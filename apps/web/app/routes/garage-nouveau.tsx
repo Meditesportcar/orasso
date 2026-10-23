@@ -1,7 +1,8 @@
 // Ajout d'un véhicule sur le site (lot M1) : la même chose que l'appli, dans le même ordre et avec les mêmes mots, en une
 // seule page de cinq sections (Photos, Plaque, Marque et modèle, Fiche technique, Catégories) puis « Envoyer ».
-// Formulaire serveur (`Form` + `action`) : l'essentiel marche sans JavaScript ; les listes liées (modèles, motorisations,
-// catégories), le recadrage carré et le nuancier demandent JavaScript. Les règles métier restent dans l'API.
+// Formulaire serveur (`Form` + `action`) : l'essentiel marche sans JavaScript ; les listes liées (modèles, catégories),
+// le recadrage carré et le nuancier demandent JavaScript. Les règles métier restent dans l'API. Décision de Damien du
+// 23/10 (lot M1, tour 2) : motorisation, puissance et poids en saisie libre, pas de catalogue.
 import { Button, CheckboxField, Icon, SelectField, TextField } from "@orasso/design-system/web";
 import {
   archiveStatusChoices,
@@ -12,8 +13,8 @@ import {
   PREPARED_CATEGORY_SLUG,
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
+  VEHICLE_ENGINE_MAX,
   type VehicleCreate,
-  type VehicleEngine,
   type VehicleFull,
   type VehicleGeneration,
   type VehicleMake,
@@ -21,6 +22,7 @@ import {
   type VehiclePreparation,
   vehiclePreparationLabels,
   vehiclePreparations,
+  vehicleSpecsIssue,
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
@@ -38,6 +40,7 @@ import {
   keptCategories,
   modelsForType,
   originCategories,
+  plateFields,
   preparedCategory,
   sortRows,
   visibleStyles,
@@ -64,6 +67,7 @@ type Errors = Partial<
     | "year"
     | "plate"
     | "photo"
+    | "engine"
     | "powerHp"
     | "weightKg"
     | "color"
@@ -91,8 +95,13 @@ export async function action({ request }: Route.ActionArgs) {
   if (!text("modelId")) errors.modelId = "Choisis un modèle.";
   if (active && !unregistered && !text("plate")) errors.plate = L.plateRequired;
   if (yearText && !/^\d{4}$/.test(yearText)) errors.year = "Année sur 4 chiffres.";
-  if (powerText && !/^\d{1,4}$/.test(powerText)) errors.powerHp = "Puissance en chevaux, nombre entier.";
-  if (weightText && !/^\d{2,5}$/.test(weightText)) errors.weightKg = "Poids en kilos, nombre entier.";
+  // Décision de Damien du 23/10 : saisie libre, mêmes bornes que l'appli et l'API (`vehicleSpecsIssue`).
+  const engineIssue = vehicleSpecsIssue({ engine: text("engine") });
+  if (engineIssue) errors.engine = engineIssue;
+  const powerIssue = vehicleSpecsIssue({ powerHp: powerText });
+  if (powerIssue) errors.powerHp = powerIssue;
+  const weightIssue = vehicleSpecsIssue({ weightKg: weightText });
+  if (weightIssue) errors.weightKg = weightIssue;
   if (text("color").length > 40) errors.color = "Teinte : 40 caractères au plus.";
   if (text("description").length > VEHICLE_DESCRIPTION_MAX) {
     errors.description = `Description : ${VEHICLE_DESCRIPTION_MAX} caractères au plus.`;
@@ -107,15 +116,9 @@ export async function action({ request }: Route.ActionArgs) {
     .getAll("preparation")
     .map(String)
     .filter((p): p is VehiclePreparation => preparationKeys.has(p));
+  // Une préparation choisie coche « Préparée » côté page ; lot M1, tour 2 : la case reste décochable, comme dans
+  // l'appli (l'action n'en rajoute plus d'office).
   const categoryIds = form.getAll("categoryIds").map(String);
-  // Une préparation cochée coche « Préparée », si la catégorie convient à ce véhicule.
-  if (preparation.length) {
-    const query = new URLSearchParams({ vehicleType: text("vehicleType") || "car", makeId: text("makeId") });
-    if (/^\d{4}$/.test(yearText)) query.set("year", yearText);
-    const rows = await api<CategoryOption[]>(request, `/vehicle-reference/categories?${query}`);
-    const prepared = rows.ok ? preparedCategory(rows.data, PREPARED_CATEGORY_SLUG) : null;
-    if (prepared && !categoryIds.includes(prepared.id)) categoryIds.push(prepared.id);
-  }
 
   const body: Partial<VehicleCreate> = {
     vehicleType: text("vehicleType") as VehicleCreate["vehicleType"],
@@ -124,7 +127,7 @@ export async function action({ request }: Route.ActionArgs) {
     generationId: text("generationId") || null,
     year: yearText ? Number(yearText) : null,
     color: text("color") || null,
-    engine: text("engine").slice(0, 80) || null,
+    engine: text("engine") || null,
     powerHp: powerText ? Number(powerText) : null,
     weightKg: weightText ? Number(weightText) : null,
     plate: unregistered ? null : text("plate") || null,
@@ -143,8 +146,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (!hasPhoto) return redirect(`/app/garage/${created.data.id}`);
   const upload = new FormData();
   upload.set("photo", photo as File);
-  // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif).
-  if (text("plateRects")) upload.set("plateRects", text("plateRects"));
+  // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif) ; lot M1, tour 2 :
+  // sinon « aucune plaque visible » confirmé, que l'API exige aussi.
+  plateFields(form, upload);
   const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
   if (!sent.ok) {
     // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
@@ -210,9 +214,6 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [modelId, setModelId] = useState("");
   const [generations, setGenerations] = useState<VehicleGeneration[]>([]);
   const [generationId, setGenerationId] = useState("");
-  const [engines, setEngines] = useState<VehicleEngine[]>([]);
-  // Motorisation du catalogue choisie ; `null` : « Autre motorisation » ; `undefined` : rien de choisi.
-  const [engineId, setEngineId] = useState<string | null | undefined>(undefined);
   const [engine, setEngine] = useState("");
   const [powerHp, setPowerHp] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -265,24 +266,11 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     });
   }, [modelId]);
 
-  // Motorisations du catalogue de la génération ; sans catalogue : saisie directe.
-  useEffect(() => {
-    setEngines([]);
-    setEngineId(undefined);
-    if (!generationId) return;
-    let stale = false;
-    apiFetch<VehicleEngine[]>(`/vehicle-reference/generations/${generationId}/engines`).then((res) => {
-      if (!stale && res.ok) setEngines(res.data);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [generationId]);
-
-  // Catégories filtrées par marque, type et année.
+  // Catégories filtrées par marque, modèle (tout-terrain : « 4x4 »), type et année.
   useEffect(() => {
     const query = new URLSearchParams({ vehicleType: type });
     if (makeId) query.set("makeId", makeId);
+    if (makeId && modelId) query.set("modelId", modelId);
     if (/^\d{4}$/.test(year)) query.set("year", year);
     let stale = false;
     apiFetch<CategoryOption[]>(`/vehicle-reference/categories?${query}`).then((res) => {
@@ -291,7 +279,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     return () => {
       stale = true;
     };
-  }, [type, makeId, year]);
+  }, [type, makeId, modelId, year]);
 
   const make = makes.find((m) => m.id === makeId);
   const sortedMakes = useMemo(() => sortRows(makes), [makes]);
@@ -301,8 +289,6 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   );
   const generation = generations.find((g) => g.id === generationId);
   const years = yearChoices(generation, new Date().getFullYear());
-  const catalog = engines.length > 0;
-  const otherEngine = !catalog || engineId === null;
   const origins = originCategories(categories, make);
   const styles = visibleStyles(categories);
   const prepared = preparedCategory(categories, PREPARED_CATEGORY_SLUG);
@@ -319,12 +305,6 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     });
   }, [categories, make]);
 
-  const pickEngine = (e: VehicleEngine) => {
-    setEngineId(e.id);
-    setEngine(e.name);
-    setPowerHp(e.powerHp ? String(e.powerHp) : "");
-    setWeightKg(e.weightKg ? String(e.weightKg) : "");
-  };
   const togglePreparation = (key: string) => {
     const next = preparation.includes(key) ? preparation.filter((p) => p !== key) : [...preparation, key];
     setPreparation(next);
@@ -468,89 +448,40 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
         {/* 4 · Fiche technique */}
         <section className="s-stack g-section" data-testid="add-specs">
           <h2 className="s-h2">{`4 · ${V.steps[3]}`}</h2>
-          <p className="o-t-body s-muted">{catalog ? V.specsText : V.specsTextFree}</p>
-          {catalog && (
-            <fieldset className="g-engines" data-testid="add-engines">
-              <legend className="o-field__label o-t-label">{V.engines}</legend>
-              {engines.map((e) => (
-                <label key={e.id} className={engineId === e.id ? "g-opt g-engine is-on" : "g-opt g-engine"}>
-                  <input
-                    type="radio"
-                    name="engineChoice"
-                    value={e.id}
-                    checked={engineId === e.id}
-                    data-testid="add-engine-card"
-                    onChange={() => pickEngine(e)}
-                  />
-                  <Icon name="power" size={20} />
-                  <span className="g-engine__text">
-                    <span className="o-t-body-strong g-engine__name">{e.name}</span>
-                    <span className="o-t-caption">{V.engineFacts(e.powerHp, e.weightKg, e.drivetrain)}</span>
-                  </span>
-                </label>
-              ))}
-              <label
-                className={otherEngine ? "g-opt g-engine g-engine--other is-on" : "g-opt g-engine g-engine--other"}
-              >
-                <input
-                  type="radio"
-                  name="engineChoice"
-                  value="other"
-                  checked={otherEngine}
-                  data-testid="add-engine-other"
-                  onChange={() => {
-                    setEngineId(null);
-                    setEngine("");
-                    setPowerHp("");
-                    setWeightKg("");
-                  }}
-                />
-                <Icon name="edit" size={20} />
-                <span className="g-engine__text">
-                  <span className="o-t-body-strong">{V.otherEngine}</span>
-                  <span className="o-t-caption">{V.otherEngineHint}</span>
-                </span>
-              </label>
-            </fieldset>
-          )}
-          {otherEngine ? (
-            <div className="s-stack s-stack--tight">
+          <p className="o-t-body s-muted">{V.specsText}</p>
+          <div className="s-stack s-stack--tight" data-testid="add-engine-fields">
+            <TextField
+              label={L.engine}
+              name="engine"
+              value={engine}
+              maxLength={VEHICLE_ENGINE_MAX}
+              help={V.engineHelp}
+              onChange={(e) => setEngine(e.currentTarget.value)}
+              error={errors.engine}
+            />
+            <div className="s-two">
               <TextField
-                label={L.engine}
-                name="engine"
-                value={engine}
-                maxLength={80}
-                placeholder={V.enginePlaceholder}
-                onChange={(e) => setEngine(e.currentTarget.value)}
+                label={L.power}
+                name="powerHp"
+                inputMode="numeric"
+                maxLength={4}
+                value={powerHp}
+                help={V.powerHelp}
+                onChange={(e) => setPowerHp(e.currentTarget.value.replace(/\D/g, ""))}
+                error={errors.powerHp}
               />
-              <div className="s-two">
-                <TextField
-                  label={L.power}
-                  name="powerHp"
-                  inputMode="numeric"
-                  maxLength={4}
-                  value={powerHp}
-                  onChange={(e) => setPowerHp(e.currentTarget.value)}
-                  error={errors.powerHp}
-                />
-                <TextField
-                  label={L.weight}
-                  name="weightKg"
-                  inputMode="numeric"
-                  maxLength={5}
-                  value={weightKg}
-                  onChange={(e) => setWeightKg(e.currentTarget.value)}
-                  error={errors.weightKg}
-                />
-              </div>
+              <TextField
+                label={L.weight}
+                name="weightKg"
+                inputMode="numeric"
+                maxLength={5}
+                value={weightKg}
+                help={V.weightHelp}
+                onChange={(e) => setWeightKg(e.currentTarget.value.replace(/\D/g, ""))}
+                error={errors.weightKg}
+              />
             </div>
-          ) : (
-            <>
-              <input type="hidden" name="engine" value={engine} />
-              <input type="hidden" name="powerHp" value={powerHp} />
-              <input type="hidden" name="weightKg" value={weightKg} />
-            </>
-          )}
+          </div>
           {years.length > 0 ? (
             <fieldset className="g-years" data-testid="add-years">
               <legend className="o-field__label o-t-label">{V.year}</legend>

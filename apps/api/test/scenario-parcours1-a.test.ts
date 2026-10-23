@@ -37,6 +37,7 @@ async function uploadPhoto(u: TestUser, vehicleId: string) {
     .toBuffer();
   const form = new FormData();
   form.append("photo", new File([new Uint8Array(jpeg)], "photo.jpg", { type: "image/jpeg" }));
+  form.append("noPlate", "true"); // lot M1, tour 2 : décision sur la plaque exigée
   const res = await app.request(`/api/me/vehicles/${vehicleId}/photos`, {
     method: "POST",
     body: form,

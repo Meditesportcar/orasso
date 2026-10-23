@@ -262,6 +262,8 @@ export async function addVehicleApi(cookie: Cookie, plate: string): Promise<stri
   if (created.status !== 201) throw new Error(`Véhicule : ${created.status} ${JSON.stringify(created.data)}`);
   const form = new FormData();
   form.set("photo", new Blob([new Uint8Array(samplePhoto())], { type: "image/png" }), "photo.png");
+  // Lot M1, tour 2 : l'API exige une décision sur la plaque (ici, aucune plaque sur l'image d'essai).
+  form.set("noPlate", "true");
   const res = await fetch(`${API}/api/me/vehicles/${created.data.id}/photos`, {
     method: "POST",
     headers: { origin: WEB, cookie },

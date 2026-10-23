@@ -398,7 +398,6 @@
   color: var(--ink);
 }
 .g-type.is-on,
-.g-engine.is-on,
 .g-pill.is-on {
   border-color: var(--ink);
   background: var(--ink);
@@ -414,8 +413,7 @@
   border: 0;
 }
 .g-pills legend,
-.g-years legend,
-.g-engines legend {
+.g-years legend {
   width: 100%;
   padding: 0;
   margin-bottom: var(--space-1);
@@ -440,35 +438,6 @@
 }
 .g-pill.is-off span {
   text-decoration: line-through;
-}
-.g-engines {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.g-engine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-field);
-  color: var(--ink);
-}
-.g-engine--other {
-  border-style: dashed;
-}
-.g-engine__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.g-engine__name {
-  overflow-wrap: anywhere;
 }
 .g-count {
   margin: calc(var(--space-2) * -1) 0 0;

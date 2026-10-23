@@ -1,5 +1,6 @@
 // Lot 31 : règles de cohérence des catégories (pays de la marque, type, liste blanche de marques) et un véhicule
 // certifié de démonstration. Idempotent ; `applyCategoryRules` est aussi appelé par les tests et par le déploiement.
+import { OFFROAD_TYPE } from "@orasso/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -30,8 +31,9 @@ export const CATEGORY_RULES: Record<string, Rule> = {
   },
   moto: { types: ["moto"] },
   utilitaire: { types: ["truck"] },
-  // Lot M1 (retour 07, consigne de Damien) : « 4x4 » n'est pas proposé à une voiture.
-  "4x4": { types: ["truck"] },
+  // Lot M1 (retour 07, consigne de Damien) : « 4x4 » n'est pas proposé à une voiture… sauf aux vrais tout-terrain du
+  // référentiel (lot M1, tour 2 : Defender, Wrangler, Classe G, Pajero, Land Cruiser… marqués `offroad`).
+  "4x4": { types: ["truck", OFFROAD_TYPE] },
 };
 
 export async function applyCategoryRules(ex: Executor = db): Promise<number> {

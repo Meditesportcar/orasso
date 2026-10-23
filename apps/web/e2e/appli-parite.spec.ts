@@ -650,6 +650,8 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
   for (let n = 1; n < 3; n++) {
     const form = new FormData();
     form.set("photo", new Blob([new Uint8Array(samplePhoto([40 + n * 30, 90, 160]))], { type: "image/png" }), "p.png");
+    // Lot M1, tour 2 : l'API exige une décision sur la plaque (ici, aucune plaque sur l'image d'essai).
+    form.set("noPlate", "true");
     const res = await fetch(`${API}/api/me/vehicles/${mine}/photos`, {
       method: "POST",
       headers: { origin: `http://localhost:${process.env.WEB_PORT ?? 5173}`, cookie },

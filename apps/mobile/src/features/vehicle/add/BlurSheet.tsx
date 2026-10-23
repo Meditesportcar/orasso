@@ -81,7 +81,10 @@ export function BlurSheet({
         v = await api.blurVehiclePhoto(vehicleId, target.photo.id, rects);
       } else {
         const form = await photoForm(target.photo, 0);
+        // Lot M1, tour 2 : des cadres, ou « aucune plaque visible » confirmé ; l'API refuse une photo sans l'un ni l'autre.
         if (rects.length) form.append("plateRects", JSON.stringify(rects));
+        else if (noPlate) form.append("noPlate", "true");
+        else throw new Error(L.noPlateIssue(1));
         v = await api.uploadVehiclePhoto(vehicleId, form);
       }
       await onDone(v);

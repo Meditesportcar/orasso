@@ -2,7 +2,16 @@
 // Les lignes « Autre » (marque, modèle, génération) sont ajoutées par le seed : ne pas les écrire ici.
 
 export type RefGeneration = { name: string; yearFrom: number; yearTo: number | null };
-export type RefModel = { name: string; type: "car" | "moto" | "truck"; generations: RefGeneration[] };
+/**
+ * `offroad` (lot M1, tour 2) : vrai tout-terrain typé « voiture » (Defender, Wrangler, Classe G, Pajero, Land
+ * Cruiser…) : la catégorie « 4x4 » lui est proposée (`OFFROAD_TYPE` de `@orasso/shared`), pas à une Supra.
+ */
+export type RefModel = {
+  name: string;
+  type: "car" | "moto" | "truck";
+  offroad?: true;
+  generations: RefGeneration[];
+};
 export type RefMake = { name: string; country: string; models: RefModel[] };
 
 export const vehicleReference: RefMake[] = [
@@ -826,6 +835,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Wrangler",
         type: "car",
+        offroad: true,
         generations: [
           { name: "YJ", yearFrom: 1987, yearTo: 1995 },
           { name: "TJ", yearFrom: 1996, yearTo: 2006 },
@@ -836,11 +846,13 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Cherokee",
         type: "car",
+        offroad: true,
         generations: [{ name: "XJ", yearFrom: 1984, yearTo: 2001 }],
       },
       {
         name: "CJ",
         type: "car",
+        offroad: true,
         generations: [
           { name: "CJ-5", yearFrom: 1955, yearTo: 1983 },
           { name: "CJ-7", yearFrom: 1976, yearTo: 1986 },
@@ -999,6 +1011,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Defender",
         type: "car",
+        offroad: true,
         generations: [
           { name: "90/110", yearFrom: 1983, yearTo: 1990 },
           { name: "Defender", yearFrom: 1990, yearTo: 2016 },
@@ -1008,6 +1021,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Série",
         type: "car",
+        offroad: true,
         generations: [
           { name: "Série I", yearFrom: 1948, yearTo: 1958 },
           { name: "Série II", yearFrom: 1958, yearTo: 1961 },
@@ -1018,6 +1032,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Discovery",
         type: "car",
+        offroad: true,
         generations: [
           { name: "Mk1", yearFrom: 1989, yearTo: 1998 },
           { name: "Mk2", yearFrom: 1998, yearTo: 2004 },
@@ -1029,6 +1044,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Range Rover",
         type: "car",
+        offroad: true,
         generations: [
           { name: "Classic", yearFrom: 1970, yearTo: 1996 },
           { name: "P38A", yearFrom: 1994, yearTo: 2002 },
@@ -1272,6 +1288,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Classe G",
         type: "car",
+        offroad: true,
         generations: [
           { name: "W460", yearFrom: 1979, yearTo: 1992 },
           { name: "W463", yearFrom: 1989, yearTo: 2018 },
@@ -1384,6 +1401,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Pajero",
         type: "car",
+        offroad: true,
         generations: [
           { name: "Mk1", yearFrom: 1982, yearTo: 1991 },
           { name: "Mk2", yearFrom: 1991, yearTo: 1999 },
@@ -1898,6 +1916,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Jimny",
         type: "car",
+        offroad: true,
         generations: [
           { name: "LJ", yearFrom: 1970, yearTo: 1981 },
           { name: "SJ", yearFrom: 1981, yearTo: 1998 },
@@ -1996,6 +2015,7 @@ export const vehicleReference: RefMake[] = [
       {
         name: "Land Cruiser",
         type: "car",
+        offroad: true,
         generations: [
           { name: "J40", yearFrom: 1960, yearTo: 1984 },
           { name: "J60", yearFrom: 1980, yearTo: 1990 },

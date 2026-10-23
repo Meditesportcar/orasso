@@ -34,10 +34,6 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .get("/vehicle-reference/models/:id/generations", async (c) =>
     c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H),
   )
-  // Lot M1 : motorisations du catalogue Orasso d'une génération (puissance et poids remplis à l'ajout).
-  .get("/vehicle-reference/generations/:id/engines", async (c) =>
-    c.json(await vehiclesRepo.engines(uuidParam(c, "id")), 200, CACHE_1H),
-  )
   // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
   // Filtré par marque, type et année quand ils sont donnés (formulaire du véhicule) : chaque catégorie dit si elle est
   // éligible et pourquoi sinon (lot 31).
@@ -77,7 +73,11 @@ export const vehiclesRoutes = new Hono<AppEnv>()
       }
       plateRects = parse(plateRectsSchema, raw);
     }
-    return c.json(await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo, plateRects), 201);
+    // Lot M1, tour 2 : « aucune plaque visible » confirmé (`noPlate=true`) ; sans cadre ni confirmation, refusée.
+    return c.json(
+      await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo, plateRects, form.noPlate === "true"),
+      201,
+    );
   })
   // Floutage de plaque sur une photo déjà envoyée (irréversible, V9).
   .post("/me/vehicles/:id/photos/:photoId/blur", async (c) => {

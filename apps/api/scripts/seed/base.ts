@@ -2,14 +2,14 @@
 // Code déplacé tel quel depuis `scripts/seed.ts` (lot 15) ; appelé par `seed.ts`.
 import { randomBytes } from "node:crypto";
 import { fromWallTime, type RefusalReason } from "@orasso/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
-import { vehicleEngines } from "../../src/db/seed/vehicle-engines";
 import { vehicleReference } from "../../src/db/seed/vehicle-reference";
 import { startJobs } from "../../src/jobs";
 import { deps } from "../../src/lib/deps";
 import { slugify } from "../../src/lib/slug";
+import type { Executor } from "../../src/lib/tx";
 import { scheduleEventJobs } from "../../src/modules/events/jobs";
 import {
   type AppStatus,
@@ -73,39 +73,31 @@ export async function seedMissingCategories() {
   console.log(`Catégories ajoutées : ${missing.map(([slug]) => slug).join(", ")}.`);
 }
 
-// --- Motorisations (lot M1) --------------------------------------------------------------------------------------
-
 /**
- * Insère les motorisations de `vehicleEngines` pour les générations retrouvées par « marque|modèle|génération ».
- * Idempotente : ne fait rien si la table n'est pas vide, ce qui complète aussi une base déjà semée.
+ * Lot M1, tour 2 : les vrais tout-terrain du référentiel (`offroad` de `vehicle-reference.ts`) marqués sur une base
+ * déjà semée, pour que « 4x4 » leur soit proposé. Idempotente (ne touche que les modèles listés, par marque et nom).
  */
-export async function seedEngines() {
-  // Ligne par ligne : une motorisation déjà là (même génération, même nom) n'est ni recréée ni modifiée.
-  const rows = await db
-    .select({
-      id: t.vehicleGenerations.id,
-      make: t.vehicleMakes.name,
-      model: t.vehicleModels.name,
-      gen: t.vehicleGenerations.name,
-    })
-    .from(t.vehicleGenerations)
-    .innerJoin(t.vehicleModels, eq(t.vehicleGenerations.modelId, t.vehicleModels.id))
-    .innerJoin(t.vehicleMakes, eq(t.vehicleModels.makeId, t.vehicleMakes.id));
-  const ids = new Map(rows.map((r) => [`${r.make}|${r.model}|${r.gen}`, r.id]));
-  const values = Object.entries(vehicleEngines).flatMap(([key, engines]) => {
-    const generationId = ids.get(key);
-    return generationId ? engines.map((e, position) => ({ generationId, ...e, position })) : [];
-  });
-  let added = 0;
-  for (let i = 0; i < values.length; i += 500) {
-    const inserted = await db
-      .insert(t.vehicleEngines)
-      .values(values.slice(i, i + 500))
-      .onConflictDoNothing({ target: [t.vehicleEngines.generationId, t.vehicleEngines.name] })
-      .returning({ id: t.vehicleEngines.id });
-    added += inserted.length;
+export async function seedOffroadModels(ex: Executor = db) {
+  let marked = 0;
+  for (const make of vehicleReference) {
+    const names = make.models.filter((m) => m.offroad).map((m) => m.name);
+    if (!names.length) continue;
+    const row = await ex.query.vehicleMakes.findFirst({ where: eq(t.vehicleMakes.name, make.name) });
+    if (!row) continue;
+    const updated = await ex
+      .update(t.vehicleModels)
+      .set({ offroad: true })
+      .where(
+        and(
+          eq(t.vehicleModels.makeId, row.id),
+          inArray(t.vehicleModels.name, names),
+          eq(t.vehicleModels.offroad, false),
+        ),
+      )
+      .returning({ id: t.vehicleModels.id });
+    marked += updated.length;
   }
-  if (added) console.log(`Motorisations : ${added} ajoutées (${values.length} dans le catalogue).`);
+  if (marked) console.log(`Référentiel : ${marked} modèles tout-terrain marqués.`);
 }
 
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
@@ -131,7 +123,13 @@ async function seedReference() {
     const models = await db
       .insert(t.vehicleModels)
       .values([
-        ...source.models.map((m) => ({ makeId: make.id, name: m.name, slug: slugify(m.name), vehicleType: m.type })),
+        ...source.models.map((m) => ({
+          makeId: make.id,
+          name: m.name,
+          slug: slugify(m.name),
+          vehicleType: m.type,
+          offroad: Boolean(m.offroad),
+        })),
         { makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car" as const, isOther: true },
       ])
       .returning();
@@ -173,7 +171,6 @@ async function seedReference() {
 export async function seedBase(hash: string) {
   const categories = await seedCategories();
   const { refs, find } = await seedReference();
-  await seedEngines();
 
   // Comptes nommés (prototype validé).
   const damien = await createAccount(

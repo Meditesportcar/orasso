@@ -12,10 +12,12 @@ import {
   type VehicleFull,
   type VehiclePreparation,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { randomUUID } from "expo-crypto";
+import { useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -31,24 +33,25 @@ import { LiveCard } from "./LiveCard";
 import {
   applyMode,
   type BlurMode,
-  createBody,
+  continueBlocked,
   type Draft,
   type DraftPhoto,
   detectionUnavailable,
   draftFromVehicle,
+  draftIsEmpty,
   emptyDraft,
   keptCategories,
   liveCard,
   MAX_PHOTOS,
   modelsForType,
-  photoPlan,
+  nextMove,
   preparedCategory,
   STEP,
   STEP_COUNT,
   shortName,
   stepIssue,
   stepOfError,
-  updateBody,
+  stepToRevisit,
   withCover,
 } from "./model";
 import { SquareButton } from "./parts";
@@ -57,6 +60,7 @@ import { DoneView, type PhotoState, SendingView } from "./SendViews";
 import { type PhotoSource, StepPhotos } from "./StepPhotos";
 import { photoToFix, StepPlate } from "./StepPlate";
 import { StepCategories, StepIdentity, StepSpecs } from "./Steps";
+import { DraftIncomplete, newSendMemo, runSend, type SendApi } from "./send";
 
 const { space2 } = tokens.spacing;
 
@@ -93,25 +97,13 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const [cropBusy, setCropBusy] = useState(false);
   // Étape Plaque : « Continuer » ouvre la photo à régler (maquette 1.3).
   const [plateFocus, setPlateFocus] = useState<{ index: number; tick: number } | null>(null);
-  // Envoi interrompu (réseau) : on reprend sans recréer le véhicule ni renvoyer les photos déjà parties.
-  const sent = useRef<{
-    vehicleId: string | null;
-    /** Fiche telle que l'API la connaît (créée ou modifiée) : la reprise n'envoie que ce qui a changé depuis. */
-    base: VehicleFull | null;
-    done: Set<string>;
-    pending: boolean;
-    /** Photo locale envoyée → identifiant de la photo en ligne (ordre final). */
-    uploaded: Map<string, string>;
-    /** Envoi de photo dont la réponse n'est pas arrivée : à vérifier avant de la renvoyer (pas de doublon). */
-    inFlight: { key: string; before: string[] } | null;
-  }>({
-    vehicleId: vehicle?.id ?? null,
-    base: vehicle ?? null,
-    done: new Set(),
-    pending: false,
-    uploaded: new Map(),
-    inFlight: null,
-  });
+  // Envoi interrompu (réseau) : on reprend sans recréer le véhicule (clé client) ni renvoyer les photos déjà parties ;
+  // une photo recadrée depuis est remplacée en ligne (lot M1, tour 2, voir `send.ts`).
+  const [memo] = useState(() => newSendMemo(randomUUID(), vehicle));
+  // Quitter (lot M1, tour 2) : un brouillon non vide ou un envoi en cours se confirme ; `leaving` laisse passer.
+  const [quitting, setQuitting] = useState(false);
+  const leaving = useRef(false);
+  const pendingLeave = useRef<(() => void) | null>(null);
 
   const patch = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
 
@@ -121,8 +113,14 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     enabled: Boolean(draft.modelId),
   });
   const categories = useApi(
-    () => api.categories({ makeId: draft.makeId, vehicleType: draft.vehicleType, year: draft.year }),
-    [draft.makeId, draft.vehicleType, draft.year],
+    () =>
+      api.categories({
+        makeId: draft.makeId,
+        modelId: draft.modelId,
+        vehicleType: draft.vehicleType,
+        year: draft.year,
+      }),
+    [draft.makeId, draft.modelId, draft.vehicleType, draft.year],
   );
 
   const make = makes.data?.find((m) => m.id === draft.makeId);
@@ -133,12 +131,6 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const model = modelRows.find((m) => m.id === draft.modelId);
   const generation = generations.data?.find((g) => g.id === draft.generationId);
   const makeCountry = make && !make.isOther ? make.country : null;
-  // Lot M1 : motorisations du catalogue Orasso de la génération choisie.
-  const realGeneration = generation && !generation.isOther ? generation.id : null;
-  const engines = useApi(() => api.engines(realGeneration ?? ""), [realGeneration], {
-    enabled: Boolean(realGeneration),
-  });
-
   // Un modèle sans génération dans la liste : rien à choisir.
   useEffect(() => {
     if (draft.modelId && generations.data && generations.data.length === 0 && draft.generationId === undefined) {
@@ -157,7 +149,28 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     });
   }, [categories.data, makeCountry]);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
+  // Pendant l'import ou le recadrage d'une photo, « Continuer » attend (lot M1, tour 2, vie privée de la plaque).
+  const importing = busy || cropBusy || phase === "crop";
+  const guarded = phase === "sending" || (phase !== "done" && !(!editing && draftIsEmpty(draft)));
+  const leave = () => {
+    leaving.current = true;
+    const action = pendingLeave.current;
+    pendingLeave.current = null;
+    if (action) return action();
+    return router.canGoBack() ? router.back() : router.replace("/(tabs)/garage");
+  };
+  const close = () => (guarded ? setQuitting(true) : leave());
+  // ✕, retour Android ou geste : même confirmation tant que le brouillon n'est pas vide ou que l'envoi tourne.
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!guarded) return;
+    return navigation.addListener("beforeRemove", (e) => {
+      if (leaving.current) return;
+      e.preventDefault();
+      pendingLeave.current = () => navigation.dispatch(e.data.action);
+      setQuitting(true);
+    });
+  }, [navigation, guarded]);
   const card = liveCard(draft, editing ? STEP.categories : step, {
     make,
     model,
@@ -256,6 +269,20 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     });
   };
 
+  // Une photo ajoutée ou recadrée après l'étape Plaque (ou une détection qui repart) ramène à cette étape : rien ne
+  // part sans masque ni « aucune plaque » confirmé (lot M1, tour 2).
+  useEffect(() => {
+    if (phase !== "steps" || importing) return;
+    const back = stepToRevisit(draft, step);
+    if (back === null) return;
+    setStep(back);
+    setIssueShown(true);
+    if (back === STEP.plate) {
+      const target = photoToFix(draft);
+      if (target >= 0) setPlateFocus({ index: target, tick: Date.now() });
+    }
+  }, [phase, importing, draft, step]);
+
   function setMode(mode: BlurMode) {
     setDraft((d) =>
       mode === "auto" && detectionUnavailable(d.photos)
@@ -274,16 +301,23 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   }
 
   // --- Étapes --------------------------------------------------------------------------------------------------------
-  function next() {
-    const issue = stepIssue(step, draft);
-    setError(null);
-    setIssueShown(Boolean(issue));
-    if (issue && step === STEP.plate) {
+  /** Montre ce qui manque à l'étape `at` ; à l'étape Plaque, ouvre la photo à régler. */
+  function showIssue(at: number) {
+    setIssueShown(true);
+    if (at !== step) setStep(at);
+    if (at === STEP.plate) {
       const target = photoToFix(draft);
       if (target >= 0) setPlateFocus({ index: target, tick: Date.now() });
     }
-    if (issue) return;
-    if (step < STEP_COUNT - 1) setStep(step + 1);
+  }
+
+  function next() {
+    const move = nextMove(step, draft, importing);
+    if (move.kind === "wait") return;
+    setError(null);
+    if (move.kind === "fix") return showIssue(move.step);
+    setIssueShown(false);
+    if (move.kind === "step") setStep(move.step);
     else void send();
   }
 
@@ -295,87 +329,44 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   }
 
   // --- Envoi ---------------------------------------------------------------------------------------------------------
+  const sendApi: SendApi = {
+    create: (body) => api.createVehicle(body),
+    update: (id, body) => api.updateVehicle(id, body),
+    get: (id) => api.vehicle(id),
+    upload: async (id, photo, fields, index) => {
+      const form = await photoForm({ uri: photo.uri, width: photo.width, height: photo.height }, index);
+      if ("plateRects" in fields) form.append("plateRects", JSON.stringify(fields.plateRects));
+      else form.append("noPlate", "true");
+      return api.uploadVehiclePhoto(id, form);
+    },
+    blur: (id, photoId, rects) => api.blurVehiclePhoto(id, photoId, rects),
+    remove: (id, photoId) => api.deleteVehiclePhoto(id, photoId),
+    reorder: (id, photoIds) => api.reorderVehiclePhotos(id, photoIds),
+  };
+
   async function send() {
     setPhase("sending");
     setError(null);
-    const s = sent.current;
-    let ops = photoPlan(draft, vehicle?.photos ?? []).filter((op) => !s.done.has(opKey(op)));
-    let total = ops.length;
-    setProgress({ done: 0, total, complete: false });
+    setProgress({ done: 0, total: 0, complete: false });
     try {
-      let current: VehicleFull | null = null;
-      if (!s.vehicleId) {
-        current = await api.createVehicle(createBody(draft));
-        s.vehicleId = current.id;
-        s.base = current;
-        s.pending = Boolean(current.plateTransfer);
-      } else if (s.base) {
-        // Modification, ou reprise après une erreur corrigée : seulement ce qui a changé depuis la dernière fiche.
-        const body = updateBody(draft, s.base);
-        if (Object.keys(body).length) {
-          current = await api.updateVehicle(s.vehicleId, body);
-          s.base = current;
-          s.pending = Boolean(current.plateTransfer);
-        }
-      }
-      const id = s.vehicleId as string;
-      current ??= await api.vehicle(id);
-      // Réponse perdue pendant un envoi de photo : si la photo est arrivée, on la garde au lieu de la renvoyer.
-      if (s.inFlight) {
-        const before = new Set(s.inFlight.before);
-        const known = new Set(s.uploaded.values());
-        const arrived = current.photos.find((p) => !before.has(p.id) && !known.has(p.id));
-        if (arrived) {
-          s.uploaded.set(s.inFlight.key, arrived.id);
-          s.done.add(`upload:${s.inFlight.key}`);
-        }
-        s.inFlight = null;
-      }
-      // Photos envoyées : leur identifiant, pour poser l'ordre final (couverture en tête).
-      const uploaded = s.uploaded;
-      ops = ops.filter((op) => !s.done.has(opKey(op)));
-      total = ops.length;
-      setProgress({ done: 0, total, complete: false });
-      let n = 0;
-      for (const op of ops) {
-        if (op.kind === "remove") {
-          await api.deleteVehiclePhoto(id, op.photoId);
-        } else if (op.kind === "upload") {
-          const photo = draft.photos.find((p) => p.key === op.key);
-          if (photo) {
-            setPhotoStates((st) => ({ ...st, [op.key]: "sending" }));
-            const form = await photoForm({ uri: photo.uri, width: photo.width, height: photo.height }, n);
-            if (op.rects.length) form.append("plateRects", JSON.stringify(op.rects));
-            const before = new Set(current.photos.map((p) => p.id));
-            s.inFlight = { key: op.key, before: [...before] };
-            const after = await api.uploadVehiclePhoto(id, form);
-            s.inFlight = null;
-            const added = after.photos.find((p) => !before.has(p.id));
-            if (added) uploaded.set(op.key, added.id);
-            current = after;
-            setPhotoStates((st) => ({ ...st, [op.key]: "done" }));
-          }
-        } else {
-          current = await api.blurVehiclePhoto(id, op.photoId, op.rects);
-        }
-        s.done.add(opKey(op));
-        n++;
-        setProgress({ done: n, total, complete: false });
-      }
-      // Ordre final : la couverture choisie en tête.
-      const order = draft.photos.map((p) => p.remoteId ?? uploaded.get(p.key)).filter((x): x is string => Boolean(x));
-      const currentOrder = current.photos.map((p) => p.id);
-      if (order.length > 1 && order.join() !== currentOrder.join()) {
-        current = await api.reorderVehiclePhotos(id, order);
-      }
+      const current = await runSend(draft, vehicle?.photos ?? [], memo, sendApi, {
+        progress: (done, total) => setProgress({ done, total, complete: false }),
+        photo: (key, state) => setPhotoStates((st) => ({ ...st, [key]: state })),
+      });
       // La voiture finit son tour et se gare dans le O.
-      setProgress({ done: total, total, complete: true });
+      setProgress((p) => ({ done: p.total, total: p.total, complete: true }));
       await waitUploadParked();
       // Lot 40 : le premier véhicule actif fait passer de visiteur à exposant.
       await refreshMe().catch(() => undefined);
       setSaved(current);
       setPhase("done");
     } catch (e) {
+      // Brouillon incomplet (photo sans décision de plaque…) : rien n'est parti pour elle, retour à son étape.
+      if (e instanceof DraftIncomplete) {
+        setPhase("steps");
+        showIssue(e.step);
+        return;
+      }
       // Relecture : une erreur sur un champ (plaque déjà prise, valeur refusée, photo illisible) ramène à son étape,
       // brouillon gardé ; une panne réseau ou serveur reste sur l'envoi avec « Reprendre ».
       const back = stepOfError(e);
@@ -389,6 +380,24 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
 
   const title = editing ? L.editTitle : L.title;
   const bar = (pct: number) => <ProgressBar pct={pct} />;
+  const quitSheet = (
+    <ConfirmSheet
+      visible={quitting}
+      title={phase === "sending" ? V.quitSendingTitle : V.quitTitle}
+      body={phase === "sending" ? V.quitSendingBody : editing ? V.quitEditBody : V.quitBody}
+      confirmLabel={V.quitConfirm}
+      confirmIcon="close"
+      cancelLabel={V.quitKeep}
+      onConfirm={() => {
+        setQuitting(false);
+        leave();
+      }}
+      onClose={() => {
+        pendingLeave.current = null;
+        setQuitting(false);
+      }}
+    />
+  );
 
   // --- Rendu ---------------------------------------------------------------------------------------------------------
   if (phase === "crop" && cropping) {
@@ -430,13 +439,13 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     const name = shortName({ make, model }, draft.vehicleType);
     const full = liveCard(draft, STEP.categories, { make, model, generation, categories: categories.data ?? [] });
     const doneTitle = editing ? L.doneTitleEdit : L.doneTitle(name);
-    const seeVehicle = editing || sent.current.pending;
+    const seeVehicle = editing || memo.pending;
     return (
       <FlowScreen
         title={title}
         facts={V.done}
         header={bar(100)}
-        onClose={() => router.replace(sent.current.pending ? `/vehicule/${saved.id}` : "/(tabs)/garage")}
+        onClose={() => router.replace(memo.pending ? `/vehicule/${saved.id}` : "/(tabs)/garage")}
         footer={
           <>
             {seeVehicle ? (
@@ -509,6 +518,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         facts={V.sending}
         header={bar(100)}
         onClose={close}
+        overlays={quitSheet}
         footer={
           error ? (
             <>
@@ -535,14 +545,16 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
 
   const issue = stepIssue(step, draft);
   const shownError = error ?? (issueShown ? issue : null);
-  // Maquettes 1.1 et 1.5 : « Continuer » grisé tant qu'il n'y a pas de photo, ou que le choix n'est pas fait.
-  const blocked = Boolean(issue) && (step === STEP.photos || step === STEP.identity);
+  // Maquettes 1.1 et 1.5 : « Continuer » grisé tant qu'il n'y a pas de photo, ou que le choix n'est pas fait ; lot M1,
+  // tour 2 : aussi pendant l'import ou le recadrage d'une photo.
+  const blocked = continueBlocked(step, draft, importing);
   const last = step === STEP_COUNT - 1;
   return (
     <FlowScreen
       title={title}
       facts={V.stepOf(step + 1, STEP_COUNT, V.steps[step] ?? "")}
       onClose={close}
+      overlays={quitSheet}
       header={
         <>
           {bar(((step + 1) / STEP_COUNT) * 100)}
@@ -577,9 +589,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               </Button>
             </View>
           </View>
-          {blocked && step === STEP.photos ? (
+          {blocked && (importing || step === STEP.photos) ? (
             <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
-              {issue}
+              {importing ? V.importing : issue}
             </Text>
           ) : null}
         </>
@@ -629,13 +641,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         />
       ) : null}
       {step === STEP.specs ? (
-        <StepSpecs
-          draft={draft}
-          patch={patch}
-          generation={generation}
-          engines={realGeneration ? (engines.data ?? []) : []}
-          onPreparation={onPreparation}
-        />
+        <StepSpecs draft={draft} patch={patch} generation={generation} onPreparation={onPreparation} />
       ) : null}
       {step === STEP.categories ? (
         <StepCategories draft={draft} patch={patch} categories={categories.data ?? []} make={make} />
@@ -658,9 +664,6 @@ function ProgressBar({ pct }: { pct: number }) {
     </View>
   );
 }
-
-const opKey = (op: ReturnType<typeof photoPlan>[number]) =>
-  op.kind === "remove" ? `remove:${op.photoId}` : `${op.kind}:${op.key}`;
 
 const styles = StyleSheet.create({
   footer: { flexDirection: "row", gap: space2, alignItems: "center" },

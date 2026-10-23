@@ -20,6 +20,7 @@ import {
   type VehicleStatus,
   type VehicleType,
   type VehicleUpdate,
+  vehicleSpecsIssue,
 } from "@orasso/shared";
 
 // Chemin relatif : Vitest (sans alias « @/ ») teste ce module.
@@ -87,8 +88,6 @@ export type Draft = {
   /** Lot M1 : préparations choisies en pastilles, et la note libre d'une fiche d'avant. */
   preparation: VehiclePreparation[];
   preparationNote: string;
-  /** Motorisation du catalogue choisie ; `null` : « Autre motorisation » (saisie) ; absent : rien de choisi. */
-  engineId?: string | null;
   /** Teinte saisie à la main (« Autre teinte »). */
   colorCustom?: boolean;
   /** « C'est un ancien véhicule » : vendu, souvenir ou accidenté, plaque facultative. */
@@ -111,6 +110,22 @@ export type PlateReading = {
   probable: boolean;
   area: number;
 };
+
+/** Rien de saisi (lot M1, tour 2) : ✕ ou retour quitte sans demander. */
+export const draftIsEmpty = (d: Draft): boolean =>
+  d.photos.length === 0 &&
+  !d.makeId &&
+  !d.plate.trim() &&
+  !d.engine.trim() &&
+  !d.powerHp.trim() &&
+  !d.weightKg.trim() &&
+  d.year === undefined &&
+  !d.color &&
+  !d.description.trim() &&
+  d.preparation.length === 0 &&
+  d.categoryIds.length === 0 &&
+  !d.former &&
+  !d.unregistered;
 
 export const emptyDraft = (): Draft => ({
   vehicleType: "car",
@@ -152,7 +167,9 @@ export function draftFromVehicle(v: VehicleFull): Draft {
       plateBlurred: p.plateBlurred,
       rects: [],
     })),
-    blurMode: "manual",
+    // Lot M1, tour 2 : une plaque repérée avec certitude sur une nouvelle photo est masquée d'office, comme à la création
+    // (les photos déjà en ligne ne sont pas touchées par `applyMode`).
+    blurMode: "auto",
     plate: v.plate ?? "",
     description: v.description ?? "",
     preparation: prep.items,
@@ -255,13 +272,6 @@ export function ageNote(rows: readonly CategoryOption[], year: number | undefine
 
 // --- Étapes ----------------------------------------------------------------------------------------------------------
 
-function intIn(text: string, min: number, max: number): number | null | "invalid" {
-  const t = text.trim();
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isInteger(n) && n >= min && n <= max ? n : "invalid";
-}
-
 /** Ce qui empêche de passer l'étape (`STEP`, index 0 à 4), ou null. */
 export function stepIssue(step: number, d: Draft, currentYear = new Date().getFullYear()): string | null {
   switch (step) {
@@ -270,11 +280,13 @@ export function stepIssue(step: number, d: Draft, currentYear = new Date().getFu
       if (!d.modelId) return "Choisis le modèle.";
       if (d.generationId === undefined) return "Choisis la génération (ou « Autre »).";
       return null;
-    case STEP.specs:
-      if (intIn(d.powerHp, 1, 2500) === "invalid") return "Puissance : un nombre entier de 1 à 2 500.";
-      if (intIn(d.weightKg, 50, 40000) === "invalid") return "Poids : un nombre entier de 50 à 40 000.";
+    case STEP.specs: {
+      // Décision de Damien du 23/10 : saisie libre, mêmes bornes que l'API (`vehicleSpecsIssue`).
+      const specs = vehicleSpecsIssue(d);
+      if (specs) return specs;
       if (d.year !== undefined && (d.year < 1885 || d.year > currentYear + 1)) return "Année hors limites.";
       return null;
+    }
     case STEP.categories:
       return null;
     case STEP.photos:
@@ -301,6 +313,38 @@ export function firstIssue(d: Draft, upTo = STEP_COUNT): { step: number; issue: 
     if (issue) return { step: s, issue };
   }
   return null;
+}
+
+/**
+ * Lot M1, tour 2 (vie privée de la plaque) : où mène « Continuer ». Rien pendant l'import ou le recadrage d'une photo
+ * (`wait`) ; une étape déjà passée qui ne tient plus — photo ajoutée ou recadrée après l'étape Plaque, détection en
+ * cours — y ramène (`fix`) ; sinon l'étape suivante, ou l'envoi à la dernière.
+ */
+export type NextMove =
+  | { kind: "wait" }
+  | { kind: "fix"; step: number; issue: string }
+  | { kind: "step"; step: number }
+  | { kind: "send" };
+
+export function nextMove(step: number, d: Draft, importing: boolean): NextMove {
+  if (importing) return { kind: "wait" };
+  const issue = firstIssue(d, step + 1);
+  if (issue) return { kind: "fix", ...issue };
+  return step < STEP_COUNT - 1 ? { kind: "step", step: step + 1 } : { kind: "send" };
+}
+
+/** Étape déjà passée à reprendre (la première incomplète avant `step`), ou null. */
+export function stepToRevisit(d: Draft, step: number): number | null {
+  return firstIssue(d, step)?.step ?? null;
+}
+
+/**
+ * « Continuer » grisé (maquettes 1.1 et 1.5) : pendant l'import ou le recadrage d'une photo (lot M1, tour 2), tant
+ * qu'il n'y a pas de photo, ou que le choix de la marque et du modèle n'est pas fait.
+ */
+export function continueBlocked(step: number, d: Draft, importing: boolean): boolean {
+  if (importing) return true;
+  return Boolean(stepIssue(step, d)) && (step === STEP.photos || step === STEP.identity);
 }
 
 // --- Carte qui se construit -------------------------------------------------------------------------------------------
@@ -419,25 +463,6 @@ export function updateBody(d: Draft, v: VehicleFull): VehicleUpdate {
   return body;
 }
 
-export type PhotoOp =
-  | { kind: "upload"; key: string; rects: PlateRect[] }
-  | { kind: "blur"; key: string; photoId: string; rects: PlateRect[] }
-  | { kind: "remove"; photoId: string };
-
-/**
- * Opérations sur les photos, dans l'ordre : retraits, envois (avec leurs cadres de plaque), floutages des photos déjà
- * en ligne ; l'ordre final (couverture en tête) est posé ensuite par `PUT …/photos/order`.
- */
-export function photoPlan(d: Draft, before: readonly { id: string }[] = []): PhotoOp[] {
-  const kept = new Set(d.photos.filter((p) => p.remoteId).map((p) => p.remoteId));
-  const ops: PhotoOp[] = before.filter((p) => !kept.has(p.id)).map((p) => ({ kind: "remove", photoId: p.id }));
-  for (const p of d.photos) if (!p.remoteId) ops.push({ kind: "upload", key: p.key, rects: p.rects });
-  for (const p of d.photos) {
-    if (p.remoteId && p.rects.length) ops.push({ kind: "blur", key: p.key, photoId: p.remoteId, rects: p.rects });
-  }
-  return ops;
-}
-
 /** Nombre de plaques floutées (ou qui le seront) : cadres posés et photos déjà floutées. */
 export const blurredCount = (d: Draft): number =>
   d.photos.reduce((n, p) => n + (p.rects.length ? p.rects.length : p.plateBlurred ? 1 : 0), 0);
@@ -492,7 +517,12 @@ export function stepOfError(e: unknown): number | null {
   if (err.status === 0 || err.status >= 500 || err.status === 429) return null;
   const fields = Object.keys((err.details?.fields as Record<string, unknown> | undefined) ?? {});
   const has = (...names: string[]) => fields.some((f) => names.some((n) => f === n || f.startsWith(`${n}.`)));
-  if (err.code === "plate_taken" || has("plate", "unregistered", "status") || /plaque/i.test(err.message ?? ""))
+  // Lot M1, tour 2 : photo refusée sans décision sur la plaque (`plateDecision`) → étape Plaque.
+  if (
+    err.code === "plate_taken" ||
+    has("plate", "unregistered", "status", "plateDecision") ||
+    /plaque/i.test(err.message ?? "")
+  )
     return STEP.plate;
   if (has("vehicleType", "makeId", "modelId", "generationId")) return STEP.identity;
   if (has("year", "engine", "powerHp", "weightKg", "color", "description", "preparation")) return STEP.specs;

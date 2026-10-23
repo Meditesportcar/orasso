@@ -1,12 +1,9 @@
 import type { BodyColorFamily } from "../rules/vehicleAdd";
-import type { VehicleDrivetrain } from "../schemas/vehicle";
 
 // Ajout de véhicule refait (lot M1, maquettes 1.1 à 1.9 validées par Damien le 23/10). Les libellés de l'étape Plaque
 // restent dans `vehicleWizardLabels` (lot M2) ; ceux-ci s'y ajoutent.
 
 const thePhotos = (n: number) => (n <= 1 ? `${n} photo` : `${n} photos`);
-/** « 1 495 » (espace insécable), sans dépendre d'Intl sur le téléphone. */
-const thousands = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
 
 export const vehicleAddLabels = {
   /** Ordre décidé par Damien (retour 11) : la photo d'abord, la plaque ensuite (elle préremplit le numéro). */
@@ -41,6 +38,8 @@ export const vehicleAddLabels = {
   certRest: "Il restera la description, à l'étape 4.",
   plateNote: "La plaque est masquée toute seule : tu vérifies photo par photo à l'étape suivante.",
   needPhoto: "Ajoute au moins une photo pour continuer.",
+  /** Lot M1, tour 2 : « Continuer » attend la fin de l'import ou du recadrage. */
+  importing: "Import de la photo en cours…",
   cover: "Couverture",
   makeCover: "Choisir comme couverture",
   isCover: "Photo de couverture",
@@ -104,17 +103,11 @@ export const vehicleAddLabels = {
   clearSearch: "Effacer la recherche",
   crumb: "Ton choix",
   // 4. Fiche technique (1.6)
-  specsText: "La motorisation vient de la base Orasso : puissance et poids se remplissent seuls.",
-  specsTextFree:
-    "Ce modèle n'a pas encore ses motorisations dans la base Orasso : indique la tienne, l'équipe l'ajoutera.",
-  engines: "Motorisation",
-  engineFacts: (power: number | null, weight: number | null, drive: VehicleDrivetrain | null) =>
-    [power ? `${power} ch` : null, weight ? `${thousands(weight)} kg` : null, drive ? drivetrainLabels[drive] : null]
-      .filter(Boolean)
-      .join(" · "),
-  otherEngine: "Autre motorisation",
-  otherEngineHint: "Pas dans la liste ? Saisis-la, l'équipe Orasso l'ajoute.",
-  enginePlaceholder: "Ex. 1.4 T-Jet 160",
+  // Décision de Damien du 23/10 (lot M1, tour 2) : saisie libre, pas de catalogue des motorisations.
+  specsText: "Tu connais ta voiture, préparation comprise : motorisation, puissance et poids sont facultatifs.",
+  engineHelp: "Ex. 3.0 turbo B58",
+  powerHelp: "En chevaux, de 1 à 2 000.",
+  weightHelp: "En kilos, de 50 à 10 000.",
   year: "Année",
   yearOther: "Autre année",
   color: "Couleur",
@@ -179,6 +172,14 @@ export const vehicleAddLabels = {
   photoSent: "Envoyée",
   photoWaiting: "En attente",
   percent: (p: number) => `${Math.round(p)} %`,
+  // Quitter (lot M1, tour 2) : un brouillon non vide ou un envoi en cours ne se perd pas sans confirmation.
+  quitTitle: "Quitter sans enregistrer ?",
+  quitBody: "Ton véhicule n'est pas encore enregistré : ses photos et ce que tu as saisi seront perdus.",
+  quitEditBody: "Tes changements ne sont pas encore enregistrés : ils seront perdus.",
+  quitSendingTitle: "L'envoi n'est pas fini",
+  quitSendingBody: "Si tu quittes maintenant, l'envoi s'arrête : ce qui n'est pas encore parti est perdu.",
+  quitConfirm: "Quitter sans enregistrer",
+  quitKeep: "Rester",
   // Succès (1.9)
   doneText: "Sa fiche est prête : plaque masquée, couverture choisie.",
   preferences: "Continuer · tes préférences",
@@ -203,10 +204,4 @@ export const originAdjectives: Record<string, string> = {
   NL: "Néerlandaise",
   AT: "Autrichienne",
   CN: "Chinoise",
-};
-
-export const drivetrainLabels: Record<VehicleDrivetrain, string> = {
-  rwd: "propulsion",
-  fwd: "traction",
-  awd: "intégrale",
 };

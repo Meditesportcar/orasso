@@ -1,6 +1,8 @@
 // Le nuancier du site (lot M1, même données que l'appli) : familles en onglets, pastilles rondes avec le reflet de leur
 // finition (dégradés CSS calculés depuis `bodyColors`), nom de la teinte dessous, choix cerclé, « Autre teinte » à
-// saisie libre (40 caractères). Le champ envoyé s'appelle `color` et porte le NOM de la teinte.
+// saisie libre (40 caractères). Le champ envoyé s'appelle `color` et porte le NOM de la teinte. Lot M1, tour 2 : c'est
+// un champ caché indépendant de la famille affichée (les pastilles s'appellent `colorSwatch`), pour qu'une teinte
+// choisie reste envoyée quand on regarde une autre famille.
 
 import { TextField } from "@orasso/design-system/web";
 import {
@@ -113,6 +115,9 @@ export function ColorPicker({
           onChange={(e) => onChange(e.currentTarget.value, true)}
         />
       ) : (
+        <input type="hidden" name="color" value={known?.name ?? ""} data-testid="site-color-value" />
+      )}
+      {custom ? null : (
         <div className="g-swatches" role="radiogroup" aria-label={V.colorFamilies[family]}>
           {shown.map((b) => {
             const on = known?.name === b.name;
@@ -120,7 +125,7 @@ export function ColorPicker({
               <label key={b.name} className={on ? "g-swatches__cell g-opt is-on" : "g-swatches__cell g-opt"}>
                 <input
                   type="radio"
-                  name="color"
+                  name="colorSwatch"
                   value={b.name}
                   checked={on}
                   aria-label={`${b.name}, ${V.colorFinish[b.finish]}`}

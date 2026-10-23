@@ -41,6 +41,8 @@ async function shot(page: Page, theme: string, view: string, name: string, settl
 async function uploadPhoto(cookie: Cookie, vehicleId: string, rgb: [number, number, number]) {
   const form = new FormData();
   form.set("photo", new Blob([new Uint8Array(samplePhoto(rgb))], { type: "image/png" }), "photo.png");
+  // Lot M1, tour 2 : l'API exige une décision sur la plaque (ici, aucune plaque sur l'image d'essai).
+  form.set("noPlate", "true");
   const res = await fetch(`${API}/api/me/vehicles/${vehicleId}/photos`, {
     method: "POST",
     headers: { origin: WEB, cookie },

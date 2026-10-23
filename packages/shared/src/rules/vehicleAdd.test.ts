@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from "vitest";
-import { vehicleUpdateSchema } from "../schemas/vehicle";
+import { vehicleCreateSchema, vehicleUpdateSchema } from "../schemas/vehicle";
 import {
   bodyColorByName,
   bodyColorFamilies,
@@ -7,6 +7,7 @@ import {
   formatPreparation,
   parsePreparation,
   vehiclePreparations,
+  vehicleSpecsIssue,
 } from "./vehicleAdd";
 
 describe("nuancier des couleurs de carrosserie", () => {
@@ -56,5 +57,29 @@ describe("préparation", () => {
   it("tient dans le champ de l'API", () => {
     const all = formatPreparation([...vehiclePreparations]) ?? "";
     expect(vehicleUpdateSchema.shape.preparation.safeParse(all).success).toBe(true);
+  });
+});
+
+describe("fiche technique en saisie libre (décision de Damien du 23/10)", () => {
+  it("trois champs facultatifs, aux bornes de l'API", () => {
+    expect(vehicleSpecsIssue({})).toBeNull();
+    expect(vehicleSpecsIssue({ engine: "3.0 turbo B58", powerHp: "340", weightKg: "1495" })).toBeNull();
+    expect(vehicleSpecsIssue({ powerHp: "1", weightKg: "50" })).toBeNull();
+    expect(vehicleSpecsIssue({ powerHp: "2000", weightKg: "10000" })).toBeNull();
+    expect(vehicleSpecsIssue({ engine: "x".repeat(61) })).toMatch(/60 caractères/);
+    expect(vehicleSpecsIssue({ powerHp: "0" })).toMatch(/^Puissance/);
+    expect(vehicleSpecsIssue({ powerHp: "2001" })).toMatch(/^Puissance/);
+    expect(vehicleSpecsIssue({ powerHp: "12.5" })).toMatch(/^Puissance/);
+    expect(vehicleSpecsIssue({ weightKg: "49" })).toMatch(/^Poids/);
+    expect(vehicleSpecsIssue({ weightKg: "10001" })).toMatch(/^Poids/);
+  });
+
+  it("l'API applique les mêmes bornes", () => {
+    const base = { vehicleType: "car", makeId: crypto.randomUUID(), modelId: crypto.randomUUID(), unregistered: true };
+    expect(vehicleCreateSchema.safeParse({ ...base, powerHp: 2000, weightKg: 10000 }).success).toBe(true);
+    expect(vehicleCreateSchema.safeParse({ ...base, powerHp: 2001 }).success).toBe(false);
+    expect(vehicleCreateSchema.safeParse({ ...base, weightKg: 10001 }).success).toBe(false);
+    expect(vehicleCreateSchema.safeParse({ ...base, engine: "x".repeat(61) }).success).toBe(false);
+    expect(vehicleUpdateSchema.safeParse({ weightKg: 49 }).success).toBe(false);
   });
 });

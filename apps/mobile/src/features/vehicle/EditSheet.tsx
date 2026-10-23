@@ -2,7 +2,7 @@
 // description, catégories (celles qui ne conviennent pas sont grisées avec la raison, comme à l'ajout) et plaque. Une
 // plaque déjà prise par un autre membre lance une demande de transfert : le véhicule reste, la plaque attend la réponse.
 import { Button, CheckboxField, Chip, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { garageAppLabels as L, type VehicleFull } from "@orasso/shared";
+import { garageAppLabels as L, VEHICLE_ENGINE_MAX, type VehicleFull } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -47,8 +47,14 @@ export function EditSheet({
 
   const yearValue = /^\d{4}$/.test(form.year) ? Number.parseInt(form.year, 10) : undefined;
   const categories = useApi(
-    () => api.categories({ makeId: vehicle.makeId, vehicleType: vehicle.vehicleType, year: yearValue }),
-    [vehicle.makeId, vehicle.vehicleType, yearValue],
+    () =>
+      api.categories({
+        makeId: vehicle.makeId,
+        modelId: vehicle.modelId,
+        vehicleType: vehicle.vehicleType,
+        year: yearValue,
+      }),
+    [vehicle.makeId, vehicle.modelId, vehicle.vehicleType, yearValue],
     { enabled: visible },
   );
 
@@ -92,7 +98,12 @@ export function EditSheet({
         testID="vehicle-year"
       />
       <TextField label={L.color} value={form.color} onChangeText={(color) => patch({ color })} maxLength={40} />
-      <TextField label={L.engine} value={form.engine} onChangeText={(engine) => patch({ engine })} maxLength={80} />
+      <TextField
+        label={L.engine}
+        value={form.engine}
+        onChangeText={(engine) => patch({ engine })}
+        maxLength={VEHICLE_ENGINE_MAX}
+      />
       <TextField
         label={L.power}
         value={form.powerHp}

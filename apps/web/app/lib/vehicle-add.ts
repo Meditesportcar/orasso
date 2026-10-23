@@ -67,3 +67,15 @@ export function keptCategories(ids: readonly string[], rows: readonly CategoryOp
 /** « Préparée » : la catégorie à cocher d'office dès qu'une préparation est choisie, si elle convient. */
 export const preparedCategory = (rows: readonly CategoryOption[], slug: string) =>
   rows.find((c) => c.slug === slug && c.eligible) ?? null;
+
+/**
+ * Lot M1, tour 2 : champs de plaque d'une photo de véhicule envoyée à l'API, depuis le formulaire du site. Des cadres
+ * (`plateRects`, floutés par l'API), ou « aucune plaque visible » confirmé (case `noPlate` → `noPlate=true`). L'API
+ * refuse une photo sans l'un ni l'autre (défense en profondeur) ; l'action du site le vérifie avant
+ * (`plateDecisionError`).
+ */
+export function plateFields(form: FormData, upload: FormData, suffix = ""): void {
+  const rects = String(form.get(`plateRects${suffix}`) ?? "").trim();
+  if (rects) upload.set("plateRects", rects);
+  else if (form.get(`noPlate${suffix}`) === "on") upload.set("noPlate", "true");
+}

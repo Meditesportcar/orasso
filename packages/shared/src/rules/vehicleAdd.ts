@@ -3,6 +3,14 @@
 // (pas des jetons d'interface) : l'appli et le site les affichent, l'API stocke le nom de la teinte dans `color` et la
 // préparation en texte lisible dans `preparation` (la fiche du tri l'affiche telle quelle).
 
+import {
+  VEHICLE_ENGINE_MAX,
+  VEHICLE_POWER_MAX,
+  VEHICLE_POWER_MIN,
+  VEHICLE_WEIGHT_MAX,
+  VEHICLE_WEIGHT_MIN,
+} from "../schemas/vehicle";
+
 // --- Couleurs de carrosserie ------------------------------------------------------------------------------------------
 
 /** Familles du nuancier, dans l'ordre d'affichage. */
@@ -193,3 +201,31 @@ export const PREPARED_CATEGORY_SLUG = "preparee";
 
 /** Longueur de la description dans l'ajout (maquette 1.6 : compteur « 142 / 600 ») ; l'API en accepte 2 000. */
 export const VEHICLE_DESCRIPTION_MAX = 600;
+
+// --- Fiche technique (saisie libre) -------------------------------------------------------------------------------
+// Décision de Damien du 23/10 (lot M1, tour 2) : motorisation, puissance et poids saisis librement, sans catalogue.
+// Mêmes bornes que l'API (`vehicleFields`) ; l'appli et le site disent la même chose.
+
+/** « 2 000 » (espace insécable), sans dépendre d'Intl sur le téléphone. */
+const grouped = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+
+const wholeIn = (text: string, min: number, max: number): boolean => {
+  const n = Number(text.trim());
+  return /^\d+$/.test(text.trim()) && Number.isInteger(n) && n >= min && n <= max;
+};
+
+/** Ce qui ne va pas dans la fiche technique saisie (champs texte du formulaire), ou `null`. Les trois sont facultatifs. */
+export function vehicleSpecsIssue(input: { engine?: string; powerHp?: string; weightKg?: string }): string | null {
+  if ((input.engine ?? "").trim().length > VEHICLE_ENGINE_MAX) {
+    return `Motorisation : ${VEHICLE_ENGINE_MAX} caractères au plus.`;
+  }
+  const power = (input.powerHp ?? "").trim();
+  if (power && !wholeIn(power, VEHICLE_POWER_MIN, VEHICLE_POWER_MAX)) {
+    return `Puissance : un nombre entier de ${VEHICLE_POWER_MIN} à ${grouped(VEHICLE_POWER_MAX)} ch.`;
+  }
+  const weight = (input.weightKg ?? "").trim();
+  if (weight && !wholeIn(weight, VEHICLE_WEIGHT_MIN, VEHICLE_WEIGHT_MAX)) {
+    return `Poids : un nombre entier de ${VEHICLE_WEIGHT_MIN} à ${grouped(VEHICLE_WEIGHT_MAX)} kg.`;
+  }
+  return null;
+}

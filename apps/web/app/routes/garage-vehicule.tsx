@@ -14,6 +14,7 @@ import {
   type PlateTransferView,
   plateTransferLabels,
   shareSheetLabels,
+  VEHICLE_ENGINE_MAX,
   type VehicleDetail,
   type VehicleHistoryItem,
   vehicleStatusLabels,
@@ -27,6 +28,7 @@ import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/Pl
 import { ShareCard } from "../components/ShareButtons";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
+import { plateFields } from "../lib/vehicle-add";
 import type { Route } from "./+types/garage-vehicule";
 import "../styles/garage.css";
 
@@ -37,7 +39,11 @@ export function meta() {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const id = params.id;
   const vehicle = await apiOrThrow<VehicleDetail>(request, `/me/vehicles/${encodeURIComponent(id)}`);
-  const query = new URLSearchParams({ makeId: vehicle.makeId, vehicleType: vehicle.vehicleType });
+  const query = new URLSearchParams({
+    makeId: vehicle.makeId,
+    modelId: vehicle.modelId,
+    vehicleType: vehicle.vehicleType,
+  });
   if (vehicle.year) query.set("year", String(vehicle.year));
   const [history, categories, transfers] = await Promise.all([
     apiOrThrow<VehicleHistoryItem[]>(request, `/me/vehicles/${encodeURIComponent(id)}/history`),
@@ -98,7 +104,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (decision) return data({ error: decision, done: null }, { status: 400 });
     const upload = new FormData();
     upload.set("photo", photo);
-    if (text("plateRects")) upload.set("plateRects", text("plateRects"));
+    plateFields(form, upload);
     const res = await api(request, `${base}/photos`, { method: "POST", body: upload });
     return res.ok ? data({ error: null, done: "photo" }) : fail(res);
   }
@@ -419,7 +425,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
             <TextField label="Année" name="year" inputMode="numeric" maxLength={4} defaultValue={v.year ?? ""} />
             <TextField label="Couleur" name="color" defaultValue={v.color ?? ""} />
           </div>
-          <TextField label="Moteur" name="engine" defaultValue={v.engine ?? ""} />
+          <TextField label="Moteur" name="engine" maxLength={VEHICLE_ENGINE_MAX} defaultValue={v.engine ?? ""} />
           <div className="s-two">
             <TextField label="Puissance (ch)" name="powerHp" inputMode="numeric" defaultValue={v.powerHp ?? ""} />
             <TextField label="Poids (kg)" name="weightKg" inputMode="numeric" defaultValue={v.weightKg ?? ""} />

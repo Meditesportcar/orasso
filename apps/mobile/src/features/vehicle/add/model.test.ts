@@ -5,24 +5,27 @@ import {
   ageNote,
   applyMode,
   blurredCount,
+  continueBlocked,
   createBody,
   type Draft,
   detectionUnavailable,
   dimmedNote,
   draftFromVehicle,
+  draftIsEmpty,
   emptyDraft,
   filterRows,
   fitPhoto,
   keptCategories,
   liveCard,
   needsPlateDecision,
+  nextMove,
   originCategories,
-  photoPlan,
   preparedCategory,
   STEP,
   shortName,
   stepIssue,
   stepOfError,
+  stepToRevisit,
   styleCategories,
   updateBody,
   visibleStyles,
@@ -231,20 +234,27 @@ describe("envoi", () => {
     expect(updateBody({ ...d, former: true, plate: "" }, vehicle)).toEqual({ plate: null, status: "keepsake" });
   });
 
-  it("plan des photos : retraits, envois avec cadres, floutage des photos déjà en ligne", () => {
+  it("plaques floutées : cadres posés et photos déjà floutées", () => {
     const d = draftFromVehicle(vehicle);
     const rect = { x: 0.1, y: 0.6, w: 0.3, h: 0.1 };
     const photos = [
       { ...(d.photos[0] as Draft["photos"][number]), rects: [rect] },
       { key: "new", uri: "file:///n.jpg", width: 800, height: 600, rects: [rect] },
     ];
-    expect(photoPlan({ ...d, photos }, vehicle.photos)).toEqual([
-      { kind: "remove", photoId: "p2" },
-      { kind: "upload", key: "new", rects: [rect] },
-      { kind: "blur", key: "p1", photoId: "p1", rects: [rect] },
-    ]);
     expect(blurredCount({ ...d, photos })).toBe(2);
     expect(blurredCount(d)).toBe(1); // p2 déjà floutée
+  });
+
+  it("lot M1, tour 2 : en modification, une plaque sûre d'une nouvelle photo est masquée d'office", () => {
+    const d = draftFromVehicle(vehicle);
+    expect(d.blurMode).toBe("auto");
+    const detected = [{ x: 0.2, y: 0.7, w: 0.2, h: 0.08 }];
+    const photos = applyMode(
+      [...d.photos, { key: "n", uri: "file:///n.jpg", width: 1, height: 1, rects: [], detected }],
+      "auto",
+    );
+    expect(photos.at(-1)?.rects).toEqual(detected);
+    expect(photos[0]?.rects).toEqual([]); // la photo déjà en ligne n'est pas touchée
   });
 
   it("couverture et mode Automatique", () => {
@@ -254,6 +264,62 @@ describe("envoi", () => {
     const withDetection = photos.map((p) => ({ ...p, detected }));
     expect(applyMode(withDetection, "auto")[0]?.rects).toEqual(detected);
     expect(applyMode(withDetection, "manual")[0]?.rects).toEqual([]);
+  });
+});
+
+describe("lot M1, tour 2 : vie privée de la plaque pendant l'import", () => {
+  const photo = (over: Partial<Draft["photos"][number]> = {}) => ({
+    key: "a",
+    uri: "file:///a.jpg",
+    width: 1200,
+    height: 900,
+    rects: [],
+    noPlate: true,
+    ...over,
+  });
+
+  it("import retardé : « Continuer » est grisé et ne fait rien, à toutes les étapes", () => {
+    const d = filled();
+    for (const step of Object.values(STEP)) {
+      expect(continueBlocked(step, d, true)).toBe(true);
+      expect(nextMove(step, d, true)).toEqual({ kind: "wait" });
+    }
+    expect(continueBlocked(STEP.plate, d, false)).toBe(false);
+    expect(nextMove(STEP.photos, d, false)).toEqual({ kind: "step", step: STEP.plate });
+  });
+
+  it("une photo arrivée après l'étape Plaque ramène à cette étape, sans rien envoyer", () => {
+    // Photo 1 validée ; la photo 2 arrive (import fini) pendant qu'on est à la fiche technique.
+    const later = filled({
+      photos: [photo(), photo({ key: "b", uri: "file:///b.jpg", noPlate: false, detection: "pending" })],
+    });
+    expect(stepToRevisit(later, STEP.specs)).toBe(STEP.plate);
+    expect(nextMove(STEP.specs, later, false)).toMatchObject({ kind: "fix", step: STEP.plate });
+    expect(nextMove(STEP.categories, later, false)).toMatchObject({ kind: "fix", step: STEP.plate });
+    // Détection finie, toujours sans décision : encore l'étape Plaque.
+    const found = filled({ photos: [photo(), photo({ key: "b", noPlate: false, detection: "none" })] });
+    expect(nextMove(STEP.categories, found, false)).toMatchObject({ kind: "fix", step: STEP.plate });
+    // Décidée (cadre posé) : l'envoi peut partir.
+    const ok = filled({
+      photos: [photo(), photo({ key: "b", noPlate: false, rects: [{ x: 0.1, y: 0.6, w: 0.3, h: 0.1 }] })],
+    });
+    expect(stepToRevisit(ok, STEP.categories)).toBeNull();
+    expect(nextMove(STEP.categories, ok, false)).toEqual({ kind: "send" });
+  });
+
+  it("brouillon vide : on quitte sans confirmation ; sinon on confirme", () => {
+    expect(draftIsEmpty(emptyDraft())).toBe(true);
+    expect(draftIsEmpty({ ...emptyDraft(), photos: [photo()] })).toBe(false);
+    expect(draftIsEmpty({ ...emptyDraft(), plate: "AB" })).toBe(false);
+    expect(draftIsEmpty({ ...emptyDraft(), makeId: "mk" })).toBe(false);
+  });
+
+  it("fiche technique libre : bornes de la décision de Damien", () => {
+    expect(stepIssue(STEP.specs, filled({ engine: "", powerHp: "", weightKg: "" }))).toBeNull();
+    expect(stepIssue(STEP.specs, filled({ powerHp: "2000", weightKg: "10000" }))).toBeNull();
+    expect(stepIssue(STEP.specs, filled({ powerHp: "2001" }))).toMatch(/Puissance/);
+    expect(stepIssue(STEP.specs, filled({ weightKg: "49" }))).toMatch(/Poids/);
+    expect(stepIssue(STEP.specs, filled({ engine: "x".repeat(61) }))).toMatch(/60 caractères/);
   });
 });
 

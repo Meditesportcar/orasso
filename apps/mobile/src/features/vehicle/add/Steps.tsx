@@ -1,14 +1,15 @@
 // Étapes 3 à 5 de l'ajout de véhicule (lot 51 ; lot M1 d'après les maquettes 1.5 à 1.7 et l'artefact `s-vadd`) :
-// marque › modèle › génération dans la liste Orasso (« Autre » sans saisie libre), fiche technique (motorisations du
-// catalogue, années en rangée, nuancier, description, préparation), catégories (origine déduite sous cadenas, styles en
-// pastilles, incompatibles cachés ou barrés avec une seule phrase d'explication).
+// marque › modèle › génération dans la liste Orasso (« Autre » sans saisie libre), fiche technique (motorisation,
+// puissance et poids en saisie libre — décision de Damien du 23/10, pas de catalogue —, années en rangée, nuancier,
+// description, préparation), catégories (origine déduite sous cadenas, styles en pastilles, incompatibles cachés ou
+// barrés avec une seule phrase d'explication).
 import { Icon, type IconName, Text, TextField, textStyles, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type CategoryOption,
   vehicleWizardLabels as L,
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
-  type VehicleEngine,
+  VEHICLE_ENGINE_MAX,
   type VehicleGeneration,
   type VehicleMake,
   type VehicleModel,
@@ -90,7 +91,7 @@ export function StepIdentity({
   const model = models.find((m) => m.id === draft.modelId);
   const level: "make" | "model" | "generation" = !draft.makeId ? "make" : !draft.modelId ? "model" : "generation";
   const pickType = (vehicleType: Draft["vehicleType"]) =>
-    patch({ vehicleType, modelId: undefined, generationId: undefined, engineId: undefined });
+    patch({ vehicleType, modelId: undefined, generationId: undefined });
 
   const rows =
     level === "make"
@@ -100,7 +101,7 @@ export function StepIdentity({
           detail: m.isOther ? L.otherHint : null,
           other: m.isOther,
           pick: () => {
-            patch({ makeId: m.id, modelId: undefined, generationId: undefined, engineId: undefined });
+            patch({ makeId: m.id, modelId: undefined, generationId: undefined });
             setSearch("");
           },
           selected: false,
@@ -112,7 +113,7 @@ export function StepIdentity({
             detail: m.isOther ? L.otherHint : null,
             other: m.isOther,
             pick: () => {
-              patch({ modelId: m.id, generationId: undefined, engineId: undefined });
+              patch({ modelId: m.id, generationId: undefined });
               setSearch("");
             },
             selected: false,
@@ -122,8 +123,9 @@ export function StepIdentity({
             title: g.isOther ? L.other : g.name,
             detail: g.isOther ? L.otherHint : generationYears(g),
             other: g.isOther,
-            pick: () =>
-              patch({ generationId: g.id, engineId: draft.generationId === g.id ? draft.engineId : undefined }),
+            // Lot M1, tour 2 : motorisation, puissance et poids sont saisis par la personne ; changer de génération
+            // les garde.
+            pick: () => patch({ generationId: g.id }),
             selected: draft.generationId === g.id,
           }));
   const onlyOther = rows.length > 0 && rows.every((r) => r.other) && search.trim().length > 0;
@@ -132,14 +134,14 @@ export function StepIdentity({
       ? {
           label: make.isOther ? L.other : make.name,
           a11y: `${L.make} : ${make.isOther ? L.other : make.name}, changer`,
-          onPress: () => patch({ makeId: undefined, modelId: undefined, generationId: undefined, engineId: undefined }),
+          onPress: () => patch({ makeId: undefined, modelId: undefined, generationId: undefined }),
         }
       : null,
     model
       ? {
           label: model.isOther ? L.other : model.name,
           a11y: `${L.model} : ${model.isOther ? L.other : model.name}, changer`,
-          onPress: () => patch({ modelId: undefined, generationId: undefined, engineId: undefined }),
+          onPress: () => patch({ modelId: undefined, generationId: undefined }),
         }
       : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null);
@@ -216,32 +218,16 @@ export function StepSpecs({
   draft,
   patch,
   generation,
-  engines,
   onPreparation,
 }: {
   draft: Draft;
   patch: Patch;
   generation: VehicleGeneration | undefined;
-  /** Motorisations du catalogue de la génération ; vide : saisie libre. */
-  engines: VehicleEngine[];
   /** Une préparation vient d'être choisie (la catégorie « Préparée » se coche d'office). */
   onPreparation: (items: VehiclePreparation[]) => void;
 }) {
   const years = yearChoices(generation && !generation.isOther ? generation : undefined, new Date().getFullYear());
   const [yearText, setYearText] = useState(draft.year ? String(draft.year) : "");
-  const catalog = engines.length > 0;
-  // Fiche existante : sa motorisation est reconnue dans le catalogue, sinon elle est « Autre ».
-  const known = engines.find(
-    (e) => e.id === draft.engineId || (draft.engineId === undefined && e.name === draft.engine),
-  );
-  const other = !catalog || draft.engineId === null || (!known && draft.engine.trim().length > 0);
-  const pickEngine = (e: VehicleEngine) =>
-    patch({
-      engineId: e.id,
-      engine: e.name,
-      powerHp: e.powerHp ? String(e.powerHp) : "",
-      weightKg: e.weightKg ? String(e.weightKg) : "",
-    });
   const customColor = Boolean(draft.colorCustom);
   const toggle = (p: VehiclePreparation) => {
     const next = draft.preparation.includes(p) ? draft.preparation.filter((x) => x !== p) : [...draft.preparation, p];
@@ -250,64 +236,41 @@ export function StepSpecs({
   };
   return (
     <>
-      <StepHead title={L.specsTitle} text={catalog ? V.specsText : V.specsTextFree} />
-      <FieldLabel>{V.engines}</FieldLabel>
-      <View style={styles.list} accessibilityRole="radiogroup">
-        {engines.map((e) => (
-          <SelectRow
-            key={e.id}
-            title={e.name}
-            detail={V.engineFacts(e.powerHp, e.weightKg, e.drivetrain)}
-            icon="power"
-            selected={!other && known?.id === e.id}
-            onPress={() => pickEngine(e)}
-            testID="vehicle-engine-card"
-          />
-        ))}
-        {catalog ? (
-          <SelectRow
-            title={V.otherEngine}
-            detail={V.otherEngineHint}
-            icon="edit"
-            other
-            selected={other}
-            onPress={() => patch({ engineId: null, engine: known ? "" : draft.engine })}
-            testID="vehicle-engine-other"
-          />
-        ) : null}
-      </View>
-      {other ? (
-        <View style={styles.stack}>
+      <StepHead title={L.specsTitle} text={V.specsText} />
+      {/* Décision de Damien du 23/10 : trois champs libres et facultatifs, bornes de `vehicleSpecsIssue`. */}
+      <View style={styles.stack}>
+        <TextField
+          label={L.engine}
+          value={draft.engine}
+          onChangeText={(engine) => patch({ engine: engine.slice(0, VEHICLE_ENGINE_MAX) })}
+          help={V.engineHelp}
+          maxLength={VEHICLE_ENGINE_MAX}
+          autoCapitalize="none"
+          testID="vehicle-engine"
+        />
+        <View style={styles.two}>
           <TextField
-            label={L.engine}
-            value={draft.engine}
-            onChangeText={(engine) => patch({ engine })}
-            placeholder={V.enginePlaceholder}
-            maxLength={80}
-            testID="vehicle-engine"
+            label={L.power}
+            value={draft.powerHp}
+            onChangeText={(powerHp) => patch({ powerHp: powerHp.replace(/\D/g, "") })}
+            keyboardType="number-pad"
+            maxLength={4}
+            help={V.powerHelp}
+            style={styles.grow}
+            testID="vehicle-power"
           />
-          <View style={styles.two}>
-            <TextField
-              label={L.power}
-              value={draft.powerHp}
-              onChangeText={(powerHp) => patch({ powerHp })}
-              keyboardType="number-pad"
-              maxLength={4}
-              style={styles.grow}
-              testID="vehicle-power"
-            />
-            <TextField
-              label={L.weight}
-              value={draft.weightKg}
-              onChangeText={(weightKg) => patch({ weightKg })}
-              keyboardType="number-pad"
-              maxLength={5}
-              style={styles.grow}
-              testID="vehicle-weight"
-            />
-          </View>
+          <TextField
+            label={L.weight}
+            value={draft.weightKg}
+            onChangeText={(weightKg) => patch({ weightKg: weightKg.replace(/\D/g, "") })}
+            keyboardType="number-pad"
+            maxLength={5}
+            help={V.weightHelp}
+            style={styles.grow}
+            testID="vehicle-weight"
+          />
         </View>
-      ) : null}
+      </View>
       <FieldLabel>{V.year}</FieldLabel>
       {years.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.years}>
