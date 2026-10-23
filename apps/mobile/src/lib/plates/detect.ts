@@ -21,35 +21,53 @@ export { normalizePlateText };
  * stricte (`plateKind`), les bandes retirées autour (« F » à gauche, département à droite), et s'il est ambigu (une
  * autre lecture aussi bonne donne un autre numéro : on ne le propose pas).
  */
-export type PlateRead = { plate: string; fixes: number; valid: boolean; stripped: number; ambiguous: boolean };
+export type PlateRead = {
+  plate: string;
+  fixes: number;
+  valid: boolean;
+  stripped: number;
+  tier: number;
+  ambiguous: boolean;
+};
 
 const TRAILING_DEPT = /(\d{2,3}|2[AB])$/;
 
-/** Classement des lectures (lot M2, tour 2) : la plus fidèle d'abord, puis valide, puis la plus complète. */
+/** Bande « F » lue comme telle : un « F » de tête suivi d'un séparateur (mot à part, tiret), comme `normalizePlate`. */
+const BAND_PREFIX = /^\s*F[\s\-.·]+/i;
+
+/**
+ * Classement des lectures (lot M2) : la plus fidèle d'abord, puis valide, puis le découpage préféré (`tier` : avec une
+ * bande lue à part, sans le « F » ; sinon le texte entier avant la bande collée), puis la plus complète.
+ */
 const byQuality = (a: Omit<PlateRead, "ambiguous">, b: Omit<PlateRead, "ambiguous">) =>
-  a.fixes - b.fixes || Number(b.valid) - Number(a.valid) || b.stripped - a.stripped;
+  a.fixes - b.fixes || Number(b.valid) - Number(a.valid) || a.tier - b.tier || b.stripped - a.stripped;
 
 /**
  * Meilleure lecture d'un texte qui ressemble à une plaque, ou `null`. SIV, W garage, WW, FNI ou diplomatique,
  * confusions tolérées ; la bande « F » et le département autour sont essayés retirés. Une FNI lue exactement passe
- * devant une SIV obtenue en relisant des caractères (« 256 BB 88 » n'est pas « ZS-688-BB »).
+ * devant une SIV obtenue en relisant des caractères (« 256 BB 88 » n'est pas « ZS-688-BB »). Tour 3 : comme
+ * `normalizePlate`, un « F » séparé du reste est une bande (« F W 623 AX » → W garage) ; collé, il fait d'abord partie
+ * du numéro (« FW 123 AB » → SIV de série FW).
  */
 export function readPlate(raw: string): PlateRead | null {
   const s = normalizePlateText(raw);
   if (s.length < 5) return null;
-  // [texte, bandes retirées, département retiré] : un département ne se retire qu'autour d'une plaque récente (SIV,
-  // W garage, WW) ; il fait partie du numéro d'une FNI ou d'une diplomatique.
-  const candidates: [string, number, boolean][] = [[s, 0, false]];
-  const noF = s.startsWith("F") && s.length >= 7 ? s.slice(1) : null;
-  if (noF) candidates.push([noF, 1, false]);
-  for (const [c, n] of [...candidates]) {
-    if (TRAILING_DEPT.test(c) && c.length >= 8) candidates.push([c.replace(TRAILING_DEPT, ""), n + 1, true]);
+  const noF = s.startsWith("F") && s.length >= 6 ? s.slice(1) : null;
+  const band = Boolean(noF) && BAND_PREFIX.test(raw);
+  // [texte, bandes retirées, découpage] ; un département ne se retire qu'autour d'une plaque récente (SIV, W garage,
+  // WW) : il fait partie du numéro d'une FNI ou d'une diplomatique.
+  const bases: [string, number, number][] = band
+    ? [[noF as string, 1, 0]]
+    : [[s, 0, 0], ...(noF ? ([[noF, 1, 1]] as [string, number, number][]) : [])];
+  const candidates: [string, number, number, boolean][] = bases.map(([c, n, t]) => [c, n, t, false]);
+  for (const [c, n, t] of bases) {
+    if (TRAILING_DEPT.test(c) && c.length >= 8) candidates.push([c.replace(TRAILING_DEPT, ""), n + 1, t, true]);
   }
   const reads = candidates
-    .flatMap(([c, stripped, dept]) =>
+    .flatMap(([c, stripped, tier, dept]) =>
       plateReadings(c, "wide")
         .filter((r) => !dept || r.siv)
-        .map((r) => ({ plate: r.plate, fixes: r.fixes, valid: plateKind(r.plate) !== null, stripped })),
+        .map((r) => ({ plate: r.plate, fixes: r.fixes, valid: plateKind(r.plate) !== null, stripped, tier })),
     )
     .sort(byQuality);
   const [best] = reads;
@@ -208,7 +226,8 @@ export function frameCovers(rect: PlateRect, width: number, height: number, poin
  */
 export type FoundPlate = PlateRead & {
   rect: PlateRect;
-  probable: boolean /** Surface du cadre (0–1). */;
+  probable: boolean;
+  /** Surface du cadre (0–1). */
   area: number;
 };
 
@@ -223,22 +242,42 @@ export function findPlates(lines: TextLineResult[], imageWidth: number, imageHei
   const found: (PlateRead & { frame: TextFrame; corners: TextCorners[]; probable: boolean })[] = [];
   for (const line of lines) {
     const words = line.elements.filter((e) => e.frame);
-    let best: (PlateRead & { run: typeof words }) | null = null;
+    // Tour 3 : toutes les lectures de la ligne, avec leur place (mots `start` à `end`, exclus).
+    const reads: (PlateRead & { start: number; end: number })[] = [];
     for (let size = Math.min(5, words.length); size >= 1; size--) {
       for (let start = 0; start + size <= words.length; start++) {
-        const run = words.slice(start, start + size);
-        const read = readPlate(run.map((w) => w.text).join(""));
-        if (read && (!best || byQuality(read, best) < 0)) best = { ...read, run };
+        const read = readPlate(
+          words
+            .slice(start, start + size)
+            .map((w) => w.text)
+            .join(" "),
+        );
+        if (read) reads.push({ ...read, start, end: start + size });
       }
     }
-    if (best) {
-      const { run, ...read } = best;
+    // La plaque est la plus longue suite lue (à longueur égale, la mieux lue) : une sous-suite (« 123 CD 66 » dans
+    // « A8 123 CD 66 ») ne réduit jamais le cadre. Les lectures qui la chevauchent sont concurrentes : le cadre couvre
+    // leur union, et une concurrente mieux lue qui donne un autre numéro rend la plaque ambiguë (pas de numéro).
+    const primary = [...reads].sort((a, b) => b.end - b.start - (a.end - a.start) || byQuality(a, b))[0];
+    if (primary) {
+      const group = reads.filter((r) => r.start < primary.end && primary.start < r.end);
+      const start = Math.min(...group.map((r) => r.start));
+      const end = Math.max(...group.map((r) => r.end));
+      const run = words.slice(start, end);
+      const rival = group.some(
+        (r) =>
+          r.plate !== primary.plate &&
+          (r.fixes < primary.fixes || (r.fixes === primary.fixes && r.valid && !primary.valid)),
+      );
       const corners = run.flatMap((w) => (w.corners?.length === 4 ? [w.corners] : []));
+      const { start: _s, end: _e, ...read } = primary;
       found.push({
         ...read,
+        ambiguous: read.ambiguous || rival,
         frame: union(run.map((w) => w.frame as TextFrame)),
         corners: corners.length === run.length ? corners : [],
-        probable: read.fixes > MAX_SURE_FIXES,
+        // Sûre si l'une des lectures du groupe l'est : le cadre (union) est alors appliqué.
+        probable: group.every((r) => r.fixes > MAX_SURE_FIXES),
       });
       continue;
     }
@@ -254,6 +293,7 @@ export function findPlates(lines: TextLineResult[], imageWidth: number, imageHei
           fixes: 0,
           valid: false,
           stripped: 0,
+          tier: 0,
           ambiguous: false,
           frame: line.frame,
           corners,

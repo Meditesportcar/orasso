@@ -39,24 +39,36 @@ const TRAILING_DEPT = /(\d{2,3}|2[AB])$/;
 /** Formats récents (SIV, W garage, WW) : les seuls autour desquels une bande « F » et un département sont imprimés. */
 const RECENT: PlateKind[] = ["siv", "ww", "wGarage"];
 
+/** Bande « F » écrite comme telle : un « F » de tête suivi d'un séparateur (espace, tiret, point) — « F W… », « F-AB… ». */
+const BAND_PREFIX = /^\s*F[\s\-.·]+/i;
+
 /**
  * Forme unique d'une plaque, stockée dans `plate_normalized` (recherche, doublons, accueil drive) : lettres et
- * chiffres seuls, sans accents. Lot M2, tour 2 : la bande européenne « F » à gauche et le département à droite sont
- * retirés quand le reste est une plaque récente (« F AB-123-CD 66 » → « AB123CD », « F W 623 AX 66 » → « W623AX »), le
- * « F » seul devant une FNI (« F 1234 AB 66 » → « 1234AB66 ») ;
- * une saisie déjà au format français reste telle quelle (« 1234 AB 66 » est une FNI).
+ * chiffres seuls, sans accents. Lot M2 : la bande européenne « F » à gauche et le département à droite sont retirés
+ * autour d'une plaque récente (SIV, W garage, WW), le « F » devant une FNI ; le département d'une FNI reste (il fait
+ * partie du numéro). Tour 3 : la saisie départage la SIV de série « FW » et le W garage précédé de sa bande. Un « F »
+ * suivi d'un séparateur est une bande (« F W 123 AB » → W123AB, « F FW-123-AB 66 » → FW123AB) ; sans séparateur, la
+ * plaque entière passe d'abord (« FW-123-AB 66 » → FW123AB, « FW123AB » reste une SIV). Même règle, en SQL, dans la
+ * migration `0053_plate-normalization-conflicts` (test de parité).
  */
 export function normalizePlate(raw: string): string {
   const n = plateCharacters(raw);
-  if (match(n)) return n;
   const noF = n.startsWith("F") ? n.slice(1) : null;
-  const strip = (s: string | null) => (s && TRAILING_DEPT.test(s) ? s.replace(TRAILING_DEPT, "") : null);
-  // Le plus de bandes retirées d'abord : une plaque imprimée a la bande et le département.
-  for (const c of [strip(noF), noF, strip(n)]) {
+  const strip = (c: string | null) => (c && TRAILING_DEPT.test(c) ? c.replace(TRAILING_DEPT, "") : null);
+  const recent = (c: string | null) => {
     const m = c ? match(c) : null;
-    // Sans le « F », une FNI reste une FNI (son département fait partie du numéro).
-    if (c && m && (RECENT.includes(m.kind) || c === noF)) return c;
+    return Boolean(m && RECENT.includes(m.kind));
+  };
+  const french = (c: string | null) => Boolean(c && match(c));
+  if (noF && BAND_PREFIX.test(raw)) {
+    if (recent(strip(noF))) return strip(noF) as string;
+    if (french(noF)) return noF;
   }
+  if (french(n)) return n;
+  if (recent(strip(n))) return strip(n) as string;
+  // Bande collée (« FAB123CD66 », ancienne forme stockée) : en dernier recours.
+  if (recent(strip(noF))) return strip(noF) as string;
+  if (french(noF)) return noF as string;
   return n;
 }
 

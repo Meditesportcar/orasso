@@ -289,6 +289,40 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
     expect(plate?.rect.w).toBeCloseTo(0.276, 3);
   });
 
+  it("tour 3 : une sous-suite mieux lue ne réduit jamais le cadre et rend le numéro ambigu (« A8 123 CD 66 »)", () => {
+    const words = (texts: string[]) => {
+      let x = 300;
+      return texts.map((t): [string, TextFrame] => {
+        const f = frame(x, 600, t.length * 20, 40);
+        x += t.length * 20 + 10;
+        return [t, f];
+      });
+    };
+    for (const texts of [
+      ["A8", "123", "CD", "66"],
+      ["F", "A8", "123", "CD", "66"],
+    ]) {
+      const ws = words(texts);
+      const [plate, ...rest] = findPlates([line(ws)], 1000, 1000);
+      expect(rest, texts.join(" ")).toEqual([]);
+      expect(plate).toMatchObject({ plate: "AB123CD", ambiguous: true, probable: false });
+      expect(suggestedPlate([plate!]), texts.join(" ")).toBeNull();
+      // Cadre : toute la ligne, du premier au dernier mot (agrandi de 15 %), jamais la seule sous-suite.
+      const left = ws[0]![1].left;
+      const right = ws.at(-1)![1].left + ws.at(-1)![1].width;
+      expect(plate!.rect.x).toBeLessThanOrEqual(left / 1000);
+      expect(plate!.rect.x + plate!.rect.w).toBeGreaterThanOrEqual(right / 1000);
+    }
+  });
+
+  it("tour 3 : « F » lu à part = bande (W garage) ; collé = SIV de série FW", () => {
+    expect(plateReadingOf("F W 123 AB")).toBe("W123AB");
+    expect(plateReadingOf("F W 123 AB 66")).toBe("W123AB");
+    expect(plateReadingOf("FW 123 AB")).toBe("FW123AB");
+    expect(plateReadingOf("FW-123-AB 66")).toBe("FW123AB");
+    expect(plateReadingOf("F FW 123 AB 66")).toBe("FW123AB");
+  });
+
   it("numéro prérempli : la lecture exacte d'abord, le plus grand cadre ensuite, rien s'il y a ambiguïté", () => {
     const at = (plate: string, fixes: number, area: number) => ({
       plate,
