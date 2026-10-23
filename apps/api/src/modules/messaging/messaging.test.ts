@@ -7,6 +7,7 @@ import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  createEvent,
   createStructure,
   resetDb,
   signUp,
@@ -423,6 +424,52 @@ describe("organisateurs toujours joignables", () => {
     // Structure non vérifiée : on ne la contacte pas.
     const brouillon = await createStructure(damien.id, false);
     expect((await req(fan, "POST", `/structures/${brouillon.id}/conversation`)).status).toBe(404);
+  });
+});
+
+// Lot M4 : un message écrit depuis la fiche d'un événement porte son contexte, visible des deux côtés.
+describe("« À propos de » un événement", () => {
+  it("étiquette sur le message, des deux côtés ; refusée hors de la structure, sur un brouillon ou entre amis", async () => {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const kenji = await signUp("Kenji");
+    const s = await createStructure(damien.id);
+    const other = await createStructure((await signUp("Autre", { twoFactor: true })).id);
+    const startsAt = fromWallTime({ year: 2026, month: 10, day: 24, hour: 19, minute: 0 });
+    const nocturne = await createEvent(s.id, { title: "Nocturne de Canet", startsAt });
+    const draft = await createEvent(s.id, { status: "draft" });
+    const elsewhere = await createEvent(other.id);
+    const id = (await req(kenji, "POST", `/structures/${s.id}/conversation`)).json.id as string;
+    const about = (aboutEventId: string, body = "Je peux venir avec une remorque ?") =>
+      req(kenji, "POST", `/conversations/${id}/messages`, { clientId: randomUUID(), body, aboutEventId }, "bearer");
+
+    const sent = await about(nocturne.id);
+    expect(sent.status).toBe(201);
+    const label = {
+      eventId: nocturne.id,
+      slug: nocturne.slug,
+      title: "Nocturne de Canet",
+      startsAt: startsAt.toISOString(),
+      city: nocturne.city,
+    };
+    expect(sent.json.about).toEqual(label);
+    expect((await req(damien, "GET", `/conversations/${id}/messages`)).json.items[0].about).toEqual(label);
+    expect((await req(kenji, "GET", `/conversations/${id}/messages`)).json.items[0].about).toEqual(label);
+    // Une réponse sans contexte n'en porte pas.
+    expect((await send(damien, id, "Oui, parking visiteurs")).json.about).toBeNull();
+
+    for (const bad of [draft.id, elsewhere.id, randomUUID()]) {
+      const refused = await about(bad);
+      expect(refused.status).toBe(400);
+      expect(refused.json.error.details.field).toBe("aboutEventId");
+    }
+    const lea = await signUp("Lea");
+    const direct = await directBetween(kenji, lea);
+    const between = await req(kenji, "POST", `/conversations/${direct}/messages`, {
+      clientId: randomUUID(),
+      body: "Tu viens ?",
+      aboutEventId: nocturne.id,
+    });
+    expect(between.status).toBe(400);
   });
 });
 

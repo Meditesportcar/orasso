@@ -15,6 +15,11 @@ export const messageSendSchema = z
     clientId: z.uuid(),
     body: z.string().trim().min(1).max(MESSAGE_BODY_MAX).optional(),
     imageKey: z.string().min(10).max(200).optional(),
+    /**
+     * Lot M4 : message écrit depuis la fiche d'un événement (« À propos de : Nocturne de Canet · 24 oct. »). Seulement
+     * dans une conversation avec la structure qui l'organise ; l'étiquette se voit des deux côtés.
+     */
+    aboutEventId: z.uuid().optional(),
   })
   .refine((v) => Boolean(v.body) !== Boolean(v.imageKey), { message: "Un texte ou une image", path: ["body"] });
 export type MessageSend = z.infer<typeof messageSendSchema>;
@@ -45,6 +50,9 @@ export const uploadPurposeSchema = z.enum(acceptedUploadPurposes);
 /** Une personne dans la messagerie : pseudo et photo, jamais rien d'autre. */
 export type MessagePerson = { userId: string; pseudo: string; avatarUrl: string | null };
 
+/** Lot M4 : l'événement dont parle un message (étiquette « À propos de », lien vers sa fiche). */
+export type MessageAbout = { eventId: string; slug: string; title: string; startsAt: string; city: string | null };
+
 export type MessageView = {
   id: string;
   conversationId: string;
@@ -66,6 +74,8 @@ export type MessageView = {
   moderated?: boolean;
   /** « Lu par » : sur les messages de mon côté de la première page seulement. */
   readBy: { userId: string; pseudo: string }[] | null;
+  /** Lot M4 : écrit depuis la fiche de cet événement ; absent des messages d'avant. */
+  about?: MessageAbout | null;
 };
 
 /** Pourquoi on ne peut plus écrire dans une conversation (lecture toujours possible). */

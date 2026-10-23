@@ -108,6 +108,8 @@ export const messages = pgTable(
     asStructure: boolean("as_structure").notNull().default(false),
     /** Message groupé d'origine (lot 20). */
     groupMessageId: uuid("group_message_id"),
+    /** Lot M4 : écrit depuis la fiche de cet événement (« À propos de »), visible des deux côtés. */
+    aboutEventId: uuid("about_event_id").references(() => events.id, { onDelete: "set null" }),
     deletedAt: tstz("deleted_at"),
     moderatedAt: tstz("moderated_at"),
     ...timestamps,

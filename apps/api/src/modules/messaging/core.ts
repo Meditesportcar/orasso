@@ -3,6 +3,7 @@
 import {
   type ConversationWriteBlock,
   MESSAGE_PREVIEW_MAX,
+  type MessageAbout,
   type MessageView,
   messagePreview,
   shorten,
@@ -10,7 +11,7 @@ import {
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversationParticipants, conversations, messages, profiles } from "../../db/schema";
+import { conversationParticipants, conversations, events, messages, profiles } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound } from "../../lib/errors";
@@ -117,11 +118,30 @@ export const isMySide = (m: Pick<MessageRow, "senderId" | "asStructure">, reader
 
 type SenderProfile = { userId: string; pseudo: string; avatarKey: string | null; deletedAt: Date | null } | null;
 
+/** Lot M4 : les événements dont parlent des messages (« À propos de »), par identifiant. */
+export async function aboutsOf(
+  ex: Executor,
+  rows: Pick<MessageRow, "aboutEventId">[],
+): Promise<Map<string, MessageAbout>> {
+  const ids = [...new Set(rows.map((r) => r.aboutEventId).filter((id): id is string => Boolean(id)))];
+  const out = new Map<string, MessageAbout>();
+  if (!ids.length) return out;
+  const found = await ex
+    .select({ id: events.id, slug: events.slug, title: events.title, startsAt: events.startsAt, city: events.city })
+    .from(events)
+    .where(inArray(events.id, ids));
+  for (const e of found) {
+    out.set(e.id, { eventId: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString(), city: e.city });
+  }
+  return out;
+}
+
 export function serializeMessage(
   m: MessageRow,
   sender: SenderProfile,
   viewerId: string | null,
   readBy: MessageView["readBy"] = null,
+  abouts: Map<string, MessageAbout> | null = null,
 ): MessageView {
   const deleted = Boolean(m.deletedAt || m.moderatedAt);
   const mine = viewerId !== null && m.senderId === viewerId;
@@ -151,6 +171,7 @@ export function serializeMessage(
     deleted,
     moderated: Boolean(m.moderatedAt),
     readBy,
+    about: m.aboutEventId ? (abouts?.get(m.aboutEventId) ?? null) : null,
   };
 }
 

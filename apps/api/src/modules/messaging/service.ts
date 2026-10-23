@@ -21,7 +21,7 @@ import {
 import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversationParticipants, conversations, messages, structures, uploads } from "../../db/schema";
+import { conversationParticipants, conversations, events, messages, structures, uploads } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
@@ -38,6 +38,7 @@ import { isStructureOrganizer, isStructureSuspended, structureCanReach } from ".
 import {
   type Access,
   type Actor,
+  aboutsOf,
   actorOf,
   ensureParticipant,
   imageNameOf,
@@ -293,6 +294,7 @@ export const messagingService = {
       page.map((m) => m.senderId),
     );
     const readBy = q.before ? null : await this.readByOf(access, page);
+    const abouts = await aboutsOf(db, page);
     return {
       items: page.map((m) =>
         serializeMessage(
@@ -300,6 +302,7 @@ export const messagingService = {
           m.senderId ? (senders.get(m.senderId) ?? null) : null,
           v.user.id,
           readBy?.get(m.id) ?? null,
+          abouts,
         ),
       ),
       nextCursor: rows.length > q.limit ? (page.at(-1)?.id ?? null) : null,
@@ -353,7 +356,7 @@ export const messagingService = {
     const access = await requireAccess(actor, id);
     const replay = async (row: MessageRow) => {
       if (row.senderId !== v.user.id) throw conflict("conflict", "Identifiant de message déjà utilisé");
-      return { message: serializeMessage(row, senderOf(v), v.user.id), created: false };
+      return { message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row])), created: false };
     };
     const [seen] = await db
       .select()
@@ -362,6 +365,22 @@ export const messagingService = {
     if (seen) return replay(seen);
     const block = await writeBlockOf(db, actor, access);
     if (block) throw writeBlockError(block);
+    // Lot M4 : « À propos de » un événement de la structure de cette conversation, publié ou annulé (jamais un brouillon).
+    if (input.aboutEventId) {
+      const [about] = await db
+        .select({ structureId: events.structureId, status: events.status })
+        .from(events)
+        .where(eq(events.id, input.aboutEventId));
+      const conv = access.conversation;
+      if (
+        conv.kind !== "organizer" ||
+        !about ||
+        about.structureId !== conv.structureId ||
+        about.status === "draft"
+      ) {
+        throw validation(messagingLabels.aboutEventNotHere, { field: "aboutEventId" });
+      }
+    }
     const [recent] = await db
       .select({ n: count() })
       .from(messages)
@@ -402,6 +421,7 @@ export const messagingService = {
           imageHeight: image?.height ?? null,
           clientId: input.clientId,
           asStructure: reader.side === "structure",
+          aboutEventId: input.aboutEventId ?? null,
           createdAt: at,
         })
         .returning();
@@ -424,20 +444,26 @@ export const messagingService = {
       for (const r of recipients) await ensureParticipant(tx, id, r.userId, r.side);
       await pushTo(tx, access, row, v, recipients);
       after(() => notificationsService.kick());
+      const abouts = await aboutsOf(tx, [row]);
       after(() => {
-        publishToConversation(id, access.readers, "message.new", { message: serializeMessage(row, senderOf(v), null) });
+        publishToConversation(id, access.readers, "message.new", {
+          message: serializeMessage(row, senderOf(v), null, null, abouts),
+        });
         announce(
           id,
           access.readers.map((r) => r.userId),
         );
       });
-      return { row, created: true };
+      return { row, created: true, abouts };
     }).catch((error) => {
       if (isUniqueViolation(error)) throw conflict("conflict", "Message déjà envoyé");
       throw error;
     });
     if (!result.created) return replay(result.row);
-    return { message: serializeMessage(result.row, senderOf(v), v.user.id), created: true };
+    return {
+      message: serializeMessage(result.row, senderOf(v), v.user.id, null, "abouts" in result ? result.abouts : null),
+      created: true,
+    };
   },
 
   /** `POST /conversations/:id/read {messageId}` : le marqueur ne recule jamais (plusieurs appareils). */
