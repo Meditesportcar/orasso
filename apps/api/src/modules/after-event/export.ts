@@ -12,6 +12,7 @@ import {
   csvLine,
   type ExportQuery,
   exportFileName,
+  formatPlate,
   wallTime,
 } from "@orasso/shared";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -143,7 +144,8 @@ export const exportService = {
         r.email,
         r.phone,
         veh ? vehicleLabel(veh) : null,
-        veh?.plate ?? null,
+        // Lot M2 : toujours lisible (« AE-665-GH »), y compris pour une fiche saisie avant la normalisation.
+        veh?.plate ? formatPlate(veh.plate) : null,
         cats
           .filter((c) => c.vehicleId === r.app.vehicleId)
           .map((c) => c.label)

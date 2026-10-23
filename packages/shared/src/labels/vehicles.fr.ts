@@ -105,6 +105,13 @@ export const vehicleWizardLabels = {
   privacyNote:
     "Le numéro reste privé : seule l'équipe organisatrice le voit, pour vérifier ton inscription. Une plaque n'est active que sur un seul véhicule. Déjà enregistrée ? L'ancien propriétaire confirme le transfert.",
   plateRequired: "Indique le numéro de plaque, ou coche « C'est un ancien véhicule ».",
+  // Lot M2 : numéro prérempli par la lecture de la photo (à confirmer), format étranger accepté sans blocage, « Envoyer
+  // sans flouter » confirmé photo par photo.
+  plateRead: "Lu sur ta photo : vérifie le numéro.",
+  plateForeign: "Ce n'est pas un format français : vérifie le numéro. Une plaque étrangère est acceptée.",
+  noPlateConfirmTitle: "Aucune plaque visible sur cette photo ?",
+  noPlateConfirmBody: "Elle partira telle quelle, sans flou : vérifie qu'aucune plaque ne se voit, même au loin.",
+  noPlateConfirm: "Oui, envoyer sans flouter",
   livePlate: "Plaque floutée, numéro privé",
   // Envoi et fin
   parkingTitle: "On la gare",

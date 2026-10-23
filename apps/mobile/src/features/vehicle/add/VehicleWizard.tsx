@@ -13,7 +13,7 @@ import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { CROP_VEHICLE, photoForm, pickPhotos } from "@/lib/photos";
-import { detectPlates } from "@/lib/plates/detect";
+import { detectPlateReadings } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -42,6 +42,7 @@ import {
   updateBody,
   withCover,
 } from "./model";
+import { detectionPatch } from "./plateStep";
 import { StepPlate } from "./StepPlate";
 import { StepCategories, StepIdentity, StepPhotos, StepSpecs } from "./Steps";
 
@@ -61,6 +62,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const [phase, setPhase] = useState<Phase>("steps");
   const [progress, setProgress] = useState({ done: 0, total: 0, complete: false });
   const [error, setError] = useState<string | null>(null);
+  // Lot M2 (retour 15) : le blocage de l'étape se relit à chaque changement, il disparaît dès que c'est réglé.
+  const [issueShown, setIssueShown] = useState(false);
   const [saved, setSaved] = useState<VehicleFull | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   // Envoi interrompu (réseau) : on reprend sans recréer le véhicule ni renvoyer les photos déjà parties.
@@ -145,19 +148,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       setDraft((d) => ({ ...d, photos: [...d.photos, ...added].slice(0, MAX_PHOTOS) }));
       // Repérage de la plaque sur l'appareil, photo par photo ; rien ne part au serveur.
       for (const p of added) {
-        const found = await detectPlates(p.uri, p.width, p.height).catch(() => null);
+        const found = await detectPlateReadings(p.uri, p.width, p.height).catch(() => null);
         setDraft((d) => ({
           ...d,
-          photos: d.photos.map((x) =>
-            x.key === p.key
-              ? {
-                  ...x,
-                  detected: found ?? [],
-                  detection: found === null ? "unavailable" : found.length ? "found" : "none",
-                  rects: d.blurMode === "auto" ? (found ?? []) : x.rects,
-                }
-              : x,
-          ),
+          photos: d.photos.map((x) => (x.key === p.key ? { ...x, ...detectionPatch(x, found, d.blurMode) } : x)),
         }));
       }
       // Relecture : aucune détection possible ici (web, Expo Go) → « À la main », sans promesse d'automatique.
@@ -178,17 +172,16 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   // --- Étapes --------------------------------------------------------------------------------------------------------
   function next() {
     const issue = stepIssue(step, draft);
-    if (issue) {
-      setError(issue);
-      return;
-    }
     setError(null);
+    setIssueShown(Boolean(issue));
+    if (issue) return;
     if (step < STEP_COUNT - 1) setStep(step + 1);
     else void send();
   }
 
   function previous() {
     setError(null);
+    setIssueShown(false);
     if (step === 0) close();
     else setStep(step - 1);
   }
@@ -382,6 +375,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   }
 
   const issue = stepIssue(step, draft);
+  const shownError = error ?? (issueShown ? issue : null);
   return (
     <FlowScreen
       title={editing ? L.editTitle : L.title}
@@ -390,9 +384,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       onClose={close}
       footer={
         <>
-          {error ? (
+          {shownError ? (
             <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="vehicle-step-error">
-              {error}
+              {shownError}
             </Text>
           ) : null}
           <View style={styles.footer}>

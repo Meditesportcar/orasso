@@ -118,7 +118,11 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     });
     // Relecture : la photo ajoutée passe par l'éditeur ; ici « aucune plaque visible », pour la flouter après coup.
     await expect(page.getByTestId("add-plate-frame")).toBeVisible();
-    await page.getByTestId("site-no-plate").check();
+    // Lot M2, tour 2 : « Envoyer sans flouter » se confirme sur la photo.
+    await page.getByTestId("site-no-plate").click();
+    await expect(page.getByTestId("site-no-plate-confirm").getByRole("img")).toBeVisible();
+    await page.getByTestId("site-no-plate-yes").click();
+    await expect(page.getByTestId("site-no-plate")).toBeChecked();
     await page.getByRole("button", { name: "Envoyer la photo" }).click();
     await expect(page.getByTestId("photo-blur")).toHaveCount(1, { timeout: 30_000 });
     // Une photo déjà floutée peut recevoir un autre cadre.

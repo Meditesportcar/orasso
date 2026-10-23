@@ -31,6 +31,7 @@ import {
 import { db, pool } from "../../db/client";
 import {
   accessPasses,
+  applications,
   checkins,
   devices,
   emailOutbox,
@@ -40,6 +41,7 @@ import {
   passportStamps,
   profiles,
   scanEvents,
+  vehicles,
 } from "../../db/schema";
 import { mail } from "../../lib/mail";
 import { realtime } from "../../lib/realtime";
@@ -305,6 +307,22 @@ describe("pointage manuel et par plaque", () => {
     expect(found.text).not.toContain(kenji.plate.replaceAll("-", ""));
   });
 
+  it("lot M2, tour 4 : deux pass retenus sous la même plaque (un jour) → ambiguë, rien n'est pointé", async () => {
+    const [kenji, lea] = [people[0]!, people[1]!];
+    const kApp = await db.query.applications.findFirst({ where: eq(applications.id, kenji.applicationId) });
+    const lApp = await db.query.applications.findFirst({ where: eq(applications.id, lea.applicationId) });
+    const kVehicle = await db.query.vehicles.findFirst({ where: eq(vehicles.id, kApp!.vehicleId!) });
+    // Le véhicule de Léa porte la même clé (gardé en souvenir : la contrainte d'unicité ne vise que les actifs).
+    await db
+      .update(vehicles)
+      .set({ status: "keepsake", plateNormalized: kVehicle!.plateNormalized })
+      .where(eq(vehicles.id, lApp!.vehicleId!));
+    const res = await call(theo, "POST", `/events/${eventId}/checkins/by-plates`, { plates: [kenji.plate] });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ matched: [], unmatched: [], ambiguous: [kenji.plate] });
+    expect(await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).toEqual([]);
+  });
+
   it("direct de l'équipe organisatrice : arrivés / attendus, staff présent", async () => {
     await checkinsService.receiveBatch(julieV, eventId, {
       deviceId: julieDevice,
@@ -509,7 +527,8 @@ describe("inscription express", () => {
       password: "motdepasse-express-1",
       firstName: "Paul",
       lastName: "Nouveau",
-      plate: "EX-123-PR",
+      // Lot M2 : saisie n'importe comment, avec la bande « F » et le département.
+      plate: "f ex 123pr 66",
       makeId: ref!.makeId,
       modelId: ref!.id,
     };
@@ -532,6 +551,12 @@ describe("inscription express", () => {
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });
     expect(entry).toMatchObject({ method: "express", staffUserId: julie.id });
+    // Lot M2 : plaque stockée lisible et sous sa forme unique.
+    const expressApp = await db.query.applications.findFirst({ where: eq(applications.id, res.json.applicationId) });
+    expect(await db.query.vehicles.findFirst({ where: eq(vehicles.id, expressApp?.vehicleId ?? "") })).toMatchObject({
+      plate: "EX-123-PR",
+      plateNormalized: "EX123PR",
+    });
     // Lot 49 : l'entrée express pose le tampon de participation.
     expect(
       await db.query.passportStamps.findFirst({ where: eq(passportStamps.applicationId, res.json.applicationId) }),

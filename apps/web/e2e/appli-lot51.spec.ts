@@ -144,12 +144,29 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     // Relecture : sans détection, pas de mode « Automatique » ; une photo sans cadre ne part pas sans confirmation.
     await expect(page.getByText("Automatique", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("plate-none")).toBeVisible();
-    await page.getByTestId("vehicle-plate").fill(randomPlate());
+    // Lot M2 : numéro saisi n'importe comment, stocké sous une seule forme et rendu lisible (« AB-123-CD »).
+    const plate = randomPlate().replace(/[IOUSW]/g, "A"); // SIV valide (ni I, O, U ; ni SS, ni WW)
+    await page.getByTestId("vehicle-plate").fill(plate.replaceAll("-", " ").toLowerCase());
     await next(page);
     await expect(page.getByTestId("vehicle-step-error")).toContainText("Photo 1 : place le cadre");
     await shot(page, "05a-plaque-sans-detection", theme);
+    // Lot M2 : « Envoyer sans flouter » se confirme photo par photo, la photo sous les yeux ; Annuler ne coche rien.
+    await page.getByTestId("plate-none").click();
+    await expect(page.getByTestId("plate-none-photo")).toBeVisible();
+    await expect(page.getByText("Aucune plaque visible sur cette photo ?").first()).toBeVisible();
+    await page.getByRole("button", { name: "Annuler" }).click();
+    await expect(page.getByTestId("plate-none-photo")).toHaveCount(0);
+    await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "false");
     await page.getByTestId("plate-frame-add").click();
     await expect(page.getByTestId("plate-none")).toHaveCount(0);
+    // Lot M2 (retour 15) : le message disparaît dès que la photo est réglée, sans nouvel appui sur « Envoyer ».
+    await expect(page.getByTestId("vehicle-step-error")).toHaveCount(0);
+    // Numéro vide : son propre message, qui se relit aussi à la saisie.
+    await page.getByTestId("vehicle-plate").fill("");
+    await next(page);
+    await expect(page.getByTestId("vehicle-step-error")).toContainText("Indique le numéro de plaque");
+    await page.getByTestId("vehicle-plate").fill(plate.replaceAll("-", " ").toLowerCase());
+    await expect(page.getByTestId("vehicle-step-error")).toHaveCount(0);
     const frame = page.getByTestId("plate-frame").first();
     await expect(frame).toBeVisible();
     const box = await frame.boundingBox();
@@ -170,13 +187,12 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await shot(page, "06-au-garage", theme);
 
     // La photo stockée est floutée dans le cadre, nette ailleurs (pixels lus via l'API).
-    const mine = await apiCall<{ id: string; photos: { url: string; plateBlurred: boolean }[] }[]>(
-      cookie,
-      "GET",
-      "/me/vehicles",
-    );
+    const mine = await apiCall<
+      { id: string; plate: string | null; photos: { url: string; plateBlurred: boolean }[] }[]
+    >(cookie, "GET", "/me/vehicles");
     const vehicle = mine.data[0];
     expect(vehicle?.photos[0]?.plateBlurred).toBe(true);
+    expect(vehicle?.plate, "plaque rendue lisible (lot M2)").toBe(plate);
     const stored = await storedPhoto(vehicle?.photos[0]?.url ?? "");
     const blurred = await regionSpread(stored, inner(rect));
     const sharp = await regionSpread(stored, { x: 0.02, y: 0.02, w: 0.2, h: 0.2 });

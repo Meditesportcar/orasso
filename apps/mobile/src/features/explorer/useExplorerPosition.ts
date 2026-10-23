@@ -7,6 +7,7 @@
 // requête de liste : jamais écrite sur l'appareil ni enregistrée par l'API.
 import { coarsePosition, type LatLng } from "@orasso/shared";
 import * as Location from "expo-location";
+import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Linking } from "react-native";
 
@@ -42,7 +43,13 @@ export function useExplorerPosition(): ExplorerPosition {
   const [status, setStatus] = useState<ExplorerPositionStatus>("checking");
   const [blocked, setBlocked] = useState(false);
 
+  // Lot M3, tour 2 : l'onglet est préchargé ; la position (GPS) n'est lue qu'au premier affichage de l'écran.
+  const focused = useIsFocused();
+  const [seen, setSeen] = useState(focused);
+  if (focused && !seen) setSeen(true);
+
   useEffect(() => {
+    if (!seen) return;
     let alive = true;
     (async () => {
       try {
@@ -67,7 +74,7 @@ export function useExplorerPosition(): ExplorerPosition {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [seen]);
 
   const request = useCallback(async () => {
     if (blocked) {
