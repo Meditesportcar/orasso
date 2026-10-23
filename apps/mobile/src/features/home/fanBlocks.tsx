@@ -45,11 +45,14 @@ export function SecH({
   title,
   link,
   onLink,
+  meta,
   testID,
 }: {
   title: string;
   link?: string;
   onLink?: () => void;
+  /** Lot M5 : une mention à droite (« 1 sur 3 »), `.t-meta` de l'artefact. */
+  meta?: string;
   testID?: string;
 }) {
   const { t } = useTheme();
@@ -59,6 +62,11 @@ export function SecH({
       <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.secTitle}>
         {title}
       </Text>
+      {meta ? (
+        <Text variant="meta" color={c.inkMuted} testID={testID ? `${testID}-meta` : undefined}>
+          {meta}
+        </Text>
+      ) : null}
       {link && onLink ? (
         <Pressable onPress={onLink} accessibilityRole="link" style={styles.secLink} hitSlop={10}>
           <Text variant="bodyStrong" color={c.accentText} style={styles.secLinkText}>
@@ -290,12 +298,16 @@ export function PosterRail({
               </View>
             )}
           </View>
+          {/* Lot M5 (maquette 6.2) : « ★ Sponsorisé » en tête du corps, puis le pro. */}
           <View style={styles.mpBody}>
+            <View style={styles.spTag}>
+              <Icon name="star" size={12} color={c.inkMuted} />
+              <Text variant="label" color={c.inkMuted} style={styles.spTagText} testID="sponsored-tag">
+                {homeLabels.sponsored}
+              </Text>
+            </View>
             <Text variant="posterS" color={c.ink} style={styles.mpTitle}>
               {sponsored.pro.name}
-            </Text>
-            <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>
-              {homeLabels.sponsored}
             </Text>
           </View>
         </Pressable>
@@ -377,5 +389,7 @@ const styles = StyleSheet.create({
   mpBody: { padding: 10, gap: 3 },
   mpSponsoredText: { flex: 1, padding: 10, gap: 6, justifyContent: "flex-end" },
   mpTitle: { fontSize: 12.5, lineHeight: 13 },
+  spTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  spTagText: { fontSize: 10.5, lineHeight: 13 },
   mpCap: { fontSize: 12, lineHeight: 16 },
 });
