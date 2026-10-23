@@ -60,6 +60,8 @@ function PersonaTabBar({
       if (next !== preloadRef.current.current) preloadRef.current.navigation.preload(next);
       timer = setTimeout(step, PRELOAD_STEP_MS);
     };
+    // Téléphone seulement : sur le web de recette, un onglet préchargé reste dans la page (deux Explorer, par exemple).
+    if (Platform.OS === "web") return undefined;
     timer = setTimeout(step, PRELOAD_FIRST_MS);
     return () => clearTimeout(timer);
   }, []);
