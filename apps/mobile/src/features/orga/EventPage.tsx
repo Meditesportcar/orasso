@@ -164,7 +164,8 @@ export function EventPage({
 
   return (
     <FlowScreen
-      title={e?.title ?? orgaLabels.eventsTitle}
+      // Lot M7 : le titre de l'événement est dans la plaque d'en-tête ; l'en-tête de fiche ne le répète pas.
+      title="Événement"
       facts={structureName}
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/evenements"))}
       onRefresh={reloadAll}
