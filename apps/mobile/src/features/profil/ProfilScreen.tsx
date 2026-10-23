@@ -8,7 +8,8 @@
 // d'intérêt), Apparence (thème, animations), Mon profil public, Amis et crews, Aide, Se déconnecter.
 // Plus d'accès flottant ici (retour 31).
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { capLabels, gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";import { useRouter } from "expo-router";
+import { capLabels, gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
@@ -202,11 +203,16 @@ export function ProfilScreen() {
         <SetRow
           icon="explore"
           title={preferencesLabels.settingsRow}
-          caption={department ? `${department} favori, distance, types, centres d'intérêt` : preferencesLabels.settingsRowCaption}
+          caption={
+            department
+              ? `${department} favori, distance, types, centres d'intérêt`
+              : preferencesLabels.settingsRowCaption
+          }
           onPress={() => router.push("/preferences")}
           testID="reglage-tes-preferences-tuile"
         />
-        <SetRow          icon="gear"
+        <SetRow
+          icon="gear"
           title="Apparence"
           caption={preferencesCaption}
           onPress={() => router.push("/reglages/preferences")}

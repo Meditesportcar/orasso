@@ -154,7 +154,10 @@ for (const theme of THEMES) {
     await page.waitForTimeout(1500);
     await decideApi(damien, event.id, applicationId, "accept");
     await page.reload();
-    await page.waitForTimeout(2500);
+    await afterOpening(page);
+    // Le bandeau arrive dès que la candidature retenue est relue ; capture quand il est posé.
+    await expect(page.getByTestId("announce-good")).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(700);
     await shot(page, "20-annonce-retenue", theme);
     await page.waitForTimeout(5000);
     await shot(page, "21-annonce-apres-4s", theme);

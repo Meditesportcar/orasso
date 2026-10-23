@@ -120,7 +120,11 @@ test("Tes préférences : première fois après le premier véhicule, rangées s
   await expect(page.getByText("Dernière étape · 30 secondes")).toBeVisible();
   await page.getByRole("button", { name: "Rassemblement" }).click();
   await page.getByRole("button", { name: "Nocturne" }).click();
-  await page.getByTestId("pref-everywhere").click();
+  // La puce « Partout en France » (la zone `pref-everywhere` l'entoure).
+  await page
+    .getByTestId("pref-everywhere")
+    .getByText(/Partout/i)
+    .click();
   await page.getByTestId("pref-notify-newEvents").click();
   await clean(page);
   await page.getByTestId("preferences-submit").click();

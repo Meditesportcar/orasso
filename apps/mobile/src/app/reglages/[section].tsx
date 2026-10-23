@@ -15,7 +15,8 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { helpLabels, moderationLabels, preferencesLabels } from "@orasso/shared";import { useLocalSearchParams, useRouter } from "expo-router";
+import { helpLabels, moderationLabels, preferencesLabels } from "@orasso/shared";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
