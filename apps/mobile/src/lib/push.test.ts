@@ -22,7 +22,9 @@ vi.mock("react-native", () => ({
   Platform: { OS: "android" },
   AppState: { addEventListener: vi.fn(), currentState: "active" },
 }));
-vi.mock("expo-constants", () => ({ default: { expoConfig: { version: "1.0.0", extra: { eas: { projectId: "p" } } } } }));
+vi.mock("expo-constants", () => ({
+  default: { expoConfig: { version: "1.0.0", extra: { eas: { projectId: "p" } } } },
+}));
 vi.mock("expo-device", () => ({ isDevice: true, deviceName: "Pixel", modelName: "Pixel" }));
 vi.mock("expo-notifications", () => sim.notifications);
 vi.mock("./api", () => ({ api: sim.api }));
@@ -64,7 +66,11 @@ const pending = () => {
 };
 const pushOf = (userId: string, type = "message_received") => ({
   identifier: "systeme-1",
-  content: { title: "Bob", body: "Bob : coucou", data: { notificationId: "n1", notificationType: type, recipient: pushRecipientId(userId) } },
+  content: {
+    title: "Bob",
+    body: "Bob : coucou",
+    data: { notificationId: "n1", notificationType: type, recipient: pushRecipientId(userId) },
+  },
 });
 
 beforeEach(() => {

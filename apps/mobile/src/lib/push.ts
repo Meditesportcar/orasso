@@ -76,7 +76,10 @@ export function receivedPush(request: {
  * Toucher une notification du système : l'ouvrir si elle est pour le compte ouvert ; sinon l'Accueil, sans rien de son
  * contenu ; session pas encore lue : attendre ; déconnecté : rien (l'écran de connexion s'impose).
  */
-export function notificationTapAction(data: unknown, status: "loading" | "in" | "out"): "wait" | "open" | "home" | "none" {
+export function notificationTapAction(
+  data: unknown,
+  status: "loading" | "in" | "out",
+): "wait" | "open" | "home" | "none" {
   if (status === "loading") return "wait";
   if (status === "out") return "none";
   return pushIsForOpenAccount(data) ? "open" : "home";

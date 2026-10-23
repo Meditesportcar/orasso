@@ -404,13 +404,7 @@ export function ShareBody({
           style={styles.grow}
           testID="share-story"
         >
-          {busy === "share"
-            ? L.loading
-            : checking
-              ? L.plateCheckingShort
-              : format === "story"
-                ? L.story
-                : L.post}
+          {busy === "share" ? L.loading : checking ? L.plateCheckingShort : format === "story" ? L.story : L.post}
         </SmButton>
         <SmButton
           kind="s"
