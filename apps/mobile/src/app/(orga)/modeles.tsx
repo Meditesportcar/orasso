@@ -6,7 +6,7 @@ import { TemplatesScreen } from "@/features/orga/Templates";
 
 export default function Modeles() {
   return (
-    <OrgaGate title={orgaManageLabels.templatesTitle}>
+    <OrgaGate page title={orgaManageLabels.templatesTitle}>
       <TemplatesScreen />
     </OrgaGate>
   );

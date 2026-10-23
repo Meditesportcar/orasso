@@ -1,5 +1,8 @@
 // Casquette Pro, Publier : une offre ou une actualité pour mes abonnés, avec le compteur du mois (limite mensuelle).
+// Lot M7 : page masquée du groupe ouverte depuis Ma fiche, c'est un parcours : mode B (en-tête de fiche, ✕ revient à Ma
+// fiche), sans barre d'onglets.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
@@ -9,12 +12,13 @@ import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
 
 export default function ProPublier() {
   const { t } = useTheme();
+  const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   const [title, setTitle] = useState("");
@@ -40,7 +44,11 @@ export default function ProPublier() {
   }
 
   return (
-    <TabScreen title="Publier" facts={pro ? `${pro.postsUsed} / ${pro.postsLimit} ce mois-ci` : undefined}>
+    <FlowScreen
+      title="Publier"
+      facts={pro ? `${pro.postsUsed} / ${pro.postsLimit} ce mois-ci` : undefined}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(pro)/fiche"))}
+    >
       {!pro ? (
         myPro.loading ? null : (
           <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
@@ -102,7 +110,7 @@ export default function ProPublier() {
           <Posts pro={pro} reload={myPro.reload} />
         </>
       )}
-    </TabScreen>
+    </FlowScreen>
   );
 }
 
