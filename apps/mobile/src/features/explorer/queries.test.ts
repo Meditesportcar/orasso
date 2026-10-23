@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   activeFilters,
   dayBound,
+  effectiveAround,
   emptyEventFilters,
   emptyProFilters,
   eventQuery,
+  placeKey,
   proQuery,
   shouldAsk,
   whenRange,
@@ -81,5 +83,53 @@ describe("position : « Plus tard » retenu", () => {
     expect(shouldAsk(null, NOW.getTime())).toBe(true);
     expect(shouldAsk(NOW.getTime() - 2 * day, NOW.getTime())).toBe(false);
     expect(shouldAsk(NOW.getTime() - 7 * day, NOW.getTime())).toBe(true);
+  });
+});
+
+// Lot M4, tour 2 : « Autour de… » (temporaire) et la distance propre à l'Explorer.
+describe("« Autour de… » → API", () => {
+  const here = { lat: 42.7, lng: 2.9 };
+  it("Mon coin : ni position ni département envoyés (l'API part du secteur du compte) ; rayon ou partout", () => {
+    const q = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
+      around: { kind: "mine" },
+      radiusKm: 50,
+    });
+    expect(q.lat).toBeUndefined();
+    expect(q.around).toBeUndefined();
+    expect(q.radiusKm).toBe(50);
+    expect(q.everywhere).toBeUndefined();
+    const all = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "date", {
+      around: { kind: "mine" },
+      radiusKm: null,
+    });
+    expect(all.everywhere).toBe("1");
+    expect(all.radiusKm).toBeUndefined();
+  });
+
+  it("Autour de moi : la position ; Ailleurs : le département, sans la position", () => {
+    const me = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
+      around: { kind: "me" },
+      radiusKm: 25,
+    });
+    expect(me).toMatchObject({ lat: 42.7, lng: 2.9, radiusKm: 25 });
+    const elsewhere = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
+      around: { kind: "dept", code: "75" },
+      radiusKm: null,
+    });
+    expect(elsewhere).toMatchObject({ around: "75", everywhere: "1" });
+    expect(elsewhere.lat).toBeUndefined();
+  });
+
+  it("le choix par défaut suit la position ; « Autour de moi » sans position retombe sur Mon coin", () => {
+    expect(effectiveAround(null, true)).toEqual({ kind: "me" });
+    expect(effectiveAround(null, false)).toEqual({ kind: "mine" });
+    expect(effectiveAround({ kind: "me" }, false)).toEqual({ kind: "mine" });
+    expect(effectiveAround({ kind: "dept", code: "11" }, true)).toEqual({ kind: "dept", code: "11" });
+  });
+
+  it("cache : par point de départ et distance, jamais pour « Autour de moi »", () => {
+    expect(placeKey({ around: { kind: "mine" }, radiusKm: null })).toBe("coin.partout");
+    expect(placeKey({ around: { kind: "dept", code: "2A" }, radiusKm: 100 })).toBe("d2A.100");
+    expect(placeKey({ around: { kind: "me" }, radiusKm: 10 })).toBeNull();
   });
 });

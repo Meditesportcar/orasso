@@ -17,7 +17,7 @@ import { EVENT_LIST_BLOCKS, Waiting } from "@/ui/Waiting";
 import { EventCardV2 } from "./EventCardV2";
 import { ExplorerMap } from "./ExplorerMap";
 import { eventPins } from "./mapPins";
-import { activeFilters, type EventFilters, type EventSort, eventQuery } from "./queries";
+import { activeFilters, type EventFilters, type EventSort, type ExplorerPlace, eventQuery, placeKey } from "./queries";
 import type { ExplorerPosition } from "./useExplorerPosition";
 import { usePaged } from "./usePaged";
 
@@ -37,9 +37,17 @@ export function distanceBasis(
   filters: EventFilters,
   status: ExplorerPosition["status"],
   dept: string | null,
+  place?: ExplorerPlace,
 ): string | null {
   if (filters.affinity) return L.sortAffinity;
   if (filters.followed) return L.sortFollowed;
+  // Tour 2 : « Autour de… » et la distance de l'Explorer.
+  const within = place?.radiusKm ? ` · ${L.withinKm(place.radiusKm)}` : "";
+  if (place?.around.kind === "dept") return `${L.fromDeptElsewhere(place.around.code)}${within}`;
+  if (place?.around.kind === "mine" && dept) {
+    return `${status === "denied" ? L.fromDeptDenied(dept) : L.fromDept(dept)}${within}`;
+  }
+  if (place && status === "on") return `${L.fromPosition}${within}`;
   if (status === "on") return L.fromPosition;
   if (!dept) return null;
   return status === "denied" ? L.fromDeptDenied(dept) : L.fromDept(dept);
@@ -54,6 +62,7 @@ export function EventsSegment({
   sort = "distance",
   fromPrefs = false,
   settled = true,
+  place,
 }: {
   q: string;
   filters: EventFilters;
@@ -66,18 +75,24 @@ export function EventsSegment({
   fromPrefs?: boolean;
   /** Tour 2 : les réglages enregistrés (tri) sont lus ; avant, ni requête ni cache. */
   settled?: boolean;
+  /** Tour 2 : « Autour de… » et la distance (absent : la position si elle est là, comme avant). */
+  place?: ExplorerPlace;
 }) {
   const { t } = useTheme();
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const ready = position.status !== "checking" && position.status !== "asking";
   const list = usePaged(
-    (cursor) => api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor, sort)),
-    [q, filters, position.position, view, sort],
+    (cursor) =>
+      api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor, sort, place)),
+    [q, filters, position.position, view, sort, place],
     q ? 300 : 0,
     ready && settled,
-    // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API.
-    settled && !q && activeFilters(filters) === 0 && view === "list" ? `explore-events.${sort}` : undefined,
+    // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API. Tour 2 :
+    // une clé par point de départ et distance, jamais pour « Autour de moi » (rien de la position sur l'appareil).
+    settled && !q && activeFilters(filters) === 0 && view === "list" && (!place || placeKey(place) !== null)
+      ? `explore-events.${sort}${place ? `.${placeKey(place)}` : ""}`
+      : undefined,
   );
   const items = list.items ?? [];
   const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
@@ -96,7 +111,7 @@ export function EventsSegment({
         <Text variant="caption" color={t.color.inkMuted} style={styles.sortText}>
           {[
             list.items ? L.count(items.length, list.hasMore) : null,
-            distanceBasis(filters, position.status, dept),
+            distanceBasis(filters, position.status, dept, place),
             fromPrefs ? L.fromPrefs : null,
           ]
             .filter(Boolean)

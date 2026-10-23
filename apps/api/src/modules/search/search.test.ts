@@ -429,6 +429,22 @@ describe("distance : GET /events?sort=distance", () => {
     expect((await get(viewer, "/events?around=999")).status).toBe(400);
   });
 
+  it("« Partout en France » (lot M4, tour 2) : everywhere=1 enlève le rayon d'origine d'une position triée par date", async () => {
+    const viewer = await person("Viewer_66", { departments: ["66"] });
+    const owner = await person("Orga_A");
+    const s = await createStructure(owner.id);
+    const paris = await createEvent(s.id, { title: "Paris", ...PARIS });
+    const rivesaltes = await createEvent(s.id, { title: "Rivesaltes", ...RIVESALTES });
+    const at = `lat=${PERPIGNAN.lat}&lng=${PERPIGNAN.lng}`;
+    // Comportement d'origine (lot 29) : position et tri par date, 50 km.
+    expect(ids((await get(viewer, `/events?sort=date&${at}`)).json.items)).toEqual([rivesaltes.slug]);
+    expect(ids((await get(viewer, `/events?sort=date&${at}&everywhere=1`)).json.items).sort()).toEqual(
+      [paris.slug, rivesaltes.slug].sort(),
+    );
+    // Un rayon demandé s'applique comme avant.
+    expect(ids((await get(viewer, `/events?sort=distance&${at}&radiusKm=50`)).json.items)).toEqual([rivesaltes.slug]);
+  });
+
   it("la position de l'appareil prime pour la requête et n'est enregistrée nulle part", async () => {
     const viewer = await person("Viewer_66", { departments: ["66"] });
     const owner = await person("Orga_A");

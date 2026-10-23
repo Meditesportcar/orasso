@@ -8,7 +8,11 @@ import { qs } from "./qs";
 /** Réglages communs de position : celle de l'appareil pour cette requête seulement, jamais enregistrée par l'API. */
 type Position = { lat?: number; lng?: number; radiusKm?: number };
 
-export type ExploreEventsQuery = Position & {
+/** Lot M4, tour 2 (« Autour de… ») : un autre département comme point de départ, et « Partout en France ». */
+type Around = { around?: string; everywhere?: "1" };
+
+export type ExploreEventsQuery = Position &
+  Around & {
   q?: string;
   format?: string;
   categoryId?: string;

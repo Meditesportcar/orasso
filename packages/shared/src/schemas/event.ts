@@ -250,6 +250,14 @@ export const eventListQuerySchema = pageQuery.extend({
    * partout en France.
    */
   around: departmentSchema.optional(),
+  /**
+   * Lot M4, tour 2 (« Partout en France » de l'Explorer) : aucun rayon, même avec une position envoyée et le tri par
+   * date (qui garde sinon son rayon d'origine de 50 km).
+   */
+  everywhere: z
+    .enum(["1", "true", "0", "false"])
+    .transform((v) => v === "1" || v === "true")
+    .optional(),
   structureId: z.uuid().optional(),
   q: z.string().trim().max(80).optional(),
   /** `upcoming` (défaut) : pas encore terminés, du plus proche au plus lointain ; `past` : terminés, du plus récent. */

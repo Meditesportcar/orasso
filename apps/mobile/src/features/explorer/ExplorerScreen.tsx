@@ -10,19 +10,24 @@
 // Lot M4 (maquettes 3.1 à 3.3, « parfait » pour Damien) : sous les puces, « Trier : Distance ▾ » (un vrai sélecteur,
 // dans une feuille, gardé pour les prochaines visites) et « Filtres » avec le nombre de filtres actifs ; la bascule
 // « Liste | Carte » flotte au-dessus de la barre d'onglets, toujours visible. Préférences du lot M6 : voir `prefsFilters`.
+// Tour 2 (décision de Damien du 23/10) : « Autour de… » à côté du tri (Mon coin, Autour de moi, Ailleurs…) et une
+// distance propre à l'Explorer avec « Partout en France » ; choix temporaires, jamais enregistrés, « Revenir à mon coin ».
 import {
   Chip,
   ChipRow,
+  departmentChoices,
+  departmentLabel,
   Icon,
   type IconName,
   TAB_BAR_SPACE,
   Text,
+  TextField,
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
 import { eventFormatLabels, eventFormats, explorerLabels, explorerV2Labels as L } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,13 +40,17 @@ import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { TabScreen } from "@/ui/Screens";
 import {
+  type Around,
   activeFilters,
   EVENT_SORTS,
   type EventFilters,
   type EventSort,
+  type ExplorerPlace,
+  effectiveAround,
   emptyEventFilters,
   emptyProFilters,
   type ProFilters,
+  RADII,
   SORT_KEY,
   type When,
 } from "./queries";
@@ -104,6 +113,33 @@ export function ExplorerScreen() {
   const me = useSession().me;
   const dept = me?.profile.departments[0] ?? null;
   const position = useExplorerPosition();
+  // Tour 2 : « Autour de… » et la distance de l'Explorer. Temporaires : en mémoire de l'écran seulement (jamais le
+  // profil, les préférences ni l'appareil). `null` : pas encore choisi (la position si elle est activée, sinon Mon coin).
+  const [chosen, setChosen] = useState<Around | null>(null);
+  const [radiusKm, setRadiusKm] = useState<number | null>(null);
+  const [aroundOpen, setAroundOpen] = useState(false);
+  const around = effectiveAround(chosen, position.status === "on" && position.position !== null);
+  const aroundId = around.kind === "dept" ? `d${around.code}` : around.kind;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le point de départ change quand son identifiant change
+  const place: ExplorerPlace = useMemo(() => ({ around, radiusKm }), [aroundId, radiusKm]);
+  const enableMyPosition = () => {
+    setChosen({ kind: "me" });
+    void position.request();
+  };
+  const chooseAround = (next: Around) => {
+    if (next.kind === "me") {
+      enableMyPosition();
+      return;
+    }
+    setChosen(next);
+    // La position ne sert plus : elle quitte la mémoire de l'écran.
+    if (position.status === "on") position.clear();
+  };
+  const backHome = () => {
+    chooseAround({ kind: "mine" });
+    setRadiusKm(null);
+  };
+  const away = around.kind !== "mine" || radiusKm !== null;
 
   // « Voir tout » d'une recherche : on arrive avec un segment et un texte.
   useEffect(() => {
@@ -139,11 +175,24 @@ export function ExplorerScreen() {
             <SheetHead title={L.sortSheet} onClose={() => setSorting(false)} />
             <SortOptions value={sort} onChange={chooseSort} />
           </AppSheet>
+          <AppSheet visible={aroundOpen} onClose={() => setAroundOpen(false)} accessibilityLabel={L.aroundSheet}>
+            <SheetHead title={L.aroundSheet} onClose={() => setAroundOpen(false)} />
+            <AroundOptions
+              around={around}
+              radiusKm={radiusKm}
+              departments={me?.profile.departments ?? []}
+              onAround={(next) => {
+                chooseAround(next);
+                setAroundOpen(false);
+              }}
+              onRadius={setRadiusKm}
+            />
+          </AppSheet>
         </>
       }
     >
       <View style={styles.head} testID="explorer-head">
-        <SearchLine q={q} onChange={setQ} position={position} />
+        <SearchLine q={q} onChange={setQ} position={position} onEnable={enableMyPosition} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exrow}>
           <View style={styles.exrow} accessibilityRole="tablist">
             {chip(explorerLabels.segmentEvents, segment === "evenements", () => setSegment("evenements"))}
@@ -155,6 +204,7 @@ export function ExplorerScreen() {
           // `.xtools` : « Trier : Distance ▾ » à gauche, « Filtres » à droite, toujours visibles.
           <View style={styles.xtools}>
             <SortButton value={sort} onPress={() => setSorting(true)} />
+            <AroundButton around={around} onPress={() => setAroundOpen(true)} />
             <View style={styles.grow} />
             {chip(
               count > 0 ? `${L.filters} · ${count}` : L.filters,
@@ -165,11 +215,12 @@ export function ExplorerScreen() {
             )}
           </View>
         ) : null}
+        {segment === "evenements" && away ? <BackHome onPress={backHome} /> : null}
         {segment === "evenements" && filtersOpen ? (
           <FiltersPanel value={filters} onChange={setFilters} signedIn={Boolean(me)} />
         ) : null}
       </View>
-      {position.status === "ask" ? <AskPosition position={position} dept={dept} /> : null}
+      {position.status === "ask" ? <AskPosition position={position} dept={dept} onEnable={enableMyPosition} /> : null}
       {segment === "evenements" ? (
         <EventsSegment
           q={q}
@@ -179,6 +230,7 @@ export function ExplorerScreen() {
           view={view}
           sort={sort}
           settled={sortRead}
+          place={place}
         />
       ) : null}
       {segment === "pros" ? (
@@ -218,6 +270,155 @@ function SortButton({ value, onPress }: { value: EventSort; onPress: () => void 
       </Text>
       <Icon name="down" size={16} color={c.ink} />
     </Pressable>
+  );
+}
+
+/** Tour 2 : « Autour de : <b>Mon coin</b> ▾ », à côté du tri, du même style (pas de néon). */
+function AroundButton({ around, onPress }: { around: Around; onPress: () => void }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const label = around.kind === "mine" ? L.aroundMine : around.kind === "me" ? L.aroundMe : L.aroundDept(around.code);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${L.aroundButton} : ${label}`}
+      onPress={onPress}
+      style={[styles.sortBtn, { backgroundColor: c.surface, borderColor: c.line }]}
+      testID="around-open"
+    >
+      <Icon name="place" size={16} color={c.inkMuted} />
+      <Text variant="caption" color={c.ink} style={styles.sortBtnValue}>
+        {label}
+      </Text>
+      <Icon name="down" size={16} color={c.ink} />
+    </Pressable>
+  );
+}
+
+/** Tour 2 : « Revenir à mon coin », un lien (le point de départ et la distance reprennent leurs valeurs). */
+function BackHome({ onPress }: { onPress: () => void }) {
+  const { t } = useTheme();
+  return (
+    <Pressable accessibilityRole="link" onPress={onPress} style={styles.backHome} testID="around-back">
+      <Icon name="back" size={14} color={t.color.accentText} />
+      <Text variant="caption" color={t.color.accentText} style={styles.backHomeText}>
+        {L.backHome}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Tour 2 : la feuille « Autour de… » : trois points de départ, puis la distance (ou partout en France). */
+function AroundOptions({
+  around,
+  radiusKm,
+  departments,
+  onAround,
+  onRadius,
+}: {
+  around: Around;
+  radiusKm: number | null;
+  departments: readonly string[];
+  onAround: (next: Around) => void;
+  onRadius: (km: number | null) => void;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  const [elsewhere, setElsewhere] = useState(around.kind === "dept");
+  const [find, setFind] = useState("");
+  const matches = useMemo(() => {
+    const needle = find.trim().toLowerCase();
+    if (!needle) return departmentChoices;
+    return departmentChoices.filter(
+      (d) => d.code.toLowerCase().startsWith(needle) || d.name.toLowerCase().includes(needle),
+    );
+  }, [find]);
+  const row = (id: string, on: boolean, icon: IconName, title: string, hint: string, onPress: () => void) => (
+    <Pressable
+      key={id}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: on }}
+      aria-checked={on}
+      onPress={onPress}
+      style={[styles.opt, { backgroundColor: c.surface }, on && { borderColor: c.accent, borderWidth: 2 }]}
+      testID={`around-${id}`}
+    >
+      <View style={[styles.optIcon, { backgroundColor: c.surfaceSunken }]}>
+        <Icon name={icon} size={18} color={c.ink} />
+      </View>
+      <View style={styles.grow}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.optTitle}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted}>
+          {hint}
+        </Text>
+      </View>
+      <View style={[styles.radio, { borderColor: on ? c.accent : c.line }]}>
+        {on ? <View style={[styles.radioDot, { backgroundColor: c.accent }]} /> : null}
+      </View>
+    </Pressable>
+  );
+  return (
+    <View style={styles.optlist} testID="around-sheet">
+      <View style={styles.optlist} accessibilityRole="radiogroup">
+        {row("mine", around.kind === "mine" && !elsewhere, "home", L.aroundMine, L.aroundMineHint(departments), () =>
+          onAround({ kind: "mine" }),
+        )}
+        {row("me", around.kind === "me" && !elsewhere, "place", L.aroundMe, L.aroundMeHint, () =>
+          onAround({ kind: "me" }),
+        )}
+        {row(
+          "elsewhere",
+          around.kind === "dept" || elsewhere,
+          "map",
+          around.kind === "dept" ? `${L.aroundElsewhere} ${L.aroundDept(around.code)}` : L.aroundElsewhere,
+          L.aroundElsewhereHint,
+          () => setElsewhere(true),
+        )}
+      </View>
+      {elsewhere ? (
+        <View style={styles.group} testID="around-departments">
+          <TextField
+            label={L.aroundElsewhere}
+            value={find}
+            onChangeText={setFind}
+            placeholder="66, Aude, Gironde…"
+            testID="around-find"
+          />
+          <ChipRow>
+            {matches.map((d) => (
+              <Chip
+                key={d.code}
+                accessibilityRole="radio"
+                selected={around.kind === "dept" && around.code === d.code}
+                onPress={() => onAround({ kind: "dept", code: d.code })}
+              >
+                {departmentLabel(d)}
+              </Chip>
+            ))}
+          </ChipRow>
+        </View>
+      ) : null}
+      <View style={styles.group}>
+        <Text variant="label" color={c.inkMuted}>
+          {L.aroundDistance}
+        </Text>
+        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.aroundDistance}>
+          {RADII.map((km) => (
+            <Chip key={km} accessibilityRole="radio" selected={radiusKm === km} onPress={() => onRadius(km)}>
+              {L.aroundKm(km)}
+            </Chip>
+          ))}
+          <Chip accessibilityRole="radio" selected={radiusKm === null} onPress={() => onRadius(null)}>
+            {L.everywhere}
+          </Chip>
+        </ChipRow>
+      </View>
+      <Text variant="caption" color={c.inkMuted} style={styles.optHint}>
+        {L.aroundSheetHint}
+      </Text>
+    </View>
   );
 }
 
@@ -349,10 +550,13 @@ function SearchLine({
   q,
   onChange,
   position,
+  onEnable,
 }: {
   q: string;
   onChange: (q: string) => void;
   position: ExplorerPosition;
+  /** Tour 2 : activer la position, c'est choisir « Autour de moi ». */
+  onEnable: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -379,7 +583,7 @@ function SearchLine({
         accessibilityLabel={
           on ? L.gpsOnA11y : denied ? (position.blocked ? L.gpsBlockedA11y : L.gpsOffA11y) : L.gpsAskA11y
         }
-        onPress={() => (on ? position.clear() : void position.request())}
+        onPress={() => (on ? position.clear() : onEnable())}
         style={[styles.gps, { backgroundColor: c.surfaceRaised }]}
         testID="gps-button"
         accessibilityState={{ checked: on }}
@@ -394,7 +598,15 @@ function SearchLine({
 }
 
 /** « Trie par distance depuis là où tu es » : Activer / Plus tard. */
-function AskPosition({ position, dept }: { position: ExplorerPosition; dept: string | null }) {
+function AskPosition({
+  position,
+  dept,
+  onEnable,
+}: {
+  position: ExplorerPosition;
+  dept: string | null;
+  onEnable: () => void;
+}) {
   const { t } = useTheme();
   return (
     <View style={[styles.ask, { backgroundColor: t.color.poster }]} testID="position-ask">
@@ -409,7 +621,7 @@ function AskPosition({ position, dept }: { position: ExplorerPosition; dept: str
           {L.askText(dept)}
         </Text>
         <View style={styles.askActions}>
-          <SmallButton kind="p" icon="place" onPress={() => void position.request()} testID="position-enable">
+          <SmallButton kind="p" icon="place" onPress={onEnable} testID="position-enable">
             {L.askEnable}
           </SmallButton>
           <SmallButton icon="close" onPress={position.later} onPoster>
@@ -515,7 +727,9 @@ const styles = StyleSheet.create({
   filters: { gap: space2 },
   group: { gap: space1 },
   grow: { flex: 1, minWidth: 0 },
-  xtools: { flexDirection: "row", alignItems: "center", gap: space2 },
+  xtools: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
+  backHome: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", minHeight: 32 },
+  backHomeText: { fontSize: 12.5, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
   sortBtn: {
     flexDirection: "row",
     alignItems: "center",

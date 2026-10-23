@@ -107,7 +107,9 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
         ? "date"
         : q.sort;
   // Rayon : demandé explicitement, ou position envoyée sans ordre particulier (comportement d'origine : 50 km).
-  const wantsRadius = located !== null && (q.radiusKm !== undefined || (explicit && q.sort === "date"));
+  // Lot M4, tour 2 : « Partout en France » (`everywhere`) n'a jamais de rayon.
+  const wantsRadius =
+    located !== null && !q.everywhere && (q.radiusKm !== undefined || (explicit && q.sort === "date"));
   const needsDistance = located !== null && (sort !== "date" || wantsRadius || explicit);
   const dist = needsDistance && located ? distanceKmSql(events.lat, events.lng, located.position) : null;
 
