@@ -33,6 +33,7 @@ export * from "./reviews";
 export * from "./solar";
 export * from "./sorties";
 export * from "./sponsored";
+export * from "./squareCrop";
 export * from "./stampArt";
 export * from "./stamps";
 export * from "./templates";

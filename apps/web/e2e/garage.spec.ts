@@ -1,6 +1,15 @@
 import { expect, type Page, test } from "@playwright/test";
 import pg from "pg";
-import { addVehicleApi, apiCall, type Cookie, login, loginInBrowser, randomPlate, samplePhoto } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  type Cookie,
+  chooseSitePhoto,
+  login,
+  loginInBrowser,
+  randomPlate,
+  samplePhoto,
+} from "./helpers";
 
 // Lot 31 : garage et certification de bout en bout sur le site — catégories grisées, transfert de plaque (Léa prend la
 // plaque de Marc, Marc confirme), fiche Instagram (PNG sans plaque), certification (Kenji demande, Damien certifie,
@@ -54,16 +63,22 @@ test("formulaire du véhicule : catégories grisées avec la raison, statut et p
   await loginInBrowser(page, "lea@orasso.local", undefined, "/app/garage/nouveau");
   await pickVehicle(page, "BMW", "Série 3");
   await page.getByLabel("Année").fill("2015");
+  // Lot M1 (parité avec l'appli) : les styles qui n'ont rien à voir avec le véhicule (autre marque, autre type) sont
+  // cachés, celui refusé pour l'âge reste barré et grisé avec une seule phrase dessous ; l'origine vient de la marque.
   const cats = page.getByTestId("categories");
-  const row = (label: string) => cats.locator(".g-cat", { hasText: label }).first();
-  await expect(row("Youngtimer")).toContainText("Véhicule trop récent");
-  await expect(row("Youngtimer").getByRole("checkbox")).toBeDisabled();
-  await expect(row("JDM")).toContainText("Marque d'un autre pays");
-  await expect(row("Supercar")).toContainText("Réservée à certaines marques");
-  await expect(row("Allemande").getByRole("checkbox")).toBeEnabled();
-  await expect(page.getByLabel(/Poids en kg/)).toBeVisible();
-  // Un véhicule archivé n'exige ni plaque ni photo.
-  await page.getByLabel("Statut").selectOption({ label: "Souvenir" });
+  const youngtimer = cats.getByRole("checkbox", { name: "Youngtimer" });
+  await expect(youngtimer).toBeDisabled();
+  await expect(page.getByTestId("add-styles-note")).toContainText("Youngtimer");
+  await expect(page.getByTestId("add-styles-note")).toContainText("grisée");
+  await expect(cats.getByRole("checkbox", { name: "Supercar" })).toHaveCount(0);
+  await expect(cats.getByRole("checkbox", { name: "JDM" })).toHaveCount(0);
+  await expect(page.getByTestId("add-origin")).toContainText("Allemande");
+  await expect(page.getByTestId("add-origin")).toContainText("Déduit de BMW");
+  await expect(cats.getByRole("checkbox", { name: "Drift" })).toBeEnabled();
+  await expect(page.getByLabel(/Poids \(kg\)/)).toBeVisible();
+  // Un ancien véhicule (vendu, souvenir, accidenté) n'exige ni plaque ni photo.
+  await page.getByLabel("C'est un ancien véhicule").check();
+  await page.getByLabel("Il est…").selectOption({ label: "Souvenir" });
   await expect(page.getByLabel("Motif (facultatif)")).toBeVisible();
   await expect(page.getByLabel("Photo")).not.toHaveAttribute("required", "");
 });
@@ -80,16 +95,14 @@ test("transfert de plaque : Léa saisit la plaque de Marc, Marc confirme, sa voi
   await loginInBrowser(leaPage, "lea@orasso.local", undefined, "/app/garage/nouveau");
   await pickVehicle(leaPage, "BMW", "Série 3");
   await leaPage.getByLabel("Année").fill("1995");
-  await leaPage.getByLabel("Plaque").fill(plate);
-  await leaPage
-    .getByLabel("Photo")
-    .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: samplePhoto([40, 80, 140]) });
+  await leaPage.getByLabel("Numéro de plaque").fill(plate);
+  await chooseSitePhoto(leaPage, { name: "photo.png", mimeType: "image/png", buffer: samplePhoto([40, 80, 140]) });
   // Lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
   // Lot M2, tour 2 : « Envoyer sans flouter » se confirme sur la photo.
   await leaPage.getByTestId("site-no-plate").click();
   await leaPage.getByTestId("site-no-plate-yes").click();
   await expect(leaPage.getByTestId("site-no-plate")).toBeChecked();
-  await leaPage.getByRole("button", { name: "Ajouter au garage" }).click();
+  await leaPage.getByRole("button", { name: "Envoyer", exact: true }).click();
   await leaPage.waitForURL(/\/app\/garage\/[0-9a-f-]{36}$/);
   await expect(leaPage.getByTestId("plate-pending")).toBeVisible();
   await expect(leaPage.getByText("Plaque en attente de transfert").first()).toBeVisible();

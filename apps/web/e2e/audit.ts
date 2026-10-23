@@ -45,6 +45,8 @@ export async function auditPage(page: Page): Promise<Audit> {
     };
     const greens = new Set<string>();
     for (const el of all) {
+      // Lot M1 : les teintes de carrosserie du nuancier et des drapeaux sont des données ([data-paint]), pas de l'interface.
+      if (el.closest("[data-paint]")) continue;
       const s = getComputedStyle(el);
       for (const c of [s.color, s.backgroundColor, s.borderTopColor]) if (isGreen(c)) greens.add(`${el.tagName} ${c}`);
     }

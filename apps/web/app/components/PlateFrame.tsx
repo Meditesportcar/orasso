@@ -30,12 +30,15 @@ export function PhotoWithPlate({
   error,
   required,
   testId,
+  prepare,
 }: {
   label: string;
   help?: string;
   error?: string;
   required?: boolean;
   testId?: string;
+  /** Lot M1 : prépare la photo choisie (recadrage carré) ; le fichier rendu remplace celui du champ, `null` l'annule. */
+  prepare?: (file: File) => Promise<File | null>;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
@@ -52,10 +55,21 @@ export function PhotoWithPlate({
         help={help}
         error={error}
         required={required}
-        onChange={(e) => {
-          const file = e.currentTarget.files?.[0];
-          setUrl(file ? URL.createObjectURL(file) : null);
+        onChange={async (e) => {
+          const input = e.currentTarget;
+          let file = input.files?.[0] ?? null;
           setNoPlate(false);
+          if (file && prepare) {
+            setUrl(null);
+            const prepared = await prepare(file);
+            if (prepared) {
+              const transfer = new DataTransfer();
+              transfer.items.add(prepared);
+              input.files = transfer.files;
+            } else input.value = "";
+            file = prepared;
+          }
+          setUrl(file ? URL.createObjectURL(file) : null);
         }}
       />
       {url ? (
