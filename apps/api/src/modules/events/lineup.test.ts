@@ -1,6 +1,6 @@
-// Lot R4b : le plateau d'un événement (`GET /events/:id/lineup`), vie privée d'abord : listes blanches des champs pour
-// chaque regard (moi, membre, compte privé, visiteur), absents jamais montrés après l'événement, comptes suspendus
-// exclus, événements brouillon / privé / annulé fermés, ligne de Mes sorties, fiche d'une voiture d'un compte privé.
+// Lot R4b : le plateau d'un Ã©vÃ©nement (`GET /events/:id/lineup`), vie privÃ©e d'abord : listes blanches des champs pour
+// chaque regard (moi, membre, compte privÃ©, visiteur), absents jamais montrÃ©s aprÃ¨s l'Ã©vÃ©nement, comptes suspendus
+// exclus, Ã©vÃ©nements brouillon / privÃ© / annulÃ© fermÃ©s, ligne de Mes sorties, fiche d'une voiture d'un compte privÃ©.
 import { type LineupCarMember, lineupCarMemberFields, lineupCarVisitorFields, lineupProFields } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -26,6 +26,8 @@ import {
   profiles,
   providerProfiles,
   vehicleCategories,
+  vehicleGenerations,
+  vehicleModels,
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
@@ -55,7 +57,7 @@ beforeEach(async () => {
   structureId = (await createStructure(orga.id)).id;
 });
 
-/** Une personne avec un véhicule (une photo, plaque floutée) ; `private` pour un compte privé. */
+/** Une personne avec un vÃ©hicule (une photo, plaque floutÃ©e) ; `private` pour un compte privÃ©. */
 async function exhibitor(pseudo: string, opts: { private?: boolean } = {}) {
   const u = await signUp(pseudo);
   if (opts.private) await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
@@ -93,14 +95,14 @@ async function checkIn(eventId: string, applicationId: string) {
 const sorted = (a: readonly string[]) => [...a].sort();
 
 describe("le plateau : champs par regard (liste blanche)", () => {
-  it("moi, membre, compte privé, visiteur : rien d'autre que les champs prévus, jamais d'heure ni de plaque", async () => {
+  it("moi, membre, compte privÃ©, visiteur : rien d'autre que les champs prÃ©vus, jamais d'heure ni de plaque", async () => {
     const e = await createEvent(structureId);
     const kenji = await exhibitor("Kenji_R4b");
     const julie = await exhibitor("Julie_R4b");
     const priv = await exhibitor("Prive_R4b", { private: true });
     for (const p of [julie, priv, kenji]) await apply(e.id, p);
 
-    // Moi : ma voiture en tête, « Toi ».
+    // Moi : ma voiture en tÃªte, Â« Toi Â».
     const mine = await call(kenji.u, "GET", `/events/${e.id}/lineup`);
     expect(mine.status).toBe(200);
     expect(mine.json.phase).toBe("accepted");
@@ -108,11 +110,11 @@ describe("le plateau : champs par regard (liste blanche)", () => {
     const cars = mine.json.cars as LineupCarMember[];
     expect(cars[0]).toMatchObject({ pseudo: "Kenji_R4b", me: true, private: false });
     for (const c of cars) expect(sorted(Object.keys(c))).toEqual(sorted(lineupCarMemberFields));
-    // Compte privé : le pseudo et la voiture restent visibles, avec le cadenas.
+    // Compte privÃ© : le pseudo et la voiture restent visibles, avec le cadenas.
     expect(cars.find((c) => c.pseudo === "Prive_R4b")).toMatchObject({ private: true, me: false });
     expect(cars.find((c) => c.pseudo === "Julie_R4b")).toMatchObject({ private: false, me: false });
 
-    // Membre (connecté, sans voiture) : mêmes champs, personne n'est « Toi ».
+    // Membre (connectÃ©, sans voiture) : mÃªmes champs, personne n'est Â« Toi Â».
     const member = await signUp("Membre_R4b");
     const seen = await call(member, "GET", `/events/${e.id}/lineup`);
     for (const c of seen.json.cars) {
@@ -130,7 +132,7 @@ describe("le plateau : champs par regard (liste blanche)", () => {
       expect(visitor.text).not.toContain(p.u.id);
     }
 
-    // Aucun regard : ni identifiant de compte, ni plaque, ni heure, ni zone, ni département, ni note d'arrivée.
+    // Aucun regard : ni identifiant de compte, ni plaque, ni heure, ni zone, ni dÃ©partement, ni note d'arrivÃ©e.
     for (const res of [mine, seen, visitor]) {
       expect(sorted(Object.keys(res.json))).toEqual(
         sorted(["eventId", "phase", "cars", "pros", "counts", "filtered", "categories", "nextCursor"]),
@@ -142,12 +144,12 @@ describe("le plateau : champs par regard (liste blanche)", () => {
     }
   });
 
-  it("les pros : prestataires retenus, remise pour mon grade, champs prévus seulement", async () => {
+  it("les pros : prestataires retenus, remise pour mon grade, champs prÃ©vus seulement", async () => {
     const e = await createEvent(structureId);
     const res = await call(null, "GET", `/events/${e.id}/lineup`);
     expect(res.json.pros).toEqual([]);
     expect(res.json.counts).toEqual({ cars: 0, pros: 0 });
-    // Un food truck retenu, stand d'un pro du réseau qui accorde une remise au grade Rodage.
+    // Un food truck retenu, stand d'un pro du rÃ©seau qui accorde une remise au grade Rodage.
     const owner = await signUp("Truck_R4b");
     const pro = await createPro(owner.id);
     await db.insert(proDiscounts).values({ proId: pro.id, grade: "rodage", percent: 8 });
@@ -179,7 +181,7 @@ describe("le plateau : champs par regard (liste blanche)", () => {
       },
     ]);
     for (const p of seen.json.pros) expect(sorted(Object.keys(p))).toEqual(sorted(lineupProFields));
-    // Ni emplacement de stand, ni téléphone ; un visiteur n'a pas de remise.
+    // Ni emplacement de stand, ni tÃ©lÃ©phone ; un visiteur n'a pas de remise.
     expect(seen.text).not.toMatch(/B2|0600000000/);
     const visitor = await call(null, "GET", `/events/${e.id}/lineup`);
     expect(visitor.json.pros[0].discount).toBeNull();
@@ -187,8 +189,8 @@ describe("le plateau : champs par regard (liste blanche)", () => {
   });
 });
 
-describe("le plateau : qui y apparaît", () => {
-  it("avant la fin : les retenues seulement (ni en attente, ni liste d'attente, ni refusées)", async () => {
+describe("le plateau : qui y apparaÃ®t", () => {
+  it("avant la fin : les retenues seulement (ni en attente, ni liste d'attente, ni refusÃ©es)", async () => {
     const e = await createEvent(structureId);
     const a = await exhibitor("Retenu_R4b");
     await apply(e.id, a);
@@ -200,7 +202,7 @@ describe("le plateau : qui y apparaît", () => {
     expect(res.json.counts.cars).toBe(1);
   });
 
-  it("après l'événement : seulement les présentes ; les absents jamais montrés, même en nombre", async () => {
+  it("aprÃ¨s l'Ã©vÃ©nement : seulement les prÃ©sentes ; les absents jamais montrÃ©s, mÃªme en nombre", async () => {
     const e = await createEvent(structureId);
     const present = await exhibitor("Present_R4b");
     const absent = await exhibitor("Absent_R4b");
@@ -214,12 +216,12 @@ describe("le plateau : qui y apparaît", () => {
     expect(res.json.counts.cars).toBe(1);
     expect(res.json.filtered).toBe(1);
     expect(res.text).not.toContain("Absent_R4b");
-    // L'absent lui-même ne s'y voit pas.
+    // L'absent lui-mÃªme ne s'y voit pas.
     const self = await call(absent.u, "GET", `/events/${e.id}/lineup`);
     expect(self.json.cars.some((c: LineupCarMember) => c.me)).toBe(false);
   });
 
-  it("compte suspendu, supprimé ou banni : exclu ; véhicule archivé : exclu", async () => {
+  it("compte suspendu, supprimÃ© ou banni : exclu ; vÃ©hicule archivÃ© : exclu", async () => {
     const e = await createEvent(structureId);
     const ok = await exhibitor("Regle_R4b");
     const susp = await exhibitor("Suspendu_R4b");
@@ -236,7 +238,7 @@ describe("le plateau : qui y apparaît", () => {
     expect(res.json.counts.cars).toBe(1);
   });
 
-  it("brouillon, privé, annulé, inconnu : rien (404)", async () => {
+  it("brouillon, privÃ©, annulÃ©, inconnu : rien (404)", async () => {
     const draft = await createEvent(structureId, { status: "draft" });
     const priv = await createEvent(structureId, { admission: "invite_only" });
     const cancelled = await createEvent(structureId, { status: "cancelled", cancelledAt: new Date() });
@@ -246,7 +248,7 @@ describe("le plateau : qui y apparaît", () => {
     }
   });
 
-  it("une vignette par véhicule, filtre par catégorie côté serveur, pages de 30", async () => {
+  it("une vignette par vÃ©hicule, filtre par catÃ©gorie cÃ´tÃ© serveur, pages de 30", async () => {
     const e = await createEvent(structureId);
     for (let i = 0; i < 32; i++) {
       const p = await exhibitor(`Pilote_R4b${String(i).padStart(2, "0")}`);
@@ -269,7 +271,7 @@ describe("le plateau : qui y apparaît", () => {
     expect((await call(orga, "GET", `/events/${e.id}/lineup?category=JDM%20!`)).status).toBe(400);
   });
 
-  it("route publique limitée en débit", async () => {
+  it("route publique limitÃ©e en dÃ©bit", async () => {
     resetRateLimits();
     const e = await createEvent(structureId);
     let last = 200;
@@ -296,7 +298,7 @@ describe("Mes sorties et la fiche d'une voiture", () => {
     expect(pending.lineupPreview).toBeNull();
   });
 
-  it("passée : « · N présentes » ; événement privé : pas de ligne", async () => {
+  it("passÃ©e : Â« Â· N prÃ©sentes Â» ; Ã©vÃ©nement privÃ© : pas de ligne", async () => {
     const e = await createEvent(structureId);
     const kenji = await exhibitor("Kenji_R4b");
     const ak = await apply(e.id, kenji);
@@ -309,7 +311,7 @@ describe("Mes sorties et la fiche d'une voiture", () => {
     expect((await lineupService.previews([e.id], kenji.u.id)).size).toBe(0);
   });
 
-  it("canal en direct : réservé aux événements dont le plateau se montre", async () => {
+  it("canal en direct : rÃ©servÃ© aux Ã©vÃ©nements dont le plateau se montre", async () => {
     const e = await createEvent(structureId);
     const priv = await createEvent(structureId, { admission: "invite_only" });
     expect(await lineupService.canSubscribe(`event:${e.id}:lineup`)).toBe(true);
@@ -319,10 +321,10 @@ describe("Mes sorties et la fiche d'une voiture", () => {
 });
 
 describe("lot R4b, tour 2", () => {
-  it("photo : seulement une photo floutée (la seconde si la première ne l'est pas), sinon aucune", async () => {
+  it("photo : seulement une photo floutÃ©e (la seconde si la premiÃ¨re ne l'est pas), sinon aucune", async () => {
     const e = await createEvent(structureId);
     const a = await exhibitor("Floue_R4b");
-    // Première photo non floutée, seconde floutée : la seconde.
+    // PremiÃ¨re photo non floutÃ©e, seconde floutÃ©e : la seconde.
     await db.update(vehiclePhotos).set({ plateBlurred: false }).where(eq(vehiclePhotos.vehicleId, a.v.id));
     await db.insert(vehiclePhotos).values({
       vehicleId: a.v.id,
@@ -333,10 +335,10 @@ describe("lot R4b, tour 2", () => {
       bytes: 10,
       plateBlurred: true,
     });
-    // Aucune photo floutée : aucune.
+    // Aucune photo floutÃ©e : aucune.
     const b = await exhibitor("Nette_R4b", { private: true });
     await db.update(vehiclePhotos).set({ plateBlurred: false }).where(eq(vehiclePhotos.vehicleId, b.v.id));
-    // Tour 3 : « aucune plaque visible » confirmé à l'envoi suffit.
+    // Tour 3 : Â« aucune plaque visible Â» confirmÃ© Ã  l'envoi suffit.
     const c = await exhibitor("SansPlaque_R4b");
     await db
       .update(vehiclePhotos)
@@ -348,17 +350,17 @@ describe("lot R4b, tour 2", () => {
     expect(urls.filter(Boolean)).toHaveLength(2);
     expect(urls.some((u: string | null) => u?.includes("-floue.webp"))).toBe(true);
     expect(urls.some((u: string | null) => u?.includes(c.v.id))).toBe(true);
-    // Même règle pour la voiture d'un compte privé et pour la ligne de Mes sorties.
+    // MÃªme rÃ¨gle pour la voiture d'un compte privÃ© et pour la ligne de Mes sorties.
     const viewer = await signUp("Voit_R4b");
     expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toBeNull();
     const previews = await lineupService.previews([e.id], viewer.id);
     expect(previews.get(e.id)?.photoUrls).toHaveLength(2);
-    // Véhicule non immatriculé : la première photo.
+    // VÃ©hicule non immatriculÃ© : la premiÃ¨re photo.
     await db.update(vehicles).set({ unregistered: true }).where(eq(vehicles.id, b.v.id));
     expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toContain(b.v.id);
   });
 
-  it("après la fin : ni retenus ni places restantes publics (les deux routes croisées), l'organisation garde les siens", async () => {
+  it("aprÃ¨s la fin : ni retenus ni places restantes publics (les deux routes croisÃ©es), l'organisation garde les siens", async () => {
     const e = await createEvent(structureId, { capacity: 10 });
     const present = await exhibitor("Present2_R4b");
     const ap = await apply(e.id, present);
@@ -382,7 +384,7 @@ describe("lot R4b, tour 2", () => {
     expect((await eventsService.getPublic(e.slug, null)).acceptedCount).toBeNull();
   });
 
-  it("le canal en direct : pointage, accréditation d'un photographe", async () => {
+  it("le canal en direct : pointage, accrÃ©ditation d'un photographe", async () => {
     const e = await createEvent(structureId);
     const got: string[] = [];
     const socket: RealtimeSocket = { send: (m) => got.push(JSON.parse(m).type) };
@@ -390,7 +392,7 @@ describe("lot R4b, tour 2", () => {
     try {
       const p = await exhibitor("Pointe_R4b");
       const app = await apply(e.id, p);
-      // Un retenu a son pass (émis à l'acceptation dans le vrai parcours) ; le pointage s'ouvre le jour J.
+      // Un retenu a son pass (Ã©mis Ã  l'acceptation dans le vrai parcours) ; le pointage s'ouvre le jour J.
       await withTx((tx) => accessService.issue(tx, app));
       clock.set(new Date(e.startsAt.getTime() + 3_600_000));
       const res = await call(orga, "POST", `/events/${e.id}/checkins`, { applicationId: app.id });
@@ -424,5 +426,38 @@ describe("lot R4b, tour 2", () => {
     } finally {
       realtime.unsubscribe(`event:${e.id}:lineup`, socket);
     }
+  });
+});
+
+describe("vague R4 : le nom tapÃ© (lot R4a) sur le plateau", () => {
+  it("un modÃ¨le absent de la liste s'affiche sous le nom tapÃ© (Â« Peugeot 207 CC Â»), pas Â« Autre Â»", async () => {
+    const e = await createEvent(structureId);
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: ref.makeId, name: "Autre", slug: "autre-r4", vehicleType: "car", isOther: true })
+      .returning();
+    const [otherGen] = await db
+      .insert(vehicleGenerations)
+      .values({ modelId: other!.id, name: "Autre", isOther: true })
+      .returning();
+    const u = await signUp("Tape_R4");
+    const v = await createVehicle(
+      u.id,
+      { makeId: ref.makeId, modelId: other!.id, generationId: otherGen!.id },
+      {
+        generationId: null,
+        proposedModel: "207 CC",
+        year: 2008,
+      },
+    );
+    await db.update(vehiclePhotos).set({ plateBlurred: true }).where(eq(vehiclePhotos.vehicleId, v.id));
+    await apply(e.id, { u, v });
+
+    const res = await call(orga, "GET", `/events/${e.id}/lineup`);
+    expect(res.status).toBe(200);
+    const car = (res.json.cars as LineupCarMember[]).find((c) => c.pseudo === "Tape_R4");
+    expect(car?.modelName).toBe("207 CC");
+    expect(car?.label).toContain("207 CC");
+    expect(car?.modelName).not.toBe("Autre");
   });
 });

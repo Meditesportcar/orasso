@@ -27,7 +27,14 @@ import { crewsService } from "../crews/service";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
-import { vehicleBrief, vehicleLabel, vehiclePrivate, vehiclePublic } from "../vehicles/serializers";
+import {
+  makeNameOf,
+  modelNameOf,
+  vehicleBrief,
+  vehicleLabel,
+  vehiclePrivate,
+  vehiclePublic,
+} from "../vehicles/serializers";
 import { followsService } from "./follows";
 import { socialRepo } from "./repo";
 
@@ -181,8 +188,8 @@ export const socialProfile = {
         ? {
             id: g.id,
             label: vehicleLabel(g),
-            makeName: g.make.name,
-            modelName: g.model.name,
+            makeName: makeNameOf(g),
+            modelName: modelNameOf(g),
             // Vague R4, après fusion : la vitrine sort du garage, seulement une photo à plaque floutée ou sans plaque.
             photoUrl: storage.url(maskedPhoto(g.photos, g.unregistered)?.storageKey ?? null),
             detailed: true,
@@ -191,8 +198,8 @@ export const socialProfile = {
         : {
             id: g.id,
             label: vehicleBrief(g).label,
-            makeName: g.make.name,
-            modelName: g.model.name,
+            makeName: makeNameOf(g),
+            modelName: modelNameOf(g),
             photoUrl: null,
             detailed: false,
             main: g.id === mainId,

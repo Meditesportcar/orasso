@@ -132,6 +132,8 @@ async function mainVehicleLabels(people: Pick<Profile, "userId" | "mainVehicleId
       makeOther: vehicleMakes.isOther,
       modelName: vehicleModels.name,
       modelOther: vehicleModels.isOther,
+      proposedMake: vehicles.proposedMake,
+      proposedModel: vehicles.proposedModel,
     })
     .from(vehicles)
     .innerJoin(vehicleMakes, eq(vehicleMakes.id, vehicles.makeId))
@@ -152,9 +154,12 @@ async function mainVehicleLabels(people: Pick<Profile, "userId" | "mainVehicleId
     if (main) {
       out.set(
         p.userId,
+        // Vague R4 : le nom tapé (lot R4a) quand la marque ou le modèle vaut « Autre ».
         vehicleBriefLabel({
           make: { name: main.makeName, isOther: main.makeOther },
           model: { name: main.modelName, isOther: main.modelOther },
+          proposedMake: main.proposedMake,
+          proposedModel: main.proposedModel,
         } as Parameters<typeof vehicleBriefLabel>[0]),
       );
     }

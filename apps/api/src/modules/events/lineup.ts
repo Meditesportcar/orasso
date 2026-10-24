@@ -43,7 +43,7 @@ import { storage } from "../../lib/storage";
 import { discountsByPro } from "../pros/explore";
 import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
-import { vehicleLabel } from "../vehicles/serializers";
+import { makeNameOf, modelNameOf, vehicleLabel } from "../vehicles/serializers";
 
 /** Compte en règle : ni supprimé, ni banni, ni suspendu (un compte suspendu sort du plateau). */
 const accountOk = (t: Date) =>
@@ -182,8 +182,8 @@ export const lineupService = {
         // Lot R4b, tour 2 : seulement une photo dont la plaque est floutée (ou d'un véhicule sans plaque).
         photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
         label: vehicleLabel(v),
-        makeName: v.make.name,
-        modelName: v.model.name,
+        makeName: makeNameOf(v),
+        modelName: modelNameOf(v),
         generationName: v.generation && !v.generation.isOther ? v.generation.name : null,
       };
       if (!viewer) return [shown];
