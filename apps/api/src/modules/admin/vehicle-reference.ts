@@ -13,6 +13,7 @@ import {
   type VehicleProposalAccept,
   type VehicleProposalGroup,
   type VehicleProposalPage,
+  vehicleName,
   versionFromTyped,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
@@ -784,7 +785,7 @@ export const vehicleReferenceService = {
             .join(" ");
           await notificationsService.notify(tx, r.v.ownerId, "vehicle_reassigned", {
             title: "Ton véhicule est dans la base Orasso",
-            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${[label, version].filter(Boolean).join(" ")}.`,
+            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${vehicleName({ make: make.name, model: model.name, generation: gen && !gen.isOther ? gen.name : null, version })}.`,
             link: { label: "Voir mon véhicule", path: `/app/garage/${r.v.id}` },
             data: { vehicleId: r.v.id },
           });
@@ -827,6 +828,11 @@ export const vehicleReferenceService = {
       const gen = input.generationId
         ? (await tx.select().from(vehicleGenerations).where(eq(vehicleGenerations.id, input.generationId)))[0]
         : undefined;
+      // Lot R4e : comme `acceptProposal`, la précision tapée après le modèle devient la version, si elle est vide (un nom
+      // tapé n'existe qu'avec le modèle « Autre »). Écrite par l'équipe : pas une modification du propriétaire.
+      const version =
+        current.version ??
+        typedVersion({ v: current, model: { isOther: Boolean(current.proposedModel) } }, { make, model, gen });
       await tx
         .update(vehicles)
         .set({
@@ -839,27 +845,23 @@ export const vehicleReferenceService = {
           proposedModel: model.isOther ? current.proposedModel : null,
           // Lot R4e : comme `acceptProposal`, la précision tapée après le modèle devient la version, si elle est vide (un
           // nom tapé n'existe qu'avec le modèle « Autre »).
-          ...(current.version
-            ? {}
-            : {
-                version: typedVersion(
-                  { v: current, model: { isOther: Boolean(current.proposedModel) } },
-                  { make, model, gen },
-                ),
-              }),
+          ...(current.version ? {} : { version }),
           // Marque ou modèle changés : ce n'est plus la fiche certifiée (relecture).
           ...(current.certifiedAt && (current.makeId !== input.makeId || current.modelId !== input.modelId)
             ? { certifiedAt: null, certifiedLostReason: "modified" as const }
             : {}),
         })
         .where(eq(vehicles.id, vehicleId));
-      const label = [
-        make?.isOther ? null : make?.name,
-        model.isOther ? null : model.name,
-        gen?.isOther ? null : gen?.name,
-      ]
-        .filter(Boolean)
-        .join(" ");
+      // Lot R4e, tour 2 : la notification dit la version (composition commune `vehicleName`).
+      const label = vehicleName(
+        {
+          make: make?.isOther ? null : make?.name,
+          model: model.isOther ? null : model.name,
+          generation: gen?.isOther ? null : gen?.name,
+          version,
+        },
+        { fallback: "" },
+      );
       await audit(tx, v, {
         action: "vehicle.reassign",
         targetType: "vehicle",

@@ -66,6 +66,7 @@ export async function certificationFieldsOf(ex: Executor, vehicleId: string): Pr
     photoIds: photos.map((p) => p.id),
     proposedMake: v.proposedMake,
     proposedModel: v.proposedModel,
+    version: v.version,
   };
 }
 

@@ -179,6 +179,11 @@ export type CertificationFields = {
   /** Lot R4a, tour 2 : marque et modèle tapés (absents d'une ancienne demande : comptés comme vides). */
   proposedMake?: string | null;
   proposedModel?: string | null;
+  /**
+   * Lot R4e, tour 2 (décision du coordinateur) : la version (« GTI ») est une affirmation sur le véhicule ; la changer fait
+   * perdre la certification. Absente d'une ancienne demande : comptée comme vide.
+   */
+  version?: string | null;
 };
 
 const textOrNull = (v: string | null | undefined) => {
@@ -206,7 +211,8 @@ export function certificationLostByChange(before: CertificationFields, after: Ce
     !sameSet(before.categoryIds, after.categoryIds) ||
     !sameSet(before.photoIds, after.photoIds) ||
     textOrNull(before.proposedMake) !== textOrNull(after.proposedMake) ||
-    textOrNull(before.proposedModel) !== textOrNull(after.proposedModel)
+    textOrNull(before.proposedModel) !== textOrNull(after.proposedModel) ||
+    textOrNull(before.version) !== textOrNull(after.version)
   );
 }
 

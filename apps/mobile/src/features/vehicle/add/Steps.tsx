@@ -529,7 +529,7 @@ export function StepSpecs({
           onChangeText={(version) => patch({ version: version.slice(0, VEHICLE_VERSION_MAX) })}
           help={V.versionHelp}
           maxLength={VEHICLE_VERSION_MAX}
-          autoCapitalize="characters"
+          autoCapitalize="words"
           testID="vehicle-version"
         />
         <TextField

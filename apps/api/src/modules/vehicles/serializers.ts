@@ -7,6 +7,7 @@ import {
   type VehicleFull,
   type VehiclePrivate,
   type VehiclePublic,
+  vehicleName,
 } from "@orasso/shared";
 
 import { storage } from "../../lib/storage";
@@ -32,14 +33,20 @@ export const modelNameOf = (v: Pick<VehicleWithAll, "model"> & Proposed) =>
  * (« Peugeot 207 CC »). Lot R4e : la version vient après le modèle et la génération (« Volkswagen Golf Mk4 GTI »).
  */
 export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generation"> & Proposed): string {
-  const parts = [
-    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
-    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
-  ];
-  if (v.generation && !v.generation.isOther) parts.push(v.generation.name);
-  parts.push(v.version);
-  const label = parts.filter(Boolean).join(" ");
-  return label || "Autre véhicule";
+  // Lot R4e, tour 2 : composition commune (`vehicleName`, packages/shared), version jamais répétée.
+  return vehicleName(nameParts(v));
+}
+
+/** Morceaux du nom d'une ligne de `vehicles` : niveaux « Autre » remplacés par les noms tapés. */
+export function nameParts(
+  v: Pick<VehicleWithAll, "make" | "model"> & Partial<Pick<VehicleWithAll, "generation">> & Proposed,
+) {
+  return {
+    make: v.make.isOther ? v.proposedMake : v.make.name,
+    model: v.model.isOther ? v.proposedModel : v.model.name,
+    generation: v.generation && !v.generation.isOther ? v.generation.name : null,
+    version: v.version,
+  };
 }
 
 /**
@@ -114,14 +121,7 @@ export function vehicleFull(v: VehicleWithAll): VehicleFull {
  * R4e : la version suit le modèle (« Peugeot 207 CC »), c'est une précision du nom, comme le nom tapé.
  */
 export function vehicleBriefLabel(v: Pick<VehicleWithAll, "make" | "model"> & Proposed): string {
-  const label = [
-    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
-    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
-    v.version,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return label || "Autre véhicule";
+  return vehicleName({ ...nameParts(v), generation: null });
 }
 
 export function vehicleBrief(v: VehicleWithAll): VehicleBrief {

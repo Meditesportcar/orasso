@@ -22,6 +22,7 @@ import {
   type VehicleStatus,
   type VehicleType,
   type VehicleUpdate,
+  vehicleName,
   vehicleSpecsIssue,
 } from "@orasso/shared";
 
@@ -410,9 +411,12 @@ export function liveCard(
   const typedModel = d.typing ? cleanProposedName(d.proposedModel) : null;
   const make = typedMake ?? (ref.make && !ref.make.isOther ? ref.make.name : ref.make && !d.typing ? L.other : null);
   const model = typedModel ?? (ref.model && !ref.model.isOther ? ref.model.name : null);
-  // Lot R4e : la version suit le modèle (« Peugeot 207 CC »), dès qu'elle est saisie.
+  // Lot R4e : la version suit le modèle (« Peugeot 207 CC »), dès qu'elle est saisie ; tour 2 : composition commune
+  // (`vehicleName`), sans répéter le modèle tapé ni la génération (montrée sur sa ligne).
   const version = model ? cleanVehicleVersion(d.version) : null;
   const gen = ref.generation && !ref.generation.isOther ? ref.generation : null;
+  const name =
+    make || model ? vehicleName({ make, model, generation: gen?.name, version }, { withGeneration: false }) : null;
   const unset = Boolean(model) && !gen && (d.typing !== undefined || d.generationId !== undefined);
   const specs = [
     d.engine.trim() || null,
@@ -425,7 +429,7 @@ export function liveCard(
   return {
     type: d.vehicleType,
     photos: d.photos.length,
-    name: [make, model, version].filter(Boolean).join(" ") || null,
+    name,
     generation: gen
       ? [gen.name, generationYears(gen)].filter(Boolean).join(" · ")
       : d.typing && !typedModel

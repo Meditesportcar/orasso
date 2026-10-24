@@ -91,6 +91,16 @@ export async function checkReference(
  * Lot R4a (maquette R4.8) : marque et modèle tapés, gardés seulement avec le niveau « Autre » correspondant et
  * nettoyés (40 caractères au plus). Un nom tapé demande l'année (la génération n'est pas demandée).
  */
+/**
+ * Lot R4e, tour 2 : version nettoyée ; un texte qui ne garde rien au nettoyage (caractères invisibles seuls) est refusé,
+ * un texte vide efface la version.
+ */
+function versionOf(text: string | null | undefined): string | null {
+  const version = cleanVehicleVersion(text);
+  if (text?.trim() && !version) throw validation("Version : aucun caractère visible.", { field: "version" });
+  return version;
+}
+
 async function proposedNames(
   ex: Executor,
   v: {
@@ -107,6 +117,13 @@ async function proposedNames(
   ]);
   const proposedMake = make?.isOther ? cleanProposedName(v.proposedMake) : null;
   const proposedModel = model?.isOther ? cleanProposedName(v.proposedModel) : null;
+  // Lot R4e, tour 2 : un nom tapé qui ne garde rien au nettoyage (invisibles seuls, un caractère) est refusé.
+  if (make?.isOther && v.proposedMake?.trim() && !proposedMake) {
+    throw validation("Nom de la marque : 2 caractères visibles au moins.", { field: "proposedMake" });
+  }
+  if (model?.isOther && v.proposedModel?.trim() && !proposedModel) {
+    throw validation("Nom du modèle : 2 caractères visibles au moins.", { field: "proposedModel" });
+  }
   if ((proposedMake || proposedModel) && !v.year) {
     throw validation("Indique l'année : ton modèle n'est pas encore dans la liste Orasso.", { field: "year" });
   }
@@ -300,7 +317,7 @@ export const vehiclesService = {
             clientKey: input.clientKey ?? null,
             ...proposed,
             // Lot R4e : la version, nettoyée (30 caractères au plus), pour tout modèle.
-            version: cleanVehicleVersion(input.version),
+            version: versionOf(input.version),
           })
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
@@ -410,6 +427,7 @@ export const vehiclesService = {
     const holder = wantsPlate && plateIsNew ? await plateHolder(db, plateNormalized, id) : null;
     assertNotOwnPlate(holder, v.user.id);
     const { categoryIds: _ignored, proposedMake: _make, proposedModel: _model, version, ...fields } = input;
+    const cleanedVersion = version !== undefined ? versionOf(version) : undefined;
     try {
       await withTx(async (tx, after) => {
         // Véhicule verrouillé et relu : une acceptation de transfert concurrente ne doit jamais être écrasée (I1).
@@ -440,8 +458,8 @@ export const vehiclesService = {
           .set({
             ...fields,
             ...proposed,
-            // Lot R4e : la version, nettoyée ; une précision du nom, elle ne fait pas perdre la certification.
-            ...(version !== undefined ? { version: cleanVehicleVersion(version) } : {}),
+            // Lot R4e : la version, nettoyée ; tour 2 : la changer fait perdre la certification (`afterChange`).
+            ...(version !== undefined ? { version: cleanedVersion } : {}),
             generationId: merged.generationId ?? null,
             year: merged.year ?? null,
             plate: merged.plate,
