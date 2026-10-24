@@ -2622,3 +2622,9 @@ Source : `lots/r1-bugs-apk.md` et `retours-damien-2026-10-24.md` (relais), secti
 ### À revoir avec Damien (lot R1)
 - **« Un début de mot »** : la recherche accepte tout morceau de mot (« sport » trouve MéditeSportCar), comme le faisait déjà la recherche sur le titre et la ville. Plus large qu'un vrai début de mot, mais un nom collé (MéditeSportCar) n'a qu'un seul « mot ».
 - **Site à 390 px** : les résultats de l'Explorer passent sous le long formulaire de filtres (déjà le cas avant ce lot) ; la refonte de l'Explorer (lot R2) devra le reprendre.
+
+## 24/10/2026 — Heures calmes désactivables sur dev (décision de Damien)
+
+- **Choix** : nouvelle variable d'environnement de l'API `NOTIFY_QUIET_HOURS` (`on` par défaut ; `off` coupe les heures calmes 22:00–08:00 du choix C15, les push partent tout de suite). Posée à `off` dans `/etc/orasso/dev.env` de dev.orasso.fr seulement.
+- **Raison** : Damien teste souvent la nuit ; ses acceptations étaient différées à 08:00 et il croyait les notifications système cassées. La production garde les heures calmes (variable jamais posée).
+- **Fichiers** : `apps/api/src/env.ts`, `apps/api/src/modules/notifications/service.ts`.

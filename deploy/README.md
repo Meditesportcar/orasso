@@ -53,6 +53,10 @@ Retour arrière et migrations : `rollback` remet les images précédentes mais n
 - E-mails par Brevo (lot 15) : une adresse d'un domaine réservé (`.local`, `.localhost`, `.test`, `.example`, `.invalid`, `example.com/net/org` — comptes de démonstration du seed) n'est jamais envoyée à Brevo, même avec `MAIL_TRANSPORT=brevo` : elle passe par le journal (console, `email_outbox.transport = journal` avec la mention « Adresse non routable »), pour éviter les rebonds durs qui abîment la réputation du compte. Délai de 10 s par appel à Brevo. `MAIL_REPLY_TO` facultatif (réponses vers contact@orasso.fr).
 - Clés d'accès (passkeys, lot 15) : identifiant de domaine = hôte de `PUBLIC_URL` (`dev.orasso.fr`) ; une clé créée sur dev.orasso.fr ne vaut pas pour orasso.fr.
 
+## Heures calmes (24/10)
+
+`NOTIFY_QUIET_HOURS=off` dans `/etc/orasso/dev.env` coupe les heures calmes des notifications (22:00–08:00) sur dev.orasso.fr, pour les essais de nuit. **Ne jamais la poser en production.**
+
 ## Voir les journaux sur le VPS
 
 ```bash
