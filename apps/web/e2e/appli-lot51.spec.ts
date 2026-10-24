@@ -2,7 +2,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { apiCall, type Cookie, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { apiCall, type Cookie, MOBILE, randomPlate, SEED_PASSWORD, seeStepEnd, signUpApi, unique } from "./helpers";
 import { checkerPhoto, inner, type Rect, regionSpread, storedPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -56,7 +56,10 @@ async function checkDesign(page: Page) {
   expect(audit.horizontalScroll).toBe(false);
 }
 
-const next = (page: Page) => page.getByTestId("vehicle-step-next").click();
+const next = async (page: Page) => {
+  await seeStepEnd(page);
+  await page.getByTestId("vehicle-step-next").click();
+};
 const row = (page: Page, name: string) => page.getByRole("radio", { name, exact: false }).first();
 
 /** Le cadre de plaque, en fraction de la photo affichée. */
