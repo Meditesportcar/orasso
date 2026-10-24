@@ -2688,7 +2688,24 @@ Source : fiche `lots/r3c-referentiel-vehicules.md` (relais). La Peugeot 207 manq
 
 ### À revoir avec Damien (lot R3c)
 - **Erreurs vues dans la liste de départ (non corrigées, pas de renommage)** : BMW « 2002 » a une génération nommée « Série 1 » (confusion avec le modèle Série 1 ; proposition « 02 (E10) ») ; Renault « Megane » sans accent (proposition « Mégane », la recherche le trouve déjà sans accent). Correction possible dans l'admin.
-- **Ludospaces** : un Berlingo, un Kangoo ou un Partner « voiture » est rangé en « Utilitaire » ; la personne qui choisit « Voiture » ne le trouve pas dans la liste par type. À trancher avec l'écran « Autre » (R4) : chercher tous types, ou dupliquer les ludospaces.
-- **Suppression ou renommage dans l'admin** : une ligne de la liste supprimée dans l'admin revient au démarrage suivant ; une ligne renommée (le slug change) fait revenir le nom d'origine à côté. Pour retirer durablement un nom, le retirer aussi du fichier.
+- **Ludospaces** : tranché au tour 2 (voir plus bas).
+- **Suppression ou renommage dans l'admin** : corrigé au tour 2 (clés vues).
 - **Ajouts de l'admin vus dans la recherche** : au plus 10 minutes après (index en mémoire), comme les listes déjà gardées une heure par le cache HTTP.
 - **Années à la marge** : quelques dates de fin récentes (modèles arrêtés en 2024-2025) et de lancement (2025) viennent des pages publiques du moment ; un passionné qui voit une erreur la signale, l'équipe corrige dans l'admin.
+
+## Lot R3c, tour 2 (relectures Opus et Codex « fusionnable après corrections ») — 24/10/2026
+
+Source : `corrections-r3c.md` (relais).
+- **Clés vues (bloquant)** : table `vehicle_reference_seen (key text primary key, seen_at)`, migration `0057_vehicle-reference-seen`. Clés « slug de marque », « slug de marque|slug de modèle », « …|nom de génération » sans accents ni casse, espaces réduits. La synchronisation n'insère qu'une clé jamais vue puis note toutes les clés du fichier (y compris celles déjà en base au premier passage) : une ligne supprimée ou renommée dans l'admin ne revient plus. Les noms existants sont comparés normalisés (« phase  1 » corrigée par l'équipe ne fait pas revenir « Phase 1 »). Le marquage tout-terrain ne vaut plus qu'à l'arrivée d'un modèle (clé non vue).
+  - Conséquence : au **premier** passage sur une base (dev, production), ce qui a été supprimé dans l'admin avant ce lot revient une fois, puisqu'aucune clé n'était encore notée. La passe à blanc le montre avant le déploiement.
+  - Une marque renommée dans l'admin ne reçoit plus les lignes ajoutées plus tard au fichier sous l'ancien nom (rattachement par slug) : les ajouter dans l'admin, ou renommer aussi la marque dans le fichier.
+- **Transaction et verrou** : toute la synchronisation dans une transaction, sous `pg_advisory_xact_lock(hashtextextended('vehicle-reference-sync', 0))` ; identifiants relus après chaque insertion. Deux synchronisations simultanées : une seule ajoute ; un échec au milieu n'écrit rien (tests).
+- **Passe à blanc** : `pnpm --filter @orasso/api db:reference --dry-run` liste ligne à ligne ce qui serait ajouté (« + Peugeot 207 Phase 1 ») puis annule la transaction. Sur la base du seed d'avant le lot : 102 marques, 1 583 modèles, 3 808 générations à ajouter (« Autre » compris).
+- **Échec au démarrage** : message `[orasso] ERREUR : …` avec la pile, envoi à GlitchTip quand `SENTRY_DSN` est posé ; le démarrage de l'API continue (`deploy/api-start.sh` inchangé depuis le tour 1).
+- **Recherche** : l'index est relu après toute modification réussie du référentiel dans l'admin (intergiciel sur `/admin/vehicle-reference/*`, après la réponse, donc après validation de la transaction) ; cache HTTP de la route ramené à `private, max-age=60` ; limite `referenceSearch` / `referenceSearchPublic` de 120 recherches par minute (une par frappe ; `limitSearch` accepte désormais ses règles) ; `Intl.Collator("fr")` créé une fois. L'anti-rebond côté appli et site sera posé avec les écrans qui appellent la route (R3a / R4) : aucun ne l'appelle encore.
+- **Chiffres romains collés** : un numéro de 1 à 12 de l'index vaut aussi son romain (« Mk4 » → iv) ; « golf-iv », « golfiv », « GOLF-IV » trouvent la Golf Mk4.
+- **Ludospaces (décision du coordinateur)** : Partner, Kangoo, Berlingo, Caddy, Doblo, Combo typés voiture ; fourgons en Utilitaire sous leur nom propre : Kangoo Express (I, II), Kangoo Van (III), Berlingo Van (III), Caddy Van (Mk3, Mk4), Caddy Cargo (Mk5), Doblo Cargo, Combo Cargo (E). Le Partner n'a pas de nom de fourgon distinct : voiture seulement. L'API accepte un Kangoo en voiture et le refuse en utilitaire (test).
+- **Données** : Ferrari 512 TR 1991-1994 ; Subaru Impreza GJ (2011-2016) et GT (2016-2023) ajoutées. Chiffres : 149 marques, 1 721 modèles, 2 894 générations hors « Autre ».
+
+### À revoir avec Damien (lot R3c, tour 2)
+- **Erreurs de la liste de départ, à corriger dans l'admin** (la correction tient désormais) : BMW « 2002 » a une génération « Série 1 » (proposition « 02 (E10) ») ; Renault « Megane » sans accent ; Subaru Impreza « VA » est une WRX STI (la WRX est séparée depuis 2014) ; Nissan « Skyline » (ajoutée au tour 1) et « Skyline GT-R » ont toutes deux R32 à R34 : garder les deux (berlines et GT-R) ou fondre.
