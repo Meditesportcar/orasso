@@ -9,6 +9,7 @@ import {
   homeProfileLabels,
   type MyWeather,
   weatherCodeLabels,
+  withYear,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -312,7 +313,7 @@ export function PosterRail({
         </Pressable>
       ) : null}
       {events.map((e) => {
-        const day = DAY_FMT.format(new Date(e.startsAt)).replace(/\./g, "");
+        const day = withYear(DAY_FMT.format(new Date(e.startsAt)).replace(/\./g, ""), e.startsAt);
         const dist = typeof e.distanceKm === "number" ? ` · ${Math.round(e.distanceKm)} km` : "";
         return (
           <Pressable

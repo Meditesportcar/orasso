@@ -143,7 +143,8 @@ export function CrewRowR2({ crew, mine, sent, busy }: { crew: CrewCard; mine: bo
         <Button variant="secondary" icon="next" href={`/c/${crew.slug}`} data-testid="crew-open">
           Ouvrir
         </Button>
-      ) : sent ? (
+      ) : sent || crew.requested ? (
+        // Lot R3b : la demande déjà envoyée vient de l'API (elle reste après un rechargement).
         <Button variant="secondary" icon="check" disabled data-testid="crew-requested">
           {R.joinRequested}
         </Button>

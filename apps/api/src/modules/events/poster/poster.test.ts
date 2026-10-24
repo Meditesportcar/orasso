@@ -1,6 +1,6 @@
 // Lot 47 : générateur d'affiche (8 styles × 2 formats rendus par l'API), aperçu en direct, génération par
 // l'organisateur, vignette des cartes, régénération (date, duplication).
-import { fromWallTime, posterStyles } from "@orasso/shared";
+import { fromWallTime, posterPreviewKey, posterStyles, setDisplayClock } from "@orasso/shared";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -16,8 +16,10 @@ import {
 } from "../../../../test/helpers";
 import { app } from "../../../app";
 import { pool } from "../../../db/client";
+import { now } from "../../../lib/deps";
 import { storage } from "../../../lib/storage";
-import { clearPosterCache, POSTER_MAX_BYTES, posterCacheSize, render } from "./render";
+import { clearPosterCache, POSTER_MAX_BYTES, posterCacheKey, posterCacheSize, render } from "./render";
+import { posterYearOf, posterYearStale } from "./service";
 import { posterTemplates } from "./templates";
 import { textLine } from "./text";
 import type { PosterCtx, PosterInput, TextLayer } from "./types";
@@ -91,7 +93,7 @@ describe("rendu des affiches", () => {
         cqh: 13.5,
         story: false,
         input: input({ style, title }),
-        date: { weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h" },
+        date: { weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h", year: "" },
         title: title.toUpperCase(),
         place: "CANET",
       };
@@ -289,4 +291,59 @@ describe("API de l'affiche", () => {
     expect(copy.json.poster.postUrl).not.toBe(original.json.poster.postUrl);
     expect(copy.json.posterUrl).toBe(copy.json.poster.postUrl);
   }, 60_000);
+});
+
+describe("affiche et année (lot R3b, tour 2) : un Nouvel An refait les affiches", () => {
+  const Y = new Date().getUTCFullYear();
+  const wall = (year: number, month: number, day: number, hour = 12) =>
+    fromWallTime({ year, month, day, hour, minute: 0 });
+  const event = (key: string | null) => ({
+    startsAt: wall(Y + 1, 1, 5, 19),
+    timezone: "Europe/Paris",
+    posterPostKey: key,
+    posterStyle: "neon",
+    posterTitle: "Nocturne",
+  });
+  const beforeNewYear = wall(Y, 12, 31, 23);
+  const afterNewYear = wall(Y + 1, 1, 1, 0);
+
+  it("l'année à écrire change au Nouvel An (heure de Paris)", () => {
+    expect(posterYearOf(event(null), beforeNewYear)).toBe(Y + 1);
+    expect(posterYearOf(event(null), afterNewYear)).toBe(0);
+  });
+
+  it("affiche enregistrée : refaite quand l'année écrite n'est plus la bonne, jamais sinon", () => {
+    // Rendue avant le lot (clé sans marque) pour un événement de l'an prochain : à refaire.
+    expect(posterYearStale(event("events/e/poster-post-abc123.png"), beforeNewYear)).toBe(true);
+    expect(posterYearStale(event(`events/e/poster-post-y${Y + 1}-abc123.png`), beforeNewYear)).toBe(false);
+    // Le Nouvel An passé, « 2027 » n'a plus lieu d'être écrit.
+    expect(posterYearStale(event(`events/e/poster-post-y${Y + 1}-abc123.png`), afterNewYear)).toBe(true);
+    expect(posterYearStale(event("events/e/poster-post-y0-abc123.png"), afterNewYear)).toBe(false);
+    // Une clé sans marque, dans l'année en cours : rien à refaire (pas de rendu en masse).
+    expect(posterYearStale(event("events/e/poster-post-abc123.png"), afterNewYear)).toBe(false);
+    expect(posterYearStale(event(null), beforeNewYear)).toBe(false);
+  });
+
+  it("les clés des caches d'aperçus (API et clients) changent au Nouvel An", () => {
+    const input = {
+      style: "neon",
+      title: "NOCTURNE",
+      startsAt: wall(Y + 1, 1, 5, 19),
+      timezone: "Europe/Paris",
+      place: "CANET",
+      structureName: "Club",
+      photo: null,
+      logo: null,
+    } as unknown as PosterInput;
+    try {
+      setDisplayClock(() => beforeNewYear);
+      const keyBefore = posterCacheKey(input, "post");
+      const clientBefore = posterPreviewKey({ style: "neon" });
+      setDisplayClock(() => afterNewYear);
+      expect(posterCacheKey(input, "post")).not.toBe(keyBefore);
+      expect(posterPreviewKey({ style: "neon" })).not.toBe(clientBefore);
+    } finally {
+      setDisplayClock(now);
+    }
+  });
 });

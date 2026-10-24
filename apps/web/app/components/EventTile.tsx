@@ -1,8 +1,9 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { type EventCard, eventFormatLabels } from "@orasso/shared";
+import { type EventCard, eventFormatLabels, yearToShow } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
-import { formatTime } from "../lib/format";
+import { now } from "../lib/clock";
+import { formatDayShort, formatTime } from "../lib/format";
 
 const TZ = "Europe/Paris";
 const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short" });
@@ -10,13 +11,17 @@ const monthFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, month: "short"
 const dayNumFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric" });
 const longDateFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
 
-/** Souche de la carte (prototype `sdate`) : « sam. » / « 24 » / « oct. ». */
-export function stubOf(iso: string): { weekday: string; day: string; month: string } {
+/**
+ * Souche de la carte (prototype `sdate`) : « sam. » / « 24 » / « oct. ». Lot R3b : `year` (« 2027 ») hors de l'année
+ * en cours, à l'heure d'Orasso, sinon `null`.
+ */
+export function stubOf(iso: string): { weekday: string; day: string; month: string; year: number | null } {
   const at = new Date(iso);
   return {
     weekday: weekdayFmt.format(at).replace(".", ""),
     day: dayNumFmt.format(at),
     month: monthFmt.format(at).replace(".", ""),
+    year: yearToShow(iso, now(), TZ),
   };
 }
 
@@ -106,13 +111,20 @@ export function EventTile({
               <small className="o-t-label">{stub.weekday}</small>
               <b className="o-t-number-narrow">{stub.day}</b>
               <small className="o-t-label">{stub.month}</small>
+              {stub.year !== null && <small className="o-t-label">{stub.year}</small>}
             </span>
           )}
         </span>
         <span className="w-card__body">
           <span className="o-t-label w-card__format">
-            <span className="o-visually-hidden">{longDateFmt.format(new Date(event.startsAt))}, </span>
-            {eventFormatLabels[event.format]} · {formatTime(event.startsAt)}
+            <span className="o-visually-hidden">
+              {longDateFmt.format(new Date(event.startsAt))}
+              {stub.year !== null ? ` ${stub.year}` : ""},{" "}
+            </span>
+            {eventFormatLabels[event.format]} ·{" "}
+            {/* Lot R3b : hors de l'année en cours, la date et son année se lisent sur la carte (pas seulement sur l'affiche). */}
+            {stub.year !== null && <span data-testid="event-tile-date">{formatDayShort(event.startsAt)} · </span>}
+            {formatTime(event.startsAt)}
           </span>
           <h3 className="w-card__title o-t-poster-s">{event.title}</h3>
           {showStructure && (

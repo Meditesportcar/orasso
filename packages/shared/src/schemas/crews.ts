@@ -97,6 +97,11 @@ export type CrewCard = {
   logoUrl: string | null;
   department: string;
   membersCount: number;
+  /**
+   * Lot R3b : ma demande pour rejoindre ce crew est envoyée (vue par moi : un refus reste « envoyée » 30 jours). Donné
+   * par la recherche de crews, pour que « Demande envoyée » survive à un rechargement ; absent ailleurs.
+   */
+  requested?: boolean;
 };
 
 export type MyCrew = CrewCard & { role: CrewRole };

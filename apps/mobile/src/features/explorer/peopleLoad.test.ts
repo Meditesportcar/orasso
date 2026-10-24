@@ -92,3 +92,20 @@ describe("Personnes et crews : plus aucun annuaire (lot R2, tour 2)", () => {
     expect(await pending).toBeNull();
   });
 });
+
+describe("Rejoindre un crew : les crews seulement (lot R3b, tour 2)", () => {
+  it("aucune lecture de personnes : une panne (503, 429) de leur recherche ne vide pas les crews", async () => {
+    const api = fakeApi();
+    const down = Object.assign(new Error("Service indisponible"), { status: 503 });
+    api.searchPeople = vi.fn(async () => Promise.reject(down));
+    api.suggestions = vi.fn(async () => Promise.reject(Object.assign(new Error("Trop de demandes"), { status: 429 })));
+    const gate = createRequestGate(() => "compte");
+    const input = { where: null, filters: emptyPeopleFilters, coin: ["66"], crewsOnly: true };
+    const near = await loadPeople(gate.start(), api, { ...input, q: "" });
+    expect(near).toMatchObject({ kind: "suggest", sameModel: null, crews: [{ name: "Drift 66" }] });
+    const found = await loadPeople(gate.start(), api, { ...input, q: "drift" });
+    expect(found).toMatchObject({ kind: "search", people: [], crews: [{ name: "Drift 66" }] });
+    expect(api.searchPeople).not.toHaveBeenCalled();
+    expect(api.suggestions).not.toHaveBeenCalled();
+  });
+});

@@ -6,10 +6,11 @@
 // 116 px) à gauche, les infos à droite (format, distance, « SAM. 24 OCT. · 19 H », nom, organisateur avec son logo et
 // son nom jamais coupé, lieu, jauge) ; plus de grande bande paysage en tête de liste.
 import { Chip, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime } from "@orasso/shared";
+import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime, yearToShow } from "@orasso/shared";
 import { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
+import { now } from "@/lib/clock";
 import type { PosterRect } from "@/lib/eventPreview";
 import { mediaSource } from "@/lib/media";
 import { cardPoster } from "./poster";
@@ -20,8 +21,11 @@ const PRESS_INTENT_MS = 90;
 const DAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
 const MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
 
-/** Souche : « Sam. » / « 24 » / « Oct. » / « 19 h » (heure de Paris). */
-export function stubOf(iso: string): { day: string; date: string; month: string; hour: string } {
+/**
+ * Souche : « Sam. » / « 24 » / « Oct. » / « 19 h » (heure de Paris). Lot R3b : `year` (« 2027 ») hors de l'année en
+ * cours, à l'heure d'Orasso, sinon vide.
+ */
+export function stubOf(iso: string): { day: string; date: string; month: string; hour: string; year: string } {
   const w = wallTime(new Date(iso));
   const weekday = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
   return {
@@ -29,7 +33,20 @@ export function stubOf(iso: string): { day: string; date: string; month: string;
     date: String(w.day),
     month: MONTHS[w.month - 1] ?? "",
     hour: w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`,
+    year: String(yearToShow(iso, now()) ?? ""),
   };
+}
+
+const NBSP = " ";
+
+/**
+ * La ligne de date de la vignette portrait : « SAM. 24 OCT. · 19 H ». Lot R3b, tour 2 : espaces insécables (l'heure
+ * ne se coupe jamais) ; avec l'année, le jour de la semaine cède sa place (« 14 MARS 2027 · 18 H ») pour que la ligne
+ * tienne sur une seule ligne dès 320 px.
+ */
+export function whenLine(stub: ReturnType<typeof stubOf>): string {
+  const date = stub.year ? [stub.date, stub.month, stub.year].join(NBSP) : [stub.day, stub.date, stub.month].join(NBSP);
+  return `${date}${NBSP}· ${stub.hour.replaceAll(" ", NBSP)}`;
 }
 
 /** Jauge des places : part prise (0 → 1), texte ; `null` sans limite. */
@@ -137,6 +154,11 @@ export function EventCardV2({
       <Text variant="label" color={c.plateMuted}>
         {stub.month}
       </Text>
+      {stub.year ? (
+        <Text variant="label" color={c.plateMuted} testID="event-year">
+          {stub.year}
+        </Text>
+      ) : null}
       <Text variant="meta" color={c.accentText} style={styles.stubHour}>
         {stub.hour}
       </Text>
@@ -157,7 +179,7 @@ export function EventCardV2({
       </View>
       {portrait ? (
         <Text variant="label" color={c.accentText} style={styles.when} testID="event-when">
-          {`${stub.day} ${stub.date} ${stub.month} · ${stub.hour}`}
+          {whenLine(stub)}
         </Text>
       ) : null}
       <Text variant={big ? "posterM" : "posterS"} color={c.plateInk} style={portrait ? styles.portraitTitle : null}>

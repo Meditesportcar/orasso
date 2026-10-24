@@ -39,7 +39,7 @@ export function damier(ctx: PosterCtx): PosterLayout {
             gapBefore: i ? fit.fontSize * 0.2 : 0,
           })),
           {
-            text: dot(`${p.DAY} ${p.D} ${p.M}`, p.pl),
+            text: dot([p.DAY, p.D, p.M, p.Y].filter(Boolean).join(" "), p.pl),
             font: "narrow" as const,
             size: 3.4 * cqw,
             color: C.dark,

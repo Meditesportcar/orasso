@@ -6,6 +6,7 @@
 // le lot 26 (capacité de l'événement, aucune candidature n'a de jour). Plusieurs jours = au moins deux lignes
 // `event_days` ; `events.starts_at` / `ends_at` sont alors les bornes (début du premier jour, fin du dernier).
 import { BUSINESS_TIMEZONE, type DayAccess } from "../enums";
+import { localDateYearToShow } from "./dateYear";
 import { addDays, fromWallTime, wallTime } from "./time";
 
 /** Au plus deux semaines de jours déclarés : au-delà, ce n'est plus un événement mais une série (récurrence). */
@@ -164,12 +165,15 @@ export function resolveDays(
 }
 
 /** « samedi 14 mars » : une date locale `AAAA-MM-JJ` en toutes lettres (sans fuseau : c'est déjà une date locale). */
-export function formatDayDate(dayDate: string, opts: { weekday?: boolean } = {}): string {
+export function formatDayDate(dayDate: string, opts: { weekday?: boolean; now?: Date } = {}): string {
   const [y, m, d] = dayDate.split("-").map(Number) as [number, number, number];
+  // Lot R3b : « samedi 14 mars 2027 » quand le jour n'est pas dans l'année en cours.
+  const year = localDateYearToShow(dayDate, opts.now);
   return new Intl.DateTimeFormat("fr-FR", {
     timeZone: "UTC",
     ...(opts.weekday === false ? {} : { weekday: "long" }),
     day: "numeric",
     month: "long",
+    ...(year === null ? {} : { year: "numeric" }),
   }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }

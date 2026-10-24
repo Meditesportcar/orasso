@@ -28,6 +28,7 @@ import {
   nearCountdown,
   registrationBlock,
   type VendorTypeCode,
+  withYear,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -79,12 +80,16 @@ function Countdown({ event }: { event: Pick<EventCard, "startsAt" | "endsAt"> })
   const now = new Date(nowMs());
   if (now >= new Date(event.endsAt)) return null;
   const live = now >= new Date(event.startsAt);
-  const day = new Intl.DateTimeFormat("fr-FR", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "Europe/Paris",
-  }).format(new Date(event.startsAt));
+  const day = withYear(
+    new Intl.DateTimeFormat("fr-FR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "Europe/Paris",
+    }).format(new Date(event.startsAt)),
+    event.startsAt,
+    now,
+  );
   return (
     <View style={[styles.cd, { backgroundColor: t.color.accent }]} testID="event-countdown">
       <View style={styles.cdIn}>

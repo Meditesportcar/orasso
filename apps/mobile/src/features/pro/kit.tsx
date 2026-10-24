@@ -370,6 +370,11 @@ export function MiniDate({ iso }: { iso: string }) {
       <Text variant="label" color={t.color.inkMuted} style={styles.miniSmall}>
         {s.month}
       </Text>
+      {s.year ? (
+        <Text variant="label" color={t.color.inkMuted} style={styles.miniSmall}>
+          {s.year}
+        </Text>
+      ) : null}
     </View>
   );
 }

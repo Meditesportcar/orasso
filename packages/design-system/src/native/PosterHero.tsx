@@ -152,6 +152,8 @@ export type PosterHeroProps = {
   weekday: string;
   day: string;
   month: string;
+  /** Lot R3b : « 2027 » sous le mois, hors de l'année en cours. */
+  year?: string | null;
   /** « J-6 », « Demain », « Aujourd'hui ». */
   countdown: string;
   /** « 19 h · ouverture ». */
@@ -178,6 +180,7 @@ export function PosterHero({
   weekday,
   day,
   month,
+  year,
   countdown,
   hourLabel,
   title,
@@ -226,6 +229,11 @@ export function PosterHero({
           <Text variant="body" style={[styles.dateSmall, { color: c.accentInk }]}>
             {month}
           </Text>
+          {year ? (
+            <Text variant="body" style={[styles.dateSmall, { color: c.accentInk }]}>
+              {year}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.countdown}>
           <OutlinedText

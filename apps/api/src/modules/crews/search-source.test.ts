@@ -55,7 +55,17 @@ describe("crews dans la recherche de premier niveau", () => {
       expect(res.status).toBe(200);
       expect(res.json.crews).toHaveLength(1);
       const hit = res.json.crews[0] ?? {};
-      expect(Object.keys(hit).sort()).toEqual(["department", "id", "logoUrl", "membersCount", "name", "slug"]);
+      // Lot R3b : `requested` (ma propre demande en cours, vue par moi) ; rien sur les autres membres.
+      expect(Object.keys(hit).sort()).toEqual([
+        "department",
+        "id",
+        "logoUrl",
+        "membersCount",
+        "name",
+        "requested",
+        "slug",
+      ]);
+      expect(hit.requested).toBe(false);
       expect(hit.name).toBe("Roussillon Drift");
       expect(JSON.stringify(res.json.crews)).not.toContain("Chef_Drift");
     }

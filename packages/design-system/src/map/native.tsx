@@ -154,8 +154,20 @@ export function ClusterPin({
   );
 }
 
-/** Pro : plaque avec son nom (jamais tronqué). */
-export function ProPin({ label, onPress, accessibilityLabel, testID = "map-pin" }: PinPress & { label: string }) {
+/**
+ * Pro : plaque avec son nom (jamais tronqué). Lot R3b : `onWidth` donne la largeur de la plaque, et `shift` (px, voir
+ * `edgeShift`) la décale pour la garder entière au bord de l'écran. Tour 2 : seule la plaque se décale ; le point
+ * d'ancrage du marqueur (le milieu du bas) reste sur le lieu exact : la zone du marqueur s'élargit de l'autre côté
+ * (sur Android, la vue d'un marqueur est dessinée dans ses bornes, une translation serait coupée).
+ */
+export function ProPin({
+  label,
+  onPress,
+  accessibilityLabel,
+  testID = "map-pin",
+  onWidth,
+  shift = 0,
+}: PinPress & { label: string; onWidth?: (width: number) => void; shift?: number }) {
   const { t } = useTheme();
   return (
     <Pressable
@@ -163,9 +175,16 @@ export function ProPin({ label, onPress, accessibilityLabel, testID = "map-pin" 
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       testID={testID}
-      style={{ minHeight: HIT, alignItems: "center", justifyContent: "center" }}
+      style={{
+        minHeight: HIT,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingLeft: shift > 0 ? 2 * shift : 0,
+        paddingRight: shift < 0 ? -2 * shift : 0,
+      }}
     >
       <View
+        onLayout={onWidth ? (e) => onWidth(e.nativeEvent.layout.width) : undefined}
         style={{
           minHeight: 28,
           paddingHorizontal: 9,

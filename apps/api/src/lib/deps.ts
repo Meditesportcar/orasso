@@ -1,4 +1,5 @@
 // Dépendances remplaçables (horloge, file de tâches) : réelles en marche normale, simulées dans les tests.
+import { setDisplayClock } from "@orasso/shared";
 
 export interface Clock {
   now(): Date;
@@ -87,3 +88,6 @@ export const deps: { clock: Clock; jobs: JobQueue } = {
 };
 
 export const now = () => deps.clock.now();
+
+// Lot R3b : les mises en forme de dates de `@orasso/shared` (année hors de l'année en cours) suivent cette horloge.
+setDisplayClock(now);

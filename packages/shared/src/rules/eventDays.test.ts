@@ -146,7 +146,10 @@ describe("veille et bornes", () => {
   });
 
   it("date en toutes lettres", () => {
-    expect(formatDayDate("2027-03-14")).toBe("dimanche 14 mars");
-    expect(formatDayDate("2027-03-14", { weekday: false })).toBe("14 mars");
+    const now = new Date("2027-06-01T12:00:00Z");
+    expect(formatDayDate("2027-03-14", { now })).toBe("dimanche 14 mars");
+    expect(formatDayDate("2027-03-14", { weekday: false, now })).toBe("14 mars");
+    // Lot R3b : hors de l'année en cours, l'année.
+    expect(formatDayDate("2028-03-14", { weekday: false, now })).toBe("14 mars 2028");
   });
 });

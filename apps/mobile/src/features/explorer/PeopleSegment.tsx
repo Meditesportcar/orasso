@@ -7,8 +7,8 @@
 // département (l'API le garantit). Une action par ligne (« Ajouter », « Rejoindre »), secondaire, avec son icône.
 import { archivoAt, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type CrewCard, gradeLabels, type PeopleWhere, type PersonCard, explorerR2Labels as R } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { SmallButton } from "@/features/sorties/bits";
@@ -67,6 +67,7 @@ function Row({
   trailing,
   onPress,
   testID,
+  wrapAction = false,
 }: {
   lead: ReactNode;
   title: string;
@@ -74,12 +75,22 @@ function Row({
   trailing: ReactNode;
   onPress: () => void;
   testID: string;
+  /** Lot R3b, tour 2 : une action longue (« Demande envoyée ») passe sous le nom, jamais le nom coupé. */
+  wrapAction?: boolean;
 }) {
   const { t } = useTheme();
   const c = t.color;
   return (
-    <View style={[styles.row, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]} testID={testID}>
-      <Pressable onPress={onPress} accessibilityRole="link" accessibilityLabel={title} style={styles.rowMain}>
+    <View
+      style={[styles.row, wrapAction && styles.rowWrap, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+      testID={testID}
+    >
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="link"
+        accessibilityLabel={title}
+        style={[styles.rowMain, wrapAction && styles.rowMainFull]}
+      >
         {lead}
         <View style={styles.grow}>
           <Text variant="bodyStrong" color={c.ink} style={styles.rowTitle}>
@@ -206,10 +217,19 @@ function PersonAction({ person }: { person: PersonCard }) {
 }
 
 /** « Rejoindre » (demande au chef du crew), « Demande envoyée », ou ton crew (il s'ouvre). */
-function CrewAction({ crew, mine }: { crew: CrewCard; mine: boolean }) {
+function CrewAction({
+  crew,
+  mine,
+  sent,
+  onSent,
+}: {
+  crew: CrewCard;
+  mine: boolean;
+  sent: boolean;
+  onSent: () => void;
+}) {
   const { t } = useTheme();
   const router = useRouter();
-  const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   if (mine) {
     return (
@@ -234,7 +254,7 @@ function CrewAction({ crew, mine }: { crew: CrewCard; mine: boolean }) {
         setBusy(true);
         try {
           await api.requestCrew(crew.id, null);
-          setSent(true);
+          onSent();
         } catch {
           router.push(`/crew/${crew.slug}`);
         } finally {
@@ -282,8 +302,15 @@ function PersonRow({ person, testID = "person-row" }: { person: PersonCard; test
 
 function CrewRow({ crew, mine }: { crew: CrewCard; mine: boolean }) {
   const router = useRouter();
+  // Lot R3b : la demande déjà envoyée vient de l'API (elle reste après un rechargement) ; tour 2 : dans les deux sens
+  // (une demande annulée ailleurs revient à « Rejoindre » à la relecture).
+  const [sent, setSent] = useState(crew.requested === true);
+  useEffect(() => {
+    setSent(crew.requested === true);
+  }, [crew.requested]);
   return (
     <Row
+      wrapAction={sent && !mine}
       testID="crew-row"
       lead={<Round url={crew.logoUrl} name={crew.name} mine={mine} />}
       title={crew.name}
@@ -291,7 +318,7 @@ function CrewRow({ crew, mine }: { crew: CrewCard; mine: boolean }) {
         .filter(Boolean)
         .join(" · ")}
       onPress={() => router.push(`/crew/${crew.slug}`)}
-      trailing={<CrewAction crew={crew} mine={mine} />}
+      trailing={<CrewAction crew={crew} mine={mine} sent={sent} onSent={() => setSent(true)} />}
     />
   );
 }
@@ -323,6 +350,8 @@ export function PeopleSegment({
   show,
   filters,
   coin,
+  create = true,
+  crewsOnly = false,
 }: {
   q: string;
   /** `null` : rien de choisi (suggestions de mon coin, recherche élargie à toute la France). */
@@ -330,6 +359,10 @@ export function PeopleSegment({
   show: PeopleShow;
   filters: PeopleFilters;
   coin: readonly string[];
+  /** Lot R3b : « Créer un crew » en bas des suggestions (l'écran « Rejoindre un crew » pose le sien). */
+  create?: boolean;
+  /** Tour 2 : les crews seulement, sans aucune lecture de personnes (« Rejoindre un crew »). */
+  crewsOnly?: boolean;
 }) {
   const { t } = useTheme();
   const router = useRouter();
@@ -348,6 +381,15 @@ export function PeopleSegment({
   const [error, setError] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [retry, setRetry] = useState(0);
+  // Lot R3b, tour 2 : au retour sur l'écran (fiche d'un crew, demande annulée), la liste est relue : « Demande
+  // envoyée » suit l'API. Pas au premier affichage (la lecture vient de partir).
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) setRetry((n) => n + 1);
+      focusedOnce.current = true;
+    }, []),
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: relu au changement de compte
   useEffect(() => {
@@ -374,7 +416,7 @@ export function PeopleSegment({
     const ticket = gate.start();
     const timer = setTimeout(
       () => {
-        loadPeople(ticket, FETCHERS, { q, where, filters, coin })
+        loadPeople(ticket, FETCHERS, { q, where, filters, coin, crewsOnly })
           .then((r) => {
             if (!r) return;
             if (r.kind === "suggest") setSuggest(r);
@@ -512,11 +554,13 @@ export function PeopleSegment({
       ) : null}
       {nothing ? <Empty>{R.noSuggestions}</Empty> : null}
       {privacy}
-      <View style={styles.actions}>
-        <SmallButton icon="add" onPress={() => router.push("/crew/nouveau")} testID="crew-new">
-          {R.createCrew}
-        </SmallButton>
-      </View>
+      {create ? (
+        <View style={styles.actions}>
+          <SmallButton icon="add" onPress={() => router.push("/crew/nouveau")} testID="crew-new">
+            {R.createCrew}
+          </SmallButton>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -536,7 +580,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 14,
   },
+  // Lot R3b, tour 2 : seulement avec une action longue (« Demande envoyée ») : elle passe sous le nom, à droite.
+  rowWrap: { flexWrap: "wrap", justifyContent: "flex-end" },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 },
+  rowMainFull: { flexBasis: "100%" },
   rowTitle: { fontSize: 14, lineHeight: 17, fontFamily: archivoAt(100, 800) },
   rowCap: { fontSize: 12, lineHeight: 16 },
   priv: { fontSize: 12, lineHeight: 16, fontFamily: archivoAt(100, 750) },

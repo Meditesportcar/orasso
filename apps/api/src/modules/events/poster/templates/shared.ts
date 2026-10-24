@@ -85,5 +85,7 @@ export function parts(ctx: PosterCtx) {
     h: d.hour.toUpperCase(),
     pl: ctx.place,
     mm: d.monthNumber,
+    /** Lot R3b : l'année hors de l'année en cours, sinon vide (posée sur la ligne de texte, jamais sur les chiffres). */
+    Y: d.year,
   };
 }

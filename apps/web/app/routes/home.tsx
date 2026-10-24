@@ -1,5 +1,5 @@
 import { Button, Icon, LiveO, OLoader, Outlined, StampDrop } from "@orasso/design-system/web";
-import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscounts } from "@orasso/shared";
+import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscounts, withYear } from "@orasso/shared";
 
 import { EventTile, PosterFace } from "../components/EventTile";
 import { Qr } from "../components/Qr";
@@ -58,7 +58,7 @@ function tickerDay(iso: string): string {
     const name = DAY.format(at);
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
-  return SHORT.format(at).replace(/^1 /, "1er ");
+  return withYear(SHORT.format(at).replace(/^1 /, "1er "), at);
 }
 
 function tickerState(event: EventCard): string {

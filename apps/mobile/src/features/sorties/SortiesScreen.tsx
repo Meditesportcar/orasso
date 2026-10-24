@@ -413,7 +413,7 @@ export function SortiesScreen() {
               badge={<SkewTag tone="line">{x.status === "used" ? "Entrée enregistrée" : "Terminé"}</SkewTag>}
               title={x.event.title}
               detail={sortiesLabels.publicTicketLine(x.name)}
-              onPressTitle={() => router.push(`/e/${x.event.slug}`)}
+              onPress={() => router.push(`/e/${x.event.slug}`)}
             >
               {x.status === "used" && recapReady.has(x.event.id) ? (
                 <SmallButton
@@ -746,7 +746,8 @@ function PastTicket({
       badge={<SkewTag tone={badge === "cancelled" ? "win" : "line"}>{result}</SkewTag>}
       title={app.event.title}
       notes={notes}
-      onPressTitle={onOpen}
+      // Lot R3b (retour 14) : toucher une sortie passée, n'importe où sur le ticket, ouvre sa fiche.
+      onPress={onOpen}
     >
       {contest?.contestStatus ? (
         <View style={styles.chipLine}>

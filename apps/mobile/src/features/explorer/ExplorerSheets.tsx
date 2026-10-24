@@ -182,9 +182,19 @@ export function KmSlider({ value, onChange }: { value: number; onChange: (km: nu
 }
 
 /** Le bouton principal d'une feuille à plusieurs réglages (« Voir les 12 événements »). */
-export function SeeButton({ label, onPress, testID }: { label: string; onPress: () => void; testID: string }) {
+export function SeeButton({
+  label,
+  onPress,
+  testID,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  testID: string;
+  disabled?: boolean;
+}) {
   return (
-    <Button icon="check" onPress={onPress} fullWidth testID={testID}>
+    <Button icon="check" onPress={onPress} fullWidth testID={testID} disabled={disabled}>
       {label}
     </Button>
   );
@@ -297,13 +307,17 @@ export function WhereSheet({
     setDraft(next);
     setAway(next.kind === "dept");
   };
+  // Lot R3b (retour 11) : un seul choix actif. « Ailleurs » touché l'emporte sur le choix précédent, même avant qu'un
+  // département soit choisi (« Autour de moi » restait coché avec lui) ; on ne voit alors qu'après le département.
+  const choice: ExplorerWhere["kind"] = away ? "dept" : draft.kind;
+  const awayPending = away && draft.kind !== "dept";
   const coinText = coin.map(deptLong).join(", ");
   return (
     <AppSheet visible={visible} onClose={onClose} accessibilityLabel={R.whereSheet}>
       <SheetHead title={R.whereSheet} onClose={onClose} />
       <View style={styles.optlist} accessibilityRole="radiogroup" testID="around-sheet">
         <OptRow
-          on={draft.kind === "me"}
+          on={choice === "me"}
           icon="place"
           title={R.whereMe}
           hint={positionDenied ? R.whereMeDenied : R.whereMeHint}
@@ -313,7 +327,7 @@ export function WhereSheet({
           }}
           testID="around-me"
         />
-        {draft.kind === "me" ? (
+        {choice === "me" && draft.kind === "me" ? (
           <KmSlider
             value={km}
             onChange={(next) => {
@@ -323,7 +337,7 @@ export function WhereSheet({
           />
         ) : null}
         <OptRow
-          on={draft.kind === "mine"}
+          on={choice === "mine"}
           icon="home"
           title={R.whereMine}
           hint={R.whereMineHint(coinText)}
@@ -332,7 +346,7 @@ export function WhereSheet({
           testID="around-mine"
         />
         <OptRow
-          on={draft.kind === "dept" || away}
+          on={choice === "dept"}
           icon="map"
           title={draft.kind === "dept" ? `${R.whereAway} · ${deptLong(draft.code)}` : R.whereAway}
           hint={R.whereAwayHint}
@@ -346,7 +360,7 @@ export function WhereSheet({
           />
         ) : null}
         <OptRow
-          on={draft.kind === "all"}
+          on={choice === "all"}
           icon="explore"
           title={R.whereAll}
           hint={R.whereAllHint}
@@ -355,7 +369,12 @@ export function WhereSheet({
         />
       </View>
       <View style={styles.foot}>
-        <SeeButton label={seeLabel(count)} onPress={() => onApply(draft)} testID="where-apply" />
+        <SeeButton
+          label={seeLabel(awayPending ? null : count)}
+          onPress={() => onApply(draft)}
+          disabled={awayPending}
+          testID="where-apply"
+        />
         <Hint>{R.whereKeep}</Hint>
       </View>
     </AppSheet>

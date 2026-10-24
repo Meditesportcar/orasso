@@ -6,9 +6,11 @@
 // une sortie passée (et les missions du prestataire et les accréditations du média).
 
 import { Plate, Text, useTheme } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE, wallTime } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, wallTime, yearToShow } from "@orasso/shared";
 import { createContext, type ReactNode, useContext } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+
+import { now } from "@/lib/clock";
 
 const WEEKDAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
 const MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
@@ -61,6 +63,7 @@ export function Ticket({
   const c = t.color;
   const w = wallTime(new Date(date), BUSINESS_TIMEZONE);
   const weekday = WEEKDAYS[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()];
+  const year = yearToShow(date, now(), BUSINESS_TIMEZONE);
   const ink = highlight ? c.posterInk : c.plateInk;
   const muted = highlight ? c.posterMuted : c.plateMuted;
   const content = (
@@ -75,6 +78,12 @@ export function Ticket({
         <Text variant="label" color={muted} style={styles.stubSmall}>
           {MONTHS[w.month - 1]}
         </Text>
+        {/* Lot R3b : l'année, hors de l'année en cours (sinon « 17 oct. 2027 » se lit comme passé). */}
+        {year !== null ? (
+          <Text variant="label" color={muted} style={styles.stubSmall} testID="ticket-year">
+            {year}
+          </Text>
+        ) : null}
         {/* Les deux encoches de la perforation, de la couleur du fond. */}
         <View style={[styles.notch, styles.notchTop, { backgroundColor: c.ground }]} />
         <View style={[styles.notch, styles.notchBottom, { backgroundColor: c.ground }]} />

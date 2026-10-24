@@ -1,6 +1,9 @@
 // Dates et durées en français, dans le fuseau de l'événement (Europe/Paris par défaut), comme dans les maquettes :
 // « Sam 17 oct », « 19 h », « 19 h 30 », « J-2 », « dans 1 h 42 ».
-import { BUSINESS_TIMEZONE, calendarDaysBetween, wallTime } from "@orasso/shared";
+// Lot R3b (retour 10) : une date hors de l'année en cours dit son année (« Dim 17 oct 2027 »), à l'heure d'Orasso.
+import { BUSINESS_TIMEZONE, calendarDaysBetween, rangeYears, wallTime, withYear } from "@orasso/shared";
+
+import { now as orassoNow } from "./clock";
 
 const WEEKDAYS = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
 const MONTHS = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
@@ -11,16 +14,37 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const weekdayOf = (w: { year: number; month: number; day: number }) =>
   new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
 
-/** « Sam 17 oct » */
-export function formatDay(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {
+const bareDay = (iso: string | Date, timeZone: string) => {
   const w = wallTime(new Date(iso), timeZone);
   return `${capitalize(WEEKDAYS[weekdayOf(w)] ?? "")} ${w.day} ${MONTHS[w.month - 1]}`;
+};
+
+/** « Sam 17 oct », « Dim 17 oct 2027 » hors de l'année en cours. */
+export function formatDay(iso: string | Date, timeZone = BUSINESS_TIMEZONE, now: Date = orassoNow()): string {
+  return withYear(bareDay(iso, timeZone), iso, now, timeZone);
 }
 
-/** « 17 oct » */
-export function formatShortDate(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {
+/**
+ * Le jour d'un événement (fiche) : « Sam 17 oct » ; à cheval sur deux années, les deux bornes avec leur année
+ * (« Jeu 31 déc 2026 → Sam 2 janv 2027 », lot R3b).
+ */
+export function formatEventDay(
+  startsAt: string | Date,
+  endsAt: string | Date,
+  timeZone = BUSINESS_TIMEZONE,
+  now: Date = orassoNow(),
+): string {
+  const y = rangeYears(startsAt, endsAt, now, timeZone);
+  if (y.start !== null && y.end !== null && y.start !== y.end) {
+    return `${bareDay(startsAt, timeZone)} ${y.start} → ${bareDay(endsAt, timeZone)} ${y.end}`;
+  }
+  return formatDay(startsAt, timeZone, now);
+}
+
+/** « 17 oct », « 17 oct 2027 » hors de l'année en cours. */
+export function formatShortDate(iso: string | Date, timeZone = BUSINESS_TIMEZONE, now: Date = orassoNow()): string {
   const w = wallTime(new Date(iso), timeZone);
-  return `${w.day} ${MONTHS[w.month - 1]}`;
+  return withYear(`${w.day} ${MONTHS[w.month - 1]}`, iso, now, timeZone);
 }
 
 /** « 19 h » ou « 19 h 30 » */
@@ -29,19 +53,18 @@ export function formatHour(iso: string | Date, timeZone = BUSINESS_TIMEZONE): st
   return w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`;
 }
 
-/** « Sam 17 oct · 19 h » */
-export function formatDayHour(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {
-  return `${formatDay(iso, timeZone)} · ${formatHour(iso, timeZone)}`;
+/** « Sam 17 oct · 19 h » (« Dim 17 oct 2027 · 19 h » hors de l'année en cours). */
+export function formatDayHour(iso: string | Date, timeZone = BUSINESS_TIMEZONE, now: Date = orassoNow()): string {
+  return `${formatDay(iso, timeZone, now)} · ${formatHour(iso, timeZone)}`;
 }
 
 /**
  * « Sam 17 oct · 15 h 12 », avec l'année quand elle n'est pas celle en cours : « Sam 16 oct 2027 · 15 h 12 » (lot 36,
- * une copie d'événement ouvrait ses candidatures l'année suivante et se lisait comme « aujourd'hui »).
+ * une copie d'événement ouvrait ses candidatures l'année suivante et se lisait comme « aujourd'hui »). Depuis le lot
+ * R3b, `formatDayHour` suit la même règle ; ce nom reste pour passer une heure explicite.
  */
-export function formatDayHourYear(iso: string | Date, now: Date = new Date(), timeZone = BUSINESS_TIMEZONE): string {
-  const w = wallTime(new Date(iso), timeZone);
-  if (w.year === wallTime(now, timeZone).year) return formatDayHour(iso, timeZone);
-  return `${formatDay(iso, timeZone)} ${w.year} · ${formatHour(iso, timeZone)}`;
+export function formatDayHourYear(iso: string | Date, now: Date = orassoNow(), timeZone = BUSINESS_TIMEZONE): string {
+  return formatDayHour(iso, timeZone, now);
 }
 
 /** « 17 oct à 14 h 05 », pour un horodatage de cache. */

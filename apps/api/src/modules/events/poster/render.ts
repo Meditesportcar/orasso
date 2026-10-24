@@ -114,6 +114,8 @@ export function posterCacheKey(input: PosterInput, format: PosterFormat, width?:
         digest(input.logo),
         format,
         width ?? null,
+        // Lot R3b, tour 2 : l'année écrite sur l'affiche (vide dans l'année en cours) ; un Nouvel An refait l'aperçu.
+        posterDate(input.startsAt, input.timezone).year,
       ]),
     )
     .digest("hex");

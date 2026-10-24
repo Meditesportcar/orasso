@@ -47,6 +47,11 @@ export function EventLine({
           <Text variant="meta" color={c.plateMuted}>
             {stub.month}
           </Text>
+          {stub.year ? (
+            <Text variant="meta" color={c.plateMuted}>
+              {stub.year}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.text}>
           <Text variant="bodyStrong" color={c.plateInk}>

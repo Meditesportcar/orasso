@@ -82,7 +82,7 @@ import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
 import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
-import { posterColumns, posterService, posterSettingsOf, samePoster } from "./poster/service";
+import { posterColumns, posterService, posterSettingsOf, posterYearStale, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
 /**
@@ -99,6 +99,9 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
   const postUrl = storage.url(e.posterPostKey);
   const storyUrl = storage.url(e.posterStoryKey);
   const style = posterSettingsOf(e)?.style;
+  // Lot R3b, tour 2 : une affiche qui n'écrit plus la bonne année (rendue avant le lot, ou un Nouvel An passé) est
+  // refaite à l'affichage de la fiche, par la tâche de rendu (une seule en file par événement) ; d'ici là, l'ancienne.
+  if (posterYearStale(e, t)) void posterService.schedule(e.id).catch(() => undefined);
   return {
     days,
     dayAccess: days.length ? e.dayAccess : "whole",
