@@ -7,6 +7,9 @@
 // (profil public, export des données, suppression), Tes préférences (lot M6 : coin, distance, types, centres
 // d'intérêt), Apparence (thème, animations), Mon profil public, Amis et crews, Aide, Se déconnecter.
 // Plus d'accès flottant ici (retour 31).
+// Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, amis),
+// chacun ouvre sa liste (`/reseau`), puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
+// réglages (avec « Amis et crews »).
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { capLabels, gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
@@ -24,19 +27,9 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
+import { departmentCaption, NetworkCounters, ProfileLinks } from "./network";
 
-import {
-  CapRows,
-  CreateSheet,
-  CrewLine,
-  HeadAvatar,
-  HubRow,
-  LinkRow,
-  RowIcon,
-  SeasonBlock,
-  SetList,
-  SetRow,
-} from "./parts";
+import { CapRows, CreateSheet, HeadAvatar, HubRow, LinkRow, RowIcon, SeasonBlock, SetList, SetRow } from "./parts";
 
 const { space1, space3 } = tokens.spacing;
 
@@ -58,6 +51,8 @@ export function ProfilScreen() {
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
   // Relecture C2b : sans véhicule actif (casquette visiteur, pas d'onglet Garage), les archives restent joignables ici.
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
+  // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, amis).
+  const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
   const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
 
   const profile = me?.profile;
@@ -78,6 +73,7 @@ export function ProfilScreen() {
           staff.reload(),
           passport.reload(),
           vehicles.reload(),
+          network.reload(),
         ]);
       }}
       overlays={
@@ -91,41 +87,70 @@ export function ProfilScreen() {
       <EmailBanner />
       <PendingCard where="profil" />
 
-      {/* En-tête compact `.mh` : avatar, pseudo, grade et département ; le QR de compte (Ma fiche pour le pro) en icône. */}
-      <View style={styles.head} testID="profil-head">
-        <HeadAvatar
-          url={base ? profile?.avatarUrl : active.logoUrl}
-          name={(base ? profile?.pseudo : active.label) ?? "?"}
-        />
-        <View style={styles.headText}>
-          <Text variant="posterL" color={t.color.ink} style={styles.pseudo}>
-            {profile?.pseudo ?? ""}
-          </Text>
-          <View style={styles.headTags}>
-            {base && profile ? (
-              <TagWin>{gradeLabels[profile.grade]}</TagWin>
-            ) : (
-              <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
-            )}
-            <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
-              {base ? (department ? `Département ${department}` : "Passionné") : active.label}
+      {/* En-tête compact `.mh` : avatar, pseudo, grade et département ; le QR de compte (Ma fiche pour le pro) en icône.
+          Lot R4c : pour le passionné, une carte `.r4me` avec les compteurs et les deux accès. */}
+      <View
+        style={base ? [styles.me, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }] : undefined}
+        testID="profil-card"
+      >
+        <View style={styles.head} testID="profil-head">
+          <HeadAvatar
+            url={base ? profile?.avatarUrl : active.logoUrl}
+            name={(base ? profile?.pseudo : active.label) ?? "?"}
+          />
+          <View style={styles.headText}>
+            <Text variant="posterL" color={t.color.ink} style={styles.pseudo}>
+              {profile?.pseudo ?? ""}
             </Text>
+            <View style={styles.headTags}>
+              {base && profile ? (
+                <TagWin>{gradeLabels[profile.grade]}</TagWin>
+              ) : (
+                <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
+              )}
+              <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
+                {base ? (departmentCaption(department) ?? "Passionné") : active.label}
+              </Text>
+            </View>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={qrLabel}
+            onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
+            testID="profil-account-qr"
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.qrb,
+              base
+                ? { backgroundColor: t.color.surfaceRaised }
+                : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={qrLabel}
-          onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
-          testID="profil-account-qr"
-          hitSlop={6}
-          style={({ pressed }) => [
-            styles.qrb,
-            { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
-        </Pressable>
+        {base ? (
+          <>
+            <NetworkCounters
+              counts={network.data}
+              onOpen={(tab) => router.push({ pathname: "/reseau", params: { tab } })}
+            />
+            <ProfileLinks
+              crew={
+                crew
+                  ? {
+                      name: crew.name,
+                      caption: `Ton crew · ${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}`,
+                    }
+                  : null
+              }
+              onPublic={() => router.push("/profil-public")}
+              // Lot R3b (retour 16) : sans crew, d'abord rejoindre (« Créer un crew » vient en second).
+              onCrew={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/rejoindre")}
+            />
+          </>
+        ) : null}
       </View>
 
       {/* « Ma saison » : points et passeport en un seul bloc (maquette 7.2). */}
@@ -137,15 +162,6 @@ export function ProfilScreen() {
           stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
           onPassport={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
           onHistory={() => router.push("/reglages/points")}
-        />
-      ) : null}
-
-      {/* Le crew en une ligne. */}
-      {base ? (
-        <CrewLine
-          crew={crew ? { name: crew.name, membersCount: crew.membersCount } : null}
-          // Lot R3b (retour 16) : sans crew, d'abord rejoindre (« Créer un crew » vient en second).
-          onPress={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/rejoindre")}
         />
       ) : null}
 
@@ -190,7 +206,7 @@ export function ProfilScreen() {
         <SetRow
           icon="bell"
           title="Notifications"
-          caption="Candidatures, jour J, messages"
+          caption="Candidatures, jour J, messages, abonnés"
           onPress={() => router.push("/reglages/notifications")}
           testID="reglage-notifications"
         />
@@ -220,20 +236,6 @@ export function ProfilScreen() {
           testID="reglage-preferences"
         />
         <SetRow
-          icon="eye"
-          title="Mon profil public"
-          caption="Photo, pseudo, description : ce que voient les autres"
-          onPress={() => router.push("/reglages/profil")}
-          testID="reglage-profil"
-        />
-        <SetRow
-          icon="staff"
-          title="Amis et crews"
-          caption={crew ? `Amis, crew ${crew.name}` : "Tes amis et tes crews"}
-          onPress={() => router.push("/amis")}
-          testID="reglage-amis"
-        />
-        <SetRow
           icon="help"
           title="Aide"
           caption="Tutos, questions fréquentes, nous écrire"
@@ -256,6 +258,7 @@ export function ProfilScreen() {
 }
 
 const styles = StyleSheet.create({
+  me: { gap: space3, padding: space3 + 2, borderRadius: 20 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   headText: { flex: 1, minWidth: 0, gap: space1 + 1 },
   pseudo: { fontSize: 22, lineHeight: 23 },

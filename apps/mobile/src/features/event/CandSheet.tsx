@@ -8,6 +8,8 @@
 // Lot M4 (maquette 4.4, retour 24) : « Suivre <structure> » revient, cochée d'office (docs/01 l. 50 et Damien), juste
 // au-dessus de la newsletter (non cochée) ; le véhicule de la dernière candidature est présélectionné (« Dernière
 // utilisée ») ; fiches de véhicule de la maquette (photo carrée, nom entier, coche ronde).
+// Lot R4c (maquette R4.5b) : le véhicule principal est présélectionné (« ★ Véhicule principal »), sinon le dernier
+// utilisé, sinon le premier qui convient (`preselectVehicle`, packages/shared, même règle sur le site).
 // Tour 2 (relectures) : le mode crew s'ouvre aussi seul (`mode="crew"`, bouton « Inscrire mon crew » de la fiche) pour un
 // chef qui a déjà candidaté ou qui n'a pas de véhicule ; sélecteur quand on dirige plusieurs crews ; lien vers le suivi
 // des confirmations (`/crew/inscription`) ; état remis à zéro à la fermeture.
@@ -32,6 +34,8 @@ import {
   eventDaysLabels,
   formatDayDate,
   type MyApplication,
+  mainVehicleLabels,
+  preselectVehicle,
   type VehicleFull,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
@@ -44,6 +48,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { NotificationAsk } from "@/ui/NotificationAsk";
@@ -87,6 +92,8 @@ export function CandSheet({
   const c = t.color;
   const router = useRouter();
   const { reload, markAnnounced, upcoming, past } = useApplications();
+  const { me } = useSession();
+  const mainVehicleId = me?.profile.mainVehicleId ?? null;
   const vehicles = useApi(() => api.vehicles(), [visible], { enabled: visible, cacheKey: "vehicles" });
   const crews = useApi(() => api.myCrews(), [visible], { enabled: visible, cacheKey: "my-crews" });
   const led = (crews.data ?? []).filter((x) => x.role === "leader");
@@ -146,8 +153,7 @@ export function CandSheet({
     return [...active].sort((a, b) => Number(score(b)) - Number(score(a)));
   }, [vehicles.data, wanted]);
   const limit = e.maxVehiclesPerUser ?? 1;
-  // Lot M4 : le véhicule de la dernière candidature (s'il est encore au garage, avec une photo), sinon le premier qui a
-  // une photo. Le garage n'a pas de « favori » : la dernière utilisée en tient lieu (journal des choix).
+  // Lot M4 : le véhicule de la dernière candidature (s'il est encore au garage, avec une photo).
   const lastUsed = useMemo(() => {
     const usable = new Set(eligible.filter((v) => v.photos.length > 0).map((v) => v.id));
     const recent = [...(upcoming ?? []), ...(past ?? [])]
@@ -155,15 +161,21 @@ export function CandSheet({
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     return recent?.vehicle?.id ?? null;
   }, [eligible, upcoming, past]);
-  const selected =
-    picked !== null
-      ? picked
-      : lastUsed
-        ? [lastUsed]
-        : eligible
-            .filter((v) => v.photos.length > 0)
-            .slice(0, 1)
-            .map((v) => v.id);
+  // Lot R4c : principal → dernier utilisé → premier qui convient (règle commune avec le site).
+  const preselected = useMemo(
+    () =>
+      preselectVehicle(
+        eligible.map((v) => ({
+          id: v.id,
+          hasPhoto: v.photos.length > 0,
+          matches: wanted.size === 0 || v.categories.some((cat) => wanted.has(cat.id)),
+        })),
+        mainVehicleId,
+        lastUsed,
+      ),
+    [eligible, wanted, mainVehicleId, lastUsed],
+  );
+  const selected = picked !== null ? picked : preselected ? [preselected.id] : [];
 
   // Plusieurs jours (lot 26) : « Tout l'événement » et/ou un jour, selon le mode d'accès de l'organisateur.
   const taken = (e.myApplications ?? []).filter((a) => OPEN.includes(a.status)).map((a) => a.eventDayId);
@@ -494,11 +506,19 @@ export function CandSheet({
                               .filter(Boolean)
                               .join(" · ")}
                       </Text>
-                      {v.id === lastUsed ? (
-                        <View style={styles.fav} testID="cand-last-used">
+                      {v.id === mainVehicleId ? (
+                        <View style={styles.fav} testID="cand-main">
                           <Icon name="star" size={12} color={c.accentText} />
                           <Text variant="caption" color={c.accentText} style={styles.favText}>
-                            Dernière utilisée
+                            {mainVehicleLabels.candTag}
+                          </Text>
+                        </View>
+                      ) : v.id === lastUsed ? (
+                        // « Dernière utilisée » seulement si ce n'est pas le principal (R4.5b).
+                        <View style={styles.fav} testID="cand-last-used">
+                          <Icon name="wait" size={12} color={c.inkMuted} />
+                          <Text variant="caption" color={c.inkMuted} style={styles.favText}>
+                            {mainVehicleLabels.lastUsed}
                           </Text>
                         </View>
                       ) : null}

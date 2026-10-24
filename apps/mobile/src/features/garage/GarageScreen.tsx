@@ -5,17 +5,27 @@
 // bas. Pas d'accès flottant ici (lot M5 : il n'a rien à faire au Garage). Retirés (audit § 5.2) : les
 // crews (Mon profil › Mon crew), les demandes de transfert de plaque (Boîte › Demandes). « Partager sa carte » ouvre
 // l'écran de flux `/vehicule/<id>/partager`. Un garage vide montre l'état vide du O.
+// Lot R4c (maquette R4.5) : le véhicule principal en mini-fiche (l'API renvoie le garage trié, principal d'abord), les
+// autres en lignes compactes sous « Tes autres véhicules » ; menu « ⋯ » de chaque véhicule : « Mettre en avant »,
+// Modifier, Partager son affiche, Retirer du garage (archiver) ; un bandeau confirme le nouveau principal ; « Pour ta … »
+// suit le principal.
 import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { vehicleWizardLabels as L } from "@orasso/shared";
+import { vehicleWizardLabels as L, mainVehicleLabels as M, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
+import { SetList, SetRow } from "@/features/profil/parts";
+import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
 import { api } from "@/lib/api";
+import { errorMessage } from "@/lib/http";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 import { GarageCard } from "./GarageCard";
 import { VehiclePros } from "./VehiclePros";
 
@@ -29,6 +39,31 @@ export function GarageScreen() {
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
   const add = () => router.push("/vehicule/nouveau");
   const [round, setRound] = useState(0);
+  const { refreshMe } = useSession();
+  const [menuFor, setMenuFor] = useState<VehicleFull | null>(null);
+  const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const isMain = (v: VehicleFull | null) => Boolean(v && active[0]?.id === v.id);
+
+  // Le bandeau de confirmation s'efface seul (4,5 s, comme la maquette).
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 4500);
+    return () => clearTimeout(id);
+  }, [banner]);
+
+  const feature = async (v: VehicleFull) => {
+    setMenuFor(null);
+    setError(null);
+    try {
+      await api.setMainVehicle(v.id);
+      await Promise.all([vehicles.reload(), refreshMe()]);
+      setBanner(M.confirmed(v.label));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
 
   return (
     <TabScreen
@@ -39,6 +74,94 @@ export function GarageScreen() {
         // Tour 2 : la certification et « Pour ta … » se relisent aussi.
         setRound((r) => r + 1);
       }}
+      overlays={
+        <>
+          <AppSheet
+            visible={menuFor !== null}
+            onClose={() => setMenuFor(null)}
+            accessibilityLabel={menuFor ? M.menu(menuFor.label) : "Menu du véhicule"}
+          >
+            <Text variant="title" color={t.color.ink} style={styles.menuTitle}>
+              {menuFor?.label ?? ""}
+            </Text>
+            <View testID="garage-menu-sheet">
+              <SetList>
+                {menuFor && !isMain(menuFor) ? (
+                  <SetRow
+                    first
+                    icon="star"
+                    title={M.feature}
+                    caption={M.featureHint}
+                    onPress={() => void feature(menuFor)}
+                    testID="garage-feature"
+                  />
+                ) : null}
+                <SetRow
+                  first={isMain(menuFor)}
+                  icon="edit"
+                  title={M.edit}
+                  caption={M.editHint}
+                  onPress={() => {
+                    const v = menuFor;
+                    setMenuFor(null);
+                    if (v) router.push(`/vehicule/${v.id}/modifier`);
+                  }}
+                  testID="garage-menu-edit"
+                />
+                <SetRow
+                  icon="share"
+                  title={M.share}
+                  onPress={() => {
+                    const v = menuFor;
+                    setMenuFor(null);
+                    if (v) router.push(`/vehicule/${v.id}/partager`);
+                  }}
+                  testID="garage-menu-share"
+                />
+                <SetRow
+                  icon="trash"
+                  title={M.remove}
+                  tone="out"
+                  onPress={() => {
+                    setArchiveFor(menuFor);
+                    setMenuFor(null);
+                  }}
+                  testID="garage-menu-remove"
+                />
+              </SetList>
+            </View>
+          </AppSheet>
+          <ArchiveSheet
+            visible={archiveFor !== null}
+            onClose={() => setArchiveFor(null)}
+            onConfirm={async (status, note) => {
+              if (!archiveFor) return;
+              await api.setVehicleStatus(archiveFor.id, status, note);
+              setArchiveFor(null);
+              // Un principal archivé cède sa place au plus ancien suivant, sans question (API).
+              await Promise.all([vehicles.reload(), refreshMe()]);
+            }}
+          />
+          {banner ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.banner,
+                { backgroundColor: t.color.bar, boxShadow: `0 0 0 2px ${t.color.accent}, ${t.shadow.shadowPoster}` },
+              ]}
+              accessibilityLiveRegion="polite"
+              testID="garage-main-banner"
+            >
+              <View style={[styles.bannerIcon, { backgroundColor: t.color.accent }]}>
+                <Icon name="star" size={18} color={t.color.accentInk} />
+              </View>
+              <Text variant="body" color={t.color.barInk} style={styles.bannerText}>
+                {banner}
+              </Text>
+            </View>
+          ) : null}
+        </>
+      }
     >
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
 
@@ -53,13 +176,26 @@ export function GarageScreen() {
           }
         />
       ) : null}
-      {active.map((v, i) => (
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {active[0] ? (
+        <GarageCard
+          key={active[0].id}
+          vehicle={active[0]}
+          first
+          round={round}
+          onShare={(v) => router.push(`/vehicule/${v.id}/partager`)}
+          onMenu={setMenuFor}
+        />
+      ) : null}
+      {active.length > 1 ? <SecHead title={M.others} /> : null}
+      {active.slice(1).map((v) => (
         <GarageCard
           key={v.id}
           vehicle={v}
-          first={i === 0}
+          first={false}
           round={round}
-          onShare={(v) => router.push(`/vehicule/${v.id}/partager`)}
+          onShare={(x) => router.push(`/vehicule/${x.id}/partager`)}
+          onMenu={setMenuFor}
         />
       ))}
 
@@ -110,5 +246,20 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   addTitle: { fontFamily: "Archivo-ExtraBold" },
+  menuTitle: { marginBottom: space3 },
+  banner: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    top: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    paddingVertical: space3,
+    paddingHorizontal: space3 + 2,
+    borderRadius: 16,
+  },
+  bannerIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  bannerText: { flex: 1, fontSize: 13, lineHeight: 18 },
   addText: { flex: 1, gap: space1 },
 });
