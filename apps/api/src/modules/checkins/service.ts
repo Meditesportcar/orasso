@@ -661,7 +661,15 @@ export const checkinsService = {
     if (q.zoneId) filters.push(eq(applications.zoneId, q.zoneId));
     if (q.q) {
       const l = `%${escapeLike(q.q)}%`;
-      filters.push(or(ilike(profiles.pseudo, l), ilike(vehicleMakes.name, l), ilike(vehicleModels.name, l)));
+      // Lot R4e : la version (« GTI ») aussi.
+      filters.push(
+        or(
+          ilike(profiles.pseudo, l),
+          ilike(vehicleMakes.name, l),
+          ilike(vehicleModels.name, l),
+          ilike(vehicles.version, l),
+        ),
+      );
     }
     const items = await listItems(eventId, and(...filters));
     if (!q.dayId) return items;

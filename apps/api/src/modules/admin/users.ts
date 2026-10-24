@@ -181,6 +181,8 @@ export const adminUsersService = {
           g.make.isOther ? (g.v.proposedMake ?? "Autre") : g.make.name,
           g.model.isOther ? (g.v.proposedModel ?? "Autre") : g.model.name,
           g.gen?.name,
+          // Lot R4e : la version après le modèle et la génération.
+          g.v.version,
         ]
           .filter(Boolean)
           .join(" "),

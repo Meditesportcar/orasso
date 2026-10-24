@@ -134,6 +134,7 @@ async function mainVehicleLabels(people: Pick<Profile, "userId" | "mainVehicleId
       modelOther: vehicleModels.isOther,
       proposedMake: vehicles.proposedMake,
       proposedModel: vehicles.proposedModel,
+      version: vehicles.version,
     })
     .from(vehicles)
     .innerJoin(vehicleMakes, eq(vehicleMakes.id, vehicles.makeId))
@@ -160,6 +161,7 @@ async function mainVehicleLabels(people: Pick<Profile, "userId" | "mainVehicleId
           model: { name: main.modelName, isOther: main.modelOther },
           proposedMake: main.proposedMake,
           proposedModel: main.proposedModel,
+          version: main.version,
         } as Parameters<typeof vehicleBriefLabel>[0]),
       );
     }

@@ -443,6 +443,8 @@ export const applicationsQueries = {
           ilike(profiles.pseudo, like),
           ilike(vehicleMakes.name, like),
           ilike(vehicleModels.name, like),
+          // Lot R4e : la version (« GTI ») aussi.
+          ilike(vehicles.version, like),
           ilike(providerProfiles.name, like),
         ),
       );

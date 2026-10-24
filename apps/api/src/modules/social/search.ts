@@ -112,11 +112,17 @@ async function run(
     // Lot R4a, tour 2 : un niveau « Autre » se cherche par son nom tapé (« Peugeot 207 CC »).
     const mk = typedMakeSql;
     const md = typedModelSql;
+    // Lot R4e : la version suit le modèle (« golf gti »), avec la même visibilité que le nom du modèle.
     const text = vehicleExists(sql`(
       ${mk} ilike ${pattern} escape '\\'
       or ${md} ilike ${pattern} escape '\\'
       or (${mk} || ' ' || ${md}) ilike ${pattern} escape '\\'
-      or (d.detail and (g.name ilike ${pattern} escape '\\' or (${mk} || ' ' || ${md} || ' ' || g.name) ilike ${pattern} escape '\\'))
+      or v.version ilike ${pattern} escape '\\'
+      or concat_ws(' ', ${md}, v.version) ilike ${pattern} escape '\\'
+      or concat_ws(' ', ${mk}, ${md}, v.version) ilike ${pattern} escape '\\'
+      or (d.detail and (g.name ilike ${pattern} escape '\\' or (${mk} || ' ' || ${md} || ' ' || g.name) ilike ${pattern} escape '\\'
+        or concat_ws(' ', ${md}, g.name, v.version) ilike ${pattern} escape '\\'
+        or concat_ws(' ', ${mk}, ${md}, g.name, v.version) ilike ${pattern} escape '\\'))
     )`);
     where.push(sql`(${pseudoMatch} or ${text})`);
   }

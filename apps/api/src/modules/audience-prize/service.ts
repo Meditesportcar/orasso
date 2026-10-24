@@ -141,6 +141,7 @@ async function cards(ex: Executor, applicationIds: string[]) {
       modelOther: vehicleModels.isOther,
       proposedMake: vehicles.proposedMake,
       proposedModel: vehicles.proposedModel,
+      version: vehicles.version,
       generation: vehicleGenerations.name,
       generationOther: vehicleGenerations.isOther,
       pseudo: profiles.pseudo,
@@ -161,6 +162,8 @@ async function cards(ex: Executor, applicationIds: string[]) {
       // Lot R4a : un niveau « Autre » prend le nom tapé (« Peugeot 207 CC »).
       const parts = [r.makeOther ? r.proposedMake : r.make, r.modelOther ? r.proposedModel : r.model];
       if (r.generation && !r.generationOther) parts.push(r.generation);
+      // Lot R4e : la version après le modèle et la génération, comme `vehicleLabel`.
+      parts.push(r.version);
       const label = parts.filter(Boolean).join(" ") || "Autre véhicule";
       return [r.applicationId, { vehicleLabel: label, pseudo: r.pseudo, photoUrl: storage.url(r.photoKey) }];
     }),

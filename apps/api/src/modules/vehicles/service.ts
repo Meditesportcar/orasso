@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import {
   cleanProposedName,
+  cleanVehicleVersion,
   effectiveMainVehicleId,
   formatPlate,
   garageOrder,
@@ -187,7 +188,7 @@ export const vehiclesService = {
 
   /** Garage visible des autres (sans plaque). */
   async garageOf(userId: string): Promise<VehiclePublic[]> {
-    return (await vehiclesRepo.findFull(eq(vehicles.ownerId, userId))).map(vehiclePublic);
+    return (await vehiclesRepo.findFull(eq(vehicles.ownerId, userId))).map((row) => vehiclePublic(row));
   },
 
   /** Historique : les candidatures du véhicule, avec « présent » quand l'entrée a été enregistrée sur place. */
@@ -298,6 +299,8 @@ export const vehiclesService = {
             archivedAt: input.status === "active" ? null : now(),
             clientKey: input.clientKey ?? null,
             ...proposed,
+            // Lot R4e : la version, nettoyée (30 caractères au plus), pour tout modèle.
+            version: cleanVehicleVersion(input.version),
           })
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
@@ -406,7 +409,7 @@ export const vehiclesService = {
     const plateIsNew = plateNormalized !== current.plateNormalized || current.status !== "active";
     const holder = wantsPlate && plateIsNew ? await plateHolder(db, plateNormalized, id) : null;
     assertNotOwnPlate(holder, v.user.id);
-    const { categoryIds: _ignored, proposedMake: _make, proposedModel: _model, ...fields } = input;
+    const { categoryIds: _ignored, proposedMake: _make, proposedModel: _model, version, ...fields } = input;
     try {
       await withTx(async (tx, after) => {
         // Véhicule verrouillé et relu : une acceptation de transfert concurrente ne doit jamais être écrasée (I1).
@@ -437,6 +440,8 @@ export const vehiclesService = {
           .set({
             ...fields,
             ...proposed,
+            // Lot R4e : la version, nettoyée ; une précision du nom, elle ne fait pas perdre la certification.
+            ...(version !== undefined ? { version: cleanVehicleVersion(version) } : {}),
             generationId: merged.generationId ?? null,
             year: merged.year ?? null,
             plate: merged.plate,

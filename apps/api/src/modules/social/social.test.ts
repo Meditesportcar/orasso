@@ -116,6 +116,12 @@ describe("audience d'un profil", () => {
     expect(full.json.vehicles[0].photoUrl).toBeNull();
     expect((await call(c, "GET", `/vehicles/${va.id}`)).json.photos).toEqual([]);
     expect((await call(a, "GET", `/me/vehicles/${va.id}`)).json.photos).toHaveLength(1);
+    // Lot R4e (Damien) : le propriétaire qui regarde sa propre vitrine voit sa photo sans décision ; un autre membre
+    // voit `null`, et son aperçu « vu par un membre » aussi.
+    expect((await call(a, "GET", "/users/Alpha_Pub")).json.vehicles[0].photoUrl).toContain("test/");
+    expect((await call(a, "GET", `/vehicles/${va.id}`)).json.photos).toHaveLength(1);
+    expect((await call(a, "GET", "/me/public-preview?as=member")).json.vehicles[0].photoUrl).toBeNull();
+    expect((await call(c, "GET", "/users/Alpha_Pub")).json.vehicles[0].photoUrl).toBeNull();
     await blurPlatesOf(a.id);
     expect((await call(c, "GET", "/users/Alpha_Pub")).json.vehicles[0].photoUrl).toContain("test/");
 
@@ -527,6 +533,22 @@ describe("recherche de personnes", () => {
     expect(pub.departments).toEqual(["66", "11"]);
     expect(pub.vehicles.map((v: { label: string }) => v.label)).toContain("Toyota Supra MK4");
     expect(bySupra.text).not.toMatch(/AA-\d{3}-ZZ/);
+
+    // Lot R4e : la version se cherche avec le modèle (« supra rz »), comme lui, pour le privé aussi.
+    await db.execute(sql`update vehicles set version = 'RZ' where model_id = ${supra.modelId}`);
+    const byVersion = await call(me, "GET", "/users/search?q=supra%20rz");
+    const withVersion = byVersion.json.items.map((i: { pseudo: string }) => i.pseudo);
+    expect(withVersion).toEqual(expect.arrayContaining(["Priv_Owner", "Supra_Fan"]));
+    expect(withVersion).not.toContain("Supra_Gone");
+    expect(byVersion.json.items.find((i: { pseudo: string }) => i.pseudo === "Priv_Owner").vehicles).toEqual([
+      { id: expect.any(String), label: "Toyota Supra RZ" },
+    ]);
+    expect(
+      (await call(me, "GET", "/users/search?q=toyota%20supra%20mk4%20rz")).json.items.map(
+        (i: { pseudo: string }) => i.pseudo,
+      ),
+    ).not.toContain("Priv_Owner");
+    await db.execute(sql`update vehicles set version = null`);
 
     // Lot R2, tour 2 (plus aucun annuaire) : un filtre seul ne liste personne, il affine une recherche par texte.
     for (const filter of [

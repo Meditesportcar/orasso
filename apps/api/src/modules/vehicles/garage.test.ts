@@ -616,6 +616,34 @@ describe("certification", () => {
     expect(res.status).toBe(409);
   });
 
+  it("lot R4e : la version se saisit, se nettoie, suit le modèle et la génération, et ne fait pas perdre la certification", async () => {
+    const { u, v } = await sportVehicle("Version_R4e", { certifiedAt: new Date() });
+    const set = await call(u, "PATCH", `/me/vehicles/${v.id}`, { version: "  ‮GTI‬  " });
+    expect(set.status).toBe(200);
+    expect(set.json).toMatchObject({ version: "GTI", label: "BMW Série 3 E36 GTI", certified: true });
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+    expect(row).toMatchObject({ version: "GTI", certifiedLostReason: null });
+    expect(row?.certifiedAt).not.toBeNull();
+    // 30 caractères au plus ; vide → effacée.
+    const long = await call(u, "PATCH", `/me/vehicles/${v.id}`, { version: "x".repeat(45) });
+    expect(long.json.version).toHaveLength(30);
+    const cleared = await call(u, "PATCH", `/me/vehicles/${v.id}`, { version: "" });
+    expect(cleared.json).toMatchObject({ version: null, label: "BMW Série 3 E36", certified: true });
+    // À la création, pour un modèle de la liste ; un autre champ modifié ne touche pas la version.
+    const created = await call(u, "POST", "/me/vehicles", {
+      vehicleType: "car",
+      makeId: ref.makeId,
+      modelId: ref.modelId,
+      year: 1995,
+      plate: "VR-404-EE",
+      version: "Touring",
+    });
+    expect(created.status).toBe(201);
+    expect(created.json).toMatchObject({ version: "Touring", label: "BMW Série 3 Touring" });
+    const other = await call(u, "PATCH", `/me/vehicles/${created.json.id}`, { color: "Bleu" });
+    expect(other.json.version).toBe("Touring");
+  });
+
   it("conditions : grade, photos, description, catégorie, statut ; refus avec note", async () => {
     const admin = await signUp("Admin_01", { twoFactor: true, role: "super_admin" });
     const lea = await signUp("Lea_11");
