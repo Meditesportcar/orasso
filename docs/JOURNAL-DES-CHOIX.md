@@ -2716,3 +2716,19 @@ Décision finale de Damien appliquée : visible de tous dès la première accept
 ### À revoir avec Damien (lot R4b)
 - **Sécurité (objection gardée)** : la liste « telle voiture, tel lieu, tel jour » reste publique sans compte (photos et modèles). Atténuations : pas d'heure, pas de zone, plaque masquée, pas de pseudo ni d'identifiant sans compte, page non indexée, débit limité. Les adresses des photos (`vehicles/<id>/…`) restent stables : un visiteur peut reconnaître une même photo d'un événement à l'autre.
 - **Modèle tapé (R4a)** : pas encore dans la branche ; la vignette prendra `proposed_model` quand R4a sera fusionné.
+
+## Lot R4b, tour 2 (relectures Opus « fusionnable après corrections » et Codex « non fusionnable ») — 24/10/2026
+
+Source : `corrections-r4b.md` (relais).
+- **Plaque** : hors du garage (plateau, ligne de Mes sorties, voiture d'un compte privé), seule la première photo dont la plaque a été floutée est montrée (`maskedPhoto`, `rules/lineup.ts`) ; pour un véhicule non immatriculé, la première photo. Sinon aucune : la silhouette. « Aucune plaque visible » n'est pas gardé en base, une photo envoyée ainsi n'est donc jamais montrée. Conséquence : les photos du seed (non marquées floutées) s'affichent en silhouettes.
+- **Absents** : après la fin, `acceptedCount`, `remaining` (fiche et listes) et les places des jours sont `null` dans les réponses publiques (`publicCountsHidden`) ; l'organisation (membres de la structure, vue organisateur) garde ses chiffres. L'appli retire la ligne des places, le site les compteurs « places » et « retenus » (le nombre du plateau reste).
+- **Appli** : pages suivantes gardées (`createLineupPager` : changement de catégorie, relecture, changement de compte) ; plateau relu au (ré)abonnement du canal, phrase « peut-être pas à jour » si la relecture échoue ; erreur de l'événement affichée, le geste de rafraîchissement relit l'événement puis le plateau ; le bloc s'ouvre dès qu'il y a une voiture ou un pro, les pastilles des prestataires ouvrent leur vitrine ; bouton « Voir le plateau » (le nombre est écrit au-dessus).
+- **En direct** : `lineup.changed` aussi après une inscription express, une décision ou une accréditation de prestataire et un pointage (après validation de la transaction).
+- **Site** : plateau par fenêtres de 30 (`?depart=`), sans limite ; 429 : « Trop de demandes, réessaie dans un instant » ; la fiche de la voiture d'un compte privé ne mène plus à son profil ; signalement d'un prestataire sur sa vitrine `/providers/:id` et dans l'onglet Pros du plateau (l'Instagram reste sur la vitrine).
+
+### À revoir avec Damien (lot R4b, tour 2)
+- **Adresse des photos** : elle contient l'identifiant du véhicule (`vehicles/<id>/…`). Choix du coordinateur : pas d'adresses opaques dans ce lot (une même photo reconnaît de toute façon une voiture). Piste si Damien la veut : des adresses signées propres à chaque événement.
+- **Absents par comparaison** : la liste des retenues de la veille comparée aux présentes du lendemain désigne les absents ; c'est inhérent à « visible de tous ».
+- **Pros après la fin** : les prestataires ne sont pas pointés à l'entrée ; le plateau garde ceux qui étaient retenus.
+- **Compte privé** : un ami voit aussi le cadenas (toucher ouvre la fiche de la voiture). La recherche et le profil d'un compte privé cachent encore la photo de ses véhicules : le lot R4c harmonisera.
+- **Seed** : ses photos ne sont pas marquées floutées, le plateau du seed est en silhouettes ; à marquer si ces photos ont bien leur plaque masquée.

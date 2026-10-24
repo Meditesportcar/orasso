@@ -45,7 +45,11 @@ export async function prosOnlyFixture(): Promise<{ event: CreatedEvent; provider
   if (patched.status !== 200) throw new Error(`Types attendus : ${patched.status}`);
   const providerName = `Photo R4b ${unique()}`;
   const cookie = await signUpApi(`R4bPhoto_${unique().slice(-6)}`);
-  const profile = await apiCall(cookie, "PUT", "/me/provider-profile", { type: "photographer", name: providerName });
+  const profile = await apiCall(cookie, "PUT", "/me/provider-profile", {
+    type: "photographer",
+    name: providerName,
+    instagram: "@photo.r4b",
+  });
   if (profile.status !== 200) throw new Error(`Profil prestataire : ${profile.status} ${JSON.stringify(profile.data)}`);
   const applied = await apiCall<{ id: string }>(cookie, "POST", `/events/${event.id}/provider-applications`, {
     rulesAccepted: true,

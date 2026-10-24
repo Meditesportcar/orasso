@@ -92,6 +92,7 @@ export function CarTile({ car, onPress }: { car: LineupCar; onPress?: () => void
           placeholder={`linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
           style={StyleSheet.absoluteFill}
         />
+        {car.photoUrl ? null : <Silhouette size={36} />}
         {me ? <MeBadge /> : null}
       </View>
       <View style={styles.tileText}>
@@ -109,6 +110,16 @@ export function CarTile({ car, onPress }: { car: LineupCar; onPress?: () => void
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+/** Sans photo floutée (lot R4b, tour 2) : la silhouette d'une voiture, jamais une photo à la plaque lisible. */
+function Silhouette({ size }: { size: number }) {
+  const { t } = useTheme();
+  return (
+    <View style={styles.silhouette} pointerEvents="none">
+      <Icon name="vehicle" size={size} color={t.color.inkMuted} />
+    </View>
   );
 }
 
@@ -228,6 +239,7 @@ export function LineupBlock({ eventId, slug }: { eventId: string; slug: string }
                 <View key={isMemberCar(car) ? car.vehicleId : `${i}`} style={styles.thumb}>
                   <View style={[styles.thumbIn, { backgroundColor: c.surfaceRaised }]}>
                     <Photo source={mediaSource(car.photoUrl)} style={StyleSheet.absoluteFill} />
+                    {car.photoUrl ? null : <Silhouette size={22} />}
                   </View>
                   {isMemberCar(car) && car.me ? (
                     <>
@@ -317,6 +329,15 @@ const styles = StyleSheet.create({
   tileName: { fontSize: 12.5, lineHeight: 14 },
   who: { flexDirection: "row", alignItems: "center", gap: space1 },
   whoText: { fontWeight: "700", flexShrink: 1 },
+  silhouette: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   me: { position: "absolute", left: 6, top: 6, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
   meText: { fontSize: 9.5, letterSpacing: 0.6 },
   logo: { borderRadius: radiusSm, overflow: "hidden", alignItems: "center", justifyContent: "center" },
