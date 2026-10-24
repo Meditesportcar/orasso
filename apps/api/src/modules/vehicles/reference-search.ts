@@ -18,6 +18,7 @@ import { db } from "../../db/client";
 import { vehicleGenerations, vehicleMakes, vehicleModels } from "../../db/schema";
 
 const TTL_MS = 10 * 60 * 1000;
+const collator = new Intl.Collator("fr", { numeric: true });
 
 /**
  * Noms de passion qui ne sont pas dans le nom du référentiel (« 350Z » pour la Nissan Z de génération Z33, « Miata »
@@ -179,7 +180,7 @@ export const referenceSearch = {
       (a, b) =>
         b.score - a.score ||
         KIND_ORDER[a.entry.hit.kind] - KIND_ORDER[b.entry.hit.kind] ||
-        a.entry.sortName.localeCompare(b.entry.sortName, "fr", { numeric: true }),
+        collator.compare(a.entry.sortName, b.entry.sortName),
     );
     return scored.slice(0, limit).map((s) => s.entry.hit);
   },

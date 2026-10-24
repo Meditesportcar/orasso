@@ -14,7 +14,8 @@ import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
-import { type AppEnv, requireUser } from "../../lib/session";
+import { limitSearch } from "../../lib/search-limit";
+import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { categoryOptions } from "./categories";
 import { certificationService } from "./certification";
@@ -37,9 +38,12 @@ export const vehiclesRoutes = new Hono<AppEnv>()
     c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H),
   )
   // Lot R3c : recherche « Marque ou modèle » (sans accents, casse, tirets ni espaces ; « golf 4 », « e36 », « mx5 »).
-  .get("/vehicle-reference/search", async (c) =>
-    c.json(await referenceSearch.search(query(c, vehicleReferenceSearchQuery)), 200, CACHE_1H),
-  )
+  // Tour 2 : limitée (une requête par frappe), cache court (l'index suit les modifications de l'admin).
+  .get("/vehicle-reference/search", async (c) => {
+    limitSearch(c, await optionalUser(c), { user: "referenceSearch", visitor: "referenceSearchPublic" });
+    const hits = await referenceSearch.search(query(c, vehicleReferenceSearchQuery));
+    return c.json(hits, 200, { "cache-control": "private, max-age=60" });
+  })
   // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
   // Filtré par marque, type et année quand ils sont donnés (formulaire du véhicule) : chaque catégorie dit si elle est
   // éligible et pourquoi sinon (lot 31).

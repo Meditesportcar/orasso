@@ -14,6 +14,8 @@ describe("recherche « Marque ou modèle » (lot R3c)", () => {
 
   it("un numéro romain ou un « Mk4 » vaut aussi son chiffre ; un « X » en tête reste une lettre", () => {
     expect(searchWords("Mk4")).toContain("4");
+    expect(searchWords("Mk4")).toContain("iv"); // tour 2 : « golfiv », « golf-iv »
+    expect(searchTokens("golf-iv")).toEqual([["golfiv"]]);
     expect(searchWords("Golf IV")).toContain("4");
     expect(searchWords("I (T7)")).toContain("1");
     expect(searchWords("Evo X")).toContain("10");

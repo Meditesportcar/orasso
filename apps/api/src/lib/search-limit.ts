@@ -1,7 +1,7 @@
 // Limite de débit des recherches par texte (lot 29) : par personne connectée, par adresse pour un visiteur sans compte.
 // Servie à `GET /search` et aux listes `GET /events` et `GET /pros` quand elles reçoivent un texte (`q`).
 
-import { rateLimit } from "./rateLimit";
+import { type RateRuleName, rateLimit } from "./rateLimit";
 import type { Viewer } from "./session";
 
 /** Adresse du visiteur (posée par nginx / le rendu serveur du site), sinon un repère commun. */
@@ -24,7 +24,12 @@ export function ipv6Prefix64(ip: string): string {
     .join(":");
 }
 
-export function limitSearch(c: { req: { header(name: string): string | undefined } }, viewer: Viewer | null): void {
-  if (viewer) rateLimit("search", viewer.user.id);
-  else rateLimit("searchPublic", visitorOf(c));
+/** Règles par défaut : la recherche de premier niveau ; une autre recherche peut passer les siennes (lot R3c). */
+export function limitSearch(
+  c: { req: { header(name: string): string | undefined } },
+  viewer: Viewer | null,
+  rules: { user: RateRuleName; visitor: RateRuleName } = { user: "search", visitor: "searchPublic" },
+): void {
+  if (viewer) rateLimit(rules.user, viewer.user.id);
+  else rateLimit(rules.visitor, visitorOf(c));
 }

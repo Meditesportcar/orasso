@@ -45,6 +45,8 @@ const ROMAN: Record<string, string> = {
   xii: "12",
 };
 
+const ARABIC: Record<string, string> = Object.fromEntries(Object.entries(ROMAN).map(([r, n]) => [n, r]));
+
 /** Préfixes de numéro de génération : « Mk4 », « Gen2 », « Phase1 », « Serie3 », « S2 » valent aussi « 4 », « 2 »… */
 const NUMBERED = /^(mk|gen|phase|serie|series)(\d{1,2})$/;
 
@@ -78,6 +80,11 @@ export function searchWords(name: string): string[] {
       const numbered = NUMBERED.exec(part);
       if (numbered?.[2]) out.add(String(Number(numbered[2])));
     }
+  }
+  // Tour 2 : un numéro de 1 à 12 vaut aussi son romain (« Mk4 » → iv), pour « golfiv » et « golf-iv ».
+  for (const word of [...out]) {
+    const roman = ARABIC[word];
+    if (roman) out.add(roman);
   }
   return [...out];
 }

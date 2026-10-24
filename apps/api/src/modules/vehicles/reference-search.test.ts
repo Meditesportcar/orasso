@@ -1,10 +1,11 @@
 // Lot R3c : recherche « Marque ou modèle » sur le référentiel complet, tolérante et mesurée.
 import type { VehicleReferenceHit } from "@orasso/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resetDb } from "../../../test/helpers";
+import { call, resetDb, signUp } from "../../../test/helpers";
 import { app } from "../../app";
 import { pool } from "../../db/client";
 import { vehicleCatalog } from "../../db/seed/vehicle-catalog";
+import { resetRateLimits } from "../../lib/rateLimit";
 import { referenceSearch, SEARCH_ALIASES } from "./reference-search";
 import { syncVehicleReference } from "./reference-sync";
 
@@ -37,7 +38,7 @@ describe("recherche « Marque ou modèle » (lot R3c)", () => {
   });
 
   it("« golf 4 », « golf iv », « golf4 » trouvent la Golf Mk4", async () => {
-    for (const q of ["golf 4", "golf iv", "Golf IV", "golf4", "volkswagen golf mk4"]) {
+    for (const q of ["golf 4", "golf iv", "Golf IV", "golf4", "golf-iv", "golfiv", "GOLF-IV", "volkswagen golf mk4"]) {
       const [first] = await search(q);
       expect(label(first), q).toBe("Volkswagen Golf Mk4");
       expect(first).toMatchObject({ kind: "generation", yearFrom: 1997, yearTo: 2003 });
@@ -95,6 +96,12 @@ describe("recherche « Marque ou modèle » (lot R3c)", () => {
   it("la saisie est contrôlée (vide ou trop longue refusée)", async () => {
     expect((await app.request("/api/vehicle-reference/search?q=")).status).toBe(400);
     expect((await app.request(`/api/vehicle-reference/search?q=${"a".repeat(61)}`)).status).toBe(400);
+    for (const bad of ["limit=0", "limit=51", "type=foo"]) {
+      expect((await app.request(`/api/vehicle-reference/search?q=golf&${bad}`)).status, bad).toBe(400);
+    }
+    expect((await app.request("/api/vehicle-reference/search?q=golf")).headers.get("cache-control")).toBe(
+      "private, max-age=60",
+    );
   });
 
   it("reste rapide sur le référentiel complet (temps mesuré)", async () => {
@@ -122,5 +129,48 @@ describe("recherche « Marque ou modèle » (lot R3c)", () => {
     expect(median).toBeLessThan(25);
     expect(p95).toBeLessThan(60);
     expect(cold).toBeLessThan(5000);
+  });
+
+  it("ludospaces en voiture, fourgons en utilitaire : l'API accepte l'association", async () => {
+    const [kangoo] = await search("kangoo", "car");
+    expect(kangoo).toMatchObject({ modelName: "Kangoo", vehicleType: "car" });
+    const vans = (await search("kangoo", "truck")).map((h) => h.modelName);
+    expect(vans).toEqual(expect.arrayContaining(["Kangoo Express", "Kangoo Van"]));
+    expect(vans).not.toContain("Kangoo");
+    const kenji = await signUp("Kenji_66");
+    const car = {
+      vehicleType: "car",
+      makeId: kangoo!.makeId,
+      modelId: kangoo!.modelId,
+      year: 2010,
+      unregistered: true,
+    };
+    expect((await call(kenji, "POST", "/me/vehicles", car)).status).toBe(201);
+    expect((await call(kenji, "POST", "/me/vehicles", { ...car, vehicleType: "truck" })).status).toBe(400);
+  });
+
+  it("une modification dans l'admin est vue tout de suite par la recherche", async () => {
+    const admin = await signUp("Damien_Admin", { twoFactor: true, role: "super_admin" });
+    const [venturi] = await search("venturi atlantique");
+    expect(venturi?.modelName).toBe("Atlantique");
+    const res = await call(admin, "DELETE", `/admin/vehicle-reference/models/${venturi!.modelId}`);
+    expect(res.status).toBe(204);
+    expect((await search("venturi atlantique")).some((h) => h.modelName === "Atlantique")).toBe(false);
+    const created = await call(admin, "POST", "/admin/vehicle-reference/models", {
+      makeId: venturi!.makeId,
+      name: "Fétish",
+      vehicleType: "car",
+    });
+    expect(created.status).toBe(201);
+    expect((await search("venturi fetish"))[0]?.modelName).toBe("Fétish");
+  });
+
+  it("limite de fréquence adaptée à l'autocomplétion : 120 par minute, puis 429", async () => {
+    resetRateLimits();
+    for (let i = 0; i < 120; i++) {
+      expect((await app.request("/api/vehicle-reference/search?q=golf")).status).toBe(200);
+    }
+    expect((await app.request("/api/vehicle-reference/search?q=golf")).status).toBe(429);
+    resetRateLimits();
   });
 });
