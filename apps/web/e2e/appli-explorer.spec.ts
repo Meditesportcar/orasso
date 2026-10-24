@@ -61,48 +61,59 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
       timeout: 30_000,
     });
     await shot(page, `03-explorer-rivesaltes-${theme}`);
-    // Personnes et crews : la feuille de l'artefact (`sh-people`), par-dessus Explorer.
+    // Personnes et crews : un segment (lot R2), sans annuaire ; les filtres s'ouvrent en feuille.
     await page.getByTestId("events-q").fill("");
-    await page.getByTestId("people-open").click();
+    await page.getByTestId("segment-personnes").click();
     await expect(page.getByTestId("people-search")).toBeVisible({ timeout: 30_000 });
-    // Les filtres de personnes (département, centre d'intérêt, grade) restent atteignables.
+    // Les filtres de personnes (centre d'intérêt, grade) restent atteignables.
     await page.getByTestId("people-filters").click();
     await expect(page.getByTestId("people-filters-panel")).toBeVisible();
+    await page.getByTestId("sheet-close").click();
     await page.getByTestId("people-q").fill("drift");
     await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" }).first()).toBeVisible({
       timeout: 30_000,
     });
-    await page.getByTestId("sheet-close").click();
 
     // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
+    // Le segment est gardé par compte (lot R1) : on revient aux Événements.
+    await page.getByTestId("segment-evenements").click({ timeout: 30_000 });
     const rows = page.getByTestId("event-row");
-    // Lot M4 : « N événements · distances depuis ta position ».
-    await expect(page.getByTestId("sort-line")).toContainText("distances depuis ta position", { timeout: 30_000 });
+    // Lot R2 : « N événements à venir · <lieu> », par date. On cherche partout en France (les événements du Club
+    // Audois Passion sont dans l'Aude, hors du coin de ce compte).
+    await expect(page.getByTestId("sort-line")).toContainText("à venir", { timeout: 30_000 });
+    await page.getByTestId("around-open").click();
+    await page.getByTestId("around-all").click();
+    await page.getByTestId("where-apply").click();
+    await expect(page.getByTestId("sort-line")).toContainText("partout en France", { timeout: 30_000 });
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-explorer-distance-${theme}`);
 
     // « Mes affinités » : l'organisateur suivi en tête ; « Structures suivies » : seulement lui.
     await page.getByTestId("filters-toggle").click();
     await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("filters-apply").click();
     await expect(rows.first()).toContainText("Rassemblement de Narbonne", { timeout: 30_000 });
     await shot(page, `05-explorer-affinites-${theme}`);
+    await page.getByTestId("filters-toggle").click();
     await page.getByText("Mes affinités", { exact: true }).click();
     await page.getByText("Structures suivies", { exact: true }).click();
+    await page.getByTestId("filters-apply").click();
     await expect(rows.first()).toContainText("Club Audois Passion", { timeout: 30_000 });
     for (const text of await rows.allTextContents()) expect(text).toContain("Club Audois Passion");
     await shot(page, `06-explorer-suivies-${theme}`);
-    await page.getByText("Structures suivies", { exact: true }).click();
     await page.getByTestId("filters-toggle").click();
+    await page.getByText("Structures suivies", { exact: true }).click();
+    await page.getByTestId("filters-apply").click();
 
     // Position : jamais enregistrée.
     const me = await apiCall<{ profile: { departments: string[] } }>(cookie, "GET", "/me");
     expect(me.data.profile.departments).toEqual(["66"]);
 
     // --- Pros ---------------------------------------------------------------------------------------------------
-    await page.getByText("Pros", { exact: true }).first().click();
-    // Lot C2a : les lieux pratiques (garage favori, lavage, carburant) sont en tête des Pros.
-    await expect(page.getByTestId("explorer-places")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("segment-pros").click();
+    // Lot R2 : la ligne « N pros · … » ; plus de lieux pratiques (stations retirées au lot R1).
+    await expect(page.getByTestId("pros-line")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("events-q").fill("detailing");
     const pros = page.getByTestId("pro-row");
     await expect(pros.filter({ hasText: "Detailing Hérault" })).toBeVisible({ timeout: 30_000 });

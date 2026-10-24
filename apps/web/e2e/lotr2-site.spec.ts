@@ -136,10 +136,11 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       const days = page.locator('[data-testid^="map-day-"]:not([data-testid="map-day-all"])');
       expect(await days.count()).toBeGreaterThan(0);
       const first = days.first();
-      const dayCount = count((await first.textContent()) ?? "");
+      const dayCount = count((await first.locator(".o-t-caption").textContent()) ?? ""); // le nombre, pas la date du libellé
       // Choisir une date ne garde que ses épingles (le clic compte une fois la page hydratée).
       await expect(async () => {
-        await first.click();
+        // Un second clic sur la même date la décocherait : on ne clique que si elle n'est pas déjà choisie.
+        if ((await first.getAttribute("aria-pressed")) !== "true") await first.click();
         await expect(page.getByTestId("events-map")).toHaveAttribute("data-count", String(dayCount), {
           timeout: 1_000,
         });

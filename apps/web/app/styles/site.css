@@ -2325,9 +2325,11 @@
     position: sticky;
     top: var(--space-4);
   }
+  /* `relative`, pas `static` : le canevas de MapLibre se place par rapport à la carte (et non à `.ex-map`, qui est collant),
+     sinon il recouvre la frise des dates. */
   .ex-map .evs__map {
     order: 0;
-    position: static;
+    position: relative;
     height: 62vh;
   }
 }

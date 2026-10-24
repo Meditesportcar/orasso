@@ -92,15 +92,20 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await afterOpening(page);
     // Demande à la première ouverture, puis refus → icône rouge et repli sur le 66.
     await expect(page.getByTestId("position-ask")).toBeVisible({ timeout: 30_000 });
-    // Lot M4 : « N événements · distances depuis le centre du 66 ».
-    await expect(page.getByTestId("sort-line")).toContainText("depuis le centre du 66");
+    // Lot R2 : « N événements à venir · Pyrénées-Orientales (66) » (Mon coin), par date.
+    await expect(page.getByTestId("sort-line")).toContainText("(66)");
     await shot(page, `explorer-demande-${theme}`);
     await page.getByTestId("position-enable").click();
-    await expect(page.getByTestId("sort-line")).toContainText("position refusée : distances depuis le centre du 66", {
-      timeout: 30_000,
-    });
-    await expect(page.getByTestId("gps-button")).toContainText("Ma position"); // Lot C2a : libellé de l'artefact.
+    // Lot R2 : plus de bouton « Ma position » (la position se choisit dans « Où chercher ? ») ; refusée, la demande
+    // disparaît et le lieu reste Mon coin.
+    await expect(page.getByTestId("position-ask")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("sort-line")).toContainText("(66)", { timeout: 30_000 });
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
+    // Du plus proche au plus loin : le tri par distance (le tri par défaut est la date).
+    await page.getByTestId("sort-open").click();
+    await page.getByTestId("sort-distance").click();
+    await expect(page.getByTestId("sort-open")).toContainText("distance", { timeout: 30_000 });
+    await expect(page.getByTestId("event-km").first()).toBeVisible({ timeout: 30_000 });
     expect(await page.getByTestId("event-row").count()).toBeGreaterThan(3);
     const km = await distances(page);
     expect(km.length).toBeGreaterThan(3);
@@ -114,14 +119,19 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await page.getByTestId("filters-toggle").click();
     await expect(page.getByTestId("explorer-filters")).toBeVisible();
     await page.getByTestId("explorer-filters").getByText("Exposition", { exact: true }).click();
+    // Lot R2 : les filtres s'appliquent avec le bouton « Voir N événements ».
+    await shot(page, `explorer-filtres-${theme}`);
+    await page.getByTestId("filters-apply").click();
     await expect(page.getByTestId("event-row").first()).toContainText("Exposition", { timeout: 30_000 });
     for (const row of await page.getByTestId("event-row").allTextContents()) expect(row).toContain("Exposition");
-    await shot(page, `explorer-filtres-${theme}`);
+    await page.getByTestId("filters-toggle").click();
     await page.getByTestId("explorer-filters").getByText("Tous", { exact: true }).click();
     await page.getByText("Mes affinités", { exact: true }).click();
-    await expect(page.getByTestId("sort-line")).toContainText("affinités");
-    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("filters-apply").click();
+    await expect(page.getByTestId("sort-line")).toContainText("affinités", { timeout: 30_000 });
     await page.getByTestId("filters-toggle").click();
+    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("filters-apply").click();
 
     // Carte stylée : canvas MapLibre, style du thème, étiquettes datées.
     await page.getByText("Carte", { exact: true }).click();
@@ -129,11 +139,14 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await expect(canvas).toHaveAttribute("data-map-style", `orasso-${theme}`, { timeout: 45_000 });
     await expect(canvas.locator("canvas.maplibregl-canvas")).toBeVisible();
     await expect(canvas.locator('[data-testid="map-marker"], [data-testid="map-cluster"]').first()).toBeVisible();
-    // Lot C2a : carte en écran plein (`s-map`) : recherche en surimpression, légende, sans barre d'onglets.
-    await expect(page).toHaveURL(/\/carte/);
-    await expect(page.getByTestId("map-q")).toBeVisible();
-    await expect(page.getByTestId("map-legend")).toContainText("Plusieurs");
-    await expect(page.getByRole("tab", { name: "Explorer", exact: true })).toBeHidden();
+    // Lot R2 : la carte vit dans l'onglet Explorer (même ligne de pastilles, bascule Liste | Carte, frise des dates) ;
+    // plus de recherche sur la carte, plus de légende, la barre d'onglets reste.
+    await expect(page).toHaveURL(/\/explorer/);
+    await expect(page.getByTestId("map-screen")).toBeVisible();
+    await expect(page.getByTestId("map-dates")).toBeVisible();
+    await expect(page.getByTestId("map-q")).toHaveCount(0);
+    await expect(page.getByTestId("map-legend")).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Explorer", exact: true })).toBeVisible();
     await page.waitForTimeout(3000);
     await shot(page, `explorer-carte-${theme}`);
     await ctx.close();

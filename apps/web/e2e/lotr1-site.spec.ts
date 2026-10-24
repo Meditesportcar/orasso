@@ -125,17 +125,17 @@ test("site, tour 2 : le choix appartient au compte ; « Tous les formats » se r
     expect((await apiCall(kenji, "PATCH", "/me/preferences", { eventFormats: ["exhibition"] })).status).toBe(200);
     await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
     const tiles = page.getByTestId("event-tile");
-    await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=date");
+    await page.goto("/app/explorer?segment=evenements&autour=partout&tri=date");
     await expect(tiles.first()).toBeVisible();
     const filtered = await tiles.count();
     // « Tous les formats » choisi : plus d'événements ; après un tour ailleurs, il revient tel quel.
-    await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=date&format=");
+    await page.goto("/app/explorer?segment=evenements&autour=partout&tri=date&format=all");
     await expect(tiles.first()).toBeVisible();
     const all = await tiles.count();
     expect(all).toBeGreaterThan(filtered);
     await page.goto("/app");
     await page.goto("/app/explorer");
-    await expect(page).toHaveURL(/format=(&|$)/);
+    await expect(page).toHaveURL(/format=all/);
     await expect(tiles).toHaveCount(all);
 
     // Session de Kenji expirée (cookies de session effacés, celui du choix gardé), Damien se connecte sans déconnexion :
