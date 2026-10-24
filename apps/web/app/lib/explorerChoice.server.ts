@@ -8,7 +8,9 @@
 //   - « Tous les formats » se restaure tel quel : `format=` (vide) est un choix, distinct de l'absence de `format` (qui
 //     laisse les types des préférences s'appliquer) ;
 //   - seulement des réglages relatifs : pas de dates absolues (`du`, `au`), qui seraient vite passées.
+// Lot R2, tour 2 : un cookie écrit par le lot R1 est migré à la lecture (`migrateR1Choice`) vers les clés du lot R2.
 import { createHash } from "node:crypto";
+import { departments } from "@orasso/shared";
 
 import { getMe } from "./api.server";
 
@@ -21,11 +23,15 @@ const KEPT = [
   "vue",
   "tri",
   "autour",
+  "ailleurs",
   "rayon",
   "format",
-  "categorie",
-  "departement",
-  "activite",
+  "quand",
+  "affinites",
+  "suivis",
+  "metier",
+  "lieu",
+  "montrer",
   "interet",
   "grade",
 ] as const;
@@ -37,6 +43,36 @@ const OWNER = /^[0-9a-f]{16}$/;
 /** Identifiant opaque du compte dans le cookie (16 caractères hexadécimaux, jamais l'identifiant lui-même). */
 export function explorerOwner(userId: string): string {
   return createHash("sha256").update(`orasso-explorer:${userId}`).digest("hex").slice(0, 16);
+}
+
+const isDepartment = (code: string) => (departments as readonly string[]).includes(code);
+
+/**
+ * Les réglages du lot R1 repris dans les clés du lot R2 (le choix d'un utilisateur ne se perd pas à la mise à jour) :
+ * `format=` (« Tous les formats ») devient `format=all` ; `activite` devient `metier` ; `departement` devient le lieu
+ * (`autour=ailleurs&ailleurs=<code>`, ou `lieu=…` pour Personnes et crews) ; `rayon=partout` devient `autour=partout` ;
+ * `categorie` (filtre abandonné) disparaît.
+ */
+export function migrateR1Choice(params: URLSearchParams): URLSearchParams {
+  const out = new URLSearchParams(params);
+  if (out.get("format") === "") out.set("format", "all");
+  const activite = out.get("activite");
+  out.delete("activite");
+  if (activite && !out.has("metier")) out.set("metier", activite);
+  out.delete("categorie");
+  const dept = out.get("departement") ?? "";
+  out.delete("departement");
+  const people = out.get("segment") === "personnes";
+  const autour = out.get("autour") ?? "";
+  if (isDepartment(dept) && autour !== "moi" && !(people && out.has("lieu"))) {
+    if (people) out.set("lieu", "ailleurs");
+    else out.set("autour", "ailleurs");
+    out.set("ailleurs", dept);
+  } else if (out.get("rayon") === "partout" && !people && (autour === "" || autour === "coin" || autour === "moi")) {
+    out.set("autour", "partout");
+  }
+  if (out.get("rayon") === "partout") out.delete("rayon");
+  return out;
 }
 
 /** Les réglages gardables d'une adresse (`null` s'il n'y en a aucun, ou pour les résultats d'une recherche). */
@@ -72,7 +108,7 @@ export function decodeExplorerChoice(raw: string): { owner: string; kept: string
   const at = text.indexOf("|");
   const owner = at < 0 ? "" : text.slice(0, at);
   if (!OWNER.test(owner)) return null;
-  return { owner, kept: keptExplorerParams(new URLSearchParams(text.slice(at + 1))) };
+  return { owner, kept: keptExplorerParams(migrateR1Choice(new URLSearchParams(text.slice(at + 1)))) };
 }
 
 function readRaw(request: Request): string | null {

@@ -1,15 +1,20 @@
-// Marqueurs de la carte (lot 44, prototype `s-map`) : un événement est une étiquette inclinée avec sa date
-// (« SAM 24 »), un groupe de points proches une pastille avec le nombre, un pro une plaque, toi un point. Ici, la partie
-// pure commune au site et à l'appli : la date de l'étiquette et le regroupement des points à un niveau de zoom.
-import { wallTime } from "@orasso/shared";
+// Marqueurs de la carte (lot 44, prototype `s-map`) : un événement est une étiquette inclinée avec sa date, un groupe de
+// points proches une pastille avec le nombre, un pro une plaque, toi un point. Ici, la partie pure commune au site et à
+// l'appli : la date de l'étiquette et le regroupement des points à un niveau de zoom.
+// Lot R2 (maquette R2.8) : « mar 2 », « dim 1 » ne se lisaient pas comme des dates ; l'étiquette dit la date en clair
+// (« AUJOURD'HUI », « DEMAIN », « DIM. 1 NOV. ») et une pastille de groupe dit « 2 ÉVÉNEMENTS ».
+import { dayLabel } from "@orasso/shared";
 
-const DAYS = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"] as const;
+/** Date d'une étiquette d'événement, heure de Paris : « AUJOURD'HUI », « DEMAIN », sinon « DIM. 1 NOV. ». */
+export function pinDateLabel(iso: string | Date, now: Date, timeZone?: string): string {
+  return dayLabel(iso, now, timeZone).toUpperCase();
+}
 
-/** Date d'une étiquette d'événement, heure de Paris : « SAM 24 ». */
-export function pinDateLabel(iso: string | Date, timeZone?: string): string {
-  const w = wallTime(typeof iso === "string" ? new Date(iso) : iso, timeZone);
-  const weekday = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
-  return `${DAYS[weekday]} ${w.day}`;
+/** Texte d'une pastille de groupe : « 2 ÉVÉNEMENTS », « 3 PROS » (le nombre seul sans genre connu). */
+export function clusterLabel(count: number, kind?: "event" | "pro"): string {
+  if (kind === "event") return `${count} ÉVÉNEMENT${count > 1 ? "S" : ""}`;
+  if (kind === "pro") return `${count} PRO${count > 1 ? "S" : ""}`;
+  return String(count);
 }
 
 export type MapPoint = { id: string; lat: number; lng: number };

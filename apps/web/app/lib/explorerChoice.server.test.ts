@@ -31,7 +31,50 @@ describe("choix de l'Explorer du site (lot R1, tour 2)", () => {
     expect(keptExplorerParams(new URLSearchParams("segment=evenements&format="))).toBe("segment=evenements&format=");
     expect(keptExplorerParams(new URLSearchParams("segment=evenements"))).toBe("segment=evenements");
     const step = explorerChoiceStep(request(stored("a", "segment=evenements&format=")), new URL(BASE), "a");
-    expect(step.redirectTo).toBe("/app/explorer?segment=evenements&format=");
+    // Lot R2 : le choix « Tous les formats » d'un cookie du lot R1 (`format=`) devient explicite (`format=all`).
+    expect(step.redirectTo).toBe("/app/explorer?segment=evenements&format=all");
+  });
+
+  it("cookies du lot R1 : migrés vers les clés du lot R2 à la lecture", () => {
+    const go = (kept: string) => {
+      const step = explorerChoiceStep(request(stored("a", kept)), new URL(BASE), "a");
+      return Object.fromEntries(new URL(`http://x${step.redirectTo}`).searchParams);
+    };
+    // Événements : « Tous les formats », département filtré, tout le pays.
+    expect(go("segment=evenements&format=&departement=66&categorie=3f1e0b5e-8c2d-4f67-9a10-1b2c3d4e5f60")).toEqual({
+      segment: "evenements",
+      autour: "ailleurs",
+      ailleurs: "66",
+      format: "all",
+    });
+    expect(go("segment=evenements&autour=coin&rayon=partout&format=rassemblement")).toEqual({
+      segment: "evenements",
+      autour: "partout",
+      format: "rassemblement",
+    });
+    // Pros : activite -> metier ; le tri R1 reste lisible.
+    expect(go("segment=pros&activite=detailing&departement=11&tri=nom")).toEqual({
+      segment: "pros",
+      tri: "nom",
+      autour: "ailleurs",
+      ailleurs: "11",
+      metier: "detailing",
+    });
+    // Personnes : le département devient le lieu (Ailleurs), les filtres restent.
+    expect(go("segment=personnes&departement=66&grade=route")).toEqual({
+      segment: "personnes",
+      ailleurs: "66",
+      lieu: "ailleurs",
+      grade: "route",
+    });
+    // « Autour de moi » est gardé tel quel (la position n'est jamais dans le cookie).
+    expect(go("segment=evenements&autour=moi&rayon=50&departement=66")).toEqual({
+      segment: "evenements",
+      autour: "moi",
+      rayon: "50",
+    });
+    // Un département inconnu est ignoré.
+    expect(go("segment=pros&departement=xx&activite=pneus")).toEqual({ segment: "pros", metier: "pneus" });
   });
 
   it("le cookie porte un identifiant opaque du compte, jamais l'identifiant lui-même", () => {

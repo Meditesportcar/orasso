@@ -106,8 +106,9 @@ describe("recherche de personnes", () => {
     expect(hasPeopleSearchCriteria({})).toBe(false);
     expect(hasPeopleSearchCriteria({ q: " k " })).toBe(false);
     expect(hasPeopleSearchCriteria({ q: "ke" })).toBe(true);
-    expect(hasPeopleSearchCriteria({ department: "66" })).toBe(true);
-    expect(hasPeopleSearchCriteria({ generationId: "g" })).toBe(true);
+    // Lot R2, tour 2 : un filtre seul ne suffit plus (plus aucun annuaire).
+    expect(hasPeopleSearchCriteria({ department: "66" } as { q?: string })).toBe(false);
+    expect(hasPeopleSearchCriteria({ q: "ke", grade: "route" } as { q?: string })).toBe(true);
   });
 });
 

@@ -22,6 +22,7 @@ export const mapSupported = true;
 export function ExplorerMap({
   pins,
   me,
+  selectedId,
   onSelect,
   onSelectGroup,
   children,
@@ -102,6 +103,10 @@ export function ExplorerMap({
     byId.current = new Map(pins.map((p) => [p.id, p]));
     placed.current?.update(webPins(pins));
   }, [pins, me]);
+  // Lot R2 : une épingle choisie par la frise des dates est mise en avant comme au toucher.
+  useEffect(() => {
+    placed.current?.select(selectedId ?? null);
+  }, [selectedId]);
 
   useEffect(() => {
     handle.current?.setTheme(theme);

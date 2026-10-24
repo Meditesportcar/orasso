@@ -1,6 +1,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { pinDateLabel, placePins } from "@orasso/design-system/web";
 import { useEffect, useRef } from "react";
+import { now } from "../lib/clock";
 import { useOrassoMap } from "./useOrassoMap";
 
 /** Centre par défaut de l'épingle quand aucune adresse n'est encore placée (Perpignan). */
@@ -45,7 +46,7 @@ export function EventMap({
             kind: "event",
             lat: center.lat,
             lng: center.lng,
-            label: startsAt ? pinDateLabel(startsAt) : "ICI",
+            label: startsAt ? pinDateLabel(startsAt, now()) : "ICI",
             title: label,
           },
         ]);

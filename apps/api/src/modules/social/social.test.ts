@@ -513,39 +513,37 @@ describe("recherche de personnes", () => {
     expect(pub.vehicles.map((v: { label: string }) => v.label)).toContain("Toyota Supra MK4");
     expect(bySupra.text).not.toMatch(/AA-\d{3}-ZZ/);
 
-    // Génération : ni le privé (sa génération n'est pas publique) ni le suspendu ne ressortent.
-    const byGen = await call(me, "GET", `/users/search?generationId=${supra.generationId}`);
-    expect(byGen.json.items.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Supra_Fan"]);
-    // Modèle : le privé ressort (marque + modèle sont publics).
-    const byModel = await call(me, "GET", `/users/search?modelId=${supra.modelId}`);
-    expect(byModel.json.items.map((i: { pseudo: string }) => i.pseudo).sort()).toEqual(["Priv_Owner", "Supra_Fan"]);
-    // Département : seul le profil public (le département du privé ne se devine pas).
-    const byDept = await call(me, "GET", "/users/search?department=11");
-    expect(byDept.json.items.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Supra_Fan"]);
-    const byDept66 = await call(me, "GET", "/users/search?department=66");
-    expect(byDept66.json.items.map((i: { pseudo: string }) => i.pseudo)).not.toContain("Priv_Owner");
+    // Lot R2, tour 2 (plus aucun annuaire) : un filtre seul ne liste personne, il affine une recherche par texte.
+    for (const filter of [
+      `generationId=${supra.generationId}`,
+      `modelId=${supra.modelId}`,
+      "department=11",
+      "grade=route",
+      `categoryId=${ref.jdm.id}`,
+    ]) {
+      expect((await call(me, "GET", `/users/search?${filter}`)).status, filter).toBe(400);
+    }
+    const found = async (query: string) =>
+      (await call(me, "GET", `/users/search?q=Toyota&${query}`)).json.items
+        .map((i: { pseudo: string }) => i.pseudo)
+        .sort();
+    // « Toyota » trouve les deux propriétaires (marque et modèle publics) ; les filtres de détail (génération, modèle,
+    // département, grade, centre d'intérêt) ne portent que sur les comptes au détail visible : jamais le privé inconnu.
+    expect(await found("")).toEqual(["Priv_Owner", "Supra_Fan"]);
+    expect(await found(`generationId=${supra.generationId}`)).toEqual(["Supra_Fan"]);
+    expect(await found(`modelId=${supra.modelId}`)).toEqual(["Supra_Fan"]);
+    expect(await found("department=11")).toEqual(["Supra_Fan"]);
+    expect(await found("department=66")).not.toContain("Priv_Owner");
     // Une fois amis, tout ressort pour le privé.
     await befriend(me, b);
-    expect(
-      (await call(me, "GET", "/users/search?department=66")).json.items.map((i: { pseudo: string }) => i.pseudo),
-    ).toContain("Priv_Owner");
-    expect(
-      (await call(me, "GET", `/users/search?generationId=${supra.generationId}`)).json.items
-        .map((i: { pseudo: string }) => i.pseudo)
-        .sort(),
-    ).toEqual(["Priv_Owner", "Supra_Fan"]);
+    expect(await found("department=66")).toContain("Priv_Owner");
+    expect(await found(`generationId=${supra.generationId}`)).toEqual(["Priv_Owner", "Supra_Fan"]);
     // Grade minimum.
     await db.update(profiles).set({ grade: "sport" }).where(eq(profiles.userId, a.id));
-    expect(
-      (await call(me, "GET", "/users/search?grade=route")).json.items.map((i: { pseudo: string }) => i.pseudo),
-    ).toEqual(["Supra_Fan"]);
+    expect(await found("grade=route")).toEqual(["Supra_Fan"]);
     // Centre d'intérêt.
     await db.insert(profileInterests).values({ userId: a.id, categoryId: ref.jdm.id });
-    expect(
-      (await call(me, "GET", `/users/search?categoryId=${ref.jdm.id}`)).json.items.map(
-        (i: { pseudo: string }) => i.pseudo,
-      ),
-    ).toEqual(["Supra_Fan"]);
+    expect(await found(`categoryId=${ref.jdm.id}`)).toEqual(["Supra_Fan"]);
     void categories;
   });
 

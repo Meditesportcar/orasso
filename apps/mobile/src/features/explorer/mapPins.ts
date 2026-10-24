@@ -3,7 +3,14 @@
 // Lot 44 : l'épingle porte son genre (étiquette datée d'un événement, plaque d'un pro) et son texte ; le fond de carte
 // est le style Orasso du paquet de style (`mapStyle`, repli raster compris).
 import { pinDateLabel } from "@orasso/design-system";
-import { type EventCard, eventFormatLabels, type LatLng, type ProCard, proActivityLabels } from "@orasso/shared";
+import {
+  type EventCard,
+  eventFormatLabels,
+  type LatLng,
+  type ProCard,
+  proActivityLabels,
+  shownStart,
+} from "@orasso/shared";
 import type { ReactNode } from "react";
 
 export type MapPin = {
@@ -25,14 +32,15 @@ export type MapView = { center: LngLat; zoom: number } | { bounds: [number, numb
 /** Centre de la France métropolitaine, quand il n'y a rien à montrer. */
 export const FRANCE_VIEW: MapView = { center: [2.35, 46.6], zoom: 4.6 };
 
-export function eventPins(events: EventCard[]): MapPin[] {
+/** Lot R2 (maquette R2.8) : l'étiquette dit la date en clair (« AUJOURD'HUI », « DEMAIN », « DIM. 1 NOV. »). */
+export function eventPins(events: EventCard[], now: Date): MapPin[] {
   return events.flatMap((e) =>
     e.lat !== null && e.lng !== null
       ? [
           {
             id: e.id,
             kind: "event" as const,
-            label: pinDateLabel(e.startsAt),
+            label: pinDateLabel(shownStart(e.startsAt, now), now),
             lat: e.lat,
             lng: e.lng,
             title: e.title,
@@ -81,6 +89,22 @@ export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[]): MapView {
   // Toutes au même endroit : un cadre vide ne se montre pas, on zoome comme pour une seule.
   if (west === east && south === north) return { center: [west, south], zoom: 10 };
   return { bounds: [west, south, east, north] };
+}
+
+/**
+ * Relecture du lot R1 : les épingles se recalculent quand les données qu'elles montrent changent (adresse, coordonnées,
+ * date, titre corrigés), pas seulement quand la liste des identifiants change.
+ */
+export const eventPinsData = (events: readonly EventCard[]): string =>
+  events.map((e) => [e.id, e.lat, e.lng, e.startsAt, e.title, e.city, e.format].join("~")).join("|");
+export const proPinsData = (pros: readonly ProCard[]): string =>
+  pros.map((p) => [p.slug, p.lat, p.lng, p.name, p.city, p.activities.join("+")].join("~")).join("|");
+
+/** Le genre d'une pastille de groupe (« 2 ÉVÉNEMENTS », « 3 PROS »). */
+export function groupKind(pins: readonly Pick<MapPin, "kind">[]): "event" | "pro" | undefined {
+  if (pins.every((p) => p.kind === "event")) return "event";
+  if (pins.every((p) => p.kind === "pro")) return "pro";
+  return undefined;
 }
 
 /** Clé qui change quand les épingles changent : la carte repart alors de la vue qui convient. */

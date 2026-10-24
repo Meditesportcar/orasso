@@ -295,7 +295,8 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     if (await later.isVisible().catch(() => false)) await later.click();
     await shot(page, `explorer-${theme}`);
     if (AFTER) {
-      await expect(page.getByTestId("sort-open")).toContainText("Distance");
+      // Lot R2 : tri par date par défaut ; « Où chercher ? » (Mon coin, Ailleurs, Partout en France) remplace « Autour de ».
+      await expect(page.getByTestId("sort-open")).toContainText("Par date");
       await expect(page.getByTestId("sort-line")).toContainText("événement");
       await expect(page.getByTestId("list-map-toggle")).toBeVisible();
       await audit(page);
@@ -307,42 +308,41 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés");
       // Le dernier publié de la recette arrive en tête.
       await expect(page.getByTestId("event-row").first()).toContainText(open6.title, { timeout: 30_000 });
-      // Tour 2 : « Autour de… » (temporaire) : Ailleurs… le 75, une distance, puis « Revenir à mon coin ».
+      // « Où chercher ? » : Mon coin, puis Ailleurs… le 75, puis retour à Mon coin (pastille en contour).
       await expect(page.getByTestId("around-open")).toContainText("Mon coin");
-      await expect(page.getByTestId("around-back")).toHaveCount(0);
       await page.getByTestId("around-open").click();
       await expect(page.getByTestId("around-sheet")).toBeVisible();
       await page.getByTestId("around-elsewhere").click();
       await page.getByTestId("around-find").fill("75");
       await shot(page, `explorer-autour-${theme}`);
       await page.getByRole("radio", { name: /^75 · / }).click();
+      await page.getByTestId("where-apply").click();
       await expect(page.getByTestId("around-sheet")).toHaveCount(0);
-      await expect(page.getByTestId("around-open")).toContainText("Le 75");
-      await expect(page.getByTestId("sort-line")).toContainText("distances depuis le centre du 75", {
-        timeout: 30_000,
-      });
-      await page.getByTestId("around-open").click();
-      await page.getByRole("radio", { name: "50 km" }).click();
-      await page.getByTestId("sheet-close").last().click();
-      await expect(page.getByTestId("sort-line")).toContainText("à 50 km au plus", { timeout: 30_000 });
+      await expect(page.getByTestId("around-open")).toContainText("(75)");
+      await expect(page.getByTestId("sort-line")).toContainText("(75)", { timeout: 30_000 });
       await shot(page, `explorer-ailleurs-${theme}`);
-      await page.getByTestId("around-back").click();
+      await page.getByTestId("around-open").click();
+      await page.getByTestId("around-mine").click();
+      await page.getByTestId("where-apply").click();
       await expect(page.getByTestId("around-open")).toContainText("Mon coin");
-      await expect(page.getByTestId("around-back")).toHaveCount(0);
-      await expect(page.getByTestId("sort-line")).not.toContainText("75");
+      // Pastille en contour : son fond n'est plus celui de l'encre (celui du segment actif).
+      const fond = (id: string) => page.getByTestId(id).evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(await fond("around-open")).not.toBe(await fond("segment-evenements"));
+      await expect(page.getByTestId("sort-line")).not.toContainText("(75)");
       // Gardé pour la prochaine visite.
       await goto(page, "/explorer");
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés", { timeout: 30_000 });
       await page.getByTestId("sort-open").click();
       await page.getByTestId("sort-distance").click();
+      // Lot R2 : la carte est dans l'onglet (plus de route /carte), avec la même bascule.
       await page.getByTestId("map-toggle").click();
-      await expect(page).toHaveURL(/\/carte/, { timeout: 30_000 });
       const onMap = page.getByTestId("map-screen");
-      await expect(onMap.getByTestId("list-map-toggle")).toBeVisible();
+      await expect(onMap).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("list-map-toggle")).toBeVisible();
       await page.waitForTimeout(2500);
       await shot(page, `carte-${theme}`);
-      await onMap.getByTestId("list-toggle").click();
-      await expect(page).toHaveURL(/explorer/, { timeout: 30_000 });
+      await page.getByTestId("list-toggle").click();
+      await expect(page.getByTestId("sort-line")).toBeVisible({ timeout: 30_000 });
     }
     await ctx.close();
   }

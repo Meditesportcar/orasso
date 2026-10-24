@@ -90,4 +90,5 @@ export const pageQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().max(200).optional(),
 });
-export type Page<T> = { items: T[]; nextCursor: string | null };
+/** Lot R2 : `total`, le nombre de résultats en tout, seulement quand la liste le demande (`withTotal=1`). */
+export type Page<T> = { items: T[]; nextCursor: string | null; total?: number };

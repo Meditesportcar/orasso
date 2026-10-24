@@ -1,12 +1,10 @@
-// Explorer v2, segment Événements (lot 44, `s-explore`) : la ligne d'ordre (« Tous les événements, du plus proche au
-// plus loin », position refusée → autour du département favori), le nombre de résultats, puis les cartes v2 (la
-// première en vedette avec son affiche) ou la carte stylée avec l'aperçu de l'événement touché. Tri et filtres : API.
-// Lot M4 (maquettes 3.1 à 3.3) : toutes les cartes en portrait (affiche à gauche), le tri choisi (`sort`), la ligne
-// « 14 événements · distances depuis le centre du 66 » (ou « depuis ta position »).
-import { Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, explorerLabels, explorerV2Labels as L, notOver } from "@orasso/shared";
+// Explorer, segment Événements (lot 44, `s-explore`) : la ligne qui dit ce qu'on voit, puis les cartes v2 (affiche à
+// gauche, lot M4). Tri, filtres et lieu : appliqués par l'API.
+// Lot R2 (maquette R2.1) : « 12 événements à venir · jusqu'à 100 km de toi » (le nombre en tout, `withTotal`) ; les
+// cartes d'événement ne changent pas (« parfaites » pour Damien). La carte vit dans `ExplorerMapView`.
+import { archivoAt, Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { type EventCard, explorerLabels, explorerV2Labels as L, notOver, explorerR2Labels as R } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -15,109 +13,73 @@ import { type PosterRect, prefetchEvent, rememberEventCard } from "@/lib/eventPr
 import { LoadError } from "@/ui/LoadError";
 import { EVENT_LIST_BLOCKS, Waiting } from "@/ui/Waiting";
 import { EventCardV2 } from "./EventCardV2";
-import { ExplorerMap } from "./ExplorerMap";
-import { eventPins } from "./mapPins";
 import { activeFilters, type EventFilters, type EventSort, type ExplorerPlace, eventQuery, placeKey } from "./queries";
 import type { ExplorerPosition } from "./useExplorerPosition";
 import { usePaged } from "./usePaged";
 
 const { space2 } = tokens.spacing;
 
-/** La ligne d'ordre au-dessus de la liste. */
-export function sortLine(filters: EventFilters, status: ExplorerPosition["status"], dept: string | null): string {
-  if (filters.affinity) return L.sortAffinity;
-  if (filters.followed) return L.sortFollowed;
-  if (status === "on") return L.sortOn;
-  if (!dept) return L.sortByDate;
-  return status === "denied" ? L.sortDenied(dept) : L.sortAround(dept);
-}
-
-/** Lot M4 : d'où partent les distances (ta position, sinon le centre du département favori). */
-export function distanceBasis(
-  filters: EventFilters,
-  status: ExplorerPosition["status"],
-  dept: string | null,
-  place?: ExplorerPlace,
-): string | null {
-  if (filters.affinity) return L.sortAffinity;
-  if (filters.followed) return L.sortFollowed;
-  // Tour 2 : « Autour de… » et la distance de l'Explorer.
-  const within = place?.radiusKm ? ` · ${L.withinKm(place.radiusKm)}` : "";
-  if (place?.around.kind === "dept") return `${L.fromDeptElsewhere(place.around.code)}${within}`;
-  if (place?.around.kind === "mine" && dept) {
-    return `${status === "denied" ? L.fromDeptDenied(dept) : L.fromDept(dept)}${within}`;
-  }
-  if (place && status === "on") return `${L.fromPosition}${within}`;
-  if (status === "on") return L.fromPosition;
-  if (!dept) return null;
-  return status === "denied" ? L.fromDeptDenied(dept) : L.fromDept(dept);
+/** Ouvrir la fiche tout de suite avec l'aperçu de la carte (lot M3) ; sa lecture part dès le toucher. */
+export function useOpenEvent() {
+  const router = useRouter();
+  return (e: EventCard, poster: PosterRect | null = null) => {
+    rememberEventCard(e, poster);
+    prefetchEvent(e.slug);
+    router.push(`/e/${e.slug}`);
+  };
 }
 
 export function EventsSegment({
   q,
   filters,
   position,
-  dept,
-  view,
-  sort = "distance",
-  fromPrefs = false,
-  settled = true,
+  sort,
   place,
+  placeLine,
+  settled = true,
 }: {
   q: string;
   filters: EventFilters;
   position: ExplorerPosition;
-  dept: string | null;
-  view: "list" | "map";
-  /** Lot M4 : le tri de « Trier : … ▾ ». */
-  sort?: EventSort;
-  /** Lot M4 : la liste s'ouvre filtrée d'après « Tes préférences » (lot M6). */
-  fromPrefs?: boolean;
-  /** Tour 2 : les réglages enregistrés (tri) sont lus ; avant, ni requête ni cache. */
+  sort: EventSort;
+  place: ExplorerPlace;
+  /** « jusqu'à 100 km de toi », « Pyrénées-Orientales (66) », « partout en France ». */
+  placeLine: string;
+  /** Les réglages gardés (lot R1) et les préférences sont lus ; avant, ni requête ni cache. */
   settled?: boolean;
-  /** Tour 2 : « Autour de… » et la distance (absent : la position si elle est là, comme avant). */
-  place?: ExplorerPlace;
 }) {
   const { t } = useTheme();
-  const router = useRouter();
-  const [selected, setSelected] = useState<string[]>([]);
+  const open = useOpenEvent();
   const ready = position.status !== "checking" && position.status !== "asking";
+  const key = placeKey(place);
   const list = usePaged(
     (cursor) =>
-      api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor, sort, place)),
-    [q, filters, position.position, view, sort, place],
+      api.exploreEvents(eventQuery(q, filters, position.position, "list", new Date(nowMs()), cursor, sort, place)),
+    [q, filters, position.position, sort, place],
     q ? 300 : 0,
     ready && settled,
-    // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API. Tour 2 :
-    // une clé par point de départ et distance, jamais pour « Autour de moi » (rien de la position sur l'appareil).
-    settled && !q && activeFilters(filters) === 0 && view === "list" && (!place || placeKey(place) !== null)
-      ? `explore-events.${sort}${place ? `.${placeKey(place)}` : ""}${filters.formats?.length ? `.${filters.formats.join("+")}` : ""}`
+    // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API ; une clé
+    // par lieu, jamais pour « Autour de moi » (rien de la position sur l'appareil).
+    settled && !q && activeFilters(filters) === 0 && key !== null
+      ? `explore-events.${sort}.${key}${filters.formats?.length ? `.${filters.formats.join("+")}` : ""}`
       : undefined,
   );
-  // Lot R1 : un événement terminé ne se montre plus (liste et carte), même lu du cache d'hier (l'API l'écarte déjà).
+  // Lot R1 : un événement terminé ne se montre plus, même lu du cache d'hier (l'API l'écarte déjà).
   const items = notOver(list.items ?? [], new Date(nowMs()));
-  const itemsKey = items.map((e) => e.id).join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: les repères changent quand la liste affichée change
-  const pins = useMemo(() => eventPins(items), [itemsKey]);
-  const picked: EventCard[] = items.filter((e) => selected.includes(e.id));
-  // Lot M3 : la fiche s'ouvre tout de suite avec la carte (aperçu), sa lecture part dès le toucher.
-  const open = (e: EventCard, poster: PosterRect | null = null) => {
-    rememberEventCard(e, poster);
-    prefetchEvent(e.slug);
-    router.push(`/e/${e.slug}`);
-  };
+  const count = list.total ?? items.length;
 
   return (
     <>
-      {/* `.xcount` : « 14 événements · distances depuis le centre du 66 · filtrés selon tes préférences ». */}
-      <View style={styles.sortline} testID="sort-line">
-        <Text variant="caption" color={t.color.inkMuted} style={styles.sortText}>
-          {[
-            list.items ? L.count(items.length, list.hasMore) : null,
-            distanceBasis(filters, position.status, dept, place),
-            fromPrefs ? L.fromPrefs : null,
-          ]
-            .filter(Boolean)
+      {/* `.xline` : « 12 événements à venir · jusqu'à 100 km de toi ». */}
+      <View style={styles.line} testID="sort-line">
+        <Text variant="caption" color={t.color.inkMuted} style={styles.lineText}>
+          {list.items ? (
+            <Text variant="caption" color={t.color.ink} style={styles.lineCount}>
+              {R.eventsLine(count, list.total === null && list.hasMore)}
+            </Text>
+          ) : null}
+          {[list.items ? "" : null, placeLine, filters.affinity ? L.sortAffinity : null]
+            .filter((x) => x !== null)
             .join(" · ")}
         </Text>
       </View>
@@ -129,45 +91,16 @@ export function EventsSegment({
       ) : null}
       {list.items && items.length === 0 ? <EmptyState title={L.emptyTitle} text={L.emptyText} /> : null}
 
-      {view === "map" && list.items ? (
-        <ExplorerMap
-          pins={pins}
-          me={position.position}
-          selectedId={selected.length === 1 ? selected[0] : null}
-          onSelect={(p) => setSelected([p.id])}
-          onSelectGroup={(group) => setSelected(group.map((p) => p.id))}
-        >
-          {picked.length > 0 ? (
-            <View style={styles.picked} testID="map-picked">
-              {picked.map((e) => (
-                <EventCardV2
-                  key={e.id}
-                  event={e}
-                  portrait
-                  onPressIn={() => prefetchEvent(e.slug)}
-                  onPress={(r) => open(e, r)}
-                />
-              ))}
-            </View>
-          ) : (
-            <Text variant="caption" color={t.color.inkMuted}>
-              {pins.length > 0 ? L.mapHint : explorerLabels.mapNoPosition}
-            </Text>
-          )}
-        </ExplorerMap>
-      ) : null}
-      {view === "list"
-        ? items.map((event) => (
-            <EventCardV2
-              key={event.id}
-              event={event}
-              portrait
-              onPressIn={() => prefetchEvent(event.slug)}
-              onPress={(r) => open(event, r)}
-            />
-          ))
-        : null}
-      {view === "list" && list.hasMore ? (
+      {items.map((event) => (
+        <EventCardV2
+          key={event.id}
+          event={event}
+          portrait
+          onPressIn={() => prefetchEvent(event.slug)}
+          onPress={(r) => open(event, r)}
+        />
+      ))}
+      {list.hasMore ? (
         <Button
           variant="secondary"
           icon="add"
@@ -183,7 +116,7 @@ export function EventsSegment({
 }
 
 const styles = StyleSheet.create({
-  sortline: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
-  sortText: { flex: 1 },
-  picked: { gap: space2 },
+  line: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
+  lineText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
+  lineCount: { fontSize: 12.5, lineHeight: 17, fontFamily: archivoAt(100, 800) },
 });

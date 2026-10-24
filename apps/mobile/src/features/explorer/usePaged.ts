@@ -15,6 +15,8 @@ import { createRequestGate } from "@/lib/requestGate";
 
 export type Paged<T> = {
   items: T[] | null;
+  /** Lot R2 : le nombre en tout, quand la première page le donne (`withTotal`). */
+  total: number | null;
   hasMore: boolean;
   loadingMore: boolean;
   error: string | null;
@@ -55,6 +57,7 @@ export function usePaged<T>(
   cacheKey?: string,
 ): Paged<T> {
   const [items, setItems] = useState<T[] | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -77,6 +80,7 @@ export function usePaged<T>(
     void cacheGetJson<Page<T>>(cacheKey).then((cached) => {
       if (cancelled || fresh.current || !cached) return;
       setItems(cached.items);
+      setTotal(cached.total ?? null);
       setCursor(cached.nextCursor);
     });
     return () => {
@@ -92,6 +96,7 @@ export function usePaged<T>(
     previousAccount.current = account;
     gate.invalidate();
     setItems(null);
+    setTotal(null);
     setCursor(null);
     setError(null);
   }, [account, gate]);
@@ -108,6 +113,7 @@ export function usePaged<T>(
       lastOk.current = Date.now();
       if (cacheKey) void cacheSetJson(cacheKey, page, scope);
       setItems(page.items);
+      setTotal(page.total ?? null);
       setCursor(page.nextCursor);
       setError(null);
     } catch (e) {
@@ -164,5 +170,5 @@ export function usePaged<T>(
     }
   }, [cursor, gate]);
 
-  return { items, hasMore: cursor !== null, loadingMore, error, reload, loadMore };
+  return { items, total, hasMore: cursor !== null, loadingMore, error, reload, loadMore };
 }

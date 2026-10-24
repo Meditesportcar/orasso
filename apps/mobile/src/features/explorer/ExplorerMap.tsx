@@ -18,6 +18,7 @@ import {
 import {
   ClusterPin,
   chooseMapStyle,
+  clusterLabel,
   clusterPins,
   EventPin,
   GROUP_MAX_ZOOM,
@@ -40,6 +41,7 @@ import { useScrollAssist } from "@/ui/ScrollAssist";
 import { createTouchHold } from "@/ui/scrollHold";
 import {
   type ExplorerMapProps,
+  groupKind,
   type MapPin,
   mapGlyphsOrigin,
   mapHeight,
@@ -173,7 +175,11 @@ export function ExplorerMap({
               return (
                 <Marker key={g.id} id={g.id} lngLat={[g.lng, g.lat]} anchor="bottom" onPress={open}>
                   {stacked ? (
-                    <ClusterPin count={g.items.length} onPress={open} />
+                    <ClusterPin
+                      count={g.items.length}
+                      label={clusterLabel(g.items.length, groupKind(g.items as MapPin[]))}
+                      onPress={open}
+                    />
                   ) : first.kind === "pro" ? (
                     <ProPin label={first.label} accessibilityLabel={first.title} onPress={open} />
                   ) : (

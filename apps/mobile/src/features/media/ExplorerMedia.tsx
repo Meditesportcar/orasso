@@ -76,7 +76,7 @@ export function ExplorerMedia() {
     }
     return ids;
   }, [agenda.data, kept]);
-  const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
+  const pins = useMemo(() => eventPins(list.items ?? [], new Date(nowMs())), [list.items]);
   const picked: EventCard[] = items.filter((e) => selected.includes(e.id));
   const now = new Date(nowMs());
   const open = (slug: string) => router.push(`/e/${slug}`);

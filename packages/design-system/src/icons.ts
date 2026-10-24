@@ -176,6 +176,15 @@ export const iconShapes = {
       "M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13M17 10a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4 15.5a1.6 1.6 0 0 1 2.5-2L8 15",
     ),
   ], // à la main, gestes à deux doigts, `#i-hand`
+  // Lot R2 (maquette « Explorer R2 », 24/10/2026) : la ligne de pastilles de l'Explorer (tri ⇅, filtres) et la feuille
+  // « Quel métier ? » (rouleau de peinture, siège, haut-parleur, grille « Tous les métiers ») ; ajout consigné dans le
+  // journal des choix (lot R2).
+  sort: [p("M7 4v16M3.5 7.5 7 4l3.5 3.5M17 20V4M13.5 16.5 17 20l3.5-3.5")], // trier, `#i-sort`
+  filter: [p("M4 6h16M7 12h10M10 18h4")], // filtres
+  roller: [r(3, 3, 15, 6, 1.5), p("M18 6h3v5h-9v3"), r(10, 14, 4, 7, 1)], // carrosserie et peinture, `#i-roller`
+  seat: [p("M7 3h4a2 2 0 0 1 2 2l-.8 8H18a2 2 0 0 1 2 2v3H6.2L5 5a2 2 0 0 1 2-2z"), p("M8 18v3M17 18v3")], // sellerie
+  speaker: [r(5, 2, 14, 20, 2), c(12, 14, 4), c(12, 6.5, 1)], // audio et électronique, `#i-speaker`
+  grid: [r(4, 4, 6, 6, 1.5), r(14, 4, 6, 6, 1.5), r(4, 14, 6, 6, 1.5), r(14, 14, 6, 6, 1.5)], // tous les métiers
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;
@@ -219,6 +228,22 @@ export const weatherIcons = {
   snow: "weatherSnow",
   thunderstorm: "weatherThunderstorm",
   wind: "weatherWind",
+} as const satisfies Record<string, IconName>;
+
+/** Lot R2 (feuille « Quel métier ? ») : l'icône de chaque métier d'une fiche pro (`proActivities` de `@orasso/shared`). */
+export const proActivityIcons = {
+  garage: "wrench",
+  preparation: "power",
+  detailing: "drop",
+  covering: "layers",
+  parts: "gear",
+  tyres: "rim",
+  bodywork: "roller",
+  tint: "weatherClear",
+  upholstery: "seat",
+  audio: "speaker",
+  inspection: "shield",
+  other: "more",
 } as const satisfies Record<string, IconName>;
 
 /** Icônes réservées à un usage précis (README Icons) : à ne pas employer ailleurs. */

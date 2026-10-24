@@ -1,143 +1,169 @@
-// Explorer v2 (lot 44, prototype DA v2 `s-explore`, validé par Damien le 19/10/2026 ; écran partagé par les onglets
-// Explorer de l'exposant et du visiteur, lot 40). Un en-tête de deux lignes : la recherche et l'état de la position ;
-// les segments Événements · Pros · Personnes et crews, « Filtres » replié et la bascule Carte. Position demandée à la
-// première ouverture ; refusée, petite icône rouge et repli sur le département favori. Par défaut tout, du plus proche
-// au plus loin. La recherche de premier niveau (`app/recherche.tsx`) renvoie ici par « Voir tout » (segment, texte).
-// Lot C2a (artefact DA v2 `s-explore`) : pas de grand titre ; en-tête `.exhead` (champ de 48 px rayon 14 avec
-// « Ma position » dedans, puis la rangée de puces Événements · Pros · Personnes et crews · Filtres · Carte) ;
-// « Personnes et crews » ouvre la feuille `sh-people` ; « Carte » ouvre la carte en écran plein (`s-map`, flux) ;
-// la demande de position est la carte crème `.locask` (phrase en casse normale).
-// Lot M4 (maquettes 3.1 à 3.3, « parfait » pour Damien) : sous les puces, « Trier : Distance ▾ » (un vrai sélecteur,
-// dans une feuille, gardé pour les prochaines visites) et « Filtres » avec le nombre de filtres actifs ; la bascule
-// « Liste | Carte » flotte au-dessus de la barre d'onglets, toujours visible. Préférences du lot M6 : voir `prefsFilters`.
-// Tour 2 (décision de Damien du 23/10) : « Autour de… » à côté du tri (Mon coin, Autour de moi, Ailleurs…) et une
-// distance propre à l'Explorer avec « Partout en France », « Revenir à mon coin ».
-// Lot R1 (retour de Damien du 24/10, il remplace « temporaires » du tour 2) : segment, tri, « Autour de… », distance et
-// filtres restent d'un onglet à l'autre et après un redémarrage, rangés par compte (`explorerChoice.ts`) ; « Autour de
-// moi » ne garde que le mode, jamais la position.
+// Explorer (lot 44, prototype DA v2 `s-explore` ; écran partagé par les onglets Explorer de l'exposant et du visiteur,
+// lot 40). La recherche de premier niveau (`app/recherche.tsx`) renvoie ici par « Voir tout » (segment, texte).
+// Lot R2 (maquette « Explorer R2 », validée par Damien le 24/10 : « Parfait ! Juste l'entête, on garde toujours
+// Orasso ») : un onglet, mode A, la bande ORASSO toujours en haut ; dessous, la même structure dans les trois segments :
+// le segment (Événements, Pros, Personnes et crews), la recherche du segment actif, puis une ligne de trois pastilles
+// qui montrent leur valeur (contour : tes réglages habituels ; encre : une valeur choisie ; nombre moutarde : les
+// filtres actifs). Une seule feuille « Où chercher ? » (Autour de moi et sa distance, Mon coin, Ailleurs, Partout en
+// France) remplace « Ma position », « Autour de… » et « Revenir à mon coin » ; le lieu est commun aux Événements et aux
+// Pros. Tri par date (événements), par distance (pros). Les Pros par métier, un seul à la fois. Personnes et crews :
+// aucun annuaire (suggestions publiques, recherche). La carte vit dans l'onglet, avec la frise des dates.
+// Lot R1 : tout le choix est gardé pour le compte (`explorerChoice.ts`), jamais une position.
+import { Icon, type IconName, TAB_BAR_SPACE, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  Chip,
-  ChipRow,
-  departmentChoices,
-  departmentLabel,
-  Icon,
-  type IconName,
-  TAB_BAR_SPACE,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
-import {
-  eventFormatLabels,
-  eventFormats,
-  explorerLabels,
+  type ExplorerWhere,
+  effectiveWhere,
+  gradeLabels,
+  grades,
+  habitualWhere,
   explorerV2Labels as L,
-  preferenceFilterCount,
+  type ProActivity,
+  type ProActivityCounts,
+  proActivityLabels,
+  explorerR2Labels as R,
+  sameWhere,
 } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { EventsSegment } from "@/features/explorer/EventsSegment";
-import { PeopleSheetBody } from "@/features/explorer/PeopleSheet";
+import { EventsMapView, ProsMapView } from "@/features/explorer/ExplorerMapView";
+import { PeopleSegment } from "@/features/explorer/PeopleSegment";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
 import { SmallButton } from "@/features/sorties/bits";
-import { cacheGetJson, cacheScope, cacheSetJson, kvDel, kvGet } from "@/lib/kv";
+import { api } from "@/lib/api";
+import { nowMs } from "@/lib/clock";
+import { cacheGetJson, cacheScope, cacheSetJson, kvDel } from "@/lib/kv";
 import { usePreferences } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
-import { AppSheet } from "@/ui/AppSheet";
-import { TabScreen } from "@/ui/Screens";
+import { useApi } from "@/lib/useApi";
+import { TabStage } from "@/ui/Screens";
+import { ExSearch, Pill, PillRow, SegmentBar } from "./ExplorerHead";
+import {
+  type ChoiceOption,
+  ChoiceSheet,
+  deptLong,
+  EventFiltersSheet,
+  type FiltersDraft,
+  JobSheet,
+  PeopleFiltersSheet,
+  PeopleWhereSheet,
+  WhereSheet,
+} from "./ExplorerSheets";
 import {
   CHOICE_KEY,
   defaultChoice,
   EXPLORER_SEGMENTS,
   type ExplorerSegment,
+  type PeopleFilters,
+  type PeopleShow,
+  type PeopleWhere,
+  type ProSort,
   readChoice,
   storeChoice,
 } from "./explorerChoice";
+import { peopleView } from "./peopleLoad";
 import {
-  type Around,
   activeFilters,
   EVENT_SORTS,
   type EventFilters,
   type EventSort,
   type ExplorerPlace,
-  effectiveAround,
-  emptyEventFilters,
-  emptyProFilters,
-  type ProFilters,
+  eventQuery,
   preferredFormats,
-  RADII,
+  proQuery,
   SORT_KEY,
-  type When,
 } from "./queries";
 import { type ExplorerPosition, useExplorerPosition } from "./useExplorerPosition";
 
-const { space1, space2, space3, space4 } = tokens.spacing;
+const { space2, space3, space4 } = tokens.spacing;
 
-type Segment = ExplorerSegment;
-const SEGMENTS: readonly Segment[] = EXPLORER_SEGMENTS;
-const WHEN: { id: When; label: string }[] = [
-  { id: "all", label: L.whenAll },
-  { id: "weekend", label: L.whenWeekend },
-  { id: "month", label: L.whenMonth },
+type Sheet = "where" | "sort" | "filters" | "job" | "proSort" | "peopleWhere" | "show" | "peopleFilters" | null;
+
+const SORT_ICONS: Record<EventSort, IconName> = {
+  date: "calendar",
+  distance: "place",
+  recent: "spark",
+  seats: "vehicle",
+};
+const EVENT_SORT_OPTIONS: ChoiceOption<EventSort>[] = EVENT_SORTS.map((s) => ({
+  id: s,
+  icon: SORT_ICONS[s],
+  label: L.sorts[s]?.label ?? s,
+  hint: L.sorts[s]?.hint,
+}));
+const PRO_SORT_OPTIONS: ChoiceOption<ProSort>[] = [
+  { id: "distance", icon: "place", label: R.proSorts.distance?.label ?? "", hint: R.proSorts.distance?.hint },
+  { id: "name", icon: "list", label: R.proSorts.name?.label ?? "", hint: R.proSorts.name?.hint },
 ];
+const SHOW_OPTIONS: ChoiceOption<PeopleShow>[] = [
+  { id: "all", icon: "explore", label: R.showAll },
+  { id: "people", icon: "profile", label: R.showPeople },
+  { id: "crews", icon: "staff", label: R.showCrews },
+];
+const SHOW_LABEL: Record<PeopleShow, string> = { all: R.showAll, people: R.showPeople, crews: R.showCrews };
+
+/** Le lieu, en clair, pour la ligne de la liste. */
+function placeLineOf(where: ExplorerWhere, coin: readonly string[]): string {
+  if (where.kind === "me") return R.lineMe(where.km);
+  if (where.kind === "mine") return coin.map(deptLong).join(", ");
+  if (where.kind === "dept") return deptLong(where.code);
+  return R.lineAll;
+}
+
+/** Le lieu, sur sa pastille. */
+function wherePill(where: ExplorerWhere, coin: readonly string[]): string {
+  if (where.kind === "me") return R.pillMe(where.km);
+  if (where.kind === "mine") return R.pillMine(coin);
+  if (where.kind === "dept") return deptLong(where.code);
+  return R.pillAll;
+}
+
+const whereId = (w: ExplorerWhere) => (w.kind === "me" ? `me${w.km}` : w.kind === "dept" ? `d${w.code}` : w.kind);
 
 export function ExplorerScreen() {
   const params = useLocalSearchParams<{ segment?: string; q?: string }>();
-  const fromParams = (SEGMENTS as readonly string[]).includes(params.segment ?? "")
-    ? (params.segment as Segment)
-    : "evenements";
-  const router = useRouter();
-  const [segment, setSegment] = useState<Segment>(fromParams);
-  // « Voir tout » d'une recherche de personnes : la feuille s'ouvre directement.
-  const [people, setPeople] = useState(params.segment === "personnes");
-  const [q, setQ] = useState(typeof params.q === "string" ? params.q : "");
-  const [filters, setFilters] = useState<EventFilters>(emptyEventFilters);
-  const [proFilters, setProFilters] = useState<ProFilters>(emptyProFilters);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  // Lot M4 : la carte s'ouvre en écran plein (`/carte`) ; la liste reste la vue de cet écran.
-  const view: "list" | "map" = "list";
-  // Lot M4 : le tri choisi ; lot R1 : gardé avec tout le choix de l'Explorer (plus bas).
-  const [sort, setSort] = useState<EventSort>("distance");
-  const [sorting, setSorting] = useState(false);
-  const chooseSort = (next: EventSort) => {
-    setSort(next);
-    setSorting(false);
-  };
-  const openMap = () =>
-    // La carte s'ouvre en écran plein (`s-map`, flux sans barre) et garde les filtres de la liste (relecture du lot C2a).
-    router.push({
-      pathname: "/carte",
-      params: { segment, q, filtres: JSON.stringify(segment === "pros" ? proFilters : filters) },
-    });
+  const fromParams = (EXPLORER_SEGMENTS as readonly string[]).includes(params.segment ?? "")
+    ? (params.segment as ExplorerSegment)
+    : null;
+  const { t } = useTheme();
+  const insets = useSafeAreaInsets();
   const me = useSession().me;
-  // Tour 2 (lot M6 fusionné) : « Tes préférences » sont le point de départ de l'Explorer, jamais une limite : Mon coin
-  // (leurs départements), la distance habituelle (ou partout) et les types préférés. Ce qu'on choisit ici ne les change pas.
+  const [segment, setSegment] = useState<ExplorerSegment>(fromParams ?? "evenements");
+  // La recherche dépend du segment (son texte d'aide aussi) : un texte par segment.
+  const [qs, setQs] = useState<Record<ExplorerSegment, string>>(() => ({
+    evenements: "",
+    pros: "",
+    personnes: "",
+    ...(fromParams && typeof params.q === "string" ? { [fromParams]: params.q } : {}),
+  }));
+  const q = qs[segment];
+  const setQ = (text: string) => setQs((all) => ({ ...all, [segment]: text }));
+  const [view, setView] = useState<"list" | "map">("list");
+  const [sheet, setSheet] = useState<Sheet>(null);
+
+  const [where, setWhere] = useState<ExplorerWhere | null>(defaultChoice.where);
+  const [sort, setSort] = useState<EventSort>(defaultChoice.sort);
+  const [filters, setFilters] = useState<Omit<EventFilters, "formats">>(defaultChoice.filters);
+  const [prefFormatsOn, setPrefFormatsOn] = useState(defaultChoice.prefFormatsOn);
+  const [job, setJob] = useState<ProActivity | "">(defaultChoice.job);
+  const [proSort, setProSort] = useState<ProSort>(defaultChoice.proSort);
+  const [peopleWhere, setPeopleWhere] = useState<PeopleWhere | null>(defaultChoice.peopleWhere);
+  const [show, setShow] = useState<PeopleShow>(defaultChoice.show);
+  const [people, setPeople] = useState<PeopleFilters>(defaultChoice.people);
+
+  // « Tes préférences » (lot M6) : le point de départ de l'Explorer, jamais une limite. Ce qu'on choisit ici ne les change pas.
   const { preferences: prefs, loading: prefsLoading, error: prefsError } = usePreferences();
   const prefsRead = !me || prefs !== null || prefsError !== null || !prefsLoading;
   const coin = prefs?.departments.length ? prefs.departments : (me?.profile.departments ?? []);
-  const dept = coin[0] ?? null;
-  // Les types des préférences s'appliquent tant qu'aucun format n'est choisi à la main (« Revenir à mon coin » les rend).
-  const [prefFormatsOn, setPrefFormatsOn] = useState(true);
-  // Une recherche par texte cherche partout : les préférences cadrent la découverte, jamais une recherche.
-  const searching = q.trim().length > 0;
-  const prefFormats = prefFormatsOn && !searching ? preferredFormats(prefs?.eventFormats) : [];
+  const coinKey = coin.join(",");
   const position = useExplorerPosition();
-  // Tour 2 : « Autour de… » et la distance de l'Explorer. Temporaires : en mémoire de l'écran seulement (jamais le
-  // profil, les préférences ni l'appareil). `null` : pas encore choisi (la position si elle est activée, sinon Mon coin).
-  const [chosen, setChosen] = useState<Around | null>(null);
-  // `undefined` : la distance habituelle des préférences (`null` = partout en France).
-  const [radiusChoice, setRadiusChoice] = useState<number | null | undefined>(undefined);
-  const [aroundOpen, setAroundOpen] = useState(false);
+  const positionOn = position.status === "on" && position.position !== null;
 
-  // Lot R1 : le choix gardé (segment, tri, « Autour de… », distance, filtres), relu pour le compte connecté. La liste
-  // attend cette lecture (pas de première requête au mauvais tri, pas de liste qui saute d'un cache à l'autre).
+  // Lot R1 : le choix gardé, relu pour le compte connecté. La liste attend cette lecture.
   const meId = me?.user.id ?? null;
   const [choiceRead, setChoiceRead] = useState(false);
-  // Le compte dont l'écran porte le choix : rien ne s'écrit sous un autre compte.
   const choiceScope = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: relu à l'ouverture et quand le compte change
   useEffect(() => {
@@ -146,22 +172,21 @@ export function ExplorerScreen() {
     const scope = cacheScope();
     (async () => {
       const saved = readChoice(await cacheGetJson<unknown>(CHOICE_KEY));
-      // Avant le lot R1, seul le tri était gardé (sur l'appareil, sans compte) : il sert une fois, puis s'efface.
-      const legacy = saved ? null : await kvGet(SORT_KEY);
       if (!alive) return;
-      const choice = saved ?? {
-        ...defaultChoice,
-        sort: (EVENT_SORTS as readonly string[]).includes(legacy ?? "") ? (legacy as EventSort) : defaultChoice.sort,
-      };
-      if (legacy !== null) void kvDel(SORT_KEY);
+      // Avant le lot R1, seul le tri était gardé (sur l'appareil, sans compte) : il s'efface.
+      if (!saved) void kvDel(SORT_KEY);
+      const choice = saved ?? defaultChoice;
       // « Voir tout » d'une recherche arrive avec son segment : il l'emporte.
-      if (!params.segment) setSegment(choice.segment);
+      if (!fromParams) setSegment(choice.segment);
+      setWhere(choice.where);
       setSort(choice.sort);
-      setChosen(choice.around);
-      setRadiusChoice(choice.radius);
-      setFilters((f) => ({ ...f, ...choice.filters }));
+      setFilters(choice.filters);
       setPrefFormatsOn(choice.prefFormatsOn);
-      setProFilters(choice.pros);
+      setJob(choice.job);
+      setProSort(choice.proSort);
+      setPeopleWhere(choice.peopleWhere);
+      setShow(choice.show);
+      setPeople(choice.people);
     })()
       .catch(() => undefined)
       .finally(() => {
@@ -175,402 +200,375 @@ export function ExplorerScreen() {
   }, [meId]);
   useEffect(() => {
     if (!choiceRead || !choiceScope.current) return;
-    const { format, when, affinity, followed } = filters;
     void cacheSetJson(
       CHOICE_KEY,
-      storeChoice({
-        segment,
-        sort,
-        around: chosen,
-        radius: radiusChoice,
-        filters: { format, when, affinity, followed },
-        prefFormatsOn,
-        pros: proFilters,
-      }),
+      storeChoice({ segment, where, sort, filters, prefFormatsOn, job, proSort, peopleWhere, show, people }),
       choiceScope.current,
     );
-  }, [choiceRead, segment, sort, chosen, radiusChoice, filters, prefFormatsOn, proFilters]);
-
-  const around = effectiveAround(chosen, position.status === "on" && position.position !== null);
-  // La distance habituelle vaut autour de Mon coin (pas autour de la position ni d'un autre département), hors recherche.
-  const radiusFromPrefs = radiusChoice === undefined && prefs !== null && !searching && around.kind === "mine";
-  const radiusKm = radiusChoice !== undefined ? radiusChoice : radiusFromPrefs ? (prefs?.radiusKm ?? null) : null;
-  const aroundId = around.kind === "dept" ? `d${around.code}` : around.kind;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: le point de départ change quand son identifiant change
-  const place: ExplorerPlace = useMemo(() => ({ around, radiusKm }), [aroundId, radiusKm]);
-  const enableMyPosition = () => {
-    setChosen({ kind: "me" });
-    void position.request();
-  };
-  const chooseAround = (next: Around) => {
-    if (next.kind === "me") {
-      enableMyPosition();
-      return;
-    }
-    setChosen(next);
-    // La position ne sert plus : elle quitte la mémoire de l'écran.
-    if (position.status === "on") position.clear();
-  };
-  const backHome = () => {
-    chooseAround({ kind: "mine" });
-    setRadiusChoice(undefined);
-    setPrefFormatsOn(true);
-    setFilters((f) => ({ ...f, format: "" }));
-  };
-  const away = around.kind !== "mine" || (prefs ? radiusChoice !== undefined || !prefFormatsOn : radiusKm !== null);
-  const prefFormatsKey = prefFormats.join(",");
-  const listFilters = useMemo(
-    () => ({ ...filters, formats: prefFormatsKey ? (prefFormatsKey.split(",") as EventFilters["formats"]) : [] }),
-    [filters, prefFormatsKey],
-  );
-  // Pastille « Filtres » : les filtres choisis et ceux qui viennent des préférences (types, distance).
-  const fromPrefs =
-    prefs !== null &&
-    preferenceFilterCount({ eventFormats: prefFormats, radiusKm: radiusFromPrefs ? prefs.radiusKm : null }) > 0;
+  }, [choiceRead, segment, where, sort, filters, prefFormatsOn, job, proSort, peopleWhere, show, people]);
 
   // « Voir tout » d'une recherche : on arrive avec un segment et un texte.
   useEffect(() => {
+    if (!fromParams) return;
     setSegment(fromParams);
-    if (params.segment === "personnes") setPeople(true);
-    if (typeof params.q === "string") setQ(params.q);
-  }, [fromParams, params.segment, params.q]);
+    setView("list");
+    if (typeof params.q === "string") setQs((all) => ({ ...all, [fromParams]: params.q as string }));
+  }, [fromParams, params.q]);
 
-  const count =
-    activeFilters(filters) +
-    (prefs
-      ? preferenceFilterCount({ eventFormats: prefFormats, radiusKm: radiusFromPrefs ? prefs.radiusKm : null })
-      : 0);
-  const chip = (
-    label: string,
-    on: boolean,
-    onPress: () => void,
-    testID?: string,
-    a11y: "tab" | "toggle" | "button" = "tab",
-  ) => (
-    <View testID={testID}>
-      <Chip accessibilityRole={a11y} selected={on} onPress={onPress}>
-        {label}
-      </Chip>
-    </View>
+  // Le lieu : le choix fait, sinon les réglages habituels ; une recherche par texte cherche partout tant que le lieu n'a
+  // pas été choisi (lot R1).
+  const searching = q.trim().length > 0;
+  const habitual = habitualWhere(prefs ? { radiusKm: prefs.radiusKm } : null, positionOn, coin.length > 0);
+  const effective = effectiveWhere(where, habitual, { positionOn, hasCoin: coin.length > 0, searching });
+  const effectiveId = whereId(effective);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le lieu change quand son identifiant change
+  const place: ExplorerPlace = useMemo(() => ({ where: effective, coin }), [effectiveId, coinKey]);
+  const whereSet = where !== null && !sameWhere(effective, habitual);
+  const placeLine = placeLineOf(effective, coin);
+
+  // Les types des préférences s'appliquent tant qu'aucun format n'est choisi à la main ; jamais à une recherche.
+  const prefTypes = preferredFormats(prefs?.eventFormats);
+  const prefFormats = prefFormatsOn && !filters.format && !searching ? prefTypes : [];
+  const prefFormatsKey = prefFormats.join(",");
+  const listFilters = useMemo<EventFilters>(
+    () => ({ ...filters, formats: prefFormatsKey ? (prefFormatsKey.split(",") as EventFilters["formats"]) : [] }),
+    [filters, prefFormatsKey],
   );
-  return (
-    <TabScreen
-      overlays={
-        <>
-          <ListMapToggle view="list" onList={() => undefined} onMap={openMap} />
-          <AppSheet visible={people} onClose={() => setPeople(false)} accessibilityLabel={explorerLabels.segmentPeople}>
-            <SheetHead title={explorerLabels.segmentPeople} onClose={() => setPeople(false)} />
-            <PeopleSheetBody key={`s|${q}`} initialQ={q} />
-          </AppSheet>
-          <AppSheet visible={sorting} onClose={() => setSorting(false)} accessibilityLabel={L.sortSheet}>
-            <SheetHead title={L.sortSheet} onClose={() => setSorting(false)} />
-            <SortOptions value={sort} onChange={chooseSort} />
-          </AppSheet>
-          <AppSheet visible={aroundOpen} onClose={() => setAroundOpen(false)} accessibilityLabel={L.aroundSheet}>
-            <SheetHead title={L.aroundSheet} onClose={() => setAroundOpen(false)} />
-            <AroundOptions
-              around={around}
-              radiusKm={radiusKm}
-              departments={coin}
-              onAround={(next) => {
-                chooseAround(next);
-                setAroundOpen(false);
-              }}
-              onRadius={(km) => setRadiusChoice(km)}
-            />
-          </AppSheet>
-        </>
-      }
-    >
-      <View style={styles.head} testID="explorer-head">
-        <SearchLine q={q} onChange={setQ} position={position} onEnable={enableMyPosition} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exrow}>
-          <View style={styles.exrow} accessibilityRole="tablist">
-            {chip(explorerLabels.segmentEvents, segment === "evenements", () => setSegment("evenements"))}
-            {chip(explorerLabels.segmentPros, segment === "pros", () => setSegment("pros"))}
-          </View>
-          {chip(explorerLabels.segmentPeople, people, () => setPeople(true), "people-open", "button")}
-        </ScrollView>
-        {segment === "evenements" ? (
-          // `.xtools` : « Trier : Distance ▾ » à gauche, « Filtres » à droite, toujours visibles.
-          <View style={styles.xtools}>
-            <SortButton value={sort} onPress={() => setSorting(true)} />
-            <AroundButton around={around} onPress={() => setAroundOpen(true)} />
-            {/* Tour 2 : « Filtres » reste à droite, sur la même ligne ou la suivante s'il n'y a plus la place. */}
-            <View style={styles.filtersEnd}>
-              {chip(
-                count > 0 ? `${L.filters} · ${count}` : L.filters,
-                filtersOpen || count > 0,
-                () => setFiltersOpen((o) => !o),
-                "filters-toggle",
-                "toggle",
-              )}
-            </View>
-          </View>
-        ) : null}
-        {segment === "evenements" && away ? <BackHome onPress={backHome} /> : null}
-        {segment === "evenements" && filtersOpen ? (
-          <FiltersPanel
-            value={filters}
-            onChange={(next) => {
-              // Un format choisi à la main remplace les types des préférences.
-              if (next.format !== filters.format) setPrefFormatsOn(false);
-              setFilters(next);
-            }}
-            signedIn={Boolean(me)}
+  const filterCount = activeFilters(listFilters) + (prefFormats.length ? 1 : 0);
+  const settled = choiceRead && prefsRead;
+  const grade = me ? me.profile.grade : null;
+  const gradeLabel = grade ? gradeLabels[grade] : null;
+
+  // Les nombres des feuilles (« Voir les 12 événements », « Quel métier ? ») : lus pour le brouillon, première page seule.
+  const eventsCount = (w: ExplorerWhere, f: EventFilters) => {
+    if (w.kind === "me" && !positionOn) return Promise.resolve(null);
+    const query = eventQuery(q, f, position.position, "list", new Date(nowMs()), undefined, sort, { where: w, coin });
+    return api.exploreEvents({ ...query, limit: 1 }).then((p) => p.total ?? null);
+  };
+  const prosCount = (w: ExplorerWhere) => {
+    if (w.kind === "me" && !positionOn) return Promise.resolve(null);
+    const query = proQuery(q, job, proSort, position.position, "list", undefined, { where: w, coin });
+    return api.explorePros({ ...query, limit: 1 }).then((p) => p.total ?? null);
+  };
+  const filtersFor = (d: FiltersDraft): EventFilters => ({
+    ...d.filters,
+    formats: d.prefOn && !d.filters.format && !searching ? prefTypes : [],
+  });
+  const jobCounts = useApi<ProActivityCounts | null>(
+    () =>
+      sheet === "job"
+        ? api.proActivityCounts(proQuery(q, "", proSort, position.position, "list", undefined, place))
+        : Promise.resolve(null),
+    [sheet === "job", place, q, position.position],
+  );
+  const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
+
+  const close = () => setSheet(null);
+  const applyWhere = (next: ExplorerWhere) => {
+    // Revenu sur ses réglages habituels : rien de choisi (la pastille repasse en contour).
+    setWhere(sameWhere(next, habitual) ? null : next);
+    if (next.kind !== "me" && position.status === "on") position.clear();
+    close();
+  };
+  const enableMyPosition = () => {
+    void position.request();
+  };
+
+  const mapOk = segment !== "personnes";
+  const inMap = view === "map" && mapOk;
+  const pills =
+    segment === "evenements" ? (
+      <>
+        <Pill
+          icon="place"
+          value={wherePill(effective, coin)}
+          set={whereSet}
+          onPress={() => setSheet("where")}
+          testID="around-open"
+        />
+        {inMap ? null : (
+          <Pill
+            icon="sort"
+            // Relecture du lot R2 : « Mes affinités » (filtres) l'emporte sur le tri choisi : la pastille le dit.
+            value={filters.affinity ? L.tasteAffinity : (R.sortPill[sort] ?? sort)}
+            set={filters.affinity || sort !== defaultChoice.sort}
+            onPress={() => setSheet("sort")}
+            testID="sort-open"
           />
-        ) : null}
-      </View>
-      {position.status === "ask" ? <AskPosition position={position} dept={dept} onEnable={enableMyPosition} /> : null}
-      {segment === "evenements" ? (
-        <EventsSegment
-          q={q}
-          filters={listFilters}
-          position={position}
-          dept={dept}
-          view={view}
-          sort={sort}
-          settled={choiceRead && prefsRead}
-          place={place}
-          fromPrefs={fromPrefs && around.kind === "mine"}
+        )}
+        <Pill
+          icon="filter"
+          value={R.filters}
+          count={filterCount || undefined}
+          set={activeFilters(listFilters) > 0 || (!prefFormatsOn && prefTypes.length > 0)}
+          onPress={() => setSheet("filters")}
+          testID="filters-toggle"
         />
-      ) : null}
-      {segment === "pros" ? (
-        <ProsSegment
-          q={q}
-          position={position}
-          dept={dept}
-          view={view}
-          filters={proFilters}
-          onFiltersChange={setProFilters}
-          places
+      </>
+    ) : segment === "pros" ? (
+      <>
+        <Pill
+          icon="place"
+          value={wherePill(effective, coin)}
+          set={whereSet}
+          onPress={() => setSheet("where")}
+          testID="around-open"
         />
-      ) : null}
-    </TabScreen>
-  );
-}
-
-/** Lot M4 : « Trier : <b>Distance</b> ▾ » (`.sortbtn`), un vrai sélecteur. */
-function SortButton({ value, onPress }: { value: EventSort; onPress: () => void }) {
-  const { t } = useTheme();
-  const c = t.color;
-  const label = L.sorts[value]?.label ?? value;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${L.sortButton} : ${label}`}
-      onPress={onPress}
-      style={[styles.sortBtn, { backgroundColor: c.surface, borderColor: c.line }]}
-      testID="sort-open"
-    >
-      <Icon name="list" size={16} color={c.inkMuted} />
-      <Text variant="caption" color={c.inkMuted} style={styles.sortBtnText}>
-        {`${L.sortButton} : `}
-        <Text variant="caption" color={c.ink} style={styles.sortBtnValue}>
-          {label}
-        </Text>
-      </Text>
-      <Icon name="down" size={16} color={c.ink} />
-    </Pressable>
-  );
-}
-
-/** Tour 2 : « Autour de : <b>Mon coin</b> ▾ », à côté du tri, du même style (pas de néon). */
-function AroundButton({ around, onPress }: { around: Around; onPress: () => void }) {
-  const { t } = useTheme();
-  const c = t.color;
-  const label = around.kind === "mine" ? L.aroundMine : around.kind === "me" ? L.aroundMe : L.aroundDept(around.code);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${L.aroundButton} : ${label}`}
-      onPress={onPress}
-      style={[styles.sortBtn, { backgroundColor: c.surface, borderColor: c.line }]}
-      testID="around-open"
-    >
-      <Icon name="place" size={16} color={c.inkMuted} />
-      <Text variant="caption" color={c.ink} style={styles.sortBtnValue}>
-        {label}
-      </Text>
-      <Icon name="down" size={16} color={c.ink} />
-    </Pressable>
-  );
-}
-
-/** Tour 2 : « Revenir à mon coin », un lien (le point de départ et la distance reprennent leurs valeurs). */
-function BackHome({ onPress }: { onPress: () => void }) {
-  const { t } = useTheme();
-  return (
-    <Pressable accessibilityRole="link" onPress={onPress} style={styles.backHome} testID="around-back">
-      <Icon name="back" size={14} color={t.color.accentText} />
-      <Text variant="caption" color={t.color.accentText} style={styles.backHomeText}>
-        {L.backHome}
-      </Text>
-    </Pressable>
-  );
-}
-
-/** Tour 2 : la feuille « Autour de… » : trois points de départ, puis la distance (ou partout en France). */
-function AroundOptions({
-  around,
-  radiusKm,
-  departments,
-  onAround,
-  onRadius,
-}: {
-  around: Around;
-  radiusKm: number | null;
-  departments: readonly string[];
-  onAround: (next: Around) => void;
-  onRadius: (km: number | null) => void;
-}) {
-  const { t } = useTheme();
-  const c = t.color;
-  const [elsewhere, setElsewhere] = useState(around.kind === "dept");
-  const [find, setFind] = useState("");
-  const matches = useMemo(() => {
-    const needle = find.trim().toLowerCase();
-    if (!needle) return departmentChoices;
-    return departmentChoices.filter(
-      (d) => d.code.toLowerCase().startsWith(needle) || d.name.toLowerCase().includes(needle),
+        <Pill
+          icon="wrench"
+          k={R.job}
+          value={job ? proActivityLabels[job] : R.jobAll}
+          set={Boolean(job)}
+          onPress={() => setSheet("job")}
+          testID="job-open"
+        />
+        {inMap ? null : (
+          <Pill
+            icon="sort"
+            value={R.sortPill[proSort] ?? proSort}
+            set={proSort !== defaultChoice.proSort}
+            onPress={() => setSheet("proSort")}
+            testID="pro-sort-open"
+          />
+        )}
+      </>
+    ) : (
+      <>
+        <Pill
+          icon="place"
+          // Tour 2 : rien de choisi = mon coin pour les suggestions, toute la France pour une recherche (en contour) ;
+          // un lieu choisi (Mon coin compris) est en encre et limite la recherche.
+          value={
+            peopleWhere === null
+              ? peopleView(q, people, null).mode === "search"
+                ? R.pillAll
+                : R.pillMine(coin)
+              : peopleWhere.kind === "mine"
+                ? R.pillMine(coin)
+                : peopleWhere.kind === "dept"
+                  ? deptLong(peopleWhere.code)
+                  : R.pillAll
+          }
+          set={peopleWhere !== null}
+          onPress={() => setSheet("peopleWhere")}
+          testID="people-where-open"
+        />
+        <Pill
+          icon="profile"
+          k={R.show}
+          value={SHOW_LABEL[show]}
+          set={show !== "all"}
+          onPress={() => setSheet("show")}
+          testID="show-open"
+        />
+        <Pill
+          icon="filter"
+          value={R.filters}
+          count={(people.categoryId ? 1 : 0) + (people.grade ? 1 : 0) || undefined}
+          set={Boolean(people.categoryId || people.grade)}
+          onPress={() => setSheet("peopleFilters")}
+          testID="people-filters"
+        />
+      </>
     );
-  }, [find]);
-  const row = (id: string, on: boolean, icon: IconName, title: string, hint: string, onPress: () => void) => (
-    <Pressable
-      key={id}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: on }}
-      aria-checked={on}
-      onPress={onPress}
-      style={[styles.opt, { backgroundColor: c.surface }, on && { borderColor: c.accent, borderWidth: 2 }]}
-      testID={`around-${id}`}
-    >
-      <View style={[styles.optIcon, { backgroundColor: c.surfaceSunken }]}>
-        <Icon name={icon} size={18} color={c.ink} />
-      </View>
-      <View style={styles.grow}>
-        <Text variant="bodyStrong" color={c.ink} style={styles.optTitle}>
-          {title}
-        </Text>
-        <Text variant="caption" color={c.inkMuted}>
-          {hint}
-        </Text>
-      </View>
-      <View style={[styles.radio, { borderColor: on ? c.accent : c.line }]}>
-        {on ? <View style={[styles.radioDot, { backgroundColor: c.accent }]} /> : null}
-      </View>
-    </Pressable>
+  const header = (
+    <View style={styles.head} testID="explorer-head">
+      <SegmentBar
+        value={segment}
+        onChange={(s) => {
+          setSegment(s);
+          if (s === "personnes") setView("list");
+        }}
+      />
+      {/* Relecture du lot R2 : le texte s'applique aussi à la carte ; le champ y reste donc visible. */}
+      <ExSearch
+        value={q}
+        onChange={setQ}
+        placeholder={segment === "evenements" ? R.searchEvents : segment === "pros" ? R.searchPros : R.searchPeople}
+        testID={segment === "personnes" ? "people-q" : "events-q"}
+      />
+      <PillRow>{pills}</PillRow>
+    </View>
   );
-  return (
-    <View style={styles.optlist} testID="around-sheet">
-      <View style={styles.optlist} accessibilityRole="radiogroup">
-        {row("mine", around.kind === "mine" && !elsewhere, "home", L.aroundMine, L.aroundMineHint(departments), () =>
-          onAround({ kind: "mine" }),
-        )}
-        {row("me", around.kind === "me" && !elsewhere, "place", L.aroundMe, L.aroundMeHint, () =>
-          onAround({ kind: "me" }),
-        )}
-        {row(
-          "elsewhere",
-          around.kind === "dept" || elsewhere,
-          "map",
-          around.kind === "dept" ? `${L.aroundElsewhere} ${L.aroundDept(around.code)}` : L.aroundElsewhere,
-          L.aroundElsewhereHint,
-          () => setElsewhere(true),
-        )}
-      </View>
-      {elsewhere ? (
-        <View style={styles.group} testID="around-departments">
-          <TextField
-            label={L.aroundElsewhere}
-            value={find}
-            onChangeText={setFind}
-            placeholder="66, Aude, Gironde…"
-            testID="around-find"
-          />
-          {/* Tour 2 : les puces passent à la ligne (une rangée qui défile cachait la fin de la liste). */}
-          <View style={styles.wrapRow}>
-            {matches.map((d) => (
-              <Chip
-                key={d.code}
-                accessibilityRole="radio"
-                selected={around.kind === "dept" && around.code === d.code}
-                onPress={() => onAround({ kind: "dept", code: d.code })}
-              >
-                {departmentLabel(d)}
-              </Chip>
-            ))}
-          </View>
-        </View>
+
+  const sheets = (
+    <>
+      {mapOk ? (
+        <ListMapToggle view={inMap ? "map" : "list"} onList={() => setView("list")} onMap={() => setView("map")} />
       ) : null}
-      <View style={styles.group}>
-        <Text variant="label" color={c.inkMuted}>
-          {L.aroundDistance}
-        </Text>
-        <View style={styles.wrapRow} accessibilityRole="radiogroup" accessibilityLabel={L.aroundDistance}>
-          {RADII.map((km) => (
-            <Chip key={km} accessibilityRole="radio" selected={radiusKm === km} onPress={() => onRadius(km)}>
-              {L.aroundKm(km)}
-            </Chip>
-          ))}
-          <Chip accessibilityRole="radio" selected={radiusKm === null} onPress={() => onRadius(null)}>
-            {L.everywhere}
-          </Chip>
-        </View>
-      </View>
-      <Text variant="caption" color={c.inkMuted} style={styles.optHint}>
-        {L.aroundSheetHint}
-      </Text>
-    </View>
+      <WhereSheet
+        visible={sheet === "where"}
+        onClose={close}
+        value={effective}
+        coin={coin}
+        positionOn={positionOn}
+        positionDenied={position.status === "denied"}
+        onRequestPosition={enableMyPosition}
+        countFor={(w) => (segment === "pros" ? prosCount(w) : eventsCount(w, listFilters))}
+        seeLabel={segment === "pros" ? R.seePros : R.seeEvents}
+        onApply={applyWhere}
+      />
+      <ChoiceSheet
+        visible={sheet === "sort"}
+        onClose={close}
+        title={R.sortEventsSheet}
+        options={EVENT_SORT_OPTIONS}
+        value={sort}
+        onPick={(s) => {
+          setSort(s);
+          close();
+        }}
+        hint={R.sortHint}
+        testID="sort-sheet"
+      />
+      <ChoiceSheet
+        visible={sheet === "proSort"}
+        onClose={close}
+        title={R.sortProsSheet}
+        options={PRO_SORT_OPTIONS}
+        value={proSort}
+        onPick={(s) => {
+          setProSort(s);
+          close();
+        }}
+        hint={R.sortHint}
+        testID="pro-sort-sheet"
+      />
+      <EventFiltersSheet
+        visible={sheet === "filters"}
+        onClose={close}
+        value={{ filters: { ...filters }, prefOn: prefFormatsOn }}
+        hasPrefs={prefTypes.length > 0 && !searching}
+        signedIn={Boolean(me)}
+        countFor={(d) => eventsCount(effective, filtersFor(d))}
+        onApply={(d) => {
+          const { format, when, affinity, followed } = d.filters;
+          // Relecture du lot R2 : rien de changé, rien de relu.
+          const same =
+            format === filters.format &&
+            when === filters.when &&
+            affinity === filters.affinity &&
+            followed === filters.followed;
+          if (!same) setFilters({ format, when, affinity, followed });
+          if (d.prefOn !== prefFormatsOn) setPrefFormatsOn(d.prefOn);
+          close();
+        }}
+      />
+      <JobSheet
+        visible={sheet === "job"}
+        onClose={close}
+        value={job}
+        counts={jobCounts.data ?? null}
+        onPick={(next) => {
+          setJob(next);
+          close();
+        }}
+      />
+      <PeopleWhereSheet
+        visible={sheet === "peopleWhere"}
+        onClose={close}
+        value={peopleWhere}
+        coin={coin}
+        onApply={(next) => {
+          setPeopleWhere(next);
+          close();
+        }}
+      />
+      <ChoiceSheet
+        visible={sheet === "show"}
+        onClose={close}
+        title={R.showSheet}
+        options={SHOW_OPTIONS}
+        value={show}
+        onPick={(s) => {
+          setShow(s);
+          close();
+        }}
+        testID="show-sheet"
+      />
+      <PeopleFiltersSheet
+        visible={sheet === "peopleFilters"}
+        onClose={close}
+        value={people}
+        categories={(categories.data ?? []).map((x) => ({ id: x.id, label: x.label }))}
+        grades={grades.map((g) => ({ id: g, label: gradeLabels[g] }))}
+        onApply={(next) => {
+          setPeople({ categoryId: next.categoryId, grade: next.grade as PeopleFilters["grade"] });
+          close();
+        }}
+      />
+    </>
   );
-}
 
-const SORT_ICONS: Record<EventSort, IconName> = {
-  distance: "place",
-  date: "calendar",
-  recent: "spark",
-  seats: "vehicle",
-};
+  if (inMap) {
+    return (
+      <TabStage overlays={sheets}>
+        {segment === "evenements" ? (
+          <EventsMapView
+            header={header}
+            q={q}
+            filters={listFilters}
+            position={position}
+            sort="date"
+            place={place}
+            settled={settled}
+          />
+        ) : (
+          <ProsMapView
+            header={header}
+            q={q}
+            job={job}
+            sort={proSort}
+            position={position}
+            place={place}
+            gradeLabel={gradeLabel}
+            settled={settled}
+          />
+        )}
+      </TabStage>
+    );
+  }
 
-/** Lot M4 (maquette 3.2) : la feuille « Trier les événements », le choix s'applique tout de suite. */
-function SortOptions({ value, onChange }: { value: EventSort; onChange: (s: EventSort) => void }) {
-  const { t } = useTheme();
-  const c = t.color;
   return (
-    <View style={styles.optlist} accessibilityRole="radiogroup" testID="sort-sheet">
-      {EVENT_SORTS.map((s) => {
-        const on = s === value;
-        return (
-          <Pressable
-            key={s}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            aria-checked={on}
-            onPress={() => onChange(s)}
-            style={[styles.opt, { backgroundColor: c.surface }, on && { borderColor: c.accent, borderWidth: 2 }]}
-            testID={`sort-${s}`}
-          >
-            <View style={[styles.optIcon, { backgroundColor: c.surfaceSunken }]}>
-              <Icon name={SORT_ICONS[s]} size={18} color={c.ink} />
-            </View>
-            <View style={styles.grow}>
-              <Text variant="bodyStrong" color={c.ink} style={styles.optTitle}>
-                {L.sorts[s]?.label}
-              </Text>
-              <Text variant="caption" color={c.inkMuted}>
-                {L.sorts[s]?.hint}
-              </Text>
-            </View>
-            <View style={[styles.radio, { borderColor: on ? c.accent : c.line }]}>
-              {on ? <View style={[styles.radioDot, { backgroundColor: c.accent }]} /> : null}
-            </View>
-          </Pressable>
-        );
-      })}
-      <Text variant="caption" color={c.inkMuted} style={styles.optHint}>
-        {L.sortSheetHint}
-      </Text>
-    </View>
+    <TabStage overlays={sheets}>
+      <View style={[styles.headWrap, { backgroundColor: t.color.ground }]}>{header}</View>
+      <ScrollView
+        style={styles.fill}
+        contentContainerStyle={[styles.body, { paddingBottom: 150 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        testID="explorer-body"
+      >
+        {segment !== "personnes" && position.status === "ask" ? (
+          <AskPosition position={position} dept={coin[0] ?? null} onEnable={enableMyPosition} />
+        ) : null}
+        {segment === "evenements" ? (
+          <EventsSegment
+            q={q}
+            filters={listFilters}
+            position={position}
+            sort={sort}
+            place={place}
+            placeLine={placeLine}
+            settled={settled}
+          />
+        ) : null}
+        {segment === "pros" ? (
+          <ProsSegment
+            q={q}
+            position={position}
+            job={job}
+            sort={proSort}
+            place={place}
+            placeLine={placeLine}
+            grade={grade}
+            settled={settled}
+          />
+        ) : null}
+        {segment === "personnes" ? (
+          <PeopleSegment q={q} where={peopleWhere} show={show} filters={people} coin={coin} />
+        ) : null}
+      </ScrollView>
+    </TabStage>
   );
 }
 
@@ -627,79 +625,6 @@ export function ListMapToggle({
   );
 }
 
-/** En-tête de feuille `.sh-h` : titre italique 18 px, ✕ sur fond de carte. */
-export function SheetHead({ title, onClose }: { title: string; onClose: () => void }) {
-  const { t } = useTheme();
-  return (
-    <View style={styles.shH}>
-      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={styles.shTitle}>
-        {title}
-      </Text>
-      <Pressable
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Fermer"
-        style={[styles.closex, { backgroundColor: t.color.surface }]}
-        testID="sheet-close"
-      >
-        <Icon name="close" size={20} color={t.color.ink} />
-      </Pressable>
-    </View>
-  );
-}
-
-/** Ligne 1 : la recherche, et l'état de la position à droite (moutarde activée, rouge refusée, sinon le département). */
-function SearchLine({
-  q,
-  onChange,
-  position,
-  onEnable,
-}: {
-  q: string;
-  onChange: (q: string) => void;
-  position: ExplorerPosition;
-  /** Tour 2 : activer la position, c'est choisir « Autour de moi ». */
-  onEnable: () => void;
-}) {
-  const { t } = useTheme();
-  const c = t.color;
-  const on = position.status === "on";
-  const denied = position.status === "denied";
-  // `.gpsbtn` : icône moutarde activée, rouge refusée ; libellé « Ma position » (rouge s'il est refusé).
-  const tint = on ? c.accentText : denied ? c.winText : c.inkMuted;
-  return (
-    <View style={[styles.search, { backgroundColor: c.surfaceField, borderColor: c.line }]}>
-      <Icon name="search" size={18} color={c.inkMuted} />
-      <TextInput
-        value={q}
-        onChangeText={onChange}
-        placeholder={L.searchPlaceholder}
-        placeholderTextColor={c.inkFaint}
-        accessibilityLabel={L.searchLabel}
-        autoCapitalize="none"
-        returnKeyType="search"
-        style={[styles.input, { color: c.ink }]}
-        testID="events-q"
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          on ? L.gpsOnA11y : denied ? (position.blocked ? L.gpsBlockedA11y : L.gpsOffA11y) : L.gpsAskA11y
-        }
-        onPress={() => (on ? position.clear() : onEnable())}
-        style={[styles.gps, { backgroundColor: c.surfaceRaised }]}
-        testID="gps-button"
-        accessibilityState={{ checked: on }}
-      >
-        <Icon name="place" size={16} color={tint} />
-        <Text variant="bodyStrong" color={denied ? c.winText : c.ink} style={styles.gpsText}>
-          {L.gpsOn}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
 /** « Trie par distance depuis là où tu es » : Activer / Plus tard. */
 function AskPosition({
   position,
@@ -736,87 +661,11 @@ function AskPosition({
   );
 }
 
-/** Filtres repliés (prototype : sous les segments) : Format, Quand, Selon mes goûts. */
-// « Selon mes goûts » suppose un compte (affinités, structures suivies) : masqué sans compte.
-function FiltersPanel({
-  value,
-  onChange,
-  signedIn,
-}: {
-  value: EventFilters;
-  onChange: (next: EventFilters) => void;
-  signedIn: boolean;
-}) {
-  const set = <K extends keyof EventFilters>(key: K, v: EventFilters[K]) => onChange({ ...value, [key]: v });
-  return (
-    <View style={styles.filters} testID="explorer-filters">
-      <Group label={L.groupFormat} exclusive>
-        <Chip accessibilityRole="tab" selected={value.format === ""} onPress={() => set("format", "")}>
-          {L.formatAll}
-        </Chip>
-        {eventFormats.map((f) => (
-          <Chip
-            accessibilityRole="tab"
-            key={f}
-            selected={value.format === f}
-            onPress={() => set("format", value.format === f ? "" : f)}
-          >
-            {eventFormatLabels[f]}
-          </Chip>
-        ))}
-      </Group>
-      <Group label={L.groupWhen} exclusive>
-        {WHEN.map((w) => (
-          <Chip accessibilityRole="tab" key={w.id} selected={value.when === w.id} onPress={() => set("when", w.id)}>
-            {w.label}
-          </Chip>
-        ))}
-      </Group>
-      {signedIn ? (
-        <Group label={L.groupTaste}>
-          <Chip accessibilityRole="toggle" selected={value.affinity} onPress={() => set("affinity", !value.affinity)}>
-            {L.tasteAffinity}
-          </Chip>
-          <Chip accessibilityRole="toggle" selected={value.followed} onPress={() => set("followed", !value.followed)}>
-            {L.tasteFollowed}
-          </Chip>
-        </Group>
-      ) : null}
-    </View>
-  );
-}
-
-function Group({ label, children, exclusive = false }: { label: string; children: ReactNode; exclusive?: boolean }) {
-  const { t } = useTheme();
-  return (
-    <View style={styles.group}>
-      <Text variant="label" color={t.color.inkMuted}>
-        {label}
-      </Text>
-      <ChipRow accessibilityRole={exclusive ? "tablist" : undefined} accessibilityLabel={label}>
-        {children}
-      </ChipRow>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  head: { gap: space2 },
-  // `.exsearch` : 48 px, rayon 14, fond de champ, liseré 1,5 px ; `.gpsbtn` 36 px rayon 10 sur `--card-2`.
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space2,
-    height: 48,
-    paddingLeft: space3,
-    paddingRight: 6,
-    borderRadius: 14,
-    borderWidth: 1.5,
-  },
-  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15 },
-  gps: { flexDirection: "row", alignItems: "center", gap: 5, height: 36, paddingHorizontal: 10, borderRadius: 10 },
-  gpsText: { fontSize: 12, lineHeight: 15, fontWeight: "800" },
-  exrow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  fill: { flex: 1 },
+  headWrap: { paddingHorizontal: space4, paddingTop: space3, paddingBottom: space2 },
+  head: { gap: 8 },
+  body: { paddingHorizontal: space4, paddingTop: space2, gap: 10 },
   // `.locask` : carte crème, pastille moutarde 44 px rayon 14, phrase 13,5 px.
   ask: { flexDirection: "row", gap: space3, padding: 14, borderRadius: 18 },
   askIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
@@ -824,45 +673,6 @@ const styles = StyleSheet.create({
   askTitle: { fontWeight: "800" },
   askText: { fontSize: 13.5, lineHeight: 19, marginTop: 3, marginBottom: 10 },
   askActions: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  shH: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
-  shTitle: { flex: 1, fontSize: 18, lineHeight: 19 },
-  closex: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  filters: { gap: space2 },
-  group: { gap: space1 },
-  grow: { flex: 1, minWidth: 0 },
-  xtools: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
-  filtersEnd: { marginLeft: "auto" },
-  wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  backHome: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", minHeight: 32 },
-  backHomeText: { fontSize: 12.5, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
-  sortBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 36,
-    paddingHorizontal: space3,
-    borderRadius: 10,
-    borderWidth: 1.5,
-  },
-  sortBtnText: { fontSize: 13, lineHeight: 16 },
-  sortBtnValue: { fontSize: 13, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
-  // `.optlist` / `.opt` : lignes de 12 × 14, rayon 14, pastille d'icône, rond de choix.
-  optlist: { gap: 6 },
-  opt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space3,
-    paddingVertical: space3,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  optIcon: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  optTitle: { fontSize: 14.5, lineHeight: 18, fontFamily: "Archivo-ExtraBold" },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  radioDot: { width: 10, height: 10, borderRadius: 5 },
-  optHint: { marginTop: space3 },
   lcWrap: { position: "absolute", left: 0, right: 0, alignItems: "center", zIndex: 24 },
   lcfab: { flexDirection: "row", padding: 4, borderRadius: 999 },
   lcItem: { flexDirection: "row", alignItems: "center", gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 999 },
