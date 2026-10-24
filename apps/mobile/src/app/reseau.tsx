@@ -65,7 +65,7 @@ export default function Reseau() {
   accountRef.current = accountId;
   const loader = useMemo(
     () =>
-      createNetworkLoader<{ tab: NetworkTab; term: string | undefined }, Lists>({
+      createNetworkLoader<{ tab: NetworkTab; term: string | undefined; account: string | null }, Lists>({
         scope: () => accountRef.current,
         fetch: async ({ tab: which, term }) => {
           if (which === "abonnes") return { followers: await api.followers(term) };
@@ -97,8 +97,16 @@ export default function Reseau() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    await loader.load({ tab, term: query || undefined });
-  }, [loader, tab, query]);
+    // Le compte fait partie de la lecture : un changement de compte la relance (invariant « Comptes et sessions »).
+    await loader.load({ tab, term: query || undefined, account: accountId });
+  }, [loader, tab, query, accountId]);
+
+  // Changement de compte : les listes de l'ancien compte disparaissent avant la nouvelle lecture.
+  const shownFor = useRef(accountId);
+  if (shownFor.current !== accountId) {
+    shownFor.current = accountId;
+    setLists({});
+  }
 
   // Tour 2 : au retour d'un profil (suivre, ne plus suivre), les listes et les nombres se relisent.
   const firstFocus = useRef(true);
