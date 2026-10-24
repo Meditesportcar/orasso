@@ -95,6 +95,19 @@ for (const theme of ["beton", "sable"] as const) {
       const search = identity.getByLabel("Marque ou modèle");
       await search.fill("golf 4");
       await expect(identity.getByTestId("add-search-hits")).toContainText("Volkswagen Golf Mk4");
+      // Tour 2 : la génération choisie par la recherche s'applique, et une deuxième du même modèle aussi.
+      const generation = page.getByLabel("Génération", { exact: true });
+      await identity
+        .getByRole("button", { name: /Volkswagen Golf Mk4/ })
+        .first()
+        .click();
+      await expect(generation.locator("option:checked")).toHaveText(/^Mk4/);
+      await search.fill("golf 5");
+      await identity
+        .getByRole("button", { name: /Golf Mk5/ })
+        .first()
+        .click();
+      await expect(generation.locator("option:checked")).toHaveText(/^Mk5/);
       await search.fill("");
       await page.getByLabel("Marque", { exact: true }).selectOption({ label: "Peugeot" });
       await expect(page.getByLabel("Modèle", { exact: true }).locator("option", { hasText: "208" })).toHaveCount(1);

@@ -28,6 +28,13 @@ import { socialProfile } from "./profile";
 import { socialRepo } from "./repo";
 
 /**
+ * Lot R4a, tour 2 : nom affiché d'une fiche dans les recherches (alias `v`, `mk`, `md`) : le nom tapé quand le niveau
+ * vaut « Autre », sinon celui de la liste. Même visibilité que la marque et le modèle de la liste.
+ */
+export const typedMakeSql = sql`(case when mk.is_other then coalesce(v.proposed_make, mk.name) else mk.name end)`;
+export const typedModelSql = sql`(case when md.is_other then coalesce(v.proposed_model, md.name) else md.name end)`;
+
+/**
  * Condition SQL (alias `p` = profiles) : la fiche complète de la personne est visible de `viewerId` (compte public, ou ami).
  * Un compte privé non ami ne montre que pseudo, photo, grade, marque et modèle : tout filtre ou tri qui lirait autre chose
  * (génération, département, centres d'intérêt) doit passer par cette condition.
@@ -102,11 +109,14 @@ async function run(
     where.push(sql`${pseudoMatch}`);
   } else if (q) {
     const pattern = `%${escapeLike(q)}%`;
+    // Lot R4a, tour 2 : un niveau « Autre » se cherche par son nom tapé (« Peugeot 207 CC »).
+    const mk = typedMakeSql;
+    const md = typedModelSql;
     const text = vehicleExists(sql`(
-      mk.name ilike ${pattern} escape '\\'
-      or md.name ilike ${pattern} escape '\\'
-      or (mk.name || ' ' || md.name) ilike ${pattern} escape '\\'
-      or (d.detail and (g.name ilike ${pattern} escape '\\' or (mk.name || ' ' || md.name || ' ' || g.name) ilike ${pattern} escape '\\'))
+      ${mk} ilike ${pattern} escape '\\'
+      or ${md} ilike ${pattern} escape '\\'
+      or (${mk} || ' ' || ${md}) ilike ${pattern} escape '\\'
+      or (d.detail and (g.name ilike ${pattern} escape '\\' or (${mk} || ' ' || ${md} || ' ' || g.name) ilike ${pattern} escape '\\'))
     )`);
     where.push(sql`(${pseudoMatch} or ${text})`);
   }

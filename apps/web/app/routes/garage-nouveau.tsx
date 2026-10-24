@@ -344,10 +344,16 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const found = Array.isArray(answer) ? answer : null;
   const searchError = answer === "busy" ? L.searchBusySite : answer === "offline" ? L.searchOfflineSite : null;
   const pickHit = (h: VehicleReferenceHit) => {
-    pending.current = { modelId: h.modelId, generationId: h.generationId };
     if (h.vehicleType) setType(h.vehicleType);
-    if (h.makeId === makeId && h.modelId) setModelId(h.modelId);
-    else setMakeId(h.makeId);
+    if (h.makeId === makeId && h.modelId && h.modelId === modelId) {
+      // Lot R4a, tour 2 : même modèle (sa liste de générations est déjà lue) : la génération s'applique tout de suite.
+      pending.current = null;
+      setGenerationId(h.generationId ?? "");
+    } else {
+      pending.current = { modelId: h.modelId, generationId: h.generationId };
+      if (h.makeId === makeId && h.modelId) setModelId(h.modelId);
+      else setMakeId(h.makeId);
+    }
     setSearch("");
   };
   const otherMake = makes.find((m) => m.isOther);

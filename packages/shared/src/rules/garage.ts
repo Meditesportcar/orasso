@@ -176,6 +176,9 @@ export type CertificationFields = {
   weightKg: number | null;
   categoryIds: readonly string[];
   photoIds: readonly string[];
+  /** Lot R4a, tour 2 : marque et modèle tapés (absents d'une ancienne demande : comptés comme vides). */
+  proposedMake?: string | null;
+  proposedModel?: string | null;
 };
 
 const textOrNull = (v: string | null | undefined) => {
@@ -201,7 +204,9 @@ export function certificationLostByChange(before: CertificationFields, after: Ce
     (before.powerHp ?? null) !== (after.powerHp ?? null) ||
     (before.weightKg ?? null) !== (after.weightKg ?? null) ||
     !sameSet(before.categoryIds, after.categoryIds) ||
-    !sameSet(before.photoIds, after.photoIds)
+    !sameSet(before.photoIds, after.photoIds) ||
+    textOrNull(before.proposedMake) !== textOrNull(after.proposedMake) ||
+    textOrNull(before.proposedModel) !== textOrNull(after.proposedModel)
   );
 }
 

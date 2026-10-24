@@ -163,3 +163,78 @@ describe("cadre par modes (lot R4a, maquette R4.1)", () => {
     expect((next.y + next.h / 2) * H).toBeCloseTo(168 + 20, 1);
   });
 });
+
+describe("Taille d'un cadre tourné : la plaque masquée reste masquée (lot R4a, tour 2)", () => {
+  const W = 400;
+  const H = 300;
+  /** Coins et centre d'un cadre, en px de la photo. */
+  const points = (r: { x: number; y: number; w: number; h: number; angle?: number }) => {
+    const a = ((r.angle ?? 0) * Math.PI) / 180;
+    const cx = (r.x + r.w / 2) * W;
+    const cy = (r.y + r.h / 2) * H;
+    const hw = (r.w * W) / 2;
+    const hh = (r.h * H) / 2;
+    return [
+      [0, 0],
+      [-hw, -hh],
+      [hw, -hh],
+      [hw, hh],
+      [-hw, hh],
+    ].map(([u, v]) => [
+      cx + (u ?? 0) * Math.cos(a) - (v ?? 0) * Math.sin(a),
+      cy + (u ?? 0) * Math.sin(a) + (v ?? 0) * Math.cos(a),
+    ]);
+  };
+  /** Le point (px) est dans le cadre, à un demi-pixel près. */
+  const inside = (r: { x: number; y: number; w: number; h: number; angle?: number }, [px, py]: number[]) => {
+    const a = ((r.angle ?? 0) * Math.PI) / 180;
+    const dx = (px ?? 0) - (r.x + r.w / 2) * W;
+    const dy = (py ?? 0) - (r.y + r.h / 2) * H;
+    const lx = dx * Math.cos(a) + dy * Math.sin(a);
+    const ly = -dx * Math.sin(a) + dy * Math.cos(a);
+    return Math.abs(lx) <= (r.w * W) / 2 + 0.5 && Math.abs(ly) <= (r.h * H) / 2 + 0.5;
+  };
+  const outward: Record<string, [number, number]> = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
+
+  it("cas de la relecture : bord gauche d'un cadre à 45° tiré loin vers le haut à gauche", () => {
+    const start = { x: 0.35, y: 0.5, w: 0.3, h: 0.12, angle: 45 };
+    const next = resizePlateFrameEdges(start, ["l"], -200, -200, W, H);
+    for (const p of points(start)) expect(inside(next, p)).toBe(true);
+    expect(next.x).toBeGreaterThanOrEqual(0);
+    expect(next.y + next.h).toBeLessThanOrEqual(1);
+  });
+
+  it("plusieurs angles, bords et positions, jusqu'aux limites de la photo", () => {
+    const starts = [
+      { x: 0.35, y: 0.5, w: 0.3, h: 0.12 },
+      { x: 0.02, y: 0.03, w: 0.25, h: 0.1 },
+      { x: 0.7, y: 0.85, w: 0.28, h: 0.12 },
+    ];
+    for (const base of starts) {
+      for (const angle of [0, 12, 45, -60, 90, -89]) {
+        const start = angle ? { ...base, angle } : base;
+        for (const edges of [["l"], ["r"], ["t"], ["b"], ["l", "t"], ["r", "b"]] as const) {
+          for (const d of [10, 80, 600]) {
+            // Vers l'extérieur, dans les axes du cadre.
+            let ux = 0;
+            let uy = 0;
+            for (const e of edges) {
+              ux += outward[e]?.[0] ?? 0;
+              uy += outward[e]?.[1] ?? 0;
+            }
+            const a = (angle * Math.PI) / 180;
+            const dx = d * (ux * Math.cos(a) - uy * Math.sin(a));
+            const dy = d * (ux * Math.sin(a) + uy * Math.cos(a));
+            const next = resizePlateFrameEdges(start, edges, dx, dy, W, H);
+            const label = JSON.stringify({ start, edges, d });
+            for (const p of points(start)) expect(inside(next, p), label).toBe(true);
+            expect(next.x, label).toBeGreaterThanOrEqual(0);
+            expect(next.y, label).toBeGreaterThanOrEqual(0);
+            expect(next.x + next.w, label).toBeLessThanOrEqual(1 + 1e-9);
+            expect(next.y + next.h, label).toBeLessThanOrEqual(1 + 1e-9);
+          }
+        }
+      }
+    }
+  });
+});

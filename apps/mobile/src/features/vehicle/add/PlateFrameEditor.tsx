@@ -182,6 +182,9 @@ export function PlateFrameEditor({
   const showMode = editable && rects.length > 0;
   return (
     <View style={styles.outer} onLayout={(e) => setOuter(e.nativeEvent.layout.width)}>
+      {/* Lot R4a, tour 2 : la ligne du mode au-dessus de la photo, pour qu'elle reste visible pendant le réglage (sous la
+          photo, la barre « Continuer » la recouvrait). */}
+      {showMode ? <ModeLine mode={mode} /> : null}
       <View style={[styles.editor, { width: box.w, height: box.h }]} testID={testID}>
         {/* Lot 59c, tour 2 : la photo coupe ce qui la dépasse (cadre tourné contre un bord) ; la tige passe sous un
             cadre collé en haut (`rotateKnobBelow`) pour rester dans la photo et se toucher. */}
@@ -219,7 +222,6 @@ export function PlateFrameEditor({
         {loupe && box.w > 0 ? <Loupe source={source} box={box} probe={probe} /> : null}
         {children}
       </View>
-      {showMode ? <ModeLine mode={mode} /> : null}
     </View>
   );
 }

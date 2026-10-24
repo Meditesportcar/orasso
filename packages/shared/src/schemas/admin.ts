@@ -245,6 +245,8 @@ export const vehicleProposalAcceptSchema = z
       .uuid()
       .nullish()
       .transform((v) => v ?? null),
+    /** Lot R4a, tour 2 : empreinte du groupe affiché (`VehicleProposalGroup.version`) ; changé depuis : 409. */
+    version: z.string().regex(/^[0-9a-f]{32}$/),
   })
   .refine((v) => Boolean(v.makeId) !== Boolean(v.makeName), {
     message: "Choisis la marque, ou donne son nom",
@@ -288,8 +290,15 @@ export type VehicleProposalGroup = {
   variants: { text: string; count: number }[];
   /** Type le plus fréquent des fiches (le modèle créé le prend). */
   vehicleType: string;
+  /** Nombre de fiches du groupe ; `vehicles` n'en montre que les 20 plus récentes. */
+  count: number;
+  /** Empreinte des fiches du groupe, renvoyée avec le geste (le groupe a changé : 409). */
+  version: string;
   vehicles: VehicleProposalItem[];
 };
+
+/** Une page de la file : des groupes entiers, la plus grosse file en tête. */
+export type VehicleProposalPage = { items: VehicleProposalGroup[]; nextCursor: string | null };
 
 export type ReferenceMake = { id: string; name: string; country: string | null; isOther: boolean; vehicles: number };
 export type ReferenceModel = {

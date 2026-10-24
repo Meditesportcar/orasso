@@ -13,8 +13,10 @@ export const PROPOSED_NAME_MAX = 40;
  */
 export function cleanProposedName(text: string | null | undefined): string | null {
   const clean = (text ?? "")
+    // Lot R4a, tour 2 : contrôles C0 et C1, marques de sens (bidi) et espaces de largeur nulle retirés.
     // biome-ignore lint/suspicious/noControlCharactersInRegex: on retire justement les caractères de contrôle.
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, " ")
+    .replace(/[​-‍﻿]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, PROPOSED_NAME_MAX)
@@ -24,10 +26,22 @@ export function cleanProposedName(text: string | null | undefined): string | nul
 
 /**
  * Texte normalisé d'un nom tapé, pour regrouper les fiches de la file admin : sans accents ni casse, espaces et
- * ponctuation retirés (« 207 CC », « 207cc » et « 207-CC » vont ensemble).
+ * ponctuation retirés (« 207 CC », « 207cc » et « 207-CC » vont ensemble). Lot R4a, tour 2 : les lettres et chiffres de
+ * toutes les écritures restent (« 丰田 », « Лада ») ; un nom sans lettre ni chiffre garde sa ponctuation, espaces
+ * réduits, pour ne pas rejoindre un autre nom.
  */
 export function proposalText(text: string): string {
-  return searchFold(text).replace(/[^a-z0-9]+/g, "");
+  const folded = searchFold(text);
+  return folded.replace(/[^\p{L}\p{N}]+/gu, "") || folded.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Écriture sûre dans une adresse, sans collision : lettres latines minuscules et chiffres gardés, tout autre caractère
+ * écrit `_<code hexadécimal>_` ; un texte vide s'écrit « - » (aucun autre texte ne donne ce signe).
+ */
+function keyPart(text: string): string {
+  if (!text) return "-";
+  return [...text].map((ch) => (/[a-z0-9]/.test(ch) ? ch : `_${(ch.codePointAt(0) ?? 0).toString(16)}_`)).join("");
 }
 
 /**
@@ -40,6 +54,6 @@ export function proposalKey(v: {
   proposedMake: string | null;
   proposedModel: string | null;
 }) {
-  const model = proposalText(v.proposedModel ?? "") || "_";
-  return v.makeIsOther ? `make.${proposalText(v.proposedMake ?? "") || "_"}.${model}` : `model.${v.makeId}.${model}`;
+  const model = keyPart(proposalText(v.proposedModel ?? ""));
+  return v.makeIsOther ? `make.${keyPart(proposalText(v.proposedMake ?? ""))}.${model}` : `model.${v.makeId}.${model}`;
 }

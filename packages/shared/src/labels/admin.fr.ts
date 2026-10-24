@@ -102,6 +102,9 @@ export const adminTexts = {
     n > 1 ? `Ajouter à la liste et rattacher les ${n} fiches` : "Ajouter à la liste et rattacher la fiche",
   proposalExisting: "Modèle existant (faute de frappe)",
   proposalAttach: "Rattacher à un modèle existant",
+  proposalPickModel: "Choisir le modèle",
+  proposalMore: (n: number) => (n > 1 ? `et ${n} autres fiches` : "et 1 autre fiche"),
+  proposalsNext: "Groupes suivants",
   proposalNotice: (name: string) =>
     `Chaque propriétaire reçoit : « L'équipe Orasso a rattaché ta ${name} à la liste. » Pas d'annulation : une erreur se corrige fiche par fiche.`,
   audit: "Journal des accès",

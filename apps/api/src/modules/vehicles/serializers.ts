@@ -4,8 +4,12 @@ import { formatPlate, type VehicleBrief, type VehicleFull, type VehiclePublic } 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
 
-/** Lot R4a : marque et modèle tapés (niveau « Autre »), absents d'une ligne lue sans eux. */
-type Proposed = Partial<Pick<VehicleWithAll, "proposedMake" | "proposedModel">>;
+/**
+ * Lot R4a : marque et modèle tapés (niveau « Autre »). Obligatoires (tour 2) : toute lecture qui construit un nom de
+ * véhicule doit lire les deux colonnes, le compilateur le vérifie. `makeNameOf`, `modelNameOf` et `vehicleLabel`
+ * prennent une ligne de `vehicles` (avec `make`, `model`, `generation`) : à utiliser partout où un nom s'affiche.
+ */
+export type Proposed = Pick<VehicleWithAll, "proposedMake" | "proposedModel">;
 
 /** Marque affichée : la marque de la liste, ou celle tapée par la personne (« Autre » sinon). */
 export const makeNameOf = (v: Pick<VehicleWithAll, "make"> & Proposed) =>

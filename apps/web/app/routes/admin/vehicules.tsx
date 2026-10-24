@@ -12,6 +12,7 @@ import {
   type ReferenceMake,
   type ReferenceModel,
   type VehicleProposalGroup,
+  type VehicleProposalPage,
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
@@ -30,11 +31,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const makeId = url.searchParams.get("marque");
   const modelId = url.searchParams.get("modele");
-  const [makes, others, proposals] = await Promise.all([
+  // Lot R4a, tour 2 : la file se lit par pages de groupes entiers (`?propositions=<curseur>`).
+  const proposalCursor = url.searchParams.get("propositions");
+  const [makes, others, proposalPage] = await Promise.all([
     apiOrThrow<ReferenceMake[]>(request, "/admin/vehicle-reference/makes"),
     apiOrThrow<OtherVehicleGroup[]>(request, "/admin/vehicle-reference/others"),
-    apiOrThrow<VehicleProposalGroup[]>(request, "/admin/vehicle-reference/proposals"),
+    apiOrThrow<VehicleProposalPage>(
+      request,
+      `/admin/vehicle-reference/proposals${proposalCursor ? `?cursor=${encodeURIComponent(proposalCursor)}` : ""}`,
+    ),
   ]);
+  const proposals = proposalPage.items;
   // Modèles existants des marques connues de la file (« Rattacher à un modèle existant »).
   const proposalMakes = [...new Set(proposals.filter((g) => !g.make.isOther).map((g) => g.make.id))];
   const proposalModels = Object.fromEntries(
@@ -63,6 +70,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     generations,
     others,
     proposals,
+    proposalsNext: proposalPage.nextCursor,
     proposalModels,
     make: makes.find((m) => m.id === makeId) ?? null,
     model: models.find((m) => m.id === modelId) ?? null,
@@ -119,10 +127,11 @@ export async function action({ request }: Route.ActionArgs) {
       res = await api(request, `/admin/vehicle-reference/proposals/${encodeURIComponent(text("key"))}/accept`, {
         method: "POST",
         json: attach
-          ? { makeId: text("makeId"), modelId: text("existingModelId") }
+          ? { makeId: text("makeId"), modelId: text("existingModelId"), version: text("version") }
           : text("makeId")
-            ? { makeId: text("makeId"), modelName: text("modelName") }
+            ? { makeId: text("makeId"), modelName: text("modelName"), version: text("version") }
             : {
+                version: text("version"),
                 makeName: text("makeName"),
                 country: text("country").toUpperCase() || null,
                 modelName: text("modelName"),
@@ -145,7 +154,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AdminVehicles({ loaderData, actionData }: Route.ComponentProps) {
-  const { makes, models, generations, others, proposals, proposalModels, make, model, done } = loaderData;
+  const { makes, models, generations, others, proposals, proposalsNext, proposalModels, make, model, done } =
+    loaderData;
   const busy = useNavigation().state !== "idle";
   const target = make && model && !model.isOther ? { make, model } : null;
   return (
@@ -181,6 +191,11 @@ export default function AdminVehicles({ loaderData, actionData }: Route.Componen
             <ProposalGroup key={g.key} group={g} open={i === 0} models={proposalModels[g.make.id] ?? []} busy={busy} />
           ))
         )}
+        {proposalsNext ? (
+          <a className="o-t-body" href={`/admin/vehicules?propositions=${proposalsNext}`} data-testid="proposals-next">
+            {adminTexts.proposalsNext}
+          </a>
+        ) : null}
       </section>
 
       <div className="adm-columns">
@@ -364,7 +379,7 @@ function ProposalGroup({
   models: ReferenceModel[];
   busy: boolean;
 }) {
-  const n = g.vehicles.length;
+  const n = g.count;
   const title = g.level === "make" ? `${g.makeName ?? "?"} ${g.modelName}` : `${g.make.name} ${g.modelName}`;
   const known =
     g.level === "make" ? adminTexts.proposalTypedMake(g.makeName ?? "") : adminTexts.proposalKnownMake(g.make.name);
@@ -403,11 +418,19 @@ function ProposalGroup({
               <td>{SINCE.format(new Date(v.createdAt))}</td>
             </tr>
           ))}
+          {n > g.vehicles.length ? (
+            <tr>
+              <td colSpan={5} className="o-t-caption">
+                {adminTexts.proposalMore(n - g.vehicles.length)}
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
       <Form method="post" className="adm-proposal__act" data-testid="proposal-add">
         <input type="hidden" name="intent" value="proposal-add" />
         <input type="hidden" name="key" value={g.key} />
+        <input type="hidden" name="version" value={g.version} />
         {g.level === "make" ? (
           <>
             <TextField label="Nouvelle marque" name="makeName" defaultValue={g.makeName ?? ""} required />
@@ -425,10 +448,14 @@ function ProposalGroup({
         <Form method="post" className="adm-proposal__act" data-testid="proposal-attach">
           <input type="hidden" name="intent" value="proposal-attach" />
           <input type="hidden" name="key" value={g.key} />
+          <input type="hidden" name="version" value={g.version} />
           <input type="hidden" name="makeId" value={g.make.id} />
           <SelectField
             label={adminTexts.proposalExisting}
             name="existingModelId"
+            required
+            placeholder={adminTexts.proposalPickModel}
+            defaultValue=""
             options={models.map((m) => ({ value: m.id, label: m.name }))}
           />
           <Button type="submit" variant="secondary" icon="layers" loading={busy}>

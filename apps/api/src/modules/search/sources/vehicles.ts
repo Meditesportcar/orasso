@@ -10,7 +10,7 @@ import { db } from "../../../db/client";
 import { now } from "../../../lib/deps";
 import { storage } from "../../../lib/storage";
 import { containsPattern, searchTokens } from "../../../lib/text-search";
-import { detailVisibleSql } from "../../social/search";
+import { detailVisibleSql, typedMakeSql, typedModelSql } from "../../social/search";
 import { vehiclesRepo } from "../../vehicles/repo";
 import { vehicleBriefLabel, vehicleLabel } from "../../vehicles/serializers";
 import type { SearchSource } from "./index";
@@ -27,7 +27,8 @@ export const vehiclesSource: SearchSource<"vehicles"> = {
     const detail = detailVisibleSql(viewer.user.id);
     const conditions = tokens.map((token) => {
       const like = containsPattern(token);
-      return sql`(mk.name ilike ${like} or md.name ilike ${like} or (d.detail and g.name ilike ${like}))`;
+      // Lot R4a, tour 2 : un niveau « Autre » se cherche par son nom tapé (même visibilité que le nom de la liste).
+      return sql`(${typedMakeSql} ilike ${like} or ${typedModelSql} ilike ${like} or (d.detail and g.name ilike ${like}))`;
     });
     const result = await db.execute<Row>(sql`
       select v.id as vehicle_id, d.detail

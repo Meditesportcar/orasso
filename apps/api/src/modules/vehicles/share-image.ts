@@ -18,7 +18,7 @@ export type ShareExtras = { style?: ShareStyle; masks?: PlateRect[] };
 
 /** « Toyota · A90 · Blanche » : marque, génération, couleur (sans les morceaux absents ou « Autre »). */
 export function storyLine(
-  v: Pick<VehicleWithAll, "make" | "generation" | "color"> & Partial<Pick<VehicleWithAll, "proposedMake">>,
+  v: Pick<VehicleWithAll, "make" | "generation" | "color"> & Pick<VehicleWithAll, "proposedMake">,
 ): string {
   return [
     v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
@@ -34,7 +34,7 @@ export function storyLine(
  * (« 207 CC ») y figure aussi.
  */
 export function storyName(
-  v: Pick<VehicleWithAll, "model" | "make"> & Partial<Pick<VehicleWithAll, "proposedMake" | "proposedModel">>,
+  v: Pick<VehicleWithAll, "model" | "make"> & Pick<VehicleWithAll, "proposedMake" | "proposedModel">,
 ): string {
   if (!v.model.isOther) return v.model.name;
   if (v.proposedModel) return v.proposedModel;

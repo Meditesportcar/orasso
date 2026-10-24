@@ -219,8 +219,10 @@ export function plateFrameHit(
 
 /**
  * Tire un ou deux bords du cadre (Taille) de `dx, dy` px : le bord opposé reste fixe, en suivant les axes du cadre s'il
- * est tourné. Borné à la taille minimale ; un cadre droit s'arrête au bord de la photo, un cadre tourné reste dans
- * l'image (le rectangle avant rotation, comme `resizeOrientedPlateFrame`).
+ * est tourné. Borné à la taille minimale. Lot R4a, tour 2 (relecture Codex, bloquant) : la photo borne
+ * l'agrandissement lui-même, jamais en déplaçant le cadre après coup (un cadre tourné déplacé pouvait découvrir la
+ * plaque qu'il masquait). Le geste s'arrête au dernier point où le cadre (son rectangle avant rotation, ce que l'API
+ * vérifie) tient dans la photo.
  */
 export function resizePlateFrameEdges(
   start: PlateRect,
@@ -237,26 +239,52 @@ export function resizePlateFrameEdges(
   const ly = -dx * sin + dy * cos;
   const minW = PLATE_FRAME_MIN_W * W;
   const minH = PLATE_FRAME_MIN_H * H;
-  let L = -g.hw;
-  let R = g.hw;
-  let T = -g.hh;
-  let B = g.hh;
-  const upright = !start.angle;
-  if (edges.includes("l")) L = clamp(L + lx, upright ? -g.cx : R - W, R - minW);
-  if (edges.includes("r")) R = clamp(R + lx, L + minW, upright ? W - g.cx : L + W);
-  if (edges.includes("t")) T = clamp(T + ly, upright ? -g.cy : B - H, B - minH);
-  if (edges.includes("b")) B = clamp(B + ly, T + minH, upright ? H - g.cy : T + H);
-  const mx = (L + R) / 2;
-  const my = (T + B) / 2;
-  const cx = g.cx + mx * cos - my * sin;
-  const cy = g.cy + mx * sin + my * cos;
-  const w = Math.min(1, (R - L) / W);
-  const h = Math.min(1, (B - T) / H);
+  /** Le cadre pour une fraction `k` du geste (0 : le cadre de départ). */
+  const at = (k: number) => {
+    let L = -g.hw;
+    let R = g.hw;
+    let T = -g.hh;
+    let B = g.hh;
+    if (edges.includes("l")) L = Math.min(L + lx * k, R - minW);
+    if (edges.includes("r")) R = Math.max(R + lx * k, L + minW);
+    if (edges.includes("t")) T = Math.min(T + ly * k, B - minH);
+    if (edges.includes("b")) B = Math.max(B + ly * k, T + minH);
+    const mx = (L + R) / 2;
+    const my = (T + B) / 2;
+    const w = (R - L) / W;
+    const h = (B - T) / H;
+    return {
+      x: (g.cx + mx * cos - my * sin) / W - w / 2,
+      y: (g.cy + mx * sin + my * cos) / H - h / 2,
+      w,
+      h,
+    };
+  };
+  const EPS = 1e-9;
+  const fits = (r: { x: number; y: number; w: number; h: number }) =>
+    r.x >= -EPS && r.y >= -EPS && r.x + r.w <= 1 + EPS && r.y + r.h <= 1 + EPS;
+  let k = 1;
+  if (!fits(at(1))) {
+    // Le geste sort de la photo : la plus grande fraction qui tient (le cadre de départ tient toujours).
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(at(mid))) lo = mid;
+      else hi = mid;
+    }
+    k = lo;
+  }
+  const r = at(k);
+  // Arrondi au dix-millième vers l'intérieur : la taille ne grandit jamais par l'arrondi, la position ne bouge que
+  // d'une fraction de pixel pour rester dans la photo.
+  const w = Math.min(1, Math.floor(r.w * 10000) / 10000);
+  const h = Math.min(1, Math.floor(r.h * 10000) / 10000);
   return {
-    x: round(clamp(cx / W - w / 2, 0, 1 - w)),
-    y: round(clamp(cy / H - h / 2, 0, 1 - h)),
-    w: round(w),
-    h: round(h),
+    x: clamp(round(r.x + (r.w - w) / 2), 0, round(1 - w)),
+    y: clamp(round(r.y + (r.h - h) / 2), 0, round(1 - h)),
+    w,
+    h,
     ...(start.angle ? { angle: start.angle } : {}),
   };
 }
