@@ -2699,3 +2699,16 @@ Source : `corrections-r3b.md` (relais).
 
 ### À revoir avec Damien (lot R3b, tour 2)
 - **Héros de l'Accueil** : avec l'année, « DIM. 14 MARS 2027 » ne tient plus à côté de « J-141 » et passe dessous (capture avant/après) ; rien n'est coupé.
+## Lot R4d : « Où chercher ? » › Ailleurs (maquette R4.2, validée par Damien le 24/10/2026)
+
+Source : `lots/r4d-ailleurs.md` (relais), écran `t-w-away` de « Orasso maquettes R4 ». La grille de 101 départements laisse place à la recherche, aux récents et à la carte de « Ton coin », dans l'appli et sur le site.
+- **Recherche commune** (`packages/shared/src/rules/departmentSearch.ts`) : `foldSearch` y est rangé (l'Arrivée de l'appli et la liste web du design-system le reprennent). Correspondance : début du numéro, puis début du nom, puis début d'un mot du nom ; espace, tiret et apostrophe se valent (« cote d'or » = Côte-d'Or, pas Côtes-d'Armor) ; dans chaque rang, l'ordre des numéros (« pyrenees » : 64, 66, puis 65). 5 résultats au plus, « et N autres : continue à taper », phrase claire quand rien ne correspond.
+- **Récents** : 3 au plus, le plus récent d'abord, sans doublon, seulement les départements choisis par « Ailleurs » (jamais Mon coin) et poussés quand le lieu est appliqué (bouton « Voir les… »), comme la démo de la maquette. Une seule liste pour Événements, Pros et Personnes et crews (même « Ailleurs »). Appli : champ `awayRecent` du choix de l'Explorer (par compte, `cacheScope`). Site : clé `recents=11-34-09` dans le cookie de l'Explorer (haché par compte), lue à part : jamais dans l'adresse ni lue depuis l'adresse.
+- **Carte** : `FranceMap` en variante « Ton coin » (terre `deptLand`, frontières de la carte) ; nouvelle prop `dashed` (design-system, natif et web) pour Mon coin en pointillé d'encre, comme `.r4map path.coin` de la maquette. Un toucher choisit ; pas de zoom ; l'outre-mer par la recherche (dit sous la carte, avec le crédit).
+- **Liste déroulante de l'appli dans le flux** (elle pousse les récents et la carte au lieu de les recouvrir comme la maquette) : sur Android, un enfant hors du cadre de son parent ne reçoit pas le toucher. Sur le site, elle recouvre (position absolue), comme la maquette.
+- **Libellé d'« Ailleurs »** : titre « Ailleurs » seul, et « Choisi : Aude (11) » en dessous une fois un département choisi (maquette) ; auparavant « Ailleurs · Aude (11) » dans le titre.
+- **Site** : liste déroulante en `combobox`/`listbox` (flèches, Entrée choisit sans envoyer le formulaire, Échap ferme la liste sans fermer la feuille). Le bloc « Ailleurs » est toujours rendu et se montre par CSS quand « Ailleurs » est coché (marche sans JavaScript). Sans JavaScript, le texte part dans `dq` et le chargeur renvoie vers l'adresse avec le premier département qui correspond (`awayQueryRedirect`). Le département ne part qu'avec « Ailleurs » coché ; « Voir les événements » est grisé tant qu'aucun département n'est choisi (comme l'appli). La loupe du champ reste à 390 px.
+- **Site, bouton** : il reste « Voir les événements » sans nombre (comme en R2 : le site ne compte pas un brouillon de réglages, il faudrait une route de comptage côté client). L'appli dit « Voir les 2 événements ».
+
+### À revoir avec Damien (lot R4d)
+- **Petits départements d'Île-de-France** : difficiles à toucher sur la carte sans zoom ; la recherche y supplée (choix validé par défaut).
