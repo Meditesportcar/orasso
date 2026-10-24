@@ -166,7 +166,10 @@ test("R4a : captures avant / après (Plaque, Marque et modèle, site, admin)", a
       const plate = page.getByTestId("new-plate-frame");
       await expect(plate).toBeVisible();
       if ((await page.getByTestId("site-plate-frame").count()) === 0)
-        await plate.getByRole("button", { name: /Poser un cadre|Cadre/ }).first().click();
+        await plate
+          .getByRole("button", { name: /Poser un cadre|Cadre/ })
+          .first()
+          .click();
       await plate.scrollIntoViewIfNeeded();
       await shot(page, `site-plaque-cadre-${width}-${theme}`);
       const box = await page.getByTestId("site-plate-frame").first().boundingBox();

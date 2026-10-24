@@ -223,6 +223,8 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
           {v.certified && <Chip variant="verified">Certifié</Chip>}
           {archived && <Chip>{vehicleStatusLabels[v.status]}</Chip>}
           {v.plateTransfer && <Chip variant="accent">{plateTransferLabels.pending}</Chip>}
+          {/* Lot R4a : nom tapé, en attente de la liste Orasso (le propriétaire seul le voit). */}
+          {(v.proposedMake || v.proposedModel) && <Chip>{vehicleWizardLabels.toBeListed}</Chip>}
           {v.categories.map((c) => (
             <Chip key={c.id}>{c.label}</Chip>
           ))}

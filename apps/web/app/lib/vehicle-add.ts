@@ -37,6 +37,13 @@ export function originCategories(rows: readonly CategoryOption[], make: VehicleM
   return rows.filter((c) => c.eligible && c.allowedCountries?.includes(country));
 }
 
+/** Lot R4a : les origines à choisir à la main, pour une marque tapée (pays inconnu). */
+export const pickableOrigins = (rows: readonly CategoryOption[]) =>
+  rows.filter((c) => c.allowedCountries && c.eligible);
+
+/** Nom tapé : 40 caractères au plus (`PROPOSED_NAME_MAX`). */
+export { PROPOSED_NAME_MAX as PROPOSED_MAX } from "@orasso/shared";
+
 /** Les autres catégories (les origines d'autres pays ne sont pas des styles : on ne les montre pas). */
 export const styleCategories = (rows: readonly CategoryOption[]) => rows.filter((c) => !c.allowedCountries);
 
@@ -54,13 +61,15 @@ export function dimmedNote(rows: readonly CategoryOption[], year: number | undef
 }
 
 /** Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. */
-export function keptCategories(ids: readonly string[], rows: readonly CategoryOption[], make: VehicleMake | undefined) {
+export function keptCategories(
+  ids: readonly string[],
+  rows: readonly CategoryOption[],
+  make: VehicleMake | undefined,
+  /** Lot R4a : marque tapée, l'origine se choisit à la main (elle ne se déduit pas). */
+  pickOrigins = false,
+) {
   const origins = originCategories(rows, make).map((c) => c.id);
-  const eligible = new Set(
-    styleCategories(rows)
-      .filter((c) => c.eligible)
-      .map((c) => c.id),
-  );
+  const eligible = new Set((pickOrigins ? rows : styleCategories(rows)).filter((c) => c.eligible).map((c) => c.id));
   return [...origins, ...ids.filter((id) => eligible.has(id) && !origins.includes(id))].slice(0, MAX_CATEGORIES);
 }
 

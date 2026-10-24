@@ -2,7 +2,7 @@
 // 1.7) : d'abord la photo de couverture et le nombre de photos, puis « Plaque masquée, numéro privé », le type et le
 // nom, la fiche technique et les catégories. Chaque ligne qui apparaît se gare (Park) ; animations réduites : fondu.
 import { FitTitle, Icon, Park, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { vehicleAddLabels as V, vehicleTypeLabels } from "@orasso/shared";
+import { vehicleWizardLabels as L, vehicleAddLabels as V, vehicleTypeLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
@@ -60,6 +60,15 @@ export function LiveCard({ card, remoteCover }: { card: LiveCardData; remoteCove
         <Text variant="caption" color={c.inkMuted} style={styles.small}>
           {card.name ? (card.generation ?? vehicleTypeLabels[card.type]) : V.liveLater}
         </Text>
+        {/* Lot R4a : nom tapé, en attente de la liste (pour le propriétaire seulement). */}
+        {card.toBeListed ? (
+          <View style={styles.line} testID="vehicle-live-tobe">
+            <Icon name="info" size={13} color={c.accentText} />
+            <Text variant="caption" color={c.accentText} style={styles.small}>
+              {L.toBeListed}
+            </Text>
+          </View>
+        ) : null}
         {card.specs ? (
           <Park>
             <Text variant="caption" color={c.inkMuted} style={styles.small} testID="vehicle-live-specs">

@@ -291,6 +291,8 @@ export default function VehiculeFiche() {
         {v.certified ? <Tag tone="acc">Certifié</Tag> : null}
         {archived ? <TagWin>{vehicleStatusLabels[v.status]}</TagWin> : null}
         {v.plateTransfer ? <Tag tone="acc">{plateTransferLabels.pending}</Tag> : null}
+        {/* Lot R4a : nom tapé, en attente de la liste Orasso (le propriétaire seul le voit). */}
+        {v.proposedMake || v.proposedModel ? <Tag tone="line">{vehicleWizardLabels.toBeListed}</Tag> : null}
         {v.categories.map((cat, i) => (
           <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
             {cat.label}

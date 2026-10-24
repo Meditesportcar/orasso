@@ -16,6 +16,7 @@ import type {
   VehicleMake,
   VehicleModel,
   VehiclePros,
+  VehicleReferenceHit,
   VehicleStatus,
   VehicleUpdate,
 } from "@orasso/shared";
@@ -64,6 +65,9 @@ export const garageApi = {
   shareZones: (vehicleId: string, format: ShareFormat, style: ShareStyle) =>
     request<{ texts: ShareZone[] }>(`/api/me/vehicles/${vehicleId}/share-zones?format=${format}&style=${style}`),
   makes: () => request<VehicleMake[]>("/api/vehicle-reference/makes"),
+  /** Lot R4a : recherche « Marque ou modèle » tolérante du lot R3c (« golf 4 », « e36 », « mx5 »). */
+  referenceSearch: (q: string, type?: string) =>
+    request<VehicleReferenceHit[]>(`/api/vehicle-reference/search${qs({ q, type, limit: 20 })}`),
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
   generations: (modelId: string) =>
     request<VehicleGeneration[]>(`/api/vehicle-reference/models/${modelId}/generations`),
