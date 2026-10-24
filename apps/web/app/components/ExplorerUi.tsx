@@ -51,6 +51,23 @@ export function PillSheet({
   const close = () => ref.current?.close();
   return (
     <>
+      {/* Sans JavaScript la fenêtre ne s'ouvre pas : le réglage s'ouvre à la place dans un bloc repliable (formulaire GET). */}
+      <noscript>
+        <style>{`[data-testid="${testId}"]{display:none}.ex-pills{flex-wrap:wrap;overflow:visible}`}</style>
+        <details className="ex-nojs">
+          <summary className="ex-pill">
+            <Icon name={icon} size={18} />
+            <span className="ex-pill__text">
+              {k ? <span className="ex-pill__k">{k} : </span> : null}
+              <strong className="ex-pill__v">{value}</strong>
+            </span>
+          </summary>
+          <div className="ex-nojs__in">
+            <h2 className="s-h2">{title}</h2>
+            {children}
+          </div>
+        </details>
+      </noscript>
       <button
         type="button"
         className="ex-pill"
@@ -210,6 +227,7 @@ export function WhereForm({
   dept: dept0,
   coin,
   hasPosition,
+  position = null,
   seeLabel,
   people = false,
 }: {
@@ -222,6 +240,8 @@ export function WhereForm({
   coin: readonly string[];
   /** La position de l'appareil est déjà dans l'adresse. */
   hasPosition: boolean;
+  /** La position déjà dans l'adresse (arrondie) : elle repart avec le formulaire quand on change seulement le rayon. */
+  position?: { lat: string; lng: string } | null;
   seeLabel: string;
   people?: boolean;
 }) {
@@ -290,6 +310,12 @@ export function WhereForm({
   return (
     <form method="get" action="/app/explorer" className="ex-where" onSubmit={submit} data-testid="around-sheet">
       <Hidden entries={hidden} />
+      {!people && mode === "moi" && hasPosition && position ? (
+        <>
+          <input type="hidden" name="lat" value={position.lat} />
+          <input type="hidden" name="lng" value={position.lng} />
+        </>
+      ) : null}
       {people ? <p className="o-t-caption s-muted">{R.wherePeopleHint}</p> : null}
       {people ? null : option("moi", "place", R.whereMe, denied ? R.whereMeDenied : R.whereMeHint, "around-me")}
       {!people && mode === "moi" ? (

@@ -1863,6 +1863,28 @@
   color: inherit;
   font: inherit;
 }
+/* Une seule ✕ : celle du navigateur est retirée, la nôtre (lien « Effacer ») reste. */
+.ex-search__field input::-webkit-search-cancel-button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+.ex-search__field input::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 390 px : le texte d'aide entre en entier (la loupe de la fin envoie déjà la recherche). */
+@media (max-width: 480px) {
+  .ex-search__field {
+    gap: 0;
+    padding-left: var(--space-2);
+  }
+  .ex-search__field > svg:first-child {
+    display: none;
+  }
+  .ex-search__field input {
+    font-size: 14px;
+  }
+}
 .ex-search__field input:focus-visible {
   outline: none;
 }
@@ -2001,6 +2023,27 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-4);
+}
+/* Sans JavaScript (`<noscript>`) : le réglage s'ouvre dans un bloc repliable. */
+.ex-nojs {
+  flex: 1 0 100%;
+}
+.ex-nojs > summary {
+  list-style: none;
+  width: fit-content;
+}
+.ex-nojs > summary::-webkit-details-marker {
+  display: none;
+}
+.ex-nojs__in {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line);
 }
 .ex-sheet__head {
   display: flex;

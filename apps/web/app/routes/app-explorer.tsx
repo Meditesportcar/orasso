@@ -20,10 +20,13 @@ import {
   type Page,
   PEOPLE_SEARCH_MIN_QUERY,
   type PeopleSearchPage,
+  type PeopleWhere,
   type PersonCard,
   type Preferences,
   type ProActivityCounts,
   type ProCard,
+  peopleSearchPlace,
+  peopleSuggestPlace,
   proActivities,
   proActivityLabels,
   explorerR2Labels as R,
@@ -53,9 +56,10 @@ import {
   type EventFilters,
   type EventSort,
   eventsParams,
+  failureMessage,
+  firstFailure,
   isMover,
   type PeopleShow,
-  type PeopleWhere,
   type ProSort,
   parseChosenWhere,
   parseEventSort,
@@ -85,6 +89,8 @@ export function meta() {
 
 const SEGMENTS = ["resultats", "evenements", "pros", "personnes"] as const;
 type Segment = (typeof SEGMENTS)[number];
+/** Provisoire (le libellé partagé est côté appli) : le lien qui recharge la page après une erreur. */
+const RETRY = "Réessayer";
 const PAGE = 24;
 const MAP_PAGE = 100;
 /** Les réglages gardés d'un segment à l'autre : le lieu (Événements et Pros partagent « Où chercher ? ») et la vue. */
@@ -105,12 +111,17 @@ type EventsData = {
 };
 type ProsData = { page: Page<ProCard>; job: string; sort: ProSort; counts: ProActivityCounts | null; place: Place };
 type PeopleData = {
-  where: PeopleWhere;
+  /** `null` : rien de choisi (suggestions de mon coin ; une recherche s'élargit d'elle-même à toute la France). */
+  where: PeopleWhere | null;
   show: PeopleShow;
   interet: string;
   grade: string;
   searching: boolean;
   tooShort: boolean;
+  /** Des filtres sans texte : on reste sur les suggestions et on le dit. */
+  needText: boolean;
+  /** La recherche a été élargie d'elle-même à toute la France (aucun lieu choisi). */
+  broadened: boolean;
   categories: Category[];
   crewDept: string;
   people: PeopleSearchPage | null;
@@ -149,6 +160,7 @@ async function load(request: Request, url: URL) {
     q,
     vue,
     cur,
+    cursor,
     coin: [] as string[],
     gradeLabel: null as string | null,
     signedIn: false,
@@ -162,7 +174,7 @@ async function load(request: Request, url: URL) {
   if (segment === "resultats") {
     if (q.length < SEARCH_MIN_LENGTH) return base;
     const res = await api<SearchResults>(request, `/search?${new URLSearchParams({ q, limit: "5" })}`);
-    return { ...base, results: res.ok ? res.data : null, failed: res.ok ? null : res.error.message };
+    return { ...base, results: res.ok ? res.data : null, failed: failureMessage(res) };
   }
 
   // Les préférences et le compte : le point de départ de l'Explorer, jamais une limite (lot M6).
@@ -172,19 +184,22 @@ async function load(request: Request, url: URL) {
   const gradeLabel = me ? gradeLabels[me.profile.grade] : null;
   const withMe = { ...base, coin, gradeLabel, signedIn: me !== null };
 
-  // Personnes et crews : des départements seulement, aucune position, aucun annuaire.
+  // Personnes et crews : des départements seulement, aucune position, aucun annuaire. Sans texte (≥ 2 caractères), aucune
+  // liste de personnes : les filtres n'affinent qu'une recherche par texte (tour 2).
   if (segment === "personnes") {
     const where = parsePeopleWhere(get("lieu"), get("ailleurs"));
     const show = parseShow(get("montrer"));
     const interet = /^[0-9a-f-]{36}$/i.test(get("interet")) ? get("interet") : "";
     const grade = parseGrade(get("grade"));
-    const searching = q.length > 0 || Boolean(interet || grade);
-    const tooShort = q.length > 0 && q.length < PEOPLE_SEARCH_MIN_QUERY && !interet && !grade;
-    const dept = where.kind === "dept" ? where.code : "";
-    // Les crews proposés : ceux du département choisi, sinon de mon coin ; partout en France, les plus suivis.
-    const crewDept = where.kind === "dept" ? where.code : where.kind === "mine" ? (coin[0] ?? "") : "";
-    if (where.kind === "all") cur.lieu = "partout";
-    if (where.kind === "dept") {
+    const tooShort = q.length > 0 && q.length < PEOPLE_SEARCH_MIN_QUERY;
+    const searching = q.length >= PEOPLE_SEARCH_MIN_QUERY;
+    const needText = !searching && !tooShort && Boolean(interet || grade);
+    const searchPlace = peopleSearchPlace(where, coin);
+    // Les crews proposés : ceux du lieu choisi, sinon de mon coin ; partout en France, les plus suivis.
+    const suggestDepts = peopleSuggestPlace(where, coin);
+    if (where?.kind === "mine") cur.lieu = "coin";
+    if (where?.kind === "all") cur.lieu = "partout";
+    if (where?.kind === "dept") {
       cur.lieu = "ailleurs";
       cur.ailleurs = where.code;
     }
@@ -202,8 +217,10 @@ async function load(request: Request, url: URL) {
       grade,
       searching,
       tooShort,
+      needText,
+      broadened: searching && searchPlace.broadened,
       categories,
-      crewDept,
+      crewDept: suggestDepts.join(", "),
       people: null,
       crews: [],
       sameModel: null,
@@ -212,30 +229,29 @@ async function load(request: Request, url: URL) {
     };
     if (tooShort) return { ...withMe, people: view };
     if (searching) {
-      // Une recherche (≥ 2 lettres) ou des filtres : Personnes puis Crews. Le département seul n'est jamais un critère.
-      const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      if (dept) params.set("department", dept);
+      // Une recherche (≥ 2 lettres), puis ses filtres : Personnes puis Crews.
+      const params = new URLSearchParams({ q });
+      if (searchPlace.departments) params.set("departments", searchPlace.departments);
       if (interet) params.set("categoryId", interet);
       if (grade) params.set("grade", grade);
       if (cursor) params.set("cursor", cursor);
       const crewParams = new URLSearchParams({ limit: "20", q });
-      if (dept) crewParams.set("department", dept);
+      if (searchPlace.departments) crewParams.set("departments", searchPlace.departments);
       const [people, crews] = await Promise.all([
         show === "crews" ? Promise.resolve(null) : api<PeopleSearchPage>(request, `/users/search?${params}`),
-        q && show !== "people" ? api<Page<CrewCard>>(request, `/crews/search?${crewParams}`) : Promise.resolve(null),
+        show !== "people" ? api<Page<CrewCard>>(request, `/crews/search?${crewParams}`) : Promise.resolve(null),
       ]);
       return {
         ...withMe,
         people: { ...view, people: people?.ok ? people.data : null, crews: crews?.ok ? crews.data.items : [] },
-        failed: people && !people.ok ? people.error.message : null,
+        failed: firstFailure(people, crews),
       };
     }
-    // Sans texte ni filtre : des suggestions courtes, de données publiques seulement.
+    // Sans texte : des suggestions courtes, de données publiques seulement (les filtres seuls ne listent personne).
     const suggestParams = new URLSearchParams();
-    if (dept) suggestParams.set("department", dept);
+    if (suggestDepts.length) suggestParams.set("departments", suggestDepts.join(","));
     const crewParams = new URLSearchParams({ limit: "6" });
-    if (crewDept) crewParams.set("department", crewDept);
+    if (suggestDepts.length) crewParams.set("departments", suggestDepts.join(","));
     const [suggestions, crews] = await Promise.all([
       show === "crews"
         ? Promise.resolve(null)
@@ -249,6 +265,7 @@ async function load(request: Request, url: URL) {
         sameModel: suggestions?.ok ? suggestions.data.sameModel : null,
         crews: crews?.ok ? crews.data.items : [],
       },
+      failed: firstFailure(suggestions, crews),
     };
   }
 
@@ -331,7 +348,7 @@ async function load(request: Request, url: URL) {
         prefOn,
         place,
       },
-      failed: res.ok ? null : res.error.message,
+      failed: failureMessage(res),
     };
   }
 
@@ -359,7 +376,7 @@ async function load(request: Request, url: URL) {
       counts: counts.ok ? counts.data : null,
       place,
     },
-    failed: res.ok ? null : res.error.message,
+    failed: firstFailure(res, counts),
   };
 }
 
@@ -419,7 +436,8 @@ const WHEN_OPTIONS = [
 const PLACE_OMIT = ["autour", "ailleurs", "rayon", "lat", "lng"];
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const { segment, q, vue, cur, coin, gradeLabel, signedIn, failed, results, events, pros, people } = loaderData;
+  const { segment, q, vue, cur, cursor, coin, gradeLabel, signedIn, failed, results, events, pros, people } =
+    loaderData;
   const busy = useNavigation().state !== "idle";
   const done = actionData as unknown as
     | {
@@ -438,7 +456,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   /** Les réglages courants à garder dans un formulaire, sauf ceux que le formulaire pose lui-même. */
   const hiddenFor = (omit: readonly string[] = []): [string, string][] => {
     const out = Object.entries(cur).filter(([key]) => !omit.includes(key));
-    if (q) out.push(["q", q]);
+    if (q && !omit.includes("q")) out.push(["q", q]);
     return out;
   };
 
@@ -488,6 +506,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
         dept={place.where.kind === "dept" ? place.where.code : ""}
         coin={coin}
         hasPosition={place.hasPosition}
+        position={place.hasPosition && cur.lat && cur.lng ? { lat: cur.lat, lng: cur.lng } : null}
         seeLabel={seeLabel}
       />
     </PillSheet>
@@ -638,12 +657,23 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   } else if (segment === "personnes" && people) {
     const w = people.where;
     const nFilters = (people.interet ? 1 : 0) + (people.grade ? 1 : 0);
+    // Rien de choisi : contour. Les suggestions viennent de mon coin ; une recherche s'élargit d'elle-même à la France.
+    const wherePillValue =
+      w === null
+        ? people.searching || coin.length === 0
+          ? R.pillAll
+          : R.pillMine(coin)
+        : w.kind === "mine"
+          ? R.pillMine(coin)
+          : w.kind === "dept"
+            ? deptLong(w.code)
+            : R.pillAll;
     pills = (
       <>
         <PillSheet
           icon="place"
-          value={w.kind === "mine" ? R.pillMine(coin) : w.kind === "dept" ? deptLong(w.code) : R.pillAll}
-          set={w.kind !== "mine"}
+          value={wherePillValue}
+          set={w !== null}
           title={R.whereSheet}
           testId="people-where-open"
           sheetId="people-where-sheet"
@@ -652,9 +682,19 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             people
             field="lieu"
             hidden={hiddenFor(["lieu", "ailleurs"])}
-            mode={w.kind === "mine" ? "coin" : w.kind === "dept" ? "ailleurs" : "partout"}
+            mode={
+              w === null
+                ? people.searching || coin.length === 0
+                  ? "partout"
+                  : "coin"
+                : w.kind === "mine"
+                  ? "coin"
+                  : w.kind === "dept"
+                    ? "ailleurs"
+                    : "partout"
+            }
             km={100}
-            dept={w.kind === "dept" ? w.code : ""}
+            dept={w?.kind === "dept" ? w.code : ""}
             coin={coin}
             hasPosition={false}
             seeLabel={R.seeResults}
@@ -753,7 +793,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
           data-testid="explorer-search"
         >
           {segment === "resultats" ? <input type="hidden" name="segment" value="resultats" /> : null}
-          {segment === "resultats" ? null : <Hidden entries={hiddenFor()} />}
+          {segment === "resultats" ? null : <Hidden entries={hiddenFor(["q"])} />}
           <label className="ex-search__field">
             <Icon name="search" size={18} />
             <span className="o-visually-hidden">{R.searchLabel}</span>
@@ -795,8 +835,11 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
       </div>
 
       {failed && (
-        <p className="s-error" role="alert">
-          {failed}
+        <p className="s-error" role="alert" data-testid="explorer-failed">
+          {failed}{" "}
+          <a href={link({ suite: cursor || null })} data-testid="explorer-retry">
+            {RETRY}
+          </a>
         </p>
       )}
       {actionError && (
@@ -869,7 +912,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
         />
       )}
 
-      {segment === "personnes" && people && (
+      {segment === "personnes" && people && !failed && (
         <PeopleList view={people} q={q} busy={busy} sentCrew={sentCrew} more={nextLink(people.people?.nextCursor)} />
       )}
     </div>
@@ -985,7 +1028,12 @@ function PeopleList({
         hint={R.peopleGroupHint}
         testId="people-results"
       >
-        {people.length === 0 ? <PeopleEmpty>{q ? R.noPeople(q) : R.noPeopleFiltered}</PeopleEmpty> : null}
+        {view.broadened ? (
+          <p className="o-t-caption s-muted" role="status" data-testid="people-broadened">
+            {R.broadened}
+          </p>
+        ) : null}
+        {people.length === 0 ? <PeopleEmpty>{R.noPeople(q)}</PeopleEmpty> : null}
         <ul className="s-people">
           {people.map((p) => (
             <PersonRowR2 key={p.userId} person={p} busy={busy} />
@@ -1046,6 +1094,11 @@ function PeopleList({
         >
           <ul className="s-people">{crews.map(crewRow)}</ul>
         </PeopleSection>
+      ) : null}
+      {view.needText ? (
+        <p className="o-t-caption s-muted" role="status" data-testid="people-need-text">
+          {R.peopleFiltersNeedText}
+        </p>
       ) : null}
       {nothing ? <PeopleEmpty>{R.noSuggestions}</PeopleEmpty> : null}
       {privacy}

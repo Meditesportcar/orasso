@@ -4,6 +4,8 @@ import {
   activeFilters,
   type EventFilters,
   eventsParams,
+  failureMessage,
+  firstFailure,
   isMover,
   parseChosenWhere,
   parseEventSort,
@@ -40,12 +42,13 @@ describe("lieu de l'Explorer (adresse)", () => {
   });
 
   it("personnes et crews : des départements seulement", () => {
-    expect(parsePeopleWhere("")).toEqual({ kind: "mine" });
+    // Rien de choisi : null (suggestions de mon coin, recherche élargie d'elle-même) ; « Mon coin » choisi est explicite.
+    expect(parsePeopleWhere("")).toBeNull();
     expect(parsePeopleWhere("coin")).toEqual({ kind: "mine" });
     expect(parsePeopleWhere("partout")).toEqual({ kind: "all" });
     expect(parsePeopleWhere("ailleurs", "66")).toEqual({ kind: "dept", code: "66" });
-    expect(parsePeopleWhere("ailleurs", "xx")).toEqual({ kind: "mine" });
-    expect(parsePeopleWhere("moi")).toEqual({ kind: "mine" });
+    expect(parsePeopleWhere("ailleurs", "xx")).toBeNull();
+    expect(parsePeopleWhere("moi")).toBeNull();
   });
 });
 
@@ -186,5 +189,22 @@ describe("paramètres de l'API", () => {
     expect(isMover({ lat: null, city: null, interventionDepartments: ["66"] })).toBe(true);
     expect(isMover({ lat: 42.7, city: "Perpignan", interventionDepartments: ["66"] })).toBe(false);
     expect(isMover({ lat: null, city: null, interventionDepartments: [] })).toBe(false);
+  });
+});
+
+describe("erreur distincte d'une liste vide", () => {
+  const fail = (status: number, message = "x") => ({ ok: false as const, status, error: { message } });
+  it("ok ou rien lu : pas d'erreur ; 429 et 503 ont leur texte ; une autre erreur garde le sien", () => {
+    expect(failureMessage({ ok: true })).toBeNull();
+    expect(failureMessage(null)).toBeNull();
+    expect(failureMessage(fail(429))).toContain("Trop de demandes");
+    expect(failureMessage(fail(503))).toContain("momentanément indisponible");
+    expect(failureMessage(fail(500, "Erreur inattendue."))).toBe("Erreur inattendue.");
+    expect(failureMessage(fail(500, ""))).toContain("momentanément indisponible");
+  });
+  it("la première lecture en échec l'emporte, une liste vide qui a réussi n'est pas une erreur", () => {
+    expect(firstFailure({ ok: true }, null, fail(503))).toContain("indisponible");
+    expect(firstFailure({ ok: true }, fail(429), fail(503))).toContain("Trop de demandes");
+    expect(firstFailure({ ok: true }, null)).toBeNull();
   });
 });

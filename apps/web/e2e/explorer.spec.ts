@@ -207,6 +207,11 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   await expect(page.getByTestId("people-privacy")).toBeVisible();
   await page.goto("/app/explorer?segment=personnes&lieu=ailleurs&ailleurs=66");
   await expect(page.getByTestId("person-row")).toHaveCount(0);
+  // Un grade ou un département seul n'est pas non plus un annuaire : il n'affine qu'une recherche par texte.
+  await page.goto("/app/explorer?segment=personnes&grade=rodage");
+  await expect(page.getByTestId("people-results")).toHaveCount(0);
+  await expect(page.getByTestId("person-row")).toHaveCount(0);
+  await expect(page.getByTestId("people-need-text")).toBeVisible();
 
   // --- Confidentialité : un compte privé que l'on ne connaît pas n'apparaît pas par son département ------------------
   // Par son pseudo, en revanche, il se trouve, réduit : ni département ni véhicule détaillé.

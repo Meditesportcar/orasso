@@ -17,7 +17,9 @@ export function EventsMap({ events }: { events: EventCard[] }) {
   const container = useRef<HTMLElement>(null);
   const located = useMemo(() => events.filter((e) => e.lat != null && e.lng != null), [events]);
   const strip = useMemo(() => dateStrip(located, now()), [located]);
-  const [day, setDay] = useState<string | null>(null);
+  const [picked, setDay] = useState<string | null>(null);
+  // Le jour choisi n'existe plus (la liste a changé) : retour à « Toutes ».
+  const day = picked !== null && strip.some((d) => d.key === picked) ? picked : null;
   const shown = useMemo(
     () => (day ? located.filter((e) => dayKey(shownStart(e.startsAt, now())) === day) : located),
     [located, day],

@@ -12,6 +12,7 @@ import {
   type Grade,
   grades,
   type LatLng,
+  type PeopleWhere,
   type ProActivity,
   type ProCard,
   proActivities,
@@ -29,7 +30,7 @@ export type ProSort = (typeof PRO_SORTS)[number];
 export const PEOPLE_SHOWS = ["all", "people", "crews"] as const;
 export type PeopleShow = (typeof PEOPLE_SHOWS)[number];
 /** Personnes et crews : des départements seulement, jamais de position ni de distance (docs/01). */
-export type PeopleWhere = { kind: "mine" } | { kind: "dept"; code: string } | { kind: "all" };
+export type { PeopleWhere };
 
 const isDepartment = (code: string) => (departments as readonly string[]).includes(code);
 
@@ -62,12 +63,38 @@ export function parseChosenWhere(get: (name: string) => string): ExplorerWhere |
   return isDepartment(autour) ? { kind: "dept", code: autour } : null;
 }
 
-export function parsePeopleWhere(lieu: string, ailleurs = ""): PeopleWhere {
+/**
+ * Le lieu de Personnes et crews choisi dans l'adresse (`lieu` : `coin`, `partout`, `ailleurs` avec `ailleurs=<code>`, ou
+ * directement un département), `null` si rien n'est choisi : les suggestions viennent de mon coin et une recherche s'élargit
+ * d'elle-même à toute la France (lot R2, tour 2).
+ */
+export function parsePeopleWhere(lieu: string, ailleurs = ""): PeopleWhere | null {
+  if (lieu === "coin") return { kind: "mine" };
   if (lieu === "partout") return { kind: "all" };
-  if (lieu === "ailleurs") return isDepartment(ailleurs) ? { kind: "dept", code: ailleurs } : { kind: "mine" };
+  if (lieu === "ailleurs") return isDepartment(ailleurs) ? { kind: "dept", code: ailleurs } : null;
   if (isDepartment(lieu)) return { kind: "dept", code: lieu };
-  return { kind: "mine" };
+  return null;
 }
+
+/** Message d'une lecture de l'API en échec (`null` : la lecture a réussi, ou n'a pas eu lieu). 429 et 503 ont leur texte. */
+export const RATE_LIMITED = "Trop de demandes en peu de temps. Réessaie dans un instant.";
+export const UNAVAILABLE = "Le service est momentanément indisponible.";
+type Outcome = { ok: true } | { ok: false; status: number; error?: { message?: string } } | null | undefined;
+export function failureMessage(res: Outcome): string | null {
+  if (!res || res.ok) return null;
+  if (res.status === 429) return RATE_LIMITED;
+  if (res.status === 503) return UNAVAILABLE;
+  return res.error?.message || UNAVAILABLE;
+}
+
+/** Le premier message d'échec d'une série de lectures : une erreur n'est jamais présentée comme une liste vide. */
+export const firstFailure = (...results: Outcome[]): string | null => {
+  for (const r of results) {
+    const m = failureMessage(r);
+    if (m) return m;
+  }
+  return null;
+};
 
 export function parseWhen(raw: string): When {
   return (WHENS as readonly string[]).includes(raw) ? (raw as When) : "all";

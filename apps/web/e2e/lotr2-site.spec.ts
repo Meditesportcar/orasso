@@ -223,7 +223,7 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("people-where-open")).toContainText("(11)");
       await expect(page).not.toHaveURL(/lat=|lng=/);
 
-      // Filtres : un grade (ne trouve que les comptes publics et les amis), puis les résultats, jamais un annuaire.
+      // Filtres : un grade seul n'est jamais un annuaire (aucune personne), il affine une recherche par texte.
       await page.goto("/app/explorer?segment=personnes");
       await openSheet(page, "people-filters", "people-filters-sheet");
       await page
@@ -233,10 +233,54 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await page.getByTestId("people-filters-apply").click();
       await page.waitForURL(/grade=/);
       await expect(page.getByTestId("people-filters")).toHaveAttribute("data-set", "true");
+      await expect(page.getByTestId("people-need-text")).toContainText("au moins deux caractères");
+      await expect(page.getByTestId("people-results")).toHaveCount(0);
+      await expect(page.getByTestId("person-row")).toHaveCount(0);
+      await page.goto("/app/explorer?segment=personnes&grade=rodage&interet=3f1e0b5e-8c2d-4f67-9a10-1b2c3d4e5f60");
+      await expect(page.getByTestId("people-need-text")).toBeVisible();
+      await expect(page.getByTestId("person-row")).toHaveCount(0);
+      // Avec un texte, le grade affine la recherche.
+      await page.goto("/app/explorer?segment=personnes&q=ke&grade=route");
       await expect(page.getByTestId("people-results")).toContainText("Personnes ·");
+      await expect(page.getByTestId("people-need-text")).toHaveCount(0);
+
+      // « Mon coin » : rien de choisi = recherche élargie d'elle-même (pastille en contour, « Partout en France ») ;
+      // « Mon coin » choisi = recherche dans mes départements (pastille en encre).
+      await page.goto("/app/explorer?segment=personnes&q=ke");
+      await expect(page.getByTestId("people-where-open")).toContainText("Partout en France");
+      await expect(page.getByTestId("people-where-open")).not.toHaveAttribute("data-set", "true");
+      await expect(page.getByTestId("people-broadened")).toContainText("toute la France");
+      await page.goto("/app/explorer?segment=personnes&q=ke&lieu=coin");
+      await expect(page.getByTestId("people-where-open")).toContainText("Mon coin");
+      await expect(page.getByTestId("people-where-open")).toHaveAttribute("data-set", "true");
+      await expect(page.getByTestId("people-broadened")).toHaveCount(0);
+      await expect(page.getByTestId("people-results")).toBeVisible();
+      await page.goto("/app/explorer?segment=personnes&q=ke&lieu=partout");
+      await expect(page.getByTestId("people-where-open")).toHaveAttribute("data-set", "true");
+      await expect(page.getByTestId("people-broadened")).toHaveCount(0);
+
+      // « Voir plus » : la page suivante (si la base seedée a plus d'une page de personnes pour ce texte).
+      await page.goto("/app/explorer?segment=personnes&q=_66&montrer=people&lieu=partout");
+      const more = page.getByTestId("people-results").getByRole("link", { name: "Voir plus" });
+      if (await more.count()) {
+        const before = await page.getByTestId("person-row").count();
+        await more.click();
+        await page.waitForURL(/suite=/);
+        expect(await page.getByTestId("person-row").count()).toBeGreaterThan(0);
+        expect(before).toBeGreaterThan(0);
+      }
 
       // Une recherche : « Personnes · N » puis « Crews · N » ; un compte privé réduit, sans département.
       await page.goto("/app/explorer?segment=personnes");
+      await page.getByTestId("people-q").fill("Marc_66");
+      await page.getByTestId("search-submit").click();
+      await page.waitForURL(/q=Marc_66/);
+      // Une seule recherche dans l'adresse (le formulaire ne porte plus `q` en champ caché), même après une deuxième.
+      expect(new URL(page.url()).searchParams.getAll("q")).toEqual(["Marc_66"]);
+      await page.getByTestId("people-q").fill("Kenji");
+      await page.getByTestId("search-submit").click();
+      await page.waitForURL(/q=Kenji/);
+      expect(new URL(page.url()).searchParams.getAll("q")).toEqual(["Kenji"]);
       await page.getByTestId("people-q").fill("Marc_66");
       await page.getByTestId("search-submit").click();
       await page.waitForURL(/q=Marc_66/);
@@ -263,4 +307,41 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await ctx.close();
     }
   }
+});
+
+// « Autour de moi » garde la position (tour 2) : après une localisation, changer seulement le rayon repart avec les
+// mêmes coordonnées (arrondies), sans nouvelle lecture.
+test("site : Explorer R2, « Autour de moi » garde la position quand on change le rayon", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const ctx = await browser.newContext({
+    viewport: DESKTOP,
+    geolocation: { latitude: 42.69, longitude: 2.89 },
+    permissions: ["geolocation"],
+  });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+  await page.goto("/app/explorer?segment=evenements");
+  await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 30_000 });
+  await openSheet(page, "around-open", "where-sheet");
+  await page.getByTestId("around-me").click();
+  await page.getByTestId("where-range").fill("50");
+  await page.getByTestId("where-apply").click();
+  await page.waitForURL(/autour=moi/);
+  await page.waitForURL(/lat=/);
+  const first = new URL(page.url()).searchParams;
+  expect(first.get("rayon")).toBe("50");
+  const [lat, lng] = [first.get("lat"), first.get("lng")];
+  expect(lat).toBeTruthy();
+  expect(lng).toBeTruthy();
+  // Seconde validation : seul le rayon change, les coordonnées courantes partent avec le formulaire.
+  await openSheet(page, "around-open", "where-sheet");
+  await page.getByTestId("where-range").fill("100");
+  await page.getByTestId("where-apply").click();
+  await page.waitForURL(/rayon=100/);
+  const second = new URL(page.url()).searchParams;
+  expect(second.get("autour")).toBe("moi");
+  expect(second.get("lat")).toBe(lat);
+  expect(second.get("lng")).toBe(lng);
+  expect(second.getAll("lat")).toHaveLength(1);
+  await ctx.close();
 });
