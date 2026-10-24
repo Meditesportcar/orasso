@@ -8,6 +8,7 @@ import {
   type PosterPreview,
   type PosterSettings,
   posterStyles,
+  yearToShow,
 } from "@orasso/shared";
 import { and, eq, gt, isNotNull, isNull, ne } from "drizzle-orm";
 
@@ -92,6 +93,25 @@ export function posterSettingsOf(e: EventRow): PosterSettings | null {
   return { photoKey: e.posterPhotoKey, style, title: e.posterTitle };
 }
 
+/** L'année que l'affiche doit écrire maintenant (0 : aucune, l'événement est dans l'année en cours). */
+export function posterYearOf(e: Pick<EventRow, "startsAt" | "timezone">, at: Date = now()): number {
+  return yearToShow(e.startsAt, at, e.timezone) ?? 0;
+}
+
+/**
+ * Lot R3b, tour 2 : l'affiche enregistrée n'écrit plus la bonne année (rendue avant le lot pour un événement de l'an
+ * prochain, ou un Nouvel An est passé). Une clé sans marque d'année vaut « aucune année » : seules les affiches des
+ * années suivantes sont refaites.
+ */
+export function posterYearStale(
+  e: Pick<EventRow, "startsAt" | "timezone" | "posterPostKey" | "posterStyle" | "posterTitle">,
+  at: Date = now(),
+): boolean {
+  if (!e.posterPostKey || !e.posterStyle || !e.posterTitle) return false;
+  const stored = Number(/poster-post-y(\d+)-/.exec(e.posterPostKey)?.[1] ?? 0);
+  return stored !== posterYearOf(e, at);
+}
+
 export const posterService = {
   /**
    * Contrôle la photo choisie pour l'affiche d'un événement, dans la transaction de l'appelant : celle déjà en place,
@@ -111,7 +131,8 @@ export const posterService = {
   ): Promise<PosterKeys> {
     const input = await eventPosterInput(e, settings);
     const [post, story] = await Promise.all([render(input, "post"), render(input, "story")]);
-    const tag = randomBytes(6).toString("hex");
+    // Lot R3b, tour 2 : la clé dit l'année écrite sur l'affiche (`y0` : aucune), pour savoir quand la refaire.
+    const tag = `y${posterYearOf(e)}-${randomBytes(6).toString("hex")}`;
     const postKey = `events/${e.id}/poster-post-${tag}.png`;
     const storyKey = `events/${e.id}/poster-story-${tag}.png`;
     await Promise.all([storage.put(postKey, post), storage.put(storyKey, story)]);

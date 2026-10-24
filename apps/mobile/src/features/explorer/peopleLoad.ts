@@ -45,7 +45,14 @@ export type PeopleFetchers = {
   suggestions: (departments?: string) => Promise<PeopleSuggestions>;
 };
 
-export type PeopleInput = { q: string; where: PeopleWhere | null; filters: PeopleFilters; coin: readonly string[] };
+export type PeopleInput = {
+  q: string;
+  where: PeopleWhere | null;
+  filters: PeopleFilters;
+  coin: readonly string[];
+  /** Lot R3b, tour 2 : les crews seulement (« Rejoindre un crew ») ; aucune lecture de personnes. */
+  crewsOnly?: boolean;
+};
 
 export type SuggestResult = {
   kind: "suggest";
@@ -82,13 +89,16 @@ export async function loadPeople(
   if (view.mode === "suggest") {
     const near = peopleSuggestPlace(input.where, input.coin);
     const departments = near.length ? near.join(",") : undefined;
-    const [s, crews] = await Promise.all([api.suggestions(departments), api.searchCrews("", undefined, departments)]);
+    const [s, crews] = await Promise.all([
+      input.crewsOnly ? Promise.resolve({ sameModel: null }) : api.suggestions(departments),
+      api.searchCrews("", undefined, departments),
+    ]);
     if (!ticket.current()) return null;
     return { kind: "suggest", sameModel: s.sameModel, crews: crews.items, crewDept: near[0] ?? null };
   }
   const query = peopleQuery(input);
   const [people, crews] = await Promise.all([
-    api.searchPeople(query),
+    input.crewsOnly ? Promise.resolve({ items: [], nextCursor: null }) : api.searchPeople(query),
     api.searchCrews(query.q, undefined, query.departments),
   ]);
   if (!ticket.current()) return null;

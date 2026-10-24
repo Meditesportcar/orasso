@@ -176,6 +176,32 @@ describe("crews : création, fiche, limites", () => {
     expect((await req(lea, "GET", "/crews/search?q=xyz")).json.items).toHaveLength(0);
   });
 
+  it("lot R3b, tour 2 : la recherche dit « requested » puis revient à faux quand la demande est annulée", async () => {
+    const chef = await signUp("ChefAnnule");
+    const zoe = await signUp("ZoeAnnule");
+    const crew = await newCrew(chef);
+    const found = async () =>
+      (await req(zoe, "GET", "/crews/search?department=66")).json.items.find(
+        (c: { id: string }) => c.id === crew.id,
+      ) as { requested: boolean };
+    expect((await found()).requested).toBe(false);
+    expect((await req(zoe, "POST", `/crews/${crew.id}/requests`, { message: null })).status).toBe(201);
+    expect((await found()).requested).toBe(true);
+    expect((await req(zoe, "DELETE", `/crews/${crew.id}/members/${zoe.id}`)).status).toBe(204);
+    expect((await found()).requested).toBe(false);
+  });
+
+  it("lot R3b, tour 2 : un crew nommé « Rejoindre » garde le slug « rejoindre » et reste accessible", async () => {
+    const chef = await signUp("ChefRejoindre");
+    const created = await req(chef, "POST", "/crews", { name: "Rejoindre", department: "66" });
+    expect(created.status).toBe(201);
+    expect(created.json.slug).toBe("rejoindre");
+    const other = await signUp("Visiteur");
+    const seen = await req(other, "GET", "/crews/by-slug/rejoindre");
+    expect(seen.status).toBe(200);
+    expect(seen.json.name).toBe("Rejoindre");
+  });
+
   it("limite de 5 crews par personne (création et arrivée), 3 créations par jour", async () => {
     const a = await signUp("Alice");
     for (let i = 0; i < 3; i++) await newCrew(a);

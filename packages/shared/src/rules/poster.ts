@@ -169,10 +169,14 @@ export function createPreviewCache<T>(max = 64, drop?: (value: T) => void) {
   };
 }
 
-/** Clé d'un aperçu : tous les réglages qui changent le rendu. */
-export const posterPreviewKey = (input: Record<string, unknown>) =>
-  JSON.stringify(
-    Object.keys(input)
+/**
+ * Clé d'un aperçu : tous les réglages qui changent le rendu. Lot R3b, tour 2 : plus l'année en cours (heure d'Orasso),
+ * qui décide si l'affiche écrit l'année : un Nouvel An, réel ou simulé, refait l'aperçu.
+ */
+export const posterPreviewKey = (input: Record<string, unknown>, now: Date = displayNow()) =>
+  JSON.stringify([
+    ...Object.keys(input)
       .sort()
       .map((k) => [k, input[k]]),
-  );
+    ["@year", wallTime(now).year],
+  ]);

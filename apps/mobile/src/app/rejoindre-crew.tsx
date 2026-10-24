@@ -2,6 +2,8 @@
 // création. D'abord rejoindre : la recherche de crews et « Crews de ton coin », avec la même logique et les mêmes appels
 // que le segment Personnes et crews de l'Explorer (lot R2, `PeopleSegment` limité aux crews) ; « Créer un crew » vient
 // ensuite, en lien secondaire. Mode B : en-tête de fiche, sans barre d'onglets.
+// Tour 2 : route `/rejoindre-crew`, hors de `/crew/…` (elle masquait un crew au slug « rejoindre ») ; les crews seulement,
+// aucune lecture de personnes (une panne de la recherche de personnes ne vide pas l'écran).
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { crewLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
@@ -28,7 +30,15 @@ export default function JoinCrew() {
         {crewLabels.joinHint}
       </Text>
       <ExSearch value={q} onChange={setQ} placeholder={crewLabels.joinSearchPlaceholder} testID="crew-join-q" />
-      <PeopleSegment q={q} where={null} show="crews" filters={emptyPeopleFilters} coin={coin} create={false} />
+      <PeopleSegment
+        q={q}
+        where={null}
+        show="crews"
+        filters={emptyPeopleFilters}
+        coin={coin}
+        create={false}
+        crewsOnly
+      />
       <View style={styles.create} testID="crew-join-create">
         <Text variant="caption" color={t.color.inkMuted}>
           {crewLabels.joinOrCreate}

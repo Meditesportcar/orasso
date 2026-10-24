@@ -17,6 +17,7 @@ import {
   homeLabels,
   homeProfileLabels,
   type MyApplication,
+  withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -49,9 +50,14 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
   day: "numeric",
   month: "long",
-  hour: "numeric",
   timeZone: "Europe/Paris",
 });
+const HOUR_FMT = new Intl.DateTimeFormat("fr-FR", { hour: "numeric", timeZone: "Europe/Paris" });
+/** « samedi 17 octobre à 19 h » ; lot R3b, tour 2 : « … 17 octobre 2027 à 19 h » hors de l'année en cours. */
+const weatherDay = (iso: string) => {
+  const at = new Date(iso);
+  return `${withYear(DAY_FMT.format(at), at)} à ${HOUR_FMT.format(at).replace(/\s*h$/, "")} h`;
+};
 /** Tickets dans le glissement, au plus. */
 const MAX_OUTINGS = 6;
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
@@ -253,10 +259,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   // Météo : celle du jour J de la prochaine sortie (lieu, jour et heure), sinon celle du département.
   const weather = data?.weather ?? null;
-  const weatherWhen =
-    weather?.kind === "event"
-      ? DAY_FMT.format(new Date(weather.event.startsAt)).replace(/ (?:à )?(\d+) h$/, " à $1 h")
-      : null;
+  const weatherWhen = weather?.kind === "event" ? weatherDay(weather.event.startsAt) : null;
   const weatherPlace = weather?.kind === "event" ? (heroEvent?.city ?? null) : department ? `Dép. ${department}` : null;
 
   return (

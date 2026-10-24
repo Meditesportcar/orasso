@@ -171,16 +171,24 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
   let pins = initial;
   let selected: string | null = null;
   let markers: Marker[] = [];
-  /** Lot R3b : les plaques des pros, décalées pour rester entières au bord de la carte. */
-  let edged: { marker: Marker; el: HTMLElement; lng: number; lat: number }[] = [];
+  /**
+   * Lot R3b : les plaques des pros, décalées pour rester entières au bord de la carte. Tour 2 : seule la plaque se
+   * décale (propriété CSS `translate`, qui s'ajoute au `transform` posé par MapLibre) : le point d'ancrage du marqueur
+   * et sa bulle restent sur le lieu exact. Largeur lue une fois, relu à la fin d'un mouvement (`moveend`) et au
+   * redimensionnement ; seuls les décalages qui changent sont écrits.
+   */
+  let edged: { el: HTMLElement; lng: number; lat: number; width: number; shift: number }[] = [];
   let lastZoom = -1;
 
   const fitEdges = () => {
     if (!edged.length) return;
     const width = map.getContainer().clientWidth;
     for (const e of edged) {
-      const x = map.project([e.lng, e.lat]).x;
-      e.marker.setOffset([edgeShift(x, e.el.offsetWidth, width), 0]);
+      if (!e.width) e.width = e.el.offsetWidth;
+      const shift = edgeShift(map.project([e.lng, e.lat]).x, e.width, width);
+      if (shift === e.shift) continue;
+      e.shift = shift;
+      e.el.style.translate = shift ? `${shift}px 0` : "";
     }
   };
 
@@ -237,7 +245,7 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
       if (popup) marker.setPopup(new maplibre.Popup({ offset: 18, closeButton: false }).setDOMContent(popup));
       markers.push(marker.addTo(map));
       if (group.items.length === 1 && first.kind === "pro") {
-        edged.push({ marker, el, lng: group.lng, lat: group.lat });
+        edged.push({ el, lng: group.lng, lat: group.lat, width: 0, shift: 0 });
       }
     }
     for (const p of me) {
@@ -250,7 +258,7 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
     if (Math.round(map.getZoom()) !== lastZoom) draw();
   };
   map.on("zoomend", onZoom);
-  map.on("move", fitEdges);
+  map.on("moveend", fitEdges);
   map.on("resize", fitEdges);
   draw();
   return {
@@ -266,7 +274,7 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
     },
     remove() {
       map.off("zoomend", onZoom);
-      map.off("move", fitEdges);
+      map.off("moveend", fitEdges);
       map.off("resize", fitEdges);
       for (const m of markers) m.remove();
       markers = [];
