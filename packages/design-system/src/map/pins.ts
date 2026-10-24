@@ -10,6 +10,32 @@ export function pinDateLabel(iso: string | Date, now: Date, timeZone?: string): 
   return dayLabel(iso, now, timeZone).toUpperCase();
 }
 
+/** Marge (px) gardée entre une étiquette et le bord de la carte. */
+export const PIN_EDGE_MARGIN = 6;
+
+/**
+ * Lot R3b (reste de R2, relevé sur le Xiaomi) : le décalage horizontal (px) qui garde une étiquette entière dans la
+ * carte. `x` : la position du point à l'écran (depuis le bord gauche de la carte), `width` : la largeur de l'étiquette
+ * centrée sur lui, `viewWidth` : la largeur de la carte. 0 quand l'étiquette tient déjà, ou quand le point lui-même est
+ * hors de la carte (son étiquette ne vient pas s'afficher à la place d'une autre).
+ */
+export function edgeShift(x: number, width: number, viewWidth: number, margin = PIN_EDGE_MARGIN): number {
+  if (!(width > 0) || !(viewWidth > 0) || !Number.isFinite(x) || x < 0 || x > viewWidth) return 0;
+  // Plus large que la carte : centrée.
+  if (width + 2 * margin >= viewWidth) return Math.round(viewWidth / 2 - x);
+  const left = x - width / 2;
+  const right = x + width / 2;
+  if (left < margin) return Math.round(margin - left);
+  if (right > viewWidth - margin) return Math.round(viewWidth - margin - right);
+  return 0;
+}
+
+/** La position horizontale (px) d'une longitude dans une carte sans rotation, de bornes ouest et est connues. */
+export function lngToX(lng: number, west: number, east: number, viewWidth: number): number {
+  const span = east - west;
+  return span > 0 ? ((lng - west) / span) * viewWidth : Number.NaN;
+}
+
 /** Texte d'une pastille de groupe : « 2 ÉVÉNEMENTS », « 3 PROS » (le nombre seul sans genre connu). */
 export function clusterLabel(count: number, kind?: "event" | "pro"): string {
   if (kind === "event") return `${count} ÉVÉNEMENT${count > 1 ? "S" : ""}`;

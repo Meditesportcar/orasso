@@ -11,7 +11,12 @@ const dayOpts = { timeZone: TZ, weekday: "short", day: "numeric", month: "short"
 const dayFmt = new Intl.DateTimeFormat("fr-FR", dayOpts);
 const dayYearFmt = new Intl.DateTimeFormat("fr-FR", { ...dayOpts, year: "numeric" });
 const dayShortFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric", month: "short" });
-const dayShortYearFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric", month: "short", year: "numeric" });
+const dayShortYearFmt = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: TZ,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 const timeFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 const dateTimeFmt = new Intl.DateTimeFormat("fr-FR", {
   timeZone: TZ,

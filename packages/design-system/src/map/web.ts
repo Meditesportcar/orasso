@@ -7,7 +7,7 @@ import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 
 import { type ThemeId, tokens } from "../tokens";
 import { hatchImage } from "./hatch";
-import { clusterLabel, clusterPins, GROUP_MAX_ZOOM, isStacked, type MapPoint } from "./pins";
+import { clusterLabel, clusterPins, edgeShift, GROUP_MAX_ZOOM, isStacked, type MapPoint } from "./pins";
 import { chooseMapStyle, probedVectorTiles, probeVectorTiles, shouldFallBack } from "./probe";
 import { MAP_SOURCE_ID, type MapStyleOptions, mapFallbackRaster, mapStyle } from "./style";
 
@@ -171,11 +171,23 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
   let pins = initial;
   let selected: string | null = null;
   let markers: Marker[] = [];
+  /** Lot R3b : les plaques des pros, décalées pour rester entières au bord de la carte. */
+  let edged: { marker: Marker; el: HTMLElement; lng: number; lat: number }[] = [];
   let lastZoom = -1;
+
+  const fitEdges = () => {
+    if (!edged.length) return;
+    const width = map.getContainer().clientWidth;
+    for (const e of edged) {
+      const x = map.project([e.lng, e.lat]).x;
+      e.marker.setOffset([edgeShift(x, e.el.offsetWidth, width), 0]);
+    }
+  };
 
   const draw = () => {
     for (const m of markers) m.remove();
     markers = [];
+    edged = [];
     const zoom = Math.round(map.getZoom());
     lastZoom = zoom;
     const me = pins.filter((p) => p.kind === "me");
@@ -224,16 +236,22 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
       if (groupPopup) marker.setPopup(groupPopup);
       if (popup) marker.setPopup(new maplibre.Popup({ offset: 18, closeButton: false }).setDOMContent(popup));
       markers.push(marker.addTo(map));
+      if (group.items.length === 1 && first.kind === "pro") {
+        edged.push({ marker, el, lng: group.lng, lat: group.lat });
+      }
     }
     for (const p of me) {
       markers.push(new maplibre.Marker({ element: meElement() }).setLngLat([p.lng, p.lat]).addTo(map));
     }
+    fitEdges();
   };
 
   const onZoom = () => {
     if (Math.round(map.getZoom()) !== lastZoom) draw();
   };
   map.on("zoomend", onZoom);
+  map.on("move", fitEdges);
+  map.on("resize", fitEdges);
   draw();
   return {
     update(next: WebPin[]) {
@@ -248,8 +266,11 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
     },
     remove() {
       map.off("zoomend", onZoom);
+      map.off("move", fitEdges);
+      map.off("resize", fitEdges);
       for (const m of markers) m.remove();
       markers = [];
+      edged = [];
     },
   };
 }

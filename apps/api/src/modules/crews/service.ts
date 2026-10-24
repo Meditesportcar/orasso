@@ -69,7 +69,8 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
-const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
+// Lot R3b : « rejoindre » est l'écran « Rejoindre un crew » de l'appli (`/crew/rejoindre`).
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug", "rejoindre"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {
@@ -632,8 +633,36 @@ export const crewsService = {
       .orderBy(desc(crews.membersCount), asc(crews.name), asc(crews.id))
       .limit(q.limit + 1)
       .offset(offset);
+    const shown = rows.slice(0, q.limit);
+    // Lot R3b : « Demande envoyée » vient de l'API (il survit à un rechargement de la liste).
+    const mine = shown.length
+      ? await db
+          .select()
+          .from(crewMembers)
+          .where(
+            and(
+              eq(crewMembers.userId, v.user.id),
+              inArray(
+                crewMembers.crewId,
+                shown.map((r) => r.id),
+              ),
+            ),
+          )
+      : [];
+    const at = now();
+    const requested = new Set(
+      mine
+        .filter(
+          (m) =>
+            crewViewerState(
+              { status: m.status, respondedAt: m.respondedAt, role: m.role, requestedByMe: m.invitedBy === null },
+              at,
+            ) === "requested",
+        )
+        .map((m) => m.crewId),
+    );
     return {
-      items: rows.slice(0, q.limit).map(crewCard),
+      items: shown.map((r) => ({ ...crewCard(r), requested: requested.has(r.id) })),
       nextCursor: rows.length > q.limit ? Buffer.from(String(offset + q.limit)).toString("base64url") : null,
     };
   },

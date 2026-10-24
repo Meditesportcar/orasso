@@ -144,7 +144,8 @@ export function ProfilScreen() {
       {base ? (
         <CrewLine
           crew={crew ? { name: crew.name, membersCount: crew.membersCount } : null}
-          onPress={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/nouveau")}
+          // Lot R3b (retour 16) : sans crew, d'abord rejoindre (« Créer un crew » vient en second).
+          onPress={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/rejoindre")}
         />
       ) : null}
 

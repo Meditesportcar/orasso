@@ -65,6 +65,11 @@ export const crewLabels = {
   searchEmpty: "Aucun crew ne correspond.",
   searchIdle: "Cherche un crew par son nom ou son département.",
   yourCrews: "Tes crews",
+  // Lot R3b (retour 16) : « Crée ou rejoins un crew » du profil propose d'abord de rejoindre.
+  joinTitle: "Rejoindre un crew",
+  joinHint: "Cherche le crew de tes amis par son nom, ou regarde ceux de ton coin. Le chef reçoit ta demande.",
+  joinSearchPlaceholder: "Nom du crew",
+  joinOrCreate: "Aucun ne te va ?",
   limitCrews: `Tu fais déjà partie de ${CREWS_PER_PERSON} crews (maximum).`,
   limitMembers: `Ce crew a atteint ${MEMBERS_PER_CREW} membres (maximum).`,
   nameTaken: "Ce nom de crew est déjà pris.",

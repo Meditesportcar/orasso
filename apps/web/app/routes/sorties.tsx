@@ -277,7 +277,9 @@ function ApplicationCard({
         <div className="s-stack s-stack--tight">
           <div className="s-label o-t-label">{eventFormatLabels[app.event.format]}</div>
           <h2 className="s-h2">
-            <a href={`/e/${app.event.slug}`}>{app.event.title}</a>
+            <a href={`/e/${app.event.slug}`} data-testid="application-open">
+              {app.event.title}
+            </a>
           </h2>
           <div className="o-t-meta s-muted">
             {formatWhen(app.event.startsAt, app.event.endsAt)}

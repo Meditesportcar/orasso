@@ -99,7 +99,11 @@ function ProfileHub({ hub }: { hub: Hub }) {
           <span className="o-t-label">{passportScreenTexts.tileTitle}</span>
           <span>{passportScreenTexts.tile(hub.passport?.total ?? 0, hub.passport?.rare ?? 0)}</span>
         </a>
-        <a className="s-card pf-tile" href={hub.crew ? `/c/${hub.crew.slug}` : "/app/crews"} data-testid="hub-crew">
+        <a
+          className="s-card pf-tile"
+          href={hub.crew ? `/c/${hub.crew.slug}` : "/app/crews/rejoindre"}
+          data-testid="hub-crew"
+        >
           <span className="o-t-label">Mon crew</span>
           <span className="o-never-truncate">{hub.crew ? hub.crew.name : "Rejoins ou crée un crew"}</span>
         </a>

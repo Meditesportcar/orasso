@@ -1,12 +1,5 @@
 import { Button, Icon, LiveO, OLoader, Outlined, StampDrop } from "@orasso/design-system/web";
-import {
-  departments,
-  type EventCard,
-  siteLabels as L,
-  type Page,
-  proPitchDiscounts,
-  withYear,
-} from "@orasso/shared";
+import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscounts, withYear } from "@orasso/shared";
 
 import { EventTile, PosterFace } from "../components/EventTile";
 import { Qr } from "../components/Qr";

@@ -154,12 +154,22 @@ export function ClusterPin({
   );
 }
 
-/** Pro : plaque avec son nom (jamais tronqué). */
-export function ProPin({ label, onPress, accessibilityLabel, testID = "map-pin" }: PinPress & { label: string }) {
+/**
+ * Pro : plaque avec son nom (jamais tronqué). Lot R3b : `onWidth` donne sa largeur, pour que la carte la décale et
+ * la garde entière au bord de l'écran (`edgeShift`).
+ */
+export function ProPin({
+  label,
+  onPress,
+  accessibilityLabel,
+  testID = "map-pin",
+  onWidth,
+}: PinPress & { label: string; onWidth?: (width: number) => void }) {
   const { t } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      onLayout={onWidth ? (e) => onWidth(e.nativeEvent.layout.width) : undefined}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       testID={testID}

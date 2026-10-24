@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { THEME_IDS, tokens } from "../tokens";
 import { HATCH_SIZE, hatchImage, hatchPngDataUri } from "./hatch";
-import { clusterLabel, clusterPins, isStacked, pinDateLabel } from "./pins";
+import { clusterLabel, clusterPins, edgeShift, isStacked, lngToX, PIN_EDGE_MARGIN, pinDateLabel } from "./pins";
 import {
   chooseMapStyle,
   probedVectorTiles,
@@ -181,4 +181,27 @@ describe("aucune couleur en dur dans les fichiers de carte", () => {
       expect(text.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/g)).toBeNull();
     });
   }
+});
+
+describe("étiquettes entières au bord de la carte (lot R3b)", () => {
+  const W = 390;
+  it("au milieu : pas de décalage", () => {
+    expect(edgeShift(195, 120, W)).toBe(0);
+  });
+  it("près du bord gauche ou droit : décalée vers l'intérieur, marge comprise", () => {
+    expect(edgeShift(20, 120, W)).toBe(PIN_EDGE_MARGIN + 60 - 20);
+    expect(edgeShift(W - 10, 120, W)).toBe(W - PIN_EDGE_MARGIN - (W - 10 + 60));
+  });
+  it("point hors de la carte, largeur inconnue : rien", () => {
+    expect(edgeShift(-5, 120, W)).toBe(0);
+    expect(edgeShift(W + 5, 120, W)).toBe(0);
+    expect(edgeShift(20, 0, W)).toBe(0);
+  });
+  it("plus large que la carte : centrée", () => {
+    expect(edgeShift(50, W, W)).toBe(W / 2 - 50);
+  });
+  it("longitude vers x", () => {
+    expect(lngToX(2.5, 2, 3, W)).toBe(W / 2);
+    expect(Number.isNaN(lngToX(2.5, 3, 3, W))).toBe(true);
+  });
 });

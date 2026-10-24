@@ -209,8 +209,12 @@ function PersonAction({ person }: { person: PersonCard }) {
 function CrewAction({ crew, mine }: { crew: CrewCard; mine: boolean }) {
   const { t } = useTheme();
   const router = useRouter();
-  const [sent, setSent] = useState(false);
+  // Lot R3b : la demande déjà envoyée vient de l'API (elle reste après un rechargement).
+  const [sent, setSent] = useState(crew.requested === true);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (crew.requested) setSent(true);
+  }, [crew.requested]);
   if (mine) {
     return (
       <View style={styles.go} accessibilityElementsHidden>
@@ -323,6 +327,7 @@ export function PeopleSegment({
   show,
   filters,
   coin,
+  create = true,
 }: {
   q: string;
   /** `null` : rien de choisi (suggestions de mon coin, recherche élargie à toute la France). */
@@ -330,6 +335,8 @@ export function PeopleSegment({
   show: PeopleShow;
   filters: PeopleFilters;
   coin: readonly string[];
+  /** Lot R3b : « Créer un crew » en bas des suggestions (l'écran « Rejoindre un crew » pose le sien). */
+  create?: boolean;
 }) {
   const { t } = useTheme();
   const router = useRouter();
@@ -512,11 +519,13 @@ export function PeopleSegment({
       ) : null}
       {nothing ? <Empty>{R.noSuggestions}</Empty> : null}
       {privacy}
-      <View style={styles.actions}>
-        <SmallButton icon="add" onPress={() => router.push("/crew/nouveau")} testID="crew-new">
-          {R.createCrew}
-        </SmallButton>
-      </View>
+      {create ? (
+        <View style={styles.actions}>
+          <SmallButton icon="add" onPress={() => router.push("/crew/nouveau")} testID="crew-new">
+            {R.createCrew}
+          </SmallButton>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -21,10 +21,12 @@ import {
   clusterLabel,
   clusterPins,
   EventPin,
+  edgeShift,
   GROUP_MAX_ZOOM,
   hatchImageId,
   hatchPngDataUri,
   isStacked,
+  lngToX,
   MePin,
   mapFallbackRaster,
   ProPin,
@@ -120,11 +122,20 @@ export function ExplorerMap({
     [theme, fellBack, vectorOk],
   );
   const groups = useMemo(() => clusterPins(pins, Math.round(zoom)), [pins, zoom]);
+  // Lot R3b (reste de R2, relevé sur le Xiaomi) : les plaques des pros se décalent pour rester entières au bord de la
+  // carte. Bornes ouest et est de la vue (carte sans rotation : x est linéaire en longitude), largeur de la carte et
+  // largeur de chaque plaque ; relu à la fin de chaque geste.
+  const [span, setSpan] = useState<{ west: number; east: number } | null>(null);
+  const [mapWidth, setMapWidth] = useState(0);
+  const [pinWidths, setPinWidths] = useState<Record<string, number>>({});
+  const shiftOf = (id: string, lng: number) =>
+    span ? edgeShift(lngToX(lng, span.west, span.east, mapWidth), pinWidths[id] ?? 0, mapWidth) : 0;
 
   return (
     <View style={fill ? styles.fillWrap : styles.wrap} testID="explorer-map">
       <View
         style={fill ? styles.fillMap : [styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
+        onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
         onTouchStart={(e) => touchHold.start(ids(e))}
         onTouchEnd={(e) => touchHold.end(ids(e))}
         onTouchCancel={() => touchHold.cancel()}
@@ -139,7 +150,11 @@ export function ExplorerMap({
             attribution
             touchRotate={false}
             touchPitch={false}
-            onRegionDidChange={(e: { nativeEvent: ViewStateChangeEvent }) => setZoom(e.nativeEvent.zoom)}
+            onRegionDidChange={(e: { nativeEvent: ViewStateChangeEvent }) => {
+              setZoom(e.nativeEvent.zoom);
+              const [west, , east] = e.nativeEvent.bounds;
+              setSpan((prev) => (prev && prev.west === west && prev.east === east ? prev : { west, east }));
+            }}
             onDidFailLoadingMap={() => {
               if (!fellBack) {
                 console.warn("[carte] le style n'a pas pu se charger : repli raster OSM");
@@ -172,8 +187,16 @@ export function ExplorerMap({
                       listGroup,
                     )
                 : () => press(g.id, () => onSelect(first));
+              const pro = !stacked && first.kind === "pro";
               return (
-                <Marker key={g.id} id={g.id} lngLat={[g.lng, g.lat]} anchor="bottom" onPress={open}>
+                <Marker
+                  key={g.id}
+                  id={g.id}
+                  lngLat={[g.lng, g.lat]}
+                  anchor="bottom"
+                  offset={pro ? [shiftOf(g.id, g.lng), 0] : undefined}
+                  onPress={open}
+                >
                   {stacked ? (
                     <ClusterPin
                       count={g.items.length}
@@ -181,7 +204,12 @@ export function ExplorerMap({
                       onPress={open}
                     />
                   ) : first.kind === "pro" ? (
-                    <ProPin label={first.label} accessibilityLabel={first.title} onPress={open} />
+                    <ProPin
+                      label={first.label}
+                      accessibilityLabel={first.title}
+                      onPress={open}
+                      onWidth={(w) => setPinWidths((prev) => (prev[g.id] === w ? prev : { ...prev, [g.id]: w }))}
+                    />
                   ) : (
                     <EventPin
                       label={first.label}

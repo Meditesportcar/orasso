@@ -32,7 +32,11 @@ export function yearToShow(at: When, now: Date = displayNow(), timeZone = BUSINE
 }
 
 /** Même règle pour une date locale « AAAA-MM-JJ ». */
-export function localDateYearToShow(dayDate: string, now: Date = displayNow(), timeZone = BUSINESS_TIMEZONE): number | null {
+export function localDateYearToShow(
+  dayDate: string,
+  now: Date = displayNow(),
+  timeZone = BUSINESS_TIMEZONE,
+): number | null {
   const year = localYear(dayDate);
   return year === yearOf(now, timeZone) ? null : year;
 }
