@@ -1,6 +1,11 @@
 // Routes du garage ajoutées au lot 31 : transferts de plaque (ancien propriétaire, équipe Orasso) et demandes de
 // certification (équipe Orasso). Les routes du véhicule lui-même restent dans `routes.ts`.
-import { adminDecisionSchema, adminPlateConflictSchema, certificationStatuses, mainVehicleSchema } from "@orasso/shared";
+import {
+  adminDecisionSchema,
+  adminPlateConflictSchema,
+  certificationStatuses,
+  mainVehicleSchema,
+} from "@orasso/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 
