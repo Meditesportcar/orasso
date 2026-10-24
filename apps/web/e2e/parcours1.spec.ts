@@ -57,9 +57,10 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await expect(page.getByText("Ton garage est vide")).toBeVisible();
   await page.getByRole("link", { name: "Ajouter un véhicule" }).first().click();
   await page.waitForURL(/\/app\/garage\/nouveau\?retour=/);
-  await page.getByLabel("Marque").selectOption({ label: "BMW" });
-  await expect(page.getByLabel("Modèle")).toBeEnabled();
-  await page.getByLabel("Modèle").selectOption({ index: 1 });
+  // Lot R4a : la recherche « Marque ou modèle » précède les listes ; libellés exacts.
+  await page.getByLabel("Marque", { exact: true }).selectOption({ label: "BMW" });
+  await expect(page.getByLabel("Modèle", { exact: true })).toBeEnabled();
+  await page.getByLabel("Modèle", { exact: true }).selectOption({ index: 1 });
   await page.getByLabel("Année").fill("1995");
   await page.getByLabel("Numéro de plaque").fill(plate);
   await chooseSitePhoto(page, { name: "photo.png", mimeType: "image/png", buffer: samplePhoto() });
