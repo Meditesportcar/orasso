@@ -13,6 +13,8 @@ import {
   type VehicleProposalAccept,
   type VehicleProposalGroup,
   type VehicleProposalPage,
+  vehicleName,
+  versionFromTyped,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
@@ -117,6 +119,30 @@ export function proposalVersion(ids: readonly string[]): string {
 }
 
 /** Fiches actives au nom tapé, les plus récentes d'abord ; `lock` : verrouillées pour le rattachement groupé. */
+/**
+ * Lot R4e : version tirée du modèle tapé quand la fiche est rattachée à la liste (« 207 CC » rattaché à « 207 » → « CC »),
+ * la marque et la génération retirées si elles ouvrent le texte. Null sans modèle tapé, ou si le texte ne commence pas
+ * par le modèle choisi (on ne devine pas).
+ */
+function typedVersion(
+  r: {
+    v: { proposedModel: string | null };
+    model: { isOther: boolean };
+  },
+  to: {
+    make: { name: string } | undefined;
+    model: { name: string; isOther: boolean };
+    gen: { name: string; isOther: boolean } | undefined;
+  },
+): string | null {
+  if (!r.model.isOther || to.model.isOther) return null;
+  return versionFromTyped(r.v.proposedModel, {
+    make: to.make?.name,
+    model: to.model.name,
+    generation: to.gen && !to.gen.isOther ? to.gen.name : null,
+  });
+}
+
 async function proposalRows(ex: Executor, lock = false, scope?: ProposalScope) {
   const q = ex
     .select({
@@ -733,7 +759,22 @@ export const vehicleReferenceService = {
               rows.map((r) => r.v.id),
             ),
           );
+        // Lot R4e : la précision tapée après le modèle (« 207 CC » → « CC ») devient la version, si elle est vide. Une
+        // écriture par version distincte (un groupe de 2 000 fiches n'en fait que quelques-unes).
+        const versions = new Map(rows.map((r) => [r.v.id, r.v.version ?? typedVersion(r, { make, model, gen })]));
+        const byVersion = new Map<string, string[]>();
         for (const r of rows) {
+          const version = versions.get(r.v.id);
+          if (!version || r.v.version) continue;
+          const ids = byVersion.get(version) ?? [];
+          ids.push(r.v.id);
+          byVersion.set(version, ids);
+        }
+        for (const [version, ids] of byVersion) {
+          await tx.update(vehicles).set({ version }).where(inArray(vehicles.id, ids));
+        }
+        for (const r of rows) {
+          const version = versions.get(r.v.id);
           // Un compte anonymisé n'est pas prévenu.
           if (r.deletedAt) continue;
           const typed = [
@@ -744,7 +785,7 @@ export const vehicleReferenceService = {
             .join(" ");
           await notificationsService.notify(tx, r.v.ownerId, "vehicle_reassigned", {
             title: "Ton véhicule est dans la base Orasso",
-            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${label}.`,
+            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${vehicleName({ make: make.name, model: model.name, generation: gen && !gen.isOther ? gen.name : null, version })}.`,
             link: { label: "Voir mon véhicule", path: `/app/garage/${r.v.id}` },
             data: { vehicleId: r.v.id },
           });
@@ -787,6 +828,11 @@ export const vehicleReferenceService = {
       const gen = input.generationId
         ? (await tx.select().from(vehicleGenerations).where(eq(vehicleGenerations.id, input.generationId)))[0]
         : undefined;
+      // Lot R4e : comme `acceptProposal`, la précision tapée après le modèle devient la version, si elle est vide (un nom
+      // tapé n'existe qu'avec le modèle « Autre »). Écrite par l'équipe : pas une modification du propriétaire.
+      const version =
+        current.version ??
+        typedVersion({ v: current, model: { isOther: Boolean(current.proposedModel) } }, { make, model, gen });
       await tx
         .update(vehicles)
         .set({
@@ -797,19 +843,25 @@ export const vehicleReferenceService = {
           // Lot R4a : un nom tapé ne reste que tant que son niveau est « Autre ».
           proposedMake: make?.isOther ? current.proposedMake : null,
           proposedModel: model.isOther ? current.proposedModel : null,
+          // Lot R4e : comme `acceptProposal`, la précision tapée après le modèle devient la version, si elle est vide (un
+          // nom tapé n'existe qu'avec le modèle « Autre »).
+          ...(current.version ? {} : { version }),
           // Marque ou modèle changés : ce n'est plus la fiche certifiée (relecture).
           ...(current.certifiedAt && (current.makeId !== input.makeId || current.modelId !== input.modelId)
             ? { certifiedAt: null, certifiedLostReason: "modified" as const }
             : {}),
         })
         .where(eq(vehicles.id, vehicleId));
-      const label = [
-        make?.isOther ? null : make?.name,
-        model.isOther ? null : model.name,
-        gen?.isOther ? null : gen?.name,
-      ]
-        .filter(Boolean)
-        .join(" ");
+      // Lot R4e, tour 2 : la notification dit la version (composition commune `vehicleName`).
+      const label = vehicleName(
+        {
+          make: make?.isOther ? null : make?.name,
+          model: model.isOther ? null : model.name,
+          generation: gen?.isOther ? null : gen?.name,
+          version,
+        },
+        { fallback: "" },
+      );
       await audit(tx, v, {
         action: "vehicle.reassign",
         targetType: "vehicle",

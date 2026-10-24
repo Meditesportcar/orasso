@@ -50,6 +50,7 @@ export * from "./templates";
 export * from "./ticketing";
 export * from "./time";
 export * from "./vehicleAdd";
+export * from "./vehicleName";
 export * from "./vehicleSearch";
 export * from "./visibility";
 export * from "./waitlistDeadline";

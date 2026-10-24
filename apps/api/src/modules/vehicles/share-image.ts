@@ -1,7 +1,14 @@
 // Affiche à partager d'un véhicule (lot 31, lot 50 ; lot M6 : maquettes 2.1 à 2.3) : story 9:16 ou post 4:5, trois
 // styles, rendue par `share-story.ts`. Ce fichier rassemble ce que l'affiche montre (jamais la plaque : la fonction ne
 // lit pas le champ ; la photo est celle que le serveur a floutée) et la garde une heure en cache.
-import { type PlateRect, type ShareFormat, type ShareStyle, type ShareZone, shareSheetLabels } from "@orasso/shared";
+import {
+  type PlateRect,
+  type ShareFormat,
+  type ShareStyle,
+  type ShareZone,
+  shareSheetLabels,
+  vehicleName,
+} from "@orasso/shared";
 
 import { env } from "../../env";
 import { AppError } from "../../lib/errors";
@@ -31,14 +38,19 @@ export function storyLine(
 
 /**
  * Nom de l'affiche : le modèle (la marque et la génération sont sur la ligne du dessous). Lot R4a : un modèle tapé
- * (« 207 CC ») y figure aussi.
+ * (« 207 CC ») y figure aussi. Lot R4e, tour 2 : la version suit, par la composition commune (`vehicleName`), sans
+ * répéter ce que le modèle ou la génération disent déjà ; le nom tient sur une ligne et n'est jamais coupé
+ * (`fitNameLine`).
  */
 export function storyName(
-  v: Pick<VehicleWithAll, "model" | "make"> & Pick<VehicleWithAll, "proposedMake" | "proposedModel">,
+  v: Pick<VehicleWithAll, "model" | "make" | "generation"> &
+    Pick<VehicleWithAll, "proposedMake" | "proposedModel" | "version">,
 ): string {
-  if (!v.model.isOther) return v.model.name;
-  if (v.proposedModel) return v.proposedModel;
-  return v.make.isOther ? (v.proposedMake ?? "Véhicule") : v.make.name;
+  const model = !v.model.isOther
+    ? v.model.name
+    : (v.proposedModel ?? (v.make.isOther ? (v.proposedMake ?? null) : v.make.name));
+  const generation = v.generation && !v.generation.isOther ? v.generation.name : null;
+  return vehicleName({ model, generation, version: v.version }, { withGeneration: false, fallback: "Véhicule" });
 }
 
 /** Puissance, poids, année : lisibles par tous (plus de grade, retour 17). */

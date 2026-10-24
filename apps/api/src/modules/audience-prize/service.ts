@@ -19,6 +19,7 @@ import {
   type PointKind,
   pointsForWinner,
   rankResults,
+  vehicleName,
   voteClosesAt,
   voteOpen,
 } from "@orasso/shared";
@@ -141,6 +142,7 @@ async function cards(ex: Executor, applicationIds: string[]) {
       modelOther: vehicleModels.isOther,
       proposedMake: vehicles.proposedMake,
       proposedModel: vehicles.proposedModel,
+      version: vehicles.version,
       generation: vehicleGenerations.name,
       generationOther: vehicleGenerations.isOther,
       pseudo: profiles.pseudo,
@@ -159,9 +161,13 @@ async function cards(ex: Executor, applicationIds: string[]) {
   return new Map(
     rows.map((r) => {
       // Lot R4a : un niveau « Autre » prend le nom tapé (« Peugeot 207 CC »).
-      const parts = [r.makeOther ? r.proposedMake : r.make, r.modelOther ? r.proposedModel : r.model];
-      if (r.generation && !r.generationOther) parts.push(r.generation);
-      const label = parts.filter(Boolean).join(" ") || "Autre véhicule";
+      // Lot R4e, tour 2 : la composition commune (`vehicleName`), version jamais répétée.
+      const label = vehicleName({
+        make: r.makeOther ? r.proposedMake : r.make,
+        model: r.modelOther ? r.proposedModel : r.model,
+        generation: r.generation && !r.generationOther ? r.generation : null,
+        version: r.version,
+      });
       return [r.applicationId, { vehicleLabel: label, pseudo: r.pseudo, photoUrl: storage.url(r.photoKey) }];
     }),
   );

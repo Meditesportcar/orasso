@@ -234,6 +234,20 @@ describe("envoi", () => {
     expect(updateBody({ ...d, former: true, plate: "" }, vehicle)).toEqual({ plate: null, status: "keepsake" });
   });
 
+  it("lot R4e : la version se saisit, part nettoyée, suit le modèle sur la fiche qui se construit", () => {
+    const d = draftFromVehicle(vehicle);
+    expect(d.version).toBe("");
+    expect(updateBody({ ...d, version: "  GTI " }, vehicle)).toEqual({ version: "GTI" });
+    const withVersion = { ...vehicle, version: "GTI" } as VehicleFull;
+    expect(draftFromVehicle(withVersion).version).toBe("GTI");
+    expect(updateBody(draftFromVehicle(withVersion), withVersion)).toEqual({});
+    expect(updateBody({ ...draftFromVehicle(withVersion), version: " " }, withVersion)).toEqual({ version: null });
+    expect(createBody(filled({ version: "x".repeat(40) })).version).toHaveLength(30);
+    expect(draftIsEmpty({ ...emptyDraft(), version: "CC" })).toBe(false);
+    const card = liveCard(filled({ version: "RZ" }), STEP.specs, { make: toyota, model: supra, generation: a90 });
+    expect(card.name).toBe("Toyota GR Supra RZ");
+  });
+
   it("plaques floutées : cadres posés et photos déjà floutées", () => {
     const d = draftFromVehicle(vehicle);
     const rect = { x: 0.1, y: 0.6, w: 0.3, h: 0.1 };

@@ -9,14 +9,17 @@ import {
   certificationLostLabels,
   certificationMissingLabels,
   certificationStatusLabels,
+  cleanVehicleVersion,
   countryLabel,
   type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
   shareSheetLabels,
   VEHICLE_ENGINE_MAX,
+  VEHICLE_VERSION_MAX,
   type VehicleDetail,
   type VehicleHistoryItem,
+  vehicleAddLabels,
   vehicleStatusLabels,
   vehicleTypeLabels,
   vehicleWizardLabels,
@@ -62,6 +65,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 type EditFields = {
   year: number | null;
+  version: string | null;
   engine: string | null;
   powerHp: number | null;
   weightKg: number | null;
@@ -76,6 +80,7 @@ function changedFields(v: VehicleDetail, next: EditFields): Partial<EditFields> 
   const body: Partial<EditFields> = {};
   const same = (a: string | number | null | undefined, b: string | number | null) => (a ?? null) === b;
   if (!same(v.year, next.year)) body.year = next.year;
+  if (!same(v.version, next.version)) body.version = next.version;
   if (!same(v.engine?.trim() || null, next.engine)) body.engine = next.engine;
   if (!same(v.powerHp, next.powerHp)) body.powerHp = next.powerHp;
   if (!same(v.weightKg, next.weightKg)) body.weightKg = next.weightKg;
@@ -92,6 +97,7 @@ function changedFields(v: VehicleDetail, next: EditFields): Partial<EditFields> 
 /** Libellés des champs de « Modifier la fiche », pour dire lequel bloque. */
 const FIELD_LABELS: Record<string, string> = {
   year: "Année",
+  version: vehicleAddLabels.versionFact,
   engine: "Moteur",
   powerHp: "Puissance",
   weightKg: "Poids",
@@ -130,6 +136,8 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!current.ok) return fail(current);
     const body = changedFields(current.data, {
       year: numberOrNull(form.get("year")),
+      // Lot R4e : la version, nettoyée comme dans l'appli et l'API.
+      version: cleanVehicleVersion(text("version")),
       engine: text("engine") || null,
       powerHp: numberOrNull(form.get("powerHp")),
       weightKg: numberOrNull(form.get("weightKg")),
@@ -340,6 +348,13 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
               <dd>{v.generationName}</dd>
             </>
           )}
+          {/* Lot R4e : la version (« GTI »), après le modèle et la génération. */}
+          {v.version && (
+            <>
+              <dt>{vehicleAddLabels.versionFact}</dt>
+              <dd>{v.version}</dd>
+            </>
+          )}
           {v.year && (
             <>
               <dt>Année</dt>
@@ -483,6 +498,13 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
             <TextField label="Année" name="year" inputMode="numeric" maxLength={4} defaultValue={v.year ?? ""} />
             <TextField label="Couleur" name="color" defaultValue={v.color ?? ""} />
           </div>
+          <TextField
+            label={vehicleAddLabels.version}
+            name="version"
+            maxLength={VEHICLE_VERSION_MAX}
+            help={vehicleAddLabels.versionHelp}
+            defaultValue={v.version ?? ""}
+          />
           <TextField label="Moteur" name="engine" maxLength={VEHICLE_ENGINE_MAX} defaultValue={v.engine ?? ""} />
           <div className="s-two">
             <TextField label="Puissance (ch)" name="powerHp" inputMode="numeric" defaultValue={v.powerHp ?? ""} />

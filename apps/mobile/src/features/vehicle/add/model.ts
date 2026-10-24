@@ -6,6 +6,7 @@
 import {
   type CategoryOption,
   cleanProposedName,
+  cleanVehicleVersion,
   formatPreparation,
   vehicleWizardLabels as L,
   normalizePlate,
@@ -21,6 +22,7 @@ import {
   type VehicleStatus,
   type VehicleType,
   type VehicleUpdate,
+  vehicleName,
   vehicleSpecsIssue,
 } from "@orasso/shared";
 
@@ -75,6 +77,8 @@ export type Draft = {
   makeId?: string;
   modelId?: string;
   generationId?: string | null;
+  /** Lot R4e : version (« CC », « GTI »), facultative, pour tout modèle. */
+  version: string;
   engine: string;
   powerHp: string;
   weightKg: string;
@@ -124,6 +128,7 @@ export const draftIsEmpty = (d: Draft): boolean =>
   d.photos.length === 0 &&
   !d.makeId &&
   !d.plate.trim() &&
+  !d.version.trim() &&
   !d.engine.trim() &&
   !d.powerHp.trim() &&
   !d.weightKg.trim() &&
@@ -137,6 +142,7 @@ export const draftIsEmpty = (d: Draft): boolean =>
 
 export const emptyDraft = (): Draft => ({
   vehicleType: "car",
+  version: "",
   engine: "",
   powerHp: "",
   weightKg: "",
@@ -160,6 +166,7 @@ export function draftFromVehicle(v: VehicleFull): Draft {
     makeId: v.makeId,
     modelId: v.modelId,
     generationId: v.generationId,
+    version: v.version ?? "",
     engine: v.engine ?? "",
     powerHp: v.powerHp ? String(v.powerHp) : "",
     weightKg: v.weightKg ? String(v.weightKg) : "",
@@ -404,7 +411,12 @@ export function liveCard(
   const typedModel = d.typing ? cleanProposedName(d.proposedModel) : null;
   const make = typedMake ?? (ref.make && !ref.make.isOther ? ref.make.name : ref.make && !d.typing ? L.other : null);
   const model = typedModel ?? (ref.model && !ref.model.isOther ? ref.model.name : null);
+  // Lot R4e : la version suit le modèle (« Peugeot 207 CC »), dès qu'elle est saisie ; tour 2 : composition commune
+  // (`vehicleName`), sans répéter le modèle tapé ni la génération (montrée sur sa ligne).
+  const version = model ? cleanVehicleVersion(d.version) : null;
   const gen = ref.generation && !ref.generation.isOther ? ref.generation : null;
+  const name =
+    make || model ? vehicleName({ make, model, generation: gen?.name, version }, { withGeneration: false }) : null;
   const unset = Boolean(model) && !gen && (d.typing !== undefined || d.generationId !== undefined);
   const specs = [
     d.engine.trim() || null,
@@ -417,7 +429,7 @@ export function liveCard(
   return {
     type: d.vehicleType,
     photos: d.photos.length,
-    name: [make, model].filter(Boolean).join(" ") || null,
+    name,
     generation: gen
       ? [gen.name, generationYears(gen)].filter(Boolean).join(" · ")
       : d.typing && !typedModel
@@ -463,6 +475,7 @@ export function createBody(d: Draft): VehicleCreate {
     modelId: d.modelId as string,
     generationId: d.generationId ?? null,
     year: d.year ?? null,
+    version: cleanVehicleVersion(d.version),
     engine: d.engine.trim() || null,
     powerHp: numberOrNull(d.powerHp),
     weightKg: numberOrNull(d.weightKg),
@@ -488,6 +501,7 @@ export function updateBody(d: Draft, v: VehicleFull): VehicleUpdate {
   if (next.modelId !== v.modelId) body.modelId = next.modelId;
   if ((next.generationId ?? null) !== v.generationId) body.generationId = next.generationId ?? null;
   if ((next.year ?? null) !== v.year) body.year = next.year ?? null;
+  if ((next.version ?? null) !== (v.version ?? null)) body.version = next.version ?? null;
   if ((next.engine ?? null) !== v.engine) body.engine = next.engine ?? null;
   if ((next.powerHp ?? null) !== v.powerHp) body.powerHp = next.powerHp ?? null;
   if ((next.weightKg ?? null) !== v.weightKg) body.weightKg = next.weightKg ?? null;
@@ -572,7 +586,7 @@ export function stepOfError(e: unknown): number | null {
   )
     return STEP.plate;
   if (has("vehicleType", "makeId", "modelId", "generationId")) return STEP.identity;
-  if (has("year", "engine", "powerHp", "weightKg", "color", "description", "preparation")) return STEP.specs;
+  if (has("year", "version", "engine", "powerHp", "weightKg", "color", "description", "preparation")) return STEP.specs;
   if (has("categoryIds")) return STEP.categories;
   if (
     err.status === 413 ||

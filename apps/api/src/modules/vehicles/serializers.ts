@@ -7,6 +7,7 @@ import {
   type VehicleFull,
   type VehiclePrivate,
   type VehiclePublic,
+  vehicleName,
 } from "@orasso/shared";
 
 import { storage } from "../../lib/storage";
@@ -14,10 +15,11 @@ import type { VehicleWithAll } from "./repo";
 
 /**
  * Lot R4a : marque et modèle tapés (niveau « Autre »). Obligatoires (tour 2) : toute lecture qui construit un nom de
- * véhicule doit lire les deux colonnes, le compilateur le vérifie. `makeNameOf`, `modelNameOf` et `vehicleLabel`
+ * véhicule doit lire les deux colonnes, le compilateur le vérifie. Lot R4e : la version aussi (« Peugeot 207 CC »).
+ * `makeNameOf`, `modelNameOf` et `vehicleLabel`
  * prennent une ligne de `vehicles` (avec `make`, `model`, `generation`) : à utiliser partout où un nom s'affiche.
  */
-export type Proposed = Pick<VehicleWithAll, "proposedMake" | "proposedModel">;
+export type Proposed = Pick<VehicleWithAll, "proposedMake" | "proposedModel" | "version">;
 
 /** Marque affichée : la marque de la liste, ou celle tapée par la personne (« Autre » sinon). */
 export const makeNameOf = (v: Pick<VehicleWithAll, "make"> & Proposed) =>
@@ -28,16 +30,23 @@ export const modelNameOf = (v: Pick<VehicleWithAll, "model"> & Proposed) =>
 
 /**
  * « BMW Série 3 E36 » ; la génération « Autre » n'apparaît pas. Lot R4a : un niveau « Autre » prend le nom tapé
- * (« Peugeot 207 CC »).
+ * (« Peugeot 207 CC »). Lot R4e : la version vient après le modèle et la génération (« Volkswagen Golf Mk4 GTI »).
  */
 export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generation"> & Proposed): string {
-  const parts = [
-    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
-    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
-  ];
-  if (v.generation && !v.generation.isOther) parts.push(v.generation.name);
-  const label = parts.filter(Boolean).join(" ");
-  return label || "Autre véhicule";
+  // Lot R4e, tour 2 : composition commune (`vehicleName`, packages/shared), version jamais répétée.
+  return vehicleName(nameParts(v));
+}
+
+/** Morceaux du nom d'une ligne de `vehicles` : niveaux « Autre » remplacés par les noms tapés. */
+export function nameParts(
+  v: Pick<VehicleWithAll, "make" | "model"> & Partial<Pick<VehicleWithAll, "generation">> & Proposed,
+) {
+  return {
+    make: v.make.isOther ? v.proposedMake : v.make.name,
+    model: v.model.isOther ? v.proposedModel : v.model.name,
+    generation: v.generation && !v.generation.isOther ? v.generation.name : null,
+    version: v.version,
+  };
 }
 
 /**
@@ -45,8 +54,9 @@ export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generat
  * est floutée ou « aucune plaque visible » confirmée sortent (toutes pour un véhicule non immatriculé). Le propriétaire
  * et l'organisation passent par `vehicleFull`, qui garde toutes les photos.
  */
-export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
-  return vehicleView(v, maskedPhotos(v.photos, v.unregistered));
+export function vehiclePublic(v: VehicleWithAll, opts: { owner?: boolean } = {}): VehiclePublic {
+  // Lot R4e (Damien) : le propriétaire qui regarde sa propre vitrine voit toutes ses photos, sans masque.
+  return vehicleView(v, opts.owner ? v.photos : maskedPhotos(v.photos, v.unregistered));
 }
 
 function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): VehiclePublic {
@@ -60,6 +70,7 @@ function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): Vehic
     modelName: modelNameOf(v),
     generationId: v.generationId,
     generationName: v.generation?.name ?? null,
+    version: v.version,
     country: v.make.country,
     year: v.year,
     color: v.color,
@@ -105,15 +116,12 @@ export function vehicleFull(v: VehicleWithAll): VehicleFull {
   };
 }
 
-/** Marque + modèle (fiche réduite d'un compte privé, lot 17) : « BMW Série 3 », jamais la génération ni l'année. */
+/**
+ * Marque + modèle (fiche réduite d'un compte privé, lot 17) : « BMW Série 3 », jamais la génération ni l'année. Lot
+ * R4e : la version suit le modèle (« Peugeot 207 CC »), c'est une précision du nom, comme le nom tapé.
+ */
 export function vehicleBriefLabel(v: Pick<VehicleWithAll, "make" | "model"> & Proposed): string {
-  const label = [
-    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
-    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return label || "Autre véhicule";
+  return vehicleName({ ...nameParts(v), generation: null });
 }
 
 export function vehicleBrief(v: VehicleWithAll): VehicleBrief {

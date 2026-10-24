@@ -1,0 +1,2 @@
+ALTER TABLE "vehicles" ADD COLUMN "version" text;--> statement-breakpoint
+ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_version_check" CHECK ("vehicles"."version" is null or char_length("vehicles"."version") between 1 and 30);

@@ -12,6 +12,7 @@ import {
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
   VEHICLE_ENGINE_MAX,
+  VEHICLE_VERSION_MAX,
   type VehicleGeneration,
   type VehicleMake,
   type VehicleModel,
@@ -521,6 +522,16 @@ export function StepSpecs({
       <StepHead title={L.specsTitle} text={V.specsText} />
       {/* Décision de Damien du 23/10 : trois champs libres et facultatifs, bornes de `vehicleSpecsIssue`. */}
       <View style={styles.stack}>
+        {/* Lot R4e (Damien) : la version, après le modèle dans le nom (« Peugeot 207 CC »), pour tout modèle. */}
+        <TextField
+          label={V.version}
+          value={draft.version}
+          onChangeText={(version) => patch({ version: version.slice(0, VEHICLE_VERSION_MAX) })}
+          help={V.versionHelp}
+          maxLength={VEHICLE_VERSION_MAX}
+          autoCapitalize="words"
+          testID="vehicle-version"
+        />
         <TextField
           label={L.engine}
           value={draft.engine}

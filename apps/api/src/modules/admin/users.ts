@@ -1,7 +1,15 @@
 // Registre des utilisateurs (lot 33, ARCHITECTURE-SUITE § 16) : recherche, fiche détaillée, réinitialisation de la double
 // authentification par l'équipe (A5), anonymisation (service unique du lot 15), sanction directe (échelle du lot 32),
 // rôle de modérateur. Super admin seulement ; chaque action écrit le journal d'administration avec son motif.
-import type { AdminUserDetail, AdminUserRow, Grade, PlatformRole, ReportReason, SanctionKind } from "@orasso/shared";
+import {
+  type AdminUserDetail,
+  type AdminUserRow,
+  type Grade,
+  type PlatformRole,
+  type ReportReason,
+  type SanctionKind,
+  vehicleName,
+} from "@orasso/shared";
 import { and, count, desc, eq, ilike, isNull, like, lt, ne, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -177,13 +185,13 @@ export const adminUsersService = {
       structures: members.map(({ m, s }) => ({ id: s.id, slug: s.slug, name: s.name, role: m.role, status: m.status })),
       vehicles: garage.map((g) => ({
         id: g.v.id,
-        label: [
-          g.make.isOther ? (g.v.proposedMake ?? "Autre") : g.make.name,
-          g.model.isOther ? (g.v.proposedModel ?? "Autre") : g.model.name,
-          g.gen?.name,
-        ]
-          .filter(Boolean)
-          .join(" "),
+        // Lot R4e, tour 2 : la composition commune (`vehicleName`), version jamais répétée.
+        label: vehicleName({
+          make: g.make.isOther ? (g.v.proposedMake ?? "Autre") : g.make.name,
+          model: g.model.isOther ? (g.v.proposedModel ?? "Autre") : g.model.name,
+          generation: g.gen?.name,
+          version: g.v.version,
+        }),
         year: g.v.year,
         status: g.v.status,
         certified: g.v.certifiedAt !== null,

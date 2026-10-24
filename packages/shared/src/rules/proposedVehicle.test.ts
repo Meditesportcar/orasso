@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanProposedName, proposalKey, proposalText } from "./proposedVehicle";
+import {
+  cleanProposedName,
+  cleanVehicleVersion,
+  proposalKey,
+  proposalText,
+  VEHICLE_VERSION_MAX,
+  versionFromTyped,
+} from "./proposedVehicle";
 
 describe("nom tapé (lot R4a)", () => {
   it("nettoyé : contrôles, marques de sens et espaces de largeur nulle retirés, espaces réduits, 40 caractères", () => {
@@ -35,5 +42,66 @@ describe("nom tapé (lot R4a)", () => {
     expect(proposalKey({ makeId: "x", makeIsOther: true, proposedMake: "Lotus", proposedModel: "Exige" })).toBe(
       "make.lotus.exige",
     );
+  });
+});
+
+describe("version du véhicule (lot R4e)", () => {
+  it("nettoyée comme un nom tapé : 1 à 30 caractères, sinon null", () => {
+    expect(cleanVehicleVersion("  GTI ")).toBe("GTI");
+    expect(cleanVehicleVersion("S")).toBe("S");
+    expect(cleanVehicleVersion("‮C\u0085C‬")).toBe("C C");
+    expect(cleanVehicleVersion("​ ")).toBeNull();
+    expect(cleanVehicleVersion(null)).toBeNull();
+    expect(cleanVehicleVersion("x".repeat(50))).toHaveLength(VEHICLE_VERSION_MAX);
+  });
+
+  it("tirée du nom tapé au rattachement : le reste après le modèle de la liste", () => {
+    expect(versionFromTyped("207 CC", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207CC", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207-cc", { model: "207" })).toBe("cc");
+    expect(versionFromTyped("207", { model: "207" })).toBeNull();
+    expect(versionFromTyped("207 ", { model: "207" })).toBeNull();
+    expect(versionFromTyped(null, { model: "207" })).toBeNull();
+  });
+
+  it("sans casse ni accents, la marque et la génération retirées si elles y sont", () => {
+    expect(versionFromTyped("serie 3 E36 M3", { model: "Série 3", generation: "E36" })).toBe("M3");
+    expect(versionFromTyped("GOLF IV GTI", { model: "Golf", generation: "IV" })).toBe("GTI");
+    expect(versionFromTyped("Golf GTI", { model: "Golf", generation: "IV" })).toBe("GTI");
+    expect(versionFromTyped("Peugeot 207 SW", { make: "Peugeot", model: "207" })).toBe("SW");
+    expect(versionFromTyped("Citroën DS3 Racing", { make: "Citroen", model: "DS3" })).toBe("Racing");
+  });
+
+  it("un texte qui ne commence pas par le modèle ne donne rien", () => {
+    expect(versionFromTyped("208 GTI", { model: "207" })).toBeNull();
+    expect(versionFromTyped("CC 207", { model: "207" })).toBeNull();
+  });
+
+  it("tour 2 : le modèle d'abord dans le texte entier, puis après la marque", () => {
+    expect(versionFromTyped("DS 3 Racing", { make: "DS", model: "DS 3" })).toBe("Racing");
+    expect(versionFromTyped("DS3 Racing", { make: "DS", model: "DS 3" })).toBe("Racing");
+    expect(versionFromTyped("Mini Classic Sport", { make: "Mini", model: "Classic" })).toBe("Sport");
+    expect(versionFromTyped("Mini Cooper S", { make: "Mini", model: "Mini Cooper" })).toBe("S");
+  });
+
+  it("tour 2 : jamais au milieu d'un mot ou d'un nombre ; parenthèses et ponctuation retirées aux bords", () => {
+    expect(versionFromTyped("2070", { model: "207" })).toBeNull();
+    expect(versionFromTyped("Golfe", { model: "Golf" })).toBeNull();
+    expect(versionFromTyped("207CC", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("GTI2", { model: "GTI" })).toBe("2");
+    expect(versionFromTyped("207 (CC)", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207 - CC !", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207 ()", { model: "207" })).toBeNull();
+    // Une génération collée à un mot (« Mk40 ») n'est pas retirée.
+    expect(versionFromTyped("Golf Mk40", { model: "Golf", generation: "Mk4" })).toBe("Mk40");
+  });
+
+  it("tour 2 : caractères invisibles retirés ; rien de visible → null", () => {
+    for (const ch of ["\u200e", "\u200f", "\u061c", "\u2060", "\u00ad", "\u3164", "\u200b", "\ufeff"]) {
+      expect(cleanVehicleVersion(`G${ch}TI`)).toBe("GTI");
+      expect(cleanVehicleVersion(ch)).toBeNull();
+      expect(cleanProposedName(`20${ch}7`)).toBe("207");
+      expect(cleanProposedName(`${ch}${ch}`)).toBeNull();
+    }
   });
 });

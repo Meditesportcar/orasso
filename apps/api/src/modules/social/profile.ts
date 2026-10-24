@@ -191,7 +191,11 @@ export const socialProfile = {
             makeName: makeNameOf(g),
             modelName: modelNameOf(g),
             // Vague R4, après fusion : la vitrine sort du garage, seulement une photo à plaque floutée ou sans plaque.
-            photoUrl: storage.url(maskedPhoto(g.photos, g.unregistered)?.storageKey ?? null),
+            // Lot R4e (Damien) : le propriétaire qui regarde sa propre vitrine voit sa couverture, sans masque ; son
+            // aperçu « vu par un membre / un ami » garde la règle des autres.
+            photoUrl: storage.url(
+              (audience === "self" ? g.photos[0] : maskedPhoto(g.photos, g.unregistered))?.storageKey ?? null,
+            ),
             detailed: true,
             main: g.id === mainId,
           }
@@ -267,7 +271,8 @@ export const socialProfile = {
     const detailed = profileFields(audience).vehicleDetails;
     return {
       // Lot R4b : compte privé, la fiche réduite de `privateVehicleFields` (photo masquée, génération, catégories).
-      ...(detailed ? vehiclePublic(row) : vehiclePrivate(row)),
+      // Lot R4e : le propriétaire voit toutes ses photos (la règle de masquage reste pour tous les autres).
+      ...(detailed ? vehiclePublic(row, { owner: audience === "self" }) : vehiclePrivate(row)),
       detailed,
       owner: {
         userId: owner.userId,

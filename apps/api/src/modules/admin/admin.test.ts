@@ -36,6 +36,9 @@ import {
 } from "../../db/schema";
 import { isProtectedTemplate, withinMailBudget } from "../../lib/mail";
 import { notificationsService } from "../notifications/service";
+import { vehiclesRepo } from "../vehicles/repo";
+import { vehicleLabel } from "../vehicles/serializers";
+import { storyName } from "../vehicles/share-image";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -596,9 +599,22 @@ describe("modèles proposés (lot R4a, maquette R4.8b)", () => {
       const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
       expect(row).toMatchObject({ modelId: done.json.modelId, proposedModel: null, proposedMake: null });
     }
+    // Lot R4e : la précision tapée après le modèle devient la version (« 207 CC » → « CC », « 207cc » → « cc »).
+    const versionOf = async (id: string) =>
+      (await db.query.vehicles.findFirst({ where: eq(vehicles.id, id) }))?.version;
+    expect(await versionOf(a.id)).toBe("CC");
+    expect(await versionOf(b.id)).toBe("CC");
+    expect(await versionOf(c.id)).toBe("cc");
+    expect(await versionOf(late.id)).toBe("CC");
     const notes = await db.select().from(notifications).where(eq(notifications.type, "vehicle_reassigned"));
     expect(notes).toHaveLength(4);
     expect(notes.find((n) => n.userId === fan.id)?.body).toContain("ta Peugeot 207 CC");
+    expect(notes.find((n) => n.userId === fan.id)?.body).toContain(": Peugeot 207 CC.");
+    // La fiche du propriétaire garde sa précision : « Peugeot 207 CC ».
+    expect((await req(fan, "GET", `/me/vehicles/${a.id}`)).json).toMatchObject({
+      label: "Peugeot 207 CC",
+      version: "CC",
+    });
     const traces = await db.select({ action: adminAuditLog.action }).from(adminAuditLog);
     expect(traces.map((t) => t.action)).toEqual(
       expect.arrayContaining(["reference.model_create", "vehicle.proposal_accept"]),
@@ -620,6 +636,99 @@ describe("modèles proposés (lot R4a, maquette R4.8b)", () => {
     });
     expect(again.json.count).toBe(1);
     expect((await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items).toHaveLength(0);
+  });
+
+  it("version au rattachement (lot R4e) : rien pour « 207 », une version déjà saisie est gardée, aussi fiche par fiche", async () => {
+    const peugeot = await peugeotWithOther();
+    const lea = await signUp("Lea_66");
+    const plain = await createVehicle(fan.id, peugeot, { generationId: null, proposedModel: "207", year: 2008 });
+    const kept = await createVehicle(lea.id, peugeot, {
+      generationId: null,
+      proposedModel: "207 CC",
+      year: 2008,
+      version: "Phase 2",
+    });
+    const items = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    const group = items.find((g: { modelName: string }) => g.modelName === "207");
+    expect(group.count).toBe(1);
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "207",
+      version: group.version,
+    });
+    expect(done.status).toBe(200);
+    const versionOf = async (id: string) =>
+      (await db.query.vehicles.findFirst({ where: eq(vehicles.id, id) }))?.version;
+    expect(await versionOf(plain.id)).toBeNull();
+    // « 207 CC » est un autre groupe (texte normalisé différent) : rattaché fiche par fiche, sa version saisie reste.
+    const [other] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    expect(other).toMatchObject({ modelName: "207 CC", count: 1 });
+    expect(
+      (
+        await req(admin, "POST", `/admin/vehicles/${kept.id}/reassign`, {
+          makeId: peugeot.makeId,
+          modelId: done.json.modelId,
+          generationId: null,
+        })
+      ).status,
+    ).toBe(200);
+    expect(await versionOf(kept.id)).toBe("Phase 2");
+    // Fiche par fiche, sans version : la précision tapée la remplit.
+    const solo = await createVehicle(lea.id, peugeot, { generationId: null, proposedModel: "207 SW", year: 2009 });
+    await req(admin, "POST", `/admin/vehicles/${solo.id}/reassign`, {
+      makeId: peugeot.makeId,
+      modelId: done.json.modelId,
+      generationId: null,
+    });
+    expect(await db.query.vehicles.findFirst({ where: eq(vehicles.id, solo.id) })).toMatchObject({
+      proposedModel: null,
+      version: "SW",
+    });
+    // Tour 2 : la notification de « Rattacher ce véhicule » dit la version.
+    const soloNote = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, lea.id), eq(notifications.type, "vehicle_reassigned")));
+    expect(soloNote.map((n) => n.body)).toContain(
+      "L'équipe Orasso a rattaché ton véhicule au référentiel : Peugeot 207 SW.",
+    );
+    // Tour 2 : jamais au milieu d'un nombre ; parenthèses retirées ; le nom de l'affiche suit.
+    const glued = await createVehicle(lea.id, peugeot, { generationId: null, proposedModel: "2070", year: 2009 });
+    const paren = await createVehicle(lea.id, peugeot, { generationId: null, proposedModel: "207 (CC)", year: 2009 });
+    const before = await vehiclesRepo.findFullById(paren.id);
+    expect(storyName(before!)).toBe("207 (CC)");
+    for (const x of [glued, paren]) {
+      await req(admin, "POST", `/admin/vehicles/${x.id}/reassign`, {
+        makeId: peugeot.makeId,
+        modelId: done.json.modelId,
+        generationId: null,
+      });
+    }
+    expect(await versionOf(glued.id)).toBeNull();
+    expect(await versionOf(paren.id)).toBe("CC");
+    const after = await vehiclesRepo.findFullById(paren.id);
+    expect(storyName(after!)).toBe("207 CC");
+    expect(vehicleLabel(after!)).toBe("Peugeot 207 CC");
+  });
+
+  it("tour 2 (lot R4e) : rattachement groupé, le modèle cherché d'abord dans le texte entier (« DS 3 Racing »)", async () => {
+    const [ds] = await db.insert(vehicleMakes).values({ name: "DS", slug: "ds", country: "FR" }).returning();
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: ds!.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const ref = { makeId: ds!.id, modelId: other!.id, generationId: "" };
+    const racing = await createVehicle(fan.id, ref, { generationId: null, proposedModel: "DS 3 Racing", year: 2012 });
+    const [group] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeId: ds!.id,
+      modelName: "DS 3",
+      version: group.version,
+    });
+    expect(done.status).toBe(200);
+    const row = await vehiclesRepo.findFullById(racing.id);
+    expect(row?.version).toBe("Racing");
+    expect(vehicleLabel(row!)).toBe("DS DS 3 Racing");
   });
 
   it("marque tapée : la marque et le modèle sont créés ; un groupe inconnu est refusé", async () => {

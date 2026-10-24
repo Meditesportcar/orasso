@@ -1,7 +1,7 @@
 // Recherche de premier niveau et Explorer (lot 29) : `GET /search`, `GET /events` (affinités, distance, filtres),
 // `GET /pros` (distance, filtres). En cookie ET en jeton porteur. Confidentialité, abus, absence de déduction.
 import { type affinityOf, compareByAffinity, fromWallTime } from "@orasso/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -738,6 +738,23 @@ describe("GET /search : confidentialité des véhicules et des personnes", () =>
       // Jamais de plaque, de département ni de centre d'intérêt dans un résultat.
       expect(JSON.stringify(res.json)).not.toMatch(/AA-\d{3}-ZZ|AA\d{3}ZZ|plate/i);
     }
+  });
+
+  it("lot R4e : la version se cherche (« supra rz »), comme le modèle, pour tous ; jamais la génération d'un privé", async () => {
+    const { viewer, vPub, vPriv } = await garage();
+    await db
+      .update(vehicles)
+      .set({ version: "RZ" })
+      .where(inArray(vehicles.id, [vPub.id, vPriv.id]));
+    const res = await get(viewer, "/search?q=supra%20rz");
+    const hits = res.json.vehicles as { id: string; label: string }[];
+    expect(hits.map((h) => h.id).sort()).toEqual([vPub.id, vPriv.id].sort());
+    const byId = new Map(hits.map((h) => [h.id, h.label]));
+    expect(byId.get(vPub.id)).toBe("Toyota Supra MK4 RZ");
+    expect(byId.get(vPriv.id)).toBe("Toyota Supra RZ");
+    // La génération et la version ensemble ne trouvent pas le privé non ami.
+    const gen = await get(viewer, "/search?q=mk4%20rz");
+    expect(gen.json.vehicles.map((h: { id: string }) => h.id)).toEqual([vPub.id]);
   });
 
   it("la génération ne trouve pas un compte privé non ami (sinon elle la révélerait) mais trouve un compte public et un ami", async () => {

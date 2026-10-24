@@ -1,7 +1,7 @@
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
 // public ou ami, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
 import { Button, Chip, Photo, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
-import { gradeLabels, socialLabels } from "@orasso/shared";
+import { gradeLabels, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -91,6 +91,7 @@ export default function OtherVehiclePage() {
         {full ? (
           <Plate style={styles.facts}>
             {full.generationName ? <Fact label="Génération" value={full.generationName} /> : null}
+            {full.version ? <Fact label={vehicleAddLabels.versionFact} value={full.version} /> : null}
             {full.engine ? <Fact label="Moteur" value={full.engine} /> : null}
             {full.weightKg ? <Fact label="Poids" value={`${full.weightKg} kg`} /> : null}
             {full.color ? <Fact label="Couleur" value={full.color} /> : null}
