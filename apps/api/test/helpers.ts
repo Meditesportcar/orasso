@@ -31,6 +31,7 @@ const TABLES = [
   "user",
   "categories",
   "vehicle_makes",
+  "vehicle_reference_seen",
   "structures",
   "email_outbox",
   "admin_audit_log",

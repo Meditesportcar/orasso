@@ -89,6 +89,16 @@ export const vehicleGenerations = pgTable(
   ],
 );
 
+/**
+ * Lot R3c, tour 2 : clés du référentiel déjà arrivées par la synchronisation (`syncVehicleReference`), une par marque
+ * (« peugeot »), modèle (« peugeot|207 ») et génération (« peugeot|207|phase 1 », nom sans accents ni casse). Une clé
+ * vue n'est plus jamais réinsérée : une ligne supprimée ou renommée dans l'admin ne revient pas.
+ */
+export const vehicleReferenceSeen = pgTable("vehicle_reference_seen", {
+  key: text("key").primaryKey(),
+  seenAt: tstz("seen_at").notNull().defaultNow(),
+});
+
 export const vehicles = pgTable(
   "vehicles",
   {
