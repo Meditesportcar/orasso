@@ -144,21 +144,22 @@ export const explorerV2Labels = {
   fromDept: (dept: string) => `distances depuis le centre du ${dept}`,
   fromDeptDenied: (dept: string) => `position refusée : distances depuis le centre du ${dept}`,
   fromPrefs: "filtrés selon tes préférences",
-  // Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… », un point de départ temporaire.
+  // Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… », un point de départ ; lot R1 (24/10) : gardé pour les
+  // prochaines visites (« Autour de moi » : le mode, jamais la position).
   aroundButton: "Autour de",
   aroundSheet: "Autour de…",
   aroundMine: "Mon coin",
   aroundMineHint: (depts: readonly string[]) =>
     depts.length ? `Ton secteur : ${depts.join(", ")}` : "Ajoute ton département dans ton profil",
   aroundMe: "Autour de moi",
-  aroundMeHint: "Ta position, le temps de cette recherche",
+  aroundMeHint: "Ta position, lue à chaque visite, jamais gardée",
   aroundElsewhere: "Ailleurs…",
-  aroundElsewhereHint: "Un autre département, le temps de cette recherche",
+  aroundElsewhereHint: "Un autre département que ton coin",
   aroundDept: (code: string) => `Le ${code}`,
   aroundDistance: "Distance",
   aroundKm: (km: number) => `${km} km`,
   everywhere: "Partout en France",
-  aroundSheetHint: "Ces choix valent pour cette recherche : ils ne changent ni ton profil ni tes préférences.",
+  aroundSheetHint: "Ces choix restent pour tes prochaines visites : ils ne changent ni ton profil ni tes préférences.",
   backHome: "Revenir à mon coin",
   fromDeptElsewhere: (dept: string) => `distances depuis le centre du ${dept}`,
   withinKm: (km: number) => `à ${km} km au plus`,

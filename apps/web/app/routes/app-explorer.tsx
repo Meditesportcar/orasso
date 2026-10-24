@@ -37,7 +37,7 @@ import {
   searchGroupLabels,
   socialLabels,
 } from "@orasso/shared";
-import { Form, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation } from "react-router";
 
 import { CrewRow } from "../components/Crews";
 import { EventsMap } from "../components/EventsMap";
@@ -47,6 +47,7 @@ import { ProsMap } from "../components/ProsMap";
 import { ProTile } from "../components/ProTile";
 import { UsePosition } from "../components/UsePosition";
 import { api, apiOrThrow } from "../lib/api.server";
+import { keptExplorerParams, readExplorerCookie, setExplorerCookie } from "../lib/explorerChoice.server";
 import { friendAction } from "../lib/friends.server";
 import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/app-explorer";
@@ -85,8 +86,21 @@ function dayBound(value: string, end: boolean): string | null {
   }).toISOString();
 }
 
+/**
+ * Lot R1 : une arrivée sans réglage reprend le dernier choix (cookie de préférence) ; chaque réglage choisi le remplace.
+ */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  if (url.search === "") {
+    const saved = readExplorerCookie(request);
+    if (saved) throw redirect(`/app/explorer?${saved}`);
+  }
+  const kept = keptExplorerParams(url.searchParams);
+  const result = await load(request, url);
+  return kept ? data(result, { headers: { "set-cookie": setExplorerCookie(request, kept) } }) : result;
+}
+
+async function load(request: Request, url: URL) {
   const get = (name: string) => url.searchParams.get(name) ?? "";
   const q = get("q").trim().slice(0, SEARCH_MAX_LENGTH);
   const requested = get("segment");
