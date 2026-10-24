@@ -8,6 +8,21 @@ import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle
 import type { IconName } from "../icons";
 import { initialsOf } from "../initials";
 import { Logo } from "./Brand";
+import {
+  BAR_ACTION,
+  BAR_GAP,
+  BAR_PAD_LEFT,
+  BAR_PAD_RIGHT,
+  CAPCHIP_GAP,
+  CAPCHIP_LOGO,
+  CAPCHIP_MAX_FONT_SCALE,
+  CAPCHIP_PAD_LEFT,
+  CAPCHIP_PAD_RIGHT,
+  capChipCompact,
+  LOGO_NARROW_BELOW,
+  LOGO_WIDTH,
+  LOGO_WIDTH_NARROW,
+} from "./capChipFit";
 import { archivoAt } from "./fontFamily";
 import { Icon } from "./Icon";
 import { Text } from "./text";
@@ -17,17 +32,6 @@ import { angle, radius, spacing, useTheme } from "./theme";
 export const APP_BAR_HEIGHT = 58;
 /** Cibles tactiles d'au moins 44 px autour des boutons de 38 px (lot C1, tour 2). */
 const HIT_38 = { top: 3, bottom: 3, left: 3, right: 3 };
-/**
- * La pastille « Organisateur » complète demande environ 375 px (logotype, pastille, deux boutons, marges) : sous 380 px,
- * ou sous 400 px avec un texte agrandi, elle se réduit au logo rond (le nom reste dans son libellé accessible).
- */
-const CAPCHIP_FULL_MIN = 400;
-/** Un rôle plus long que « Organisateur » (12 lettres) tient en entier seulement à partir de 430 px (lot C7). */
-const CAPCHIP_ROLE_MAX = 12;
-const CAPCHIP_LONG_MIN = 430;
-/** `.ab-logo` de l'artefact : 118 px (112 px sous 360 px). */
-const LOGO_WIDTH = 118;
-
 type ActionProps = {
   icon: IconName;
   /** Nom accessible (« Rechercher », « Journal »). */
@@ -114,7 +118,13 @@ function CapChip({
         )}
       </View>
       {persona.role && !compact ? (
-        <Text variant="label" color={c.barInk} style={styles.capText} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+        <Text
+          variant="label"
+          color={c.barInk}
+          style={styles.capText}
+          numberOfLines={1}
+          maxFontSizeMultiplier={CAPCHIP_MAX_FONT_SCALE}
+        >
           {persona.role}
         </Text>
       ) : null}
@@ -302,55 +312,53 @@ export function AppBar({
         disabled={!onLogo && !onLogoLongPress}
         testID="topbar-logo"
       >
-        <Logo width={width < 360 ? 112 : LOGO_WIDTH} tone="dark" />
+        <Logo width={width < LOGO_NARROW_BELOW ? LOGO_WIDTH_NARROW : LOGO_WIDTH} tone="dark" />
       </Pressable>
       {persona ? (
         <CapChip
           persona={persona}
-          compact={
-            width < 380 ||
-            (fontScale > 1 && width < CAPCHIP_FULL_MIN) ||
-            // Lot C7 (capture 32c, 390 px) : « Administration » poussait la Boîte hors de l'écran ; un rôle plus long
-            // que « Organisateur » passe au logo rond sous 430 px.
-            ((persona.role?.length ?? 0) > CAPCHIP_ROLE_MAX && width < CAPCHIP_LONG_MIN)
-          }
+          // Correctif R4 : le rôle en entier s'il tient (« ORGANISATEUR » à 390 px), sinon le logo rond ; jamais de « … »,
+          // et la Boîte reste dans l'écran (lot C7).
+          compact={capChipCompact({ width, fontScale, role: persona.role, withClose: Boolean(onClose) })}
           onPress={onPersona}
           testID="topbar-persona"
         />
       ) : null}
-      <View style={styles.spacer} />
-      {kind === "home" ? (
-        <>
-          {onSearch ? <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} /> : null}
-          {onNotifications ? (
+      {/* Recherche, Boîte (et ✕) poussés à droite : un écart de barre de moins qu'avec une cale (correctif R4). */}
+      <View style={styles.end}>
+        {kind === "home" ? (
+          <>
+            {onSearch ? <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} /> : null}
+            {onNotifications ? (
+              <AppBarAction
+                icon="bell"
+                label="Journal"
+                onPress={onNotifications}
+                on={notificationsOn}
+                count={notificationsOn ? undefined : notificationCount}
+              />
+            ) : null}
+            {avatar ? (
+              <AppBarAction icon="profile" label={avatarLabel} onPress={onAvatar} onLongPress={onAvatarLongPress}>
+                {avatar}
+                {avatarDot ? <View style={[styles.dot, { backgroundColor: c.accent }]} /> : null}
+              </AppBarAction>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
             <AppBarAction
-              icon="bell"
-              label="Journal"
-              onPress={onNotifications}
-              on={notificationsOn}
-              count={notificationsOn ? undefined : notificationCount}
+              icon="inbox"
+              label="Boîte"
+              onPress={onInbox}
+              on={inboxOn}
+              count={inboxOn ? undefined : inboxCount}
             />
-          ) : null}
-          {avatar ? (
-            <AppBarAction icon="profile" label={avatarLabel} onPress={onAvatar} onLongPress={onAvatarLongPress}>
-              {avatar}
-              {avatarDot ? <View style={[styles.dot, { backgroundColor: c.accent }]} /> : null}
-            </AppBarAction>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
-          <AppBarAction
-            icon="inbox"
-            label="Boîte"
-            onPress={onInbox}
-            on={inboxOn}
-            count={inboxOn ? undefined : inboxCount}
-          />
-        </>
-      )}
-      {onClose ? <CloseX label={closeLabel} onPress={onClose} onBar /> : null}
+          </>
+        )}
+        {onClose ? <CloseX label={closeLabel} onPress={onClose} onBar /> : null}
+      </View>
     </View>
   );
 }
@@ -361,23 +369,23 @@ const styles = StyleSheet.create({
     zIndex: 20,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingLeft: 14,
-    paddingRight: 12,
+    gap: BAR_GAP,
+    paddingLeft: BAR_PAD_LEFT,
+    paddingRight: BAR_PAD_RIGHT,
     borderBottomWidth: 2,
   },
   flow: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10 },
   flowInset: { paddingHorizontal: spacing.space4 },
   flowTitle: { fontSize: 16, lineHeight: 17 },
   flowFacts: { fontSize: 12.5 },
-  spacer: { flex: 1 },
+  end: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: BAR_GAP },
   // Au moins la hauteur du ✕ : un titre d'une ligne reste centré sur lui, comme avant le lot M7.
   heading: { flex: 1, minWidth: 0, minHeight: 38, justifyContent: "center" },
   closeTop: { alignSelf: "flex-start" },
   counter: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.radiusSm },
   action: {
-    width: 38,
-    height: 38,
+    width: BAR_ACTION,
+    height: BAR_ACTION,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
@@ -389,16 +397,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: CAPCHIP_GAP,
     height: 30,
-    paddingLeft: 4,
-    paddingRight: 10,
+    paddingLeft: CAPCHIP_PAD_LEFT,
+    paddingRight: CAPCHIP_PAD_RIGHT,
     borderRadius: radius.radiusPill,
   },
-  capchipRound: { paddingRight: 4 },
+  capchipRound: { paddingRight: CAPCHIP_PAD_LEFT },
   capLogo: {
-    width: 22,
-    height: 22,
+    width: CAPCHIP_LOGO,
+    height: CAPCHIP_LOGO,
     borderRadius: radius.radiusPill,
     overflow: "hidden",
     alignItems: "center",

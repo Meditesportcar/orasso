@@ -2992,3 +2992,9 @@ Source : `corrections-r4a.md` (relais).
 
 ### À revoir avec Damien (lot R4a)
 - **Nom tapé gardé comme finition au rattachement** (maquette `t-m-admin` : « 207 CC » reste sur la fiche) : la fiche n'a pas de champ « finition » ; il faudrait une colonne (migration) et sa place à l'écran. Pas codé : au rattachement, le nom tapé est effacé et la fiche prend le nom de la liste (« Peugeot 207 »). À trancher : colonne `trim` ou rien.
+
+## Correctif de la vague R4 : pastille de casquette « ORGANISAT… » à 390 px (24/10/2026)
+- **Choix** : la pastille montre le rôle en entier quand il tient, sinon le logo rond ; la règle est une fonction pure testée (`capChipCompact`, largeurs des rôles mesurées dans Chrome, marge de 2 px, rôle inconnu à 0,8 em par signe), qui remplace les seuils fixes de C7 (380, 400, 430 px). Pour que « ORGANISATEUR » tienne à 390 px : un écart de barre de moins (Recherche et Boîte groupées et poussées à droite, au lieu d'une cale entre deux écarts) et remplissage droit de la pastille à `space2` (écart daté dans le README du système de design). « Administration » s'affiche désormais en entier à partir de 397 px (412 px compris), au lieu de 430 px.
+- **Raison** : un libellé ne se coupe jamais ; la Boîte reste dans l'écran (lot C7).
+- **Fichiers** : `packages/design-system/src/native/capChipFit.ts` (+ test), `packages/design-system/src/native/AppBar.tsx`.
+- **Reste** : les largeurs sont mesurées dans Chrome ; sur Android, le rendu d'Archivo peut différer d'un pixel ou deux : à regarder sur le Xiaomi avec l'APK.
