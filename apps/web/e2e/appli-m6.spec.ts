@@ -185,10 +185,26 @@ test("affiche à partager : story et post, zones masquées en story, zones à fl
   expect(bad.status).toBe(400);
 });
 
+/** Heure de Paris (0 à 23), pour les heures calmes des notifications (22 h – 8 h, choix C15). */
+const parisHour = () =>
+  Number(
+    new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(
+      new Date(),
+    ),
+  );
+
 test("bandeau d'annonce : « Retenue ! » moutarde puis liste d'attente sobre ; toucher ouvre Sorties", async ({
   page,
 }) => {
   test.setTimeout(300_000);
+  // Lot C7 : la décision part en notification, retenue pendant les heures calmes (22 h – 8 h) ; la nuit, la recette
+  // demande l'API lancée avec NOTIFY_QUIET_HOURS=off (et la même variable pour Playwright), sinon elle est sautée en le
+  // disant au lieu d'échouer au bout du délai.
+  const quiet = parisHour() >= 22 || parisHour() < 8;
+  test.skip(
+    quiet && process.env.NOTIFY_QUIET_HOURS !== "off",
+    "Heures calmes : lancer l'API avec NOTIFY_QUIET_HOURS=off",
+  );
   const damien = await login("damien@orasso.local");
   const s = unique();
   const email = `bandeau_${s}@e2e.orasso.test`;

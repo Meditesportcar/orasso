@@ -1,7 +1,18 @@
 import { createHmac } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  login,
+  randomPlate,
+  SEED_PASSWORD,
+  samplePhoto,
+  signUpApi,
+  unique,
+} from "./helpers";
+import { sql } from "./helpers/lot48";
 import { RELAIS } from "./relais";
 
 // Lot 16, côté appli (version web de recette) : Moi complet (profil, aperçu public, notifications par type, public /
@@ -298,6 +309,26 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
   // Sarah_66 (seed) : co-organisatrice de MéditeSportCar (candidatures à trier) et propriétaire de Roues Libres 66.
+  // Lot C7 : la recette ne dépend plus de l'ordre (`appli-tri` vide le tri) : une candidature en attente est déposée
+  // ici sur un événement publié de la structure de Sarah dont les candidatures sont ouvertes.
+  const upcoming = await sql<{ id: string }>(
+    `select e.id from events e
+       join structure_members m on m.structure_id = e.structure_id
+       join "user" u on u.id = m.user_id
+     where u.email = 'sarah@orasso.local' and e.status = 'published' and e.starts_at > now()
+     order by e.starts_at limit 10`,
+  );
+  const applicant = await signUpApi(`TriC7_${unique()}`);
+  const vehicle = await addVehicleApi(applicant, randomPlate());
+  let applied = false;
+  for (const e of upcoming) {
+    if (applied) break;
+    applied = await applyApi(applicant, e.id, vehicle).then(
+      () => true,
+      () => false,
+    );
+  }
+  expect(applied, "une candidature à trier chez Sarah").toBe(true);
   const sarah = await login("sarah@orasso.local");
   const me = await apiCall<{ personas: { kind: string; label: string; badge: number }[] }>(sarah, "GET", "/me");
   // Lot 40 : Sarah n'a pas de véhicule actif, sa casquette de base est le visiteur.

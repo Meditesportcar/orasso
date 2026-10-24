@@ -100,9 +100,9 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 30_000 });
-  // Barre du visiteur, carte sur l'Accueil.
+  // Barre du visiteur. Lot C7 : la carte « Termine ta fiche » a quitté l'Accueil (reconstruit d'après l'artefact au lot
+  // C2a) ; elle reste dans Mon profil, vérifiée plus bas.
   await expect(page.getByRole("tab", { name: "Passeport" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("pending-pro").filter({ visible: true })).toContainText("Termine ta fiche");
 
   // Tes préférences : le coin (trois touchers rapides dans la feuille, le dernier gagne), puis « Enregistrer ».
   await page.goto("/preferences");
@@ -125,7 +125,9 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
   await page.goto("/");
   await skipOpening(page);
   await page.getByRole("tab", { name: "Profil" }).click();
-  await expect(page.getByTestId("pending-pro").filter({ visible: true }).last()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("pending-pro").filter({ visible: true }).last()).toContainText("Termine ta fiche", {
+    timeout: 30_000,
+  });
   await page
     .getByTestId("pending-pro")
     .filter({ visible: true })
