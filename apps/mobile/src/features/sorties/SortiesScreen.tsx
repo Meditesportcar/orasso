@@ -54,6 +54,7 @@ import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { TICKET_BLOCKS, Waiting } from "@/ui/Waiting";
 import { ApplicationTag, Seg, SkewTag, SmallButton } from "./bits";
+import { LineupLine } from "./LineupLine";
 import {
   arrivalPhrase,
   liveApplications,
@@ -559,6 +560,8 @@ function ApplicationTicket({
           {sortiesLabels.withdraw}
         </SmallButton>
       ) : null}
+      {/* Lot R4b (maquette R4.4) : la ligne « Le plateau » des places retenues. */}
+      {app.status === "accepted" ? <LineupLine slug={app.event.slug} preview={app.lineupPreview} /> : null}
     </Ticket>
   );
 }
@@ -775,6 +778,8 @@ function PastTicket({
           Réponse de l'équipe organisatrice : {app.review.given.reply}
         </Text>
       ) : null}
+      {/* Lot R4b (maquette R4.4) : « Le plateau · N présentes », qui ouvre directement le plateau. */}
+      {app.status === "accepted" ? <LineupLine slug={app.event.slug} preview={app.lineupPreview} /> : null}
       {recapReady && app.checkedInAt ? (
         <SmallButton icon="list" onPress={onRecap} testID="ticket-recap">
           {recapScreenTexts.seeRecap}

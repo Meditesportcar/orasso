@@ -173,6 +173,11 @@ export const vehiclePhotos = pgTable(
      */
     plateRects: jsonb("plate_rects").$type<PlateRect[]>(),
     plateBlurred: boolean("plate_blurred").notNull().default(false),
+    /**
+     * Lot R4b, tour 3 : « aucune plaque visible » confirmé à l'envoi (`noPlate=true`, décision exigée depuis le lot M1).
+     * Avec `plate_blurred`, ce qui permet de montrer la photo hors du garage (plateau). Faux pour les photos d'avant.
+     */
+    noPlateConfirmed: boolean("no_plate_confirmed").notNull().default(false),
     ...timestamps,
   },
   (t) => [

@@ -31,6 +31,7 @@ import {
   lockAt,
   type Page,
   type PosterSettings,
+  publicCountsHidden,
   type RecurrenceRule,
   recurrenceOccurrences,
   registrationOpensAt,
@@ -89,13 +90,20 @@ import { type EventRow, eventsRepo } from "./repo";
  * Ce que la fiche montre au-delà du public : les consignes (retenus et organisation) et, depuis le lot M4, le créneau
  * d'arrivée strict des exposants.
  */
-type ViewRights = { instructions: boolean; exhibitorSlot: boolean };
+type ViewRights = {
+  instructions: boolean;
+  exhibitorSlot: boolean;
+  /** Lot R4b, tour 2 : retenus et places restantes après la fin (organisation seulement, `publicCountsHidden`). */
+  countsAfterEnd?: boolean;
+};
 
 async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
   const t = now();
   // Plusieurs jours (lot 26) : jours avec leurs places ; un événement d'un jour n'en a pas et reste `whole`.
-  const days = await daysRepo.serialize(e);
+  // Lot R4b, tour 2 : après la fin, ni retenus ni places restantes dans une réponse publique (nombre d'absents).
+  const hideCounts = !rights.countsAfterEnd && publicCountsHidden(e.endsAt, t);
+  const days = (await daysRepo.serialize(e)).map((d) => (hideCounts ? { ...d, remaining: null } : d));
   const postUrl = storage.url(e.posterPostKey);
   const storyUrl = storage.url(e.posterStoryKey);
   const style = posterSettingsOf(e)?.style;
@@ -105,7 +113,7 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
   return {
     days,
     dayAccess: days.length ? e.dayAccess : "whole",
-    ...card(e, s, counters.remaining),
+    ...card(e, s, hideCounts ? null : counters.remaining),
     description: e.description,
     // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur. Lot M4 (correction
     // de Damien) : le créneau des exposants est privé, jamais dans une réponse publique ni anonyme.
@@ -132,7 +140,7 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
     rulesText: e.rulesText,
     instructions: rights.instructions ? e.instructions : null,
     entranceNote: e.entranceNote,
-    acceptedCount: counters.accepted,
+    acceptedCount: hideCounts ? null : counters.accepted,
   };
 }
 
@@ -320,7 +328,7 @@ export const eventsService = {
     // Lot M4, tour 2 : le créneau strict des exposants n'est donné qu'aux concernés (`holdsExhibitorSlot`). La feuille
     // de candidature le lit à part, par `applyContext`, seulement si l'on peut candidater maintenant.
     const exhibitorSlot = viewer !== null && holdsExhibitorSlot(member, mine);
-    const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot });
+    const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot, countsAfterEnd: member });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
     const full: EventPublic = {
@@ -387,7 +395,7 @@ export const eventsService = {
     });
     const settings = posterSettingsOf(e);
     return {
-      ...(await publicView(e, s, { instructions: true, exhibitorSlot: true })),
+      ...(await publicView(e, s, { instructions: true, exhibitorSlot: true, countsAfterEnd: true })),
       zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity, position: z.position })),
       counters: await eventsRepo.counters(e),
       publishedAt: e.publishedAt?.toISOString() ?? null,

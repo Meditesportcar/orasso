@@ -54,6 +54,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { lineupService } from "../events/lineup";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { filledByNeed, needView, reviewsByApplication, reviewsOf } from "./needs";
@@ -141,6 +142,8 @@ function announce(event: { id: string }, app: { id: string; userId: string; stat
   const payload = { applicationId: app.id, eventId: event.id, status: app.status };
   realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
   realtime.publish(`user:${app.userId}`, "application.changed", payload);
+  // Lot R4b, tour 2 : un prestataire retenu, retiré ou accrédité change les pros du plateau.
+  lineupService.changed(event.id);
 }
 
 /** Ce qu'une candidature de prestataire montre depuis le lot 21. */

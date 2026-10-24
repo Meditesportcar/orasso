@@ -38,10 +38,11 @@ import { EventFeed } from "@/features/communication/EventFeed";
 import { eventAction, type ProfileKind } from "@/features/event/action";
 import { CandSheet } from "@/features/event/CandSheet";
 import { CustomPoster } from "@/features/event/CustomPoster";
-import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
+import { Info, Reviews } from "@/features/event/EventExtras";
 import { AdmissionTags, EventRows, EventTitle } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
+import { LineupBlock } from "@/features/event/Lineup";
 import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
 import { OrgBar } from "@/features/event/OrgBar";
@@ -136,7 +137,6 @@ export default function EventPage() {
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   // Fil de l'événement (lot 20) : public, enrichi pour les retenus (consignes, annonces réservées).
   const feed = useApi(() => api.eventAnnouncements(slug), [slug, status], { enabled: status !== "loading" });
-  const providers = useApi(() => api.eventProviders(slug), [slug, status], { enabled: status !== "loading" });
   const structure = useApi(() => api.structureBySlug(e?.structure.slug ?? ""), [e?.structure.slug, status], {
     enabled: Boolean(e) && status !== "loading",
   });
@@ -551,6 +551,8 @@ export default function EventPage() {
         />
       ) : null}
       <EventRows event={e} />
+      {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
+      <LineupBlock eventId={e.id} slug={e.slug} />
       <AdmissionTags event={e} />
       {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
@@ -606,9 +608,6 @@ export default function EventPage() {
       {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
       {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}
-      {providers.data && providers.data.length > 0 ? (
-        <ProvidersPresent providers={providers.data} reportable={status === "in"} />
-      ) : null}
       {/* Lot 55 : contenus des médias accrédités (mis en avant d'abord), et pour un média l'état de l'accréditation. */}
       {!cancelled ? <MediaContents slug={e.slug} /> : null}
       {kind === "media" && !cancelled && e.accreditation && !e.accreditation.open && !e.accreditation.mine ? (

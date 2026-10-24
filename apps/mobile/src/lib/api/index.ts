@@ -13,6 +13,7 @@ import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
+import { lineupApi } from "./lineup";
 import { listsApi } from "./lists";
 import { mediaApi } from "./media";
 import { messagingApi } from "./messaging";
@@ -47,6 +48,7 @@ export const api = {
   ...garageApi,
   ...homeApi,
   ...eventsApi,
+  ...lineupApi,
   ...mediaApi,
   ...explorerApi,
   ...applicationsApi,

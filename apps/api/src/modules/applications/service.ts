@@ -47,6 +47,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
 import { arrivalAnswer } from "../events/arrivals";
 import { daysRepo } from "../events/days";
+import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { expirePendingInvitations } from "../invitations/expire";
 import { notifyMediaDecision } from "../media/notify";
@@ -205,6 +206,8 @@ function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
     if (visible.length) {
       realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: visible.map((a) => a.id) });
     }
+    // Lot R4b : le plateau suit (une acceptation ajoute une vignette, un retrait la retire).
+    lineupService.changed(event.id);
     notificationsService.kick();
   });
 }

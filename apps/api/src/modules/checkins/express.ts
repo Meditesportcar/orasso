@@ -38,6 +38,7 @@ import { withTx } from "../../lib/tx";
 import { accessService, passPayload } from "../access/service";
 import { announceCandidatesChanged } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
+import { lineupService } from "../events/lineup";
 import { eventsRepo } from "../events/repo";
 import { passportService } from "../passport/service";
 import { staffService } from "../staff/service";
@@ -233,6 +234,8 @@ export const expressService = {
       await passportService.stampCheckin(tx, { applicationId: app.id, eventId: event.id, at: t });
       after(() => realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: [app.id] }));
       after(() => announceCandidatesChanged(event.id));
+      // Lot R4b, tour 2 : une inscription express retient une voiture, elle rejoint le plateau.
+      after(() => lineupService.changed(event.id));
       return { applicationId: app.id, pass };
     });
     return {

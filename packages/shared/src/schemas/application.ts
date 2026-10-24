@@ -15,6 +15,7 @@ import type { ArrivalSlot } from "../rules/arrival";
 import type { StructureNoteView } from "./afterEvent";
 import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
 import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
+import type { LineupPreview } from "./lineup";
 import type { ProviderForTriage } from "./provider";
 import type { MyReview } from "./review";
 import type { VehicleFull, VehiclePublic } from "./vehicle";
@@ -139,6 +140,11 @@ export type MyApplication = {
   arrival?: ArrivalSlot | null;
   /** Lot 43 : la structure organisatrice (logo, nom, validée) ; absente d'une copie gardée avant le lot 43. */
   organizer?: { name: string; logoUrl: string | null; verified: boolean } | null;
+  /**
+   * Lot R4b : la ligne « Le plateau » (place retenue : voitures retenues avant la fin, présentes après) ; `null` sans
+   * plateau à montrer (pas retenue, événement privé ou annulé, aucune présente) ; absente d'une copie plus ancienne.
+   */
+  lineupPreview?: LineupPreview | null;
 };
 
 /** Jour d'une candidature (lot 26) : identifiant, date locale `AAAA-MM-JJ`, horaires. */

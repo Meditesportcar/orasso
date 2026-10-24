@@ -1,5 +1,5 @@
 // Social (lot 17) : audiences des profils, amis, QR ami, recherche de personnes, Journal des amis.
-import { accountQrPayload, fromWallTime } from "@orasso/shared";
+import { accountQrPayload, fromWallTime, privateVehicleFields } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -29,6 +29,7 @@ import {
   vehicleGenerations,
   vehicleMakes,
   vehicleModels,
+  vehiclePhotos,
 } from "../../db/schema";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
@@ -123,9 +124,16 @@ describe("audience d'un profil", () => {
     // Fiches de véhicule : complète / réduite.
     const fa = await call(c, "GET", `/vehicles/${va.id}`);
     expect(fa.json).toMatchObject({ label: "BMW Série 3 E36", generationName: "E36" });
+    // Lot R4b (choix validé par Damien) : compte privé, photo masquée, marque, modèle, génération et catégories,
+    // rien d'autre (liste blanche `privateVehicleFields`, plus `detailed` et `owner`).
+    // Tour 2 : seulement une photo dont la plaque est floutée.
+    expect((await call(c, "GET", `/vehicles/${vb.id}`)).json.photoUrl).toBeNull();
+    await db.update(vehiclePhotos).set({ plateBlurred: true }).where(eq(vehiclePhotos.vehicleId, vb.id));
     const fb = await call(c, "GET", `/vehicles/${vb.id}`);
-    expect(fb.json).toMatchObject({ label: "BMW Série 3", makeName: "BMW", modelName: "Série 3" });
-    expect(fb.json.generationName).toBeUndefined();
+    expect(fb.json).toMatchObject({ label: "BMW Série 3 E36", makeName: "BMW", modelName: "Série 3" });
+    expect(fb.json.generationName).toBe("E36");
+    expect(fb.json.photoUrl).toContain("test/");
+    expect(Object.keys(fb.json).sort()).toEqual([...privateVehicleFields, "detailed", "owner"].sort());
     expect(fb.json.year).toBeUndefined();
 
     for (const res of [full, limited, fa, fb]) {

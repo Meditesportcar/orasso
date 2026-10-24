@@ -21,7 +21,7 @@ import { crewsService } from "../crews/service";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
-import { vehicleBrief, vehicleLabel, vehiclePublic } from "../vehicles/serializers";
+import { vehicleBrief, vehicleLabel, vehiclePrivate, vehiclePublic } from "../vehicles/serializers";
 import { socialRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -211,7 +211,8 @@ export const socialProfile = {
     const { audience } = await audienceFor(viewer, owner);
     const detailed = profileFields(audience).vehicleDetails;
     return {
-      ...(detailed ? vehiclePublic(row) : vehicleBrief(row)),
+      // Lot R4b : compte privé, la fiche réduite de `privateVehicleFields` (photo masquée, génération, catégories).
+      ...(detailed ? vehiclePublic(row) : vehiclePrivate(row)),
       detailed,
       owner: {
         userId: owner.userId,

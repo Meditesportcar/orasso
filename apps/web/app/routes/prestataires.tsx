@@ -4,6 +4,7 @@
 import { proV2Labels as P, type ProviderPublic, type ProviderReviewsSummary } from "@orasso/shared";
 
 import { ProviderVitrine } from "../components/ProviderVitrine";
+import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import "../styles/providers.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -38,6 +39,8 @@ export default function Prestataires({ loaderData }: Route.ComponentProps) {
       <FicheBar title={P.providerPage} back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="provider-public">
         <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
+        {/* Lot R4b, tour 2 : le signalement d'un prestataire (il était sur la fiche de l'événement, qui l'a confié au plateau). */}
+        <ReportDialog look="link" targetType="provider" targetId={loaderData.provider.id} />
       </div>
     </>
   );

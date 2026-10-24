@@ -209,6 +209,8 @@ export function EventRows({ event }: { event: EventPublic }) {
   const pub = event.arrivals?.public?.strict ? event.arrivals.public : null;
   const taken = event.remaining !== null && event.capacity ? (event.capacity - event.remaining) / event.capacity : null;
   const day = formatEventDay(event.startsAt, event.endsAt);
+  // Lot R4b, tour 2 : après la fin, plus de ligne des places (avec le plateau des présentes, elle dirait les absents).
+  const ended = new Date(event.endsAt).getTime() <= nowMs();
   return (
     <View style={styles.factsWrap}>
       <View style={[styles.rows, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
@@ -223,16 +225,23 @@ export function EventRows({ event }: { event: EventPublic }) {
         >
           <Row icon="place" title={whereTitle} sub={whereSub || null} right={pins.length > 0 ? <MiniPlan /> : null} />
         </Pressable>
-        <View style={[styles.sep, { borderTopColor: c.line }]} />
-        <Row
-          icon="vehicle"
-          title={event.remaining !== null ? L.seatsRow(event.remaining) : L.seatsNoLimit}
-          sub={[event.capacity ? L.seatsOf(event.capacity) : null, eventAdmissionLabels[event.admission].toLowerCase()]
-            .filter(Boolean)
-            .join(" · ")}
-          extra={taken !== null ? <SeatBar taken={taken} /> : null}
-          testID="event-seats"
-        />
+        {ended ? null : (
+          <>
+            <View style={[styles.sep, { borderTopColor: c.line }]} />
+            <Row
+              icon="vehicle"
+              title={event.remaining !== null ? L.seatsRow(event.remaining) : L.seatsNoLimit}
+              sub={[
+                event.capacity ? L.seatsOf(event.capacity) : null,
+                eventAdmissionLabels[event.admission].toLowerCase(),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              extra={taken !== null ? <SeatBar taken={taken} /> : null}
+              testID="event-seats"
+            />
+          </>
+        )}
         <View style={[styles.sep, { borderTopColor: c.line }]} />
         <Row
           icon="eye"

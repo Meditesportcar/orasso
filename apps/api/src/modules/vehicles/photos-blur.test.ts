@@ -1,9 +1,12 @@
 // Floutage de plaque (lot 51) : rectangles validés, zone modifiée, reste de la photo intact, irréversible.
+
+import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
-import { pool } from "../../db/client";
+import { db, pool } from "../../db/client";
+import { vehiclePhotos } from "../../db/schema";
 import { BLUR_COLUMNS, BLUR_ROWS, blurPlateRegions, blurSigma, coveredBy, plateBox, plateCorners } from "./photos-blur";
 
 afterAll(async () => {
@@ -291,6 +294,29 @@ describe("POST /me/vehicles/:id/photos (plateRects) et /photos/:photoId/blur", (
     const ok = await upload(u, v.json.id, src, undefined, "true");
     expect(ok.status).toBe(201);
     expect(((await ok.json()) as { photos: { plateBlurred: boolean }[] }).photos[0]?.plateBlurred).toBe(false);
+  });
+
+  it("lot R4b, tour 3 : « aucune plaque visible » est gardé (et seulement là) ; la photo se montre alors hors du garage", async () => {
+    const u = await signUp("Flou_06");
+    const v = await call(u, "POST", "/me/vehicles", car());
+    const src = await checker();
+    expect((await upload(u, v.json.id, src, undefined, "true")).status).toBe(201);
+    expect((await upload(u, v.json.id, src, [{ x: 0.3, y: 0.3, w: 0.4, h: 0.2 }])).status).toBe(201);
+    const rows = await db
+      .select({ noPlate: vehiclePhotos.noPlateConfirmed, blurred: vehiclePhotos.plateBlurred })
+      .from(vehiclePhotos)
+      .where(eq(vehiclePhotos.vehicleId, v.json.id))
+      .orderBy(asc(vehiclePhotos.position));
+    expect(rows).toEqual([
+      { noPlate: true, blurred: false },
+      { noPlate: false, blurred: true },
+    ]);
+    // Compte privé vu par un autre : la première photo (sans plaque confirmée) est montrée.
+    await call(u, "PATCH", "/me/profile", { visibility: "private" });
+    const other = await signUp("Flou_07");
+    const seen = await call(other, "GET", `/vehicles/${v.json.id}`);
+    const first = (await call(u, "GET", `/me/vehicles/${v.json.id}`)).json.photos[0].url;
+    expect(seen.json.photoUrl).toBe(first);
   });
 
   it("rectangle hors de l'image, JSON illisible ou plus de 4 cadres : 400", async () => {

@@ -407,6 +407,13 @@
       "when": 1792839339477,
       "tag": "0057_vehicle-reference-seen",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1792849587677,
+      "tag": "0058_photo-no-plate",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,12 @@
 // Sérialiseurs par audience (ARCHITECTURE.md § 5.2) : la plaque ne sort que pour le propriétaire et l'organisateur.
-import { formatPlate, type VehicleBrief, type VehicleFull, type VehiclePublic } from "@orasso/shared";
+import {
+  formatPlate,
+  maskedPhoto,
+  type VehicleBrief,
+  type VehicleFull,
+  type VehiclePrivate,
+  type VehiclePublic,
+} from "@orasso/shared";
 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
@@ -80,5 +87,23 @@ export function vehicleBrief(v: VehicleWithAll): VehicleBrief {
     modelName: v.model.name,
     vehicleType: v.vehicleType,
     photoUrl: null,
+  };
+}
+
+/**
+ * Lot R4b : la voiture d'un compte privé vue par un autre (`privateVehicleFields`) : la photo (plaque masquée), la
+ * marque, le modèle, la génération et les catégories ; ni année, ni fiche technique, ni description, ni plaque.
+ */
+export function vehiclePrivate(v: VehicleWithAll): VehiclePrivate {
+  return {
+    id: v.id,
+    label: vehicleLabel(v),
+    vehicleType: v.vehicleType,
+    makeName: v.make.name,
+    modelName: v.model.name,
+    generationName: v.generation && !v.generation.isOther ? v.generation.name : null,
+    // Lot R4b, tour 2 : seulement une photo dont la plaque est floutée (ou d'un véhicule sans plaque).
+    photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
+    categories: v.categories.map((c) => ({ id: c.category.id, slug: c.category.slug, label: c.category.label })),
   };
 }

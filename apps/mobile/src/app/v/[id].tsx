@@ -65,9 +65,10 @@ export default function OtherVehiclePage() {
             year={full?.year ?? undefined}
             power={full?.powerHp ? `${full.powerHp} ch` : undefined}
             photoCount={full && full.photos.length > 1 ? full.photos.length : undefined}
-            categories={full?.categories.map((c) => ({ label: c.label }))}
+            categories={v.categories.map((c) => ({ label: c.label }))}
             photo={{
-              source: mediaSource(full?.photos[0]?.url),
+              // Lot R4b : compte privé, la photo (plaque masquée) est montrée aussi.
+              source: mediaSource(full ? full.photos[0]?.url : "photoUrl" in v ? v.photoUrl : null),
               placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
             }}
           />

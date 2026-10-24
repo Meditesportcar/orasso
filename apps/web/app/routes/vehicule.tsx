@@ -38,6 +38,7 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const { vehicle: v, nearby } = loaderData;
   const busy = useNavigation().state !== "idle";
   const full = "photos" in v ? v : null;
+  const reduced = "photos" in v ? null : v;
   return (
     <>
       {/* Lot M7, tour 2 : avec photo, la carte du véhicule n'a pas de h1 ; l'en-tête de fiche le porte. */}
@@ -54,6 +55,14 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
             power={full.powerHp ? `${full.powerHp} ch` : undefined}
             categories={full.categories.map((c) => ({ label: c.label }))}
           />
+        ) : reduced?.photoUrl ? (
+          // Lot R4b : compte privé, la photo (plaque masquée), le nom, la génération et les catégories.
+          <VehicleCard
+            first
+            name={v.label}
+            photo={<img src={reduced.photoUrl} alt="" />}
+            categories={v.categories.map((c) => ({ label: c.label }))}
+          />
         ) : (
           <Plate as="article" className="s-vrow">
             <h1 className="o-t-poster-m o-never-truncate">{v.label}</h1>
@@ -66,15 +75,24 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
         )}
         {/* Signaler la photo principale (lot 32) ; les autres photos ont leur lien sous la galerie. */}
         {full?.photos[0] && <ReportDialog look="link" targetType="photo" targetId={full.photos[0].id} />}
-        <a
-          className="s-row"
-          href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, `/v/${v.id}`)}
-          data-testid="vehicule-owner"
-        >
-          <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
-          <span className="o-t-title">{v.owner.pseudo}</span>
-          <Chip>{gradeLabels[v.owner.grade]}</Chip>
-        </a>
+        {/* Lot R4b, tour 2 : compte privé, pas de lien vers son profil (comme la feuille de l'appli). */}
+        {v.detailed ? (
+          <a
+            className="s-row"
+            href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, `/v/${v.id}`)}
+            data-testid="vehicule-owner"
+          >
+            <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
+            <span className="o-t-title">{v.owner.pseudo}</span>
+            <Chip>{gradeLabels[v.owner.grade]}</Chip>
+          </a>
+        ) : (
+          <div className="s-row" data-testid="vehicule-owner">
+            <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
+            <span className="o-t-title">{v.owner.pseudo}</span>
+            <Chip>{gradeLabels[v.owner.grade]}</Chip>
+          </div>
+        )}
         <div className="s-row">
           <ReportDialog targetType="vehicle" targetId={v.id} />
         </div>
