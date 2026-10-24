@@ -65,7 +65,8 @@ async function noHorizontalScroll(page: Page, where: string) {
       if (
         e.clientWidth > 1 &&
         !e.classList.contains("o-visually-hidden") &&
-        !e.closest(".w-ticker, .maplibregl-map") &&
+        // .ex-dates : la frise des dates de la carte défile exprès (overflow-x: auto, depuis R2).
+        !e.closest(".w-ticker, .maplibregl-map, .ex-dates") &&
         e.scrollWidth > e.clientWidth + 1 &&
         getComputedStyle(e).overflowX !== "visible"
       ) {
