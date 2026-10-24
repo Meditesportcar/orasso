@@ -1,9 +1,11 @@
 // Durée des sessions (lot R3d, décision de Damien du 24/10 : « sessions comme Instagram »). Tout le monde garde une
 // session glissante d'un an, prolongée au plus une fois par jour d'usage (`auth.ts`, bloc `session`). Les comptes à rôle
-// de plateforme (modération, administration : ceux de `requirePlatformRole`) tombent après 30 jours sans usage : leur
-// session n'est jamais prolongée au-delà de 30 jours, et Better Auth la supprime à la lecture une fois échue. Changer
-// son mot de passe déconnecte toujours les autres appareils, « Compte › Appareils » ferme une session, et la double
-// authentification n'est demandée qu'à la connexion (la preuve reste sur la session).
+// de plateforme (modération, administration : ceux de `requirePlatformRole`) tombent après 30 jours sans usage : à la
+// prolongation (la première lecture d'un nouveau jour), une session de ces comptes qui n'a pas été prolongée depuis plus
+// de 30 jours est supprimée, et la personne se reconnecte. Tour 2 (relectures) : le contrôle ne se fait qu'à la
+// prolongation, au plus une fois par jour comme pour tout le monde ; aucune lecture ni écriture de plus par requête.
+// Changer son mot de passe déconnecte toujours les autres appareils, « Compte › Appareils » ferme une session, et la
+// double authentification n'est demandée qu'à la connexion (la preuve reste sur la session).
 import { eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -28,16 +30,6 @@ async function hasPlatformRole(userId: string): Promise<boolean> {
   return Boolean(row && row.role !== "user");
 }
 
-/**
- * Échéance d'une session créée ou prolongée : celle de Better Auth (un an), ramenée à 30 jours après maintenant pour un
- * compte à rôle de plateforme. L'horloge est celle de Better Auth (`Date`), qui compare l'échéance à l'heure réelle.
- */
-export async function sessionExpiry(userId: string, proposed: Date): Promise<Date> {
-  if (!(await hasPlatformRole(userId))) return proposed;
-  const cap = new Date(Date.now() + PLATFORM_SESSION_IDLE_S * 1000);
-  return proposed < cap ? proposed : cap;
-}
-
 type ReadSession = { id: string; userId: string; updatedAt: Date };
 
 /** Session courante lue par Better Auth avant sa prolongation (`ctx.context.session`), si le contexte la porte. */
@@ -49,15 +41,13 @@ export function sessionReadOf(ctx: unknown): ReadSession | null {
 }
 
 /**
- * Prolongation d'une session à sa lecture : `false` quand elle doit tomber (compte à rôle de plateforme sans usage
- * depuis plus de 30 jours, même s'il a reçu son rôle après l'ouverture de la session), sinon la nouvelle échéance.
- * La dernière prolongation (`updatedAt`, au plus une par jour d'usage) date le dernier usage.
+ * La session peut-elle être prolongée ? Non pour un compte à rôle de plateforme sans usage depuis plus de 30 jours,
+ * même s'il a reçu son rôle après l'ouverture de la session. `updatedAt` (dernière prolongation, une par jour d'usage
+ * au plus) date le dernier usage, à un jour près (journal des choix). L'horloge est celle de Better Auth (`Date`).
  */
-export async function prolongation(read: ReadSession, proposed: Date): Promise<Date | false> {
-  if (!(await hasPlatformRole(read.userId))) return proposed;
-  if (Date.now() - read.updatedAt.getTime() > PLATFORM_SESSION_IDLE_S * 1000) return false;
-  const cap = new Date(Date.now() + PLATFORM_SESSION_IDLE_S * 1000);
-  return proposed < cap ? proposed : cap;
+export async function mayProlong(read: ReadSession): Promise<boolean> {
+  if (Date.now() - read.updatedAt.getTime() <= PLATFORM_SESSION_IDLE_S * 1000) return true;
+  return !(await hasPlatformRole(read.userId));
 }
 
 /**

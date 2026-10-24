@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { apiCall, login, MOBILE, unique } from "./helpers";
+import { apiCall, login, MOBILE, SEED_PASSWORD, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R3d (retour réel du 24/10 : un organisateur, sur un Samsung, bloqué à « Qui es-tu ? » devant un bouton grisé),
@@ -100,6 +100,66 @@ for (const theme of ["beton", "sable"] as const) {
     await ctx.close();
   });
 }
+
+test("tour 2 : la connexion dit ce qui manque ; A commence l'inscription puis se connecte : B, après un redémarrage, ne retrouve rien", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await fresh(browser, theme);
+    // A : profil, coin, nom, e-mail, conditions…
+    await page.getByTestId("profile-visitor").click();
+    await page.getByRole("button", { name: "Continuer" }).click();
+    await page.waitForURL(/arrivee\/departement/);
+    await page.getByTestId("dept-66").click();
+    await page.getByRole("button", { name: "Continuer" }).click();
+    await page.waitForURL(/arrivee\/identite/);
+    const s = unique();
+    await fillIdentity(page, `R3a_${s}`.slice(0, 24), `r3a_${s}@e2e.orasso.test`, "123456789");
+    await expect
+      .poll(async () => page.evaluate((k) => localStorage.getItem(k) ?? "", DRAFT_KEY), { timeout: 10_000 })
+      .toContain(`r3a_${s}`);
+    // … puis « J'ai déjà un compte » : la connexion dit ce qui manque, puis A se connecte à son compte.
+    await page.goto("/auth");
+    const skip = page.getByTestId("opening-skip");
+    if (await skip.isVisible({ timeout: 3_000 }).catch(() => false))
+      await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+    const signIn = page.getByRole("button", { name: "Me connecter" });
+    await expect(missing(page)).toHaveText("Indique ton e-mail.");
+    await page.getByLabel("E-mail").fill("kenji@orasso.local");
+    await page.getByLabel("Mot de passe", { exact: true }).first().fill("123456789");
+    await expect(signIn).toBeDisabled();
+    await expect(missing(page)).toHaveText("Mot de passe : 10 caractères au moins (il en manque 1).");
+    await shot(page, `05-connexion-9-caracteres-${theme}`);
+    await expectClean(page);
+    await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+    await expect(missing(page)).toHaveCount(0);
+    await signIn.click();
+    await page.waitForURL((u) => !u.pathname.startsWith("/auth"), { timeout: 30_000 });
+    // Le brouillon de l'inscription est effacé à la connexion.
+    await expect
+      .poll(async () => page.evaluate((k) => localStorage.getItem(k), DRAFT_KEY), { timeout: 10_000 })
+      .toBeNull();
+    // Kenji se déconnecte ; l'appli redémarre ; B commence une inscription : rien de A.
+    await page.evaluate(() => {
+      for (const key of Object.keys(localStorage)) if (key !== "orasso.theme") localStorage.removeItem(key);
+    });
+    await page.goto("/");
+    await page.waitForURL(/\/arrivee$/, { timeout: 30_000 });
+    await page.getByRole("button", { name: "Commencer" }).click();
+    await page.waitForURL(/arrivee\/profil/);
+    await page.getByRole("button", { name: "Continuer" }).click();
+    await page.waitForURL(/arrivee\/departement/);
+    await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+    await page.getByTestId("dept-11").click();
+    await page.getByRole("button", { name: "Continuer" }).click();
+    await page.waitForURL(/arrivee\/identite/);
+    await expect(page.getByLabel("Pseudo")).toHaveValue("");
+    await expect(page.getByLabel("E-mail")).toHaveValue("");
+    await expect(page.getByLabel("Nom", { exact: true })).toHaveValue("");
+    await ctx.close();
+  }
+});
 
 test("départements perdus : la ligne mène à Ton coin ; rechargement : les choix et l'étape sont gardés, jamais le mot de passe ; effacés à la création du compte", async ({
   browser,

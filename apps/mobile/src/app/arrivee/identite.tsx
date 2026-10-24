@@ -3,7 +3,7 @@
 // l'e-mail, le mot de passe et les conditions, nécessaires à la création du compte, suivent avec les mêmes champs.
 // Crée le compte (`POST /api/auth/sign-up/email`) puis ouvre le tuto.
 import { Button, CheckboxField, TextField } from "@orasso/design-system/native";
-import { arriveeLabels, expressLabels, namePrivacy, passwordHint, pseudoHint } from "@orasso/shared";
+import { arriveeLabels, EMAIL_MAX_LENGTH, expressLabels, namePrivacy, passwordHint, pseudoHint } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -19,6 +19,7 @@ import { ArtIcon } from "@/features/tuto/icons";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
+import { announce } from "@/ui/Announce";
 
 export default function ArriveeIdentite() {
   const a = useArt();
@@ -51,7 +52,7 @@ export default function ArriveeIdentite() {
     setError(null);
     setBusy(true);
     try {
-      await signUp({
+      const created = await signUp({
         email: identity.email.trim(),
         password: identity.password,
         pseudo: identity.pseudo,
@@ -64,6 +65,16 @@ export default function ArriveeIdentite() {
       // Le brouillon gardé sur l'appareil s'efface ; le mot de passe quitte aussi la mémoire.
       await finishArrivee();
       arriveeStore.set({ identity: { ...identity, password: "" } });
+      // Tour 2 : pseudo pris entre la vérification et l'envoi, l'API l'a complété de chiffres : on le dit.
+      if (created && created.profile.pseudo !== identity.pseudo) {
+        announce({
+          id: `pseudo-pris-${created.user.id}`,
+          tone: "info",
+          icon: "profile",
+          title: arriveeLabels.pseudoTaken.title(created.profile.pseudo),
+          text: arriveeLabels.pseudoTaken.text,
+        });
+      }
       router.replace("/arrivee/tuto");
     } catch (e) {
       setError(authErrorMessage(e));
@@ -147,6 +158,7 @@ export default function ArriveeIdentite() {
         keyboardType="email-address"
         autoComplete="email"
         inputMode="email"
+        maxLength={EMAIL_MAX_LENGTH}
       />
       <TextField
         label={arriveeLabels.identity.password}

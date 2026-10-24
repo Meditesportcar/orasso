@@ -97,19 +97,33 @@ describe("durée des sessions", () => {
     expect(await sessionsOf(moderator)).toHaveLength(0);
   });
 
-  it("administrateur actif tous les 10 jours : jamais déconnecté, et jamais plus de 30 jours d'avance", async () => {
+  it("administrateur actif tous les 10 jours : jamais déconnecté", async () => {
     const admin = await signUp("Admin_Actif", { role: "super_admin" });
     for (let i = 0; i < 12; i++) {
       advance(10 * DAY);
       expect((await call(admin, "GET", "/me")).status, `jour ${(i + 1) * 10}`).toBe(200);
-      const [s] = await sessionsOf(admin);
-      expect(s?.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 30 * DAY);
     }
+    expect(await sessionsOf(admin)).toHaveLength(1);
   });
 
-  it("administrateur qui se connecte : sa session ne vaut que 30 jours, puis tombe sans usage", async () => {
+  it("tour 2 : administrateur, prolongée au plus une fois par jour comme pour tout le monde (aucune écriture par requête)", async () => {
+    const admin = await signUp("Admin_Jour", { role: "super_admin" });
+    const [created] = await sessionsOf(admin);
+    for (let i = 0; i < 5; i++) {
+      advance(3600 * 1000);
+      expect((await call(admin, "GET", "/me")).status).toBe(200);
+    }
+    const [same] = await sessionsOf(admin);
+    expect(same?.updatedAt.getTime()).toBe(created?.updatedAt.getTime());
+    expect(same?.expiresAt.getTime()).toBe(created?.expiresAt.getTime());
+    advance(DAY);
+    expect((await call(admin, "GET", "/me")).status).toBe(200);
+    const [prolonged] = await sessionsOf(admin);
+    expect(prolonged?.updatedAt.getTime()).toBeGreaterThan(created?.updatedAt.getTime() ?? 0);
+  });
+
+  it("administrateur qui se connecte puis reste 31 jours sans usage : déconnecté", async () => {
     const admin = await signUp("Admin_Login", { role: "super_admin" });
-    // La session de l'inscription (ouverte avant le rôle) est fermée : seule compte celle de la connexion.
     await db.delete(session).where(eq(session.userId, admin.id));
     const res = await app.request("/api/auth/sign-in/email", {
       method: "POST",
@@ -121,9 +135,23 @@ describe("durée des sessions", () => {
       .getSetCookie()
       .map((c) => c.split(";")[0])
       .join("; ");
-    const [fresh] = await sessionsOf(admin);
-    expect(fresh?.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 30 * DAY);
     advance(31 * DAY);
     expect((await call({ ...admin, cookie }, "GET", "/me")).status).toBe(401);
+  });
+
+  it("tour 2 : la prolongation renouvelle aussi le cookie du navigateur (un an de plus), une fois par jour", async () => {
+    const fan = await signUp("Fan_Cookie");
+    advance(2 * DAY);
+    const res = await app.request("/api/me", { headers: { origin: ORIGIN, cookie: fan.cookie } });
+    expect(res.status).toBe(200);
+    const renewed = res.headers.getSetCookie().find((c) => c.includes("better-auth.session_token="));
+    expect(renewed, "cookie de session renouvelé").toBeTruthy();
+    expect(renewed).toMatch(new RegExp(`Max-Age=${SESSION_EXPIRES_IN_S}\\b`));
+    // Même jeton : le cookie garde la session, seule sa durée repart.
+    expect(renewed?.split(";")[0]).toBe(fan.cookie.split("; ").find((c) => c.startsWith("better-auth.session_token=")));
+    // Une heure plus tard, rien à renouveler.
+    advance(3600 * 1000);
+    const again = await app.request("/api/me", { headers: { origin: ORIGIN, cookie: fan.cookie } });
+    expect(again.headers.getSetCookie().some((c) => c.includes("better-auth.session_token="))).toBe(false);
   });
 });

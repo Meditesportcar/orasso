@@ -90,6 +90,11 @@ export const arriveeLabels = {
     passwordsDiffer: "Les deux mots de passe sont différents.",
     terms: "Coche les conditions d'utilisation.",
   },
+  /** Tour 2 : le pseudo a été pris entre la vérification et l'envoi ; l'API l'a complété de chiffres. */
+  pseudoTaken: {
+    title: (pseudo: string) => `Ton pseudo était pris : tu es ${pseudo}.`,
+    text: "Tu peux le changer dans Mon profil.",
+  },
 } as const;
 
 /** Pourquoi on demande le département, selon le profil. */

@@ -16,9 +16,23 @@ export type SignupMissing = {
 /** La disponibilité du pseudo, vérifiée à part (`idle` : pas encore vérifiée, ou vérification en panne). */
 export type PseudoAvailability = "idle" | "checking" | "free" | "taken" | "invalid";
 
-/** Une adresse e-mail a l'air complète (la même règle que l'inscription du site). */
+/** Longueur maximale d'une adresse e-mail (RFC 5321). */
+export const EMAIL_MAX_LENGTH = 254;
+
+/**
+ * Une adresse e-mail a l'air complète : 254 caractères au plus, sans espace, un « @ » précédé d'au moins un caractère,
+ * un point dans la partie qui suit, ni au début ni à la fin. Lecture en une passe (coût linéaire, tour 2 : la
+ * regex d'avant pouvait coûter cher sur une longue saisie). Même règle dans l'appli et sur le site.
+ */
 export function emailLooksValid(email: string): boolean {
-  return /^\S+@\S+\.\S+$/.test(email.trim());
+  const value = email.trim();
+  if (value.length === 0 || value.length > EMAIL_MAX_LENGTH) return false;
+  if (/\s/.test(value)) return false;
+  const at = value.indexOf("@");
+  if (at < 1) return false;
+  const domain = value.slice(at + 1);
+  const dot = domain.lastIndexOf(".");
+  return dot > 0 && dot < domain.length - 1;
 }
 
 /** Ce qui ne va pas dans un mot de passe à créer, ou `null`. */
@@ -67,6 +81,14 @@ export function identityMissing(
   if (!draft.terms) return { field: "terms", text: M.terms };
   if (departments && departments.length === 0) return { field: "departments", text: M.departments };
   return null;
+}
+
+/** Connexion (tour 2) : e-mail, puis mot de passe ; même ligne sous le bouton que dans l'arrivée. */
+export function loginMissing(email: string, password: string): SignupMissing | null {
+  if (!email.trim()) return { field: "email", text: M.email };
+  if (!emailLooksValid(email)) return { field: "email", text: M.emailInvalid };
+  const issue = passwordMissing(password);
+  return issue ? { field: "password", text: issue } : null;
 }
 
 /** « Ton coin » : au moins un département. */

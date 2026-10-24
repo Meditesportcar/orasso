@@ -2,6 +2,7 @@
 import {
   arriveeLabels,
   departmentSchema,
+  emailLooksValid,
   expressLabels,
   MAX_DEPARTMENTS,
   type MainProfile,
@@ -66,7 +67,7 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
     const free = await api<{ available: boolean }>(request, `/pseudo-available?pseudo=${encodeURIComponent(pseudo)}`);
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
-  if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
+  if (!emailLooksValid(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
   // Lot R3d : le message dit combien de caractères manquent (règle partagée avec l'appli).
   const passwordIssue = passwordMissing(password);
   if (passwordIssue) errors.password = passwordIssue;

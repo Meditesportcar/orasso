@@ -1,7 +1,18 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { auditPage } from "./audit";
-import { apiCall, createEvent, fillArrivee, login, MOBILE, setTheme, unique } from "./helpers";
+import {
+  apiCall,
+  createEvent,
+  fillArrivee,
+  login,
+  loginInBrowser,
+  MOBILE,
+  setTheme,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R3d (retour réel du 24/10), côté site : l'inscription et l'inscription express suivent la même règle que l'appli.
@@ -77,6 +88,41 @@ test("inscription : sans département, la ligne sous le bouton le dit d'abord", 
   await page.getByText("J'accepte les conditions générales d'utilisation d'Orasso").click();
   await page.getByRole("button", { name: "Créer mon compte" }).click();
   await expect(page.getByTestId("signup-missing")).toHaveText("Choisis au moins un département.");
+  await ctx.close();
+});
+
+test("tour 2 : une session prolongée renouvelle le cookie du navigateur (un an de plus), page et données", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  const s = unique();
+  const email = `r3c_${s}@e2e.orasso.test`;
+  await signUpApi(`R3c_${s}`.slice(0, 24), email);
+  await loginInBrowser(page, email);
+  const cookieOf = async () => (await ctx.cookies()).find((c) => c.name.endsWith("better-auth.session_token")) ?? null;
+  const first = await cookieOf();
+  expect(first).not.toBeNull();
+  // La session a servi pour la dernière fois il y a plus d'un jour (échéance ramenée à 300 jours) et le cookie du
+  // navigateur n'a plus que 300 jours : la prochaine page la prolonge, et le cookie avec elle.
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `update "session" set expires_at = now() + interval '300 days', updated_at = now() - interval '65 days'
+       where user_id = (select id from "user" where email = $1)`,
+      [email],
+    );
+  } finally {
+    await client.end();
+  }
+  const in300Days = Date.now() / 1000 + 300 * 24 * 3600;
+  if (first) await ctx.addCookies([{ ...first, expires: in300Days }]);
+  await page.goto("/app/sorties");
+  await page.waitForLoadState("networkidle");
+  const renewed = await cookieOf();
+  expect(renewed?.value).toBe(first?.value);
+  expect(renewed?.expires ?? 0).toBeGreaterThan(Date.now() / 1000 + 360 * 24 * 3600);
   await ctx.close();
 });
 

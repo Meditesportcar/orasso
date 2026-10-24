@@ -4,6 +4,7 @@ import { type ApiError, CLOCK_OFFSET_HEADER, type Me } from "@orasso/shared";
 import { redirect } from "react-router";
 
 import { applyClockHeader } from "./clock";
+import { collectSessionCookies } from "./session-cookie.server";
 
 function apiBase(): string {
   return process.env.API_INTERNAL_URL ?? `http://localhost:${process.env.API_PORT ?? 3001}`;
@@ -67,6 +68,8 @@ export async function api<T>(request: Request, path: string, init: Init = {}): P
   // Horloge simulée (lot 34a) : l'API annonce son décalage ; sans l'en-tête, il retombe à 0 (une erreur 5xx du serveur
   // frontal ne dit rien de l'horloge).
   if (res.status < 500) applyClockHeader(res.headers.get(CLOCK_OFFSET_HEADER));
+  // Lot R3d, tour 2 : cookie de session renouvelé par l'API (session prolongée), transmis au navigateur par `root.tsx`.
+  if (!init.cookie) collectSessionCookies(res.headers);
   if (res.ok) {
     const data = res.status === 204 ? null : await res.json().catch(() => null);
     return { ok: true, status: res.status, data: data as T, headers: res.headers };

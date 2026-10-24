@@ -62,6 +62,29 @@ test("appli : profil, Ton coin vide, Qui es-tu ? avec un mot de passe de 9 carac
   }
 });
 
+test("appli : connexion, mot de passe de 9 caractères (tour 2)", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  for (const theme of THEMES) {
+    const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP });
+    const page = await ctx.newPage();
+    await page.goto("/auth");
+    await page.evaluate((t) => {
+      localStorage.clear();
+      localStorage.setItem("orasso.onboarded", "1");
+      localStorage.setItem("orasso.theme", t);
+    }, theme);
+    await page.goto("/auth");
+    const skip = page.getByTestId("opening-skip");
+    if (await skip.isVisible({ timeout: 3_000 }).catch(() => false))
+      await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+    await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+    await page.getByLabel("E-mail").fill("kenji@orasso.local");
+    await page.getByLabel("Mot de passe", { exact: true }).first().fill("123456789");
+    await shot(page, `appli-04-connexion-9-caracteres-${theme}`);
+    await ctx.close();
+  }
+});
+
 test("site : inscription vide puis refusée (mot de passe de 9 caractères, sans conditions)", async ({ browser }) => {
   test.setTimeout(240_000);
   for (const theme of THEMES) {

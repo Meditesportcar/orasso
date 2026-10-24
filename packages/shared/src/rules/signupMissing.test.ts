@@ -5,6 +5,7 @@ import {
   departmentsMissing,
   emailLooksValid,
   identityMissing,
+  loginMissing,
   passwordMissing,
   profileMissing,
   pseudoMissing,
@@ -63,6 +64,31 @@ describe("ce qui manque à l'inscription", () => {
     expect(pseudoMissing("Julien_66", "taken")).toBe("Ce pseudo est déjà pris : choisis-en un autre.");
     expect(pseudoMissing("Julien_66", "checking")).toBe("Vérification du pseudo…");
     expect(pseudoMissing("Julien_66", "idle")).toBeNull();
+  });
+
+  it("tour 2 : l'e-mail se lit en une passe, borné à 254 caractères (20 000 caractères : refusé tout de suite)", () => {
+    const long = `${"a".repeat(20_000)}@exemple.fr`;
+    const hostile = `a@${"a.".repeat(10_000)}`;
+    const start = performance.now();
+    expect(emailLooksValid(long)).toBe(false);
+    expect(emailLooksValid(hostile)).toBe(false);
+    expect(emailLooksValid("a".repeat(20_000))).toBe(false);
+    expect(performance.now() - start).toBeLessThan(50);
+    expect(emailLooksValid(`${"a".repeat(242)}@exemple.fr`)).toBe(true);
+    expect(emailLooksValid(`${"a".repeat(244)}@exemple.fr`)).toBe(false);
+    expect(emailLooksValid("@exemple.fr")).toBe(false);
+    expect(emailLooksValid("julien@.fr")).toBe(false);
+    expect(emailLooksValid("julien@exemple.")).toBe(false);
+    expect(emailLooksValid("ju lien@exemple.fr")).toBe(false);
+  });
+
+  it("tour 2 : la connexion dit aussi ce qui manque", () => {
+    expect(loginMissing("", "")?.text).toBe("Indique ton e-mail.");
+    expect(loginMissing("kenji", "")?.text).toBe("E-mail : l'adresse n'est pas complète.");
+    expect(loginMissing("kenji@orasso.local", "123456789")?.text).toBe(
+      "Mot de passe : 10 caractères au moins (il en manque 1).",
+    );
+    expect(loginMissing("kenji@orasso.local", "1234567890")).toBeNull();
   });
 
   it("l'e-mail, le profil et Ton coin", () => {
