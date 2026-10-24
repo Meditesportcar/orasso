@@ -16,14 +16,16 @@ import {
   type OtherVehicle,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { CarTile, ProRow, useLineup } from "@/features/event/Lineup";
+import { createLineupPager } from "@/features/event/lineupPages";
 import { Seg } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { cacheScope } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -57,9 +59,12 @@ export default function LineupScreen() {
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [extraOf, setExtraOf] = useState(data);
+  // Lot R4b, tour 2 : les pages suivantes sont gardées (catégorie, relecture, compte) ; une page en retard est jetée.
+  const pager = useRef(createLineupPager(cacheScope)).current;
   if (extraOf !== data) {
     setExtraOf(data);
     setExtra(null);
+    pager.reset();
   }
   const cars = [...(data?.cars ?? []), ...(extra?.cars ?? [])];
   const next = extra ? extra.next : (data?.nextCursor ?? null);
@@ -73,7 +78,8 @@ export default function LineupScreen() {
     setMoreBusy(true);
     setMoreError(null);
     try {
-      const page = await api.eventLineup(e.id, { category, cursor: next, limit: LINEUP_PAGE_SIZE });
+      const page = await pager.more(() => api.eventLineup(e.id, { category, cursor: next, limit: LINEUP_PAGE_SIZE }));
+      if (!page) return;
       setExtra((prev) => ({ cars: [...(prev?.cars ?? []), ...page.cars], next: page.nextCursor }));
     } catch (err) {
       setMoreError(errorMessage(err));
@@ -100,11 +106,19 @@ export default function LineupScreen() {
       facts={facts}
       onClose={close}
       closeLabel={L.backToEvent}
+      // Lot R4b, tour 2 : l'événement d'abord (il donne l'identifiant du plateau), puis le plateau.
       onRefresh={async () => {
+        await event.reload();
         await lineup.reload();
       }}
       overlays={<PrivateCarSheet car={sheet} onClose={() => setSheet(null)} canAskFriend={status === "in"} />}
     >
+      {event.error && !e ? (
+        <Notice tone="error" testID="lineup-event-error">
+          {event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}
+        </Notice>
+      ) : null}
+      {lineup.error && data ? <Notice testID="lineup-stale">{L.stale}</Notice> : null}
       {lineup.error && !data ? (
         <Notice tone="error">
           {lineup.error.status === 404 ? "Ce plateau n'est pas visible." : lineup.error.message}

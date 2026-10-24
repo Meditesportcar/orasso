@@ -36,3 +36,22 @@ export async function lineupFixture(): Promise<LineupFixture> {
   }
   return { event, publicPseudo, privatePseudo };
 }
+
+/** Lot R4b, tour 2 : un événement sans voiture retenue, avec un photographe retenu (plateau de pros seulement). */
+export async function prosOnlyFixture(): Promise<{ event: CreatedEvent; providerName: string }> {
+  const damien = await login("damien@orasso.local");
+  const event = await createEvent(damien, { title: `Pros R4b ${unique()}` });
+  const patched = await apiCall(damien, "PATCH", `/events/${event.id}`, { vendorTypes: ["Photographe"] });
+  if (patched.status !== 200) throw new Error(`Types attendus : ${patched.status}`);
+  const providerName = `Photo R4b ${unique()}`;
+  const cookie = await signUpApi(`R4bPhoto_${unique().slice(-6)}`);
+  const profile = await apiCall(cookie, "PUT", "/me/provider-profile", { type: "photographer", name: providerName });
+  if (profile.status !== 200) throw new Error(`Profil prestataire : ${profile.status} ${JSON.stringify(profile.data)}`);
+  const applied = await apiCall<{ id: string }>(cookie, "POST", `/events/${event.id}/provider-applications`, {
+    rulesAccepted: true,
+    message: null,
+  });
+  if (applied.status !== 201) throw new Error(`Candidature prestataire : ${applied.status}`);
+  await decideApi(damien, event.id, applied.data.id, "accept");
+  return { event, providerName };
+}

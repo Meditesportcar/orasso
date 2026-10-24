@@ -53,6 +53,7 @@ import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
 import { announceCandidatesChanged } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
+import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { passportService } from "../passport/service";
 import { loadProviders } from "../providers/serializers";
@@ -359,6 +360,8 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
     announceCandidatesChanged(eventId);
+    // Lot R4b, tour 2 : un pointage change le plateau d'un événement terminé (rattrapage, envoi différé).
+    lineupService.changed(eventId);
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));
     await passportService.announce(eventId, applicationIds);
   });

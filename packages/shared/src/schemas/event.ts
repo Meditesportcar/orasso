@@ -411,7 +411,8 @@ export type EventPublic = EventCard & {
   instructions: string | null;
   /** Lot 53 : précision pour l'entrée (« Entrée par le quai Nord »), publique comme l'adresse. */
   entranceNote: string | null;
-  acceptedCount: number;
+  /** Lot R4b, tour 2 : `null` dans une réponse publique après la fin de l'événement (avec « N présentes », le nombre d'absents). */
+  acceptedCount: number | null;
   /** Lot 26 : jours (vide = événement d'un jour) et mode d'accès (`whole` pour un événement d'un jour). */
   days: EventDay[];
   dayAccess: DayAccess;

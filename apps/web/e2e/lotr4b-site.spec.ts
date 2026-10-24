@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
-import { type LineupFixture, lineupFixture } from "./helpers/lotr4b";
+import { type LineupFixture, lineupFixture, prosOnlyFixture } from "./helpers/lotr4b";
 import { RELAIS } from "./relais";
 
 // Lot R4b, côté site (maquette R4.7) : la section « Le plateau » de la page de l'événement, après « Véhicules
@@ -78,6 +78,9 @@ test("connecté : pseudos, cadenas du compte privé (fiche de sa voiture, jamais
   await priv.click();
   await expect(page.getByTestId("vehicule")).toBeVisible();
   await expect(page.getByTestId("vehicule")).toHaveAttribute("data-detailed", "false");
+  // Tour 2 : la fiche de la voiture d'un compte privé ne mène pas à son profil.
+  await expect(page.getByTestId("vehicule-owner")).not.toHaveAttribute("href", /.*/);
+  await expect(page.locator(`a[href^="/u/${fx.privatePseudo}"]`)).toHaveCount(0);
 });
 
 test("la Nocturne : « Toi » sur la voiture de Kenji, « Voir les N voitures », catégories, onglet Pros", async ({
@@ -93,8 +96,10 @@ test("la Nocturne : « Toi » sur la voiture de Kenji, « Voir les N voitures »
   await expect(page).toHaveURL(new RegExp(`/e/${NOCTURNE}/plateau`));
   const grid = page.getByTestId("lineup-grid");
   await expect(grid.locator(".lu-car")).toHaveCount(30);
+  // Tour 2 : « Voir les N autres » passe à la fenêtre suivante (curseur dans l'adresse).
   await page.getByTestId("lineup-more").click();
-  await expect(page.getByTestId("lineup-grid").locator(".lu-car")).toHaveCount(60);
+  await expect(page).toHaveURL(/depart=30/);
+  await expect(page.getByTestId("lineup-grid").locator(".lu-car")).toHaveCount(30);
   await audit(page);
   await page.getByTestId("lineup-tab-pros").click();
   await expect(page.getByTestId("lineup-pros")).toBeVisible();
@@ -108,6 +113,39 @@ test("/app/sorties : la ligne « Le plateau » d'une sortie retenue ouvre le pla
   await expect(line).toContainText(/Le plateau · \d+ voitures/);
   await line.click();
   await expect(page).toHaveURL(/\/plateau/);
+});
+
+test("tour 2 : plateau de pros seulement, signalement d'un prestataire, fenêtres de 30 par l'adresse", async ({
+  page,
+}) => {
+  const pros = await prosOnlyFixture();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginInBrowser(page, "kenji@orasso.local", SEED_PASSWORD, `/e/${pros.event.slug}`);
+  await page.goto(`/e/${pros.event.slug}`);
+  const section = page.getByTestId("lineup");
+  await expect(section.getByTestId("lineup-empty")).toBeVisible();
+  await expect(section.getByTestId("lineup-pro")).toContainText(pros.providerName);
+  await expect(section.getByTestId("lineup-open")).toHaveText(/Voir le plateau/);
+  await section.getByTestId("lineup-open").click();
+  await page.getByTestId("lineup-tab-pros").click();
+  await expect(page.getByTestId("lineup-pros").getByRole("button", { name: "Signaler" })).toBeVisible();
+  await page.getByTestId("lineup-pros").getByTestId("lineup-pro").click();
+  await expect(page.getByTestId("provider-public")).toBeVisible();
+  const report = page.getByTestId("provider-public").getByRole("button", { name: "Signaler" });
+  await report.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  // Fenêtres de 30 : la Nocturne (plus de 90 voitures), à partir de la 91e, puis les précédentes.
+  await page.goto(`/e/${NOCTURNE}/plateau?depart=90`);
+  const n = await page.getByTestId("lineup-grid").locator(".lu-car").count();
+  expect(n).toBeGreaterThan(0);
+  expect(n).toBeLessThanOrEqual(30);
+  await page.getByTestId("lineup-prev").click();
+  await expect(page).toHaveURL(/depart=60/);
+  await expect(page.getByTestId("lineup-grid").locator(".lu-car")).toHaveCount(30);
+  // Au-delà de la liste (et au-delà de 300) : la page répond, sans « introuvable ».
+  const far = await page.goto(`/e/${NOCTURNE}/plateau?depart=330`);
+  expect(far?.status()).toBe(200);
 });
 
 for (const theme of ["beton", "sable"] as const) {

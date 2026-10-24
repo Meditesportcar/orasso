@@ -33,7 +33,12 @@ export function useLineup(eventId: string | null, query: { category?: string; li
   const state = useApi(() => api.eventLineup(eventId ?? "", query), [eventId, status, query.category, query.limit], {
     enabled: Boolean(eventId) && status !== "loading",
   });
-  useChannel(eventId && status === "in" ? `event:${eventId}:lineup` : null, () => void state.reload());
+  // Lot R4b, tour 2 : relu aussi à chaque (ré)abonnement, pour les changements manqués pendant une coupure.
+  useChannel(
+    eventId && status === "in" ? `event:${eventId}:lineup` : null,
+    () => void state.reload(),
+    () => void state.reload(),
+  );
   return state;
 }
 
@@ -159,19 +164,28 @@ export function ProRow({ pro, grade, onPress }: { pro: LineupPro; grade: Grade |
   );
 }
 
-/** Les pros sur place en une ligne de pastilles (bloc de la fiche). */
+/** Les pros sur place en une ligne de pastilles (bloc de la fiche) ; un prestataire ouvre sa vitrine (connecté). */
 function ProPills({ pros }: { pros: LineupPro[] }) {
   const { t } = useTheme();
   const c = t.color;
+  const router = useRouter();
+  const { status } = useSession();
   return (
     <View style={styles.pills} testID="lineup-pros-line">
       {pros.map((p) => (
-        <View key={p.id} style={[styles.pill, { backgroundColor: c.ground, borderColor: c.line }]}>
+        <Pressable
+          key={`${p.kind}-${p.id}`}
+          accessibilityRole={p.kind === "provider" && status === "in" ? "link" : undefined}
+          disabled={!(p.kind === "provider" && status === "in")}
+          onPress={() => router.push(`/providers/${p.id}`)}
+          style={[styles.pill, { backgroundColor: c.ground, borderColor: c.line }]}
+          testID="lineup-pro-pill"
+        >
           <Icon name={p.kind === "media" || p.officialMedia ? "camera" : "shop"} size={14} color={c.inkMuted} />
           <Text variant="caption" color={c.ink} style={styles.strong}>
             {p.name}
           </Text>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
@@ -204,7 +218,11 @@ export function LineupBlock({ eventId, slug }: { eventId: string; slug: string }
         </Text>
       ) : (
         <>
-          <Pressable accessibilityRole="button" accessibilityLabel={L.seeAll(n, data.phase)} onPress={open}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${L.seeAll} · ${L.carsCount(n, data.phase)}`}
+            onPress={open}
+          >
             <View style={styles.thumbs} testID="lineup-thumbs">
               {data.cars.map((car, i) => (
                 <View key={isMemberCar(car) ? car.vehicleId : `${i}`} style={styles.thumb}>
@@ -255,9 +273,15 @@ export function LineupBlock({ eventId, slug }: { eventId: string; slug: string }
           <ProPills pros={data.pros} />
         </>
       ) : null}
-      {n > 0 ? (
+      {lineup.error ? (
+        <Text variant="caption" color={c.inkMuted} testID="lineup-stale">
+          {L.stale}
+        </Text>
+      ) : null}
+      {/* Lot R4b, tour 2 : le plateau s'ouvre dès qu'il y a une voiture ou un pro. */}
+      {n > 0 || data.pros.length > 0 ? (
         <Button variant="secondary" icon="grid" fullWidth onPress={open} testID="lineup-open">
-          {L.seeAll(n, data.phase)}
+          {L.seeAll}
         </Button>
       ) : null}
     </View>

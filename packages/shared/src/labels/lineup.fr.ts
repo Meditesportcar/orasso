@@ -16,9 +16,8 @@ export const lineupLabels = {
       : `${plural(n, "voiture retenue", "voitures retenues")}`,
   carsCount: (n: number, phase: LineupPhase) => `${n} ${lineupLabels.cars(n, phase)}`,
   prosOnSite: (n: number) => `et ${n} ${plural(n, "pro", "pros")} sur place`,
-  /** Le bouton du bloc : « Voir le plateau · 42 voitures », « · 38 présentes ». */
-  seeAll: (n: number, phase: LineupPhase) =>
-    `Voir le plateau · ${n} ${phase === "present" ? plural(n, "présente", "présentes") : plural(n, "voiture", "voitures")}`,
+  /** Le bouton du bloc (lot R4b, tour 2) : le nombre est déjà écrit au-dessus, le bouton tient sur une ligne. */
+  seeAll: "Voir le plateau",
   /** Bloc vide (validé par Damien) : le bloc reste, avec cette phrase. */
   empty: "Les premières voitures apparaîtront ici dès leur acceptation.",
   emptyCount: "0 voiture pour l'instant",
@@ -66,4 +65,11 @@ export const lineupLabels = {
   sortiesLine: (n: number, phase: LineupPhase) =>
     `${phase === "present" ? plural(n, "présente", "présentes") : plural(n, "voiture", "voitures")}`,
   backToEvent: "Retour à la fiche",
+  previous: "Voir les précédentes",
+  /** Lot R4b, tour 2 : la relecture a échoué (coupure) ; la liste montrée est la dernière reçue. */
+  stale: "Pas de réseau : le plateau n'est peut-être pas à jour.",
+  /** Site : 429 de la route du plateau. */
+  tooMany: "Trop de demandes, réessaie dans un instant.",
+  loadError: "Le plateau n'a pas pu être chargé.",
+  retry: "Réessayer",
 } as const;

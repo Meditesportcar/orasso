@@ -23,8 +23,10 @@ export const LINEUP_PREVIEW_PHOTOS = 3;
 
 /**
  * Champs d'une vignette de voiture pour un visiteur sans compte : la photo (plaque masquée) et le modèle, sans pseudo
- * ni identifiant de compte (ni le champ `vehicleId` : sans compte, aucune fiche ne s'ouvre). Liste blanche : l'API
- * n'envoie rien d'autre, les tests le vérifient.
+ * ni identifiant de compte (ni le champ `vehicleId` : sans compte, aucune fiche ne s'ouvre). L'adresse de la photo,
+ * elle, contient l'identifiant du véhicule (choix du coordinateur, tour 2 : pas d'adresses opaques dans ce lot ; une
+ * même photo reconnaît de toute façon une voiture d'un événement à l'autre). Liste blanche : l'API n'envoie rien
+ * d'autre, les tests le vérifient.
  */
 export const lineupCarVisitorFields = ["photoUrl", "label", "makeName", "modelName", "generationName"] as const;
 
@@ -37,3 +39,24 @@ export const lineupCarMemberFields = [...lineupCarVisitorFields, "vehicleId", "p
 
 /** Champs d'une vignette de pro (prestataire retenu ou média accrédité) : jamais d'emplacement de stand. */
 export const lineupProFields = ["id", "kind", "name", "job", "logoUrl", "officialMedia", "discount"] as const;
+
+/**
+ * Lot R4b, tour 2 : après la fin de l'événement, les réponses publiques ne disent plus ni le nombre de retenus ni les
+ * places restantes (avec « N présentes », ils donneraient le nombre d'absents). L'organisation garde ses chiffres.
+ */
+export function publicCountsHidden(endsAt: Date | string, now: Date): boolean {
+  return lineupPhase(endsAt, now) === "present";
+}
+
+/**
+ * Lot R4b, tour 2 : la photo montrée hors du garage (plateau, voiture d'un compte privé) est la première photo dont la
+ * plaque a été floutée ; pour un véhicule non immatriculé (sans plaque), la première photo. Sinon aucune (silhouette) :
+ * « aucune plaque visible » n'est pas gardé en base, une photo non floutée peut montrer une plaque lisible.
+ */
+export function maskedPhoto<T extends { plateBlurred: boolean }>(
+  photos: readonly T[],
+  unregistered: boolean,
+): T | null {
+  if (unregistered) return photos[0] ?? null;
+  return photos.find((p) => p.plateBlurred) ?? null;
+}

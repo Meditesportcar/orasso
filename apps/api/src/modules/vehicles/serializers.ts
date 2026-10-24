@@ -1,6 +1,7 @@
 // Sérialiseurs par audience (ARCHITECTURE.md § 5.2) : la plaque ne sort que pour le propriétaire et l'organisateur.
 import {
   formatPlate,
+  maskedPhoto,
   type VehicleBrief,
   type VehicleFull,
   type VehiclePrivate,
@@ -101,7 +102,8 @@ export function vehiclePrivate(v: VehicleWithAll): VehiclePrivate {
     makeName: v.make.name,
     modelName: v.model.name,
     generationName: v.generation && !v.generation.isOther ? v.generation.name : null,
-    photoUrl: storage.url(v.photos[0]?.storageKey ?? null),
+    // Lot R4b, tour 2 : seulement une photo dont la plaque est floutée (ou d'un véhicule sans plaque).
+    photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
     categories: v.categories.map((c) => ({ id: c.category.id, slug: c.category.slug, label: c.category.label })),
   };
 }

@@ -10,6 +10,7 @@ import {
   type EventCard,
   type EventListQuery,
   type Page,
+  publicCountsHidden,
   resolvePosition,
   upcomingEndBound,
 } from "@orasso/shared";
@@ -255,7 +256,8 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   const page = rows.slice(0, q.limit);
   const remaining = await remainingWithDays(page.map((r) => r.e));
   const items = page.map((r) => {
-    const out = card(r.e, r.s, remaining.get(r.e.id) ?? null);
+    // Lot R4b, tour 2 : après la fin, plus de places restantes publiques.
+    const out = card(r.e, r.s, publicCountsHidden(r.e.endsAt, now()) ? null : (remaining.get(r.e.id) ?? null));
     const km = roundKm(r.dist);
     if (needsDistance) out.distanceKm = km;
     if (sort === "affinity") {

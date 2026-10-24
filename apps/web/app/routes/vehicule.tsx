@@ -75,15 +75,24 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
         )}
         {/* Signaler la photo principale (lot 32) ; les autres photos ont leur lien sous la galerie. */}
         {full?.photos[0] && <ReportDialog look="link" targetType="photo" targetId={full.photos[0].id} />}
-        <a
-          className="s-row"
-          href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, `/v/${v.id}`)}
-          data-testid="vehicule-owner"
-        >
-          <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
-          <span className="o-t-title">{v.owner.pseudo}</span>
-          <Chip>{gradeLabels[v.owner.grade]}</Chip>
-        </a>
+        {/* Lot R4b, tour 2 : compte privé, pas de lien vers son profil (comme la feuille de l'appli). */}
+        {v.detailed ? (
+          <a
+            className="s-row"
+            href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, `/v/${v.id}`)}
+            data-testid="vehicule-owner"
+          >
+            <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
+            <span className="o-t-title">{v.owner.pseudo}</span>
+            <Chip>{gradeLabels[v.owner.grade]}</Chip>
+          </a>
+        ) : (
+          <div className="s-row" data-testid="vehicule-owner">
+            <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
+            <span className="o-t-title">{v.owner.pseudo}</span>
+            <Chip>{gradeLabels[v.owner.grade]}</Chip>
+          </div>
+        )}
         <div className="s-row">
           <ReportDialog targetType="vehicle" targetId={v.id} />
         </div>

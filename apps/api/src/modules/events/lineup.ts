@@ -2,8 +2,9 @@
 // `GET /events/:id/lineup` : les voitures retenues avant la fin de l'événement, seulement les entrées pointées ensuite
 // (les absents jamais montrés, même en nombre), et les pros sur place (prestataires retenus, médias accrédités).
 // Vie privée : jamais d'heure, de zone, de créneau, de plaque ni de département ; jamais d'identifiant de compte ; un
-// visiteur sans compte ne reçoit ni pseudo ni identifiant de véhicule. Chaque vignette est construite champ par champ
-// (liste blanche), jamais par copie d'une ligne de la base.
+// visiteur sans compte ne reçoit ni pseudo ni le champ `vehicleId` (l'adresse de la photo, elle, contient l'identifiant
+// du véhicule : le journal, lot R4b tour 2, le dit). Photo : seulement une photo floutée (`maskedPhoto`). Chaque
+// vignette est construite champ par champ (liste blanche), jamais par copie d'une ligne de la base.
 import {
   type EventLineup,
   type Grade,
@@ -14,6 +15,7 @@ import {
   type LineupQuery,
   lineupLabels,
   lineupPhase,
+  maskedPhoto,
   proVisibility,
   providerTypeLabel,
   shownDiscount,
@@ -177,7 +179,8 @@ export const lineupService = {
       const v = full.get(r.vehicleId);
       if (!v) return [];
       const shown = {
-        photoUrl: storage.url(v.photos[0]?.storageKey ?? null),
+        // Lot R4b, tour 2 : seulement une photo dont la plaque est floutée (ou d'un véhicule sans plaque).
+        photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
         label: vehicleLabel(v),
         makeName: v.make.name,
         modelName: v.model.name,
@@ -250,7 +253,7 @@ export const lineupService = {
         at: sql<number>`extract(epoch from ${firstAt})::float8`,
         photoKey: sql<
           string | null
-        >`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} order by ${vehiclePhotos.position} limit 1)`,
+        >`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} and (${vehiclePhotos.plateBlurred} or ${vehicles.unregistered}) order by ${vehiclePhotos.position} limit 1)`,
       })
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))

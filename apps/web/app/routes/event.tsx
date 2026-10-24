@@ -584,9 +584,9 @@ function EventPage({
                   : `${lineupLabels.carsCount(lineup.counts.cars, lineup.phase)} · ${lineupLabels.caption(lineup.phase)}`}
               </span>
               <span className="lu__head-grow" />
-              {connected && lineup.counts.cars > 0 && (
+              {connected && (lineup.counts.cars > 0 || lineup.pros.length > 0) && (
                 <Button variant="secondary" icon="grid" href={`/e/${event.slug}/plateau`} data-testid="lineup-open">
-                  {lineupLabels.siteSeeAll(lineup.counts.cars)}
+                  {lineup.counts.cars > 0 ? lineupLabels.siteSeeAll(lineup.counts.cars) : lineupLabels.seeAll}
                 </Button>
               )}
             </div>
@@ -730,8 +730,9 @@ function EventPage({
             className="ev__counts"
             variant="surface"
             size="site"
+            // Lot R4b, tour 2 : après la fin, ni places ni retenus (l'API ne les donne plus) : le nombre du plateau seul.
             items={[
-              { value: event.remaining ?? "∞", label: "places" },
+              ...(ended ? [] : [{ value: event.remaining ?? "∞", label: "places" }]),
               // Lot R4b : le nombre du plateau (après l'événement, les présentes : les absents ne se comptent pas).
               lineup
                 ? {
@@ -741,7 +742,7 @@ function EventPage({
                         ? lineupLabels.kpiPresent(lineup.counts.cars)
                         : lineupLabels.kpiAccepted(lineup.counts.cars),
                   }
-                : { value: event.acceptedCount, label: "retenus" },
+                : { value: event.acceptedCount ?? "–", label: "retenus" },
             ]}
           />
           {mine.length > 0 ? (

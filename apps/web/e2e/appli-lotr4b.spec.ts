@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { MOBILE, SEED_PASSWORD } from "./helpers";
-import { type LineupFixture, lineupFixture } from "./helpers/lotr4b";
+import { type LineupFixture, lineupFixture, prosOnlyFixture } from "./helpers/lotr4b";
 import { RELAIS } from "./relais";
 
 // Lot R4b, côté appli (version web compilée), maquette R4 validée par Damien :
@@ -79,7 +79,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await block.scrollIntoViewIfNeeded();
     await expect(block.getByTestId("lineup-thumbs")).toBeVisible();
     await expect(block).toContainText("Toi");
-    await expect(block.getByTestId("lineup-open")).toContainText(/Voir le plateau · \d+ voitures/);
+    await expect(block.getByTestId("lineup-open")).toContainText("Voir le plateau");
+    await expect(block.getByTestId("lineup-open")).not.toContainText("voitures");
     await expect(page.getByTestId("providers-present")).toHaveCount(0);
     await shot(page, `fiche-plateau-${theme}`);
     await audit(page);
@@ -149,5 +150,23 @@ test("sans compte : le plateau sans pseudo, rien ne s'ouvre", async ({ browser }
   await expect(page.locator("body")).not.toContainText(fx.privatePseudo);
   await expect(page.getByTestId("lineup-car-private")).toHaveCount(0);
   await shot(page, "plateau-visiteur-beton");
+  await ctx.close();
+});
+
+test("tour 2 : un plateau de pros seulement s'ouvre, la pastille d'un prestataire ouvre sa vitrine", async ({
+  browser,
+}) => {
+  const pros = await prosOnlyFixture();
+  const { ctx, page } = await open(browser, "beton");
+  await goto(page, `/e/${pros.event.slug}`);
+  const block = page.getByTestId("lineup-block");
+  await block.scrollIntoViewIfNeeded();
+  await expect(block.getByTestId("lineup-empty")).toBeVisible();
+  await expect(block.getByTestId("lineup-open")).toBeVisible();
+  await shot(page, "fiche-pros-seulement-beton");
+  await block.getByTestId("lineup-pro-pill").first().click();
+  await expect(page).toHaveURL(/\/providers\//);
+  await goto(page, `/e/${pros.event.slug}/plateau`);
+  await expect(page.getByTestId("lineup-tab-pros")).toBeVisible();
   await ctx.close();
 });

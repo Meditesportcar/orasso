@@ -26,9 +26,15 @@ import {
   profiles,
   providerProfiles,
   vehicleCategories,
+  vehiclePhotos,
+  vehicles,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { type RealtimeSocket, realtime } from "../../lib/realtime";
+import { withTx } from "../../lib/tx";
+import { accessService } from "../access/service";
 import { lineupService } from "./lineup";
+import { eventsService } from "./service";
 
 afterAll(async () => {
   await pool.end();
@@ -49,11 +55,12 @@ beforeEach(async () => {
   structureId = (await createStructure(orga.id)).id;
 });
 
-/** Une personne avec un véhicule (une photo) ; `private` pour un compte privé. */
+/** Une personne avec un véhicule (une photo, plaque floutée) ; `private` pour un compte privé. */
 async function exhibitor(pseudo: string, opts: { private?: boolean } = {}) {
   const u = await signUp(pseudo);
   if (opts.private) await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
   const v = await createVehicle(u.id, ref);
+  await db.update(vehiclePhotos).set({ plateBlurred: true }).where(eq(vehiclePhotos.vehicleId, v.id));
   return { u, v };
 }
 
@@ -224,7 +231,6 @@ describe("le plateau : qui y apparaît", () => {
       .set({ suspendedUntil: new Date(clock.now.getTime() + 7 * DAY) })
       .where(eq(profiles.userId, susp.u.id));
     await db.update(profiles).set({ deletedAt: clock.now }).where(eq(profiles.userId, gone.u.id));
-    const { vehicles } = await import("../../db/schema");
     await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, sold.v.id));
     const res = await call(null, "GET", `/events/${e.id}/lineup`);
     expect(res.json.counts.cars).toBe(1);
@@ -309,5 +315,107 @@ describe("Mes sorties et la fiche d'une voiture", () => {
     expect(await lineupService.canSubscribe(`event:${e.id}:lineup`)).toBe(true);
     expect(await lineupService.canSubscribe(`event:${priv.id}:lineup`)).toBe(false);
     expect(await lineupService.canSubscribe(`event:${e.id}:triage`)).toBe(false);
+  });
+});
+
+describe("lot R4b, tour 2", () => {
+  it("photo : seulement une photo floutée (la seconde si la première ne l'est pas), sinon aucune", async () => {
+    const e = await createEvent(structureId);
+    const a = await exhibitor("Floue_R4b");
+    // Première photo non floutée, seconde floutée : la seconde.
+    await db.update(vehiclePhotos).set({ plateBlurred: false }).where(eq(vehiclePhotos.vehicleId, a.v.id));
+    await db.insert(vehiclePhotos).values({
+      vehicleId: a.v.id,
+      position: 2,
+      storageKey: `test/${a.v.id}-floue.webp`,
+      width: 10,
+      height: 10,
+      bytes: 10,
+      plateBlurred: true,
+    });
+    // Aucune photo floutée : aucune.
+    const b = await exhibitor("Nette_R4b", { private: true });
+    await db.update(vehiclePhotos).set({ plateBlurred: false }).where(eq(vehiclePhotos.vehicleId, b.v.id));
+    for (const p of [a, b]) await apply(e.id, p);
+    const res = await call(null, "GET", `/events/${e.id}/lineup`);
+    const urls = res.json.cars.map((c: { photoUrl: string | null }) => c.photoUrl);
+    expect(urls.filter(Boolean)).toHaveLength(1);
+    expect(urls.find(Boolean)).toContain("-floue.webp");
+    // Même règle pour la voiture d'un compte privé et pour la ligne de Mes sorties.
+    const viewer = await signUp("Voit_R4b");
+    expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toBeNull();
+    const previews = await lineupService.previews([e.id], viewer.id);
+    expect(previews.get(e.id)?.photoUrls).toHaveLength(1);
+    // Véhicule non immatriculé : la première photo.
+    await db.update(vehicles).set({ unregistered: true }).where(eq(vehicles.id, b.v.id));
+    expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toContain(b.v.id);
+  });
+
+  it("après la fin : ni retenus ni places restantes publics (les deux routes croisées), l'organisation garde les siens", async () => {
+    const e = await createEvent(structureId, { capacity: 10 });
+    const present = await exhibitor("Present2_R4b");
+    const ap = await apply(e.id, present);
+    await apply(e.id, await exhibitor("Absent2_R4b"));
+    await checkIn(e.id, ap.id);
+    const member = await signUp("Membre2_R4b");
+    const before = await call(member, "GET", `/events/by-slug/${e.slug}`);
+    expect(before.json.acceptedCount).toBe(2);
+    expect(before.json.remaining).toBe(8);
+    clock.set(new Date(e.endsAt.getTime() + DAY));
+    for (const who of [member, null]) {
+      const ev = await call(who, "GET", `/events/by-slug/${e.slug}`);
+      const lineup = await call(who, "GET", `/events/${e.id}/lineup`);
+      expect(ev.json.acceptedCount).toBeNull();
+      expect(ev.json.remaining).toBeNull();
+      expect(lineup.json.counts.cars).toBe(1);
+    }
+    const orgaView = await call(orga, "GET", `/events/${e.id}`);
+    expect(orgaView.json.acceptedCount).toBe(2);
+    expect(orgaView.json.remaining).toBe(8);
+    expect((await eventsService.getPublic(e.slug, null)).acceptedCount).toBeNull();
+  });
+
+  it("le canal en direct : pointage, accréditation d'un photographe", async () => {
+    const e = await createEvent(structureId);
+    const got: string[] = [];
+    const socket: RealtimeSocket = { send: (m) => got.push(JSON.parse(m).type) };
+    realtime.subscribe(`event:${e.id}:lineup`, socket);
+    try {
+      const p = await exhibitor("Pointe_R4b");
+      const app = await apply(e.id, p);
+      // Un retenu a son pass (émis à l'acceptation dans le vrai parcours) ; le pointage s'ouvre le jour J.
+      await withTx((tx) => accessService.issue(tx, app));
+      clock.set(new Date(e.startsAt.getTime() + 3_600_000));
+      const res = await call(orga, "POST", `/events/${e.id}/checkins`, { applicationId: app.id });
+      expect([200, 201]).toContain(res.status);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(got).toContain("lineup.changed");
+      got.length = 0;
+      const owner = await signUp("Photo_R4b");
+      const [provider] = await db
+        .insert(providerProfiles)
+        .values({ userId: owner.id, type: "photographer", name: "Photo R4b" })
+        .returning();
+      const [pApp] = await db
+        .insert(applications)
+        .values({
+          eventId: e.id,
+          userId: owner.id,
+          kind: "provider",
+          providerProfileId: provider!.id,
+          status: "accepted",
+          rulesAcceptedAt: new Date(),
+          followStructure: false,
+        })
+        .returning();
+      const acc = await call(orga, "PATCH", `/events/${e.id}/applications/${pApp!.id}/accreditation`, {
+        accredited: true,
+      });
+      expect(acc.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(got).toContain("lineup.changed");
+    } finally {
+      realtime.unsubscribe(`event:${e.id}:lineup`, socket);
+    }
   });
 });
