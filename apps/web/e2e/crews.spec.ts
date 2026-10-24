@@ -139,7 +139,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
     { name: "03-mes-crews", cookie: kCookie, path: "/app/crews" },
     { name: "04-inscription-crew", cookie: kCookie, path: `/e/${event.slug}/crew` },
     { name: "05-acces-confirmer", cookie: nCookie, path: "/app/acces" },
-    { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes&departement=66` },
+    { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes` },
     { name: "07-tri-liste-crew", cookie: organizer, path: `/orga/meditesportcar/e/${event.id}/candidatures?vue=liste` },
     { name: "08-garage", cookie: kCookie, path: "/app/garage" },
   ];

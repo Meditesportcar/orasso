@@ -17,7 +17,7 @@ import { RELAIS } from "./relais";
 // Lot M4, côté site (le site raccord) : la fiche événement (bande de l'organisateur fixée en haut, créneau strict des
 // exposants jamais montré au public, aucun horaire « conseillé », « Ta place » pour l'inscrit, « Écrire à » avec
 // l'étiquette « À propos de »), la candidature (« Suivre » cochée d'office) et l'Explorer (tris « Nouveautés » et
-// « Places restantes »). Béton et Sable, 390 et 1 280 px. `M4_PHASE=avant` : captures seules (paires avant | après).
+// « Places restantes », « Où chercher ? » depuis le lot R2). Béton et Sable, 390 et 1 280 px. `M4_PHASE=avant` : captures seules (paires avant | après).
 // Lancer avec l'API et le site sur la base seedée.
 const PHASE = process.env.M4_PHASE ?? "apres";
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-m4-captures/site-${PHASE}`;
@@ -60,6 +60,14 @@ async function eventIn(damien: string, days: number, title: string) {
   expect(created.status).toBe(201);
   expect((await apiCall(damien, "POST", `/events/${created.data.id}/publish`)).status).toBe(200);
   return { ...created.data, title };
+}
+
+/** Ouvre une feuille de l'Explorer : le clic n'a d'effet qu'une fois la page hydratée, on le répète jusqu'à la fenêtre. */
+async function openSheet(page: Page, pill: string, sheet: string) {
+  await expect(async () => {
+    await page.getByTestId(pill).click();
+    await expect(page.getByTestId(sheet)).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 async function shot(page: Page, name: string) {
@@ -156,29 +164,30 @@ test("Lot M4, site : fiche, « Ta place », écrire avec le contexte, candidatur
         await expect(mine.getByLabel(/newsletter/i)).not.toBeChecked();
       }
 
-      // 4. L'Explorer du site : le tri « Nouveautés ».
+      // 4. L'Explorer du site (adapté au lot R2) : le tri « Nouveautés » dans sa feuille, puis « Ailleurs » et le retour à
+      // « Mon coin » dans « Où chercher ? ».
       await mine.goto("/app/explorer");
-      await expect(mine.getByLabel("Trier par")).toBeVisible({ timeout: 30_000 });
+      await expect(mine.getByTestId("explorer-head")).toBeVisible({ timeout: 30_000 });
       await shot(mine, `explorer-${theme}-${size}`);
       if (AFTER && theme === "beton") {
-        await mine.goto("/app/explorer?tri=nouveautes");
+        await mine.goto("/app/explorer?segment=evenements&tri=nouveautes&autour=partout");
         await expect(mine.getByText(open.title).first()).toBeVisible({ timeout: 30_000 });
-        await expect(mine.getByLabel("Trier par")).toHaveValue("nouveautes");
+        await expect(mine.getByTestId("sort-open")).toContainText("Nouveautés");
+        await openSheet(mine, "sort-open", "sort-sheet");
+        await expect(mine.getByTestId("sort-recent")).toHaveAttribute("aria-current", "true");
       }
-      // Tour 2 : « Autour de… » et la distance de l'Explorer, comme l'appli.
       if (AFTER) {
-        await mine.goto("/app/explorer?autour=75&rayon=50");
-        await expect(mine.getByTestId("around-line")).toContainText("distances depuis le centre du 75", {
-          timeout: 30_000,
-        });
-        await expect(mine.getByTestId("around-line")).toContainText("à 50 km au plus");
-        await expect(mine.getByLabel("Autour de")).toHaveValue("75");
+        await mine.goto("/app/explorer?segment=evenements&autour=ailleurs&ailleurs=75");
+        await expect(mine.getByTestId("around-open")).toContainText("(75)", { timeout: 30_000 });
+        await expect(mine.getByTestId("around-open")).toHaveAttribute("data-set", "true");
+        await expect(mine.getByTestId("sort-line")).toContainText("(75)");
         await shot(mine, `explorer-ailleurs-${theme}-${size}`);
-        await mine.getByTestId("around-back").click();
-        await expect(mine.getByLabel("Autour de")).toHaveValue("coin", { timeout: 30_000 });
-        // Revenu au point de départ des préférences (Mon coin, distance habituelle).
-        await expect(mine.getByTestId("around-line")).toContainText("Mon coin");
-        await expect(mine.getByTestId("around-back")).toHaveCount(0);
+        await openSheet(mine, "around-open", "where-sheet");
+        await mine.getByTestId("around-mine").click();
+        await mine.getByTestId("where-apply").click();
+        // Revenu sur ses réglages habituels (Mon coin) : la pastille repasse en contour.
+        await expect(mine.getByTestId("around-open")).toContainText("Mon coin", { timeout: 30_000 });
+        await expect(mine.getByTestId("around-open")).not.toHaveAttribute("data-set", "true");
       }
       await ctx.close();
     }

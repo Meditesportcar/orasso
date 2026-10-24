@@ -1829,3 +1829,505 @@
 .s-composer__field {
   min-height: 64px;
 }
+
+/* ---------- Explorer R2 : segment, recherche, pastilles, feuilles (jetons seulement) ---------- */
+.ex-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ex-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ex-search__field {
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--surface-field);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.ex-search__field input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.ex-search__field input:focus-visible {
+  outline: none;
+}
+.ex-search__field:focus-within {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.ex-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ex-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--timing-fast) var(--ease-inout),
+    color var(--timing-fast) var(--ease-inout);
+}
+.ex-pill[data-set="true"] {
+  background: var(--ink);
+  color: var(--surface);
+}
+.ex-pill__text {
+  white-space: nowrap;
+}
+.ex-pill__k {
+  opacity: 0.75;
+}
+.ex-pill__v {
+  font-weight: 800;
+}
+.ex-pill__n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.ex-line {
+  margin: 0;
+  color: var(--ink-muted);
+}
+.ex-sub {
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1.5px solid var(--line);
+  color: var(--ink-muted);
+}
+
+/* Feuilles (fenêtres) : un fondu court, aussi en mouvement réduit. */
+.ex-sheet {
+  width: min(92vw, 560px);
+  max-height: 88vh;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+  overflow: auto;
+}
+.ex-sheet[open] {
+  animation: ex-fade var(--timing-fast) var(--ease-inout);
+}
+.ex-sheet::backdrop {
+  background: var(--scrim);
+}
+@keyframes ex-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 640px) {
+  .ex-sheet {
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+}
+.ex-sheet__in {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.ex-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ex-sheet__head h2 {
+  margin: 0;
+}
+.ex-choices {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ex-choices--grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.ex-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.ex-opt[data-selected],
+.ex-opt:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.ex-opt[aria-disabled="true"],
+.ex-opt[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.ex-opt__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.ex-opt__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.ex-opt__title {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.ex-opt__hint,
+.ex-opt__meta {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+.ex-choices--grid .ex-opt {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.ex-choices--grid .ex-opt__main {
+  flex-basis: 100%;
+}
+.ex-opt--radio input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.ex-opt--radio:has(input:focus-visible) {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.ex-opt__dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+}
+.ex-opt:has(input:checked) .ex-opt__dot {
+  background: radial-gradient(circle, var(--ink) 0 45%, transparent 50%);
+}
+.ex-where,
+.ex-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ex-km {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.ex-km__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.ex-km__value {
+  font-weight: 900;
+  font-size: 20px;
+}
+.ex-km input[type="range"] {
+  width: 100%;
+  accent-color: var(--ink);
+}
+.ex-away {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.ex-away select {
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+  font: inherit;
+}
+.ex-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ex-group__legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  color: var(--ink-muted);
+}
+.ex-group__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.ex-chip {
+  position: relative;
+  cursor: pointer;
+}
+.ex-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.ex-chip span {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 13px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+}
+.ex-chip input:checked + span {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+.ex-chip input:focus-visible + span {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* Fiche d'un pro de l'Explorer : le même gabarit pour tous. */
+.ex-pro {
+  border-radius: var(--radius-lg);
+  background: var(--plate);
+  color: var(--plate-ink);
+}
+.ex-pro__link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+.ex-pro__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--night);
+  color: var(--night-ink);
+  font-weight: 900;
+  font-size: 24px;
+}
+.ex-pro__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ex-pro__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.ex-pro__jobs {
+  color: var(--plate-muted);
+}
+.ex-pro__name {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+.ex-pro__badge {
+  flex: none;
+  color: var(--accent-text);
+}
+.ex-pro__where {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--plate-muted);
+}
+.ex-pro__where strong {
+  color: var(--plate-ink);
+}
+.ex-pro__disc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.ex-pro__tag {
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 13px;
+}
+.ex-pro__tag[data-from="true"] {
+  border: 1.5px solid var(--plate-muted);
+  background: transparent;
+  color: var(--plate-ink);
+}
+.ex-pro__none {
+  color: var(--plate-muted);
+}
+.ex-pro__fav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-text);
+}
+
+/* Personnes et crews : sections, lignes, note de vie privée. */
+.ex-sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ex-sec__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.ex-sec__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+.ex-row {
+  padding: var(--space-2) var(--space-3);
+}
+.ex-row__priv {
+  color: var(--ink);
+}
+.ex-empty {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink-muted);
+}
+.ex-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink-muted);
+}
+.ex-privacy svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
+/* Carte : la frise des dates au-dessus (une date ne garde que ses épingles). */
+.ex-map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.ex-dates {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 var(--space-1);
+  border: 0;
+  overflow-x: auto;
+}
+.ex-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.ex-date[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+@media (min-width: 1000px) {
+  .ex-map {
+    order: 2;
+    position: sticky;
+    top: var(--space-4);
+  }
+  .ex-map .evs__map {
+    order: 0;
+    position: static;
+    height: 62vh;
+  }
+}

@@ -52,15 +52,17 @@ test("site : « Médite », événements terminés, choix gardé, plus de statio
       await page.goto(`/app/explorer?segment=evenements&q=${encodeURIComponent(running.title)}`);
       await expect(tiles.filter({ hasText: running.title })).toHaveCount(1);
 
-      // Le choix reste : une arrivée sans réglage reprend le dernier (tri, Autour de, distance).
-      await page.goto("/app/explorer?segment=evenements&tri=places&autour=11&rayon=partout");
-      await expect(page.getByLabel("Trier par", { exact: true })).toHaveValue("places");
+      // Le choix reste : une arrivée sans réglage reprend le dernier (tri, « Où chercher ? », filtres).
+      // (Lot R2 : « Ailleurs » et le tri « Places restantes », lus dans les pastilles.)
+      await page.goto("/app/explorer?segment=evenements&tri=seats&autour=ailleurs&ailleurs=11");
+      await expect(page.getByTestId("sort-open")).toContainText("Places restantes");
       await page.goto("/app");
       await page.goto("/app/explorer");
-      await expect(page).toHaveURL(/tri=places/);
-      await expect(page).toHaveURL(/autour=11/);
-      await expect(page.getByLabel("Trier par", { exact: true })).toHaveValue("places");
-      await expect(page.getByLabel("Autour de", { exact: true })).toHaveValue("11");
+      await expect(page).toHaveURL(/tri=seats/);
+      await expect(page).toHaveURL(/autour=ailleurs/);
+      await expect(page).toHaveURL(/ailleurs=11/);
+      await expect(page.getByTestId("sort-open")).toContainText("Places restantes");
+      await expect(page.getByTestId("around-open")).toContainText("(11)");
       await shot(page, `explorer-choix-garde-${theme}-${size}`);
       const audit = await auditPage(page);
       expect(audit.greens).toEqual([]);

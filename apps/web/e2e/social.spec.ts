@@ -83,8 +83,9 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   const row = page.getByTestId("person-row").filter({ hasText: bravo });
   await expect(row).toBeVisible();
   // Demande d'ami depuis la liste.
-  await row.getByRole("button", { name: "Ajouter en ami" }).click();
-  await expect(page.getByTestId("person-row").filter({ hasText: bravo }).getByTestId("friend-state")).toContainText(
+  // Lot R2 : « Ajouter », puis « Demande envoyée » (comme l'appli).
+  await row.getByRole("button", { name: "Ajouter", exact: true }).click();
+  await expect(page.getByTestId("person-row").filter({ hasText: bravo }).getByTestId("person-requested")).toContainText(
     "Demande envoyée",
   );
 
