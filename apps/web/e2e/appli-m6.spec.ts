@@ -38,6 +38,10 @@ async function open(page: Page, onboarded = true) {
   }, onboarded);
 }
 
+// Affiches : un compte que les autres recettes de l'affiche n'utilisent pas (Théo, sa Golf active). Avec Kenji, la série
+// complète dépassait la limite de 40 affiches par heure (`share-image`, compteur en mémoire de l'API) : 429.
+const POSTER_EMAIL = "theo@orasso.local";
+
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
   if (await skip.isVisible().catch(() => false))
@@ -154,11 +158,11 @@ test("affiche à partager : story et post, zones masquées en story, zones à fl
   page,
 }) => {
   test.setTimeout(240_000);
-  const kenji = await login("kenji@orasso.local");
-  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const owner = await login(POSTER_EMAIL);
+  const vehicles = await apiCall<{ id: string; status: string }[]>(owner, "GET", "/me/vehicles");
   const vehicle = vehicles.data.find((v) => v.status === "active");
   await open(page);
-  await signIn(page, "kenji@orasso.local");
+  await signIn(page, POSTER_EMAIL);
   await go(page, `/vehicule/${vehicle?.id}/partager`);
   await expect(page.getByText("Affiche à partager", { exact: true })).toBeVisible({ timeout: 30_000 });
   const img = page.getByTestId("share-preview").locator("img");
@@ -176,11 +180,11 @@ test("affiche à partager : story et post, zones masquées en story, zones à fl
 
   const ok = await fetch(
     `${API}/api/me/vehicles/${vehicle?.id}/share-image?format=post&style=sand&masks=${encodeURIComponent("0.1,0.2,0.3,0.05")}`,
-    { headers: { cookie: kenji } },
+    { headers: { cookie: owner } },
   );
   expect(ok.status).toBe(200);
   const bad = await fetch(`${API}/api/me/vehicles/${vehicle?.id}/share-image?format=story&masks=nimporte`, {
-    headers: { cookie: kenji },
+    headers: { cookie: owner },
   });
   expect(bad.status).toBe(400);
 });
@@ -279,8 +283,8 @@ test("tour 2 : une plaque détectée sur l'affiche se masque (rendu relancé), p
   page,
 }) => {
   test.setTimeout(240_000);
-  const kenji = await login("kenji@orasso.local");
-  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const owner = await login(POSTER_EMAIL);
+  const vehicles = await apiCall<{ id: string; status: string }[]>(owner, "GET", "/me/vehicles");
   const vehicle = vehicles.data.find((v) => v.status === "active");
   // Détection simulée (recette web seulement) : une plaque lisible sur la photo de l'affiche (lot R3a : la vérification
   // ignore les textes d'Orasso, sous la photo).
@@ -292,7 +296,7 @@ test("tour 2 : une plaque détectée sur l'affiche se masque (rendu relancé), p
     if (r.url().includes("/share-image") && r.url().includes("masks=")) masked.push(r.url());
   });
   await open(page);
-  await signIn(page, "kenji@orasso.local");
+  await signIn(page, POSTER_EMAIL);
   await go(page, `/vehicule/${vehicle?.id}/partager`);
   await expect(page.getByTestId("share-plate-check")).toContainText("Une plaque semble lisible", { timeout: 60_000 });
   // Le partage normal est retiré ; « La masquer » est le bouton principal, « Partager quand même » est secondaire.
@@ -347,8 +351,8 @@ test("tour 3 : vérification de plaque interrompue par un changement de style, r
   page,
 }) => {
   test.setTimeout(240_000);
-  const kenji = await login("kenji@orasso.local");
-  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const owner = await login(POSTER_EMAIL);
+  const vehicles = await apiCall<{ id: string; status: string }[]>(owner, "GET", "/me/vehicles");
   const vehicle = vehicles.data.find((v) => v.status === "active");
   // Détection simulée lente (recette seulement) : aucune plaque, réponse après 4 s.
   await page.addInitScript(() => {
@@ -357,7 +361,7 @@ test("tour 3 : vérification de plaque interrompue par un changement de style, r
     w.__orassoFakePlatesDelayMs = 4000;
   });
   await open(page);
-  await signIn(page, "kenji@orasso.local");
+  await signIn(page, POSTER_EMAIL);
   await go(page, `/vehicule/${vehicle?.id}/partager`);
   await expect(page.getByTestId("share-plate-check")).toContainText("Vérification", { timeout: 60_000 });
   await expect(page.getByTestId("share-story")).toBeDisabled();
@@ -372,8 +376,8 @@ test("tour 4 : vérification de plaque trop longue (8 s), « Vérifier à nouvea
   page,
 }) => {
   test.setTimeout(240_000);
-  const kenji = await login("kenji@orasso.local");
-  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const owner = await login(POSTER_EMAIL);
+  const vehicles = await apiCall<{ id: string; status: string }[]>(owner, "GET", "/me/vehicles");
   const vehicle = vehicles.data.find((v) => v.status === "active");
   // Détection simulée qui ne répond pas avant 30 s (recette seulement).
   await page.addInitScript(() => {
@@ -382,7 +386,7 @@ test("tour 4 : vérification de plaque trop longue (8 s), « Vérifier à nouvea
     w.__orassoFakePlatesDelayMs = 30_000;
   });
   await open(page);
-  await signIn(page, "kenji@orasso.local");
+  await signIn(page, POSTER_EMAIL);
   const dir = `${RELAIS}/lot-m6-captures/tour4`;
   mkdirSync(dir, { recursive: true });
   for (const theme of ["beton", "sable"] as const) {
