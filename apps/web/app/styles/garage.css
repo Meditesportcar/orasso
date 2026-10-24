@@ -897,7 +897,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 2px solid var(--accent);
-  background: var(--surface-sunken);
+  background: var(--surface);
 }
 .g-typed .o-t-body-strong,
 .g-typed .o-t-caption {
