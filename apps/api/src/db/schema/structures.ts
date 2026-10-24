@@ -84,7 +84,11 @@ export const structures = pgTable(
     followerMessageQuota: smallint("follower_message_quota"),
     ...timestamps,
   },
-  (t) => [index("structures_department_idx").on(t.department)],
+  (t) => [
+    index("structures_department_idx").on(t.department),
+    // Lot R1, tour 2 : l'Explorer cherche aussi par nom de l'organisateur, sans accents ni casse (migration 0056).
+    index("structures_name_fold_trgm_idx").using("gin", sql`orasso_fold(${t.name}) gin_trgm_ops`),
+  ],
 );
 
 export const structureMembers = pgTable(

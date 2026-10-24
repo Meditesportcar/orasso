@@ -70,9 +70,13 @@ export const angleDelta = (from: number, to: number) => ((((to - from) % 360) + 
  * Place de la loupe dans la photo (px) : centrée au-dessus du doigt, en dessous quand on est en haut de la photo, et
  * toujours dans la photo.
  */
-export function loupePlace(px: number, py: number, boxW: number, boxH: number, size = LOUPE_SIZE, gap = 52) {
+export function loupePlace(px: number, py: number, boxW: number, boxH: number, sizeArg?: number, gapArg?: number) {
   "worklet";
-  // Appelée sur le fil UI (style animé de la loupe) : pas d'appel à une fonction JS ordinaire ici.
+  // Appelée sur le fil UI (style animé de la loupe) : pas d'appel à une fonction JS ordinaire ici. Les valeurs par
+  // défaut se posent dans le corps : une constante de module en valeur par défaut d'un paramètre n'est pas capturée par
+  // le plugin Reanimated (plantage « Property 'LOUPE_SIZE' doesn't exist » sur le Xiaomi, 24/10).
+  const size = sizeArg ?? LOUPE_SIZE;
+  const gap = gapArg ?? 52;
   const left = Math.min(Math.max(6, boxW - size - 6), Math.max(6, px - size / 2));
   const above = py - size - gap;
   const top = above >= 6 ? above : Math.min(Math.max(6, boxH - size - 6), Math.max(6, py + gap));

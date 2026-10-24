@@ -4,7 +4,7 @@
 // Lot M4 (maquettes 3.1 à 3.3) : toutes les cartes en portrait (affiche à gauche), le tri choisi (`sort`), la ligne
 // « 14 événements · distances depuis le centre du 66 » (ou « depuis ta position »).
 import { Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, explorerLabels, explorerV2Labels as L } from "@orasso/shared";
+import { type EventCard, explorerLabels, explorerV2Labels as L, notOver } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -94,8 +94,11 @@ export function EventsSegment({
       ? `explore-events.${sort}${place ? `.${placeKey(place)}` : ""}${filters.formats?.length ? `.${filters.formats.join("+")}` : ""}`
       : undefined,
   );
-  const items = list.items ?? [];
-  const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
+  // Lot R1 : un événement terminé ne se montre plus (liste et carte), même lu du cache d'hier (l'API l'écarte déjà).
+  const items = notOver(list.items ?? [], new Date(nowMs()));
+  const itemsKey = items.map((e) => e.id).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: les repères changent quand la liste affichée change
+  const pins = useMemo(() => eventPins(items), [itemsKey]);
   const picked: EventCard[] = items.filter((e) => selected.includes(e.id));
   // Lot M3 : la fiche s'ouvre tout de suite avec la carte (aperçu), sa lecture part dès le toucher.
   const open = (e: EventCard, poster: PosterRect | null = null) => {
@@ -124,7 +127,7 @@ export function EventsSegment({
       {list.items === null && !list.error ? (
         <Waiting blocks={EVENT_LIST_BLOCKS} label={L.loading} testID="explorer-loading" />
       ) : null}
-      {list.items?.length === 0 ? <EmptyState title={L.emptyTitle} text={L.emptyText} /> : null}
+      {list.items && items.length === 0 ? <EmptyState title={L.emptyTitle} text={L.emptyText} /> : null}
 
       {view === "map" && list.items ? (
         <ExplorerMap

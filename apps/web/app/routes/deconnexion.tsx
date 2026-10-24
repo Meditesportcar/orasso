@@ -2,6 +2,7 @@ import { DEPT_COOKIE } from "@orasso/design-system/web";
 import { redirect } from "react-router";
 
 import { api, safeReturn, withCookies } from "../lib/api.server";
+import { clearExplorerCookie } from "../lib/explorerChoice.server";
 import type { Route } from "./+types/deconnexion";
 
 export async function action({ request }: Route.ActionArgs) {
@@ -11,6 +12,8 @@ export async function action({ request }: Route.ActionArgs) {
   const headers = withCookies(res.headers);
   // Lot 38 : le département du thème Automatique appartient au compte ; on l'oublie à la déconnexion.
   headers.append("set-cookie", `${DEPT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`);
+  // Lot R1 : le choix de l'Explorer appartient aussi au compte.
+  headers.append("set-cookie", clearExplorerCookie(request));
   return redirect(safeReturn(String(form?.get("retour") ?? ""), "/"), { headers });
 }
 

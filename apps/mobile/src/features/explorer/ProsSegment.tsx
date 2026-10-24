@@ -4,7 +4,7 @@
 // Lot C2a : les lieux pratiques retirés de l'Accueil (garage favori, lavage, carburant ; audit § 5.2) vivent ici, en tête
 // de la liste ; les filtres peuvent venir d'Explorer (`filters` / `onFiltersChange`) pour que la carte plein écran les garde.
 import { Button, Chip, ChipRow, EmptyState, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { explorerLabels, explorerV2Labels as L } from "@orasso/shared";
+import { explorerLabels, homeWidgetOffered, explorerV2Labels as L } from "@orasso/shared";
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -130,7 +130,8 @@ export function ProsSegment({
 
 /**
  * Lieux pratiques (lot 30, retirés de l'Accueil au lot C2a) : garage favori, lavage et carburant les plus proches, lus
- * par `GET /me/home?blocks=places` (ni sponsorisé ni incitation : rien n'y est compté).
+ * par `GET /me/home?blocks=places` (ni sponsorisé ni incitation : rien n'y est compté). Lot R1 : lavage et carburant
+ * retirés pour l'instant (décision de Damien du 24/10), il reste le garage favori.
  */
 function PracticalPlaces({ position }: { position: ExplorerPosition }) {
   const data = useApi(
@@ -148,8 +149,9 @@ function PracticalPlaces({ position }: { position: ExplorerPosition }) {
   return (
     <View style={styles.places} testID="explorer-places">
       <FavoriteGarageWidget garage={data.data.favoriteGarage} />
-      <PlacesWidget kind="wash" places={data.data.wash} />
-      <PlacesWidget kind="fuel" places={data.data.fuel} />
+      {/* Lot R1 (décision de Damien du 24/10) : stations retirées pour l'instant (`NEARBY_STATIONS_ENABLED`). */}
+      {homeWidgetOffered("wash") ? <PlacesWidget kind="wash" places={data.data.wash} /> : null}
+      {homeWidgetOffered("fuel") ? <PlacesWidget kind="fuel" places={data.data.fuel} /> : null}
     </View>
   );
 }

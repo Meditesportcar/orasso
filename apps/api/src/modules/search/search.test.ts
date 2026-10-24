@@ -1,7 +1,7 @@
 // Recherche de premier niveau et Explorer (lot 29) : `GET /search`, `GET /events` (affinités, distance, filtres),
 // `GET /pros` (distance, filtres). En cookie ET en jeton porteur. Confidentialité, abus, absence de déduction.
 import { type affinityOf, compareByAffinity, fromWallTime } from "@orasso/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +33,7 @@ import {
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { fold } from "../../lib/text-search";
 import { socialRepo } from "../social/repo";
 
 afterAll(async () => {
@@ -551,6 +552,79 @@ describe("filtres combinés et texte", () => {
     expect(none.json.items).toHaveLength(0);
   });
 
+  it("lot R1 : le nom de l'organisateur, la ville et le lieu, sans accents ni casse, un début de mot suffit", async () => {
+    const viewer = await person("Viewer_66");
+    const owner = await person("Orga_A");
+    const medite = await createStructure(owner.id);
+    await db.update(structures).set({ name: "MéditeSportCar" }).where(eq(structures.id, medite.id));
+    const other = await createStructure(owner.id);
+    const night = await createEvent(medite.id, { title: "Nocturne du port", city: "Canet-en-Roussillon" });
+    const elne = await createEvent(other.id, {
+      title: "Rassemblement d'automne",
+      city: "Elne",
+      addressLine: "Parc des Expositions Élisée",
+    });
+    await createEvent(other.id, { title: "Autre", city: "Perpignan" });
+    for (const q of ["Médite", "medite", "MEDI", "méditesportcar", "sportcar"]) {
+      const res = await get(viewer, `/events?q=${encodeURIComponent(q)}`);
+      expect(ids(res.json.items), `q=${q}`).toEqual([night.slug]);
+    }
+    // La ville et le lieu (adresse), sans accents : « canet », « elisee », « ÉLNE ».
+    expect(ids((await get(viewer, "/events?q=canet")).json.items)).toEqual([night.slug]);
+    for (const q of ["elisee", "ÉLNE", "expositions elne"]) {
+      expect(ids((await get(viewer, `/events?q=${encodeURIComponent(q)}`)).json.items), `q=${q}`).toEqual([elne.slug]);
+    }
+    // Chaque mot doit se retrouver quelque part : l'organisateur et la ville d'un autre événement ne se mélangent pas.
+    expect((await get(viewer, `/events?q=${encodeURIComponent("médite elne")}`)).json.items).toHaveLength(0);
+    // Même règle dans la recherche de premier niveau (groupe Événements).
+    const search = await get(viewer, `/search?q=${encodeURIComponent("Médite")}`);
+    expect(ids(search.json.events)).toEqual([night.slug]);
+  });
+
+  it("lot R1, tour 2 : `orasso_fold` (base, index de la migration 0056) donne le même texte que `fold` (API)", async () => {
+    for (const text of [
+      "MéditeSportCar",
+      "ÉLNE",
+      "Ÿvelines",
+      "Çà et là",
+      "Noël à l'Île",
+      "ÀÇÈÑ ÔÛ",
+      "Canet-en-Roussillon",
+    ]) {
+      const { rows } = await db.execute<{ v: string }>(sql`select orasso_fold(${text}) as v`);
+      expect(rows[0]?.v, text).toBe(fold(text));
+    }
+  });
+
+  it("lot R1 : un événement terminé n'est jamais listé, même avec une période commencée plus tôt (plusieurs jours compris)", async () => {
+    const clock = useClock(fromWallTime({ year: 2026, month: 10, day: 18, hour: 15, minute: 0 }));
+    const viewer = await person("Viewer_66");
+    const owner = await person("Orga_A");
+    const s = await createStructure(owner.id);
+    const at = (h: number) => new Date(clock.now.getTime() + h * 3_600_000);
+    // Samedi 17 : fini la veille. Vendredi → dimanche 23 h : plusieurs jours, encore en cours. Mardi : à venir.
+    await createEvent(s.id, { title: "Fini hier", startsAt: at(-28), endsAt: at(-24) });
+    const running = await createEvent(s.id, { title: "En cours", startsAt: at(-48), endsAt: at(8) });
+    const soon = await createEvent(s.id, { title: "Mardi", startsAt: at(48), endsAt: at(52) });
+    // Fini il y a une minute.
+    await createEvent(s.id, {
+      title: "Fini à l'instant",
+      startsAt: at(-4),
+      endsAt: new Date(clock.now.getTime() - 60_000),
+    });
+    const saturday = fromWallTime({ year: 2026, month: 10, day: 17, hour: 0, minute: 0 }).toISOString();
+    for (const path of ["/events", `/events?from=${encodeURIComponent(saturday)}`, "/events?sort=distance&limit=100"]) {
+      const res = await get(viewer, path);
+      expect(ids(res.json.items), path).toEqual([running.slug, soon.slug]);
+    }
+    // Les passés restent dans « passés ».
+    const past = await get(viewer, "/events?scope=past");
+    expect(past.json.items.map((e: { title: string }) => e.title)).toEqual(["Fini à l'instant", "Fini hier"]);
+    // L'horloge avance : l'événement en cours se termine et disparaît.
+    clock.advance(9 * 3_600_000);
+    expect(ids((await get(viewer, "/events")).json.items)).toEqual([soon.slug]);
+  });
+
   it("les jokers de like saisis ne sont pas des jokers", async () => {
     const viewer = await person("Viewer_66");
     const owner = await person("Orga_A");
@@ -852,6 +926,9 @@ describe("GET /pros : filtres, distance, visibilité", () => {
     expect(ids((await get(viewer, "/pros?q=detailing")).json.items)).toEqual([detailing.slug]);
     expect(ids((await get(viewer, "/pros?q=wrap")).json.items)).toEqual([covering.slug]);
     expect(ids((await get(viewer, "/pros?q=paris&activity=parts")).json.items)).toHaveLength(1);
+    // Lot R1 : sans accents ni casse, comme les événements (« pieces » trouve « Pièces Paris »).
+    expect(ids((await get(viewer, "/pros?q=pieces")).json.items)).toHaveLength(1);
+    expect(ids((await get(viewer, "/pros?q=PIÈC")).json.items)).toHaveLength(1);
     expect((await get(viewer, "/pros?activity=inconnue")).status).toBe(400);
   });
 

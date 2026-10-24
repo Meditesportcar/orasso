@@ -8,7 +8,7 @@
 // Lot M5 (tour 2) : `?event=<adresse>` (« Sur la carte » d'un ticket de l'Accueil) montre cet événement seul, lu par sa
 // page (l'API dit s'il est visible pour la personne : un événement sur invitation l'est pour ses invités), sans recherche.
 import { Icon, type IconName, Text, useTheme } from "@orasso/design-system/native";
-import { type EventCard, explorerV2Labels as L } from "@orasso/shared";
+import { type EventCard, explorerV2Labels as L, notOver } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
@@ -118,8 +118,11 @@ function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: 
     q ? 300 : 0,
     ready,
   );
-  const items = list.items ?? [];
-  const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
+  // Lot R1 : un événement terminé ne se montre plus sur la carte.
+  const items = notOver(list.items ?? [], new Date(nowMs()));
+  const itemsKey = items.map((e) => e.id).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: les repères changent quand la liste affichée change
+  const pins = useMemo(() => eventPins(items), [itemsKey]);
   const picked: EventCard[] = items.filter((e) => selected.includes(e.id));
   const router = useRouter();
 

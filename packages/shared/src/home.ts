@@ -19,6 +19,22 @@ export const homeWidgetIds = [
 ] as const;
 export type HomeWidgetId = (typeof homeWidgetIds)[number];
 
+/**
+ * Lot R1 (décision de Damien du 24/10) : les stations de lavage et de carburant sont retirées pour l'instant. Elles
+ * montraient les stations les plus proches de soi ; la fonction voulue est autre (les stations proches d'un événement)
+ * et viendra plus tard. Tant que ce réglage vaut `false` : l'API ne les cherche plus (Overpass et prix des carburants
+ * restent en place, sans appel), l'Explorer (appli et site), l'Accueil du site et ses réglages ne les montrent plus.
+ */
+export const NEARBY_STATIONS_ENABLED = false;
+
+/** Les widgets des stations (lavage, carburant), coupés par `NEARBY_STATIONS_ENABLED`. */
+export const stationWidgetIds = ["wash", "fuel"] as const satisfies readonly HomeWidgetId[];
+
+/** Ce widget est-il proposé aujourd'hui ? (les stations sont retirées tant que `NEARBY_STATIONS_ENABLED` est faux) */
+export function homeWidgetOffered(id: HomeWidgetId, stations = NEARBY_STATIONS_ENABLED): boolean {
+  return stations || !(stationWidgetIds as readonly HomeWidgetId[]).includes(id);
+}
+
 /** Le seul widget qui ne se déplace ni ne se masque : il porte le néon moutarde de l'écran. */
 export const HOME_FIXED_WIDGET: HomeWidgetId = "next_access";
 
@@ -51,12 +67,23 @@ export function visibleHomeWidgets(config: HomeWidgetsConfig): HomeWidgetId[] {
   return config.order.filter((id) => !config.hidden.includes(id));
 }
 
-/** Monte (`-1`) ou descend (`+1`) un widget ; « Prochain accès » reste en première place. */
-export function moveHomeWidget(config: HomeWidgetsConfig, id: HomeWidgetId, delta: -1 | 1): HomeWidgetsConfig {
+/**
+ * Monte (`-1`) ou descend (`+1`) un widget ; « Prochain accès » reste en première place. Lot R1, tour 2 : un widget ne
+ * s'échange qu'avec son voisin proposé (`offered`) ; les widgets retirés pour l'instant (stations) gardent leur place dans
+ * l'ordre enregistré, ils ne comptent pas (sinon descendre un widget l'échangerait avec une station invisible).
+ */
+export function moveHomeWidget(
+  config: HomeWidgetsConfig,
+  id: HomeWidgetId,
+  delta: -1 | 1,
+  offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
+): HomeWidgetsConfig {
   const order = [...config.order];
   const from = order.indexOf(id);
-  const to = from + delta;
-  if (id === HOME_FIXED_WIDGET || from < 0 || to < 1 || to >= order.length) return config;
+  if (id === HOME_FIXED_WIDGET || from < 0 || !offered(id)) return config;
+  let to = from + delta;
+  while (to >= 1 && to < order.length && !offered(order[to] as HomeWidgetId)) to += delta;
+  if (to < 1 || to >= order.length) return config;
   [order[from], order[to]] = [order[to] as HomeWidgetId, order[from] as HomeWidgetId];
   return { order, hidden: config.hidden };
 }

@@ -62,16 +62,18 @@ export function whenRange(when: When, now: Date): { from?: string; to?: string }
   };
 }
 
-/** Lot M4 (maquette 3.2) : le tri choisi dans « Trier : … ▾ » (gardé pour les prochaines visites). */
+/** Lot M4 (maquette 3.2) : le tri choisi dans « Trier : … ▾ » (gardé avec le choix de l'Explorer, lot R1). */
 export const EVENT_SORTS = ["distance", "date", "recent", "seats"] as const;
 export type EventSort = (typeof EVENT_SORTS)[number];
+/** Lot M4 : clé d'avant le lot R1 (tri seul, sans compte) ; lue une fois puis effacée (`explorerChoice.ts`). */
 export const SORT_KEY = "explorer.sort";
 
 /**
  * Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… », le point de départ de l'Explorer. « Mon coin » : les
  * départements du compte (plus tard « Tes préférences », lot M6) ; « Autour de moi » : la position de l'appareil,
- * demandée sur ce geste seulement ; « Ailleurs… » : un autre département (pas de géocodage de ville). Temporaire : jamais
- * enregistré (ni profil, ni préférences, ni appareil) ; la position reste en mémoire de l'écran.
+ * demandée sur ce geste seulement ; « Ailleurs… » : un autre département (pas de géocodage de ville). Jamais enregistré
+ * dans le profil ni les préférences ; lot R1 : le mode est gardé sur l'appareil pour le compte (`explorerChoice.ts`),
+ * jamais la position, qui reste en mémoire de l'écran.
  */
 export type Around = { kind: "mine" } | { kind: "me" } | { kind: "dept"; code: string };
 /** Où chercher : le point de départ et la distance propre à l'Explorer (`null` = partout en France). */

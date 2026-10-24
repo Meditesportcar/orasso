@@ -3,7 +3,7 @@
 // rayon mis à jour, position de l'appareil jamais enregistrée), réglage des widgets, garage favori, emplacement
 // sponsorisé (ciblage, période, plafond, pondération, clics), confidentialité. Routes essayées en cookie ET en porteur.
 import { readFileSync } from "node:fs";
-import { PRO_PAID_FROM } from "@orasso/shared";
+import { NEARBY_STATIONS_ENABLED, PRO_PAID_FROM } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +38,7 @@ import { setExternalFetch } from "../../lib/external/cache";
 import { fuelNear, fuelUrl, parseFuel } from "../../lib/external/fuel";
 import { parseOverpass, washNear } from "../../lib/external/overpass";
 import { resetRateLimits } from "../../lib/rateLimit";
-import { homeService, nearestPlaces, pickNextAccess } from "./service";
+import { homeService, nearbyStations, nearestPlaces, pickNextAccess } from "./service";
 import { sponsoredService } from "./sponsored";
 
 afterAll(async () => {
@@ -91,8 +91,13 @@ beforeEach(async () => {
   await db.delete(externalCache);
   clock = useClock(NOW);
   setExternalFetch(null);
+  // Lot R1 : les stations sont coupées pour l'instant (décision de Damien) ; ces tests gardent leur code vérifié.
+  nearbyStations.enabled = true;
 });
-afterEach(() => setExternalFetch(null));
+afterEach(() => {
+  setExternalFetch(null);
+  nearbyStations.enabled = NEARBY_STATIONS_ENABLED;
+});
 
 /** `fetch` simulé : une réponse par source, avec compteur d'appels. */
 function sources(over: { wash?: () => Response; fuel?: () => Response } = {}) {
@@ -492,6 +497,20 @@ describe("widgets réglables", () => {
     expect((await req(u, "PATCH", "/me/settings", { homeWidgets: { order: ["weather"], hidden: [] } })).status).toBe(
       200,
     );
+  });
+
+  it("lot R1 : stations retirées pour l'instant (réglage coupé) : ni lavage ni carburant, aucune source appelée", async () => {
+    nearbyStations.enabled = NEARBY_STATIONS_ENABLED;
+    expect(NEARBY_STATIONS_ENABLED).toBe(false);
+    const fetched = sources();
+    const u = await user("Sans_Station");
+    for (const path of ["/me/home", "/me/home?blocks=places&persona=fan"]) {
+      const r = await req(u, "GET", path);
+      expect(r.status).toBe(200);
+      expect(r.json.wash).toEqual([]);
+      expect(r.json.fuel).toEqual([]);
+    }
+    expect(fetched).not.toHaveBeenCalled();
   });
 
   it("un widget masqué n'est pas calculé : aucun appel de source externe", async () => {

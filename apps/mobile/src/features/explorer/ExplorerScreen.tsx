@@ -11,7 +11,10 @@
 // dans une feuille, gardé pour les prochaines visites) et « Filtres » avec le nombre de filtres actifs ; la bascule
 // « Liste | Carte » flotte au-dessus de la barre d'onglets, toujours visible. Préférences du lot M6 : voir `prefsFilters`.
 // Tour 2 (décision de Damien du 23/10) : « Autour de… » à côté du tri (Mon coin, Autour de moi, Ailleurs…) et une
-// distance propre à l'Explorer avec « Partout en France » ; choix temporaires, jamais enregistrés, « Revenir à mon coin ».
+// distance propre à l'Explorer avec « Partout en France », « Revenir à mon coin ».
+// Lot R1 (retour de Damien du 24/10, il remplace « temporaires » du tour 2) : segment, tri, « Autour de… », distance et
+// filtres restent d'un onglet à l'autre et après un redémarrage, rangés par compte (`explorerChoice.ts`) ; « Autour de
+// moi » ne garde que le mode, jamais la position.
 import {
   Chip,
   ChipRow,
@@ -33,7 +36,7 @@ import {
   preferenceFilterCount,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -41,11 +44,19 @@ import { EventsSegment } from "@/features/explorer/EventsSegment";
 import { PeopleSheetBody } from "@/features/explorer/PeopleSheet";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
 import { SmallButton } from "@/features/sorties/bits";
-import { kvGet, kvSet } from "@/lib/kv";
+import { cacheGetJson, cacheScope, cacheSetJson, kvDel, kvGet } from "@/lib/kv";
 import { usePreferences } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { TabScreen } from "@/ui/Screens";
+import {
+  CHOICE_KEY,
+  defaultChoice,
+  EXPLORER_SEGMENTS,
+  type ExplorerSegment,
+  readChoice,
+  storeChoice,
+} from "./explorerChoice";
 import {
   type Around,
   activeFilters,
@@ -66,8 +77,8 @@ import { type ExplorerPosition, useExplorerPosition } from "./useExplorerPositio
 
 const { space1, space2, space3, space4 } = tokens.spacing;
 
-type Segment = "evenements" | "pros";
-const SEGMENTS: Segment[] = ["evenements", "pros"];
+type Segment = ExplorerSegment;
+const SEGMENTS: readonly Segment[] = EXPLORER_SEGMENTS;
 const WHEN: { id: When; label: string }[] = [
   { id: "all", label: L.whenAll },
   { id: "weekend", label: L.whenWeekend },
@@ -76,7 +87,9 @@ const WHEN: { id: When; label: string }[] = [
 
 export function ExplorerScreen() {
   const params = useLocalSearchParams<{ segment?: string; q?: string }>();
-  const fromParams = (SEGMENTS as string[]).includes(params.segment ?? "") ? (params.segment as Segment) : "evenements";
+  const fromParams = (SEGMENTS as readonly string[]).includes(params.segment ?? "")
+    ? (params.segment as Segment)
+    : "evenements";
   const router = useRouter();
   const [segment, setSegment] = useState<Segment>(fromParams);
   // « Voir tout » d'une recherche de personnes : la feuille s'ouvre directement.
@@ -87,30 +100,12 @@ export function ExplorerScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Lot M4 : la carte s'ouvre en écran plein (`/carte`) ; la liste reste la vue de cet écran.
   const view: "list" | "map" = "list";
-  // Lot M4 : le tri choisi, relu au lancement et gardé pour les prochaines visites.
+  // Lot M4 : le tri choisi ; lot R1 : gardé avec tout le choix de l'Explorer (plus bas).
   const [sort, setSort] = useState<EventSort>("distance");
   const [sorting, setSorting] = useState(false);
-  // Tour 2 (relecture Opus) : la liste attend la lecture du tri enregistré (pas de première requête au mauvais tri,
-  // pas de liste qui saute d'un cache à l'autre).
-  const [sortRead, setSortRead] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void kvGet(SORT_KEY)
-      .then((v) => {
-        if (alive && v && (EVENT_SORTS as readonly string[]).includes(v)) setSort(v as EventSort);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (alive) setSortRead(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
   const chooseSort = (next: EventSort) => {
     setSort(next);
     setSorting(false);
-    void kvSet(SORT_KEY, next);
   };
   const openMap = () =>
     // La carte s'ouvre en écran plein (`s-map`, flux sans barre) et garde les filtres de la liste (relecture du lot C2a).
@@ -137,6 +132,65 @@ export function ExplorerScreen() {
   // `undefined` : la distance habituelle des préférences (`null` = partout en France).
   const [radiusChoice, setRadiusChoice] = useState<number | null | undefined>(undefined);
   const [aroundOpen, setAroundOpen] = useState(false);
+
+  // Lot R1 : le choix gardé (segment, tri, « Autour de… », distance, filtres), relu pour le compte connecté. La liste
+  // attend cette lecture (pas de première requête au mauvais tri, pas de liste qui saute d'un cache à l'autre).
+  const meId = me?.user.id ?? null;
+  const [choiceRead, setChoiceRead] = useState(false);
+  // Le compte dont l'écran porte le choix : rien ne s'écrit sous un autre compte.
+  const choiceScope = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu à l'ouverture et quand le compte change
+  useEffect(() => {
+    let alive = true;
+    setChoiceRead(false);
+    const scope = cacheScope();
+    (async () => {
+      const saved = readChoice(await cacheGetJson<unknown>(CHOICE_KEY));
+      // Avant le lot R1, seul le tri était gardé (sur l'appareil, sans compte) : il sert une fois, puis s'efface.
+      const legacy = saved ? null : await kvGet(SORT_KEY);
+      if (!alive) return;
+      const choice = saved ?? {
+        ...defaultChoice,
+        sort: (EVENT_SORTS as readonly string[]).includes(legacy ?? "") ? (legacy as EventSort) : defaultChoice.sort,
+      };
+      if (legacy !== null) void kvDel(SORT_KEY);
+      // « Voir tout » d'une recherche arrive avec son segment : il l'emporte.
+      if (!params.segment) setSegment(choice.segment);
+      setSort(choice.sort);
+      setChosen(choice.around);
+      setRadiusChoice(choice.radius);
+      setFilters((f) => ({ ...f, ...choice.filters }));
+      setPrefFormatsOn(choice.prefFormatsOn);
+      setProFilters(choice.pros);
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!alive) return;
+        choiceScope.current = scope;
+        setChoiceRead(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [meId]);
+  useEffect(() => {
+    if (!choiceRead || !choiceScope.current) return;
+    const { format, when, affinity, followed } = filters;
+    void cacheSetJson(
+      CHOICE_KEY,
+      storeChoice({
+        segment,
+        sort,
+        around: chosen,
+        radius: radiusChoice,
+        filters: { format, when, affinity, followed },
+        prefFormatsOn,
+        pros: proFilters,
+      }),
+      choiceScope.current,
+    );
+  }, [choiceRead, segment, sort, chosen, radiusChoice, filters, prefFormatsOn, proFilters]);
+
   const around = effectiveAround(chosen, position.status === "on" && position.position !== null);
   // La distance habituelle vaut autour de Mon coin (pas autour de la position ni d'un autre département), hors recherche.
   const radiusFromPrefs = radiusChoice === undefined && prefs !== null && !searching && around.kind === "mine";
@@ -276,7 +330,7 @@ export function ExplorerScreen() {
           dept={dept}
           view={view}
           sort={sort}
-          settled={sortRead && prefsRead}
+          settled={choiceRead && prefsRead}
           place={place}
           fromPrefs={fromPrefs && around.kind === "mine"}
         />
