@@ -377,7 +377,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await s.page.getByTestId("bans-add").click();
   await shot(s.page, "13-bannir-confirmation-beton");
   await s.page.getByTestId("orga-confirm").click();
-  await expect(s.page.getByText("Personne bannie.")).toBeVisible({ timeout: 20_000 });
+  await expect(s.page.getByText("Personne bannie.", { exact: true })).toBeVisible({ timeout: 20_000 });
   const ban = s.page.getByTestId("bans-row").filter({ hasText: person });
   await expect(ban).toBeVisible();
   await shot(s.page, "14-bannissements-beton");
