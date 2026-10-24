@@ -118,6 +118,8 @@ export type Me = {
     radiusKm: number | null;
     /** Profil choisi à l'arrivée (lot 41) ; `null` pour les comptes antérieurs. */
     mainProfile: MainProfile | null;
+    /** Lot R4c : le véhicule principal effectif (choisi s'il est actif, sinon le plus ancien actif), `null` sans véhicule. */
+    mainVehicleId: string | null;
     interests: string[];
     platformRole: PlatformRole;
     newsletterOptIn: boolean;

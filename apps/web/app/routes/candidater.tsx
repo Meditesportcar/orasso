@@ -6,6 +6,8 @@ import {
   eventDaysLabels,
   formatDayDate,
   type MyApplication,
+  mainVehicleLabels,
+  preselectVehicle,
   type StructurePublic,
   type VehicleFull,
   vehicleTypeLabels,
@@ -43,10 +45,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   // Lot M4, tour 2 : le créneau des exposants est privé (la fiche ne le donne qu'aux inscrits) ; la candidature le lit
   // à part, seulement si l'on peut candidater maintenant (sinon l'état « pas encore ouvert », « clos »… s'affiche).
-  const [structure, vehicles, context] = await Promise.all([
+  const [structure, vehicles, context, upcoming, past] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
     api<ApplyContext>(request, `/events/${event.id}/apply-context`),
+    // Lot R4c : le dernier véhicule utilisé (après le principal, avant le premier qui convient), comme l'appli.
+    api<MyApplication[]>(request, "/me/applications?scope=upcoming"),
+    api<MyApplication[]>(request, "/me/applications?scope=past"),
   ]);
   const slot = context.ok ? context.data.exhibitors : (event.arrivals?.exhibitors ?? null);
   // Tour 2 : l'API n'a pas répondu (5xx, réseau) : on ne sait pas s'il faut cocher « J'ai vu », l'envoi attend.
@@ -58,7 +63,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .sort(
       (a, b) => Number(b.categories.some((c) => wanted.has(c.id))) - Number(a.categories.some((c) => wanted.has(c.id))),
     );
-  const preselected = new URL(request.url).searchParams.get("vehicule");
+  // Tour 2 : le principal effectif est le premier véhicule actif du garage (l'API le renvoie en tête).
+  const mainVehicleId = vehicles.find((v) => v.status === "active")?.id ?? null;
+  const withPhoto = new Set(activeVehicles.filter((v) => v.photos.length > 0).map((v) => v.id));
+  const lastUsed =
+    [...(upcoming.ok ? upcoming.data : []), ...(past.ok ? past.data : [])]
+      .filter((a) => a.vehicle && withPhoto.has(a.vehicle.id))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.vehicle?.id ?? null;
+  // Lot R4c (R4.5b) : `?vehicule=` d'abord (lien de la fiche), sinon principal → dernier utilisé → premier qui convient.
+  const preselected =
+    new URL(request.url).searchParams.get("vehicule") ??
+    preselectVehicle(
+      activeVehicles.map((v) => ({
+        id: v.id,
+        hasPhoto: v.photos.length > 0,
+        matches: wanted.size === 0 || v.categories.some((c) => wanted.has(c.id)),
+        admitted: event.admittedVehicleTypes.includes(v.vehicleType),
+      })),
+      mainVehicleId,
+      lastUsed,
+    )?.id ??
+    null;
   const preselectedDay = new URL(request.url).searchParams.get("jour");
   return {
     event,
@@ -73,6 +98,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       admitted: event.admittedVehicleTypes.includes(v.vehicleType),
       typeLabel: vehicleTypeLabels[v.vehicleType],
       matches: v.categories.filter((c) => wanted.has(c.id)).map((c) => c.label),
+      main: v.id === mainVehicleId,
+      lastUsed: v.id === lastUsed && v.id !== mainVehicleId,
     })),
     preselected,
     slot,
@@ -251,7 +278,13 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
                               ? `${v.typeLabel} : type non admis`
                               : v.photoCount === 0
                                 ? "Ajoute une photo pour candidater"
-                                : [v.year, v.powerHp ? `${v.powerHp} ch` : null, ...v.matches]
+                                : [
+                                    v.main ? `★ ${mainVehicleLabels.candTag}` : null,
+                                    v.lastUsed ? mainVehicleLabels.lastUsed : null,
+                                    v.year,
+                                    v.powerHp ? `${v.powerHp} ch` : null,
+                                    ...v.matches,
+                                  ]
                                     .filter(Boolean)
                                     .join(" · ")
                           }

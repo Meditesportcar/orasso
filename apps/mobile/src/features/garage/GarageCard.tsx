@@ -3,8 +3,15 @@
 // les infos brèves (étiquettes, nom entier jamais tronqué, motorisation · année · couleur, trois chiffres étroits, des
 // tirets quand ils manquent), la ligne d'état de la certification (ce qui manque en premier, détail au toucher) et
 // « Partager » · « Modifier ». Véhicules suivants `.veh.sm` : vignette carrée à gauche, une étiquette, nom, sous-ligne.
-import { Chip, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { vehicleWizardLabels as L, plateTransferLabels, type VehicleFull } from "@orasso/shared";
+// Lot R4c (maquette R4.5) : la mini-fiche est celle du véhicule principal, avec l'étiquette « ★ Principal » (une marque,
+// pas un bouton) et le menu « ⋯ » ; les autres véhicules passent en lignes compactes (`.r4vrow`), chacune avec son « ⋯ ».
+import { Chip, Icon, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  vehicleWizardLabels as L,
+  mainVehicleLabels as M,
+  plateTransferLabels,
+  type VehicleFull,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { type LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
@@ -43,11 +50,15 @@ export function GarageCard({
   vehicle,
   first,
   onShare,
+  onMenu,
   round = 0,
 }: {
   vehicle: VehicleFull;
+  /** La mini-fiche : le véhicule principal (lot R4c). */
   first: boolean;
   onShare: (vehicle: VehicleFull) => void;
+  /** Lot R4c : ouvre le menu « ⋯ » du véhicule (Mettre en avant, Modifier, Partager, Retirer). */
+  onMenu?: (vehicle: VehicleFull) => void;
   /** Change à chaque « tirer pour actualiser » du Garage (tour 2) : la certification se relit. */
   round?: number;
 }) {
@@ -69,35 +80,47 @@ export function GarageCard({
   const placeholder = `linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`;
   const open = () => router.push(`/vehicule/${vehicle.id}`);
 
+  const menu = onMenu ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={M.menu(vehicle.label)}
+      onPress={() => onMenu(vehicle)}
+      hitSlop={4}
+      testID="garage-menu"
+      style={({ pressed }) => [styles.dots, { backgroundColor: c.surfaceRaised }, pressed && styles.pressed]}
+    >
+      <Icon name="more" size={20} color={c.ink} />
+    </Pressable>
+  ) : null;
+
   if (!first) {
-    // `.veh.sm` : vignette carrée à gauche (format maître 1:1, décision du 10), texte à droite.
-    const smallTrim = [vehicle.year ? String(vehicle.year) : null, vehicle.color?.toLowerCase() ?? null]
-      .concat(vehicle.powerHp ? [`${narrowNumber(vehicle.powerHp)} ch`] : [])
-      .filter(Boolean)
-      .join(" · ");
+    // `.r4vrow` (lot R4c) : vignette carrée de 64 px, nom entier et sous-ligne, menu « ⋯ ».
+    const smallTrim = trim ?? (vehicle.powerHp ? `${narrowNumber(vehicle.powerHp)} ch` : null);
     return (
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={vehicle.label}
-        onPress={open}
-        testID="garage-card"
-        style={[styles.veh, styles.vehSm, { backgroundColor: c.surface, boxShadow: t.shadow.shadowPoster }]}
-      >
-        <View style={[styles.smPhoto, { backgroundColor: c.surfaceSunken }]}>
-          <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
-        </View>
-        <View style={styles.smBody}>
-          {vehicle.categories[0] ? <Tag tone="line">{vehicle.categories[0].label}</Tag> : null}
-          <Text variant="posterM" color={c.ink} style={styles.smName} testID="garage-card-name">
-            {vehicle.label}
-          </Text>
-          {smallTrim ? (
-            <Text variant="meta" color={c.inkMuted} style={styles.trim}>
-              {smallTrim}
+      <View style={[styles.row, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]} testID="garage-row">
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={vehicle.label}
+          onPress={open}
+          testID="garage-card"
+          style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
+        >
+          <View style={[styles.rowThumb, { backgroundColor: c.surfaceSunken }]}>
+            <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
+          </View>
+          <View style={styles.smBody}>
+            <Text variant="posterS" color={c.ink} style={styles.rowName} testID="garage-card-name">
+              {vehicle.label}
             </Text>
-          ) : null}
-        </View>
-      </Pressable>
+            {smallTrim ? (
+              <Text variant="caption" color={c.inkMuted} style={styles.rowTrim}>
+                {smallTrim}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+        {menu}
+      </View>
     );
   }
 
@@ -120,55 +143,67 @@ export function GarageCard({
       style={[styles.veh, styles.mini, { backgroundColor: c.surface, boxShadow: t.shadow.shadowPoster }]}
       testID="garage-mini"
     >
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={vehicle.label}
-        onPress={open}
-        testID="garage-card"
-        style={({ pressed }) => [styles.top, pressed && styles.pressed]}
-      >
-        <View style={[styles.cover, { backgroundColor: c.surfaceSunken }]} testID="garage-cover">
-          <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
-          {vehicle.certified || prizes > 0 ? (
-            <View style={styles.badges}>
-              {vehicle.certified ? (
-                <Chip variant="verified" selected>
-                  {L.certified}
-                </Chip>
-              ) : null}
-              {prizes > 0 ? (
-                <Chip variant="accent" selected>
-                  {prizes > 1 ? `${L.audiencePrize} ×${prizes}` : L.audiencePrize}
-                </Chip>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.info} onLayout={onInfo}>
-          {vehicle.categories.length ? (
-            <View style={styles.tags}>
-              {vehicle.categories.map((cat, i) => (
-                <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
-                  {cat.label}
-                </Tag>
-              ))}
-            </View>
-          ) : null}
-          <Text
-            variant="posterM"
-            color={c.ink}
-            style={{ fontSize: nameSize, lineHeight: Math.round(nameSize * 1.02) }}
-            testID="garage-card-name"
-          >
-            {vehicle.label}
-          </Text>
-          {trim ? (
-            <Text variant="meta" color={c.inkMuted} style={styles.trim}>
-              {trim}
+      <View style={styles.topRow}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={vehicle.label}
+          onPress={open}
+          testID="garage-card"
+          style={({ pressed }) => [styles.top, pressed && styles.pressed]}
+        >
+          <View style={[styles.cover, { backgroundColor: c.surfaceSunken }]} testID="garage-cover">
+            <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
+            {vehicle.certified || prizes > 0 ? (
+              <View style={styles.badges}>
+                {vehicle.certified ? (
+                  <Chip variant="verified" selected>
+                    {L.certified}
+                  </Chip>
+                ) : null}
+                {prizes > 0 ? (
+                  <Chip variant="accent" selected>
+                    {prizes > 1 ? `${L.audiencePrize} ×${prizes}` : L.audiencePrize}
+                  </Chip>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.info} onLayout={onInfo}>
+            {onMenu ? (
+              // « ★ Principal » : une marque, pas un bouton (validation de Damien, R4.5).
+              <View style={[styles.star, { backgroundColor: c.accent }]} testID="garage-main-tag">
+                <Icon name="star" size={13} color={c.accentInk} />
+                <Text variant="label" color={c.accentInk} style={styles.starText}>
+                  {M.tag}
+                </Text>
+              </View>
+            ) : null}
+            {vehicle.categories.length ? (
+              <View style={styles.tags}>
+                {vehicle.categories.map((cat, i) => (
+                  <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
+                    {cat.label}
+                  </Tag>
+                ))}
+              </View>
+            ) : null}
+            <Text
+              variant="posterM"
+              color={c.ink}
+              style={{ fontSize: nameSize, lineHeight: Math.round(nameSize * 1.02) }}
+              testID="garage-card-name"
+            >
+              {vehicle.label}
             </Text>
-          ) : null}
-        </View>
-      </Pressable>
+            {trim ? (
+              <Text variant="meta" color={c.inkMuted} style={styles.trim}>
+                {trim}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+        {menu}
+      </View>
 
       {thumbs.length ? (
         <View style={styles.thumbs} testID="garage-thumbs">
@@ -247,7 +282,30 @@ const styles = StyleSheet.create({
   veh: { borderRadius: 22, overflow: "hidden", position: "relative" },
   mini: { padding: space3, paddingBottom: space3 + 10, gap: space2 + 2 },
   credit: { position: "absolute", right: space3, bottom: 2 },
-  top: { flexDirection: "row", gap: space3, alignItems: "flex-start" },
+  topRow: { flexDirection: "row", gap: space2, alignItems: "flex-start" },
+  top: { flex: 1, minWidth: 0, flexDirection: "row", gap: space3, alignItems: "flex-start" },
+  dots: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  star: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    height: 22,
+    paddingHorizontal: space2,
+    borderRadius: 6,
+  },
+  starText: { fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    padding: space2,
+    borderRadius: 16,
+  },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space3 },
+  rowThumb: { width: 64, height: 64, borderRadius: 12, overflow: "hidden" },
+  rowName: { fontSize: 13.5, lineHeight: 15 },
+  rowTrim: { fontSize: 12, marginTop: 3 },
   pressed: { opacity: 0.85 },
   cover: { width: COVER, height: COVER, borderRadius: 14, overflow: "hidden" },
   badges: { position: "absolute", top: space1, left: space1, gap: space1 },
@@ -263,8 +321,5 @@ const styles = StyleSheet.create({
   specUnit: { fontSize: 11.5, lineHeight: 14 },
   actions: { flexDirection: "row", gap: space2 + 2 },
   grow: { flex: 1, alignSelf: "stretch" },
-  vehSm: { flexDirection: "row", alignItems: "stretch" },
-  smPhoto: { width: 120, aspectRatio: 1, overflow: "hidden" },
-  smBody: { flex: 1, gap: space2, padding: space3 + 2 },
-  smName: { fontSize: 15, lineHeight: 16 },
+  smBody: { flex: 1, minWidth: 0 },
 });

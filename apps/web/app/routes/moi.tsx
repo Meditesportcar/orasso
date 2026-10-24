@@ -4,8 +4,11 @@ import {
   accountAppLabels,
   gradeLabels,
   helpLabels,
+  type MyCrew,
   moderationLabels,
   mutableTypesByFamily,
+  networkLabels as N,
+  type NetworkCounts,
   type NotificationFamily,
   notificationFamilies,
   notificationFamilyLabels,
@@ -25,6 +28,7 @@ import { TextAreaField } from "../components/Fields";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
+import "../styles/network.css";
 
 // Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : profil, aperçu public, notifications par type, compte
 // public ou privé, apparence (thème ; le coin, la distance et les centres d'intérêt sont dans « Tes préférences »,
@@ -35,12 +39,22 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  const [settings, preview] = await Promise.all([
+  const [settings, preview, network, crews] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     apiOrThrow<PublicPreview>(request, "/me/public-preview"),
+    // Lot R4c : abonnés, abonnements, amis ; le crew à côté de « Mon profil public ».
+    api<NetworkCounts>(request, "/me/network"),
+    api<MyCrew[]>(request, "/me/crews"),
   ]);
   const url = new URL(request.url);
-  return { me, settings, preview, saved: url.searchParams.get("fait") };
+  return {
+    me,
+    settings,
+    preview,
+    network: network.ok ? network.data : null,
+    crew: crews.ok ? (crews.data[0] ?? null) : null,
+    saved: url.searchParams.get("fait"),
+  };
 }
 
 const MUTABLE = mutableTypesByFamily();
@@ -144,6 +158,43 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         <Chip>
           {gradeLabels[me.profile.grade]} · {me.profile.pointsSeason} pts
         </Chip>
+      </div>
+      {/* Lot R4c (maquette R4.6) : trois compteurs, chacun ouvre sa liste ; « Mon profil public » et le crew. */}
+      <div className="n-me" data-testid="profil-card">
+        <nav className="n-counts" aria-label={N.countsGroup} data-testid="profil-counters">
+          {(
+            [
+              ["abonnes", loaderData.network?.followers, N.followers],
+              ["abonnements", loaderData.network?.following, N.following],
+              ["amis", loaderData.network?.friends, N.friends],
+            ] as const
+          ).map(([tab, n, label]) => (
+            <a key={tab} href={`/app/reseau?onglet=${tab}`} data-testid={`profil-count-${tab}`}>
+              <strong>{n ?? "—"}</strong>
+              <small>{label(n ?? 2)}</small>
+            </a>
+          ))}
+        </nav>
+        <div className="n-links">
+          <a href="/app/profil-public" data-testid="profil-public">
+            <span className="n-ico">
+              <Icon name="eye" size={18} />
+            </span>
+            <span>
+              <b>Mon profil public</b>
+              <small>Comme te voient les autres</small>
+            </span>
+          </a>
+          <a href={loaderData.crew ? `/c/${loaderData.crew.slug}` : "/app/crews/rejoindre"} data-testid="profil-crew">
+            <span className="n-ico n-ico--crew">
+              {loaderData.crew ? loaderData.crew.name.slice(0, 2).toUpperCase() : "+"}
+            </span>
+            <span>
+              <b>{loaderData.crew ? loaderData.crew.name : "Un crew ?"}</b>
+              <small>{loaderData.crew ? "Ton crew" : "Rejoins ou crée un crew"}</small>
+            </span>
+          </a>
+        </div>
       </div>
       {saved && SAVED[saved] && (
         <p className="s-notice s-notice--ok" role="status">

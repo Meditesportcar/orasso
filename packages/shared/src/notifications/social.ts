@@ -10,6 +10,8 @@ export const socialNotificationTypes = {
   friend_accepted: "social",
   friend_going_event: "social",
   friend_new_vehicle: "social",
+  /** Lot R4c : « Kenji_66 te suit », regroupée (une ligne non lue complétée au lieu d'une nouvelle). */
+  user_followed: "social",
 } as const satisfies Record<string, NotificationFamily>;
 
 /** Items d'actualité du Journal : ni push, ni e-mail, livrés tout de suite (ARCHITECTURE-SUITE § 2.4). */
@@ -21,4 +23,8 @@ export const socialNotificationLabels: Record<keyof typeof socialNotificationTyp
   friend_accepted: "Demande d'ami acceptée",
   friend_going_event: "Un ami va à un événement",
   friend_new_vehicle: "Un ami ajoute un véhicule",
+  user_followed: "Nouvel abonné",
 };
+
+/** Lot R4c : un nouvel abonné ne vaut pas un e-mail (push et Journal seulement). */
+export const socialNoEmailTypes: readonly string[] = ["user_followed"];

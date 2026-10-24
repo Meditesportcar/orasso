@@ -39,6 +39,9 @@ export default [
     route("app/billets", "routes/billets.tsx"),
     // Social (lot 17) : amis, Journal, profils et véhicules des autres (connectés seulement).
     route("app/amis", "routes/amis.tsx"),
+    // Lot R4c : « Ton réseau » (abonnés, abonnements, amis) et l'aperçu de mon profil public.
+    route("app/reseau", "routes/reseau.tsx"),
+    route("app/profil-public", "routes/profil-public.tsx"),
     route("app/journal", "routes/journal.tsx"),
     route("u/:pseudo", "routes/profil.tsx"),
     route("v/:id", "routes/vehicule.tsx"),

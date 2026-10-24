@@ -1,8 +1,10 @@
 import {
+  followingListQuery,
   friendRequestByInviteSchema,
   friendRequestByQrSchema,
   friendRequestCreateSchema,
   friendsListQuery,
+  networkListQuery,
   pageQuery,
   peopleSearchQuery,
   peopleSuggestionsQuery,
@@ -12,6 +14,7 @@ import { Hono } from "hono";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { followsService } from "./follows";
 import { friendsService } from "./friends";
 import { socialProfile } from "./profile";
 import { peopleSearch } from "./search";
@@ -46,7 +49,31 @@ export const socialRoutes = new Hono<AppEnv>()
     rateLimit("peopleSearch", v.user.id);
     return c.json(await peopleSearch.ownersNearby(v, uuidParam(c, "id"), query(c, pageQuery)));
   })
-  .get("/me/friends", async (c) => c.json(await friendsService.list(await requireUser(c))))
+  // Lot R4c : suivre une personne (compte public seulement), sans acceptation.
+  .post("/users/:pseudo/follow", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await followsService.follow(v, c.req.param("pseudo")));
+  })
+  .delete("/users/:pseudo/follow", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await followsService.unfollow(v, c.req.param("pseudo")));
+  })
+  // Lot R4c : le réseau, visible par soi seul (aucune route ne donne les listes d'un autre).
+  .get("/me/network", async (c) => c.json(await followsService.network(await requireUser(c))))
+  .get("/me/followers", async (c) => {
+    const v = await requireUser(c);
+    const q = query(c, networkListQuery);
+    return c.json(await followsService.followers(v, q.q, q.cursor));
+  })
+  .get("/me/following", async (c) => {
+    const v = await requireUser(c);
+    const q = query(c, followingListQuery);
+    return c.json(await followsService.following(v, q.kind, q.q, q.cursor));
+  })
+  .get("/me/friends", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await friendsService.list(v, query(c, networkListQuery).q));
+  })
   .get("/me/friends/requests", async (c) => {
     const v = await requireUser(c);
     return c.json(await friendsService.requests(v, query(c, friendsListQuery).direction));

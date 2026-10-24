@@ -11,6 +11,7 @@ import {
   appInstallLabels,
   defaultNotificationPrefs,
   normalizeHomeWidgets,
+  type PreviewAs,
   type PublicPreview,
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
@@ -282,9 +283,12 @@ export const accountService = {
     return this.settings({ ...v, profile: updated });
   },
 
-  /** Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi »). */
-  publicPreview(v: Viewer): Promise<PublicPreview> {
-    return socialProfile.view(v, v.profile.pseudo, { asStranger: true });
+  /**
+   * Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi ») ; lot
+   * R4c : `as=friend` pour le regard d'un ami.
+   */
+  publicPreview(v: Viewer, as: PreviewAs = "member"): Promise<PublicPreview> {
+    return socialProfile.view(v, v.profile.pseudo, { as });
   },
 
   /**

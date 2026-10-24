@@ -1,18 +1,23 @@
 // Export des données personnelles (lot 35c, D20) : tout ce que le compte a saisi ou produit, en un fichier JSON lisible,
 // pour le titulaire seulement. Jamais de secret (mot de passe, secret du QR de compte, clés d'accès) ni de donnée d'un
 // autre compte (messages, coordonnées des autres). Les photos ne sont pas incluses : leurs adresses suffisent.
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   events,
+  friendships,
   pointEntries,
+  proFollows,
   profiles,
+  proProfiles,
   seasons,
+  structureFollows,
   structureMembers,
   structures,
   tickets,
+  userFollows,
   vehicleMakes,
   vehicleModels,
   vehiclePhotos,
@@ -32,6 +37,14 @@ export type AccountExport = {
   tickets: Record<string, unknown>[];
   points: { season: string; kind: string; points: number; event: string | null; note: string | null; at: string }[];
   structures: { name: string; role: string; status: string }[];
+  /** Lot R4c, tour 2 : abonnements (personnes, organisateurs, pros), abonnés et amitiés, par pseudo ou nom. */
+  network: {
+    following: { pseudo: string; since: string }[];
+    followers: { pseudo: string; since: string }[];
+    followingOrganizers: { name: string; since: string }[];
+    followingPros: { name: string; since: string }[];
+    friendships: { pseudo: string; status: string; requestedByMe: boolean; since: string }[];
+  };
 };
 
 export const accountExportService = {
@@ -82,6 +95,35 @@ export const accountExportService = {
       .from(structureMembers)
       .innerJoin(structures, eq(structures.id, structureMembers.structureId))
       .where(eq(structureMembers.userId, userId));
+
+    const following = await db
+      .select({ pseudo: profiles.pseudo, at: userFollows.createdAt })
+      .from(userFollows)
+      .innerJoin(profiles, eq(profiles.userId, userFollows.followedId))
+      .where(eq(userFollows.followerId, userId));
+    const followers = await db
+      .select({ pseudo: profiles.pseudo, at: userFollows.createdAt })
+      .from(userFollows)
+      .innerJoin(profiles, eq(profiles.userId, userFollows.followerId))
+      .where(eq(userFollows.followedId, userId));
+    const orgs = await db
+      .select({ name: structures.name, at: structureFollows.createdAt })
+      .from(structureFollows)
+      .innerJoin(structures, eq(structures.id, structureFollows.structureId))
+      .where(eq(structureFollows.userId, userId));
+    const pros = await db
+      .select({ name: proProfiles.name, at: proFollows.createdAt })
+      .from(proFollows)
+      .innerJoin(proProfiles, eq(proProfiles.id, proFollows.proId))
+      .where(eq(proFollows.userId, userId));
+    const friendRows = await db
+      .select({ f: friendships, pseudo: profiles.pseudo })
+      .from(friendships)
+      .innerJoin(
+        profiles,
+        sql`${profiles.userId} = case when ${friendships.requesterId} = ${userId} then ${friendships.addresseeId} else ${friendships.requesterId} end`,
+      )
+      .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
 
     return {
       exportedAt: now().toISOString(),
@@ -155,6 +197,19 @@ export const accountExportService = {
         at: e.createdAt.toISOString(),
       })),
       structures: memberRows,
+      network: {
+        following: following.map((r) => ({ pseudo: r.pseudo, since: r.at.toISOString() })),
+        followers: followers.map((r) => ({ pseudo: r.pseudo, since: r.at.toISOString() })),
+        followingOrganizers: orgs.map((r) => ({ name: r.name, since: r.at.toISOString() })),
+        followingPros: pros.map((r) => ({ name: r.name, since: r.at.toISOString() })),
+        friendships: friendRows.map(({ f, pseudo }) => ({
+          pseudo,
+          // Le refus reste silencieux (S7) : pour le demandeur, une demande refusée s'exporte « en attente ».
+          status: f.status === "declined" && f.requesterId === userId ? "pending" : f.status,
+          requestedByMe: f.requesterId === userId,
+          since: (f.respondedAt ?? f.createdAt).toISOString(),
+        })),
+      },
     };
   },
 };

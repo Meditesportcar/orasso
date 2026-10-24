@@ -20,6 +20,7 @@ import { db } from "../../db/client";
 import { accountQrUses, friendships, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../lib/errors";
+import { escapeLike } from "../../lib/pagination";
 import { rateAssertBelow, rateLimit, rateRecord } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -307,7 +308,7 @@ export const friendsService = {
   },
 
   /** `GET /me/friends` : amis acceptés, hors comptes supprimés et suspendus. */
-  async list(viewer: Viewer): Promise<{ items: FriendItem[]; nextCursor: null }> {
+  async list(viewer: Viewer, q?: string): Promise<{ items: FriendItem[]; nextCursor: null }> {
     const t = now();
     const rows = await db
       .select({
@@ -328,7 +329,11 @@ export const friendsService = {
           eq(friendships.status, "accepted"),
           or(eq(friendships.requesterId, viewer.user.id), eq(friendships.addresseeId, viewer.user.id)),
           sql`${profiles.deletedAt} is null`,
+          // Tour 2 du lot R4c : ni les comptes bannis.
+          sql`${profiles.bannedAt} is null`,
           sql`(${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${t})`,
+          // Lot R4c : recherche dans la liste (début du pseudo).
+          q ? sql`lower(${profiles.pseudo}) like ${`${escapeLike(q.toLowerCase())}%`}` : undefined,
         ),
       )
       .orderBy(asc(sql`lower(${profiles.pseudo})`));
