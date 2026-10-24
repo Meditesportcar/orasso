@@ -9,15 +9,17 @@ import {
   arriveeLabels,
   departmentFirstTag,
   departmentHint,
+  departmentsMissing,
   departmentWhy,
   overseasDepartmentNames,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
 import { DepartmentSheet } from "@/features/arrivee/DepartmentSheet";
+import { MissingLine } from "@/features/arrivee/MissingLine";
 import { arriveeStore, departmentLimitReached, toggleDepartment, useArrivee } from "@/features/arrivee/model";
 import { T, useArt } from "@/features/tuto/art";
 
@@ -35,6 +37,8 @@ export default function ArriveeDepartement() {
   const [listOpen, setListOpen] = useState(false);
   const [limit, setLimit] = useState(false);
   const [first, ...others] = departments;
+  // Lot R3d : l'étape affichée est gardée avec le brouillon (reprise après une fermeture de l'appli).
+  useFocusEffect(useCallback(() => arriveeStore.set({ step: "departement" }), []));
 
   const toggle = (code: string) => {
     if (departmentLimitReached(departments, code)) {
@@ -50,15 +54,18 @@ export default function ArriveeDepartement() {
       step={1}
       onClose={() => router.back()}
       footer={
-        <Button
-          variant="primary"
-          icon="next"
-          fullWidth
-          disabled={departments.length === 0}
-          onPress={() => router.push("/arrivee/identite")}
-        >
-          {arriveeLabels.next}
-        </Button>
+        <>
+          <Button
+            variant="primary"
+            icon="next"
+            fullWidth
+            disabled={departments.length === 0}
+            onPress={() => router.push("/arrivee/identite")}
+          >
+            {arriveeLabels.next}
+          </Button>
+          <MissingLine missing={departmentsMissing(departments)} />
+        </>
       }
       overlay={
         <DepartmentSheet

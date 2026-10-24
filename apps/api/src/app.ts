@@ -50,6 +50,7 @@ import { recapRoutes } from "./modules/recap/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
 import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
+import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
@@ -150,7 +151,7 @@ app.post("/auth/sign-up/email", async (c, next) => {
 app.on(
   ["GET", "POST"],
   "/auth/*",
-  authGuard((headers) => auth.api.getSession({ headers }) as Promise<SessionLike | null>),
+  authGuard((headers) => readSessionOrNull(() => auth.api.getSession({ headers }) as Promise<SessionLike | null>)),
   (c) => auth.handler(c.req.raw),
 );
 

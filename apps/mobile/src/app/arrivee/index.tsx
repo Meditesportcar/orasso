@@ -5,10 +5,12 @@
 import { Button, Ground, OliveActivityProvider, OpeningBattleLogo } from "@orasso/design-system/native";
 import { arriveeLabels } from "@orasso/shared";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { arriveeStore } from "@/features/arrivee/model";
+import { arriveeHydrated, takeResumeStep } from "@/features/arrivee/persist";
 import { A } from "@/features/tuto/anim";
 import { T, useArt } from "@/features/tuto/art";
 import { ArtIcon } from "@/features/tuto/icons";
@@ -25,6 +27,22 @@ export default function ArriveeAccueil() {
   const params = useLocalSearchParams<{ next?: string }>();
   const next = params.next?.startsWith("/") ? params.next : undefined;
   const [composed, setComposed] = useState(false);
+  // Lot R3d : l'appli a été fermée pendant l'arrivée (Android en arrière-plan) : on reprend à l'étape où l'on était,
+  // avec les écrans d'avant dans la pile (la croix et « Retour à Ton coin » y reviennent). Une fois par lancement.
+  useEffect(() => {
+    let live = true;
+    void arriveeHydrated.then(() => {
+      const step = live ? takeResumeStep() : null;
+      if (!step) return;
+      const saved = arriveeStore.get().next;
+      router.push({ pathname: "/arrivee/profil", params: saved ? { next: saved } : {} });
+      router.push("/arrivee/departement");
+      if (step === "identite") router.push("/arrivee/identite");
+    });
+    return () => {
+      live = false;
+    };
+  }, [router]);
   // `.sp-logo` : toute la largeur, 330 px au plus.
   const logoWidth = Math.min(330, width - 32);
 

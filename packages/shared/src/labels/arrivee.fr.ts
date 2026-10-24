@@ -69,6 +69,33 @@ export const arriveeLabels = {
     lastName: "Ton nom est obligatoire.",
     tooMany: "Tu peux choisir 20 départements au plus.",
   },
+  /**
+   * Lot R3d (retour réel du 24/10) : sous un bouton principal grisé, une ligne dit ce qui manque, la première chose
+   * seulement. Mêmes mots dans l'appli (arrivée) et sur le site (inscription, inscription express).
+   */
+  missing: {
+    profile: "Choisis ton profil pour continuer.",
+    departments: "Choisis au moins un département.",
+    departmentsLink: "Retour à Ton coin",
+    pseudo: "Choisis un pseudo.",
+    pseudoInvalid: "Pseudo : 3 à 24 caractères, lettres, chiffres, « _ » ou « . ».",
+    pseudoChecking: "Vérification du pseudo…",
+    pseudoTaken: "Ce pseudo est déjà pris : choisis-en un autre.",
+    firstName: "Indique ton prénom.",
+    lastName: "Indique ton nom.",
+    email: "Indique ton e-mail.",
+    passwordEmpty: "Indique ton mot de passe.",
+    emailInvalid: "E-mail : l'adresse n'est pas complète.",
+    password: (min: number, missing: number) => `Mot de passe : ${min} caractères au moins (il en manque ${missing}).`,
+    passwordTooLong: (max: number) => `Mot de passe : ${max} caractères au plus.`,
+    passwordsDiffer: "Les deux mots de passe sont différents.",
+    terms: "Coche les conditions d'utilisation.",
+  },
+  /** Tour 2 : le pseudo a été pris entre la vérification et l'envoi ; l'API l'a complété de chiffres. */
+  pseudoTaken: {
+    title: (pseudo: string) => `Ton pseudo était pris : tu es ${pseudo}.`,
+    text: "Tu peux le changer dans Mon profil.",
+  },
 } as const;
 
 /** Pourquoi on demande le département, selon le profil. */

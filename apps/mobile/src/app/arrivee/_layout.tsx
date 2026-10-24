@@ -2,6 +2,9 @@
 import { useTheme } from "@orasso/design-system/native";
 import { Stack } from "expo-router";
 
+// Lot R3d : le brouillon de l'arrivée gardé sur l'appareil est relu dès que le flux s'ouvre.
+import "@/features/arrivee/persist";
+
 export default function ArriveeLayout() {
   const { t } = useTheme();
   return (

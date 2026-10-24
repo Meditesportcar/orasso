@@ -17,6 +17,7 @@ import { ClockBanner } from "./components/ClockBanner";
 import { setClockOffset } from "./lib/clock";
 import { readClockOffset } from "./lib/clock.server";
 import { publicSettings } from "./lib/lists.server";
+import { withRenewedSessionCookie } from "./lib/session-cookie.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
@@ -33,6 +34,9 @@ export const headers: Route.HeadersFunction = () => ({
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "X-Content-Type-Options": "nosniff",
 });
+
+// Lot R3d, tour 2 : la session prolongée par l'API renouvelle aussi le cookie du navigateur (pages et données).
+export const middleware: Route.MiddlewareFunction[] = [(_args, next) => withRenewedSessionCookie(next)];
 
 // La préférence de thème est un cookie : le serveur écrit le bon `data-theme` dans le HTML, sans flash.
 export async function loader({ request }: Route.LoaderArgs) {

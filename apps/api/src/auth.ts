@@ -17,6 +17,7 @@ import { ensureProfile } from "./modules/profiles/service";
 import { securityAfter, securityBefore, trustedDeviceFactor } from "./modules/security/auth-hooks";
 import { secondFactorForPath } from "./modules/security/passkey";
 import { securityService } from "./modules/security/service";
+import { mayProlong, SESSION_EXPIRES_IN_S, SESSION_UPDATE_AGE_S, sessionReadOf } from "./modules/security/session-life";
 
 // Google et Apple sont prévus (docs/01) mais restent désactivés tant que leurs identifiants n'existent pas.
 const socialProviders = {
@@ -97,7 +98,11 @@ export const auth = betterAuth({
     trustedDeviceFactor,
   ],
   // Second facteur prouvé par la session (lot 15, corrections) : colonne `session.second_factor`.
+  // Lot R3d (Damien, 24/10 : « sessions comme Instagram ») : un an glissant, prolongé au plus une fois par jour d'usage ;
+  // 30 jours sans usage pour les comptes à rôle de plateforme (`modules/security/session-life.ts`).
   session: {
+    expiresIn: SESSION_EXPIRES_IN_S,
+    updateAge: SESSION_UPDATE_AGE_S,
     additionalFields: { secondFactor: { type: "string", required: false, input: false } },
   },
   // Second facteur des sessions, ajout et retrait des facteurs, alertes : `modules/security/auth-hooks.ts`.
@@ -150,6 +155,20 @@ export const auth = betterAuth({
             await securityService.onLogin(session.userId, session.ipAddress, session.userAgent);
           } catch (error) {
             console.error("Alerte de connexion :", error);
+          }
+        },
+      },
+      update: {
+        // Lot R3d : prolongation à la lecture (au plus une fois par jour d'usage, pour tout le monde) ; un compte à rôle de
+        // plateforme sans usage depuis plus de 30 jours tombe à ce moment-là. La session lue avant la prolongation est
+        // dans le contexte de Better Auth.
+        before: async (data, ctx) => {
+          const read = sessionReadOf(ctx);
+          if (!read || !data.expiresAt) return;
+          if (!(await mayProlong(read))) {
+            // Révoquée à la lecture : la session est supprimée, la personne se reconnecte.
+            await db.delete(schema.session).where(eq(schema.session.id, read.id));
+            return false;
           }
         },
       },

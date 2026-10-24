@@ -6,8 +6,8 @@ import { Button, CheckboxField, Icon, Plate, SelectField, TextField } from "@ora
 import {
   type ExpressInvitePublic,
   expressLabels,
-  PASSWORD_MIN_LENGTH,
   passwordHint,
+  passwordMissing,
   type VehicleFull,
   type VehicleGeneration,
   type VehicleMake,
@@ -15,7 +15,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
-import { TermsField } from "../components/Fields";
+import { FirstMissing, TermsField } from "../components/Fields";
 import { PhotoWithPlate, plateDecisionError } from "../components/PlateFrame";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, cookieFrom, withCookies } from "../lib/api.server";
@@ -55,6 +55,19 @@ type Errors = Partial<
   >
 >;
 type Done = { photoSent: boolean };
+/** Lot R3d : l'ordre des champs du formulaire, pour la ligne « ce qui manque » sous le bouton. */
+const expressFieldOrder = [
+  "pseudo",
+  "password",
+  "password2",
+  "firstName",
+  "lastName",
+  "makeId",
+  "modelId",
+  "plate",
+  "photo",
+  "terms",
+] as const;
 
 export async function action({ request, params }: Route.ActionArgs) {
   const form = await request.formData();
@@ -77,7 +90,9 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
   const password = String(form.get("password") ?? "");
-  if (password.length < PASSWORD_MIN_LENGTH) errors.password = passwordHint;
+  // Lot R3d : le message dit combien de caractères manquent (règle partagée avec l'appli).
+  const passwordIssue = passwordMissing(password);
+  if (passwordIssue) errors.password = passwordIssue;
   const terms = form.get("terms") === "on";
   if (!terms) errors.terms = expressLabels.termsRequired;
   if (password !== String(form.get("password2") ?? "")) errors.password2 = "Les deux mots de passe sont différents.";
@@ -338,6 +353,7 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
         <Button type="submit" icon="express" loading={busy} fullWidth>
           M'inscrire
         </Button>
+        <FirstMissing errors={errors} order={expressFieldOrder} />
       </Form>
       <p className="o-t-caption s-muted">
         <Icon name="qr" size={16} /> Le lien est valable jusqu'au {formatDateTime(invite.expiresAt)}.

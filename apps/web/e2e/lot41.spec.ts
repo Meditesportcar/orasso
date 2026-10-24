@@ -70,7 +70,9 @@ for (const theme of ["beton", "sable"] as const) {
     const refused = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/inscription"));
     await page.getByRole("button", { name: "Créer mon compte" }).click();
     expect((await refused).status()).toBe(400);
-    await expect(page.getByText("Ton prénom est obligatoire.")).toBeVisible();
+    // Lot R3d : sous le champ, et redit sous le bouton (la première chose qui manque).
+    await expect(page.locator(".o-field__error", { hasText: "Ton prénom est obligatoire." })).toBeVisible();
+    await expect(page.getByTestId("signup-missing")).toHaveText("Ton prénom est obligatoire.");
     // Les choix sont gardés après le refus.
     await expect(page.getByTestId("profile-pro").locator("input")).toBeChecked();
     await expect(page.getByTestId("dept-summary")).toContainText("66 · principal");

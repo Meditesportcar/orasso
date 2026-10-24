@@ -7,6 +7,7 @@ import { auth } from "./auth";
 import { env } from "./env";
 import { type RealtimeSocket, realtime } from "./lib/realtime";
 import { profilesRepo } from "./modules/profiles/repo";
+import { readSessionOrNull } from "./modules/security/session-life";
 
 const HEARTBEAT_MS = 30_000;
 /** Sous-protocole qui transporte le jeton de session (appli dans un navigateur : pas d'en-tête possible). */
@@ -49,7 +50,7 @@ type ResolvedSession = { userId: string; secondFactor: string | null };
 /** Session valide et compte non supprimé, sinon `null`. */
 export async function resolveWsSession(credentials: Headers | null): Promise<ResolvedSession | null> {
   if (!credentials) return null;
-  const session = await auth.api.getSession({ headers: credentials });
+  const session = await readSessionOrNull(() => auth.api.getSession({ headers: credentials }));
   if (!session) return null;
   const profile = await profilesRepo.byUserId(session.user.id);
   if (!profile || profile.deletedAt) return null;

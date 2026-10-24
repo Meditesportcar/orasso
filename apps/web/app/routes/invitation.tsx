@@ -4,7 +4,7 @@ import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { ArriveeFields } from "../components/ArriveeFields";
-import { TermsField } from "../components/Fields";
+import { FirstMissing, signupFieldOrder, TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, getMe, loginUrl, withCookies } from "../lib/api.server";
 import { signUpFromForm } from "../lib/signup.server";
@@ -110,7 +110,7 @@ export default function Invitation({ loaderData, actionData }: Route.ComponentPr
               error={errors.password}
               required
             />
-            <TermsField error={errors.terms} />
+            <TermsField error={errors.terms} defaultChecked={actionData?.values.terms} />
             {errors.form && (
               <p className="s-error" role="alert">
                 {errors.form}
@@ -119,6 +119,7 @@ export default function Invitation({ loaderData, actionData }: Route.ComponentPr
             <Button type="submit" icon="add" loading={busy} fullWidth>
               Créer mon compte et suivre
             </Button>
+            <FirstMissing errors={errors} order={signupFieldOrder} />
           </Form>
           <p className="s-muted">
             Déjà un compte ?{" "}

@@ -4,11 +4,12 @@
 // restent masqués ici tant que leurs identifiants n'existent pas (PLAN, H6) : aucun bouton qui ne marcherait pas.
 
 import { Button, TextField } from "@orasso/design-system/native";
-import { PASSWORD_MIN_LENGTH } from "@orasso/shared";
+import { EMAIL_MAX_LENGTH, loginMissing } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { MissingLine } from "@/features/arrivee/MissingLine";
 import { T, useArt } from "@/features/tuto/art";
 import { ArtIcon, type ArtIconName } from "@/features/tuto/icons";
 import { authErrorMessage } from "@/lib/http";
@@ -56,7 +57,9 @@ export function AuthForm({
   /** Le compte a la double authentification : étape du code. */
   const [needsCode, setNeedsCode] = useState(false);
 
-  const ready = email.includes("@") && password.length >= PASSWORD_MIN_LENGTH;
+  // Lot R3d, tour 2 : le bouton grisé dit ce qui manque (même règle et même ligne que l'arrivée).
+  const missing = loginMissing(email, password);
+  const ready = missing === null;
 
   async function done() {
     await kvSet("onboarded", "1");
@@ -102,6 +105,7 @@ export function AuthForm({
         keyboardType="email-address"
         autoComplete="username"
         inputMode="email"
+        maxLength={EMAIL_MAX_LENGTH}
       />
       <TextField
         label="Mot de passe"
@@ -119,9 +123,18 @@ export function AuthForm({
         </T>
       ) : null}
       <View style={styles.actions}>
-        <Button variant="primary" icon="entry" loading={busy} disabled={!ready} onPress={() => void submit()} fullWidth>
+        <Button
+          variant="primary"
+          icon="entry"
+          loading={busy}
+          disabled={!ready}
+          onPress={() => void submit()}
+          fullWidth
+          accessibilityHint={missing?.text}
+        >
           Me connecter
         </Button>
+        <MissingLine missing={missing} />
         {onForgotPassword ? (
           <GhostLink icon="lock" onPress={onForgotPassword}>
             Mot de passe oublié ?

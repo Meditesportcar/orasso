@@ -7,6 +7,7 @@ import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
 import { ApiRequestError, getSessionToken, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
+import { forgetArrivee } from "@/features/arrivee/persist";
 import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
@@ -25,7 +26,8 @@ type SessionValue = {
   /** `"two_factor"` : le compte a la double authentification, il faut le code (`verifyTwoFactor`). */
   signIn: (email: string, password: string) => Promise<"in" | "two_factor">;
   verifyTwoFactor: (code: string, opts: { backup: boolean; trustDevice: boolean }) => Promise<void>;
-  signUp: (input: Parameters<typeof authApi.signUp>[0]) => Promise<void>;
+  /** Le profil du compte créé (le pseudo a pu être complété de chiffres s'il était pris entre-temps). */
+  signUp: (input: Parameters<typeof authApi.signUp>[0]) => Promise<Me | null>;
   signOut: () => Promise<void>;
   /** Recharge `/api/me` (compteurs, grade, points). */
   refreshMe: () => Promise<Me | null>;
@@ -96,7 +98,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [loadMe]);
 
   const open = useCallback(
-    async (token: string) => {
+    async (token: string): Promise<Me | null> => {
       setSessionToken(token);
       await kvSet(TOKEN_KEY, token);
       const loaded = await loadMe();
@@ -107,6 +109,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Repris à l'ouverture du QR de compte.
       }
       setStatus(loaded ? "in" : "out");
+      return loaded;
     },
     [loadMe],
   );
@@ -123,12 +126,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return "two_factor";
         }
         await open(result.token);
+        // Lot R3d, tour 2 : un brouillon d'inscription commencé sur ce téléphone ne survit pas à une connexion.
+        await forgetArrivee();
         return "in";
       },
       verifyTwoFactor: async (code, { backup, trustDevice }) => {
         const token = await authApi.verifyTwoFactor({ code, backup, trustDevice, cookie: pendingTwoFactor.current });
         pendingTwoFactor.current = null;
         await open(token);
+        await forgetArrivee();
       },
       signUp: async (input) => open(await authApi.signUp(input)),
       signOut: async () => {
@@ -180,6 +186,8 @@ async function clearSession() {
     kvDel("staff-events"),
     purgeCaches(),
     purgeAllStaff(),
+    // Lot R3d, tour 2 : le brouillon d'inscription (nom, e-mail…) et l'état de l'arrivée en mémoire non plus.
+    forgetArrivee(),
   ]);
   // Lot M3, tour 2 : les fiches lues d'avance et les aperçus ne survivent pas au compte.
   clearEventPreviews();

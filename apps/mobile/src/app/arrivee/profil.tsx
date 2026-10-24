@@ -2,12 +2,13 @@
 // (`.tabprev` : la barre du profil choisi, en miniature, le O au centre). La croix revient à l'accueil ; « J'ai déjà un
 // compte » est sur l'accueil, plus ici.
 import { Button, Icon, type IconName, tabSets } from "@orasso/design-system/native";
-import { arriveeLabels, type MainProfile } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { arriveeLabels, type MainProfile, profileMissing } from "@orasso/shared";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
+import { MissingLine } from "@/features/arrivee/MissingLine";
 import { arriveeStore, profileTileOrder, tabSetOfProfile, useArrivee } from "@/features/arrivee/model";
 import { ProfileTile } from "@/features/arrivee/ProfileTile";
 import { A } from "@/features/tuto/anim";
@@ -60,6 +61,8 @@ export default function ArriveeProfil() {
   }, [next]);
 
   const choose = (p: MainProfile) => arriveeStore.set({ profile: p });
+  // Lot R3d : l'étape affichée est gardée avec le brouillon (reprise après une fermeture de l'appli).
+  useFocusEffect(useCallback(() => arriveeStore.set({ step: "profil" }), []));
 
   return (
     <ArriveeScreen
@@ -78,6 +81,7 @@ export default function ArriveeProfil() {
           >
             {arriveeLabels.next}
           </Button>
+          <MissingLine missing={profileMissing(profile)} />
           {
             // Arrivée d'un lien partagé (« Candidater » sur un événement → inscription) : qui a déjà un compte doit pouvoir
             // se connecter sans repasser par l'accueil, en gardant la destination (relecture Codex du lot C3).

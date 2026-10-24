@@ -15,7 +15,7 @@ import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { ArriveeFields } from "../components/ArriveeFields";
-import { TermsField } from "../components/Fields";
+import { FirstMissing, signupFieldOrder, TermsField } from "../components/Fields";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, getMe, withCookies } from "../lib/api.server";
@@ -60,7 +60,15 @@ export async function action({ request, params }: Route.ActionArgs) {
         {
           error: res.error,
           errors: {},
-          values: { pseudo: "", email: "", mainProfile: "", departments: [], firstName: "", lastName: "" },
+          values: {
+            pseudo: "",
+            email: "",
+            mainProfile: "",
+            departments: [],
+            firstName: "",
+            lastName: "",
+            terms: false,
+          },
         },
         { status: res.status },
       );
@@ -172,7 +180,7 @@ export default function InvitationEvenement({ loaderData, actionData }: Route.Co
               error={errors.password}
               required
             />
-            <TermsField error={errors.terms} />
+            <TermsField error={errors.terms} defaultChecked={actionData?.values.terms} />
             {errors.form && (
               <p className="s-error" role="alert">
                 {errors.form}
@@ -181,6 +189,7 @@ export default function InvitationEvenement({ loaderData, actionData }: Route.Co
             <Button type="submit" icon="add" loading={busy} fullWidth>
               {L.linkSignUp}
             </Button>
+            <FirstMissing errors={errors} order={signupFieldOrder} />
           </Form>
           <Button variant="secondary" icon="profile" href={`/connexion?retour=${retour}`} fullWidth>
             {L.linkSignIn}
