@@ -67,12 +67,23 @@ export function visibleHomeWidgets(config: HomeWidgetsConfig): HomeWidgetId[] {
   return config.order.filter((id) => !config.hidden.includes(id));
 }
 
-/** Monte (`-1`) ou descend (`+1`) un widget ; « Prochain accès » reste en première place. */
-export function moveHomeWidget(config: HomeWidgetsConfig, id: HomeWidgetId, delta: -1 | 1): HomeWidgetsConfig {
+/**
+ * Monte (`-1`) ou descend (`+1`) un widget ; « Prochain accès » reste en première place. Lot R1, tour 2 : un widget ne
+ * s'échange qu'avec son voisin proposé (`offered`) ; les widgets retirés pour l'instant (stations) gardent leur place dans
+ * l'ordre enregistré, ils ne comptent pas (sinon descendre un widget l'échangerait avec une station invisible).
+ */
+export function moveHomeWidget(
+  config: HomeWidgetsConfig,
+  id: HomeWidgetId,
+  delta: -1 | 1,
+  offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
+): HomeWidgetsConfig {
   const order = [...config.order];
   const from = order.indexOf(id);
-  const to = from + delta;
-  if (id === HOME_FIXED_WIDGET || from < 0 || to < 1 || to >= order.length) return config;
+  if (id === HOME_FIXED_WIDGET || from < 0 || !offered(id)) return config;
+  let to = from + delta;
+  while (to >= 1 && to < order.length && !offered(order[to] as HomeWidgetId)) to += delta;
+  if (to < 1 || to >= order.length) return config;
   [order[from], order[to]] = [order[to] as HomeWidgetId, order[from] as HomeWidgetId];
   return { order, hidden: config.hidden };
 }
