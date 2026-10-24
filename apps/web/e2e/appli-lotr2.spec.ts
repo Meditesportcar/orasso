@@ -401,6 +401,11 @@ test("Personnes et crews : filtres sans texte = aucune liste ; 503 et 429 = erre
   await expect(page.getByTestId("people-need-text")).toBeVisible();
   await expect(page.getByTestId("people-results")).toHaveCount(0);
   await expect(page.getByTestId("person-row")).toHaveCount(0);
+  // Le grade retiré (un second toucher le décoche) : la suite cherche sans filtre.
+  await pill(page, "people-filters").click();
+  await page.getByTestId("people-filters-panel").getByText("Route", { exact: true }).click();
+  await page.getByTestId("people-filters-apply").click();
+  await expect(page.getByTestId("people-need-text")).toHaveCount(0);
   // Suggestions en panne (503) : l'erreur et « Réessayer », puis la reprise.
   await page.route("**/api/users/suggestions**", (r) =>
     r.fulfill({ status: 503, contentType: "application/json", body: '{"error":"indisponible"}' }),
@@ -423,5 +428,12 @@ test("Personnes et crews : filtres sans texte = aucune liste ; 503 et 429 = erre
   await expect(page.getByTestId("people-results")).toBeVisible();
   // Rien de choisi : la recherche est élargie à toute la France, et l'écran le dit.
   await expect(page.getByTestId("people-broadened")).toBeVisible();
+  // « Voir plus » : « pilote » trouve par le texte plus de 20 comptes du seed ; la page suivante s'ajoute.
+  await page.getByTestId("people-q").fill("pilote");
+  await expect(page.getByTestId("people-more")).toBeVisible({ timeout: 30_000 });
+  const before = await page.getByTestId("person-row").count();
+  expect(before).toBeGreaterThanOrEqual(20);
+  await page.getByTestId("people-more").click();
+  await expect.poll(() => page.getByTestId("person-row").count(), { timeout: 30_000 }).toBeGreaterThan(before);
   await ctx.close();
 });

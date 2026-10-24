@@ -259,16 +259,18 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("people-where-open")).toHaveAttribute("data-set", "true");
       await expect(page.getByTestId("people-broadened")).toHaveCount(0);
 
-      // « Voir plus » : la page suivante (si la base seedée a plus d'une page de personnes pour ce texte).
-      await page.goto("/app/explorer?segment=personnes&q=_66&montrer=people&lieu=partout");
+      // « Voir plus » (tour 2) : « pilote » trouve par le texte les comptes générés du seed (Pilote_0xx, plus de 20) ;
+      // la page suivante s'ouvre et montre d'autres personnes.
+      await page.goto("/app/explorer?segment=personnes&q=pilote&montrer=people&lieu=partout");
+      const firstPage = await page.getByTestId("person-row").allTextContents();
+      expect(firstPage.length).toBeGreaterThanOrEqual(20);
       const more = page.getByTestId("people-results").getByRole("link", { name: "Voir plus" });
-      if (await more.count()) {
-        const before = await page.getByTestId("person-row").count();
-        await more.click();
-        await page.waitForURL(/suite=/);
-        expect(await page.getByTestId("person-row").count()).toBeGreaterThan(0);
-        expect(before).toBeGreaterThan(0);
-      }
+      await expect(more).toBeVisible();
+      await more.click();
+      await page.waitForURL(/suite=/);
+      const nextPage = await page.getByTestId("person-row").allTextContents();
+      expect(nextPage.length).toBeGreaterThan(0);
+      expect(nextPage[0]).not.toEqual(firstPage[0]);
 
       // Une recherche : « Personnes · N » puis « Crews · N » ; un compte privé réduit, sans département.
       await page.goto("/app/explorer?segment=personnes");

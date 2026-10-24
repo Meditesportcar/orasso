@@ -91,12 +91,12 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
 
     // « Mes affinités » : l'organisateur suivi en tête ; « Structures suivies » : seulement lui.
     await page.getByTestId("filters-toggle").click();
-    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
     await expect(rows.first()).toContainText("Rassemblement de Narbonne", { timeout: 30_000 });
     await shot(page, `05-explorer-affinites-${theme}`);
     await page.getByTestId("filters-toggle").click();
-    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByText("Structures suivies", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
     await expect(rows.first()).toContainText("Club Audois Passion", { timeout: 30_000 });

@@ -217,8 +217,7 @@ export function ExplorerScreen() {
 
   // Le lieu : le choix fait, sinon les réglages habituels ; une recherche par texte cherche partout tant que le lieu n'a
   // pas été choisi (lot R1).
-  // La carte n'applique pas le texte de la liste (relecture du lot R2) : il n'y élargit donc pas le lieu.
-  const searching = !(view === "map" && segment !== "personnes") && q.trim().length > 0;
+  const searching = q.trim().length > 0;
   const habitual = habitualWhere(prefs ? { radiusKm: prefs.radiusKm } : null, positionOn, coin.length > 0);
   const effective = effectiveWhere(where, habitual, { positionOn, hasCoin: coin.length > 0, searching });
   const effectiveId = whereId(effective);
@@ -381,14 +380,13 @@ export function ExplorerScreen() {
           if (s === "personnes") setView("list");
         }}
       />
-      {inMap ? null : (
-        <ExSearch
-          value={q}
-          onChange={setQ}
-          placeholder={segment === "evenements" ? R.searchEvents : segment === "pros" ? R.searchPros : R.searchPeople}
-          testID={segment === "personnes" ? "people-q" : "events-q"}
-        />
-      )}
+      {/* Relecture du lot R2 : le texte s'applique aussi à la carte ; le champ y reste donc visible. */}
+      <ExSearch
+        value={q}
+        onChange={setQ}
+        placeholder={segment === "evenements" ? R.searchEvents : segment === "pros" ? R.searchPros : R.searchPeople}
+        testID={segment === "personnes" ? "people-q" : "events-q"}
+      />
       <PillRow>{pills}</PillRow>
     </View>
   );
@@ -506,11 +504,9 @@ export function ExplorerScreen() {
     return (
       <TabStage overlays={sheets}>
         {segment === "evenements" ? (
-          // Relecture du lot R2 : la carte n'a pas de champ de recherche (maquette R2.8) ; elle ne filtre donc pas par le
-          // texte de la liste, qui reste dans la liste.
           <EventsMapView
             header={header}
-            q=""
+            q={q}
             filters={listFilters}
             position={position}
             sort="date"
@@ -520,7 +516,7 @@ export function ExplorerScreen() {
         ) : (
           <ProsMapView
             header={header}
-            q=""
+            q={q}
             job={job}
             sort={proSort}
             position={position}

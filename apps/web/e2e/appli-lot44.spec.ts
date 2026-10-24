@@ -126,11 +126,11 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     for (const row of await page.getByTestId("event-row").allTextContents()) expect(row).toContain("Exposition");
     await page.getByTestId("filters-toggle").click();
     await page.getByTestId("explorer-filters").getByText("Tous", { exact: true }).click();
-    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
     await expect(page.getByTestId("sort-line")).toContainText("affinités", { timeout: 30_000 });
     await page.getByTestId("filters-toggle").click();
-    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
 
     // Carte stylée : canvas MapLibre, style du thème, étiquettes datées.
