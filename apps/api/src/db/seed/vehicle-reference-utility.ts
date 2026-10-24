@@ -101,7 +101,7 @@ TRX : 2021-2024
 Gladiator : JT 2019-
 
 @ Toyota | JP | truck
-Hilux : IV 1983-1988 ; V 1988-1997 ; VI 1997-2005 ; VII 2004-2015 ; VIII 2015-
+Hilux : IV 1983-1988 ; V 1988-1997 ; VI 1997-2006 ; VII 2004-2015 ; VIII 2015-2025 ; IX 2025-
 HiAce : 1967-
 Proace : 2013-
 Proace City : 2019-
@@ -116,7 +116,7 @@ Cabstar : 1968-
 Townstar : 2022-
 
 @ Mitsubishi | JP | truck
-L200 : III 1996-2006 ; IV 2005-2015 ; V 2015-2024 ; VI 2024-
+L200 : II 1986-1996 ; III 1996-2006 ; IV 2005-2015 ; V 2014-2023 ; VI 2023-
 L300 : 1980-2013
 Canter : 1963-
 
