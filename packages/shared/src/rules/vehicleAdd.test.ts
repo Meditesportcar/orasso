@@ -1,9 +1,11 @@
 ﻿import { describe, expect, it } from "vitest";
+import { vehicleAddLabels } from "../labels/vehicle-add.fr";
 import { vehicleCreateSchema, vehicleUpdateSchema } from "../schemas/vehicle";
 import {
   bodyColorByName,
   bodyColorFamilies,
   bodyColors,
+  bodyColorWithFinish,
   formatPreparation,
   parsePreparation,
   vehiclePreparations,
@@ -81,5 +83,28 @@ describe("fiche technique en saisie libre (décision de Damien du 23/10)", () =>
     expect(vehicleCreateSchema.safeParse({ ...base, weightKg: 10001 }).success).toBe(false);
     expect(vehicleCreateSchema.safeParse({ ...base, engine: "x".repeat(61) }).success).toBe(false);
     expect(vehicleUpdateSchema.safeParse({ weightKg: 49 }).success).toBe(false);
+  });
+});
+
+describe("couleur et finition sans doublon (lot R3a, retour 4)", () => {
+  it("n'écrit pas une finition déjà dans le nom (racine, sans accents ni casse)", () => {
+    expect(bodyColorWithFinish("Blanc nacré", "nacrée")).toBe("Blanc nacré");
+    expect(bodyColorWithFinish("Noir mat", "mate")).toBe("Noir mat");
+    expect(bodyColorWithFinish("Noir métallisé", "métallisée")).toBe("Noir métallisé");
+    expect(bodyColorWithFinish("NOIR METALLISE", "métallisée")).toBe("NOIR METALLISE");
+    expect(bodyColorWithFinish("Bicolore noir et blanc", "bicolore")).toBe("Bicolore noir et blanc");
+  });
+  it("garde la finition quand le nom ne la dit pas", () => {
+    expect(bodyColorWithFinish("Blanc", "vernie")).toBe("Blanc · vernie");
+    expect(bodyColorWithFinish("Gris anthracite", "métallisée")).toBe("Gris anthracite · métallisée");
+    expect(bodyColorWithFinish("Caméléon", "à effet")).toBe("Caméléon · à effet");
+    expect(bodyColorWithFinish("Mauve", "mate")).toBe("Mauve · mate");
+  });
+  it("aucune teinte du nuancier ne répète sa finition", () => {
+    for (const c of bodyColors) {
+      const text = bodyColorWithFinish(c.name, vehicleAddLabels.colorFinish[c.finish]);
+      const folded = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      expect(folded.match(/nacr|metallis|\bmat\b|\bmate\b|bicolor/g)?.length ?? 0, text).toBeLessThanOrEqual(1);
+    }
   });
 });

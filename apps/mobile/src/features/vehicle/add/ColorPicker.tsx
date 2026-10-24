@@ -9,6 +9,7 @@ import {
   type BodyColor,
   type BodyColorFamily,
   bodyColorByName,
+  bodyColorWithFinish,
   bodyColorFamilies,
   bodyColors,
   mixHex,
@@ -41,7 +42,7 @@ export function ColorPicker({
   const summary = custom
     ? value || V.colorOther
     : known
-      ? `${known.name} · ${V.colorFinish[known.finish]}`
+      ? bodyColorWithFinish(known.name, V.colorFinish[known.finish])
       : V.colorPick;
   return (
     <View style={styles.wrap} testID="vehicle-colors">
@@ -123,7 +124,7 @@ export function ColorPicker({
                 accessibilityRole="radio"
                 accessibilityState={{ checked: on }}
                 aria-checked={on}
-                accessibilityLabel={`${b.name}, ${V.colorFinish[b.finish]}`}
+                accessibilityLabel={bodyColorWithFinish(b.name, V.colorFinish[b.finish])}
                 onPress={() => onChange(on ? undefined : b.name, false)}
                 testID={`vehicle-color-${b.name}`}
                 style={styles.cell}
