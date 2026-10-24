@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { auditPage } from "./audit";
 import {
   apiCall,
@@ -150,19 +151,68 @@ for (const theme of ["beton", "sable"] as const) {
     expect(audit.greens).toEqual([]);
     expect(audit.horizontalScroll).toBe(false);
 
-    // --- Vitrine publique vue par le propriétaire : la ligne « Version », sa photo ------------------------------------
+    // --- Vitrine publique vue par le propriétaire : la ligne « Version », sa photo SANS décision de plaque -----------
+    // Photo ramenée à « sans décision » (ni floutée, ni « aucune plaque visible ») : les autres ne la voient pas, lui oui.
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      await client.query(
+        "update vehicle_photos set plate_blurred = false, no_plate_confirmed = false where vehicle_id = $1",
+        [id],
+      );
+    } finally {
+      await client.end();
+    }
     await page.goto(`/v/${id}`);
     await afterOpening(page);
     await expect(page.getByTestId("vehicule")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Version", { exact: true })).toBeVisible();
-    await shot(page, `${theme}-04-vitrine-proprietaire`);
+    await shot(page, `${theme}-04-vitrine-proprietaire-photo-sans-decision`);
     const mine = await apiCall<{ photos: unknown[]; version: string }>(cookie, "GET", `/vehicles/${id}`);
     expect(mine.data).toMatchObject({ version: "GTI" });
     expect(mine.data.photos).toHaveLength(1);
+    const ownProfile = await apiCall<{ vehicles: { photoUrl: string | null }[] }>(cookie, "GET", `/users/${pseudo}`);
+    expect(ownProfile.data.vehicles[0]?.photoUrl).toBeTruthy();
+    const stranger = await signUpApi(`R4eC${unique()}`.slice(0, 20));
+    expect((await apiCall<{ photos: unknown[] }>(stranger, "GET", `/vehicles/${id}`)).data.photos).toEqual([]);
+    const seen = await apiCall<{ vehicles: { photoUrl: string | null }[] }>(stranger, "GET", `/users/${pseudo}`);
+    expect(seen.data.vehicles[0]?.photoUrl ?? null).toBeNull();
 
-    // --- Recherche d'un autre membre : « golf gti » -----------------------------------------------------------------
+    // --- Version de 30 caractères sans espace : le nom ne se coupe jamais (fiche, garage, fiche qui se construit) -----
+    const LONG = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123";
+    expect((await apiCall(cookie, "PATCH", `/me/vehicles/${id}`, { version: LONG })).status).toBe(200);
+    await page.goto(`/vehicule/${id}`);
+    await afterOpening(page);
+    const title = page.getByRole("heading", { name: `Volkswagen Golf Mk4 ${LONG}` });
+    await expect(title).toBeVisible({ timeout: 30_000 });
+    expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect((await auditPage(page)).horizontalScroll).toBe(false);
+    await shot(page, `${theme}-05-version-longue-fiche`);
+    await page.goto("/garage");
+    await afterOpening(page);
+    const card = page.getByText(new RegExp(LONG)).first();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect((await auditPage(page)).horizontalScroll).toBe(false);
+    await shot(page, `${theme}-06-version-longue-garage`);
+    await page.goto(`/vehicule/${id}/modifier`);
+    await afterOpening(page);
+    for (let i = 0; i < 3; i++) {
+      await seeStepEnd(page);
+      await page.getByTestId("vehicle-step-next").click();
+    }
+    const live = page.getByText(`Volkswagen Golf ${LONG}`).first();
+    await expect(live).toBeVisible();
+    expect(await live.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot(page, `${theme}-07-version-longue-fiche-en-direct`);
+    // --- Recherche d'un autre membre : le modèle et la version ------------------------------------------------------
     const other = await signUpApi(`R4eB${unique()}`.slice(0, 20));
-    const found = await apiCall<{ vehicles: { id: string; label: string }[] }>(other, "GET", "/search?q=golf%20gti");
+    const found = await apiCall<{ vehicles: { id: string; label: string }[] }>(
+      other,
+      "GET",
+      "/search?q=golf%20abcdefghij",
+    );
     expect(found.data.vehicles.map((v) => v.id)).toContain(id);
     await ctx.close();
   });
