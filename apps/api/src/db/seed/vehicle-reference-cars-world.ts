@@ -1,0 +1,660 @@
+// Compléments du référentiel (lot R3c) : voitures des marques britanniques, suédoises, japonaises, coréennes,
+// américaines et chinoises. Format : voir `vehicle-catalog.ts`. Une marque déjà présente dans `vehicle-reference.ts`
+// ne reçoit ici que ce qui lui manque. Méthode et sources : docs/JOURNAL-DES-CHOIX.md, « Lot R3c ».
+
+export const vehicleCarsWorld = `
+# --- Royaume-Uni ------------------------------------------------------------------------------------------------
+
+@ Mini | GB
+Cooper : R50 2001-2006 ; R56 2006-2013 ; F56 2014-2024 ; J01 2024-
+One : R50 2001-2006 ; R56 2006-2013 ; F55/F56 2014-2024
+Countryman : R60 2010-2016 ; F60 2017-2023 ; U25 2023-
+Clubman : R55 2007-2014 ; F54 2015-2024
+Paceman : R61 2012-2016
+Cabrio : R52 2004-2008 ; R57 2009-2015 ; F57 2016-2024
+Roadster : R59 2012-2015
+Aceman : J05 2024-
+Moke : 1964-1993
+Mini Classic : Cooper S 1963-1971
+
+@ Jaguar | GB
+XK120 : 1948-1954
+XK140 : 1954-1957
+XK150 : 1957-1961
+Mk2 : 1959-1967
+S-Type : Classique 1963-1968 ; X200 1999-2008
+XJ220 : 1992-1994
+XK : X150 2006-2015
+XF : X250 2007-2015 ; X260 2015-2024
+XE : X760 2015-2024
+X-Type : X400 2001-2009
+F-Pace : X761 2016-
+E-Pace : X540 2017-2024
+I-Pace : X590 2018-2024
+
+@ Land Rover | GB
+Freelander : L314 1997-2006 ; L359 2006-2014
+Discovery Sport : L550 2014-
+Range Rover Sport [4x4] : L320 2005-2013 ; L494 2013-2022 ; L461 2022-
+Range Rover Evoque : L538 2011-2018 ; L551 2018-
+Range Rover Velar : L560 2017-
+
+@ Aston Martin | GB
+DB2/4 : 1953-1957
+DB4 : 1958-1963
+DB6 : 1965-1970
+DBS : Classique 1967-1972 ; DBS 2007-2012 ; Superleggera 2018-2023
+V8 : 1972-1989
+V8 Vantage (1977) : 1977-1989
+Virage : 1989-2000
+DB7 : 1994-2004
+DB11 : 2016-2023
+DB12 : 2023-
+Vanquish : I 2001-2007 ; II 2012-2018 ; III 2024-
+Rapide : 2010-2020
+DBX : 2020-
+Valkyrie : 2021-2024
+One-77 : 2009-2012
+
+@ Bentley | GB
+Mulsanne : Classique 1980-1992 ; Moderne 2010-2020
+Turbo R : 1985-1998
+Arnage : 1998-2009
+Azure : I 1995-2003 ; II 2006-2010
+Continental GT : I 2003-2011 ; II 2011-2018 ; III 2018-2024 ; IV 2024-
+Flying Spur : I 2005-2013 ; II 2013-2019 ; III 2019-
+Bentayga : 2015-
+
+@ Rolls-Royce | GB
+Silver Cloud : 1955-1966
+Silver Shadow : 1965-1980
+Corniche : 1971-1995
+Camargue : 1975-1986
+Silver Spirit : 1980-1998
+Silver Seraph : 1998-2002
+Phantom : VII 2003-2017 ; VIII 2017-
+Ghost : I 2009-2020 ; II 2020-
+Wraith : 2013-2023
+Dawn : 2015-2023
+Cullinan : 2018-
+Spectre : 2023-
+
+@ Lotus | GB
+Elite : Type 14 1957-1963 ; Type 75 1974-1982
+Elan : Classique 1962-1975 ; M100 1989-1995
+Europa : Classique 1966-1975 ; Europa S 2006-2010
+Eclat : 1975-1982
+Excel : 1982-1992
+Carlton : 1990-1992
+340R : 2000-2000
+Evora : 2009-2021
+Emira : 2021-
+Eletre : 2022-
+
+@ Caterham | GB
+Seven : 1973-
+21 : 1994-1999
+
+@ McLaren | GB
+12C : 2011-2014
+650S : 2014-2017
+675LT : 2015-2016
+P1 : 2013-2015
+540C : 2015-2021
+600LT : 2018-2020
+Senna : 2018-2019
+GT : 2019-2025
+765LT : 2020-2022
+Artura : 2021-
+750S : 2023-
+Elva : 2020-2022
+
+@ MG | GB
+TD : 1950-1953
+MGA : 1955-1962
+MGC : 1967-1969
+RV8 : 1992-1995
+TF : Classique 1953-1955 ; Moderne 2002-2011
+ZR : 2001-2005
+ZS : Rover 2001-2005 ; SUV 2017-
+ZT : 2001-2005
+MG3 : 2013-
+MG4 : 2022-
+MG5 : 2020-
+HS : 2018-
+Marvel R : 2021-2023
+Cyberster : 2023-
+
+@ Triumph | GB
+TR2 : 1953-1955
+TR3 : 1955-1962
+TR5 : 1967-1968
+TR8 : 1978-1981
+GT6 : 1966-1973
+Stag : 1970-1977
+Herald : 1959-1971
+Vitesse : 1962-1971
+Dolomite : 1972-1980
+Acclaim : 1981-1984
+
+@ Rover | GB
+P5 : 1958-1973
+P6 : 1963-1977
+SD1 : 1976-1986
+Metro : 1980-1998
+200 : SD3 1984-1989 ; R8 1989-1995 ; R3 1995-1999
+400 : 1990-1999
+600 : 1993-1999
+800 : 1986-1999
+25 : 1999-2005
+45 : 1999-2005
+75 : 1998-2005
+Streetwise : 2003-2005
+
+@ Austin | GB
+Seven : 1922-1939
+Allegro : 1973-1983
+Maestro : 1983-1994
+Montego : 1984-1994
+
+@ Austin-Healey | GB
+100 : 1953-1956
+3000 : 1959-1967
+Sprite : Frogeye 1958-1961 ; Mk2 1961-1964 ; Mk3 1964-1966 ; Mk4 1966-1971
+
+@ Morgan | GB
+4/4 : 1936-
+Plus 4 : 1950-
+Plus 8 : 1968-2004
+Aero 8 : 2001-2018
+3 Wheeler : 2011-2021
+Plus Six : 2019-
+Super 3 : 2022-
+
+@ Jensen | GB
+Interceptor : 1966-1976
+
+@ AC | GB
+Cobra : 1962-1967
+Ace : 1953-1963
+
+@ TVR | GB
+Griffith : 1991-2002
+Sagaris : 2005-2006
+S : 1986-1994
+
+@ Ariel | GB
+Atom : 2000-
+
+@ Noble | GB
+M12 : 2000-2008
+
+# --- Suède ------------------------------------------------------------------------------------------------------
+
+@ Volvo | SE
+PV 444 : 1947-1958
+PV 544 : 1958-1965
+140 : 1966-1974
+164 : 1968-1975
+260 : 1974-1982
+340 : 1976-1991
+360 : 1983-1991
+440 : 1987-1996
+460 : 1988-1996
+480 : 1986-1995
+740 : 1984-1992
+760 : 1982-1992
+780 : 1985-1990
+940 : 1990-1998
+960 : 1990-1998
+S40 : I 1995-2004 ; II 2004-2012
+V40 : I 1995-2004 ; II 2012-2019
+S60 : I 2000-2009 ; II 2010-2018 ; III 2018-2025
+V50 : 2004-2012
+V60 : I 2010-2018 ; II 2018-
+S70 : 1996-2000
+V70 : I 1996-2000 ; II 2000-2007 ; III 2007-2016
+S80 : I 1998-2006 ; II 2006-2016
+S90 : 2016-
+V90 : 2016-
+C30 : 2006-2013
+C70 : I 1996-2005 ; II 2006-2013
+XC40 : 2017-
+XC60 : I 2008-2017 ; II 2017-
+XC70 : I 2000-2007 ; II 2007-2016
+XC90 : I 2002-2014 ; II 2014-
+EX30 : 2023-
+EX90 : 2024-
+850 : T-5R 1995-1995 ; R 1996-1997
+
+@ Saab | SE
+92 : 1949-1956
+93 : 1955-1960
+95 : 1959-1978
+96 : 1960-1980
+Sonett : II 1966-1967 ; III 1970-1974
+9-5 : I 1997-2010 ; II 2010-2012
+9-3 : Viggen 1999-2002
+
+@ Koenigsegg | SE
+CCX : 2006-2010
+Agera : 2011-2018
+Regera : 2016-2022
+Jesko : 2021-
+
+@ Polestar | SE
+1 : 2019-2021
+2 : 2019-
+3 : 2024-
+4 : 2024-
+
+# --- Japon ------------------------------------------------------------------------------------------------------
+
+@ Toyota | JP
+2000GT : 1967-1970
+Corolla : KE20 1970-1974 ; E30 1974-1979 ; E70 1979-1987 ; E90 1987-1992
+Starlet : P60 1978-1984 ; P70 1984-1989 ; P80 1989-1996 ; P90 1996-1999
+Yaris : XP10 1999-2005 ; XP90 2005-2011 ; XP130 2011-2020 ; XP210 2020-
+Yaris Cross : 2021-
+Aygo : I 2005-2014 ; II 2014-2022
+Aygo X : 2022-
+iQ : 2008-2015
+Auris : E150 2006-2012 ; E180 2012-2018
+Carina : E 1992-1997
+Avensis : T22 1997-2003 ; T25 2003-2008 ; T27 2008-2018
+Camry : XV70 2017-2024 ; XV80 2024-
+Prius : XW10 1997-2003 ; XW20 2003-2009 ; XW30 2009-2015 ; XW50 2015-2022 ; XW60 2023-
+Verso : 2009-2018
+RAV4 : XA10 1994-2000 ; XA20 2000-2005 ; XA30 2005-2012 ; XA40 2012-2018 ; XA50 2018-
+C-HR : I 2016-2023 ; II 2023-
+bZ4X : 2022-
+Paseo : 1991-1999
+Previa : 1990-2006
+Celica : GT-Four (ST165) 1986-1989 ; GT-Four (ST185) 1989-1993 ; GT-Four (ST205) 1994-1999
+Chaser : JZX90 1992-1996 ; JZX100 1996-2001
+Mark II : JZX90 1992-1996 ; JZX100 1996-2000 ; JZX110 2000-2004
+Cresta : JZX90 1992-1996 ; JZX100 1996-2001
+Soarer : Z20 1986-1991 ; Z30 1991-2000
+Crown : S130 1987-1991
+Century : G50 1997-2017
+FJ Cruiser [4x4] : 2006-2018
+4Runner [4x4] : N130 1989-1995 ; N180 1995-2002
+Land Cruiser : J70 1984- ; J250 2024-
+Mirai : 2014-
+
+@ Lexus | JP
+IS : XE10 1998-2005 ; XE20 2005-2013 ; XE30 2013-
+GS : S140 1991-1997 ; S160 1997-2005 ; S190 2005-2011 ; L10 2012-2020
+LS : XF10 1989-1994 ; XF20 1994-2000 ; XF30 2000-2006 ; XF40 2006-2017 ; XF50 2017-
+SC : Z30 1991-2000 ; Z40 2001-2010
+RX : XU10 1998-2003 ; XU30 2003-2009 ; AL10 2009-2015 ; AL20 2015-2022 ; ALA10 2022-
+NX : AZ10 2014-2021 ; AZ20 2021-
+UX : 2018-
+CT : 2011-2022
+RC : 2014-
+LC : 2017-
+LFA : 2010-2012
+LBX : 2023-
+
+@ Nissan | JP
+Skyline : R31 1985-1990 ; R32 1989-1994 ; R33 1993-1998 ; R34 1998-2002 ; V35 2001-2007
+180SX : 1989-1998
+Laurel : C33 1989-1993 ; C34 1993-1997 ; C35 1997-2002
+Cefiro : A31 1988-1994
+Stagea : WC34 1996-2001
+Sunny GTI-R : N14 1990-1994
+Cherry : N10 1978-1982
+Sunny : B11 1981-1986 ; N13 1986-1991 ; N14 1990-1995
+Micra : K10 1982-1992 ; K11 1992-2002 ; K12 2002-2010 ; K13 2010-2017 ; K14 2017-2023 ; K15 2025-
+Almera : N15 1995-2000 ; N16 2000-2006
+Primera : P10 1990-1996 ; P11 1996-2002 ; P12 2002-2008
+Note : E11 2006-2013 ; E12 2013-2016
+Pixo : 2009-2013
+Tiida : 2007-2012
+Qashqai : J10 2006-2013 ; J11 2013-2021 ; J12 2021-
+Juke : F15 2010-2019 ; F16 2019-
+X-Trail : T30 2001-2007 ; T31 2007-2014 ; T32 2013-2022 ; T33 2022-
+Murano : Z50 2003-2008 ; Z51 2008-2014
+Leaf : ZE0 2010-2017 ; ZE1 2017-2025 ; ZE2 2025-
+Ariya : 2022-
+Patrol [4x4] : 160 1980-1989 ; Y60 1987-1997 ; Y61 1997-2010 ; Y62 2010-
+Terrano [4x4] : I 1986-1995 ; II 1993-2006
+Pathfinder [4x4] : R50 1995-2004 ; R51 2004-2014
+Pulsar : C13 2014-2018
+Prairie : M10 1982-1988
+
+@ Honda | JP
+S800 : 1966-1970
+N360 : 1967-1972
+Civic : SB1 1972-1979 ; SR 1979-1983 ; AG/AT 1983-1987 ; Type R EK9 1997-2000 ; Type R EP3 2001-2005 ; Type R FN2 2007-2011 ; Type R FK2 2015-2017 ; Type R FK8 2017-2021 ; Type R FL5 2022-
+Jazz : GD 2001-2008 ; GE 2008-2015 ; GK 2015-2020 ; GR 2020-
+City : 1981-1986
+Accord : CG 1997-2002 ; CL 2002-2008 ; CU 2008-2015
+Legend : KA 1985-1990 ; KA7 1990-1995
+CR-V : RD1 1995-2001 ; RD4 2001-2006 ; RE 2006-2012 ; RM 2012-2018 ; RW 2018-2023 ; RS 2023-
+HR-V : GH 1998-2006 ; RU 2015-2021 ; RV 2021-
+FR-V : 2004-2009
+Insight : ZE1 1999-2006 ; ZE2 2009-2014
+CR-Z : 2010-2016
+e : 2020-2024
+ZR-V : 2023-
+Beat : 1991-1996
+S660 : 2015-2022
+Integra : DC2 Type R 1995-2001 ; DA 1989-1993
+Prelude : SN 1978-1982 ; AB 1982-1987 ; BF 2025-
+S2000 : CR 2007-2009
+
+@ Mazda | JP
+R100 : 1968-1975
+RX-3 : 1971-1978
+Cosmo : L10 1967-1972 ; JC 1990-1996
+121 : 1975-2002
+323 : FA 1977-1980 ; BD 1980-1985 ; BA 1994-1998 ; BJ 1998-2003
+626 : CB 1979-1982 ; GC 1983-1987 ; GD 1987-1992 ; GE 1991-1997 ; GF 1997-2002
+Xedos 6 : 1992-1999
+MX-3 : 1991-1998
+MX-6 : 1987-1997
+Demio : DW 1996-2002
+Premacy : 1999-2005
+Tribute : 2000-2008
+2 : DY 2002-2007 ; DE 2007-2014 ; DJ 2014-
+3 : MPS (BK) 2006-2009 ; MPS (BL) 2009-2013
+5 : CR 2005-2010 ; CW 2010-2015
+6 : GG 2002-2007 ; GH 2007-2012 ; GJ 2012-2024
+CX-3 : 2015-2022
+CX-30 : 2019-
+CX-5 : KE 2012-2017 ; KF 2017-
+CX-60 : 2022-
+CX-7 : 2006-2012
+MX-30 : 2020-
+
+@ Mitsubishi | JP
+Starion : 1982-1990
+Galant : VR-4 (E39A) 1987-1992 ; VR-4 (EC5) 1996-2002
+Lancer : CB 1991-1996 ; CK 1995-2003 ; CS 2003-2007 ; CY 2007-2017
+Colt : CA 1991-1995 ; CJ 1995-2003 ; Z30 2004-2012 ; VI 2023-
+Carisma : 1995-2004
+Space Star : I 1998-2005 ; II 2012-
+Space Wagon : 1983-2004
+FTO : 1994-2000
+i-MiEV : 2009-2021
+ASX : I 2010-2022 ; II 2023-
+Outlander : I 2001-2006 ; II 2005-2012 ; III 2012-2021 ; IV 2021-
+Eclipse Cross : 2017-
+Pajero Pinin [4x4] : 1999-2007
+Pajero Sport [4x4] : I 1996-2008 ; II 2008-2015
+
+@ Subaru | JP
+Leone : 1971-1994
+Legacy : BC 1989-1994 ; BD 1993-1999 ; BE 1998-2003 ; BL 2003-2009 ; BM 2009-2014
+Forester : SF 1997-2002 ; SG 2002-2008 ; SH 2008-2013 ; SJ 2012-2018 ; SK 2018-2024 ; SL 2024-
+Outback : BG 1994-1999 ; BE 1998-2003 ; BP 2003-2009 ; BR 2009-2014 ; BS 2014-2020 ; BT 2020-
+XV : GP 2011-2017 ; GT 2017-2023
+Crosstrek : 2023-
+Justy : 1984-2011
+Levorg : VM 2014-2020 ; VN 2020-
+Impreza : 22B 1998-1998
+Solterra : 2022-
+
+@ Suzuki | JP
+Samurai [4x4] : 1985-2004
+Vitara [4x4] : I 1988-1998 ; IV 2015-
+Grand Vitara [4x4] : I 1998-2005 ; II 2005-2015
+Cappuccino : 1991-1998
+Alto : 1979-
+Wagon R+ : 1997-2008
+Ignis : I 2000-2008 ; II 2016-
+Baleno : I 1995-2002 ; II 2016-2020
+Liana : 2001-2007
+SX4 : 2006-2014
+S-Cross : I 2013-2021 ; II 2021-
+Splash : 2008-2014
+Celerio : 2014-2020
+Swace : 2020-
+Across : 2020-
+Swift : Sport (Mk3) 2005-2010 ; Sport (Mk4) 2011-2017 ; Sport (Mk5) 2018-2024 ; Mk6 2024-
+
+@ Daihatsu | JP
+Charade : G10 1977-1983 ; G11 1983-1987 ; G100 1987-1993 ; G200 1993-2000
+Cuore : 1980-2012
+Copen : L880 2002-2012
+Sirion : 1998-2013
+Terios [4x4] : J100 1997-2005 ; J200 2006-2017
+Feroza [4x4] : 1988-1999
+Rocky [4x4] : 1984-2002
+Materia : 2006-2012
+
+@ Isuzu | JP
+Trooper [4x4] : I 1981-1991 ; II 1991-2005
+Piazza : 1981-1993
+
+@ Datsun | JP
+Fairlady : SR311 1965-1970
+Bluebird : 510 1967-1972
+Cherry : 100A 1970-1974
+Sunny : B110 1970-1973
+
+@ Infiniti | JP
+Q50 : 2013-2023
+QX70 : 2008-2017
+
+# --- Corée ------------------------------------------------------------------------------------------------------
+
+@ Hyundai | KR
+Pony : 1975-1990
+Atos : 1997-2008
+Getz : 2002-2011
+Accent : 1994-2011
+Lantra : 1990-2000
+Elantra : 2000-2011
+Matrix : 2001-2010
+i10 : PA 2007-2013 ; IA 2013-2019 ; AC3 2019-
+i20 : PB 2008-2014 ; GB 2014-2020 ; BC3 2020-
+i20 N : BC3 2020-2024
+i30 : FD 2007-2012 ; GD 2012-2017 ; PD 2017-
+i40 : 2011-2019
+ix20 : 2010-2019
+ix35 : 2009-2015
+Tucson : JM 2004-2010 ; TL 2015-2020 ; NX4 2020-
+Kona : OS 2017-2023 ; SX2 2023-
+Kona N : 2021-2023
+Bayon : 2021-
+Santa Fe : SM 2000-2006 ; CM 2006-2012 ; DM 2012-2018 ; TM 2018-2023 ; MX5 2023-
+Ioniq : 2016-2022
+Ioniq 5 : 2021-
+Ioniq 5 N : 2024-
+Ioniq 6 : 2022-
+Genesis Coupé : 2008-2016
+Terracan [4x4] : 2001-2007
+Galloper [4x4] : 1991-2003
+
+@ Kia | KR
+Pride : 1987-2000
+Picanto : SA 2004-2011 ; TA 2011-2017 ; JA 2017-
+Rio : I 2000-2005 ; II 2005-2011 ; III 2011-2017 ; IV 2017-2023
+Cerato : 2004-2009
+Ceed : GT 2013-2018 ; ProCeed GT 2019-2024
+XCeed : 2019-
+Venga : 2009-2019
+Soul : I 2008-2013 ; II 2013-2019 ; III 2019-
+Stonic : 2017-
+Sportage : I 1993-2004 ; II 2004-2010 ; III 2010-2015 ; IV 2015-2021 ; V 2021-
+Sorento : I 2002-2009 ; II 2009-2014 ; III 2014-2020 ; IV 2020-
+Carens : 1999-2019
+Optima : 2010-2020
+Niro : I 2016-2022 ; II 2022-
+EV3 : 2024-
+EV6 : 2021-
+EV9 : 2023-
+
+@ SsangYong | KR
+Korando : 1983-
+Rexton [4x4] : I 2001-2017 ; II 2017-
+Musso [4x4] : 1993-2005
+Tivoli : 2015-
+
+# --- États-Unis --------------------------------------------------------------------------------------------------
+
+@ Ford | US
+Model T : 1908-1927
+Model A : 1927-1931
+Anglia : 105E 1959-1968
+Cortina : Mk1 1962-1966 ; Mk2 1966-1970 ; Mk3 1970-1976 ; Mk4 1976-1979 ; Mk5 1979-1982
+Taunus : 1970-1982
+Granada : Mk1 1972-1977 ; Mk2 1977-1985
+Consul : 1972-1975
+Orion : 1983-1993
+Scorpio : 1985-1998
+Probe : 1988-1997
+Cougar : 1998-2002
+RS200 : 1984-1986
+Ka : I 1996-2008 ; II 2008-2016
+Ka+ : 2016-2020
+StreetKa : 2003-2005
+Puma : Coupé 1997-2002 ; SUV 2019-
+Fusion : 2002-2012
+B-Max : 2012-2017
+C-Max : 2003-2019
+S-Max : 2006-2023
+Galaxy : 1995-2023
+Mondeo : Mk1 1993-1996 ; Mk2 1996-2000 ; Mk3 2000-2007 ; Mk4 2007-2014 ; Mk5 2014-2022
+Kuga : I 2008-2012 ; II 2012-2019 ; III 2019-
+EcoSport : 2013-2022
+Edge : 2016-2020
+Explorer : 2019-
+Mustang Mach-E : 2020-
+GT : I 2004-2006 ; II 2017-2022
+Bronco [4x4] : I 1966-1977 ; II 1978-1979 ; III 1980-1986 ; IV 1987-1991 ; V 1992-1996 ; VI 2021-
+Thunderbird : I 1955-1957 ; II 1958-1960 ; XI 2002-2005
+Falcon : 1960-1970
+Fairlane : 1955-1970
+Galaxie : 1959-1974
+Crown Victoria : 1991-2011
+Escort : RS Cosworth 1992-1996 ; RS Turbo 1984-1990 ; RS 2000 1975-1980 ; XR3i 1983-1990
+Sierra : RS Cosworth 1986-1992 ; XR4i 1983-1985
+Fiesta : ST (Mk6) 2005-2008 ; ST (Mk7) 2013-2017 ; ST (Mk8) 2018-2022 ; XR2 1981-1989
+Focus : RS (Mk1) 2002-2003 ; RS (Mk2) 2009-2011 ; RS (Mk3) 2016-2018 ; ST (Mk2) 2005-2010 ; ST (Mk3) 2012-2018 ; ST (Mk4) 2019-2025
+Capri : Électrique 2024-
+
+@ Chevrolet | US
+Impala : Classique 1958-1985 ; SS 1994-1996 ; Moderne 2000-2020
+Chevelle : 1964-1977
+Nova : 1962-1979
+Monte Carlo : 1970-2007
+Caprice : 1965-1996
+El Camino [truck] : 1959-1987
+Blazer [4x4] : K5 1969-1994
+Corvair : 1960-1969
+Matiz : 2005-2010
+Spark : 2009-2015
+Kalos : 2005-2008
+Aveo : 2006-2015
+Lacetti : 2004-2009
+Cruze : 2009-2015
+Orlando : 2011-2015
+Captiva : 2006-2015
+Trax : 2013-2015
+Volt : 2011-2015
+Bel Air : 1950-1954
+
+@ Dodge | US
+Coronet : 1965-1976
+Dart : 1960-1976
+Super Bee : 1968-1971
+Caliber : 2006-2012
+Journey : 2008-2020
+Nitro : 2007-2011
+Durango : 1997-
+Challenger : SRT Hellcat 2015-2023
+Charger : Daytona (1969) 1969-1969 ; Daytona EV 2024-
+
+@ Jeep | US
+Willys MB [4x4] : 1941-1945
+Grand Cherokee [4x4] : ZJ 1992-1998 ; WJ 1998-2004 ; WK 2004-2010 ; WK2 2010-2021 ; WL 2021-
+Cherokee : KJ 2001-2008 ; KK 2008-2013 ; KL 2013-2023
+Commander [4x4] : 2006-2010
+Compass : MK 2006-2016 ; MP 2016-
+Patriot : 2007-2017
+Renegade : 2014-
+Avenger : 2022-
+CJ : CJ-2A 1945-1949 ; CJ-3B 1953-1968 ; CJ-8 1981-1986
+
+@ Cadillac | US
+Eldorado : 1953-2002
+DeVille : 1958-2005
+Fleetwood : 1985-1996
+Seville : 1975-2004
+Escalade : 1998-
+CTS : 2002-2019
+
+@ Lincoln | US
+Continental : 1939-2020
+Town Car : 1981-2011
+
+@ Buick | US
+Riviera : 1963-1999
+Skylark : 1953-1998
+
+@ Oldsmobile | US
+Cutlass : 1961-1999
+Toronado : 1966-1992
+
+@ Plymouth | US
+Barracuda : 1964-1974
+Road Runner : 1968-1980
+Fury : 1955-1978
+Prowler : 1997-2002
+
+@ Pontiac | US
+Trans Am : 1969-2002
+Fiero : 1984-1988
+Bonneville : 1957-2005
+
+@ AMC | US
+Javelin : 1968-1974
+Gremlin : 1970-1978
+
+@ Chrysler | US
+PT Cruiser : 2000-2010
+Crossfire : 2003-2008
+300C : LX 2004-2010 ; LD 2011-2023
+Voyager : I 1988-1991 ; II 1991-1995 ; III 1996-2000 ; IV 2001-2007 ; V 2008-2016
+Sebring : 1995-2010
+
+@ Shelby | US
+Cobra : 1962-1967
+GT350 : 1965-1970
+GT500 : 1967-1970
+
+@ Hummer | US
+H1 [4x4] : 1992-2006
+H2 [4x4] : 2002-2009
+H3 [4x4] : 2005-2010
+
+@ Tesla | US
+Roadster : 2008-2012
+Model S : 2012-
+Model X : 2015-
+Model 3 : I 2017-2023 ; Highland 2023-
+Model Y : I 2020-2025 ; Juniper 2025-
+
+@ DeLorean | US
+DMC-12 : 1981-1983
+
+# --- Chine ------------------------------------------------------------------------------------------------------
+
+@ BYD | CN
+Atto 3 : 2022-
+Dolphin : 2023-
+Dolphin Surf : 2025-
+Seal : 2023-
+Seal U : 2024-
+Han : 2022-
+Tang : 2022-
+
+@ Lynk & Co | CN
+01 : 2021-
+
+@ Xpeng | CN
+G6 : 2024-
+`;
