@@ -899,7 +899,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
   },
-  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15 },
+  // Navigateur : pas de contour de focus du champ, le cercle d'accent le montre déjà (comme le Field du design-system).
+  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, outlineStyle: "none" } as object,
   clear: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   ddl: { padding: 6, borderRadius: 14, borderWidth: 1 },
   ddr: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingHorizontal: 10, borderRadius: 10 },
