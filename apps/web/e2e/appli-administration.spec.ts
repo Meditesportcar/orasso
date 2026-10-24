@@ -463,7 +463,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
   await page.getByTestId("bans-add").click();
   await page.getByTestId("orga-confirm").click();
-  await expect(page.getByText("Personne bannie.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Personne bannie.", { exact: true })).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("bans-row").filter({ hasText: "Pilote_001" }).getByTestId("bans-lift").click();
   await page.getByTestId("orga-confirm").click();
   await expect(page.getByText("Bannissement levé.")).toBeVisible({ timeout: 20_000 });
