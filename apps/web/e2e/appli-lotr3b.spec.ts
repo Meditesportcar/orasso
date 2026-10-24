@@ -272,7 +272,9 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
   expect(await when.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   // Tour 2 : sur une seule ligne (l'heure jamais coupée).
   expect(
-    await when.evaluate((el) => el.getBoundingClientRect().height < 1.6 * Number.parseFloat(getComputedStyle(el).lineHeight)),
+    await when.evaluate(
+      (el) => el.getBoundingClientRect().height < 1.6 * Number.parseFloat(getComputedStyle(el).lineHeight),
+    ),
   ).toBe(true);
   await expect(when).toContainText(/18\sH$/i);
   expect((await auditPage(narrow.page)).horizontalScroll).toBe(false);
