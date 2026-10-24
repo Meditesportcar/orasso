@@ -22,7 +22,7 @@ import { proProfiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { distanceKmSql, roundKm, withinRadiusSql } from "../../lib/geo-sql";
 import type { Viewer } from "../../lib/session";
-import { containsPattern, fold, searchTokens } from "../../lib/text-search";
+import { anyColumnContains, fold, searchTokens } from "../../lib/text-search";
 import { followersCounts, toCard } from "./card";
 
 const safeOffset = (n: number): number => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
@@ -59,14 +59,12 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
       ? or(eq(proProfiles.department, q.department), sql`${q.department} = any(${proProfiles.interventionDepartments})`)
       : undefined,
   ];
+  // Lot R1 : comme les événements, sans tenir compte des accents ni de la casse (« meca » trouve « Méca »).
   for (const token of searchTokens(q.q)) {
-    const like = containsPattern(token);
     const activities = activitiesMatching(token);
     filters.push(
       or(
-        sql`${proProfiles.name} ilike ${like}`,
-        sql`${proProfiles.city} ilike ${like}`,
-        sql`${proProfiles.description} ilike ${like}`,
+        anyColumnContains(token, [proProfiles.name, proProfiles.city, proProfiles.description]),
         activities.length
           ? sql`${proProfiles.activities} && ARRAY[${sql.join(
               activities.map((a) => sql`${a}`),

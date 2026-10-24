@@ -11,15 +11,16 @@ import {
   type EventListQuery,
   type Page,
   resolvePosition,
+  upcomingEndBound,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gte, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, events, structures } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { distanceKmSql, roundKm, withinRadiusSql } from "../../lib/geo-sql";
 import type { Viewer } from "../../lib/session";
-import { containsPattern, searchTokens } from "../../lib/text-search";
+import { anyColumnContains, searchTokens } from "../../lib/text-search";
 import { decorateForMedia, mediaExploreFilters } from "../media/explore";
 import { card } from "./card";
 import { daysRepo } from "./days";
@@ -118,7 +119,8 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
     ne(events.admission, "invite_only"),
     eq(structures.verification, "verified"),
     sql`${structures.deletedAt} is null`,
-    upcoming ? gte(events.endsAt, q.from ?? t) : lt(events.endsAt, t),
+    // Lot R1 : un événement terminé ne remonte jamais dans les « à venir », même avec une période commencée plus tôt.
+    upcoming ? gte(events.endsAt, upcomingEndBound(q.from, t)) : lt(events.endsAt, t),
   ];
   if (q.to) filters.push(sql`${events.startsAt} <= ${q.to.toISOString()}::timestamptz`);
   if (q.format) filters.push(eq(events.format, q.format));
@@ -132,9 +134,10 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
       sql`exists (select 1 from structure_follows sf where sf.structure_id = ${events.structureId} and sf.user_id = ${viewer.user.id})`,
     );
   }
+  // Lot R1 : chaque mot se retrouve dans le titre, la ville, le lieu (adresse) ou le nom de l'organisateur, sans tenir
+  // compte des accents ni de la casse ; un début de mot suffit (« Médite » trouve MéditeSportCar).
   for (const token of searchTokens(q.q)) {
-    const like = containsPattern(token);
-    filters.push(or(sql`${events.title} ilike ${like}`, sql`${events.city} ilike ${like}`));
+    filters.push(anyColumnContains(token, [events.title, events.city, events.addressLine, structures.name]));
   }
   if (wantsRadius && located) {
     filters.push(withinRadiusSql(events.lat, events.lng, located.position, q.radiusKm ?? 50));
