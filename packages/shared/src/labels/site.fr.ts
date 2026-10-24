@@ -100,7 +100,8 @@ export const siteLabels = {
     posters: "Affiches",
     list: "Liste",
     search: "Recherche",
-    searchPlaceholder: "Nom ou ville",
+    // Relecture du lot R1 (lot R2) : la recherche porte aussi sur l'organisateur et le lieu (maquette R2.1).
+    searchPlaceholder: "Un événement, un organisateur, une ville",
     apply: "Filtrer",
     reset: "Réinitialiser",
     empty: "Aucun événement ne correspond à ces filtres pour l'instant.",
