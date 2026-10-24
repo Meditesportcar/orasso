@@ -72,4 +72,63 @@ export function useProbe(onDone: () => void) {
     // `useAnimatedStyle(style)` : le plugin fait lui-même un worklet de la fonction passée par son nom (pas un défaut).
     expect(issues).toHaveLength(4);
   });
+
+  it("tour 2 : appels optionnels, sur membre ou calculés, fonctions passées en argument, résultats de crochets", () => {
+    const code = `import { useNavigation } from "expo-router";
+import { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+const helpers = { double: (v: number) => v * 2, nested: { double: (v: number) => v * 2 } };
+const triple = (v: number) => v * 3;
+export function useProbe(props: { cb: { f: () => void } }, onDone?: () => void) {
+  const sv = useSharedValue(0);
+  const navigation = useNavigation();
+  return useAnimatedStyle(() => {
+    onDone?.();
+    props.cb.f();
+    helpers["double"](1);
+    helpers.nested.double(1);
+    const list = [1, 2].map(triple);
+    const inner = (x: number) => x;
+    sv.set(inner(list[0] ?? 0));
+    return { opacity: sv.get() + (navigation ? 0 : 1) };
+  });
+}`;
+    const { issues } = probe("tour2.tsx", code);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/appel de « onDone\(\) » \(param\), pas un worklet/),
+        expect.stringMatching(/appel de « props\.cb\.f\(\) » \(param\) à vérifier/),
+        expect.stringMatching(/appel de « helpers\.double\(\) » \(ObjectExpression\) à vérifier/),
+        expect.stringMatching(/appel de « helpers\.nested\.double\(\) » \(ObjectExpression\) à vérifier/),
+        expect.stringMatching(/« triple » \(ArrowFunctionExpression\) passée en argument, pas un worklet/),
+        expect.stringMatching(/capture « navigation » \(useNavigation\(\)\) à vérifier/),
+      ]),
+    );
+    // `sv.get()` / `sv.set()` d'une valeur partagée et la fonction locale du worklet (`inner`) ne sont pas des défauts.
+    expect(issues).toHaveLength(6);
+  });
+
+  it("tour 2 : un crochet de l'appli qui rend des valeurs partagées et un champ simple connu est résolu", () => {
+    const code = `import { useTheme } from "@orasso/design-system/native";
+import { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+function useKey() {
+  const { reducedMotion } = useTheme();
+  const p = useSharedValue(0);
+  return { p, reduced: reducedMotion };
+}
+function useLoose() {
+  return { go: () => undefined };
+}
+export function useProbe() {
+  const { p, reduced } = useKey();
+  const { reducedMotion } = useTheme();
+  const { go } = useLoose();
+  return useAnimatedStyle(() => {
+    p.set(1);
+    return { opacity: reduced || reducedMotion || !go ? p.get() : 1 };
+  });
+}`;
+    expect(probe("crochets.tsx", code).issues).toEqual([
+      expect.stringMatching(/capture « go » \(useLoose\(\)\) à vérifier/),
+    ]);
+  });
 });
