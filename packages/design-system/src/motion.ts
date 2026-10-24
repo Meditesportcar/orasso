@@ -174,6 +174,8 @@ export const smoke = {
   // Lot C7 (capture de Damien du 22/10, « artefact | réel ») : 16 bouffées faisaient un chapelet de grosses taches ;
   // plus de bouffées, moins opaques (`orbitDensity`), pour la traînée fine de l'artefact.
   orbitPool: { low: 14, high: 24 },
+  /** Tour 2 du lot C7 : sur Android, 16 bouffées par voiture au plus autour du O (coût mesuré sur le Xiaomi). */
+  orbitPoolAndroidMax: 16,
   /** Densité des bouffées autour du O (la `density` du fond, ramenée pour un pool plus fourni). */
   orbitDensity: 1.7,
   /** Échelle `k` des rayons de la fumée dans l'ouverture (artefact : `Drift` de l'accueil, k = 0,6). */

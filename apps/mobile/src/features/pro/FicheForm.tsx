@@ -82,6 +82,9 @@ export type MyProState = Pick<ApiState<Awaited<ReturnType<typeof api.myPro>>>, "
  * Les champs de la fiche : modification (onglet Ma fiche, qui passe sa propre `state`) ou création (depuis Créer).
  * Sans `state`, le composant charge la fiche lui-même (création : pour savoir si elle existe déjà).
  */
+/** « Fiche enregistrée, SIRET non validé : … » (le message du registre ou de l'API, tel quel). */
+export const siretPartial = (issue: string) => `Fiche enregistrée, SIRET non validé : ${issue}`;
+
 export function ProFicheFields({
   create = false,
   state,
@@ -134,17 +137,21 @@ export function ProFicheFields({
       return;
     }
     if (!pro) return;
+    let siretIssue: string | null = null;
     const ok = await run(
       "save",
       async () => {
         await api.updatePro(pro.id, parsed.body);
         dirty.current = false;
         await myPro.reload();
-        await siretPending?.current?.();
+        siretIssue = (await siretPending?.current?.()) ?? null;
       },
       L.ficheSaved,
     );
     if (!ok) dirty.current = true;
+    // Tour 2 (lot C7) : la fiche est enregistrée, mais le SIRET saisi n'a pas pu être validé : on le dit (confirmation
+    // partielle), au lieu d'un « Fiche enregistrée » sans réserve.
+    else if (siretIssue) setNotice(siretPartial(siretIssue));
   }
 
   return (

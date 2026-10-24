@@ -245,7 +245,8 @@ export function SmokePuff({ maxR, style }: { maxR: number; style: ComponentProps
 export function useSmokePool(kind: "battle" | "orbit" = "battle"): number {
   const { width } = useWindowDimensions();
   const api = Platform.OS === "android" ? Number(Platform.Version) : undefined;
-  return smokePoolSize(width, api, kind === "orbit" ? smoke.orbitPool : smoke.pool);
+  const size = smokePoolSize(width, api, kind === "orbit" ? smoke.orbitPool : smoke.pool);
+  return kind === "orbit" && Platform.OS === "android" ? Math.min(size, smoke.orbitPoolAndroidMax) : size;
 }
 
 export const styles = StyleSheet.create({

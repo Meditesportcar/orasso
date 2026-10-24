@@ -271,4 +271,25 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     await replayPendingPush();
     expect(sim.store.get("signout-pending")).toBeUndefined();
   });
+
+  it("lot C7, tour 2 : une déconnexion ajoutée pendant un rejeu n'est jamais perdue ; 20 au plus", async () => {
+    await queueSignOut("session-a");
+    let release: () => void = () => {};
+    sim.api.revokeSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({});
+        }),
+    );
+    const replay = replayPendingPush();
+    await new Promise((r) => setTimeout(r, 0));
+    const added = queueSignOut("session-b");
+    release();
+    await Promise.all([replay, added]);
+    expect(JSON.parse(sim.store.get("signout-pending") ?? "[]")).toEqual(["session-b"]);
+    for (let i = 0; i < 25; i++) await queueSignOut(`s-${i}`);
+    const kept = JSON.parse(sim.store.get("signout-pending") ?? "[]");
+    expect(kept).toHaveLength(20);
+    expect(kept.at(-1)).toBe("s-24");
+  });
 });

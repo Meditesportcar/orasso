@@ -89,4 +89,20 @@ describe("accès flottant du site", () => {
     } as MyStaffEvent;
     expect(nearAccessOf({ staff: [staff] }, at(10, 20))).toMatchObject({ href: "/app/sorties?vue=staff" });
   });
+
+  it("tour 2 : festival du samedi au dimanche, inscrit le samedi : le dimanche, le samedi fini reste dans « À venir »", async () => {
+    const saturday = app(
+      {
+        day: {
+          id: "d",
+          date: "2026-10-24",
+          startsAt: at(10, 24, 10).toISOString(),
+          endsAt: at(10, 24, 18).toISOString(),
+        },
+      },
+      { startsAt: at(10, 24, 10).toISOString(), endsAt: at(10, 25, 18).toISOString() },
+    );
+    expect(nearAccessOf({ applications: [saturday] }, at(10, 25, 9))?.href).toBe("/app/sorties");
+    expect(nearAccessOf({ applications: [saturday] }, at(10, 25, 20))?.href).toBe("/app/sorties?vue=passes");
+  });
 });

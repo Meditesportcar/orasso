@@ -336,13 +336,14 @@ function TransfersBody() {
     if (!ok) return;
     setTarget(null);
     setNotice(target.accept ? "La plaque a changé de main." : "Transfert refusé.");
-    await rows.reload();
+    // Une décision de transfert peut libérer une forme unique : la file des conflits est relue aussi (tour 2).
+    await Promise.all([rows.reload(), conflicts.reload()]);
   }
 
   return (
     <AdminPage
       title="Transferts de plaque"
-      onRefresh={rows.reload}
+      onRefresh={() => Promise.all([rows.reload(), conflicts.reload()])}
       overlays={
         <>
           {conflicts.sheet}
@@ -432,7 +433,7 @@ function TransfersBody() {
  * Conflits laissés par la forme unique des plaques (lot M2) : sous les transferts, sur le même écran. Appliquer la forme
  * unique (refusé par l'API tant qu'un autre la porte) ou classer le conflit ; note facultative, gardée au journal.
  */
-function useConflictsSection(): { sheet: ReactNode; section: ReactNode } {
+function useConflictsSection(): { sheet: ReactNode; section: ReactNode; reload: () => Promise<unknown> } {
   const { t } = useTheme();
   const rows = useApi(() => api.adminPlateConflicts(), []);
   const gesture = useGesture();
@@ -528,7 +529,7 @@ function useConflictsSection(): { sheet: ReactNode; section: ReactNode } {
       ))}
     </View>
   );
-  return { sheet, section };
+  return { sheet, section, reload: rows.reload };
 }
 
 export function TransfersScreen() {

@@ -24,9 +24,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   await requireSuperAdmin(request);
   const [rows, conflicts] = await Promise.all([
     apiOrThrow<AdminPlateTransfer[]>(request, "/admin/plate-transfers"),
-    apiOrThrow<AdminPlateConflict[]>(request, "/admin/plate-conflicts"),
+    // Tour 2 (lot C7) : une panne des conflits ne fait pas tomber les transferts ; la section se dit indisponible.
+    api<AdminPlateConflict[]>(request, "/admin/plate-conflicts"),
   ]);
-  return { rows, conflicts };
+  return { rows, conflicts: conflicts.ok ? conflicts.data : null };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -133,7 +134,14 @@ export default function AdminTransfers({ loaderData, actionData }: Route.Compone
           Plaques qui gardent leur ancienne forme parce qu'une autre porte déjà la forme unique (accents, bande F,
           département).
         </p>
-        {conflicts.length === 0 ? (
+        {conflicts === null ? (
+          <div className="s-notice s-row s-row--between" role="alert" data-testid="plate-conflicts-unavailable">
+            <span>Conflits de plaque indisponibles pour le moment.</span>
+            <Button variant="secondary" icon="undo" href="/admin/transferts">
+              Réessayer
+            </Button>
+          </div>
+        ) : conflicts.length === 0 ? (
           <p className="s-notice">Aucun conflit de plaque.</p>
         ) : (
           <div className="g-queue">

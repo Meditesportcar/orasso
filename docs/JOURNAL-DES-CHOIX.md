@@ -2689,3 +2689,15 @@ Source : `lots/c7-finitions.md` (relais). Exclus (lots en parallèle) : recettes
 - **Durée des sessions** : Better Auth garde ses réglages par défaut (7 jours, prolongée chaque jour d'usage). Proposition par défaut : garder 7 jours ; la révocation au rejeu ferme désormais une session quittée hors ligne.
 - **Fumée de l'ouverture** : plus fine qu'avant, mais en bouffées douces et non en grain comme l'artefact ; à juger sur le Xiaomi (APK).
 - **Tickets du site** : le site n'a pas de ticket (Missions, Candidatures, Accréditations et Mes sorties sont en cartes) ; à faire avec le lot de Mes sorties du site.
+
+## Lot C7, tour 2 (relectures Opus « fusionnable avec réserves » et Codex « fusionnable après corrections ») — 24/10/2026
+
+Source : `corrections-c7.md` (relais).
+- **Déconnexions hors ligne** : l'ajout d'un jeton passe par la même file que le rejeu (`serial` de `push.ts`) : un jeton ajouté pendant un rejeu n'est plus écrasé (test de l'entrelacement) ; 20 jetons au plus, les plus anciens abandonnés (ils expirent d'eux-mêmes).
+- **Conflits de plaque** : verrous dans l'ordre de `vehiclesService.update` (le véhicule ou la demande, puis la ligne de conflit) ; un interblocage (40P01) est rendu en 409. Appliquer la forme unique migre dans la même transaction les demandes de transfert ouvertes du véhicule sur l'ancienne forme (refus 409 si un demandeur a déjà une autre demande ouverte sur la forme unique) et avance l'horodatage des candidatures du véhicule : la synchro différentielle du staff renvoie leur nouveau hachage de plaque. Site : une panne de la file des conflits n'emporte plus la page des transferts (section « indisponible » et « Réessayer ») ; appli : tirer pour actualiser et chaque décision de transfert relisent aussi les conflits.
+- **Carte flottante du site** : « Passées » d'après la fin de l'événement entier (Mes sorties range un festival en cours dans « À venir », même après le jour choisi).
+- **SIRET** : un contrôle refusé (400, 409), introuvable au registre ou sans réseau donne « Fiche enregistrée, SIRET non validé : <raison> » au lieu de « Fiche enregistrée. » (`siretCheckIssue`, testé).
+- **`appli-m6`, bandeau** : plus de saut silencieux. Les recettes se lancent avec `NOTIFY_QUIET_HOURS=off` pour l'API (environnement de recette seulement, jamais sur le VPS) ; la nuit sans cette variable, la recette échoue aussitôt en le disant.
+- **Coût de la battle d'ouverture** : les douze traces suivent une horloge qui avance par pas de deux images (`useAnimatedReaction`), même dessin ; sur Android, 16 bouffées par voiture au plus autour du O (`smoke.orbitPoolAndroidMax`). À mesurer sur le Xiaomi.
+- **Site, O vivant en mouvement réduit** : l'image figée est repeinte quand l'hôte change de taille (rotation).
+- **Gardés tels quels** : le doublon `ui/Ticket.tsx` / `features/sorties/Ticket.tsx`, à réunir avec le lot de Mes sorties ; les adaptations d'`appli-lot50` (passeport lu dans l'API) et d'`appli-lot41-liste` (carte dans Mon profil). La recette `lot56` (`/evenements`, `.ex-dates`) échoue depuis R2, hors lot.

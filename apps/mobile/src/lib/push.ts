@@ -206,11 +206,19 @@ async function savePending(next: PendingUnregister): Promise<void> {
  */
 const SIGNOUT_KEY = "signout-pending";
 
-/** Garde le jeton d'une session à révoquer dès que le réseau revient. */
-export async function queueSignOut(token: string): Promise<void> {
-  const saved = (await kvGetJson<string[]>(SIGNOUT_KEY)) ?? [];
-  const tokens = Array.isArray(saved) ? saved : [];
-  if (!tokens.includes(token)) await kvSetJson(SIGNOUT_KEY, [...tokens, token]);
+/** Au plus 20 sessions en attente : au-delà, les plus anciennes sont abandonnées (elles expirent d'elles-mêmes). */
+const SIGNOUT_MAX = 20;
+
+/**
+ * Garde le jeton d'une session à révoquer dès que le réseau revient. Passe par la même file que le rejeu (`serial`) :
+ * un jeton ajouté pendant un rejeu n'est jamais écrasé par lui (tour 2 du lot C7).
+ */
+export function queueSignOut(token: string): Promise<void> {
+  return serial(async () => {
+    const saved = (await kvGetJson<string[]>(SIGNOUT_KEY)) ?? [];
+    const tokens = Array.isArray(saved) ? saved : [];
+    if (!tokens.includes(token)) await kvSetJson(SIGNOUT_KEY, [...tokens, token].slice(-SIGNOUT_MAX));
+  });
 }
 
 /** Rejoue les déconnexions en attente : faite (2xx), ou déjà caduque (400, 401, 403) ; sinon elle attend encore. */

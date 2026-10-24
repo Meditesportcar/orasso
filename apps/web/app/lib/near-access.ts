@@ -50,8 +50,9 @@ export function nearAccessOf(
           endsAt: span.endsAt,
           title: a.event.title,
           line: ["Retenue", a.zone ? `zone ${a.zone.code}` : null, when].filter(Boolean).join(" · "),
-          // Relecture C4b (lot C7) : à J+1, la sortie terminée est dans « Passées », pas dans « À venir ».
-          href: new Date(span.endsAt) <= now ? "/app/sorties?vue=passes" : "/app/sorties",
+          // Relecture C4b (lot C7) : à J+1, la sortie terminée est dans « Passées », pas dans « À venir ». Tour 2 : d'après
+          // la fin de l'événement entier (Mes sorties range un festival en cours dans « À venir », même après son samedi).
+          href: new Date(a.event.endsAt) <= now ? "/app/sorties?vue=passes" : "/app/sorties",
         };
       }),
     ...(sources.tickets ?? [])

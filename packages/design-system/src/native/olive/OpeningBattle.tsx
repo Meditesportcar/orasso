@@ -13,6 +13,7 @@ import Animated, {
   cancelAnimation,
   type SharedValue,
   useAnimatedProps,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -71,6 +72,8 @@ const TRACE = { points: 34, alpha: 0.16, width: 2.2 } as const;
 const TRACE_SPAN = (TRACE.points / 60) * 1000;
 const TRACE_BANDS = 3;
 const TRACE_STEPS = 6;
+/** Pas de recalcul des traces : deux images à 60 i/s. */
+const TRACE_STEP_MS = 1000 / 30;
 
 /**
  * Une bouffée derrière la voiture de tête (`chase` faux) ou la chasse : elle naît tant que la voiture drifte (avant que
@@ -218,6 +221,19 @@ export function OpeningBattleLogo({
   const pool = useSmokePool("orbit");
   const [running, setRunning] = useState(false);
   const clock = useOliveClock(!reducedMotion && active && running);
+  // Tour 2 du lot C7 (coût) : les traces suivent une horloge qui avance par pas de deux images (33 ms) ; leurs douze
+  // chemins ne sont recalculés qu'une image sur deux, sans rien changer à leur dessin (même géométrie, même fondu).
+  const traceClock = useSharedValue(0);
+  useAnimatedReaction(
+    () => {
+      "worklet";
+      return Math.floor(clock.value / TRACE_STEP_MS);
+    },
+    (step, previous) => {
+      "worklet";
+      if (step !== previous) traceClock.value = step * TRACE_STEP_MS;
+    },
+  );
   const done = useRef(onDone);
   done.current = onDone;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -366,7 +382,7 @@ export function OpeningBattleLogo({
                       chase={isChase}
                       side={side}
                       band={band}
-                      clock={clock}
+                      clock={traceClock}
                       parkT={parkT}
                       fade={smokeOn}
                       kz={kz}

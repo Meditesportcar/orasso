@@ -197,14 +197,15 @@ test("bandeau d'annonce : « Retenue ! » moutarde puis liste d'attente sobre ; 
   page,
 }) => {
   test.setTimeout(300_000);
-  // Lot C7 : la décision part en notification, retenue pendant les heures calmes (22 h – 8 h) ; la nuit, la recette
-  // demande l'API lancée avec NOTIFY_QUIET_HOURS=off (et la même variable pour Playwright), sinon elle est sautée en le
-  // disant au lieu d'échouer au bout du délai.
+  // Lot C7, tour 2 : la décision part en notification, retenue pendant les heures calmes (22 h – 8 h). Les recettes se
+  // lancent avec NOTIFY_QUIET_HOURS=off pour l'API (environnement de recette seulement, jamais sur le VPS) ; la nuit,
+  // sans elle, la recette échoue tout de suite en le disant (plus de saut silencieux ni d'attente jusqu'au délai).
   const quiet = parisHour() >= 22 || parisHour() < 8;
-  test.skip(
-    quiet && process.env.NOTIFY_QUIET_HOURS !== "off",
-    "Heures calmes : lancer l'API avec NOTIFY_QUIET_HOURS=off",
-  );
+  if (quiet && process.env.NOTIFY_QUIET_HOURS !== "off") {
+    throw new Error(
+      "Heures calmes : lancer l'API et Playwright avec NOTIFY_QUIET_HOURS=off (environnement de recette)",
+    );
+  }
   const damien = await login("damien@orasso.local");
   const s = unique();
   const email = `bandeau_${s}@e2e.orasso.test`;

@@ -3,9 +3,23 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, createVehicle, resetDb, seedReference, signUp } from "../../../test/helpers";
+import {
+  call,
+  createEvent,
+  createStructure,
+  createVehicle,
+  resetDb,
+  seedReference,
+  signUp,
+} from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { adminAuditLog, plateNormalizationConflicts, vehicles } from "../../db/schema";
+import {
+  adminAuditLog,
+  applications,
+  plateNormalizationConflicts,
+  plateTransferRequests,
+  vehicles,
+} from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -80,5 +94,52 @@ describe("conflits de plaque (équipe Orasso)", () => {
     expect(res.status).toBe(200);
     expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, dup.id) }))?.plateNormalized).toBe("GA662KS66");
     expect(await db.select().from(plateNormalizationConflicts)).toEqual([]);
+  });
+
+  it("tour 2 : appliquer migre les demandes ouvertes sur l'ancienne forme et relance la synchro du staff", async () => {
+    const { a, dup, holder, conflictId } = await collision();
+    const c = await signUp("Conf_03");
+    const [transfer] = await db
+      .insert(plateTransferRequests)
+      .values({ plateNormalized: "GA662KS66", fromVehicleId: dup.id, toUserId: c.id })
+      .returning();
+    const structure = await createStructure(a.id);
+    const event = await createEvent(structure.id);
+    const past = new Date(Date.now() - 3_600_000);
+    const [app] = await db
+      .insert(applications)
+      .values({
+        eventId: event.id,
+        userId: a.id,
+        vehicleId: dup.id,
+        status: "accepted",
+        rulesAcceptedAt: past,
+        followStructure: false,
+        updatedAt: past,
+      })
+      .returning();
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, holder.id));
+    const admin = await signUp("Admin_C7d", { twoFactor: true, role: "super_admin" });
+    const res = await call(admin, "POST", `/admin/plate-conflicts/${conflictId}/resolve`, { action: "apply" });
+    expect(res.status).toBe(200);
+    const moved = await db.query.plateTransferRequests.findFirst({ where: eq(plateTransferRequests.id, transfer!.id) });
+    expect(moved?.plateNormalized).toBe("GA662KS");
+    // Synchro différentielle du staff : l'horodatage de la candidature avance (le hachage de plaque a changé).
+    const after = await db.query.applications.findFirst({ where: eq(applications.id, app!.id) });
+    expect(after!.updatedAt.getTime()).toBeGreaterThan(past.getTime() + 1000);
+  });
+
+  it("tour 2 : appliquer est refusé quand le demandeur a déjà une demande ouverte sur la forme unique", async () => {
+    const { dup, holder, conflictId } = await collision();
+    const c = await signUp("Conf_04");
+    await db.insert(plateTransferRequests).values([
+      { plateNormalized: "GA662KS66", fromVehicleId: dup.id, toUserId: c.id },
+      { plateNormalized: "GA662KS", fromVehicleId: holder.id, toUserId: c.id },
+    ]);
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, holder.id));
+    const admin = await signUp("Admin_C7e", { twoFactor: true, role: "super_admin" });
+    const res = await call(admin, "POST", `/admin/plate-conflicts/${conflictId}/resolve`, { action: "apply" });
+    expect(res.status).toBe(409);
+    expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, dup.id) }))?.plateNormalized).toBe("GA662KS66");
   });
 });

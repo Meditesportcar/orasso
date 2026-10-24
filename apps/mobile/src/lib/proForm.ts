@@ -13,6 +13,7 @@ import {
   type ProOwner,
   type ProUpdate,
   proActivities,
+  proAppLabels,
   type Weekday,
   weekdays,
 } from "@orasso/shared";
@@ -152,4 +153,29 @@ export const siretDigits = (value: string): string => value.replace(/\s+/g, "");
 export function partnerChoices<T extends { slug: string }>(structures: T[], linkedSlugs: string[]): T[] {
   const linked = new Set(linkedSlugs);
   return structures.filter((s) => !linked.has(s.slug));
+}
+
+/**
+ * Tour 2 du lot C7 : le contrôle du SIRET joué par « Enregistrer » de la fiche. `null` si le SIRET est validé, sinon la
+ * raison à dire en confirmation partielle (refus de l'API tel quel, registre qui ne le trouve pas, panne réseau).
+ */
+export async function siretCheckIssue(
+  check: () => Promise<{ verifiedAt: string | null; registryCheck: { status: string } | null }>,
+): Promise<string | null> {
+  try {
+    const fresh = await check();
+    if (fresh.verifiedAt) return null;
+    const status = fresh.registryCheck?.status;
+    return status === "closed"
+      ? proAppLabels.siretClosed
+      : status === "not_found"
+        ? proAppLabels.siretNotFound
+        : status === "unavailable"
+          ? proAppLabels.siretUnavailable
+          : proAppLabels.siretChecked;
+  } catch (e) {
+    // Le message de l'API (`ApiRequestError`, réseau compris), tel quel ; `http.ts` n'est pas importé ici (tests sans
+    // React Native).
+    return e instanceof Error && e.message ? e.message : "Une erreur est survenue. Réessaie.";
+  }
 }

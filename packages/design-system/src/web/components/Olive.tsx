@@ -891,18 +891,24 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
     };
 
     if (reduced) {
-      // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe.
-      const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
-      measure(e);
-      e.paint.read(o, 0, () => getComputedStyle(o).color);
+      // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe. Tour 2 du
+      // lot C7 : repeinte quand l'hôte change de taille (rotation, fenêtre), le O fluide changeant d'échelle.
+      const still = () => {
+        const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
+        measure(e);
+        e.paint.read(o, 0, () => getComputedStyle(o).color);
+        begin(e);
+        for (let i = 0; i < 53; i++) {
+          ctx.clearRect(0, 0, e.w, e.h);
+          e.frame(ctx, 1 / 60, e.u, () => {});
+        }
+      };
       setParked(false);
-      begin(e);
-      for (let i = 0; i < 53; i++) {
-        ctx.clearRect(0, 0, e.w, e.h);
-        e.frame(ctx, 1 / 60, e.u, () => {});
-      }
+      still();
       engine.current = null;
-      return;
+      const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => still());
+      ro?.observe(el);
+      return () => ro?.disconnect();
     }
     if (!running) return;
 
