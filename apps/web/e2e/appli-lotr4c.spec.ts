@@ -152,22 +152,24 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
   const event = await openEvent(damien, `R4c Nocturne ${id}`.slice(0, 34));
 
   // Mon compte : public, dans le 66, deux véhicules (le plus ancien est le principal par défaut).
-  const mePseudo = `R4cMe_${id}`.slice(0, 20);
+  // Pseudos d'essai courts (14 signes au plus) : à 20 signes sans espace, l'aperçu du profil les coupait (instable).
+  const tag = id.slice(-7);
+  const mePseudo = `R4cMe_${tag}`;
   const me = await signUpApi(mePseudo);
   await apiCall(me, "PATCH", "/me/profile", { departments: ["66"], visibility: "public" });
   const first = await vehicle(me, "Toyota", 0);
   const second = await vehicle(me, "Nissan", 0);
   // Un ami, un abonné public (que je suis aussi), un abonné privé, un compte privé à visiter ; MéditeSportCar suivie.
   const mk = async (p: string, visibility: "public" | "private") => {
-    const pseudo = `${p}_${id}`.slice(0, 20);
+    const pseudo = `${p}_${tag}`;
     const cookie = await signUpApi(pseudo);
     await apiCall(cookie, "PATCH", "/me/profile", { departments: ["66"], visibility });
     return { pseudo, cookie };
   };
   const friend = await mk("R4cAmi", "public");
   const fan = await mk("R4cFan", "public");
-  const shy = await mk("R4cDiscret", "private");
-  const priv = await mk("R4cPrive", "private");
+  const shy = await mk("R4cDis", "private");
+  const priv = await mk("R4cPri", "private");
   await vehicle(priv.cookie, "Toyota", 1);
   const req = await apiCall<{ id: string }>(me, "POST", "/friends/requests", { pseudo: friend.pseudo });
   expect((await apiCall(friend.cookie, "POST", `/friends/requests/${req.data.id}/accept`)).status).toBe(200);
@@ -176,7 +178,7 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
   expect((await apiCall(me, "POST", `/users/${fan.pseudo}/follow`)).status).toBe(200);
   await apiCall(me, "POST", `/structures/${event.structureId}/follow`);
   // Une demande d'ami reçue (en tête de l'onglet Amis).
-  const asker = await mk("R4cDemande", "public");
+  const asker = await mk("R4cDem", "public");
   await apiCall(asker.cookie, "POST", "/friends/requests", { pseudo: mePseudo });
   const errors: string[] = [];
   const email = `${mePseudo.toLowerCase()}@e2e.orasso.test`;
