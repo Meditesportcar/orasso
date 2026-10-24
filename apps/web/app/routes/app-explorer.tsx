@@ -49,7 +49,7 @@ import { ProTile } from "../components/ProTile";
 import { api, apiOrThrow, getMe } from "../lib/api.server";
 import { now } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
-import { explorerChoice } from "../lib/explorerChoice.server";
+import { awayQueryRedirect, explorerChoice } from "../lib/explorerChoice.server";
 import {
   activeFilters,
   EVENT_SORTS,
@@ -136,10 +136,14 @@ type PeopleData = {
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  // Lot R4d : sans JavaScript, le texte tapé dans « Ailleurs » devient un département.
+  const away = awayQueryRedirect(url);
+  if (away) throw redirect(away);
   // Tour 2 : le choix appartient au compte connecté (`explorerChoice.server.ts`).
   const choice = await explorerChoice(request, url);
   if (choice.redirectTo) throw redirect(choice.redirectTo);
-  const result = await load(request, url);
+  // Lot R4d : les derniers départements choisis par « Ailleurs » (cookie, par compte).
+  const result = { ...(await load(request, url)), awayRecent: choice.recent };
   return choice.setCookie ? data(result, { headers: { "set-cookie": choice.setCookie } }) : result;
 }
 
@@ -436,8 +440,22 @@ const WHEN_OPTIONS = [
 const PLACE_OMIT = ["autour", "ailleurs", "rayon", "lat", "lng"];
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const { segment, q, vue, cur, cursor, coin, gradeLabel, signedIn, failed, results, events, pros, people } =
-    loaderData;
+  const {
+    segment,
+    q,
+    vue,
+    cur,
+    cursor,
+    coin,
+    gradeLabel,
+    signedIn,
+    failed,
+    results,
+    events,
+    pros,
+    people,
+    awayRecent,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   const done = actionData as unknown as
     | {
@@ -508,6 +526,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
         hasPosition={place.hasPosition}
         position={place.hasPosition && cur.lat && cur.lng ? { lat: cur.lat, lng: cur.lng } : null}
         seeLabel={seeLabel}
+        recent={awayRecent}
       />
     </PillSheet>
   );
@@ -698,6 +717,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             coin={coin}
             hasPosition={false}
             seeLabel={R.seeResults}
+            recent={awayRecent}
           />
         </PillSheet>
         <PillSheet
