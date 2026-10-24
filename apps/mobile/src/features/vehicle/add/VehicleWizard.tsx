@@ -15,7 +15,7 @@ import {
 import { randomUUID } from "expo-crypto";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { AccessibilityInfo, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
@@ -40,6 +40,7 @@ import { useApi } from "@/lib/useApi";
 import { waitUploadParked } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
 import { SquareCropper } from "@/ui/SquareCropper";
+import { markSeen, waitsForEnd } from "@/ui/scrollEnd";
 import { LiveCard } from "./LiveCard";
 import {
   applyMode,
@@ -119,6 +120,22 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const pendingLeave = useRef<(() => void) | null>(null);
 
   const patch = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
+
+  // Lot R3a (retour 3 de Damien) : « Continuer » attend que le bas de l'étape ait été vu ; une étape vue le reste.
+  // Avec un lecteur d'écran, aucun blocage (il lit tout sans défiler).
+  const [seen, setSeen] = useState<ReadonlySet<number>>(() => new Set());
+  const [screenReader, setScreenReader] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void AccessibilityInfo.isScreenReaderEnabled()
+      .then((on) => alive && setScreenReader(on))
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener("screenReaderChanged", setScreenReader);
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
 
   const makes = useApi(() => api.makes(), [], { cacheKey: "ref.makes" });
   const models = useApi(() => api.models(draft.makeId ?? ""), [draft.makeId], { enabled: Boolean(draft.makeId) });
@@ -242,7 +259,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     try {
       const room = MAX_PHOTOS - draft.photos.length;
       const picked = (
-        from === "camera" ? await takePhoto(VEHICLE_SOURCE_SIDE) : await pickPhotos(room, undefined, VEHICLE_SOURCE_SIDE)
+        from === "camera"
+          ? await takePhoto(VEHICLE_SOURCE_SIDE)
+          : await pickPhotos(room, undefined, VEHICLE_SOURCE_SIDE)
       ).slice(0, room);
       const added: { key: string; source: PickedPhoto; square: PickedPhoto; crop: SquareCrop }[] = [];
       for (const p of picked) {
@@ -572,6 +591,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   // Maquettes 1.1 et 1.5 : « Continuer » grisé tant qu'il n'y a pas de photo, ou que le choix n'est pas fait ; lot M1,
   // tour 2 : aussi pendant l'import ou le recadrage d'une photo.
   const blocked = continueBlocked(step, draft, importing);
+  const unseen = waitsForEnd(seen, step, screenReader);
   const last = step === STEP_COUNT - 1;
   return (
     <FlowScreen
@@ -579,6 +599,12 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       facts={V.stepOf(step + 1, STEP_COUNT, V.steps[step] ?? "")}
       onClose={close}
       overlays={quitSheet}
+      endGate={{
+        key: step,
+        locked: unseen,
+        onSeen: () => setSeen((s) => markSeen(s, step)),
+        label: V.seeRest,
+      }}
       header={
         <>
           {bar(((step + 1) / STEP_COUNT) * 100)}
@@ -604,10 +630,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
                 variant="primary"
                 icon={last ? (editing ? "check" : "upload") : "next"}
                 onPress={next}
-                disabled={blocked}
+                disabled={blocked || unseen}
                 fullWidth
                 testID="vehicle-step-next"
-                accessibilityHint={issue ?? undefined}
+                accessibilityHint={blocked ? (issue ?? undefined) : unseen ? V.seeRestHint : (issue ?? undefined)}
               >
                 {last ? (editing ? L.save : V.send) : L.next}
               </Button>

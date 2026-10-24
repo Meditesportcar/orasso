@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plateOnSharePhoto, SHARE_SIZES, sharePhotoZone, shareFormats, shareStyles } from "./garage";
+import { plateOnSharePhoto, SHARE_SIZES, shareFormats, sharePhotoZone, shareStyles } from "./garage";
 
 // Lot R3a (retour 7 de Damien) : la vérification de plaque de l'affiche ne porte que sur la photo. La mise en page est
 // la même pour les trois styles (seule l'ambiance change) : la zone ne dépend que du format.

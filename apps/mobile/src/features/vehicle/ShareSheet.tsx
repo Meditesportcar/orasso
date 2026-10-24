@@ -6,7 +6,7 @@
 // lisible se masque d'un toucher (l'API floute la zone).
 // Le contenu (`ShareBody`) est commun à l'écran de flux (`/vehicule/<id>/partager`) et à la feuille de fin d'ajout.
 
-import { Button, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, FitTitle, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   shareSheetLabels as L,
   type PlateRect,
@@ -256,9 +256,7 @@ export function ShareBody({
     <View style={styles.body}>
       {sheet ? (
         <View>
-          <Text variant="posterM" color={c.ink}>
-            {L.title}
-          </Text>
+          <FitTitle title={L.title} variant="posterM" color={c.ink} header />
           <Text variant="caption" color={c.inkMuted}>
             {L.subtitle}
           </Text>

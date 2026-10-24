@@ -84,6 +84,9 @@ export const vehicleAddLabels = {
   plateProbable: (n: number) =>
     `Photo ${n} : une plaque semble visible, à vérifier. Pose le cadre dessus, ou touche « Aucune plaque ».`,
   plateSearching: "On cherche la plaque sur tes photos…",
+  /** Lot R3a (retour 3) : l'indicateur discret en bas d'une étape longue, et pourquoi « Continuer » attend. */
+  seeRest: "Voir la suite de l'étape",
+  seeRestHint: "Descends jusqu'en bas de l'étape pour continuer",
   noneTitle: "Aucune plaque visible sur cette photo ?",
   noneText: "Elle partira sans masque. Vérifie bien : l'avant et l'arrière de la voiture.",
   noneYes: "Oui, aucune plaque",

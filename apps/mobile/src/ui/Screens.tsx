@@ -9,16 +9,19 @@
 // lui-même en mode B : aucune page sans bande, aucune bande en double.
 import {
   Button,
+  GradientFill,
   Ground,
+  Icon,
   OliveActivityProvider,
   TAB_BAR_SPACE,
   tokens,
   useFlowChrome,
   useTheme,
+  withAlpha,
 } from "@orasso/design-system/native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SwipeEntry } from "@/features/nav/SwipeEntry";
@@ -32,6 +35,7 @@ import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
 import { revealOffset, type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
+import { endReached } from "./scrollEnd";
 import { TabTitle } from "./TabTitle";
 import { TopBar, useInTabs, useTabBandRefresh } from "./TopBar";
 
@@ -190,6 +194,7 @@ export function FlowScreen({
   onRefresh,
   overlays,
   header,
+  endGate,
 }: Common & {
   title: string;
   facts?: string;
@@ -200,6 +205,8 @@ export function FlowScreen({
   closeLabel?: string;
   /** Lot M1 : zone fixe sous l'en-tête, qui ne défile pas (barre de progression, fiche en construction). */
   header?: ReactNode;
+  /** Lot R3a : le bas de la page doit être vu (voir `EndGate`). */
+  endGate?: EndGate;
 }) {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -222,7 +229,7 @@ export function FlowScreen({
           />
           {header ? <View style={styles.flowHeader}>{header}</View> : null}
           <KeyboardSafe style={styles.fill}>
-            <Body onRefresh={onRefresh}>
+            <Body onRefresh={onRefresh} endGate={endGate}>
               {inInbox ? (
                 <Button
                   variant="plate"
@@ -248,15 +255,27 @@ export function FlowScreen({
   );
 }
 
+/**
+ * Lot R3a (retour 3 de Damien) : une page dont le bas doit être vu avant de continuer (étape d'un parcours plus haute
+ * que l'écran). `key` : la page affichée (une nouvelle page repart en haut et se remesure) ; `locked` : pas encore vue ;
+ * `onSeen` : son bas est visible, ou presque ; `label` : l'indicateur discret qui invite à descendre (lecture d'écran).
+ */
+export type EndGate = { key: string | number; locked: boolean; onSeen: () => void; label: string };
+
+/** Délai après lequel une nouvelle page de même hauteur que la précédente garde l'ancienne mesure. */
+const REMEASURE_MS = 250;
+
 function Body({
   children,
   onRefresh,
   bottom,
+  endGate,
 }: {
   children: ReactNode;
   onRefresh?: () => Promise<unknown>;
   /** Marge sous le contenu (onglets : place de la barre flottante). */
   bottom?: number;
+  endGate?: EndGate;
 }) {
   const { t } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
@@ -264,6 +283,41 @@ function Body({
   const [held, setHeld] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const offset = useRef(0);
+  // Lot R3a : mesures de la page pour `endGate` (hauteur visible, hauteur du contenu ; 0 = à remesurer).
+  const viewport = useRef(0);
+  const content = useRef(0);
+  const lastContent = useRef(0);
+  const [atEnd, setAtEnd] = useState(true);
+  const gate = useRef(endGate);
+  gate.current = endGate;
+  const checkEnd = useCallback(() => {
+    const g = gate.current;
+    if (!g) return;
+    const reached = endReached({ offset: offset.current, viewport: viewport.current, content: content.current });
+    // L'indicateur ne se montre qu'une fois la page mesurée et plus haute que l'écran.
+    setAtEnd(reached || !(content.current > 0) || !(viewport.current > 0));
+    if (reached && g.locked) g.onSeen();
+  }, []);
+  const gateKey = endGate?.key;
+  const gateLocked = endGate?.locked;
+  // Nouvelle page : elle repart en haut et sa hauteur se remesure (sinon celle de la page d'avant la débloquerait).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement de page relance la mesure
+  useEffect(() => {
+    if (gateKey === undefined) return;
+    offset.current = 0;
+    scroll.current?.scrollTo({ y: 0, animated: false });
+    content.current = 0;
+    setAtEnd(true);
+    const timer = setTimeout(() => {
+      if (content.current === 0) content.current = lastContent.current;
+      checkEnd();
+    }, REMEASURE_MS);
+    return () => clearTimeout(timer);
+  }, [gateKey]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: un verrou posé ou levé relit la position
+  useEffect(() => {
+    checkEnd();
+  }, [gateLocked]);
   const assist = useMemo<ScrollAssist>(
     () => ({
       hold: (on) => setHeld(on),
@@ -283,7 +337,7 @@ function Body({
     }),
     [],
   );
-  return (
+  const page = (
     <ScrollView
       ref={scroll}
       style={styles.fill}
@@ -298,6 +352,16 @@ function Body({
       onTouchCancel={() => setHeld(false)}
       onScroll={(e) => {
         offset.current = e.nativeEvent.contentOffset.y;
+        if (gate.current) checkEnd();
+      }}
+      onLayout={(e) => {
+        viewport.current = e.nativeEvent.layout.height;
+        if (gate.current) checkEnd();
+      }}
+      onContentSizeChange={(_w, h) => {
+        content.current = h;
+        lastContent.current = h;
+        if (gate.current) checkEnd();
       }}
       refreshControl={
         onRefresh ? (
@@ -320,6 +384,30 @@ function Body({
       <ScrollAssistContext.Provider value={assist}>{children}</ScrollAssistContext.Provider>
     </ScrollView>
   );
+  if (!endGate) return page;
+  const ground = t.color.ground;
+  return (
+    <View style={styles.fill}>
+      {page}
+      {/* Lot R3a : indicateur discret et immobile (rien à réduire en mouvement réduit) : un fondu en bas de la page et
+          une petite flèche ; la toucher fait descendre. */}
+      {endGate.locked && !atEnd ? (
+        <View style={styles.endHint} pointerEvents="box-none" testID="flow-end-hint">
+          <GradientFill css={`linear-gradient(180deg, ${withAlpha(ground, 0)} 0%, ${withAlpha(ground, 0.88)} 100%)`} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={endGate.label}
+            onPress={() => scroll.current?.scrollToEnd({ animated: true })}
+            hitSlop={12}
+            style={[styles.endArrow, { backgroundColor: t.color.surface, borderColor: t.color.line }]}
+            testID="flow-end-arrow"
+          >
+            <Icon name="down" size={18} color={t.color.inkMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 /** Intitulé de section (« À venir », « Passés · carnet de route ») : étiquette étroite en capitales. */
@@ -337,4 +425,22 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: space4, paddingTop: space2, gap: space2 },
   flowHeader: { paddingHorizontal: space4, gap: space3, paddingBottom: space2 },
   section: { marginTop: space3 },
+  endHint: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: space2,
+  },
+  endArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: tokens.radius.radiusPill,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

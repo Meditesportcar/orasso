@@ -1,7 +1,7 @@
 // La fiche du véhicule qui se construit en tête de chaque étape (artefact `s-vadd`, `.vlive` ; lot M1, maquettes 1.1 à
 // 1.7) : d'abord la photo de couverture et le nombre de photos, puis « Plaque masquée, numéro privé », le type et le
 // nom, la fiche technique et les catégories. Chaque ligne qui apparaît se gare (Park) ; animations réduites : fondu.
-import { Icon, Park, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { FitTitle, Icon, Park, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleAddLabels as V, vehicleTypeLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
@@ -50,9 +50,13 @@ export function LiveCard({ card, remoteCover }: { card: LiveCardData; remoteCove
             </>
           )}
         </View>
-        <Text variant="posterM" color={c.ink} testID="vehicle-live-name">
-          {card.name ?? V.liveName}
-        </Text>
+        <FitTitle
+          title={card.name ?? V.liveName}
+          variant="posterM"
+          color={c.ink}
+          maxLines={3}
+          testID="vehicle-live-name"
+        />
         <Text variant="caption" color={c.inkMuted} style={styles.small}>
           {card.name ? (card.generation ?? vehicleTypeLabels[card.type]) : V.liveLater}
         </Text>

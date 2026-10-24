@@ -2,7 +2,7 @@
 // grande case d'appel (appareil photo ou galerie) ; ensuite la grille de vignettes carrées avec l'étoile (couverture),
 // recadrer et supprimer, et la case « Ajouter · Appareil ou galerie · 2 sur 8 ». La ligne « 3 photos conseillées » se
 // remplit : il en faut 3 pour demander la certification (décision de Damien du 22/10).
-import { Button, Icon, Photo, Tag, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
+import { Button, FitTitle, Icon, Photo, Tag, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import { CERTIFICATION_MIN_PHOTOS, photoLabels, vehicleAddLabels as V } from "@orasso/shared";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -51,9 +51,14 @@ export function StepPhotos({
           <View style={[styles.callIcon, { backgroundColor: c.accent }]}>
             <Icon name="camera" size={30} color={c.accentInk} />
           </View>
-          <Text variant="posterM" color={c.ink} style={styles.center}>
-            {V.callTitle}
-          </Text>
+          {/* Lot R3a (retour 2) : « AJOUTER DES… » coupé sur Android ; titre mesuré, lignes posées par l'appli. */}
+          <FitTitle
+            title={V.callTitle}
+            variant="posterM"
+            color={c.ink}
+            align="center"
+            testID="vehicle-photo-call-title"
+          />
           <Text variant="caption" color={c.inkMuted} style={styles.center}>
             {V.callText}
           </Text>

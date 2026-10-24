@@ -401,7 +401,12 @@ export type DetectionResult = { found: FoundPlate[] | null; failure?: DetectionF
 export type DetectionDeps = {
   recognize: (uri: string) => Promise<RecognizeResult>;
   /** Copie réduite (côté le plus long `side`) ; absente : pas de second essai. */
-  shrink?: (uri: string, width: number, height: number, side: number) => Promise<{ uri: string; width: number; height: number }>;
+  shrink?: (
+    uri: string,
+    width: number,
+    height: number,
+    side: number,
+  ) => Promise<{ uri: string; width: number; height: number }>;
 };
 
 /**

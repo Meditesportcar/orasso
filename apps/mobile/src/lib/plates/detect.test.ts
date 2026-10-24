@@ -420,8 +420,7 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
 });
 
 describe("lot R3a : plaque de Damien (« EJ-706-EW », bande F et 66), lectures probables de ML Kit", () => {
-  const at = (words: string[]) =>
-    line(words.map((w, i): [string, TextFrame] => [w, frame(560 + i * 70, 560, 60, 30)]));
+  const at = (words: string[]) => line(words.map((w, i): [string, TextFrame] => [w, frame(560 + i * 70, 560, 60, 30)]));
   const cases: string[][] = [
     ["EJ-706-EW"],
     ["F", "EJ-706-EW", "66"],
@@ -459,8 +458,7 @@ describe("lot R3a : plaque de Damien (« EJ-706-EW », bande F et 66), lectures 
 });
 
 describe("lot R3a : raison d'un échec et second essai sur une copie réduite", () => {
-  const plateLine = (scale: number) =>
-    line([["EJ-706-EW", frame(560 * scale, 560 * scale, 180 * scale, 40 * scale)]]);
+  const plateLine = (scale: number) => line([["EJ-706-EW", frame(560 * scale, 560 * scale, 180 * scale, 40 * scale)]]);
   const shrink = async (_uri: string, w: number, h: number, side: number) => {
     const k = side / Math.max(w, h);
     return { uri: "petite", width: Math.round(w * k), height: Math.round(h * k) };
@@ -495,7 +493,8 @@ describe("lot R3a : raison d'un échec et second essai sur une copie réduite", 
   });
   it("erreur de ML Kit puis rien sur la copie : la raison est l'erreur ; aucune ligne nulle part : « no-text »", async () => {
     const failing = await detectWithRetry("grande", 1600, 1600, {
-      recognize: async (uri) => (uri === "grande" ? { status: "error", code: "MlKitException" } : { status: "ok", lines: [] }),
+      recognize: async (uri) =>
+        uri === "grande" ? { status: "error", code: "MlKitException" } : { status: "ok", lines: [] },
       shrink,
     });
     expect(failing).toMatchObject({ found: null, failure: "error:MlKitException", retried: true });
@@ -513,7 +512,10 @@ describe("lot R3a : raison d'un échec et second essai sur une copie réduite", 
     });
     expect(absent).toMatchObject({ found: null, failure: "absent", retried: false });
     expect(calls).toBe(1);
-    const small = await detectWithRetry("petite", 900, 900, { recognize: async () => ({ status: "ok", lines: [] }), shrink });
+    const small = await detectWithRetry("petite", 900, 900, {
+      recognize: async () => ({ status: "ok", lines: [] }),
+      shrink,
+    });
     expect(small).toMatchObject({ found: [], failure: "no-text", retried: false });
   });
 });

@@ -25,11 +25,7 @@ export const CROP_SQUARE: [number, number] = [1, 1];
  * recadrage. Avec `crop` (lot 36) : une photo à la fois, recadrée dans le cadre donné par l'éditeur du système (le
  * recadrage n'existe pas en sélection multiple).
  */
-export async function pickPhotos(
-  limit: number,
-  crop?: [number, number],
-  maxSide = MAX_SIDE,
-): Promise<PickedPhoto[]> {
+export async function pickPhotos(limit: number, crop?: [number, number], maxSide = MAX_SIDE): Promise<PickedPhoto[]> {
   if (limit <= 0) return [];
   const result = await ImagePicker.launchImageLibraryAsync(
     crop

@@ -2,7 +2,7 @@
 // en-tête d'étape (`.vs-h`), ligne de choix de la liste Orasso (`.vg`, « Autre » en pointillés), bouton de type
 // (`.vtype`), pastille (`.vstyles`, choisie en moutarde, refusée barrée), année (`.vyears`), fil d'Ariane (`.vcrumb`),
 // note (`.vnote`), bouton carré « ‹ » du pied, et l'ancienne ligne à coche (`ChoiceRow`, étape Plaque et floutage).
-import { Icon, type IconName, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { FitTitle, Icon, type IconName, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -13,9 +13,8 @@ export function StepHead({ title, text }: { title: string; text: string }) {
   const { t } = useTheme();
   return (
     <View style={styles.head}>
-      <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
-        {title}
-      </Text>
+      {/* Lot R3a : titre mesuré, jamais coupé (Android). */}
+      <FitTitle title={title} variant="posterL" color={t.color.ink} header testID="vehicle-step-title" />
       <Text variant="body" color={t.color.inkMuted}>
         {text}
       </Text>
