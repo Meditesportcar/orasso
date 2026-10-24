@@ -26,14 +26,9 @@ const longDay = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric",
   timeZone: "Europe/Paris",
 });
-const dayTime = new Intl.DateTimeFormat("fr-FR", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
+// Tour 2 (relecture Codex) : la date et l'heure par deux formateurs distincts ; le séparateur d'`Intl` entre les deux
+// (« à » dans le navigateur, une virgule sous Node) ne sert plus.
+const time = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -42,7 +37,5 @@ export const formatShortDay = (iso: string | Date) => cap(withYear(shortDay.form
 /** « Dim. 6 juin 2027 » */
 export const formatLongDay = (iso: string | Date) => cap(longDay.format(new Date(iso)));
 /** « Mer. 21 oct. · 18:00 » (« Jeu. 21 oct. 2027 · 18:00 » hors de l'année en cours). */
-export const formatDayTime = (iso: string | Date) => {
-  const [day = "", time = ""] = dayTime.format(new Date(iso)).split(" à ");
-  return cap(`${withYear(day, iso)} · ${time}`);
-};
+export const formatDayTime = (iso: string | Date) =>
+  cap(`${withYear(shortDay.format(new Date(iso)), iso)} · ${time.format(new Date(iso))}`);

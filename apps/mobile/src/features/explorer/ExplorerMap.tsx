@@ -187,16 +187,8 @@ export function ExplorerMap({
                       listGroup,
                     )
                 : () => press(g.id, () => onSelect(first));
-              const pro = !stacked && first.kind === "pro";
               return (
-                <Marker
-                  key={g.id}
-                  id={g.id}
-                  lngLat={[g.lng, g.lat]}
-                  anchor="bottom"
-                  offset={pro ? [shiftOf(g.id, g.lng), 0] : undefined}
-                  onPress={open}
-                >
+                <Marker key={g.id} id={g.id} lngLat={[g.lng, g.lat]} anchor="bottom" onPress={open}>
                   {stacked ? (
                     <ClusterPin
                       count={g.items.length}
@@ -208,6 +200,7 @@ export function ExplorerMap({
                       label={first.label}
                       accessibilityLabel={first.title}
                       onPress={open}
+                      shift={shiftOf(g.id, g.lng)}
                       onWidth={(w) => setPinWidths((prev) => (prev[g.id] === w ? prev : { ...prev, [g.id]: w }))}
                     />
                   ) : (

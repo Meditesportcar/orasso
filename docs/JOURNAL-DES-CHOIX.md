@@ -2686,3 +2686,16 @@ Source : `lots/r3b-dates-explorer.md` (relais), retours 10, 11, 14 et 16 sur l'A
 ### À revoir avec Damien (lot R3b)
 - **Affiches déjà rendues sans l'année** : un événement de l'an prochain créé avant ce lot garde une affiche sans année (la vignette et la fiche la disent quand même). Régénérer ses affiches demanderait un passage sur la base.
 - **Natif** : le décalage des plaques de pros n'est relu qu'à la fin d'un geste (pendant un glissement, une plaque peut dépasser un instant) ; à vérifier sur le Xiaomi.
+
+## Lot R3b, tour 2 (relectures Opus et Codex « fusionnable après corrections ») — 24/10/2026
+
+Source : `corrections-r3b.md` (relais).
+- **Rejoindre un crew** : l'écran de l'appli passe en `/rejoindre-crew`, hors de `/crew/…` (il masquait un crew au slug « rejoindre ») ; la réservation du slug est retirée (test : un crew « Rejoindre » garde son slug et s'ouvre). Le site garde `/app/crews/rejoindre` (crews en `/c/:slug`). L'écran ne lit plus que les crews (`crewsOnly` de `loadPeople`) : une panne de la recherche de personnes ne le vide pas.
+- **« Demande envoyée »** : l'état suit l'API dans les deux sens (annulée ailleurs → « Rejoindre ») ; Personnes et crews relit la liste en reprenant le focus (retour d'une fiche de crew). Seule une action longue (« Demande envoyée ») passe sous le nom ; « Rejoindre » reste à droite, à la hauteur de R2 (captures avant/après identiques).
+- **Ligne de date de la vignette** : espaces insécables ; quand l'année s'écrit, le jour de la semaine cède sa place (« 14 MARS 2027 · 18 H ») pour tenir sur une seule ligne dès 320 px. La souche et la fiche gardent le jour.
+- **Affiches et année** : la clé des caches d'aperçus (API `posterCacheKey`, clients `posterPreviewKey`) porte l'année ; la clé de stockage d'une affiche enregistrée porte l'année écrite (`poster-post-y2027-…`, `y0` : aucune). À l'affichage de la fiche, une affiche dont l'année n'est plus la bonne est remise en rendu (tâche `event.poster-render`, une par événement) : les affiches des événements de l'an prochain rendues avant le lot (sans marque) se refont ainsi au premier affichage de leur fiche ; une clé sans marque d'un événement de l'année en cours n'est pas refaite (pas de rendu en masse). Pas de régénération ponctuelle.
+- **Étiquettes des pros** : seule la plaque se décale. Site : propriété CSS `translate` (le `transform` de MapLibre reste, l'ancrage et la bulle restent sur le lieu), recalcul à `moveend` et au redimensionnement, largeurs gardées, seuls les décalages changés écrits. Natif : la zone du marqueur s'élargit du côté opposé (l'ancrage reste au milieu du bas), plus d'`offset` sur le `Marker`.
+- **Divers** : horaires de l'assistant du site par deux formateurs (date, heure) ; date de la météo de l'Accueil avec l'année ; tests datés avec une heure explicite.
+
+### À revoir avec Damien (lot R3b, tour 2)
+- **Héros de l'Accueil** : avec l'année, « DIM. 14 MARS 2027 » ne tient plus à côté de « J-141 » et passe dessous (capture avant/après) ; rien n'est coupé.

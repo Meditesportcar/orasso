@@ -147,7 +147,7 @@ export function ProfilScreen() {
               }
               onPublic={() => router.push("/profil-public")}
               // Lot R3b (retour 16) : sans crew, d'abord rejoindre (« Créer un crew » vient en second).
-              onCrew={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/rejoindre")}
+              onCrew={() => router.push(crew ? `/crew/${crew.slug}` : "/rejoindre-crew")}
             />
           </>
         ) : null}
