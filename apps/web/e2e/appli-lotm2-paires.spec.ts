@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import {
   addVehicleApi,
   type Cookie,
+  chooseSitePhoto,
   MOBILE,
   randomPlate,
   SEED_PASSWORD,
@@ -93,12 +94,11 @@ test("paires : la plaque dans le garage et la fiche, appli et site", async ({ br
     await s.page.waitForLoadState("networkidle");
     await shot(s.page, `site-fiche-${theme}`);
     // Ajout : photo choisie, puis « Envoyer sans flouter » (après M2 : la confirmation avec la photo).
+    // Depuis le lot M1, la photo choisie passe d'abord par le recadrage au carré (« Valider ») : la case
+    // « sans flouter » n'apparaît qu'après. Page hydratée avant de choisir le fichier.
     await s.page.goto(`${WEB}/app/garage/nouveau`);
-    await s.page.locator('input[name="photo"]').setInputFiles({
-      name: "photo.png",
-      mimeType: "image/png",
-      buffer: samplePhoto(),
-    });
+    await s.page.waitForLoadState("networkidle");
+    await chooseSitePhoto(s.page, { name: "photo.png", mimeType: "image/png", buffer: samplePhoto() });
     await s.page.getByTestId("site-no-plate").click();
     await shot(s.page, `site-sans-flouter-${theme}`);
     await s.ctx.close();
