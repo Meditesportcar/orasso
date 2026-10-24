@@ -12,7 +12,7 @@
 import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proAppLabels as L, proActivityLabels, proV2Labels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
@@ -33,6 +33,7 @@ import {
   PartnersBlock,
   PublicationBlock,
   SiretBlock,
+  type SiretPending,
   SubscriptionBlock,
 } from "./ProBlocks";
 
@@ -57,6 +58,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   const pro = myPro.data;
   const [mode, setMode] = useState<Mode>(initial);
   const [viewer, setViewer] = useState<number | null>(null);
+  const siretPending: SiretPending = useRef(null);
   const [previewNote, setPreviewNote] = useState(false);
   const reload = () => myPro.reload();
   const zone = pro?.interventionDepartments.length ? `Intervient : ${pro.interventionDepartments.join(", ")}` : null;
@@ -233,7 +235,11 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
 
           {/* Montés en permanence : changer de segment ne perd pas la saisie en cours. */}
           <View style={[styles.stack, mode !== "edit" && styles.hidden]} testID="pro-edit">
-            <ProFicheFields state={myPro} siret={<SiretBlock pro={pro} reload={reload} />} />
+            <ProFicheFields
+              state={myPro}
+              siret={<SiretBlock pro={pro} reload={reload} pending={siretPending} />}
+              siretPending={siretPending}
+            />
             <DiscountsBlock pro={pro} reload={reload} />
             <MediaBlock pro={pro} reload={reload} />
           </View>

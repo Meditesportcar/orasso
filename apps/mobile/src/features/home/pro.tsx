@@ -22,6 +22,9 @@ import { TabScreen } from "@/ui/Screens";
 import { Greeting, QuietNote, TutoTile } from "./parts";
 import { todayLine } from "./today";
 
+/** Initiales distinctes des grades (relecture C4b, lot C7 : « Rodage » et « Route » donnaient tous deux « RO »). */
+const GRADE_SHORT: Record<Grade, string> = { rodage: "RD", route: "RT", sport: "SP", circuit: "CI", legende: "LG" };
+
 const { space2, space4 } = tokens.spacing;
 
 export function ProHome() {
@@ -96,7 +99,7 @@ export function ProHome() {
               <TzRow
                 key={`${s.usedAt}-${s.grade}`}
                 testID="home-pro-scan"
-                leading={<RoundInitials text={(gradeLabels[s.grade as Grade] ?? s.grade).slice(0, 2).toUpperCase()} />}
+                leading={<RoundInitials text={GRADE_SHORT[s.grade as Grade] ?? s.grade.slice(0, 2).toUpperCase()} />}
                 title={`Grade ${gradeLabels[s.grade as Grade] ?? s.grade}`}
                 caption={formatDayHour(s.usedAt)}
                 trailing={<AngledTag tone="acc">{`−${s.percent} %`}</AngledTag>}

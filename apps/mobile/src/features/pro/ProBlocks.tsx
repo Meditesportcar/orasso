@@ -23,7 +23,7 @@ import {
   type ProOwner,
   proV2Labels,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { type MutableRefObject, useEffect, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
@@ -121,10 +121,24 @@ export function PublicationBlock({ pro, reload }: BlockProps) {
 
 // --- SIRET -------------------------------------------------------------------------------------------------------
 
-export function SiretBlock({ pro, reload }: BlockProps) {
+/** Contrôle du SIRET saisi et pas encore contrôlé, joué par « Enregistrer » de la fiche (relecture C4b, lot C7). */
+export type SiretPending = MutableRefObject<(() => Promise<void>) | null>;
+
+export function SiretBlock({ pro, reload, pending }: BlockProps & { pending?: SiretPending }) {
   const { busy, error, notice, run, setNotice } = useRun();
   const [number, setNumber] = useState(pro.siret ?? "");
   const check = pro.registryCheck;
+
+  // Le champ est au milieu de la fiche : « Enregistrer » enregistre aussi un SIRET changé (sinon seul « Contrôler » le
+  // faisait, et la saisie se perdait sans un mot).
+  useEffect(() => {
+    if (!pending) return;
+    const digits = siretDigits(number);
+    pending.current = digits.length >= 9 && digits !== siretDigits(pro.siret ?? "") ? checkSiret : null;
+    return () => {
+      pending.current = null;
+    };
+  });
 
   async function checkSiret() {
     let verified = false;

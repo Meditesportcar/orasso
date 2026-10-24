@@ -10,12 +10,14 @@ import {
   notificationFamilyLabels,
   socialLabels,
 } from "@orasso/shared";
+import type { ReactNode } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { ConversationRow, InboxSegments } from "../components/Messaging";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
+import { byRecent, inboxSources } from "../lib/inbox-feed";
 import type { Route } from "./+types/journal";
 
 // Journal (lot 17, ARCHITECTURE-SUITE § 2.4) : le fil d'actualité des amis et les notifications, dans un seul fil
@@ -43,27 +45,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       `/me/notifications?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
     ),
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
-    // « Tout » réunit messages, demandes et notifications (`sh-inbox`) : les plus récents de chaque sorte.
-    api<ConversationPage>(request, "/me/conversations?limit=10"),
-    api<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
-    api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
+    // « Tout » réunit messages, demandes et notifications (`sh-inbox`) : les plus récents de chaque sorte, sur la
+    // première page seulement (« Plus ancien » ne pagine que les notifications).
+    cursor ? null : api<ConversationPage>(request, "/me/conversations?limit=10"),
+    cursor ? null : api<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
+    cursor ? null : api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
   ]);
-  return {
-    ...page,
-    summary,
-    conversations: conversations.ok ? conversations.data.items : [],
-    requests: [
-      ...(friends.ok ? friends.data.items : []).map((r) => ({
-        id: `friend-${r.id}`,
-        at: r.createdAt,
-        pseudo: r.person.pseudo,
-        text: "veut devenir ton ami",
-      })),
-      ...(contacts.ok ? contacts.data.items : [])
-        .filter((r) => r.direction === "in")
-        .map((r) => ({ id: `contact-${r.id}`, at: r.createdAt, pseudo: r.person.pseudo, text: "veut te contacter" })),
-    ],
-  };
+  return { ...page, summary, ...inboxSources(conversations, friends, contacts) };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -82,10 +70,65 @@ const pathOf = (item: JournalItem): string | null => {
   return raw?.startsWith("/") && !raw.startsWith("//") ? raw : null;
 };
 
+/** Une notification du fil (lien vers son écran quand elle en a un). */
+function JournalRow({ item }: { item: JournalItem }) {
+  const path = pathOf(item);
+  const actor = item.data.actor;
+  const content = (
+    <>
+      {actor ? (
+        <PersonAvatar url={actor.avatarUrl} pseudo={actor.pseudo} size={40} />
+      ) : (
+        <span className="s-journal__dot" aria-hidden="true" />
+      )}
+      <div className="s-journal__main">
+        <strong className="s-journal__title">{item.title}</strong>
+        {item.body && <span className="s-journal__body">{item.body}</span>}
+        <span className="o-t-caption s-muted">
+          {formatDay(item.createdAt)} · {formatTime(item.createdAt)} · {notificationFamilyLabels[item.family]}
+        </span>
+      </div>
+      {!item.readAt && <Chip>Nouveau</Chip>}
+    </>
+  );
+  return (
+    <li className="s-journal__item" data-testid="journal-item" data-type={item.type} data-read={Boolean(item.readAt)}>
+      {path ? (
+        <a className="s-journal__link" href={path}>
+          {content}
+        </a>
+      ) : (
+        <div className="s-journal__link">{content}</div>
+      )}
+    </li>
+  );
+}
+
 export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
-  const { items, nextCursor, summary, conversations, requests } = loaderData;
+  const { items, nextCursor, summary, conversations, requests, unavailable } = loaderData;
   const busy = useNavigation().state !== "idle";
   const unread = items.filter((i) => !i.readAt).length;
+  const feed: { at: string; node: ReactNode }[] = byRecent<{ at: string; node: ReactNode }>(
+    conversations.map((c: ConversationSummary) => ({
+      at: c.lastMessage?.at ?? "",
+      node: <ConversationRow key={c.id} c={c} />,
+    })),
+    requests.map((r) => ({
+      at: r.at,
+      node: (
+        <li key={r.id}>
+          <a className="s-convo" href="/app/boite/demandes" data-testid="inbox-request">
+            <div className="s-convo__main">
+              <strong>{r.pseudo}</strong>
+              <span className="s-muted">{r.text}</span>
+            </div>
+            <Chip>{messagingLabels.requests}</Chip>
+          </a>
+        </li>
+      ),
+    })),
+    items.map((item) => ({ at: item.createdAt, node: <JournalRow key={item.id} item={item} /> })),
+  );
   return (
     <div className="s-narrow s-stack" data-testid="journal">
       <h1 className="s-title">{messagingLabels.inbox}</h1>
@@ -110,74 +153,26 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
           {actionData.error}
         </p>
       )}
-      {(conversations.length > 0 || requests.length > 0) && (
-        <ul className="s-convos" data-testid="inbox-all">
-          {[
-            ...conversations.map((c: ConversationSummary) => ({
-              at: c.lastMessage?.at ?? "",
-              node: <ConversationRow key={c.id} c={c} />,
-            })),
-            ...requests.map((r) => ({
-              at: r.at,
-              node: (
-                <li key={r.id}>
-                  <a className="s-convo" href="/app/boite/demandes" data-testid="inbox-request">
-                    <div className="s-convo__main">
-                      <strong>{r.pseudo}</strong>
-                      <span className="s-muted">{r.text}</span>
-                    </div>
-                    <Chip>{messagingLabels.requests}</Chip>
-                  </a>
-                </li>
-              ),
-            })),
-          ]
-            .sort((a, b) => b.at.localeCompare(a.at))
-            .map((x) => x.node)}
-        </ul>
+      {(unavailable.messages || unavailable.requests) && (
+        <div className="s-notice s-row s-row--between" role="alert" data-testid="inbox-unavailable">
+          <span>
+            {unavailable.messages && unavailable.requests
+              ? "Messages et demandes indisponibles pour le moment."
+              : unavailable.messages
+                ? "Messages indisponibles pour le moment."
+                : "Demandes indisponibles pour le moment."}
+          </span>
+          <Button variant="secondary" icon="undo" href="/app/journal" data-testid="inbox-retry">
+            Réessayer
+          </Button>
+        </div>
       )}
-      {items.length === 0 ? (
+      {feed.length === 0 ? (
         <p className="s-notice">{socialLabels.journalEmpty}</p>
       ) : (
-        <ul className="s-journal">
-          {items.map((item) => {
-            const path = pathOf(item);
-            const actor = item.data.actor;
-            const content = (
-              <>
-                {actor ? (
-                  <PersonAvatar url={actor.avatarUrl} pseudo={actor.pseudo} size={40} />
-                ) : (
-                  <span className="s-journal__dot" aria-hidden="true" />
-                )}
-                <div className="s-journal__main">
-                  <strong className="s-journal__title">{item.title}</strong>
-                  {item.body && <span className="s-journal__body">{item.body}</span>}
-                  <span className="o-t-caption s-muted">
-                    {formatDay(item.createdAt)} · {formatTime(item.createdAt)} · {notificationFamilyLabels[item.family]}
-                  </span>
-                </div>
-                {!item.readAt && <Chip>Nouveau</Chip>}
-              </>
-            );
-            return (
-              <li
-                key={item.id}
-                className="s-journal__item"
-                data-testid="journal-item"
-                data-type={item.type}
-                data-read={Boolean(item.readAt)}
-              >
-                {path ? (
-                  <a className="s-journal__link" href={path}>
-                    {content}
-                  </a>
-                ) : (
-                  <div className="s-journal__link">{content}</div>
-                )}
-              </li>
-            );
-          })}
+        // Relecture C4a (lot C7) : messages, demandes et notifications dans un seul fil, du plus récent au plus ancien.
+        <ul className="s-journal" data-testid="inbox-all">
+          {feed.map((x) => x.node)}
         </ul>
       )}
       {nextCursor && (

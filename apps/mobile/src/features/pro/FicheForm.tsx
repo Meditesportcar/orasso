@@ -35,6 +35,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ActGrid } from "./kit";
+import type { SiretPending } from "./ProBlocks";
 
 const { space2 } = tokens.spacing;
 /** `.field` de l'artefact : 14 px entre deux champs du segment Modifier. */
@@ -85,11 +86,14 @@ export function ProFicheFields({
   create = false,
   state,
   siret,
+  siretPending,
 }: {
   create?: boolean;
   state?: MyProState;
   /** Bloc SIRET de la fiche existante, posé après les activités comme dans l'artefact (absent à la création). */
   siret?: ReactNode;
+  /** Le contrôle du SIRET changé, joué après l'enregistrement de la fiche (lot C7). */
+  siretPending?: SiretPending;
 }) {
   const { t } = useTheme();
   const { refreshMe } = useSession();
@@ -136,6 +140,7 @@ export function ProFicheFields({
         await api.updatePro(pro.id, parsed.body);
         dirty.current = false;
         await myPro.reload();
+        await siretPending?.current?.();
       },
       L.ficheSaved,
     );

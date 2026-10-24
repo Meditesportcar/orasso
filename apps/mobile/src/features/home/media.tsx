@@ -92,7 +92,8 @@ export function MediaHome() {
             <>
               <SecH title={homeProfileLabels.pressInstructions} />
               <View style={styles.brief} testID="home-press-brief">
-                {[...(report.briefing?.zones ? [report.briefing.zones] : []), ...lines].map((l) => (
+                {/* Une consigne répétée (zones et une ligne identiques) ne s'affiche qu'une fois : clé unique (lot C7). */}
+                {[...new Set([...(report.briefing?.zones ? [report.briefing.zones] : []), ...lines])].map((l) => (
                   <TzRow key={l} leading={<Icon name="check" size={16} color={c.accentText} />} title={l} />
                 ))}
                 {report.briefing?.contact ? (
