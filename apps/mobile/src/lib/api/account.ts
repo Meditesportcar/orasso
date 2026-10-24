@@ -30,6 +30,12 @@ export const accountApi = {
   unregisterDevice: (body: { expoPushToken: string }) =>
     request<unknown>("/api/me/devices/unregister", { method: "POST", body, timeout: 5_000 }),
   /** Lot M6, tour 4 : même retrait sans session, sur preuve du jeton (déconnexion hors ligne rejouée). */
+  /**
+   * Lot C7 : révoque une session par son jeton (déconnexion faite hors ligne, rejouée plus tard ; la session ouverte
+   * depuis, s'il y en a une, n'est pas touchée : l'en-tête donné prime sur celui de la session courante).
+   */
+  revokeSession: (token: string) =>
+    request<unknown>("/api/auth/sign-out", { method: "POST", body: {}, headers: { authorization: `Bearer ${token}` } }),
   forgetPushToken: (body: { expoPushToken: string }) =>
     request<unknown>("/api/devices/unregister", { method: "POST", body, timeout: 5_000 }),
   notifications: (cursor?: string) =>

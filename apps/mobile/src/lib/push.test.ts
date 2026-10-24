@@ -17,7 +17,7 @@ const sim = vi.hoisted(() => ({
     setBadgeCountAsync: vi.fn(async () => true),
     requestPermissionsAsync: vi.fn(),
   },
-  api: { registerDevice: vi.fn(), unregisterDevice: vi.fn(), forgetPushToken: vi.fn() },
+  api: { registerDevice: vi.fn(), unregisterDevice: vi.fn(), forgetPushToken: vi.fn(), revokeSession: vi.fn() },
 }));
 
 vi.mock("react-native", () => ({
@@ -53,6 +53,7 @@ import {
   leavePush,
   notificationTapAction,
   presentationOf,
+  queueSignOut,
   receivedPush,
   registerThisDevice,
   replayPendingPush,
@@ -248,5 +249,26 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     await replayPendingPush();
     expect(sim.api.forgetPushToken).toHaveBeenCalledTimes(2);
     expect(pending()).toBeNull();
+  });
+
+  it("lot C7 : une déconnexion faite hors ligne révoque la session du serveur au rejeu, une fois", async () => {
+    await queueSignOut("jeton-session");
+    await queueSignOut("jeton-session");
+    sim.api.revokeSession.mockImplementation(offline);
+    await replayPendingPush();
+    expect(sim.api.revokeSession).toHaveBeenCalledWith("jeton-session");
+    expect(JSON.parse(sim.store.get("signout-pending") ?? "[]")).toEqual(["jeton-session"]);
+    sim.api.revokeSession.mockReset();
+    sim.api.revokeSession.mockImplementation(async () => ({}));
+    await replayPendingPush();
+    expect(sim.api.revokeSession).toHaveBeenCalledTimes(1);
+    expect(sim.store.get("signout-pending")).toBeUndefined();
+  });
+
+  it("lot C7 : une session déjà caduque (401) n'est plus rejouée", async () => {
+    await queueSignOut("jeton-expire");
+    sim.api.revokeSession.mockImplementation(() => status(401));
+    await replayPendingPush();
+    expect(sim.store.get("signout-pending")).toBeUndefined();
   });
 });

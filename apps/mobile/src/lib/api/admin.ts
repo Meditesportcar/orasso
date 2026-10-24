@@ -7,6 +7,7 @@ import type {
   AdminBadgeRow,
   AdminCertificationRequest,
   AdminOverview,
+  AdminPlateConflict,
   AdminPlateTransfer,
   AdminProRow,
   AdminReportDetail,
@@ -106,6 +107,10 @@ export const adminApi = {
     request<unknown>(`/api/admin/certification-requests/${id}/decide`, { method: "POST", body: { decision, note } }),
 
   adminPlateTransfers: () => request<AdminPlateTransfer[]>("/api/admin/plate-transfers"),
+  /** Lot C7 : conflits de plaque laissés par la forme unique (lot M2). */
+  adminPlateConflicts: () => request<AdminPlateConflict[]>("/api/admin/plate-conflicts"),
+  resolvePlateConflict: (id: string, action: "apply" | "dismiss", note: string | null) =>
+    request<unknown>(`/api/admin/plate-conflicts/${id}/resolve`, { method: "POST", body: { action, note } }),
   decidePlateTransfer: (id: string, decision: "accept" | "refuse", note: string | null) =>
     request<unknown>(`/api/admin/plate-transfers/${id}/decide`, { method: "POST", body: { decision, note } }),
 
