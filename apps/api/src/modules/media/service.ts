@@ -55,6 +55,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { organizerIds } from "../after-event/helpers";
+import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
@@ -126,6 +127,8 @@ function announce(eventId: string, app: { id: string; userId: string; status: Ap
   const payload = { applicationId: app.id, eventId, status: app.status };
   realtime.publish(`event:${eventId}:triage`, "application.changed", payload);
   realtime.publish(`user:${app.userId}`, "application.changed", payload);
+  // Lot R4b : un média accrédité rejoint les pros du plateau.
+  lineupService.changed(eventId);
 }
 
 /**

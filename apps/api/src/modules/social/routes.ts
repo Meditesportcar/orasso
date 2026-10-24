@@ -35,7 +35,8 @@ export const socialRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await socialProfile.view(v, c.req.param("pseudo")));
   })
-  // Fiche d'un véhicule d'un autre : complète (compte public ou ami) ou marque + modèle (compte privé). Jamais la plaque.
+  // Fiche d'un véhicule d'un autre : complète (compte public ou ami) ou réduite (compte privé, lot R4b :
+  // `privateVehicleFields`). Jamais la plaque.
   .get("/vehicles/:id", async (c) => {
     const v = await requireUser(c);
     return c.json(await socialProfile.vehicleOf(v, uuidParam(c, "id")));

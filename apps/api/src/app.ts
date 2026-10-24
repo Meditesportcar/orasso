@@ -30,6 +30,7 @@ import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
 import { devMailRoutes } from "./modules/dev-mail/routes";
 import { posterRoutes } from "./modules/events/poster/routes";
+import { lineupService } from "./modules/events/lineup";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
@@ -223,6 +224,8 @@ app.route("/", recapRoutes);
 realtime.setAuthorizer(async (userId, channel, ctx) => {
   // Lot 49 : classement du prix du public en direct, ouvert à toute personne connectée.
   if (channel.endsWith(":votes")) return audiencePrizeService.canSubscribe(userId, channel);
+  // Lot R4b : le plateau en direct, ouvert à toute personne connectée (événement publié et non privé).
+  if (channel.endsWith(":lineup")) return lineupService.canSubscribe(channel);
   const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
   const profile = await profilesRepo.byUserId(userId);
   if (!u || !profile) return false;

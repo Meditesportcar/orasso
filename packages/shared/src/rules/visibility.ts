@@ -50,6 +50,23 @@ export function profileFields(audience: ProfileAudience): ProfileFields {
   };
 }
 
+/**
+ * Lot R4b (maquette R4.3b, choix validé par Damien le 24/10) : la fiche de la voiture d'un compte privé, vue par un
+ * autre (plateau, `GET /vehicles/:id`). La photo (plaque masquée), la marque, le modèle, la génération et les
+ * catégories ; rien d'autre : ni année, ni fiche technique, ni description, ni historique, ni plaque. Liste blanche.
+ */
+export const privateVehicleFields = [
+  "id",
+  "label",
+  "vehicleType",
+  "makeName",
+  "modelName",
+  "generationName",
+  "photoUrl",
+  "categories",
+] as const;
+export type PrivateVehicleField = (typeof privateVehicleFields)[number];
+
 // --- Amitié ------------------------------------------------------------------------------------------------------
 
 export const friendshipStatuses = ["pending", "accepted", "declined"] as const;

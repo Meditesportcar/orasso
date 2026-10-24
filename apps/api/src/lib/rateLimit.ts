@@ -69,6 +69,9 @@ export const rateRules = {
   /** Recherche de premier niveau (lot 29) : par personne connectée, et par adresse pour un visiteur sans compte. */
   search: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   searchPublic: { max: 30, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
+  /** Lot R4b : le plateau d'un événement (route publique, pages de 30). */
+  lineup: { max: 120, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
+  lineupPublic: { max: 60, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
   /** QR ami : lectures par minute, et codes refusés (le code à 8 chiffres ne se devine pas par essais). */
   friendQr: { max: 30, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
   friendQrFailure: { max: 10, windowMs: 600_000, message: "Trop de codes refusés : réessaie dans quelques minutes." },

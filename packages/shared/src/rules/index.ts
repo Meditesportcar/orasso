@@ -11,6 +11,7 @@ export * from "./eventDays";
 export * from "./explore";
 export * from "./garage";
 export * from "./invitations";
+export * from "./lineup";
 export * from "./lock";
 export * from "./markdown";
 export * from "./menu";

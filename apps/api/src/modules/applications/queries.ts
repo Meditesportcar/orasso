@@ -46,6 +46,7 @@ import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews
 import { arrivalsOf } from "../events/arrivals";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type DayRow, daysRepo } from "../events/days";
+import { lineupService } from "../events/lineup";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
 import { providerTriageExtras } from "../providers/needs";
@@ -373,7 +374,13 @@ export const applicationsQueries = {
         ),
       )
       .orderBy(scope === "upcoming" ? asc(events.startsAt) : desc(events.startsAt), asc(applications.createdAt));
-    return toMine(rows.map((r) => r.a));
+    const mine = await toMine(rows.map((r) => r.a));
+    // Lot R4b : la ligne « Le plateau » des places retenues, lue en une fois pour toutes les sorties.
+    const previews = await lineupService.previews(
+      mine.filter((a) => a.status === "accepted").map((a) => a.event.id),
+      v.user.id,
+    );
+    return mine.map((a) => ({ ...a, lineupPreview: a.status === "accepted" ? (previews.get(a.event.id) ?? null) : null }));
   },
 
   /** Candidat : sa carte Accès. Organisation : la fiche de tri. */

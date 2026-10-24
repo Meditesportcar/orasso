@@ -23,6 +23,7 @@ export * from "./labels/garage.fr";
 export * from "./labels/help.fr";
 export * from "./labels/home.fr";
 export * from "./labels/invitations.fr";
+export * from "./labels/lineup.fr";
 export * from "./labels/media.fr";
 export * from "./labels/media-app.fr";
 export * from "./labels/messaging.fr";

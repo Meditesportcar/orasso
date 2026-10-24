@@ -157,6 +157,12 @@ export type VehicleBrief = Pick<VehiclePublic, "id" | "label" | "makeName" | "mo
   photoUrl: string | null;
 };
 
+/**
+ * Lot R4b : la voiture d'un compte privé vue par un autre (plateau, `GET /vehicles/:id`), d'après
+ * `privateVehicleFields` : photo (plaque masquée), marque, modèle, génération, catégories, rien d'autre.
+ */
+export type VehiclePrivate = VehicleBrief & Pick<VehiclePublic, "generationName" | "categories">;
+
 export type VehicleMake = { id: string; name: string; slug: string; country: string | null; isOther: boolean };
 export type VehicleModel = { id: string; makeId: string; name: string; vehicleType: VehicleType; isOther: boolean };
 export type VehicleGeneration = {

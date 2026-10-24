@@ -3,6 +3,7 @@ import {
   eventDaysPutSchema,
   eventListQuerySchema,
   eventUpdateSchema,
+  lineupQuerySchema,
   outlookUpdateSchema,
   recurrenceCreateSchema,
   zoneCreateSchema,
@@ -13,9 +14,10 @@ import { Hono } from "hono";
 import { validation } from "../../lib/errors";
 import { geocode } from "../../lib/geocode";
 import { rateLimit } from "../../lib/rateLimit";
-import { limitSearch } from "../../lib/search-limit";
+import { limitSearch, visitorOf } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { lineupService } from "./lineup";
 import { eventsService } from "./service";
 
 export const eventsRoutes = new Hono<AppEnv>()
@@ -33,6 +35,15 @@ export const eventsRoutes = new Hono<AppEnv>()
       "cache-control": "private, no-cache",
     }),
   )
+  // Lot R4b : le plateau (public, limité en débit) ; la réponse dépend de la personne (pseudos, « Toi », remises).
+  .get("/events/:id/lineup", async (c) => {
+    const viewer = await optionalUser(c);
+    if (viewer) rateLimit("lineup", viewer.user.id);
+    else rateLimit("lineupPublic", visitorOf(c));
+    return c.json(await lineupService.get(uuidParam(c, "id"), viewer, query(c, lineupQuerySchema)), 200, {
+      "cache-control": "private, no-cache",
+    });
+  })
   // Lot M4, tour 2 : le créneau strict des exposants, à l'ouverture de la feuille de candidature (si l'on peut candidater).
   .get("/events/:id/apply-context", async (c) =>
     c.json(await eventsService.applyContext(await requireUser(c), uuidParam(c, "id")), 200, {

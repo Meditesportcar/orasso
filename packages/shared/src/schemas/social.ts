@@ -7,7 +7,7 @@ import { optionalText, pageQuery } from "./common";
 import type { CrewCard } from "./crews";
 import type { PublicProfile } from "./profile";
 import { pseudoSchema } from "./profile";
-import type { VehicleBrief, VehiclePublic } from "./vehicle";
+import type { VehiclePrivate, VehiclePublic } from "./vehicle";
 
 // Social (lot 17) : amis, profils des autres, recherche de personnes. Routes : ARCHITECTURE-SUITE § 2.3.
 
@@ -57,7 +57,7 @@ export type PersonCard = {
 };
 
 /** Fiche d'un véhicule d'un autre (`GET /vehicles/:id`) : complète ou réduite, avec son propriétaire. */
-export type OtherVehicle = (VehiclePublic | VehicleBrief) & {
+export type OtherVehicle = (VehiclePublic | VehiclePrivate) & {
   /** Vrai si la fiche complète est consultable (compte public ou ami). */
   detailed: boolean;
   owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
