@@ -49,14 +49,15 @@ export function publicCountsHidden(endsAt: Date | string, now: Date): boolean {
 }
 
 /**
- * Lot R4b, tour 2 : la photo montrée hors du garage (plateau, voiture d'un compte privé) est la première photo dont la
- * plaque a été floutée ; pour un véhicule non immatriculé (sans plaque), la première photo. Sinon aucune (silhouette) :
- * « aucune plaque visible » n'est pas gardé en base, une photo non floutée peut montrer une plaque lisible.
+ * Lot R4b, tours 2 et 3 : la photo montrée hors du garage (plateau, Mes sorties, voiture d'un compte privé) est la
+ * première photo qui a une décision de plaque vraie : plaque floutée (cadres), ou « aucune plaque visible » confirmé à
+ * l'envoi ; pour un véhicule non immatriculé (sans plaque), la première photo. Sinon aucune (silhouette) : une photo
+ * sans décision (envoyée avant le lot M1) peut montrer une plaque lisible.
  */
-export function maskedPhoto<T extends { plateBlurred: boolean }>(
+export function maskedPhoto<T extends { plateBlurred: boolean; noPlateConfirmed: boolean }>(
   photos: readonly T[],
   unregistered: boolean,
 ): T | null {
   if (unregistered) return photos[0] ?? null;
-  return photos.find((p) => p.plateBlurred) ?? null;
+  return photos.find((p) => p.plateBlurred || p.noPlateConfirmed) ?? null;
 }

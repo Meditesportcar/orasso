@@ -157,6 +157,8 @@ export async function createVehicle(
       width: info.width,
       height: info.height,
       bytes: info.size,
+      // Lot R4b, tour 3 : la décision vraie de la photo regardée (aucune plaque lisible), sinon aucune.
+      noPlateConfirmed: info.noPlate,
     });
   }
   return { ...row, ref };

@@ -496,6 +496,8 @@ export const vehiclesService = {
           bytes: output.info.size,
           plateRects: plateRects?.length ? plateRects : null,
           plateBlurred: Boolean(plateRects?.length),
+          // Lot R4b, tour 3 : la décision « aucune plaque visible » est gardée (seulement sans cadre).
+          noPlateConfirmed: noPlate && !plateRects?.length,
         });
         // Une photo ajoutée ou retirée fait perdre la certification (S38).
         await certificationService.afterChange(tx, after, id, certifiedBefore);

@@ -336,16 +336,23 @@ describe("lot R4b, tour 2", () => {
     // Aucune photo floutée : aucune.
     const b = await exhibitor("Nette_R4b", { private: true });
     await db.update(vehiclePhotos).set({ plateBlurred: false }).where(eq(vehiclePhotos.vehicleId, b.v.id));
-    for (const p of [a, b]) await apply(e.id, p);
+    // Tour 3 : « aucune plaque visible » confirmé à l'envoi suffit.
+    const c = await exhibitor("SansPlaque_R4b");
+    await db
+      .update(vehiclePhotos)
+      .set({ plateBlurred: false, noPlateConfirmed: true })
+      .where(eq(vehiclePhotos.vehicleId, c.v.id));
+    for (const p of [a, b, c]) await apply(e.id, p);
     const res = await call(null, "GET", `/events/${e.id}/lineup`);
-    const urls = res.json.cars.map((c: { photoUrl: string | null }) => c.photoUrl);
-    expect(urls.filter(Boolean)).toHaveLength(1);
-    expect(urls.find(Boolean)).toContain("-floue.webp");
+    const urls = res.json.cars.map((x: { photoUrl: string | null }) => x.photoUrl);
+    expect(urls.filter(Boolean)).toHaveLength(2);
+    expect(urls.some((u: string | null) => u?.includes("-floue.webp"))).toBe(true);
+    expect(urls.some((u: string | null) => u?.includes(c.v.id))).toBe(true);
     // Même règle pour la voiture d'un compte privé et pour la ligne de Mes sorties.
     const viewer = await signUp("Voit_R4b");
     expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toBeNull();
     const previews = await lineupService.previews([e.id], viewer.id);
-    expect(previews.get(e.id)?.photoUrls).toHaveLength(1);
+    expect(previews.get(e.id)?.photoUrls).toHaveLength(2);
     // Véhicule non immatriculé : la première photo.
     await db.update(vehicles).set({ unregistered: true }).where(eq(vehicles.id, b.v.id));
     expect((await call(viewer, "GET", `/vehicles/${b.v.id}`)).json.photoUrl).toContain(b.v.id);

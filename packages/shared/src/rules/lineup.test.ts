@@ -35,10 +35,13 @@ describe("Le plateau (lot R4b)", () => {
   });
 
   it("photo : seulement une photo floutée, ou d'un véhicule sans plaque (tour 2)", () => {
-    const a = { id: "a", plateBlurred: false };
-    const b = { id: "b", plateBlurred: true };
+    const a = { id: "a", plateBlurred: false, noPlateConfirmed: false };
+    const b = { id: "b", plateBlurred: true, noPlateConfirmed: false };
+    const c = { id: "c", plateBlurred: false, noPlateConfirmed: true };
     expect(maskedPhoto([a, b], false)).toBe(b);
     expect(maskedPhoto([a], false)).toBeNull();
+    // Tour 3 : « aucune plaque visible » confirmé à l'envoi suffit ; une photo sans décision, jamais.
+    expect(maskedPhoto([a, c, b], false)).toBe(c);
     expect(maskedPhoto([a, b], true)).toBe(a);
     expect(maskedPhoto([], true)).toBeNull();
   });

@@ -2732,3 +2732,12 @@ Source : `corrections-r4b.md` (relais).
 - **Pros après la fin** : les prestataires ne sont pas pointés à l'entrée ; le plateau garde ceux qui étaient retenus.
 - **Compte privé** : un ami voit aussi le cadenas (toucher ouvre la fiche de la voiture). La recherche et le profil d'un compte privé cachent encore la photo de ses véhicules : le lot R4c harmonisera.
 - **Seed** : ses photos ne sont pas marquées floutées, le plateau du seed est en silhouettes ; à marquer si ces photos ont bien leur plaque masquée.
+
+## Lot R4b, tour 3 : les photos sans plaque sur le plateau — 24/10/2026
+
+- **Décision gardée** : migration `vehicle_photos.no_plate_confirmed` (faux par défaut). `addPhoto` l'enregistre quand l'envoi confirme « aucune plaque visible » (`noPlate=true`, sans cadre) ; c'est le seul chemin d'envoi d'une photo de véhicule (le floutage après coup pose `plate_blurred`, l'inscription express et l'administration n'envoient pas de photo de véhicule).
+- **Règle** (`maskedPhoto`, `packages/shared/src/rules/lineup.ts`) : hors du garage, la première photo floutée **ou** « aucune plaque visible » confirmé ; n'importe quelle photo d'un véhicule non immatriculé ; sinon la silhouette. Appliquée au plateau, à la ligne de Mes sorties et à la voiture d'un compte privé.
+- **Seed** : les 21 photos de `assets/photos` utilisées pour les véhicules ont été regardées une à une : plaques déjà masquées par un aplat sur l'image, ou hors champ. Elles reçoivent « aucune plaque visible » par une liste nommée (`NO_PLATE_REVIEWED`, `scripts/seed/photos.ts`) ; une photo ajoutée plus tard au dossier n'a pas de décision.
+
+### À revoir avec Damien (lot R4b, tour 3)
+- **Photos déjà en base** (dev, puis production) : sans décision, elles restent en silhouette sur le plateau tant que leur propriétaire ne les modifie pas ; on ne devine rien. Proposition : demander au propriétaire, dans son garage, de confirmer « aucune plaque visible » (ou de poser le cadre) sur ses anciennes photos.

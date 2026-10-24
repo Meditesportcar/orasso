@@ -253,7 +253,7 @@ export const lineupService = {
         at: sql<number>`extract(epoch from ${firstAt})::float8`,
         photoKey: sql<
           string | null
-        >`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} and (${vehiclePhotos.plateBlurred} or ${vehicles.unregistered}) order by ${vehiclePhotos.position} limit 1)`,
+        >`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} and (${vehiclePhotos.plateBlurred} or ${vehiclePhotos.noPlateConfirmed} or ${vehicles.unregistered}) order by ${vehiclePhotos.position} limit 1)`,
       })
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))

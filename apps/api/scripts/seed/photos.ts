@@ -43,13 +43,51 @@ async function realPool(pool: Pool) {
   return out;
 }
 
-/** Pose la `index`-ième photo réelle du lot sous `key` (à la place d'un dégradé factice) ; renvoie ses dimensions. */
+/**
+ * Lot R4b, tour 3 : photos de `assets/photos` regardées une à une (24/10/2026) : aucune ne montre de plaque lisible
+ * (plaques déjà masquées par un aplat sur l'image, ou hors champ : vue de côté, avant coupé, motos de profil ; les
+ * voitures du fond sont trop loin pour être lues). Leur décision vraie est donc « aucune plaque visible ». Une photo
+ * ajoutée plus tard au dossier n'est pas dans cette liste : sans décision, elle reste en silhouette hors du garage.
+ */
+const NO_PLATE_REVIEWED = new Set([
+  "car-audi-s3.jpg",
+  "car-bmw-i8.jpg",
+  "car-e30-bbs.jpg",
+  "car-golf-gti.jpg",
+  "car-gt86.jpg",
+  "car-gtr.jpg",
+  "car-lamborghini.jpg",
+  "car-lexus-is.jpg",
+  "car-megane-rs.jpg",
+  "car-mustang.jpg",
+  "car-mx5.jpg",
+  "car-seat-rouge.jpg",
+  "car-subaru-sti.jpg",
+  "car-supra.jpg",
+  "event-e30-foule.jpg",
+  "event-honda-rassemblement.jpg",
+  "event-polizei-e30.jpg",
+  "event-sheriff-scene.jpg",
+  "moto-cbr-blanche.jpg",
+  "moto-ninja.jpg",
+  "moto-r1.jpg",
+]);
+
+/**
+ * Pose la `index`-ième photo réelle du lot sous `key` (à la place d'un dégradé factice) ; renvoie ses dimensions et sa
+ * décision de plaque (`noPlate` : photo regardée, aucune plaque lisible).
+ */
 export async function putRealPhoto(key: string, pool: Pool, index: number) {
   const photos = await realPool(pool);
   const photo = photos[index % photos.length];
   if (!photo) throw new Error(`Aucune photo réelle « ${pool} » dans ${ASSETS_DIR}`);
   await storage.put(key, photo.data);
-  return { width: photo.width, height: photo.height, size: photo.data.length };
+  return {
+    width: photo.width,
+    height: photo.height,
+    size: photo.data.length,
+    noPlate: NO_PLATE_REVIEWED.has(photo.name),
+  };
 }
 
 /** Les photos d'événement disponibles, en WebP (2000 px au plus), dans un ordre stable. */

@@ -1,0 +1,1 @@
+ALTER TABLE "vehicle_photos" ADD COLUMN "no_plate_confirmed" boolean DEFAULT false NOT NULL;
