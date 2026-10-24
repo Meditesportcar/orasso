@@ -41,6 +41,7 @@ async function audit(page: Page) {
   expect(a.greens).toEqual([]);
   expect(a.horizontalScroll).toBe(false);
   expect(a.truncated).toEqual([]);
+  expect(a.brokenWords).toEqual([]);
 }
 
 async function openSheet(page: Page, pill: string, sheet: string) {
