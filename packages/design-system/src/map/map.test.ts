@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { THEME_IDS, tokens } from "../tokens";
 import { HATCH_SIZE, hatchImage, hatchPngDataUri } from "./hatch";
-import { clusterPins, isStacked, pinDateLabel } from "./pins";
+import { clusterLabel, clusterPins, isStacked, pinDateLabel } from "./pins";
 import {
   chooseMapStyle,
   probedVectorTiles,
@@ -90,10 +90,15 @@ describe("style de carte Orasso (lot 44)", () => {
     });
   }
 
-  it("étiquette d'événement : jour et date à Paris", () => {
-    expect(pinDateLabel("2026-10-24T17:00:00Z")).toBe("SAM 24");
-    // 23 h 30 à Paris le dimanche 25 = 22 h 30 UTC (heure d'hiver).
-    expect(pinDateLabel("2026-10-25T22:30:00Z")).toBe("DIM 25");
+  it("étiquette d'événement : la date en clair, à Paris (lot R2)", () => {
+    const now = new Date("2026-10-24T08:00:00Z");
+    expect(pinDateLabel("2026-10-24T17:00:00Z", now)).toBe("AUJOURD'HUI");
+    // 23 h 30 à Paris le dimanche 25 = 22 h 30 UTC (heure d'hiver) : demain.
+    expect(pinDateLabel("2026-10-25T22:30:00Z", now)).toBe("DEMAIN");
+    expect(pinDateLabel("2026-11-01T09:00:00Z", now)).toBe("DIM. 1 NOV.");
+    expect(clusterLabel(2, "event")).toBe("2 ÉVÉNEMENTS");
+    expect(clusterLabel(1, "pro")).toBe("1 PRO");
+    expect(clusterLabel(3)).toBe("3");
   });
 
   it("regroupe les points proches selon le zoom", () => {

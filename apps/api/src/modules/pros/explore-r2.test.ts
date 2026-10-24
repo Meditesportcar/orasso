@@ -29,7 +29,10 @@ beforeEach(async () => {
   await resetDb();
   useClock(fromWallTime({ year: 2026, month: 10, day: 16, hour: 11, minute: 0 }));
   fan = await signUp("Kenji_66");
-  await db.update(profiles).set({ departments: ["66"], grade: "route" }).where(eq(profiles.userId, fan.id));
+  await db
+    .update(profiles)
+    .set({ departments: ["66"], grade: "route" })
+    .where(eq(profiles.userId, fan.id));
 });
 
 const slugs = (res: { json: { items: { slug: string }[] } }) => res.json.items.map((p) => p.slug).sort();
@@ -64,8 +67,22 @@ describe("pros : Où chercher ?, métiers, remise, favori", () => {
     const d = await signUp("Pro_D");
     await createPro(a.id, { slug: "port", lat: 42.7, lng: 3.03 });
     await createPro(b.id, { slug: "toulouse", lat: 43.6, lng: 1.44, department: "31", city: "Toulouse" });
-    await createPro(c.id, { slug: "mobile-66", lat: null, lng: null, city: null, department: null, interventionDepartments: ["66", "11"] });
-    await createPro(d.id, { slug: "mobile-33", lat: null, lng: null, city: null, department: null, interventionDepartments: ["33"] });
+    await createPro(c.id, {
+      slug: "mobile-66",
+      lat: null,
+      lng: null,
+      city: null,
+      department: null,
+      interventionDepartments: ["66", "11"],
+    });
+    await createPro(d.id, {
+      slug: "mobile-33",
+      lat: null,
+      lng: null,
+      city: null,
+      department: null,
+      interventionDepartments: ["33"],
+    });
     const res = await call(
       fan,
       "GET",
@@ -126,8 +143,14 @@ describe("Personnes et crews : suggestions", () => {
     const friend = await signUp("Lea_11");
     const away = await signUp("Pilote_088");
     for (const u of [pub, priv, friend, away]) await createVehicle(u.id, ref);
-    await db.update(profiles).set({ departments: ["11"] }).where(eq(profiles.userId, pub.id));
-    await db.update(profiles).set({ departments: ["66"] }).where(eq(profiles.userId, away.id));
+    await db
+      .update(profiles)
+      .set({ departments: ["11"] })
+      .where(eq(profiles.userId, pub.id));
+    await db
+      .update(profiles)
+      .set({ departments: ["66"] })
+      .where(eq(profiles.userId, away.id));
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, priv.id));
     await db.insert(friendships).values({ requesterId: fan.id, addresseeId: friend.id, status: "accepted" });
     const res = await call(fan, "GET", "/users/suggestions");

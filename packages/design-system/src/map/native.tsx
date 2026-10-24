@@ -1,6 +1,7 @@
 // Marqueurs de la carte Orasso dans l'appli native (lot 44, prototype `s-map`) : le dessin seul, que l'appli pose
 // dans un `Marker` de MapLibre natif (une vue React Native qui suit un point). Étiquette inclinée datée (événement),
 // pastille avec le nombre (groupe), plaque (pro), point bleu (toi). Couleurs : jetons du thème, rien en dur.
+// Lot R2 : la date en clair (« DIM. 1 NOV. ») et « 2 ÉVÉNEMENTS » sur une pastille de groupe.
 import { Pressable, Text, View } from "react-native";
 
 import { withAlpha } from "../native/color";
@@ -68,17 +69,65 @@ export function EventPin({
   );
 }
 
-/** Groupe : pastille avec le nombre ; la toucher rapproche. */
+/**
+ * Groupe : pastille avec le nombre ; la toucher rapproche. Lot R2 (maquette R2.8) : avec `label` (« 2 ÉVÉNEMENTS »),
+ * une étiquette arrondie, droite, avec sa pointe, comme celle d'un événement.
+ */
 export function ClusterPin({
   count,
+  label,
   onPress,
   testID = "map-cluster",
 }: {
   count: number;
+  label?: string;
   onPress?: () => void;
   testID?: string;
 }) {
   const { t } = useTheme();
+  if (label) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${label.toLowerCase()} : zoomer`}
+        testID={testID}
+        style={{ minWidth: HIT, minHeight: HIT, alignItems: "center", justifyContent: "flex-end" }}
+      >
+        <View
+          style={{
+            backgroundColor: t.color.mapRoad,
+            borderRadius: radius.radiusMd,
+            paddingHorizontal: 9,
+            paddingVertical: 4,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: narrow,
+              fontSize: tokens.type.label.fontSize,
+              letterSpacing: 0.5,
+              color: t.color.mapLand,
+            }}
+          >
+            {label}
+          </Text>
+        </View>
+        <View
+          style={{
+            width: 0,
+            height: 0,
+            borderLeftWidth: 5,
+            borderRightWidth: 5,
+            borderTopWidth: 7,
+            borderLeftColor: "transparent",
+            borderRightColor: "transparent",
+            borderTopColor: t.color.mapRoad,
+          }}
+        />
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       onPress={onPress}

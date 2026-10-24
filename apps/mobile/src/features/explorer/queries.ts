@@ -2,11 +2,21 @@
 // l'API ; l'appli ne fait que les traduire. Explorer v2 (lot 44, `s-explore`) : par défaut tout, du plus proche au plus
 // loin (`sort=distance` : position de l'appareil si elle est activée, sinon le département favori du profil) ;
 // filtres Format, Quand, Selon mes goûts (« Mes affinités » = tri par affinités, « Structures suivies » = filtre).
-import { addDays, type EventFormat, eventFormats, fromWallTime, type LatLng, wallTime } from "@orasso/shared";
+// Lot R2 : le lieu de « Où chercher ? » (`ExplorerWhere`, règles communes de `@orasso/shared`), le nombre en tout sur la
+// première page (`withTotal`), le métier des pros.
+import {
+  addDays,
+  type EventFormat,
+  type ExplorerWhere,
+  eventFormats,
+  fromWallTime,
+  type LatLng,
+  type ProActivity,
+  wallTime,
+  whereQuery,
+} from "@orasso/shared";
 
 import type { ExploreEventsQuery, ExploreProsQuery } from "@/lib/api/explorer";
-
-export const RADII = [10, 25, 50, 100, 200] as const;
 
 export type When = "all" | "weekend" | "month";
 
@@ -22,9 +32,6 @@ export type EventFilters = {
 };
 
 export const emptyEventFilters: EventFilters = { format: "", when: "all", affinity: false, followed: false };
-
-export type ProFilters = { activity: string; department: string; radiusKm: number | null };
-export const emptyProFilters: ProFilters = { activity: "", department: "", radiusKm: null };
 
 /** « 2026-10-17 » → minuit (début) ou 23 h 59 (fin) à Paris, en instant ISO ; `undefined` si la date est illisible. */
 export function dayBound(value: string, end: boolean): string | undefined {
@@ -62,27 +69,23 @@ export function whenRange(when: When, now: Date): { from?: string; to?: string }
   };
 }
 
-/** Lot M4 (maquette 3.2) : le tri choisi dans « Trier : … ▾ » (gardé avec le choix de l'Explorer, lot R1). */
-export const EVENT_SORTS = ["distance", "date", "recent", "seats"] as const;
+/** Lot M4 (maquette 3.2) : le tri des événements (gardé avec le choix de l'Explorer, lot R1 ; par date, lot R2). */
+export const EVENT_SORTS = ["date", "distance", "recent", "seats"] as const;
 export type EventSort = (typeof EVENT_SORTS)[number];
 /** Lot M4 : clé d'avant le lot R1 (tri seul, sans compte) ; lue une fois puis effacée (`explorerChoice.ts`). */
 export const SORT_KEY = "explorer.sort";
 
-/**
- * Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… », le point de départ de l'Explorer. « Mon coin » : les
- * départements du compte (plus tard « Tes préférences », lot M6) ; « Autour de moi » : la position de l'appareil,
- * demandée sur ce geste seulement ; « Ailleurs… » : un autre département (pas de géocodage de ville). Jamais enregistré
- * dans le profil ni les préférences ; lot R1 : le mode est gardé sur l'appareil pour le compte (`explorerChoice.ts`),
- * jamais la position, qui reste en mémoire de l'écran.
- */
-export type Around = { kind: "mine" } | { kind: "me" } | { kind: "dept"; code: string };
-/** Où chercher : le point de départ et la distance propre à l'Explorer (`null` = partout en France). */
-export type ExplorerPlace = { around: Around; radiusKm: number | null };
+/** Où chercher (lot R2) : le lieu et mes départements (Mon coin). */
+export type ExplorerPlace = { where: ExplorerWhere; coin: readonly string[] };
 
-/** Ce que l'Explorer utilise vraiment : un choix fait, sinon la position si elle est activée, sinon « Mon coin ». */
-export function effectiveAround(chosen: Around | null, positionOn: boolean): Around {
-  if (chosen?.kind === "me" && !positionOn) return { kind: "mine" };
-  return chosen ?? (positionOn ? { kind: "me" } : { kind: "mine" });
+/**
+ * Clé du cache de la liste : par lieu, jamais pour « Autour de moi » (les distances partent de la position, rien d'elle
+ * ne s'écrit sur l'appareil).
+ */
+export function placeKey(place: ExplorerPlace): string | null {
+  const w = place.where;
+  if (w.kind === "me") return null;
+  return w.kind === "mine" ? `coin.${place.coin.join("+")}` : w.kind === "dept" ? `d${w.code}` : "partout";
 }
 
 /**
@@ -93,12 +96,6 @@ export function preferredFormats(formats: readonly EventFormat[] | null | undefi
   return formats && formats.length > 0 && formats.length < eventFormats.length ? [...formats] : [];
 }
 
-/** Clé du cache de la liste : jamais pour « Autour de moi » (distances calculées depuis la position). */
-export function placeKey(place: ExplorerPlace): string | null {
-  const where = place.around.kind === "mine" ? "coin" : place.around.kind === "dept" ? `d${place.around.code}` : null;
-  return where === null ? null : `${where}.${place.radiusKm ?? "partout"}`;
-}
-
 export function eventQuery(
   q: string,
   filters: EventFilters,
@@ -106,12 +103,14 @@ export function eventQuery(
   mode: "list" | "map",
   now: Date,
   cursor?: string,
-  sort: EventSort = "distance",
-  /** Lot M4, tour 2 : « Autour de… » ; absent, la position de l'appareil sert si elle est là (comme avant). */
+  sort: EventSort = "date",
   place?: ExplorerPlace,
 ): ExploreEventsQuery {
-  const around = place?.around ?? null;
-  const usePosition = around === null || around.kind === "me";
+  const where = place
+    ? whereQuery(place.where, position, place.coin)
+    : position
+      ? { lat: position.lat, lng: position.lng }
+      : {};
   return {
     q: q.trim() || undefined,
     format: filters.format || undefined,
@@ -120,48 +119,54 @@ export function eventQuery(
     // « Mes affinités » (filtres) l'emporte sur le tri choisi.
     sort: filters.affinity ? "affinity" : sort,
     followed: filters.followed ? "1" : undefined,
-    lat: usePosition ? position?.lat : undefined,
-    lng: usePosition ? position?.lng : undefined,
-    around: around?.kind === "dept" ? around.code : undefined,
-    radiusKm: place?.radiusKm ?? undefined,
-    everywhere: place && place.radiusKm === null ? "1" : undefined,
+    ...where,
     limit: mode === "map" ? 100 : 20,
+    // Lot R2 : le nombre en tout, sur la première page de la liste (« 12 événements à venir »).
+    withTotal: mode === "list" && !cursor ? "1" : undefined,
     cursor,
   };
 }
 
+export type ProSortValue = "name" | "distance";
+
 export function proQuery(
   q: string,
-  filters: ProFilters,
-  sort: "name" | "distance",
+  job: ProActivity | "",
+  sort: ProSortValue,
   position: LatLng | null,
   mode: "list" | "map",
   cursor?: string,
+  place?: ExplorerPlace,
 ): ExploreProsQuery {
+  const where = place
+    ? whereQuery(place.where, position, place.coin)
+    : position
+      ? { lat: position.lat, lng: position.lng }
+      : {};
+  const {
+    everywhere: _all,
+    around: _around,
+    ...rest
+  } = where as typeof where & { everywhere?: string; around?: string };
   return {
     q: q.trim() || undefined,
-    activity: filters.activity || undefined,
-    department: filters.department || undefined,
+    activity: job || undefined,
     sort,
-    radiusKm: filters.radiusKm ?? undefined,
-    lat: position?.lat,
-    lng: position?.lng,
+    ...rest,
     limit: mode === "map" ? 100 : 20,
+    withTotal: mode === "list" && !cursor ? "1" : undefined,
     cursor,
   };
 }
 
 /** Nombre de filtres actifs (pastille du bouton « Filtres »). */
-export function activeFilters(filters: EventFilters | ProFilters): number {
-  if ("when" in filters) {
-    return (
-      (filters.format ? 1 : 0) +
-      (filters.when !== "all" ? 1 : 0) +
-      (filters.affinity ? 1 : 0) +
-      (filters.followed ? 1 : 0)
-    );
-  }
-  return Object.values(filters).filter((v) => v !== "" && v !== null).length;
+export function activeFilters(filters: EventFilters): number {
+  return (
+    (filters.format ? 1 : 0) +
+    (filters.when !== "all" ? 1 : 0) +
+    (filters.affinity ? 1 : 0) +
+    (filters.followed ? 1 : 0)
+  );
 }
 
 /** « Plus tard » (position) : on ne propose à nouveau la carte qu'après ce nombre de jours. */

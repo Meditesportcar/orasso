@@ -1,11 +1,9 @@
+import { effectiveWhere, habitualWhere } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
-
 import {
   activeFilters,
   dayBound,
-  effectiveAround,
   emptyEventFilters,
-  emptyProFilters,
   eventQuery,
   placeKey,
   proQuery,
@@ -17,9 +15,10 @@ import {
 const NOW = new Date("2026-10-21T13:00:00Z");
 
 describe("réglages de l'Explorer v2 → API", () => {
-  it("rien de réglé : tout, du plus proche au plus loin (distance), 20 par page", () => {
+  it("rien de réglé : tout, par date (lot R2), 20 par page, le nombre en tout sur la première page", () => {
     const q = eventQuery("", emptyEventFilters, null, "list", NOW);
-    expect(q).toMatchObject({ sort: "distance", limit: 20 });
+    expect(q).toMatchObject({ sort: "date", limit: 20, withTotal: "1" });
+    expect(eventQuery("", emptyEventFilters, null, "list", NOW, "page2").withTotal).toBeUndefined();
     expect(q.q).toBeUndefined();
     expect(q.lat).toBeUndefined();
     expect(q.followed).toBeUndefined();
@@ -65,15 +64,26 @@ describe("réglages de l'Explorer v2 → API", () => {
     expect(dayBound("", true)).toBeUndefined();
   });
 
-  it("pros : activité, département, distance", () => {
-    const q = proQuery("", { activity: "detailing", department: "34", radiusKm: 25 }, "distance", null, "list");
-    expect(q).toMatchObject({ activity: "detailing", department: "34", sort: "distance", radiusKm: 25, limit: 20 });
+  it("pros : un métier, le tri, le lieu (jamais « partout » ni « around » envoyés à l'annuaire)", () => {
+    const q = proQuery("", "detailing", "distance", { lat: 42.7, lng: 2.9 }, "list", undefined, {
+      where: { kind: "me", km: 100 },
+      coin: ["66"],
+    });
+    expect(q).toMatchObject({ activity: "detailing", sort: "distance", radiusKm: 100, lat: 42.7, limit: 20 });
+    const away = proQuery("", "", "name", null, "list", undefined, {
+      where: { kind: "dept", code: "34" },
+      coin: ["66"],
+    });
+    expect(away).toMatchObject({ departments: "34", sort: "name" });
+    expect(away).not.toHaveProperty("around");
+    const all = proQuery("", "", "distance", null, "map", undefined, { where: { kind: "all" }, coin: ["66"] });
+    expect(all).not.toHaveProperty("everywhere");
+    expect(all.limit).toBe(100);
   });
 
   it("compte les filtres actifs", () => {
     expect(activeFilters(emptyEventFilters)).toBe(0);
     expect(activeFilters({ ...emptyEventFilters, format: "show", followed: true })).toBe(2);
-    expect(activeFilters({ ...emptyProFilters, activity: "parts" })).toBe(1);
   });
 });
 
@@ -86,50 +96,57 @@ describe("position : « Plus tard » retenu", () => {
   });
 });
 
-// Lot M4, tour 2 : « Autour de… » (temporaire) et la distance propre à l'Explorer.
-describe("« Autour de… » → API", () => {
+// Lot R2 : « Où chercher ? » → API.
+describe("« Où chercher ? » → API", () => {
   const here = { lat: 42.7, lng: 2.9 };
-  it("Mon coin : ni position ni département envoyés (l'API part du secteur du compte) ; rayon ou partout", () => {
-    const q = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
-      around: { kind: "mine" },
-      radiusKm: 50,
+  const coin = ["66", "11"];
+  it("Autour de moi : la position et la distance ; Mon coin et Ailleurs : des départements entiers ; Partout", () => {
+    const me = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "date", {
+      where: { kind: "me", km: 75 },
+      coin,
     });
-    expect(q.lat).toBeUndefined();
-    expect(q.around).toBeUndefined();
-    expect(q.radiusKm).toBe(50);
-    expect(q.everywhere).toBeUndefined();
+    expect(me).toMatchObject({ lat: 42.7, lng: 2.9, radiusKm: 75 });
+    expect(me.everywhere).toBeUndefined();
+    const mine = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "date", {
+      where: { kind: "mine" },
+      coin,
+    });
+    expect(mine).toMatchObject({ departments: "66,11" });
+    expect(mine.lat).toBeUndefined();
+    expect(mine.radiusKm).toBeUndefined();
+    const away = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
+      where: { kind: "dept", code: "75" },
+      coin,
+    });
+    expect(away).toMatchObject({ departments: "75", around: "75" });
     const all = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "date", {
-      around: { kind: "mine" },
-      radiusKm: null,
+      where: { kind: "all" },
+      coin,
     });
-    expect(all.everywhere).toBe("1");
+    expect(all).toMatchObject({ everywhere: "1", lat: 42.7 });
     expect(all.radiusKm).toBeUndefined();
   });
 
-  it("Autour de moi : la position ; Ailleurs : le département, sans la position", () => {
-    const me = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
-      around: { kind: "me" },
-      radiusKm: 25,
+  it("réglages habituels : la distance des préférences autour de moi, sinon mon coin, ou partout", () => {
+    expect(habitualWhere({ radiusKm: 100 }, true, true)).toEqual({ kind: "me", km: 100 });
+    expect(habitualWhere({ radiusKm: 100 }, false, true)).toEqual({ kind: "mine" });
+    expect(habitualWhere({ radiusKm: null }, true, true)).toEqual({ kind: "all" });
+    expect(habitualWhere(null, false, false)).toEqual({ kind: "all" });
+    // « Autour de moi » sans position retombe sur mon coin ; une recherche cherche partout tant que rien n'est choisi.
+    const habit = { kind: "mine" } as const;
+    const opts = { positionOn: false, hasCoin: true, searching: false };
+    expect(effectiveWhere({ kind: "me", km: 50 }, habit, opts)).toEqual({ kind: "mine" });
+    expect(effectiveWhere(null, habit, { ...opts, searching: true })).toEqual({ kind: "all" });
+    expect(effectiveWhere({ kind: "dept", code: "11" }, habit, { ...opts, searching: true })).toEqual({
+      kind: "dept",
+      code: "11",
     });
-    expect(me).toMatchObject({ lat: 42.7, lng: 2.9, radiusKm: 25 });
-    const elsewhere = eventQuery("", emptyEventFilters, here, "list", NOW, undefined, "distance", {
-      around: { kind: "dept", code: "75" },
-      radiusKm: null,
-    });
-    expect(elsewhere).toMatchObject({ around: "75", everywhere: "1" });
-    expect(elsewhere.lat).toBeUndefined();
   });
 
-  it("le choix par défaut suit la position ; « Autour de moi » sans position retombe sur Mon coin", () => {
-    expect(effectiveAround(null, true)).toEqual({ kind: "me" });
-    expect(effectiveAround(null, false)).toEqual({ kind: "mine" });
-    expect(effectiveAround({ kind: "me" }, false)).toEqual({ kind: "mine" });
-    expect(effectiveAround({ kind: "dept", code: "11" }, true)).toEqual({ kind: "dept", code: "11" });
-  });
-
-  it("cache : par point de départ et distance, jamais pour « Autour de moi »", () => {
-    expect(placeKey({ around: { kind: "mine" }, radiusKm: null })).toBe("coin.partout");
-    expect(placeKey({ around: { kind: "dept", code: "2A" }, radiusKm: 100 })).toBe("d2A.100");
-    expect(placeKey({ around: { kind: "me" }, radiusKm: 10 })).toBeNull();
+  it("cache : par lieu, jamais pour « Autour de moi »", () => {
+    expect(placeKey({ where: { kind: "mine" }, coin })).toBe("coin.66+11");
+    expect(placeKey({ where: { kind: "dept", code: "2A" }, coin })).toBe("d2A");
+    expect(placeKey({ where: { kind: "all" }, coin })).toBe("partout");
+    expect(placeKey({ where: { kind: "me", km: 10 }, coin })).toBeNull();
   });
 });

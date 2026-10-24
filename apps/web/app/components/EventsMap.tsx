@@ -2,6 +2,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { fitPoints, pinDateLabel, placePins, type WebPin } from "@orasso/design-system/web";
 import type { EventCard } from "@orasso/shared";
 import { useMemo, useRef } from "react";
+import { now } from "../lib/clock";
 import { useOrassoMap } from "./useOrassoMap";
 
 const FRANCE: [number, number] = [2.35, 46.6];
@@ -22,7 +23,7 @@ export function EventsMap({ events }: { events: EventCard[] }) {
         kind: "event",
         lat: e.lat as number,
         lng: e.lng as number,
-        label: pinDateLabel(e.startsAt),
+        label: pinDateLabel(e.startsAt, now()),
         title: e.title,
       }));
       const bySlug = new Map(located.map((e) => [e.id, e.slug]));

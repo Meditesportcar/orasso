@@ -1,78 +1,96 @@
-// Le choix de l'Explorer reste (lot R1, retour de Damien du 24/10 : « les sélecteurs ne gardent pas le choix ») :
-// segment, tri, « Autour de… », distance et filtres sont gardés sur l'appareil, rangés par compte (`cacheScope()` de
-// `kv.ts` : un autre compte ne les lit jamais, la déconnexion les efface). Ils restent d'un onglet à l'autre et après un
-// redémarrage. « Autour de moi » ne garde que le mode : jamais de coordonnées. Le texte de recherche n'est pas gardé.
+// Le choix de l'Explorer reste (lot R1, retour de Damien du 24/10 : « les sélecteurs ne gardent pas le choix ») : il
+// est gardé sur l'appareil, rangé par compte (`cacheScope()` de `kv.ts` : un autre compte ne le lit jamais, la
+// déconnexion l'efface). Il reste d'un onglet à l'autre et après un redémarrage. Le texte de recherche n'est pas gardé.
+// Lot R2 (maquette « Explorer R2 ») : le segment (Événements, Pros, Personnes et crews), le lieu (« Où chercher ? »,
+// commun aux Événements et aux Pros ; `null` = tes réglages habituels), le tri des événements (par date par défaut) et
+// des pros (par distance), les filtres, le métier, et pour Personnes et crews le département, « Montrer » et les filtres.
+// « Autour de moi » ne garde que le mode et la distance : jamais de coordonnées.
 // Logique pure (testée) : lecture prudente d'une valeur enregistrée, chaque champ illisible reprend sa valeur par défaut.
-import { departments, eventFormats, proActivities } from "@orasso/shared";
-
 import {
-  type Around,
-  EVENT_SORTS,
-  type EventFilters,
-  type EventSort,
-  emptyEventFilters,
-  emptyProFilters,
-  type ProFilters,
-  RADII,
-  type When,
-} from "./queries";
+  departments,
+  type ExplorerWhere,
+  eventFormats,
+  type Grade,
+  grades,
+  type ProActivity,
+  proActivities,
+  readWhere,
+} from "@orasso/shared";
+
+import { EVENT_SORTS, type EventFilters, type EventSort, emptyEventFilters, type When } from "./queries";
 
 /** Clé du cache du compte. */
 export const CHOICE_KEY = "explorer-choice";
 
-export type ExplorerSegment = "evenements" | "pros";
-export const EXPLORER_SEGMENTS: readonly ExplorerSegment[] = ["evenements", "pros"];
+export type ExplorerSegment = "evenements" | "pros" | "personnes";
+export const EXPLORER_SEGMENTS: readonly ExplorerSegment[] = ["evenements", "pros", "personnes"];
+
+export const PRO_SORTS = ["distance", "name"] as const;
+export type ProSort = (typeof PRO_SORTS)[number];
+export const PEOPLE_SHOWS = ["all", "people", "crews"] as const;
+export type PeopleShow = (typeof PEOPLE_SHOWS)[number];
+/** Personnes et crews : des départements seulement, jamais de position ni de distance (docs/01). */
+export type PeopleWhere = { kind: "mine" } | { kind: "dept"; code: string } | { kind: "all" };
+export type PeopleFilters = { categoryId: string; grade: Grade | "" };
+export const emptyPeopleFilters: PeopleFilters = { categoryId: "", grade: "" };
 
 export type ExplorerChoice = {
   segment: ExplorerSegment;
+  /** Le lieu choisi ; `null` : tes réglages habituels. */
+  where: ExplorerWhere | null;
   sort: EventSort;
-  /** `null` : pas de choix (la position si elle est activée, sinon Mon coin). */
-  around: Around | null;
-  /** `undefined` : la distance habituelle des préférences ; `null` : partout en France. */
-  radius: number | null | undefined;
   /** Les filtres choisis (les types des préférences s'y ajoutent à l'affichage, ils ne sont pas gardés ici). */
   filters: Omit<EventFilters, "formats">;
   /** Les types de « Tes préférences » s'appliquent (faux après un format choisi à la main). */
   prefFormatsOn: boolean;
-  pros: ProFilters;
+  job: ProActivity | "";
+  proSort: ProSort;
+  peopleWhere: PeopleWhere;
+  show: PeopleShow;
+  people: PeopleFilters;
 };
 
 export const defaultChoice: ExplorerChoice = {
   segment: "evenements",
-  sort: "distance",
-  around: null,
-  radius: undefined,
+  where: null,
+  // Décision de Damien (lot R2) : par date pour les événements, par distance pour les pros.
+  sort: "date",
   filters: { format: emptyEventFilters.format, when: emptyEventFilters.when, affinity: false, followed: false },
   prefFormatsOn: true,
-  pros: emptyProFilters,
+  job: "",
+  proSort: "distance",
+  peopleWhere: { kind: "mine" },
+  show: "all",
+  people: emptyPeopleFilters,
 };
 
+/** Version de la valeur gardée : avant le lot R2, « Autour de… » et le tri par distance par défaut (non repris). */
+const VERSION = 2;
 const WHENS: readonly When[] = ["all", "weekend", "month"];
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const oneOf = <T>(list: readonly T[], v: unknown, fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
-const isRadius = (v: unknown): v is number => (RADII as readonly unknown[]).includes(v);
+const isDepartment = (code: string) => (departments as readonly string[]).includes(code);
 
-function readAround(v: unknown): Around | null {
-  if (!isObject(v)) return null;
-  if (v.kind === "mine") return { kind: "mine" };
-  // « Autour de moi » : le mode seulement, quoi que contienne la valeur enregistrée.
-  if (v.kind === "me") return { kind: "me" };
-  if (v.kind === "dept" && (departments as readonly unknown[]).includes(v.code))
-    return { kind: "dept", code: v.code as string };
-  return null;
+function readPeopleWhere(v: unknown): PeopleWhere {
+  if (!isObject(v)) return { kind: "mine" };
+  if (v.kind === "all") return { kind: "all" };
+  if (v.kind === "dept" && typeof v.code === "string" && isDepartment(v.code)) return { kind: "dept", code: v.code };
+  return { kind: "mine" };
 }
 
 /** Une valeur enregistrée (ou rien) → le choix, champ par champ ; `null` si rien n'a jamais été gardé. */
 export function readChoice(raw: unknown): ExplorerChoice | null {
   if (!isObject(raw)) return null;
   const f = isObject(raw.filters) ? raw.filters : {};
-  const p = isObject(raw.pros) ? raw.pros : {};
+  const legacy = raw.v !== VERSION;
+  // Avant le lot R2 : le métier était dans `pros.activity`.
+  const job = legacy && isObject(raw.pros) ? raw.pros.activity : raw.job;
+  const people = isObject(raw.people) ? raw.people : {};
   return {
     segment: oneOf(EXPLORER_SEGMENTS, raw.segment, defaultChoice.segment),
-    sort: oneOf(EVENT_SORTS, raw.sort, defaultChoice.sort),
-    around: readAround(raw.around),
-    // JSON n'a pas d'`undefined` : « prefs » = la distance des préférences.
-    radius: raw.radius === null ? null : isRadius(raw.radius) ? raw.radius : undefined,
+    // Avant le lot R2, « Autour de… » et sa distance : on repart des réglages habituels (le tri par date aussi).
+    where: legacy ? null : readWhere(raw.where, isDepartment),
+    sort: legacy ? defaultChoice.sort : oneOf(EVENT_SORTS, raw.sort, defaultChoice.sort),
     filters: {
       format: oneOf(["", ...eventFormats] as const, f.format, ""),
       when: oneOf(WHENS, f.when, "all"),
@@ -80,22 +98,32 @@ export function readChoice(raw: unknown): ExplorerChoice | null {
       followed: f.followed === true,
     },
     prefFormatsOn: raw.prefFormatsOn !== false,
-    pros: {
-      activity: oneOf(["", ...proActivities] as const, p.activity, ""),
-      department: oneOf(["", ...departments] as const, p.department, ""),
-      radiusKm: isRadius(p.radiusKm) ? p.radiusKm : null,
+    job: oneOf(["", ...proActivities] as const, job, ""),
+    proSort: oneOf(PRO_SORTS, raw.proSort, defaultChoice.proSort),
+    peopleWhere: readPeopleWhere(raw.peopleWhere),
+    show: oneOf(PEOPLE_SHOWS, raw.show, defaultChoice.show),
+    people: {
+      categoryId: typeof people.categoryId === "string" && people.categoryId.length <= 64 ? people.categoryId : "",
+      grade: oneOf(["", ...grades] as const, people.grade, ""),
     },
   };
 }
 
-/** Le choix → la valeur à garder (jamais de position : « Autour de moi » est un mode). */
+/** Le choix → la valeur à garder (jamais de position : « Autour de moi » est un mode et une distance). */
 export function storeChoice(choice: ExplorerChoice): Record<string, unknown> {
-  const a = choice.around;
+  const w = choice.where;
   return {
+    v: VERSION,
     segment: choice.segment,
+    where:
+      w === null
+        ? null
+        : w.kind === "me"
+          ? { kind: "me", km: w.km }
+          : w.kind === "dept"
+            ? { kind: "dept", code: w.code }
+            : { kind: w.kind },
     sort: choice.sort,
-    around: a === null ? null : a.kind === "dept" ? { kind: "dept", code: a.code } : { kind: a.kind },
-    radius: choice.radius === undefined ? "prefs" : choice.radius,
     filters: {
       format: choice.filters.format,
       when: choice.filters.when,
@@ -103,6 +131,11 @@ export function storeChoice(choice: ExplorerChoice): Record<string, unknown> {
       followed: choice.filters.followed,
     },
     prefFormatsOn: choice.prefFormatsOn,
-    pros: { activity: choice.pros.activity, department: choice.pros.department, radiusKm: choice.pros.radiusKm },
+    job: choice.job,
+    proSort: choice.proSort,
+    peopleWhere:
+      choice.peopleWhere.kind === "dept" ? { kind: "dept", code: choice.peopleWhere.code } : choice.peopleWhere,
+    show: choice.show,
+    people: { categoryId: choice.people.categoryId, grade: choice.people.grade },
   };
 }

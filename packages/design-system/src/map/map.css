@@ -15,7 +15,8 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.o-mappin--event {
+.o-mappin--event,
+.o-mappin--group {
   flex-direction: column;
   /* Zone de toucher de 44 px au moins, l'étiquette au centre. */
   min-width: 44px;
@@ -48,6 +49,12 @@
 }
 .o-mappin--event.is-hot .o-mappin__tip {
   border-top-color: var(--accent);
+}
+/* Lot R2 (maquette R2.8) : une pastille de groupe qui dit « 2 ÉVÉNEMENTS » : droite, arrondie, avec sa pointe. */
+.o-mappin--group .o-mappin__tag {
+  padding: 4px 9px;
+  border-radius: var(--radius-md);
+  transform: none;
 }
 .o-mappin--cluster {
   width: 30px;

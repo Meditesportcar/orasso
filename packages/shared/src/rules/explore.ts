@@ -120,7 +120,20 @@ export function roadTime(km: number): string {
 // --- Lot R2 : les dates de la carte -----------------------------------------------------------------------------
 
 const WEEKDAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."] as const;
-const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."] as const;
+const MONTHS = [
+  "janv.",
+  "févr.",
+  "mars",
+  "avr.",
+  "mai",
+  "juin",
+  "juil.",
+  "août",
+  "sept.",
+  "oct.",
+  "nov.",
+  "déc.",
+] as const;
 
 const keyOf = (w: Pick<WallTime, "year" | "month" | "day">) =>
   `${w.year}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
@@ -147,11 +160,13 @@ export type DateStripDay = { key: string; label: string; count: number };
  * La frise des dates de la carte (maquette R2.8) : un jour par date de début, dans l'ordre, avec le nombre d'événements.
  * Un événement déjà commencé (plusieurs jours, en cours) compte pour son jour de début.
  */
-export function dateStrip(events: readonly { startsAt: string | Date }[], now: Date, timeZone?: string): DateStripDay[] {
+export function dateStrip(
+  events: readonly { startsAt: string | Date }[],
+  now: Date,
+  timeZone?: string,
+): DateStripDay[] {
   const days = new Map<string, DateStripDay>();
-  const sorted = [...events].sort(
-    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-  );
+  const sorted = [...events].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
   for (const e of sorted) {
     const key = dayKey(e.startsAt, timeZone);
     const day = days.get(key);

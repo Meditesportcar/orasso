@@ -8,8 +8,8 @@ import {
   friendshipState,
   hasPeopleSearchCriteria,
   type PeopleSearchPage,
-  type PeopleSuggestions,
   type PeopleSearchQuery,
+  type PeopleSuggestions,
   type PersonCard,
 } from "@orasso/shared";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
@@ -209,7 +209,13 @@ export const peopleSearch = {
       const query = { limit: SUGGESTIONS_LIMIT, modelId: v.modelId, department } as PeopleSearchQuery;
       const { rows, limit } = await run(viewer, query, { publicStrangers: true });
       if (!rows.length) continue;
-      return { sameModel: { model: v.model.name, vehicle: vehicleLabel(v), items: (await cards(viewer, rows)).slice(0, limit) } };
+      return {
+        sameModel: {
+          model: v.model.name,
+          vehicle: vehicleLabel(v),
+          items: (await cards(viewer, rows)).slice(0, limit),
+        },
+      };
     }
     return { sameModel: null };
   },

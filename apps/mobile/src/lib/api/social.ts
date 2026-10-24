@@ -6,6 +6,7 @@ import type {
   InboxSummary,
   OtherVehicle,
   PeopleSearchPage,
+  PeopleSuggestions,
   UserProfileView,
 } from "@orasso/shared";
 
@@ -25,6 +26,8 @@ export const socialApi = {
   otherVehicle: (id: string) => request<OtherVehicle>(`/api/vehicles/${id}`),
   ownersNearby: (id: string, cursor?: string) =>
     request<PeopleSearchPage & { sector: string[] }>(`/api/vehicles/${id}/owners-nearby${qs({ limit: 20, cursor })}`),
+  /** Lot R2 : « Même modèle que toi » (comptes publics seulement), dans le département choisi s'il y en a un. */
+  peopleSuggestions: (department?: string) => request<PeopleSuggestions>(`/api/users/suggestions${qs({ department })}`),
   searchPeople: (filters: PeopleFilters) =>
     request<PeopleSearchPage>(`/api/users/search${qs({ limit: 20, ...filters })}`),
   friends: () => request<{ items: FriendItem[] }>("/api/me/friends"),

@@ -22,6 +22,7 @@ import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { PillO, SmButton } from "@/features/passionne/kit";
+import { nowMs } from "@/lib/clock";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 
@@ -193,7 +194,7 @@ export function EventRows({ event }: { event: EventPublic }) {
   const { t } = useTheme();
   const c = t.color;
   const [map, setMap] = useState(false);
-  const pins = useMemo(() => eventPins([event]), [event]);
+  const pins = useMemo(() => eventPins([event], new Date(nowMs())), [event]);
   const city = [event.postalCode, event.city].filter(Boolean).join(" ");
   const multi = (event.days?.length ?? 0) > 1;
   const when = `${formatHour(event.startsAt)} → ${formatHour(event.endsAt)}${multi ? ` · ${event.days.length} jours` : ""}`;

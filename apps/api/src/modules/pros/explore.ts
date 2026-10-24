@@ -151,9 +151,7 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
     const rowsFav = await db
       .select({ id: proFollows.proId })
       .from(proFollows)
-      .where(
-        and(eq(proFollows.userId, viewer.user.id), eq(proFollows.favorite, true), inArray(proFollows.proId, ids)),
-      );
+      .where(and(eq(proFollows.userId, viewer.user.id), eq(proFollows.favorite, true), inArray(proFollows.proId, ids)));
     for (const r of rowsFav) favorites.add(r.id);
   }
   const items = page.map((r) => {
@@ -183,6 +181,7 @@ export async function proActivityCounts(q: ProListQuery, viewer: Viewer | null):
   ).rows;
   const total = Number((await db.select({ n: sql<number>`count(*)::int` }).from(proProfiles).where(where))[0]?.n ?? 0);
   const counts: ProActivityCounts["counts"] = {};
-  for (const r of rows) if ((proActivities as readonly string[]).includes(r.a)) counts[r.a as ProActivity] = Number(r.n);
+  for (const r of rows)
+    if ((proActivities as readonly string[]).includes(r.a)) counts[r.a as ProActivity] = Number(r.n);
   return { total, counts };
 }

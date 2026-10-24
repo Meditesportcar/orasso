@@ -290,7 +290,8 @@ export const explorerR2Labels = {
   whereMeHint: "Ta position, lue sur ton téléphone. Elle n'est jamais gardée.",
   whereMeDenied: "Position refusée : touche pour la redemander.",
   whereMine: "Mon coin",
-  whereMineHint: (depts: string) => (depts ? `Tes départements : ${depts}` : "Ajoute tes départements dans Tes préférences"),
+  whereMineHint: (depts: string) =>
+    depts ? `Tes départements : ${depts}` : "Ajoute tes départements dans Tes préférences",
   whereAway: "Ailleurs",
   whereAwayHint: "Un autre département, le temps d'un week-end ou d'un voyage",
   whereAwayFind: "Chercher un département",
@@ -307,7 +308,13 @@ export const explorerR2Labels = {
   lineMe: (km: number) => `jusqu'à ${km} km de toi`,
   lineAll: "partout en France",
   seeEvents: (n: number | null) =>
-    n === null ? "Voir les événements" : n === 0 ? "Aucun événement ici" : n === 1 ? "Voir l'événement" : `Voir les ${n} événements`,
+    n === null
+      ? "Voir les événements"
+      : n === 0
+        ? "Aucun événement ici"
+        : n === 1
+          ? "Voir l'événement"
+          : `Voir les ${n} événements`,
   seePros: (n: number | null) =>
     n === null ? "Voir les pros" : n === 0 ? "Aucun pro ici" : n === 1 ? "Voir le pro" : `Voir les ${n} pros`,
   seeResults: "Voir les résultats",
@@ -315,10 +322,13 @@ export const explorerR2Labels = {
   sortEventsSheet: "Trier les événements",
   sortProsSheet: "Trier les pros",
   sortHint: "Un toucher suffit : le tri s'applique et la feuille se ferme. Il est gardé pour tes prochaines visites.",
-  sortPill: { date: "Par date", distance: "Par distance", recent: "Nouveautés", seats: "Places restantes", name: "Par nom" } as Record<
-    string,
-    string
-  >,
+  sortPill: {
+    date: "Par date",
+    distance: "Par distance",
+    recent: "Nouveautés",
+    seats: "Places restantes",
+    name: "Par nom",
+  } as Record<string, string>,
   proSorts: {
     distance: { label: "Distance", hint: "Du plus proche au plus loin" },
     name: { label: "Nom", hint: "Par ordre alphabétique" },
@@ -326,6 +336,8 @@ export const explorerR2Labels = {
   // Filtres.
   filters: "Filtres",
   filtersSheet: "Filtres",
+  /** Format : les types de « Tes préférences » (tant qu'aucun format n'est choisi à la main). */
+  formatPrefs: "Mes préférences",
   // Événements (maquette R2.1).
   eventsLine: (n: number, more: boolean) => `${n}${more ? "+" : ""} événement${n > 1 || more ? "s" : ""} à venir`,
   // Pros (maquettes R2.4, R2.5).

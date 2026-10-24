@@ -1,117 +1,204 @@
-// Explorer v2, segment Pros (lot 29 ; lot 44 : en-tête commun, position partagée, du plus proche au plus loin quand
-// on a une position ou un département favori, sinon par nom ; carte stylée avec les plaques des pros). Fiches
-// supprimées, non publiées ou de comptes suspendus : jamais là.
-// Lot C2a : les lieux pratiques retirés de l'Accueil (garage favori, lavage, carburant ; audit § 5.2) vivent ici, en tête
-// de la liste ; les filtres peuvent venir d'Explorer (`filters` / `onFiltersChange`) pour que la carte plein écran les garde.
-import { Button, Chip, ChipRow, EmptyState, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { explorerLabels, homeWidgetOffered, explorerV2Labels as L } from "@orasso/shared";
-import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+// Explorer, segment Pros (lot 29 ; lot 44 : en-tête commun, position partagée). Fiches supprimées, non publiées ou de
+// comptes suspendus : jamais là (API).
+// Lot R2 (maquettes R2.4, R2.5) : le même lieu que les événements (« Où chercher ? »), un métier à la fois (« Quel
+// métier ? »), du plus proche au plus loin par défaut. Toutes les fiches ont le même gabarit (`.pcard`) : logo, métiers,
+// nom en entier, ville et distance, la remise pour mon grade (toujours une ligne : « −8 % avec ton grade Route »,
+// « −10 % dès le grade Sport » ou « Pas encore de remise Orasso »), l'étoile de mon garage favori. Les pros sans atelier
+// qui se déplacent chez moi sont rangés à part, en fin de liste. Les stations (lavage, carburant) restent retirées (R1).
+import {
+  archivoAt,
+  Button,
+  EmptyState,
+  Icon,
+  Photo,
+  Plate,
+  Tag,
+  Text,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
+import {
+  explorerLabels,
+  gradeLabels,
+  explorerV2Labels as L,
+  type ProActivity,
+  type ProCard,
+  proActivityLabels,
+  explorerR2Labels as R,
+} from "@orasso/shared";
+import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { FavoriteGarageWidget, PlacesWidget } from "@/features/home/HomeWidgets";
 import { api } from "@/lib/api";
-import { useApi } from "@/lib/useApi";
-import { Notice } from "@/ui/Notice";
-import { ExplorerMap } from "./ExplorerMap";
-import { ProFiltersSheet } from "./FiltersSheets";
-import { proPins } from "./mapPins";
-import { activeFilters, emptyProFilters, type ProFilters, proQuery } from "./queries";
-import { ProRow } from "./rows";
+import { mediaSource } from "@/lib/media";
+import { LoadError } from "@/ui/LoadError";
+import { EVENT_LIST_BLOCKS, Waiting } from "@/ui/Waiting";
+import { type ExplorerPlace, type ProSortValue, placeKey, proQuery } from "./queries";
 import type { ExplorerPosition } from "./useExplorerPosition";
 import { usePaged } from "./usePaged";
 
-const { space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter((w) => w.length > 2 || /^[A-Z0-9]/.test(w))
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("") || name.slice(0, 2).toUpperCase();
+
+/** Un pro sans atelier (zone d'intervention seulement) : il se déplace. */
+export const isMover = (p: Pick<ProCard, "lat" | "city" | "interventionDepartments">) =>
+  p.lat === null && !p.city && p.interventionDepartments.length > 0;
+
+/** `.pcard` : le gabarit unique d'une fiche pro de l'Explorer. */
+export function ProCardR2({ pro, gradeLabel }: { pro: ProCard; gradeLabel: string | null }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const router = useRouter();
+  const logo = mediaSource(pro.logoUrl);
+  const km = pro.distanceKm;
+  const d = pro.discount;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={pro.name}
+      onPress={() => router.push(`/p/${pro.slug}`)}
+      testID="pro-row"
+    >
+      <Plate style={styles.card}>
+        <View style={[styles.logo, { backgroundColor: c.night }]}>
+          {logo ? (
+            <Photo source={logo} style={StyleSheet.absoluteFill as never} accessibilityLabel="" />
+          ) : (
+            <Text variant="posterM" color={c.nightInk} style={styles.logoText}>
+              {initials(pro.name)}
+            </Text>
+          )}
+        </View>
+        <View style={styles.main}>
+          <Text variant="label" color={c.plateMuted}>
+            {pro.activities.map((a) => proActivityLabels[a]).join(" · ")}
+          </Text>
+          <View style={styles.nameRow}>
+            <Text variant="bodyStrong" color={c.plateInk} style={styles.name}>
+              {pro.name}
+            </Text>
+            {pro.verified ? (
+              <View accessibilityLabel={explorerLabels.verifiedPro} style={styles.badge}>
+                <Icon name="badge" size={17} color={c.accentText} />
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.where}>
+            <Icon name={isMover(pro) ? "vehicle" : "place"} size={14} color={c.plateMuted} />
+            <Text variant="caption" color={c.plateMuted} style={styles.whereText}>
+              {isMover(pro)
+                ? R.moverZone(pro.interventionDepartments)
+                : [pro.city, pro.department].filter(Boolean).join(" · ")}
+              {!isMover(pro) && km !== undefined && km !== null ? (
+                <Text variant="caption" color={c.plateInk} style={styles.km}>
+                  {` · ${L.km(km)}`}
+                </Text>
+              ) : null}
+            </Text>
+          </View>
+          {gradeLabel !== null ? (
+            d ? (
+              <View style={styles.disc} testID="pro-discount">
+                <Tag tone={d.from ? "line" : "acc"}>{R.discountTag(d.percent)}</Tag>
+                <Text variant="caption" color={c.plateMuted} style={styles.discText}>
+                  {d.from ? R.discountFrom(gradeLabels[d.from]) : R.discountMine(d.percent, gradeLabel)}
+                </Text>
+              </View>
+            ) : (
+              <Text variant="caption" color={c.inkFaint} style={styles.discNone} testID="pro-discount">
+                {R.discountNone}
+              </Text>
+            )
+          ) : null}
+          {pro.favorite ? (
+            <View style={styles.fav} testID="pro-favorite">
+              <Icon name="star" size={14} color={c.accentText} />
+              <Text variant="label" color={c.accentText}>
+                {R.favorite}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </Plate>
+    </Pressable>
+  );
+}
 
 export function ProsSegment({
   q,
   position,
-  dept,
-  view,
-  filters: controlled,
-  onFiltersChange,
-  places = false,
+  job,
+  sort,
+  place,
+  placeLine,
+  grade,
+  settled = true,
 }: {
   q: string;
   position: ExplorerPosition;
-  dept: string | null;
-  view: "list" | "map";
-  filters?: ProFilters;
-  onFiltersChange?: (next: ProFilters) => void;
-  /** Lieux pratiques en tête (liste d'Explorer). */
-  places?: boolean;
+  job: ProActivity | "";
+  sort: ProSortValue;
+  place: ExplorerPlace;
+  placeLine: string;
+  /** Le grade de la personne connectée (« avec ton grade Route ») ; `null` sans compte (aucune remise montrée). */
+  grade: keyof typeof gradeLabels | null;
+  settled?: boolean;
 }) {
   const { t } = useTheme();
-  const [own, setOwn] = useState(controlled ?? emptyProFilters);
-  // Contrôlés par Explorer (liste) ; sinon (carte), ceux reçus au départ puis ceux de la feuille de filtres.
-  const filters = onFiltersChange && controlled ? controlled : own;
-  const setFilters = (next: ProFilters) => (onFiltersChange ? onFiltersChange(next) : setOwn(next));
-  const [sheet, setSheet] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
-  const sort = position.status === "on" || dept ? "distance" : "name";
+  const c = t.color;
   const ready = position.status !== "checking" && position.status !== "asking";
-
+  const key = placeKey(place);
   const list = usePaged(
-    (cursor) => api.explorePros(proQuery(q, filters, sort, position.position, view, cursor)),
-    [q, filters, sort, position.position, view],
+    (cursor) => api.explorePros(proQuery(q, job, sort, position.position, "list", cursor, place)),
+    [q, job, sort, position.position, place],
     q ? 300 : 0,
-    ready,
+    ready && settled,
+    settled && !q && !job && key !== null ? `explore-pros.${sort}.${key}` : undefined,
   );
   const items = list.items ?? [];
-  const pins = useMemo(() => proPins(list.items ?? []), [list.items]);
-  const picked = items.filter((p) => selected.includes(p.slug));
-  const count = activeFilters(filters);
-  const line = position.status === "on" ? L.prosOn : dept ? L.prosAround(dept) : L.prosByName;
+  const workshops = items.filter((p) => !isMover(p));
+  const movers = items.filter(isMover);
+  const count = list.total ?? items.length;
+  const gradeLabel = grade ? gradeLabels[grade] : null;
+  const card = (p: ProCard) => <ProCardR2 key={p.slug} pro={p} gradeLabel={gradeLabel} />;
 
   return (
     <>
-      {places && view === "list" ? <PracticalPlaces position={position} /> : null}
-      <ChipRow>
-        <Chip selected={count > 0} onPress={() => setSheet(true)}>
-          {count > 0 ? `${L.filters} · ${count}` : L.filters}
-        </Chip>
-      </ChipRow>
-      <View style={styles.sortline}>
-        <Text variant="caption" color={t.color.inkMuted} style={styles.sortText}>
-          {line}
+      <View style={styles.line} testID="pros-line">
+        <Text variant="caption" color={c.inkMuted} style={styles.lineText}>
+          {[
+            list.items ? R.prosLine(count, list.total === null && list.hasMore) : null,
+            job ? proActivityLabels[job] : null,
+            placeLine,
+            sort === "distance" ? R.prosNearest : R.prosByName,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
-        {list.items ? (
-          <Text variant="caption" color={t.color.inkMuted}>
-            {L.results(items.length, list.hasMore)}
-          </Text>
-        ) : null}
       </View>
-
-      {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+      {list.error ? <LoadError message={list.error} onRetry={() => void list.reload()} /> : null}
       {list.items === null && !list.error ? (
-        <View style={styles.loading}>
-          <OLoader label={L.loading} />
-        </View>
+        <Waiting blocks={EVENT_LIST_BLOCKS} label={L.loading} testID="explorer-loading" />
       ) : null}
       {list.items?.length === 0 ? <EmptyState title={L.emptyTitle} text={L.prosEmptyText} /> : null}
-
-      {view === "map" && list.items ? (
-        <ExplorerMap
-          pins={pins}
-          me={position.position}
-          selectedId={selected.length === 1 ? selected[0] : null}
-          onSelect={(p) => setSelected([p.id])}
-          onSelectGroup={(group) => setSelected(group.map((p) => p.id))}
-        >
-          {picked.length > 0 ? (
-            <View style={styles.picked}>
-              {picked.map((p) => (
-                <ProRow key={p.slug} pro={p} />
-              ))}
-            </View>
-          ) : (
-            <Text variant="caption" color={t.color.inkMuted}>
-              {pins.length > 0 ? L.mapProHint : explorerLabels.mapNoPosition}
-            </Text>
-          )}
-        </ExplorerMap>
+      {workshops.map(card)}
+      {movers.length ? (
+        <View style={styles.subH} testID="pros-movers">
+          <Text variant="label" color={c.inkMuted}>
+            {R.movers}
+          </Text>
+          <View style={[styles.subLine, { backgroundColor: c.line }]} />
+        </View>
       ) : null}
-      {view === "list" ? items.map((pro) => <ProRow key={pro.slug} pro={pro} />) : null}
-      {view === "list" && list.hasMore ? (
+      {movers.map(card)}
+      {list.hasMore ? (
         <Button
           variant="secondary"
           icon="add"
@@ -122,44 +209,34 @@ export function ProsSegment({
           {explorerLabels.more}
         </Button>
       ) : null}
-
-      <ProFiltersSheet visible={sheet} value={filters} onClose={() => setSheet(false)} onApply={setFilters} />
     </>
   );
 }
 
-/**
- * Lieux pratiques (lot 30, retirés de l'Accueil au lot C2a) : garage favori, lavage et carburant les plus proches, lus
- * par `GET /me/home?blocks=places` (ni sponsorisé ni incitation : rien n'y est compté). Lot R1 : lavage et carburant
- * retirés pour l'instant (décision de Damien du 24/10), il reste le garage favori.
- */
-function PracticalPlaces({ position }: { position: ExplorerPosition }) {
-  const data = useApi(
-    () =>
-      api.homeData({
-        persona: "fan",
-        blocks: "places",
-        lat: position.position?.lat,
-        lng: position.position?.lng,
-      }),
-    [position.position?.lat, position.position?.lng],
-    { cacheKey: "explorer-places" },
-  );
-  if (!data.data) return null;
-  return (
-    <View style={styles.places} testID="explorer-places">
-      <FavoriteGarageWidget garage={data.data.favoriteGarage} />
-      {/* Lot R1 (décision de Damien du 24/10) : stations retirées pour l'instant (`NEARBY_STATIONS_ENABLED`). */}
-      {homeWidgetOffered("wash") ? <PlacesWidget kind="wash" places={data.data.wash} /> : null}
-      {homeWidgetOffered("fuel") ? <PlacesWidget kind="fuel" places={data.data.fuel} /> : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  places: { gap: space2 },
-  sortline: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
-  sortText: { flex: 1 },
-  loading: { alignItems: "center", paddingVertical: space2 },
-  picked: { gap: space2 },
+  line: { flexDirection: "row", alignItems: "baseline", gap: space2 },
+  lineText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
+  card: { flexDirection: "row", alignItems: "flex-start", gap: space3, padding: 10, borderRadius: 18 },
+  logo: {
+    width: 62,
+    height: 62,
+    borderRadius: 15,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoText: { fontSize: 25, lineHeight: 28, fontFamily: archivoAt(62, 900) },
+  main: { flex: 1, minWidth: 0, gap: space1 },
+  nameRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  name: { flexShrink: 1, fontSize: 16, lineHeight: 19, fontFamily: archivoAt(100, 850) },
+  badge: { marginTop: 1 },
+  where: { flexDirection: "row", alignItems: "flex-start", gap: 5 },
+  whereText: { flex: 1, fontSize: 12.5, lineHeight: 16 },
+  km: { fontSize: 12.5, lineHeight: 16, fontFamily: archivoAt(100, 800) },
+  disc: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7, marginTop: 2 },
+  discText: { fontSize: 12.5, lineHeight: 16, fontFamily: archivoAt(100, 700) },
+  discNone: { fontSize: 12.5, lineHeight: 16, marginTop: 2 },
+  fav: { flexDirection: "row", alignItems: "center", gap: 4 },
+  subH: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  subLine: { flex: 1, height: 1 },
 });

@@ -7,7 +7,7 @@ import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 
 import { type ThemeId, tokens } from "../tokens";
 import { hatchImage } from "./hatch";
-import { clusterPins, GROUP_MAX_ZOOM, isStacked, type MapPoint } from "./pins";
+import { clusterLabel, clusterPins, GROUP_MAX_ZOOM, isStacked, type MapPoint } from "./pins";
 import { chooseMapStyle, probedVectorTiles, probeVectorTiles, shouldFallBack } from "./probe";
 import { MAP_SOURCE_ID, type MapStyleOptions, mapFallbackRaster, mapStyle } from "./style";
 
@@ -140,11 +140,24 @@ function meElement(): HTMLElement {
   return el;
 }
 
-function clusterElement(count: number): HTMLElement {
+function clusterElement(count: number, kind?: "event" | "pro"): HTMLElement {
   const el = document.createElement("button");
   el.type = "button";
-  el.className = "o-mappin o-mappin--cluster";
   el.dataset.testid = "map-cluster";
+  // Lot R2 (maquette R2.8) : une pastille d'événements (ou de pros) le dit : « 2 ÉVÉNEMENTS ».
+  if (kind) {
+    const label = clusterLabel(count, kind);
+    el.className = "o-mappin o-mappin--group";
+    el.setAttribute("aria-label", `${label.toLowerCase()} : zoomer`);
+    const tag = document.createElement("span");
+    tag.className = "o-mappin__tag";
+    tag.textContent = label;
+    const tip = document.createElement("span");
+    tip.className = "o-mappin__tip";
+    el.append(tag, tip);
+    return el;
+  }
+  el.className = "o-mappin o-mappin--cluster";
   el.setAttribute("aria-label", `${count} lieux : zoomer`);
   el.textContent = String(count);
   return el;
@@ -172,8 +185,13 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
       let el: HTMLElement;
       let groupPopup: import("maplibre-gl").Popup | null = null;
       if (group.items.length > 1) {
-        el = clusterElement(group.items.length);
         const items = group.items as WebPin[];
+        const kind = items.every((p) => p.kind === "event")
+          ? "event"
+          : items.every((p) => p.kind === "pro")
+            ? "pro"
+            : undefined;
+        el = clusterElement(group.items.length, kind);
         const stacked = isStacked(group, map.getZoom());
         el.addEventListener("click", () => {
           if (!stacked) {
