@@ -34,6 +34,14 @@ const schema = z.object({
     .enum(["on", "off", ""])
     .optional()
     .transform((v) => v === "on"),
+  /**
+   * Heures calmes des notifications (22:00–08:00, choix C15) : `off` les coupe, pour les essais de nuit sur
+   * dev.orasso.fr (décision de Damien, 24/10). Par défaut actives ; la production ne pose jamais cette variable.
+   */
+  NOTIFY_QUIET_HOURS: z
+    .enum(["on", "off", ""])
+    .optional()
+    .transform((v) => v !== "off"),
   /** E-mails : « journal » écrit dans DATA_DIR/mail et affiche en console ; « brevo » envoie (clé requise). */
   MAIL_TRANSPORT: z.enum(["journal", "brevo"]).default("journal"),
   MAIL_FROM: z.string().default("Orasso <contact@orasso.fr>"),
