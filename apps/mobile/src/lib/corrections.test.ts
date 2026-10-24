@@ -5,11 +5,14 @@ import { redirectSystemPath } from "../app/+native-intent";
 import { formatDayHour, formatDayHourYear } from "./format";
 import { passwordFormError } from "./passwordForm";
 
+/** Lot R3b, tour 2 : l'année de référence est passée explicitement (ces tests ne cassent pas le 1er janvier). */
+const IN_2026 = new Date("2026-06-01T12:00:00Z");
+
 describe("dates", () => {
   const now = new Date("2026-10-18T14:50:00Z");
 
   it("heure de Paris, quel que soit le fuseau de l'appareil", () => {
-    expect(formatDayHour("2026-10-17T13:12:00Z")).toBe("Sam 17 oct · 15 h 12");
+    expect(formatDayHour("2026-10-17T13:12:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 15 h 12");
   });
 
   it("l'année s'affiche quand elle n'est pas l'année en cours", () => {
