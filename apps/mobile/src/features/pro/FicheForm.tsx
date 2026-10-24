@@ -31,10 +31,10 @@ import { useSession } from "@/lib/session";
 import { type ApiState, useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
+import { ActGrid } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
-import { ActGrid } from "./kit";
 import type { SiretPending } from "./ProBlocks";
 
 const { space2 } = tokens.spacing;

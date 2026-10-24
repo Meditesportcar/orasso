@@ -18,20 +18,20 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { AngledTag, TzChip } from "@/features/pro/kit";
-import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { alreadyApplied, candidatureKind, missionDetail, missionFacts, missionTag, tradeIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { SmButton } from "@/ui/Kit";
+import { AngledTag, TzChip } from "@/ui/KitTz";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
 import { Slider } from "@/ui/Slider";
-import { StatusTag } from "@/ui/StatusTag";
+import { Ticket } from "@/ui/Ticket";
 import { ApplySheet } from "./ApplySheet";
 import { ProposeSheet } from "./ProposeSheet";
 
@@ -193,12 +193,13 @@ export function MissionsScreen() {
                   testID="mission-card"
                   date={card.startsAt}
                   badge={
+                    // Lot C7 : étiquettes inclinées `.tag` de l'artefact `s-missions`.
                     mineStatus === "pending" ? (
-                      <StatusTag status="pending" />
+                      <AngledTag tone="line">En attente</AngledTag>
                     ) : mineStatus === "waitlist" ? (
-                      <StatusTag status="waitlist" />
+                      <AngledTag tone="wait">Liste d'attente</AngledTag>
                     ) : tag.mine ? (
-                      <StatusTag status="retained" />
+                      <AngledTag tone="acc">Retenue</AngledTag>
                     ) : (
                       <AngledTag tone="line">{tag.label}</AngledTag>
                     )
@@ -206,6 +207,8 @@ export function MissionsScreen() {
                   title={card.title}
                   detail={missionDetail(card)}
                   onPressTitle={() => router.push(`/e/${card.slug}`)}
+                  // Artefact `s-missions` : la mission où le prestataire est retenu est le ticket mis en avant (`.tk.me`).
+                  highlight={Boolean(tag.mine)}
                 >
                   {facts.length && !tag.mine ? (
                     <View style={styles.facts}>
@@ -214,9 +217,9 @@ export function MissionsScreen() {
                       ))}
                     </View>
                   ) : null}
+                  {/* Lot C7 : petit bouton `.btn.btn-s.sm` de l'artefact. */}
                   {applied ? (
-                    <Button
-                      variant="plate"
+                    <SmButton
                       icon="ticket"
                       onPress={() =>
                         router.navigate({
@@ -227,17 +230,16 @@ export function MissionsScreen() {
                       testID="mission-see"
                     >
                       {missionTexts.seeApplication}
-                    </Button>
+                    </SmButton>
                   ) : (
-                    <Button
-                      variant="plate"
+                    <SmButton
                       icon="send"
                       disabled={Boolean(p.issue)}
                       onPress={() => setProposing(card)}
                       testID="mission-propose"
                     >
                       {missionTexts.propose(p.name)}
-                    </Button>
+                    </SmButton>
                   )}
                 </Ticket>
               );
@@ -260,15 +262,9 @@ export function MissionsScreen() {
                   detail={[e.structureName, e.city, formatDayHour(e.startsAt)].filter(Boolean).join(" · ")}
                   onPressTitle={() => router.push(`/e/${e.slug}`)}
                 >
-                  <Button
-                    variant="plate"
-                    icon="send"
-                    disabled={Boolean(p.issue)}
-                    onPress={() => setApplying(e)}
-                    testID="open-apply"
-                  >
+                  <SmButton icon="send" disabled={Boolean(p.issue)} onPress={() => setApplying(e)} testID="open-apply">
                     {proV2Labels.apply}
-                  </Button>
+                  </SmButton>
                 </Ticket>
               ))}
             </View>

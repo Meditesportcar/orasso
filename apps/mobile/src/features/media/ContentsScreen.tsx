@@ -31,7 +31,6 @@ import { useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { DirBig } from "@/features/pro/kit";
 import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
@@ -45,6 +44,7 @@ import { detectPlates } from "@/lib/plates/detect";
 import { formatCount } from "@/lib/proPresta";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
+import { DirBig } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";

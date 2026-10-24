@@ -22,11 +22,11 @@ import { mediaSource } from "@/lib/media";
 import { discountCells, initialsOf, proActivityIcons, viewerCellKey } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { ActGrid, DiscGrid, SecH, SegBlock, SquareLogo, ValidatedPill } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { ProFicheFields } from "./FicheForm";
-import { ActGrid, DiscGrid, SecH, SegBlock, SquareLogo, ValidatedPill } from "./kit";
 import {
   DiscountsBlock,
   MediaBlock,

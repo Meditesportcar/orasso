@@ -10,8 +10,6 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { AngledTag, SegBlock } from "@/features/pro/kit";
-import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { candidatureKind, countdown, needLabel, reviewTag, upcomingDetail } from "@/lib/proPresta";
@@ -19,11 +17,13 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AppSheet } from "@/ui/AppSheet";
+import { SmButton } from "@/ui/Kit";
+import { AngledTag, SegBlock } from "@/ui/KitTz";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { StatusTag } from "@/ui/StatusTag";
+import { Ticket } from "@/ui/Ticket";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -84,16 +84,17 @@ export function CandidaturesScreen() {
 
   function badgeOf(app: ProviderApplicationView) {
     switch (candidatureKind(app)) {
+      // Lot C7 : les étiquettes inclinées `.tag` de l'artefact `s-pcand` (moutarde, contour, bleu d'attente).
       case "retained":
-        return <StatusTag status={app.checkedInAt ? "onsite" : "retained"} />;
+        return <AngledTag tone="acc">{app.checkedInAt ? "Sur place" : "Retenue"}</AngledTag>;
       case "pending":
-        return <StatusTag status="pending" />;
+        return <AngledTag tone="line">En attente</AngledTag>;
       case "waitlist":
         return <AngledTag tone="wait">{proV2Labels.waitlistRank(app.waitlistRank)}</AngledTag>;
       case "refused":
-        return <StatusTag status="refused" />;
+        return <AngledTag tone="line">Refusée</AngledTag>;
       default:
-        return <StatusTag status="cancelled" />;
+        return <AngledTag tone="line">Annulé</AngledTag>;
     }
   }
 
@@ -176,38 +177,35 @@ export function CandidaturesScreen() {
                   detail={upcomingDetail(app) ?? undefined}
                   notes={notes}
                   onPressTitle={() => router.push(`/e/${app.event.slug}`)}
+                  // Artefact `s-pcand` : la prochaine candidature retenue est le ticket mis en avant (`.tk.me`).
+                  highlight={app.id === firstRetained}
                 >
                   {app.accreditedMedia ? <Chip surface="plate">{proV2Labels.mediaOfficial}</Chip> : null}
+                  {/* Lot C7 : petits boutons `.btn.sm` en ligne (Mon accès moutarde, Consignes fantôme), comme l'artefact. */}
                   {retained ? (
-                    <View style={styles.row}>
-                      <Button
-                        variant={app.id === firstRetained ? "primary" : "plate"}
-                        icon="qr"
-                        onPress={() => router.push(`/stand/${app.id}`)}
-                        testID="candidature-access"
-                      >
-                        {"Mon accès"}
-                      </Button>
-                      <Button
-                        variant="plate"
-                        icon="list"
-                        onPress={() => setInstructions(app)}
-                        testID="candidature-instructions-open"
-                      >
-                        {"Consignes"}
-                      </Button>
-                    </View>
+                    <SmButton
+                      kind={app.id === firstRetained ? "p" : "s"}
+                      icon="qr"
+                      onPress={() => router.push(`/stand/${app.id}`)}
+                      testID="candidature-access"
+                    >
+                      {"Mon accès"}
+                    </SmButton>
+                  ) : null}
+                  {retained ? (
+                    <SmButton
+                      kind="g"
+                      icon="info"
+                      onPress={() => setInstructions(app)}
+                      testID="candidature-instructions-open"
+                    >
+                      {"Consignes"}
+                    </SmButton>
                   ) : null}
                   {app.canWithdraw ? (
-                    <Button
-                      variant="plate"
-                      tone="dashed"
-                      icon="undo"
-                      onPress={() => setWithdrawing(app)}
-                      testID="candidature-withdraw"
-                    >
+                    <SmButton kind="g" icon="undo" onPress={() => setWithdrawing(app)} testID="candidature-withdraw">
                       {proV2Labels.withdraw}
-                    </Button>
+                    </SmButton>
                   ) : null}
                 </Ticket>
               );

@@ -9,8 +9,6 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { AngledTag, SegBlock } from "@/features/pro/kit";
-import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { nowMs } from "@/lib/clock";
@@ -19,9 +17,12 @@ import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
+import { SmButton } from "@/ui/Kit";
+import { AngledTag, SegBlock } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { Ticket } from "@/ui/Ticket";
 import { daysUntil } from "./model";
 
 const { space1 } = tokens.spacing;
@@ -163,23 +164,24 @@ function UpcomingTicket({
       notes={accredited && !a.pass ? [L.badgeNotYet] : undefined}
       onPressTitle={onOpen}
       dim={refused}
+      // Artefact `s-accred` : l'accréditation qui donne le badge du prochain jour J est le ticket mis en avant (`.tk.me`).
+      highlight={accredited && primary}
     >
+      {/* Lot C7 : petits boutons `.btn.sm` en ligne, comme l'artefact (badge moutarde, Consignes fantôme). */}
+      {accredited && a.pass ? (
+        <SmButton kind={primary ? "p" : "s"} icon="qr" onPress={onBadge} testID="media-badge">
+          {mediaLabels.pressBadge}
+        </SmButton>
+      ) : null}
       {accredited ? (
-        <>
-          {a.pass ? (
-            <Button variant={primary ? "primary" : "plate"} icon="qr" onPress={onBadge} fullWidth testID="media-badge">
-              {mediaLabels.pressBadge}
-            </Button>
-          ) : null}
-          <Button variant="plate" icon="press" onPress={onBriefing} fullWidth testID="media-briefing">
-            {mediaLabels.instructions}
-          </Button>
-        </>
+        <SmButton kind="g" icon="info" onPress={onBriefing} testID="media-briefing">
+          {mediaLabels.instructions}
+        </SmButton>
       ) : null}
       {a.canWithdraw && a.status !== "refused" ? (
-        <Button variant="plate" tone="dashed" icon="close" onPress={onWithdraw} fullWidth testID="media-withdraw">
+        <SmButton kind="g" icon="close" onPress={onWithdraw} testID="media-withdraw">
           {a.status === "pending" ? L.withdraw : "Me désister"}
-        </Button>
+        </SmButton>
       ) : null}
     </Ticket>
   );
@@ -208,9 +210,9 @@ function PastTicket({ a, onOpen, onAdd }: { a: MediaAccreditationView; onOpen: (
       dim
     >
       {!refused && a.coverage.contents === 0 ? (
-        <Button variant="plate" icon="add" onPress={onAdd}>
+        <SmButton icon="add" onPress={onAdd}>
           {L.addContentFor}
-        </Button>
+        </SmButton>
       ) : null}
     </Ticket>
   );
