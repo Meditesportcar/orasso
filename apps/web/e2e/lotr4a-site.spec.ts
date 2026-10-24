@@ -175,7 +175,9 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(proposals).toContainText("Modèles proposés");
       const group = proposals.getByTestId("proposal-group").filter({ hasText: `Peugeot ${typed}` });
       await expect(group).toHaveCount(1);
-      await group.locator("summary").click();
+      // Lot R4e : le premier groupe de la file est déjà ouvert (`open={i === 0}`) ; selon les fiches déjà en base, ce
+      // peut être celui-ci, et un clic le refermerait.
+      if (!(await group.evaluate((el) => (el as HTMLDetailsElement).open))) await group.locator("summary").click();
       await expect(group.getByTestId("proposal-vehicle").filter({ hasText: pseudo })).toBeVisible();
       await expect(group).toContainText("Marque connue : Peugeot · modèle tapé");
       await group.scrollIntoViewIfNeeded();
