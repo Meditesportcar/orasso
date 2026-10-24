@@ -206,6 +206,13 @@ describe("crews : demandes, invitations, départs", () => {
       expect(asked.status).toBe(201);
       expect(asked.json.viewerState).toBe("requested");
       expect((await req(lea, "POST", `/crews/${crew.id}/requests`, { message: null }, mode)).status).toBe(409);
+      // Lot R3b : la recherche dit la demande en cours, à elle seulement (« Demande envoyée » après rechargement).
+      const found = async (who: typeof lea) =>
+        (await req(who, "GET", "/crews/search?department=66", undefined, mode)).json.items.find(
+          (c: { id: string }) => c.id === crew.id,
+        ) as { requested: boolean };
+      expect((await found(lea)).requested).toBe(true);
+      expect((await found(await signUp("NoraR3b"))).requested).toBe(false);
       expect((await req(kenji, "GET", "/me/inbox/summary", undefined, mode)).json.requests.crew).toBe(1);
       const pending = await req(kenji, "GET", `/crews/${crew.id}/requests`, undefined, mode);
       expect(pending.json.requests[0]).toMatchObject({ message: "Je peux venir ?", person: { pseudo: lea.pseudo } });
