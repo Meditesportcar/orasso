@@ -7,6 +7,7 @@ import {
   plateRectsSchema,
   shareImageQuery,
   vehicleCreateSchema,
+  vehicleReferenceSearchQuery,
   vehicleUpdateSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
@@ -19,6 +20,7 @@ import { categoryOptions } from "./categories";
 import { certificationService } from "./certification";
 import { photoBlurService } from "./photos-blur";
 import { vehicleProsService } from "./pros";
+import { referenceSearch } from "./reference-search";
 import { vehiclesRepo } from "./repo";
 import { vehiclesService } from "./service";
 
@@ -33,6 +35,10 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   )
   .get("/vehicle-reference/models/:id/generations", async (c) =>
     c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H),
+  )
+  // Lot R3c : recherche « Marque ou modèle » (sans accents, casse, tirets ni espaces ; « golf 4 », « e36 », « mx5 »).
+  .get("/vehicle-reference/search", async (c) =>
+    c.json(await referenceSearch.search(query(c, vehicleReferenceSearchQuery)), 200, CACHE_1H),
   )
   // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
   // Filtré par marque, type et année quand ils sont donnés (formulaire du véhicule) : chaque catégorie dit si elle est
