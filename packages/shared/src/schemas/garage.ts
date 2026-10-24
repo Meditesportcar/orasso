@@ -174,6 +174,33 @@ export type AdminPlateTransfer = PlateTransferView & {
   requesterVehicleId: string | null;
 };
 
+/**
+ * Lot C7 : conflit de plaque laissé par la forme unique du lot M2 (`plate_normalization_conflicts`). `vehicle` : un
+ * véhicule actif garde son ancienne forme parce qu'un autre véhicule actif porte déjà la forme unique ; `transfer` : une
+ * demande de transfert ouverte garde son ancienne forme parce qu'une autre demande du même compte porte la forme unique.
+ */
+export type AdminPlateConflict = {
+  id: string;
+  kind: "vehicle" | "transfer";
+  createdAt: string;
+  /** Plaque lisible (véhicule) ou forme gardée (demande). */
+  plate: string;
+  keptNormalized: string;
+  wantedNormalized: string;
+  ownerPseudo: string;
+  vehicleId: string | null;
+  vehicleLabel: string | null;
+  /** Qui porte déjà la forme unique : un véhicule actif (`vehicle`) ou une autre demande ouverte (`transfer`). */
+  holder: { pseudo: string; label: string | null } | null;
+};
+
+/** Résolution par l'équipe : appliquer la forme unique (quand elle est libre) ou classer (garder l'ancienne forme). */
+export const adminPlateConflictSchema = z.object({
+  action: z.enum(["apply", "dismiss"]),
+  note: optionalText(500),
+});
+export type AdminPlateConflictResolution = z.infer<typeof adminPlateConflictSchema>;
+
 export type AdminCertificationRequest = {
   id: string;
   status: CertificationStatus;

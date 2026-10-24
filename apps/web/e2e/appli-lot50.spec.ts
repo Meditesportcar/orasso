@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { passportTexts } from "@orasso/shared";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import {
   addVehicleApi,
@@ -125,26 +126,41 @@ async function checkIn(damien: Cookie, eventId: string, applicationId: string) {
   expect(res.status, `pointage : ${JSON.stringify(res.data)}`).toBe(201);
 }
 
-test("passeport de Kenji : 9 tampons dont 1 rare, deux pages, la légende (deux thèmes)", async ({ browser }) => {
+test("passeport de Kenji : ses tampons (9 au seed, dont 1 rare), ses pages, la légende (deux thèmes)", async ({
+  browser,
+}) => {
   test.setTimeout(900_000);
   mkdirSync(DIR, { recursive: true });
+  // Lot C7 : d'autres recettes ajoutent des tampons à Kenji (pointages) ; le passeport attendu se lit dans l'API au lieu
+  // d'être figé à 9 tampons sur deux pages (huit par page, le carnet s'ouvre sur la dernière).
+  const passport = (
+    await apiCall<{ total: number; rare: number; pages: { stamps: unknown[] }[] }>(
+      await login("kenji@orasso.local"),
+      "GET",
+      "/me/passport",
+    )
+  ).data;
+  expect(passport.total).toBeGreaterThanOrEqual(9);
+  const pages = passport.pages.length;
+  const last = passport.pages[pages - 1]?.stamps.length ?? 0;
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
     await openPassportFromProfile(page);
     await expect(page.getByRole("heading", { name: "Passeport", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("9 tampons · 1 rare", { exact: true })).toBeVisible();
+    await expect(page.getByText(passportTexts.summary(passport.total, passport.rare), { exact: true })).toBeVisible();
     await expect(page.getByTestId("passport-book")).toBeVisible();
-    // Huit tampons sur la première page, un sur la seconde ; le carnet s'ouvre sur la dernière.
-    await expect(page.getByTestId("passport-page")).toHaveText("Page 2 sur 2");
-    expect(await page.locator('[data-testid^="stamp-"]').count()).toBe(9);
-    expect(await page.getByTestId("passport-page-1").locator('[data-testid^="stamp-"]').count()).toBe(8);
-    expect(await page.getByTestId("passport-page-2").locator('[data-testid^="stamp-"]').count()).toBe(1);
+    await expect(page.getByTestId("passport-page")).toHaveText(passportTexts.page(pages, pages));
+    expect(await page.locator('[data-testid^="stamp-"]').count()).toBe(passport.total);
+    expect(await page.getByTestId("passport-page-1").locator('[data-testid^="stamp-"]').count()).toBe(
+      passport.pages[0]?.stamps.length ?? 0,
+    );
+    expect(await page.getByTestId(`passport-page-${pages}`).locator('[data-testid^="stamp-"]').count()).toBe(last);
     await shot(page, `passeport-page-2-${theme}`);
     await checkRules(page, theme, `passeport page 2 ${theme}`);
     // La page 1 : on y va par les points sous le carnet.
-    await page.getByRole("tab", { name: "Page 1 sur 2" }).click();
-    await expect(page.getByTestId("passport-page")).toHaveText("Page 1 sur 2");
+    await page.getByRole("tab", { name: passportTexts.page(1, pages) }).click();
+    await expect(page.getByTestId("passport-page")).toHaveText(passportTexts.page(1, pages));
     await shot(page, `passeport-page-1-${theme}`);
     // Les quatre notes.
     for (const lead of ["La forme", "L'encre", "L'usure", "Les rares"]) {

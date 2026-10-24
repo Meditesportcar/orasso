@@ -8,7 +8,6 @@ import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type Grade, gradeLabels, homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-import { AngledTag, DirBig, MiniDate, RoundInitials, SecH, TzRow } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
@@ -16,11 +15,15 @@ import { formatCount } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { AngledTag, DirBig, MiniDate, RoundInitials, SecH, TzRow } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { Greeting, QuietNote, TutoTile } from "./parts";
 import { todayLine } from "./today";
+
+/** Initiales distinctes des grades (relecture C4b, lot C7 : « Rodage » et « Route » donnaient tous deux « RO »). */
+const GRADE_SHORT: Record<Grade, string> = { rodage: "RD", route: "RT", sport: "SP", circuit: "CI", legende: "LG" };
 
 const { space2, space4 } = tokens.spacing;
 
@@ -96,7 +99,7 @@ export function ProHome() {
               <TzRow
                 key={`${s.usedAt}-${s.grade}`}
                 testID="home-pro-scan"
-                leading={<RoundInitials text={(gradeLabels[s.grade as Grade] ?? s.grade).slice(0, 2).toUpperCase()} />}
+                leading={<RoundInitials text={GRADE_SHORT[s.grade as Grade] ?? s.grade.slice(0, 2).toUpperCase()} />}
                 title={`Grade ${gradeLabels[s.grade as Grade] ?? s.grade}`}
                 caption={formatDayHour(s.usedAt)}
                 trailing={<AngledTag tone="acc">{`−${s.percent} %`}</AngledTag>}

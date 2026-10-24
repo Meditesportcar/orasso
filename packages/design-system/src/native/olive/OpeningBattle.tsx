@@ -1,8 +1,9 @@
 // OpeningBattle : l'ouverture de l'appli (lot 39, remplace OpeningScreen ; V12 : 3 s à chaque lancement). Le O, agrandi
 // au centre de l'écran ; deux voitures vues de dessus driftent autour en tandem, l'une chasse l'autre ; la voiture de
 // tête quitte le drift et se gare dans le O (elle devient la voiture du logo), la chasse s'efface, puis le logotype se
-// compose (le O reprend sa place, les lettres se découvrent). Pas de traces de pneus. Lot C8 : la fumée des roues
-// arrière derrière les deux voitures (artefact, classe `Drift`), en pool fixe de bouffées (smoke.ts). Un toucher n'importe où passe
+// compose (le O reprend sa place, les lettres se découvrent). Lot C8 : la fumée des roues arrière derrière les deux
+// voitures (artefact, classe `Drift`), en pool fixe de bouffées (smoke.ts). Lot C7 : les traces de pneus de l'artefact
+// (34 derniers points par roue arrière, opacité croissante vers la voiture), en chemins SVG. Un toucher n'importe où passe
 // l'ouverture (état final, puis `onDone`) : le staff qui relance l'appli sur le parking n'attend pas 3 s.
 // Réduction des animations : logo composé, fondu de 120 ms.
 
@@ -11,11 +12,13 @@ import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   cancelAnimation,
   type SharedValue,
+  useAnimatedProps,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
+import Svg, { G, Path } from "react-native-svg";
 import { olive, smoke } from "../../motion";
 import { type BrandTone, LogoLetters, oTransform, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
@@ -48,13 +51,29 @@ const O_RIGHT = 140;
 /** La voiture de tête se gare à ce moment ; le logotype se compose ensuite pendant `poster`. */
 const PARK_AT = olive.open - olive.park - duration.poster;
 const COMPOSE_AT = PARK_AT + olive.park;
+/** Les deux voitures de la battle, en unités du O (artefact : 34 × k, k = 0,6 ; lot C7, elles étaient 36). */
+const OPEN_CAR = smoke.openingCar;
 /** Garée, la caisse de la voiture vue de dessus (60 unités sur 64) prend la longueur de la voiture du logo (66). */
-const PARKED_SCALE = (66 / 60) * (carTop.box[2] / CAR_UNITS);
+const PARKED_SCALE = (66 / 60) * (carTop.box[2] / OPEN_CAR);
 
 const SPEC = smoke.orbit;
 /** Échelle des rayons de la fumée (artefact : k = 0,6 pour l'accueil). */
 const SMOKE_K = smoke.openingK;
 const CAR_RATIO = carTop.box[3] / carTop.box[2];
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+/**
+ * Traces de pneus (artefact, classe `Drift`) : les 34 derniers points de chaque roue arrière, à 60 images par seconde
+ * (≈ 570 ms d'historique), segment i à l'opacité (i / 34) × 0,16 ; épaisseur 2,2 px par unité du O. Le tour étant une
+ * fonction de l'horloge, l'historique se recalcule à chaque image (aucun tampon) et se peint en `TRACE_BANDS` tranches
+ * d'opacité de `TRACE_STEPS` points.
+ */
+const TRACE = { points: 34, alpha: 0.16, width: 2.2 } as const;
+const TRACE_SPAN = (TRACE.points / 60) * 1000;
+const TRACE_BANDS = 3;
+const TRACE_STEPS = 6;
+/** Pas de recalcul des traces : deux images à 60 i/s. */
+const TRACE_STEP_MS = 1000 / 30;
 
 /**
  * Une bouffée derrière la voiture de tête (`chase` faux) ou la chasse : elle naît tant que la voiture drifte (avant que
@@ -80,7 +99,7 @@ function OrbitPuff({
   stagePx: number;
 }) {
   const maxR = puffMaxRadius(SPEC, kz, SMOKE_K);
-  const length = CAR_UNITS * kz;
+  const length = OPEN_CAR * kz;
   // Distance parcourue sur le tour entre deux bouffées (périmètre approché de l'ellipse du drift).
   const gap = (ellipsePerimeter(ORBIT.radius, ORBIT.radius * ORBIT.squash) * kz * SPEC.life) / olive.orbit / count;
   const style = useAnimatedStyle(() => {
@@ -103,12 +122,59 @@ function OrbitPuff({
       noise(slot + (chase ? 41 : 0), b.cycle),
       noise(b.cycle + 3, slot + (chase ? 13 : 0)),
       maxR,
-      smoke.density * fade.value,
+      smoke.orbitDensity * fade.value,
       kz,
       SMOKE_K,
     );
   });
   return <SmokePuff maxR={maxR} style={style} />;
+}
+
+/**
+ * Une tranche (`band`, 0 = la plus ancienne) de la trace d'une roue arrière (`side` −1 ou 1) de la voiture de tête ou de
+ * la chasse. Elle s'arrête quand la tête part se garer (`parkT`) et s'efface avec la fumée (`fade`).
+ */
+function OrbitTrace({
+  chase,
+  side,
+  band,
+  clock,
+  parkT,
+  fade,
+  kz,
+  stagePx,
+}: {
+  chase: boolean;
+  side: number;
+  band: number;
+  clock: SharedValue<number>;
+  parkT: SharedValue<number>;
+  fade: SharedValue<number>;
+  kz: number;
+  stagePx: number;
+}) {
+  const length = OPEN_CAR * kz;
+  const alpha = ((band + 0.5) / TRACE_BANDS) * TRACE.alpha;
+  const props = useAnimatedProps(() => {
+    "worklet";
+    const stop = parkT.value > 0 ? Math.min(clock.value, parkT.value * olive.orbit) : clock.value;
+    const from = Math.max(0, stop - TRACE_SPAN + (band * TRACE_SPAN) / TRACE_BANDS);
+    const to = Math.max(0, stop - TRACE_SPAN + ((band + 1) * TRACE_SPAN) / TRACE_BANDS);
+    if (to <= from) return { d: "M0 0", strokeOpacity: 0 };
+    let d = "";
+    for (let i = 0; i <= TRACE_STEPS; i++) {
+      const ms = from + ((to - from) * i) / TRACE_STEPS;
+      const p = driftOrbit(
+        ms / olive.orbit - (chase ? olive.tandemGap : 0),
+        ORBIT.radius + (chase ? 8 : 0),
+        ORBIT.squash,
+      );
+      const w = rearWheel(SPEC, p.x * kz, p.y * kz, p.heading, length, length * CAR_RATIO, side);
+      d += `${i === 0 ? "M" : "L"}${(stagePx / 2 + w.x).toFixed(1)} ${(stagePx / 2 + w.y).toFixed(1)}`;
+    }
+    return { d, strokeOpacity: alpha * fade.value };
+  });
+  return <AnimatedPath animatedProps={props} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
 }
 
 export type OpeningBattleProps = {
@@ -155,6 +221,19 @@ export function OpeningBattleLogo({
   const pool = useSmokePool("orbit");
   const [running, setRunning] = useState(false);
   const clock = useOliveClock(!reducedMotion && active && running);
+  // Tour 2 du lot C7 (coût) : les traces suivent une horloge qui avance par pas de deux images (33 ms) ; leurs douze
+  // chemins ne sont recalculés qu'une image sur deux, sans rien changer à leur dessin (même géométrie, même fondu).
+  const traceClock = useSharedValue(0);
+  useAnimatedReaction(
+    () => {
+      "worklet";
+      return Math.floor(clock.value / TRACE_STEP_MS);
+    },
+    (step, previous) => {
+      "worklet";
+      if (step !== previous) traceClock.value = step * TRACE_STEP_MS;
+    },
+  );
   const done = useRef(onDone);
   done.current = onDone;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -292,6 +371,28 @@ export function OpeningBattleLogo({
               />
             )),
           )}
+          {/* Les traces par-dessus la fumée (ordre de l'artefact). */}
+          <Svg width={stagePx} height={stagePx} style={StyleSheet.absoluteFill}>
+            <G stroke={brandArt.ink[version]} strokeWidth={Math.max(1, TRACE.width * kz)}>
+              {[false, true].map((isChase) =>
+                [-1, 1].map((side) =>
+                  [0, 1, 2].map((band) => (
+                    <OrbitTrace
+                      key={`t${isChase ? "c" : "l"}${side}${band}`}
+                      chase={isChase}
+                      side={side}
+                      band={band}
+                      clock={traceClock}
+                      parkT={parkT}
+                      fade={smokeOn}
+                      kz={kz}
+                      stagePx={stagePx}
+                    />
+                  )),
+                ),
+              )}
+            </G>
+          </Svg>
         </View>
       )}
       <Animated.View style={[{ width, height }, logoStyle]}>
@@ -315,8 +416,8 @@ export function OpeningBattleLogo({
             { width: stagePx, height: stagePx, left: (width - stagePx) / 2, top: (boxH - stagePx) / 2 },
           ]}
         >
-          <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={brandArt.ink[version]} style={chaseStyle} />
-          <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={t.color.accent} style={leadStyle} />
+          <OrbitCar stagePx={stagePx} length={OPEN_CAR * kz} color={brandArt.ink[version]} style={chaseStyle} />
+          <OrbitCar stagePx={stagePx} length={OPEN_CAR * kz} color={t.color.accent} style={leadStyle} />
         </View>
       )}
     </View>

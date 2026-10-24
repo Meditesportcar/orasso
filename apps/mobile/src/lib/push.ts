@@ -197,8 +197,43 @@ async function savePending(next: PendingUnregister): Promise<void> {
   else await kvDel(PENDING_KEY);
 }
 
-/** Rejoue le retrait en attente (sans session : sur preuve du jeton). */
+// --- Session à révoquer (lot C7) ------------------------------------------------------------------------------------
+
+/**
+ * Déconnexion faite sans réseau : la session locale est effacée, mais celle du serveur resterait valide jusqu'à son
+ * expiration. Son jeton attend ici (jamais affiché, jamais envoyé ailleurs qu'à la déconnexion de l'API) et la
+ * déconnexion se rejoue avec le retrait des push.
+ */
+const SIGNOUT_KEY = "signout-pending";
+
+/** Au plus 20 sessions en attente : au-delà, les plus anciennes sont abandonnées (elles expirent d'elles-mêmes). */
+const SIGNOUT_MAX = 20;
+
+/**
+ * Garde le jeton d'une session à révoquer dès que le réseau revient. Passe par la même file que le rejeu (`serial`) :
+ * un jeton ajouté pendant un rejeu n'est jamais écrasé par lui (tour 2 du lot C7).
+ */
+export function queueSignOut(token: string): Promise<void> {
+  return serial(async () => {
+    const saved = (await kvGetJson<string[]>(SIGNOUT_KEY)) ?? [];
+    const tokens = Array.isArray(saved) ? saved : [];
+    if (!tokens.includes(token)) await kvSetJson(SIGNOUT_KEY, [...tokens, token].slice(-SIGNOUT_MAX));
+  });
+}
+
+/** Rejoue les déconnexions en attente : faite (2xx), ou déjà caduque (400, 401, 403) ; sinon elle attend encore. */
+async function replaySignOuts(): Promise<void> {
+  const saved = await kvGetJson<string[]>(SIGNOUT_KEY);
+  if (!Array.isArray(saved) || saved.length === 0) return;
+  const left: string[] = [];
+  for (const token of saved) if ((await outcomeOf(() => api.revokeSession(token))) === "later") left.push(token);
+  if (left.length) await kvSetJson(SIGNOUT_KEY, left);
+  else await kvDel(SIGNOUT_KEY);
+}
+
+/** Rejoue le retrait en attente (sans session : sur preuve du jeton), et les déconnexions faites hors ligne. */
 async function replayPending(): Promise<void> {
+  await replaySignOuts();
   const pending = await readPending();
   if (!pending.tokens.length && !pending.native) return;
   let { native } = pending;

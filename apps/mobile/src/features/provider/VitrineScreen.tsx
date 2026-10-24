@@ -7,7 +7,6 @@ import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "
 import { PROVIDER_MAX_PHOTOS, type ProviderProfileView, proV2Labels, vitrineTexts } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { SegBlock, SquareLogo } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -15,6 +14,7 @@ import { photoForm, pickPhotos } from "@/lib/photos";
 import { initialsOf, tradeIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { SegBlock, SquareLogo } from "@/ui/KitTz";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";

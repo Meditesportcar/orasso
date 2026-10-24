@@ -7,14 +7,13 @@ import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native"
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-
-import { AngledTag, SecH, TzRow } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { AngledTag, SecH, TzRow } from "@/ui/KitTz";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { StatusTag } from "@/ui/StatusTag";
@@ -92,7 +91,8 @@ export function MediaHome() {
             <>
               <SecH title={homeProfileLabels.pressInstructions} />
               <View style={styles.brief} testID="home-press-brief">
-                {[...(report.briefing?.zones ? [report.briefing.zones] : []), ...lines].map((l) => (
+                {/* Une consigne répétée (zones et une ligne identiques) ne s'affiche qu'une fois : clé unique (lot C7). */}
+                {[...new Set([...(report.briefing?.zones ? [report.briefing.zones] : []), ...lines])].map((l) => (
                   <TzRow key={l} leading={<Icon name="check" size={16} color={c.accentText} />} title={l} />
                 ))}
                 {report.briefing?.contact ? (

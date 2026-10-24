@@ -60,8 +60,11 @@ describe("accès flottant du site", () => {
     expect(nearAccessOf({ applications: [festival] }, at(10, 24, 12))?.countdown).toBe("Demain");
   });
 
-  it("J+1 : visible le lendemain de la fin", () => {
-    expect(nearAccessOf({ applications: [app()] }, at(10, 25, 9))?.countdown).toBe("J+1");
+  it("J+1 : visible le lendemain de la fin, et ouvre « Passées »", () => {
+    expect(nearAccessOf({ applications: [app()] }, at(10, 25, 9))).toMatchObject({
+      countdown: "J+1",
+      href: "/app/sorties?vue=passes",
+    });
     expect(nearAccessOf({ applications: [app()] }, at(10, 26, 0))).toBeNull();
   });
 
@@ -77,5 +80,29 @@ describe("accès flottant du site", () => {
     } as MyStaffEvent;
     const r = nearAccessOf({ applications: [app()], tickets: [ticket], staff: [staff] }, at(10, 20));
     expect(r).toMatchObject({ title: "Cars & Coffee", line: "Billet · entrée public · 19 h", href: "/app/billets" });
+  });
+
+  it("mission staff : ouvre le segment Staff de Mes sorties", () => {
+    const staff = {
+      presence: "unknown",
+      event: { id: "s", startsAt: at(10, 21, 9).toISOString(), endsAt: at(10, 21, 12).toISOString(), title: "Staff" },
+    } as MyStaffEvent;
+    expect(nearAccessOf({ staff: [staff] }, at(10, 20))).toMatchObject({ href: "/app/sorties?vue=staff" });
+  });
+
+  it("tour 2 : festival du samedi au dimanche, inscrit le samedi : le dimanche, le samedi fini reste dans « À venir »", async () => {
+    const saturday = app(
+      {
+        day: {
+          id: "d",
+          date: "2026-10-24",
+          startsAt: at(10, 24, 10).toISOString(),
+          endsAt: at(10, 24, 18).toISOString(),
+        },
+      },
+      { startsAt: at(10, 24, 10).toISOString(), endsAt: at(10, 25, 18).toISOString() },
+    );
+    expect(nearAccessOf({ applications: [saturday] }, at(10, 25, 9))?.href).toBe("/app/sorties");
+    expect(nearAccessOf({ applications: [saturday] }, at(10, 25, 20))?.href).toBe("/app/sorties?vue=passes");
   });
 });

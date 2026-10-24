@@ -14,6 +14,11 @@ import { RELAIS } from "./relais";
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-42-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
+// Lot C7 : la trace de Playwright (gardée en cas d'échec, donc enregistrée à chaque essai) se fige sur la page du
+// tuto en mouvement réduit, et l'attente de la fin de l'ouverture dépassait le délai ; sans trace, la recette passe en
+// quelques secondes. L'appli reste fluide (règles CSS, nœuds et animations stables, mesurés au lot C7). `trace` ne se
+// règle que pour tout le fichier.
+test.use({ trace: "off" });
 
 type Theme = "beton" | "sable";
 type Profile = "exhibitor" | "visitor" | "pro" | "organizer" | "provider" | "media";

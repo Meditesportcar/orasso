@@ -74,7 +74,8 @@ export async function requestWithHeaders<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const headers: Record<string, string> = { ...extra };
-  if (sessionToken) headers.authorization = `Bearer ${sessionToken}`;
+  // Un jeton donné par l'appelant (révocation d'une ancienne session, lot C7) prime sur celui de la session ouverte.
+  if (sessionToken && !headers.authorization) headers.authorization = `Bearer ${sessionToken}`;
   // Téléphone : Better Auth exige un en-tête Origin quand des cookies accompagnent la requête (étape « code », appareil
   // de confiance) ; le navigateur le pose lui-même en recette web.
   Object.assign(headers, authOriginHeader(path, Platform.OS !== "web", apiUrl("/")));

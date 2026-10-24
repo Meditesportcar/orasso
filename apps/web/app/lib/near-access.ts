@@ -50,7 +50,9 @@ export function nearAccessOf(
           endsAt: span.endsAt,
           title: a.event.title,
           line: ["Retenue", a.zone ? `zone ${a.zone.code}` : null, when].filter(Boolean).join(" · "),
-          href: "/app/sorties",
+          // Relecture C4b (lot C7) : à J+1, la sortie terminée est dans « Passées », pas dans « À venir ». Tour 2 : d'après
+          // la fin de l'événement entier (Mes sorties range un festival en cours dans « À venir », même après son samedi).
+          href: new Date(a.event.endsAt) <= now ? "/app/sorties?vue=passes" : "/app/sorties",
         };
       }),
     ...(sources.tickets ?? [])
@@ -73,7 +75,8 @@ export function nearAccessOf(
         endsAt: s.event.endsAt,
         title: s.event.title,
         line: `Staff · ${formatTime(s.event.startsAt)}`,
-        href: "/app/sorties",
+        // Une mission staff est dans le segment Staff de Mes sorties (relecture C4b, lot C7).
+        href: "/app/sorties?vue=staff",
       })),
   ];
   const next = nearestAccess(items, now);

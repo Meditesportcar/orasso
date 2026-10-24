@@ -31,10 +31,11 @@ import { useSession } from "@/lib/session";
 import { type ApiState, useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
+import { ActGrid } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
-import { ActGrid } from "./kit";
+import type { SiretPending } from "./ProBlocks";
 
 const { space2 } = tokens.spacing;
 /** `.field` de l'artefact : 14 px entre deux champs du segment Modifier. */
@@ -81,15 +82,21 @@ export type MyProState = Pick<ApiState<Awaited<ReturnType<typeof api.myPro>>>, "
  * Les champs de la fiche : modification (onglet Ma fiche, qui passe sa propre `state`) ou création (depuis Créer).
  * Sans `state`, le composant charge la fiche lui-même (création : pour savoir si elle existe déjà).
  */
+/** « Fiche enregistrée, SIRET non validé : … » (le message du registre ou de l'API, tel quel). */
+export const siretPartial = (issue: string) => `Fiche enregistrée, SIRET non validé : ${issue}`;
+
 export function ProFicheFields({
   create = false,
   state,
   siret,
+  siretPending,
 }: {
   create?: boolean;
   state?: MyProState;
   /** Bloc SIRET de la fiche existante, posé après les activités comme dans l'artefact (absent à la création). */
   siret?: ReactNode;
+  /** Le contrôle du SIRET changé, joué après l'enregistrement de la fiche (lot C7). */
+  siretPending?: SiretPending;
 }) {
   const { t } = useTheme();
   const { refreshMe } = useSession();
@@ -130,16 +137,21 @@ export function ProFicheFields({
       return;
     }
     if (!pro) return;
+    let siretIssue: string | null = null;
     const ok = await run(
       "save",
       async () => {
         await api.updatePro(pro.id, parsed.body);
         dirty.current = false;
         await myPro.reload();
+        siretIssue = (await siretPending?.current?.()) ?? null;
       },
       L.ficheSaved,
     );
     if (!ok) dirty.current = true;
+    // Tour 2 (lot C7) : la fiche est enregistrée, mais le SIRET saisi n'a pas pu être validé : on le dit (confirmation
+    // partielle), au lieu d'un « Fiche enregistrée » sans réserve.
+    else if (siretIssue) setNotice(siretPartial(siretIssue));
   }
 
   return (

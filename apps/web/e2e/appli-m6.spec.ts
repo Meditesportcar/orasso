@@ -185,10 +185,27 @@ test("affiche à partager : story et post, zones masquées en story, zones à fl
   expect(bad.status).toBe(400);
 });
 
+/** Heure de Paris (0 à 23), pour les heures calmes des notifications (22 h – 8 h, choix C15). */
+const parisHour = () =>
+  Number(
+    new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(
+      new Date(),
+    ),
+  );
+
 test("bandeau d'annonce : « Retenue ! » moutarde puis liste d'attente sobre ; toucher ouvre Sorties", async ({
   page,
 }) => {
   test.setTimeout(300_000);
+  // Lot C7, tour 2 : la décision part en notification, retenue pendant les heures calmes (22 h – 8 h). Les recettes se
+  // lancent avec NOTIFY_QUIET_HOURS=off pour l'API (environnement de recette seulement, jamais sur le VPS) ; la nuit,
+  // sans elle, la recette échoue tout de suite en le disant (plus de saut silencieux ni d'attente jusqu'au délai).
+  const quiet = parisHour() >= 22 || parisHour() < 8;
+  if (quiet && process.env.NOTIFY_QUIET_HOURS !== "off") {
+    throw new Error(
+      "Heures calmes : lancer l'API et Playwright avec NOTIFY_QUIET_HOURS=off (environnement de recette)",
+    );
+  }
   const damien = await login("damien@orasso.local");
   const s = unique();
   const email = `bandeau_${s}@e2e.orasso.test`;

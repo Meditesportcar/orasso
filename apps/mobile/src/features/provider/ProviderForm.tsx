@@ -20,11 +20,11 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { DepartmentPicker } from "@/features/arrivee/DepartmentPicker";
-import { ActGrid } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useVendorTypes } from "@/lib/lists";
 import { tradeIcons } from "@/lib/proPresta";
+import { ActGrid } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 

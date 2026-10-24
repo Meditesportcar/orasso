@@ -714,6 +714,8 @@ class LiveEngine {
   cy = 0;
   w = 0;
   h = 0;
+  /** Px par unité du O (largeur mesurée du O / 150). */
+  u = 1;
   constructor(
     readonly mode: "drift" | "tandem",
     readonly k: number,
@@ -837,8 +839,11 @@ function drawTrail(ctx: CanvasRenderingContext2D, tr: Float32Array, n: number): 
 }
 
 export type LiveOProps = {
-  /** Largeur du O, en px (artefact : 170 dans le hero du site). */
-  size?: number;
+  /**
+   * Largeur du O, en px (artefact : 170 dans le hero du site). `"fluid"` : la largeur vient de la feuille de style
+   * (`.o-live__o`), et voitures, fumée et traces suivent la taille mesurée du O (comme l'artefact, qui lit la sienne).
+   */
+  size?: number | "fluid";
   /** `tandem` : deux voitures, l'une chasse l'autre ; `drift` : une seule. */
   mode?: "drift" | "tandem";
   /** Échelle des voitures et de la fumée (artefact : 0,9). */
@@ -870,12 +875,12 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
     const o = oEl.current;
     const ctx = cv?.getContext("2d");
     if (!cv || !el || !o || !ctx) return;
-    const u = size / LIVE_UNITS;
     const measure = (e: LiveEngine) => {
       const hr = el.getBoundingClientRect();
       const or = o.getBoundingClientRect();
       e.w = hr.width;
       e.h = hr.height;
+      e.u = (typeof size === "number" ? size : or.width) / LIVE_UNITS;
       e.cx = or.left + or.width / 2 - hr.left;
       e.cy = or.top + or.height / 2 - hr.top;
     };
@@ -886,18 +891,24 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
     };
 
     if (reduced) {
-      // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe.
-      const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
-      measure(e);
-      e.paint.read(o, 0, () => getComputedStyle(o).color);
+      // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe. Tour 2 du
+      // lot C7 : repeinte quand l'hôte change de taille (rotation, fenêtre), le O fluide changeant d'échelle.
+      const still = () => {
+        const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
+        measure(e);
+        e.paint.read(o, 0, () => getComputedStyle(o).color);
+        begin(e);
+        for (let i = 0; i < 53; i++) {
+          ctx.clearRect(0, 0, e.w, e.h);
+          e.frame(ctx, 1 / 60, e.u, () => {});
+        }
+      };
       setParked(false);
-      begin(e);
-      for (let i = 0; i < 53; i++) {
-        ctx.clearRect(0, 0, e.w, e.h);
-        e.frame(ctx, 1 / 60, u, () => {});
-      }
+      still();
       engine.current = null;
-      return;
+      const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => still());
+      ro?.observe(el);
+      return () => ro?.disconnect();
     }
     if (!running) return;
 
@@ -921,7 +932,7 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
       last = now;
       eng.paint.read(o, eng.T, () => getComputedStyle(o).color);
       begin(eng);
-      const idle = eng.frame(ctx, dt, u, () => setParked(true));
+      const idle = eng.frame(ctx, dt, eng.u, () => setParked(true));
       if (!idle) {
         raf = requestAnimationFrame(tick);
         return;
@@ -958,8 +969,7 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
         className={cx("o-olive o-olive--auto o-live__o", parked || reduced ? "is-parked" : "is-out")}
         style={
           {
-            width: size,
-            height: size,
+            ...(typeof size === "number" ? { width: size, height: size } : null),
             "--live-out": ms(LIVE.out),
             "--live-park": ms(LIVE.parkIn),
             "--live-ease-out": `cubic-bezier(${LIVE.outEase.join(",")})`,
@@ -969,7 +979,13 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
           } as CSSProperties
         }
       >
-        <svg width={size} height={size} viewBox={brandArt.viewBox.join(" ")} aria-hidden="true" focusable="false">
+        <svg
+          width={typeof size === "number" ? size : "100%"}
+          height={typeof size === "number" ? size : "100%"}
+          viewBox={brandArt.viewBox.join(" ")}
+          aria-hidden="true"
+          focusable="false"
+        >
           <OArt id={id} />
         </svg>
       </span>

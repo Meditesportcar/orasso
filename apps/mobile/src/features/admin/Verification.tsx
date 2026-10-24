@@ -4,6 +4,7 @@
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type AdminCertificationRequest,
+  type AdminPlateConflict,
   type AdminPlateTransfer,
   type AdminStructureRow,
   type CertificationStatus,
@@ -15,7 +16,7 @@ import {
   structureVerificationLabels,
   verificationDocumentKindLabels,
 } from "@orasso/shared";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { PrivateImage } from "@/features/boite/PrivateImage";
 import { api } from "@/lib/api";
@@ -321,6 +322,7 @@ export function CertificationsScreen() {
 
 function TransfersBody() {
   const { t } = useTheme();
+  const conflicts = useConflictsSection();
   const rows = useApi(() => api.adminPlateTransfers(), []);
   const gesture = useGesture();
   const [target, setTarget] = useState<{ row: AdminPlateTransfer; accept: boolean } | null>(null);
@@ -334,31 +336,35 @@ function TransfersBody() {
     if (!ok) return;
     setTarget(null);
     setNotice(target.accept ? "La plaque a changé de main." : "Transfert refusé.");
-    await rows.reload();
+    // Une décision de transfert peut libérer une forme unique : la file des conflits est relue aussi (tour 2).
+    await Promise.all([rows.reload(), conflicts.reload()]);
   }
 
   return (
     <AdminPage
       title="Transferts de plaque"
-      onRefresh={rows.reload}
+      onRefresh={() => Promise.all([rows.reload(), conflicts.reload()])}
       overlays={
-        <ReasonSheet
-          visible={target !== null}
-          title={target?.accept ? L.transferAcceptTitle : L.transferRefuseTitle}
-          body={target?.accept ? L.transferAcceptBody : L.transferRefuseBody}
-          confirmLabel={target?.accept ? L.transferAccept : L.transferRefuse}
-          confirmIcon={target?.accept ? "check" : "close"}
-          danger={target ? !target.accept : false}
-          reasonLabel="Note (envoyée au demandeur)"
-          minLength={0}
-          busy={gesture.busy}
-          error={gesture.error}
-          onConfirm={(note) => void decide(note)}
-          onClose={() => {
-            setTarget(null);
-            gesture.setError(null);
-          }}
-        />
+        <>
+          {conflicts.sheet}
+          <ReasonSheet
+            visible={target !== null}
+            title={target?.accept ? L.transferAcceptTitle : L.transferRefuseTitle}
+            body={target?.accept ? L.transferAcceptBody : L.transferRefuseBody}
+            confirmLabel={target?.accept ? L.transferAccept : L.transferRefuse}
+            confirmIcon={target?.accept ? "check" : "close"}
+            danger={target ? !target.accept : false}
+            reasonLabel="Note (envoyée au demandeur)"
+            minLength={0}
+            busy={gesture.busy}
+            error={gesture.error}
+            onConfirm={(note) => void decide(note)}
+            onClose={() => {
+              setTarget(null);
+              gesture.setError(null);
+            }}
+          />
+        </>
       }
     >
       <AdminFailure error={rows.error} />
@@ -416,8 +422,114 @@ function TransfersBody() {
           </View>
         </Plate>
       ))}
+      {conflicts.section}
     </AdminPage>
   );
+}
+
+// --- Conflits de plaque (lot C7) ------------------------------------------------------------------------------------
+
+/**
+ * Conflits laissés par la forme unique des plaques (lot M2) : sous les transferts, sur le même écran. Appliquer la forme
+ * unique (refusé par l'API tant qu'un autre la porte) ou classer le conflit ; note facultative, gardée au journal.
+ */
+function useConflictsSection(): { sheet: ReactNode; section: ReactNode; reload: () => Promise<unknown> } {
+  const { t } = useTheme();
+  const rows = useApi(() => api.adminPlateConflicts(), []);
+  const gesture = useGesture();
+  const [target, setTarget] = useState<{ row: AdminPlateConflict; apply: boolean } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function resolve(note: string) {
+    if (!target) return;
+    const ok = await gesture.run(() =>
+      api.resolvePlateConflict(target.row.id, target.apply ? "apply" : "dismiss", note || null),
+    );
+    if (!ok) return;
+    setTarget(null);
+    setNotice(target.apply ? "La plaque a pris sa forme unique." : "Conflit classé.");
+    await rows.reload();
+  }
+
+  const sheet = (
+    <ReasonSheet
+      visible={target !== null}
+      title={target?.apply ? "Appliquer la forme unique" : "Classer le conflit"}
+      body={
+        target?.apply
+          ? "La plaque prend sa forme unique. Refusé tant qu'un autre véhicule actif la porte."
+          : "La plaque garde son ancienne forme et la forme unique n'est plus réservée."
+      }
+      confirmLabel={target?.apply ? "Appliquer" : "Classer"}
+      confirmIcon={target?.apply ? "check" : "close"}
+      reasonLabel="Note (journal de l'équipe)"
+      minLength={0}
+      busy={gesture.busy}
+      error={gesture.error}
+      onConfirm={(note) => void resolve(note)}
+      onClose={() => {
+        setTarget(null);
+        gesture.setError(null);
+      }}
+    />
+  );
+  const section = (
+    <View style={styles.stack} testID="plate-conflicts">
+      <Text variant="title">Conflits de plaque</Text>
+      <Muted variant="caption">
+        Plaques qui gardent leur ancienne forme parce qu'une autre porte déjà la forme unique (accents, bande F,
+        département).
+      </Muted>
+      <AdminFailure error={rows.error} />
+      {notice ? <Notice>{notice}</Notice> : null}
+      {rows.data && rows.data.length === 0 ? <Notice>Aucun conflit de plaque.</Notice> : null}
+      {(rows.data ?? []).map((c) => (
+        <Plate key={c.id} style={styles.block} testID="plate-conflict">
+          <Muted variant="label">Relevé le {formatDayHour(c.createdAt)}</Muted>
+          <Text variant="title" color={t.color.plateInk}>
+            Plaque {c.plate}
+          </Text>
+          <Fact label={c.kind === "vehicle" ? "Véhicule" : "Demande de transfert"}>
+            {c.vehicleLabel ? `${c.ownerPseudo}, ${c.vehicleLabel}` : c.ownerPseudo}
+          </Fact>
+          <Fact label="Forme gardée · forme unique">{`${c.keptNormalized} · ${c.wantedNormalized}`}</Fact>
+          <Fact label="Porte déjà la forme unique">
+            {c.holder ? [c.holder.pseudo, c.holder.label].filter(Boolean).join(", ") : "Personne : elle est libre"}
+          </Fact>
+          <View style={styles.stack}>
+            <Button
+              variant="plate"
+              icon="check"
+              disabled={c.holder !== null}
+              onPress={() => {
+                gesture.setError(null);
+                setNotice(null);
+                setTarget({ row: c, apply: true });
+              }}
+              fullWidth
+              testID="admin-conflict-apply"
+            >
+              Appliquer la forme unique
+            </Button>
+            <Button
+              variant="plate"
+              icon="close"
+              onPress={() => {
+                gesture.setError(null);
+                setNotice(null);
+                setTarget({ row: c, apply: false });
+              }}
+              fullWidth
+              testID="admin-conflict-dismiss"
+            >
+              Classer le conflit
+            </Button>
+          </View>
+        </Plate>
+      ))}
+    </View>
+  );
+  return { sheet, section, reload: rows.reload };
 }
 
 export function TransfersScreen() {

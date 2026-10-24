@@ -14,9 +14,8 @@ import {
   vitrineTexts,
 } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
-
-import { ActGrid, AngledTag, SecH, TzChip } from "@/features/pro/kit";
 import { formatRating, frontageIcon, monthYear, powerIcon, waterIcon } from "@/lib/proPresta";
+import { ActGrid, AngledTag, SecH, TzChip } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 
 const { space1, space2, space3 } = tokens.spacing;

@@ -5,13 +5,13 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
-import { ApiRequestError, setSessionToken } from "./http";
+import { ApiRequestError, getSessionToken, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
 import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
-import { leavePush, registerThisDevice, setPushAccount, watchPendingPush } from "./push";
+import { leavePush, queueSignOut, registerThisDevice, setPushAccount, watchPendingPush } from "./push";
 import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
 
@@ -135,10 +135,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Lot M6, tours 3 et 4 : l'appareil quitte les push de ce compte (système et API), tant que la session est
         // valide ; sans réseau, le retrait reste en attente et se rejoue.
         await leavePush({ withSession: true });
+        const token = getSessionToken();
         try {
           await authApi.signOut();
-        } catch {
-          // Hors ligne : la session locale est effacée quand même.
+        } catch (error) {
+          // Hors ligne : la session locale est effacée quand même, et la déconnexion du serveur se rejoue avec le
+          // retrait des push (lot C7 ; sinon la session du serveur resterait valide jusqu'à son expiration).
+          const gone = error instanceof ApiRequestError && [400, 401, 403].includes(error.status);
+          if (token && !gone) await queueSignOut(token);
         }
         await clearSession();
         setMe(null);

@@ -171,9 +171,17 @@ export const smoke = {
   // téléphone, 10 → 7 bouffées par voiture (6 → 4 sur un appareil modeste). Le moteur (`BattleLayer`) ne change pas.
   pool: { low: 4, high: 7 },
   /** Autour du O, les voitures vont deux fois plus vite (un tour en 1,4 s) : plus de bouffées pour une traînée continue. */
-  orbitPool: { low: 10, high: 16 },
+  // Lot C7 (capture de Damien du 22/10, « artefact | réel ») : 16 bouffées faisaient un chapelet de grosses taches ;
+  // plus de bouffées, moins opaques (`orbitDensity`), pour la traînée fine de l'artefact.
+  orbitPool: { low: 14, high: 24 },
+  /** Tour 2 du lot C7 : sur Android, 16 bouffées par voiture au plus autour du O (coût mesuré sur le Xiaomi). */
+  orbitPoolAndroidMax: 16,
+  /** Densité des bouffées autour du O (la `density` du fond, ramenée pour un pool plus fourni). */
+  orbitDensity: 1.7,
   /** Échelle `k` des rayons de la fumée dans l'ouverture (artefact : `Drift` de l'accueil, k = 0,6). */
   openingK: 0.6,
+  /** Longueur de la voiture de l'ouverture en unités du O (artefact : `L = 34 × k`, k = 0,6). */
+  openingCar: 34 * 0.6,
   /**
    * Natif : une bouffée par pas de la voiture (entre les deux roues arrière, étirée le long de la trace jusqu'à la
    * suivante) au lieu de ~42 bouffées par seconde et par roue : chacune est plus opaque pour garder la même densité à

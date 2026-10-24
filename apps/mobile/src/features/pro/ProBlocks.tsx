@@ -23,7 +23,7 @@ import {
   type ProOwner,
   proV2Labels,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { type MutableRefObject, useEffect, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
@@ -32,7 +32,14 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 import { CROP_SQUARE, photoForm, pickPhotos } from "@/lib/photos";
-import { type DiscountTexts, discountsBody, discountTexts, partnerChoices, siretDigits } from "@/lib/proForm";
+import {
+  type DiscountTexts,
+  discountsBody,
+  discountTexts,
+  partnerChoices,
+  siretCheckIssue,
+  siretDigits,
+} from "@/lib/proForm";
 import { useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { AppSheet } from "@/ui/AppSheet";
@@ -121,10 +128,24 @@ export function PublicationBlock({ pro, reload }: BlockProps) {
 
 // --- SIRET -------------------------------------------------------------------------------------------------------
 
-export function SiretBlock({ pro, reload }: BlockProps) {
+/** Contrôle du SIRET saisi et pas encore contrôlé, joué par « Enregistrer » de la fiche (relecture C4b, lot C7). */
+export type SiretPending = MutableRefObject<(() => Promise<string | null>) | null>;
+
+export function SiretBlock({ pro, reload, pending }: BlockProps & { pending?: SiretPending }) {
   const { busy, error, notice, run, setNotice } = useRun();
   const [number, setNumber] = useState(pro.siret ?? "");
   const check = pro.registryCheck;
+
+  // Le champ est au milieu de la fiche : « Enregistrer » enregistre aussi un SIRET changé (sinon seul « Contrôler » le
+  // faisait, et la saisie se perdait sans un mot).
+  useEffect(() => {
+    if (!pending) return;
+    const digits = siretDigits(number);
+    pending.current = digits.length >= 9 && digits !== siretDigits(pro.siret ?? "") ? checkWithSave : null;
+    return () => {
+      pending.current = null;
+    };
+  });
 
   async function checkSiret() {
     let verified = false;
@@ -135,6 +156,17 @@ export function SiretBlock({ pro, reload }: BlockProps) {
     });
     // Vérifié : le badge apparaît ; sinon c'est le résultat du registre (introuvable, fermé…) qui s'affiche dessous.
     if (ok) setNotice(verified ? L.siretDone : null);
+  }
+
+  /**
+   * Contrôle joué par « Enregistrer » : `null` si le SIRET est validé, sinon la raison (refus de l'API, registre qui ne
+   * le trouve pas, panne réseau), que la fiche affiche en confirmation partielle (tour 2).
+   */
+  async function checkWithSave(): Promise<string | null> {
+    const issue = await siretCheckIssue(() => api.checkProSiret(pro.id, siretDigits(number)));
+    await reload().catch(() => undefined);
+    if (!issue) setNotice(L.siretDone);
+    return issue;
   }
 
   const registryText =

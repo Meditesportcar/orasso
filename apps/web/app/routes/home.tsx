@@ -140,14 +140,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
           <Stores href={appHref} />
         </div>
-        <div className="w-fan">
-          {fan.map((event) => (
-            <a key={event.id} className="w-fan__card" href={`/e/${event.slug}`} aria-label={event.title}>
-              <PosterFace event={event} />
-            </a>
-          ))}
-          {/* Artefact (s-web-home) : liveO(170, tandem, k .9) en boucle, fumée et traces en canvas. */}
-          <LiveO className="w-fan__o" size={170} mode="tandem" scale={0.9} />
+        <div className="w-fan-box">
+          <div className="w-fan">
+            {fan.map((event) => (
+              <a key={event.id} className="w-fan__card" href={`/e/${event.slug}`} aria-label={event.title}>
+                <PosterFace event={event} />
+              </a>
+            ))}
+            {/* Artefact (s-web-home) : liveO(170, tandem, k .9) en boucle, fumée et traces en canvas ; le O fait 170 px
+                au plus et se réduit avec la composition (largeur dans site-v2.css). */}
+            <LiveO className="w-fan__o" size="fluid" mode="tandem" scale={0.9} />
+          </div>
         </div>
       </section>
 

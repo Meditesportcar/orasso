@@ -22,6 +22,9 @@ const HIT_38 = { top: 3, bottom: 3, left: 3, right: 3 };
  * ou sous 400 px avec un texte agrandi, elle se réduit au logo rond (le nom reste dans son libellé accessible).
  */
 const CAPCHIP_FULL_MIN = 400;
+/** Un rôle plus long que « Organisateur » (12 lettres) tient en entier seulement à partir de 430 px (lot C7). */
+const CAPCHIP_ROLE_MAX = 12;
+const CAPCHIP_LONG_MIN = 430;
 /** `.ab-logo` de l'artefact : 118 px (112 px sous 360 px). */
 const LOGO_WIDTH = 118;
 
@@ -111,7 +114,7 @@ function CapChip({
         )}
       </View>
       {persona.role && !compact ? (
-        <Text variant="label" color={c.barInk} style={styles.capText} maxFontSizeMultiplier={1.2}>
+        <Text variant="label" color={c.barInk} style={styles.capText} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {persona.role}
         </Text>
       ) : null}
@@ -304,7 +307,13 @@ export function AppBar({
       {persona ? (
         <CapChip
           persona={persona}
-          compact={width < 380 || (fontScale > 1 && width < CAPCHIP_FULL_MIN)}
+          compact={
+            width < 380 ||
+            (fontScale > 1 && width < CAPCHIP_FULL_MIN) ||
+            // Lot C7 (capture 32c, 390 px) : « Administration » poussait la Boîte hors de l'écran ; un rôle plus long
+            // que « Organisateur » passe au logo rond sous 430 px.
+            ((persona.role?.length ?? 0) > CAPCHIP_ROLE_MAX && width < CAPCHIP_LONG_MIN)
+          }
           onPress={onPersona}
           testID="topbar-persona"
         />
@@ -376,6 +385,8 @@ const styles = StyleSheet.create({
   },
   avatar: { padding: 3 },
   capchip: {
+    flexShrink: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -395,7 +406,7 @@ const styles = StyleSheet.create({
   },
   capImage: { width: "100%", height: "100%" },
   capInitials: { fontFamily: archivoAt(75, 900), fontSize: 8.5, lineHeight: 10, letterSpacing: 0 },
-  capText: { fontFamily: archivoAt(100, 800), fontSize: 11, letterSpacing: 0.33 },
+  capText: { flexShrink: 1, fontFamily: archivoAt(100, 800), fontSize: 11, letterSpacing: 0.33 },
   count: {
     position: "absolute",
     top: -5,

@@ -1,12 +1,13 @@
 // Routes du garage ajoutées au lot 31 : transferts de plaque (ancien propriétaire, équipe Orasso) et demandes de
 // certification (équipe Orasso). Les routes du véhicule lui-même restent dans `routes.ts`.
-import { adminDecisionSchema, certificationStatuses } from "@orasso/shared";
+import { adminDecisionSchema, adminPlateConflictSchema, certificationStatuses } from "@orasso/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { certificationService } from "./certification";
+import { plateConflictsService } from "./plate-conflicts";
 import { plateTransferService } from "./plate-transfer";
 
 const adminCertificationsQuery = z.object({ status: z.enum(certificationStatuses).optional() });
@@ -27,6 +28,13 @@ export const garageRoutes = new Hono<AppEnv>()
   .post("/admin/plate-transfers/:id/decide", async (c) => {
     const v = await requireUser(c);
     await plateTransferService.adminDecide(v, uuidParam(c, "id"), await body(c, adminDecisionSchema));
+    return c.json({ ok: true });
+  })
+  // Lot C7 : conflits de plaque laissés par la forme unique (lot M2).
+  .get("/admin/plate-conflicts", async (c) => c.json(await plateConflictsService.adminList(await requireUser(c))))
+  .post("/admin/plate-conflicts/:id/resolve", async (c) => {
+    const v = await requireUser(c);
+    await plateConflictsService.adminResolve(v, uuidParam(c, "id"), await body(c, adminPlateConflictSchema));
     return c.json({ ok: true });
   })
   .get("/admin/certification-requests", async (c) => {
