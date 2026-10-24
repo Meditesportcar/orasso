@@ -9,12 +9,14 @@ import {
   type CategoryOption,
   CERTIFICATION_MIN_PHOTOS,
   cleanProposedName,
+  cleanVehicleVersion,
   formatPreparation,
   vehicleWizardLabels as L,
   PREPARED_CATEGORY_SLUG,
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
   VEHICLE_ENGINE_MAX,
+  VEHICLE_VERSION_MAX,
   type VehicleCreate,
   type VehicleFull,
   type VehicleGeneration,
@@ -75,6 +77,7 @@ type Errors = Partial<
     | "year"
     | "plate"
     | "photo"
+    | "version"
     | "engine"
     | "powerHp"
     | "weightKg"
@@ -157,6 +160,8 @@ export async function action({ request }: Route.ActionArgs) {
     year: yearText ? Number(yearText) : null,
     proposedMake: typing === "make" ? cleanProposedName(text("proposedMake")) : null,
     proposedModel: typing ? cleanProposedName(text("proposedModel")) : null,
+    // Lot R4e : la version (« CC », « GTI »), nettoyée comme dans l'appli et l'API.
+    version: cleanVehicleVersion(text("version")),
     color: text("color") || null,
     engine: text("engine") || null,
     powerHp: powerText ? Number(powerText) : null,
@@ -256,6 +261,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [typedMake, setTypedMake] = useState("");
   const [typedModel, setTypedModel] = useState("");
   const pending = useRef<{ modelId: string | null; generationId: string | null } | null>(null);
+  const [version, setVersion] = useState("");
   const [engine, setEngine] = useState("");
   const [powerHp, setPowerHp] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -651,6 +657,17 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
             <h2 className="s-h2">{`4 · ${V.steps[3]}`}</h2>
             <p className="o-t-body s-muted">{V.specsText}</p>
             <div className="s-stack s-stack--tight" data-testid="add-engine-fields">
+              {/* Lot R4e (Damien) : la version, après le modèle dans le nom (« Peugeot 207 CC »), pour tout modèle. */}
+              <TextField
+                label={V.version}
+                name="version"
+                value={version}
+                maxLength={VEHICLE_VERSION_MAX}
+                help={V.versionHelp}
+                onChange={(e) => setVersion(e.currentTarget.value)}
+                error={errors.version}
+                data-testid="add-version"
+              />
               <TextField
                 label={L.engine}
                 name="engine"

@@ -13,6 +13,7 @@ import {
   garageAppLabels,
   photoLabels,
   plateTransferLabels,
+  vehicleAddLabels,
   vehicleStatusLabels,
   vehicleTypeLabels,
   vehicleWizardLabels,
@@ -130,6 +131,8 @@ export default function VehiculeFiche() {
     ["Marque", country ? `${v.makeName} · ${country}` : v.makeName],
     ["Modèle", v.modelName],
     ["Génération", v.generationName],
+    // Lot R4e : la version (« GTI »), après le modèle et la génération.
+    [vehicleAddLabels.versionFact, v.version],
     ["Année", v.year ? String(v.year) : null],
     ["Moteur", v.engine],
     ["Puissance", v.powerHp ? `${v.powerHp} ch` : null],

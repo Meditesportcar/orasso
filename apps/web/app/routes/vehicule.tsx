@@ -1,5 +1,5 @@
 import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
-import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels } from "@orasso/shared";
+import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useNavigation } from "react-router";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
@@ -103,6 +103,12 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
               <>
                 <dt>Génération</dt>
                 <dd>{full.generationName}</dd>
+              </>
+            )}
+            {full.version && (
+              <>
+                <dt>{vehicleAddLabels.versionFact}</dt>
+                <dd>{full.version}</dd>
               </>
             )}
             {full.engine && (

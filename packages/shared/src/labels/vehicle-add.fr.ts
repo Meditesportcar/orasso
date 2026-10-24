@@ -106,6 +106,11 @@ export const vehicleAddLabels = {
   // 4. Fiche technique (1.6)
   // Décision de Damien du 23/10 (lot M1, tour 2) : saisie libre, pas de catalogue des motorisations.
   specsText: "Tu connais ta voiture, préparation comprise : motorisation, puissance et poids sont facultatifs.",
+  /** Lot R4e (décision de Damien, 24/10) : précision affichée après le modèle (« Peugeot 207 CC »). */
+  version: "Version (facultatif)",
+  versionHelp: "Par exemple CC, SW, GTI, Phase 2",
+  /** Ligne de la fiche du véhicule. */
+  versionFact: "Version",
   engineHelp: "Ex. 3.0 turbo B58",
   powerHelp: "En chevaux, de 1 à 2 000.",
   weightHelp: "En kilos, de 50 à 10 000.",
