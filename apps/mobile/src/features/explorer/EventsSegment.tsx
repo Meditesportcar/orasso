@@ -2,7 +2,7 @@
 // gauche, lot M4). Tri, filtres et lieu : appliqués par l'API.
 // Lot R2 (maquette R2.1) : « 12 événements à venir · jusqu'à 100 km de toi » (le nombre en tout, `withTotal`) ; les
 // cartes d'événement ne changent pas (« parfaites » pour Damien). La carte vit dans `ExplorerMapView`.
-import { Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { archivoAt, Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, explorerLabels, explorerV2Labels as L, notOver, explorerR2Labels as R } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -73,12 +73,13 @@ export function EventsSegment({
       {/* `.xline` : « 12 événements à venir · jusqu'à 100 km de toi ». */}
       <View style={styles.line} testID="sort-line">
         <Text variant="caption" color={t.color.inkMuted} style={styles.lineText}>
-          {[
-            list.items ? R.eventsLine(count, list.total === null && list.hasMore) : null,
-            placeLine,
-            filters.affinity ? L.sortAffinity : null,
-          ]
-            .filter(Boolean)
+          {list.items ? (
+            <Text variant="caption" color={t.color.ink} style={styles.lineCount}>
+              {R.eventsLine(count, list.total === null && list.hasMore)}
+            </Text>
+          ) : null}
+          {[list.items ? "" : null, placeLine, filters.affinity ? L.sortAffinity : null]
+            .filter((x) => x !== null)
             .join(" · ")}
         </Text>
       </View>
@@ -117,4 +118,5 @@ export function EventsSegment({
 const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
   lineText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
+  lineCount: { fontSize: 12.5, lineHeight: 17, fontFamily: archivoAt(100, 800) },
 });

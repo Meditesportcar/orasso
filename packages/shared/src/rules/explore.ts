@@ -154,11 +154,20 @@ export function dayLabel(iso: string | Date, now: Date, timeZone?: string): stri
   return `${WEEKDAYS[weekday]} ${w.day} ${MONTHS[w.month - 1]}`;
 }
 
+/**
+ * Le moment montré d'un événement sur la carte : son début, ou maintenant s'il a déjà commencé (en cours, plusieurs
+ * jours) : il se range alors dans « Aujourd'hui », pas au jour passé de son début.
+ */
+export function shownStart(iso: string | Date, now: Date): Date {
+  const start = typeof iso === "string" ? new Date(iso) : iso;
+  return start.getTime() < now.getTime() ? now : start;
+}
+
 export type DateStripDay = { key: string; label: string; count: number };
 
 /**
  * La frise des dates de la carte (maquette R2.8) : un jour par date de début, dans l'ordre, avec le nombre d'événements.
- * Un événement déjà commencé (plusieurs jours, en cours) compte pour son jour de début.
+ * Un événement déjà commencé (en cours, plusieurs jours) compte pour aujourd'hui (`shownStart`).
  */
 export function dateStrip(
   events: readonly { startsAt: string | Date }[],
@@ -168,10 +177,11 @@ export function dateStrip(
   const days = new Map<string, DateStripDay>();
   const sorted = [...events].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
   for (const e of sorted) {
-    const key = dayKey(e.startsAt, timeZone);
+    const at = shownStart(e.startsAt, now);
+    const key = dayKey(at, timeZone);
     const day = days.get(key);
     if (day) day.count += 1;
-    else days.set(key, { key, label: dayLabel(e.startsAt, now, timeZone), count: 1 });
+    else days.set(key, { key, label: dayLabel(at, now, timeZone), count: 1 });
   }
   return [...days.values()];
 }

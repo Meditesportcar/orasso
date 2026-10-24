@@ -3,7 +3,14 @@
 // Lot 44 : l'épingle porte son genre (étiquette datée d'un événement, plaque d'un pro) et son texte ; le fond de carte
 // est le style Orasso du paquet de style (`mapStyle`, repli raster compris).
 import { pinDateLabel } from "@orasso/design-system";
-import { type EventCard, eventFormatLabels, type LatLng, type ProCard, proActivityLabels } from "@orasso/shared";
+import {
+  type EventCard,
+  eventFormatLabels,
+  type LatLng,
+  type ProCard,
+  proActivityLabels,
+  shownStart,
+} from "@orasso/shared";
 import type { ReactNode } from "react";
 
 export type MapPin = {
@@ -33,7 +40,7 @@ export function eventPins(events: EventCard[], now: Date): MapPin[] {
           {
             id: e.id,
             kind: "event" as const,
-            label: pinDateLabel(e.startsAt, now),
+            label: pinDateLabel(shownStart(e.startsAt, now), now),
             lat: e.lat,
             lng: e.lng,
             title: e.title,

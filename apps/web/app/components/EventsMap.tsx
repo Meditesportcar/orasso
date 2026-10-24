@@ -1,6 +1,6 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { fitPoints, pinDateLabel, placePins, type WebPin } from "@orasso/design-system/web";
-import { dateStrip, dayKey, type EventCard, explorerR2Labels as R } from "@orasso/shared";
+import { dateStrip, dayKey, type EventCard, explorerR2Labels as R, shownStart } from "@orasso/shared";
 import { useMemo, useRef, useState } from "react";
 import { now } from "../lib/clock";
 import { useOrassoMap } from "./useOrassoMap";
@@ -18,7 +18,10 @@ export function EventsMap({ events }: { events: EventCard[] }) {
   const located = useMemo(() => events.filter((e) => e.lat != null && e.lng != null), [events]);
   const strip = useMemo(() => dateStrip(located, now()), [located]);
   const [day, setDay] = useState<string | null>(null);
-  const shown = useMemo(() => (day ? located.filter((e) => dayKey(e.startsAt) === day) : located), [located, day]);
+  const shown = useMemo(
+    () => (day ? located.filter((e) => dayKey(shownStart(e.startsAt, now())) === day) : located),
+    [located, day],
+  );
   const failed = useOrassoMap(
     container,
     { center: FRANCE, zoom: 4.6 },
@@ -28,7 +31,7 @@ export function EventsMap({ events }: { events: EventCard[] }) {
         kind: "event",
         lat: e.lat as number,
         lng: e.lng as number,
-        label: pinDateLabel(e.startsAt, now()),
+        label: pinDateLabel(shownStart(e.startsAt, now()), now()),
         title: e.title,
       }));
       const bySlug = new Map(shown.map((e) => [e.id, e.slug]));

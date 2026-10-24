@@ -773,15 +773,18 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
               }
               data-testid={segment === "personnes" ? "people-q" : "events-q"}
             />
+            {/* `.exsearch .xclr` : ✕ dans le champ ; la loupe envoie la recherche (le site marche sans JavaScript). */}
+            {q && segment !== "resultats" ? (
+              <a className="ex-search__btn" href={href({ ...cur, q: null })} data-testid="search-clear">
+                <Icon name="close" size={16} />
+                <span className="o-visually-hidden">{R.clearSearch}</span>
+              </a>
+            ) : null}
+            <button type="submit" className="ex-search__btn" data-testid="search-submit">
+              <Icon name="search" size={16} />
+              <span className="o-visually-hidden">{R.searchLabel}</span>
+            </button>
           </label>
-          {q && segment !== "resultats" ? (
-            <Button variant="secondary" icon="close" href={href({ ...cur, q: null })} data-testid="search-clear">
-              {R.clearSearch}
-            </Button>
-          ) : null}
-          <Button type="submit" variant="secondary" icon="search" data-testid="search-submit">
-            {R.searchLabel}
-          </Button>
         </Form>
         {pills ? (
           <fieldset className="ex-pills">

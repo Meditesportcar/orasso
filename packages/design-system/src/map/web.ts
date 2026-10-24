@@ -240,6 +240,12 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
       pins = next;
       draw();
     },
+    /** Lot R2 : l'épingle choisie hors de la carte (la frise des dates) passe en moutarde. */
+    select(id: string | null) {
+      if (selected === id) return;
+      selected = id;
+      draw();
+    },
     remove() {
       map.off("zoomend", onZoom);
       for (const m of markers) m.remove();

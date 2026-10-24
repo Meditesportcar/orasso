@@ -1848,8 +1848,8 @@
   align-items: center;
   gap: var(--space-2);
   min-height: 48px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  padding: 0 6px 0 var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--surface-field);
   color: var(--ink);
   box-shadow: inset 0 0 0 1.5px var(--line);
@@ -1869,34 +1869,66 @@
 .ex-search__field:focus-within {
   box-shadow: inset 0 0 0 2px var(--ink);
 }
+/* `.exsearch .xclr` : 34 px dans le champ (zone de toucher portée à 44 px par la marge). */
+.ex-search__btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ex-search__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* `.pills` (maquette R2.9) : une seule ligne, qui défile au doigt si elle déborde ; la pastille « où » reste la première. */
 .ex-pills {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  flex-wrap: nowrap;
+  gap: 5px;
   min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: 1px 0;
   border: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.ex-pills::-webkit-scrollbar {
+  display: none;
+}
+/* `.pill` : 36 px, contour = le réglage habituel ; plein encre = une valeur choisie. */
 .ex-pill {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-2);
-  min-height: 44px;
-  padding: 0 var(--space-3);
-  border: 1.5px solid var(--ink);
+  gap: 3px;
+  min-height: 36px;
+  padding: 0 8px 0 7px;
+  border: 1.5px solid var(--line);
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
+  font-family: var(--font-narrow);
+  font-stretch: var(--stretch-narrow);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background-color var(--timing-fast) var(--ease-inout),
     color var(--timing-fast) var(--ease-inout);
 }
 .ex-pill[data-set="true"] {
+  border-color: var(--ink);
   background: var(--ink);
-  color: var(--surface);
+  color: var(--ground);
 }
 .ex-pill__text {
   white-space: nowrap;
@@ -1905,19 +1937,19 @@
   opacity: 0.75;
 }
 .ex-pill__v {
-  font-weight: 800;
+  font-weight: 850;
 }
 .ex-pill__n {
   display: inline-grid;
   place-items: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 900;
 }
 .ex-line {
   margin: 0;

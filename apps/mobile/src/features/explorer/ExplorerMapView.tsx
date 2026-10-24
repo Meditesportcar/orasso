@@ -14,6 +14,7 @@ import {
   type ProActivity,
   type ProCard,
   explorerR2Labels as R,
+  shownStart,
 } from "@orasso/shared";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -187,7 +188,8 @@ export function EventsMapView({
   const itemsKey = eventPinsData(items);
   // biome-ignore lint/correctness/useExhaustiveDependencies: la frise suit les données affichées
   const days = useMemo(() => dateStrip(items, now), [itemsKey]);
-  const shown = day === "all" ? items : items.filter((e) => dayKey(e.startsAt) === day);
+  const dayOf = (e: EventCard) => dayKey(shownStart(e.startsAt, now));
+  const shown = day === "all" ? items : items.filter((e) => dayOf(e) === day);
   // Relecture du lot R1 : les épingles suivent les données (coordonnées, date corrigées), pas seulement les identifiants.
   const shownKey = eventPinsData(shown);
   // biome-ignore lint/correctness/useExhaustiveDependencies: recalculées quand les données affichées changent
@@ -195,7 +197,7 @@ export function EventsMapView({
   const picked: EventCard[] = shown.filter((e) => selected.includes(e.id));
   const pickDay = (key: string) => {
     setDay(key);
-    const first = key === "all" ? null : items.find((e) => dayKey(e.startsAt) === key && e.lat !== null);
+    const first = key === "all" ? null : items.find((e) => dayOf(e) === key && e.lat !== null);
     setSelected(first ? [first.id] : []);
   };
   return (
