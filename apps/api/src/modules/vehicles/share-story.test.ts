@@ -1,10 +1,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHARE_SIZES, shareFormats, sharePhotoZone, shareSafeBands, shareStyles } from "@orasso/shared";
+import {
+  plateOnSharePoster,
+  SHARE_SIZES,
+  shareFormats,
+  shareReadableBand,
+  shareSafeBands,
+  shareStyles,
+} from "@orasso/shared";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { fitNameLine, renderStory, type StoryInput, storyLayout } from "./share-story";
+import { fitNameLine, renderStory, type StoryInput, storyLayout, storyZones } from "./share-story";
 
 // Affiche à partager (lot 50 ; lot M6, maquettes 2.1 à 2.3) : formats story 9:16 et post 4:5, trois styles, aucun
 // texte dans les marges qu'Instagram recouvre, nom du véhicule sur une seule ligne quelle que soit sa longueur.
@@ -79,27 +86,39 @@ describe("affiche à partager", () => {
     }
   });
 
-  it("lot R3a : aucun texte d'Orasso sur la partie nette de la photo (zone de la vérification de plaque), 3 styles", async () => {
+  it("lot R3a, tour 2 : zones réelles des textes d'Orasso, écartées de la vérification ; la photo reste vérifiée", async () => {
+    const grow = (z: { x: number; y: number; w: number; h: number }) => ({
+      x: z.x - z.w * 0.075,
+      y: z.y - z.h * 0.075,
+      w: z.w * 1.15,
+      h: z.h * 1.15,
+    });
     for (const format of shareFormats) {
-      const zone = sharePhotoZone(format);
       for (const style of shareStyles) {
-        for (const name of ["GTI", LONG]) {
-          for (const over of [{}, { stats: [] }, { line: "" }, { tags: [] }]) {
-            const { frame, placed } = await storyLayout(base({ format, style, name, certified: true, ...over }));
-            for (const p of placed) {
-              if (p.kind === "shadow" || p.kind === "halo") continue;
-              if (p.kind === "seal") {
-                // Le sceau est dans la zone exclue (à droite en haut).
-                expect(p.top, `${format} ${style} : sceau`).toBeGreaterThanOrEqual(zone.seal.top * frame.H);
-                expect(p.bottom, `${format} ${style} : sceau`).toBeLessThanOrEqual(zone.seal.bottom * frame.H);
-                continue;
-              }
-              expect(p.top, `${format} ${style} ${p.kind} sous la photo (${name})`).toBeGreaterThanOrEqual(
-                zone.bottom * frame.H,
-              );
-            }
+        const band = shareReadableBand(format, style);
+        const H = SHARE_SIZES[format].height;
+        const plain = await storyZones(base({ format, style, certified: false }));
+        const sealed = await storyZones(base({ format, style, certified: true }));
+        // Le sceau n'est une zone que s'il est dessiné.
+        expect(sealed.length, `${format} ${style}`).toBe(plain.length + 1);
+        for (const zones of [plain, sealed]) {
+          for (const z of zones) {
+            expect(z.x).toBeGreaterThanOrEqual(0);
+            expect(z.x + z.w).toBeLessThanOrEqual(1.0001);
+            // Un texte d'Orasso lu comme une plaque (cadre agrandi de la détection) : jamais signalé.
+            expect(plateOnSharePoster(format, style, grow(z), zones), `${format} ${style} ${JSON.stringify(z)}`).toBe(
+              false,
+            );
           }
+          // Une plaque au milieu de la photo, à gauche : signalée.
+          const mid = (band.top + band.bottom) / 2 / H;
+          expect(plateOnSharePoster(format, style, { x: 0.1, y: mid, w: 0.3, h: 0.04 }, zones)).toBe(true);
         }
+        // Sans certification, le haut droit de la photo est vérifié.
+        expect(
+          plateOnSharePoster(format, style, { x: 0.75, y: band.top / H + 0.06, w: 0.2, h: 0.03 }, plain),
+          `${format} ${style} haut droit`,
+        ).toBe(true);
       }
     }
   });

@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Platform, Share, StyleSheet, View } from "react-native";
 import { siteUrl } from "@/api";
 import { Seg, SmButton } from "@/features/passionne/kit";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { detectSharePlates } from "@/lib/sharePlates";
 import {
@@ -160,7 +161,12 @@ export function ShareBody({
     const timer = setTimeout(() => {
       if (!cancelled) setChecks((all) => (all[key] === "checking" ? { ...all, [key]: "slow" } : all));
     }, PLATE_CHECK_TIMEOUT_MS);
-    void detectSharePlates(shownUri, format)
+    // Lot R3a, tour 2 : les zones des textes d'Orasso de cette affiche ; sans elles (panne), rien n'est écarté.
+    void api
+      .shareZones(vehicleId, format, style)
+      .then((z) => z.texts)
+      .catch(() => [])
+      .then((texts) => detectSharePlates(shownUri, format, style, texts))
       .catch(() => null)
       .then((plates) => {
         clearTimeout(timer);

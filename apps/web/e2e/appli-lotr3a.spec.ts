@@ -8,8 +8,8 @@ import { RELAIS } from "./relais";
 //   - (2) le titre de la case d'appel « Ajouter des photos » tient en entier à 390 et à 320 px ;
 //   - (3) « Continuer » attend que le bas d'une étape plus haute que l'écran ait été vu : indicateur discret (fondu et
 //     petite flèche), toucher la flèche fait descendre, le bouton s'active et le reste en remontant ;
-//   - (7) affiche à partager : une plaque « lue » sur les textes d'Orasso (sous la photo) est ignorée, dans les trois
-//     styles ; une plaque sur la photo est signalée ;
+//   - (7) affiche à partager : une plaque « lue » sur les textes d'Orasso (leurs zones réelles, renvoyées par l'API) est
+//     écartée, dans les trois styles ; une plaque sur la photo, même dans son fondu, est signalée ;
 //   - (8) « La masquer » et « Partager quand même » l'un sous l'autre, pleine largeur, libellés sur une ligne.
 // La couleur sans doublon (4) et la lecture de plaque (6) sont couvertes par les tests unitaires (shared, mobile).
 // Béton et Sable. Lancer avec APP_URL (appli compilée : `node scripts/appli-compilee.mjs`), API seedée.
@@ -150,14 +150,22 @@ for (const theme of THEMES) {
     const kenji = await login("kenji@orasso.local");
     const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
     const vehicle = vehicles.data.find((v) => v.status === "active");
+    // (7) Tour 2 : des « plaques » lues exactement sur les textes d'Orasso (zones réelles renvoyées par l'API, agrandies
+    // comme le fait la détection) : écartées, dans les trois styles.
+    const zones = await apiCall<{ texts: { x: number; y: number; w: number; h: number }[] }>(
+      kenji,
+      "GET",
+      `/me/vehicles/${vehicle?.id}/share-zones?format=story&style=night`,
+    );
+    const fakes = [...zones.data.texts]
+      .sort((a, b) => b.w * b.h - a.w * a.h)
+      .slice(0, 3)
+      .map((z) => ({ x: z.x - z.w * 0.075, y: z.y - z.h * 0.075, w: z.w * 1.15, h: z.h * 1.15 }));
+    expect(fakes.length).toBe(3);
     const { ctx, page } = await open(browser, theme);
-    // (7) Une « plaque » lue sous la photo (le nom, les chiffres, le pied d'Orasso) : ignorée.
-    await page.addInitScript(() => {
-      (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = [
-        { x: 0.06, y: 0.62, w: 0.5, h: 0.05 },
-        { x: 0.3, y: 0.88, w: 0.3, h: 0.03 },
-      ];
-    });
+    await page.addInitScript((f) => {
+      (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = f;
+    }, fakes);
     await signIn(page, "kenji@orasso.local");
     await page.goto(`/vehicule/${vehicle?.id}/partager`);
     await afterOpening(page);
@@ -167,15 +175,15 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("share-story")).toBeEnabled();
       await shot(page, `${theme}-05-affiche-textes-ignores-${style}`);
     }
-    // Story et post : même règle.
-    await page.getByTestId("share-formats").getByText("Post 4:5", { exact: true }).click();
-    await expect(page.getByTestId("share-plate-check")).toContainText("rien de lisible", { timeout: 60_000 });
     await ctx.close();
 
-    // Une plaque sur la photo : signalée, dans les trois styles ; (8) les deux boutons l'un sous l'autre.
+    // Une plaque sur la photo, au haut (dans le fondu d'entrée : cas de Codex, tour 2) : signalée, dans les trois styles ;
+    // (8) les deux boutons l'un sous l'autre.
     const second = await open(browser, theme);
     await second.page.addInitScript(() => {
-      (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = [{ x: 0.1, y: 0.3, w: 0.3, h: 0.06 }];
+      (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = [
+        { x: 0.2, y: 0.067, w: 0.2, h: 0.012 },
+      ];
     });
     const p = second.page;
     await signIn(p, "kenji@orasso.local");

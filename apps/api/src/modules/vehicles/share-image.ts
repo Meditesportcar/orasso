@@ -1,13 +1,13 @@
 // Affiche à partager d'un véhicule (lot 31, lot 50 ; lot M6 : maquettes 2.1 à 2.3) : story 9:16 ou post 4:5, trois
 // styles, rendue par `share-story.ts`. Ce fichier rassemble ce que l'affiche montre (jamais la plaque : la fonction ne
 // lit pas le champ ; la photo est celle que le serveur a floutée) et la garde une heure en cache.
-import { type PlateRect, type ShareFormat, type ShareStyle, shareSheetLabels } from "@orasso/shared";
+import { type PlateRect, type ShareFormat, type ShareStyle, type ShareZone, shareSheetLabels } from "@orasso/shared";
 
 import { env } from "../../env";
 import { AppError } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
-import { renderStory, type ShareStat } from "./share-story";
+import { renderStory, type ShareStat, type StoryInput, storyZones } from "./share-story";
 
 const fr = new Intl.NumberFormat("fr-FR");
 // Espace insécable (U+00A0) et fine insécable (U+202F) du format fr-FR : remplacées par une espace simple.
@@ -109,8 +109,29 @@ async function renderShareImageNow(
 ): Promise<Buffer> {
   const cover = v.photos[0];
   const photo = cover ? await storage.get(cover.storageKey) : null;
+  return renderStory(storyInput(v, pseudo, format, extras, photo));
+}
+
+/** Lot R3a, tour 2 : les zones des textes d'Orasso sur l'affiche de ce véhicule (sans rendre la photo). */
+export function shareZones(
+  v: VehicleWithAll,
+  pseudo: string,
+  format: ShareFormat,
+  style: ShareStyle,
+): Promise<ShareZone[]> {
+  return renderQueue.run(() => storyZones(storyInput(v, pseudo, format, { style }, null)));
+}
+
+/** Ce que montre l'affiche d'un véhicule (le rendu et les zones partent de la même mise en page). */
+function storyInput(
+  v: VehicleWithAll,
+  pseudo: string,
+  format: ShareFormat,
+  extras: ShareExtras,
+  photo: Buffer | null,
+): StoryInput {
   const site = new URL(env.PUBLIC_URL);
-  return renderStory({
+  return {
     format,
     style: extras.style ?? "night",
     photo,
@@ -129,7 +150,7 @@ async function renderShareImageNow(
     site: site.host,
     qrUrl: `${site.origin}/v/${v.id}`,
     masks: extras.masks,
-  });
+  };
 }
 
 // --- Cache (une heure par véhicule, format et style) ----------------------------------------------------------------

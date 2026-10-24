@@ -606,6 +606,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         locked: unseen,
         onSeen: () => setSeen((s) => markSeen(s, step)),
         label: V.seeRest,
+        // Tour 2 : une étape dont la liste se charge ne compte pas comme vue tant qu'elle est courte et vide.
+        ready:
+          step === STEP.identity ? Boolean(makes.data) : step === STEP.categories ? Boolean(categories.data) : true,
       }}
       header={
         <>

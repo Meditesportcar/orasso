@@ -260,7 +260,14 @@ export function FlowScreen({
  * que l'écran). `key` : la page affichée (une nouvelle page repart en haut et se remesure) ; `locked` : pas encore vue ;
  * `onSeen` : son bas est visible, ou presque ; `label` : l'indicateur discret qui invite à descendre (lecture d'écran).
  */
-export type EndGate = { key: string | number; locked: boolean; onSeen: () => void; label: string };
+export type EndGate = {
+  key: string | number;
+  locked: boolean;
+  onSeen: () => void;
+  label: string;
+  /** Tour 2 : contenu encore en chargement (`false`) : la page ne compte pas comme vue, même courte. */
+  ready?: boolean;
+};
 
 /** Délai après lequel une nouvelle page de même hauteur que la précédente garde l'ancienne mesure. */
 const REMEASURE_MS = 250;
@@ -303,12 +310,12 @@ function Body({
     setAtEnd(reached || !(content.current > 0) || !(viewport.current > 0));
     if (settle.current) clearTimeout(settle.current);
     settle.current = null;
-    if (reached && g.locked) {
+    if (reached && g.locked && g.ready !== false) {
       settle.current = setTimeout(() => {
         settle.current = null;
         const now = gate.current;
         const still = endReached({ offset: offset.current, viewport: viewport.current, content: content.current });
-        if (now?.locked && still) now.onSeen();
+        if (now?.locked && now.ready !== false && still) now.onSeen();
       }, SETTLE_MS);
     }
   }, []);
@@ -320,6 +327,7 @@ function Body({
   );
   const gateKey = endGate?.key;
   const gateLocked = endGate?.locked;
+  const gateReady = endGate?.ready;
   // Nouvelle page : elle repart en haut et sa hauteur se remesure (sinon celle de la page d'avant la débloquerait).
   // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement de page relance la mesure
   useEffect(() => {
@@ -334,10 +342,10 @@ function Body({
     }, REMEASURE_MS);
     return () => clearTimeout(timer);
   }, [gateKey]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: un verrou posé ou levé relit la position
+  // biome-ignore lint/correctness/useExhaustiveDependencies: un verrou posé ou levé, un contenu chargé relisent la position
   useEffect(() => {
     checkEnd();
-  }, [gateLocked]);
+  }, [gateLocked, gateReady]);
   const assist = useMemo<ScrollAssist>(
     () => ({
       hold: (on) => setHeld(on),

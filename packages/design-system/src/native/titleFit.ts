@@ -1,15 +1,18 @@
-// Titre ajusté sur une ou plusieurs lignes, coupé par l'appli et non par Android (lot R3a, retour 2 de Damien du 24/10 :
-// « AJOUTER DES… », le mot PHOTOS manquait sur son Android). Pur : testé sans React Native.
+// Titre ajusté sur une ou plusieurs lignes, coupé par l'appli et non par le système (lot R3a, retour 2 de Damien du
+// 24/10 : « AJOUTER DES… », le mot PHOTOS manquait sur son Android). Pur : testé sans React Native.
 //
-// La cause côté Android : le texte est mesuré avant d'être mis en capitales (`textTransform`), la boîte prévue pour une
-// ligne reçoit deux lignes et la seconde est coupée. `FitTitle` mesure chaque mot tel qu'il s'affiche, choisit lui-même
-// les coupures de ligne et réduit le corps pour que chaque ligne tienne ; chaque ligne est un texte d'une ligne. Les
-// largeurs mesurées suivent l'échelle de police du système (1,0, 1,3, 2,0…) : le calcul reste juste à toutes les échelles.
+// Cause probable (tour 2) : l'échelle de police ou la taille d'affichage du système, plus grandes que sur le Xiaomi de
+// test, font passer le titre sur deux lignes et la seconde n'est pas affichée. `FitTitle` mesure chaque mot tel qu'il
+// s'affiche, choisit lui-même les coupures de ligne et réduit le corps pour que chaque ligne tienne ; chaque ligne est un
+// texte d'une ligne. Les largeurs mesurées suivent l'échelle de police du système (1,0, 1,3, 2,0…).
 
 /** On réduit d'abord jusqu'à 70 % sur `maxLines` lignes ; au-delà, une ligne de plus plutôt qu'un corps illisible. */
 export const FIT_TITLE_MIN_SCALE = 0.7;
-/** Marge de sécurité (px) : la chasse ne suit pas exactement le corps (approche fixe, arrondis). */
-const SAFETY = 2;
+/**
+ * Marge de sécurité, proportionnelle à la place (tour 2) : la chasse ne suit pas exactement le corps (approche fixe,
+ * arrondis, rendu d'Android) ; chaque ligne étant d'une ligne, un dépassement afficherait « … ». 3 %, 2 px au moins.
+ */
+export const FIT_TITLE_SAFETY = 0.03;
 
 export type FitTitleInput = {
   /** Largeur de chaque mot au corps de base. */
@@ -57,7 +60,7 @@ function wrap(words: readonly number[], space: number, room: number, k: number):
 export function fitTitle(input: FitTitleInput): FitTitle {
   const { words, space, size } = input;
   const maxLines = Math.max(1, input.maxLines ?? 2);
-  const room = input.room - SAFETY;
+  const room = input.room - Math.max(2, input.room * FIT_TITLE_SAFETY);
   const all = words.map((_, i) => i);
   if (!words.length || !(input.room > 0) || words.some((w) => !(w > 0))) return { fontSize: size, lines: [all] };
   const round = (k: number) => Math.floor(size * k * 10) / 10;

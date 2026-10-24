@@ -1,7 +1,7 @@
 // FitTitle : un titre d'affiche (capitales Archivo large) qui ne se coupe jamais (lot R3a, retour 2 de Damien du 24/10 :
 // « AJOUTER DES… » sur son Android). Chaque mot est mesuré hors champ, tel qu'il s'affiche ; `fitTitle` choisit les
 // coupures de ligne et le corps (jusqu'à 70 % sur deux lignes, puis une ligne de plus) ; chaque ligne est un texte d'une
-// ligne, qu'Android ne peut plus couper. Même méthode que `BigTitle` (lot R1) : une largeur nulle (écran caché) ne
+// ligne, avec une marge, que le système ne passe plus à la ligne. Même méthode que `BigTitle` (lot R1) : une largeur nulle (écran caché) ne
 // change rien. Sans mesure (premier rendu), le titre s'affiche au corps de base.
 
 import { useReducer } from "react";

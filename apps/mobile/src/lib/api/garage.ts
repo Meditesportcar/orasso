@@ -4,6 +4,9 @@ import type {
   OutgoingPlateTransferView,
   PlateRect,
   PlateTransferView,
+  ShareFormat,
+  ShareStyle,
+  ShareZone,
   VehicleCertification,
   VehicleCreate,
   VehicleDetail,
@@ -57,6 +60,9 @@ export const garageApi = {
       body: { rects },
       timeout: 60_000,
     }),
+  /** Lot R3a, tour 2 : zones des textes d'Orasso sur l'affiche (écartées de la vérification de plaque). */
+  shareZones: (vehicleId: string, format: ShareFormat, style: ShareStyle) =>
+    request<{ texts: ShareZone[] }>(`/api/me/vehicles/${vehicleId}/share-zones?format=${format}&style=${style}`),
   makes: () => request<VehicleMake[]>("/api/vehicle-reference/makes"),
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
   generations: (modelId: string) =>

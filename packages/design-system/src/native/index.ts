@@ -92,5 +92,5 @@ export {
   useSystemReducedMotion,
   useTheme,
 } from "./theme";
-export { FIT_TITLE_MIN_SCALE, fitTitle, titleWords } from "./titleFit";
+export { FIT_TITLE_MIN_SCALE, FIT_TITLE_SAFETY, fitTitle, titleWords } from "./titleFit";
 export { VehicleCard, type VehicleCardProps, VehicleThumb, type VehicleThumbProps } from "./VehicleCard";

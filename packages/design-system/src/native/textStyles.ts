@@ -1,7 +1,6 @@
 // Styles de texte du système (jetons `type`), côté natif : ajoute la largeur d'Archivo et les capitales,
 // comme web/typography.css (le README demande au consommateur d'ajouter font-stretch et uppercase).
 
-import { Children, type ReactNode } from "react";
 import type { TextStyle } from "react-native";
 import { type TypeStyleName, tokens } from "../tokens";
 import { archivoAt, archivoFamily, type FontWidth } from "./fontFamily";
@@ -26,8 +25,7 @@ const widthOf: Record<TypeStyleName, FontWidth> = {
   numberNarrow: "narrow",
 };
 
-/** Styles écrits en capitales. */
-export const uppercased: ReadonlySet<TypeStyleName> = new Set<TypeStyleName>([
+const uppercased = new Set<TypeStyleName>([
   "posterXl",
   "posterL",
   "posterM",
@@ -65,16 +63,3 @@ export function textStyle(name: TypeStyleName): TextStyle {
 export const textStyles = Object.fromEntries(
   (Object.keys(tokens.type) as TypeStyleName[]).map((name) => [name, textStyle(name)]),
 ) as Record<TypeStyleName, TextStyle>;
-
-/**
- * Lot R3a (retour 2 de Damien : « AJOUTER DES… », PHOTOS manquant sur son Android) : Android mesure le texte avant de le
- * mettre en capitales (`textTransform`) ; la boîte prévue pour le texte en minuscules, plus étroit, reçoit une ligne de
- * moins que le texte affiché et la dernière est coupée. Sur Android, les styles en capitales reçoivent donc leur texte
- * déjà en capitales (français) : mesure et affichage portent sur le même texte. Ailleurs, rien ne change.
- */
-export function capitalsFor(variant: TypeStyleName, children: ReactNode, os: string): ReactNode {
-  if (os !== "android" || !uppercased.has(variant)) return children;
-  const up = (c: ReactNode): ReactNode => (typeof c === "string" ? c.toLocaleUpperCase("fr-FR") : c);
-  // `Children.map` garde des clés stables (aucun avertissement de liste).
-  return Array.isArray(children) ? Children.map(children, up) : up(children);
-}
