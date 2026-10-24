@@ -22,8 +22,11 @@ import {
   type HomeWidgetsConfig,
   homeNudgeOrder,
   homeProfileOf,
+  homeWidgetIds,
+  homeWidgetOffered,
   type LatLng,
   type MyApplication,
+  NEARBY_STATIONS_ENABLED,
   type NearbyPlace,
   nearestDepartment,
   normalizeHomeWidgets,
@@ -61,6 +64,12 @@ export function pickNextAccess(upcoming: MyApplication[]): MyApplication | null 
     null
   );
 }
+
+/**
+ * Lot R1 : les stations (lavage, carburant) suivent le réglage `NEARBY_STATIONS_ENABLED` (coupé pour l'instant). Les
+ * tests de leurs sources le rallument : le code de collecte reste vérifié pour le jour où elles reviendront.
+ */
+export const nearbyStations = { enabled: NEARBY_STATIONS_ENABLED };
 
 /** Les stations les plus proches de `from`, avec leur distance (`limit` au plus). */
 export function nearestPlaces<T extends CachedPlace>(places: T[], from: LatLng, limit = HOME_PLACES_LIMIT) {
@@ -103,6 +112,9 @@ export const homeService = {
       shown.add("wash");
       shown.add("fuel");
     }
+    // Lot R1 (décision de Damien du 24/10) : stations de lavage et de carburant retirées pour l'instant ; leurs sources
+    // (Overpass, prix des carburants) ne sont plus appelées tant que `NEARBY_STATIONS_ENABLED` est faux.
+    for (const id of homeWidgetIds) if (!homeWidgetOffered(id, nearbyStations.enabled)) shown.delete(id);
     const extras = full && q.blocks !== "places";
 
     const upcomingPromise = applicationsQueries.mine(v, "upcoming");

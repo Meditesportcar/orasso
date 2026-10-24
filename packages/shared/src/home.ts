@@ -19,6 +19,22 @@ export const homeWidgetIds = [
 ] as const;
 export type HomeWidgetId = (typeof homeWidgetIds)[number];
 
+/**
+ * Lot R1 (décision de Damien du 24/10) : les stations de lavage et de carburant sont retirées pour l'instant. Elles
+ * montraient les stations les plus proches de soi ; la fonction voulue est autre (les stations proches d'un événement)
+ * et viendra plus tard. Tant que ce réglage vaut `false` : l'API ne les cherche plus (Overpass et prix des carburants
+ * restent en place, sans appel), l'Explorer (appli et site), l'Accueil du site et ses réglages ne les montrent plus.
+ */
+export const NEARBY_STATIONS_ENABLED = false;
+
+/** Les widgets des stations (lavage, carburant), coupés par `NEARBY_STATIONS_ENABLED`. */
+export const stationWidgetIds = ["wash", "fuel"] as const satisfies readonly HomeWidgetId[];
+
+/** Ce widget est-il proposé aujourd'hui ? (les stations sont retirées tant que `NEARBY_STATIONS_ENABLED` est faux) */
+export function homeWidgetOffered(id: HomeWidgetId, stations = NEARBY_STATIONS_ENABLED): boolean {
+  return stations || !(stationWidgetIds as readonly HomeWidgetId[]).includes(id);
+}
+
 /** Le seul widget qui ne se déplace ni ne se masque : il porte le néon moutarde de l'écran. */
 export const HOME_FIXED_WIDGET: HomeWidgetId = "next_access";
 

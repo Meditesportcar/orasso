@@ -7,6 +7,7 @@ import {
   type HomeWidgetsConfig,
   homeLabels,
   homeWidgetIds,
+  homeWidgetOffered,
   homeWidgetTitles,
   moveHomeWidget,
   normalizeHomeWidgets,
@@ -173,7 +174,8 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
       {home && (
         <div className="hm-grid">
           {visibleHomeWidgets(widgets)
-            .filter((id) => id !== "next_access")
+            // Lot R1 : stations de lavage et de carburant retirées pour l'instant (`NEARBY_STATIONS_ENABLED`).
+            .filter((id) => id !== "next_access" && homeWidgetOffered(id))
             .map((id) => (
               <div key={id}>{blocks[id] ?? null}</div>
             ))}
@@ -193,6 +195,8 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
 /** Réorganiser (par boutons, sans glisser-déposer) : monter, descendre, masquer ; chaque geste est enregistré. */
 function Reorder({ widgets, error }: { widgets: HomeWidgetsConfig; error: string | null }) {
   const config = JSON.stringify(widgets);
+  // Lot R1 : les widgets retirés pour l'instant (stations) ne se règlent pas.
+  const offered = widgets.order.filter((id) => homeWidgetOffered(id));
   return (
     <details className="hm-reorder" data-testid="reorder">
       <summary className="o-t-button">{homeLabels.reorder}</summary>
@@ -203,7 +207,7 @@ function Reorder({ widgets, error }: { widgets: HomeWidgetsConfig; error: string
         </p>
       )}
       <ul className="hm-reorder" style={{ listStyle: "none", padding: 0 }}>
-        {widgets.order.map((id, i) => {
+        {offered.map((id, i) => {
           const hidden = widgets.hidden.includes(id);
           const fixed = id === "next_access";
           return (
@@ -230,7 +234,7 @@ function Reorder({ widgets, error }: { widgets: HomeWidgetsConfig; error: string
                       type="submit"
                       variant="plate"
                       icon="down"
-                      disabled={i === widgets.order.length - 1}
+                      disabled={i === offered.length - 1}
                       data-testid={`down-${id}`}
                     >
                       {homeLabels.moveDown}
