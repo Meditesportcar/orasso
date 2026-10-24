@@ -98,6 +98,8 @@ export const certificationService = {
         plateTransferPending: Boolean(row.pendingTransferId),
         certified: Boolean(row.certifiedAt),
         hasPendingRequest: last?.status === "pending",
+        // Lot R4a : un modèle tapé se certifie une fois rattaché à la liste par l'équipe.
+        referencePending: Boolean(row.proposedMake || row.proposedModel),
       },
     );
     return {

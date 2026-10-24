@@ -224,6 +224,73 @@ export const vehicleReassignSchema = z.object({
     .transform((v) => v ?? null),
 });
 
+/**
+ * Lot R4a (maquette R4.8b) : `POST /admin/vehicle-reference/proposals/:clé/accept`. Rattache toutes les fiches d'un
+ * groupe de « Modèles proposés » en une transaction : à un modèle existant (`modelId`), ou à un modèle créé au besoin
+ * (`modelName`) chez une marque existante (`makeId`) ou créée au besoin (`makeName`, `country`).
+ */
+export const vehicleProposalAcceptSchema = z
+  .object({
+    makeId: z.uuid().optional(),
+    makeName: refName.optional(),
+    country: z
+      .string()
+      .trim()
+      .regex(/^[A-Z]{2}$/, "Code pays sur deux lettres (FR, DE…)")
+      .nullish()
+      .transform((v) => v ?? null),
+    modelId: z.uuid().optional(),
+    modelName: refName.optional(),
+    generationId: z
+      .uuid()
+      .nullish()
+      .transform((v) => v ?? null),
+  })
+  .refine((v) => Boolean(v.makeId) !== Boolean(v.makeName), {
+    message: "Choisis la marque, ou donne son nom",
+    path: ["makeId"],
+  })
+  .refine((v) => Boolean(v.modelId) !== Boolean(v.modelName), {
+    message: "Choisis le modèle, ou donne son nom",
+    path: ["modelId"],
+  })
+  .refine((v) => !v.modelId || Boolean(v.makeId), {
+    message: "Un modèle existant vient d'une marque existante",
+    path: ["modelId"],
+  });
+export type VehicleProposalAccept = z.infer<typeof vehicleProposalAcceptSchema>;
+
+/** Une fiche d'un groupe de « Modèles proposés » : ce que la personne a tapé, pour reconnaître le véhicule. */
+export type VehicleProposalItem = {
+  id: string;
+  ownerPseudo: string;
+  vehicleType: string;
+  typedMake: string | null;
+  typedModel: string | null;
+  year: number | null;
+  department: string | null;
+  photoUrl: string | null;
+  createdAt: string;
+};
+
+/**
+ * Groupe de la file « Modèles proposés » (lot R4a) : les fiches dont le modèle (marque connue) ou la marque et le modèle
+ * ont été tapés, regroupées par texte normalisé (`proposalKey`). `modelName` (et `makeName`) : la variante la plus
+ * tapée ; `variants` : chaque écriture et son nombre de fiches.
+ */
+export type VehicleProposalGroup = {
+  key: string;
+  level: "make" | "model";
+  make: { id: string; name: string; isOther: boolean };
+  /** Marque tapée (niveau « make ») : la variante la plus tapée. */
+  makeName: string | null;
+  modelName: string;
+  variants: { text: string; count: number }[];
+  /** Type le plus fréquent des fiches (le modèle créé le prend). */
+  vehicleType: string;
+  vehicles: VehicleProposalItem[];
+};
+
 export type ReferenceMake = { id: string; name: string; country: string | null; isOther: boolean; vehicles: number };
 export type ReferenceModel = {
   id: string;

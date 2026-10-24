@@ -136,6 +136,8 @@ async function cards(ex: Executor, applicationIds: string[]) {
       makeOther: vehicleMakes.isOther,
       model: vehicleModels.name,
       modelOther: vehicleModels.isOther,
+      proposedMake: vehicles.proposedMake,
+      proposedModel: vehicles.proposedModel,
       generation: vehicleGenerations.name,
       generationOther: vehicleGenerations.isOther,
       pseudo: profiles.pseudo,
@@ -151,7 +153,8 @@ async function cards(ex: Executor, applicationIds: string[]) {
     .where(inArray(applications.id, applicationIds));
   return new Map(
     rows.map((r) => {
-      const parts = [r.makeOther ? null : r.make, r.modelOther ? null : r.model];
+      // Lot R4a : un niveau « Autre » prend le nom tapé (« Peugeot 207 CC »).
+      const parts = [r.makeOther ? r.proposedMake : r.make, r.modelOther ? r.proposedModel : r.model];
       if (r.generation && !r.generationOther) parts.push(r.generation);
       const label = parts.filter(Boolean).join(" ") || "Autre véhicule";
       return [r.applicationId, { vehicleLabel: label, pseudo: r.pseudo, photoUrl: storage.url(r.photoKey) }];

@@ -22,6 +22,7 @@ import {
   vehicleMakeUpdateSchema,
   vehicleModelCreateSchema,
   vehicleModelUpdateSchema,
+  vehicleProposalAcceptSchema,
   vehicleReassignSchema,
 } from "@orasso/shared";
 import type { Context } from "hono";
@@ -120,6 +121,16 @@ export const adminRoutes = new Hono<AppEnv>()
   .get("/admin/vehicle-reference/others", async (c) =>
     c.json(await vehicleReferenceService.others(await requireUser(c))),
   )
+  // Lot R4a (maquette R4.8b) : « Modèles proposés », regroupés par texte tapé ; rattachement groupé en un geste.
+  .get("/admin/vehicle-reference/proposals", async (c) =>
+    c.json(await vehicleReferenceService.proposals(await requireUser(c))),
+  )
+  .post("/admin/vehicle-reference/proposals/:key/accept", async (c) => {
+    const v = await requireUser(c);
+    const key = c.req.param("key");
+    if (!/^(make|model)\.[a-z0-9_.-]{1,140}$/.test(key)) throw validation("Groupe inconnu");
+    return c.json(await vehicleReferenceService.acceptProposal(v, key, await body(c, vehicleProposalAcceptSchema)));
+  })
   .post("/admin/vehicle-reference/makes", async (c) => {
     const v = await requireUser(c);
     return c.json(await vehicleReferenceService.createMake(v, await body(c, vehicleMakeCreateSchema)), 201);

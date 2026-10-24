@@ -177,7 +177,11 @@ export const adminUsersService = {
       structures: members.map(({ m, s }) => ({ id: s.id, slug: s.slug, name: s.name, role: m.role, status: m.status })),
       vehicles: garage.map((g) => ({
         id: g.v.id,
-        label: [g.make.isOther ? "Autre" : g.make.name, g.model.isOther ? "Autre" : g.model.name, g.gen?.name]
+        label: [
+          g.make.isOther ? (g.v.proposedMake ?? "Autre") : g.make.name,
+          g.model.isOther ? (g.v.proposedModel ?? "Autre") : g.model.name,
+          g.gen?.name,
+        ]
           .filter(Boolean)
           .join(" "),
         year: g.v.year,

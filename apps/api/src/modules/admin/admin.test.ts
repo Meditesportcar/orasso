@@ -113,6 +113,8 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
   ["PATCH", `/admin/vehicle-reference/makes/${UUID}`, { name: "Alpine" }],
   ["DELETE", `/admin/vehicle-reference/makes/${UUID}`],
   ["POST", `/admin/vehicles/${UUID}/reassign`, { makeId: UUID, modelId: UUID, generationId: null }],
+  ["GET", "/admin/vehicle-reference/proposals"],
+  ["POST", `/admin/vehicle-reference/proposals/model.${UUID}.207/accept`, { makeId: UUID, modelName: "207" }],
   ["GET", "/admin/assistance-requests"],
   ["POST", `/admin/assistance-requests/${UUID}/close`],
   ["GET", "/admin/settings"],
@@ -486,6 +488,117 @@ describe("base véhicules et file « Autre »", () => {
     expect(traces.map((t) => t.action)).toEqual(
       expect.arrayContaining(["reference.make_create", "reference.model_create", "vehicle.reassign"]),
     );
+  });
+});
+
+describe("modèles proposés (lot R4a, maquette R4.8b)", () => {
+  async function peugeotWithOther() {
+    const [make] = await db
+      .insert(vehicleMakes)
+      .values({ name: "Peugeot", slug: "peugeot", country: "FR" })
+      .returning();
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: make!.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const [otherGen] = await db
+      .insert(vehicleGenerations)
+      .values({ modelId: other!.id, name: "Autre", isOther: true })
+      .returning();
+    return { makeId: make!.id, modelId: other!.id, generationId: otherGen!.id };
+  }
+
+  it("regroupés par texte normalisé, la plus grosse file en tête ; rattachement groupé en une transaction", async () => {
+    const peugeot = await peugeotWithOther();
+    const lea = await signUp("Lea_66");
+    const theo = await signUp("Theo_11");
+    const typed = (ownerId: string, proposedModel: string, year = 2008) =>
+      createVehicle(ownerId, peugeot, { generationId: null, proposedModel, year });
+    const a = await typed(fan.id, "207 CC");
+    const b = await typed(lea.id, "207 CC");
+    const c = await typed(theo.id, "207cc", 2007);
+    await typed(lea.id, "308 GTi");
+    // « Autre » sans nom tapé : reste dans la file « Autre ».
+    await createVehicle(fan.id, peugeot, { generationId: null });
+
+    const list = await req(admin, "GET", "/admin/vehicle-reference/proposals");
+    expect(list.status).toBe(200);
+    expect(list.json).toHaveLength(2);
+    const [big, small] = list.json;
+    expect(big).toMatchObject({ level: "model", make: { name: "Peugeot" }, modelName: "207 CC" });
+    expect(big.vehicles).toHaveLength(3);
+    expect(big.variants).toEqual(
+      expect.arrayContaining([
+        { text: "207 CC", count: 2 },
+        { text: "207cc", count: 1 },
+      ]),
+    );
+    expect(small.modelName).toBe("308 GTi");
+    const others = await req(admin, "GET", "/admin/vehicle-reference/others");
+    expect(others.json.flatMap((g: { vehicles: unknown[] }) => g.vehicles)).toHaveLength(1);
+
+    // « Ajouter à la liste et rattacher les 3 fiches » : le modèle est créé, toutes les fiches rattachées.
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${big.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "207",
+    });
+    expect(done.status).toBe(200);
+    expect(done.json).toMatchObject({ label: "Peugeot 207", count: 3 });
+    for (const v of [a, b, c]) {
+      const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+      expect(row).toMatchObject({ modelId: done.json.modelId, proposedModel: null, proposedMake: null });
+    }
+    const notes = await db.select().from(notifications).where(eq(notifications.type, "vehicle_reassigned"));
+    expect(notes).toHaveLength(3);
+    expect(notes.find((n) => n.userId === fan.id)?.body).toContain("ta Peugeot 207 CC");
+    const traces = await db.select({ action: adminAuditLog.action }).from(adminAuditLog);
+    expect(traces.map((t) => t.action)).toEqual(
+      expect.arrayContaining(["reference.model_create", "vehicle.proposal_accept"]),
+    );
+    // Le groupe n'existe plus ; « Rattacher à un modèle existant » pour l'autre (faute de frappe).
+    expect(
+      (
+        await req(admin, "POST", `/admin/vehicle-reference/proposals/${big.key}/accept`, {
+          makeId: peugeot.makeId,
+          modelName: "207",
+        })
+      ).status,
+    ).toBe(404);
+    const again = await req(admin, "POST", `/admin/vehicle-reference/proposals/${small.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelId: done.json.modelId,
+    });
+    expect(again.json.count).toBe(1);
+    expect((await req(admin, "GET", "/admin/vehicle-reference/proposals")).json).toHaveLength(0);
+  });
+
+  it("marque tapée : la marque et le modèle sont créés ; un groupe inconnu est refusé", async () => {
+    const [other] = await db.insert(vehicleMakes).values({ name: "Autre", slug: "autre", isOther: true }).returning();
+    const [otherModel] = await db
+      .insert(vehicleModels)
+      .values({ makeId: other!.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const v = await createVehicle(
+      fan.id,
+      { makeId: other!.id, modelId: otherModel!.id, generationId: "" },
+      { generationId: null, proposedMake: "Lotus", proposedModel: "Exige" },
+    );
+    const [group] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json;
+    expect(group).toMatchObject({ level: "make", makeName: "Lotus", modelName: "Exige", key: "make.lotus.exige" });
+    expect(
+      (await req(admin, "POST", "/admin/vehicle-reference/proposals/xx/accept", { makeName: "L", modelName: "E" }))
+        .status,
+    ).toBe(400);
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeName: "Lotus",
+      country: "GB",
+      modelName: "Exige",
+    });
+    expect(done.status).toBe(200);
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+    expect(row).toMatchObject({ makeId: done.json.makeId, proposedMake: null, proposedModel: null });
+    const models = await req(admin, "GET", `/admin/vehicle-reference/makes/${done.json.makeId}/models`);
+    expect(models.json.map((m: { name: string }) => m.name).sort()).toEqual(["Autre", "Exige"]);
   });
 });
 

@@ -4,9 +4,25 @@ import { formatPlate, type VehicleBrief, type VehicleFull, type VehiclePublic } 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
 
-/** « BMW Série 3 E36 » ; la génération « Autre » n'apparaît pas. */
-export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generation">): string {
-  const parts = [v.make.isOther ? null : v.make.name, v.model.isOther ? null : v.model.name];
+/** Lot R4a : marque et modèle tapés (niveau « Autre »), absents d'une ligne lue sans eux. */
+type Proposed = Partial<Pick<VehicleWithAll, "proposedMake" | "proposedModel">>;
+
+/** Marque affichée : la marque de la liste, ou celle tapée par la personne (« Autre » sinon). */
+export const makeNameOf = (v: Pick<VehicleWithAll, "make"> & Proposed) =>
+  v.make.isOther ? (v.proposedMake ?? v.make.name) : v.make.name;
+/** Modèle affiché : le modèle de la liste, ou celui tapé (« 207 CC »). */
+export const modelNameOf = (v: Pick<VehicleWithAll, "model"> & Proposed) =>
+  v.model.isOther ? (v.proposedModel ?? v.model.name) : v.model.name;
+
+/**
+ * « BMW Série 3 E36 » ; la génération « Autre » n'apparaît pas. Lot R4a : un niveau « Autre » prend le nom tapé
+ * (« Peugeot 207 CC »).
+ */
+export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generation"> & Proposed): string {
+  const parts = [
+    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
+    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
+  ];
   if (v.generation && !v.generation.isOther) parts.push(v.generation.name);
   const label = parts.filter(Boolean).join(" ");
   return label || "Autre véhicule";
@@ -18,9 +34,9 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
     label: vehicleLabel(v),
     vehicleType: v.vehicleType,
     makeId: v.makeId,
-    makeName: v.make.name,
+    makeName: makeNameOf(v),
     modelId: v.modelId,
-    modelName: v.model.name,
+    modelName: modelNameOf(v),
     generationId: v.generationId,
     generationName: v.generation?.name ?? null,
     country: v.make.country,
@@ -63,12 +79,19 @@ export function vehicleFull(v: VehicleWithAll): VehicleFull {
           createdAt: v.pendingTransfer.createdAt.toISOString(),
         }
       : null,
+    proposedMake: v.proposedMake,
+    proposedModel: v.proposedModel,
   };
 }
 
 /** Marque + modèle (fiche réduite d'un compte privé, lot 17) : « BMW Série 3 », jamais la génération ni l'année. */
-export function vehicleBriefLabel(v: Pick<VehicleWithAll, "make" | "model">): string {
-  const label = [v.make.isOther ? null : v.make.name, v.model.isOther ? null : v.model.name].filter(Boolean).join(" ");
+export function vehicleBriefLabel(v: Pick<VehicleWithAll, "make" | "model"> & Proposed): string {
+  const label = [
+    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
+    v.model.isOther ? (v.proposedModel ?? null) : v.model.name,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return label || "Autre véhicule";
 }
 
@@ -76,8 +99,8 @@ export function vehicleBrief(v: VehicleWithAll): VehicleBrief {
   return {
     id: v.id,
     label: vehicleBriefLabel(v),
-    makeName: v.make.name,
-    modelName: v.model.name,
+    makeName: makeNameOf(v),
+    modelName: modelNameOf(v),
     vehicleType: v.vehicleType,
     photoUrl: null,
   };

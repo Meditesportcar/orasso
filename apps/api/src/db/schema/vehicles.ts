@@ -140,6 +140,13 @@ export const vehicles = pgTable(
     audiencePrizes: integer("audience_prizes").notNull().default(0),
     /** Lot M1, tour 2 : clé tirée par l'appli à l'ouverture de l'ajout (création idempotente, pas de doublon). */
     clientKey: uuid("client_key"),
+    /**
+     * Lot R4a (maquette R4.8) : marque et modèle tapés par la personne quand ils ne sont pas dans la liste (niveau
+     * « Autre » seulement), texte nettoyé de 40 caractères au plus. Le nom affiché devient « Peugeot 207 CC » ; l'équipe
+     * les rattache à la liste par la file « Modèles proposés » de l'admin, qui les remet à vide.
+     */
+    proposedMake: text("proposed_make"),
+    proposedModel: text("proposed_model"),
     ...timestamps,
   },
   (t) => [
@@ -152,6 +159,14 @@ export const vehicles = pgTable(
     uniqueIndex("vehicles_owner_client_key_unique").on(t.ownerId, t.clientKey),
     check("vehicles_power_hp_check", sql`${t.powerHp} is null or ${t.powerHp} between 1 and 2500`),
     check("vehicles_weight_kg_check", sql`${t.weightKg} is null or ${t.weightKg} between 50 and 40000`),
+    check(
+      "vehicles_proposed_make_check",
+      sql`${t.proposedMake} is null or char_length(${t.proposedMake}) between 2 and 40`,
+    ),
+    check(
+      "vehicles_proposed_model_check",
+      sql`${t.proposedModel} is null or char_length(${t.proposedModel}) between 2 and 40`,
+    ),
   ],
 );
 

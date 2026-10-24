@@ -27,6 +27,7 @@ export * from "./plateNumber";
 export * from "./points";
 export * from "./poster";
 export * from "./pro";
+export * from "./proposedVehicle";
 export * from "./pushRecipient";
 export * from "./quietHours";
 export * from "./recurrence";

@@ -80,6 +80,8 @@ export type CertificationMissing =
   | "photos"
   | "description"
   | "category"
+  /** Lot R4a : marque ou modèle tapés, pas encore rattachés à la liste Orasso par l'équipe. */
+  | "reference"
   | "pending"
   | "certified";
 
@@ -92,6 +94,8 @@ export type CertificationVehicleFacts = {
   plateTransferPending: boolean;
   certified: boolean;
   hasPendingRequest: boolean;
+  /** Lot R4a : marque ou modèle tapés, en attente de la liste (la certification vient une fois rattaché). */
+  referencePending?: boolean;
 };
 
 /** Conditions de la demande de certification (S37) ; `missing` liste ce qui manque, dans l'ordre d'affichage. */
@@ -108,6 +112,7 @@ export function certificationEligibility(
   if (vehicle.photoCount < CERTIFICATION_MIN_PHOTOS) missing.push("photos");
   if (!vehicle.description?.trim()) missing.push("description");
   if (vehicle.categoryCount < 1) missing.push("category");
+  if (vehicle.referencePending) missing.push("reference");
   return { ok: missing.length === 0, missing };
 }
 
@@ -121,7 +126,14 @@ export const CERTIFICATION_IMPOSSIBLE: readonly CertificationMissing[] = ["statu
  * Ordre « ce qui manque en premier » de la ligne d'état (lot M5) : d'abord ce que la personne règle tout de suite dans
  * la fiche (photos, description, catégorie), puis la plaque en transfert, enfin le grade (il vient avec les sorties).
  */
-const LINE_ORDER: readonly CertificationMissing[] = ["photos", "description", "category", "plate", "grade"];
+const LINE_ORDER: readonly CertificationMissing[] = [
+  "photos",
+  "description",
+  "category",
+  "plate",
+  "reference",
+  "grade",
+];
 
 /** La ligne d'état de la certification (Garage, page du véhicule, site) : un seul état, ce qui manque en premier. */
 export type CertificationLine =
