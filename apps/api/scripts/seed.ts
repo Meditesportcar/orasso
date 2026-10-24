@@ -13,9 +13,10 @@ import { db, pool } from "../src/db/client";
 import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
+import { syncVehicleReference } from "../src/modules/vehicles/reference-sync";
 import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
-import { seedBase, seedMissingCategories, seedOffroadModels } from "./seed/base";
+import { seedBase, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
 import { seedCrews } from "./seed/crews";
@@ -89,9 +90,13 @@ async function main() {
   } else {
     await seedBase(hash);
   }
-  // Lot M1 : catégories « Track day » / « Origine », modèles tout-terrain (« 4x4 ») ; complète un seed existant.
+  // Lot M1 : catégories « Track day » / « Origine » ; complète un seed existant.
   await seedMissingCategories();
-  await seedOffroadModels();
+  // Lot R3c : référentiel complet (ajoute ce qui manque, tout-terrain marqués) ; complète un seed existant.
+  const added = await syncVehicleReference();
+  console.log(
+    `Référentiel : ${added.makes} marques, ${added.models} modèles, ${added.generations} générations ajoutées.`,
+  );
   // Lot 06 : QR des retenus, jour J (« Salon Argelès »), événement passé réglé, points ; complète un seed existant.
   await seedDayJ(hash);
   // Lot 14 : professionnels (annuaire, remises par grade) et billetterie (billets gratuits, billets payants « bientôt »).
