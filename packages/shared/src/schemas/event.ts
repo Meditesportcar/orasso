@@ -247,6 +247,19 @@ export const eventListQuerySchema = pageQuery.extend({
   ),
   categoryId: z.uuid().optional(),
   department: departmentSchema.optional(),
+  /**
+   * Lot R2 (« Où chercher ? » : Mon coin, Ailleurs) : les événements de ces départements, entiers, séparés par des
+   * virgules. Aucun rayon implicite avec eux.
+   */
+  departments: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(departmentSchema).max(20).optional(),
+  ),
+  /** Lot R2 : le nombre de résultats en tout (`total`), pour la ligne de la liste et « Voir les N événements ». */
+  withTotal: z
+    .enum(["1", "true", "0", "false"])
+    .transform((v) => v === "1" || v === "true")
+    .optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),

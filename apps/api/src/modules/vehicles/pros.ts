@@ -11,7 +11,6 @@
 import {
   type Grade,
   type ProActivity,
-  type ProDiscounts,
   proVisibility,
   resolvePosition,
   shownDiscount,
@@ -21,14 +20,14 @@ import {
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { proDiscounts, proProfiles } from "../../db/schema";
+import { proProfiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { distanceKmSql, roundKm, withinRadiusSql } from "../../lib/geo-sql";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { sponsoredService } from "../home/sponsored";
-import { proOwnerActive } from "../pros/explore";
+import { discountsByPro, proOwnerActive } from "../pros/explore";
 import { vehiclesRepo } from "./repo";
 
 /** Pros partenaires montrés sous le sponsorisé. */
@@ -37,14 +36,6 @@ export const VEHICLE_PROS_LIMIT = 3;
 export const VEHICLE_PROS_RADIUS_KM = 100;
 /** Pros lus avant de retirer ceux sans remise pour ce grade (puis 3 gardés). */
 const VEHICLE_PROS_READ = 12;
-
-async function discountsByPro(ids: string[]): Promise<Map<string, ProDiscounts>> {
-  const out = new Map<string, ProDiscounts>();
-  if (!ids.length) return out;
-  const rows = await db.select().from(proDiscounts).where(inArray(proDiscounts.proId, ids));
-  for (const r of rows) out.set(r.proId, { ...(out.get(r.proId) ?? {}), [r.grade]: r.percent });
-  return out;
-}
 
 export const vehicleProsService = {
   /** `GET /me/vehicles/:id/pros` (propriétaire seulement). */

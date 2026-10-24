@@ -264,3 +264,130 @@ export const eventPageLabels = {
   withdrawFree: (when: string) => `Sans pénalité jusqu'au ${when}`,
   withdrawLate: "Après le verrouillage : un malus s'applique",
 } as const;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+/**
+ * Explorer R2 (maquette « Explorer R2 », validée par Damien le 24/10 : « Parfait ! Juste l'entête, on garde toujours
+ * Orasso ») : dans les trois segments, le segment, la recherche, puis une ligne de trois pastilles qui montrent leur
+ * valeur ; une feuille « Où chercher ? » commune aux Événements et aux Pros ; les Pros par métier ; Personnes et crews
+ * sans annuaire ; la carte avec les dates en clair.
+ */
+export const explorerR2Labels = {
+  segments: "Que chercher ?",
+  segmentEvents: "Événements",
+  segmentPros: "Pros",
+  segmentPeople: "Personnes et crews",
+  searchEvents: "Un événement, un organisateur, une ville",
+  searchPros: "Un pro, un métier, une ville",
+  searchPeople: "Un pseudo, un crew, un modèle…",
+  searchLabel: "Rechercher",
+  clearSearch: "Effacer la recherche",
+  pills: "Réglages de la recherche",
+  // « Où chercher ? » (maquette R2.2).
+  whereSheet: "Où chercher ?",
+  whereMe: "Autour de moi",
+  whereMeHint: "Ta position, lue sur ton téléphone. Elle n'est jamais gardée.",
+  whereMeDenied: "Position refusée : touche pour la redemander.",
+  whereMine: "Mon coin",
+  whereMineHint: (depts: string) => (depts ? `Tes départements : ${depts}` : "Ajoute tes départements dans Tes préférences"),
+  whereAway: "Ailleurs",
+  whereAwayHint: "Un autre département, le temps d'un week-end ou d'un voyage",
+  whereAwayFind: "Chercher un département",
+  whereAwayPlaceholder: "66, Aude, Gironde…",
+  whereAll: "Partout en France",
+  whereAllHint: "Aucune limite de distance",
+  wherePeopleHint: "Départements seulement : jamais de position ni de distance.",
+  whereKeep: "Gardé pour tes prochaines visites. Tes préférences ne changent pas.",
+  km: "km",
+  pillMe: (km: number) => `À ${km} km de moi`,
+  pillMine: (codes: readonly string[]) => (codes.length ? `Mon coin (${codes.join(", ")})` : "Mon coin"),
+  pillDept: (name: string, code: string) => `${name} (${code})`,
+  pillAll: "Partout en France",
+  lineMe: (km: number) => `jusqu'à ${km} km de toi`,
+  lineAll: "partout en France",
+  seeEvents: (n: number | null) =>
+    n === null ? "Voir les événements" : n === 0 ? "Aucun événement ici" : n === 1 ? "Voir l'événement" : `Voir les ${n} événements`,
+  seePros: (n: number | null) =>
+    n === null ? "Voir les pros" : n === 0 ? "Aucun pro ici" : n === 1 ? "Voir le pro" : `Voir les ${n} pros`,
+  seeResults: "Voir les résultats",
+  // Trier (maquette R2.3).
+  sortEventsSheet: "Trier les événements",
+  sortProsSheet: "Trier les pros",
+  sortHint: "Un toucher suffit : le tri s'applique et la feuille se ferme. Il est gardé pour tes prochaines visites.",
+  sortPill: { date: "Par date", distance: "Par distance", recent: "Nouveautés", seats: "Places restantes", name: "Par nom" } as Record<
+    string,
+    string
+  >,
+  proSorts: {
+    distance: { label: "Distance", hint: "Du plus proche au plus loin" },
+    name: { label: "Nom", hint: "Par ordre alphabétique" },
+  } as Record<string, { label: string; hint: string }>,
+  // Filtres.
+  filters: "Filtres",
+  filtersSheet: "Filtres",
+  // Événements (maquette R2.1).
+  eventsLine: (n: number, more: boolean) => `${n}${more ? "+" : ""} événement${n > 1 || more ? "s" : ""} à venir`,
+  // Pros (maquettes R2.4, R2.5).
+  job: "Métier",
+  jobAll: "Tous",
+  jobSheet: "Quel métier ?",
+  jobAllLong: "Tous les métiers",
+  jobCount: (n: number) => (n > 0 ? plural(n, "pro", "pros") : "Aucun pour l'instant"),
+  jobHint: "Le nombre compte les pros du lieu choisi. Un toucher suffit : la liste se filtre et la feuille se ferme.",
+  prosLine: (n: number, more: boolean) => `${n}${more ? "+" : ""} pro${n > 1 || more ? "s" : ""}`,
+  prosNearest: "les plus proches d'abord",
+  prosByName: "par nom",
+  movers: "Se déplacent chez toi",
+  moverZone: (depts: readonly string[]) =>
+    depts.length === 0
+      ? "Se déplace chez toi"
+      : `Se déplace dans le ${depts.slice(0, -1).join(", le ")}${depts.length > 1 ? " et le " : ""}${depts.at(-1)}`,
+  discountMine: (percent: number, grade: string) => `avec ton grade ${grade}`,
+  discountFrom: (grade: string) => `dès le grade ${grade}`,
+  discountTag: (percent: number) => `−${percent} %`,
+  discountNone: "Pas encore de remise Orasso",
+  favorite: "Ton garage favori",
+  // Personnes et crews (maquettes R2.6, R2.7).
+  show: "Montrer",
+  showAll: "Tout",
+  showPeople: "Personnes",
+  showCrews: "Crews",
+  showSheet: "Montrer",
+  peopleFiltersHint: "Les centres d'intérêt et le grade ne trouvent que les comptes publics et tes amis.",
+  sameModelTitle: (model: string) => `D'autres ${model}`,
+  sameModelHint: (vehicle: string) => `Comme ta ${vehicle}`,
+  crewsNearTitle: (code: string | null) => (code ? `Crews du ${code}` : "Des crews"),
+  crewsNearHint: (mine: string | null) => (mine ? `Ton crew : ${mine}` : "Les plus suivis"),
+  publicOnly: "Comptes publics",
+  privacyOpen:
+    "Ici, seulement des comptes publics, et ce que leur profil montre déjà. Un compte privé se trouve par la recherche. Jamais plus précis que le département.",
+  privacyResults:
+    "Un compte privé montre son pseudo, son grade, la marque et le modèle de ses véhicules. Le reste est pour ses amis.",
+  noSuggestions: "Rien à te suggérer pour l'instant. Cherche un pseudo, un crew ou un modèle.",
+  peopleGroup: (n: number, more: boolean) => `Personnes · ${n}${more ? "+" : ""}`,
+  peopleGroupHint: "Pseudo ou véhicule",
+  crewsGroup: (n: number, more: boolean) => `Crews · ${n}${more ? "+" : ""}`,
+  crewsGroupHint: "Par nom",
+  noPeople: (q: string) => `Personne ne s'appelle « ${q} » et aucun véhicule ne porte ce nom.`,
+  noPeopleFiltered: "Personne ne correspond à ces filtres.",
+  noCrews: (q: string) => `Aucun crew ne s'appelle « ${q} ». Essaie un nom de crew ou un département.`,
+  noCrewsHere: "Aucun crew par ici pour l'instant.",
+  tooShort: "Saisis au moins deux caractères.",
+  privateAccount: "Compte privé",
+  yourCrew: "ton crew",
+  members: (n: number) => plural(n, "membre", "membres"),
+  add: "Ajouter",
+  requested: "Demande envoyée",
+  write: "Écrire",
+  join: "Rejoindre",
+  joinRequested: "Demande envoyée",
+  grade: (g: string) => `grade ${g}`,
+  createCrew: "Créer un crew",
+  // Carte (maquette R2.8).
+  dates: "Dates",
+  allDates: "Toutes",
+  eventsCount: (n: number) => plural(n, "événement", "événements"),
+  prosCount: (n: number) => plural(n, "pro", "pros"),
+  mapLocate: "Me localiser",
+} as const;

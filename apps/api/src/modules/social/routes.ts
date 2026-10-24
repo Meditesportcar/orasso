@@ -5,6 +5,7 @@ import {
   friendsListQuery,
   pageQuery,
   peopleSearchQuery,
+  peopleSuggestionsQuery,
 } from "@orasso/shared";
 import { Hono } from "hono";
 
@@ -21,6 +22,12 @@ export const socialRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     rateLimit("peopleSearch", v.user.id);
     return c.json(await peopleSearch.search(v, query(c, peopleSearchQuery)));
+  })
+  // Lot R2 : suggestions de Personnes et crews (comptes publics seulement) ; déclarée avant `/users/:pseudo`.
+  .get("/users/suggestions", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("peopleSearch", v.user.id);
+    return c.json(await peopleSearch.suggestions(v, query(c, peopleSuggestionsQuery).department));
   })
   .get("/users/:pseudo", async (c) => {
     const v = await requireUser(c);

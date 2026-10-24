@@ -60,6 +60,17 @@ export type OtherVehicle = (VehiclePublic | VehicleBrief) & {
 
 export type PeopleSearchPage = { items: PersonCard[]; nextCursor: string | null };
 
+/**
+ * Lot R2 (Personnes et crews à l'ouverture, maquette R2.6) : des suggestions courtes, tirées de données publiques
+ * seulement. « Même modèle que toi » : des comptes publics (jamais mes amis ni moi) dont le garage a le modèle d'un de mes
+ * véhicules. Ni « Amis de tes amis » (aucune liste d'amis n'est publique) ni « Vus aux mêmes sorties » (il faudrait
+ * l'accord de chacun : v2.1, « Le plateau »).
+ */
+export type PeopleSuggestions = {
+  sameModel: { model: string; vehicle: string; items: PersonCard[] } | null;
+};
+export const peopleSuggestionsQuery = z.object({ department: departmentSchema.optional() });
+
 export type ProfileVehicle = {
   id: string;
   label: string;

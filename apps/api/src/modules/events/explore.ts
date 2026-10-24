@@ -109,8 +109,11 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
         : q.sort;
   // Rayon : demandé explicitement, ou position envoyée sans ordre particulier (comportement d'origine : 50 km).
   // Lot M4, tour 2 : « Partout en France » (`everywhere`) n'a jamais de rayon.
+  // Lot R2 : des départements entiers (« Mon coin », « Ailleurs ») n'ont jamais de rayon implicite.
   const wantsRadius =
-    located !== null && !q.everywhere && (q.radiusKm !== undefined || (explicit && q.sort === "date"));
+    located !== null &&
+    !q.everywhere &&
+    (q.radiusKm !== undefined || (explicit && q.sort === "date" && !q.departments?.length));
   const needsDistance = located !== null && (sort !== "date" || wantsRadius || explicit);
   const dist = needsDistance && located ? distanceKmSql(events.lat, events.lng, located.position) : null;
 
@@ -126,6 +129,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   if (q.format) filters.push(eq(events.format, q.format));
   else if (q.formats?.length) filters.push(inArray(events.format, q.formats));
   if (q.department) filters.push(eq(events.department, q.department));
+  if (q.departments?.length) filters.push(inArray(events.department, q.departments));
   if (q.structureId) filters.push(eq(events.structureId, q.structureId));
   if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);
   // Lot 44 : « Structures suivies » (Explorer, Selon mes goûts) ; sans compte, le filtre est ignoré.
@@ -174,6 +178,19 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   end)`;
   // Tour 2 : pagination par curseur sur (places, début, id) pour ce tri, dont la valeur bouge au fil des inscriptions
   // (un décalage d'offset sautait ou répétait des événements). L'appli écarte un doublon par son id.
+  // Lot R2 : le nombre en tout, avant le curseur (première page seulement, à la demande).
+  const total =
+    q.withTotal && !q.cursor
+      ? Number(
+          (
+            await db
+              .select({ n: sql<number>`count(*)::int` })
+              .from(events)
+              .innerJoin(structures, eq(structures.id, events.structureId))
+              .where(and(...filters))
+          )[0]?.n ?? 0,
+        )
+      : undefined;
   const after = sort === "seats" ? decodeSeatsCursor(q.cursor) : null;
   if (after) {
     filters.push(
@@ -234,5 +251,5 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
       : sort === "seats"
         ? encodeSeatsCursor({ seats: Number(last.seats), startsAt: last.e.startsAt.toISOString(), id: last.e.id })
         : encodeOffset(offset + q.limit);
-  return { items, nextCursor };
+  return total === undefined ? { items, nextCursor } : { items, nextCursor, total };
 }

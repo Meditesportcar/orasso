@@ -8,6 +8,7 @@ import {
   friendshipState,
   hasPeopleSearchCriteria,
   type PeopleSearchPage,
+  type PeopleSuggestions,
   type PeopleSearchQuery,
   type PersonCard,
 } from "@orasso/shared";
@@ -50,7 +51,12 @@ type Options = {
   /** Départements dont l'un au moins doit être celui de la personne (propriétaires près de chez moi). */
   departmentsAny?: string[];
   exclude?: string[];
+  /** Lot R2 (suggestions) : seulement les comptes publics, jamais mes amis. */
+  publicStrangers?: boolean;
 };
+
+/** Lot R2 : des suggestions courtes (2 ou 3 lignes par section, maquette R2.6). */
+export const SUGGESTIONS_LIMIT = 3;
 
 const encodeCursor = (pseudo: string, id: string) => Buffer.from(`${pseudo.toLowerCase()}|${id}`).toString("base64url");
 function decodeCursor(cursor: string | undefined): { pseudo: string; id: string } | null {
@@ -124,6 +130,12 @@ async function run(
     );
   }
   if (query.grade) where.push(sql`p.grade >= ${query.grade}::grade`);
+  if (options.publicStrangers) {
+    where.push(sql`p.visibility = 'public'`);
+    where.push(
+      sql`not exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = p.user_id) or (f.requester_id = p.user_id and f.addressee_id = ${viewerId})))`,
+    );
+  }
   if (cursor) where.push(sql`(lower(p.pseudo), p.user_id) > (${cursor.pseudo}, ${cursor.id})`);
 
   const result = await db.execute<Row>(sql`
@@ -181,6 +193,25 @@ export const peopleSearch = {
     }
     const { rows, limit } = await run(viewer, query, {});
     return page(rows, limit, await cards(viewer, rows));
+  },
+
+  /**
+   * `GET /users/suggestions` (lot R2, Personnes et crews à l'ouverture) : « Même modèle que toi », tiré des garages
+   * publics seulement. Le premier de mes véhicules dont le modèle a au moins un autre propriétaire public (ni moi ni mes
+   * amis), trois au plus, dans le département choisi s'il y en a un. Rien d'autre : pas de liste d'amis, pas de sorties.
+   */
+  async suggestions(viewer: Viewer, department?: string): Promise<PeopleSuggestions> {
+    const mine = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, viewer.user.id), eq(vehicles.status, "active")));
+    const seen = new Set<string>();
+    for (const v of mine) {
+      if (v.model.isOther || seen.has(v.modelId)) continue;
+      seen.add(v.modelId);
+      const query = { limit: SUGGESTIONS_LIMIT, modelId: v.modelId, department } as PeopleSearchQuery;
+      const { rows, limit } = await run(viewer, query, { publicStrangers: true });
+      if (!rows.length) continue;
+      return { sameModel: { model: v.model.name, vehicle: vehicleLabel(v), items: (await cards(viewer, rows)).slice(0, limit) } };
+    }
+    return { sameModel: null };
   },
 
   /**

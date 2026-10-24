@@ -17,7 +17,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
-import { exploreProsList } from "./explore";
+import { exploreProsList, proActivityCounts } from "./explore";
 import { prosService } from "./service";
 
 const statsQuery = z.object({ days: z.coerce.number().int().min(7).max(90).default(30) });
@@ -33,6 +33,13 @@ export const prosRoutes = new Hono<AppEnv>()
     const q = query(c, proListQuery);
     if (q.q) limitSearch(c, viewer);
     return c.json(await exploreProsList(q, viewer), 200, { "cache-control": "private, no-cache" });
+  })
+  // Lot R2 (feuille « Quel métier ? ») : combien de pros par métier dans le lieu choisi (mêmes paramètres que `/pros`).
+  .get("/pros/activities", async (c) => {
+    const viewer = await optionalUser(c);
+    const q = query(c, proListQuery);
+    if (q.q) limitSearch(c, viewer);
+    return c.json(await proActivityCounts(q, viewer), 200, { "cache-control": "private, no-cache" });
   })
   .get("/pros/by-slug/:slug", async (c) =>
     c.json(await prosService.getPublic(c.req.param("slug"), await optionalUser(c))),

@@ -104,6 +104,19 @@ export const proListQuery = z.object({
   q: z.string().trim().max(80).optional(),
   activity: z.enum(proActivities).optional(),
   department: departmentSchema.optional(),
+  /**
+   * Lot R2 (« Où chercher ? » : Mon coin, Ailleurs) : les pros installés dans ces départements ou qui y interviennent,
+   * séparés par des virgules.
+   */
+  departments: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(departmentSchema).max(20).optional(),
+  ),
+  /** Lot R2 : le nombre de pros en tout (`total`), pour la ligne de la liste et « Voir les N pros ». */
+  withTotal: z
+    .enum(["1", "true", "0", "false"])
+    .transform((v) => v === "1" || v === "true")
+    .optional(),
   /** Lot 29 : `name` (défaut, vérifiés d'abord) ou `distance` (position envoyée ou secteur du profil). */
   sort: z.enum(["name", "distance"]).default("name"),
   lat: z.coerce.number().min(-90).max(90).optional(),
@@ -131,7 +144,17 @@ export type ProCard = {
   followersCount: number;
   /** Distance à ma position (lot 29), seulement quand la requête en a une et que la fiche a une adresse. */
   distanceKm?: number | null;
+  /**
+   * Lot R2 (maquette R2.4, même gabarit pour tous) : la remise montrée pour mon grade (`shownDiscount`), seulement dans
+   * la liste de l'Explorer d'une personne connectée ; `null` : pas de remise pour moi.
+   */
+  discount?: { percent: number; from: Grade | null } | null;
+  /** Lot R2 : mon garage favori (l'étoile de la liste). */
+  favorite?: boolean;
 };
+
+/** Lot R2 (feuille « Quel métier ? ») : le nombre de pros de chaque métier dans le lieu choisi. */
+export type ProActivityCounts = { total: number; counts: Partial<Record<ProActivity, number>> };
 
 export type ProPartner = { slug: string; name: string; logoUrl: string | null; city: string | null };
 
