@@ -137,8 +137,9 @@ export default function Reseau() {
 
   return (
     <FlowScreen
-      title={me?.profile.pseudo ?? N.title}
-      facts={N.title}
+      // Le titre est « Ton réseau », le pseudo en petit : un pseudo long ne se coupe pas dans l'en-tête de fiche.
+      title={N.title}
+      facts={me?.profile.pseudo}
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/profil"))}
       closeLabel="Retour au profil"
       onRefresh={async () => {
@@ -270,5 +271,5 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: "Archivo-Regular", fontSize: 15, minHeight: 44 },
   note: { flexDirection: "row", gap: space2, alignItems: "flex-start", padding: space3, borderRadius: 14 },
   noteText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
-  noteStrong: { fontFamily: "Archivo-Bold", fontSize: 12.5 },
+  noteStrong: { fontFamily: "Archivo-ExtraBold", fontSize: 12.5 },
 });

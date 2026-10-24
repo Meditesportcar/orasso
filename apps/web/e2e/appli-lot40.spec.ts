@@ -220,8 +220,9 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
       "reglage-preferences",
       "reglage-compte",
       "reglage-confidentialite",
-      "reglage-amis",
-      "reglage-profil",
+      // Lot R4c (maquette R4.6) : « Mon profil public » et les amis montent dans l'en-tête du profil.
+      "profil-public",
+      "profil-count-amis",
     ]) {
       await expect(page.getByTestId(id)).toBeVisible();
     }

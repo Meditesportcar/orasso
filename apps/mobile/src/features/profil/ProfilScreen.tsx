@@ -17,6 +17,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
+import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TagWin } from "@/features/passionne/kit";
@@ -41,6 +42,7 @@ export function ProfilScreen() {
   const { me, refreshMe, signOut } = useSession();
   const { persona, active, entries } = usePersona();
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | null>(null);
+  const [headW, setHeadW] = useState(0);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
 
@@ -62,6 +64,7 @@ export function ProfilScreen() {
   // Lot M6 : la tuile Préférences devient « Apparence » (thème, animations) ; coin et distance sont dans « Tes préférences ».
   const preferencesCaption = `Thème ${theme}`;
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
+  const pseudoSize = fitWordSize(profile?.pseudo ?? "", headW, 22, 14, WIDE_EM);
 
   return (
     <TabScreen
@@ -98,8 +101,13 @@ export function ProfilScreen() {
             url={base ? profile?.avatarUrl : active.logoUrl}
             name={(base ? profile?.pseudo : active.label) ?? "?"}
           />
-          <View style={styles.headText}>
-            <Text variant="posterL" color={t.color.ink} style={styles.pseudo}>
+          <View style={styles.headText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
+            <Text
+              variant="posterL"
+              color={t.color.ink}
+              // Lot R4c : l'en-tête est une carte, plus étroite ; un pseudo long rapetisse au lieu de se couper.
+              style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
+            >
               {profile?.pseudo ?? ""}
             </Text>
             <View style={styles.headTags}>

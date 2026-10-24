@@ -19,6 +19,7 @@ export function FriendButton({
   primary = false,
   source = "profile",
   onChanged,
+  wide = false,
 }: {
   state: FriendshipState;
   requestId: string | null;
@@ -27,6 +28,8 @@ export function FriendButton({
   primary?: boolean;
   source?: "profile" | "search";
   onChanged: () => void;
+  /** Lot R4c : pleine largeur de sa colonne (en-tête d'un profil, à côté de « Suivre »). */
+  wide?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export function FriendButton({
   let buttons: React.ReactNode;
   if (state === "pending_out") {
     buttons = (
-      <Button variant="secondary" icon="wait" disabled testID="friend-state">
+      <Button variant="secondary" icon="wait" disabled testID="friend-state" fullWidth={wide}>
         {friendStateLabels.pending_out}
       </Button>
     );
@@ -76,11 +79,23 @@ export function FriendButton({
     );
   } else if (state === "friends") {
     buttons = confirming ? (
-      <Button variant="alert" icon="close" loading={busy} onPress={() => void run(() => api.removeFriend(userId))}>
+      <Button
+        variant="alert"
+        icon="close"
+        loading={busy}
+        fullWidth={wide}
+        onPress={() => void run(() => api.removeFriend(userId))}
+      >
         {socialLabels.removeFriend}
       </Button>
     ) : (
-      <Button variant="secondary" icon="check" onPress={() => setConfirming(true)} testID="friend-state">
+      <Button
+        variant="secondary"
+        icon="check"
+        onPress={() => setConfirming(true)}
+        testID="friend-state"
+        fullWidth={wide}
+      >
         {friendStateLabels.friends}
       </Button>
     );
@@ -92,6 +107,7 @@ export function FriendButton({
         loading={busy}
         onPress={() => void run(() => api.requestFriend(pseudo, source))}
         testID="friend-add"
+        fullWidth={wide}
       >
         {socialLabels.addFriend}
       </Button>

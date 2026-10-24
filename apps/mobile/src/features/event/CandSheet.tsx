@@ -525,6 +525,7 @@ export function CandSheet({
                     </View>
                     <View
                       style={[styles.ck, on ? { backgroundColor: c.accent } : { borderWidth: 2, borderColor: c.line }]}
+                      testID={on ? "cand-checked" : undefined}
                     >
                       {on ? <Icon name="check" size={16} strokeWidth={3} color={c.accentInk} /> : null}
                     </View>

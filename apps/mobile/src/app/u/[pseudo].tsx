@@ -65,6 +65,7 @@ export default function UserProfile() {
                     pseudo={p.pseudo}
                     userId={p.userId}
                     primary
+                    wide
                     onChanged={() => void profile.reload()}
                   />
                 </View>

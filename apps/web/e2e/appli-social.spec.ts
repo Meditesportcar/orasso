@@ -129,7 +129,8 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await expect(page.getByText(alpha).first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `08-mes-amis-${theme}`);
     await page.goto("/moi");
-    await expect(page.getByTestId("reglage-amis")).toBeVisible({ timeout: 30_000 });
+    // Lot R4c : les amis s'ouvrent par le compteur de l'en-tête du profil (la ligne « Amis et crews » a quitté les réglages).
+    await expect(page.getByTestId("profil-count-amis")).toBeVisible({ timeout: 30_000 });
     // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
     deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
     // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).

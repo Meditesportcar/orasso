@@ -9,11 +9,21 @@
 // autres en lignes compactes sous « Tes autres véhicules » ; menu « ⋯ » de chaque véhicule : « Mettre en avant »,
 // Modifier, Partager son affiche, Retirer du garage (archiver) ; un bandeau confirme le nouveau principal ; « Pour ta … »
 // suit le principal.
-import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  APP_BAR_HEIGHT,
+  Button,
+  EmptyState,
+  Icon,
+  Monogram,
+  Text,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import { vehicleWizardLabels as L, mainVehicleLabels as M, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SmButton } from "@/features/passionne/kit";
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -40,6 +50,7 @@ export function GarageScreen() {
   const add = () => router.push("/vehicule/nouveau");
   const [round, setRound] = useState(0);
   const { refreshMe } = useSession();
+  const insets = useSafeAreaInsets();
   const [menuFor, setMenuFor] = useState<VehicleFull | null>(null);
   const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -147,6 +158,8 @@ export function GarageScreen() {
               pointerEvents="none"
               style={[
                 styles.banner,
+                // Sous la bande ORASSO, pas dessous.
+                { top: insets.top + APP_BAR_HEIGHT + 8 },
                 { backgroundColor: t.color.bar, boxShadow: `0 0 0 2px ${t.color.accent}, ${t.shadow.shadowPoster}` },
               ]}
               accessibilityLiveRegion="polite"
@@ -179,7 +192,7 @@ export function GarageScreen() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {active[0] ? (
         <GarageCard
-          key={active[0].id}
+          key={`main-${active[0].id}`}
           vehicle={active[0]}
           first
           round={round}
@@ -251,7 +264,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 10,
     right: 10,
-    top: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: space3,

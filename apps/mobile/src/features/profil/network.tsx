@@ -18,6 +18,7 @@ import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { CrewDot, Num, SmButton, TagWin } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -165,6 +166,7 @@ function Row({
   action,
   onPress,
   testID,
+  actionBelow,
 }: {
   face: ReactNode;
   name: string;
@@ -172,10 +174,15 @@ function Row({
   action?: ReactNode;
   onPress: () => void;
   testID: string;
+  /** Les boutons sous le nom (demande d'ami : « Accepter » et ✕ laissent toute la largeur au pseudo). */
+  actionBelow?: boolean;
 }) {
   const { t } = useTheme();
+  const [w, setW] = useState(0);
+  // Un pseudo long rapetisse (jusqu'à 11 px) au lieu de se couper à côté des boutons.
+  const size = fitWordSize(name, w, 14, 11, 0.62);
   return (
-    <View style={styles.row} testID={testID}>
+    <View style={[styles.row, actionBelow && styles.rowBelow]} testID={testID}>
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={name}
@@ -183,8 +190,8 @@ function Row({
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         {face}
-        <View style={styles.rowText}>
-          <Text variant="bodyStrong" color={t.color.ink} style={styles.rowName}>
+        <View style={styles.rowText} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+          <Text variant="bodyStrong" color={t.color.ink} style={[styles.rowName, { fontSize: size }]}>
             {name}
           </Text>
           {caption ? (
@@ -413,6 +420,7 @@ export function FriendsList({
                 </View>
               }
               testID="net-request"
+              actionBelow
             />
           ))}
         </Group>
@@ -496,6 +504,8 @@ export function FollowButton({
 export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactNode }) {
   const { t } = useTheme();
   const c = t.color;
+  const [textW, setTextW] = useState(0);
+  const size = fitWordSize(p.pseudo, textW, 24, 14, WIDE_EM);
   const privateView = p.audience === "public_limited";
   const crew = p.crews?.[0]?.name;
   const place = [departmentCaption(p.departments?.[0]), crew ? `crew ${crew}` : null].filter(Boolean).join(" · ");
@@ -510,8 +520,8 @@ export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactN
     <View style={styles.pubHead} testID="public-head">
       <View style={styles.pubTop}>
         <Face url={p.avatarUrl} name={p.pseudo} size={64} />
-        <View style={styles.pubText}>
-          <Text variant="posterL" color={c.ink} style={styles.pubPseudo}>
+        <View style={styles.pubText} onLayout={(e) => setTextW(e.nativeEvent.layout.width)}>
+          <Text variant="posterL" color={c.ink} style={[styles.pubPseudo, { fontSize: size, lineHeight: size + 1 }]}>
             {p.pseudo}
           </Text>
           <View style={styles.pubTags}>
@@ -553,7 +563,7 @@ const styles = StyleSheet.create({
   followCol: { gap: space2 },
   counts: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   count: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: space1, gap: 1 },
-  countLabel: { fontSize: 12, fontFamily: "Archivo-Bold" },
+  countLabel: { fontSize: 12, fontFamily: "Archivo-ExtraBold" },
   links: { flexDirection: "row", gap: space2 },
   link: {
     flex: 1,
@@ -576,7 +586,8 @@ const styles = StyleSheet.create({
   groupTitle: { fontSize: 15 },
   groupBody: { borderRadius: 16, paddingHorizontal: space3, paddingVertical: space1 },
   row: { flexDirection: "row", alignItems: "center", gap: space2, paddingVertical: space2 },
-  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space3 },
+  rowBelow: { flexDirection: "column", alignItems: "flex-end" },
+  rowMain: { flex: 1, minWidth: 0, alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: space3 },
   rowText: { flex: 1, minWidth: 0 },
   rowName: { fontSize: 14 },
   rowCaption: { fontSize: 12, lineHeight: 15 },
