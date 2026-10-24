@@ -10,20 +10,23 @@ import {
   ChipRow,
   departmentChoices,
   departmentLabel,
+  FranceMap,
+  franceMapCredit,
   Icon,
   type IconName,
   proActivityIcons,
   Text,
-  TextField,
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
 import {
   clampKm,
+  DEPARTMENT_MATCHES_SHOWN,
   type ExplorerWhere,
   eventFormatLabels,
   eventFormats,
   explorerV2Labels as L,
+  matchDepartments,
   type ProActivity,
   type ProActivityCounts,
   proActivities,
@@ -33,7 +36,7 @@ import {
   WHERE_KM,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { type LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
+import { Keyboard, type LayoutChangeEvent, Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
 import type { PeopleWhere } from "./explorerChoice";
@@ -209,32 +212,159 @@ function Hint({ children }: { children: string }) {
   );
 }
 
-/** Le choix d'un département (« Ailleurs »), avec sa recherche. */
-function DepartmentPicker({ value, onPick }: { value: string | null; onPick: (code: string) => void }) {
+/**
+ * Le choix d'un département (« Ailleurs », maquette R4.2) : plus de grille de 101 vignettes, mais trois façons de choisir,
+ * de la plus rapide à la plus visuelle. La recherche (un numéro ou un nom, sans accents ni majuscules) et sa liste
+ * déroulante de 5 départements au plus ; les 3 derniers choisis ; la carte de France de « Ton coin » (toucher un
+ * département le choisit ; Mon coin en pointillé, repère ; l'outre-mer se choisit par la recherche, pas de zoom).
+ * La liste déroulante pousse la suite au lieu de la recouvrir : sur Android, un enfant hors du cadre de son parent ne
+ * reçoit pas le toucher.
+ */
+function AwayPicker({
+  value,
+  onPick,
+  recent,
+  coin,
+}: {
+  value: string | null;
+  onPick: (code: string) => void;
+  recent: readonly string[];
+  coin: readonly string[];
+}) {
+  const { t } = useTheme();
+  const c = t.color;
   const [find, setFind] = useState("");
-  const matches = useMemo(() => {
-    const needle = find.trim().toLowerCase();
-    if (!needle) return departmentChoices;
-    return departmentChoices.filter(
-      (d) => d.code.toLowerCase().startsWith(needle) || d.name.toLowerCase().includes(needle),
-    );
-  }, [find]);
+  const typed = find.trim();
+  const matches = useMemo(() => matchDepartments(departmentChoices, find), [find]);
+  const shown = matches.slice(0, DEPARTMENT_MATCHES_SHOWN);
+  const choose = (code: string) => {
+    setFind("");
+    Keyboard.dismiss();
+    onPick(code);
+  };
   return (
-    <View style={styles.group} testID="around-departments">
-      <TextField
-        label={R.whereAwayFind}
-        value={find}
-        onChangeText={setFind}
-        placeholder={R.whereAwayPlaceholder}
-        testID="around-find"
-      />
-      <View style={styles.wrapRow}>
-        {matches.map((d) => (
-          <Chip key={d.code} accessibilityRole="radio" selected={value === d.code} onPress={() => onPick(d.code)}>
-            {departmentLabel(d)}
-          </Chip>
-        ))}
+    <View style={styles.away} testID="around-departments">
+      <View style={styles.group}>
+        <View style={[styles.search, { backgroundColor: c.surfaceField, borderColor: c.accent }]}>
+          <Icon name="search" size={18} color={c.inkMuted} />
+          <TextInput
+            value={find}
+            onChangeText={setFind}
+            placeholder={R.whereAwayPlaceholder}
+            placeholderTextColor={c.inkFaint}
+            accessibilityLabel={R.whereAwayFind}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (shown[0]) choose(shown[0].code);
+            }}
+            style={[styles.input, { color: c.ink }]}
+            testID="around-find"
+          />
+          {find ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={R.whereAwayClear}
+              onPress={() => setFind("")}
+              style={[styles.clear, { backgroundColor: c.surfaceRaised }]}
+              testID="around-find-clear"
+            >
+              <Icon name="close" size={16} color={c.ink} />
+            </Pressable>
+          ) : null}
+        </View>
+        {typed ? (
+          <View
+            style={[
+              styles.ddl,
+              { backgroundColor: c.surface, borderColor: c.cardLine, boxShadow: t.shadow.shadowCard },
+            ]}
+            accessibilityLabel={R.whereAwayList}
+            accessibilityRole="radiogroup"
+            testID="around-results"
+          >
+            {shown.map((d, i) => {
+              const on = value === d.code;
+              return (
+                <Pressable
+                  key={d.code}
+                  accessibilityRole="radio"
+                  accessibilityLabel={departmentLabel(d)}
+                  accessibilityState={{ checked: on }}
+                  aria-checked={on}
+                  onPress={() => choose(d.code)}
+                  style={[
+                    styles.ddr,
+                    i > 0 && { borderTopWidth: 1, borderTopColor: c.line },
+                    on && { backgroundColor: c.surfaceRaised },
+                  ]}
+                  testID={`around-result-${d.code}`}
+                >
+                  <Text variant="bodyStrong" color={c.ink} style={styles.ddrNum}>
+                    {d.code}
+                  </Text>
+                  <Text variant="bodyStrong" color={c.ink} style={styles.ddrName}>
+                    {d.name}
+                  </Text>
+                  {on ? <Icon name="check" size={16} color={c.accentText} /> : null}
+                </Pressable>
+              );
+            })}
+            {matches.length > shown.length ? (
+              <Text variant="caption" color={c.inkMuted} style={styles.ddm}>
+                {R.whereAwayMore(matches.length - shown.length)}
+              </Text>
+            ) : null}
+            {matches.length === 0 ? (
+              <Text variant="caption" color={c.inkMuted} style={styles.ddm} testID="around-none">
+                {R.whereAwayNone(typed)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
+      {recent.length ? (
+        <View style={styles.group} testID="around-recent">
+          <Text variant="label" color={c.inkMuted}>
+            {R.whereAwayRecent}
+          </Text>
+          <View style={styles.wrapRow}>
+            {recent.map((code) => (
+              <View key={code} testID={`around-recent-${code}`}>
+                <Chip
+                  accessibilityRole="radio"
+                  selected={value === code}
+                  onPress={() => choose(code)}
+                  accessibilityLabel={`${R.whereAwayRecent} : ${departmentLabel({ code, name: deptName(code) })}`}
+                >
+                  {departmentLabel({ code, name: deptName(code) })}
+                </Chip>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {/* Décorative pour le lecteur d'écran : la recherche est son chemin (comme « Ton coin »). */}
+      <View
+        style={[styles.awMap, { backgroundColor: c.surface, borderColor: c.cardLine }]}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
+        testID="around-map"
+      >
+        <FranceMap
+          selected={value ? [value] : []}
+          favorite={null}
+          onToggle={choose}
+          land={c.deptLand}
+          border={c.surface}
+          dashed={coin}
+        />
+      </View>
+      <Text variant="credit" color={c.inkFaint} style={styles.awCredit}>
+        {`${franceMapCredit} · ${R.whereAwayOverseas}`}
+      </Text>
     </View>
   );
 }
@@ -280,11 +410,14 @@ export function WhereSheet({
   countFor,
   seeLabel,
   onApply,
+  recent,
 }: {
   visible: boolean;
   onClose: () => void;
   value: ExplorerWhere;
   coin: readonly string[];
+  /** Les derniers départements choisis par « Ailleurs » (lot R4d). */
+  recent: readonly string[];
   positionOn: boolean;
   positionDenied: boolean;
   onRequestPosition: () => void;
@@ -348,15 +481,17 @@ export function WhereSheet({
         <OptRow
           on={choice === "dept"}
           icon="map"
-          title={draft.kind === "dept" ? `${R.whereAway} · ${deptLong(draft.code)}` : R.whereAway}
-          hint={R.whereAwayHint}
+          title={R.whereAway}
+          hint={draft.kind === "dept" ? R.whereAwayChosen(deptLong(draft.code)) : R.whereAwayHint}
           onPress={() => setAway(true)}
           testID="around-elsewhere"
         />
         {away ? (
-          <DepartmentPicker
+          <AwayPicker
             value={draft.kind === "dept" ? draft.code : null}
             onPick={(code) => pick({ kind: "dept", code })}
+            recent={recent}
+            coin={coin}
           />
         ) : null}
         <OptRow
@@ -388,12 +523,14 @@ export function PeopleWhereSheet({
   value,
   coin,
   onApply,
+  recent,
 }: {
   visible: boolean;
   onClose: () => void;
   /** `null` : rien de choisi (Mon coin pour les suggestions). */
   value: PeopleWhere | null;
   coin: readonly string[];
+  recent: readonly string[];
   onApply: (where: PeopleWhere) => void;
 }) {
   const [away, setAway] = useState(value?.kind === "dept");
@@ -417,15 +554,17 @@ export function PeopleWhereSheet({
         <OptRow
           on={value?.kind === "dept" || away}
           icon="map"
-          title={value?.kind === "dept" ? `${R.whereAway} · ${deptLong(value.code)}` : R.whereAway}
-          hint={R.whereAwayHint}
+          title={R.whereAway}
+          hint={value?.kind === "dept" ? R.whereAwayChosen(deptLong(value.code)) : R.whereAwayHint}
           onPress={() => setAway(true)}
           testID="people-where-elsewhere"
         />
         {away ? (
-          <DepartmentPicker
+          <AwayPicker
             value={value?.kind === "dept" ? value.code : null}
             onPick={(code) => onApply({ kind: "dept", code })}
+            recent={recent}
+            coin={coin}
           />
         ) : null}
         <OptRow
@@ -750,6 +889,28 @@ const styles = StyleSheet.create({
   group: { gap: space1 },
   filters: { gap: space2 },
   wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  // Lot R4d (maquette R4.2, `.awy`) : la recherche cerclée d'accent, sa liste déroulante, les récents, la carte.
+  away: { gap: 10, paddingTop: 2, paddingBottom: 4 },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space2,
+    height: 48,
+    paddingLeft: 12,
+    paddingRight: 6,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  // Navigateur : pas de contour de focus du champ, le cercle d'accent le montre déjà (comme le Field du design-system).
+  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, outlineStyle: "none" } as object,
+  clear: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  ddl: { padding: 6, borderRadius: 14, borderWidth: 1 },
+  ddr: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingHorizontal: 10, borderRadius: 10 },
+  ddrNum: { width: 40, fontSize: 20, lineHeight: 24, fontFamily: archivoAt(62, 900) },
+  ddrName: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 18, fontFamily: archivoAt(100, 700) },
+  ddm: { paddingVertical: 8, paddingHorizontal: 10, fontSize: 12.5, lineHeight: 17 },
+  awMap: { padding: 6, borderRadius: 16, borderWidth: 1 },
+  awCredit: { fontSize: 11, lineHeight: 14, marginTop: -4 },
   // `.rng.flat` : 12 × 14, le grand nombre 40 px, la piste, les graduations.
   rng: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, gap: 8 },
   rv: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },

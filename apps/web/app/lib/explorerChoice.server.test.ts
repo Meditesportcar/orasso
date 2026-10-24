@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  awayFormStep,
   decodeExplorerChoice,
   EXPLORER_COOKIE,
   encodeExplorerChoice,
@@ -82,13 +83,13 @@ describe("choix de l'Explorer du site (lot R1, tour 2)", () => {
     expect(set).toContain(`${EXPLORER_COOKIE}=`);
     expect(set).toContain("HttpOnly");
     const decoded = decodeExplorerChoice(cookieValue(set));
-    expect(decoded).toEqual({ owner: explorerOwner("compte-a"), kept: "tri=places" });
+    expect(decoded).toEqual({ owner: explorerOwner("compte-a"), kept: "tri=places", recent: [] });
     expect(decodeURIComponent(cookieValue(set))).not.toContain("compte-a");
   });
 
   it("arrivée sans réglage : le choix du même compte revient ; celui d'un autre compte est ignoré et effacé", () => {
     const mine = explorerChoiceStep(request(stored("a", "tri=places&autour=11")), new URL(BASE), "a");
-    expect(mine).toEqual({ redirectTo: "/app/explorer?tri=places&autour=11", setCookie: null });
+    expect(mine).toEqual({ redirectTo: "/app/explorer?tri=places&autour=11", setCookie: null, recent: [] });
     // Session de A expirée, B se connecte dans le même navigateur sans déconnexion.
     const other = explorerChoiceStep(request(stored("a", "tri=places&autour=11")), new URL(BASE), "b");
     expect(other.redirectTo).toBeNull();
@@ -107,8 +108,88 @@ describe("choix de l'Explorer du site (lot R1, tour 2)", () => {
     expect(explorerChoiceStep(request(stored("a", "tri=places")), new URL(BASE), null)).toEqual({
       redirectTo: null,
       setCookie: null,
+      recent: [],
     });
     // Une valeur gardée avant ce tour avec des dates : elles ne reviennent pas.
     expect(decodeExplorerChoice(encodeExplorerChoice(explorerOwner("a"), `tri=date&du=${DAY}`))?.kept).toBe("tri=date");
+  });
+});
+
+describe("« Ailleurs » : les récents et la recherche sans JavaScript (lot R4d, tours 1 et 2)", () => {
+  const visit = (cookie: string | undefined, search: string, userId = "a") =>
+    explorerChoiceStep(request(cookie), new URL(`${BASE}?${search}`), userId);
+  /** Un envoi du formulaire « Où chercher ? » (`valide=1`), comme le fait le chargeur : redirection, puis le cookie. */
+  const submit = (cookie: string | undefined, search: string, userId = "a") => {
+    const form = awayFormStep(new URL(`${BASE}?${search}&valide=1`));
+    if (!form.redirectTo) throw new Error("pas de redirection");
+    return { form, ...explorerChoiceStep(request(cookie), new URL(form.redirectTo, BASE), userId, form.picked) };
+  };
+  const next = (step: { setCookie: string | null }) => `${EXPLORER_COOKIE}=${cookieValue(step.setCookie)}`;
+
+  it("un département validé par Ailleurs passe en tête : 3 au plus, sans doublon ; Mon coin n'y entre pas", () => {
+    let cookie: string | undefined;
+    for (const code of ["11", "34", "09", "34", "66"])
+      cookie = next(submit(cookie, `segment=evenements&autour=ailleurs&ailleurs=${code}`));
+    expect(decodeExplorerChoice(cookie?.split("=").slice(1).join("=") ?? "")?.recent).toEqual(["66", "34", "09"]);
+    const coin = submit(cookie, "segment=evenements&autour=coin&ailleurs=11");
+    expect(coin.recent).toEqual(["66", "34", "09"]);
+    // « Ailleurs » pas coché : le département ne reste pas dans l'adresse.
+    expect(coin.form.redirectTo).toBe("/app/explorer?segment=evenements&autour=coin");
+    // Personnes et crews : le même « Ailleurs », la même liste.
+    expect(submit(next(coin), "segment=personnes&lieu=ailleurs&ailleurs=2A").recent).toEqual(["2A", "66", "34"]);
+  });
+
+  it("tour 2 : un simple chargement (lien partagé, retour, rechargement) ne compte pas ; seule la validation compte", () => {
+    const cookie = next(submit(undefined, "segment=evenements&autour=ailleurs&ailleurs=11"));
+    const loaded = visit(cookie, "segment=evenements&autour=ailleurs&ailleurs=34");
+    expect(loaded.recent).toEqual(["11"]);
+    expect(decodeExplorerChoice(cookieValue(loaded.setCookie))?.recent).toEqual(["11"]);
+    // Recharger l'adresse propre après une validation : rien ne bouge.
+    const sent = submit(next(loaded), "segment=evenements&autour=ailleurs&ailleurs=34");
+    expect(sent.form.redirectTo).not.toContain("valide");
+    expect(sent.recent).toEqual(["34", "11"]);
+    expect(visit(next(sent), "segment=evenements&autour=ailleurs&ailleurs=34").recent).toEqual(["34", "11"]);
+    expect(visit(next(sent), "segment=evenements&autour=ailleurs&ailleurs=11").recent).toEqual(["34", "11"]);
+  });
+
+  it("les récents restent au cookie : ni dans l'adresse de retour, ni lus depuis l'adresse", () => {
+    const cookie = next(submit(undefined, "segment=pros&autour=ailleurs&ailleurs=11"));
+    const back = visit(cookie, "");
+    expect(back.redirectTo).toBe("/app/explorer?segment=pros&autour=ailleurs&ailleurs=11");
+    expect(back.recent).toEqual(["11"]);
+    expect(visit(cookie, "segment=pros&recents=34-66").recent).toEqual(["11"]);
+  });
+
+  it("par compte : ceux d'un autre compte ne reviennent jamais ; sans session, aucun", () => {
+    const cookie = next(submit(undefined, "segment=evenements&autour=ailleurs&ailleurs=11", "a"));
+    expect(visit(cookie, "segment=evenements", "b").recent).toEqual([]);
+    expect(visit(cookie, "", "b").recent).toEqual([]);
+    expect(visit(cookie, "segment=evenements", "").recent).toEqual([]);
+    // Une valeur abîmée est nettoyée.
+    const bad = `${EXPLORER_COOKIE}=${encodeURIComponent(`${explorerOwner("a")}|tri=date&recents=11-99-11-34-66-09`)}`;
+    expect(visit(bad, "").recent).toEqual(["11", "34", "66"]);
+  });
+
+  it("sans JavaScript, le texte tapé devient le premier département qui correspond", () => {
+    const go = (search: string) => awayFormStep(new URL(`${BASE}?${search}`));
+    expect(go("segment=evenements&autour=ailleurs&dq=her&ailleurs=&valide=1")).toEqual({
+      redirectTo: "/app/explorer?segment=evenements&autour=ailleurs&ailleurs=34",
+      picked: "34",
+      unmatched: null,
+    });
+    expect(go("autour=ailleurs&dq=pyrenees&ailleurs=11").redirectTo).toBe("/app/explorer?autour=ailleurs&ailleurs=64");
+    // Le texte ne sert qu'avec « Ailleurs » coché ; champ vide : seulement retiré ; rien à faire sans envoi.
+    expect(go("autour=coin&dq=her&ailleurs=11").redirectTo).toBe("/app/explorer?autour=coin");
+    expect(go("autour=coin&dq=").redirectTo).toBe("/app/explorer?autour=coin");
+    expect(go("autour=coin")).toEqual({ redirectTo: null, picked: null, unmatched: null });
+  });
+
+  it("tour 2 : sans correspondance, pas de redirection ; la saisie est gardée pour l'erreur (aucun choix antérieur)", () => {
+    const go = (search: string) => awayFormStep(new URL(`${BASE}?${search}`));
+    expect(go("segment=evenements&autour=ailleurs&dq=zzzz&valide=1")).toEqual({
+      redirectTo: null,
+      picked: null,
+      unmatched: "zzzz",
+    });
   });
 });

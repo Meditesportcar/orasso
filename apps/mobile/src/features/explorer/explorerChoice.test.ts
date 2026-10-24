@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultChoice, type ExplorerChoice, readChoice, storeChoice } from "./explorerChoice";
+import { defaultChoice, type ExplorerChoice, readChoice, readStoredChoice, storeChoice } from "./explorerChoice";
 
 const chosen: ExplorerChoice = {
   segment: "pros",
@@ -12,6 +12,7 @@ const chosen: ExplorerChoice = {
   peopleWhere: { kind: "dept", code: "66" },
   show: "crews",
   people: { categoryId: "3f2b8a4e-1c2d-4e5f-8a9b-0c1d2e3f4a5b", grade: "sport" },
+  awayRecent: ["11", "34", "09"],
 };
 
 describe("le choix de l'Explorer reste (lots R1, R2)", () => {
@@ -85,5 +86,31 @@ describe("le choix de l'Explorer reste (lots R1, R2)", () => {
       prefFormatsOn: false,
       job: "garage",
     });
+  });
+});
+
+describe("les récents d'« Ailleurs » (lot R4d)", () => {
+  it("se gardent avec le choix ; une valeur abîmée est nettoyée (connus, sans doublon, 3 au plus)", () => {
+    expect(readChoice(JSON.parse(JSON.stringify(storeChoice(chosen))))?.awayRecent).toEqual(["11", "34", "09"]);
+    expect(readChoice({ v: 2, awayRecent: ["66", "66", "zz", "2A", "974", "11"] })?.awayRecent).toEqual([
+      "66",
+      "2A",
+      "974",
+    ]);
+    // Avant le lot R4d : rien de gardé.
+    expect(readChoice({ v: 2 })?.awayRecent).toEqual([]);
+    expect(defaultChoice.awayRecent).toEqual([]);
+  });
+});
+
+describe("changement de compte : une lecture en échec repart du choix par défaut (lot R4d, tour 2)", () => {
+  it("échec : le défaut, rien de lu ; rien de gardé : le défaut ; un choix gardé : relu", async () => {
+    expect(await readStoredChoice(() => Promise.reject(new Error("stockage")))).toEqual({
+      choice: defaultChoice,
+      saved: false,
+    });
+    expect(await readStoredChoice(async () => null)).toEqual({ choice: defaultChoice, saved: false });
+    const stored = JSON.parse(JSON.stringify(storeChoice(chosen)));
+    expect(await readStoredChoice(async () => stored)).toEqual({ choice: chosen, saved: true });
   });
 });

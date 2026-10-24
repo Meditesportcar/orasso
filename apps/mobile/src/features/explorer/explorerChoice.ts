@@ -4,6 +4,7 @@
 // Lot R2 (maquette « Explorer R2 ») : le segment (Événements, Pros, Personnes et crews), le lieu (« Où chercher ? »,
 // commun aux Événements et aux Pros ; `null` = tes réglages habituels), le tri des événements (par date par défaut) et
 // des pros (par distance), les filtres, le métier, et pour Personnes et crews le département, « Montrer » et les filtres.
+// Lot R4d : les 3 derniers départements choisis par « Ailleurs » (récents), par compte comme le reste.
 // « Autour de moi » ne garde que le mode et la distance : jamais de coordonnées.
 // Logique pure (testée) : lecture prudente d'une valeur enregistrée, chaque champ illisible reprend sa valeur par défaut.
 import {
@@ -15,6 +16,7 @@ import {
   type PeopleWhere,
   type ProActivity,
   proActivities,
+  readRecentDepartments,
   readWhere,
 } from "@orasso/shared";
 
@@ -50,6 +52,8 @@ export type ExplorerChoice = {
   peopleWhere: PeopleWhere | null;
   show: PeopleShow;
   people: PeopleFilters;
+  /** Lot R4d : les 3 derniers départements choisis par « Ailleurs » (Événements, Pros, Personnes), le plus récent d'abord. */
+  awayRecent: string[];
 };
 
 export const defaultChoice: ExplorerChoice = {
@@ -64,6 +68,7 @@ export const defaultChoice: ExplorerChoice = {
   peopleWhere: null,
   show: "all",
   people: emptyPeopleFilters,
+  awayRecent: [],
 };
 
 /** Version de la valeur gardée : avant le lot R2, « Autour de… » et le tri par distance par défaut (non repris). */
@@ -112,6 +117,7 @@ export function readChoice(raw: unknown): ExplorerChoice | null {
       categoryId: typeof people.categoryId === "string" && UUID.test(people.categoryId) ? people.categoryId : "",
       grade: oneOf(["", ...grades] as const, people.grade, ""),
     },
+    awayRecent: readRecentDepartments(raw.awayRecent, isDepartment),
   };
 }
 
@@ -147,5 +153,22 @@ export function storeChoice(choice: ExplorerChoice): Record<string, unknown> {
           : { kind: choice.peopleWhere.kind },
     show: choice.show,
     people: { categoryId: choice.people.categoryId, grade: choice.people.grade },
+    awayRecent: [...choice.awayRecent],
   };
+}
+
+/**
+ * Lot R4d, tour 2 : la lecture du choix gardé à l'ouverture ou au changement de compte. Une lecture en échec (stockage
+ * illisible) donne le choix par défaut : l'état du compte précédent n'est jamais gardé ni réenregistré sous le nouveau.
+ * `saved` : faux si rien n'a été lu.
+ */
+export async function readStoredChoice(
+  read: () => Promise<unknown>,
+): Promise<{ choice: ExplorerChoice; saved: boolean }> {
+  try {
+    const saved = readChoice(await read());
+    return { choice: saved ?? defaultChoice, saved: saved !== null };
+  } catch {
+    return { choice: defaultChoice, saved: false };
+  }
 }

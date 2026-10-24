@@ -49,7 +49,7 @@ import { ProTile } from "../components/ProTile";
 import { api, apiOrThrow, getMe } from "../lib/api.server";
 import { now } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
-import { explorerChoice } from "../lib/explorerChoice.server";
+import { awayFormStep, explorerChoice } from "../lib/explorerChoice.server";
 import {
   activeFilters,
   EVENT_SORTS,
@@ -136,10 +136,18 @@ type PeopleData = {
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  // Lot R4d : un envoi de « Où chercher ? » (validation, texte tapé sans JavaScript) renvoie vers l'adresse propre ; les
+  // récents ne comptent qu'à cet envoi (tour 2).
+  const form = awayFormStep(url);
+  if (form.redirectTo) {
+    const sent = await explorerChoice(request, new URL(form.redirectTo, url), form.picked);
+    throw redirect(form.redirectTo, sent.setCookie ? { headers: { "set-cookie": sent.setCookie } } : undefined);
+  }
   // Tour 2 : le choix appartient au compte connecté (`explorerChoice.server.ts`).
   const choice = await explorerChoice(request, url);
   if (choice.redirectTo) throw redirect(choice.redirectTo);
-  const result = await load(request, url);
+  // Lot R4d : les derniers départements choisis par « Ailleurs » (cookie, par compte).
+  const result = { ...(await load(request, url)), awayRecent: choice.recent, awayUnmatched: form.unmatched };
   return choice.setCookie ? data(result, { headers: { "set-cookie": choice.setCookie } }) : result;
 }
 
@@ -436,8 +444,23 @@ const WHEN_OPTIONS = [
 const PLACE_OMIT = ["autour", "ailleurs", "rayon", "lat", "lng"];
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const { segment, q, vue, cur, cursor, coin, gradeLabel, signedIn, failed, results, events, pros, people } =
-    loaderData;
+  const {
+    segment,
+    q,
+    vue,
+    cur,
+    cursor,
+    coin,
+    gradeLabel,
+    signedIn,
+    failed,
+    results,
+    events,
+    pros,
+    people,
+    awayRecent,
+    awayUnmatched,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   const done = actionData as unknown as
     | {
@@ -489,18 +512,21 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
       title={R.whereSheet}
       testId="around-open"
       sheetId="where-sheet"
+      open={awayUnmatched !== null}
     >
       <WhereForm
         field="autour"
         hidden={hiddenFor(PLACE_OMIT)}
         mode={
-          place.where.kind === "me"
-            ? "moi"
-            : place.where.kind === "mine"
-              ? "coin"
-              : place.where.kind === "dept"
-                ? "ailleurs"
-                : "partout"
+          awayUnmatched !== null
+            ? "ailleurs"
+            : place.where.kind === "me"
+              ? "moi"
+              : place.where.kind === "mine"
+                ? "coin"
+                : place.where.kind === "dept"
+                  ? "ailleurs"
+                  : "partout"
         }
         km={place.where.kind === "me" ? place.where.km : 100}
         dept={place.where.kind === "dept" ? place.where.code : ""}
@@ -508,6 +534,8 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
         hasPosition={place.hasPosition}
         position={place.hasPosition && cur.lat && cur.lng ? { lat: cur.lat, lng: cur.lng } : null}
         seeLabel={seeLabel}
+        recent={awayRecent}
+        unmatched={awayUnmatched}
       />
     </PillSheet>
   );
@@ -677,27 +705,32 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
           title={R.whereSheet}
           testId="people-where-open"
           sheetId="people-where-sheet"
+          open={awayUnmatched !== null}
         >
           <WhereForm
             people
             field="lieu"
             hidden={hiddenFor(["lieu", "ailleurs"])}
             mode={
-              w === null
-                ? people.searching || coin.length === 0
-                  ? "partout"
-                  : "coin"
-                : w.kind === "mine"
-                  ? "coin"
-                  : w.kind === "dept"
-                    ? "ailleurs"
-                    : "partout"
+              awayUnmatched !== null
+                ? "ailleurs"
+                : w === null
+                  ? people.searching || coin.length === 0
+                    ? "partout"
+                    : "coin"
+                  : w.kind === "mine"
+                    ? "coin"
+                    : w.kind === "dept"
+                      ? "ailleurs"
+                      : "partout"
             }
             km={100}
             dept={w?.kind === "dept" ? w.code : ""}
             coin={coin}
             hasPosition={false}
             seeLabel={R.seeResults}
+            recent={awayRecent}
+            unmatched={awayUnmatched}
           />
         </PillSheet>
         <PillSheet

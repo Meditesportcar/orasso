@@ -20,6 +20,7 @@ import {
   type ProActivity,
   type ProActivityCounts,
   proActivityLabels,
+  pushRecentDepartment,
   explorerR2Labels as R,
   sameWhere,
 } from "@orasso/shared";
@@ -60,7 +61,7 @@ import {
   type PeopleShow,
   type PeopleWhere,
   type ProSort,
-  readChoice,
+  readStoredChoice,
   storeChoice,
 } from "./explorerChoice";
 import { peopleView } from "./peopleLoad";
@@ -152,6 +153,7 @@ export function ExplorerScreen() {
   const [peopleWhere, setPeopleWhere] = useState<PeopleWhere | null>(defaultChoice.peopleWhere);
   const [show, setShow] = useState<PeopleShow>(defaultChoice.show);
   const [people, setPeople] = useState<PeopleFilters>(defaultChoice.people);
+  const [awayRecent, setAwayRecent] = useState<string[]>(defaultChoice.awayRecent);
 
   // « Tes préférences » (lot M6) : le point de départ de l'Explorer, jamais une limite. Ce qu'on choisit ici ne les change pas.
   const { preferences: prefs, loading: prefsLoading, error: prefsError } = usePreferences();
@@ -171,11 +173,11 @@ export function ExplorerScreen() {
     setChoiceRead(false);
     const scope = cacheScope();
     (async () => {
-      const saved = readChoice(await cacheGetJson<unknown>(CHOICE_KEY));
+      // Lot R4d, tour 2 : une lecture en échec repart du choix par défaut (jamais celui du compte précédent).
+      const { choice, saved } = await readStoredChoice(() => cacheGetJson<unknown>(CHOICE_KEY));
       if (!alive) return;
       // Avant le lot R1, seul le tri était gardé (sur l'appareil, sans compte) : il s'efface.
       if (!saved) void kvDel(SORT_KEY);
-      const choice = saved ?? defaultChoice;
       // « Voir tout » d'une recherche arrive avec son segment : il l'emporte.
       if (!fromParams) setSegment(choice.segment);
       setWhere(choice.where);
@@ -187,6 +189,7 @@ export function ExplorerScreen() {
       setPeopleWhere(choice.peopleWhere);
       setShow(choice.show);
       setPeople(choice.people);
+      setAwayRecent(choice.awayRecent);
     })()
       .catch(() => undefined)
       .finally(() => {
@@ -202,10 +205,22 @@ export function ExplorerScreen() {
     if (!choiceRead || !choiceScope.current) return;
     void cacheSetJson(
       CHOICE_KEY,
-      storeChoice({ segment, where, sort, filters, prefFormatsOn, job, proSort, peopleWhere, show, people }),
+      storeChoice({
+        segment,
+        where,
+        sort,
+        filters,
+        prefFormatsOn,
+        job,
+        proSort,
+        peopleWhere,
+        show,
+        people,
+        awayRecent,
+      }),
       choiceScope.current,
     );
-  }, [choiceRead, segment, where, sort, filters, prefFormatsOn, job, proSort, peopleWhere, show, people]);
+  }, [choiceRead, segment, where, sort, filters, prefFormatsOn, job, proSort, peopleWhere, show, people, awayRecent]);
 
   // « Voir tout » d'une recherche : on arrive avec un segment et un texte.
   useEffect(() => {
@@ -267,6 +282,8 @@ export function ExplorerScreen() {
   const applyWhere = (next: ExplorerWhere) => {
     // Revenu sur ses réglages habituels : rien de choisi (la pastille repasse en contour).
     setWhere(sameWhere(next, habitual) ? null : next);
+    // Lot R4d : un département choisi par « Ailleurs » passe en tête des récents (pas Mon coin).
+    if (next.kind === "dept") setAwayRecent((list) => pushRecentDepartment(list, next.code));
     if (next.kind !== "me" && position.status === "on") position.clear();
     close();
   };
@@ -406,6 +423,7 @@ export function ExplorerScreen() {
         onRequestPosition={enableMyPosition}
         countFor={(w) => (segment === "pros" ? prosCount(w) : eventsCount(w, listFilters))}
         seeLabel={segment === "pros" ? R.seePros : R.seeEvents}
+        recent={awayRecent}
         onApply={applyWhere}
       />
       <ChoiceSheet
@@ -469,8 +487,10 @@ export function ExplorerScreen() {
         onClose={close}
         value={peopleWhere}
         coin={coin}
+        recent={awayRecent}
         onApply={(next) => {
           setPeopleWhere(next);
+          if (next.kind === "dept") setAwayRecent((list) => pushRecentDepartment(list, next.code));
           close();
         }}
       />

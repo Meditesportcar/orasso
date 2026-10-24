@@ -9,8 +9,13 @@
 //     laisse les types des préférences s'appliquer) ;
 //   - seulement des réglages relatifs : pas de dates absolues (`du`, `au`), qui seraient vite passées.
 // Lot R2, tour 2 : un cookie écrit par le lot R1 est migré à la lecture (`migrateR1Choice`) vers les clés du lot R2.
+// Lot R4d : le cookie garde aussi les 3 derniers départements choisis par « Ailleurs » (`recents=11-34-09`), lus à
+// part : ils ne repartent jamais dans l'adresse. Sans JavaScript, le texte tapé dans « Ailleurs » (`dq`) devient le
+// premier département qui correspond (`awayFormStep`). Tour 2 : les récents ne comptent qu'à l'envoi du formulaire
+// (`valide=1`, retiré par une redirection), jamais au simple chargement (lien partagé, retour, rechargement).
 import { createHash } from "node:crypto";
-import { departments } from "@orasso/shared";
+import { departmentChoices } from "@orasso/design-system/web";
+import { departments, matchDepartments, pushRecentDepartment, readRecentDepartments } from "@orasso/shared";
 
 import { getMe } from "./api.server";
 
@@ -89,16 +94,57 @@ export function keptExplorerParams(params: URLSearchParams): string | null {
   return text || null;
 }
 
-/** La valeur du cookie : le compte, puis ses réglages. */
-export function encodeExplorerChoice(owner: string, kept: string): string {
-  return encodeURIComponent(`${owner}|${kept}`);
+/** La clé des récents d'« Ailleurs » dans le cookie (jamais dans l'adresse). */
+const RECENTS = "recents";
+
+/** La valeur du cookie : le compte, puis ses réglages (et les récents d'« Ailleurs »). */
+export function encodeExplorerChoice(owner: string, kept: string, recent: readonly string[] = []): string {
+  const text = recent.length ? [kept, `${RECENTS}=${recent.join("-")}`].filter(Boolean).join("&") : kept;
+  return encodeURIComponent(`${owner}|${text}`);
+}
+
+/** Le département choisi par « Ailleurs » dans cette adresse (Événements, Pros : `autour` ; Personnes : `lieu`). */
+function awayPicked(params: URLSearchParams): string | null {
+  const code = params.get("ailleurs") ?? "";
+  const away = params.get("autour") === "ailleurs" || params.get("lieu") === "ailleurs";
+  return away && isDepartment(code) ? code : null;
+}
+
+/**
+ * Un envoi du formulaire « Où chercher ? » (lot R4d, tour 2) : `valide=1` dit une validation du lieu, `dq` le texte tapé
+ * sans JavaScript (le premier département qui correspond devient `ailleurs`). On renvoie vers l'adresse propre (sans
+ * `valide` ni `dq` ; sans `ailleurs` quand « Ailleurs » n'est pas coché) ; `picked` : le département à mettre en tête
+ * des récents (validation d'« Ailleurs » seulement). Texte sans correspondance : pas de redirection, `unmatched` le
+ * garde pour l'erreur et la saisie.
+ */
+export function awayFormStep(url: URL): { redirectTo: string | null; picked: string | null; unmatched: string | null } {
+  const none = { redirectTo: null, picked: null, unmatched: null };
+  if (!url.searchParams.has("dq") && !url.searchParams.has("valide")) return none;
+  const params = new URLSearchParams(url.searchParams);
+  const validated = params.get("valide") === "1";
+  const typed = (params.get("dq") ?? "").trim();
+  params.delete("dq");
+  params.delete("valide");
+  const away = params.get("autour") === "ailleurs" || params.get("lieu") === "ailleurs";
+  if (away && typed) {
+    const first = matchDepartments(departmentChoices, typed)[0];
+    if (!first) return { ...none, unmatched: typed.slice(0, 60) };
+    params.set("ailleurs", first.code);
+  }
+  if (!away) params.delete("ailleurs");
+  const search = params.toString();
+  return {
+    redirectTo: search ? `${url.pathname}?${search}` : url.pathname,
+    picked: validated ? awayPicked(params) : null,
+    unmatched: null,
+  };
 }
 
 /**
  * Lecture prudente d'une valeur du cookie : `null` si elle est illisible ou d'avant le tour 2 (sans compte) ; seules les
  * clés et valeurs gardables reviennent.
  */
-export function decodeExplorerChoice(raw: string): { owner: string; kept: string | null } | null {
+export function decodeExplorerChoice(raw: string): { owner: string; kept: string | null; recent: string[] } | null {
   let text: string;
   try {
     text = decodeURIComponent(raw);
@@ -108,7 +154,9 @@ export function decodeExplorerChoice(raw: string): { owner: string; kept: string
   const at = text.indexOf("|");
   const owner = at < 0 ? "" : text.slice(0, at);
   if (!OWNER.test(owner)) return null;
-  return { owner, kept: keptExplorerParams(migrateR1Choice(new URLSearchParams(text.slice(at + 1)))) };
+  const params = new URLSearchParams(text.slice(at + 1));
+  const recent = readRecentDepartments((params.get(RECENTS) ?? "").split("-"), isDepartment);
+  return { owner, kept: keptExplorerParams(migrateR1Choice(params)), recent };
 }
 
 function readRaw(request: Request): string | null {
@@ -136,25 +184,31 @@ export function explorerChoiceStep(
   request: Request,
   url: URL,
   userId: string | null,
-): { redirectTo: string | null; setCookie: string | null } {
+  /** Lot R4d, tour 2 : le département validé par « Ailleurs » (envoi du formulaire), seul à compter dans les récents. */
+  picked: string | null = null,
+): { redirectTo: string | null; setCookie: string | null; recent: string[] } {
   const raw = readRaw(request);
-  if (!userId) return { redirectTo: null, setCookie: null };
+  if (!userId) return { redirectTo: null, setCookie: null, recent: [] };
   const owner = explorerOwner(userId);
   const stored = raw ? decodeExplorerChoice(raw) : null;
   const foreign = raw !== null && raw !== "" && stored?.owner !== owner;
   const clear = foreign ? clearExplorerCookie(request) : null;
+  const before = foreign ? [] : (stored?.recent ?? []);
   if (url.search === "") {
-    if (!foreign && stored?.kept) return { redirectTo: `/app/explorer?${stored.kept}`, setCookie: null };
-    return { redirectTo: null, setCookie: clear };
+    if (!foreign && stored?.kept)
+      return { redirectTo: `/app/explorer?${stored.kept}`, setCookie: null, recent: before };
+    return { redirectTo: null, setCookie: clear, recent: before };
   }
   const kept = keptExplorerParams(url.searchParams);
-  if (!kept) return { redirectTo: null, setCookie: clear };
-  const cookie = `${EXPLORER_COOKIE}=${encodeExplorerChoice(owner, kept)}; Max-Age=${MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure(request)}`;
-  return { redirectTo: null, setCookie: cookie };
+  if (!kept) return { redirectTo: null, setCookie: clear, recent: before };
+  // Un département validé par « Ailleurs » passe en tête des récents (pas Mon coin, pas un simple chargement).
+  const recent = picked ? pushRecentDepartment(before, picked) : before;
+  const cookie = `${EXPLORER_COOKIE}=${encodeExplorerChoice(owner, kept, recent)}; Max-Age=${MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure(request)}`;
+  return { redirectTo: null, setCookie: cookie, recent };
 }
 
 /** Le même, pour le compte de la session (une lecture de `/me`). */
-export async function explorerChoice(request: Request, url: URL) {
+export async function explorerChoice(request: Request, url: URL, picked: string | null = null) {
   const me = await getMe(request);
-  return explorerChoiceStep(request, url, me?.user.id ?? null);
+  return explorerChoiceStep(request, url, me?.user.id ?? null, picked);
 }

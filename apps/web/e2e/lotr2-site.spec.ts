@@ -80,8 +80,10 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("where-road")).toContainText("h de route");
       await shot(page, `evenements-ou-chercher-${tag}`);
       await page.getByTestId("around-elsewhere").click();
-      await expect(page.getByTestId("around-dept")).toBeVisible();
-      await page.getByTestId("around-dept").selectOption("11");
+      // Lot R4d : la liste des 101 départements laisse place à la recherche et sa liste déroulante.
+      await expect(page.getByTestId("around-find")).toBeVisible();
+      await page.getByTestId("around-find").fill("11");
+      await page.getByTestId("around-result-11").click();
       await page.getByTestId("where-apply").click();
       await page.waitForURL(/autour=ailleurs/);
       await expect(page.getByTestId("around-open")).toContainText("(11)");
@@ -217,7 +219,8 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await openSheet(page, "people-where-open", "people-where-sheet");
       await expect(page.getByTestId("around-me")).toHaveCount(0);
       await page.getByTestId("around-elsewhere").click();
-      await page.getByTestId("around-dept").selectOption("11");
+      await page.getByTestId("around-find").fill("11");
+      await page.getByTestId("around-result-11").click();
       await page.getByTestId("where-apply").click();
       await page.waitForURL(/lieu=ailleurs/);
       await expect(page.getByTestId("people-where-open")).toContainText("(11)");

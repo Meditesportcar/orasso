@@ -4,7 +4,7 @@
 // premier porte « favori »), puis tous les autres ; un seul bouton principal « Valider (n) ». Rien n'est appliqué avant
 // « Valider ». C'est aussi le chemin du lecteur d'écran (la carte lui est masquée).
 import { departmentChoices, departmentLabel, Icon, Sheet, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { arriveeLabels } from "@orasso/shared";
+import { arriveeLabels, foldSearch } from "@orasso/shared";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,8 +13,8 @@ import { departmentLimitReached, toggleDepartment } from "./model";
 
 const { space2, space3 } = tokens.spacing;
 
-/** Recherche sans accents ni casse : « pyrenees », « 66 », « 2a ». */
-export const foldSearch = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+/** Recherche sans accents ni casse : « pyrenees », « 66 », « 2a » (rangée dans @orasso/shared, lot R4d). */
+export { foldSearch };
 
 type Row = { kind: "sep"; label: string } | { kind: "dept"; code: string; name: string };
 
