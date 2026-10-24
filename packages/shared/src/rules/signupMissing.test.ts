@@ -85,9 +85,9 @@ describe("ce qui manque à l'inscription", () => {
   it("tour 2 : la connexion dit aussi ce qui manque", () => {
     expect(loginMissing("", "")?.text).toBe("Indique ton e-mail.");
     expect(loginMissing("kenji", "")?.text).toBe("E-mail : l'adresse n'est pas complète.");
-    expect(loginMissing("kenji@orasso.local", "123456789")?.text).toBe(
-      "Mot de passe : 10 caractères au moins (il en manque 1).",
-    );
+    expect(loginMissing("kenji@orasso.local", "")?.text).toBe("Indique ton mot de passe.");
+    // Un mot de passe existant n'a pas à respecter la longueur d'une création (ancien compte).
+    expect(loginMissing("kenji@orasso.local", "123456789")).toBeNull();
     expect(loginMissing("kenji@orasso.local", "1234567890")).toBeNull();
   });
 

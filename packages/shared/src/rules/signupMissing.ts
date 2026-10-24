@@ -83,12 +83,15 @@ export function identityMissing(
   return null;
 }
 
-/** Connexion (tour 2) : e-mail, puis mot de passe ; même ligne sous le bouton que dans l'arrivée. */
+/**
+ * Connexion (tour 2) : e-mail, puis mot de passe ; même ligne sous le bouton que dans l'arrivée. Le mot de passe existe
+ * déjà : on n'en exige que la présence, jamais la longueur d'une création (un ancien compte au mot de passe plus court
+ * doit pouvoir se connecter ; c'est l'API qui juge).
+ */
 export function loginMissing(email: string, password: string): SignupMissing | null {
   if (!email.trim()) return { field: "email", text: M.email };
   if (!emailLooksValid(email)) return { field: "email", text: M.emailInvalid };
-  const issue = passwordMissing(password);
-  return issue ? { field: "password", text: issue } : null;
+  return password ? null : { field: "password", text: M.passwordEmpty };
 }
 
 /** « Ton coin » : au moins un département. */

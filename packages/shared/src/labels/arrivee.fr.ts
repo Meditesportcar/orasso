@@ -84,6 +84,7 @@ export const arriveeLabels = {
     firstName: "Indique ton prénom.",
     lastName: "Indique ton nom.",
     email: "Indique ton e-mail.",
+    passwordEmpty: "Indique ton mot de passe.",
     emailInvalid: "E-mail : l'adresse n'est pas complète.",
     password: (min: number, missing: number) => `Mot de passe : ${min} caractères au moins (il en manque ${missing}).`,
     passwordTooLong: (max: number) => `Mot de passe : ${max} caractères au plus.`,

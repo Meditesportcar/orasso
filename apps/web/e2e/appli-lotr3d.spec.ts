@@ -127,10 +127,12 @@ test("tour 2 : la connexion dit ce qui manque ; A commence l'inscription puis se
     const signIn = page.getByRole("button", { name: "Me connecter" });
     await expect(missing(page)).toHaveText("Indique ton e-mail.");
     await page.getByLabel("E-mail").fill("kenji@orasso.local");
-    await page.getByLabel("Mot de passe", { exact: true }).first().fill("123456789");
+    // Connexion : seule la présence du mot de passe est exigée (un ancien compte peut en avoir un plus court).
     await expect(signIn).toBeDisabled();
-    await expect(missing(page)).toHaveText("Mot de passe : 10 caractères au moins (il en manque 1).");
-    await shot(page, `05-connexion-9-caracteres-${theme}`);
+    await expect(missing(page)).toHaveText("Indique ton mot de passe.");
+    await page.getByLabel("Mot de passe", { exact: true }).first().fill("123456789");
+    await expect(missing(page)).toHaveCount(0);
+    await shot(page, `05-connexion-mot-de-passe-${theme}`);
     await expectClean(page);
     await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
     await expect(missing(page)).toHaveCount(0);
