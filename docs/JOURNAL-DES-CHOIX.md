@@ -2728,3 +2728,5 @@ Source : `corrections-r3b.md` (relais).
 - **Aperçu** : texte « Tes amis voient la même chose. » (vrai pour un compte public : `profileFields` montre déjà les sorties à venir et le crew à tout membre) ; l'aperçu montre les sorties à venir, le crew et le nombre de sorties quand la vue les renvoie (test : chaque champ de l'aperçu égale celui de `GET /users/:pseudo` pour ce regard). Site : ✉ en icône.
 - **Site, « Ton réseau »** : un curseur et un « Suivants » par groupe (`apres`, `apres_org`, `apres_pro`).
 - **Garage (appli)** : le bandeau de confirmation se pose dans la page, au-dessus de la mini-fiche, au lieu de la recouvrir.
+- **Curseur des listes à la milliseconde** : la base garde la microseconde, le curseur la milliseconde ; des suivis posés au même instant (même milliseconde) se perdaient entre deux pages. Tri et comparaison se font maintenant sur la date tronquée à la milliseconde, puis l'identifiant (`follows.ts`, test avec 31 organisateurs suivis au même instant).
+- **« Ton réseau » et le compte** : un changement de compte vide les listes et relance la lecture (invariants « Comptes et sessions »).

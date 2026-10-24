@@ -316,6 +316,22 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     expect((await call(a, "DELETE", "/users/T2_DevPrive/follow")).json).toEqual({ following: false });
   });
 
+  it("31 organisateurs suivis au même instant : deux pages, aucun perdu ni répété (curseur à la milliseconde)", async () => {
+    const me = await person("T2_Pages");
+    const owner = await signUp("T2_Owner");
+    const ids: string[] = [];
+    for (let i = 0; i < 31; i++) ids.push((await createStructure(owner.id)).id);
+    const at = new Date();
+    await db
+      .insert(structureFollows)
+      .values(ids.map((structureId) => ({ structureId, userId: me.id, source: "manual" as const, createdAt: at })));
+    const p1 = (await call(me, "GET", "/me/following?kind=structures")).json;
+    expect(p1.items).toHaveLength(30);
+    const p2 = (await call(me, "GET", `/me/following?kind=structures&cursor=${p1.nextCursor}`)).json;
+    expect(p2.items).toHaveLength(1);
+    expect(new Set([...p1.items, ...p2.items].map((x: { id: string }) => x.id)).size).toBe(31);
+  });
+
   it("amis : un compte banni ou suspendu n'est ni listé ni compté", async () => {
     const a = await person("T2_Amis");
     const b = await person("T2_Banni");

@@ -19,7 +19,7 @@ import {
   networkLabels,
   socialLabels,
 } from "@orasso/shared";
-import { and, asc, desc, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, desc, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -59,6 +59,19 @@ const pseudoStarts = (q: string | undefined) =>
 
 const nameContains = (column: SQL | typeof structures.name | typeof proProfiles.name, q: string | undefined) =>
   q ? sql`lower(${column}) like ${`%${escapeLike(q.toLowerCase())}%`}` : undefined;
+
+/**
+ * Tour 2 : rang strictement après le curseur (date décroissante, puis identifiant). Le curseur porte la date à la
+ * milliseconde ; la base la garde à la microseconde : la comparaison se fait à la milliseconde, sinon des lignes de la
+ * même milliseconde (suivis posés ensemble) disparaîtraient entre deux pages.
+ */
+function beyondCursor(at: SQL | AnyColumn, id: SQL | AnyColumn, c: { createdAt: Date; id: string }) {
+  const ms = sql`date_trunc('milliseconds', ${at})`;
+  return or(sql`${ms} < ${c.createdAt}`, and(sql`${ms} = ${c.createdAt}`, sql`${id} < ${c.id}`));
+}
+
+/** Tri qui va avec `beyondCursor` : date à la milliseconde décroissante, puis identifiant décroissant. */
+const newestFirst = (at: AnyColumn, id: SQL | AnyColumn) => [desc(sql`date_trunc('milliseconds', ${at})`), desc(id)];
 
 async function countOf(query: Promise<{ n: number }[]>): Promise<number> {
   const [row] = await query;
@@ -197,12 +210,10 @@ async function peoplePage(
         eq(mineCol, me),
         visibleProfile(at),
         pseudoStarts(q),
-        c
-          ? or(lt(userFollows.createdAt, c.createdAt), and(eq(userFollows.createdAt, c.createdAt), lt(other, c.id)))
-          : undefined,
+        c ? beyondCursor(userFollows.createdAt, other, c) : undefined,
       ),
     )
-    .orderBy(desc(userFollows.createdAt), desc(other))
+    .orderBy(...newestFirst(userFollows.createdAt, other))
     .limit(FOLLOW_PAGE_SIZE + 1);
   const page = rows.slice(0, FOLLOW_PAGE_SIZE);
   const last = page.at(-1);
@@ -235,15 +246,10 @@ async function pagesPage(
           eq(structureFollows.userId, me),
           isNull(structures.deletedAt),
           nameContains(structures.name, q),
-          c
-            ? or(
-                lt(structureFollows.createdAt, c.createdAt),
-                and(eq(structureFollows.createdAt, c.createdAt), lt(structures.id, c.id)),
-              )
-            : undefined,
+          c ? beyondCursor(structureFollows.createdAt, structures.id, c) : undefined,
         ),
       )
-      .orderBy(desc(structureFollows.createdAt), desc(structures.id))
+      .orderBy(...newestFirst(structureFollows.createdAt, structures.id))
       .limit(FOLLOW_PAGE_SIZE + 1);
     const page = rows.slice(0, FOLLOW_PAGE_SIZE);
     const last = page.at(-1);
@@ -268,15 +274,10 @@ async function pagesPage(
         eq(proFollows.userId, me),
         isNull(proProfiles.deletedAt),
         nameContains(proProfiles.name, q),
-        c
-          ? or(
-              lt(proFollows.createdAt, c.createdAt),
-              and(eq(proFollows.createdAt, c.createdAt), lt(proProfiles.id, c.id)),
-            )
-          : undefined,
+        c ? beyondCursor(proFollows.createdAt, proProfiles.id, c) : undefined,
       ),
     )
-    .orderBy(desc(proFollows.createdAt), desc(proProfiles.id))
+    .orderBy(...newestFirst(proFollows.createdAt, proProfiles.id))
     .limit(FOLLOW_PAGE_SIZE + 1);
   const page = rows.slice(0, FOLLOW_PAGE_SIZE);
   const last = page.at(-1);
