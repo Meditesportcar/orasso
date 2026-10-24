@@ -91,8 +91,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(grid.getByTestId("lineup-car-me")).toHaveCount(1);
     await expect(grid.getByTestId("lineup-car-name")).toHaveCount(30);
     // Mode fiche : en-tête de fiche, pas de barre d'onglets.
-    await expect(page.getByTestId("flow-close").first()).toBeVisible();
-    await expect(page.getByTestId("persona-tabbar").first()).toBeHidden();
+    await expect(page.getByTestId("appbar-close").filter({ visible: true })).toHaveCount(1);
+    await expect(page.getByTestId("persona-tabbar").filter({ visible: true })).toHaveCount(0);
     await shot(page, `plateau-${theme}`);
     await audit(page);
     await page.getByTestId("lineup-more").click();
@@ -127,7 +127,10 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await line.scrollIntoViewIfNeeded();
     await shot(page, `sorties-venir-${theme}`);
     await audit(page);
-    await page.getByTestId("sorties-segments").getByText(/Passées/).click();
+    await page
+      .getByTestId("sorties-segments")
+      .getByText(/Passées/)
+      .click();
     const past = page.getByTestId("ticket-past").getByTestId("ticket-lineup").first();
     await expect(past).toContainText(/Le plateau · \d+ présentes?/);
     await shot(page, `sorties-passees-${theme}`);

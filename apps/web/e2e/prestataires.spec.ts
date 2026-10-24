@@ -85,9 +85,9 @@ test("un food truck candidate, l'équipe organisatrice le retient, il apparaît 
   await pCard.getByRole("button", { name: "Retenir" }).click();
   await expect(orga.getByTestId("provider-message")).toContainText("retenu");
 
-  // 3. Visible sur la page publique, avec son type.
+  // 3. Visible sur la page publique, avec son type (lot R4b : dans « Sur place » du plateau).
   await page.goto(`/e/${event.slug}`);
-  const present = page.getByTestId("provider-present").filter({ hasText: name });
+  const present = page.getByTestId("lineup-pro").filter({ hasText: name });
   await expect(present).toBeVisible();
   await expect(present).toContainText("Food truck");
 
@@ -115,7 +115,7 @@ test("un food truck candidate, l'équipe organisatrice le retient, il apparaît 
     .click();
   await expect(orga.getByTestId("provider-message")).toContainText("accrédité");
   await page.goto(`/e/${event.slug}`);
-  await expect(page.getByTestId("provider-present").filter({ hasText: "Paul Photo" })).toContainText("Média officiel");
+  await expect(page.getByTestId("lineup-pro").filter({ hasText: "Paul Photo" })).toContainText("Média officiel");
   await orga.close();
 });
 

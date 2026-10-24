@@ -88,6 +88,7 @@
   padding: var(--space-2) 10px 10px;
 }
 .lu-car__name {
+  color: var(--ink);
   font-family: var(--font-display);
   font-style: italic;
   font-weight: 900;
@@ -224,6 +225,8 @@
   flex: none;
 }
 .lu-chip {
+  flex: none;
+  white-space: nowrap;
   text-decoration: none;
   color: inherit;
 }

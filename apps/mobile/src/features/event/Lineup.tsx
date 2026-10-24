@@ -52,7 +52,7 @@ function ProLogo({ pro, size }: { pro: LineupPro; size: number }) {
       {pro.logoUrl ? (
         <Photo source={mediaSource(pro.logoUrl)} style={StyleSheet.absoluteFill} />
       ) : (
-        <Text variant="numberNarrow" color={c.ink}>
+        <Text variant="numberNarrow" color={c.ink} style={{ fontSize: size * 0.36, lineHeight: size * 0.42 }}>
           {initials}
         </Text>
       )}
