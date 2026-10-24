@@ -10,7 +10,8 @@ import { RELAIS } from "./relais";
 // Aucun appel à une source externe. Captures dans les deux thèmes, au
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test accueil`.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/site`;
-const TITLES = ["pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"] as const;
+// Lot R1 (décision de Damien du 24/10) : lavage et carburant retirés pour l'instant (`NEARBY_STATIONS_ENABLED`).
+const TITLES = ["pending", "nearby", "weather", "agenda", "favorite_garage"] as const;
 
 type Home = {
   nearby: { radiusKm: number; events: { title: string }[] };
@@ -62,13 +63,10 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   // Garage favori de Kenji.
   await expect(page.getByTestId("widget-favorite_garage")).toContainText("Garage du Port");
 
-  // Lavage et carburant (cache factice), prix, itinéraire, attribution des sources.
-  const wash = page.getByTestId("widget-wash");
-  await expect(wash.getByTestId("place-line").first()).toBeVisible();
-  await expect(wash).toContainText("OpenStreetMap");
-  const fuel = page.getByTestId("widget-fuel");
-  await expect(fuel.getByTestId("place-line").first()).toContainText("Gazole");
-  await expect(fuel).toContainText("data.economie.gouv.fr");
+  // Lot R1 : ni lavage ni carburant (blocs et réglages), l'API ne les cherche plus.
+  await expect(page.getByTestId("widget-wash")).toHaveCount(0);
+  await expect(page.getByTestId("widget-fuel")).toHaveCount(0);
+  expect((await apiCall<Home>(cookie, "GET", "/me/home")).data.wash).toEqual([]);
 
   // Emplacement sponsorisé ciblé 66 + JDM : même apparence, mention « Sponsorisé ».
   const sponsored = page.getByTestId("widget-sponsored");
@@ -88,18 +86,23 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   const home = await apiCall<Home>(cookie, "GET", "/me/home");
   expect(home.data.nearby.radiusKm).toBe(150);
 
-  // Réorganiser : « Carburant » remonte avant « Lavage », « Lavage » est masqué ; tout persiste après rechargement.
+  // Réorganiser : « Garage favori » remonte avant « Agenda », « Agenda » est masqué ; tout persiste après rechargement.
+  // Lot R1 : les stations ne se règlent plus.
   await page.goto("/app");
   await page.getByTestId("reorder").locator("summary").click();
-  await page.getByTestId("up-fuel").click();
+  await expect(page.getByTestId("reorder-wash")).toHaveCount(0);
+  await expect(page.getByTestId("down-favorite_garage")).toBeDisabled();
+  await page.getByTestId("up-favorite_garage").click();
   await expect
-    .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel"))
-    .toBe(6);
-  await page.getByTestId("toggle-wash").click();
-  await expect.poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden).toEqual(["wash"]);
+    .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("favorite_garage"))
+    .toBe(4);
+  await page.getByTestId("toggle-agenda").click();
+  await expect
+    .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden)
+    .toEqual(["agenda"]);
   await page.reload();
-  expect(await shownOrder(page)).toEqual(["pending", "nearby", "weather", "agenda", "favorite_garage", "fuel"]);
-  await expect(page.getByTestId("widget-wash")).toHaveCount(0);
+  expect(await shownOrder(page)).toEqual(["pending", "nearby", "weather", "favorite_garage"]);
+  await expect(page.getByTestId("widget-agenda")).toHaveCount(0);
   // Réglage remis à l'état d'origine pour la suite.
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
   await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 50 });
