@@ -346,7 +346,13 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
     await page.goto("/moi");
     await expect(page.getByTestId("casquette-organizer")).toHaveCount(2, { timeout: 30_000 });
     await expect(page.getByTestId(/^casquette-(fan|visitor)$/)).toContainText(/Actif|Active/);
-    await expect(page.getByText(/\d+ candidatures? à trier/).first()).toBeVisible();
+    // Lot M5 (« Changer de casquette ») : le nombre à trier est la pastille de la ligne, plus une phrase.
+    await expect(
+      page
+        .getByTestId("casquette-organizer")
+        .filter({ hasText: /équipe\s*[1-9]\d*$/ })
+        .first(),
+    ).toBeVisible();
     await shot(page, `11-mes-casquettes-${theme}`);
 
     // Bascule vers la casquette Organisateur : le Direct (lot 22), barre à cinq onglets, casquette mémorisée.
