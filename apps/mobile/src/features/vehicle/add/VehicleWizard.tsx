@@ -203,14 +203,14 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
 
   /** Repérage de la plaque sur l'appareil (rien ne part au serveur) ; un résultat d'une ancienne photo est ignoré. */
   async function detect(key: string, photo: PickedPhoto) {
-    // Lot R3a : la raison d'un échec est gardée (montrée à l'étape Plaque), second essai sur une copie réduite.
-    const { found, failure } = await detectWithRetry(photo.uri, photo.width, photo.height, {
+    // Lot R3a : second essai sur une copie réduite quand rien n'est lu (la raison d'un échec part au logcat).
+    const { found } = await detectWithRetry(photo.uri, photo.width, photo.height, {
       recognize: recognizeTextResult,
       shrink: shrinkPhoto,
-    }).catch(() => ({ found: null, failure: "error:js" as const }));
+    }).catch(() => ({ found: null }));
     setDraft((d) => {
       const photos = d.photos.map((x) =>
-        x.key === key && x.uri === photo.uri ? { ...x, ...detectionPatch(x, found, d.blurMode, failure) } : x,
+        x.key === key && x.uri === photo.uri ? { ...x, ...detectionPatch(x, found, d.blurMode) } : x,
       );
       const next = { ...d, photos };
       // Relecture : aucune détection possible ici (web, Expo Go) → « À la main », sans promesse d'automatique.
