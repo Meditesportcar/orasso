@@ -507,7 +507,7 @@ GTC4Lusso : 2016-2020
 Purosangue : 2022-
 12Cilindri : 2024-
 Amalfi : 2025-
-512 TR : 1991-1996
+512 TR : 1991-1994
 F512 M : 1994-1996
 458 : Speciale 2013-2015 ; Spider 2011-2015
 488 : Pista 2018-2020 ; Spider 2015-2019

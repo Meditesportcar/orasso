@@ -393,7 +393,7 @@ XV : GP 2011-2017 ; GT 2017-2023
 Crosstrek : 2023-
 Justy : 1984-2011
 Levorg : VM 2014-2020 ; VN 2020-
-Impreza : 22B 1998-1998
+Impreza : 22B 1998-1998 ; GJ 2011-2016 ; GT 2016-2023
 Solterra : 2022-
 
 @ Suzuki | JP

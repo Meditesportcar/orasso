@@ -1,9 +1,11 @@
-// Compléments du référentiel (lot R3c) : utilitaires, pick-up et camions courants (type « Utilitaire »). Format : voir
+// Compléments du référentiel (lot R3c) : utilitaires, pick-up et camions courants (type « Utilitaire »). Tour 2 : les
+// ludospaces (Partner, Kangoo, Berlingo, Caddy, Doblo, Combo) sont des voitures [car] ; leurs fourgons restent en
+// Utilitaire sous leur propre nom quand il existe (Kangoo Express, Berlingo Van, Caddy Van, Doblo Cargo…). Format : voir
 // `vehicle-catalog.ts`. Méthode et sources : docs/JOURNAL-DES-CHOIX.md, « Lot R3c ».
 
 export const vehicleUtility = `
 @ Peugeot | FR | truck
-Partner : I 1996-2008 ; II 2008-2018 ; III 2018-
+Partner [car] : I 1996-2008 ; II 2008-2018 ; III 2018-
 Expert : I 1995-2006 ; II 2007-2016 ; III 2016-
 Boxer : I 1994-2006 ; II 2006-
 Bipper : 2008-2017
@@ -17,7 +19,9 @@ D3 / D4 : 1950-1965
 @ Renault | FR | truck
 Estafette : 1959-1980
 Express : 1985-2000
-Kangoo : I 1997-2008 ; II 2008-2021 ; III 2021-
+Kangoo [car] : I 1997-2008 ; II 2008-2021 ; III 2021-
+Kangoo Express : I 1997-2008 ; II 2008-2021
+Kangoo Van : III 2021-
 Trafic : I 1980-2001 ; II 2001-2014 ; III 2014-
 Master : I 1980-1997 ; II 1997-2010 ; III 2010-2024 ; IV 2024-
 Alaskan : 2017-2020
@@ -28,7 +32,8 @@ Acadiane : 1977-1987
 C15 : 1984-2005
 C25 : 1981-1994
 C35 : 1974-1992
-Berlingo : I 1996-2008 ; II 2008-2018 ; III 2018-
+Berlingo [car] : I 1996-2008 ; II 2008-2018 ; III 2018-
+Berlingo Van : III 2018-
 Jumpy : I 1994-2006 ; II 2007-2016 ; III 2016-
 Jumper : I 1994-2006 ; II 2006-
 Nemo : 2008-2017
@@ -39,7 +44,9 @@ Dokker : 2012-2021
 Logan Pick-up : 2008-2012
 
 @ Volkswagen | DE | truck
-Caddy : Mk1 1979-1995 ; Mk2 1995-2004 ; Mk3 2004-2015 ; Mk4 2015-2020 ; Mk5 2020-
+Caddy [car] : Mk1 1979-1995 ; Mk2 1995-2004 ; Mk3 2004-2015 ; Mk4 2015-2020 ; Mk5 2020-
+Caddy Van : Mk3 2004-2015 ; Mk4 2015-2020
+Caddy Cargo : Mk5 2020-
 Crafter : I 2006-2016 ; II 2016-
 LT : I 1975-1996 ; II 1996-2006
 Amarok : I 2010-2020 ; II 2022-
@@ -54,14 +61,16 @@ Unimog : 1948-
 Actros : 1996-
 
 @ Opel | DE | truck
-Combo : B 1993-2001 ; C 2001-2011 ; D 2011-2018 ; E 2018-
+Combo [car] : B 1993-2001 ; C 2001-2011 ; D 2011-2018 ; E 2018-
+Combo Cargo : E 2018-
 Vivaro : A 2001-2014 ; B 2014-2019 ; C 2019-
 Movano : A 1998-2010 ; B 2010-2021 ; C 2021-
 Blitz : 1952-1975
 
 @ Fiat | IT | truck
 Fiorino : I 1977-1988 ; II 1988-2000 ; III 2007-2024
-Doblo : I 2000-2010 ; II 2010-2022 ; III 2022-
+Doblo [car] : I 2000-2010 ; II 2010-2022 ; III 2022-
+Doblo Cargo : I 2000-2010 ; II 2010-2022 ; III 2022-
 Scudo : I 1995-2006 ; II 2007-2016 ; III 2022-
 Ducato : I 1981-1994 ; II 1994-2006 ; III 2006-
 Talento : 2016-2020
