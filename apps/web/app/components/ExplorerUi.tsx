@@ -48,6 +48,7 @@ export function PillSheet({
   title,
   testId,
   sheetId,
+  open = false,
   children,
 }: {
   icon: IconName;
@@ -59,6 +60,8 @@ export function PillSheet({
   title: string;
   testId: string;
   sheetId: string;
+  /** Sans JavaScript : le bloc repliable s'ouvre de lui-même (une erreur à y montrer, lot R4d). */
+  open?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -69,7 +72,7 @@ export function PillSheet({
       {/* Sans JavaScript la fenêtre ne s'ouvre pas : le réglage s'ouvre à la place dans un bloc repliable (formulaire GET). */}
       <noscript>
         <style>{`[data-testid="${testId}"]{display:none}.ex-pills{flex-wrap:wrap;overflow:visible}`}</style>
-        <details className="ex-nojs">
+        <details className="ex-nojs" open={open}>
           <summary className="ex-pill">
             <Icon name={icon} size={18} />
             <span className="ex-pill__text">
@@ -244,6 +247,7 @@ function AwayField({
   onPick,
   recent,
   coin,
+  unmatched,
 }: {
   value: string;
   /** « Ailleurs » est coché : sinon le département ne part pas avec le formulaire. */
@@ -251,13 +255,16 @@ function AwayField({
   onPick: (code: string) => void;
   recent: readonly string[];
   coin: readonly string[];
+  /** Sans JavaScript (lot R4d, tour 2) : le texte envoyé qui ne correspond à aucun département, gardé et dit. */
+  unmatched: string | null;
 }) {
   const id = useId();
   const listId = `${id}-list`;
-  const [find, setFind] = useState("");
+  const [find, setFind] = useState(unmatched ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  // Après l'hydratation, un champ vide ne part plus avec le formulaire (pas de « dq= » dans l'adresse).
+  // Lot R4d, tour 2 : `dq` ne sert que sans JavaScript. Après l'hydratation, seul le département explicitement choisi
+  // part (champ caché `ailleurs`) : un texte tapé mais pas choisi ne remplace jamais le choix.
   const [js, setJs] = useState(false);
   useEffect(() => setJs(true), []);
   const typed = find.trim();
@@ -297,11 +304,16 @@ function AwayField({
     <div className="ex-away" data-testid="around-departments">
       <input type="hidden" name="ailleurs" value={value} disabled={!on || !value} />
       <div className="ex-away__q">
+        {unmatched !== null ? (
+          <p className="ex-away__error" role="alert" data-testid="around-unmatched">
+            {R.whereAwayNone(unmatched)}
+          </p>
+        ) : null}
         <div className="ex-search__field ex-away__field">
           <Icon name="search" size={18} />
           <input
             type="text"
-            name={!js || find ? "dq" : undefined}
+            name={js ? undefined : "dq"}
             value={find}
             onChange={(event) => {
               setFind(event.target.value);
@@ -424,6 +436,7 @@ export function WhereForm({
   seeLabel,
   people = false,
   recent = [],
+  unmatched = null,
 }: {
   /** Le nom du réglage dans l'adresse : `autour` (événements, pros) ou `lieu` (personnes et crews). */
   field: "autour" | "lieu";
@@ -440,8 +453,13 @@ export function WhereForm({
   people?: boolean;
   /** Lot R4d : les 3 derniers départements choisis par « Ailleurs » (cookie de l'Explorer, par compte). */
   recent?: readonly string[];
+  /** Sans JavaScript : la recherche envoyée sans correspondance (montrée en erreur, la saisie gardée). */
+  unmatched?: string | null;
 }) {
   const [mode, setMode] = useState<Mode>(mode0);
+  // Sans JavaScript, le bouton n'est jamais grisé : il porte l'envoi implicite (Entrée) du texte tapé (`dq`).
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [dept, setDept] = useState(dept0);
   const [km, setKm] = useState(km0);
   const [denied, setDenied] = useState(false);
@@ -507,6 +525,8 @@ export function WhereForm({
   return (
     <form method="get" action="/app/explorer" className="ex-where" onSubmit={submit} data-testid="around-sheet">
       <Hidden entries={hidden} />
+      {/* Lot R4d, tour 2 : un envoi de ce formulaire est une validation du lieu (les récents ne comptent qu'elle). */}
+      <input type="hidden" name="valide" value="1" />
       {!people && mode === "moi" && hasPosition && position ? (
         <>
           <input type="hidden" name="lat" value={position.lat} />
@@ -558,6 +578,7 @@ export function WhereForm({
         }}
         recent={recent}
         coin={coin}
+        unmatched={unmatched}
       />
       {option("partout", "explore", R.whereAll, R.whereAllHint, "around-all")}
       <p className="o-t-caption s-muted">{R.whereKeep}</p>
@@ -566,7 +587,7 @@ export function WhereForm({
         icon="check"
         fullWidth
         loading={reading}
-        disabled={mode === "ailleurs" && !dept}
+        disabled={hydrated && mode === "ailleurs" && !dept}
         data-testid="where-apply"
       >
         {seeLabel}

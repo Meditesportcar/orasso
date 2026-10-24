@@ -126,13 +126,22 @@ test("site R4d : recherche, clavier, carte, récents, sans JavaScript", async ({
       await expect(page.getByTestId("around-map").locator('[data-testid="dept-66"]')).toHaveClass(/is-dashed/);
       await expect(page.getByTestId("where-apply")).toBeEnabled();
       await shot(page, `03-carte-aude-${tag}`);
+      // Tour 2 : un texte tapé mais pas choisi (Échap) ne remplace jamais le département choisi.
+      await find.fill("gironde");
+      await find.press("Escape");
+      await expect(find).toHaveValue("gironde");
       await page.getByTestId("where-apply").click();
       await page.waitForURL(/autour=ailleurs/);
       await expect(page).toHaveURL(/ailleurs=11/);
-      await expect(page).not.toHaveURL(/dq=/);
+      await expect(page).not.toHaveURL(/dq=|valide=|ailleurs=33/);
       await expect(page.getByTestId("around-open")).toContainText("(11)");
 
       // Les récents : l'Aude ; puis l'Hérault en tête ; Mon coin n'y entre pas.
+      await openWhere(page);
+      expect(await codes(recents(page))).toEqual(["11"]);
+      // Tour 2 : un lien ouvert ou un rechargement ne compte pas, seule la validation compte.
+      await page.goto("/app/explorer?segment=evenements&autour=ailleurs&ailleurs=09");
+      await page.reload();
       await openWhere(page);
       expect(await codes(recents(page))).toEqual(["11"]);
       await page.getByTestId("around-find").fill("34");
@@ -189,6 +198,23 @@ test("site R4d : recherche, clavier, carte, récents, sans JavaScript", async ({
         await details.locator("summary").click();
         await details.getByTestId("around-elsewhere").click();
         await expect(details.getByTestId("around-find")).toBeVisible();
+        // Tour 2 : sans correspondance, une erreur claire et la saisie gardée (aucun choix antérieur).
+        await details.getByTestId("around-find").fill("zzzz");
+        await details.getByTestId("around-find").press("Enter");
+        await p.waitForURL(/dq=zzzz/);
+        const again = p.locator("details.ex-nojs").first();
+        await expect(again.getByTestId("around-unmatched")).toHaveText("Aucun département ne correspond à « zzzz ».");
+        await expect(again.getByTestId("around-find")).toHaveValue("zzzz");
+        await shot(p, `05-sans-javascript-erreur-${tag}`);
+        await again.getByTestId("around-find").fill("Hérault");
+        await again.getByTestId("around-find").press("Enter");
+        await p.waitForURL(/ailleurs=34/);
+        await expect(p).not.toHaveURL(/dq=/);
+        await expect(p.getByTestId("around-open")).toContainText("(34)");
+        await p.goto("/app/explorer?segment=evenements&autour=coin");
+        const d2 = p.locator("details.ex-nojs").first();
+        await d2.locator("summary").click();
+        await d2.getByTestId("around-elsewhere").click();
         await details.getByTestId("around-find").fill("Hérault");
         await details.getByTestId("around-find").press("Enter");
         await p.waitForURL(/ailleurs=34/);

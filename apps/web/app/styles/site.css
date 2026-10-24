@@ -2246,6 +2246,13 @@
   font-weight: 700;
   font-size: 14px;
 }
+/* Lot R4d, tour 2 : sans JavaScript, une recherche sans correspondance (la saisie reste dans le champ). */
+.ex-away__error {
+  margin: 0 0 6px;
+  color: var(--win-text);
+  font-weight: 700;
+  font-size: 13px;
+}
 .ex-away__more {
   margin: 0;
   padding: 8px 10px;
