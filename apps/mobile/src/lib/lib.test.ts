@@ -22,6 +22,9 @@ import { mergeWeather, temperatureRange } from "./weather";
 
 const nodeHmac: HmacSha1 = (key, message) => new Uint8Array(createHmac("sha1", key).update(message).digest());
 
+/** Lot R3b, tour 2 : l'année de référence est passée explicitement (ces tests ne cassent pas le 1er janvier). */
+const IN_2026 = new Date("2026-06-01T12:00:00Z");
+
 describe("QR de compte hors ligne", () => {
   const secretBytes = Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 256);
   const shortId = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
@@ -116,10 +119,10 @@ describe("QR d'accès : fenêtre de consultation (D34)", () => {
 
 describe("Formats", () => {
   it("dates et heures de l'événement en heure de Paris", () => {
-    expect(formatDay("2026-10-17T17:00:00Z")).toBe("Sam 17 oct");
+    expect(formatDay("2026-10-17T17:00:00Z", undefined, IN_2026)).toBe("Sam 17 oct");
     expect(formatHour("2026-10-17T17:00:00Z")).toBe("19 h");
     expect(formatHour("2026-10-17T17:30:00Z")).toBe("19 h 30");
-    expect(formatDayHour("2026-10-17T17:00:00Z")).toBe("Sam 17 oct · 19 h");
+    expect(formatDayHour("2026-10-17T17:00:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 19 h");
   });
   it("durées et compte à rebours", () => {
     expect(formatDuration(102 * 60_000)).toBe("1 h 42");

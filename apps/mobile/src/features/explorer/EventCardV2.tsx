@@ -37,6 +37,18 @@ export function stubOf(iso: string): { day: string; date: string; month: string;
   };
 }
 
+const NBSP = " ";
+
+/**
+ * La ligne de date de la vignette portrait : « SAM. 24 OCT. · 19 H ». Lot R3b, tour 2 : espaces insécables (l'heure
+ * ne se coupe jamais) ; avec l'année, le jour de la semaine cède sa place (« 14 MARS 2027 · 18 H ») pour que la ligne
+ * tienne sur une seule ligne dès 320 px.
+ */
+export function whenLine(stub: ReturnType<typeof stubOf>): string {
+  const date = stub.year ? [stub.date, stub.month, stub.year].join(NBSP) : [stub.day, stub.date, stub.month].join(NBSP);
+  return `${date}${NBSP}· ${stub.hour.replaceAll(" ", NBSP)}`;
+}
+
 /** Jauge des places : part prise (0 → 1), texte ; `null` sans limite. */
 export function seatsOf(
   e: Pick<EventCard, "capacity" | "remaining">,
@@ -167,7 +179,7 @@ export function EventCardV2({
       </View>
       {portrait ? (
         <Text variant="label" color={c.accentText} style={styles.when} testID="event-when">
-          {`${stub.day} ${stub.date} ${stub.month}${stub.year ? ` ${stub.year}` : ""} · ${stub.hour}`}
+          {whenLine(stub)}
         </Text>
       ) : null}
       <Text variant={big ? "posterM" : "posterS"} color={c.plateInk} style={portrait ? styles.portraitTitle : null}>
