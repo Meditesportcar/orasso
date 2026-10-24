@@ -22,6 +22,8 @@ export type FranceMapProps = {
    */
   land?: string;
   border?: string;
+  /** Lot R4d (« Ailleurs ») : des départements repères (Mon coin), bordés d'encre en pointillé. */
+  dashed?: readonly string[];
   style?: ViewStyle;
 };
 
@@ -29,16 +31,21 @@ export type FranceMapProps = {
 const orderedFor = (favorite?: string | null) =>
   [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
 
-function FranceMapBase({ selected, favorite, onToggle, land, border, style }: FranceMapProps) {
+function FranceMapBase({ selected, favorite, onToggle, land, border, dashed, style }: FranceMapProps) {
   const { t } = useTheme();
   const c = t.color;
   const chosen = new Set(selected);
+  const marked = new Set(dashed ?? []);
   const ordered = orderedFor(favorite);
-  const paint = (code: string) => ({
-    fill: chosen.has(code) ? c.accent : (land ?? c.mapLand2),
-    stroke: code === favorite ? c.ink : (border ?? c.ground),
-    strokeWidth: code === favorite ? 2.5 : 1,
-  });
+  const paint = (code: string) => {
+    const dash = code !== favorite && marked.has(code);
+    return {
+      fill: chosen.has(code) ? c.accent : (land ?? c.mapLand2),
+      stroke: code === favorite || dash ? c.ink : (border ?? c.ground),
+      strokeWidth: code === favorite ? 2.5 : dash ? 1.1 : 1,
+      strokeDasharray: dash ? "2 2" : undefined,
+    };
+  };
 
   // Navigateur (recette web de l'appli) : react-native-svg y ajoute à chaque tracé des gestionnaires de réponse que le
   // DOM ne connaît pas (erreurs React en développement) ; un <svg> du DOM, plus simple, fait le même dessin.
@@ -62,6 +69,7 @@ function FranceMapBase({ selected, favorite, onToggle, land, border, style }: Fr
                 fill={p.fill}
                 stroke={p.stroke}
                 strokeWidth={p.strokeWidth}
+                strokeDasharray={p.strokeDasharray}
                 strokeLinejoin="round"
                 style={{ cursor: "pointer" }}
                 tabIndex={-1}

@@ -33,6 +33,12 @@
   stroke: var(--ink);
   stroke-width: 2.5;
 }
+/* Lot R4d (« Ailleurs ») : les départements de Mon coin, repères en pointillé d'encre. */
+.o-france__dept.is-dashed {
+  stroke: var(--ink);
+  stroke-width: 1.1;
+  stroke-dasharray: 2 2;
+}
 .o-france__dept:focus-visible {
   stroke: var(--ink);
   stroke-width: 3;

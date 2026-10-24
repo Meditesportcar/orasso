@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { departments } from "@orasso/shared";
+import { departments, matchDepartments } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 import { departmentChoices, departmentLabel } from "./choices";
 import { franceDepartmentByCode, franceDepartments, franceMapCredit, franceMapViewBox } from "./departments";
@@ -47,5 +47,18 @@ describe("carte de France (lot 41)", () => {
     expect(new Set(departmentChoices.map((d) => d.code))).toEqual(new Set(departments));
     expect(departmentLabel({ code: "66", name: "Pyrénées-Orientales" })).toBe("66 · Pyrénées-Orientales");
     expect(departmentChoices.at(-1)).toEqual({ code: "976", name: "Mayotte" });
+  });
+});
+
+describe("« Ailleurs » : la recherche sur les 101 départements (lot R4d)", () => {
+  const codes = (q: string) => matchDepartments(departmentChoices, q).map((d) => d.code);
+  it("« 34 », « her », « pyrenees », « cote d'or », « 2a », l'outre-mer", () => {
+    expect(codes("34")).toEqual(["34"]);
+    expect(codes("her")).toEqual(["34"]);
+    expect(codes("pyrenees")).toEqual(["64", "66", "65"]);
+    expect(codes("cote d'or")).toEqual(["21"]);
+    expect(codes("2a")).toEqual(["2A"]);
+    expect(codes("reunion")).toEqual(["974"]);
+    expect(codes("aude")).toEqual(["11"]);
   });
 });

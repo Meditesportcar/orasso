@@ -5,7 +5,7 @@
 //   départements » — ✕ (annuler sans rien changer), recherche par nom ou numéro, compteur, les choisis en tête (le
 //   premier est le favori), puis tous les autres, un seul bouton principal « Valider (n) ». Rien n'est appliqué avant
 //   « Valider ». Le choix part avec le formulaire par des champs cachés (`name` par département, `nameOrder` pour l'ordre).
-import { arriveeLabels, MAX_DEPARTMENTS } from "@orasso/shared";
+import { arriveeLabels, foldSearch, MAX_DEPARTMENTS } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../web/components/Button";
 import { Icon } from "../web/components/Icon";
@@ -23,8 +23,8 @@ export type DepartmentChecklistProps = {
   className?: string;
 };
 
-/** Recherche sans accents ni casse : « pyrenees », « 66 », « 2a ». */
-export const foldSearch = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+/** Recherche sans accents ni casse : « pyrenees », « 66 », « 2a » (rangée dans @orasso/shared, lot R4d). */
+export { foldSearch };
 
 type Row = { kind: "sep"; label: string } | { kind: "dept"; choice: DepartmentChoice };
 
