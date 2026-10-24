@@ -17,16 +17,17 @@ import {
   arrivalTime,
   type Category,
   crewLabels,
-  type EventProviderPublic,
+  type EventLineup,
   type EventPublic,
   type EventReviews,
   type EventWeather,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
-  instagramHandle,
   invitationLabels,
   siteLabels as L,
+  LINEUP_BLOCK_SIZE,
+  lineupLabels,
   type MediaContentView,
   type MyCrew,
   type MyTicket,
@@ -48,6 +49,7 @@ import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
+import { CarGrid, ProItem, VisitorNotice } from "../components/Lineup";
 import { ContactOrganizer } from "../components/Messaging";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
@@ -81,7 +83,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const event = found.ok
     ? found.data
     : await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, providers, weather, feed, media] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, lineup, weather, feed, media] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -90,7 +92,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       request,
       `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
     ),
-    api<EventProviderPublic[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/providers`),
+    // Lot R4b : le plateau (six vignettes, les pros sur place) ; sans compte, l'API n'envoie aucun pseudo.
+    api<EventLineup>(request, `/events/${event.id}/lineup?limit=${LINEUP_BLOCK_SIZE}`),
     // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
     api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
     // Fil de l'événement (lot 20) : public, enrichi pour les retenus et l'organisation.
@@ -108,7 +111,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     structure,
     leadsCrew: Boolean(crews?.ok && crews.data.some((c) => c.role === "leader")),
     reviews: reviews.ok ? reviews.data : null,
-    providers: providers.ok ? providers.data : [],
+    lineup: lineup.ok ? lineup.data : null,
+    grade: me?.profile.grade ?? null,
     weather: weather.ok ? weather.data : null,
     feed: feed.ok ? feed.data.items : [],
     media: media.ok ? media.data : [],
@@ -394,7 +398,8 @@ function EventPage({
     offer,
     myTickets,
     paymentCancelled,
-    providers,
+    lineup,
+    grade,
     media,
     prize,
     leadsCrew,
@@ -566,6 +571,44 @@ function EventPage({
           </p>
         </section>
 
+        {/* Lot R4b (maquette R4.7) : le plateau, après « Véhicules recherchés » ; les prestataires présents l'ont rejoint. */}
+        {lineup && (
+          <section className="s-section lu" aria-labelledby="plateau-titre" data-testid="lineup">
+            <div className="lu__head">
+              <h2 className="s-h2" id="plateau-titre">
+                {lineupLabels.title}
+              </h2>
+              <span className="o-t-caption s-muted">
+                {lineup.counts.cars === 0 && lineup.phase === "accepted"
+                  ? lineupLabels.emptyCount
+                  : `${lineupLabels.carsCount(lineup.counts.cars, lineup.phase)} · ${lineupLabels.caption(lineup.phase)}`}
+              </span>
+              <span className="lu__head-grow" />
+              {connected && lineup.counts.cars > 0 && (
+                <Button variant="secondary" icon="grid" href={`/e/${event.slug}/plateau`} data-testid="lineup-open">
+                  {lineupLabels.siteSeeAll(lineup.counts.cars)}
+                </Button>
+              )}
+            </div>
+            {lineup.counts.cars === 0 ? (
+              <p className="s-muted" data-testid="lineup-empty">
+                {lineup.phase === "present" ? lineupLabels.emptyPresent : lineupLabels.empty}
+              </p>
+            ) : (
+              <CarGrid cars={lineup.cars} />
+            )}
+            {!connected && lineup.counts.cars > 0 && <VisitorNotice retour={`/e/${event.slug}/plateau`} />}
+            {lineup.pros.length > 0 && (
+              <div className="lu-pros" data-testid="lineup-pros-line">
+                <span className="s-label o-t-label">{lineupLabels.siteOnSite}</span>
+                {lineup.pros.map((p) => (
+                  <ProItem key={`${p.kind}-${p.id}`} pro={p} grade={grade} connected={connected} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {event.vendorTypes.length > 0 && (
           <section className="s-section" data-testid="vendors">
             <h2 className="s-h2">Prestataires attendus</h2>
@@ -581,32 +624,6 @@ function EventPage({
                 </Button>
               </p>
             )}
-          </section>
-        )}
-
-        {providers.length > 0 && (
-          <section className="s-section" data-testid="providers-present">
-            <h2 className="s-h2">Prestataires présents</h2>
-            <ul className="prov__present">
-              {providers.map((p) => (
-                <li key={p.id} className="prov__present-item" data-testid="provider-present">
-                  <span className="prov__present-thumb">
-                    {p.photoUrl ? <img src={p.photoUrl} alt="" /> : <Icon name="profile" size={20} />}
-                  </span>
-                  <span className="prov__present-text">
-                    <strong className="o-never-truncate">{p.name}</strong>
-                    <span className="o-t-caption s-muted">{p.typeLabel}</span>
-                    {p.instagram && (
-                      <a className="o-t-caption" href={p.instagram} target="_blank" rel="noopener noreferrer">
-                        {instagramHandle(p.instagram) ?? "Instagram"}
-                      </a>
-                    )}
-                  </span>
-                  {p.accreditedMedia && <Chip variant="accent">Média officiel</Chip>}
-                  {connected && <ReportDialog look="link" targetType="provider" targetId={p.id} />}
-                </li>
-              ))}
-            </ul>
           </section>
         )}
 
@@ -715,7 +732,16 @@ function EventPage({
             size="site"
             items={[
               { value: event.remaining ?? "∞", label: "places" },
-              { value: event.acceptedCount, label: "retenus" },
+              // Lot R4b : le nombre du plateau (après l'événement, les présentes : les absents ne se comptent pas).
+              lineup
+                ? {
+                    value: lineup.counts.cars,
+                    label:
+                      lineup.phase === "present"
+                        ? lineupLabels.kpiPresent(lineup.counts.cars)
+                        : lineupLabels.kpiAccepted(lineup.counts.cars),
+                  }
+                : { value: event.acceptedCount, label: "retenus" },
             ]}
           />
           {mine.length > 0 ? (

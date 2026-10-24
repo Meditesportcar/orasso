@@ -38,6 +38,7 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const { vehicle: v, nearby } = loaderData;
   const busy = useNavigation().state !== "idle";
   const full = "photos" in v ? v : null;
+  const reduced = "photos" in v ? null : v;
   return (
     <>
       {/* Lot M7, tour 2 : avec photo, la carte du véhicule n'a pas de h1 ; l'en-tête de fiche le porte. */}
@@ -53,6 +54,14 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
             year={full.year ?? undefined}
             power={full.powerHp ? `${full.powerHp} ch` : undefined}
             categories={full.categories.map((c) => ({ label: c.label }))}
+          />
+        ) : reduced?.photoUrl ? (
+          // Lot R4b : compte privé, la photo (plaque masquée), le nom, la génération et les catégories.
+          <VehicleCard
+            first
+            name={v.label}
+            photo={<img src={reduced.photoUrl} alt="" />}
+            categories={v.categories.map((c) => ({ label: c.label }))}
           />
         ) : (
           <Plate as="article" className="s-vrow">

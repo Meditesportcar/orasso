@@ -20,6 +20,8 @@ export default [
     route("evenements", "routes/evenements.tsx"),
     route("e/:slug", "routes/event.tsx"),
     route("e/:slug/candidater", "routes/candidater.tsx"),
+    // Lot R4b : le plateau en pleine page (non référencé).
+    route("e/:slug/plateau", "routes/event-plateau.tsx"),
     // Inscription en crew par le chef (lot 19).
     route("e/:slug/crew", "routes/crew-inscription.tsx"),
     route("o/:slug", "routes/structure.tsx"),

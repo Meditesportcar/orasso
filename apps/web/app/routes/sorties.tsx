@@ -43,6 +43,7 @@ import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
 import { ReceivedInvitationCard } from "../components/Invitations";
+import { LineupLine } from "../components/Lineup";
 import { Qr } from "../components/Qr";
 import { RotatingQr } from "../components/RotatingQr";
 import { Stars } from "../components/Stars";
@@ -417,6 +418,9 @@ function ApplicationCard({
           )}
         </div>
       )}
+
+      {/* Lot R4b (maquette R4.4) : la ligne « Le plateau » des sorties retenues, à venir ou passées. */}
+      {app.status === "accepted" && <LineupLine slug={app.event.slug} preview={app.lineupPreview} />}
 
       {/* Lot 57 : prix du public, ouvert à un véhicule pointé jusqu'à la fin de l'événement (l'API tranche). */}
       {!past && app.status === "accepted" && app.checkedInAt && Date.parse(app.event.endsAt) > nowMs() && (

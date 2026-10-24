@@ -1,0 +1,259 @@
+/* Le plateau (lot R4b, maquette R4.7) : section de la page de l'événement et page `/e/:slug/plateau`. Jetons seulement. */
+
+.lu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.lu__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+.lu__head .s-h2 {
+  margin: 0;
+}
+.lu__head-grow {
+  flex: 1 1 auto;
+}
+
+/* Grille : deux colonnes au téléphone (nom sous la photo, jamais coupé), six sur la page de l'événement en large. */
+.lu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (min-width: 900px) {
+  .lu-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .lu-grid--wide {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.lu-car {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.lu-car.is-me {
+  box-shadow:
+    inset 0 0 0 2.5px var(--accent),
+    var(--shadow-card);
+}
+.lu-car__photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+}
+.lu-car.is-me .lu-car__photo {
+  margin: 2.5px 2.5px 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow: hidden;
+}
+.lu-car__photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lu-me {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 1;
+  padding: 1px 6px;
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-narrow);
+  font-weight: 900;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lu-car__text {
+  display: grid;
+  gap: 3px;
+  padding: var(--space-2) 10px 10px;
+}
+.lu-car__name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 12.5px;
+  line-height: 1.08;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+.lu-car__who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.lu-car__who [role="img"] {
+  display: inline-flex;
+  color: var(--ink);
+}
+
+.lu-num {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.lu-num .o-t-number-narrow {
+  font-size: 40px;
+  line-height: 1;
+}
+
+/* Les pros sur place. */
+.lu-pros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+.lu-pros--list {
+  flex-direction: column;
+  align-items: stretch;
+}
+.lu-pro {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink);
+  text-decoration: none;
+}
+.lu-pros--list .lu-pro {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.lu-pro__logo {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  font-family: var(--font-narrow);
+  font-weight: 900;
+  font-size: 13px;
+}
+.lu-pros--list .lu-pro__logo {
+  width: 44px;
+  height: 44px;
+}
+.lu-pro__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lu-pro__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--ink-muted);
+}
+.lu-pro__text strong {
+  color: var(--ink);
+}
+.lu-accent {
+  color: var(--accent-text);
+  font-weight: 800;
+}
+
+.lu-login {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: var(--space-3) 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--card-line);
+  color: var(--ink-muted);
+}
+.lu-login > svg {
+  flex: none;
+  color: var(--accent-text);
+}
+.lu-login strong {
+  color: var(--ink);
+}
+.lu-login a {
+  color: var(--accent-text);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.lu-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.lu-rule {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.lu-rule > svg {
+  flex: none;
+}
+.lu-chip {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Mes sorties (R4.4) : la ligne « Le plateau » d'un ticket. */
+.lu-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-2) 7px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.lu-line__avatars {
+  display: flex;
+}
+.lu-line__avatars img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--surface);
+  background: var(--surface-raised);
+}
+.lu-line__avatars img + img {
+  margin-left: -8px;
+}
+.lu-line__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
