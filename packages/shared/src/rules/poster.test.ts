@@ -54,8 +54,9 @@ describe("fitTitle", () => {
 
 describe("posterDate", () => {
   it("souche de la Nocturne : SAM 24 OCT, 19 h", () => {
-    const d = posterDate(fromWallTime({ year: 2026, month: 10, day: 24, hour: 19, minute: 0 }));
-    expect(d).toEqual({ weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h" });
+    const at = fromWallTime({ year: 2026, month: 10, day: 24, hour: 19, minute: 0 });
+    const d = posterDate(at, undefined, at);
+    expect(d).toEqual({ weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h", year: "" });
     expect(posterDate(fromWallTime({ year: 2026, month: 8, day: 2, hour: 9, minute: 30 })).hour).toBe("9 h 30");
   });
 });

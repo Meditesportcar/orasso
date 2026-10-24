@@ -2,6 +2,7 @@
 // `x-orasso-clock-offset` quand l'horloge simulée est active (développement seulement). Sans l'en-tête, le décalage est
 // nul et `now()` vaut exactement `new Date()` : rien ne change. Sert au rendu serveur (loaders) comme au navigateur
 // (comptes à rebours, délais) ; le loader racine transmet le décalage au navigateur.
+import { setDisplayClock } from "@orasso/shared";
 import { useSyncExternalStore } from "react";
 
 let offsetMs = 0;
@@ -15,6 +16,9 @@ export const nowMs = () => Date.now() + offsetMs;
 
 /** Heure d'Orasso. */
 export const now = () => new Date(nowMs());
+
+// Lot R3b : l'année des dates affichées (`@orasso/shared`) se décide à l'heure d'Orasso, horloge simulée comprise.
+setDisplayClock(now);
 
 /** Pose le décalage (valeur illisible ou négative : 0). Renvoie `true` s'il a changé. */
 export function setClockOffset(ms: number): boolean {

@@ -23,7 +23,7 @@ import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { PillO, SmButton } from "@/features/passionne/kit";
 import { nowMs } from "@/lib/clock";
-import { formatDay, formatHour } from "@/lib/format";
+import { formatEventDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -208,7 +208,7 @@ export function EventRows({ event }: { event: EventPublic }) {
     .join(" · ");
   const pub = event.arrivals?.public?.strict ? event.arrivals.public : null;
   const taken = event.remaining !== null && event.capacity ? (event.capacity - event.remaining) / event.capacity : null;
-  const day = formatDay(event.startsAt);
+  const day = formatEventDay(event.startsAt, event.endsAt);
   return (
     <View style={styles.factsWrap}>
       <View style={[styles.rows, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>

@@ -24,7 +24,7 @@ export function minimal(ctx: PosterCtx): PosterLayout {
         clip: `<rect width="${pw}" height="${ph}" rx="${cqw}" fill="#fff"/>`,
       },
       t,
-      label(dot(p.pl, p.h), { x: 6 * cqw, width: 88 * cqw, y: plY, size: 3.2 * cqw, color: C.muted }),
+      label(dot(p.Y, p.pl, p.h), { x: 6 * cqw, width: 88 * cqw, y: plY, size: 3.2 * cqw, color: C.muted }),
       numbers(`${p.D}/${p.mm}`, {
         x: 6 * cqw,
         width: 60 * cqw,

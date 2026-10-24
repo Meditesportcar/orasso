@@ -62,7 +62,7 @@ export function ticket(ctx: PosterCtx): PosterLayout {
         size: nmSize,
         color: C.dark,
       }),
-      label(dot(p.DAY, p.h), {
+      label(dot(p.DAY, p.Y, p.h), {
         x: inset + 5 * cqw,
         width: cw - 45 * cqw,
         y: rowBottom - nmSize * 0.7 - 1.6 * cqw,

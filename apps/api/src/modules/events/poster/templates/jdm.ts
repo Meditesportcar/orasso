@@ -1,7 +1,7 @@
 // JDM (`.pz.jdm`) : fond crème, photo sur les 70 % de droite, soleil rouge, titre vertical (de bas en haut) à gauche,
 // date en clair en bas à droite.
 import type { PosterCtx, PosterLayout } from "../types";
-import { C, label, numbers, parts, title } from "./shared";
+import { C, dot, label, numbers, parts, title } from "./shared";
 
 export function jdm(ctx: PosterCtx): PosterLayout {
   const { W, H, cqw, cqh } = ctx;
@@ -35,7 +35,7 @@ export function jdm(ctx: PosterCtx): PosterLayout {
         size: 16 * cqw,
         color: C.ink,
       }),
-      label(`${p.h}${p.pl ? ` · ${p.pl}` : ""}`, {
+      label(dot(p.Y, p.h, p.pl), {
         x: W - 5 * cqw,
         align: "right",
         width: 60 * cqw,

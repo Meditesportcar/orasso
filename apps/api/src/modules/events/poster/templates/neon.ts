@@ -49,7 +49,7 @@ export function neon(ctx: PosterCtx): PosterLayout {
         maxSize: (story ? 13 : 11) * cqw,
         color: C.ink,
       }),
-      label(dot(p.DAY, p.h, p.pl), {
+      label(dot(p.DAY, p.Y, p.h, p.pl), {
         x: 5 * cqw,
         // La signature occupe le coin bas droit : le libellé s'arrête avant (réduit s'il est plus long).
         width: SIG_FREE_WIDTH * cqw,

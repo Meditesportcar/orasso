@@ -14,7 +14,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, withYear } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
 import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -52,7 +52,7 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   timeZone: BUSINESS_TIMEZONE,
 });
 const dayLabel = (iso: string) => {
-  const s = DAY_FMT.format(new Date(iso));
+  const s = withYear(DAY_FMT.format(new Date(iso)), iso);
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 

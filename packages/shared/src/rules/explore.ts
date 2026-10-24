@@ -151,7 +151,9 @@ export function dayLabel(iso: string | Date, now: Date, timeZone?: string): stri
   if (key === keyOf(today)) return "Aujourd'hui";
   if (key === keyOf(addDays(today, 1))) return "Demain";
   const weekday = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
-  return `${WEEKDAYS[weekday]} ${w.day} ${MONTHS[w.month - 1]}`;
+  // Lot R3b : « Dim. 17 oct. 2027 » hors de l'année en cours.
+  const year = w.year === today.year ? "" : ` ${w.year}`;
+  return `${WEEKDAYS[weekday]} ${w.day} ${MONTHS[w.month - 1]}${year}`;
 }
 
 /**

@@ -36,7 +36,7 @@ export function retro(ctx: PosterCtx): PosterLayout {
         maxSize: 8.6 * cqw,
         color: C.dark,
       }),
-      label(dot(`${p.DAY} ${p.D} ${p.M}`, p.pl), {
+      label(dot([p.DAY, p.D, p.M, p.Y].filter(Boolean).join(" "), p.pl), {
         x: W / 2,
         align: "center",
         width: 84 * cqw,

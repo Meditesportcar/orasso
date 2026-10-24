@@ -2,6 +2,7 @@
 // affiche Post 4:5 et Story 9:16 rendues par l'API (une seule source pour le site, l'appli, les cartes et Instagram).
 // Ici, les règles pures : styles, formats, coupe du titre (jamais tronqué), date de la souche.
 import { BUSINESS_TIMEZONE } from "../enums";
+import { displayNow, yearToShow } from "./dateYear";
 import { wallTime } from "./time";
 
 /**
@@ -120,10 +121,12 @@ export type PosterDate = {
   monthNumber: string;
   /** « 19 h », « 18 h 30 » */
   hour: string;
+  /** Lot R3b : « 2027 » hors de l'année en cours, sinon vide. */
+  year: string;
 };
 
 /** Souche date de l'affiche : jour de la semaine, numéro, mois, heure de début (dans le fuseau de l'événement). */
-export function posterDate(startsAt: Date, timeZone = BUSINESS_TIMEZONE): PosterDate {
+export function posterDate(startsAt: Date, timeZone = BUSINESS_TIMEZONE, now: Date = displayNow()): PosterDate {
   const w = wallTime(startsAt, timeZone);
   const weekday = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
   return {
@@ -132,6 +135,7 @@ export function posterDate(startsAt: Date, timeZone = BUSINESS_TIMEZONE): Poster
     month: MONTHS[w.month - 1] ?? "",
     monthNumber: String(w.month).padStart(2, "0"),
     hour: w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`,
+    year: String(yearToShow(startsAt, now, timeZone) ?? ""),
   };
 }
 

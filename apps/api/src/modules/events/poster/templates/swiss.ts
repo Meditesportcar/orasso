@@ -39,7 +39,7 @@ export function swiss(ctx: PosterCtx): PosterLayout {
         kind: "svg",
         markup: `<rect x="${5 * cqw}" y="${H - 12.5 * cqh}" width="${90 * cqw}" height="${0.5 * cqh}" fill="${C.dark}"/>`,
       },
-      label(dot(p.DAY, p.h, p.pl), {
+      label(dot(p.DAY, p.Y, p.h, p.pl), {
         x: 5 * cqw,
         width: SIG_FREE_WIDTH * cqw,
         y: H - 6.5 * cqh,

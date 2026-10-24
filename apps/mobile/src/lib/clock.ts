@@ -3,6 +3,7 @@
 // nul et `now()` vaut exactement `new Date()` : rien ne change. Tout ce qui décide d'une règle du temps (ouverture des
 // inscriptions, jour J, mode staff, validité d'un QR, comptes à rebours) passe par ici ; les durées techniques
 // (anti-rebond d'un scan, attente avant une nouvelle tentative) restent sur `Date.now()`.
+import { setDisplayClock } from "@orasso/shared";
 import { useSyncExternalStore } from "react";
 
 let offsetMs = 0;
@@ -18,6 +19,9 @@ export const nowMs = () => Date.now() + offsetMs;
 
 /** Heure d'Orasso. */
 export const now = () => new Date(nowMs());
+
+// Lot R3b : l'année des dates affichées (`@orasso/shared`) se décide à l'heure d'Orasso, horloge simulée comprise.
+setDisplayClock(now);
 
 /** Pose le décalage (valeur illisible ou négative : 0). Renvoie `true` si le décalage a changé. */
 export function setClockOffset(ms: number): boolean {

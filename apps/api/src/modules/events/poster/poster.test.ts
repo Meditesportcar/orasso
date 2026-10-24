@@ -91,7 +91,7 @@ describe("rendu des affiches", () => {
         cqh: 13.5,
         story: false,
         input: input({ style, title }),
-        date: { weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h" },
+        date: { weekday: "SAM", day: "24", month: "OCT", monthNumber: "10", hour: "19 h", year: "" },
         title: title.toUpperCase(),
         place: "CANET",
       };

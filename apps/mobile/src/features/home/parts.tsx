@@ -20,12 +20,14 @@ import {
   homeWidgetTitles,
   type MyWeather,
   weatherTexts,
+  yearToShow,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { WeatherWidget } from "@/features/WeatherWidget";
+import { now } from "@/lib/clock";
 import { type Destination, openMaps, openWaze } from "@/lib/directions";
 import { formatShortDate } from "@/lib/format";
 import { kvGet, kvSet } from "@/lib/kv";
@@ -133,6 +135,7 @@ export function HeroCard({
       weekday={cap(WEEKDAY_FMT.format(date))}
       day={DAY_FMT.format(date)}
       month={cap(MONTH_FMT.format(date))}
+      year={yearToShow(date, now())?.toString() ?? null}
       countdown={countdown}
       hourLabel={hourLabel}
       title={title}

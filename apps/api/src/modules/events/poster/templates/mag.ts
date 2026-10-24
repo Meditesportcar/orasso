@@ -30,7 +30,7 @@ export function mag(ctx: PosterCtx): PosterLayout {
       lineHeight: 0.82,
       color: C.ink,
     }),
-    numbers([p.DAY, p.D, p.M].join(" "), {
+    numbers([p.DAY, p.D, p.M, p.Y].filter(Boolean).join(" "), {
       x: 4 * cqw,
       width: 92 * cqw,
       y: nmBottom,
