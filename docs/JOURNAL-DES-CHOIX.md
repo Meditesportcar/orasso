@@ -2761,3 +2761,40 @@ Source : `corrections-r3a.md` (relais).
 - **`endGate`** : `ready` ; les étapes Marque et modèle et Catégories ne comptent pas comme vues tant que leur liste se charge.
 - **Captures « avant »** prises depuis un worktree temporaire sur `main` 00d34cd4 (supprimé ensuite) : `lot-r3a-captures/avant/`.
 
+
+## Lot R4a : cadre de floutage par modes, modèle absent de la liste, « Modèles proposés » (maquette R4 validée par Damien le 24/10/2026)
+
+Source : maquette R4 (écrans `f-frame`, `m-absent`, `m-admin`), choix proposés validés le 24/10.
+
+### R4.1 Le cadre par modes (appli et site)
+- **Logique commune** dans `packages/shared/src/rules/plateFrame.ts` : `nextPlateFrameMode` (Déplacer → Rotation → Taille → Déplacer), `plateFrameHit` (ce que touche le doigt selon le mode), `resizePlateFrameEdges` (bord opposé fixe, dans les axes du cadre tourné ; un cadre droit s'arrête au bord de la photo), `rotateKnobBelow`, `isPlateFrameTap` (moins de 6 px et de 500 ms). Testée seule (shared, mobile).
+- **Un seul répondeur sur toute la photo** (appli) au lieu des répondeurs du cadre et de ses poignées : il trouve le cadre et le geste par la logique pure. Raison : en Taille, les zones des bords (22 px de chaque côté) dépassent du cadre, et sur Android un enfant hors de son parent ne reçoit pas le doigt. Ce qui est posé sur la photo (outils, message) garde la main ; le cadre n'est plus qu'un dessin (`pointerEvents="none"`).
+- **Bords d'une plaque basse** : une plaque fait souvent moins de 44 px de haut. Dans sa hauteur, le doigt tient le côté (gauche ou droit) ; le haut et le bas s'attrapent au-dessus ou au-dessous ; un coin, juste dehors, tient ses deux bords. Sans cela, toucher le côté tirait aussi le haut.
+- **Tige** : une seule constante, 38 px (`PLATE_ROTATE_HANDLE_OFFSET`), appli et site ; bouton de 28 px, toucher de 26 px de rayon. Retirés : `PLATE_ROTATE_OFFSET_FAR`, `PLATE_HANDLE`, `capturesGesture`, les gestes à deux doigts (`pinchPlateFrame`, `twoFingers`, `angleDelta`), les deux encadrés d'aide et `frameHint`.
+- **Les trois usages de l'éditeur** (étape Plaque, floutage d'une photo du garage, photos de contenu média) prennent les modes : un seul comportement du cadre. La loupe reste à l'étape Plaque et au floutage du garage (`loupe`).
+- **Ligne du mode** sous la photo (`.r4mode`), annoncée aux lecteurs d'écran ; pictogrammes « move », « undo » (celui du bouton de la tige) et « crop » pour Taille (pas d'icône « resize » dans le système ; aucun jeton ajouté).
+- **Masque translucide** pendant Déplacer et Taille (`night` à 62 %, comme la maquette), noir au lâcher ; pas pendant la rotation.
+- **« Cadre posé »** : la vignette le dit (icône main) quand les cadres diffèrent de ce que la détection a proposé (`framedByHand`), « Masquée » sinon.
+- **Rouvre en Déplacer** : à chaque photo ouverte (clé de la photo) et à chaque retour sur l'étape.
+- **Worklets** : styles animés sur valeurs partagées et constantes locales ; les bords tenus tiennent dans un nombre (bits l, r, t, b) ; audit propre (118 worklets).
+- **Site** : même logique à la souris (Pointer Events sur toute la photo ; curseur `ew-resize`, `ns-resize`, `nwse-resize`/`nesw-resize` aux coins, `grab` sur le geste, `pointer` dans le cadre). Les curseurs restent ceux d'un cadre droit pour un cadre tourné (approximation).
+
+### R4.8 Modèle absent de la liste
+- **Migration 0058** : `vehicles.proposed_make`, `vehicles.proposed_model` (2 à 40 caractères, contrainte en base). Gardés seulement avec le niveau « Autre » correspondant, nettoyés (`cleanProposedName` : contrôles retirés, espaces réduits, casse gardée). Un nom tapé demande l'année (400 sinon) ; la génération n'est pas demandée (`generationId` nul).
+- **Nom affiché** : `vehicleLabel` et `vehicleBriefLabel` prennent le nom tapé d'un niveau « Autre » (« Peugeot 207 CC ») : fiche, garage, candidatures, tout ce qui passe par `vehicleLabel` (le plateau de R4b doit l'utiliser), affiche (`storyName`, `storyLine`), prix du public, fiche admin d'un compte ; `makeName`/`modelName` des fiches aussi. `proposedMake`/`proposedModel` ne sont que dans `VehicleFull` (propriétaire, organisateur) : la mention « à ajouter à la liste » n'apparaît jamais sur une fiche publique.
+- **Certification** : nouvelle condition `reference` (« Le modèle rattaché à la liste Orasso ») tant qu'un nom tapé attend ; elle tombe au rattachement.
+- **Recherche « Marque ou modèle »** (appli et site) par `GET /api/vehicle-reference/search` (R3c), une requête par pause de frappe (200 ms) ; au niveau Modèle, la marque choisie fait partie de la recherche (« peugeot 207 »). Route en panne : la liste se filtre sur l'appareil, une ligne le dit.
+- **Marque tapée** : « Ma marque n'est pas dans la liste » (marque « Autre ») avec deux champs, « Marque » et « Nom du modèle » ; le modèle « Autre » de la marque « Autre » se pose seul. L'origine ne se déduit pas : l'étape 5 montre les catégories d'origine à choisir (« Son origine »), gardées par `keptCategories(…, pickOrigins)` (appli et site) ; l'API les accepte déjà pour une marque « Autre ».
+- **Rien trouvé au niveau Marque** : « Ajouter la marque « … » » (la maquette ne le montre qu'au niveau Modèle ; même principe).
+- **« Je ne sais pas, ou elle n'est pas dans la liste »** : la génération « Autre » renommée ; la fiche en direct dit « Génération non précisée ».
+- **Page du véhicule du propriétaire** (appli `vehicule/[id].tsx`, site `garage-vehicule.tsx`) : étiquette « à ajouter à la liste ».
+- **Site** : la recherche au-dessus des listes déroulantes, résultats en boutons ; « Autre » devient « Ma marque… » / « Mon modèle n'est pas dans la liste » dans les listes ; cadre « Nom du modèle » et sa phrase ; génération cachée quand on tape. Recettes existantes : `getByLabel("Marque")` et `("Modèle")` passent en `exact: true` (le champ « Marque ou modèle » les contient).
+
+### R4.8b « Modèles proposés » (site d'administration)
+- **Regroupement** : clé `model.<marque>.<texte>` ou `make.<texte>.<texte>`, texte sans accents ni casse, **espaces et ponctuation retirés** (« 207 CC », « 207cc », « 207-CC » ensemble ; « espaces réduits » pris au sens fort, sinon « 207 cc » et « 207cc » faisaient deux files). « 207 » et « 207 CC » restent deux groupes : le second se rattache au modèle créé par le premier.
+- **API** : `GET /admin/vehicle-reference/proposals`, `POST /admin/vehicle-reference/proposals/:clé/accept` (`{ makeId | makeName + country, modelId | modelName, generationId? }`), super administrateur, une transaction (fiches verrouillées) : marque et modèle retrouvés par leur nom ou créés (avec leur « Autre »), fiches rattachées, noms tapés effacés, type aligné sur le modèle, une notification `vehicle_reassigned` par propriétaire (« L'équipe Orasso a rattaché ta Peugeot 207 CC à la liste : Peugeot 207. »), journal `vehicle.proposal_accept` (et `reference.*_create`). Les fiches à nom tapé quittent la file « Autre » ; `reassign` (fiche par fiche) efface le nom tapé d'un niveau qui n'est plus « Autre ».
+- **Écran** : en tête de `/admin/vehicules`, un groupe par carte repliable (la plus grosse ouverte), variantes et nombres, tableau des fiches (propriétaire, tapé, année, département, date), « Ajouter à la liste et rattacher les N fiches » (nom modifiable), « Rattacher à un modèle existant » (modèles de la marque). Pas d'onglets comme la maquette : la page n'en a pas, la file est posée au-dessus des colonnes existantes. Pas d'annulation (V1).
+- **Génération tapée** (maquette : « Renault Clio RS · génération tapée ») : hors du lot ; seuls la marque et le modèle se tapent, une génération inconnue se passe.
+
+### Fichiers d'autres listes touchés (petits ajouts)
+- `apps/mobile/src/app/vehicule/[id].tsx`, `apps/web/app/routes/garage-vehicule.tsx` (étiquette), `apps/api/src/modules/audience-prize/service.ts`, `apps/api/src/modules/admin/users.ts` (nom tapé dans le libellé). `social/profile.ts` non touché (R4c) : ses `makeName`/`modelName` restent « Autre », son libellé dit le nom tapé.

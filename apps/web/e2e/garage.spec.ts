@@ -56,9 +56,9 @@ export async function giveSportGrade(pseudo: string) {
 const vehicles = async (cookie: Cookie) => (await apiCall<VehicleRow[]>(cookie, "GET", "/me/vehicles")).data;
 
 async function pickVehicle(page: Page, make: string, model: string) {
-  await page.getByLabel("Marque").selectOption({ label: make });
-  await expect(page.getByLabel("Modèle").locator(`option:text-is("${model}")`)).toHaveCount(1);
-  await page.getByLabel("Modèle").selectOption({ label: model });
+  await page.getByLabel("Marque", { exact: true }).selectOption({ label: make });
+  await expect(page.getByLabel("Modèle", { exact: true }).locator(`option:text-is("${model}")`)).toHaveCount(1);
+  await page.getByLabel("Modèle", { exact: true }).selectOption({ label: model });
 }
 
 test("formulaire du véhicule : catégories grisées avec la raison, statut et poids", async ({ page }) => {

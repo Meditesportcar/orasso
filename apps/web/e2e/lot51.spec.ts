@@ -54,14 +54,21 @@ async function dragFrame(page: Page, scope: string, dx: number, dy: number, gx =
   for (let i = 1; i <= 8; i++) await page.mouse.move(cx + (dx * i) / 8, cy + (dy * i) / 8);
   await page.mouse.up();
   if (gx || gy) {
-    const handle = await editor.getByTestId("site-plate-handle").first().boundingBox();
-    if (!handle) throw new Error("coin absent");
-    const hx = handle.x + handle.width / 2;
-    const hy = handle.y + handle.height / 2;
+    // Lot R4a (cadre par modes) : deux clics sur le cadre passent à Taille ; le coin bas droit tient ses deux bords.
+    const moved = await editor.getByTestId("site-plate-frame").first().boundingBox();
+    if (!moved) throw new Error("cadre absent");
+    for (let i = 0; i < 2; i++) await page.mouse.click(moved.x + moved.width / 2, moved.y + moved.height / 2);
+    await expect(editor.getByTestId("site-plate-mode")).toContainText("Taille");
+    // Le coin, juste dehors : ses deux bords (un cadre de plaque est plus bas que deux zones de toucher).
+    const hx = moved.x + moved.width + 6;
+    const hy = moved.y + moved.height + 6;
     await page.mouse.move(hx, hy);
     await page.mouse.down();
     for (let i = 1; i <= 8; i++) await page.mouse.move(hx + (gx * i) / 8, hy + (gy * i) / 8);
     await page.mouse.up();
+    // Un clic de plus : retour à Déplacer.
+    const after = await editor.getByTestId("site-plate-frame").first().boundingBox();
+    if (after) await page.mouse.click(after.x + after.width / 2, after.y + after.height / 2);
   }
 }
 
@@ -93,9 +100,9 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
 
     // Ajout : la photo choisie s'affiche, on pose le cadre, on le place.
-    await page.getByLabel("Marque").selectOption({ label: "Toyota" });
-    await expect(page.getByLabel("Modèle").locator('option:text-is("Supra")')).toHaveCount(1);
-    await page.getByLabel("Modèle").selectOption({ label: "Supra" });
+    await page.getByLabel("Marque", { exact: true }).selectOption({ label: "Toyota" });
+    await expect(page.getByLabel("Modèle", { exact: true }).locator('option:text-is("Supra")')).toHaveCount(1);
+    await page.getByLabel("Modèle", { exact: true }).selectOption({ label: "Supra" });
     await page.getByLabel("Numéro de plaque").fill(randomPlate());
     await chooseSitePhoto(page, { name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
     const editor = page.getByTestId("new-plate-frame");

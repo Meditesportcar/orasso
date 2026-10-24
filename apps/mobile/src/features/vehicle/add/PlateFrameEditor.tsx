@@ -337,6 +337,7 @@ function FrameBox({
         : { borderColor: "transparent", borderWidth: 0 };
   const below = rotateKnobBelow(rect, box.h);
   const edgeIdle = c.nightInk;
+  const ring = `0 0 0 1px ${withAlpha(c.night, 0.45)}`;
   const edgeOn = c.accent;
   const top = useAnimatedStyle(() => {
     "worklet";
@@ -368,10 +369,10 @@ function FrameBox({
     >
       {editable && mode === "size" ? (
         <>
-          <Animated.View style={[styles.edgeH, { boxShadow: `0 0 0 1px ${withAlpha(c.night, 0.45)}` }, top]} />
-          <Animated.View style={[styles.edgeH, { boxShadow: `0 0 0 1px ${withAlpha(c.night, 0.45)}` }, bottom]} />
-          <Animated.View style={[styles.edgeV, { boxShadow: `0 0 0 1px ${withAlpha(c.night, 0.45)}` }, left]} />
-          <Animated.View style={[styles.edgeV, { boxShadow: `0 0 0 1px ${withAlpha(c.night, 0.45)}` }, right]} />
+          <Animated.View testID="plate-frame-edge-t" style={[styles.edgeH, { boxShadow: ring }, top]} />
+          <Animated.View testID="plate-frame-edge-b" style={[styles.edgeH, { boxShadow: ring }, bottom]} />
+          <Animated.View testID="plate-frame-edge-l" style={[styles.edgeV, { boxShadow: ring }, left]} />
+          <Animated.View testID="plate-frame-edge-r" style={[styles.edgeV, { boxShadow: ring }, right]} />
         </>
       ) : null}
       {editable && mode === "rotate" ? (
