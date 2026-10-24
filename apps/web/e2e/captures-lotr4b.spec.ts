@@ -17,7 +17,10 @@ test.beforeAll(() => mkdirSync(DIR, { recursive: true }));
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
   if (await skip.isVisible().catch(() => false)) await skip.click({ position: { x: 40, y: 600 } }).catch(() => {});
-  await page.getByTestId("opening-battle").waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
+  await page
+    .getByTestId("opening-battle")
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => {});
 }
 
 async function go(page: Page, path: string) {
@@ -62,7 +65,10 @@ for (const theme of THEMES) {
     await go(page, "/sorties");
     await page.getByTestId("sorties-segments").waitFor();
     await shot(page, `appli-sorties-venir-${theme}`);
-    await page.getByTestId("sorties-segments").getByText(/Passées/).click();
+    await page
+      .getByTestId("sorties-segments")
+      .getByText(/Passées/)
+      .click();
     await shot(page, `appli-sorties-passees-${theme}`);
     if (PHASE === "apres") {
       await go(page, `/e/${SLUG}/plateau`);

@@ -1,12 +1,7 @@
 // Lot R4b : le plateau d'un événement (`GET /events/:id/lineup`), vie privée d'abord : listes blanches des champs pour
 // chaque regard (moi, membre, compte privé, visiteur), absents jamais montrés après l'événement, comptes suspendus
 // exclus, événements brouillon / privé / annulé fermés, ligne de Mes sorties, fiche d'une voiture d'un compte privé.
-import {
-  lineupCarMemberFields,
-  lineupCarVisitorFields,
-  lineupProFields,
-  type LineupCarMember,
-} from "@orasso/shared";
+import { type LineupCarMember, lineupCarMemberFields, lineupCarVisitorFields, lineupProFields } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -27,8 +22,8 @@ import {
   applications,
   checkins,
   events,
-  profiles,
   proDiscounts,
+  profiles,
   providerProfiles,
   vehicleCategories,
 } from "../../db/schema";

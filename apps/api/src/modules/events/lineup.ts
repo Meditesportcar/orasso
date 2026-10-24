@@ -14,8 +14,8 @@ import {
   type LineupQuery,
   lineupLabels,
   lineupPhase,
-  providerTypeLabel,
   proVisibility,
+  providerTypeLabel,
   shownDiscount,
   type VendorTypeCode,
 } from "@orasso/shared";
@@ -53,12 +53,7 @@ const accountOk = (t: Date) =>
 
 /** Entrée pointée (scan, pointage, express) de la candidature. */
 const checkedIn = () =>
-  exists(
-    db
-      .select({ one: sql`1` })
-      .from(checkins)
-      .where(eq(checkins.applicationId, applications.id)),
-  );
+  exists(db.select({ one: sql`1` }).from(checkins).where(eq(checkins.applicationId, applications.id)));
 
 /** Voitures du plateau : candidature de véhicule retenue, véhicule actif (un véhicule archivé n'est plus montré). */
 const carBase = (t: Date) =>
@@ -253,7 +248,9 @@ export const lineupService = {
         vehicleId: vehicles.id,
         mine: sql<boolean>`bool_or(${applications.userId} = ${viewerId})`,
         at: sql<number>`extract(epoch from ${firstAt})::float8`,
-        photoKey: sql<string | null>`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} order by ${vehiclePhotos.position} limit 1)`,
+        photoKey: sql<
+          string | null
+        >`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos} where ${vehiclePhotos.vehicleId} = ${vehicles.id} order by ${vehiclePhotos.position} limit 1)`,
       })
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))

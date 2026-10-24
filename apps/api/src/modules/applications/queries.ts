@@ -380,7 +380,10 @@ export const applicationsQueries = {
       mine.filter((a) => a.status === "accepted").map((a) => a.event.id),
       v.user.id,
     );
-    return mine.map((a) => ({ ...a, lineupPreview: a.status === "accepted" ? (previews.get(a.event.id) ?? null) : null }));
+    return mine.map((a) => ({
+      ...a,
+      lineupPreview: a.status === "accepted" ? (previews.get(a.event.id) ?? null) : null,
+    }));
   },
 
   /** Candidat : sa carte Accès. Organisation : la fiche de tri. */
