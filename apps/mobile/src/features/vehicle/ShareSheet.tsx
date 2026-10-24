@@ -160,8 +160,7 @@ export function ShareBody({
     const timer = setTimeout(() => {
       if (!cancelled) setChecks((all) => (all[key] === "checking" ? { ...all, [key]: "slow" } : all));
     }, PLATE_CHECK_TIMEOUT_MS);
-    const size = SHARE_SIZES[format];
-    void detectSharePlates(shownUri, size.width, size.height)
+    void detectSharePlates(shownUri, format)
       .catch(() => null)
       .then((plates) => {
         clearTimeout(timer);
@@ -398,14 +397,15 @@ export function ShareBody({
           </SmButton>
         </View>
       ) : null}
-      <View style={[styles.row, blocked ? styles.hidden : null]}>
+      {/* Lot R3a : la rangée passe à la ligne plutôt que d'écraser un libellé (grande police, écran étroit). */}
+      <View style={[styles.rowWrap, blocked ? styles.hidden : null]}>
         <SmButton
           kind="p"
           big
           icon="share"
           disabled={!current || busy !== null || checking || blocked}
           onPress={() => void send("share")}
-          style={styles.grow}
+          style={styles.growWrap}
           testID="share-story"
         >
           {busy === "share" ? L.loading : checking ? L.plateCheckingShort : format === "story" ? L.story : L.post}
@@ -479,11 +479,12 @@ const styles = StyleSheet.create({
   },
   check: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", alignSelf: "stretch" },
   checkText: { flexShrink: 1 },
-  row: { flexDirection: "row", gap: space2 },
   stack: { gap: space2 },
   wide: { alignSelf: "stretch" },
   /** Le bouton « Copier le lien » : une icône seule, carré de 50 px (`.btn.btn-s` de la maquette). */
   square: { width: 50, paddingHorizontal: 0 },
   hidden: { display: "none" },
-  grow: { flex: 1, alignSelf: "stretch" },
+  rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  /** Grandit sans jamais rétrécir sous son libellé (`flex: 1` l'écrasait). */
+  growWrap: { flexGrow: 1, flexShrink: 0, alignSelf: "stretch" },
 });

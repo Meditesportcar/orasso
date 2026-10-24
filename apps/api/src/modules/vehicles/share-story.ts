@@ -13,7 +13,16 @@
 // affiches d'événement.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type PlateRect, SHARE_SIZES, type ShareFormat, type ShareStyle, shareSafeBands } from "@orasso/shared";
+import {
+  type PlateRect,
+  SHARE_SIZES,
+  type ShareFormat,
+  type ShareStyle,
+  sharePhotoTop,
+  shareSafeBands,
+  shareSealSide,
+  shareSealTop,
+} from "@orasso/shared";
 import QRCode from "qrcode";
 import sharp, { type OverlayOptions } from "sharp";
 
@@ -118,7 +127,7 @@ export function storyFrame(format: ShareFormat) {
     story,
     cqh,
     /** La photo carrée : 4 % du haut en story, remontée de 15 % en post. */
-    photoY: Math.round(story ? 0.04 * H : -0.15 * H),
+    photoY: sharePhotoTop(format),
     /** Le voile monte de là jusqu'en bas. */
     fadeFrom: story ? 0.4 : 0.44,
     /** Bas du bloc principal (chiffres) et du pied (logo, QR). */
@@ -126,7 +135,7 @@ export function storyFrame(format: ShareFormat) {
     footBottom: Math.round(H * (story ? 0.844 : 0.968)),
     qr: Math.round((story ? 13 : 11) * cqw),
     nameMax: Math.round((story ? 13 : 11.5) * cqw),
-    sealTop: Math.round(H * (story ? 0.145 : 0.03)),
+    sealTop: shareSealTop(format),
     gap: (story ? 2.2 : 1.6) * cqh,
     bands: story ? shareSafeBands(H) : { top: 0, bottom: 0 },
   };
@@ -527,7 +536,7 @@ export async function storyLayout(i: StoryInput) {
 
   // Sceau à reflet, seulement si le véhicule est certifié.
   if (i.certified) {
-    const s = Math.round(23 * cqw);
+    const s = shareSealSide(i.format);
     const seal = await certifiedSeal(s, "VÉHICULE CERTIFIÉ · ORASSO · ");
     const turned = await sharp(seal)
       .rotate(-10, { background: { r: 0, g: 0, b: 0, alpha: 0 } })

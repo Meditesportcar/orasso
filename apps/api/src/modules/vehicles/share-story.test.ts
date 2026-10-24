@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHARE_SIZES, shareFormats, shareSafeBands, shareStyles } from "@orasso/shared";
+import { SHARE_SIZES, shareFormats, sharePhotoZone, shareSafeBands, shareStyles } from "@orasso/shared";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
@@ -74,6 +74,31 @@ describe("affiche à partager", () => {
           expect(p.bottom, `${p.kind} au-dessus de la marge du bas (${name})`).toBeLessThanOrEqual(
             frame.H - frame.bands.bottom,
           );
+        }
+      }
+    }
+  });
+
+  it("lot R3a : aucun texte d'Orasso sur la partie nette de la photo (zone de la vérification de plaque), 3 styles", async () => {
+    for (const format of shareFormats) {
+      const zone = sharePhotoZone(format);
+      for (const style of shareStyles) {
+        for (const name of ["GTI", LONG]) {
+          for (const over of [{}, { stats: [] }, { line: "" }, { tags: [] }]) {
+            const { frame, placed } = await storyLayout(base({ format, style, name, certified: true, ...over }));
+            for (const p of placed) {
+              if (p.kind === "shadow" || p.kind === "halo") continue;
+              if (p.kind === "seal") {
+                // Le sceau est dans la zone exclue (à droite en haut).
+                expect(p.top, `${format} ${style} : sceau`).toBeGreaterThanOrEqual(zone.seal.top * frame.H);
+                expect(p.bottom, `${format} ${style} : sceau`).toBeLessThanOrEqual(zone.seal.bottom * frame.H);
+                continue;
+              }
+              expect(p.top, `${format} ${style} ${p.kind} sous la photo (${name})`).toBeGreaterThanOrEqual(
+                zone.bottom * frame.H,
+              );
+            }
+          }
         }
       }
     }

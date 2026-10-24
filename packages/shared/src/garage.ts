@@ -42,6 +42,55 @@ export const SHARE_SIZES: Record<ShareFormat, { width: number; height: number }>
   post: { width: 1080, height: 1350 },
 };
 
+/** Haut de la photo carrée (px, pleine largeur) sur l'affiche : 4 % de la hauteur en story, remontée de 15 % en post. */
+export function sharePhotoTop(format: ShareFormat): number {
+  const H = SHARE_SIZES[format].height;
+  return Math.round(format === "story" ? 0.04 * H : -0.15 * H);
+}
+
+/** Haut du sceau « Véhicule certifié » (px) : 14,5 % de la hauteur en story, 3 % en post. */
+export function shareSealTop(format: ShareFormat): number {
+  return Math.round(SHARE_SIZES[format].height * (format === "story" ? 0.145 : 0.03));
+}
+
+/** Côté du sceau (px) : 23 % de la largeur ; posé à 4 % du bord droit, tourné de -10°. */
+export const shareSealSide = (format: ShareFormat): number => Math.round(SHARE_SIZES[format].width * 0.23);
+
+/**
+ * Lot R3a (retour 7 de Damien) : la partie nette de la photo sur l'affiche, en fractions de la hauteur et de la largeur.
+ * La photo carrée est fondue en haut (7 %) et en bas (à partir de 78 %) ; au-dessous viennent les étiquettes, le nom, les
+ * chiffres et le pied (textes d'Orasso). Le sceau, à droite en haut, est aussi un texte d'Orasso.
+ */
+export function sharePhotoZone(format: ShareFormat): {
+  top: number;
+  bottom: number;
+  seal: { left: number; top: number; bottom: number };
+} {
+  const { width: W, height: H } = SHARE_SIZES[format];
+  const y = sharePhotoTop(format);
+  const s = shareSealSide(format);
+  // Le sceau tourné déborde un peu de son carré : 30 px de marge.
+  const sealTop = shareSealTop(format) - 30;
+  return {
+    top: Math.max(0, y + 0.07 * W) / H,
+    bottom: Math.min(H, y + 0.78 * W) / H,
+    seal: { left: (W - 0.04 * W - s - 30) / W, top: Math.max(0, sealTop) / H, bottom: (sealTop + s + 60) / H },
+  };
+}
+
+/**
+ * Lot R3a (retour 7) : une plaque re-détectée sur l'affiche composée ne compte que si elle est sur la photo (son centre
+ * dans la partie nette, hors du sceau). Les textes qu'Orasso dessine (nom, marque, @pseudo, adresse, chiffres, sceau)
+ * sont ignorés : en Sable, l'un d'eux était lu comme une plaque.
+ */
+export function plateOnSharePhoto(format: ShareFormat, rect: { x: number; y: number; w: number; h: number }): boolean {
+  const zone = sharePhotoZone(format);
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  if (cy < zone.top || cy > zone.bottom) return false;
+  return !(cx >= zone.seal.left && cy >= zone.seal.top && cy <= zone.seal.bottom);
+}
+
 /** Délai sans réponse de l'ancien propriétaire avant l'arbitrage de l'équipe (S36). */
 export const PLATE_TRANSFER_DELAY_DAYS = 7;
 
