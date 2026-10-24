@@ -4,6 +4,7 @@ import { createMiddleware } from "hono/factory";
 import { auth } from "../auth";
 import { type Profile, profilesRepo } from "../modules/profiles/repo";
 import { ensureProfile } from "../modules/profiles/service";
+import { readSessionOrNull } from "../modules/security/session-life";
 import { now } from "./deps";
 import { AppError, unauthenticated } from "./errors";
 
@@ -24,7 +25,8 @@ export type AppEnv = {
 
 /** Charge la session Better Auth (cookie) et le profil, sans rien exiger. */
 export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  // Lot R3d : une session révoquée à la lecture (compte à rôle de plateforme inactif) vaut « pas de session ».
+  const session = await readSessionOrNull(() => auth.api.getSession({ headers: c.req.raw.headers }));
   c.set("user", session?.user ?? null);
   c.set("sessionId", session?.session.id ?? null);
   c.set(
