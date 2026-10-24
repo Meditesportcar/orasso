@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canFollowUser, followNotificationBody } from "./follows";
+import { canFollowUser, followNotificationBody, networkCountsVisible } from "./follows";
 import { effectiveMainVehicleId, garageOrder, preselectVehicle } from "./mainVehicle";
 
 const garage = [
@@ -40,28 +40,33 @@ describe("véhicule principal (lot R4c)", () => {
 });
 
 describe("présélection de la candidature (R4.5b)", () => {
-  const ok = (id: string) => ({ id, hasPhoto: true, matches: true });
+  const ok = (id: string) => ({ id, hasPhoto: true, matches: true, admitted: true });
   it("le principal d'abord", () => {
     expect(preselectVehicle([ok("a"), ok("b")], "b", "a")).toEqual({ id: "b", reason: "main" });
   });
   it("principal sans photo : le dernier utilisé", () => {
-    expect(preselectVehicle([{ id: "b", hasPhoto: false, matches: true }, ok("a")], "b", "a")).toEqual({
+    expect(preselectVehicle([{ id: "b", hasPhoto: false, matches: true, admitted: true }, ok("a")], "b", "a")).toEqual({
       id: "a",
       reason: "last",
     });
   });
   it("principal hors des catégories recherchées : le dernier utilisé, puis le premier qui convient", () => {
-    const off = { id: "b", hasPhoto: true, matches: false };
+    const off = { id: "b", hasPhoto: true, matches: false, admitted: true };
     expect(preselectVehicle([off, ok("a"), ok("c")], "b", "c")).toEqual({ id: "c", reason: "last" });
     expect(preselectVehicle([off, ok("a")], "b", null)).toEqual({ id: "a", reason: "first" });
   });
   it("rien ne convient aux catégories : le premier qui a une photo (candidature possible quand même)", () => {
-    const offA = { id: "a", hasPhoto: false, matches: false };
-    const offB = { id: "b", hasPhoto: true, matches: false };
+    const offA = { id: "a", hasPhoto: false, matches: false, admitted: true };
+    const offB = { id: "b", hasPhoto: true, matches: false, admitted: true };
     expect(preselectVehicle([offA, offB], "a", null)).toEqual({ id: "b", reason: "first" });
   });
+  it("garage mixte : une moto principale n'est jamais proposée pour un événement réservé aux voitures", () => {
+    const moto = { id: "moto", hasPhoto: true, matches: true, admitted: false };
+    expect(preselectVehicle([moto, ok("car")], "moto", "moto")).toEqual({ id: "car", reason: "first" });
+    expect(preselectVehicle([moto], "moto", null)).toBeNull();
+  });
   it("aucune photo : rien de présélectionné", () => {
-    expect(preselectVehicle([{ id: "a", hasPhoto: false, matches: true }], "a", "a")).toBeNull();
+    expect(preselectVehicle([{ id: "a", hasPhoto: false, matches: true, admitted: true }], "a", "a")).toBeNull();
   });
 });
 
@@ -71,6 +76,12 @@ describe("suivre une personne (R4.6)", () => {
     expect(canFollowUser({ isSelf: false, visibility: "private" })).toBe(false);
     expect(canFollowUser({ isSelf: true, visibility: "public" })).toBe(false);
     expect(canFollowUser({ isSelf: false, visibility: "public", unavailable: true })).toBe(false);
+  });
+  it("nombres du réseau : amis d'un compte privé, tout membre d'un compte public", () => {
+    expect(networkCountsVisible({ isSelf: false, isFriend: false, visibility: "private" })).toBe(false);
+    expect(networkCountsVisible({ isSelf: false, isFriend: true, visibility: "private" })).toBe(true);
+    expect(networkCountsVisible({ isSelf: true, isFriend: false, visibility: "private" })).toBe(true);
+    expect(networkCountsVisible({ isSelf: false, isFriend: false, visibility: "public" })).toBe(true);
   });
   it("notification regroupée", () => {
     expect(followNotificationBody(["Kenji_66"], 1)).toBe("Kenji_66 te suit.");

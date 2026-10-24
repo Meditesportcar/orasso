@@ -33,7 +33,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const raw = url.searchParams.get("onglet") ?? "abonnes";
   const tab: Tab = (TABS as readonly string[]).includes(raw) ? (raw as Tab) : "abonnes";
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 40);
+  // Tour 2 : un curseur par groupe (personnes ou abonnés, organisateurs, pros), chacun avec son « Suivants ».
   const cursor = url.searchParams.get("apres") ?? "";
+  const cursors: Record<"people" | "structures" | "pros", string> = {
+    people: cursor,
+    structures: url.searchParams.get("apres_org") ?? "",
+    pros: url.searchParams.get("apres_pro") ?? "",
+  };
   const qs = (extra: Record<string, string>) => {
     const p = new URLSearchParams({ ...(q ? { q } : {}), ...extra });
     const s = p.toString();
@@ -50,7 +56,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const page = (kind: "people" | "structures" | "pros") =>
       apiOrThrow<FollowingPage>(
         request,
-        `/me/following${qs({ kind, ...(cursor && kind === "people" ? { cursor } : {}) })}`,
+        `/me/following${qs({ kind, ...(cursors[kind] ? { cursor: cursors[kind] } : {}) })}`,
       );
     const [people, structures, pros] = (await Promise.all([page("people"), page("structures"), page("pros")])) as [
       PeoplePage,
@@ -134,13 +140,13 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
       : t === "abonnements"
         ? `${network.following} ${N.following(network.following)}`
         : `${network.friends} ${N.friends(network.friends)}`;
-  const next = (cursor: string | null) =>
+  const next = (cursor: string | null, param: "apres" | "apres_org" | "apres_pro" = "apres") =>
     cursor ? (
       <Button
         variant="secondary"
         icon="down"
-        href={`/app/reseau?${new URLSearchParams({ onglet: tab, ...(q ? { q } : {}), apres: cursor }).toString()}`}
-        data-testid="net-next"
+        href={`/app/reseau?${new URLSearchParams({ onglet: tab, ...(q ? { q } : {}), [param]: cursor }).toString()}`}
+        data-testid={param === "apres" ? "net-next" : `net-next-${param === "apres_org" ? "structures" : "pros"}`}
       >
         Suivants
       </Button>
@@ -231,6 +237,7 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
                       </li>
                     ))}
                   </ul>
+                  {next(page.nextCursor, page.kind === "structures" ? "apres_org" : "apres_pro")}
                 </section>
               ) : null,
             )}

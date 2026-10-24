@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { auditPage } from "./audit";
 import {
   apiCall,
@@ -112,6 +113,43 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
   await apiCall(fan.cookie, "POST", `/users/${mePseudo}/follow`);
   await apiCall(priv.cookie, "POST", `/users/${mePseudo}/follow`);
   const email = `${mePseudo.toLowerCase()}@e2e.orasso.test`;
+  // Tour 2 : 31 organisateurs et 31 pros suivis (copies d'une structure et d'une fiche du seed, en base) : chaque groupe
+  // a sa propre page suivante.
+  const meRow = await apiCall<{ user: { id: string } }>(me, "GET", "/me");
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  try {
+    const tag = `r4c-${id}`;
+    await db.query(
+      `insert into structures
+         select (jsonb_populate_record(null::structures, to_jsonb(s) || jsonb_build_object(
+           'id', gen_random_uuid(), 'slug', $1 || '-org-' || g, 'name', 'Orga R4c ' || lpad(g::text, 2, '0'),
+           'invite_token', md5(random()::text || g)))).*
+         from (select * from structures where slug = 'meditesportcar') s, generate_series(1, 31) g`,
+      [tag],
+    );
+    await db.query(
+      `insert into structure_follows (structure_id, user_id, source)
+         select id, $2, 'manual' from structures where slug like $1 || '-org-%'`,
+      [tag, meRow.data.user.id],
+    );
+    await db.query(
+      `insert into pro_profiles
+         select (jsonb_populate_record(null::pro_profiles, to_jsonb(p) || jsonb_build_object(
+           'id', gen_random_uuid(), 'slug', $1 || '-pro-' || u.n, 'name', 'Pro R4c ' || lpad(u.n::text, 2, '0'),
+           'owner_user_id', u.id, 'siret', null))).*
+         from (select * from pro_profiles where deleted_at is null and published_at is not null limit 1) p,
+              (select id, row_number() over () as n from "user"
+                 where id not in (select owner_user_id from pro_profiles where deleted_at is null) limit 31) u`,
+      [tag],
+    );
+    await db.query(
+      `insert into pro_follows (pro_id, user_id) select id, $2 from pro_profiles where slug like $1 || '-pro-%'`,
+      [tag, meRow.data.user.id],
+    );
+  } finally {
+    await db.end();
+  }
 
   for (const theme of ["beton", "sable"] as const) {
     for (const width of [390, 1280]) {
@@ -157,6 +195,18 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await expect(page.getByTestId("net-privacy")).toContainText("Toi seul vois ces listes.");
       await audit(page);
       await shot("06-reseau-abonnes");
+      // Tour 2 : Organisateurs et Pros, 30 par page, chacun son « Suivants ».
+      await page.getByTestId("net-tab-abonnements").click();
+      await expect(page.getByTestId("net-structures").locator(".n-row")).toHaveCount(30);
+      await expect(page.getByTestId("net-pros").locator(".n-row")).toHaveCount(30);
+      await page.getByTestId("net-next-pros").click();
+      await expect(page.getByTestId("net-pros").locator(".n-row")).toHaveCount(1);
+      await expect(page.getByTestId("net-structures").locator(".n-row")).toHaveCount(30);
+      await page.goto("/app/reseau?onglet=abonnements");
+      await page.getByTestId("net-next-structures").click();
+      await expect(page.getByTestId("net-structures").locator(".n-row")).toHaveCount(1);
+      await shot("06b-reseau-abonnements");
+      await page.goto("/app/reseau?onglet=abonnes");
       await page.getByTestId("net-tab-amis").click();
       await expect(page.getByTestId("net-friends")).toContainText(friend.pseudo);
       await shot("07-reseau-amis");
@@ -165,6 +215,7 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await page.goto("/app/profil-public");
       await expect(page.getByTestId("public-head")).toContainText(mePseudo);
       await expect(page.getByTestId("preview-vehicles")).toContainText("★ Principal");
+      await expect(page.getByTestId("preview-upcoming")).toBeVisible();
       await audit(page);
       await shot("08-apercu-membre");
       await page.getByTestId("preview-as-friend").click();

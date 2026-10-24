@@ -10,6 +10,7 @@ import { StyleSheet, View } from "react-native";
 import { SmButton } from "@/features/passionne/kit";
 import { PublicHead } from "@/features/profil/network";
 import { api } from "@/lib/api";
+import { formatDay } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -114,6 +115,48 @@ export default function ProfilPublic() {
             </>
           ) : (
             <>
+              {/* Tour 2 : tout ce qu'un membre voit vraiment (champs de GET /users/:pseudo pour ce regard). */}
+              {p.upcomingEvents ? (
+                <>
+                  <View style={styles.secHead}>
+                    <Text variant="posterM" color={c.ink}>
+                      {P.upcoming}
+                    </Text>
+                    <Muted variant="caption">{String(p.upcomingEvents.length)}</Muted>
+                  </View>
+                  <View style={styles.plist} testID="preview-upcoming">
+                    {p.upcomingEvents.length === 0 ? <Muted variant="body">{P.noUpcoming}</Muted> : null}
+                    {p.upcomingEvents.slice(0, 5).map((e) => (
+                      <View key={e.slug} style={[styles.pitem, { backgroundColor: c.surface }]}>
+                        <Icon name="calendar" size={16} color={c.ink} />
+                        <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
+                          {e.title}
+                        </Text>
+                        <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+              {p.crews && p.crews.length > 0 ? (
+                <>
+                  <View style={styles.secHead}>
+                    <Text variant="posterM" color={c.ink}>
+                      {P.crew}
+                    </Text>
+                  </View>
+                  <View style={styles.plist} testID="preview-crews">
+                    {p.crews.map((cr) => (
+                      <View key={cr.id} style={[styles.pitem, { backgroundColor: c.surface }]}>
+                        <Icon name="crew" size={16} color={c.ink} />
+                        <Text variant="bodyStrong" color={c.ink}>
+                          {cr.name}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
               <View style={styles.secHead}>
                 <Text variant="posterM" color={c.ink}>
                   {P.garage}

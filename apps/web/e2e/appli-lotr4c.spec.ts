@@ -226,6 +226,20 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(main.getByTestId("cand-checked")).toBeVisible();
     await expect(page.getByTestId("cand-checked")).toHaveCount(1);
     await shot(page, `04-candidature-principal-${theme}`);
+    // Tour 2 : le principal archivé ailleurs (fiche du véhicule, ou ici par l'API) : la candidature propose le suivant,
+    // d'après le garage relu, même si le profil de la session date d'avant.
+    expect((await apiCall(me, "PATCH", `/me/vehicles/${second.id}`, { status: "sold", statusNote: null })).status).toBe(
+      200,
+    );
+    await goto(page, `/e/${event.slug}`);
+    await page.getByTestId("event-primary").click();
+    await expect(page.getByTestId("cand-sheet")).toBeVisible({ timeout: 15_000 });
+    const after = page.getByTestId("cand-vehicle").filter({ has: page.getByTestId("cand-main") });
+    await expect(after).toContainText(first.label, { timeout: 15_000 });
+    await expect(after.getByTestId("cand-checked")).toBeVisible();
+    expect(
+      (await apiCall(me, "PATCH", `/me/vehicles/${second.id}`, { status: "active", statusNote: null })).status,
+    ).toBe(200);
 
     // --- R4.6 Profil : trois compteurs, deux accès ----------------------------------------------------------------
     await goto(page, "/profil");
@@ -279,6 +293,8 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId("public-counts")).toContainText("abonnés");
     await expect(page.getByTestId("preview-vehicles")).toContainText("★ Principal");
     await expect(page.getByTestId("preview-banner")).toContainText("membre connecté");
+    // Tour 2 : compte public, ses sorties à venir sont visibles de tout membre : l'aperçu les montre.
+    await expect(page.getByTestId("preview-upcoming")).toBeVisible();
     await shot(page, `09-apercu-membre-${theme}`);
     await audit(page);
     await page.getByTestId("preview-as-friend").click();

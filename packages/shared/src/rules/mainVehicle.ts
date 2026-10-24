@@ -26,6 +26,8 @@ export type PreselectCandidate = {
   hasPhoto: boolean;
   /** Dans une des catégories recherchées par l'événement (vrai quand l'événement n'en cherche aucune). */
   matches: boolean;
+  /** Tour 2 : son type (voiture, moto, camion) est admis par l'événement ; un véhicule non admis n'est jamais proposé. */
+  admitted: boolean;
 };
 
 export type Preselection = { id: string; reason: "main" | "last" | "first" } | null;
@@ -34,18 +36,19 @@ export type Preselection = { id: string; reason: "main" | "last" | "first" } | n
  * Véhicule présélectionné dans la feuille de candidature (validation de Damien, R4.5b) : le principal s'il convient
  * (une photo et les catégories recherchées), sinon le dernier utilisé s'il convient, sinon le premier qui convient, et
  * à défaut le premier qui a une photo (hors des catégories : la candidature reste possible). `candidates` : les
- * véhicules actifs, dans l'ordre affiché.
+ * véhicules actifs, dans l'ordre affiché ; ceux dont le type n'est pas admis par l'événement sont écartés d'abord.
  */
 export function preselectVehicle(
   candidates: readonly PreselectCandidate[],
   mainId: string | null,
   lastUsedId: string | null,
 ): Preselection {
-  const fits = (c: PreselectCandidate | undefined) => Boolean(c?.hasPhoto && c.matches);
-  const main = candidates.find((c) => c.id === mainId);
+  const usable = candidates.filter((c) => c.admitted && c.hasPhoto);
+  const fits = (c: PreselectCandidate | undefined) => Boolean(c?.matches);
+  const main = usable.find((c) => c.id === mainId);
   if (main && fits(main)) return { id: main.id, reason: "main" };
-  const last = candidates.find((c) => c.id === lastUsedId);
+  const last = usable.find((c) => c.id === lastUsedId);
   if (last && fits(last)) return { id: last.id, reason: "last" };
-  const first = candidates.find(fits) ?? candidates.find((c) => c.hasPhoto);
+  const first = usable.find(fits) ?? usable[0];
   return first ? { id: first.id, reason: "first" } : null;
 }

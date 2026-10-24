@@ -9,21 +9,11 @@
 // autres en lignes compactes sous « Tes autres véhicules » ; menu « ⋯ » de chaque véhicule : « Mettre en avant »,
 // Modifier, Partager son affiche, Retirer du garage (archiver) ; un bandeau confirme le nouveau principal ; « Pour ta … »
 // suit le principal.
-import {
-  APP_BAR_HEIGHT,
-  Button,
-  EmptyState,
-  Icon,
-  Monogram,
-  Text,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L, mainVehicleLabels as M, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SmButton } from "@/features/passionne/kit";
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -50,7 +40,6 @@ export function GarageScreen() {
   const add = () => router.push("/vehicule/nouveau");
   const [round, setRound] = useState(0);
   const { refreshMe } = useSession();
-  const insets = useSafeAreaInsets();
   const [menuFor, setMenuFor] = useState<VehicleFull | null>(null);
   const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -153,26 +142,6 @@ export function GarageScreen() {
               await Promise.all([vehicles.reload(), refreshMe()]);
             }}
           />
-          {banner ? (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.banner,
-                // Sous la bande ORASSO, pas dessous.
-                { top: insets.top + APP_BAR_HEIGHT + 8 },
-                { backgroundColor: t.color.bar, boxShadow: `0 0 0 2px ${t.color.accent}, ${t.shadow.shadowPoster}` },
-              ]}
-              accessibilityLiveRegion="polite"
-              testID="garage-main-banner"
-            >
-              <View style={[styles.bannerIcon, { backgroundColor: t.color.accent }]}>
-                <Icon name="star" size={18} color={t.color.accentInk} />
-              </View>
-              <Text variant="body" color={t.color.barInk} style={styles.bannerText}>
-                {banner}
-              </Text>
-            </View>
-          ) : null}
         </>
       }
     >
@@ -190,6 +159,24 @@ export function GarageScreen() {
         />
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {/* Tour 2 : le bandeau se pose au-dessus de la mini-fiche, dans la page : il ne couvre plus le principal. */}
+      {banner ? (
+        <View
+          style={[
+            styles.banner,
+            { backgroundColor: t.color.bar, boxShadow: `0 0 0 2px ${t.color.accent}, ${t.shadow.shadowPoster}` },
+          ]}
+          accessibilityLiveRegion="polite"
+          testID="garage-main-banner"
+        >
+          <View style={[styles.bannerIcon, { backgroundColor: t.color.accent }]}>
+            <Icon name="star" size={18} color={t.color.accentInk} />
+          </View>
+          <Text variant="body" color={t.color.barInk} style={styles.bannerText}>
+            {banner}
+          </Text>
+        </View>
+      ) : null}
       {active[0] ? (
         <GarageCard
           key={`main-${active[0].id}`}
@@ -261,9 +248,6 @@ const styles = StyleSheet.create({
   addTitle: { fontFamily: "Archivo-ExtraBold" },
   menuTitle: { marginBottom: space3 },
   banner: {
-    position: "absolute",
-    left: 10,
-    right: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: space3,

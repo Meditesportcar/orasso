@@ -275,6 +275,106 @@ describe("suivre une personne", () => {
   });
 });
 
+describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
+  it("nombres d'un compte privé : ami oui ; organisateur seulement s'il est ami ; membre non ; compte public : tous", async () => {
+    const p = await person("T2_Prive", "private");
+    const member = await person("T2_Membre");
+    const orgaUser = await person("T2_Orga");
+    const s = await createStructure(orgaUser.id);
+    // La personne suit la structure : son organisateur voit tout son profil (audience « organizer »).
+    await db.insert(structureFollows).values({ structureId: s.id, userId: p.id, source: "manual" });
+    const asOrga = (await call(orgaUser, "GET", "/users/T2_Prive")).json;
+    expect(asOrga.audience).toBe("organizer");
+    expect(asOrga).toMatchObject({ followersCount: null, followingCount: null, friendsCount: null });
+    expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({
+      followersCount: null,
+      friendsCount: null,
+    });
+    await befriend(p, orgaUser);
+    expect((await call(orgaUser, "GET", "/users/T2_Prive")).json).toMatchObject({
+      followersCount: 0,
+      followingCount: 1,
+      friendsCount: 1,
+    });
+    await person("T2_Public");
+    expect((await call(member, "GET", "/users/T2_Public")).json).toMatchObject({ followersCount: 0, friendsCount: 0 });
+  });
+
+  it("compte suspendu : pas de « Suivre », « ne plus suivre » en 404 ; compte devenu privé : on peut le quitter", async () => {
+    const a = await person("T2_A");
+    const s = await person("T2_Susp");
+    const p = await person("T2_DevPrive");
+    await call(a, "POST", "/users/T2_Susp/follow");
+    await call(a, "POST", "/users/T2_DevPrive/follow");
+    await suspendByModeration(s);
+    expect((await call(a, "GET", "/users/T2_Susp")).json.follow.canFollow).toBe(false);
+    expect((await call(a, "DELETE", "/users/T2_Susp/follow")).status).toBe(404);
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, p.id));
+    expect((await call(a, "DELETE", "/users/T2_DevPrive/follow")).json).toEqual({ following: false });
+  });
+
+  it("amis : un compte banni ou suspendu n'est ni listé ni compté", async () => {
+    const a = await person("T2_Amis");
+    const b = await person("T2_Banni");
+    const c = await person("T2_Ok");
+    await befriend(a, b);
+    await befriend(a, c);
+    await suspendByModeration(b, "ban");
+    expect((await call(a, "GET", "/me/friends")).json.items.map((f: { pseudo: string }) => f.pseudo)).toEqual([
+      "T2_Ok",
+    ]);
+    expect((await call(a, "GET", "/me/network")).json.friends).toBe(1);
+  });
+
+  it("suivis simultanés : une seule notification regroupée", async () => {
+    const t = await person("T2_Cible");
+    const fans = await Promise.all(["T2_F1", "T2_F2", "T2_F3"].map((x) => person(x)));
+    await Promise.all(fans.map((f) => call(f, "POST", "/users/T2_Cible/follow")));
+    const rows = await db.select().from(notifications).where(eq(notifications.userId, t.id));
+    expect(rows.filter((r) => r.type === "user_followed")).toHaveLength(1);
+    expect(rows[0]?.body).toMatch(/et 2 autres personnes te suivent\.$/);
+  });
+
+  it("l'export des données contient abonnements, abonnés et amitiés ; un refus reste silencieux", async () => {
+    const a = await person("T2_Export");
+    const b = await person("T2_Suivi");
+    const c = await person("T2_Refus");
+    await call(a, "POST", "/users/T2_Suivi/follow");
+    await call(b, "POST", "/users/T2_Export/follow");
+    await db
+      .insert(friendships)
+      .values({ requesterId: a.id, addresseeId: c.id, status: "declined", respondedAt: new Date() });
+    const net = (await call(a, "GET", "/me/export")).json.network;
+    expect(net.following.map((x: { pseudo: string }) => x.pseudo)).toEqual(["T2_Suivi"]);
+    expect(net.followers.map((x: { pseudo: string }) => x.pseudo)).toEqual(["T2_Suivi"]);
+    expect(net.friendships).toEqual([
+      expect.objectContaining({ pseudo: "T2_Refus", status: "pending", requestedByMe: true }),
+    ]);
+  });
+
+  it("aperçu : chaque élément visible correspond à un champ de GET /users/:pseudo pour ce regard", async () => {
+    const pub = await person("T2_Apercu");
+    const other = await person("T2_Regard");
+    const preview = (await call(pub, "GET", "/me/public-preview?as=member")).json;
+    const seen = (await call(other, "GET", "/users/T2_Apercu")).json;
+    for (const key of [
+      "upcomingEvents",
+      "pastEvents",
+      "crews",
+      "followersCount",
+      "followingCount",
+      "friendsCount",
+      "departments",
+      "bio",
+    ]) {
+      expect(preview[key], key).toEqual(seen[key]);
+    }
+    // Compte public : les sorties à venir et le crew sont visibles de tout membre (le texte de l'aperçu le dit).
+    expect(Array.isArray(preview.upcomingEvents)).toBe(true);
+    expect(Array.isArray(preview.crews)).toBe(true);
+  });
+});
+
 describe("aperçu de mon profil public", () => {
   it("vu par un membre ou par un ami ; jamais les coordonnées ; boutons d'un autre", async () => {
     const p = await person("Prev_P", "private");

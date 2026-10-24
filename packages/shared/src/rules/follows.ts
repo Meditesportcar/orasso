@@ -19,6 +19,20 @@ export function canFollowUser(input: {
   return !input.isSelf && !input.unavailable && input.visibility === "public";
 }
 
+/**
+ * Tour 2 (décision du coordinateur d'après R4.6c : « Le reste (… nombres) est réservé à tes amis ») : les nombres du
+ * réseau (abonnés, abonnements, amis) d'un compte privé ne se montrent qu'à ses amis, jamais à un organisateur qui ne
+ * l'est pas (règle distincte de `profileFields`, qui ouvre tout le profil d'un inscrit à son organisateur) ; ceux d'un
+ * compte public, à tout membre connecté.
+ */
+export function networkCountsVisible(input: {
+  isSelf: boolean;
+  isFriend: boolean;
+  visibility: ProfileVisibility;
+}): boolean {
+  return input.isSelf || input.isFriend || input.visibility === "public";
+}
+
 /** Une notification « … te suit » par paire au plus par 24 h (suivre, ne plus suivre, suivre : pas de nouvelle alerte). */
 export const FOLLOW_NOTIFY_WINDOW_MS = 24 * 3_600_000;
 

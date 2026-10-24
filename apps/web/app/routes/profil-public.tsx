@@ -10,6 +10,7 @@ import {
 
 import { PersonAvatar } from "../components/People";
 import { apiOrThrow } from "../lib/api.server";
+import { formatDay } from "../lib/format";
 import type { Route } from "./+types/profil-public";
 import "../styles/network.css";
 
@@ -33,6 +34,7 @@ export default function ProfilPublic({ loaderData }: Route.ComponentProps) {
     [p.followersCount, N.followers],
     [p.followingCount, N.following],
     [p.friendsCount, N.friends],
+    [p.pastEvents ? p.pastEvents.count + (p.upcomingEvents?.length ?? 0) : null, N.outings],
   ] as const;
   return (
     <div className="s-narrow s-stack" data-testid="profil-public">
@@ -78,7 +80,7 @@ export default function ProfilPublic({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
         </div>
-        {!limited && (
+        {p.followersCount !== null && (
           <p className="n-pub__counts" data-testid="public-counts">
             {counts.map(([n, label]) =>
               n === null ? null : (
@@ -99,9 +101,7 @@ export default function ProfilPublic({ loaderData }: Route.ComponentProps) {
               {N.follow}
             </Button>
           )}
-          <Button variant="secondary" icon="chat" tabIndex={-1}>
-            Message
-          </Button>
+          <Button variant="secondary" icon="chat" tabIndex={-1} aria-label="Écrire" />
         </div>
         <p className="o-t-caption s-muted">{P.inert}</p>
       </section>
@@ -125,30 +125,63 @@ export default function ProfilPublic({ loaderData }: Route.ComponentProps) {
           </p>
         </section>
       ) : (
-        <section className="s-stack s-stack--tight">
-          <div className="n-group__head">
-            <h2 className="s-h2">{P.garage}</h2>
-            <span className="o-t-caption">{`${p.vehicles.length} véhicule${p.vehicles.length > 1 ? "s" : ""}`}</span>
-          </div>
-          <div className="s-grid" data-testid="preview-vehicles">
-            {p.vehicles.map((v) =>
-              v.photoUrl ? (
-                <VehicleCard
-                  key={v.id}
-                  first
-                  name={v.label}
-                  photo={<img src={v.photoUrl} alt="" loading="lazy" />}
-                  facts={v.main ? `★ ${mainVehicleLabels.tag}` : undefined}
-                />
+        <>
+          {/* Tour 2 : tout ce qu'un membre voit vraiment (champs de GET /users/:pseudo pour ce regard). */}
+          {p.upcomingEvents && (
+            <section className="s-stack s-stack--tight" data-testid="preview-upcoming">
+              <div className="n-group__head">
+                <h2 className="s-h2">{P.upcoming}</h2>
+                <span className="o-t-caption">{p.upcomingEvents.length}</span>
+              </div>
+              {p.upcomingEvents.length === 0 ? (
+                <p className="s-muted">{P.noUpcoming}</p>
               ) : (
-                <Plate key={v.id} as="article" className="s-vrow">
-                  <span className="o-t-poster-m o-never-truncate">{v.label}</span>
-                  {v.main && <span className="o-t-caption">★ {mainVehicleLabels.tag}</span>}
-                </Plate>
-              ),
-            )}
-          </div>
-        </section>
+                <ul className="s-docs">
+                  {p.upcomingEvents.slice(0, 5).map((e) => (
+                    <li key={e.slug}>
+                      <a href={`/e/${e.slug}`}>{e.title}</a>{" "}
+                      <span className="o-t-caption s-muted">{formatDay(e.startsAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+          {p.crews && p.crews.length > 0 && (
+            <section className="s-stack s-stack--tight" data-testid="preview-crews">
+              <h2 className="s-h2">{P.crew}</h2>
+              <ul className="s-docs">
+                {p.crews.map((c) => (
+                  <li key={c.id}>{c.name}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <section className="s-stack s-stack--tight">
+            <div className="n-group__head">
+              <h2 className="s-h2">{P.garage}</h2>
+              <span className="o-t-caption">{`${p.vehicles.length} véhicule${p.vehicles.length > 1 ? "s" : ""}`}</span>
+            </div>
+            <div className="s-grid" data-testid="preview-vehicles">
+              {p.vehicles.map((v) =>
+                v.photoUrl ? (
+                  <VehicleCard
+                    key={v.id}
+                    first
+                    name={v.label}
+                    photo={<img src={v.photoUrl} alt="" loading="lazy" />}
+                    facts={v.main ? `★ ${mainVehicleLabels.tag}` : undefined}
+                  />
+                ) : (
+                  <Plate key={v.id} as="article" className="s-vrow">
+                    <span className="o-t-poster-m o-never-truncate">{v.label}</span>
+                    {v.main && <span className="o-t-caption">★ {mainVehicleLabels.tag}</span>}
+                  </Plate>
+                ),
+              )}
+            </div>
+          </section>
+        </>
       )}
 
       <div className="s-row">

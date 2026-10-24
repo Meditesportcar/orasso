@@ -9,12 +9,13 @@ import {
   type FriendRequestView,
   networkLabels as N,
 } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { FriendsList, type NetworkTab, PagesList, PeopleList } from "@/features/profil/network";
+import { createNetworkLoader } from "@/features/profil/networkLoad";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
@@ -58,43 +59,59 @@ export default function Reseau() {
     return () => clearTimeout(id);
   }, [q]);
 
+  // Tour 2 : une réponse obsolète (autre onglet, autre recherche, autre compte) ne remplace jamais la bonne.
+  const accountId = me?.user.id ?? null;
+  const accountRef = useRef(accountId);
+  accountRef.current = accountId;
+  const loader = useMemo(
+    () =>
+      createNetworkLoader<{ tab: NetworkTab; term: string | undefined }, Lists>({
+        scope: () => accountRef.current,
+        fetch: async ({ tab: which, term }) => {
+          if (which === "abonnes") return { followers: await api.followers(term) };
+          if (which === "abonnements") {
+            const [people, structures, pros] = await Promise.all([
+              api.following("people", term),
+              api.following("structures", term),
+              api.following("pros", term),
+            ]);
+            return {
+              people: people as Paged<FollowPerson>,
+              structures: structures as Paged<FollowedPage>,
+              pros: pros as Paged<FollowedPage>,
+            };
+          }
+          const [friends, requests] = await Promise.all([
+            api.friendsSearch(term),
+            term ? Promise.resolve({ items: [] as FriendRequestView[] }) : api.friendRequests(),
+          ]);
+          return { friends: friends.items, requests: requests.items.filter((r) => r.direction === "in") };
+        },
+        apply: (result) => setLists((l) => ({ ...l, ...result })),
+        onError: (e) => setError(errorMessage(e)),
+        onSettled: () => setLoading(false),
+      }),
+    [],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const term = query || undefined;
-    try {
-      if (tab === "abonnes") {
-        const followers = await api.followers(term);
-        setLists((l) => ({ ...l, followers }));
-      } else if (tab === "abonnements") {
-        const [people, structures, pros] = await Promise.all([
-          api.following("people", term),
-          api.following("structures", term),
-          api.following("pros", term),
-        ]);
-        setLists((l) => ({
-          ...l,
-          people: people as Paged<FollowPerson>,
-          structures: structures as Paged<FollowedPage>,
-          pros: pros as Paged<FollowedPage>,
-        }));
-      } else {
-        const [friends, requests] = await Promise.all([
-          api.friendsSearch(term),
-          term ? Promise.resolve({ items: [] as FriendRequestView[] }) : api.friendRequests(),
-        ]);
-        setLists((l) => ({
-          ...l,
-          friends: friends.items,
-          requests: requests.items.filter((r) => r.direction === "in"),
-        }));
+    await loader.load({ tab, term: query || undefined });
+  }, [loader, tab, query]);
+
+  // Tour 2 : au retour d'un profil (suivre, ne plus suivre), les listes et les nombres se relisent.
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
       }
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [tab, query]);
+      void load();
+      void counts.reload();
+    }, [load, counts.reload]),
+  );
 
   useEffect(() => {
     void load();
@@ -103,23 +120,30 @@ export default function Reseau() {
   const more = async (which: "followers" | "people" | "structures" | "pros") => {
     const current = lists[which];
     if (!current?.nextCursor) return;
-    try {
-      const page =
+    const cursor = current.nextCursor;
+    await loader.more<{ items: unknown[]; total: number; nextCursor: string | null }>(
+      () =>
         which === "followers"
-          ? await api.followers(query || undefined, current.nextCursor)
-          : await api.following(which, query || undefined, current.nextCursor);
-      setLists((l) => ({
-        ...l,
-        [which]: {
-          items: [...(current.items as unknown[]), ...(page.items as unknown[])],
-          total: page.total,
-          nextCursor: page.nextCursor,
-        },
-      }));
-    } catch (e) {
-      setError(errorMessage(e));
-    }
+          ? api.followers(query || undefined, cursor)
+          : api.following(which, query || undefined, cursor),
+      (page) =>
+        setLists((l) => {
+          const now = l[which];
+          if (!now) return l;
+          return {
+            ...l,
+            [which]: {
+              items: [...(now.items as unknown[]), ...(page.items as unknown[])],
+              total: page.total,
+              nextCursor: page.nextCursor,
+            },
+          };
+        }),
+    );
   };
+
+  /** Tour 2 : suivre ou ne plus suivre depuis une liste remet les nombres à jour. */
+  const onFollowChanged = () => void counts.reload();
 
   const n = counts.data;
   const tabLabel = (x: NetworkTab) => {
@@ -190,6 +214,7 @@ export default function Reseau() {
             pages={followers as FollowersPage}
             onMore={() => void more("followers")}
             onError={setError}
+            onChanged={onFollowChanged}
             testID="net-followers"
           />
         ) : (
@@ -208,6 +233,7 @@ export default function Reseau() {
                 pages={lists.people}
                 onMore={() => void more("people")}
                 onError={setError}
+                onChanged={onFollowChanged}
                 testID="net-people"
               />
             ) : null}

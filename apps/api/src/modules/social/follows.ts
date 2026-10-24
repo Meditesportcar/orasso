@@ -299,6 +299,9 @@ async function pagesPage(
  * suivre, suivre). Préférences (famille `social`, type coupable) et heures calmes : celles de `notificationsService`.
  */
 async function notifyFollow(tx: Tx, follower: Profile, targetId: string): Promise<boolean> {
+  // Tour 2 : deux suivis simultanés vers la même personne ne créent pas deux notifications (lecture puis écriture
+  // sérialisées par destinataire).
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`user-followed:${targetId}`}))`);
   const window = sql`${notifications.createdAt} > now() - interval '24 hours'`;
   const [recent] = await tx
     .select({ id: notifications.id })
@@ -377,7 +380,8 @@ export const followsService = {
   /** `DELETE /users/:pseudo/follow` : toujours possible (même si le compte est devenu privé entre-temps). */
   async unfollow(viewer: Viewer, pseudo: string): Promise<FollowResult> {
     const target = await profilesRepo.byPseudo(pseudo);
-    if (!target) throw notFound("Profil introuvable");
+    // Tour 2 : un compte supprimé, banni ou suspendu répond comme un pseudo inconnu ; un compte devenu privé se quitte.
+    if (!target || unavailable(target, now())) throw notFound("Profil introuvable");
     rateLimit("userFollow", viewer.user.id);
     await db
       .delete(userFollows)
@@ -421,7 +425,8 @@ export const followsService = {
     return {
       followers,
       following: people + structuresN + pros,
-      friends: viewer.profile.friendsCount,
+      // Tour 2 : comptés à la lecture, sans les comptes suspendus ou bannis (comme la liste).
+      friends: await socialRepo.visibleFriendsCount(me),
       followingBy: { people, structures: structuresN, pros },
       friendRequestsIn: requests,
     };
@@ -438,8 +443,16 @@ export const followsService = {
     return { kind, ...(await pagesPage(viewer, kind, q, cursor)) };
   },
 
-  /** Compte supprimé (anonymisé) : ses suivis disparaissent dans les deux sens. */
-  async removeAllFor(userId: string, tx: Tx) {
+  /**
+   * Compte supprimé (anonymisé) : ses suivis disparaissent dans les deux sens ; renvoie les personnes qu'il suivait (leurs
+   * alertes « … te suit » qui le citent sont retirées par l'appelant).
+   */
+  async removeAllFor(userId: string, tx: Tx): Promise<string[]> {
+    const followed = await tx
+      .select({ id: userFollows.followedId })
+      .from(userFollows)
+      .where(eq(userFollows.followerId, userId));
     await tx.delete(userFollows).where(or(eq(userFollows.followerId, userId), eq(userFollows.followedId, userId)));
+    return followed.map((r) => r.id);
   },
 };

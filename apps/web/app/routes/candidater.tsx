@@ -34,7 +34,7 @@ export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const me = await requireMe(request);
+  await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
   // Plusieurs jours (lot 26) : on peut candidater pour un autre jour ; l'API refuse le doublon du même jour.
   const active = (event.myApplications ?? []).filter((a) =>
@@ -63,21 +63,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .sort(
       (a, b) => Number(b.categories.some((c) => wanted.has(c.id))) - Number(a.categories.some((c) => wanted.has(c.id))),
     );
-  const mainVehicleId = me.profile.mainVehicleId ?? null;
+  // Tour 2 : le principal effectif est le premier véhicule actif du garage (l'API le renvoie en tête).
+  const mainVehicleId = vehicles.find((v) => v.status === "active")?.id ?? null;
   const withPhoto = new Set(activeVehicles.filter((v) => v.photos.length > 0).map((v) => v.id));
   const lastUsed =
     [...(upcoming.ok ? upcoming.data : []), ...(past.ok ? past.data : [])]
       .filter((a) => a.vehicle && withPhoto.has(a.vehicle.id))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.vehicle?.id ?? null;
-  const admitted = activeVehicles.filter((v) => event.admittedVehicleTypes.includes(v.vehicleType));
   // Lot R4c (R4.5b) : `?vehicule=` d'abord (lien de la fiche), sinon principal → dernier utilisé → premier qui convient.
   const preselected =
     new URL(request.url).searchParams.get("vehicule") ??
     preselectVehicle(
-      admitted.map((v) => ({
+      activeVehicles.map((v) => ({
         id: v.id,
         hasPhoto: v.photos.length > 0,
         matches: wanted.size === 0 || v.categories.some((c) => wanted.has(c.id)),
+        admitted: event.admittedVehicleTypes.includes(v.vehicleType),
       })),
       mainVehicleId,
       lastUsed,

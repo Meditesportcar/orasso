@@ -43,7 +43,8 @@ export const networkLabels = {
   write: (pseudo: string) => `Écrire à ${pseudo}`,
   yourFriend: "dans tes amis",
   privacyNoteStrong: "Toi seul vois ces listes.",
-  privacyNote: "Les autres membres voient seulement les nombres, et seulement si ton compte est public.",
+  privacyNote:
+    "Les autres voient seulement les nombres : tout le monde si ton compte est public, tes amis s'il est privé.",
   emptyFollowers: "Personne ne te suit encore. Ton profil public se partage depuis « Mon profil public ».",
   emptyFollowing: "Tu ne suis encore personne.",
   emptyFriends: "Pas encore d'ami. Cherche une personne ou scanne son QR de compte.",
@@ -60,7 +61,7 @@ export const publicPreviewLabels = {
   subtitle: "Aperçu : ce que voient les membres",
   asMember: "Vu par un membre",
   asFriend: "Vu par un ami",
-  bannerMemberPublic: "Ton profil vu par un membre connecté. Tes amis voient la même chose, plus tes sorties à venir.",
+  bannerMemberPublic: "Ton profil vu par un membre connecté. Tes amis voient la même chose.",
   bannerMemberPrivate: "Ton profil vu par un membre qui n'est pas ton ami. Tes amis voient tout.",
   bannerFriend: "Ton profil vu par un ami : tout, sauf tes coordonnées.",
   inert: "Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres.",
@@ -70,6 +71,9 @@ export const publicPreviewLabels = {
   privateRest: "Le reste (photos du garage, sorties, crew, nombres) est réservé à tes amis.",
   privateAccount: "Compte privé",
   privacy: "Régler la confidentialité",
+  upcoming: "Ses sorties à venir",
+  noUpcoming: "Aucune sortie à venir.",
+  crew: "Son crew",
 } as const;
 
 export const followNotificationTitle = "Nouvel abonné";

@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { friendships, profiles } from "../../db/schema";
+import { now } from "../../lib/deps";
 import type { Executor, Tx } from "../../lib/tx";
 
 export type Friendship = typeof friendships.$inferSelect;
@@ -33,6 +34,28 @@ export const socialRepo = {
         ),
       );
     return rows.map((r) => (r.requester === userId ? r.addressee : r.requester));
+  },
+
+  /**
+   * Tour 2 : amis acceptés visibles (hors comptes supprimés, bannis ou suspendus), comptés à la lecture : le cache
+   * `friends_count` compte aussi les comptes suspendus ou bannis, que la liste n'affiche pas.
+   */
+  async visibleFriendsCount(userId: string, ex: Executor = db): Promise<number> {
+    const rows = await ex
+      .select({ n: sql<number>`count(*)::int` })
+      .from(friendships)
+      .innerJoin(
+        profiles,
+        sql`${profiles.userId} = case when ${friendships.requesterId} = ${userId} then ${friendships.addresseeId} else ${friendships.requesterId} end`,
+      )
+      .where(
+        and(
+          eq(friendships.status, "accepted"),
+          or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)),
+          sql`${profiles.deletedAt} is null and ${profiles.bannedAt} is null and (${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${now()})`,
+        ),
+      );
+    return rows[0]?.n ?? 0;
   },
 
   /** Recalcule le cache `profiles.friends_count` (amis acceptés) de ces personnes. */

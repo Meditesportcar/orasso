@@ -5,6 +5,7 @@ import {
   effectiveMainVehicleId,
   friendshipState,
   garageOrder,
+  networkCountsVisible,
   type OtherVehicle,
   type PreviewAs,
   type ProfileAudience,
@@ -191,7 +192,13 @@ export const socialProfile = {
     }
 
     const isSelf = target.userId === viewer.user.id && !opts.as;
-    const counts = fields.friendsCount ? await followsService.countsOf(target.userId) : null;
+    // Tour 2 : les nombres du réseau suivent leur propre règle (amis d'un compte privé, tout membre d'un compte public),
+    // jamais l'ouverture « organisateur » du profil d'un inscrit.
+    const showCounts = networkCountsVisible({ isSelf, isFriend: state === "friends", visibility: target.visibility });
+    const counts = showCounts ? await followsService.countsOf(target.userId) : null;
+    const unavailableTarget = Boolean(
+      target.deletedAt || target.bannedAt || (target.suspendedUntil && target.suspendedUntil > at),
+    );
     return {
       userId: target.userId,
       audience,
@@ -201,7 +208,7 @@ export const socialProfile = {
       visibility: target.visibility,
       bio: fields.bio ? target.bio : null,
       departments: fields.departments ? target.departments : null,
-      friendsCount: fields.friendsCount ? target.friendsCount : null,
+      friendsCount: showCounts ? await socialRepo.visibleFriendsCount(target.userId) : null,
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
       pastEvents: fields.pastEvents && ev ? ev.past : null,
@@ -212,7 +219,7 @@ export const socialProfile = {
       followersCount: counts?.followers ?? null,
       followingCount: counts?.following ?? null,
       follow: {
-        canFollow: canFollowUser({ isSelf, visibility: target.visibility }),
+        canFollow: canFollowUser({ isSelf, visibility: target.visibility, unavailable: unavailableTarget }),
         following: isSelf || opts.as ? false : await followsService.isFollowing(viewer.user.id, target.userId),
       },
     };

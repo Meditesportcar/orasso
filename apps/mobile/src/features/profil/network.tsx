@@ -241,7 +241,15 @@ function Group({
 }
 
 /** « Suivre aussi » / « Suivi » d'une personne (toucher « Suivi » ne la suit plus). */
-function FollowToggle({ person, onError }: { person: FollowPerson; onError: (m: string) => void }) {
+function FollowToggle({
+  person,
+  onError,
+  onChanged,
+}: {
+  person: FollowPerson;
+  onError: (m: string) => void;
+  onChanged?: () => void;
+}) {
   const [following, setFollowing] = useState(person.following);
   const [busy, setBusy] = useState(false);
   if (!following && !person.canFollow) return null;
@@ -257,6 +265,7 @@ function FollowToggle({ person, onError }: { person: FollowPerson; onError: (m: 
         try {
           const r = following ? await api.unfollow(person.pseudo) : await api.follow(person.pseudo);
           setFollowing(r.following);
+          onChanged?.();
         } catch (e) {
           onError(errorMessage(e));
         } finally {
@@ -280,10 +289,13 @@ export function PeopleList({
   onError,
   testID,
   title,
+  onChanged,
 }: {
   pages: { items: FollowPerson[]; total: number; nextCursor: string | null };
   onMore: () => void;
   onError: (m: string) => void;
+  /** Tour 2 : après suivre / ne plus suivre (les nombres se relisent). */
+  onChanged?: () => void;
   testID: string;
   title?: string;
 }) {
@@ -298,7 +310,7 @@ export function PeopleList({
             name={p.pseudo}
             caption={personCaption(p)}
             onPress={() => router.push(`/u/${p.pseudo}`)}
-            action={<FollowToggle person={p} onError={onError} />}
+            action={<FollowToggle person={p} onError={onError} onChanged={onChanged} />}
             testID="net-person"
           />
         ))}

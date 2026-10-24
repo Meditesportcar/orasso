@@ -48,7 +48,6 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
-import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { NotificationAsk } from "@/ui/NotificationAsk";
@@ -92,8 +91,6 @@ export function CandSheet({
   const c = t.color;
   const router = useRouter();
   const { reload, markAnnounced, upcoming, past } = useApplications();
-  const { me } = useSession();
-  const mainVehicleId = me?.profile.mainVehicleId ?? null;
   const vehicles = useApi(() => api.vehicles(), [visible], { enabled: visible, cacheKey: "vehicles" });
   const crews = useApi(() => api.myCrews(), [visible], { enabled: visible, cacheKey: "my-crews" });
   const led = (crews.data ?? []).filter((x) => x.role === "leader");
@@ -161,7 +158,14 @@ export function CandSheet({
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     return recent?.vehicle?.id ?? null;
   }, [eligible, upcoming, past]);
-  // Lot R4c : principal → dernier utilisé → premier qui convient (règle commune avec le site).
+  // Lot R4c, tour 2 : le principal se lit dans le garage qui vient d'être chargé (l'API le renvoie en tête), pas dans le
+  // profil de la session, qui peut dater d'avant un archivage depuis la fiche du véhicule.
+  const mainVehicleId = useMemo(
+    () => (vehicles.data ?? []).find((v) => v.status === "active")?.id ?? null,
+    [vehicles.data],
+  );
+  // Lot R4c : principal → dernier utilisé → premier qui convient (règle commune avec le site) ; tour 2 : un véhicule
+  // dont le type n'est pas admis par l'événement n'est jamais proposé.
   const preselected = useMemo(
     () =>
       preselectVehicle(
@@ -169,11 +173,12 @@ export function CandSheet({
           id: v.id,
           hasPhoto: v.photos.length > 0,
           matches: wanted.size === 0 || v.categories.some((cat) => wanted.has(cat.id)),
+          admitted: e.admittedVehicleTypes.includes(v.vehicleType),
         })),
         mainVehicleId,
         lastUsed,
       ),
-    [eligible, wanted, mainVehicleId, lastUsed],
+    [eligible, wanted, mainVehicleId, lastUsed, e.admittedVehicleTypes],
   );
   const selected = picked !== null ? picked : preselected ? [preselected.id] : [];
 

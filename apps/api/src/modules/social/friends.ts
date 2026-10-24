@@ -329,6 +329,8 @@ export const friendsService = {
           eq(friendships.status, "accepted"),
           or(eq(friendships.requesterId, viewer.user.id), eq(friendships.addresseeId, viewer.user.id)),
           sql`${profiles.deletedAt} is null`,
+          // Tour 2 du lot R4c : ni les comptes bannis.
+          sql`${profiles.bannedAt} is null`,
           sql`(${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${t})`,
           // Lot R4c : recherche dans la liste (début du pseudo).
           q ? sql`lower(${profiles.pseudo}) like ${`${escapeLike(q.toLowerCase())}%`}` : undefined,
