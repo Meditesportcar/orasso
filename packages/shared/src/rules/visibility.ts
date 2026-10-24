@@ -121,28 +121,16 @@ export function friendRequestOutcome(
 
 // --- Recherche de personnes --------------------------------------------------------------------------------------
 
-/** Longueur minimale d'un pseudo recherché (sauf si un filtre est posé). */
+/** Longueur minimale du texte d'une recherche de personnes. */
 export const PEOPLE_SEARCH_MIN_QUERY = 2;
 
-/** Une recherche sans aucun critère ne liste pas tout le monde. */
-export function hasPeopleSearchCriteria(c: {
-  q?: string | null;
-  department?: string | null;
-  categoryId?: string | null;
-  makeId?: string | null;
-  modelId?: string | null;
-  generationId?: string | null;
-  grade?: string | null;
-}): boolean {
-  return Boolean(
-    (c.q && c.q.trim().length >= PEOPLE_SEARCH_MIN_QUERY) ||
-      c.department ||
-      c.categoryId ||
-      c.makeId ||
-      c.modelId ||
-      c.generationId ||
-      c.grade,
-  );
+/**
+ * Lot R2, tour 2 (relecture : plus aucun annuaire) : sans texte d'au moins deux caractères, aucune liste de personnes.
+ * Les filtres (département, centre d'intérêt, grade, véhicule) ne font qu'affiner une recherche par texte ; seuls,
+ * page après page, ils reconstitueraient un annuaire de tous les comptes.
+ */
+export function hasPeopleSearchCriteria(c: { q?: string | null }): boolean {
+  return Boolean(c.q && c.q.trim().length >= PEOPLE_SEARCH_MIN_QUERY);
 }
 
 // --- Journal -------------------------------------------------------------------------------------------------------

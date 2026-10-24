@@ -18,7 +18,7 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { friendships, proDiscounts, proFollows, profiles } from "../../db/schema";
+import { crews, friendships, proDiscounts, proFollows, profiles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -165,5 +165,88 @@ describe("Personnes et crews : suggestions", () => {
     const empty = await signUp("Sans_Auto");
     expect((await call(empty, "GET", "/users/suggestions")).json).toEqual({ sameModel: null });
     expect((await call(null, "GET", "/users/suggestions")).status).toBe(401);
+  });
+});
+
+// Lot R2, tour 2 (relectures Opus et Codex).
+describe("tour 2 : plus aucun annuaire de personnes", () => {
+  it("sans texte d'au moins deux caractères : aucune liste, même avec un filtre ou une page suivante", async () => {
+    for (const path of [
+      "/users/search?grade=rodage",
+      "/users/search?department=66",
+      "/users/search?departments=66,11",
+      "/users/search?q=a&grade=rodage",
+      `/users/search?cursor=${Buffer.from("a|b").toString("base64url")}`,
+    ]) {
+      expect((await call(fan, "GET", path)).status, path).toBe(400);
+    }
+  });
+
+  it("texte + filtre : le filtre ne trouve que les comptes au détail visible (jamais un privé par son grade)", async () => {
+    const pub = await signUp("Pilote_041");
+    const priv = await signUp("Pilote_063");
+    await db
+      .update(profiles)
+      .set({ grade: "sport", departments: ["66"] })
+      .where(eq(profiles.userId, pub.id));
+    await db
+      .update(profiles)
+      .set({ grade: "sport", departments: ["66"], visibility: "private" })
+      .where(eq(profiles.userId, priv.id));
+    const pseudos = async (path: string) =>
+      (await call(fan, "GET", path)).json.items.map((p: { pseudo: string }) => p.pseudo).sort();
+    // Le texte seul trouve le compte privé (pseudo visible de tous) ; le grade et le département ne le trouvent pas.
+    expect(await pseudos("/users/search?q=pilote")).toEqual(["Pilote_041", "Pilote_063"]);
+    expect(await pseudos("/users/search?q=pilote&grade=sport")).toEqual(["Pilote_041"]);
+    expect(await pseudos("/users/search?q=pilote&departments=66,11")).toEqual(["Pilote_041"]);
+    expect(await pseudos("/users/search?q=pilote&departments=11")).toEqual([]);
+  });
+
+  it("crews : « Mon coin » choisi cherche dans l'un des départements du compte", async () => {
+    const chef = await signUp("Chef_R2");
+    for (const [name, department] of [
+      ["Drift 66", "66"],
+      ["Drift 11", "11"],
+      ["Drift 31", "31"],
+    ] as const) {
+      await db.insert(crews).values({ slug: `drift-${department}`, name, department, createdBy: chef.id });
+    }
+    const names = (await call(fan, "GET", "/crews/search?q=drift&departments=66,11")).json.items
+      .map((c: { name: string }) => c.name)
+      .sort();
+    expect(names).toEqual(["Drift 11", "Drift 66"]);
+  });
+});
+
+describe("tour 2 : annuaire des pros et compteurs des métiers", () => {
+  it("une fiche publiée non vérifiée reste listée (fiche de base, docs/01) ; un titulaire suspendu : jamais", async () => {
+    const a = await signUp("Pro_A");
+    const b = await signUp("Pro_B");
+    await createPro(a.id, { slug: "non-verifie", activities: ["garage"], verifiedAt: null });
+    await createPro(b.id, { slug: "suspendu", activities: ["garage"] });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 7 * 86_400_000) })
+      .where(eq(profiles.userId, b.id));
+    expect(slugs(await call(fan, "GET", "/pros"))).toEqual(["non-verifie"]);
+    expect((await call(fan, "GET", "/pros/activities")).json).toEqual({ total: 1, counts: { garage: 1 } });
+  });
+
+  it("des pros distincts : une activité en double ne compte qu'une fois ; elle est dédoublonnée à l'écriture", async () => {
+    const a = await signUp("Pro_A");
+    await createPro(a.id, { activities: ["garage", "garage", "detailing"] });
+    expect((await call(fan, "GET", "/pros/activities")).json).toEqual({
+      total: 1,
+      counts: { garage: 1, detailing: 1 },
+    });
+    const owner = await signUp("Pro_Neuf");
+    const res = await call(owner, "POST", "/pros", {
+      name: "Atelier Neuf",
+      activities: ["covering", "covering"],
+      city: "Perpignan",
+      postalCode: "66000",
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.activities).toEqual(["covering"]);
   });
 });

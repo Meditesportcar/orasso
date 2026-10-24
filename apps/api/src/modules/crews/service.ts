@@ -626,6 +626,7 @@ export const crewsService = {
           isNull(crews.deletedAt),
           q.q ? ilike(crews.name, `%${escapeLike(q.q)}%`) : undefined,
           q.department ? eq(crews.department, q.department) : undefined,
+          q.departments?.length ? inArray(crews.department, q.departments) : undefined,
         ),
       )
       .orderBy(desc(crews.membersCount), asc(crews.name), asc(crews.id))

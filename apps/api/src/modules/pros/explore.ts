@@ -177,7 +177,8 @@ export async function proActivityCounts(q: ProListQuery, viewer: Viewer | null):
   const { where } = prosWhere(q, viewer, false);
   const rows = (
     await db.execute<{ a: string; n: number }>(
-      sql`select a, count(*)::int as n from ${proProfiles}, unnest(${proProfiles.activities}) as a where ${where} group by a`,
+      // Des pros distincts : une activité en double (fiche d'avant le dédoublonnage) ne compte qu'une fois.
+      sql`select a, count(distinct ${proProfiles.id})::int as n from ${proProfiles}, unnest(${proProfiles.activities}) as a where ${where} group by a`,
     )
   ).rows;
   const total = Number((await db.select({ n: sql<number>`count(*)::int` }).from(proProfiles).where(where))[0]?.n ?? 0);

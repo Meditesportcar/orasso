@@ -185,3 +185,35 @@ export function dateStrip(
   }
   return [...days.values()];
 }
+
+// --- Lot R2, tour 2 : Personnes et crews ------------------------------------------------------------------------
+
+/**
+ * Le lieu de Personnes et crews : des départements seulement, jamais de position ni de distance (docs/01). `null` : les
+ * réglages habituels (les suggestions viennent de mon coin ; une recherche cherche partout, élargie d'elle-même) ;
+ * `mine` choisi : une recherche dans l'un de mes départements.
+ */
+export type PeopleWhere = { kind: "mine" } | { kind: "dept"; code: string } | { kind: "all" };
+
+/**
+ * Les départements d'une recherche de personnes et de crews. `broadened` : la recherche a été élargie d'elle-même à
+ * toute la France (aucun lieu choisi), à dire à l'écran. Le département ne trouve que des comptes au détail visible
+ * (l'API le garantit).
+ */
+export function peopleSearchPlace(
+  where: PeopleWhere | null,
+  coin: readonly string[],
+): { departments?: string; broadened: boolean } {
+  if (where === null) return { broadened: true };
+  if (where.kind === "mine")
+    return coin.length ? { departments: coin.join(","), broadened: false } : { broadened: false };
+  if (where.kind === "dept") return { departments: where.code, broadened: false };
+  return { broadened: false };
+}
+
+/** Les départements des suggestions (crews du coin, même modèle) : le lieu choisi, sinon mon coin ; partout : aucun. */
+export function peopleSuggestPlace(where: PeopleWhere | null, coin: readonly string[]): string[] {
+  if (where === null || where.kind === "mine") return [...coin];
+  if (where.kind === "dept") return [where.code];
+  return [];
+}

@@ -27,7 +27,9 @@ export const socialRoutes = new Hono<AppEnv>()
   .get("/users/suggestions", async (c) => {
     const v = await requireUser(c);
     rateLimit("peopleSearch", v.user.id);
-    return c.json(await peopleSearch.suggestions(v, query(c, peopleSuggestionsQuery).department));
+    const q = query(c, peopleSuggestionsQuery);
+    const departments = [...(q.departments ?? []), ...(q.department ? [q.department] : [])];
+    return c.json(await peopleSearch.suggestions(v, departments));
   })
   .get("/users/:pseudo", async (c) => {
     const v = await requireUser(c);

@@ -110,16 +110,19 @@ async function run(
     )`);
     where.push(sql`(${pseudoMatch} or ${text})`);
   }
+  // Lot R2, tour 2 (relecture : plus aucun annuaire) : les filtres de détail (véhicule, département, centre d'intérêt,
+  // grade) ne portent que sur des comptes dont la fiche complète m'est visible (public, ou ami).
   const filters: SQL[] = [];
   if (query.makeId) filters.push(sql`v.make_id = ${query.makeId}`);
   if (query.modelId) filters.push(sql`v.model_id = ${query.modelId}`);
   if (query.generationId) filters.push(sql`(d.detail and v.generation_id = ${query.generationId})`);
-  if (filters.length) where.push(vehicleExists(sql.join(filters, sql` and `)));
+  if (filters.length) where.push(sql`(${vehicleExists(sql.join(filters, sql` and `))} and ${detail})`);
   if (query.department) where.push(sql`(p.departments @> ARRAY[${query.department}]::text[] and ${detail})`);
-  if (options.departmentsAny?.length) {
+  const anyOf = [...(options.departmentsAny ?? []), ...(query.departments ?? [])];
+  if (anyOf.length) {
     where.push(
       sql`(p.departments && ARRAY[${sql.join(
-        options.departmentsAny.map((d) => sql`${d}`),
+        anyOf.map((d) => sql`${d}`),
         sql`, `,
       )}]::text[] and ${detail})`,
     );
@@ -129,7 +132,7 @@ async function run(
       sql`(exists (select 1 from profile_interests pi where pi.user_id = p.user_id and pi.category_id = ${query.categoryId}) and ${detail})`,
     );
   }
-  if (query.grade) where.push(sql`p.grade >= ${query.grade}::grade`);
+  if (query.grade) where.push(sql`(p.grade >= ${query.grade}::grade and ${detail})`);
   if (options.publicStrangers) {
     where.push(sql`p.visibility = 'public'`);
     where.push(
@@ -189,7 +192,7 @@ export const peopleSearch = {
   /** `GET /users/search`. */
   async search(viewer: Viewer, query: PeopleSearchQuery): Promise<PeopleSearchPage> {
     if (!hasPeopleSearchCriteria(query)) {
-      throw validation("Saisis au moins deux caractères ou choisis un filtre");
+      throw validation("Saisis au moins deux caractères");
     }
     const { rows, limit } = await run(viewer, query, {});
     return page(rows, limit, await cards(viewer, rows));
@@ -200,13 +203,17 @@ export const peopleSearch = {
    * publics seulement. Le premier de mes véhicules dont le modèle a au moins un autre propriétaire public (ni moi ni mes
    * amis), trois au plus, dans le département choisi s'il y en a un. Rien d'autre : pas de liste d'amis, pas de sorties.
    */
-  async suggestions(viewer: Viewer, department?: string): Promise<PeopleSuggestions> {
+  async suggestions(viewer: Viewer, departments: string[] = []): Promise<PeopleSuggestions> {
     const mine = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, viewer.user.id), eq(vehicles.status, "active")));
     const seen = new Set<string>();
     for (const v of mine) {
       if (v.model.isOther || seen.has(v.modelId)) continue;
       seen.add(v.modelId);
-      const query = { limit: SUGGESTIONS_LIMIT, modelId: v.modelId, department } as PeopleSearchQuery;
+      const query = {
+        limit: SUGGESTIONS_LIMIT,
+        modelId: v.modelId,
+        departments: departments.length ? departments : undefined,
+      } as PeopleSearchQuery;
       const { rows, limit } = await run(viewer, query, { publicStrangers: true });
       if (!rows.length) continue;
       return {

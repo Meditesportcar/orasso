@@ -366,7 +366,13 @@ export const explorerR2Labels = {
   showPeople: "Personnes",
   showCrews: "Crews",
   showSheet: "Montrer",
-  peopleFiltersHint: "Les centres d'intérêt et le grade ne trouvent que les comptes publics et tes amis.",
+  // Lot R2, tour 2 : les filtres affinent une recherche par texte ; sans texte, aucune liste de personnes.
+  peopleFiltersHint:
+    "Les filtres affinent une recherche par pseudo, crew ou modèle. Le centre d'intérêt, le grade et le département ne trouvent que les comptes publics et tes amis.",
+  peopleFiltersNeedText:
+    "Saisis au moins deux caractères : les filtres affinent une recherche, ils ne listent personne seuls.",
+  broadened: "Recherche dans toute la France : aucun lieu choisi.",
+  formatAllLong: "Tous les formats",
   sameModelTitle: (model: string) => `D'autres ${model}`,
   sameModelHint: (vehicle: string) => `Comme ta ${vehicle}`,
   crewsNearTitle: (code: string | null) => (code ? `Crews du ${code}` : "Des crews"),

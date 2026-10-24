@@ -50,6 +50,11 @@ export const crewInviteSchema = z.object({ pseudo: pseudoSchema });
 export const crewSearchQuery = pageQuery.extend({
   q: z.string().trim().max(60).optional(),
   department: departmentSchema.optional(),
+  /** Lot R2, tour 2 (« Mon coin » choisi) : l'un de ces départements, séparés par des virgules. */
+  departments: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(departmentSchema).max(20).optional(),
+  ),
 });
 export type CrewSearchQuery = z.infer<typeof crewSearchQuery>;
 

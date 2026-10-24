@@ -34,7 +34,12 @@ export type ProHours = Partial<Record<Weekday, string | null | undefined>>;
 
 const proFields = z.object({
   name: z.string().trim().min(2).max(80),
-  activities: z.array(z.enum(proActivities)).min(1, "Choisis au moins une activité").max(6),
+  // Lot R2, tour 2 : une activité en double ne compte qu'une fois (compteurs de « Quel métier ? »).
+  activities: z
+    .array(z.enum(proActivities))
+    .min(1, "Choisis au moins une activité")
+    .max(6)
+    .transform((list) => [...new Set(list)]),
   description: optionalText(2000),
   addressLine: optionalText(200),
   postalCode: optionalText(10),

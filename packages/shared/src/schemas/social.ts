@@ -26,6 +26,11 @@ export const friendRequestByInviteSchema = z.object({ token: z.string().min(6).m
 export const peopleSearchQuery = pageQuery.extend({
   q: z.string().trim().max(60).optional(),
   department: departmentSchema.optional(),
+  /** Lot R2, tour 2 (« Mon coin » choisi) : l'un de ces départements, séparés par des virgules (comptes au détail visible). */
+  departments: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(departmentSchema).max(20).optional(),
+  ),
   categoryId: z.uuid().optional(),
   makeId: z.uuid().optional(),
   modelId: z.uuid().optional(),
@@ -69,7 +74,14 @@ export type PeopleSearchPage = { items: PersonCard[]; nextCursor: string | null 
 export type PeopleSuggestions = {
   sameModel: { model: string; vehicle: string; items: PersonCard[] } | null;
 };
-export const peopleSuggestionsQuery = z.object({ department: departmentSchema.optional() });
+export const peopleSuggestionsQuery = z.object({
+  department: departmentSchema.optional(),
+  /** Lot R2, tour 2 : l'un de ces départements (le lieu choisi, ou mon coin), séparés par des virgules. */
+  departments: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(departmentSchema).max(20).optional(),
+  ),
+});
 
 export type ProfileVehicle = {
   id: string;
