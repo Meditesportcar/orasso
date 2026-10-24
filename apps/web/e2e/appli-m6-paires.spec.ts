@@ -233,7 +233,9 @@ test("site : affiche à partager, signaler, Ton coin, Tes préférences (deux th
       await page.getByRole("button", { name: "Se connecter", exact: true }).click();
       await page.waitForURL(/\/app\/garage/);
       await page.waitForLoadState("networkidle");
-      await page.locator('a[href^="/app/garage/"]').filter({ hasNotText: "Ajouter" }).first().click();
+      // Lot R4c : chaque véhicule a un menu « ⋯ » (fermé) dont les liens visent aussi /app/garage/… : la fiche s'ouvre
+      // par le lien de la carte.
+      await page.locator("a.g-card-link").first().click();
       const card = page.getByTestId("share-card");
       await expect(card).toBeVisible({ timeout: 30_000 });
       await card.scrollIntoViewIfNeeded();

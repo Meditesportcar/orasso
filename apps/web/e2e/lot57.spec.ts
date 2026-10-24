@@ -301,7 +301,9 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
 
     // Carte à partager : trois styles, aperçu, téléchargement de la story.
     await page.goto("/app/garage");
-    await page.locator('a[href^="/app/garage/"]').filter({ hasNotText: "Ajouter" }).first().click();
+    // Lot R4c : chaque véhicule a un menu « ⋯ » (fermé) dont les liens visent aussi /app/garage/… : la fiche s'ouvre
+    // par le lien de la carte.
+    await page.locator("a.g-card-link").first().click();
     await expect(page.getByTestId("share-card")).toBeVisible();
     await page.getByTestId("share-style-neon").click();
     const download = page.waitForEvent("download");
