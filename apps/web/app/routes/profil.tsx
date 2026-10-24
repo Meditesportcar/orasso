@@ -3,8 +3,10 @@ import {
   CONTACT_MESSAGE_MAX,
   gradeLabels,
   type MyCrew,
+  mainVehicleLabels,
   mediaAppLabels,
   messagingLabels,
+  networkLabels,
   type PassportView,
   type PersonaKind,
   passportScreenTexts,
@@ -23,12 +25,15 @@ import { friendAction } from "../lib/friends.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
 import { withRetour } from "../lib/retour";
 import "../styles/passport.css";
+import "../styles/network.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/profil";
 
 // Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
 // (pseudo, photo, grade, marque et modèle) pour un compte privé. Jamais la plaque. Réservé aux connectés.
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+// Lot R4c (maquettes 10.2 et R4.6c) : abonnés, abonnements et amis sur une ligne (aux audiences qui voient tout),
+// « Suivre » secondaire à côté de « Ajouter en ami » (compte public seulement), le véhicule principal en premier.
 export const handle = ficheHandle;
 
 export function meta({ params }: Route.MetaArgs) {
@@ -76,7 +81,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   // Message (lot 18) : conversation entre amis, sinon demande de contact.
-  if (isMessageIntent(String(form.get("intent") ?? ""))) return messageAction(request, form);
+  const intent = String(form.get("intent") ?? "");
+  if (isMessageIntent(intent)) return messageAction(request, form);
+  // Lot R4c : suivre une personne (compte public), ou ne plus la suivre.
+  if (intent === "follow" || intent === "unfollow") {
+    const pseudo = String(form.get("pseudo") ?? "");
+    const res = await api(request, `/users/${encodeURIComponent(pseudo)}/follow`, {
+      method: intent === "follow" ? "POST" : "DELETE",
+    });
+    return { friendError: res.ok ? null : res.error.message };
+  }
   return friendAction(request, form);
 }
 
@@ -158,11 +172,27 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
             <h1 className="s-title">{p.pseudo}</h1>
             <div className="s-row s-row--tight">
               <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
-              {p.friendsCount !== null && <Chip>{socialLabels.friendsCount(p.friendsCount)}</Chip>}
               {p.departments && p.departments.length > 0 && <Chip>{p.departments.join(", ")}</Chip>}
             </div>
           </div>
         </div>
+        {p.friendsCount !== null && (
+          <p className="n-pub__counts" data-testid="public-counts">
+            {p.followersCount !== null && (
+              <span>
+                <b>{p.followersCount}</b> {networkLabels.followers(p.followersCount)}
+              </span>
+            )}
+            {p.followingCount !== null && (
+              <span>
+                <b>{p.followingCount}</b> {networkLabels.following(p.followingCount)}
+              </span>
+            )}
+            <span>
+              <b>{p.friendsCount}</b> {networkLabels.friends(p.friendsCount)}
+            </span>
+          </p>
+        )}
 
         {p.bio && <p className="s-prewrap">{p.bio}</p>}
         {limited && <p className="s-notice">{socialLabels.privateNotice}</p>}
@@ -189,6 +219,23 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
               primary
               busy={busy}
             />
+            {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami » (R4.6c). */}
+            {(p.follow.canFollow || p.follow.following) && (
+              <Form method="post">
+                <input type="hidden" name="pseudo" value={p.pseudo} />
+                <Button
+                  type="submit"
+                  name="intent"
+                  value={p.follow.following ? "unfollow" : "follow"}
+                  variant="secondary"
+                  icon={p.follow.following ? "check" : "add"}
+                  loading={busy}
+                  data-testid={p.follow.following ? "profile-followed" : "profile-follow"}
+                >
+                  {p.follow.following ? networkLabels.followed : networkLabels.follow}
+                </Button>
+              </Form>
+            )}
             {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signaler : lot 32. */}
             <Form method="post">
               <input type="hidden" name="intent" value="message_open" />
@@ -268,10 +315,16 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
                   data-testid="profil-vehicle"
                 >
                   {v.photoUrl ? (
-                    <VehicleCard first name={v.label} photo={<img src={v.photoUrl} alt="" loading="lazy" />} />
+                    <VehicleCard
+                      first
+                      name={v.label}
+                      photo={<img src={v.photoUrl} alt="" loading="lazy" />}
+                      facts={v.main ? `★ ${mainVehicleLabels.tag}` : undefined}
+                    />
                   ) : (
                     <Plate as="article" className="s-vrow">
                       <span className="o-t-poster-m o-never-truncate">{v.label}</span>
+                      {v.main && <span className="o-t-caption">★ {mainVehicleLabels.tag}</span>}
                     </Plate>
                   )}
                 </a>

@@ -6,6 +6,7 @@ import {
   crewLabels,
   gradeLabels,
   homeLabels,
+  mainVehicleLabels as M,
   type MyCrew,
   type PlateTransferView,
   plateTransferLabels,
@@ -29,6 +30,7 @@ import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/garage";
 import "../styles/garage.css";
 import "../styles/home.css";
+import "../styles/network.css";
 
 export function meta() {
   return [{ title: "Garage · Orasso" }, { name: "robots", content: "noindex" }];
@@ -79,6 +81,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "photo");
+  // Lot R4c (maquette R4.5) : « Mettre en avant » un véhicule (le véhicule principal).
+  if (intent === "feature") {
+    const vehicleId = String(form.get("vehicleId") ?? "");
+    const res = await api(request, "/me/main-vehicle", { method: "PUT", json: { vehicleId } });
+    if (!res.ok) return data({ error: res.error.message, featured: null }, { status: res.status });
+    return data({ error: null, featured: String(form.get("label") ?? "") });
+  }
   if (intent === "transfer-accept" || intent === "transfer-decline") {
     const id = String(form.get("transferId") ?? "");
     const res = await api(request, `/plate-transfers/${encodeURIComponent(id)}/${intent.slice(9)}`, {
@@ -125,6 +134,12 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
           {actionData.error}
         </p>
       )}
+      {actionData && "featured" in actionData && typeof actionData.featured === "string" && actionData.featured ? (
+        <p className="s-notice g-main-banner" role="status" data-testid="garage-main-banner">
+          <Icon name="star" size={18} />
+          {M.confirmed(actionData.featured)}
+        </p>
+      ) : null}
 
       {incoming.map((t) => (
         <Plate key={t.id} className="g-transfer" data-testid="plate-transfer-request">
@@ -160,8 +175,21 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
         <p className="s-notice">Ton garage est vide. Ajoute un véhicule pour pouvoir candidater.</p>
       )}
       <div className="s-grid">
-        {vehicles.map((v) => (
-          <div key={v.id} className="s-stack s-stack--tight">
+        {vehicles.map((v, i) => (
+          <div key={v.id} className="s-stack s-stack--tight" data-testid={i === 0 ? "garage-main" : "garage-other"}>
+            {/* Lot R4c : le principal (premier de la liste de l'API) porte « ★ Principal », une marque et pas un bouton ;
+                chaque véhicule a son menu « ⋯ ». */}
+            <div className="g-main-row">
+              {i === 0 ? (
+                <span className="g-star" data-testid="garage-main-tag">
+                  <Icon name="star" size={13} />
+                  {M.tag}
+                </span>
+              ) : (
+                <span />
+              )}
+              <VehicleMenu vehicle={v} main={i === 0} busy={busy} />
+            </div>
             <a className="g-card-link" href={`/app/garage/${v.id}`} aria-label={v.label}>
               <VehicleCard
                 photo={v.photos[0] ? <img src={v.photos[0].url} alt="" /> : undefined}
@@ -225,6 +253,58 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
         </details>
       )}
     </div>
+  );
+}
+
+/** Menu « ⋯ » d'un véhicule (lot R4c) : Mettre en avant, Modifier, Partager son affiche, Retirer du garage. */
+function VehicleMenu({ vehicle, main, busy }: { vehicle: VehicleFull; main: boolean; busy: boolean }) {
+  return (
+    <details className="g-menu" data-testid="garage-menu">
+      <summary className="g-menu__dots" aria-label={M.menu(vehicle.label)}>
+        <Icon name="more" size={20} />
+      </summary>
+      <div className="g-menu__sheet" data-testid="garage-menu-sheet">
+        {!main && (
+          <Form method="post">
+            <input type="hidden" name="vehicleId" value={vehicle.id} />
+            <input type="hidden" name="label" value={vehicle.label} />
+            <button
+              type="submit"
+              name="intent"
+              value="feature"
+              className="g-menu__row"
+              disabled={busy}
+              data-testid="garage-feature"
+            >
+              <Icon name="star" size={18} />
+              <span>
+                <strong>{M.feature}</strong>
+                <span className="o-t-caption">{M.featureHint}</span>
+              </span>
+            </button>
+          </Form>
+        )}
+        <a className="g-menu__row" href={`/app/garage/${vehicle.id}`} data-testid="garage-menu-edit">
+          <Icon name="edit" size={18} />
+          <span>
+            <strong>{M.edit}</strong>
+            <span className="o-t-caption">{M.editHint}</span>
+          </span>
+        </a>
+        <a className="g-menu__row" href={`/app/garage/${vehicle.id}#partage`} data-testid="garage-menu-share">
+          <Icon name="share" size={18} />
+          <span>
+            <strong>{M.share}</strong>
+          </span>
+        </a>
+        <a className="g-menu__row g-menu__row--out" href={`/app/garage/${vehicle.id}`} data-testid="garage-menu-remove">
+          <Icon name="trash" size={18} />
+          <span>
+            <strong>{M.remove}</strong>
+          </span>
+        </a>
+      </div>
+    </details>
   );
 }
 
