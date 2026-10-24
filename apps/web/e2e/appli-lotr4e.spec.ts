@@ -120,9 +120,9 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByText("Volkswagen Golf GTI", { exact: true }).first()).toBeVisible();
     await field.scrollIntoViewIfNeeded();
     await shot(page, `${theme}-01-fiche-technique-version`);
-    const audit = await auditPage(page);
-    expect(audit.greens).toEqual([]);
-    expect(audit.horizontalScroll).toBe(false);
+    // Pas de vert ici : le nuancier de l'étape montre de vraies teintes de carrosserie (verts compris), on ne vérifie
+    // que le défilement ; le vert se vérifie sur la page du véhicule.
+    expect((await auditPage(page)).horizontalScroll).toBe(false);
     await seeStepEnd(page);
     await page.getByTestId("vehicle-step-next").click();
     await seeStepEnd(page);
@@ -145,8 +145,10 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(version).toBeVisible();
     await expect(page.getByText("GTI", { exact: true })).toBeVisible();
     await shot(page, `${theme}-03-vehicule-fiche-version`);
-    // Le nom ne se coupe pas : le titre tient dans l'écran, sans défilement horizontal.
-    expect((await auditPage(page)).horizontalScroll).toBe(false);
+    // Le nom ne se coupe pas : le titre tient dans l'écran, sans défilement horizontal ; pas de vert.
+    const audit = await auditPage(page);
+    expect(audit.greens).toEqual([]);
+    expect(audit.horizontalScroll).toBe(false);
 
     // --- Vitrine publique vue par le propriétaire : la ligne « Version », sa photo ------------------------------------
     await page.goto(`/v/${id}`);

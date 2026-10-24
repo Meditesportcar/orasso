@@ -54,7 +54,6 @@ for (const theme of ["beton", "sable"] as const) {
       const version = page.getByLabel("Version (facultatif)");
       await expect(page.getByText("Par exemple CC, SW, GTI, Phase 2")).toBeVisible();
       await version.fill("GTI");
-      await page.getByLabel("Année").fill("2002");
       await page.getByTestId("add-engine-fields").scrollIntoViewIfNeeded();
       await shot(page, `${theme}-${width}-01-ajout-version`);
       const audit = await auditPage(page);
