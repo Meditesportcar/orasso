@@ -33,6 +33,7 @@ export * from "./recurrence";
 export * from "./registrationBlock";
 export * from "./registrationWindow";
 export * from "./registry";
+export * from "./signupMissing";
 export * from "./reviews";
 export * from "./solar";
 export * from "./sorties";

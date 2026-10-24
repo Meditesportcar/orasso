@@ -68,6 +68,38 @@ export function FileField({
   );
 }
 
+/** L'ordre des champs de l'inscription du site et des invitations (profil, coin, identité, compte). */
+export const signupFieldOrder = [
+  "mainProfile",
+  "departments",
+  "pseudo",
+  "firstName",
+  "lastName",
+  "email",
+  "password",
+  "terms",
+] as const;
+
+/**
+ * Lot R3d (retour réel du 24/10) : sous le bouton d'envoi d'une inscription refusée, une ligne redit la première chose
+ * qui manque, dans l'ordre du formulaire (sur téléphone, le champ en cause est souvent plus haut, hors de l'écran).
+ */
+export function FirstMissing({
+  errors,
+  order,
+}: {
+  errors: Partial<Record<string, string | undefined>>;
+  order: readonly string[];
+}) {
+  const first = order.map((key) => errors[key]).find(Boolean);
+  if (!first) return null;
+  return (
+    <p className="o-t-caption s-muted s-center" role="status" data-testid="signup-missing">
+      {first}
+    </p>
+  );
+}
+
 /**
  * Lot 36 : case « conditions générales », obligatoire et tracée, la même pour l'inscription, les invitations et
  * l'inscription express. Le serveur refuse sans elle (message sous la case).

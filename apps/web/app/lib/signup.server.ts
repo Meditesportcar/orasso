@@ -6,8 +6,7 @@ import {
   MAX_DEPARTMENTS,
   type MainProfile,
   mainProfiles,
-  PASSWORD_MIN_LENGTH,
-  passwordHint,
+  passwordMissing,
   pseudoSchema,
 } from "@orasso/shared";
 
@@ -35,6 +34,8 @@ export type SignupValues = {
   departments: string[];
   firstName: string;
   lastName: string;
+  /** Lot R3d : la case des conditions reste cochée après une erreur. */
+  terms: boolean;
 };
 
 export type SignupResult =
@@ -56,6 +57,7 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
   const departments = [...order.filter((d) => boxes.includes(d)), ...boxes.filter((d) => !order.includes(d))];
   const firstName = String(form.get("firstName") ?? "").trim();
   const lastName = String(form.get("lastName") ?? "").trim();
+  const terms = form.get("terms") === "on";
   const errors: SignupErrors = {};
 
   const parsed = pseudoSchema.safeParse(pseudo);
@@ -65,15 +67,17 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
-  if (password.length < PASSWORD_MIN_LENGTH) errors.password = passwordHint;
+  // Lot R3d : le message dit combien de caractères manquent (règle partagée avec l'appli).
+  const passwordIssue = passwordMissing(password);
+  if (passwordIssue) errors.password = passwordIssue;
   // Lot 36 : conditions générales, case obligatoire (tracée par l'API sur le profil).
-  if (form.get("terms") !== "on") errors.terms = expressLabels.termsRequired;
+  if (!terms) errors.terms = expressLabels.termsRequired;
   if (!(mainProfiles as readonly string[]).includes(mainProfile)) errors.mainProfile = arriveeLabels.errors.mainProfile;
   if (departments.length === 0) errors.departments = arriveeLabels.errors.departments;
   else if (departments.length > MAX_DEPARTMENTS) errors.departments = arriveeLabels.errors.tooMany;
   if (!firstName || firstName.length > 60) errors.firstName = arriveeLabels.errors.firstName;
   if (!lastName || lastName.length > 60) errors.lastName = arriveeLabels.errors.lastName;
-  const values: SignupValues = { pseudo, email, mainProfile, departments, firstName, lastName };
+  const values: SignupValues = { pseudo, email, mainProfile, departments, firstName, lastName, terms };
   if (Object.keys(errors).length) return { ok: false, errors, status: 400, values };
 
   const res = await api(request, "/auth/sign-up/email", {

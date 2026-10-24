@@ -4,13 +4,15 @@
 // Crée le compte (`POST /api/auth/sign-up/email`) puis ouvre le tuto.
 import { Button, CheckboxField, TextField } from "@orasso/design-system/native";
 import { arriveeLabels, expressLabels, namePrivacy, passwordHint, pseudoHint } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
 import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
-import { arriveeStore, identityReady, useArrivee } from "@/features/arrivee/model";
+import { MissingLine } from "@/features/arrivee/MissingLine";
+import { arriveeStore, identityBlocker, useArrivee } from "@/features/arrivee/model";
+import { finishArrivee } from "@/features/arrivee/persist";
 import { pseudoRule, usePseudoCheck } from "@/features/arrivee/usePseudoCheck";
 import { T, useArt } from "@/features/tuto/art";
 import { ArtIcon } from "@/features/tuto/icons";
@@ -37,7 +39,13 @@ export default function ArriveeIdentite() {
         : pseudoHint[profile];
   const pseudoError =
     pseudoState === "taken" ? "Ce pseudo est déjà pris." : pseudoState === "invalid" ? pseudoRule : undefined;
-  const ready = identityReady(identity, pseudoState === "free" || pseudoState === "idle") && departments.length > 0;
+  // Lot R3d (retour réel du 24/10) : le bouton grisé dit toujours pourquoi (la première chose qui manque) ; une
+  // vérification du pseudo en panne (`idle`) ne bloque pas, l'API tranche à l'envoi.
+  const missing = identityBlocker(identity, pseudoState, departments);
+  const ready = missing === null;
+  useFocusEffect(useCallback(() => arriveeStore.set({ step: "identite" }), []));
+  // « Retour à Ton coin » : l'écran d'avant dans la pile (parcours normal ou reprise), sinon on l'ouvre.
+  const toDepartments = () => (router.canGoBack() ? router.back() : router.replace("/arrivee/departement"));
 
   async function submit() {
     setError(null);
@@ -53,6 +61,8 @@ export default function ArriveeIdentite() {
         lastName: identity.lastName,
       });
       await kvSet("onboarded", "1");
+      // Le brouillon gardé sur l'appareil s'efface ; le mot de passe quitte aussi la mémoire.
+      await finishArrivee();
       arriveeStore.set({ identity: { ...identity, password: "" } });
       router.replace("/arrivee/tuto");
     } catch (e) {
@@ -67,9 +77,20 @@ export default function ArriveeIdentite() {
       step={2}
       onClose={() => router.back()}
       footer={
-        <Button variant="primary" icon="next" fullWidth loading={busy} disabled={!ready} onPress={() => void submit()}>
-          {arriveeLabels.identity.submit}
-        </Button>
+        <>
+          <Button
+            variant="primary"
+            icon="next"
+            fullWidth
+            loading={busy}
+            disabled={!ready}
+            onPress={() => void submit()}
+            accessibilityHint={missing?.text}
+          >
+            {arriveeLabels.identity.submit}
+          </Button>
+          <MissingLine missing={missing} onDepartments={toDepartments} />
+        </>
       }
     >
       <ObHead title={arriveeLabels.identity.title} text={arriveeLabels.identity.text} />
