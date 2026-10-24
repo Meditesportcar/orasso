@@ -47,7 +47,7 @@ import { ProsMap } from "../components/ProsMap";
 import { ProTile } from "../components/ProTile";
 import { UsePosition } from "../components/UsePosition";
 import { api, apiOrThrow } from "../lib/api.server";
-import { keptExplorerParams, readExplorerCookie, setExplorerCookie } from "../lib/explorerChoice.server";
+import { explorerChoice } from "../lib/explorerChoice.server";
 import { friendAction } from "../lib/friends.server";
 import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/app-explorer";
@@ -91,13 +91,11 @@ function dayBound(value: string, end: boolean): string | null {
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  if (url.search === "") {
-    const saved = readExplorerCookie(request);
-    if (saved) throw redirect(`/app/explorer?${saved}`);
-  }
-  const kept = keptExplorerParams(url.searchParams);
+  // Tour 2 : le choix appartient au compte connecté (`explorerChoice.server.ts`).
+  const choice = await explorerChoice(request, url);
+  if (choice.redirectTo) throw redirect(choice.redirectTo);
   const result = await load(request, url);
-  return kept ? data(result, { headers: { "set-cookie": setExplorerCookie(request, kept) } }) : result;
+  return choice.setCookie ? data(result, { headers: { "set-cookie": choice.setCookie } }) : result;
 }
 
 async function load(request: Request, url: URL) {
