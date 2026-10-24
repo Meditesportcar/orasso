@@ -46,6 +46,20 @@ async function stillUsed<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Course entre deux rattachements (unicité 23505, interblocage 40P01) : 409. */
+async function concurrent<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    const e = error as { code?: string; cause?: { code?: string } };
+    const code = (e.cause ?? e).code;
+    if (code === "23505" || code === "40P01") {
+      throw conflict("conflict", "Ce groupe vient de changer : recharge la page et recommence.");
+    }
+    throw error;
+  }
+}
+
 async function uniqueOr<T>(fn: () => Promise<T>, message: string): Promise<T> {
   try {
     return await fn();
@@ -573,115 +587,118 @@ export const vehicleReferenceService = {
    */
   async acceptProposal(v: Viewer, key: string, input: VehicleProposalAccept) {
     await requirePlatformRole(v, "super_admin");
-    return withTx(async (tx, after) => {
-      const rows = (await proposalRows(tx, true)).filter((r) => keyOf(r) === key);
-      if (!rows.length) throw notFound("Ce groupe n'a plus de fiche à rattacher.");
-      // Marque : existante, retrouvée par son nom, ou créée (avec son modèle « Autre », comme `createMake`).
-      let make = input.makeId
-        ? (await tx.select().from(vehicleMakes).where(eq(vehicleMakes.id, input.makeId)))[0]
-        : (
-            await tx
-              .select()
-              .from(vehicleMakes)
-              .where(eq(vehicleMakes.slug, slugify(input.makeName ?? "")))
-          )[0];
-      if (input.makeId && !make) throw notFound("Marque introuvable");
-      if (!make) {
-        [make] = await tx
-          .insert(vehicleMakes)
-          .values({ name: input.makeName ?? "", slug: slugify(input.makeName ?? ""), country: input.country })
-          .returning();
-        if (!make) throw new Error("Marque non créée");
-        const [other] = await tx
-          .insert(vehicleModels)
-          .values({ makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
-          .returning();
-        if (other) await tx.insert(vehicleGenerations).values({ modelId: other.id, name: "Autre", isOther: true });
+    // Deux équipiers sur le même groupe, ou une marque créée en même temps : 409, jamais une erreur interne.
+    return concurrent(() =>
+      withTx(async (tx, after) => {
+        const rows = (await proposalRows(tx, true)).filter((r) => keyOf(r) === key);
+        if (!rows.length) throw notFound("Ce groupe n'a plus de fiche à rattacher.");
+        // Marque : existante, retrouvée par son nom, ou créée (avec son modèle « Autre », comme `createMake`).
+        let make = input.makeId
+          ? (await tx.select().from(vehicleMakes).where(eq(vehicleMakes.id, input.makeId)))[0]
+          : (
+              await tx
+                .select()
+                .from(vehicleMakes)
+                .where(eq(vehicleMakes.slug, slugify(input.makeName ?? "")))
+            )[0];
+        if (input.makeId && !make) throw notFound("Marque introuvable");
+        if (!make) {
+          [make] = await tx
+            .insert(vehicleMakes)
+            .values({ name: input.makeName ?? "", slug: slugify(input.makeName ?? ""), country: input.country })
+            .returning();
+          if (!make) throw new Error("Marque non créée");
+          const [other] = await tx
+            .insert(vehicleModels)
+            .values({ makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+            .returning();
+          if (other) await tx.insert(vehicleGenerations).values({ modelId: other.id, name: "Autre", isOther: true });
+          await audit(tx, v, {
+            action: "reference.make_create",
+            targetType: "vehicle_make",
+            targetId: make.id,
+            reason: make.name,
+          });
+        }
+        if (make.isOther) throw validation("Choisis une vraie marque : « Autre » n'a pas de modèles.");
+        // Modèle : existant, retrouvé par son nom chez cette marque, ou créé (avec sa génération « Autre »).
+        const vehicleType = (mostTyped(rows.map((r) => r.v.vehicleType)) ?? "car") as "car" | "moto" | "truck";
+        const makeId = make.id;
+        let model = input.modelId
+          ? (await tx.select().from(vehicleModels).where(eq(vehicleModels.id, input.modelId)))[0]
+          : (
+              await tx
+                .select()
+                .from(vehicleModels)
+                .where(and(eq(vehicleModels.makeId, makeId), eq(vehicleModels.slug, slugify(input.modelName ?? ""))))
+            )[0];
+        if (input.modelId && (!model || model.makeId !== makeId)) throw validation("Modèle inconnu pour cette marque");
+        if (!model) {
+          [model] = await tx
+            .insert(vehicleModels)
+            .values({ makeId, name: input.modelName ?? "", slug: slugify(input.modelName ?? ""), vehicleType })
+            .returning();
+          if (!model) throw new Error("Modèle non créé");
+          await tx.insert(vehicleGenerations).values({ modelId: model.id, name: "Autre", isOther: true });
+          await audit(tx, v, {
+            action: "reference.model_create",
+            targetType: "vehicle_model",
+            targetId: model.id,
+            reason: `${make.name} ${model.name}`,
+          });
+        }
+        if (model.isOther) throw validation("Choisis un vrai modèle, pas « Autre ».");
+        const modelId = model.id;
+        const gen = input.generationId
+          ? (await tx.select().from(vehicleGenerations).where(eq(vehicleGenerations.id, input.generationId)))[0]
+          : undefined;
+        if (input.generationId && (!gen || gen.modelId !== modelId)) {
+          throw validation("Génération inconnue pour ce modèle");
+        }
+        const label = [make.name, model.name, gen && !gen.isOther ? gen.name : null].filter(Boolean).join(" ");
+        await tx
+          .update(vehicles)
+          .set({
+            makeId,
+            modelId,
+            generationId: gen?.id ?? null,
+            // Le type suit le modèle choisi.
+            vehicleType: model.vehicleType,
+            proposedMake: null,
+            proposedModel: null,
+          })
+          .where(
+            inArray(
+              vehicles.id,
+              rows.map((r) => r.v.id),
+            ),
+          );
+        for (const r of rows) {
+          // Un compte anonymisé n'est pas prévenu.
+          if (r.deletedAt) continue;
+          const typed = [
+            r.make.isOther ? r.v.proposedMake : r.make.name,
+            r.model.isOther ? r.v.proposedModel : r.model.name,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          await notificationsService.notify(tx, r.v.ownerId, "vehicle_reassigned", {
+            title: "Ton véhicule est dans la base Orasso",
+            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${label}.`,
+            link: { label: "Voir mon véhicule", path: `/app/garage/${r.v.id}` },
+            data: { vehicleId: r.v.id },
+          });
+        }
         await audit(tx, v, {
-          action: "reference.make_create",
-          targetType: "vehicle_make",
-          targetId: make.id,
-          reason: make.name,
-        });
-      }
-      if (make.isOther) throw validation("Choisis une vraie marque : « Autre » n'a pas de modèles.");
-      // Modèle : existant, retrouvé par son nom chez cette marque, ou créé (avec sa génération « Autre »).
-      const vehicleType = (mostTyped(rows.map((r) => r.v.vehicleType)) ?? "car") as "car" | "moto" | "truck";
-      const makeId = make.id;
-      let model = input.modelId
-        ? (await tx.select().from(vehicleModels).where(eq(vehicleModels.id, input.modelId)))[0]
-        : (
-            await tx
-              .select()
-              .from(vehicleModels)
-              .where(and(eq(vehicleModels.makeId, makeId), eq(vehicleModels.slug, slugify(input.modelName ?? ""))))
-          )[0];
-      if (input.modelId && (!model || model.makeId !== makeId)) throw validation("Modèle inconnu pour cette marque");
-      if (!model) {
-        [model] = await tx
-          .insert(vehicleModels)
-          .values({ makeId, name: input.modelName ?? "", slug: slugify(input.modelName ?? ""), vehicleType })
-          .returning();
-        if (!model) throw new Error("Modèle non créé");
-        await tx.insert(vehicleGenerations).values({ modelId: model.id, name: "Autre", isOther: true });
-        await audit(tx, v, {
-          action: "reference.model_create",
+          action: "vehicle.proposal_accept",
           targetType: "vehicle_model",
-          targetId: model.id,
-          reason: `${make.name} ${model.name}`,
+          targetId: modelId,
+          reason: `${label} · ${rows.length} fiche${rows.length > 1 ? "s" : ""} (${key})`,
         });
-      }
-      if (model.isOther) throw validation("Choisis un vrai modèle, pas « Autre ».");
-      const modelId = model.id;
-      const gen = input.generationId
-        ? (await tx.select().from(vehicleGenerations).where(eq(vehicleGenerations.id, input.generationId)))[0]
-        : undefined;
-      if (input.generationId && (!gen || gen.modelId !== modelId)) {
-        throw validation("Génération inconnue pour ce modèle");
-      }
-      const label = [make.name, model.name, gen && !gen.isOther ? gen.name : null].filter(Boolean).join(" ");
-      await tx
-        .update(vehicles)
-        .set({
-          makeId,
-          modelId,
-          generationId: gen?.id ?? null,
-          // Le type suit le modèle choisi.
-          vehicleType: model.vehicleType,
-          proposedMake: null,
-          proposedModel: null,
-        })
-        .where(
-          inArray(
-            vehicles.id,
-            rows.map((r) => r.v.id),
-          ),
-        );
-      for (const r of rows) {
-        // Un compte anonymisé n'est pas prévenu.
-        if (r.deletedAt) continue;
-        const typed = [
-          r.make.isOther ? r.v.proposedMake : r.make.name,
-          r.model.isOther ? r.v.proposedModel : r.model.name,
-        ]
-          .filter(Boolean)
-          .join(" ");
-        await notificationsService.notify(tx, r.v.ownerId, "vehicle_reassigned", {
-          title: "Ton véhicule est dans la base Orasso",
-          body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${label}.`,
-          link: { label: "Voir mon véhicule", path: `/app/garage/${r.v.id}` },
-          data: { vehicleId: r.v.id },
-        });
-      }
-      await audit(tx, v, {
-        action: "vehicle.proposal_accept",
-        targetType: "vehicle_model",
-        targetId: modelId,
-        reason: `${label} · ${rows.length} fiche${rows.length > 1 ? "s" : ""} (${key})`,
-      });
-      after(() => notificationsService.kick());
-      return { makeId, modelId, label, count: rows.length };
-    });
+        after(() => notificationsService.kick());
+        return { makeId, modelId, label, count: rows.length };
+      }),
+    );
   },
 
   /**

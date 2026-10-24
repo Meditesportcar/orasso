@@ -534,6 +534,25 @@ describe("modèles proposés (lot R4a, maquette R4.8b)", () => {
       ]),
     );
     expect(small.modelName).toBe("308 GTi");
+    // Liste blanche : ni plaque ni identifiant de compte dans la file.
+    expect(Object.keys(big).sort()).toEqual(
+      ["key", "level", "make", "makeName", "modelName", "variants", "vehicleType", "vehicles"].sort(),
+    );
+    expect(Object.keys(big.vehicles[0]).sort()).toEqual(
+      [
+        "createdAt",
+        "department",
+        "id",
+        "ownerPseudo",
+        "photoUrl",
+        "typedMake",
+        "typedModel",
+        "vehicleType",
+        "year",
+      ].sort(),
+    );
+    expect(JSON.stringify(list.json)).not.toMatch(/AA-\d{3}-ZZ|AA\d{3}ZZ/);
+    expect(JSON.stringify(list.json)).not.toContain(fan.id);
     const others = await req(admin, "GET", "/admin/vehicle-reference/others");
     expect(others.json.flatMap((g: { vehicles: unknown[] }) => g.vehicles)).toHaveLength(1);
 

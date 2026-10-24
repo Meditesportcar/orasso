@@ -30,6 +30,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { referenceSearch } from "../vehicles/reference-search";
@@ -127,6 +128,7 @@ export const adminRoutes = new Hono<AppEnv>()
   )
   .post("/admin/vehicle-reference/proposals/:key/accept", async (c) => {
     const v = await requireUser(c);
+    rateLimit("proposalAccept", v.user.id);
     const key = c.req.param("key");
     if (!/^(make|model)\.[a-z0-9_.-]{1,140}$/.test(key)) throw validation("Groupe inconnu");
     return c.json(await vehicleReferenceService.acceptProposal(v, key, await body(c, vehicleProposalAcceptSchema)));

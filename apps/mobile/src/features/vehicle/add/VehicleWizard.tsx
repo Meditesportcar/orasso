@@ -653,7 +653,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               </Button>
             </View>
           </View>
-          {blocked && (importing || step === STEP.photos) ? (
+          {/* Lot R4a (invariant) : jamais de bouton grisé sans une ligne qui dit ce qui manque : aussi à Marque et modèle. */}
+          {blocked && (importing || step === STEP.photos || step === STEP.identity) ? (
             <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
               {importing ? V.importing : issue}
             </Text>

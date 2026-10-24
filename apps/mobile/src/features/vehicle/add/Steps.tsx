@@ -23,10 +23,13 @@ import {
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 
 import { api } from "@/lib/api";
+import { ApiRequestError } from "@/lib/http";
+import { cacheScope } from "@/lib/kv";
+import { createRequestGate } from "@/lib/requestGate";
 
 import { ColorPicker } from "./ColorPicker";
 import { typeIcon } from "./LiveCard";
@@ -80,26 +83,34 @@ const STYLE_ICONS: Record<string, IconName> = {
 
 /**
  * Lot R4a : la recherche « Marque ou modèle » passe par la route tolérante du lot R3c (« golf 4 », « e36 », « mx5 »),
- * une requête par pause de frappe. `null` : pas encore de réponse ; `"offline"` : route en panne, la liste se filtre
- * sur l'appareil.
+ * une requête par pause de frappe. Seule la dernière requête compte (`requestGate` : identifiant de requête, compte) ;
+ * la réponse porte sa saisie. `null` : pas encore de réponse ; `"busy"` : trop de demandes (429) ; `"offline"` : route
+ * en panne. Dans les deux derniers cas, la liste se filtre sur l'appareil et une ligne le dit (jamais une liste vide
+ * muette).
  */
-function useReferenceSearch(text: string, type: VehicleType): VehicleReferenceHit[] | null | "offline" {
+function useReferenceSearch(text: string, type: VehicleType): VehicleReferenceHit[] | null | "offline" | "busy" {
   const q = text.trim();
-  const [hits, setHits] = useState<{ q: string; rows: VehicleReferenceHit[] | "offline" } | null>(null);
+  const gate = useRef(createRequestGate(cacheScope)).current;
+  const [hits, setHits] = useState<{ q: string; rows: VehicleReferenceHit[] | "offline" | "busy" } | null>(null);
   useEffect(() => {
     if (!q) return;
-    let stale = false;
+    const key = `${type}|${q}`;
     const timer = setTimeout(() => {
+      const ticket = gate.start();
       api
         .referenceSearch(q, type)
-        .then((rows) => (stale ? undefined : setHits({ q: `${type}|${q}`, rows })))
-        .catch(() => (stale ? undefined : setHits({ q: `${type}|${q}`, rows: "offline" })));
+        .then((rows) => (ticket.current() ? setHits({ q: key, rows }) : undefined))
+        .catch((error: unknown) => {
+          if (!ticket.current()) return;
+          const busy = error instanceof ApiRequestError && error.status === 429;
+          setHits({ q: key, rows: busy ? "busy" : "offline" });
+        });
     }, 200);
     return () => {
-      stale = true;
       clearTimeout(timer);
+      gate.invalidate();
     };
-  }, [q, type]);
+  }, [q, type, gate]);
   return q && hits?.q === `${type}|${q}` ? hits.rows : null;
 }
 
@@ -182,7 +193,7 @@ export function StepIdentity({
   let rows: Row[] = [];
   let empty: string | null = null;
   let add: { label: string; onPress: () => void } | null = null;
-  const searched = q.length > 0 && remote !== null && remote !== "offline";
+  const searched = q.length > 0 && Array.isArray(remote);
   if (level === "make") {
     if (searched) {
       rows = remote.map((h) => ({
@@ -203,7 +214,13 @@ export function StepIdentity({
         title: m.isOther ? L.makeAbsent : m.name,
         detail: m.isOther ? L.absentHint : null,
         other: m.isOther,
-        pick: () => (m.isOther ? typeMake("") : patch({ makeId: m.id, ...reset })),
+        pick: () => {
+          if (m.isOther) typeMake("");
+          else {
+            patch({ makeId: m.id, ...reset });
+            setSearch("");
+          }
+        },
         selected: false,
       }));
     }
@@ -229,7 +246,13 @@ export function StepIdentity({
         title: m.isOther ? L.modelAbsent : m.name,
         detail: m.isOther ? L.absentHint : null,
         other: m.isOther,
-        pick: () => (m.isOther ? typeModel("") : patch({ modelId: m.id, generationId: undefined })),
+        pick: () => {
+          if (m.isOther) typeModel("");
+          else {
+            patch({ modelId: m.id, generationId: undefined });
+            setSearch("");
+          }
+        },
         selected: false,
       }));
     }
@@ -374,7 +397,11 @@ export function StepIdentity({
         ))}
       </View>
       {typing ? <StepNote icon="info">{L.generationSkipped}</StepNote> : null}
-      {remote === "offline" && level !== "typed" ? <StepNote icon="info">{L.searchOffline}</StepNote> : null}
+      {(remote === "offline" || remote === "busy") && level !== "typed" ? (
+        <StepNote icon="info" testID="vehicle-search-error">
+          {remote === "busy" ? L.searchBusy : L.searchOffline}
+        </StepNote>
+      ) : null}
     </>
   );
 }

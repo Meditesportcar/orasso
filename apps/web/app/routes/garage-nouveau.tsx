@@ -252,7 +252,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [generationId, setGenerationId] = useState("");
   // Lot R4a : recherche « Marque ou modèle » (route du lot R3c) et nom tapé quand il n'est pas dans la liste.
   const [search, setSearch] = useState("");
-  const [hits, setHits] = useState<{ q: string; rows: VehicleReferenceHit[] } | null>(null);
+  const [hits, setHits] = useState<{ q: string; rows: VehicleReferenceHit[] | "busy" | "offline" } | null>(null);
   const [typedMake, setTypedMake] = useState("");
   const [typedModel, setTypedModel] = useState("");
   const pending = useRef<{ modelId: string | null; generationId: string | null } | null>(null);
@@ -325,7 +325,12 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     let stale = false;
     const timer = setTimeout(() => {
       apiFetch<VehicleReferenceHit[]>(`/vehicle-reference/search?${params}`).then((res) => {
-        if (stale || !res.ok) return;
+        if (stale) return;
+        // Une erreur n'est jamais une liste vide : 429 « Trop de demandes », sinon recherche indisponible.
+        if (!res.ok) {
+          setHits({ q: `${makeId}|${type}|${q}`, rows: res.status === 429 ? "busy" : "offline" });
+          return;
+        }
         const rows = chosen ? res.data.filter((h) => h.makeId === chosen.id && h.kind !== "make") : res.data;
         setHits({ q: `${makeId}|${type}|${q}`, rows });
       });
@@ -335,7 +340,9 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
       clearTimeout(timer);
     };
   }, [q, type, makeId, makes]);
-  const found = q && hits?.q === `${makeId}|${type}|${q}` ? hits.rows : null;
+  const answer = q && hits?.q === `${makeId}|${type}|${q}` ? hits.rows : null;
+  const found = Array.isArray(answer) ? answer : null;
+  const searchError = answer === "busy" ? L.searchBusySite : answer === "offline" ? L.searchOfflineSite : null;
   const pickHit = (h: VehicleReferenceHit) => {
     pending.current = { modelId: h.modelId, generationId: h.generationId };
     if (h.vehicleType) setType(h.vehicleType);
@@ -543,6 +550,10 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
                       </li>
                     ))}
                   </ul>
+                ) : searchError ? (
+                  <p className="s-notice" role="alert" data-testid="add-search-error">
+                    {searchError}
+                  </p>
                 ) : found ? (
                   <div className="s-stack s-stack--tight" data-testid="add-search-empty">
                     <p className="o-t-body s-muted">
