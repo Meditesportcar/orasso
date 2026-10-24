@@ -52,7 +52,7 @@ test("accueil : la battle autour du O et ses affiches, à l'échelle de l'artefa
         expect(box?.height ?? 0).toBeLessThan(480);
         expect(o?.width ?? 0).toBeLessThan(170);
         expect(stage?.width ?? 0).toBeGreaterThan(stage?.height ?? 0);
-        expect((card?.width ?? 0) / (box?.width ?? 1)).toBeLessThan(0.4);
+        expect((card?.width ?? 0) / (box?.width ?? 1)).toBeLessThan(0.45); // affiche tournée : son cadre fait ~41 % comme dans l'artefact
       }
       // Pendant la battle, la toile peint voitures, fumée et traces.
       await expect
