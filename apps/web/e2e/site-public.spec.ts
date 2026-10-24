@@ -299,7 +299,10 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
     .getByLabel("Photo du véhicule")
     .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: POSTER });
   await form.getByRole("button", { name: "M'inscrire" }).click();
-  await expect(g.getByText("10 caractères au moins.")).toBeVisible();
+  // Lot R3d : le message dit combien de caractères manquent (« court » : 5).
+  await expect(
+    g.locator(".o-field__error", { hasText: "Mot de passe : 10 caractères au moins (il en manque 5)." }),
+  ).toBeVisible();
   await expect(g.getByText("Les deux mots de passe sont différents.")).toBeVisible();
   // Lot 36 : conditions générales obligatoires, refusées par le serveur sans la case.
   await expect(form.getByTestId("terms-error")).toBeVisible();
