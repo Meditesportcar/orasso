@@ -17,9 +17,11 @@ const plainSpaces = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
 export type ShareExtras = { style?: ShareStyle; masks?: PlateRect[] };
 
 /** « Toyota · A90 · Blanche » : marque, génération, couleur (sans les morceaux absents ou « Autre »). */
-export function storyLine(v: Pick<VehicleWithAll, "make" | "generation" | "color">): string {
+export function storyLine(
+  v: Pick<VehicleWithAll, "make" | "generation" | "color"> & Pick<VehicleWithAll, "proposedMake">,
+): string {
   return [
-    v.make.isOther ? null : v.make.name,
+    v.make.isOther ? (v.proposedMake ?? null) : v.make.name,
     v.generation && !v.generation.isOther ? v.generation.name : null,
     v.color?.trim() || null,
   ]
@@ -27,10 +29,16 @@ export function storyLine(v: Pick<VehicleWithAll, "make" | "generation" | "color
     .join(" · ");
 }
 
-/** Nom de l'affiche : le modèle (la marque et la génération sont sur la ligne du dessous). */
-export function storyName(v: Pick<VehicleWithAll, "model" | "make">): string {
+/**
+ * Nom de l'affiche : le modèle (la marque et la génération sont sur la ligne du dessous). Lot R4a : un modèle tapé
+ * (« 207 CC ») y figure aussi.
+ */
+export function storyName(
+  v: Pick<VehicleWithAll, "model" | "make"> & Pick<VehicleWithAll, "proposedMake" | "proposedModel">,
+): string {
   if (!v.model.isOther) return v.model.name;
-  return v.make.isOther ? "Véhicule" : v.make.name;
+  if (v.proposedModel) return v.proposedModel;
+  return v.make.isOther ? (v.proposedMake ?? "Véhicule") : v.make.name;
 }
 
 /** Puissance, poids, année : lisibles par tous (plus de grade, retour 17). */

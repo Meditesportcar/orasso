@@ -2,8 +2,19 @@
 // générations gérés par l'équipe, file des véhicules « Autre » groupés, rattachement d'un véhicule au référentiel
 // (propriétaire prévenu). Une marque créée reçoit son modèle « Autre », un modèle créé sa génération « Autre » :
 // le formulaire du garage garde « Autre » à chaque niveau. Suppression refusée tant qu'un véhicule y est rattaché.
-import type { OtherVehicleGroup, ReferenceGeneration, ReferenceMake, ReferenceModel } from "@orasso/shared";
-import { and, asc, count, desc, eq, inArray, or, sql } from "drizzle-orm";
+
+import { createHash } from "node:crypto";
+import {
+  type OtherVehicleGroup,
+  proposalKey,
+  type ReferenceGeneration,
+  type ReferenceMake,
+  type ReferenceModel,
+  type VehicleProposalAccept,
+  type VehicleProposalGroup,
+  type VehicleProposalPage,
+} from "@orasso/shared";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { profiles, vehicleGenerations, vehicleMakes, vehicleModels, vehiclePhotos, vehicles } from "../../db/schema";
@@ -12,7 +23,7 @@ import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { slugify } from "../../lib/slug";
 import { storage } from "../../lib/storage";
-import { type Tx, withTx } from "../../lib/tx";
+import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { checkReference } from "../vehicles/service";
 import { audit } from "./audit";
@@ -38,6 +49,20 @@ async function stillUsed<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Course entre deux rattachements (unicité 23505, interblocage 40P01) : 409. */
+async function concurrent<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    const e = error as { code?: string; cause?: { code?: string } };
+    const code = (e.cause ?? e).code;
+    if (code === "23505" || code === "40P01") {
+      throw conflict("conflict", "Ce groupe vient de changer : recharge la page et recommence.");
+    }
+    throw error;
+  }
+}
+
 async function uniqueOr<T>(fn: () => Promise<T>, message: string): Promise<T> {
   try {
     return await fn();
@@ -55,6 +80,94 @@ async function usage(column: typeof vehicles.makeId | typeof vehicles.modelId | 
     .groupBy(column);
   return new Map(rows.map((r) => [r.id as string, r.n]));
 }
+
+/** File « Modèles proposés » : groupes par page, fiches montrées par groupe (« et N autres fiches »). */
+const PROPOSAL_PAGE = 50;
+const PROPOSAL_ROWS_SHOWN = 20;
+
+/** Une fiche au nom tapé (lot R4a) : marque « Autre » avec une marque tapée, ou modèle « Autre » avec un modèle tapé. */
+const proposedWhere = or(
+  and(eq(vehicleMakes.isOther, true), isNotNull(vehicles.proposedMake)),
+  and(eq(vehicleModels.isOther, true), isNotNull(vehicles.proposedModel)),
+);
+
+/**
+ * Ce qu'une clé de groupe permet de filtrer en SQL : le niveau, et la marque connue d'un modèle tapé. Lot R4a, tour 2 :
+ * plus de limite globale (2 000) ; le rattachement ne lit et ne verrouille que les fiches de ce niveau et de cette
+ * marque, puis garde celles du groupe.
+ */
+type ProposalScope = { level: "make" } | { level: "model"; makeId: string };
+
+export function proposalScopeOf(key: string): ProposalScope | null {
+  const [level, makeId] = key.split(".");
+  if (level === "make") return { level: "make" };
+  if (level === "model" && makeId && /^[0-9a-f-]{36}$/.test(makeId)) return { level: "model", makeId };
+  return null;
+}
+
+/**
+ * Empreinte d'un groupe : ses fiches (identifiants triés). L'écran l'envoie avec le geste ; si le groupe a changé entre
+ * l'affichage et la validation (fiche ajoutée, rattachée ou supprimée), le rattachement répond 409.
+ */
+export function proposalVersion(ids: readonly string[]): string {
+  return createHash("sha256")
+    .update([...ids].sort().join(","))
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** Fiches actives au nom tapé, les plus récentes d'abord ; `lock` : verrouillées pour le rattachement groupé. */
+async function proposalRows(ex: Executor, lock = false, scope?: ProposalScope) {
+  const q = ex
+    .select({
+      v: vehicles,
+      make: vehicleMakes,
+      model: vehicleModels,
+      pseudo: profiles.pseudo,
+      departments: profiles.departments,
+      deletedAt: profiles.deletedAt,
+    })
+    .from(vehicles)
+    .innerJoin(vehicleMakes, eq(vehicleMakes.id, vehicles.makeId))
+    .innerJoin(vehicleModels, eq(vehicleModels.id, vehicles.modelId))
+    .innerJoin(profiles, eq(profiles.userId, vehicles.ownerId))
+    .where(
+      and(
+        eq(vehicles.status, "active"),
+        !scope
+          ? proposedWhere
+          : scope.level === "make"
+            ? and(eq(vehicleMakes.isOther, true), isNotNull(vehicles.proposedMake))
+            : and(
+                eq(vehicles.makeId, scope.makeId),
+                eq(vehicleMakes.isOther, false),
+                eq(vehicleModels.isOther, true),
+                isNotNull(vehicles.proposedModel),
+              ),
+      ),
+    )
+    .orderBy(desc(vehicles.createdAt), asc(vehicles.id));
+  return lock ? await q.for("update", { of: vehicles }) : await q;
+}
+
+const keyOf = (r: Awaited<ReturnType<typeof proposalRows>>[number]) =>
+  proposalKey({
+    makeId: r.make.id,
+    makeIsOther: r.make.isOther,
+    proposedMake: r.make.isOther ? r.v.proposedMake : null,
+    proposedModel: r.model.isOther ? r.v.proposedModel : null,
+  });
+
+/** Chaque écriture et son nombre, la plus fréquente en tête. */
+function counted(values: readonly string[]): { text: string; count: number }[] {
+  const n = new Map<string, number>();
+  for (const v of values) n.set(v, (n.get(v) ?? 0) + 1);
+  return [...n.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr"))
+    .map(([text, count]) => ({ text, count }));
+}
+const mostTyped = (values: readonly (string | null)[]) =>
+  counted(values.filter((v): v is string => Boolean(v)))[0]?.text ?? null;
 
 async function makeOrThrow(tx: Tx, id: string) {
   const [m] = await tx.select().from(vehicleMakes).where(eq(vehicleMakes.id, id)).for("update");
@@ -396,6 +509,9 @@ export const vehicleReferenceService = {
         and(
           eq(vehicles.status, "active"),
           or(eq(vehicleMakes.isOther, true), eq(vehicleModels.isOther, true), eq(vehicleGenerations.isOther, true)),
+          // Lot R4a : une fiche au nom tapé est dans « Modèles proposés », pas ici.
+          isNull(vehicles.proposedMake),
+          isNull(vehicles.proposedModel),
         ),
       )
       .orderBy(desc(vehicles.createdAt))
@@ -446,6 +562,206 @@ export const vehicleReferenceService = {
   },
 
   /**
+   * Lot R4a (maquette R4.8b) : `GET /admin/vehicle-reference/proposals`, la file « Modèles proposés ». Les fiches
+   * actives dont le modèle (marque connue) ou la marque et le modèle ont été tapés, regroupées par texte normalisé
+   * (`proposalKey` : sans accents ni casse, espaces et ponctuation retirés), la plus grosse file en tête, avec les
+   * variantes tapées.
+   */
+  async proposals(v: Viewer, cursor: number | null = null): Promise<VehicleProposalPage> {
+    await requirePlatformRole(v, "super_admin");
+    const rows = await proposalRows(db);
+    const all = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const key = keyOf(row);
+      all.set(key, [...(all.get(key) ?? []), row]);
+    }
+    // Pages de groupes entiers, la plus grosse file en tête.
+    const ordered = [...all.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const from = cursor ?? 0;
+    const page = ordered.slice(from, from + PROPOSAL_PAGE);
+    const shown = page.flatMap(([, list]) => list.slice(0, PROPOSAL_ROWS_SHOWN));
+    const ids = shown.map((r) => r.v.id);
+    const photos = ids.length
+      ? await db
+          .select({ vehicleId: vehiclePhotos.vehicleId, key: vehiclePhotos.storageKey })
+          .from(vehiclePhotos)
+          .where(inArray(vehiclePhotos.vehicleId, ids))
+          .orderBy(asc(vehiclePhotos.position))
+      : [];
+    const cover = new Map<string, string>();
+    for (const p of photos) if (!cover.has(p.vehicleId)) cover.set(p.vehicleId, p.key);
+    const item = (r: (typeof rows)[number]) => ({
+      id: r.v.id,
+      ownerPseudo: r.pseudo,
+      vehicleType: r.v.vehicleType,
+      typedMake: r.make.isOther ? r.v.proposedMake : null,
+      typedModel: r.model.isOther ? r.v.proposedModel : null,
+      year: r.v.year,
+      department: r.departments[0] ?? null,
+      photoUrl: storage.url(cover.get(r.v.id) ?? null),
+      createdAt: r.v.createdAt.toISOString(),
+    });
+    const items: VehicleProposalGroup[] = page.map(([key, list]) => {
+      const first = list[0] as (typeof rows)[number];
+      const typedMake = list.map((r) => (r.make.isOther ? r.v.proposedMake : null));
+      const typedModel = list.map((r) => (r.model.isOther ? r.v.proposedModel : null));
+      return {
+        key,
+        level: first.make.isOther ? "make" : "model",
+        make: { id: first.make.id, name: first.make.name, isOther: first.make.isOther },
+        makeName: mostTyped(typedMake),
+        // Le nom du modèle seul (sans la marque tapée), proposé par « Ajouter à la liste ».
+        modelName: mostTyped(typedModel) ?? "",
+        variants: counted(list.map((_, i) => [typedMake[i], typedModel[i]].filter(Boolean).join(" ")).filter(Boolean)),
+        vehicleType: mostTyped(list.map((r) => r.v.vehicleType)) ?? first.v.vehicleType,
+        count: list.length,
+        version: proposalVersion(list.map((r) => r.v.id)),
+        vehicles: list.slice(0, PROPOSAL_ROWS_SHOWN).map(item),
+      };
+    });
+    return { items, nextCursor: from + PROPOSAL_PAGE < ordered.length ? String(from + PROPOSAL_PAGE) : null };
+  },
+
+  /**
+   * `POST /admin/vehicle-reference/proposals/:clé/accept` : rattache toutes les fiches du groupe en une transaction, à un
+   * modèle existant ou à un modèle (et une marque) créés au besoin. Les noms tapés sont effacés des fiches rattachées ;
+   * chaque propriétaire est prévenu (`vehicle_reassigned`) ; une ligne au journal d'administration. Pas d'annulation :
+   * une erreur se corrige fiche par fiche (« Rattacher ce véhicule »).
+   */
+  async acceptProposal(v: Viewer, key: string, input: VehicleProposalAccept) {
+    await requirePlatformRole(v, "super_admin");
+    // Deux équipiers sur le même groupe, ou une marque créée en même temps : 409, jamais une erreur interne.
+    return concurrent(() =>
+      withTx(async (tx, after) => {
+        const scope = proposalScopeOf(key);
+        if (!scope) throw notFound("Ce groupe n'a plus de fiche à rattacher.");
+        // Véhicules verrouillés d'abord (ordre du code existant : véhicule, puis le reste).
+        const rows = (await proposalRows(tx, true, scope)).filter((r) => keyOf(r) === key);
+        if (!rows.length) throw notFound("Ce groupe n'a plus de fiche à rattacher.");
+        if (proposalVersion(rows.map((r) => r.v.id)) !== input.version) {
+          throw conflict("conflict", "Ce groupe a changé depuis l'affichage : recharge la page et vérifie ses fiches.");
+        }
+        // Comme `reassign` : jamais son propre véhicule (un autre membre de l'équipe s'en charge).
+        if (rows.some((r) => r.v.ownerId === v.user.id)) {
+          throw new AppError(
+            409,
+            "self_action",
+            "Ce groupe contient ton propre véhicule : un autre membre de l'équipe doit le rattacher.",
+          );
+        }
+        // Marque : existante, retrouvée par son nom, ou créée (avec son modèle « Autre », comme `createMake`).
+        let make = input.makeId
+          ? (await tx.select().from(vehicleMakes).where(eq(vehicleMakes.id, input.makeId)))[0]
+          : (
+              await tx
+                .select()
+                .from(vehicleMakes)
+                .where(eq(vehicleMakes.slug, slugify(input.makeName ?? "")))
+            )[0];
+        if (input.makeId && !make) throw notFound("Marque introuvable");
+        if (!make) {
+          [make] = await tx
+            .insert(vehicleMakes)
+            .values({ name: input.makeName ?? "", slug: slugify(input.makeName ?? ""), country: input.country })
+            .returning();
+          if (!make) throw new Error("Marque non créée");
+          const [other] = await tx
+            .insert(vehicleModels)
+            .values({ makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+            .returning();
+          if (other) await tx.insert(vehicleGenerations).values({ modelId: other.id, name: "Autre", isOther: true });
+          await audit(tx, v, {
+            action: "reference.make_create",
+            targetType: "vehicle_make",
+            targetId: make.id,
+            reason: make.name,
+          });
+        }
+        if (make.isOther) throw validation("Choisis une vraie marque : « Autre » n'a pas de modèles.");
+        // Modèle : existant, retrouvé par son nom chez cette marque, ou créé (avec sa génération « Autre »).
+        const vehicleType = (mostTyped(rows.map((r) => r.v.vehicleType)) ?? "car") as "car" | "moto" | "truck";
+        const makeId = make.id;
+        let model = input.modelId
+          ? (await tx.select().from(vehicleModels).where(eq(vehicleModels.id, input.modelId)))[0]
+          : (
+              await tx
+                .select()
+                .from(vehicleModels)
+                .where(and(eq(vehicleModels.makeId, makeId), eq(vehicleModels.slug, slugify(input.modelName ?? ""))))
+            )[0];
+        if (input.modelId && (!model || model.makeId !== makeId)) throw validation("Modèle inconnu pour cette marque");
+        if (!model) {
+          [model] = await tx
+            .insert(vehicleModels)
+            .values({ makeId, name: input.modelName ?? "", slug: slugify(input.modelName ?? ""), vehicleType })
+            .returning();
+          if (!model) throw new Error("Modèle non créé");
+          await tx.insert(vehicleGenerations).values({ modelId: model.id, name: "Autre", isOther: true });
+          await audit(tx, v, {
+            action: "reference.model_create",
+            targetType: "vehicle_model",
+            targetId: model.id,
+            reason: `${make.name} ${model.name}`,
+          });
+        }
+        if (model.isOther) throw validation("Choisis un vrai modèle, pas « Autre ».");
+        const modelId = model.id;
+        const gen = input.generationId
+          ? (await tx.select().from(vehicleGenerations).where(eq(vehicleGenerations.id, input.generationId)))[0]
+          : undefined;
+        if (input.generationId && (!gen || gen.modelId !== modelId)) {
+          throw validation("Génération inconnue pour ce modèle");
+        }
+        const label = [make.name, model.name, gen && !gen.isOther ? gen.name : null].filter(Boolean).join(" ");
+        await tx
+          .update(vehicles)
+          .set({
+            makeId,
+            modelId,
+            generationId: gen?.id ?? null,
+            // Le type suit le modèle choisi.
+            vehicleType: model.vehicleType,
+            proposedMake: null,
+            proposedModel: null,
+            // Comme `reassign` : marque ou modèle changés, ce n'est plus la fiche certifiée.
+            certifiedLostReason: sql`case when ${vehicles.certifiedAt} is not null then 'modified'::certification_lost_reason else ${vehicles.certifiedLostReason} end`,
+            certifiedAt: null,
+          })
+          .where(
+            inArray(
+              vehicles.id,
+              rows.map((r) => r.v.id),
+            ),
+          );
+        for (const r of rows) {
+          // Un compte anonymisé n'est pas prévenu.
+          if (r.deletedAt) continue;
+          const typed = [
+            r.make.isOther ? r.v.proposedMake : r.make.name,
+            r.model.isOther ? r.v.proposedModel : r.model.name,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          await notificationsService.notify(tx, r.v.ownerId, "vehicle_reassigned", {
+            title: "Ton véhicule est dans la base Orasso",
+            body: `L'équipe Orasso a rattaché ta ${typed} à la liste : ${label}.`,
+            link: { label: "Voir mon véhicule", path: `/app/garage/${r.v.id}` },
+            data: { vehicleId: r.v.id },
+          });
+        }
+        await audit(tx, v, {
+          action: "vehicle.proposal_accept",
+          targetType: "vehicle_model",
+          targetId: modelId,
+          reason: `${label} · ${rows.length} fiche${rows.length > 1 ? "s" : ""} (${key})`,
+        });
+        after(() => notificationsService.kick());
+        return { makeId, modelId, label, count: rows.length };
+      }),
+    );
+  },
+
+  /**
    * `POST /admin/vehicles/:id/reassign {makeId, modelId, generationId}` : rattache un véhicule au référentiel (cohérence
    * marque → modèle → génération et type vérifiée). Le véhicule garde tout le reste (photos, candidatures, historique).
    * Propriétaire prévenu (`vehicle_reassigned`).
@@ -478,6 +794,9 @@ export const vehicleReferenceService = {
           modelId: input.modelId,
           generationId: input.generationId,
           vehicleType,
+          // Lot R4a : un nom tapé ne reste que tant que son niveau est « Autre ».
+          proposedMake: make?.isOther ? current.proposedMake : null,
+          proposedModel: model.isOther ? current.proposedModel : null,
           // Marque ou modèle changés : ce n'est plus la fiche certifiée (relecture).
           ...(current.certifiedAt && (current.makeId !== input.makeId || current.modelId !== input.modelId)
             ? { certifiedAt: null, certifiedLostReason: "modified" as const }

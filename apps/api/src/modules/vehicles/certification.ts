@@ -64,6 +64,8 @@ export async function certificationFieldsOf(ex: Executor, vehicleId: string): Pr
     weightKg: v.weightKg,
     categoryIds: cats.map((c) => c.id),
     photoIds: photos.map((p) => p.id),
+    proposedMake: v.proposedMake,
+    proposedModel: v.proposedModel,
   };
 }
 
@@ -98,6 +100,8 @@ export const certificationService = {
         plateTransferPending: Boolean(row.pendingTransferId),
         certified: Boolean(row.certifiedAt),
         hasPendingRequest: last?.status === "pending",
+        // Lot R4a : un modèle tapé se certifie une fois rattaché à la liste par l'équipe.
+        referencePending: Boolean(row.proposedMake || row.proposedModel),
       },
     );
     return {
@@ -186,6 +190,10 @@ export const certificationService = {
       if (!vehicle) throw notFound("Véhicule introuvable");
       const accept = input.decision === "accept";
       if (accept && vehicle.status !== "active") throw conflict("conflict", "Le véhicule n'est plus actif");
+      // Lot R4a, tour 2 : un nom tapé pas encore rattaché à la liste ne se certifie pas (condition « reference »).
+      if (accept && (vehicle.proposedMake || vehicle.proposedModel)) {
+        throw conflict("conflict", "Le modèle n'est pas encore rattaché à la liste Orasso : rattache-le d'abord.");
+      }
       if (accept) {
         const examined = (req.snapshot as CertificationSnapshot).fields;
         const current = await certificationFieldsOf(tx, vehicle.id);

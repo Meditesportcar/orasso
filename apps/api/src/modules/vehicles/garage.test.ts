@@ -590,6 +590,32 @@ describe("certification", () => {
     expect(after.eligible).toBe(true);
   });
 
+  it("lot R4a, tour 2 : un nom tapé changé fait perdre la certification ; une demande sur un nom tapé ne se valide pas", async () => {
+    const admin = await signUp("Admin_R4a", { twoFactor: true, role: "super_admin" });
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: ref.makeId, name: "Autre", slug: "autre-r4a", vehicleType: "car", isOther: true })
+      .returning();
+    // Une fiche certifiée dont le modèle est « Autre » avec un nom tapé : le nom change → perdue (« modified »).
+    const { u, v } = await sportVehicle("Tape_R4a", {
+      modelId: other!.id,
+      generationId: null,
+      proposedModel: "320 ti",
+      certifiedAt: new Date(),
+    });
+    const fixed = await call(u, "PATCH", `/me/vehicles/${v.id}`, { proposedModel: "320 tii" });
+    expect(fixed.status).toBe(200);
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+    expect(row).toMatchObject({ certifiedAt: null, certifiedLostReason: "modified" });
+    // Demande déjà en cours quand le nom est tapé : l'admin ne peut pas la valider.
+    const { u: lea, v: w } = await sportVehicle("Lea_R4a");
+    expect((await call(lea, "POST", `/me/vehicles/${w.id}/certification-request`, {})).status).toBe(201);
+    await db.update(vehicles).set({ proposedModel: "Pas listé", modelId: other!.id }).where(eq(vehicles.id, w.id));
+    const [pending] = (await call(admin, "GET", "/admin/certification-requests?status=pending")).json;
+    const res = await call(admin, "POST", `/admin/certification-requests/${pending.id}/decide`, { decision: "accept" });
+    expect(res.status).toBe(409);
+  });
+
   it("conditions : grade, photos, description, catégorie, statut ; refus avec note", async () => {
     const admin = await signUp("Admin_01", { twoFactor: true, role: "super_admin" });
     const lea = await signUp("Lea_11");

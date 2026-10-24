@@ -134,9 +134,9 @@ test("captures du garage et de la certification", async ({ browser }) => {
         await p.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator("summary").click();
       });
       await take(lea as Cookie, "/app/garage/nouveau", "04-nouveau-categories-grisees", async (p) => {
-        await p.getByLabel("Marque").selectOption({ label: "BMW" });
-        await expect(p.getByLabel("Modèle").locator('option:text-is("Série 3")')).toHaveCount(1);
-        await p.getByLabel("Modèle").selectOption({ label: "Série 3" });
+        await p.getByLabel("Marque", { exact: true }).selectOption({ label: "BMW" });
+        await expect(p.getByLabel("Modèle", { exact: true }).locator('option:text-is("Série 3")')).toHaveCount(1);
+        await p.getByLabel("Modèle", { exact: true }).selectOption({ label: "Série 3" });
         await p.getByLabel("Année").fill("2015");
       });
       await take(marc as Cookie, "/app/garage", "05-garage-demande-de-transfert");

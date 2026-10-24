@@ -90,6 +90,23 @@ export const adminTexts = {
   otherQueueHint:
     "Véhicules enregistrés avec « Autre » : crée la marque, le modèle ou la génération manquant, puis rattache chaque véhicule. Le propriétaire est prévenu.",
   reassign: "Rattacher ce véhicule",
+  // Lot R4a (maquette R4.8b) : la file « Modèles proposés ».
+  proposals: "Modèles proposés",
+  proposalsHint:
+    "Les fiches dont la personne a tapé le modèle ou la marque, regroupées par texte (sans accents ni majuscules). La plus grosse file en tête.",
+  proposalKnownMake: (make: string) => `Marque connue : ${make} · modèle tapé`,
+  proposalTypedMake: (make: string) => `Marque tapée « ${make} » : la marque et le modèle seront créés`,
+  proposalCount: (n: number) => (n > 1 ? `${n} fiches` : "1 fiche"),
+  proposalModelName: "Nom dans la liste",
+  proposalAdd: (n: number) =>
+    n > 1 ? `Ajouter à la liste et rattacher les ${n} fiches` : "Ajouter à la liste et rattacher la fiche",
+  proposalExisting: "Modèle existant (faute de frappe)",
+  proposalAttach: "Rattacher à un modèle existant",
+  proposalPickModel: "Choisir le modèle",
+  proposalMore: (n: number) => (n > 1 ? `et ${n} autres fiches` : "et 1 autre fiche"),
+  proposalsNext: "Groupes suivants",
+  proposalNotice: (name: string) =>
+    `Chaque propriétaire reçoit : « L'équipe Orasso a rattaché ta ${name} à la liste. » Pas d'annulation : une erreur se corrige fiche par fiche.`,
   audit: "Journal des accès",
   overviewEmpty: "Rien à traiter.",
 } as const;

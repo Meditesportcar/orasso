@@ -186,7 +186,7 @@ async function dragFrom(page: Page, testId: string, dx: number, dy: number) {
   await page.mouse.up();
 }
 
-test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le cadre ne leur prend plus le doigt)", async ({
+test("ajout d'un véhicule : le cadre par modes tourne par sa tige et s'agrandit par un bord (lot R4a)", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -224,18 +224,39 @@ test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le
   const before = await turn(page, "plate-frame");
   expect(Math.round(before.angle)).toBe(0);
 
-  // Poignée de rotation tirée vers la droite : le cadre penche, sans se déplacer.
+  // Lot R4a (cadre par modes) : toucher le cadre passe à Rotation ; la tige tirée vers la droite le fait pencher, sans
+  // le déplacer.
+  const tapFrame = async () => {
+    const b = await page.getByTestId("plate-frame").first().boundingBox();
+    if (!b) throw new Error("cadre absent");
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  };
+  await tapFrame();
+  await expect(page.getByTestId("plate-frame-mode")).toContainText("Rotation");
   await dragFrom(page, "plate-frame-rotate", 30, 0);
   const turned = await turn(page, "plate-frame");
   expect(turned.angle).toBeGreaterThan(15);
   expect(turned.angle).toBeLessThan(60);
-  // Coin : le cadre s'agrandit.
-  await dragFrom(page, "plate-frame-handle", 30, 10);
+  // Taille : le bord droit tiré, le cadre s'élargit.
+  await tapFrame();
+  await expect(page.getByTestId("plate-frame-mode")).toContainText("Taille");
+  const edge = await page.getByTestId("plate-frame-edge-r").first().boundingBox();
+  if (!edge) throw new Error("bord absent");
+  const ex = edge.x + edge.width / 2;
+  const ey = edge.y + edge.height / 2;
+  const rad = (turned.angle * Math.PI) / 180;
+  await page.mouse.move(ex, ey);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(ex + 3 * i * Math.cos(rad), ey + 3 * i * Math.sin(rad));
+  await page.mouse.up();
   expect((await turn(page, "plate-frame")).width).toBeGreaterThan(before.width + 10);
   await shot(page, "plaque-cadre-tourne-sable");
 
-  // Cadre remonté en haut de la photo : la poignée de rotation passe dessous (elle ne sort plus de la photo).
+  // Cadre remonté en haut de la photo (Déplacer) : la tige passe dessous (elle ne sort plus de la photo).
+  await tapFrame();
+  await expect(page.getByTestId("plate-frame-mode")).toContainText("Déplacer");
   await dragFrom(page, "plate-frame", 0, -400);
+  await tapFrame();
   const frameBox = await page.getByTestId("plate-frame").first().boundingBox();
   const handleBox = await page.getByTestId("plate-frame-rotate").first().boundingBox();
   const editorBox = await page.getByTestId("plate-editor").boundingBox();

@@ -301,3 +301,40 @@ describe("garage", () => {
     expect((await call(u, "GET", `/me/vehicles/${v.json.id}`)).status).toBe(404);
   });
 });
+
+describe("modèle absent de la liste (lot R4a, maquette R4.8)", () => {
+  it("le nom tapé part avec le niveau « Autre », nettoyé ; l'année est demandée ; la fiche publique dit « BMW 320 ti »", async () => {
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: ref.makeId, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const u = await signUp("Tape_66");
+    const viewer = await signUp("Voit_66");
+    const base = { ...car(), modelId: other!.id, generationId: null, proposedModel: "  320   ti " };
+    const noYear = await call(u, "POST", "/me/vehicles", { ...base, year: null });
+    expect(noYear.status).toBe(400);
+    expect(noYear.json.error.message).toContain("année");
+    const res = await call(u, "POST", "/me/vehicles", base);
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({
+      label: "BMW 320 ti",
+      modelName: "320 ti",
+      proposedModel: "320 ti",
+      proposedMake: null,
+    });
+    // La mention « à ajouter à la liste » est pour le propriétaire seulement : la fiche publique n'a que le nom.
+    const seen = await call(viewer, "GET", `/vehicles/${res.json.id}`);
+    expect(seen.json.label).toBe("BMW 320 ti");
+    expect(seen.json.proposedModel).toBeUndefined();
+    // Un nom tapé avec un modèle de la liste est ignoré ; la certification attend le rattachement.
+    const listed = await call(u, "POST", "/me/vehicles", { ...car(), plate: "zz-999-zz", proposedModel: "Pas pris" });
+    expect(listed.json.proposedModel).toBeNull();
+    const page = await call(u, "GET", `/me/vehicles/${res.json.id}`);
+    expect(page.json.certification.missing).toContain("reference");
+    // Modification : le nom se corrige ; un modèle de la liste choisi efface le nom tapé.
+    const fixed = await call(u, "PATCH", `/me/vehicles/${res.json.id}`, { proposedModel: "320ti" });
+    expect(fixed.json.label).toBe("BMW 320ti");
+    const back = await call(u, "PATCH", `/me/vehicles/${res.json.id}`, { modelId: ref.modelId });
+    expect(back.json).toMatchObject({ label: "BMW Série 3", proposedModel: null });
+  });
+});

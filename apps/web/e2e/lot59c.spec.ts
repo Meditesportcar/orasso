@@ -32,18 +32,22 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await setTheme(page, theme);
     await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
 
-    await page.getByLabel("Marque").selectOption({ label: "Toyota" });
-    await expect(page.getByLabel("Modèle").locator('option:text-is("Supra")')).toHaveCount(1);
-    await page.getByLabel("Modèle").selectOption({ label: "Supra" });
+    await page.getByLabel("Marque", { exact: true }).selectOption({ label: "Toyota" });
+    await expect(page.getByLabel("Modèle", { exact: true }).locator('option:text-is("Supra")')).toHaveCount(1);
+    await page.getByLabel("Modèle", { exact: true }).selectOption({ label: "Supra" });
     await page.getByLabel("Numéro de plaque").fill(randomPlate());
     await chooseSitePhoto(page, { name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
     const editor = page.getByTestId("new-plate-frame");
     await editor.getByRole("button", { name: "Poser un cadre" }).click();
     const frame = editor.getByTestId("site-plate-frame").first();
     await expect(frame).toHaveAttribute("data-angle", "0");
-    await expect(editor.getByText("tourne-le par sa poignée du haut")).toBeVisible();
-
-    // La poignée du haut, tirée vers la droite : le cadre penche (sens horaire).
+    // Lot R4a (cadre par modes) : un clic sur le cadre passe à Rotation ; la tige du haut, tirée vers la droite, le fait
+    // pencher (sens horaire).
+    await expect(editor.getByTestId("site-plate-mode")).toContainText("Déplacer");
+    const box = await frame.boundingBox();
+    if (!box) throw new Error("cadre absent");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(editor.getByTestId("site-plate-mode")).toContainText("Rotation");
     const handle = await editor.getByTestId("site-plate-rotate").first().boundingBox();
     if (!handle) throw new Error("poignée de rotation absente");
     await drag(page, handle.x + handle.width / 2, handle.y + handle.height / 2, 30, 0);

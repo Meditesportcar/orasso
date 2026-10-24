@@ -75,6 +75,7 @@ export const certificationMissingLabels: Record<CertificationMissing, string> = 
   photos: "Au moins 3 photos",
   description: "Une description",
   category: "Au moins une catégorie",
+  reference: "Le modèle rattaché à la liste Orasso",
   pending: "Une demande est déjà en cours",
   certified: "Déjà certifié",
 };
@@ -115,7 +116,9 @@ export const certificationLineLabels = {
                 ? "il manque une catégorie"
                 : line.first === "plate"
                   ? "plaque en attente de transfert"
-                  : `il faut le grade ${gradeLabels[CERTIFICATION_MIN_GRADE]}`;
+                  : line.first === "reference"
+                    ? "le modèle attend la liste Orasso"
+                    : `il faut le grade ${gradeLabels[CERTIFICATION_MIN_GRADE]}`;
         return `Certification : ${first}`;
       }
     }

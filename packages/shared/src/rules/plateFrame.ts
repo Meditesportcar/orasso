@@ -39,8 +39,11 @@ export function nextPlateFrame(existing: readonly PlateRect[]): PlateRect {
 
 /** En deçà de cet angle (degrés), le cadre se remet droit : on retrouve facilement l'horizontale. */
 export const PLATE_ANGLE_SNAP = 2;
-/** Distance (px à l'écran) entre le haut du cadre et la poignée qui le tourne. */
-export const PLATE_ROTATE_HANDLE_OFFSET = 26;
+/**
+ * Distance (px à l'écran) entre le haut du cadre et le bouton de la tige qui le tourne. Lot R4a : une seule valeur pour
+ * l'appli et le site (38 px, maquette R4.1 ; l'appli disait 38, le site 26).
+ */
+export const PLATE_ROTATE_HANDLE_OFFSET = 38;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -100,5 +103,188 @@ export function resizeOrientedPlateFrame(start: PlateRect, dx: number, dy: numbe
     w: round(w),
     h: round(h),
     angle: start.angle,
+  };
+}
+
+// Lot R4a (maquette R4.1) : le cadre ne fait qu'une chose à la fois. Toucher le cadre passe au mode suivant
+// (Déplacer → Rotation → Taille → Déplacer) ; il rouvre toujours en Déplacer. En Taille, aucune poignée : les quatre
+// bords s'attrapent (zone large et invisible), le bord opposé reste fixe, un coin tire ses deux bords. Logique pure,
+// partagée par l'appli (PanResponder) et le site (Pointer Events).
+
+export type PlateFrameMode = "move" | "rotate" | "size";
+export const PLATE_FRAME_MODES: readonly PlateFrameMode[] = ["move", "rotate", "size"];
+/** Le mode à l'ouverture du cadre : Déplacer, le geste le plus courant. */
+export const PLATE_FRAME_FIRST_MODE: PlateFrameMode = "move";
+
+/** Mode suivant, au toucher du cadre. */
+export function nextPlateFrameMode(mode: PlateFrameMode): PlateFrameMode {
+  const i = PLATE_FRAME_MODES.indexOf(mode);
+  return PLATE_FRAME_MODES[(i + 1) % PLATE_FRAME_MODES.length] ?? PLATE_FRAME_FIRST_MODE;
+}
+
+export type PlateEdge = "l" | "r" | "t" | "b";
+/** Zone de toucher d'un bord : 22 px de chaque côté du trait, 44 px en tout (validé le 24/10). */
+export const PLATE_EDGE_HIT = 22;
+/** Diamètre visible du bouton de la tige (maquette R4.1 : 28 px). */
+export const PLATE_ROTATE_KNOB = 28;
+/** Rayon de toucher autour du bouton de la tige. */
+export const PLATE_ROTATE_KNOB_HIT = 26;
+/** Un toucher (et non un geste) : moins de 6 px parcourus, en moins d'une demi-seconde. */
+export const PLATE_TAP_SLOP = 6;
+export const PLATE_TAP_MS = 500;
+
+/** Un toucher sur le cadre, et non un glissement. */
+export function isPlateFrameTap(distancePx: number, durationMs: number): boolean {
+  return distancePx < PLATE_TAP_SLOP && durationMs < PLATE_TAP_MS;
+}
+
+/** Centre, demi-tailles (px) et angle (radians) du cadre dans la photo affichée `W × H`. */
+function frameGeometry(r: PlateRect, W: number, H: number) {
+  return {
+    cx: (r.x + r.w / 2) * W,
+    cy: (r.y + r.h / 2) * H,
+    hw: (r.w * W) / 2,
+    hh: (r.h * H) / 2,
+    a: rad(r.angle ?? 0),
+  };
+}
+
+/**
+ * Le bouton de la tige passe sous le cadre quand, au-dessus, il sortirait de la photo (cadre collé en haut) : hors de
+ * la photo, il serait coupé et ne se toucherait plus. `boxH` : hauteur de la photo affichée.
+ */
+export function rotateKnobBelow(r: PlateRect, boxH: number, offset = PLATE_ROTATE_HANDLE_OFFSET): boolean {
+  const a = rad(r.angle ?? 0);
+  const reach = (r.h * boxH) / 2 + offset;
+  const cy = (r.y + r.h / 2) * boxH;
+  return cy - reach * Math.cos(a) - PLATE_ROTATE_KNOB / 2 < 0;
+}
+
+/** Ce que touche le doigt (ou la souris) : le geste du mode, les bords tenus en Taille, et s'il est dans le cadre. */
+export type PlateFrameHit = { kind: PlateFrameMode | null; edges: PlateEdge[]; inside: boolean };
+
+/**
+ * Ce que touche un point (px de la photo affichée `W × H`) selon le mode, ou null s'il ne touche pas le cadre.
+ * - Déplacer : dans le cadre, ou à 11 px de son bord.
+ * - Rotation : sur le bouton de la tige (au-dessus du cadre, ou dessous s'il est collé en haut) ; dans le cadre, un
+ *   toucher change seulement de mode.
+ * - Taille : à 22 px d'un bord, de chaque côté ; près d'un coin, ses deux bords. Sur un cadre plus étroit que deux
+ *   zones, le côté l'emporte dans sa hauteur (le haut et le bas s'attrapent au-dessus et au-dessous).
+ */
+export function plateFrameHit(
+  r: PlateRect,
+  px: number,
+  py: number,
+  W: number,
+  H: number,
+  mode: PlateFrameMode,
+  offset = PLATE_ROTATE_HANDLE_OFFSET,
+): PlateFrameHit | null {
+  const g = frameGeometry(r, W, H);
+  const cos = Math.cos(g.a);
+  const sin = Math.sin(g.a);
+  const lx = (px - g.cx) * cos + (py - g.cy) * sin;
+  const ly = -(px - g.cx) * sin + (py - g.cy) * cos;
+  const inside = Math.abs(lx) <= g.hw && Math.abs(ly) <= g.hh;
+  let kind: PlateFrameMode | null = null;
+  const edges: PlateEdge[] = [];
+  if (mode === "move") {
+    if (Math.abs(lx) <= g.hw + PLATE_EDGE_HIT / 2 && Math.abs(ly) <= g.hh + PLATE_EDGE_HIT / 2) kind = "move";
+  } else if (mode === "rotate") {
+    const ky = (rotateKnobBelow(r, H, offset) ? 1 : -1) * (g.hh + offset);
+    if (Math.hypot(lx, ly - ky) <= PLATE_ROTATE_KNOB_HIT) kind = "rotate";
+  } else {
+    const T = PLATE_EDGE_HIT;
+    const dl = Math.abs(lx + g.hw);
+    const dr = Math.abs(lx - g.hw);
+    const dt = Math.abs(ly + g.hh);
+    const db = Math.abs(ly - g.hh);
+    let side = Math.min(dl, dr) <= T && Math.abs(ly) <= g.hh + T;
+    let end = Math.min(dt, db) <= T && Math.abs(lx) <= g.hw + T;
+    if (side && end) {
+      // Cadre plus étroit que deux zones (une plaque fait souvent 30 px de haut) : dans sa hauteur, on tient le côté ;
+      // le haut et le bas s'attrapent au-dessus et au-dessous. Un coin, hors du cadre, tient ses deux bords.
+      if (g.hh < T && Math.abs(ly) <= g.hh) end = false;
+      if (g.hw < T && Math.abs(lx) <= g.hw) side = false;
+      if (!side && !end) side = Math.min(dl, dr) <= Math.min(dt, db);
+      if (!side && !end) end = true;
+    }
+    if (side) edges.push(dl < dr ? "l" : "r");
+    if (end) edges.push(dt < db ? "t" : "b");
+    if (edges.length) kind = "size";
+  }
+  if (!kind && !inside) return null;
+  return { kind, edges, inside };
+}
+
+/**
+ * Tire un ou deux bords du cadre (Taille) de `dx, dy` px : le bord opposé reste fixe, en suivant les axes du cadre s'il
+ * est tourné. Borné à la taille minimale. Lot R4a, tour 2 (relecture Codex, bloquant) : la photo borne
+ * l'agrandissement lui-même, jamais en déplaçant le cadre après coup (un cadre tourné déplacé pouvait découvrir la
+ * plaque qu'il masquait). Le geste s'arrête au dernier point où le cadre (son rectangle avant rotation, ce que l'API
+ * vérifie) tient dans la photo.
+ */
+export function resizePlateFrameEdges(
+  start: PlateRect,
+  edges: readonly PlateEdge[],
+  dx: number,
+  dy: number,
+  W: number,
+  H: number,
+): PlateRect {
+  const g = frameGeometry(start, W, H);
+  const cos = Math.cos(g.a);
+  const sin = Math.sin(g.a);
+  const lx = dx * cos + dy * sin;
+  const ly = -dx * sin + dy * cos;
+  const minW = PLATE_FRAME_MIN_W * W;
+  const minH = PLATE_FRAME_MIN_H * H;
+  /** Le cadre pour une fraction `k` du geste (0 : le cadre de départ). */
+  const at = (k: number) => {
+    let L = -g.hw;
+    let R = g.hw;
+    let T = -g.hh;
+    let B = g.hh;
+    if (edges.includes("l")) L = Math.min(L + lx * k, R - minW);
+    if (edges.includes("r")) R = Math.max(R + lx * k, L + minW);
+    if (edges.includes("t")) T = Math.min(T + ly * k, B - minH);
+    if (edges.includes("b")) B = Math.max(B + ly * k, T + minH);
+    const mx = (L + R) / 2;
+    const my = (T + B) / 2;
+    const w = (R - L) / W;
+    const h = (B - T) / H;
+    return {
+      x: (g.cx + mx * cos - my * sin) / W - w / 2,
+      y: (g.cy + mx * sin + my * cos) / H - h / 2,
+      w,
+      h,
+    };
+  };
+  const EPS = 1e-9;
+  const fits = (r: { x: number; y: number; w: number; h: number }) =>
+    r.x >= -EPS && r.y >= -EPS && r.x + r.w <= 1 + EPS && r.y + r.h <= 1 + EPS;
+  let k = 1;
+  if (!fits(at(1))) {
+    // Le geste sort de la photo : la plus grande fraction qui tient (le cadre de départ tient toujours).
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(at(mid))) lo = mid;
+      else hi = mid;
+    }
+    k = lo;
+  }
+  const r = at(k);
+  // Arrondi au dix-millième vers l'intérieur : la taille ne grandit jamais par l'arrondi, la position ne bouge que
+  // d'une fraction de pixel pour rester dans la photo.
+  const w = Math.min(1, Math.floor(r.w * 10000) / 10000);
+  const h = Math.min(1, Math.floor(r.h * 10000) / 10000);
+  return {
+    x: clamp(round(r.x + (r.w - w) / 2), 0, round(1 - w)),
+    y: clamp(round(r.y + (r.h - h) / 2), 0, round(1 - h)),
+    w,
+    h,
+    ...(start.angle ? { angle: start.angle } : {}),
   };
 }

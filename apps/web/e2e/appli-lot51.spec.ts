@@ -140,13 +140,15 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await shot(page, "05-plaque-a-la-main", theme);
     await next(page);
 
-    // 3. Marque et modèle. « Autre » : aucune saisie libre, seulement la demande à l'équipe ; un seul champ.
+    // 3. Marque et modèle. Lot R4a (maquette R4.8) : rien dans la liste, on propose de taper le nom ; un seul champ
+    // tant qu'on n'a pas choisi.
     await expect(page.getByText("Étape 3 sur 5 · Marque et modèle").first()).toBeVisible();
     await page.getByLabel("Marque ou modèle").fill("zzz introuvable");
+    await expect(page.getByTestId("vehicle-search-empty")).toContainText(
+      "Aucune marque ne s'appelle « zzz introuvable »",
+    );
     await expect(page.getByTestId("ref-row")).toHaveCount(0);
-    await expect(page.getByTestId("ref-other")).toHaveCount(1);
-    await expect(page.getByText("Pas dans la liste ? L'équipe Orasso l'ajoute à la base.").first()).toBeVisible();
-    await expect(page.getByText("Rien dans la liste Orasso").first()).toBeVisible();
+    await expect(page.getByTestId("vehicle-add-typed")).toContainText("Ajouter la marque « zzz introuvable »");
     await expect(page.locator("input:visible, textarea:visible")).toHaveCount(1);
     await shot(page, "01a-autre-sans-saisie", theme);
     await page.getByLabel("Marque ou modèle").fill("toyota");

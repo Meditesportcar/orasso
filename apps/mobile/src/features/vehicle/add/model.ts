@@ -5,6 +5,7 @@
 // Lot M1 : nouvel ordre de Damien (retour 11) Photos → Plaque → Marque et modèle → Fiche technique → Catégories.
 import {
   type CategoryOption,
+  cleanProposedName,
   formatPreparation,
   vehicleWizardLabels as L,
   normalizePlate,
@@ -99,6 +100,13 @@ export type Draft = {
    * le brouillon, il survit au va-et-vient entre les étapes.
    */
   plateTouched?: boolean;
+  /**
+   * Lot R4a (maquette R4.8) : le modèle (`model`) ou la marque et le modèle (`make`) ne sont pas dans la liste et se
+   * tapent ; le niveau choisi est alors « Autre », la génération n'est pas demandée, l'année l'est.
+   */
+  typing?: "model" | "make";
+  proposedMake?: string;
+  proposedModel?: string;
 };
 
 /** Une plaque lue sur une photo, telle que l'étape Plaque la garde (sans le cadre). */
@@ -179,6 +187,13 @@ export function draftFromVehicle(v: VehicleFull): Draft {
     former: v.status !== "active",
     status: v.status,
     unregistered: v.unregistered,
+    ...(v.proposedMake || v.proposedModel
+      ? {
+          typing: v.proposedMake ? ("make" as const) : ("model" as const),
+          proposedMake: v.proposedMake ?? "",
+          proposedModel: v.proposedModel ?? "",
+        }
+      : {}),
   };
 }
 
@@ -225,17 +240,23 @@ export function originCategories(rows: readonly CategoryOption[], makeCountry: s
   return rows.filter((c) => c.eligible && c.allowedCountries?.includes(makeCountry));
 }
 
+/** Lot R4a : les origines à choisir à la main, pour une marque tapée (pays inconnu). */
+export const pickableOrigins = (rows: readonly CategoryOption[]) =>
+  rows.filter((c) => c.allowedCountries && c.eligible);
+
 /** Les autres catégories à choisir (les origines d'autres pays ne sont pas des styles : on ne les montre pas). */
 export const styleCategories = (rows: readonly CategoryOption[]) => rows.filter((c) => !c.allowedCountries);
 
 /** Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. */
-export function keptCategories(ids: readonly string[], rows: readonly CategoryOption[], makeCountry: string | null) {
+export function keptCategories(
+  ids: readonly string[],
+  rows: readonly CategoryOption[],
+  makeCountry: string | null,
+  /** Lot R4a : marque tapée, l'origine se choisit à la main (elle ne se déduit pas). */
+  pickOrigins = false,
+) {
   const origins = originCategories(rows, makeCountry).map((c) => c.id);
-  const eligible = new Set(
-    styleCategories(rows)
-      .filter((c) => c.eligible)
-      .map((c) => c.id),
-  );
+  const eligible = new Set((pickOrigins ? rows : styleCategories(rows)).filter((c) => c.eligible).map((c) => c.id));
   const styles = ids.filter((id) => eligible.has(id) && !origins.includes(id));
   return [...origins, ...styles].slice(0, MAX_CATEGORIES);
 }
@@ -277,14 +298,19 @@ export function stepIssue(step: number, d: Draft, currentYear = new Date().getFu
   switch (step) {
     case STEP.identity:
       if (!d.makeId) return "Choisis la marque.";
+      if (d.typing === "make" && !cleanProposedName(d.proposedMake))
+        return "Tape le nom de la marque (2 caractères au moins).";
+      if (d.typing && !cleanProposedName(d.proposedModel)) return "Tape le nom du modèle (2 caractères au moins).";
       if (!d.modelId) return "Choisis le modèle.";
-      if (d.generationId === undefined) return "Choisis la génération (ou « Autre »).";
+      if (d.generationId === undefined) return "Choisis la génération (ou « Je ne sais pas »).";
       return null;
     case STEP.specs: {
       // Décision de Damien du 23/10 : saisie libre, mêmes bornes que l'API (`vehicleSpecsIssue`).
       const specs = vehicleSpecsIssue(d);
       if (specs) return specs;
       if (d.year !== undefined && (d.year < 1885 || d.year > currentYear + 1)) return "Année hors limites.";
+      // Lot R4a : un modèle tapé n'a pas de génération ; l'année est demandée.
+      if (d.typing && d.year === undefined) return L.yearRequiredTyped;
       return null;
     }
     case STEP.categories:
@@ -359,6 +385,8 @@ export type LiveCard = {
   categories: string[];
   cover: string | null;
   plate: boolean;
+  /** Lot R4a : nom tapé, en attente de la liste (« à ajouter à la liste », pour le propriétaire seulement). */
+  toBeListed: boolean;
 };
 
 export function liveCard(
@@ -371,9 +399,13 @@ export function liveCard(
     categories?: readonly CategoryOption[];
   },
 ): LiveCard {
-  const make = ref.make && !ref.make.isOther ? ref.make.name : ref.make ? L.other : null;
-  const model = ref.model && !ref.model.isOther ? ref.model.name : null;
+  // Lot R4a : un nom tapé s'affiche tout de suite (« Peugeot 207 CC »).
+  const typedMake = d.typing === "make" ? cleanProposedName(d.proposedMake) : null;
+  const typedModel = d.typing ? cleanProposedName(d.proposedModel) : null;
+  const make = typedMake ?? (ref.make && !ref.make.isOther ? ref.make.name : ref.make && !d.typing ? L.other : null);
+  const model = typedModel ?? (ref.model && !ref.model.isOther ? ref.model.name : null);
   const gen = ref.generation && !ref.generation.isOther ? ref.generation : null;
+  const unset = Boolean(model) && !gen && (d.typing !== undefined || d.generationId !== undefined);
   const specs = [
     d.engine.trim() || null,
     d.powerHp.trim() ? `${d.powerHp.trim()} ch` : null,
@@ -386,17 +418,28 @@ export function liveCard(
     type: d.vehicleType,
     photos: d.photos.length,
     name: [make, model].filter(Boolean).join(" ") || null,
-    generation: gen ? [gen.name, generationYears(gen)].filter(Boolean).join(" · ") : null,
+    generation: gen
+      ? [gen.name, generationYears(gen)].filter(Boolean).join(" · ")
+      : d.typing && !typedModel
+        ? L.typeModelName
+        : unset
+          ? L.generationUnset
+          : null,
     specs: step >= STEP.specs && specs.length ? specs.join(" · ") : null,
     categories:
       step >= STEP.categories ? d.categoryIds.map((id) => byId.get(id)).filter((x): x is string => Boolean(x)) : [],
     cover: d.photos[0]?.uri ?? null,
     plate: step >= STEP.plate,
+    toBeListed: Boolean(typedModel),
   };
 }
 
 /** « GR Supra » pour « Ta GR Supra est au garage » : le modèle, sinon la marque, sinon « voiture ». */
-export function shortName(ref: { make?: VehicleMake; model?: VehicleModel }, type: VehicleType): string {
+export function shortName(
+  ref: { make?: VehicleMake; model?: VehicleModel; typedModel?: string | null },
+  type: VehicleType,
+): string {
+  if (ref.typedModel) return ref.typedModel;
   if (ref.model && !ref.model.isOther) return ref.model.name;
   if (ref.make && !ref.make.isOther) return ref.make.name;
   return type === "moto" ? "moto" : type === "truck" ? "camion" : "voiture";
@@ -431,6 +474,8 @@ export function createBody(d: Draft): VehicleCreate {
     description: d.description.trim() || null,
     preparation: formatPreparation(d.preparation, d.preparationNote),
     categoryIds: d.categoryIds,
+    proposedMake: d.typing === "make" ? cleanProposedName(d.proposedMake) : null,
+    proposedModel: d.typing ? cleanProposedName(d.proposedModel) : null,
   };
 }
 
@@ -456,6 +501,8 @@ export function updateBody(d: Draft, v: VehicleFull): VehicleUpdate {
       body.plate = next.plate ?? null;
   }
   if (next.status !== v.status) body.status = next.status;
+  if ((next.proposedMake ?? null) !== (v.proposedMake ?? null)) body.proposedMake = next.proposedMake ?? null;
+  if ((next.proposedModel ?? null) !== (v.proposedModel ?? null)) body.proposedModel = next.proposedModel ?? null;
   const before = v.categories.map((c) => c.id);
   if (before.length !== next.categoryIds.length || !before.every((id) => next.categoryIds.includes(id))) {
     body.categoryIds = next.categoryIds;

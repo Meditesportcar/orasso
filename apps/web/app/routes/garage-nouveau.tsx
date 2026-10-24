@@ -8,6 +8,7 @@ import {
   archiveStatusChoices,
   type CategoryOption,
   CERTIFICATION_MIN_PHOTOS,
+  cleanProposedName,
   formatPreparation,
   vehicleWizardLabels as L,
   PREPARED_CATEGORY_SLUG,
@@ -20,6 +21,7 @@ import {
   type VehicleMake,
   type VehicleModel,
   type VehiclePreparation,
+  type VehicleReferenceHit,
   vehiclePreparationLabels,
   vehiclePreparations,
   vehicleSpecsIssue,
@@ -40,6 +42,8 @@ import {
   keptCategories,
   modelsForType,
   originCategories,
+  PROPOSED_MAX,
+  pickableOrigins,
   plateFields,
   preparedCategory,
   sortRows,
@@ -76,6 +80,8 @@ type Errors = Partial<
     | "weightKg"
     | "color"
     | "description"
+    | "proposedMake"
+    | "proposedModel"
     | "form",
     string
   >
@@ -101,6 +107,16 @@ export async function action({ request }: Route.ActionArgs) {
   const errors: Errors = {};
   if (!text("makeId")) errors.makeId = "Choisis une marque.";
   if (!text("modelId")) errors.modelId = "Choisis un modèle.";
+  // Lot R4a (maquette R4.8) : modèle ou marque absents de la liste, tapés ; la génération n'est pas demandée, l'année
+  // l'est (mêmes règles que l'appli et l'API).
+  const typing = text("typing");
+  if (typing === "make" && !cleanProposedName(text("proposedMake"))) {
+    errors.proposedMake = "Tape le nom de la marque (2 caractères au moins).";
+  }
+  if (typing && !cleanProposedName(text("proposedModel"))) {
+    errors.proposedModel = "Tape le nom du modèle (2 caractères au moins).";
+  }
+  if (typing && !yearText) errors.year = L.yearRequiredTyped;
   if (active && !unregistered && !text("plate")) errors.plate = L.plateRequired;
   if (yearText && !/^\d{4}$/.test(yearText)) errors.year = "Année sur 4 chiffres.";
   // Décision de Damien du 23/10 : saisie libre, mêmes bornes que l'appli et l'API (`vehicleSpecsIssue`).
@@ -137,8 +153,10 @@ export async function action({ request }: Route.ActionArgs) {
     vehicleType: text("vehicleType") as VehicleCreate["vehicleType"],
     makeId: text("makeId"),
     modelId: text("modelId"),
-    generationId: text("generationId") || null,
+    generationId: typing ? null : text("generationId") || null,
     year: yearText ? Number(yearText) : null,
+    proposedMake: typing === "make" ? cleanProposedName(text("proposedMake")) : null,
+    proposedModel: typing ? cleanProposedName(text("proposedModel")) : null,
     color: text("color") || null,
     engine: text("engine") || null,
     powerHp: powerText ? Number(powerText) : null,
@@ -232,6 +250,12 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [modelId, setModelId] = useState("");
   const [generations, setGenerations] = useState<VehicleGeneration[]>([]);
   const [generationId, setGenerationId] = useState("");
+  // Lot R4a : recherche « Marque ou modèle » (route du lot R3c) et nom tapé quand il n'est pas dans la liste.
+  const [search, setSearch] = useState("");
+  const [hits, setHits] = useState<{ q: string; rows: VehicleReferenceHit[] | "busy" | "offline" } | null>(null);
+  const [typedMake, setTypedMake] = useState("");
+  const [typedModel, setTypedModel] = useState("");
+  const pending = useRef<{ modelId: string | null; generationId: string | null } | null>(null);
   const [engine, setEngine] = useState("");
   const [powerHp, setPowerHp] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -272,7 +296,11 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     setModels([]);
     if (!makeId) return;
     apiFetch<VehicleModel[]>(`/vehicle-reference/makes/${makeId}/models`).then((res) => {
-      if (res.ok) setModels(res.data);
+      if (!res.ok) return;
+      setModels(res.data);
+      // Un résultat de la recherche choisi : son modèle ; une marque tapée : le modèle « Autre » de « Autre ».
+      const want = pending.current?.modelId ?? (res.data.every((m) => m.isOther) ? res.data[0]?.id : null);
+      if (want) setModelId(want);
     });
   }, [makeId]);
 
@@ -281,9 +309,65 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     setGenerationId("");
     if (!modelId) return;
     apiFetch<VehicleGeneration[]>(`/vehicle-reference/models/${modelId}/generations`).then((res) => {
-      if (res.ok) setGenerations(res.data);
+      if (!res.ok) return;
+      setGenerations(res.data);
+      if (pending.current?.generationId) setGenerationId(pending.current.generationId);
+      pending.current = null;
     });
   }, [modelId]);
+
+  // Recherche tolérante, une requête par pause de frappe ; au niveau Modèle, la marque choisie en fait partie.
+  const q = search.trim();
+  useEffect(() => {
+    if (!q) return;
+    const chosen = makes.find((m) => m.id === makeId && !m.isOther);
+    const params = new URLSearchParams({ q: chosen ? `${chosen.name} ${q}` : q, type, limit: "8" });
+    let stale = false;
+    const timer = setTimeout(() => {
+      apiFetch<VehicleReferenceHit[]>(`/vehicle-reference/search?${params}`).then((res) => {
+        if (stale) return;
+        // Une erreur n'est jamais une liste vide : 429 « Trop de demandes », sinon recherche indisponible.
+        if (!res.ok) {
+          setHits({ q: `${makeId}|${type}|${q}`, rows: res.status === 429 ? "busy" : "offline" });
+          return;
+        }
+        const rows = chosen ? res.data.filter((h) => h.makeId === chosen.id && h.kind !== "make") : res.data;
+        setHits({ q: `${makeId}|${type}|${q}`, rows });
+      });
+    }, 200);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [q, type, makeId, makes]);
+  const answer = q && hits?.q === `${makeId}|${type}|${q}` ? hits.rows : null;
+  const found = Array.isArray(answer) ? answer : null;
+  const searchError = answer === "busy" ? L.searchBusySite : answer === "offline" ? L.searchOfflineSite : null;
+  const pickHit = (h: VehicleReferenceHit) => {
+    if (h.vehicleType) setType(h.vehicleType);
+    if (h.makeId === makeId && h.modelId && h.modelId === modelId) {
+      // Lot R4a, tour 2 : même modèle (sa liste de générations est déjà lue) : la génération s'applique tout de suite.
+      pending.current = null;
+      setGenerationId(h.generationId ?? "");
+    } else {
+      pending.current = { modelId: h.modelId, generationId: h.generationId };
+      if (h.makeId === makeId && h.modelId) setModelId(h.modelId);
+      else setMakeId(h.makeId);
+    }
+    setSearch("");
+  };
+  const otherMake = makes.find((m) => m.isOther);
+  const addTyped = () => {
+    if (makeId && !makes.find((m) => m.id === makeId)?.isOther) {
+      const other = models.find((m) => m.isOther);
+      if (other) setModelId(other.id);
+      setTypedModel(q.slice(0, PROPOSED_MAX));
+    } else if (otherMake) {
+      setMakeId(otherMake.id);
+      setTypedMake(q.slice(0, PROPOSED_MAX));
+    }
+    setSearch("");
+  };
 
   // Catégories filtrées par marque, modèle (tout-terrain : « 4x4 »), type et année.
   useEffect(() => {
@@ -301,6 +385,8 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   }, [type, makeId, modelId, year]);
 
   const make = makes.find((m) => m.id === makeId);
+  const model = models.find((m) => m.id === modelId);
+  const typing: "make" | "model" | null = make?.isOther ? "make" : model?.isOther ? "model" : null;
   const sortedMakes = useMemo(() => sortRows(makes), [makes]);
   const visibleModels = useMemo(
     () => sortRows(modelsForType(models, type as "car" | "moto" | "truck")),
@@ -309,6 +395,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const generation = generations.find((g) => g.id === generationId);
   const years = yearChoices(generation, new Date().getFullYear());
   const origins = originCategories(categories, make);
+  const originChoices = typing === "make" ? pickableOrigins(categories) : [];
   const styles = visibleStyles(categories);
   const prepared = preparedCategory(categories, PREPARED_CATEGORY_SLUG);
   const numericYear = /^\d{4}$/.test(year) ? Number(year) : undefined;
@@ -319,7 +406,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   useEffect(() => {
     setCategoryIds((ids) => {
       const originIds = originCategories(categories, make).map((c) => c.id);
-      const next = keptCategories(ids, categories, make).filter((id) => !originIds.includes(id));
+      const next = keptCategories(ids, categories, make, make?.isOther).filter((id) => !originIds.includes(id));
       return next.length === ids.length && next.every((id, i) => id === ids[i]) ? ids : next;
     });
   }, [categories, make]);
@@ -439,26 +526,112 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
               ))}
             </fieldset>
             {errors.vehicleType && <p className="s-error">{errors.vehicleType}</p>}
+            {/* Lot R4a : la recherche tolérante (« golf 4 », « e36 », « mx5 ») ; rien chez la marque : on tape le nom. */}
+            {typing ? null : (
+              <div className="s-stack s-stack--tight" data-testid="add-search">
+                <TextField
+                  label={L.search}
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                  autoComplete="off"
+                />
+                {found?.length ? (
+                  <ul className="g-hits" data-testid="add-search-hits">
+                    {found.map((h) => (
+                      <li key={`${h.kind}:${h.generationId ?? h.modelId ?? h.makeId}`}>
+                        <button type="button" className="g-hit" onClick={() => pickHit(h)}>
+                          <Icon name={typeIcon[h.vehicleType ?? (type as "car")] ?? "vehicle"} size={18} />
+                          <span className="o-t-body-strong o-never-truncate">
+                            {[make && !make.isOther ? null : h.makeName, h.modelName, h.generationName]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </span>
+                          {h.kind === "generation" ? (
+                            <span className="o-t-caption">
+                              {generationYearsText({ yearFrom: h.yearFrom, yearTo: h.yearTo })}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : searchError ? (
+                  <p className="s-notice" role="alert" data-testid="add-search-error">
+                    {searchError}
+                  </p>
+                ) : found ? (
+                  <div className="s-stack s-stack--tight" data-testid="add-search-empty">
+                    <p className="o-t-body s-muted">
+                      {make && !make.isOther ? L.noModelMatch(make.name, q) : L.noMakeMatch(q)}
+                    </p>
+                    <button type="button" className="g-add-typed" onClick={addTyped} data-testid="add-typed">
+                      <Icon name="add" size={22} />
+                      <span className="s-stack s-stack--tight">
+                        <span className="o-t-body-strong">
+                          {make && !make.isOther ? L.addTyped(q, make.name) : L.addTypedMake(q)}
+                        </span>
+                        <span className="o-t-caption">{L.addTypedHint}</span>
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
             <SelectField
               label={L.make}
               name="makeId"
               value={makeId}
               onChange={(e) => setMakeId(e.currentTarget.value)}
               placeholder="Choisir une marque"
-              options={sortedMakes.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
+              options={sortedMakes.map((m) => ({ value: m.id, label: m.isOther ? L.makeAbsent : m.name }))}
               error={errors.makeId}
             />
-            <SelectField
-              label={L.model}
-              name="modelId"
-              value={modelId}
-              onChange={(e) => setModelId(e.currentTarget.value)}
-              placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
-              disabled={!makeId}
-              options={visibleModels.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
-              error={errors.modelId}
-            />
-            {generations.length > 0 && (
+            <input type="hidden" name="typing" value={typing ?? ""} />
+            {typing === "make" ? <input type="hidden" name="modelId" value={modelId} /> : null}
+            {typing === "make" ? null : (
+              <SelectField
+                label={L.model}
+                name="modelId"
+                value={modelId}
+                onChange={(e) => setModelId(e.currentTarget.value)}
+                placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
+                disabled={!makeId}
+                options={visibleModels.map((m) => ({ value: m.id, label: m.isOther ? L.modelAbsent : m.name }))}
+                error={errors.modelId}
+              />
+            )}
+            {typing ? (
+              <div className="g-typed s-stack s-stack--tight" data-testid="add-typed-name">
+                <p className="o-t-body-strong">
+                  <Icon name="edit" size={18} /> {typing === "make" ? L.makeAbsent : L.modelAbsent}
+                </p>
+                <p className="o-t-caption s-muted">{L.absentHint}</p>
+                {typing === "make" ? (
+                  <TextField
+                    label={L.makeNameField}
+                    name="proposedMake"
+                    value={typedMake}
+                    maxLength={PROPOSED_MAX}
+                    onChange={(e) => setTypedMake(e.currentTarget.value)}
+                    error={errors.proposedMake}
+                  />
+                ) : null}
+                <TextField
+                  label={L.modelNameField}
+                  name="proposedModel"
+                  value={typedModel}
+                  maxLength={PROPOSED_MAX}
+                  onChange={(e) => setTypedModel(e.currentTarget.value)}
+                  error={errors.proposedModel}
+                />
+                <p className="o-t-caption">
+                  <Icon name="check" size={14} /> {L.absentSay}
+                </p>
+                <p className="o-t-caption s-muted">{L.generationSkipped}</p>
+              </div>
+            ) : null}
+            {!typing && generations.length > 0 && (
               <SelectField
                 label={SITE.generation}
                 name="generationId"
@@ -467,7 +640,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
                 placeholder={SITE.chooseGeneration}
                 options={sortRows(generations, false).map((g) => ({
                   value: g.id,
-                  label: g.isOther ? L.other : [g.name, generationYearsText(g)].filter(Boolean).join(" · "),
+                  label: g.isOther ? L.generationUnknown : [g.name, generationYearsText(g)].filter(Boolean).join(" · "),
                 }))}
               />
             )}
@@ -600,6 +773,23 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
                 </span>
               </div>
             ))}
+            {originChoices.length ? (
+              <fieldset className="g-pills" data-testid="add-origin-pick">
+                <legend className="o-field__label o-t-label">{L.originPick}</legend>
+                {originChoices.map((c) => (
+                  <label key={c.id} className={categoryIds.includes(c.id) ? "g-opt g-pill is-on" : "g-opt g-pill"}>
+                    <input
+                      type="checkbox"
+                      name="categoryIds"
+                      value={c.id}
+                      checked={categoryIds.includes(c.id)}
+                      onChange={() => toggleStyle(c.id)}
+                    />
+                    <span className="o-t-body">{c.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
             <fieldset className="g-pills" data-testid="categories">
               <legend className="o-field__label o-t-label">{SITE.styles}</legend>
               {styles.map((c) => (

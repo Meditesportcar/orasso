@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  cleanProposedName,
   effectiveMainVehicleId,
   formatPlate,
   garageOrder,
@@ -26,6 +27,7 @@ import {
   plateNormalizationConflicts,
   vehicleCategories,
   vehicleGenerations,
+  vehicleMakes,
   vehicleModels,
   vehiclePhotos,
   vehicles,
@@ -82,6 +84,32 @@ export async function checkReference(
     const gen = await ex.query.vehicleGenerations.findFirst({ where: eq(vehicleGenerations.id, v.generationId) });
     if (!gen || gen.modelId !== v.modelId) throw validation("Génération inconnue pour ce modèle");
   }
+}
+
+/**
+ * Lot R4a (maquette R4.8) : marque et modèle tapés, gardés seulement avec le niveau « Autre » correspondant et
+ * nettoyés (40 caractères au plus). Un nom tapé demande l'année (la génération n'est pas demandée).
+ */
+async function proposedNames(
+  ex: Executor,
+  v: {
+    makeId: string;
+    modelId: string;
+    year: number | null;
+    proposedMake?: string | null;
+    proposedModel?: string | null;
+  },
+) {
+  const [make, model] = await Promise.all([
+    ex.query.vehicleMakes.findFirst({ where: eq(vehicleMakes.id, v.makeId), columns: { isOther: true } }),
+    ex.query.vehicleModels.findFirst({ where: eq(vehicleModels.id, v.modelId), columns: { isOther: true } }),
+  ]);
+  const proposedMake = make?.isOther ? cleanProposedName(v.proposedMake) : null;
+  const proposedModel = model?.isOther ? cleanProposedName(v.proposedModel) : null;
+  if ((proposedMake || proposedModel) && !v.year) {
+    throw validation("Indique l'année : ton modèle n'est pas encore dans la liste Orasso.", { field: "year" });
+  }
+  return { proposedMake, proposedModel };
 }
 
 /**
@@ -224,6 +252,7 @@ export const vehiclesService = {
     const plateNormalized = input.plate && !input.unregistered ? normalizePlate(input.plate) : null;
     if (input.plate && !plateNormalized) throw validation("Plaque invalide", { field: "plate" });
     await checkReference(db, input);
+    const proposed = await proposedNames(db, { ...input, year: input.year ?? null });
     await checkCategories(db, input.categoryIds, {
       vehicleType: input.vehicleType,
       makeId: input.makeId,
@@ -268,6 +297,7 @@ export const vehiclesService = {
             preparation: input.preparation,
             archivedAt: input.status === "active" ? null : now(),
             clientKey: input.clientKey ?? null,
+            ...proposed,
           })
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
@@ -339,6 +369,20 @@ export const vehiclesService = {
       input.makeId || input.modelId || input.generationId !== undefined || input.vehicleType,
     );
     if (referenceChanged) await checkReference(db, merged);
+    // Noms tapés : revus quand la marque, le modèle, l'année ou le nom lui-même changent.
+    const proposedTouched =
+      referenceChanged ||
+      input.year !== undefined ||
+      input.proposedMake !== undefined ||
+      input.proposedModel !== undefined;
+    const proposed = proposedTouched
+      ? await proposedNames(db, {
+          ...merged,
+          year: merged.year ?? null,
+          proposedMake: input.proposedMake !== undefined ? input.proposedMake : current.proposedMake,
+          proposedModel: input.proposedModel !== undefined ? input.proposedModel : current.proposedModel,
+        })
+      : {};
     // Catégories revérifiées quand elles changent, ou quand ce qui les conditionne change (marque, type, année) :
     // une fiche ancienne reste modifiable même si les règles ont été durcies depuis.
     if (input.categoryIds || referenceChanged || input.year !== undefined) {
@@ -362,7 +406,7 @@ export const vehiclesService = {
     const plateIsNew = plateNormalized !== current.plateNormalized || current.status !== "active";
     const holder = wantsPlate && plateIsNew ? await plateHolder(db, plateNormalized, id) : null;
     assertNotOwnPlate(holder, v.user.id);
-    const { categoryIds: _ignored, ...fields } = input;
+    const { categoryIds: _ignored, proposedMake: _make, proposedModel: _model, ...fields } = input;
     try {
       await withTx(async (tx, after) => {
         // Véhicule verrouillé et relu : une acceptation de transfert concurrente ne doit jamais être écrasée (I1).
@@ -392,6 +436,7 @@ export const vehiclesService = {
           .update(vehicles)
           .set({
             ...fields,
+            ...proposed,
             generationId: merged.generationId ?? null,
             year: merged.year ?? null,
             plate: merged.plate,

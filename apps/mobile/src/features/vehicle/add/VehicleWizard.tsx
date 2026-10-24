@@ -7,6 +7,7 @@
 // pourcentage à côté, et se gare à 100 % ; puis « au garage ». Fin : « Tes préférences » la première fois.
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  cleanProposedName,
   vehicleWizardLabels as L,
   vehicleAddLabels as V,
   type VehicleFull,
@@ -163,6 +164,11 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const model = modelRows.find((m) => m.id === draft.modelId);
   const generation = generations.data?.find((g) => g.id === draft.generationId);
   const makeCountry = make && !make.isOther ? make.country : null;
+  // Lot R4a : marque tapée : son modèle est le « Autre » de la marque « Autre », posé dès que ses modèles sont lus.
+  useEffect(() => {
+    const other = models.data?.find((m) => m.isOther && m.makeId === draft.makeId);
+    if (draft.typing === "make" && !draft.modelId && other) setDraft((d) => ({ ...d, modelId: other.id }));
+  }, [draft.typing, draft.modelId, draft.makeId, models.data]);
   // Un modèle sans génération dans la liste : rien à choisir.
   useEffect(() => {
     if (draft.modelId && generations.data && generations.data.length === 0 && draft.generationId === undefined) {
@@ -175,7 +181,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     const rows = categories.data;
     if (!rows) return;
     setDraft((d) => {
-      const next = keptCategories(d.categoryIds, rows, makeCountry);
+      const next = keptCategories(d.categoryIds, rows, makeCountry, d.typing === "make");
       const same = next.length === d.categoryIds.length && next.every((id, i) => id === d.categoryIds[i]);
       return same ? d : { ...d, categoryIds: next };
     });
@@ -481,7 +487,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   }
 
   if (phase === "done" && saved) {
-    const name = shortName({ make, model }, draft.vehicleType);
+    const name = shortName(
+      { make, model, typedModel: draft.typing ? cleanProposedName(draft.proposedModel) : null },
+      draft.vehicleType,
+    );
     const full = liveCard(draft, STEP.categories, { make, model, generation, categories: categories.data ?? [] });
     const doneTitle = editing ? L.doneTitleEdit : L.doneTitle(name);
     const seeVehicle = editing || memo.pending;
@@ -644,7 +653,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               </Button>
             </View>
           </View>
-          {blocked && (importing || step === STEP.photos) ? (
+          {/* Lot R4a (invariant) : jamais de bouton grisé sans une ligne qui dit ce qui manque : aussi à Marque et modèle. */}
+          {blocked && (importing || step === STEP.photos || step === STEP.identity) ? (
             <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
               {importing ? V.importing : issue}
             </Text>

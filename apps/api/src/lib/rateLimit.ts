@@ -81,6 +81,8 @@ export const rateRules = {
    * côté appli et site) : plus large que la recherche de premier niveau.
    */
   referenceSearch: { max: 120, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
+  /** Lot R4a : rattachements groupés de « Modèles proposés » (admin) : chaque geste écrit en masse et notifie. */
+  proposalAccept: { max: 60, windowMs: 3_600_000, message: "Trop de rattachements : réessaie plus tard." },
   referenceSearchPublic: { max: 120, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   /** Lot R4b : le plateau d'un événement (route publique, pages de 30). */
   lineup: { max: 120, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },

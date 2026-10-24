@@ -223,37 +223,129 @@
   border-radius: 6px;
   background: var(--scrim);
   backdrop-filter: blur(7px);
-  cursor: grab;
   touch-action: none;
+  pointer-events: none;
 }
-.g-plate__handle {
+/* Lot R4a (maquette R4.1) : le cadre par modes. Seul repère de chaque mode : le contour (Déplacer), la tige
+   (Rotation), les quatre bords (Taille, sans poignée ; le bord tenu s'allume en moutarde). Toute la photo reçoit la
+   souris, le cadre ne fait que se montrer. */
+.g-plate__edge {
   position: absolute;
-  right: -9px;
-  bottom: -9px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: nwse-resize;
+  background: var(--night-ink);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--night) 45%, transparent);
 }
-/* Lot 59c : poignée de rotation, centrée au-dessus du bord haut du cadre (26 px, PLATE_ROTATE_HANDLE_OFFSET). */
-.g-plate__handle--rotate {
-  right: auto;
-  bottom: auto;
+.g-plate__edge.is-t,
+.g-plate__edge.is-b {
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.g-plate__edge.is-t {
+  top: -2px;
+}
+.g-plate__edge.is-b {
+  bottom: -2px;
+}
+.g-plate__edge.is-l,
+.g-plate__edge.is-r {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+.g-plate__edge.is-l {
+  left: -2px;
+}
+.g-plate__edge.is-r {
+  right: -2px;
+}
+.g-plate__edge.is-on {
+  background: var(--accent);
+  box-shadow: none;
+}
+.g-plate__edge.is-on.is-t,
+.g-plate__edge.is-on.is-b {
+  height: 5px;
+}
+.g-plate__edge.is-on.is-l,
+.g-plate__edge.is-on.is-r {
+  width: 5px;
+}
+/* La tige : 38 px au-dessus du cadre (PLATE_ROTATE_HANDLE_OFFSET, commun avec l'appli), dessous s'il est collé en haut. */
+.g-plate__rot {
+  position: absolute;
   left: 50%;
-  top: -35px;
-  margin-left: -9px;
-  cursor: grab;
+  bottom: 100%;
+  width: 0;
+  height: 38px;
+}
+.g-plate__rot.is-below {
+  bottom: auto;
+  top: 100%;
 }
 .g-plate__stem {
   position: absolute;
-  left: 50%;
-  top: -26px;
+  left: -1px;
+  top: 0;
   width: 2px;
-  height: 26px;
-  margin-left: -1px;
+  height: 38px;
+  background: var(--night-ink);
+}
+.g-plate__knob {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--night-ink);
+  color: var(--night);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--night) 55%, transparent);
+}
+.g-plate__rot.is-below .g-plate__knob {
+  top: auto;
+  bottom: -14px;
+}
+.g-plate__mode {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  max-width: 520px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-muted);
+}
+.g-plate__mode strong {
+  color: var(--ink);
+}
+.g-plate__mode-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.g-plate__dots {
+  display: flex;
+  gap: 4px;
+}
+.g-plate__dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.g-plate__dots span.is-on {
+  width: 18px;
+  border-radius: 4px;
   background: var(--accent);
-  pointer-events: none;
 }
 .g-plate__badge {
   position: absolute;
@@ -344,8 +436,16 @@
   border-width: 1.5px;
   border-radius: 3px;
 }
-.g-add .g-plate__frame:active {
+.g-add .g-plate__frame.is-drag {
   background: color-mix(in srgb, var(--night) 68%, transparent);
+}
+
+/* Lot R4a : seul repère de la Rotation, la tige (contour discret) ; de la Taille, les bords (pas de contour). */
+.g-plate__photo[data-mode="rotate"] .g-plate__frame {
+  border: 1px solid color-mix(in srgb, var(--night-ink) 25%, transparent);
+}
+.g-plate__photo[data-mode="size"] .g-plate__frame {
+  border-color: transparent;
 }
 
 .g-add {
@@ -757,4 +857,51 @@
   color: var(--accent-text);
   font-weight: 900;
   white-space: nowrap;
+}
+
+/* Lot R4a (maquette R4.8) : recherche « Marque ou modèle » et modèle absent de la liste. Jetons seulement. */
+.g-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.g-hit,
+.g-add-typed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.g-hit .o-t-caption {
+  margin-left: auto;
+  color: var(--ink-muted);
+}
+.g-add-typed {
+  border-color: var(--accent);
+}
+.g-add-typed .o-t-caption {
+  color: var(--ink-muted);
+}
+.g-typed {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--accent);
+  background: var(--surface);
+}
+.g-typed .o-t-body-strong,
+.g-typed .o-t-caption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }

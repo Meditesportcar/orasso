@@ -3,7 +3,7 @@
 // de la double authentification (A5), anonymisation par l'équipe et par la personne (un seul service), base véhicules
 // et file « Autre », journal filtré et paginé. Routes sensibles jouées en cookie (site) ET en jeton porteur (appli).
 import { fromWallTime } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -113,6 +113,12 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
   ["PATCH", `/admin/vehicle-reference/makes/${UUID}`, { name: "Alpine" }],
   ["DELETE", `/admin/vehicle-reference/makes/${UUID}`],
   ["POST", `/admin/vehicles/${UUID}/reassign`, { makeId: UUID, modelId: UUID, generationId: null }],
+  ["GET", "/admin/vehicle-reference/proposals"],
+  [
+    "POST",
+    `/admin/vehicle-reference/proposals/model.${UUID}.207/accept`,
+    { makeId: UUID, modelName: "207", version: "0".repeat(32) },
+  ],
   ["GET", "/admin/assistance-requests"],
   ["POST", `/admin/assistance-requests/${UUID}/close`],
   ["GET", "/admin/settings"],
@@ -486,6 +492,251 @@ describe("base véhicules et file « Autre »", () => {
     expect(traces.map((t) => t.action)).toEqual(
       expect.arrayContaining(["reference.make_create", "reference.model_create", "vehicle.reassign"]),
     );
+  });
+});
+
+describe("modèles proposés (lot R4a, maquette R4.8b)", () => {
+  async function peugeotWithOther() {
+    const [make] = await db
+      .insert(vehicleMakes)
+      .values({ name: "Peugeot", slug: "peugeot", country: "FR" })
+      .returning();
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: make!.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const [otherGen] = await db
+      .insert(vehicleGenerations)
+      .values({ modelId: other!.id, name: "Autre", isOther: true })
+      .returning();
+    return { makeId: make!.id, modelId: other!.id, generationId: otherGen!.id };
+  }
+
+  it("regroupés par texte normalisé, la plus grosse file en tête ; rattachement groupé en une transaction", async () => {
+    const peugeot = await peugeotWithOther();
+    const lea = await signUp("Lea_66");
+    const theo = await signUp("Theo_11");
+    const typed = (ownerId: string, proposedModel: string, year = 2008) =>
+      createVehicle(ownerId, peugeot, { generationId: null, proposedModel, year });
+    const a = await typed(fan.id, "207 CC");
+    const b = await typed(lea.id, "207 CC");
+    const c = await typed(theo.id, "207cc", 2007);
+    await typed(lea.id, "308 GTi");
+    // « Autre » sans nom tapé : reste dans la file « Autre ».
+    await createVehicle(fan.id, peugeot, { generationId: null });
+
+    const list = await req(admin, "GET", "/admin/vehicle-reference/proposals");
+    expect(list.status).toBe(200);
+    expect(list.json.nextCursor).toBeNull();
+    expect(list.json.items).toHaveLength(2);
+    const [big, small] = list.json.items;
+    expect(big).toMatchObject({ level: "model", make: { name: "Peugeot" }, modelName: "207 CC", count: 3 });
+    expect(big.vehicles).toHaveLength(3);
+    expect(big.variants).toEqual(
+      expect.arrayContaining([
+        { text: "207 CC", count: 2 },
+        { text: "207cc", count: 1 },
+      ]),
+    );
+    expect(small.modelName).toBe("308 GTi");
+    // Liste blanche : ni plaque ni identifiant de compte dans la file.
+    expect(Object.keys(big).sort()).toEqual(
+      [
+        "count",
+        "key",
+        "level",
+        "make",
+        "makeName",
+        "modelName",
+        "variants",
+        "vehicleType",
+        "vehicles",
+        "version",
+      ].sort(),
+    );
+    expect(Object.keys(big.vehicles[0]).sort()).toEqual(
+      [
+        "createdAt",
+        "department",
+        "id",
+        "ownerPseudo",
+        "photoUrl",
+        "typedMake",
+        "typedModel",
+        "vehicleType",
+        "year",
+      ].sort(),
+    );
+    expect(JSON.stringify(list.json)).not.toMatch(/AA-\d{3}-ZZ|AA\d{3}ZZ/);
+    expect(JSON.stringify(list.json)).not.toContain(fan.id);
+    const others = await req(admin, "GET", "/admin/vehicle-reference/others");
+    expect(others.json.flatMap((g: { vehicles: unknown[] }) => g.vehicles)).toHaveLength(1);
+
+    // Le groupe a changé depuis l'affichage (une fiche de plus) : 409, rien n'est rattaché.
+    const late = await typed(theo.id, "207-CC");
+    const stale = await req(admin, "POST", `/admin/vehicle-reference/proposals/${big.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "207",
+      version: big.version,
+    });
+    expect(stale.status).toBe(409);
+    expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, a.id) }))?.proposedModel).toBe("207 CC");
+    const fresh = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items[0];
+    expect(fresh.count).toBe(4);
+
+    // « Ajouter à la liste et rattacher les 4 fiches » : le modèle est créé, toutes les fiches rattachées.
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${fresh.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "207",
+      version: fresh.version,
+    });
+    expect(done.status).toBe(200);
+    expect(done.json).toMatchObject({ label: "Peugeot 207", count: 4 });
+    for (const v of [a, b, c, late]) {
+      const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+      expect(row).toMatchObject({ modelId: done.json.modelId, proposedModel: null, proposedMake: null });
+    }
+    const notes = await db.select().from(notifications).where(eq(notifications.type, "vehicle_reassigned"));
+    expect(notes).toHaveLength(4);
+    expect(notes.find((n) => n.userId === fan.id)?.body).toContain("ta Peugeot 207 CC");
+    const traces = await db.select({ action: adminAuditLog.action }).from(adminAuditLog);
+    expect(traces.map((t) => t.action)).toEqual(
+      expect.arrayContaining(["reference.model_create", "vehicle.proposal_accept"]),
+    );
+    // Le groupe n'existe plus ; « Rattacher à un modèle existant » pour l'autre (faute de frappe).
+    expect(
+      (
+        await req(admin, "POST", `/admin/vehicle-reference/proposals/${fresh.key}/accept`, {
+          makeId: peugeot.makeId,
+          modelName: "207",
+          version: fresh.version,
+        })
+      ).status,
+    ).toBe(404);
+    const again = await req(admin, "POST", `/admin/vehicle-reference/proposals/${small.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelId: done.json.modelId,
+      version: small.version,
+    });
+    expect(again.json.count).toBe(1);
+    expect((await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items).toHaveLength(0);
+  });
+
+  it("marque tapée : la marque et le modèle sont créés ; un groupe inconnu est refusé", async () => {
+    const [other] = await db.insert(vehicleMakes).values({ name: "Autre", slug: "autre", isOther: true }).returning();
+    const [otherModel] = await db
+      .insert(vehicleModels)
+      .values({ makeId: other!.id, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const v = await createVehicle(
+      fan.id,
+      { makeId: other!.id, modelId: otherModel!.id, generationId: "" },
+      { generationId: null, proposedMake: "Lotus", proposedModel: "Exige" },
+    );
+    const [group] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    expect(group).toMatchObject({ level: "make", makeName: "Lotus", modelName: "Exige", key: "make.lotus.exige" });
+    expect(
+      (
+        await req(admin, "POST", "/admin/vehicle-reference/proposals/xx/accept", {
+          makeName: "L",
+          modelName: "E",
+          version: group.version,
+        })
+      ).status,
+    ).toBe(400);
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeName: "Lotus",
+      country: "GB",
+      modelName: "Exige",
+      version: group.version,
+    });
+    expect(done.status).toBe(200);
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+    expect(row).toMatchObject({ makeId: done.json.makeId, proposedMake: null, proposedModel: null });
+    const models = await req(admin, "GET", `/admin/vehicle-reference/makes/${done.json.makeId}/models`);
+    expect(models.json.map((m: { name: string }) => m.name).sort()).toEqual(["Autre", "Exige"]);
+  });
+
+  it("jamais son propre véhicule : un groupe qui le contient est refusé (self_action)", async () => {
+    const peugeot = await peugeotWithOther();
+    await createVehicle(admin.id, peugeot, { generationId: null, proposedModel: "Quasar", year: 2010 });
+    const mine = await createVehicle(fan.id, peugeot, { generationId: null, proposedModel: "quasar", year: 2011 });
+    const [group] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    expect(group.count).toBe(2);
+    const res = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "Quasar",
+      version: group.version,
+    });
+    expect(res.status).toBe(409);
+    expect(res.json.error.code).toBe("self_action");
+    expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, mine.id) }))?.proposedModel).toBe("quasar");
+  });
+
+  it("une fiche certifiée rattachée perd sa certification, comme fiche par fiche", async () => {
+    const peugeot = await peugeotWithOther();
+    const v = await createVehicle(fan.id, peugeot, {
+      generationId: null,
+      proposedModel: "Quasar",
+      year: 2010,
+      certifiedAt: new Date(),
+    });
+    const [group] = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json.items;
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${group.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "Quasar",
+      version: group.version,
+    });
+    expect(done.status).toBe(200);
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) });
+    expect(row).toMatchObject({ certifiedAt: null, certifiedLostReason: "modified" });
+  });
+
+  it("au-delà de 2 000 fiches : tout le groupe est lu et rattaché, la liste se pagine par groupes entiers", async () => {
+    const peugeot = await peugeotWithOther();
+    const rows = Array.from({ length: 2005 }, (_, i) => ({
+      ownerId: fan.id,
+      vehicleType: "car" as const,
+      makeId: peugeot.makeId,
+      modelId: peugeot.modelId,
+      generationId: null,
+      year: 2008,
+      unregistered: true,
+      proposedModel: i % 2 ? "207 CC" : "207cc",
+    }));
+    for (let i = 0; i < rows.length; i += 500) await db.insert(vehicles).values(rows.slice(i, i + 500));
+    // Et 55 petits groupes : deux pages.
+    await db.insert(vehicles).values(
+      Array.from({ length: 55 }, (_, i) => ({
+        ownerId: fan.id,
+        vehicleType: "car" as const,
+        makeId: peugeot.makeId,
+        modelId: peugeot.modelId,
+        generationId: null,
+        year: 2008,
+        unregistered: true,
+        proposedModel: `Modèle ${i}`,
+      })),
+    );
+    const first = (await req(admin, "GET", "/admin/vehicle-reference/proposals")).json;
+    expect(first.items).toHaveLength(50);
+    expect(first.items[0]).toMatchObject({ count: 2005 });
+    expect(first.items[0].vehicles).toHaveLength(20);
+    const second = (await req(admin, "GET", `/admin/vehicle-reference/proposals?cursor=${first.nextCursor}`)).json;
+    expect(second.items).toHaveLength(6);
+    expect(second.nextCursor).toBeNull();
+    const big = first.items[0];
+    const done = await req(admin, "POST", `/admin/vehicle-reference/proposals/${big.key}/accept`, {
+      makeId: peugeot.makeId,
+      modelName: "207",
+      version: big.version,
+    });
+    expect(done.json.count).toBe(2005);
+    const [left] = await db
+      .select({ n: count() })
+      .from(vehicles)
+      .where(and(eq(vehicles.makeId, peugeot.makeId), eq(vehicles.modelId, done.json.modelId)));
+    expect(left?.n).toBe(2005);
   });
 });
 

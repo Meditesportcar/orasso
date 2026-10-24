@@ -62,6 +62,16 @@ export function plateState(p: DraftPhoto): PlateState {
   return "fix";
 }
 
+/**
+ * Lot R4a (maquette R4.1) : cadre posé ou ajusté à la main (différent de ce que la détection a proposé) : la vignette dit
+ * « Cadre posé » au lieu de « Masquée ».
+ */
+export function framedByHand(p: DraftPhoto): boolean {
+  if (!p.rects.length) return false;
+  const auto = p.detected ?? [];
+  return p.rects.length !== auto.length || p.rects.some((r, i) => JSON.stringify(r) !== JSON.stringify(auto[i]));
+}
+
 /** Première photo à régler (recherche en cours, puis sans cadre ni « aucune plaque »), ou -1. */
 export const photoToFix = (d: Draft): number => {
   const pending = d.photos.findIndex((p) => !p.remoteId && p.detection === "pending");
@@ -246,12 +256,6 @@ export function StepPlate({
           ) : null}
         </PlateFrameEditor>
       ) : null}
-      {photo && photo.rects.length > 0 ? (
-        <View style={styles.hints}>
-          <HandHint icon="hand" lead={V.handTwo} text={V.handTwoText} />
-          <HandHint icon="move" lead={V.handOne} text={V.handOneText} />
-        </View>
-      ) : null}
 
       <View style={[styles.block, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
         <View style={styles.blockHead}>
@@ -373,12 +377,14 @@ function Thumb({
     online: { bg: c.surfaceRaised, ink: c.ink, icon: "check", word: c.inkMuted },
   };
   const a = art[state];
+  const hand = state === "ok" && framedByHand(photo);
+  const word = hand ? V.plateStateHand : V.plateState[state];
   const ring = selected ? c.accent : blink ? c.win : "transparent";
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={V.plateOpen(n, V.plateState[state])}
+      accessibilityLabel={V.plateOpen(n, word)}
       onPress={onPress}
       style={styles.thumbCell}
       testID={`plate-thumb-${n}`}
@@ -388,11 +394,11 @@ function Thumb({
           <PhotoThumb photo={photo} />
         </View>
         <View style={[styles.state, { backgroundColor: a.bg }]}>
-          <Icon name={a.icon} size={13} strokeWidth={3} color={a.ink} />
+          <Icon name={hand ? "hand" : a.icon} size={13} strokeWidth={hand ? 2.4 : 3} color={a.ink} />
         </View>
       </Animated.View>
       <Text variant="caption" color={a.word} style={styles.word}>
-        {V.plateState[state]}
+        {word}
       </Text>
     </Pressable>
   );
@@ -537,21 +543,6 @@ function CheckRow({
   );
 }
 
-function HandHint({ icon, lead, text }: { icon: IconName; lead: string; text: string }) {
-  const { t } = useTheme();
-  return (
-    <View style={styles.hint}>
-      <Icon name={icon} size={24} color={t.color.accentText} />
-      <Text variant="caption" color={t.color.inkMuted} style={styles.grow}>
-        <Text variant="bodyStrong" color={t.color.ink} style={styles.small}>
-          {lead}
-        </Text>{" "}
-        {text}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   center: { textAlign: "center" },
@@ -628,8 +619,6 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusMd,
   },
   confirmRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space2 },
-  hints: { gap: space2 },
-  hint: { flexDirection: "row", alignItems: "flex-start", gap: space2 + 2 },
   block: { gap: space2 + 2, padding: 14, borderRadius: tokens.radius.radiusLg },
   blockHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   read: { flexDirection: "row", alignItems: "center", gap: space1 },

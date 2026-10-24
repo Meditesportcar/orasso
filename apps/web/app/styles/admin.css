@@ -123,6 +123,60 @@
   background: var(--plate);
 }
 
+/* Lot R4a (maquette R4.8b) : « Modèles proposés », un groupe par texte tapé. */
+.adm-proposal {
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: var(--space-3);
+}
+.adm-proposal[open] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.adm-proposal__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.adm-proposal__head::-webkit-details-marker {
+  display: none;
+}
+.adm-proposal__n {
+  display: grid;
+  place-items: center;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  font-weight: 900;
+}
+.adm-proposal__count {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.adm-proposal__table {
+  width: 100%;
+  margin-block: var(--space-3);
+  border-collapse: collapse;
+}
+.adm-proposal__table th,
+.adm-proposal__table td {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.adm-proposal__act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-block: var(--space-2);
+}
+
 /* ---------- Réglages ---------- */
 .adm-setting {
   display: flex;

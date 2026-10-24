@@ -39,6 +39,12 @@ const vehicleFields = z.object({
   description: optionalText(2000),
   preparation: optionalText(2000),
   categoryIds: z.array(z.uuid()).max(10).default([]),
+  /**
+   * Lot R4a (maquette R4.8) : marque et modèle tapés quand ils ne sont pas dans la liste. Gardés seulement avec le
+   * niveau « Autre » correspondant, nettoyés (`cleanProposedName`, 40 caractères au plus) par l'API.
+   */
+  proposedMake: optionalText(80),
+  proposedModel: optionalText(80),
 });
 
 /** Plaque obligatoire pour un véhicule actif, sauf « non immatriculé » (docs/01 « Véhicules et garage »). */
@@ -147,6 +153,12 @@ export type VehicleFull = VehiclePublic & {
   shareVersion: string;
   /** Plaque déjà prise : demande de transfert en cours (le véhicule ne peut pas candidater). */
   plateTransfer: PlateTransferInfo | null;
+  /**
+   * Lot R4a : marque et modèle tapés, en attente de la liste Orasso (« à ajouter à la liste », pour le propriétaire
+   * seulement : jamais sur la fiche publique).
+   */
+  proposedMake: string | null;
+  proposedModel: string | null;
 };
 
 /** Page du véhicule (propriétaire) : fiche, plus l'état de la certification. */

@@ -1004,3 +1004,29 @@ describe("GET /pros : filtres, distance, visibilité", () => {
     }
   });
 });
+
+describe("GET /search : nom tapé d'un modèle absent de la liste (lot R4a, tour 2)", () => {
+  it("« quasar » trouve la fiche « Toyota Quasar GT » ; la marque et le modèle de la liste ne sont pas lus pour « Autre »", async () => {
+    const viewer = await person("Viewer_R4a");
+    const pub = await person("Public_R4a", { visibility: "public" });
+    const priv = await person("Prive_R4a", { visibility: "private" });
+    const [other] = await db
+      .insert(vehicleModels)
+      .values({ makeId: supra.makeId, name: "Autre", slug: "autre", vehicleType: "car", isOther: true })
+      .returning();
+    const typed = { makeId: supra.makeId, modelId: other!.id, generationId: supra.generationId };
+    const vPub = await createVehicle(pub.id, typed, { generationId: null, proposedModel: "Quasar GT" });
+    const vPriv = await createVehicle(priv.id, typed, { generationId: null, proposedModel: "Quasar GT" });
+    const res = await get(viewer, "/search?q=quasar");
+    const hits = res.json.vehicles as { id: string; label: string; photoUrl: string | null }[];
+    const byId = new Map(hits.map((h) => [h.id, h]));
+    expect(byId.get(vPub.id)?.label).toBe("Toyota Quasar GT");
+    // Compte privé non ami : marque et modèle seulement, sans photo, comme pour un modèle de la liste.
+    expect(byId.get(vPriv.id)).toMatchObject({ label: "Toyota Quasar GT", photoUrl: null });
+    // « autre » ne trouve pas une fiche dont le modèle est tapé.
+    const autre = (await get(viewer, "/search?q=autre")).json.vehicles as { id: string }[];
+    expect(autre.map((h) => h.id)).not.toContain(vPub.id);
+    // Sans compte : rien.
+    expect((await get(null, "/search?q=quasar")).json.vehicles ?? []).toHaveLength(0);
+  });
+});

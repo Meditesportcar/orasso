@@ -22,6 +22,7 @@ import {
   vehicleMakeUpdateSchema,
   vehicleModelCreateSchema,
   vehicleModelUpdateSchema,
+  vehicleProposalAcceptSchema,
   vehicleReassignSchema,
 } from "@orasso/shared";
 import type { Context } from "hono";
@@ -29,6 +30,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { referenceSearch } from "../vehicles/reference-search";
@@ -41,6 +43,9 @@ import { adminSettingsService } from "./settings";
 import { orassoTemplatesService } from "./templates";
 import { adminUsersService } from "./users";
 import { vehicleReferenceService } from "./vehicle-reference";
+
+/** Curseur de la file « Modèles proposés » : un rang de groupe (entier positif), sinon le début. */
+const proposalCursor = (raw: string | undefined) => (raw && /^\d{1,6}$/.test(raw) ? Number(raw) : null);
 
 /** Identifiant de compte Better Auth (évite une requête sur un identifiant fantaisiste). */
 function userParam(c: Context, name = "id"): string {
@@ -120,6 +125,17 @@ export const adminRoutes = new Hono<AppEnv>()
   .get("/admin/vehicle-reference/others", async (c) =>
     c.json(await vehicleReferenceService.others(await requireUser(c))),
   )
+  // Lot R4a (maquette R4.8b) : « Modèles proposés », regroupés par texte tapé ; rattachement groupé en un geste.
+  .get("/admin/vehicle-reference/proposals", async (c) =>
+    c.json(await vehicleReferenceService.proposals(await requireUser(c), proposalCursor(c.req.query("cursor")))),
+  )
+  .post("/admin/vehicle-reference/proposals/:key/accept", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("proposalAccept", v.user.id);
+    const key = c.req.param("key");
+    if (!/^(make|model)\.[a-z0-9_.-]{1,600}$/.test(key)) throw validation("Groupe inconnu");
+    return c.json(await vehicleReferenceService.acceptProposal(v, key, await body(c, vehicleProposalAcceptSchema)));
+  })
   .post("/admin/vehicle-reference/makes", async (c) => {
     const v = await requireUser(c);
     return c.json(await vehicleReferenceService.createMake(v, await body(c, vehicleMakeCreateSchema)), 201);

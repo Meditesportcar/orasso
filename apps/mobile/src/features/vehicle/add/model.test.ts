@@ -404,3 +404,48 @@ function vehicleLike(): VehicleFull {
     preparation: null,
   } as unknown as VehicleFull;
 }
+
+describe("modèle absent de la liste (lot R4a, maquette R4.8)", () => {
+  const peugeot = { id: "pg", name: "Peugeot", slug: "peugeot", country: "FR", isOther: false };
+  const autre = { id: "pa", makeId: "pg", name: "Autre", vehicleType: "car" as const, isOther: true };
+  const typed = (over: Partial<Draft> = {}) =>
+    filled({ makeId: "pg", modelId: "pa", generationId: null, typing: "model", proposedModel: "207 CC", ...over });
+
+  it("« Continuer » dès 2 caractères ; la génération n'est pas demandée, l'année l'est", () => {
+    expect(stepIssue(STEP.identity, typed({ proposedModel: "2" }))).toMatch(/nom du modèle/);
+    expect(stepIssue(STEP.identity, typed())).toBeNull();
+    expect(stepIssue(STEP.identity, typed({ typing: "make", proposedMake: " " }))).toMatch(/nom de la marque/);
+    expect(stepIssue(STEP.specs, typed({ year: undefined }))).toMatch(/année/);
+    expect(stepIssue(STEP.specs, typed({ year: 2008 }))).toBeNull();
+  });
+
+  it("la fiche en direct dit tout de suite « Peugeot 207 CC », à ajouter à la liste", () => {
+    const card = liveCard(typed(), STEP.identity, { make: peugeot, model: autre });
+    expect(card.name).toBe("Peugeot 207 CC");
+    expect(card.generation).toBe("Génération non précisée");
+    expect(card.toBeListed).toBe(true);
+    expect(liveCard(typed({ proposedModel: "" }), STEP.identity, { make: peugeot, model: autre }).generation).toBe(
+      "Tape le nom du modèle",
+    );
+    expect(shortName({ make: peugeot, model: autre, typedModel: "207 CC" }, "car")).toBe("207 CC");
+  });
+
+  it("le nom tapé part nettoyé, seulement quand on tape", () => {
+    expect(createBody(typed({ proposedModel: "  207   CC " }))).toMatchObject({
+      proposedMake: null,
+      proposedModel: "207 CC",
+      generationId: null,
+    });
+    expect(createBody(typed({ typing: undefined }))).toMatchObject({ proposedMake: null, proposedModel: null });
+    expect(createBody(typed({ typing: "make", proposedMake: "Lotus", proposedModel: "Exige" }))).toMatchObject({
+      proposedMake: "Lotus",
+      proposedModel: "Exige",
+    });
+  });
+
+  it("marque tapée : l'origine se choisit à la main et reste", () => {
+    const fr = cat("francaise", { id: "id-fr", allowedCountries: ["FR"] });
+    expect(keptCategories(["id-fr"], [fr], null)).toEqual([]);
+    expect(keptCategories(["id-fr"], [fr], null, true)).toEqual(["id-fr"]);
+  });
+});

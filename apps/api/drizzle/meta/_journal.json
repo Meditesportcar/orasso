@@ -421,6 +421,13 @@
       "when": 1792849624033,
       "tag": "0059_principal-et-suivi",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792852301108,
+      "tag": "0060_vehicle-proposed-names",
+      "breakpoints": true
     }
   ]
 }

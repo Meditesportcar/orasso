@@ -1,47 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  angleDelta,
-  capturesGesture,
-  loupePlace,
-  pinchPlateFrame,
-  rotateHandleBelow,
-  twoFingers,
-} from "./plateGestures";
+import { dragPlateFrame, EDGE_BITS, edgeMask, loupePlace, pickPlateFrame } from "./plateGestures";
 
-describe("gestes du cadre de plaque (lot 59c, tour 2)", () => {
-  it("les poignées capturent le doigt, le cadre (leur parent) non", () => {
-    expect(capturesGesture("move")).toBe(false);
-    expect(capturesGesture("resize")).toBe(true);
-    expect(capturesGesture("rotate")).toBe(true);
+// Photo affichée de 300 × 300 px ; cadre de 90 × 36 px centré en (150, 222).
+const W = 300;
+const H = 300;
+const frame = { x: 0.35, y: 0.68, w: 0.3, h: 0.12 };
+
+describe("cadre par modes dans l'appli (lot R4a, maquette R4.1)", () => {
+  it("trouve le cadre touché, le dernier posé d'abord, et le geste du mode", () => {
+    const other = { x: 0.3, y: 0.66, w: 0.3, h: 0.12 };
+    expect(pickPlateFrame([other, frame], 150, 222, W, H, "move")).toMatchObject({ index: 1, kind: "move" });
+    expect(pickPlateFrame([frame], 20, 20, W, H, "move")).toBeNull();
+    // Rotation : dans le cadre, un toucher seulement (changer de mode) ; sur le bouton de la tige, le geste.
+    expect(pickPlateFrame([frame], 150, 222, W, H, "rotate")).toMatchObject({ kind: null, inside: true });
+    expect(pickPlateFrame([frame], 150, 204 - 38, W, H, "rotate")).toMatchObject({ kind: "rotate" });
+    // Taille : un bord, ou les deux d'un coin.
+    expect(pickPlateFrame([frame], 105 - 15, 222, W, H, "size")).toMatchObject({ kind: "size", edges: ["l"] });
+    expect(pickPlateFrame([frame], 195 + 10, 240 + 10, W, H, "size")?.edges.sort()).toEqual(["b", "r"]);
   });
 
-  it("poignée de rotation sous le cadre quand, au-dessus, elle sortirait de la photo", () => {
-    // Photo affichée de 300 px de haut : cadre de 36 px ; poignée à 18 + 26 px au-dessus du centre, 11 px de rayon.
-    expect(rotateHandleBelow({ x: 0.3, y: 0.62, w: 0.3, h: 0.12 }, 300)).toBe(false);
-    expect(rotateHandleBelow({ x: 0.3, y: 0.05, w: 0.3, h: 0.12 }, 300)).toBe(true);
-    // Tourné d'un quart de tour, la poignée est sur le côté : elle reste au-dessus.
-    expect(rotateHandleBelow({ x: 0.3, y: 0.05, w: 0.3, h: 0.12, angle: 90 }, 300)).toBe(false);
-  });
-});
-
-describe("deux doigts et loupe (lot M1, maquette 1.4)", () => {
-  it("pincer agrandit autour du centre, tourner fait pivoter, le cadre reste dans la photo", () => {
-    const r = pinchPlateFrame({ x: 0.3, y: 0.6, w: 0.2, h: 0.1 }, 1.5, 0);
-    expect(r.w).toBeCloseTo(0.3);
-    expect(r.x + r.w / 2).toBeCloseTo(0.4);
-    expect(r.angle).toBeUndefined();
-    expect(pinchPlateFrame({ x: 0.3, y: 0.6, w: 0.2, h: 0.1 }, 1, 12).angle).toBe(12);
-    expect(pinchPlateFrame({ x: 0.3, y: 0.6, w: 0.2, h: 0.1, angle: 80 }, 1, 40).angle).toBe(90);
-    const big = pinchPlateFrame({ x: 0.85, y: 0.9, w: 0.1, h: 0.05 }, 3, 0);
-    expect(big.x + big.w).toBeLessThanOrEqual(1);
-    expect(big.y + big.h).toBeLessThanOrEqual(1);
+  it("Taille : le bord opposé reste fixe", () => {
+    const next = dragPlateFrame(frame, "size", ["r"], 30, 0, W, H);
+    expect(next.x).toBeCloseTo(frame.x);
+    expect(next.w).toBeCloseTo(frame.w + 0.1);
+    const up = dragPlateFrame(frame, "size", ["t"], 0, -30, W, H);
+    expect(up.y + up.h).toBeCloseTo(frame.y + frame.h);
+    expect(up.h).toBeCloseTo(frame.h + 0.1);
   });
 
-  it("mesure les deux doigts, l'angle ne saute pas d'un tour", () => {
-    expect(twoFingers({ pageX: 0, pageY: 0 }, { pageX: 30, pageY: 40 }).distance).toBe(50);
-    expect(angleDelta(179, -179)).toBeCloseTo(2);
-    expect(angleDelta(-179, 179)).toBeCloseTo(-2);
+  it("Déplacer et Rotation suivent le doigt", () => {
+    expect(dragPlateFrame(frame, "move", [], 30, -30, W, H)).toMatchObject({ x: 0.45, y: 0.58 });
+    expect(dragPlateFrame(frame, "rotate", [], 56, 56, W, H).angle).toBeGreaterThan(10);
+  });
+
+  it("les bords tenus tiennent dans un nombre (lu par le fil UI)", () => {
+    expect(edgeMask([])).toBe(0);
+    expect(edgeMask(["r", "b"])).toBe(EDGE_BITS.r | EDGE_BITS.b);
   });
 
   it("la loupe se pose au-dessus du doigt, en dessous en haut de la photo, jamais dehors", () => {
