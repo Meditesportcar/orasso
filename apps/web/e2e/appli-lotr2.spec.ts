@@ -259,7 +259,7 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
     await expect(page.getByTestId("people-privacy")).toBeVisible();
     await expect(page.getByTestId("topbar-logo").first()).toBeVisible();
     // Sans recherche : seulement des suggestions courtes (même modèle, crews du coin), jamais une liste de personnes.
-    await expect(page.getByTestId("suggest-same-model").or(page.getByTestId("suggest-crews"))).toBeVisible({
+    await expect(page.getByTestId("suggest-same-model").or(page.getByTestId("suggest-crews")).first()).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByTestId("person-row")).toHaveCount(0);
