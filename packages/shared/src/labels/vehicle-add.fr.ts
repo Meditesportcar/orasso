@@ -98,10 +98,8 @@ export const vehicleAddLabels = {
   formerNoCert: "Un ancien véhicule (vendu, souvenir ou accidenté) ne peut pas être certifié.",
   unregisteredText: "Circuit, collection ou import en cours.",
   privacyShort: "Le numéro reste privé : seule l'équipe organisatrice le voit, pour vérifier ton inscription.",
-  handTwo: "Deux doigts n'importe où :",
-  handTwoText: "pince pour agrandir, tourne pour pivoter. La loupe s'affiche quand tu déplaces le cadre ou son coin.",
-  handOne: "Un doigt dans le cadre :",
-  handOneText: "il se déplace. Coin moutarde : agrandir. Rond blanc : tourner.",
+  /** Lot R4a (maquette R4.1) : vignette d'une photo dont le cadre a été posé ou ajusté à la main. */
+  plateStateHand: "Cadre posé",
   // 3. Marque et modèle (1.5)
   clearSearch: "Effacer la recherche",
   crumb: "Ton choix",

@@ -3,12 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PLATE_FRAME,
   dragRotatePlateFrame,
+  isPlateFrameTap,
   movePlateFrame,
   nextPlateFrame,
+  nextPlateFrameMode,
+  PLATE_EDGE_HIT,
+  PLATE_FRAME_FIRST_MODE,
   PLATE_FRAME_MIN_H,
   PLATE_FRAME_MIN_W,
+  PLATE_ROTATE_HANDLE_OFFSET,
+  plateFrameHit,
   resizeOrientedPlateFrame,
   resizePlateFrame,
+  resizePlateFrameEdges,
+  rotateKnobBelow,
   rotatePlateFrame,
 } from "./plateFrame";
 
@@ -48,9 +56,9 @@ describe("cadre orientable (lot 59c)", () => {
   it("la poignée tourne le cadre autour de son centre", () => {
     // Photo 400 × 200 : cadre de 200 × 20 px, poignée à 10 + 26 = 36 px au-dessus du centre.
     // Doigt déplacé de 36 px vers la droite et 36 vers le bas : poignée à droite du centre, quart de tour.
-    expect(dragRotatePlateFrame(r, 36, 36, 200).angle).toBe(90);
+    expect(dragRotatePlateFrame(r, 36, 36, 200, 26).angle).toBe(90);
     // Vers la gauche, à 45° : −45°.
-    expect(dragRotatePlateFrame(r, -36, 0, 200).angle).toBe(-45);
+    expect(dragRotatePlateFrame(r, -36, 0, 200, 26).angle).toBe(-45);
     // Geste minuscule : rien ne bouge.
     expect(dragRotatePlateFrame(r, 0, 0.5, 200)).toEqual(r);
   });
@@ -78,5 +86,80 @@ describe("poignée de rotation sous le cadre (lot 59c, tour 2)", () => {
     expect(dragRotatePlateFrame(r, -36, -36, 200, 26, true).angle).toBe(90);
     expect(dragRotatePlateFrame(r, 36, 0, 200, 26, true).angle).toBe(-45);
     expect(dragRotatePlateFrame(r, 0, 0, 200, 26, true)).toEqual(r);
+  });
+});
+
+describe("cadre par modes (lot R4a, maquette R4.1)", () => {
+  // Photo affichée de 400 × 300 px ; cadre droit de 120 × 36 px, centré en (200, 168).
+  const W = 400;
+  const H = 300;
+  const r = { x: 0.35, y: 0.5, w: 0.3, h: 0.12 };
+
+  it("Déplacer → Rotation → Taille → Déplacer, et le cadre rouvre en Déplacer", () => {
+    expect(PLATE_FRAME_FIRST_MODE).toBe("move");
+    expect(nextPlateFrameMode("move")).toBe("rotate");
+    expect(nextPlateFrameMode("rotate")).toBe("size");
+    expect(nextPlateFrameMode("size")).toBe("move");
+  });
+
+  it("un toucher : moins de 6 px, moins d'une demi-seconde", () => {
+    expect(isPlateFrameTap(3, 200)).toBe(true);
+    expect(isPlateFrameTap(8, 200)).toBe(false);
+    expect(isPlateFrameTap(2, 800)).toBe(false);
+  });
+
+  it("Déplacer : dans le cadre ou tout près de son bord, rien au loin", () => {
+    expect(plateFrameHit(r, 200, 168, W, H, "move")).toEqual({ kind: "move", edges: [], inside: true });
+    expect(plateFrameHit(r, 140 - 8, 168, W, H, "move")).toMatchObject({ kind: "move", inside: false });
+    expect(plateFrameHit(r, 20, 20, W, H, "move")).toBeNull();
+  });
+
+  it("Rotation : seulement le bouton de la tige, à 38 px au-dessus du cadre ; dessous si le cadre est collé en haut", () => {
+    expect(PLATE_ROTATE_HANDLE_OFFSET).toBe(38);
+    expect(plateFrameHit(r, 200, 150 - 38, W, H, "rotate")).toMatchObject({ kind: "rotate" });
+    expect(plateFrameHit(r, 200, 168, W, H, "rotate")).toEqual({ kind: null, edges: [], inside: true });
+    expect(plateFrameHit(r, 320, 168, W, H, "rotate")).toBeNull();
+    const top = { x: 0.35, y: 0.02, w: 0.3, h: 0.12 };
+    expect(rotateKnobBelow(top, H)).toBe(true);
+    expect(plateFrameHit(top, 200, 6 + 36 + 38, W, H, "rotate")).toMatchObject({ kind: "rotate" });
+  });
+
+  it("Taille : un bord à 22 px de chaque côté (44 px), un coin tient ses deux bords", () => {
+    expect(PLATE_EDGE_HIT * 2).toBe(44);
+    expect(plateFrameHit(r, 140 - 20, 168, W, H, "size")).toMatchObject({ kind: "size", edges: ["l"] });
+    expect(plateFrameHit(r, 140 + 20, 168, W, H, "size")).toMatchObject({ kind: "size", edges: ["l"] });
+    expect(plateFrameHit(r, 140 - 30, 168, W, H, "size")).toBeNull();
+    expect(plateFrameHit(r, 262, 188, W, H, "size")?.edges).toEqual(["r", "b"]);
+    // Cadre plus bas que deux zones (36 px) : dans sa hauteur, le côté ; le haut s'attrape au milieu ou au-dessus.
+    expect(plateFrameHit(r, 200, 160, W, H, "size")?.edges).toEqual(["t"]);
+    expect(plateFrameHit(r, 200, 140, W, H, "size")?.edges).toEqual(["t"]);
+    expect(plateFrameHit(r, 130, 140, W, H, "size")?.edges).toEqual(["l", "t"]);
+  });
+
+  it("Taille : le bord opposé reste fixe, la taille minimale et la photo bornent", () => {
+    const right = resizePlateFrameEdges(r, ["r"], 40, 0, W, H);
+    expect(right.x).toBeCloseTo(r.x);
+    expect(right.w).toBeCloseTo(r.w + 0.1);
+    const left = resizePlateFrameEdges(r, ["l"], -40, 0, W, H);
+    expect(left.x + left.w).toBeCloseTo(r.x + r.w);
+    const corner = resizePlateFrameEdges(r, ["r", "b"], 40, 30, W, H);
+    expect(corner).toMatchObject({ x: r.x, y: r.y });
+    expect(corner.h).toBeCloseTo(r.h + 0.1);
+    const tiny = resizePlateFrameEdges(r, ["r"], -1000, 0, W, H);
+    expect(tiny.w).toBeCloseTo(PLATE_FRAME_MIN_W);
+    expect(tiny.x).toBeCloseTo(r.x);
+    const wide = resizePlateFrameEdges(r, ["r"], 1000, 0, W, H);
+    expect(wide.x).toBeCloseTo(r.x);
+    expect(wide.x + wide.w).toBeCloseTo(1);
+  });
+
+  it("Taille d'un cadre tourné : suit ses axes, le bord opposé reste en place", () => {
+    const tilted = { ...r, angle: 90 };
+    // Tourné d'un quart de tour, son bord « droit » est en bas : tirer vers le bas l'allonge.
+    const next = resizePlateFrameEdges(tilted, ["r"], 0, 40, W, H);
+    expect(next.angle).toBe(90);
+    expect(next.w * W).toBeCloseTo(r.w * W + 40);
+    // Le bord « gauche » (en haut à l'écran) ne bouge pas : le centre descend de 20 px.
+    expect((next.y + next.h / 2) * H).toBeCloseTo(168 + 20, 1);
   });
 });

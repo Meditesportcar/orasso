@@ -2,18 +2,29 @@
 // (souris ou doigt, Pointer Events), 4 cadres au plus. Les cadres, normalisés 0–1, partent dans un champ caché (JSON)
 // avec le formulaire ; l'API floute la photo stockée, définitivement. Pas de détection automatique sur le site : elle
 // vit dans l'appli (ML Kit sur le téléphone). À réutiliser par le lot 57 (parité du garage).
-// Lot 59c : le cadre se tourne par une poignée au-dessus de son bord haut (plaque penchée) ; l'API floute au flou
-// gaussien le quadrilatère tourné.
-import { Button } from "@orasso/design-system/web";
+// Lot 59c : le cadre se tourne (plaque penchée) ; l'API floute au flou gaussien le quadrilatère tourné.
+// Lot R4a (maquette R4.1) : même logique que l'appli, à la souris. Cliquer sur le cadre passe au mode suivant
+// (Déplacer → Rotation → Taille) ; Taille sans poignée, les bords s'attrapent, le curseur dit lequel ; une ligne sous la
+// photo dit le mode et le geste.
+import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
   DEFAULT_PLATE_FRAME,
   dragRotatePlateFrame,
+  isPlateFrameTap,
   vehicleWizardLabels as L,
   MAX_PLATE_RECTS,
   movePlateFrame,
   nextPlateFrame,
+  nextPlateFrameMode,
+  PLATE_FRAME_FIRST_MODE,
+  PLATE_FRAME_MODES,
+  type PlateEdge,
+  type PlateFrameHit,
+  type PlateFrameMode,
   type PlateRect,
-  resizeOrientedPlateFrame,
+  plateFrameHit,
+  resizePlateFrameEdges,
+  rotateKnobBelow,
 } from "@orasso/shared";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 
@@ -151,7 +162,43 @@ export function plateDecisionError(form: FormData, suffix = "", n?: number): str
   return n ? L.noPlateIssue(n) : L.noPlateIssue(1).replace(/^Photo 1 : /, "Photo : ");
 }
 
-type Gesture = "move" | "resize" | "rotate";
+/** Le geste en cours (souris, doigt ou stylet). */
+type Drag = {
+  index: number;
+  hit: PlateFrameHit;
+  start: PlateRect;
+  x: number;
+  y: number;
+  t0: number;
+  moved: boolean;
+};
+
+const MODE_ICONS: Record<PlateFrameMode, IconName> = { move: "move", rotate: "undo", size: "crop" };
+
+/** Curseur de la souris selon ce qu'elle survole : le bord tenu (ou le coin), la tige, le cadre. */
+function cursorFor(hit: PlateFrameHit | null, dragging: boolean): string {
+  if (!hit) return "";
+  if (hit.kind === "size") {
+    const e = [...hit.edges].sort().join("");
+    if (e === "bl" || e === "rt") return "nesw-resize";
+    if (e === "br" || e === "lt") return "nwse-resize";
+    return e === "l" || e === "r" ? "ew-resize" : "ns-resize";
+  }
+  if (hit.kind) return dragging ? "grabbing" : "grab";
+  return "pointer";
+}
+
+function pick(rects: readonly PlateRect[], px: number, py: number, W: number, H: number, mode: PlateFrameMode) {
+  let touched: { index: number; hit: PlateFrameHit } | null = null;
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i];
+    const hit = r ? plateFrameHit(r, px, py, W, H, mode) : null;
+    if (!hit) continue;
+    if (hit.kind) return { index: i, hit };
+    touched ??= { index: i, hit };
+  }
+  return touched;
+}
 
 export function PlateFrame({
   src,
@@ -168,85 +215,149 @@ export function PlateFrame({
   testId?: string;
 }) {
   const [rects, setRects] = useState<PlateRect[]>(initial);
+  // Le cadre s'ouvre toujours en Déplacer (le composant est recréé à chaque photo choisie).
+  const [mode, setMode] = useState<PlateFrameMode>(PLATE_FRAME_FIRST_MODE);
+  const [held, setHeld] = useState<{ index: number; edges: PlateEdge[] } | null>(null);
+  const [cursor, setCursor] = useState("");
   const box = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ index: number; kind: Gesture; x: number; y: number; start: PlateRect } | null>(null);
+  const drag = useRef<Drag | null>(null);
 
-  const begin = (index: number, kind: Gesture) => (e: ReactPointerEvent<HTMLElement>) => {
+  const point = (e: ReactPointerEvent<HTMLElement>) => {
+    const r = (box.current as HTMLDivElement).getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top, W: r.width, H: r.height };
+  };
+  const down = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!box.current || (e.target as HTMLElement).closest("button")) return;
+    const p = point(e);
+    const found = pick(rects, p.x, p.y, p.W, p.H, mode);
+    const start = found ? rects[found.index] : undefined;
+    if (!found || !start) return;
     e.preventDefault();
-    e.stopPropagation();
-    const start = rects[index];
-    if (!start) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    drag.current = { index, kind, x: e.clientX, y: e.clientY, start };
+    box.current.setPointerCapture(e.pointerId);
+    drag.current = { ...found, start, x: p.x, y: p.y, t0: Date.now(), moved: false };
   };
-  const move = (e: ReactPointerEvent<HTMLElement>) => {
+  const move = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!box.current) return;
+    const p = point(e);
     const d = drag.current;
-    const el = box.current;
-    if (!d || !el) return;
-    const { width, height } = el.getBoundingClientRect();
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
+    if (!d) {
+      const found = pick(rects, p.x, p.y, p.W, p.H, mode);
+      setCursor(cursorFor(found?.hit ?? null, false));
+      return;
+    }
+    const dx = p.x - d.x;
+    const dy = p.y - d.y;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
+    const kind = d.hit.kind;
+    if (!kind) return;
+    d.moved = true;
     const next =
-      d.kind === "move"
-        ? movePlateFrame(d.start, dx / width, dy / height)
-        : d.kind === "resize"
-          ? resizeOrientedPlateFrame(d.start, dx, dy, width, height)
-          : dragRotatePlateFrame(d.start, dx, dy, height);
+      kind === "move"
+        ? movePlateFrame(d.start, dx / p.W, dy / p.H)
+        : kind === "rotate"
+          ? dragRotatePlateFrame(d.start, dx, dy, p.H, undefined, rotateKnobBelow(d.start, p.H))
+          : resizePlateFrameEdges(d.start, d.hit.edges, dx, dy, p.W, p.H);
     setRects((all) => all.map((r, i) => (i === d.index ? next : r)));
+    setHeld(kind === "rotate" ? null : { index: d.index, edges: kind === "size" ? d.hit.edges : [] });
+    setCursor(cursorFor(d.hit, true));
   };
-  const end = () => {
+  const up = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
     drag.current = null;
+    setHeld(null);
+    if (!d || !box.current) return;
+    const p = point(e);
+    if (!d.moved && d.hit.inside && isPlateFrameTap(Math.hypot(p.x - d.x, p.y - d.y), Date.now() - d.t0)) {
+      const next = nextPlateFrameMode(mode);
+      setMode(next);
+      setCursor(cursorFor(pick(rects, p.x, p.y, p.W, p.H, next)?.hit ?? null, false));
+    }
+  };
+  const cancel = () => {
+    drag.current = null;
+    setHeld(null);
   };
 
+  const step = PLATE_FRAME_MODES.indexOf(mode);
+  const m = L.frameModes[mode];
   return (
     <div className="g-plate s-stack s-stack--tight" data-testid={testId}>
-      <div className="g-plate__photo" ref={box}>
+      {/* Toute la photo reçoit la souris : le cadre et le geste se trouvent par la logique de l'appli. */}
+      <div
+        className="g-plate__photo"
+        ref={box}
+        data-mode={mode}
+        style={cursor ? { cursor } : undefined}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={cancel}
+        onPointerLeave={() => (drag.current ? undefined : setCursor(""))}
+      >
         <img src={src} alt={alt} draggable={false} />
-        {rects.map((r, i) => (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: les cadres n'ont pas d'identité propre, l'ordre suffit.
-            key={i}
-            className="g-plate__frame"
-            role="presentation"
-            data-testid="site-plate-frame"
-            data-angle={r.angle ?? 0}
-            style={{
-              left: `${r.x * 100}%`,
-              top: `${r.y * 100}%`,
-              width: `${r.w * 100}%`,
-              height: `${r.h * 100}%`,
-              transform: r.angle ? `rotate(${r.angle}deg)` : undefined,
-            }}
-            onPointerDown={begin(i, "move")}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerCancel={end}
-          >
+        {rects.map((r, i) => {
+          const hold = held?.index === i ? held : null;
+          return (
             <span
-              className="g-plate__handle"
+              // biome-ignore lint/suspicious/noArrayIndexKey: les cadres n'ont pas d'identité propre, l'ordre suffit.
+              key={i}
+              className={hold ? "g-plate__frame is-drag" : "g-plate__frame"}
               role="presentation"
-              title={L.resizeFrame}
-              data-testid="site-plate-handle"
-              onPointerDown={begin(i, "resize")}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerCancel={end}
-            />
-            <span className="g-plate__stem" aria-hidden="true" />
-            <span
-              className="g-plate__handle g-plate__handle--rotate"
-              role="presentation"
-              title={L.rotateFrame}
-              data-testid="site-plate-rotate"
-              onPointerDown={begin(i, "rotate")}
-              onPointerMove={move}
-              onPointerUp={end}
-              onPointerCancel={end}
-            />
-          </span>
-        ))}
+              data-testid="site-plate-frame"
+              data-angle={r.angle ?? 0}
+              title={L.frameLabel(m.name)}
+              style={{
+                left: `${r.x * 100}%`,
+                top: `${r.y * 100}%`,
+                width: `${r.w * 100}%`,
+                height: `${r.h * 100}%`,
+                transform: r.angle ? `rotate(${r.angle}deg)` : undefined,
+              }}
+            >
+              {mode === "size"
+                ? (["t", "r", "b", "l"] as const).map((edge) => (
+                    <span
+                      key={edge}
+                      className={
+                        hold?.edges.includes(edge) ? `g-plate__edge is-${edge} is-on` : `g-plate__edge is-${edge}`
+                      }
+                      data-testid={`site-plate-edge-${edge}`}
+                    />
+                  ))
+                : null}
+              {mode === "rotate" ? (
+                <span
+                  className={
+                    rotateKnobBelow(r, box.current?.clientHeight ?? 0) ? "g-plate__rot is-below" : "g-plate__rot"
+                  }
+                  aria-hidden="true"
+                >
+                  <span className="g-plate__stem" />
+                  <span className="g-plate__knob" data-testid="site-plate-rotate">
+                    <Icon name="undo" size={15} />
+                  </span>
+                </span>
+              ) : null}
+            </span>
+          );
+        })}
         <span className="g-plate__badge o-t-label">{rects.length ? L.blurredCount(rects.length) : L.placeFrame}</span>
       </div>
+      {rects.length ? (
+        <div className="g-plate__mode" aria-live="polite" data-testid="site-plate-mode">
+          <span className="g-plate__mode-icon" aria-hidden="true">
+            <Icon name={MODE_ICONS[mode]} size={18} />
+          </span>
+          <span className="o-t-caption">
+            <strong>{m.name}</strong> : {m.mouse} · {L.frameModeSwitchMouse}
+          </span>
+          <span className="g-plate__dots" role="img" aria-label={L.frameModeStep(step + 1)}>
+            {PLATE_FRAME_MODES.map((d, j) => (
+              <span key={d} className={j === step ? "is-on" : undefined} />
+            ))}
+          </span>
+        </div>
+      ) : null}
       <input type="hidden" name={name} value={rects.length ? JSON.stringify(rects) : ""} />
       <div className="g-plate__tools">
         <Button
@@ -264,7 +375,6 @@ export function PlateFrame({
           </Button>
         ) : null}
       </div>
-      {rects.length ? <p className="o-t-caption">{L.frameHint}</p> : null}
       <p className="o-t-caption">{L.irreversible}</p>
     </div>
   );
