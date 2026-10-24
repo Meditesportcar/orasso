@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultChoice, type ExplorerChoice, readChoice, storeChoice } from "./explorerChoice";
+import { defaultChoice, type ExplorerChoice, readChoice, readStoredChoice, storeChoice } from "./explorerChoice";
 
 const chosen: ExplorerChoice = {
   segment: "pros",
@@ -100,5 +100,17 @@ describe("les récents d'« Ailleurs » (lot R4d)", () => {
     // Avant le lot R4d : rien de gardé.
     expect(readChoice({ v: 2 })?.awayRecent).toEqual([]);
     expect(defaultChoice.awayRecent).toEqual([]);
+  });
+});
+
+describe("changement de compte : une lecture en échec repart du choix par défaut (lot R4d, tour 2)", () => {
+  it("échec : le défaut, rien de lu ; rien de gardé : le défaut ; un choix gardé : relu", async () => {
+    expect(await readStoredChoice(() => Promise.reject(new Error("stockage")))).toEqual({
+      choice: defaultChoice,
+      saved: false,
+    });
+    expect(await readStoredChoice(async () => null)).toEqual({ choice: defaultChoice, saved: false });
+    const stored = JSON.parse(JSON.stringify(storeChoice(chosen)));
+    expect(await readStoredChoice(async () => stored)).toEqual({ choice: chosen, saved: true });
   });
 });

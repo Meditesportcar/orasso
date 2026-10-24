@@ -61,7 +61,7 @@ import {
   type PeopleShow,
   type PeopleWhere,
   type ProSort,
-  readChoice,
+  readStoredChoice,
   storeChoice,
 } from "./explorerChoice";
 import { peopleView } from "./peopleLoad";
@@ -173,11 +173,11 @@ export function ExplorerScreen() {
     setChoiceRead(false);
     const scope = cacheScope();
     (async () => {
-      const saved = readChoice(await cacheGetJson<unknown>(CHOICE_KEY));
+      // Lot R4d, tour 2 : une lecture en échec repart du choix par défaut (jamais celui du compte précédent).
+      const { choice, saved } = await readStoredChoice(() => cacheGetJson<unknown>(CHOICE_KEY));
       if (!alive) return;
       // Avant le lot R1, seul le tri était gardé (sur l'appareil, sans compte) : il s'efface.
       if (!saved) void kvDel(SORT_KEY);
-      const choice = saved ?? defaultChoice;
       // « Voir tout » d'une recherche arrive avec son segment : il l'emporte.
       if (!fromParams) setSegment(choice.segment);
       setWhere(choice.where);

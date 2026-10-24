@@ -348,7 +348,9 @@ function AwayPicker({
       {/* Décorative pour le lecteur d'écran : la recherche est son chemin (comme « Ton coin »). */}
       <View
         style={[styles.awMap, { backgroundColor: c.surface, borderColor: c.cardLine }]}
-        accessibilityLabel={R.whereAwayMap}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
         testID="around-map"
       >
         <FranceMap

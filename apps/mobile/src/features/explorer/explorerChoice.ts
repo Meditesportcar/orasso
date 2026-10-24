@@ -156,3 +156,19 @@ export function storeChoice(choice: ExplorerChoice): Record<string, unknown> {
     awayRecent: [...choice.awayRecent],
   };
 }
+
+/**
+ * Lot R4d, tour 2 : la lecture du choix gardé à l'ouverture ou au changement de compte. Une lecture en échec (stockage
+ * illisible) donne le choix par défaut : l'état du compte précédent n'est jamais gardé ni réenregistré sous le nouveau.
+ * `saved` : faux si rien n'a été lu.
+ */
+export async function readStoredChoice(
+  read: () => Promise<unknown>,
+): Promise<{ choice: ExplorerChoice; saved: boolean }> {
+  try {
+    const saved = readChoice(await read());
+    return { choice: saved ?? defaultChoice, saved: saved !== null };
+  } catch {
+    return { choice: defaultChoice, saved: false };
+  }
+}
