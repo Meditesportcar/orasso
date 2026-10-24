@@ -31,6 +31,7 @@ import { z } from "zod";
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { referenceSearch } from "../vehicles/reference-search";
 import { assistanceService } from "./assistance";
 import { auditService } from "./audit";
 import { newsletterService } from "./newsletter";
@@ -103,6 +104,12 @@ export const adminRoutes = new Hono<AppEnv>()
   })
 
   // --- Base véhicules et file « Autre » -------------------------------------------------------------------------------
+  // Lot R3c, tour 2 : une modification réussie du référentiel (après validation de sa transaction) fait relire l'index
+  // de la recherche « Marque ou modèle » à la recherche suivante.
+  .use("/admin/vehicle-reference/*", async (c, next) => {
+    await next();
+    if (c.req.method !== "GET" && c.res.status < 400) referenceSearch.invalidate();
+  })
   .get("/admin/vehicle-reference/makes", async (c) => c.json(await vehicleReferenceService.makes(await requireUser(c))))
   .get("/admin/vehicle-reference/makes/:id/models", async (c) =>
     c.json(await vehicleReferenceService.models(await requireUser(c), uuidParam(c, "id"))),

@@ -2,15 +2,14 @@
 // Code déplacé tel quel depuis `scripts/seed.ts` (lot 15) ; appelé par `seed.ts`.
 import { randomBytes } from "node:crypto";
 import { fromWallTime, type RefusalReason } from "@orasso/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { vehicleReference } from "../../src/db/seed/vehicle-reference";
 import { startJobs } from "../../src/jobs";
 import { deps } from "../../src/lib/deps";
-import { slugify } from "../../src/lib/slug";
-import type { Executor } from "../../src/lib/tx";
 import { scheduleEventJobs } from "../../src/modules/events/jobs";
+import { syncVehicleReference } from "../../src/modules/vehicles/reference-sync";
 import {
   type AppStatus,
   apply,
@@ -73,101 +72,57 @@ export async function seedMissingCategories() {
   console.log(`Catégories ajoutées : ${missing.map(([slug]) => slug).join(", ")}.`);
 }
 
-/**
- * Lot M1, tour 2 : les vrais tout-terrain du référentiel (`offroad` de `vehicle-reference.ts`) marqués sur une base
- * déjà semée, pour que « 4x4 » leur soit proposé. Idempotente (ne touche que les modèles listés, par marque et nom).
- */
-export async function seedOffroadModels(ex: Executor = db) {
-  let marked = 0;
-  for (const make of vehicleReference) {
-    const names = make.models.filter((m) => m.offroad).map((m) => m.name);
-    if (!names.length) continue;
-    const row = await ex.query.vehicleMakes.findFirst({ where: eq(t.vehicleMakes.name, make.name) });
-    if (!row) continue;
-    const updated = await ex
-      .update(t.vehicleModels)
-      .set({ offroad: true })
-      .where(
-        and(
-          eq(t.vehicleModels.makeId, row.id),
-          inArray(t.vehicleModels.name, names),
-          eq(t.vehicleModels.offroad, false),
-        ),
-      )
-      .returning({ id: t.vehicleModels.id });
-    marked += updated.length;
-  }
-  if (marked) console.log(`Référentiel : ${marked} modèles tout-terrain marqués.`);
-}
-
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
 
+/**
+ * Lot R3c : le référentiel complet arrive par `syncVehicleReference` (idempotente, aussi lancée au démarrage de l'API).
+ * Les véhicules tirés au hasard du seed restent pris dans la liste de départ (`vehicleReference`), dans son ordre :
+ * le seed de démonstration ne change pas avec l'enrichissement de la liste.
+ */
 async function seedReference() {
-  const refs: Ref[] = [];
+  await syncVehicleReference();
+  const rows = await db
+    .select({
+      makeId: t.vehicleMakes.id,
+      makeName: t.vehicleMakes.name,
+      country: t.vehicleMakes.country,
+      modelId: t.vehicleModels.id,
+      modelName: t.vehicleModels.name,
+      type: t.vehicleModels.vehicleType,
+      generationId: t.vehicleGenerations.id,
+      generationName: t.vehicleGenerations.name,
+      yearFrom: t.vehicleGenerations.yearFrom,
+      yearTo: t.vehicleGenerations.yearTo,
+    })
+    .from(t.vehicleGenerations)
+    .innerJoin(t.vehicleModels, eq(t.vehicleModels.id, t.vehicleGenerations.modelId))
+    .innerJoin(t.vehicleMakes, eq(t.vehicleMakes.id, t.vehicleModels.makeId));
   const index = new Map<string, Ref>();
-  const all = [...vehicleReference, { name: "Autre", country: "", models: [] }];
-  const makes = await db
-    .insert(t.vehicleMakes)
-    .values(
-      all.map((m) => ({
-        name: m.name,
-        slug: slugify(m.name),
-        country: m.country || null,
-        isOther: m.name === "Autre",
-      })),
-    )
-    .returning();
-  for (const [i, make] of makes.entries()) {
-    const source = all[i];
-    if (!source) continue;
-    const models = await db
-      .insert(t.vehicleModels)
-      .values([
-        ...source.models.map((m) => ({
-          makeId: make.id,
-          name: m.name,
-          slug: slugify(m.name),
-          vehicleType: m.type,
-          offroad: Boolean(m.offroad),
-        })),
-        { makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car" as const, isOther: true },
-      ])
-      .returning();
-    for (const [j, model] of models.entries()) {
-      const gens = source.models[j]?.generations ?? [];
-      const genRows = await db
-        .insert(t.vehicleGenerations)
-        .values([
-          ...gens.map((g) => ({ modelId: model.id, name: g.name, yearFrom: g.yearFrom, yearTo: g.yearTo })),
-          { modelId: model.id, name: "Autre", isOther: true },
-        ])
-        .returning();
-      for (const g of genRows) {
-        const ref: Ref = {
-          makeId: make.id,
-          modelId: model.id,
-          generationId: g.id,
-          type: model.vehicleType,
-          country: make.country,
-          makeName: make.name,
-          modelName: model.name,
-          yearFrom: g.yearFrom,
-          yearTo: g.yearTo,
-        };
-        index.set(`${make.name}|${model.name}|${g.name}`, ref);
-        if (!g.isOther && !model.isOther) refs.push(ref);
-      }
-    }
+  for (const r of rows) {
+    index.set(`${r.makeName}|${r.modelName}|${r.generationName}`, {
+      makeId: r.makeId,
+      modelId: r.modelId,
+      generationId: r.generationId,
+      type: r.type,
+      country: r.country,
+      makeName: r.makeName,
+      modelName: r.modelName,
+      yearFrom: r.yearFrom,
+      yearTo: r.yearTo,
+    });
   }
   const find = (make: string, model: string, gen: string) => {
     const r = index.get(`${make}|${model}|${gen}`);
     if (!r) throw new Error(`Référentiel : ${make} ${model} ${gen} introuvable`);
     return r;
   };
-  console.log(`Référentiel : ${makes.length} marques.`);
+  const refs = vehicleReference.flatMap((make) =>
+    make.models.flatMap((model) => model.generations.map((g) => find(make.name, model.name, g.name))),
+  );
+  const makes = new Set(rows.map((r) => r.makeId)).size;
+  console.log(`Référentiel : ${makes} marques.`);
   return { refs, find };
 }
-
 export async function seedBase(hash: string) {
   const categories = await seedCategories();
   const { refs, find } = await seedReference();
