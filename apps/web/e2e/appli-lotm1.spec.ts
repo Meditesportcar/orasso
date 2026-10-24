@@ -1,6 +1,16 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, type Cookie, MOBILE, randomPlate, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import {
+  apiCall,
+  type Cookie,
+  MOBILE,
+  randomPlate,
+  SEED_PASSWORD,
+  samplePhoto,
+  seeStepEnd,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot M1, côté appli (version web de recette) : l'ajout de véhicule refait d'après les maquettes 1.1 à 1.9. Ordre de
@@ -52,7 +62,10 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-const next = (page: Page) => page.getByTestId("vehicle-step-next").click();
+const next = async (page: Page) => {
+  await seeStepEnd(page);
+  await page.getByTestId("vehicle-step-next").click();
+};
 
 for (const theme of ["beton", "sable"] as const) {
   test(`ajout de véhicule refait (${theme}) : ordre, carré, plaque pendant l'import, nuancier, envoi`, async ({
@@ -104,6 +117,7 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("vehicle-photo-cert")).toContainText("2 sur 3");
     await expect(page.getByTestId("vehicle-live-photos")).toHaveText(/2 photos/i);
     await shot(page, `${theme}-03-photos`);
+    await seeStepEnd(page);
     await expect(page.getByTestId("vehicle-step-next")).toBeEnabled();
     await next(page);
 
@@ -183,6 +197,7 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByRole("button", { name: /Marque : Toyota, changer/ })).toBeVisible();
     await expect(page.getByTestId("vehicle-step-next")).toBeDisabled();
     await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
+    await seeStepEnd(page);
     await expect(page.getByTestId("vehicle-step-next")).toBeEnabled();
     await expect(page.getByTestId("vehicle-live-name")).toHaveText(/Toyota Supra/i);
     await shot(page, `${theme}-05-marque`);

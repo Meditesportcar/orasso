@@ -13,6 +13,7 @@ import {
   bodyColorByName,
   bodyColorFamilies,
   bodyColors,
+  bodyColorWithFinish,
   mixHex,
   vehicleAddLabels as V,
 } from "@orasso/shared";
@@ -58,7 +59,7 @@ export function ColorPicker({
   const summary = custom
     ? value || V.colorOther
     : known
-      ? `${known.name} · ${V.colorFinish[known.finish]}`
+      ? bodyColorWithFinish(known.name, V.colorFinish[known.finish])
       : V.colorPick;
   return (
     <div className="g-colors s-stack s-stack--tight" data-testid="site-colors">
@@ -128,7 +129,7 @@ export function ColorPicker({
                   name="colorSwatch"
                   value={b.name}
                   checked={on}
-                  aria-label={`${b.name}, ${V.colorFinish[b.finish]}`}
+                  aria-label={bodyColorWithFinish(b.name, V.colorFinish[b.finish])}
                   onChange={() => onChange(b.name, false)}
                   onClick={() => on && onChange("", false)}
                 />

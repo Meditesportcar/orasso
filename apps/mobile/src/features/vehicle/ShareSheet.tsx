@@ -6,7 +6,7 @@
 // lisible se masque d'un toucher (l'API floute la zone).
 // Le contenu (`ShareBody`) est commun à l'écran de flux (`/vehicule/<id>/partager`) et à la feuille de fin d'ajout.
 
-import { Button, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, FitTitle, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   shareSheetLabels as L,
   type PlateRect,
@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Platform, Share, StyleSheet, View } from "react-native";
 import { siteUrl } from "@/api";
 import { Seg, SmButton } from "@/features/passionne/kit";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { detectSharePlates } from "@/lib/sharePlates";
 import {
@@ -160,8 +161,12 @@ export function ShareBody({
     const timer = setTimeout(() => {
       if (!cancelled) setChecks((all) => (all[key] === "checking" ? { ...all, [key]: "slow" } : all));
     }, PLATE_CHECK_TIMEOUT_MS);
-    const size = SHARE_SIZES[format];
-    void detectSharePlates(shownUri, size.width, size.height)
+    // Lot R3a, tour 2 : les zones des textes d'Orasso de cette affiche ; sans elles (panne), rien n'est écarté.
+    void api
+      .shareZones(vehicleId, format, style)
+      .then((z) => z.texts)
+      .catch(() => [])
+      .then((texts) => detectSharePlates(shownUri, format, style, texts))
       .catch(() => null)
       .then((plates) => {
         clearTimeout(timer);
@@ -257,9 +262,7 @@ export function ShareBody({
     <View style={styles.body}>
       {sheet ? (
         <View>
-          <Text variant="posterM" color={c.ink}>
-            {L.title}
-          </Text>
+          <FitTitle title={L.title} variant="posterM" color={c.ink} header />
           <Text variant="caption" color={c.inkMuted}>
             {L.subtitle}
           </Text>
@@ -352,9 +355,10 @@ export function ShareBody({
         </SmButton>
       ) : null}
       {/* Tour 2 : une plaque détectée, le bouton principal est « La masquer » ; partager reste possible, confirmé. */}
+      {/* Lot R3a (retour 8) : côte à côte, « La masquer » s'écrasait en colonne (« L / A ») ; l'un sous l'autre. */}
       {check === "found" ? (
-        <View style={styles.row}>
-          <SmButton kind="p" big icon="eyeOff" onPress={maskPlates} style={styles.grow} testID="share-plate-mask">
+        <View style={styles.stack}>
+          <SmButton kind="p" big icon="eyeOff" onPress={maskPlates} style={styles.wide} testID="share-plate-mask">
             {L.plateMask}
           </SmButton>
           <SmButton
@@ -363,6 +367,7 @@ export function ShareBody({
             icon="share"
             disabled={!current || busy !== null}
             onPress={() => confirmShareAnyway(() => void send("share"))}
+            style={styles.wide}
             testID="share-anyway"
           >
             {L.shareAnyway}
@@ -396,14 +401,15 @@ export function ShareBody({
           </SmButton>
         </View>
       ) : null}
-      <View style={[styles.row, blocked ? styles.hidden : null]}>
+      {/* Lot R3a : la rangée passe à la ligne plutôt que d'écraser un libellé (grande police, écran étroit). */}
+      <View style={[styles.rowWrap, blocked ? styles.hidden : null]}>
         <SmButton
           kind="p"
           big
           icon="share"
           disabled={!current || busy !== null || checking || blocked}
           onPress={() => void send("share")}
-          style={styles.grow}
+          style={styles.growWrap}
           testID="share-story"
         >
           {busy === "share" ? L.loading : checking ? L.plateCheckingShort : format === "story" ? L.story : L.post}
@@ -477,11 +483,12 @@ const styles = StyleSheet.create({
   },
   check: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", alignSelf: "stretch" },
   checkText: { flexShrink: 1 },
-  row: { flexDirection: "row", gap: space2 },
   stack: { gap: space2 },
   wide: { alignSelf: "stretch" },
   /** Le bouton « Copier le lien » : une icône seule, carré de 50 px (`.btn.btn-s` de la maquette). */
   square: { width: 50, paddingHorizontal: 0 },
   hidden: { display: "none" },
-  grow: { flex: 1, alignSelf: "stretch" },
+  rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  /** Grandit sans jamais rétrécir sous son libellé (`flex: 1` l'écrasait). */
+  growWrap: { flexGrow: 1, flexShrink: 0, alignSelf: "stretch" },
 });

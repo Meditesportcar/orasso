@@ -56,6 +56,12 @@ export const formatShareMasks = (rects: readonly PlateRect[]): string =>
  * `download=1` : l'image est servie en pièce jointe (téléchargement depuis le site) au lieu de s'afficher. `masks` :
  * zones à flouter sur l'affiche composée (plaque re-détectée par l'appli avant le partage).
  */
+/** Lot R3a, tour 2 : les zones des textes d'Orasso sur l'affiche (format et style, comme l'image). */
+export const shareZonesQuery = z.object({
+  format: z.enum(shareFormats).default("story"),
+  style: z.enum(shareStyles).default("night"),
+});
+
 export const shareImageQuery = z.object({
   format: z.enum(shareFormats).default("story"),
   /** Style de l'affiche (lot 50) : story et post (lot M6). */

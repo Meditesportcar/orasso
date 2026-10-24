@@ -124,6 +124,26 @@ export function bodyColorByName(name: string | null | undefined): BodyColor | nu
 
 const foldColor = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
+/** Racine d'un mot pour comparer une finition à un nom : sans accents ni casse, sans les « e » et « s » de l'accord. */
+const colorStem = (word: string) => word.replace(/s$/, "").replace(/e+$/, "");
+const colorWords = (s: string) =>
+  foldColor(s)
+    .split(/[^a-z]+/)
+    .filter((w) => w.length >= 3)
+    .map(colorStem);
+
+/**
+ * Lot R3a (retour 4 de Damien, 24/10) : « Blanc nacré · nacrée » répétait la finition. La finition ne s'écrit après le
+ * nom que si elle n'y est pas déjà (comparaison sans accents ni casse, sur la racine : nacré / nacrée, mat / mate,
+ * métallisé / métallisée, bicolore). Utilisée par l'appli et le site.
+ */
+export function bodyColorWithFinish(name: string, finish: string): string {
+  const inName = new Set(colorWords(name));
+  const finishWords = colorWords(finish);
+  if (finishWords.length > 0 && finishWords.every((w) => inName.has(w))) return name;
+  return `${name} · ${finish}`;
+}
+
 /** Anciens noms (avant le lot M1, accordés à « voiture ») rattachés à leur teinte du nuancier. */
 const LEGACY_COLORS: Record<string, BodyColor> = Object.fromEntries(
   (

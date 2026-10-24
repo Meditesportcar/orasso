@@ -36,8 +36,10 @@ export {
   TextField,
   type TextFieldProps,
 } from "./Field";
+export { FitTitle, type FitTitleProps } from "./FitTitle";
 export { archivoAt } from "./fontFamily";
 export { archivoFonts, useOrassoFonts } from "./fonts";
+export { GradientFill, type GradientFillProps } from "./Gradient";
 export { Ground, type GroundProps } from "./Ground";
 export { Icon, type IconProps } from "./Icon";
 export { Loader, type LoaderProps } from "./Loader";
@@ -90,4 +92,5 @@ export {
   useSystemReducedMotion,
   useTheme,
 } from "./theme";
+export { FIT_TITLE_MIN_SCALE, FIT_TITLE_SAFETY, fitTitle, titleWords } from "./titleFit";
 export { VehicleCard, type VehicleCardProps, VehicleThumb, type VehicleThumbProps } from "./VehicleCard";

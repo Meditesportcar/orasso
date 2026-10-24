@@ -2,7 +2,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { MOBILE, SEED_PASSWORD, seeStepEnd, signUpApi, unique } from "./helpers";
 import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -197,7 +197,10 @@ test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le
   await signIn(page, email);
   await page.goto("/vehicule/nouveau");
   await afterOpening(page);
-  const next = () => page.getByTestId("vehicle-step-next").click();
+  const next = async () => {
+    await seeStepEnd(page);
+    await page.getByTestId("vehicle-step-next").click();
+  };
   // Nouvel ordre : les photos d'abord (recadrage carré), puis la plaque.
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("vehicle-photo-add").click();

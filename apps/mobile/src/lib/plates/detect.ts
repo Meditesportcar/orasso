@@ -7,7 +7,13 @@
 // reconnu est signalée « probable », jamais appliquée d'office (ni cadre, ni numéro) : la personne vérifie.
 import { formatPlate, type PlateRect, plateKind } from "@orasso/shared";
 
-import { recognizeText, type TextCorners, type TextFrame, type TextLineResult } from "./mlkit";
+import {
+  type RecognizeResult,
+  recognizeTextResult,
+  type TextCorners,
+  type TextFrame,
+  type TextLineResult,
+} from "./mlkit";
 import { normalizePlateText, plateReadings } from "./recognize";
 
 /** Agrandissement du rectangle détecté : la plaque entière, bords compris, est floutée. */
@@ -56,19 +62,34 @@ export function readPlate(raw: string): PlateRead | null {
   const band = Boolean(noF) && BAND_PREFIX.test(raw);
   // [texte, bandes retirées, découpage] ; un département ne se retire qu'autour d'une plaque récente (SIV, W garage,
   // WW) : il fait partie du numéro d'une FNI ou d'une diplomatique.
-  const bases: [string, number, number][] = band
-    ? [[noF as string, 1, 0]]
-    : [[s, 0, 0], ...(noF ? ([[noF, 1, 1]] as [string, number, number][]) : [])];
-  const candidates: [string, number, number, boolean][] = bases.map(([c, n, t]) => [c, n, t, false]);
+  // [texte, bandes retirées, découpage, plaque récente seulement]
+  const bases: [string, number, number, boolean][] = band
+    ? [[noF as string, 1, 0, false]]
+    : [[s, 0, 0, false], ...(noF ? ([[noF, 1, 1, false]] as [string, number, number, boolean][]) : [])];
+  // Lot R3a : la bande bleue (étoiles, « F ») collée au numéro se lit souvent « I » ou « L » (« IEJ-706-EW ») : un
+  // caractère de tête retiré, seulement devant une plaque récente (comme le département).
+  if (!band && !noF && /^[IL]/.test(s) && s.length >= 8) bases.push([s.slice(1), 1, 1, true]);
+  const candidates: [string, number, number, boolean][] = [...bases];
   for (const [c, n, t] of bases) {
     if (TRAILING_DEPT.test(c) && c.length >= 8) candidates.push([c.replace(TRAILING_DEPT, ""), n + 1, t, true]);
   }
+  // Lot R3a : le W large de la police des plaques se lit souvent « VV » (« EJ-706-EVV ») : une relecture de plus.
   const reads = candidates
-    .flatMap(([c, stripped, tier, dept]) =>
-      plateReadings(c, "wide")
-        .filter((r) => !dept || r.siv)
-        .map((r) => ({ plate: r.plate, fixes: r.fixes, valid: plateKind(r.plate) !== null, stripped, tier })),
-    )
+    .flatMap(([c, stripped, tier, sivOnly]) => {
+      const variants: [string, number][] = [[c, 0]];
+      if (c.includes("VV")) variants.push([c.replaceAll("VV", "W"), 1]);
+      return variants.flatMap(([text, extra]) =>
+        plateReadings(text, "wide")
+          .filter((r) => !sivOnly || r.siv)
+          .map((r) => ({
+            plate: r.plate,
+            fixes: r.fixes + extra,
+            valid: plateKind(r.plate) !== null,
+            stripped,
+            tier,
+          })),
+      );
+    })
     .sort(byQuality);
   const [best] = reads;
   if (!best) return null;
@@ -369,14 +390,81 @@ export function suggestedPlate(
   return rival ? null : formatPlate(best.plate);
 }
 
+/** Lot R3a : côté de la copie réduite du second essai, quand ML Kit ne lit rien sur une grande photo. */
+export const RETRY_SIDE = 1024;
+
+/** Raison d'une lecture impossible, montrée en petit à l'étape Plaque (phase de test) : code court, sans texte lu. */
+export type DetectionFailure = "absent" | "no-text" | `error:${string}`;
+
+export type DetectionResult = { found: FoundPlate[] | null; failure?: DetectionFailure; retried: boolean };
+
+export type DetectionDeps = {
+  recognize: (uri: string) => Promise<RecognizeResult>;
+  /** Copie réduite (côté le plus long `side`) ; absente : pas de second essai. */
+  shrink?: (
+    uri: string,
+    width: number,
+    height: number,
+    side: number,
+  ) => Promise<{ uri: string; width: number; height: number }>;
+};
+
+/**
+ * Lot R3a (demande du coordinateur) : lecture de la plaque avec sa raison d'échec, et un second essai sur une copie
+ * réduite (`RETRY_SIDE`) quand ML Kit échoue ou ne lit aucune ligne sur une photo plus grande. Les cadres sont
+ * normalisés (0–1) : ceux de la copie valent pour l'original. Module absent : pas de second essai.
+ */
+export async function detectWithRetry(
+  uri: string,
+  width: number,
+  height: number,
+  deps: DetectionDeps,
+): Promise<DetectionResult> {
+  if (width <= 0 || height <= 0) return { found: null, failure: "absent", retried: false };
+  const first = await deps.recognize(uri).catch((e): RecognizeResult => ({ status: "error", code: String(e) }));
+  if (first.status === "ok" && first.lines.length > 0) {
+    return { found: logFound(findPlates(first.lines, width, height), width, height), retried: false };
+  }
+  if (first.status === "absent") return { found: null, failure: "absent", retried: false };
+  let result: RecognizeResult = first;
+  let size = { width, height };
+  let retried = false;
+  if (deps.shrink && Math.max(width, height) > RETRY_SIDE) {
+    try {
+      const small = await deps.shrink(uri, width, height, RETRY_SIDE);
+      const second = await deps.recognize(small.uri);
+      retried = true;
+      console.info(`[plaque] second essai sur ${small.width}×${small.height}`);
+      if (second.status === "ok" && second.lines.length > 0) {
+        result = second;
+        size = small;
+      } else if (first.status === "ok" && second.status === "error") result = second;
+    } catch (e) {
+      console.warn(`[plaque] copie réduite impossible : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (result.status === "ok" && result.lines.length > 0) {
+    // Les cadres sont normalisés sur la copie : ils valent pour l'original.
+    return { found: logFound(findPlates(result.lines, size.width, size.height), width, height), retried };
+  }
+  if (result.status === "error") return { found: null, failure: `error:${result.code}`, retried };
+  // Lecture faite sans aucune ligne : aucune plaque (tableau vide), avec la raison pour l'écran.
+  return { found: [], failure: "no-text", retried };
+}
+
+function logFound(found: FoundPlate[], width: number, height: number): FoundPlate[] {
+  // Trace de diagnostic au logcat (tailles et nombres seulement, jamais le texte ni le numéro).
+  const sure = surePlates(found).length;
+  console.info(`[plaque] photo ${width}×${height} : ${sure} plaque(s) sûre(s), ${found.length - sure} à vérifier`);
+  return found;
+}
+
 /**
  * Propose les plaques d'une photo locale, avec leur lecture. `null` : pas de détection possible ici (web, Expo Go,
  * erreur de ML Kit) ; tableau vide : aucune plaque repérée.
  */
 export async function detectPlateReadings(uri: string, width: number, height: number): Promise<FoundPlate[] | null> {
-  if (width <= 0 || height <= 0) return null;
-  const lines = await recognizeText(uri);
-  return lines ? findPlates(lines, width, height) : null;
+  return (await detectWithRetry(uri, width, height, { recognize: recognizeTextResult })).found;
 }
 
 /** Les cadres des plaques reconnues seuls (photo ajoutée après coup, contenus des médias) : jamais les probables. */

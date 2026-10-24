@@ -265,9 +265,10 @@ test("tour 2 : une plaque détectée sur l'affiche se masque (rendu relancé), p
   const kenji = await login("kenji@orasso.local");
   const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
   const vehicle = vehicles.data.find((v) => v.status === "active");
-  // Détection simulée (recette web seulement) : une plaque lisible sur l'affiche composée.
+  // Détection simulée (recette web seulement) : une plaque lisible sur la photo de l'affiche (lot R3a : la vérification
+  // ignore les textes d'Orasso, sous la photo).
   await page.addInitScript(() => {
-    (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = [{ x: 0.1, y: 0.55, w: 0.3, h: 0.06 }];
+    (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = [{ x: 0.1, y: 0.35, w: 0.3, h: 0.06 }];
   });
   const masked: string[] = [];
   page.on("request", (r) => {

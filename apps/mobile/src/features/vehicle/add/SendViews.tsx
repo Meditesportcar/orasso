@@ -3,7 +3,17 @@
 // moitié de l'écran), et à 100 % elle se gare dans le O ; puis l'animation « au garage » (un tour de drift, la voiture
 // se gare, le O s'allume). Jamais « vous pouvez quitter l'écran ». Tout en worklets dans le design system ; mouvement
 // réduit : fondu de 120 ms.
-import { Icon, Photo, SendBurst, SendProgress, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  FitTitle,
+  Icon,
+  Photo,
+  SendBurst,
+  SendProgress,
+  Tag,
+  Text,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import { vehicleAddLabels as V } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -44,9 +54,7 @@ export function SendingView({
       : V.saving;
   return (
     <>
-      <Text variant="posterL" color={c.ink} accessibilityRole="header">
-        {V.sendTitle}
-      </Text>
+      <FitTitle title={V.sendTitle} variant="posterL" color={c.ink} header />
       <View style={styles.sendRow}>
         <SendProgress
           size={SEND_O}
@@ -147,15 +155,7 @@ export function DoneView({
         <SendBurst size={112} label={title} playKey={playKey} />
       </View>
       <View style={styles.doneText}>
-        <Text
-          variant="posterL"
-          color={c.ink}
-          accessibilityRole="header"
-          style={styles.center}
-          testID="vehicle-done-title"
-        >
-          {title}
-        </Text>
+        <FitTitle title={title} variant="posterL" color={c.ink} header align="center" testID="vehicle-done-title" />
         <Text variant="caption" color={c.inkMuted} style={styles.center}>
           {V.doneText}
         </Text>
@@ -179,9 +179,8 @@ export function DoneView({
               ))}
             </View>
           ) : null}
-          <Text variant="posterL" color={c.ink}>
-            {name}
-          </Text>
+          {/* Un nom de véhicule ne se tronque jamais : trois lignes avant de réduire. */}
+          <FitTitle title={name} variant="posterL" color={c.ink} maxLines={3} />
           {specs ? (
             <Text variant="caption" color={c.inkMuted}>
               {specs}

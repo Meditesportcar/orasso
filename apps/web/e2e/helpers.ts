@@ -338,3 +338,19 @@ export async function createPublishedPro(
   if (p.status !== 200) throw new Error(`Publication : ${p.status}`);
   return created.data;
 }
+
+/**
+ * Lot R3a (retour 3 de Damien) : dans l'ajout de véhicule de l'appli, « Continuer » attend que le bas d'une étape plus
+ * haute que l'écran ait été vu. On descend par la petite flèche de l'indicateur s'il est là, puis on attend qu'il parte.
+ */
+export async function seeStepEnd(page: Page): Promise<void> {
+  // Laisse la page se mesurer (l'indicateur n'apparaît qu'une fois la hauteur connue).
+  await page.waitForTimeout(400);
+  const arrow = page.getByTestId("flow-end-arrow");
+  if (await arrow.isVisible().catch(() => false)) {
+    await arrow.click();
+    await expect(page.getByTestId("flow-end-hint")).toHaveCount(0, { timeout: 5_000 });
+  }
+  // Le bas doit rester visible un instant pour compter comme vu.
+  await page.waitForTimeout(400);
+}

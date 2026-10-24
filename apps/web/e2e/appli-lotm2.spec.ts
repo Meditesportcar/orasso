@@ -1,7 +1,7 @@
 // Lot M1 : adapté au nouvel ordre de l'ajout (photos → plaque → marque…) ; les messages sont sur la photo.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, type Cookie, MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { apiCall, type Cookie, MOBILE, SEED_PASSWORD, seeStepEnd, signUpApi, unique } from "./helpers";
 import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -40,7 +40,10 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-const next = (page: Page) => page.getByTestId("vehicle-step-next").click();
+const next = async (page: Page) => {
+  await seeStepEnd(page);
+  await page.getByTestId("vehicle-step-next").click();
+};
 const message = (page: Page) => page.getByTestId("plate-message");
 
 test("étape Plaque : sans flouter confirmé sur la photo, message vivant, numéro obligatoire et lisible", async ({

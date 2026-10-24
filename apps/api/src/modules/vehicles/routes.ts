@@ -6,6 +6,7 @@ import {
   photoOrderSchema,
   plateRectsSchema,
   shareImageQuery,
+  shareZonesQuery,
   vehicleCreateSchema,
   vehicleReferenceSearchQuery,
   vehicleUpdateSchema,
@@ -119,6 +120,13 @@ export const vehiclesRoutes = new Hono<AppEnv>()
       "cache-control": CACHE_1H["cache-control"],
       "content-disposition": `${download ? "attachment" : "inline"}; filename="orasso-${format}-${style}.png"`,
     });
+  })
+  // Lot R3a, tour 2 : zones des textes d'Orasso sur l'affiche (la vérification de plaque de l'appli les écarte).
+  .get("/me/vehicles/:id/share-zones", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("shareZones", v.user.id);
+    const { format, style } = query(c, shareZonesQuery);
+    return c.json(await vehiclesService.shareZones(v, uuidParam(c, "id"), format, style));
   })
   // Lot M5 : « Pour ta … » du Garage (pros partenaires et sponsorisé lié au véhicule). Jamais gardé en cache : le
   // sponsorisé n'est compté que quand il est renvoyé.

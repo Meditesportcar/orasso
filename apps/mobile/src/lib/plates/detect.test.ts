@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   detectPlates,
+  detectWithRetry,
   findPlates,
   looksLikePlate,
   normalizePlateText,
@@ -415,5 +416,106 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
         text,
       ).toBe(true);
     }
+  });
+});
+
+describe("lot R3a : plaque de Damien (« EJ-706-EW », bande F et 66), lectures probables de ML Kit", () => {
+  const at = (words: string[]) => line(words.map((w, i): [string, TextFrame] => [w, frame(560 + i * 70, 560, 60, 30)]));
+  const cases: string[][] = [
+    ["EJ-706-EW"],
+    ["F", "EJ-706-EW", "66"],
+    ["F", "EJ-706-EW"],
+    ["EJ-706-EW", "66"],
+    ["EJ·706·EW"],
+    ["EJ-706-EW66"],
+    ["EJ", "706", "EW"],
+    ["EJ–706–EW"],
+    ["EJ—706—EW"],
+    ["FEJ-706-EW"],
+    ["EJ.706.EW"],
+    ["EJ-706-EW|66"],
+    ["EJ-7O6-EW"],
+    ["EJ706EW"],
+    // Tour R3a : la bande bleue collée lue « I » ou « L », et le W large lu « VV ».
+    ["IEJ-706-EW"],
+    ["IEJ-706-EW66"],
+    ["L", "EJ-706-EW"],
+    ["EJ-706-EVV"],
+  ];
+  it.each(cases)("%s → cadre posé et numéro prérempli « EJ-706-EW »", (...words: string[]) => {
+    const found = findPlates([at(words)], 922, 922);
+    expect(found.filter((f) => !f.probable)).toHaveLength(1);
+    expect(suggestedPlate(found)).toBe("EJ-706-EW");
+  });
+  it("chaque ligne à part (bloc « F », bloc plaque, bloc « 66 ») : une seule plaque", () => {
+    const found = findPlates([at(["F"]), at(["EJ-706-EW"]), at(["66"])], 922, 922);
+    expect(found.map((f) => f.plate)).toEqual(["EJ706EW"]);
+  });
+  it("le caractère de tête n'est retiré que devant une plaque récente : une FNI garde son premier chiffre", () => {
+    expect(readPlate("1234 AB 66")?.plate).toBe("1234AB66");
+    expect(readPlate("LEJ706EW")?.plate).toBe("EJ706EW");
+  });
+});
+
+describe("lot R3a : raison d'un échec et second essai sur une copie réduite", () => {
+  const plateLine = (scale: number) => line([["EJ-706-EW", frame(560 * scale, 560 * scale, 180 * scale, 40 * scale)]]);
+  const shrink = async (_uri: string, w: number, h: number, side: number) => {
+    const k = side / Math.max(w, h);
+    return { uri: "petite", width: Math.round(w * k), height: Math.round(h * k) };
+  };
+  it("lecture réussie du premier coup : pas de second essai", async () => {
+    const calls: string[] = [];
+    const r = await detectWithRetry("grande", 1600, 1600, {
+      recognize: async (uri) => (calls.push(uri), { status: "ok", lines: [plateLine(1)] }),
+      shrink,
+    });
+    expect(calls).toEqual(["grande"]);
+    expect(r.retried).toBe(false);
+    expect(r.failure).toBeUndefined();
+    expect(r.found?.map((f) => f.plate)).toEqual(["EJ706EW"]);
+  });
+  it("aucune ligne sur la grande photo : second essai sur la copie, cadres normalisés identiques", async () => {
+    const calls: string[] = [];
+    const r = await detectWithRetry("grande", 1600, 1600, {
+      recognize: async (uri) => {
+        calls.push(uri);
+        return uri === "grande" ? { status: "ok", lines: [] } : { status: "ok", lines: [plateLine(1024 / 1600)] };
+      },
+      shrink,
+    });
+    expect(calls).toEqual(["grande", "petite"]);
+    expect(r.retried).toBe(true);
+    expect(r.failure).toBeUndefined();
+    const direct = findPlates([plateLine(1)], 1600, 1600)[0]?.rect;
+    const rect = r.found?.[0]?.rect;
+    expect(rect?.x).toBeCloseTo(direct?.x ?? -1, 3);
+    expect(rect?.w).toBeCloseTo(direct?.w ?? -1, 3);
+  });
+  it("erreur de ML Kit puis rien sur la copie : la raison est l'erreur ; aucune ligne nulle part : « no-text »", async () => {
+    const failing = await detectWithRetry("grande", 1600, 1600, {
+      recognize: async (uri) =>
+        uri === "grande" ? { status: "error", code: "MlKitException" } : { status: "ok", lines: [] },
+      shrink,
+    });
+    expect(failing).toMatchObject({ found: null, failure: "error:MlKitException", retried: true });
+    const empty = await detectWithRetry("grande", 1600, 1600, {
+      recognize: async () => ({ status: "ok", lines: [] }),
+      shrink,
+    });
+    expect(empty).toMatchObject({ found: [], failure: "no-text", retried: true });
+  });
+  it("module absent : pas de second essai ; petite photo : pas de copie", async () => {
+    let calls = 0;
+    const absent = await detectWithRetry("grande", 1600, 1600, {
+      recognize: async () => (calls++, { status: "absent" }),
+      shrink,
+    });
+    expect(absent).toMatchObject({ found: null, failure: "absent", retried: false });
+    expect(calls).toBe(1);
+    const small = await detectWithRetry("petite", 900, 900, {
+      recognize: async () => ({ status: "ok", lines: [] }),
+      shrink,
+    });
+    expect(small).toMatchObject({ found: [], failure: "no-text", retried: false });
   });
 });

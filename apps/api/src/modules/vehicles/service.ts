@@ -41,7 +41,7 @@ import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "./photos-blur
 import { plateTransferService } from "./plate-transfer";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
-import { cachedShareImage } from "./share-image";
+import { cachedShareImage, shareZones } from "./share-image";
 
 export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
@@ -202,6 +202,14 @@ export const vehiclesService = {
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
     return cachedShareImage(row, v.profile.pseudo, format, Date.now(), { style, masks });
+  },
+
+  /** Lot R3a, tour 2 : zones des textes d'Orasso sur l'affiche, pour la vérification de plaque de l'appli. */
+  async shareZones(v: Viewer, id: string, format: ShareFormat, style: ShareStyle = "night") {
+    await ownVehicle(v, id);
+    const row = await vehiclesRepo.findFullById(id);
+    if (!row) throw notFound("Véhicule introuvable");
+    return { texts: await shareZones(row, v.profile.pseudo, format, style) };
   },
 
   async create(v: Viewer, input: VehicleCreate): Promise<VehicleFull> {

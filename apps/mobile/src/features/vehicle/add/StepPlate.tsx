@@ -14,6 +14,7 @@
 import {
   Chip,
   ChipRow,
+  FitTitle,
   Icon,
   type IconName,
   Tag,
@@ -219,9 +220,7 @@ export function StepPlate({
           </View>
           {confirming === i ? (
             <View style={[styles.confirm, { backgroundColor: withAlpha(c.night, 0.82) }]} testID="plate-none-confirm">
-              <Text variant="posterM" color={c.nightInk} style={styles.center}>
-                {V.noneTitle}
-              </Text>
+              <FitTitle title={V.noneTitle} variant="posterM" color={c.nightInk} align="center" maxLines={3} />
               <Text variant="caption" color={withAlpha(c.nightInk, 0.8)} style={styles.center}>
                 {V.noneText}
               </Text>

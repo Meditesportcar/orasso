@@ -453,6 +453,32 @@ describe("fiche Instagram", () => {
     expect(await cachedShareImage(row, "Kenji_66", "post", t0 + 3_700_000)).not.toBe(a);
   });
 
+  it("lot R3a, tour 2 : zones des textes d'Orasso de l'affiche, au propriétaire seulement ; sceau seulement certifié", async () => {
+    const u = await signUp("Kenji_66");
+    const v = await withCover(u.id, { year: 1996, powerHp: 330, weightKg: 1500 });
+    const zones = async (url: string, cookie?: string) =>
+      app.request(url, cookie ? { headers: { cookie } } : undefined);
+    const res = await zones(`/api/me/vehicles/${v.id}/share-zones?format=story&style=sand`, u.cookie);
+    expect(res.status).toBe(200);
+    const plain = (await res.json()) as { texts: { x: number; y: number; w: number; h: number }[] };
+    expect(plain.texts.length).toBeGreaterThan(5);
+    for (const z of plain.texts) {
+      expect(z.x).toBeGreaterThanOrEqual(0);
+      expect(z.y).toBeGreaterThanOrEqual(0);
+      expect(z.x + z.w).toBeLessThanOrEqual(1.0001);
+      expect(z.y + z.h).toBeLessThanOrEqual(1.0001);
+    }
+    await db.update(vehicles).set({ certifiedAt: new Date() }).where(eq(vehicles.id, v.id));
+    const sealed = (await (
+      await zones(`/api/me/vehicles/${v.id}/share-zones?format=story&style=sand`, u.cookie)
+    ).json()) as { texts: unknown[] };
+    expect(sealed.texts.length).toBe(plain.texts.length + 1);
+    expect((await zones(`/api/me/vehicles/${v.id}/share-zones?format=carre`, u.cookie)).status).toBe(400);
+    const other = await signUp("Autre_01");
+    expect((await zones(`/api/me/vehicles/${v.id}/share-zones`, other.cookie)).status).toBe(404);
+    expect((await zones(`/api/me/vehicles/${v.id}/share-zones`)).status).toBe(401);
+  });
+
   it("jamais de plaque : le rendu ne lit ni la plaque ni la plaque normalisée ; nom long sur une ligne sans erreur", async () => {
     const u = await signUp("Kenji_66");
     const [mercedes] = await db

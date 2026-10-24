@@ -13,7 +13,20 @@
 // affiches d'événement.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type PlateRect, SHARE_SIZES, type ShareFormat, type ShareStyle, shareSafeBands } from "@orasso/shared";
+import {
+  type PlateRect,
+  SHARE_PHOTO_FADE,
+  SHARE_SIZES,
+  type ShareFormat,
+  type ShareStyle,
+  type ShareZone,
+  sharePhotoTop,
+  shareSafeBands,
+  shareSealSide,
+  shareSealTop,
+  shareVeilFrom,
+  shareVeilStops,
+} from "@orasso/shared";
 import QRCode from "qrcode";
 import sharp, { type OverlayOptions } from "sharp";
 
@@ -118,15 +131,15 @@ export function storyFrame(format: ShareFormat) {
     story,
     cqh,
     /** La photo carrée : 4 % du haut en story, remontée de 15 % en post. */
-    photoY: Math.round(story ? 0.04 * H : -0.15 * H),
+    photoY: sharePhotoTop(format),
     /** Le voile monte de là jusqu'en bas. */
-    fadeFrom: story ? 0.4 : 0.44,
+    fadeFrom: shareVeilFrom(format),
     /** Bas du bloc principal (chiffres) et du pied (logo, QR). */
     mainBottom: Math.round(H * (story ? 0.76 : 0.855)),
     footBottom: Math.round(H * (story ? 0.844 : 0.968)),
     qr: Math.round((story ? 13 : 11) * cqw),
     nameMax: Math.round((story ? 13 : 11.5) * cqw),
-    sealTop: Math.round(H * (story ? 0.145 : 0.03)),
+    sealTop: shareSealTop(format),
     gap: (story ? 2.2 : 1.6) * cqh,
     bands: story ? shareSafeBands(H) : { top: 0, bottom: 0 },
   };
@@ -240,7 +253,7 @@ async function squarePhoto(photo: Buffer | null, y: number, H: number, style: Sh
           input: svg(
             W,
             W,
-            `<defs><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".07" stop-color="#fff" stop-opacity="1"/><stop offset=".78" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${W}" fill="url(#m)"/>`,
+            `<defs><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="${SHARE_PHOTO_FADE.inEnd}" stop-color="#fff" stop-opacity="1"/><stop offset="${SHARE_PHOTO_FADE.outStart}" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${W}" fill="url(#m)"/>`,
           ),
           blend: "dest-in",
         },
@@ -269,14 +282,10 @@ function atmosphere(f: ReturnType<typeof storyFrame>, style: ShareStyle): Buffer
   const H = f.H;
   const g = c.ground;
   const fadeTop = Math.round(H * f.fadeFrom);
-  const fade =
-    style === "sand"
-      ? f.story
-        ? `<stop offset="0" stop-color="${g}" stop-opacity="0"/><stop offset=".26" stop-color="${g}" stop-opacity=".9"/><stop offset=".62" stop-color="${g}" stop-opacity="1"/><stop offset="1" stop-color="${g}" stop-opacity=".55"/>`
-        : `<stop offset="0" stop-color="${g}" stop-opacity="0"/><stop offset=".34" stop-color="${g}" stop-opacity=".92"/><stop offset=".66" stop-color="${g}" stop-opacity="1"/>`
-      : f.story
-        ? `<stop offset="0" stop-color="${g}" stop-opacity="0"/><stop offset=".26" stop-color="${g}" stop-opacity=".86"/><stop offset=".64" stop-color="${g}" stop-opacity=".93"/><stop offset="1" stop-color="${g}" stop-opacity=".5"/>`
-        : `<stop offset="0" stop-color="${g}" stop-opacity="0"/><stop offset=".34" stop-color="${g}" stop-opacity=".88"/><stop offset=".66" stop-color="${g}" stop-opacity="1"/>`;
+  // Lot R3a, tour 2 : arrêts partagés avec la vérification de plaque de l'appli (`shareVeilStops`).
+  const fade = shareVeilStops(f.story ? "story" : "post", style)
+    .map(([at, opacity]) => `<stop offset="${at}" stop-color="${g}" stop-opacity="${opacity}"/>`)
+    .join("");
   const smokeTop = Math.round(H * 0.3);
   const smokeH = Math.round(H * 0.5);
   const smoke =
@@ -527,7 +536,7 @@ export async function storyLayout(i: StoryInput) {
 
   // Sceau à reflet, seulement si le véhicule est certifié.
   if (i.certified) {
-    const s = Math.round(23 * cqw);
+    const s = shareSealSide(i.format);
     const seal = await certifiedSeal(s, "VÉHICULE CERTIFIÉ · ORASSO · ");
     const turned = await sharp(seal)
       .rotate(-10, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -583,6 +592,28 @@ async function clip(o: OverlayOptions, H: number): Promise<OverlayOptions | null
     .png()
     .toBuffer();
   return { input: part, left: x0, top: y0 };
+}
+
+/**
+ * Lot R3a, tour 2 : les zones réelles des textes qu'Orasso dessine sur l'affiche (nom, marque, étiquettes, chiffres,
+ * filet, logo, @pseudo, adresse, QR, et le sceau s'il est dessiné), normalisées 0–1. L'appli les écarte de la
+ * vérification de plaque (`plateOnSharePoster`) ; le reste de la photo est vérifié.
+ */
+export async function storyZones(i: StoryInput): Promise<ShareZone[]> {
+  const { frame: f, placed } = await storyLayout(i);
+  const zones: ShareZone[] = [];
+  for (const p of placed) {
+    if (p.kind === "shadow" || p.kind === "halo") continue;
+    const meta = await sharp(p.overlay.input as Buffer).metadata();
+    const left = Math.max(0, p.overlay.left ?? 0);
+    const right = Math.min(W, (p.overlay.left ?? 0) + (meta.width ?? 0));
+    const top = Math.max(0, p.top);
+    const bottom = Math.min(f.H, p.bottom);
+    if (right <= left || bottom <= top) continue;
+    const r = (n: number) => Math.round(n * 10000) / 10000;
+    zones.push({ x: r(left / W), y: r(top / f.H), w: r((right - left) / W), h: r((bottom - top) / f.H) });
+  }
+  return zones;
 }
 
 /** Rend l'affiche (PNG 1080 × 1920 en story, 1080 × 1350 en post). */
