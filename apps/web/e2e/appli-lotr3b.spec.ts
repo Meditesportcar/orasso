@@ -22,7 +22,7 @@ const THEMES: Theme[] = ["beton", "sable"];
 /** L'année suivante, lue sur l'horloge de la machine (aucune date figée). */
 const NEXT_YEAR = new Date().getFullYear() + 1;
 
-async function open(browser: Browser, theme: Theme, width = MOBILE.width) {
+async function open(browser: Browser, theme: Theme, width: number = MOBILE.width) {
   const ctx = await browser.newContext({ viewport: { ...MOBILE, width }, baseURL: APP });
   const page = await ctx.newPage();
   await page.goto("/");
