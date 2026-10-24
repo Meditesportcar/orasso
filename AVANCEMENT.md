@@ -1,6 +1,18 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 23/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 24/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+
+## État au 24/10/2026 : R3 + R4 + C7 en ligne (corrections des retours, plateau, suivi, véhicule principal, cadre par modes)
+
+- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`3f47a780`** (poussé). Migrations jusqu'à `0061_vehicle-version` (0057 clés vues de la liste des véhicules, 0058 « aucune plaque visible » gardé, 0059 véhicule principal et suivi entre passionnés, 0060 noms tapés, 0061 version du véhicule).
+- **APK** : `Orasso APK/Orasso-2026-10-24-3f47a780-R3-R4-C7.apk` sur le Drive, installé sur le Xiaomi et essayé avant livraison (aucun plantage).
+- **Contenu** :
+  - **R3** : titres jamais coupés, « Continuer » après avoir tout vu, année des dates, « Où chercher ? » à choix unique, sorties passées consultables, rejoindre un crew d'abord, affiche à partager vérifiée sur toute la photo lisible, liste des véhicules passée de 240 à 1 871 modèles avec recherche tolérante et synchronisation au démarrage (`db:reference`), inscription qui dit ce qui manque, sessions d'un an (administration : 30 jours sans usage).
+  - **R4** (maquette « Orasso maquettes R4 » validée) : cadre de floutage par modes (Déplacer, Rotation, Taille), modèle absent de la liste (saisie libre et file admin « Modèles proposés »), champ « Version », le plateau d'un événement (photos seulement floutées ou sans plaque confirmée), véhicule principal, suivre un passionné, compteurs et « Ton réseau », « Ailleurs » en recherche, récents et carte.
+  - **C7** : battle autour du O, conflits de plaque dans l'admin, tickets du socle, finitions.
+- **Méthode depuis le 24/10 (D35)** : une seule livraison par vague ; recettes ciblées dans les lots ; la suite complète des recettes une seule fois à l'intégration, sur 3 piles en parallèle (1 h 19 au lieu d'environ 3 h) ; deux relectures pour les lots sensibles, une pour les autres ; règles du domaine écrites dans `lots/invariants-domaine.md` du relais.
+- **Suite** : revue des autres profils avec Damien (organisateur, staff, pro, prestataire, média, visiteur, admin), puis la recette finale (lot 58).
+- **Reprendre** par le dernier « POINT DE REPRISE » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`).
 
 ## État au 23/10/2026 : mise au point « Exposant » en ligne (lots M1 à M7)
 
