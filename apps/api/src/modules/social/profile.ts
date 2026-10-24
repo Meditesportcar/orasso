@@ -1,8 +1,12 @@
 // Profil d'un autre et fiche d'un véhicule d'un autre, selon l'audience (ARCHITECTURE-SUITE § 2.2).
 // Jamais la plaque. Nom, prénom, téléphone et e-mail : audience `organizer` seulement.
 import {
+  canFollowUser,
+  effectiveMainVehicleId,
   friendshipState,
+  garageOrder,
   type OtherVehicle,
+  type PreviewAs,
   type ProfileAudience,
   type ProfileVehicle,
   profileAudience,
@@ -22,6 +26,7 @@ import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleBrief, vehicleLabel, vehiclePublic } from "../vehicles/serializers";
+import { followsService } from "./follows";
 import { socialRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -58,13 +63,15 @@ export async function isOrganizerOf(viewerId: string, targetId: string, at: Date
 export async function audienceFor(
   viewer: Viewer,
   target: Profile,
-  opts: { asStranger?: boolean } = {},
+  opts: { as?: PreviewAs } = {},
 ): Promise<{ audience: ProfileAudience; friendshipId: string | null; state: ReturnType<typeof friendshipState> }> {
-  if (opts.asStranger) {
+  // Aperçu de son propre profil (lot R4c) : vu par un membre connecté, ou par un ami (jamais par un organisateur).
+  if (opts.as) {
+    const isFriend = opts.as === "friend";
     return {
-      audience: profileAudience({ isSelf: false, isFriend: false, isOrganizer: false, visibility: target.visibility }),
+      audience: profileAudience({ isSelf: false, isFriend, isOrganizer: false, visibility: target.visibility }),
       friendshipId: null,
-      state: "none",
+      state: isFriend ? "friends" : "none",
     };
   }
   const isSelf = target.userId === viewer.user.id;
@@ -134,8 +141,8 @@ async function profileEvents(userId: string, at: Date) {
 }
 
 export const socialProfile = {
-  /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview` avec `asStranger`). */
-  async view(viewer: Viewer, pseudo: string, opts: { asStranger?: boolean } = {}): Promise<UserProfileView> {
+  /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|friend`). */
+  async view(viewer: Viewer, pseudo: string, opts: { as?: PreviewAs } = {}): Promise<UserProfileView> {
     const target = await profilesRepo.byPseudo(pseudo);
     // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même.
     if (!target || target.deletedAt || (target.bannedAt && target.userId !== viewer.user.id)) {
@@ -145,7 +152,10 @@ export const socialProfile = {
     const fields = profileFields(audience);
     const at = now();
 
-    const garage = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, target.userId), eq(vehicles.status, "active")));
+    const active = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, target.userId), eq(vehicles.status, "active")));
+    // Lot R4c : le véhicule principal en premier dans la vitrine.
+    const mainId = effectiveMainVehicleId(active, target.mainVehicleId);
+    const garage = garageOrder(active, mainId);
     const profileVehicles: ProfileVehicle[] = garage.map((g) =>
       fields.vehicleDetails
         ? {
@@ -155,6 +165,7 @@ export const socialProfile = {
             modelName: g.model.name,
             photoUrl: storage.url(g.photos[0]?.storageKey ?? null),
             detailed: true,
+            main: g.id === mainId,
           }
         : {
             id: g.id,
@@ -163,6 +174,7 @@ export const socialProfile = {
             modelName: g.model.name,
             photoUrl: null,
             detailed: false,
+            main: g.id === mainId,
           },
     );
 
@@ -178,6 +190,8 @@ export const socialProfile = {
       };
     }
 
+    const isSelf = target.userId === viewer.user.id && !opts.as;
+    const counts = fields.friendsCount ? await followsService.countsOf(target.userId) : null;
     return {
       userId: target.userId,
       audience,
@@ -195,6 +209,12 @@ export const socialProfile = {
       crews: fields.crews ? await crewsService.ofUser(target.userId) : null,
       contact,
       friendship: { state, id: friendshipId },
+      followersCount: counts?.followers ?? null,
+      followingCount: counts?.following ?? null,
+      follow: {
+        canFollow: canFollowUser({ isSelf, visibility: target.visibility }),
+        following: isSelf || opts.as ? false : await followsService.isFollowing(viewer.user.id, target.userId),
+      },
     };
   },
 

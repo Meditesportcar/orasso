@@ -1,10 +1,16 @@
 // Routes du compte (lot 15, ARCHITECTURE-SUITE § 1.2).
 import { isIP } from "node:net";
-import { accountDeleteSchema, accountSettingsSchema, preferencesUpdateSchema, referralSchema } from "@orasso/shared";
+import {
+  accountDeleteSchema,
+  accountSettingsSchema,
+  preferencesUpdateSchema,
+  publicPreviewQuery,
+  referralSchema,
+} from "@orasso/shared";
 import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../lib/session";
-import { body } from "../../lib/validate";
+import { body, query } from "../../lib/validate";
 import { securityService } from "../security/service";
 import { accountExportService } from "./export";
 import { preferencesService } from "./preferences";
@@ -52,7 +58,10 @@ export const accountRoutes = new Hono<AppEnv>()
     c.header("cache-control", "no-store");
     return c.json(await accountExportService.build(await requireUser(c)));
   })
-  .get("/me/public-preview", async (c) => c.json(await accountService.publicPreview(await requireUser(c))))
+  .get("/me/public-preview", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await accountService.publicPreview(v, query(c, publicPreviewQuery).as));
+  })
   .delete("/me", async (c) => {
     const v = await requireUser(c);
     const input = await body(c, accountDeleteSchema);

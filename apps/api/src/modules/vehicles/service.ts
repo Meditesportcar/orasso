@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import {
+  effectiveMainVehicleId,
   formatPlate,
+  garageOrder,
   normalizePlate,
   type PlateRect,
   type ShareFormat,
@@ -141,8 +143,10 @@ export const vehiclesService = {
     return { categories: await vehiclesRepo.categories() };
   },
 
+  /** Lot R4c : le véhicule principal d'abord, puis l'ordre d'ajout. */
   async listMine(v: Viewer): Promise<VehicleFull[]> {
-    return (await vehiclesRepo.findFull(eq(vehicles.ownerId, v.user.id))).map(vehicleFull);
+    const rows = await vehiclesRepo.findFull(eq(vehicles.ownerId, v.user.id));
+    return garageOrder(rows, effectiveMainVehicleId(rows, v.profile.mainVehicleId)).map(vehicleFull);
   },
 
   /** Page du véhicule : fiche complète et état de la certification. */

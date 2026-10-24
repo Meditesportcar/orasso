@@ -1,17 +1,24 @@
 // Routes du garage ajoutées au lot 31 : transferts de plaque (ancien propriétaire, équipe Orasso) et demandes de
 // certification (équipe Orasso). Les routes du véhicule lui-même restent dans `routes.ts`.
-import { adminDecisionSchema, certificationStatuses } from "@orasso/shared";
+import { adminDecisionSchema, certificationStatuses, mainVehicleSchema } from "@orasso/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { certificationService } from "./certification";
+import { mainVehicleService } from "./main";
 import { plateTransferService } from "./plate-transfer";
 
 const adminCertificationsQuery = z.object({ status: z.enum(certificationStatuses).optional() });
 
 export const garageRoutes = new Hono<AppEnv>()
+  // Lot R4c : « Mettre en avant » un véhicule (le véhicule principal).
+  .put("/me/main-vehicle", async (c) => {
+    const v = await requireUser(c);
+    const { vehicleId } = await body(c, mainVehicleSchema);
+    return c.json(await mainVehicleService.set(v, vehicleId));
+  })
   // Demandes reçues (je suis l'ancien propriétaire) et envoyées.
   .get("/me/plate-transfers", async (c) => c.json(await plateTransferService.listMine(await requireUser(c))))
   .post("/plate-transfers/:id/accept", async (c) => {

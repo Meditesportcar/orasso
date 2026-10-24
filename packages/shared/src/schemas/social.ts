@@ -91,6 +91,8 @@ export type ProfileVehicle = {
   photoUrl: string | null;
   /** Vrai si la fiche complète (génération, année, photos) est consultable. */
   detailed: boolean;
+  /** Lot R4c : le véhicule principal de la personne (en premier dans la vitrine). */
+  main: boolean;
 };
 
 export type ProfileEvent = {
@@ -118,6 +120,11 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   /** Organisateur seulement : coordonnées déjà accessibles dans son tri. */
   contact: { firstName: string | null; lastName: string | null; phone: string | null; email: string | null } | null;
   friendship: { state: FriendshipState; id: string | null };
+  /** Lot R4c : abonnés et abonnements, aux mêmes audiences que `friendsCount` (jamais pour un compte privé non ami). */
+  followersCount: number | null;
+  followingCount: number | null;
+  /** Lot R4c : « Suivre » (compte public seulement, jamais soi-même) et si je suis déjà la personne. */
+  follow: { canFollow: boolean; following: boolean };
 };
 
 export type FriendRequestView = {
@@ -134,3 +141,52 @@ export type FriendRequestResult = { id: string; status: "pending" | "accepted"; 
 
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */
 export type JournalActor = { userId: string; pseudo: string; avatarUrl: string | null };
+
+// --- Réseau (lot R4c) : suivre une personne, listes visibles par soi seul ----------------------------------------------
+
+/** `GET /me/network` : les trois nombres de l'en-tête du profil (abonnements = personnes + organisateurs + pros). */
+export type NetworkCounts = {
+  followers: number;
+  following: number;
+  friends: number;
+  followingBy: { people: number; structures: number; pros: number };
+  /** Demandes d'ami reçues en attente (en tête de l'onglet Amis). */
+  friendRequestsIn: number;
+};
+
+/** Une personne des listes Abonnés / Abonnements. */
+export type FollowPerson = Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade"> & {
+  /** Son véhicule principal (marque et modèle, jamais la plaque), `null` sans véhicule actif. */
+  vehicle: string | null;
+  friend: boolean;
+  /** Je suis cette personne. */
+  following: boolean;
+  /** « Suivre aussi » possible (compte public). */
+  canFollow: boolean;
+};
+
+/** Un organisateur ou un pro suivi (onglet Abonnements). */
+export type FollowedPage = { id: string; slug: string; name: string; logoUrl: string | null; caption: string | null };
+
+export const networkListQuery = z.object({
+  q: z.string().trim().max(40).optional(),
+  cursor: z.string().max(200).optional(),
+});
+export const followingListQuery = networkListQuery.extend({
+  kind: z.enum(["people", "structures", "pros"]).default("people"),
+});
+export type FollowingKind = z.infer<typeof followingListQuery>["kind"];
+
+export type FollowersPage = { items: FollowPerson[]; nextCursor: string | null; total: number };
+export type FollowingPage =
+  | { kind: "people"; items: FollowPerson[]; nextCursor: string | null; total: number }
+  | { kind: "structures" | "pros"; items: FollowedPage[]; nextCursor: string | null; total: number };
+
+export type FollowResult = { following: boolean };
+
+/** `GET /me/public-preview?as=member|friend` (lot R4c) : mon profil vu par un membre, ou par un ami. */
+export const publicPreviewQuery = z.object({ as: z.enum(["member", "friend"]).default("member") });
+export type PreviewAs = z.infer<typeof publicPreviewQuery>["as"];
+
+/** `PUT /me/main-vehicle` (lot R4c). */
+export const mainVehicleSchema = z.object({ vehicleId: z.uuid() });

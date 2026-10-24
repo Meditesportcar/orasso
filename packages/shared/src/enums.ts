@@ -24,7 +24,11 @@ import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notif
 import { passportJournalOnlyTypes, passportNoEmailTypes, passportNotificationTypes } from "./notifications/passport";
 import { pointsNotificationTypes } from "./notifications/points";
 import { providersV2NotificationTypes } from "./notifications/providers-v2";
-import { journalOnlyNotificationTypes as socialJournalOnly, socialNotificationTypes } from "./notifications/social";
+import {
+  journalOnlyNotificationTypes as socialJournalOnly,
+  socialNoEmailTypes,
+  socialNotificationTypes,
+} from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
 import { weatherNotificationTypes } from "./notifications/weather";
 
@@ -34,6 +38,7 @@ export const pushOnlyNotificationTypes: readonly string[] = [
   ...communicationNoEmailTypes,
   ...afterEventNoEmailTypes,
   ...passportNoEmailTypes,
+  ...socialNoEmailTypes,
 ];
 /** Actualités du Journal : ni push ni e-mail, livrées tout de suite (un tableau par domaine). */
 export const journalOnlyNotificationTypes: readonly string[] = [

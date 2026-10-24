@@ -29,6 +29,7 @@ import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
+import { mainVehicleIdOf } from "../vehicles/main";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
 
@@ -137,6 +138,7 @@ export const profilesService = {
         departments: p.departments,
         radiusKm: p.radiusKm,
         mainProfile: p.mainProfile,
+        mainVehicleId: await mainVehicleIdOf(v.user.id, p.mainVehicleId),
         interests: await profilesRepo.interests(v.user.id),
         platformRole: p.platformRole,
         newsletterOptIn: p.newsletterOptIn,

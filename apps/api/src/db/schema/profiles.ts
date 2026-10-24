@@ -26,6 +26,7 @@ import {
 
 import { session, user } from "./auth";
 import { bytea, timestamps, tstz } from "./common";
+import { vehicles } from "./vehicles";
 
 export const platformRoleEnum = pgEnum("platform_role", platformRoles);
 export const profileVisibilityEnum = pgEnum("profile_visibility", profileVisibilities);
@@ -84,6 +85,11 @@ export const profiles = pgTable(
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
     /** Lot 17 : nombre d'amis acceptés (cache, tenu par le service social). */
     friendsCount: integer("friends_count").notNull().default(0),
+    /**
+     * Lot R4c (maquette R4.5) : le véhicule principal choisi (« Mettre en avant »). Nul = le plus ancien véhicule actif ;
+     * un principal archivé est ignoré à la lecture (`effectiveMainVehicleId`), un principal supprimé remet la colonne à nul.
+     */
+    mainVehicleId: uuid("main_vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
