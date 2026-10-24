@@ -69,8 +69,7 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
-// Lot R3b : « rejoindre » est l'écran « Rejoindre un crew » de l'appli (`/crew/rejoindre`).
-const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug", "rejoindre"]);
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {
