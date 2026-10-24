@@ -179,7 +179,8 @@ for (const theme of ["beton", "sable"] as const) {
     expect(seen.data.vehicles[0]?.photoUrl ?? null).toBeNull();
 
     // --- Version de 30 caractères sans espace : le nom ne se coupe jamais (fiche, garage, fiche qui se construit) -----
-    const LONG = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123";
+    // Propre au test (la recherche globale est limitée) : 30 caractères, sans espace.
+    const LONG = `V${unique()}ABCDEFGHIJKLMNOPQRSTUVWXYZ`.toUpperCase().slice(0, 30);
     expect((await apiCall(cookie, "PATCH", `/me/vehicles/${id}`, { version: LONG })).status).toBe(200);
     await page.goto(`/vehicule/${id}`);
     await afterOpening(page);
@@ -211,7 +212,7 @@ for (const theme of ["beton", "sable"] as const) {
     const found = await apiCall<{ vehicles: { id: string; label: string }[] }>(
       other,
       "GET",
-      "/search?q=golf%20abcdefghij",
+      `/search?q=golf%20${LONG.toLowerCase()}`,
     );
     expect(found.data.vehicles.map((v) => v.id)).toContain(id);
     await ctx.close();

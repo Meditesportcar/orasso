@@ -31,6 +31,8 @@ for (const theme of ["beton", "sable"] as const) {
     test(`version du véhicule sur le site (${theme}, ${width} px)`, async ({ browser }) => {
       test.setTimeout(240_000);
       const pseudo = `R4eS${unique()}`.slice(0, 20);
+      // Version propre au test : la recherche globale est limitée, les Golf R32 des passages précédents la rempliraient.
+      const tag = unique().slice(-5).toUpperCase();
       const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
       const cookie = await signUpApi(pseudo, email);
       const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
@@ -81,18 +83,22 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByText("Modifier la fiche").click();
       const edit = page.getByTestId("vehicle-edit");
       await expect(edit.getByLabel("Version (facultatif)")).toHaveValue("GTI");
-      await edit.getByLabel("Version (facultatif)").fill("R32 Phase 2");
+      await edit.getByLabel("Version (facultatif)").fill(`R32 ${tag}`);
       await edit.getByLabel("Version (facultatif)").scrollIntoViewIfNeeded();
       await shot(page, `${theme}-${width}-04-modifier-version`);
       await edit.getByRole("button", { name: "Enregistrer" }).click();
-      await expect(page.getByTestId("vehicle-name")).toHaveText("Volkswagen Golf Mk4 R32 Phase 2");
+      await expect(page.getByTestId("vehicle-name")).toHaveText(`Volkswagen Golf Mk4 R32 ${tag}`);
       expect((await auditPage(page)).horizontalScroll).toBe(false);
 
       // --- Vitrine publique vue par un autre membre, et sa recherche ----------------------------------------------------
       const otherPseudo = `R4eT${unique()}`.slice(0, 20);
       const otherEmail = `${otherPseudo.toLowerCase()}@e2e.orasso.test`;
       const other = await signUpApi(otherPseudo, otherEmail);
-      const found = await apiCall<{ vehicles: { id: string; label: string }[] }>(other, "GET", "/search?q=golf%20r32");
+      const found = await apiCall<{ vehicles: { id: string; label: string }[] }>(
+        other,
+        "GET",
+        `/search?q=golf%20r32%20${tag}`,
+      );
       expect(found.data.vehicles.map((v) => v.id)).toContain(vehicle?.id);
       const otherCtx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
       const otherPage = await otherCtx.newPage();
@@ -101,7 +107,7 @@ for (const theme of ["beton", "sable"] as const) {
       await otherPage.goto(`/v/${vehicle?.id}`);
       const shown = otherPage.locator("dt", { hasText: /^Version$/ });
       await expect(shown).toBeVisible();
-      await expect(shown.locator("xpath=following-sibling::dd[1]")).toHaveText("R32 Phase 2");
+      await expect(shown.locator("xpath=following-sibling::dd[1]")).toHaveText(`R32 ${tag}`);
       await shot(otherPage, `${theme}-${width}-05-vitrine-autre-membre`);
       await otherCtx.close();
       await ctx.close();
