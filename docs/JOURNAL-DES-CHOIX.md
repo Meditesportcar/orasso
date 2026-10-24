@@ -2798,3 +2798,20 @@ Source : maquette R4 (écrans `f-frame`, `m-absent`, `m-admin`), choix proposés
 
 ### Fichiers d'autres listes touchés (petits ajouts)
 - `apps/mobile/src/app/vehicule/[id].tsx`, `apps/web/app/routes/garage-vehicule.tsx` (étiquette), `apps/api/src/modules/audience-prize/service.ts`, `apps/api/src/modules/admin/users.ts` (nom tapé dans le libellé). `social/profile.ts` non touché (R4c) : ses `makeName`/`modelName` restent « Autre », son libellé dit le nom tapé.
+
+## Lot R4a, tour 2 (relectures Opus « fusionnable après corrections » et Codex « non fusionnable ») — 24/10/2026
+
+Source : `corrections-r4a.md` (relais).
+- **Taille d'un cadre tourné (bloquant)** : `resizePlateFrameEdges` ne déplace plus le cadre après l'agrandissement. La photo borne le geste lui-même : on cherche (dichotomie) la plus grande part du geste où le rectangle avant rotation tient dans la photo, le bord opposé restant fixe ; l'arrondi se fait vers l'intérieur. Test sur 6 angles, 6 combinaisons de bords, 3 positions et 3 amplitudes : les coins et le centre du cadre de départ restent dans le cadre (cas de Codex compris). L'ancien `resizeOrientedPlateFrame` (coin) n'est plus utilisé par l'appli ni le site.
+- **Certification** : `proposedMake` et `proposedModel` font partie des champs surveillés (`CertificationFields`, absents d'une ancienne demande = vides) ; la validation d'une demande est refusée (409) tant qu'un nom tapé attend ; le rattachement groupé fait perdre la certification comme `reassign` (« modified »).
+- **Rattachement groupé** : plus de limite globale de 2 000. La clé dit le niveau et la marque connue ; le rattachement lit et verrouille en SQL les fiches de ce périmètre (véhicules d'abord), garde celles du groupe, et compare l'**empreinte** des fiches affichées (`version`, SHA-256 tronqué des identifiants triés) : groupe changé = 409. Refus `self_action` si le groupe contient un véhicule de l'administrateur connecté (pas de rattachement partiel : le motif est dit, un autre membre de l'équipe s'en charge). Liste paginée par groupes entiers (50 par page, `?cursor=`), 20 fiches montrées par groupe avec « et N autres fiches ». Test à 2 005 fiches dans un groupe.
+- **Clés** : `proposalText` garde les lettres et chiffres de toutes les écritures (`\p{L}\p{N}`) ; un nom sans lettre ni chiffre garde sa ponctuation ; la clé écrit tout caractère hors `[a-z0-9]` en `_<hex>_` et le vide en « - » : sans collision, sûre dans une adresse.
+- **Nettoyage** du nom tapé : contrôles C1, marques de sens (bidi) et espaces de largeur nulle retirés.
+- **Recherche** des véhicules et des personnes : un niveau « Autre » se cherche par son nom tapé (`typedMakeSql`, `typedModelSql`), mêmes règles de visibilité.
+- **Admin du site** : « Modèle existant » sans présélection (choix vide, obligatoire) ; l'empreinte part avec chaque geste ; lien « Groupes suivants ».
+- **Site, recherche** : une génération du modèle déjà choisi s'applique tout de suite (deux générations successives testées dans `lotr4a-site`).
+- **Ligne du mode** : au-dessus de la photo (sous la photo, la barre « Continuer » la couvrait pendant le réglage). Écart à la maquette, voulu.
+- **Raccords** : `makeNameOf`, `modelNameOf` et `vehicleLabel` (`apps/api/src/modules/vehicles/serializers.ts`) prennent une ligne de `vehicles` avec ses deux colonnes tapées ; le type `Proposed` est obligatoire, le compilateur signale toute lecture qui les oublie.
+
+### À revoir avec Damien (lot R4a)
+- **Nom tapé gardé comme finition au rattachement** (maquette `t-m-admin` : « 207 CC » reste sur la fiche) : la fiche n'a pas de champ « finition » ; il faudrait une colonne (migration) et sa place à l'écran. Pas codé : au rattachement, le nom tapé est effacé et la fiche prend le nom de la liste (« Peugeot 207 »). À trancher : colonne `trim` ou rien.
