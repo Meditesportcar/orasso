@@ -22,7 +22,7 @@ import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
 import { appReturn } from "@/lib/closeTo";
 import { errorMessage } from "@/lib/http";
-import { cropSquare, type PickedPhoto, photoForm, pickPhotos, takePhoto } from "@/lib/photos";
+import { cropSquare, type PickedPhoto, photoForm, pickPhotos, takePhoto, VEHICLE_SOURCE_SIDE } from "@/lib/photos";
 import { detectPlateReadings } from "@/lib/plates/detect";
 import { PREFERENCES_FIRST_ROUTE, routeAfterFirstVehicle } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
@@ -228,7 +228,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     setBusy(true);
     try {
       const room = MAX_PHOTOS - draft.photos.length;
-      const picked = (from === "camera" ? await takePhoto() : await pickPhotos(room)).slice(0, room);
+      const picked = (
+        from === "camera" ? await takePhoto(VEHICLE_SOURCE_SIDE) : await pickPhotos(room, undefined, VEHICLE_SOURCE_SIDE)
+      ).slice(0, room);
       const added: { key: string; source: PickedPhoto; square: PickedPhoto; crop: SquareCrop }[] = [];
       for (const p of picked) {
         // Format maître carré (décision de Damien, retour 10) : carré centré d'abord, ajustable tout de suite.

@@ -417,3 +417,42 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
     }
   });
 });
+
+describe("lot R3a : plaque de Damien (« EJ-706-EW », bande F et 66), lectures probables de ML Kit", () => {
+  const at = (words: string[]) =>
+    line(words.map((w, i): [string, TextFrame] => [w, frame(560 + i * 70, 560, 60, 30)]));
+  const cases: string[][] = [
+    ["EJ-706-EW"],
+    ["F", "EJ-706-EW", "66"],
+    ["F", "EJ-706-EW"],
+    ["EJ-706-EW", "66"],
+    ["EJ·706·EW"],
+    ["EJ-706-EW66"],
+    ["EJ", "706", "EW"],
+    ["EJ–706–EW"],
+    ["EJ—706—EW"],
+    ["FEJ-706-EW"],
+    ["EJ.706.EW"],
+    ["EJ-706-EW|66"],
+    ["EJ-7O6-EW"],
+    ["EJ706EW"],
+    // Tour R3a : la bande bleue collée lue « I » ou « L », et le W large lu « VV ».
+    ["IEJ-706-EW"],
+    ["IEJ-706-EW66"],
+    ["L", "EJ-706-EW"],
+    ["EJ-706-EVV"],
+  ];
+  it.each(cases)("%s → cadre posé et numéro prérempli « EJ-706-EW »", (...words: string[]) => {
+    const found = findPlates([at(words)], 922, 922);
+    expect(found.filter((f) => !f.probable)).toHaveLength(1);
+    expect(suggestedPlate(found)).toBe("EJ-706-EW");
+  });
+  it("chaque ligne à part (bloc « F », bloc plaque, bloc « 66 ») : une seule plaque", () => {
+    const found = findPlates([at(["F"]), at(["EJ-706-EW"]), at(["66"])], 922, 922);
+    expect(found.map((f) => f.plate)).toEqual(["EJ706EW"]);
+  });
+  it("le caractère de tête n'est retiré que devant une plaque récente : une FNI garde son premier chiffre", () => {
+    expect(readPlate("1234 AB 66")?.plate).toBe("1234AB66");
+    expect(readPlate("LEJ706EW")?.plate).toBe("EJ706EW");
+  });
+});

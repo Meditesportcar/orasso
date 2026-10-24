@@ -7,6 +7,12 @@ import { Platform } from "react-native";
 export const MAX_PHOTOS = 8;
 /** Côté le plus long envoyé : au-delà, la photo ne gagne rien à l'écran et pèse le triple. */
 const MAX_SIDE = 2048;
+/**
+ * Lot R3a : photo d'origine gardée pour l'ajout de véhicule (recadrage au carré, puis lecture de la plaque sur le carré
+ * de 1600 px). À 2048 px, une photo 20:9 en paysage (4000 × 1800) ne laissait qu'un carré de 922 px : les caractères
+ * d'une plaque à quelques mètres tombaient sous les 16 px que demande ML Kit. Seul le carré part au serveur.
+ */
+export const VEHICLE_SOURCE_SIDE = 4096;
 
 export type PickedPhoto = { uri: string; width: number; height: number };
 
@@ -19,7 +25,11 @@ export const CROP_SQUARE: [number, number] = [1, 1];
  * recadrage. Avec `crop` (lot 36) : une photo à la fois, recadrée dans le cadre donné par l'éditeur du système (le
  * recadrage n'existe pas en sélection multiple).
  */
-export async function pickPhotos(limit: number, crop?: [number, number]): Promise<PickedPhoto[]> {
+export async function pickPhotos(
+  limit: number,
+  crop?: [number, number],
+  maxSide = MAX_SIDE,
+): Promise<PickedPhoto[]> {
   if (limit <= 0) return [];
   const result = await ImagePicker.launchImageLibraryAsync(
     crop
@@ -28,7 +38,7 @@ export async function pickPhotos(limit: number, crop?: [number, number]): Promis
   );
   if (result.canceled) return [];
   const converted: PickedPhoto[] = [];
-  for (const asset of result.assets.slice(0, limit)) converted.push(await toJpeg(asset));
+  for (const asset of result.assets.slice(0, limit)) converted.push(await toJpeg(asset, maxSide));
   return converted;
 }
 
@@ -36,12 +46,12 @@ export async function pickPhotos(limit: number, crop?: [number, number]): Promis
  * Lot M1 : prendre une photo avec l'appareil (la grande case « Ajouter des photos »). Liste vide si l'accès est refusé
  * ou la prise annulée. Pas de recadreur du système : l'appli recadre au carré avec son propre écran.
  */
-export async function takePhoto(): Promise<PickedPhoto[]> {
+export async function takePhoto(maxSide = MAX_SIDE): Promise<PickedPhoto[]> {
   const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
   if (permission && !permission.granted && Platform.OS !== "web") return [];
   const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 1 });
   if (result.canceled) return [];
-  return Promise.all(result.assets.slice(0, 1).map(toJpeg));
+  return Promise.all(result.assets.slice(0, 1).map((asset) => toJpeg(asset, maxSide)));
 }
 
 /** Côté du carré envoyé (lot M1) : assez pour l'affiche à partager (1080 px), sans peser pour rien. */
@@ -62,11 +72,11 @@ export async function cropSquare(
   return { uri: saved.uri, width: saved.width, height: saved.height };
 }
 
-async function toJpeg(asset: { uri: string; width: number; height: number }): Promise<PickedPhoto> {
+async function toJpeg(asset: { uri: string; width: number; height: number }, maxSide: number): Promise<PickedPhoto> {
   const context = ImageManipulator.manipulate(asset.uri);
   const longest = Math.max(asset.width, asset.height);
-  if (longest > MAX_SIDE) {
-    context.resize(asset.width >= asset.height ? { width: MAX_SIDE } : { height: MAX_SIDE });
+  if (longest > maxSide) {
+    context.resize(asset.width >= asset.height ? { width: maxSide } : { height: maxSide });
   }
   const rendered = await context.renderAsync();
   const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });

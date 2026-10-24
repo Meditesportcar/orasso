@@ -56,19 +56,34 @@ export function readPlate(raw: string): PlateRead | null {
   const band = Boolean(noF) && BAND_PREFIX.test(raw);
   // [texte, bandes retirées, découpage] ; un département ne se retire qu'autour d'une plaque récente (SIV, W garage,
   // WW) : il fait partie du numéro d'une FNI ou d'une diplomatique.
-  const bases: [string, number, number][] = band
-    ? [[noF as string, 1, 0]]
-    : [[s, 0, 0], ...(noF ? ([[noF, 1, 1]] as [string, number, number][]) : [])];
-  const candidates: [string, number, number, boolean][] = bases.map(([c, n, t]) => [c, n, t, false]);
+  // [texte, bandes retirées, découpage, plaque récente seulement]
+  const bases: [string, number, number, boolean][] = band
+    ? [[noF as string, 1, 0, false]]
+    : [[s, 0, 0, false], ...(noF ? ([[noF, 1, 1, false]] as [string, number, number, boolean][]) : [])];
+  // Lot R3a : la bande bleue (étoiles, « F ») collée au numéro se lit souvent « I » ou « L » (« IEJ-706-EW ») : un
+  // caractère de tête retiré, seulement devant une plaque récente (comme le département).
+  if (!band && !noF && /^[IL]/.test(s) && s.length >= 8) bases.push([s.slice(1), 1, 1, true]);
+  const candidates: [string, number, number, boolean][] = [...bases];
   for (const [c, n, t] of bases) {
     if (TRAILING_DEPT.test(c) && c.length >= 8) candidates.push([c.replace(TRAILING_DEPT, ""), n + 1, t, true]);
   }
+  // Lot R3a : le W large de la police des plaques se lit souvent « VV » (« EJ-706-EVV ») : une relecture de plus.
   const reads = candidates
-    .flatMap(([c, stripped, tier, dept]) =>
-      plateReadings(c, "wide")
-        .filter((r) => !dept || r.siv)
-        .map((r) => ({ plate: r.plate, fixes: r.fixes, valid: plateKind(r.plate) !== null, stripped, tier })),
-    )
+    .flatMap(([c, stripped, tier, sivOnly]) => {
+      const variants: [string, number][] = [[c, 0]];
+      if (c.includes("VV")) variants.push([c.replaceAll("VV", "W"), 1]);
+      return variants.flatMap(([text, extra]) =>
+        plateReadings(text, "wide")
+          .filter((r) => !sivOnly || r.siv)
+          .map((r) => ({
+            plate: r.plate,
+            fixes: r.fixes + extra,
+            valid: plateKind(r.plate) !== null,
+            stripped,
+            tier,
+          })),
+      );
+    })
     .sort(byQuality);
   const [best] = reads;
   if (!best) return null;
@@ -376,7 +391,12 @@ export function suggestedPlate(
 export async function detectPlateReadings(uri: string, width: number, height: number): Promise<FoundPlate[] | null> {
   if (width <= 0 || height <= 0) return null;
   const lines = await recognizeText(uri);
-  return lines ? findPlates(lines, width, height) : null;
+  if (!lines) return null;
+  const found = findPlates(lines, width, height);
+  // Lot R3a : trace de diagnostic au logcat (tailles et nombres seulement, jamais le texte ni le numéro).
+  const sure = surePlates(found).length;
+  console.info(`[plaque] photo ${width}×${height} : ${sure} plaque(s) sûre(s), ${found.length - sure} à vérifier`);
+  return found;
 }
 
 /** Les cadres des plaques reconnues seuls (photo ajoutée après coup, contenus des médias) : jamais les probables. */
