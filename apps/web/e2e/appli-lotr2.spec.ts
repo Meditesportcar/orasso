@@ -384,3 +384,44 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
   }
   expect(errors.filter((e) => !/favicon|Failed to load resource/i.test(e))).toEqual([]);
 });
+
+// Lot R2, tour 2 (relectures Opus et Codex) : plus aucun annuaire ; une erreur se dit, jamais une liste vide.
+test("Personnes et crews : filtres sans texte = aucune liste ; 503 et 429 = erreur et « Réessayer »", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, "beton");
+  await signIn(page, "kenji@orasso.local");
+  await goto(page, "/explorer");
+  await dismissAsk(page);
+  await page.getByTestId("segment-personnes").click();
+  // Un grade sans texte : aucune personne listée, une phrase le dit.
+  await pill(page, "people-filters").click();
+  await page.getByTestId("people-filters-panel").getByText("Route", { exact: true }).click();
+  await page.getByTestId("people-filters-apply").click();
+  await expect(page.getByTestId("people-need-text")).toBeVisible();
+  await expect(page.getByTestId("people-results")).toHaveCount(0);
+  await expect(page.getByTestId("person-row")).toHaveCount(0);
+  // Suggestions en panne (503) : l'erreur et « Réessayer », puis la reprise.
+  await page.route("**/api/users/suggestions**", (r) =>
+    r.fulfill({ status: 503, contentType: "application/json", body: '{"error":"indisponible"}' }),
+  );
+  await page.getByTestId("segment-evenements").click();
+  await page.getByTestId("segment-personnes").click();
+  await expect(page.getByTestId("load-error")).toBeVisible();
+  await page.unroute("**/api/users/suggestions**");
+  await page.getByTestId("load-error").getByRole("button").click();
+  await expect(page.getByTestId("load-error")).toHaveCount(0);
+  // Recherche limitée (429) : l'erreur, pas « Personne ne s'appelle… ».
+  await page.route("**/api/users/search**", (r) =>
+    r.fulfill({ status: 429, contentType: "application/json", body: '{"error":"trop de recherches"}' }),
+  );
+  await page.getByTestId("people-q").fill("pilote");
+  await expect(page.getByTestId("load-error")).toBeVisible();
+  await expect(page.getByText("Personne ne s'appelle", { exact: false })).toHaveCount(0);
+  await page.unroute("**/api/users/search**");
+  await page.getByTestId("load-error").getByRole("button").click();
+  await expect(page.getByTestId("people-results")).toBeVisible();
+  // Rien de choisi : la recherche est élargie à toute la France, et l'écran le dit.
+  await expect(page.getByTestId("people-broadened")).toBeVisible();
+  await ctx.close();
+});
