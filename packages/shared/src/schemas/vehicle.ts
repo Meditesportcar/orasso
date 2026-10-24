@@ -45,6 +45,11 @@ const vehicleFields = z.object({
    */
   proposedMake: optionalText(80),
   proposedModel: optionalText(80),
+  /**
+   * Lot R4e : version (« CC », « SW », « GTI », « Phase 2 »), facultative, nettoyée par l'API (`cleanVehicleVersion`,
+   * 30 caractères au plus). Vaut aussi pour un modèle de la liste ; la changer ne fait pas perdre la certification.
+   */
+  version: optionalText(60),
 });
 
 /** Plaque obligatoire pour un véhicule actif, sauf « non immatriculé » (docs/01 « Véhicules et garage »). */
@@ -127,6 +132,8 @@ export type VehiclePublic = {
   modelName: string;
   generationId: string | null;
   generationName: string | null;
+  /** Lot R4e : version (« GTI »), affichée après le modèle et la génération ; null sans version. */
+  version: string | null;
   country: string | null;
   year: number | null;
   color: string | null;

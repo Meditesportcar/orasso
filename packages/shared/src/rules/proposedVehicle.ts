@@ -12,16 +12,78 @@ export const PROPOSED_NAME_MAX = 40;
  * 2. La casse tapée est gardée (« 207 CC », « Exige »).
  */
 export function cleanProposedName(text: string | null | undefined): string | null {
-  const clean = (text ?? "")
-    // Lot R4a, tour 2 : contrôles C0 et C1, marques de sens (bidi) et espaces de largeur nulle retirés.
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: on retire justement les caractères de contrôle.
-    .replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, " ")
-    .replace(/[​-‍﻿]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, PROPOSED_NAME_MAX)
-    .trim();
+  const clean = cleanTyped(text, PROPOSED_NAME_MAX);
   return clean.length >= PROPOSED_NAME_MIN ? clean : null;
+}
+
+/** Texte tapé nettoyé (contrôles, bidi, largeur nulle, espaces réduits), coupé à `max` caractères. */
+function cleanTyped(text: string | null | undefined, max: number): string {
+  return (
+    (text ?? "")
+      // Lot R4a, tour 2 : contrôles C0 et C1, marques de sens (bidi) et espaces de largeur nulle retirés.
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: on retire justement les caractères de contrôle.
+      .replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, " ")
+      .replace(/[​-‍﻿]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, max)
+      .trim()
+  );
+}
+
+/**
+ * Lot R4e (décision de Damien, 24/10) : la version du véhicule (« CC », « SW », « GTI », « Phase 2 »), affichée après le
+ * modèle et la génération. Facultative, 1 à 30 caractères, même nettoyage que les noms tapés.
+ */
+export const VEHICLE_VERSION_MAX = 30;
+
+/** Version nettoyée, ou null si rien ne reste. */
+export function cleanVehicleVersion(text: string | null | undefined): string | null {
+  return cleanTyped(text, VEHICLE_VERSION_MAX) || null;
+}
+
+/** « Golf », « Mk4 », « Série 3 » : les lettres et chiffres d'un nom, sans accents ni casse. */
+const foldedChars = (text: string) => [...searchFold(text)].filter((ch) => /[\p{L}\p{N}]/u.test(ch));
+
+/**
+ * Le texte tapé après un nom de la liste qui l'ouvre, sans accents ni casse, espaces et ponctuation ignorés : « 207 CC »
+ * après « 207 » → « CC », « 207CC » → « CC », « Golf IV GTI » après « Golf » → « IV GTI ». Null si le texte ne commence
+ * pas par ce nom.
+ */
+function after(text: string, name: string): string | null {
+  const want = foldedChars(name);
+  if (!want.length) return null;
+  let i = 0;
+  let pos = 0;
+  for (const ch of text) {
+    if (i === want.length) break;
+    pos += ch.length;
+    const folded = [...searchFold(ch)].filter((c) => /[\p{L}\p{N}]/u.test(c));
+    for (const c of folded) {
+      if (c !== want[i]) return null;
+      i++;
+    }
+  }
+  return i === want.length ? text.slice(pos) : null;
+}
+
+/**
+ * Lot R4e : la version tirée d'un nom tapé rattaché à la liste (`acceptProposal`). On retire du début du texte la marque
+ * (si elle y est), le modèle de la liste, puis la génération (si elle y est) ; le reste, sans ponctuation en tête, est la
+ * version. « 207 CC » rattaché à « 207 » → « CC » ; « 207CC » → « CC » ; « 207 » → null. Un texte qui ne commence pas
+ * par le modèle ne donne rien (on ne devine pas).
+ */
+export function versionFromTyped(
+  typed: string | null | undefined,
+  names: { make?: string | null; model: string; generation?: string | null },
+): string | null {
+  let rest = cleanTyped(typed, PROPOSED_NAME_MAX);
+  if (names.make) rest = after(rest, names.make) ?? rest;
+  const model = after(rest, names.model);
+  if (model === null) return null;
+  rest = model;
+  if (names.generation) rest = after(rest, names.generation) ?? rest;
+  return cleanVehicleVersion(rest.replace(/^[^\p{L}\p{N}]+/u, ""));
 }
 
 /**

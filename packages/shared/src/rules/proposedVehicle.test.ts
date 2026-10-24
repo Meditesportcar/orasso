@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanProposedName, proposalKey, proposalText } from "./proposedVehicle";
+import {
+  cleanProposedName,
+  cleanVehicleVersion,
+  proposalKey,
+  proposalText,
+  VEHICLE_VERSION_MAX,
+  versionFromTyped,
+} from "./proposedVehicle";
 
 describe("nom tapé (lot R4a)", () => {
   it("nettoyé : contrôles, marques de sens et espaces de largeur nulle retirés, espaces réduits, 40 caractères", () => {
@@ -35,5 +42,38 @@ describe("nom tapé (lot R4a)", () => {
     expect(proposalKey({ makeId: "x", makeIsOther: true, proposedMake: "Lotus", proposedModel: "Exige" })).toBe(
       "make.lotus.exige",
     );
+  });
+});
+
+describe("version du véhicule (lot R4e)", () => {
+  it("nettoyée comme un nom tapé : 1 à 30 caractères, sinon null", () => {
+    expect(cleanVehicleVersion("  GTI ")).toBe("GTI");
+    expect(cleanVehicleVersion("S")).toBe("S");
+    expect(cleanVehicleVersion("‮C\u0085C‬")).toBe("C C");
+    expect(cleanVehicleVersion("​ ")).toBeNull();
+    expect(cleanVehicleVersion(null)).toBeNull();
+    expect(cleanVehicleVersion("x".repeat(50))).toHaveLength(VEHICLE_VERSION_MAX);
+  });
+
+  it("tirée du nom tapé au rattachement : le reste après le modèle de la liste", () => {
+    expect(versionFromTyped("207 CC", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207CC", { model: "207" })).toBe("CC");
+    expect(versionFromTyped("207-cc", { model: "207" })).toBe("cc");
+    expect(versionFromTyped("207", { model: "207" })).toBeNull();
+    expect(versionFromTyped("207 ", { model: "207" })).toBeNull();
+    expect(versionFromTyped(null, { model: "207" })).toBeNull();
+  });
+
+  it("sans casse ni accents, la marque et la génération retirées si elles y sont", () => {
+    expect(versionFromTyped("serie 3 E36 M3", { model: "Série 3", generation: "E36" })).toBe("M3");
+    expect(versionFromTyped("GOLF IV GTI", { model: "Golf", generation: "IV" })).toBe("GTI");
+    expect(versionFromTyped("Golf GTI", { model: "Golf", generation: "IV" })).toBe("GTI");
+    expect(versionFromTyped("Peugeot 207 SW", { make: "Peugeot", model: "207" })).toBe("SW");
+    expect(versionFromTyped("Citroën DS3 Racing", { make: "Citroen", model: "DS3" })).toBe("Racing");
+  });
+
+  it("un texte qui ne commence pas par le modèle ne donne rien", () => {
+    expect(versionFromTyped("208 GTI", { model: "207" })).toBeNull();
+    expect(versionFromTyped("CC 207", { model: "207" })).toBeNull();
   });
 });

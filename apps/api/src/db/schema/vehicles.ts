@@ -147,6 +147,12 @@ export const vehicles = pgTable(
      */
     proposedMake: text("proposed_make"),
     proposedModel: text("proposed_model"),
+    /**
+     * Lot R4e (décision de Damien, 24/10) : version (« CC », « SW », « GTI », « Phase 2 »), affichée après le modèle et
+     * la génération (« Peugeot 207 CC »). Saisie par le propriétaire, ou tirée du nom tapé au rattachement à la liste.
+     * Texte nettoyé (`cleanVehicleVersion`) de 1 à 30 caractères ; ne compte pas pour la certification.
+     */
+    version: text("version"),
     ...timestamps,
   },
   (t) => [
@@ -167,6 +173,7 @@ export const vehicles = pgTable(
       "vehicles_proposed_model_check",
       sql`${t.proposedModel} is null or char_length(${t.proposedModel}) between 2 and 40`,
     ),
+    check("vehicles_version_check", sql`${t.version} is null or char_length(${t.version}) between 1 and 30`),
   ],
 );
 
