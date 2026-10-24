@@ -2,6 +2,7 @@
 import {
   formatPlate,
   maskedPhoto,
+  maskedPhotos,
   type VehicleBrief,
   type VehicleFull,
   type VehiclePrivate,
@@ -19,7 +20,16 @@ export function vehicleLabel(v: Pick<VehicleWithAll, "make" | "model" | "generat
   return label || "Autre véhicule";
 }
 
+/**
+ * Fiche d'un véhicule vue par un autre (compte public ou ami). Vague R4, après fusion : seules les photos dont la plaque
+ * est floutée ou « aucune plaque visible » confirmée sortent (toutes pour un véhicule non immatriculé). Le propriétaire
+ * et l'organisation passent par `vehicleFull`, qui garde toutes les photos.
+ */
 export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
+  return vehicleView(v, maskedPhotos(v.photos, v.unregistered));
+}
+
+function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): VehiclePublic {
   return {
     id: v.id,
     label: vehicleLabel(v),
@@ -39,7 +49,7 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
     description: v.description,
     preparation: v.preparation,
     categories: v.categories.map((c) => ({ id: c.category.id, slug: c.category.slug, label: c.category.label })),
-    photos: v.photos.map((p) => ({
+    photos: photos.map((p) => ({
       id: p.id,
       position: p.position,
       url: storage.url(p.storageKey) ?? "",
@@ -56,7 +66,7 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
 /** Propriétaire et organisateur. */
 export function vehicleFull(v: VehicleWithAll): VehicleFull {
   return {
-    ...vehiclePublic(v),
+    ...vehicleView(v, v.photos),
     // Lot M2 : toujours lisible (« AE-665-GH »), y compris pour une fiche saisie avant la normalisation.
     plate: v.plate ? formatPlate(v.plate) : null,
     unregistered: v.unregistered,

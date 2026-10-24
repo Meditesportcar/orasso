@@ -201,6 +201,16 @@ export async function createVehicle(
   return v!;
 }
 
+/**
+ * Vague R4 : plaque floutée sur toutes les photos des véhicules d'une personne. Les photos de `createVehicle` n'ont pas
+ * de décision de plaque : hors du garage (`maskedPhoto`), elles ne sortent qu'après ceci.
+ */
+export async function blurPlatesOf(ownerId: string) {
+  await db.execute(
+    sql`update vehicle_photos set plate_blurred = true where vehicle_id in (select id from vehicles where owner_id = ${ownerId})`,
+  );
+}
+
 export async function createStructure(ownerId: string, verified = true) {
   const [s] = await db
     .insert(structures)

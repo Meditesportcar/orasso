@@ -22,6 +22,7 @@ import {
   invitationLabels,
   isLocked,
   lockAt,
+  maskedPhoto,
   type OrganizerInvitation,
   type ReceivedInvitation,
 } from "@orasso/shared";
@@ -684,7 +685,8 @@ export const invitationsService = {
     return rows.rows.flatMap((r) => {
       const veh = byId.get(r.vehicle_id);
       if (!veh) return [];
-      const photo = veh.photos[0];
+      // Vague R4, après fusion : ces véhicules ne sont pas (encore) inscrits ; photo à plaque masquée seulement.
+      const photo = maskedPhoto(veh.photos, veh.unregistered);
       return [
         {
           vehicleId: r.vehicle_id,

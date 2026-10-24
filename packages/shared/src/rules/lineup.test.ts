@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { lineupLabels } from "../labels/lineup.fr";
-import { lineupCarMemberFields, lineupCarVisitorFields, lineupPhase, maskedPhoto, publicCountsHidden } from "./lineup";
+import {
+  lineupCarMemberFields,
+  lineupCarVisitorFields,
+  lineupPhase,
+  maskedPhoto,
+  maskedPhotos,
+  publicCountsHidden,
+} from "./lineup";
 import { privateVehicleFields } from "./visibility";
 
 describe("Le plateau (lot R4b)", () => {
@@ -44,6 +51,10 @@ describe("Le plateau (lot R4b)", () => {
     expect(maskedPhoto([a, c, b], false)).toBe(c);
     expect(maskedPhoto([a, b], true)).toBe(a);
     expect(maskedPhoto([], true)).toBeNull();
+    // Vague R4 : la liste garde l'ordre et écarte seulement les photos sans décision.
+    expect(maskedPhotos([a, c, b], false)).toEqual([c, b]);
+    expect(maskedPhotos([a], false)).toEqual([]);
+    expect(maskedPhotos([a, b], true)).toEqual([a, b]);
   });
 
   it("après la fin, plus de retenus ni de places publics", () => {

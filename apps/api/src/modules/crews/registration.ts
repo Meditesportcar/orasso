@@ -16,6 +16,7 @@ import {
   crewLabels,
   isLocked,
   lockAt,
+  maskedPhoto,
   profileFields,
   registrationOpensAt,
 } from "@orasso/shared";
@@ -209,7 +210,8 @@ export const crewRegistrationService = {
             .map((x) => ({
               id: x.id,
               label: full ? vehicleLabel(x) : vehicleBriefLabel(x),
-              photoUrl: full ? storage.url(x.photos[0]?.storageKey ?? null) : null,
+              // Vague R4, après fusion : le chef n'est pas l'organisation, photo à plaque masquée seulement.
+              photoUrl: full ? storage.url(maskedPhoto(x.photos, x.unregistered)?.storageKey ?? null) : null,
               blocked:
                 appliedVehicles.has(x.id) || x.pendingTransferId ? crewErrors.unavailable : vehicleBlock(x, event),
             })),

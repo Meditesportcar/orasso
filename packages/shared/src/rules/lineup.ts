@@ -61,3 +61,15 @@ export function maskedPhoto<T extends { plateBlurred: boolean; noPlateConfirmed:
   if (unregistered) return photos[0] ?? null;
   return photos.find((p) => p.plateBlurred || p.noPlateConfirmed) ?? null;
 }
+
+/**
+ * Vague R4, après fusion : la même règle pour une liste de photos (fiche d'un véhicule d'un autre, compte public). Seules
+ * les photos à décision de plaque vraie sortent du garage ; un véhicule non immatriculé les montre toutes.
+ */
+export function maskedPhotos<T extends { plateBlurred: boolean; noPlateConfirmed: boolean }>(
+  photos: readonly T[],
+  unregistered: boolean,
+): T[] {
+  if (unregistered) return [...photos];
+  return photos.filter((p) => p.plateBlurred || p.noPlateConfirmed);
+}

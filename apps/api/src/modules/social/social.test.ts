@@ -5,6 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   addMember,
+  blurPlatesOf,
   call,
   createEvent,
   createStructure,
@@ -111,7 +112,12 @@ describe("audience d'un profil", () => {
     expect(full.status).toBe(200);
     expect(full.json).toMatchObject({ audience: "public_full", bio: "Passionné d'E36", departments: ["66"] });
     expect(full.json.vehicles[0]).toMatchObject({ label: "BMW Série 3 E36", detailed: true });
-    expect(full.json.vehicles[0].photoUrl).toContain("test/");
+    // Vague R4, après fusion : une photo sans décision de plaque ne sort pas du garage (profil, fiche) ; floutée, oui.
+    expect(full.json.vehicles[0].photoUrl).toBeNull();
+    expect((await call(c, "GET", `/vehicles/${va.id}`)).json.photos).toEqual([]);
+    expect((await call(a, "GET", `/me/vehicles/${va.id}`)).json.photos).toHaveLength(1);
+    await blurPlatesOf(a.id);
+    expect((await call(c, "GET", "/users/Alpha_Pub")).json.vehicles[0].photoUrl).toContain("test/");
 
     const limited = await call(c, "GET", "/users/Bravo_Priv");
     expect(limited.json).toMatchObject({ audience: "public_limited", bio: null, departments: null });
@@ -124,6 +130,7 @@ describe("audience d'un profil", () => {
     // Fiches de véhicule : complète / réduite.
     const fa = await call(c, "GET", `/vehicles/${va.id}`);
     expect(fa.json).toMatchObject({ label: "BMW Série 3 E36", generationName: "E36" });
+    expect(fa.json.photos).toHaveLength(1);
     // Lot R4b (choix validé par Damien) : compte privé, photo masquée, marque, modèle, génération et catégories,
     // rien d'autre (liste blanche `privateVehicleFields`, plus `detailed` et `owner`).
     // Tour 2 : seulement une photo dont la plaque est floutée.

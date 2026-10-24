@@ -8,6 +8,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
+  blurPlatesOf,
   createEvent,
   createStructure,
   createVehicle,
@@ -402,6 +403,12 @@ describe("édition précédente", () => {
     expect(candidates.json.map((c: { vehicleId: string }) => c.vehicleId).sort()).toEqual(
       [cars[0]!.id, cars[1]!.id, second.id].sort(),
     );
+    // Vague R4, après fusion : ces véhicules ne sont pas inscrits ; photo sans décision de plaque masquée, floutée montrée.
+    const photoOf = (r: typeof candidates, id: string) =>
+      r.json.find((c: { vehicleId: string; photoUrl: string | null }) => c.vehicleId === id)?.photoUrl;
+    expect(photoOf(candidates, cars[0]!.id)).toBeNull();
+    await blurPlatesOf(cars[0]!.ownerId);
+    expect(photoOf(await req(damien, "GET", `/events/${e.id}/invitations/candidates`), cars[0]!.id)).toContain("test/");
     // Une édition d'une autre structure : introuvable.
     const otherOwner = await signUp("Ailleurs", { twoFactor: true });
     const otherStructure = await createStructure(otherOwner.id);

@@ -5,6 +5,7 @@ import {
   effectiveMainVehicleId,
   friendshipState,
   garageOrder,
+  maskedPhoto,
   networkCountsVisible,
   type OtherVehicle,
   type PreviewAs,
@@ -182,7 +183,8 @@ export const socialProfile = {
             label: vehicleLabel(g),
             makeName: g.make.name,
             modelName: g.model.name,
-            photoUrl: storage.url(g.photos[0]?.storageKey ?? null),
+            // Vague R4, après fusion : la vitrine sort du garage, seulement une photo à plaque floutée ou sans plaque.
+            photoUrl: storage.url(maskedPhoto(g.photos, g.unregistered)?.storageKey ?? null),
             detailed: true,
             main: g.id === mainId,
           }

@@ -125,7 +125,10 @@ async function ranking(ex: Executor, eventId: string) {
   return { entered, ranked, total };
 }
 
-/** Nom du véhicule, pseudo et première photo, pour les lignes du classement. */
+/**
+ * Nom du véhicule, pseudo et photo, pour les lignes du classement. Vague R4, après fusion : la règle de `maskedPhoto`
+ * (première photo à plaque floutée ou « aucune plaque visible », ou d'un véhicule sans plaque), écrite en SQL.
+ */
 async function cards(ex: Executor, applicationIds: string[]) {
   if (!applicationIds.length)
     return new Map<string, { vehicleLabel: string; pseudo: string; photoUrl: string | null }>();
@@ -140,7 +143,9 @@ async function cards(ex: Executor, applicationIds: string[]) {
       generationOther: vehicleGenerations.isOther,
       pseudo: profiles.pseudo,
       photoKey: sql<string | null>`(select ${vehiclePhotos.storageKey} from ${vehiclePhotos}
-        where ${vehiclePhotos.vehicleId} = ${vehicles.id} order by ${vehiclePhotos.position} limit 1)`,
+        where ${vehiclePhotos.vehicleId} = ${vehicles.id}
+          and (${vehiclePhotos.plateBlurred} or ${vehiclePhotos.noPlateConfirmed} or ${vehicles.unregistered})
+        order by ${vehiclePhotos.position} limit 1)`,
     })
     .from(applications)
     .innerJoin(vehicles, eq(vehicles.id, applications.vehicleId))

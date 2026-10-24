@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  blurPlatesOf,
   createEvent,
   createPro,
   createStructure,
@@ -712,7 +713,11 @@ describe("GET /search : confidentialité des véhicules et des personnes", () =>
   }
 
   it("« Supra » : véhicules et propriétaires ; un compte privé non ami se réduit à marque et modèle, sans photo", async () => {
-    const { viewer, vPub, vPriv, vAmi } = await garage();
+    const { viewer, pub, vPub, vPriv, vAmi } = await garage();
+    // Vague R4, après fusion : une photo sans décision de plaque ne sort pas ; floutée, oui.
+    const undecided = (await get(viewer, "/search?q=supra")).json.vehicles as { id: string; photoUrl: string | null }[];
+    expect(undecided.find((h) => h.id === vPub.id)?.photoUrl).toBeNull();
+    await blurPlatesOf(pub.id);
     for (const mode of MODES) {
       const res = await get(viewer, "/search?q=supra", mode);
       expect(res.status).toBe(200);

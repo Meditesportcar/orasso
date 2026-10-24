@@ -6,6 +6,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
+  blurPlatesOf,
   call,
   createEvent,
   createStructure,
@@ -428,7 +429,12 @@ describe("prix du public", () => {
       { applicationId: p.kenji.applicationId, votes: 2, rank: 1, vehicleLabel: "BMW Série 3 E36", pseudo: "Kenji_66" },
       { applicationId: p.lea.applicationId, votes: 1, rank: 2 },
     ]);
-    expect(board.entries[0].photoUrl).toContain("test/");
+    // Vague R4, après fusion : une photo sans décision de plaque ne sort pas du garage ; floutée, oui.
+    expect(board.entries[0].photoUrl).toBeNull();
+    await blurPlatesOf(p.kenji.u.id);
+    expect((await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0].photoUrl).toContain(
+      "test/",
+    );
     expect((await call(null, "GET", `/events/${eventId}/audience-prize`)).status).toBe(401);
 
     // Fin de l'événement : vote clos.

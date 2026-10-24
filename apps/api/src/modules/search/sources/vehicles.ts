@@ -1,9 +1,9 @@
 // Véhicules par marque, modèle ou génération, avec leur propriétaire (docs/01 : recherche de personnes par véhicule).
 //
-// Confidentialité : un véhicule actif d'un compte public ou d'un ami est montré en entier (génération, première photo) ;
-// celui d'un compte privé que l'on ne connaît pas se réduit à « marque modèle », sans photo, et sa génération ne sert
-// pas à la recherche. Comptes supprimés et suspendus : jamais. Jamais la plaque. Mes propres véhicules sont écartés.
-import type { SearchVehicleHit } from "@orasso/shared";
+// Confidentialité : un véhicule actif d'un compte public ou d'un ami est montré en entier (génération, photo à plaque
+// masquée) ; celui d'un compte privé que l'on ne connaît pas se réduit à « marque modèle », sans photo, et sa
+// génération ne sert pas à la recherche. Comptes supprimés et suspendus : jamais. Jamais la plaque. Mes propres véhicules sont écartés.
+import { maskedPhoto, type SearchVehicleHit } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
@@ -59,7 +59,8 @@ export const vehiclesSource: SearchSource<"vehicles"> = {
       hits.push({
         id: v.id,
         label: row.detail ? vehicleLabel(v) : vehicleBriefLabel(v),
-        photoUrl: row.detail ? storage.url(v.photos[0]?.storageKey ?? null) : null,
+        // Vague R4, après fusion : seulement une photo à plaque floutée, « aucune plaque visible » ou sans plaque.
+        photoUrl: row.detail ? storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null) : null,
         owner: {
           userId: owner.userId,
           pseudo: owner.pseudo,

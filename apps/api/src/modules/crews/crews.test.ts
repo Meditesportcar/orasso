@@ -9,6 +9,7 @@ import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  blurPlatesOf,
   createEvent,
   createStructure,
   createVehicle,
@@ -838,8 +839,16 @@ describe("inscription en crew", () => {
     const s = await setup();
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, s.nina.id));
     await db.insert(structureBans).values({ structureId: s.event.structureId, userId: s.lea.id, createdBy: s.orga.id });
-    const options = await req(s.kenji, "GET", `/events/${s.event.id}/crew-applications/options?crewId=${s.crew.id}`);
+    const path = `/events/${s.event.id}/crew-applications/options?crewId=${s.crew.id}`;
+    // Vague R4, après fusion : une photo sans décision de plaque ne sort pas vers le chef ; floutée, oui.
+    const undecided = await req(s.kenji, "GET", path);
+    const kenjiRow = (r: typeof undecided) =>
+      r.json.members.find((m: { person: { pseudo: string } }) => m.person.pseudo === s.kenji.pseudo);
+    expect(kenjiRow(undecided).vehicles[0].photoUrl).toBeNull();
+    await blurPlatesOf(s.kenji.id);
+    const options = await req(s.kenji, "GET", path);
     expect(options.status).toBe(200);
+    expect(kenjiRow(options).vehicles[0].photoUrl).not.toBeNull();
     const byPseudo = (p: string) =>
       options.json.members.find((m: { person: { pseudo: string } }) => m.person.pseudo === p);
     expect(byPseudo(s.lea.pseudo).blocked).toBe("Indisponible pour cet événement");
