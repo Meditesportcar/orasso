@@ -98,7 +98,8 @@ test("site R3b : année des dates, un seul lieu, sorties passées, rejoindre un 
   mkdirSync(DIR, { recursive: true });
   const event = await nextYearEvent(await login("damien@orasso.local"));
   const pseudo = `R3bs${unique()}`.slice(0, 20);
-  await signUpApi(pseudo);
+  const newcomerCookie = await signUpApi(pseudo);
+  const newcomerId = (await apiCall<{ user: { id: string } }>(newcomerCookie, "GET", "/me")).data.user.id;
   const newcomer = `${pseudo.toLowerCase()}@e2e.orasso.test`;
   let first = true;
 
@@ -116,6 +117,8 @@ test("site R3b : année des dates, un seul lieu, sorties passées, rejoindre un 
       await expect(tile).toBeVisible({ timeout: 30_000 });
       await expect(tile.getByTestId("event-tile-date")).toContainText(String(NEXT_YEAR));
       await audit(page);
+      // Tour 2 : la ligne de date de la carte, au-dessus de la barre flottante, pour la capture.
+      await tile.getByTestId("event-tile-date").evaluate((el) => el.scrollIntoView({ block: "center" }));
       await shot(page, `01-explorer-annee-${tag}`);
       await page.goto(`/e/${event.slug}`);
       await expect(page.getByText(new RegExp(`14 mars ${NEXT_YEAR}`)).first()).toBeVisible({ timeout: 30_000 });
@@ -180,4 +183,22 @@ test("site R3b : année des dates, un seul lieu, sorties passées, rejoindre un 
       await n.close();
     }
   }
+
+  // Tour 2 : la demande annulée (fiche du crew, autre appareil) revient à « Rejoindre » au chargement suivant.
+  const near = await apiCall<{ items: { id: string; requested: boolean }[] }>(
+    newcomerCookie,
+    "GET",
+    "/crews/search?departments=66&limit=6",
+  );
+  const asked = near.data.items.find((c) => c.requested);
+  expect(asked).toBeTruthy();
+  expect((await apiCall(newcomerCookie, "DELETE", `/crews/${asked?.id}/members/${newcomerId}`)).status).toBe(204);
+  const n = await browser.newContext({ viewport: MOBILE });
+  const np = await n.newPage();
+  await loginInBrowser(np, newcomer, undefined, "/app/crews/rejoindre");
+  await expect(np.getByTestId("suggest-crews").getByTestId("crew-row").first().getByTestId("crew-join")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(np.getByTestId("crew-requested")).toHaveCount(0);
+  await n.close();
 });

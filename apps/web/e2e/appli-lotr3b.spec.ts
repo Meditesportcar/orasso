@@ -124,7 +124,8 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
   const event = await nextYearEvent(await login("damien@orasso.local"));
   // Un compte neuf, sans crew, dans le 66 (les crews du coin du seed).
   const pseudo = `R3b${unique()}`.slice(0, 20);
-  await signUpApi(pseudo);
+  const newcomerCookie = await signUpApi(pseudo);
+  const newcomerId = (await apiCall<{ user: { id: string } }>(newcomerCookie, "GET", "/me")).data.user.id;
   const newcomer = `${pseudo.toLowerCase()}@e2e.orasso.test`;
   const errors: string[] = [];
 
@@ -144,7 +145,7 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
       .filter({ hasText: String(NEXT_YEAR) })
       .first();
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await expect(card).toContainText(new RegExp(`MARS ${NEXT_YEAR}|Mars ${NEXT_YEAR}`, "i"));
+    await expect(card).toContainText(new RegExp(`14\\sMARS\\s${NEXT_YEAR}`, "i"));
     await audit(page, false);
     await shot(page, `01-explorer-annee-${theme}`);
     await card.click();
@@ -202,7 +203,7 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
     await signIn(n.page, newcomer);
     await goto(n.page, "/profil");
     await n.page.getByTestId("profil-crew").click();
-    await expect(n.page).toHaveURL(/\/crew\/rejoindre/, { timeout: 30_000 });
+    await expect(n.page).toHaveURL(/\/rejoindre-crew/, { timeout: 30_000 });
     await expect(n.page.getByTestId("suggest-crews")).toBeVisible({ timeout: 30_000 });
     // « Créer un crew » vient après les crews, en secondaire.
     const create = n.page.getByTestId("crew-join-create");
@@ -222,6 +223,26 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
     await expect(
       n.page.getByTestId("suggest-crews").getByTestId("crew-row").first().getByTestId("crew-requested"),
     ).toBeVisible({ timeout: 30_000 });
+    if (i === 1) {
+      // Tour 2 : la demande annulée ailleurs (fiche du crew, autre appareil) : au retour sur l'écran, « Rejoindre ».
+      const near = await apiCall<{ items: { id: string; requested: boolean }[] }>(
+        newcomerCookie,
+        "GET",
+        "/crews/search?departments=66&limit=6",
+      );
+      const asked = near.data.items.find((c) => c.requested);
+      expect(asked).toBeTruthy();
+      expect((await apiCall(newcomerCookie, "DELETE", `/crews/${asked?.id}/members/${newcomerId}`)).status).toBe(204);
+      // Aller sur la fiche du crew puis revenir : l'écran relit la liste en reprenant le focus.
+      await n.page.getByTestId("suggest-crews").getByTestId("crew-row").first().getByRole("link").first().click();
+      await expect(n.page).toHaveURL(/\/crew\//, { timeout: 30_000 });
+      await n.page.goBack();
+      await expect(n.page).toHaveURL(/\/rejoindre-crew/, { timeout: 30_000 });
+      await expect(
+        n.page.getByTestId("suggest-crews").getByTestId("crew-row").first().getByTestId("crew-join"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(n.page.getByTestId("crew-requested")).toHaveCount(0);
+    }
     // La recherche par nom passe par les mêmes appels (Explorer, Personnes et crews).
     await n.page.getByTestId("crew-join-q").fill("drift");
     await expect(n.page.getByTestId("crew-results")).toBeVisible({ timeout: 30_000 });
@@ -249,6 +270,11 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
     .filter({ hasText: String(NEXT_YEAR) })
     .first();
   expect(await when.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  // Tour 2 : sur une seule ligne (l'heure jamais coupée).
+  expect(
+    await when.evaluate((el) => el.getBoundingClientRect().height < 1.6 * Number.parseFloat(getComputedStyle(el).lineHeight)),
+  ).toBe(true);
+  await expect(when).toContainText(/18\sH$/i);
   expect((await auditPage(narrow.page)).horizontalScroll).toBe(false);
   await shot(narrow.page, "08-explorer-annee-320-sable");
   await narrow.ctx.close();
