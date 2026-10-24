@@ -15,7 +15,7 @@ import {
 import { randomUUID } from "expo-crypto";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
@@ -126,6 +126,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const [seen, setSeen] = useState<ReadonlySet<number>>(() => new Set());
   const [screenReader, setScreenReader] = useState(false);
   useEffect(() => {
+    // react-native-web répond toujours « lecteur actif » : sur le web, on ne le sait pas, la règle s'applique.
+    if (Platform.OS === "web") return;
     let alive = true;
     void AccessibilityInfo.isScreenReaderEnabled()
       .then((on) => alive && setScreenReader(on))

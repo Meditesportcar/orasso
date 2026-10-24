@@ -264,6 +264,8 @@ export type EndGate = { key: string | number; locked: boolean; onSeen: () => voi
 
 /** Délai après lequel une nouvelle page de même hauteur que la précédente garde l'ancienne mesure. */
 const REMEASURE_MS = 250;
+/** Temps pendant lequel le bas doit rester visible pour que la page compte comme vue. */
+const SETTLE_MS = 300;
 
 function Body({
   children,
@@ -290,14 +292,32 @@ function Body({
   const [atEnd, setAtEnd] = useState(true);
   const gate = useRef(endGate);
   gate.current = endGate;
+  // Le bas doit rester visible un court instant : une mise en page passagère (premier rendu, polices, en-tête qui se
+  // pose) ne débloque pas l'étape.
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const checkEnd = useCallback(() => {
     const g = gate.current;
     if (!g) return;
     const reached = endReached({ offset: offset.current, viewport: viewport.current, content: content.current });
     // L'indicateur ne se montre qu'une fois la page mesurée et plus haute que l'écran.
     setAtEnd(reached || !(content.current > 0) || !(viewport.current > 0));
-    if (reached && g.locked) g.onSeen();
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = null;
+    if (reached && g.locked) {
+      settle.current = setTimeout(() => {
+        settle.current = null;
+        const now = gate.current;
+        const still = endReached({ offset: offset.current, viewport: viewport.current, content: content.current });
+        if (now?.locked && still) now.onSeen();
+      }, SETTLE_MS);
+    }
   }, []);
+  useEffect(
+    () => () => {
+      if (settle.current) clearTimeout(settle.current);
+    },
+    [],
+  );
   const gateKey = endGate?.key;
   const gateLocked = endGate?.locked;
   // Nouvelle page : elle repart en haut et sa hauteur se remesure (sinon celle de la page d'avant la débloquerait).
