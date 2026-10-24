@@ -233,7 +233,8 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("profil")).toBeVisible();
       await expect(page.getByTestId("profile-follow")).toHaveCount(0);
-      await expect(page.getByTestId("public-counts")).toHaveCount(0);
+      // Damien, 24/10 : les nombres d'un compte privé sont visibles de tout membre (les listes, non).
+      await expect(page.getByTestId("public-counts")).toContainText("abonné");
       await shot("11-profil-prive");
       await ctx.close();
     }

@@ -43,8 +43,7 @@ export const networkLabels = {
   write: (pseudo: string) => `Écrire à ${pseudo}`,
   yourFriend: "dans tes amis",
   privacyNoteStrong: "Toi seul vois ces listes.",
-  privacyNote:
-    "Les autres voient seulement les nombres : tout le monde si ton compte est public, tes amis s'il est privé.",
+  privacyNote: "Les autres voient seulement les nombres.",
   emptyFollowers: "Personne ne te suit encore. Ton profil public se partage depuis « Mon profil public ».",
   emptyFollowing: "Tu ne suis encore personne.",
   emptyFriends: "Pas encore d'ami. Cherche une personne ou scanne son QR de compte.",
@@ -68,7 +67,7 @@ export const publicPreviewLabels = {
   garage: "Son garage",
   vehiclesPrivate: "Ses véhicules",
   vehiclesPrivateHint: "marque et modèle",
-  privateRest: "Le reste (photos du garage, sorties, crew, nombres) est réservé à tes amis.",
+  privateRest: "Le reste (photos du garage, sorties en détail, crew) est réservé à tes amis.",
   privateAccount: "Compte privé",
   privacy: "Régler la confidentialité",
   upcoming: "Ses sorties à venir",

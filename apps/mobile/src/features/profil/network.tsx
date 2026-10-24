@@ -525,7 +525,7 @@ export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactN
     [p.followersCount, N.followers],
     [p.followingCount, N.following],
     [p.friendsCount, N.friends],
-    [p.pastEvents ? p.pastEvents.count + (p.upcomingEvents?.length ?? 0) : null, N.outings],
+    [p.outingsCount, N.outings],
   ];
   const shown = counts.filter(([n]) => n !== null) as [number, (n: number) => string][];
   return (

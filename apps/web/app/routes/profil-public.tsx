@@ -34,7 +34,7 @@ export default function ProfilPublic({ loaderData }: Route.ComponentProps) {
     [p.followersCount, N.followers],
     [p.followingCount, N.following],
     [p.friendsCount, N.friends],
-    [p.pastEvents ? p.pastEvents.count + (p.upcomingEvents?.length ?? 0) : null, N.outings],
+    [p.outingsCount, N.outings],
   ] as const;
   return (
     <div className="s-narrow s-stack" data-testid="profil-public">

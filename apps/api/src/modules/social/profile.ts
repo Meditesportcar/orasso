@@ -141,6 +141,24 @@ async function profileEvents(userId: string, at: Date) {
   };
 }
 
+/** Sorties d'une personne : retenue à un événement publié (hors invitation), à venir ou fini depuis moins d'un an. */
+async function outingsCount(userId: string, at: Date): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(applications)
+    .innerJoin(events, eq(events.id, applications.eventId))
+    .where(
+      and(
+        eq(applications.userId, userId),
+        eq(applications.status, "accepted"),
+        eq(events.status, "published"),
+        ne(events.admission, "invite_only"),
+        gte(events.endsAt, new Date(at.getTime() - 365 * DAY)),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
 export const socialProfile = {
   /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|friend`). */
   async view(viewer: Viewer, pseudo: string, opts: { as?: PreviewAs } = {}): Promise<UserProfileView> {
@@ -192,9 +210,9 @@ export const socialProfile = {
     }
 
     const isSelf = target.userId === viewer.user.id && !opts.as;
-    // Tour 2 : les nombres du réseau suivent leur propre règle (amis d'un compte privé, tout membre d'un compte public),
-    // jamais l'ouverture « organisateur » du profil d'un inscrit.
-    const showCounts = networkCountsVisible({ isSelf, isFriend: state === "friends", visibility: target.visibility });
+    // Tour 2 (Damien, 24/10) : les nombres sont visibles de tout membre connecté (la route exige une session), même pour
+    // un compte privé, comme sur Instagram ; les listes restent à soi seul.
+    const showCounts = networkCountsVisible({ connected: true });
     const counts = showCounts ? await followsService.countsOf(target.userId) : null;
     const unavailableTarget = Boolean(
       target.deletedAt || target.bannedAt || (target.suspendedUntil && target.suspendedUntil > at),
@@ -209,6 +227,7 @@ export const socialProfile = {
       bio: fields.bio ? target.bio : null,
       departments: fields.departments ? target.departments : null,
       friendsCount: showCounts ? await socialRepo.visibleFriendsCount(target.userId) : null,
+      outingsCount: showCounts ? await outingsCount(target.userId, at) : null,
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
       pastEvents: fields.pastEvents && ev ? ev.past : null,

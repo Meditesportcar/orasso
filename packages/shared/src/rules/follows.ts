@@ -20,17 +20,12 @@ export function canFollowUser(input: {
 }
 
 /**
- * Tour 2 (décision du coordinateur d'après R4.6c : « Le reste (… nombres) est réservé à tes amis ») : les nombres du
- * réseau (abonnés, abonnements, amis) d'un compte privé ne se montrent qu'à ses amis, jamais à un organisateur qui ne
- * l'est pas (règle distincte de `profileFields`, qui ouvre tout le profil d'un inscrit à son organisateur) ; ceux d'un
- * compte public, à tout membre connecté.
+ * Décision de Damien (24/10, tour 2) : les nombres (abonnés, abonnements, amis, sorties) sont visibles de tout membre
+ * connecté, comme sur Instagram, même pour un compte privé. Les profils restent réservés aux connectés (docs/01) ; les
+ * listes restent visibles par soi seul.
  */
-export function networkCountsVisible(input: {
-  isSelf: boolean;
-  isFriend: boolean;
-  visibility: ProfileVisibility;
-}): boolean {
-  return input.isSelf || input.isFriend || input.visibility === "public";
+export function networkCountsVisible(input: { connected: boolean }): boolean {
+  return input.connected;
 }
 
 /** Une notification « … te suit » par paire au plus par 24 h (suivre, ne plus suivre, suivre : pas de nouvelle alerte). */

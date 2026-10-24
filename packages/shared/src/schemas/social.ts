@@ -120,9 +120,14 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   /** Organisateur seulement : coordonnées déjà accessibles dans son tri. */
   contact: { firstName: string | null; lastName: string | null; phone: string | null; email: string | null } | null;
   friendship: { state: FriendshipState; id: string | null };
-  /** Lot R4c : abonnés et abonnements, aux mêmes audiences que `friendsCount` (jamais pour un compte privé non ami). */
+  /**
+   * Lot R4c : abonnés et abonnements ; tour 2 (Damien, 24/10) : visibles de tout membre connecté, comme `friendsCount`
+   * et `outingsCount`, même pour un compte privé.
+   */
   followersCount: number | null;
   followingCount: number | null;
+  /** Nombre de sorties (retenu, 12 derniers mois et à venir, hors événements sur invitation). */
+  outingsCount: number | null;
   /** Lot R4c : « Suivre » (compte public seulement, jamais soi-même) et si je suis déjà la personne. */
   follow: { canFollow: boolean; following: boolean };
 };

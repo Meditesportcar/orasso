@@ -122,7 +122,7 @@ describe("suivre une personne", () => {
     });
   });
 
-  it("compte privé : pas de « Suivre » (403), nombres cachés aux non-amis, visibles des amis", async () => {
+  it("compte privé : pas de « Suivre » (403), nombres visibles de tout membre, profil sans compte refusé", async () => {
     const a = await person("Priv_A");
     const p = await person("Priv_P", "private");
     const f = await person("Priv_F");
@@ -130,13 +130,18 @@ describe("suivre une personne", () => {
     const refused = await call(a, "POST", "/users/Priv_P/follow");
     expect(refused.status).toBe(403);
     expect(await db.select().from(userFollows)).toHaveLength(0);
+    // Damien, 24/10 : les nombres sont visibles de tout membre connecté, même d'un compte privé.
     const stranger = await call(a, "GET", "/users/Priv_P");
     expect(stranger.json).toMatchObject({
-      followersCount: null,
-      followingCount: null,
-      friendsCount: null,
+      followersCount: 0,
+      followingCount: 0,
+      friendsCount: 1,
+      outingsCount: 0,
       follow: { canFollow: false, following: false },
     });
+    // Le reste du profil privé reste réservé aux amis.
+    expect(stranger.json).toMatchObject({ audience: "public_limited", upcomingEvents: null, crews: null, bio: null });
+    expect((await call(null, "GET", "/users/Priv_P")).status).toBe(401);
     // Un ami voit les nombres ; « Suivre » n'existe toujours pas vers un compte privé (même pour un ami).
     const friend = await call(f, "GET", "/users/Priv_P");
     expect(friend.json).toMatchObject({
@@ -276,28 +281,26 @@ describe("suivre une personne", () => {
 });
 
 describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
-  it("nombres d'un compte privé : ami oui ; organisateur seulement s'il est ami ; membre non ; compte public : tous", async () => {
+  it("nombres d'un compte privé : membre, ami et organisateur les voient ; listes toujours à soi seul", async () => {
     const p = await person("T2_Prive", "private");
     const member = await person("T2_Membre");
     const orgaUser = await person("T2_Orga");
     const s = await createStructure(orgaUser.id);
-    // La personne suit la structure : son organisateur voit tout son profil (audience « organizer »).
     await db.insert(structureFollows).values({ structureId: s.id, userId: p.id, source: "manual" });
     const asOrga = (await call(orgaUser, "GET", "/users/T2_Prive")).json;
     expect(asOrga.audience).toBe("organizer");
-    expect(asOrga).toMatchObject({ followersCount: null, followingCount: null, friendsCount: null });
+    expect(asOrga).toMatchObject({ followersCount: 0, followingCount: 1, friendsCount: 0 });
     expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({
-      followersCount: null,
-      friendsCount: null,
-    });
-    await befriend(p, orgaUser);
-    expect((await call(orgaUser, "GET", "/users/T2_Prive")).json).toMatchObject({
       followersCount: 0,
       followingCount: 1,
-      friendsCount: 1,
+      friendsCount: 0,
+      outingsCount: 0,
     });
+    await befriend(p, member);
+    expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({ friendsCount: 1 });
     await person("T2_Public");
     expect((await call(member, "GET", "/users/T2_Public")).json).toMatchObject({ followersCount: 0, friendsCount: 0 });
+    expect((await call(member, "GET", "/users/T2_Prive/followers")).status).toBe(404);
   });
 
   it("compte suspendu : pas de « Suivre », « ne plus suivre » en 404 ; compte devenu privé : on peut le quitter", async () => {
@@ -380,7 +383,7 @@ describe("aperçu de mon profil public", () => {
     const p = await person("Prev_P", "private");
     await createVehicle(p.id, ref);
     const member = (await call(p, "GET", "/me/public-preview")).json;
-    expect(member).toMatchObject({ audience: "public_limited", followersCount: null, contact: null });
+    expect(member).toMatchObject({ audience: "public_limited", followersCount: 0, contact: null });
     expect(member.vehicles[0]).toMatchObject({ detailed: false, photoUrl: null });
     const friend = (await call(p, "GET", "/me/public-preview?as=friend")).json;
     expect(friend).toMatchObject({

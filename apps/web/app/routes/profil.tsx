@@ -191,6 +191,11 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
             <span>
               <b>{p.friendsCount}</b> {networkLabels.friends(p.friendsCount)}
             </span>
+            {p.outingsCount !== null && (
+              <span>
+                <b>{p.outingsCount}</b> {networkLabels.outings(p.outingsCount)}
+              </span>
+            )}
           </p>
         )}
 

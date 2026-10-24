@@ -77,11 +77,9 @@ describe("suivre une personne (R4.6)", () => {
     expect(canFollowUser({ isSelf: true, visibility: "public" })).toBe(false);
     expect(canFollowUser({ isSelf: false, visibility: "public", unavailable: true })).toBe(false);
   });
-  it("nombres du réseau : amis d'un compte privé, tout membre d'un compte public", () => {
-    expect(networkCountsVisible({ isSelf: false, isFriend: false, visibility: "private" })).toBe(false);
-    expect(networkCountsVisible({ isSelf: false, isFriend: true, visibility: "private" })).toBe(true);
-    expect(networkCountsVisible({ isSelf: true, isFriend: false, visibility: "private" })).toBe(true);
-    expect(networkCountsVisible({ isSelf: false, isFriend: false, visibility: "public" })).toBe(true);
+  it("nombres : visibles de tout membre connecté, même d'un compte privé (Damien, 24/10)", () => {
+    expect(networkCountsVisible({ connected: true })).toBe(true);
+    expect(networkCountsVisible({ connected: false })).toBe(false);
   });
   it("notification regroupée", () => {
     expect(followNotificationBody(["Kenji_66"], 1)).toBe("Kenji_66 te suit.");

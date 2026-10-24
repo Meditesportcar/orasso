@@ -313,7 +313,8 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await goto(page, `/u/${priv.pseudo}`);
     await expect(page.getByTestId("public-head")).toContainText("Compte privé", { timeout: 30_000 });
     await expect(page.getByTestId("profile-follow")).toHaveCount(0);
-    await expect(page.getByTestId("public-counts")).toHaveCount(0);
+    // Damien, 24/10 : les nombres d'un compte privé sont visibles de tout membre (les listes, non).
+    await expect(page.getByTestId("public-counts")).toContainText("abonné");
     await shot(page, `12-profil-prive-${theme}`);
     await audit(page, false);
     await ctx.close();
