@@ -11,7 +11,7 @@ const chosen: ExplorerChoice = {
   proSort: "name",
   peopleWhere: { kind: "dept", code: "66" },
   show: "crews",
-  people: { categoryId: "c1", grade: "sport" },
+  people: { categoryId: "3f2b8a4e-1c2d-4e5f-8a9b-0c1d2e3f4a5b", grade: "sport" },
 };
 
 describe("le choix de l'Explorer reste (lots R1, R2)", () => {
@@ -25,7 +25,15 @@ describe("le choix de l'Explorer reste (lots R1, R2)", () => {
 
   it("par défaut : par date (événements), par distance (pros), mon coin et tout (Personnes et crews)", () => {
     expect(defaultChoice).toMatchObject({ sort: "date", proSort: "distance", where: null, show: "all" });
-    expect(defaultChoice.peopleWhere).toEqual({ kind: "mine" });
+    // Lot R2, tour 2 : rien de choisi (recherche élargie d'elle-même) ; « Mon coin » choisi est gardé tel quel.
+    expect(defaultChoice.peopleWhere).toBeNull();
+    const mine = readChoice(JSON.parse(JSON.stringify(storeChoice({ ...chosen, peopleWhere: { kind: "mine" } }))));
+    expect(mine?.peopleWhere).toEqual({ kind: "mine" });
+    expect(
+      readChoice(JSON.parse(JSON.stringify(storeChoice({ ...chosen, peopleWhere: null }))))?.peopleWhere,
+    ).toBeNull();
+    // Un identifiant de centre d'intérêt abîmé est ignoré.
+    expect(readChoice({ v: 2, people: { categoryId: "x'); drop" } })?.people.categoryId).toBe("");
   });
 
   it("« Autour de moi » ne garde que le mode et la distance, jamais de coordonnées", () => {

@@ -16,7 +16,7 @@ import {
   explorerR2Labels as R,
   shownStart,
 } from "@orasso/shared";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -188,8 +188,15 @@ export function EventsMapView({
   const itemsKey = eventPinsData(items);
   // biome-ignore lint/correctness/useExhaustiveDependencies: la frise suit les données affichées
   const days = useMemo(() => dateStrip(items, now), [itemsKey]);
+  // Relecture du lot R2 : un jour choisi qui n'existe plus (lieu, filtres changés) : retour à « Toutes ».
+  const dayGone = day !== "all" && !days.some((d) => d.key === day);
+  useEffect(() => {
+    if (!dayGone) return;
+    setDay("all");
+    setSelected([]);
+  }, [dayGone]);
   const dayOf = (e: EventCard) => dayKey(shownStart(e.startsAt, now));
-  const shown = day === "all" ? items : items.filter((e) => dayOf(e) === day);
+  const shown = day === "all" || dayGone ? items : items.filter((e) => dayOf(e) === day);
   // Relecture du lot R1 : les épingles suivent les données (coordonnées, date corrigées), pas seulement les identifiants.
   const shownKey = eventPinsData(shown);
   // biome-ignore lint/correctness/useExhaustiveDependencies: recalculées quand les données affichées changent
@@ -215,7 +222,7 @@ export function EventsMapView({
       ) : null}
       <Overlay
         header={header}
-        strip={<DateStrip days={days} total={items.length} value={day} onChange={pickDay} />}
+        strip={<DateStrip days={days} total={items.length} value={dayGone ? "all" : day} onChange={pickDay} />}
         onLocate={() => void position.request()}
         notice={list.error ? list.error : list.items === null ? L.loading : pins.length === 0 ? L.emptyTitle : null}
         picked={

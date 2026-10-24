@@ -6,13 +6,7 @@
 // un compte privé n'y montre que ce qu'il montre déjà à tout le monde (pseudo, grade, marque et modèle), sans
 // département (l'API le garantit). Une action par ligne (« Ajouter », « Rejoindre »), secondaire, avec son icône.
 import { archivoAt, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import {
-  type CrewCard,
-  gradeLabels,
-  PEOPLE_SEARCH_MIN_QUERY,
-  type PersonCard,
-  explorerR2Labels as R,
-} from "@orasso/shared";
+import { type CrewCard, gradeLabels, type PeopleWhere, type PersonCard, explorerR2Labels as R } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -20,11 +14,21 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { cacheScope } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
+import { createRequestGate } from "@/lib/requestGate";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { deptLong } from "./ExplorerSheets";
-import type { PeopleFilters, PeopleShow, PeopleWhere } from "./explorerChoice";
+import type { PeopleFilters, PeopleShow } from "./explorerChoice";
+import {
+  loadPeople,
+  type PeopleFetchers,
+  peopleQuery,
+  peopleView,
+  type SearchResult,
+  type SuggestResult,
+} from "./peopleLoad";
 
 const { space1, space2 } = tokens.spacing;
 
@@ -306,6 +310,13 @@ function PrivacyNote({ children }: { children: string }) {
 
 const SUGGESTED = 3;
 
+/** Les lectures de Personnes et crews (l'API de l'appli). */
+const FETCHERS: PeopleFetchers = {
+  searchPeople: (f) => api.searchPeople(f),
+  searchCrews: (q, department, departments) => api.searchCrews(q, department, departments),
+  suggestions: (departments) => api.peopleSuggestions(departments),
+};
+
 export function PeopleSegment({
   q,
   where,
@@ -314,80 +325,101 @@ export function PeopleSegment({
   coin,
 }: {
   q: string;
-  where: PeopleWhere;
+  /** `null` : rien de choisi (suggestions de mon coin, recherche élargie à toute la France). */
+  where: PeopleWhere | null;
   show: PeopleShow;
   filters: PeopleFilters;
   coin: readonly string[];
 }) {
+  const { t } = useTheme();
   const router = useRouter();
   const text = q.trim();
-  const filtered = Boolean(filters.categoryId || filters.grade);
-  const searching = text.length > 0 || filtered;
-  const tooShort = text.length > 0 && text.length < PEOPLE_SEARCH_MIN_QUERY && !filtered;
-  const dept = where.kind === "dept" ? where.code : null;
-  // Les crews proposés : ceux du département choisi, sinon de mon coin ; partout en France, les plus suivis.
-  const crewDept = where.kind === "dept" ? where.code : where.kind === "mine" ? (coin[0] ?? null) : null;
+  const view = peopleView(q, filters, where);
+  const coinKey = coin.join(",");
+  const whereKey = where === null ? "" : where.kind === "dept" ? `d${where.code}` : where.kind;
 
+  // Tour 2 (relectures Codex et Opus) : une lecture ne s'affiche que si elle est la dernière, pour le compte qui l'a
+  // lancée ; au changement de compte, tout est vidé et relu.
+  const gate = useRef(createRequestGate(cacheScope)).current;
+  const account = cacheScope();
   const [mine, setMine] = useState<CrewCard[] | null>(null);
-  const [suggest, setSuggest] = useState<{
-    sameModel: { model: string; vehicle: string; items: PersonCard[] } | null;
-    crews: CrewCard[];
-  } | null>(null);
-  const [results, setResults] = useState<{ people: PersonCard[]; more: boolean; crews: CrewCard[] } | null>(null);
+  const [suggest, setSuggest] = useState<SuggestResult | null>(null);
+  const [results, setResults] = useState<SearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const request = useRef(0);
+  const [more, setMore] = useState(false);
   const [retry, setRetry] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu au changement de compte
   useEffect(() => {
+    gate.invalidate();
+    setMine(null);
+    setSuggest(null);
+    setResults(null);
+    setError(null);
+    const from = cacheScope();
     let alive = true;
     void api.myCrews().then(
-      (list) => alive && setMine(list),
-      () => alive && setMine([]),
+      (list) => alive && cacheScope() === from && setMine(list),
+      () => alive && cacheScope() === from && setMine([]),
     );
     return () => {
       alive = false;
     };
-  }, []);
+  }, [account]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: relu quand la recherche, le lieu ou les filtres changent
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu quand la recherche, le lieu, les filtres ou le compte changent
   useEffect(() => {
-    const id = ++request.current;
     setError(null);
-    if (tooShort) return;
+    if (view.mode === "tooShort") return;
+    const ticket = gate.start();
     const timer = setTimeout(
       () => {
-        const run = searching
-          ? Promise.all([
-              api.searchPeople({
-                q: text || undefined,
-                department: dept ?? undefined,
-                categoryId: filters.categoryId || undefined,
-                grade: filters.grade || undefined,
-              }),
-              text ? api.searchCrews(text, dept ?? undefined) : Promise.resolve({ items: [] as CrewCard[] }),
-            ]).then(([people, crews]) => {
-              if (id === request.current)
-                setResults({ people: people.items, more: Boolean(people.nextCursor), crews: crews.items });
-            })
-          : Promise.all([api.peopleSuggestions(dept ?? undefined), api.searchCrews("", crewDept ?? undefined)]).then(
-              ([s, crews]) => {
-                if (id === request.current) setSuggest({ sameModel: s.sameModel, crews: crews.items });
-              },
-            );
-        run.catch((e) => {
-          if (id === request.current) setError(errorMessage(e));
-        });
+        loadPeople(ticket, FETCHERS, { q, where, filters, coin })
+          .then((r) => {
+            if (!r) return;
+            if (r.kind === "suggest") setSuggest(r);
+            else setResults(r);
+          })
+          .catch((e) => {
+            if (ticket.current()) setError(errorMessage(e));
+          });
       },
       text ? 300 : 0,
     );
     return () => clearTimeout(timer);
-  }, [text, searching, tooShort, dept, crewDept, filters.categoryId, filters.grade, retry]);
+  }, [text, view.mode, whereKey, coinKey, filters.categoryId, filters.grade, retry, account]);
+
+  // « Voir plus » : la page suivante de la même recherche, jetée si une autre lecture est partie entre-temps.
+  async function loadMore() {
+    if (!results?.cursor) return;
+    const ticket = gate.follow();
+    setMore(true);
+    try {
+      const page = await api.searchPeople(peopleQuery({ q, where, filters, coin }, results.cursor));
+      if (!ticket.current()) return;
+      setResults((prev) =>
+        prev
+          ? {
+              ...prev,
+              people: [...prev.people, ...page.items.filter((p) => !prev.people.some((x) => x.userId === p.userId))],
+              cursor: page.nextCursor,
+            }
+          : prev,
+      );
+    } catch (e) {
+      if (ticket.current()) setError(errorMessage(e));
+    } finally {
+      setMore(false);
+    }
+  }
 
   const myIds = new Set((mine ?? []).map((x) => x.id));
   const showPeople = show !== "crews";
   const showCrews = show !== "people";
+  const searching = view.mode === "search";
   const privacy = <PrivacyNote>{searching ? R.privacyResults : R.privacyOpen}</PrivacyNote>;
 
+  // Tour 2 : une erreur (limite atteinte, service indisponible) se dit comme telle, jamais comme une liste vide.
   if (error) {
     return (
       <View style={styles.col} testID="people-search">
@@ -396,7 +428,7 @@ export function PeopleSegment({
     );
   }
 
-  if (tooShort) {
+  if (view.mode === "tooShort") {
     return (
       <View style={styles.col} testID="people-search">
         <Muted variant="caption">{R.tooShort}</Muted>
@@ -404,36 +436,45 @@ export function PeopleSegment({
     );
   }
 
-  if (searching) {
+  if (view.mode === "search") {
     const people = results?.people ?? [];
     const crews = results?.crews ?? [];
     const peopleBlock = showPeople ? (
       <Section
         key="people"
-        title={R.peopleGroup(people.length, results?.more ?? false)}
+        title={R.peopleGroup(people.length, Boolean(results?.cursor))}
         hint={R.peopleGroupHint}
         testID="people-results"
       >
         {results === null ? <Muted variant="caption">…</Muted> : null}
-        {results && people.length === 0 ? <Empty>{text ? R.noPeople(text) : R.noPeopleFiltered}</Empty> : null}
+        {results && people.length === 0 ? <Empty>{R.noPeople(text)}</Empty> : null}
         {people.map((p) => (
           <PersonRow key={p.userId} person={p} />
         ))}
+        {results?.cursor ? (
+          <SmallButton icon="add" disabled={more} onPress={() => void loadMore()} testID="people-more">
+            {R.morePeople}
+          </SmallButton>
+        ) : null}
       </Section>
     ) : null;
-    const crewBlock =
-      showCrews && text ? (
-        <Section key="crews" title={R.crewsGroup(crews.length, false)} hint={R.crewsGroupHint} testID="crew-results">
-          {results && crews.length === 0 ? <Empty>{R.noCrews(text)}</Empty> : null}
-          {crews.map((x) => (
-            <CrewRow key={x.id} crew={x} mine={myIds.has(x.id)} />
-          ))}
-        </Section>
-      ) : null;
+    const crewBlock = showCrews ? (
+      <Section key="crews" title={R.crewsGroup(crews.length, false)} hint={R.crewsGroupHint} testID="crew-results">
+        {results && crews.length === 0 ? <Empty>{R.noCrews(text)}</Empty> : null}
+        {crews.map((x) => (
+          <CrewRow key={x.id} crew={x} mine={myIds.has(x.id)} />
+        ))}
+      </Section>
+    ) : null;
     // Maquette R2.7 : le groupe qui a des résultats d'abord (« supra » : des personnes ; « drift » : des crews).
     const crewsFirst = results !== null && people.length === 0 && crews.length > 0;
     return (
       <View style={styles.col} testID="people-search">
+        {view.broadened ? (
+          <Text variant="caption" color={t.color.inkMuted} testID="people-broadened">
+            {R.broadened}
+          </Text>
+        ) : null}
         {crewsFirst ? [crewBlock, peopleBlock] : [peopleBlock, crewBlock]}
         {privacy}
       </View>
@@ -445,6 +486,11 @@ export function PeopleSegment({
   const nothing = suggest !== null && !same && crews.length === 0;
   return (
     <View style={styles.col} testID="people-search">
+      {view.needText ? (
+        <Text variant="caption" color={t.color.inkMuted} testID="people-need-text">
+          {R.peopleFiltersNeedText}
+        </Text>
+      ) : null}
       {suggest === null ? <Muted variant="caption">…</Muted> : null}
       {showPeople && same ? (
         <Section title={R.sameModelTitle(same.model)} hint={R.sameModelHint(same.vehicle)} testID="suggest-same-model">
@@ -455,7 +501,7 @@ export function PeopleSegment({
       ) : null}
       {showCrews && crews.length ? (
         <Section
-          title={R.crewsNearTitle(crewDept)}
+          title={R.crewsNearTitle(suggest?.crewDept ?? null)}
           hint={R.crewsNearHint(mine?.[0]?.name ?? null)}
           testID="suggest-crews"
         >

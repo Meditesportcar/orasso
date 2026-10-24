@@ -49,7 +49,7 @@ export function PeopleSearch({
 
   const load = useCallback(async () => {
     const id = ++request.current;
-    if (!hasPeopleSearchCriteria({ q: q.trim(), department, categoryId, grade })) {
+    if (!hasPeopleSearchCriteria({ q: q.trim() })) {
       setPage(null);
       setError(null);
       return;

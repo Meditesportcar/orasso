@@ -372,6 +372,8 @@ export const explorerR2Labels = {
   peopleFiltersNeedText:
     "Saisis au moins deux caractères : les filtres affinent une recherche, ils ne listent personne seuls.",
   broadened: "Recherche dans toute la France : aucun lieu choisi.",
+  morePeople: "Voir plus de personnes",
+  retry: "Réessayer",
   formatAllLong: "Tous les formats",
   sameModelTitle: (model: string) => `D'autres ${model}`,
   sameModelHint: (vehicle: string) => `Comme ta ${vehicle}`,

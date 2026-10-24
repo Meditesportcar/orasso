@@ -63,6 +63,7 @@ import {
   readChoice,
   storeChoice,
 } from "./explorerChoice";
+import { peopleView } from "./peopleLoad";
 import {
   activeFilters,
   EVENT_SORTS,
@@ -148,7 +149,7 @@ export function ExplorerScreen() {
   const [prefFormatsOn, setPrefFormatsOn] = useState(defaultChoice.prefFormatsOn);
   const [job, setJob] = useState<ProActivity | "">(defaultChoice.job);
   const [proSort, setProSort] = useState<ProSort>(defaultChoice.proSort);
-  const [peopleWhere, setPeopleWhere] = useState<PeopleWhere>(defaultChoice.peopleWhere);
+  const [peopleWhere, setPeopleWhere] = useState<PeopleWhere | null>(defaultChoice.peopleWhere);
   const [show, setShow] = useState<PeopleShow>(defaultChoice.show);
   const [people, setPeople] = useState<PeopleFilters>(defaultChoice.people);
 
@@ -216,7 +217,8 @@ export function ExplorerScreen() {
 
   // Le lieu : le choix fait, sinon les réglages habituels ; une recherche par texte cherche partout tant que le lieu n'a
   // pas été choisi (lot R1).
-  const searching = q.trim().length > 0;
+  // La carte n'applique pas le texte de la liste (relecture du lot R2) : il n'y élargit donc pas le lieu.
+  const searching = !(view === "map" && segment !== "personnes") && q.trim().length > 0;
   const habitual = habitualWhere(prefs ? { radiusKm: prefs.radiusKm } : null, positionOn, coin.length > 0);
   const effective = effectiveWhere(where, habitual, { positionOn, hasCoin: coin.length > 0, searching });
   const effectiveId = whereId(effective);
@@ -288,8 +290,9 @@ export function ExplorerScreen() {
         {inMap ? null : (
           <Pill
             icon="sort"
-            value={R.sortPill[filters.affinity ? "date" : sort] ?? sort}
-            set={sort !== defaultChoice.sort}
+            // Relecture du lot R2 : « Mes affinités » (filtres) l'emporte sur le tri choisi : la pastille le dit.
+            value={filters.affinity ? L.tasteAffinity : (R.sortPill[sort] ?? sort)}
+            set={filters.affinity || sort !== defaultChoice.sort}
             onPress={() => setSheet("sort")}
             testID="sort-open"
           />
@@ -334,14 +337,20 @@ export function ExplorerScreen() {
       <>
         <Pill
           icon="place"
+          // Tour 2 : rien de choisi = mon coin pour les suggestions, toute la France pour une recherche (en contour) ;
+          // un lieu choisi (Mon coin compris) est en encre et limite la recherche.
           value={
-            peopleWhere.kind === "mine"
-              ? R.pillMine(coin)
-              : peopleWhere.kind === "dept"
-                ? deptLong(peopleWhere.code)
-                : R.pillAll
+            peopleWhere === null
+              ? peopleView(q, people, null).mode === "search"
+                ? R.pillAll
+                : R.pillMine(coin)
+              : peopleWhere.kind === "mine"
+                ? R.pillMine(coin)
+                : peopleWhere.kind === "dept"
+                  ? deptLong(peopleWhere.code)
+                  : R.pillAll
           }
-          set={peopleWhere.kind !== "mine"}
+          set={peopleWhere !== null}
           onPress={() => setSheet("peopleWhere")}
           testID="people-where-open"
         />
@@ -436,8 +445,14 @@ export function ExplorerScreen() {
         countFor={(d) => eventsCount(effective, filtersFor(d))}
         onApply={(d) => {
           const { format, when, affinity, followed } = d.filters;
-          setFilters({ format, when, affinity, followed });
-          setPrefFormatsOn(d.prefOn);
+          // Relecture du lot R2 : rien de changé, rien de relu.
+          const same =
+            format === filters.format &&
+            when === filters.when &&
+            affinity === filters.affinity &&
+            followed === filters.followed;
+          if (!same) setFilters({ format, when, affinity, followed });
+          if (d.prefOn !== prefFormatsOn) setPrefFormatsOn(d.prefOn);
           close();
         }}
       />
@@ -491,9 +506,11 @@ export function ExplorerScreen() {
     return (
       <TabStage overlays={sheets}>
         {segment === "evenements" ? (
+          // Relecture du lot R2 : la carte n'a pas de champ de recherche (maquette R2.8) ; elle ne filtre donc pas par le
+          // texte de la liste, qui reste dans la liste.
           <EventsMapView
             header={header}
-            q={q}
+            q=""
             filters={listFilters}
             position={position}
             sort="date"
@@ -503,7 +520,7 @@ export function ExplorerScreen() {
         ) : (
           <ProsMapView
             header={header}
-            q={q}
+            q=""
             job={job}
             sort={proSort}
             position={position}

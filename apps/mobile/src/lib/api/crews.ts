@@ -28,8 +28,9 @@ export const crewsApi = {
   archiveCrew: (id: string) => request<unknown>(`/api/crews/${id}`, { method: "DELETE" }),
   setCrewLogo: (id: string, key: string | null) =>
     request<CrewView>(`/api/crews/${id}/logo`, { method: "POST", body: { key } }),
-  searchCrews: (q: string, department?: string) =>
-    request<Page<CrewCard>>(`/api/crews/search${qs({ limit: 20, q: q || undefined, department })}`),
+  /** Lot R2, tour 2 : `departments` (l'un de ces départements, séparés par des virgules) pour « Mon coin ». */
+  searchCrews: (q: string, department?: string, departments?: string) =>
+    request<Page<CrewCard>>(`/api/crews/search${qs({ limit: 20, q: q || undefined, department, departments })}`),
   crewMembers: (id: string) => request<CrewMemberView[]>(`/api/crews/${id}/members`),
   crewPending: (id: string) => request<CrewPendingList>(`/api/crews/${id}/requests`),
   requestCrew: (id: string, message: string | null) =>

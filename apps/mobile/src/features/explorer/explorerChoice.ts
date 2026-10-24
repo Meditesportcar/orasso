@@ -12,6 +12,7 @@ import {
   eventFormats,
   type Grade,
   grades,
+  type PeopleWhere,
   type ProActivity,
   proActivities,
   readWhere,
@@ -29,8 +30,8 @@ export const PRO_SORTS = ["distance", "name"] as const;
 export type ProSort = (typeof PRO_SORTS)[number];
 export const PEOPLE_SHOWS = ["all", "people", "crews"] as const;
 export type PeopleShow = (typeof PEOPLE_SHOWS)[number];
-/** Personnes et crews : des départements seulement, jamais de position ni de distance (docs/01). */
-export type PeopleWhere = { kind: "mine" } | { kind: "dept"; code: string } | { kind: "all" };
+/** Personnes et crews : des départements seulement, jamais de position ni de distance (docs/01). Règles : `@orasso/shared`. */
+export type { PeopleWhere };
 export type PeopleFilters = { categoryId: string; grade: Grade | "" };
 export const emptyPeopleFilters: PeopleFilters = { categoryId: "", grade: "" };
 
@@ -45,7 +46,8 @@ export type ExplorerChoice = {
   prefFormatsOn: boolean;
   job: ProActivity | "";
   proSort: ProSort;
-  peopleWhere: PeopleWhere;
+  /** Lot R2, tour 2 : `null` = rien de choisi (suggestions de mon coin, recherche élargie à toute la France). */
+  peopleWhere: PeopleWhere | null;
   show: PeopleShow;
   people: PeopleFilters;
 };
@@ -59,7 +61,7 @@ export const defaultChoice: ExplorerChoice = {
   prefFormatsOn: true,
   job: "",
   proSort: "distance",
-  peopleWhere: { kind: "mine" },
+  peopleWhere: null,
   show: "all",
   people: emptyPeopleFilters,
 };
@@ -71,12 +73,16 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 const oneOf = <T>(list: readonly T[], v: unknown, fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
 const isDepartment = (code: string) => (departments as readonly string[]).includes(code);
 
-function readPeopleWhere(v: unknown): PeopleWhere {
-  if (!isObject(v)) return { kind: "mine" };
+function readPeopleWhere(v: unknown): PeopleWhere | null {
+  if (!isObject(v)) return null;
+  if (v.kind === "mine") return { kind: "mine" };
   if (v.kind === "all") return { kind: "all" };
   if (v.kind === "dept" && typeof v.code === "string" && isDepartment(v.code)) return { kind: "dept", code: v.code };
-  return { kind: "mine" };
+  return null;
 }
+
+/** Relecture du lot R2 : un identifiant de centre d'intérêt abîmé est ignoré (UUID seulement). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Une valeur enregistrée (ou rien) → le choix, champ par champ ; `null` si rien n'a jamais été gardé. */
 export function readChoice(raw: unknown): ExplorerChoice | null {
@@ -103,7 +109,7 @@ export function readChoice(raw: unknown): ExplorerChoice | null {
     peopleWhere: readPeopleWhere(raw.peopleWhere),
     show: oneOf(PEOPLE_SHOWS, raw.show, defaultChoice.show),
     people: {
-      categoryId: typeof people.categoryId === "string" && people.categoryId.length <= 64 ? people.categoryId : "",
+      categoryId: typeof people.categoryId === "string" && UUID.test(people.categoryId) ? people.categoryId : "",
       grade: oneOf(["", ...grades] as const, people.grade, ""),
     },
   };
@@ -134,7 +140,11 @@ export function storeChoice(choice: ExplorerChoice): Record<string, unknown> {
     job: choice.job,
     proSort: choice.proSort,
     peopleWhere:
-      choice.peopleWhere.kind === "dept" ? { kind: "dept", code: choice.peopleWhere.code } : choice.peopleWhere,
+      choice.peopleWhere === null
+        ? null
+        : choice.peopleWhere.kind === "dept"
+          ? { kind: "dept", code: choice.peopleWhere.code }
+          : { kind: choice.peopleWhere.kind },
     show: choice.show,
     people: { categoryId: choice.people.categoryId, grade: choice.people.grade },
   };

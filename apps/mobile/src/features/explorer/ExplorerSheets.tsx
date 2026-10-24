@@ -372,21 +372,22 @@ export function PeopleWhereSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  value: PeopleWhere;
+  /** `null` : rien de choisi (Mon coin pour les suggestions). */
+  value: PeopleWhere | null;
   coin: readonly string[];
   onApply: (where: PeopleWhere) => void;
 }) {
-  const [away, setAway] = useState(value.kind === "dept");
+  const [away, setAway] = useState(value?.kind === "dept");
   // biome-ignore lint/correctness/useExhaustiveDependencies: repart de la valeur à chaque ouverture
   useEffect(() => {
-    if (visible) setAway(value.kind === "dept");
+    if (visible) setAway(value?.kind === "dept");
   }, [visible]);
   return (
     <AppSheet visible={visible} onClose={onClose} accessibilityLabel={R.whereSheet}>
       <SheetHead title={R.whereSheet} onClose={onClose} />
       <View style={styles.optlist} accessibilityRole="radiogroup" testID="people-where-sheet">
         <OptRow
-          on={value.kind === "mine" && !away}
+          on={(value === null || value.kind === "mine") && !away}
           icon="home"
           title={R.whereMine}
           hint={R.whereMineHint(coin.map(deptLong).join(", "))}
@@ -395,21 +396,21 @@ export function PeopleWhereSheet({
           testID="people-where-mine"
         />
         <OptRow
-          on={value.kind === "dept" || away}
+          on={value?.kind === "dept" || away}
           icon="map"
-          title={value.kind === "dept" ? `${R.whereAway} · ${deptLong(value.code)}` : R.whereAway}
+          title={value?.kind === "dept" ? `${R.whereAway} · ${deptLong(value.code)}` : R.whereAway}
           hint={R.whereAwayHint}
           onPress={() => setAway(true)}
           testID="people-where-elsewhere"
         />
         {away ? (
           <DepartmentPicker
-            value={value.kind === "dept" ? value.code : null}
+            value={value?.kind === "dept" ? value.code : null}
             onPick={(code) => onApply({ kind: "dept", code })}
           />
         ) : null}
         <OptRow
-          on={value.kind === "all" && !away}
+          on={value?.kind === "all" && !away}
           icon="explore"
           title={R.whereAll}
           hint={R.whereAllHint}
