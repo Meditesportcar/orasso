@@ -146,7 +146,8 @@ export type ProCard = {
   distanceKm?: number | null;
   /**
    * Lot R2 (maquette R2.4, même gabarit pour tous) : la remise montrée pour mon grade (`shownDiscount`), seulement dans
-   * la liste de l'Explorer d'une personne connectée ; `null` : pas de remise pour moi.
+   * la liste de l'Explorer d'une personne connectée ; `null` : pas de remise pour moi ; absente : remises masquées (fiche
+   * de base) ou sans compte.
    */
   discount?: { percent: number; from: Grade | null } | null;
   /** Lot R2 : mon garage favori (l'étoile de la liste). */

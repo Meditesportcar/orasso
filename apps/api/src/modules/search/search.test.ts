@@ -954,7 +954,8 @@ describe("GET /pros : filtres, distance, visibilité", () => {
       expect(res.json.items[0].distanceKm).toBeGreaterThan(0);
       expect(res.json.items[3].distanceKm).toBeNull();
     }
-    expect(ids((await get(viewer, "/pros?radiusKm=50")).json.items)).toEqual([near.slug]);
+    // Lot R2 : avec un rayon, le pro sans atelier qui se déplace dans le secteur reste (« Se déplacent chez toi »).
+    expect(ids((await get(viewer, "/pros?radiusKm=50")).json.items)).toEqual([near.slug, zone.slug]);
     expect(ids((await get(viewer, `/pros?sort=distance&lat=${PARIS.lat}&lng=${PARIS.lng}`)).json.items)[0]).toBe(
       far.slug,
     );
@@ -982,6 +983,8 @@ describe("GET /pros : filtres, distance, visibilité", () => {
           "activities",
           "city",
           "department",
+          // Lot R2 : l'étoile du garage favori (connecté) ; la remise reste absente de la fiche de base.
+          "favorite",
           "followersCount",
           "interventionDepartments",
           "lat",

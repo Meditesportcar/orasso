@@ -56,7 +56,7 @@ export function ExplorerProTile({ pro, gradeLabel }: { pro: ProCard; gradeLabel:
               {!mover && km !== undefined && km !== null ? <strong> · {L.km(km)}</strong> : null}
             </span>
           </span>
-          {gradeLabel !== null ? (
+          {gradeLabel !== null && d !== undefined ? (
             d ? (
               <span className="ex-pro__disc" data-testid="pro-discount">
                 <span className="ex-pro__tag" data-from={d.from ? "true" : undefined}>

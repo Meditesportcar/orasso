@@ -158,7 +158,8 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
     const out = toCard(r.p, followers.get(r.p.id) ?? 0);
     if (needsDistance) out.distanceKm = roundKm(r.dist);
     if (viewer) {
-      out.discount = showDiscounts ? shownDiscount(discounts.get(r.p.id) ?? {}, viewer.profile.grade as Grade) : null;
+      // Fiche de base (lot 21) : pas de remise du tout, pas même « pas de remise ».
+      if (showDiscounts) out.discount = shownDiscount(discounts.get(r.p.id) ?? {}, viewer.profile.grade as Grade);
       out.favorite = favorites.has(r.p.id);
     }
     return out;

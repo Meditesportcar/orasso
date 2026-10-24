@@ -103,7 +103,7 @@ export function ProCardR2({ pro, gradeLabel }: { pro: ProCard; gradeLabel: strin
               ) : null}
             </Text>
           </View>
-          {gradeLabel !== null ? (
+          {gradeLabel !== null && d !== undefined ? (
             d ? (
               <View style={styles.disc} testID="pro-discount">
                 <Tag tone={d.from ? "line" : "acc"}>{R.discountTag(d.percent)}</Tag>
