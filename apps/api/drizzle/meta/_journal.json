@@ -393,6 +393,13 @@
       "when": 1792776051266,
       "tag": "0055_message-about-event",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792806194555,
+      "tag": "0056_search-folded",
+      "breakpoints": true
     }
   ]
 }

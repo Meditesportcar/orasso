@@ -1,7 +1,7 @@
 // Recherche de premier niveau et Explorer (lot 29) : `GET /search`, `GET /events` (affinités, distance, filtres),
 // `GET /pros` (distance, filtres). En cookie ET en jeton porteur. Confidentialité, abus, absence de déduction.
 import { type affinityOf, compareByAffinity, fromWallTime } from "@orasso/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +33,7 @@ import {
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { fold } from "../../lib/text-search";
 import { socialRepo } from "../social/repo";
 
 afterAll(async () => {
@@ -578,6 +579,21 @@ describe("filtres combinés et texte", () => {
     // Même règle dans la recherche de premier niveau (groupe Événements).
     const search = await get(viewer, `/search?q=${encodeURIComponent("Médite")}`);
     expect(ids(search.json.events)).toEqual([night.slug]);
+  });
+
+  it("lot R1, tour 2 : `orasso_fold` (base, index de la migration 0056) donne le même texte que `fold` (API)", async () => {
+    for (const text of [
+      "MéditeSportCar",
+      "ÉLNE",
+      "Ÿvelines",
+      "Çà et là",
+      "Noël à l'Île",
+      "ÀÇÈÑ ÔÛ",
+      "Canet-en-Roussillon",
+    ]) {
+      const { rows } = await db.execute<{ v: string }>(sql`select orasso_fold(${text}) as v`);
+      expect(rows[0]?.v, text).toBe(fold(text));
+    }
   });
 
   it("lot R1 : un événement terminé n'est jamais listé, même avec une période commencée plus tôt (plusieurs jours compris)", async () => {

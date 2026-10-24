@@ -43,12 +43,51 @@ describe("réglage des widgets de l'accueil", () => {
     let c = defaultHomeWidgets;
     c = moveHomeWidget(c, "weather", -1);
     expect(c.order.indexOf("weather")).toBeLessThan(c.order.indexOf("nearby"));
-    c = moveHomeWidget(c, "fuel", 1);
+    // Stations proposées (le jour où `NEARBY_STATIONS_ENABLED` revient) : elles se déplacent comme les autres.
+    c = moveHomeWidget(c, "fuel", 1, () => true);
     expect(c.order.at(-1)).toBe("fuel");
+    c = moveHomeWidget(c, "wash", 1, () => true);
+    expect(c.order.at(-1)).toBe("wash");
     c = toggleHomeWidget(c, "wash");
     expect(visibleHomeWidgets(c)).not.toContain("wash");
     c = toggleHomeWidget(c, "wash");
     expect(visibleHomeWidgets(c)).toContain("wash");
+  });
+
+  it("lot R1, tour 2 : stations retirées, on ne déplace qu'entre widgets proposés ; les stations gardent leur place", () => {
+    // Un ancien ordre personnalisé : une station entre deux widgets proposés.
+    const old = normalizeHomeWidgets({
+      order: ["next_access", "pending", "wash", "agenda", "fuel", "nearby", "weather", "favorite_garage"],
+      hidden: [],
+    });
+    const down = moveHomeWidget(old, "pending", 1);
+    expect(down.order).toEqual([
+      "next_access",
+      "agenda",
+      "wash",
+      "pending",
+      "fuel",
+      "nearby",
+      "weather",
+      "favorite_garage",
+    ]);
+    const up = moveHomeWidget(down, "nearby", -1);
+    expect(up.order).toEqual([
+      "next_access",
+      "agenda",
+      "wash",
+      "nearby",
+      "fuel",
+      "pending",
+      "weather",
+      "favorite_garage",
+    ]);
+    // Une station ne se déplace pas ; le premier proposé ne monte pas au-dessus de « Prochain accès ».
+    expect(moveHomeWidget(old, "wash", 1)).toBe(old);
+    expect(moveHomeWidget(down, "agenda", -1)).toBe(down);
+    // Le dernier proposé ne descend pas (les stations derrière lui ne comptent pas).
+    expect(defaultHomeWidgets.order.slice(-3)).toEqual(["favorite_garage", "wash", "fuel"]);
+    expect(moveHomeWidget(defaultHomeWidgets, "favorite_garage", 1)).toBe(defaultHomeWidgets);
   });
 
   it("valide strictement ce qui s'enregistre", () => {

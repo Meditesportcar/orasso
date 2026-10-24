@@ -74,7 +74,7 @@ export const notificationsService = {
         },
         inJournal: input.inJournal ?? true,
         eventId: input.eventId ?? null,
-        deliverAfter: immediate ? at : deliverAfter(at, input.eventStartsAt ?? null),
+        deliverAfter: immediate || !env.NOTIFY_QUIET_HOURS ? at : deliverAfter(at, input.eventStartsAt ?? null),
       })
       .returning();
     if (!row) throw new Error("Notification non enregistrée");
@@ -107,7 +107,7 @@ export const notificationsService = {
       },
       inJournal: input.inJournal ?? true,
       eventId: input.eventId ?? null,
-      deliverAfter: immediate ? at : deliverAfter(at, input.eventStartsAt ?? null),
+      deliverAfter: immediate || !env.NOTIFY_QUIET_HOURS ? at : deliverAfter(at, input.eventStartsAt ?? null),
     };
     const unique = [...new Set(userIds)];
     for (let i = 0; i < unique.length; i += 1000) {

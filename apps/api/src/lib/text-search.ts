@@ -28,13 +28,13 @@ export function fold(text: string): string {
 }
 
 // Lot R1 (retour de Damien du 24/10 : « Médite » ne trouvait pas MéditeSportCar) : la même chose côté base, sans
-// extension (`unaccent` n'est pas partout) : `translate` enlève les accents des deux casses (indépendant de la locale de
-// la base), puis `lower`. À comparer avec `like` à un motif fait de `fold(mot)`.
-const ACCENTED = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝŸ";
-const PLAIN = "aaaaaaceeeeiiiinooooouuuuyyaaaaaaceeeeiiiinooooouuuuyy";
+// extension (`unaccent` n'est pas partout). Tour 2 : par la fonction `orasso_fold` (migration 0056 : `translate` des
+// deux casses, indépendant de la locale de la base, puis `lower`), IMMUTABLE, qui porte les index trigrammes du titre,
+// de la ville et du lieu des événements et du nom des structures ; l'expression doit rester exactement celle-ci pour
+// que ces index servent. À comparer avec `like` à un motif fait de `fold(mot)` (parité testée).
 
 /** Colonne en minuscules sans accents (SQL), comme `fold`. */
-export const foldedSql = (column: SQLWrapper): SQL => sql`lower(translate(${column}, ${ACCENTED}, ${PLAIN}))`;
+export const foldedSql = (column: SQLWrapper): SQL => sql`orasso_fold(${column})`;
 
 /**
  * Un mot saisi se retrouve dans une des colonnes, sans tenir compte des accents ni de la casse ; un début de mot (ou un

@@ -46,7 +46,7 @@ import { ProTile } from "../components/ProTile";
 import { api, apiOrThrow, getMe } from "../lib/api.server";
 import { now } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
-import { keptExplorerParams, readExplorerCookie, setExplorerCookie } from "../lib/explorerChoice.server";
+import { explorerChoice } from "../lib/explorerChoice.server";
 import {
   activeFilters,
   EVENT_SORTS,
@@ -125,13 +125,11 @@ type PeopleData = {
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  if (url.search === "") {
-    const saved = readExplorerCookie(request);
-    if (saved) throw redirect(`/app/explorer?${saved}`);
-  }
-  const kept = keptExplorerParams(url.searchParams);
+  // Tour 2 : le choix appartient au compte connecté (`explorerChoice.server.ts`).
+  const choice = await explorerChoice(request, url);
+  if (choice.redirectTo) throw redirect(choice.redirectTo);
   const result = await load(request, url);
-  return kept ? data(result, { headers: { "set-cookie": setExplorerCookie(request, kept) } }) : result;
+  return choice.setCookie ? data(result, { headers: { "set-cookie": choice.setCookie } }) : result;
 }
 
 async function load(request: Request, url: URL) {

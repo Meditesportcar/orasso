@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { login, loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
 import { r1Events } from "./helpers/lotr1";
 import { RELAIS } from "./relais";
 
@@ -85,6 +85,13 @@ test("site : « Médite », événements terminés, choix gardé, plus de statio
       await page.goto("/app/explorer");
       await expect(page).toHaveURL(/\/app\/explorer\?segment=evenements$/);
 
+      // Tour 2 : pas de dates absolues dans le choix gardé (« À partir du » d'aujourd'hui).
+      const today = new Date().toISOString().slice(0, 10);
+      await page.goto(`/app/explorer?segment=evenements&tri=date&du=${today}`);
+      await page.goto("/app/explorer");
+      await expect(page).toHaveURL(/tri=date/);
+      await expect(page).not.toHaveURL(/du=/);
+
       // Accueil : ni lavage ni carburant (blocs et réglages).
       await page.goto("/app");
       await expect(page.getByTestId("widget-favorite_garage")).toBeVisible();
@@ -102,5 +109,47 @@ test("site : « Médite », événements terminés, choix gardé, plus de statio
       await expect.poll(async () => (await ctx.cookies()).find((c) => c.name === "orasso-explorer")).toBeUndefined();
       await ctx.close();
     }
+  }
+});
+
+test("site, tour 2 : le choix appartient au compte ; « Tous les formats » se restaure tel quel", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const kenji = await login("kenji@orasso.local");
+  const before = await apiCall<{ eventFormats: string[] }>(kenji, "GET", "/me/preferences");
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  try {
+    // Préférences restrictives (expositions seulement) : sans `format`, l'Explorer ne montre que des expositions.
+    expect((await apiCall(kenji, "PATCH", "/me/preferences", { eventFormats: ["exhibition"] })).status).toBe(200);
+    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+    const tiles = page.getByTestId("event-tile");
+    await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=date");
+    await expect(tiles.first()).toBeVisible();
+    const filtered = await tiles.count();
+    // « Tous les formats » choisi : plus d'événements ; après un tour ailleurs, il revient tel quel.
+    await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=date&format=");
+    await expect(tiles.first()).toBeVisible();
+    const all = await tiles.count();
+    expect(all).toBeGreaterThan(filtered);
+    await page.goto("/app");
+    await page.goto("/app/explorer");
+    await expect(page).toHaveURL(/format=(&|$)/);
+    await expect(tiles).toHaveCount(all);
+
+    // Session de Kenji expirée (cookies de session effacés, celui du choix gardé), Damien se connecte sans déconnexion :
+    // le choix de Kenji ne s'applique pas et s'efface.
+    const keep = (await ctx.cookies()).filter((c) => c.name === "orasso-explorer");
+    expect(keep).toHaveLength(1);
+    await ctx.clearCookies();
+    await ctx.addCookies(keep);
+    await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+    await page.goto("/app/explorer");
+    await expect(page).toHaveURL(/\/app\/explorer$/);
+    await expect.poll(async () => (await ctx.cookies()).find((c) => c.name === "orasso-explorer")).toBeUndefined();
+  } finally {
+    await apiCall(kenji, "PATCH", "/me/preferences", { eventFormats: before.data.eventFormats });
+    await ctx.close();
   }
 });

@@ -38,3 +38,19 @@ export function bigTitleFit(input: {
   // Seul sur sa ligne : il tient toujours, quitte à descendre sous 70 % (un titre ne se coupe jamais).
   return { fontSize: Math.floor(size * scaleFor(row) * 10) / 10, stacked: narrow };
 }
+
+/** Les trois largeurs mesurées du grand titre (0 : pas encore mesurée). */
+export type BigTitleLayout = { natural: number; row: number; label: number };
+export type BigTitleMeasure = { kind: keyof BigTitleLayout; width: number };
+export const initialBigTitleLayout: BigTitleLayout = { natural: 0, row: 0, label: 0 };
+
+/**
+ * Tour 2 : ce que fait `BigTitle` de chaque `onLayout` (réducteur pur, testé) : une largeur nulle ou illisible (onglet
+ * préchargé caché, mise en page transitoire) ne change rien, la dernière largeur visible reste ; une nouvelle largeur
+ * (rotation, autre écran) remplace l'ancienne et la taille se recalcule.
+ */
+export function bigTitleLayout(state: BigTitleLayout, m: BigTitleMeasure): BigTitleLayout {
+  const width = Math.round(m.width * 10) / 10;
+  if (!(width > 0) || state[m.kind] === width) return state;
+  return { ...state, [m.kind]: width };
+}

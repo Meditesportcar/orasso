@@ -13,7 +13,8 @@ import {
   resolvePosition,
   upcomingEndBound,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gte, inArray, lt, ne, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, ne, or, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../../db/client";
 import { applications, events, structures } from "../../db/schema";
@@ -25,6 +26,10 @@ import { decorateForMedia, mediaExploreFilters } from "../media/explore";
 import { card } from "./card";
 import { daysRepo } from "./days";
 import type { EventRow } from "./repo";
+
+/** Lot R1, tour 2 : tables de la recherche par texte (sous-requêtes indexées). */
+const matchedEvents = alias(events, "matched_events");
+const matchedStructures = alias(structures, "matched_structures");
 
 const safeOffset = (n: number): number => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 const decodeOffset = (cursor: string | undefined): number =>
@@ -139,9 +144,28 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
     );
   }
   // Lot R1 : chaque mot se retrouve dans le titre, la ville, le lieu (adresse) ou le nom de l'organisateur, sans tenir
-  // compte des accents ni de la casse ; un début de mot suffit (« Médite » trouve MéditeSportCar).
+  // compte des accents ni de la casse ; un début de mot suffit (« Médite » trouve MéditeSportCar). Tour 2 : une
+  // sous-requête par table, pour que chacune se serve de ses index trigrammes (`orasso_fold`, migration 0056) ; une
+  // seule condition sur les deux tables jointes ne pourrait en utiliser aucun.
   for (const token of searchTokens(q.q)) {
-    filters.push(anyColumnContains(token, [events.title, events.city, events.addressLine, structures.name]));
+    filters.push(
+      or(
+        inArray(
+          events.id,
+          db
+            .select({ id: matchedEvents.id })
+            .from(matchedEvents)
+            .where(anyColumnContains(token, [matchedEvents.title, matchedEvents.city, matchedEvents.addressLine])),
+        ),
+        inArray(
+          events.structureId,
+          db
+            .select({ id: matchedStructures.id })
+            .from(matchedStructures)
+            .where(anyColumnContains(token, [matchedStructures.name])),
+        ),
+      ),
+    );
   }
   if (wantsRadius && located) {
     filters.push(withinRadiusSql(events.lat, events.lng, located.position, q.radiusKm ?? 50));
