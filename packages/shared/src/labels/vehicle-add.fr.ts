@@ -84,6 +84,10 @@ export const vehicleAddLabels = {
   plateProbable: (n: number) =>
     `Photo ${n} : une plaque semble visible, à vérifier. Pose le cadre dessus, ou touche « Aucune plaque ».`,
   plateSearching: "On cherche la plaque sur tes photos…",
+  /** Lot R3a (phase de test) : lecture automatique impossible, avec un code court (nom de l'erreur, « aucun texte lu »). */
+  plateReadFailed: "Lecture automatique impossible sur ce téléphone : pose le cadre à la main",
+  plateReadCode: (failure: string) =>
+    failure === "absent" ? "module absent" : failure === "no-text" ? "aucun texte lu" : failure.replace(/^error:/, ""),
   noneTitle: "Aucune plaque visible sur cette photo ?",
   noneText: "Elle partira sans masque. Vérifie bien : l'avant et l'arrière de la voiture.",
   noneYes: "Oui, aucune plaque",

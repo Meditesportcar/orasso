@@ -16,9 +16,11 @@ export function detectionPatch(
   photo: DraftPhoto,
   found: readonly FoundPlate[] | null,
   mode: BlurMode,
-): Pick<DraftPhoto, "detected" | "detection" | "rects" | "readings"> {
+  failure?: string,
+): Pick<DraftPhoto, "detected" | "detection" | "rects" | "readings" | "detectionFailure"> {
   const rects = surePlates(found ?? []).map((f) => f.rect);
   return {
+    detectionFailure: failure,
     detected: rects,
     detection: found === null ? "unavailable" : rects.length ? "found" : "none",
     rects: mode === "auto" ? rects : photo.rects,

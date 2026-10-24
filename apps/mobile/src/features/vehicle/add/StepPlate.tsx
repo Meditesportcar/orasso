@@ -31,7 +31,7 @@ import {
   vehicleAddLabels as V,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -246,6 +246,16 @@ export function StepPlate({
             </View>
           ) : null}
         </PlateFrameEditor>
+      ) : null}
+      {/* Lot R3a (phase de test, Pixel de Damien) : la lecture automatique n'a pas pu se faire, avec son code court. Le
+          web n'a jamais de lecture automatique : rien à dire. */}
+      {photo?.detectionFailure && photo.rects.length === 0 && !photo.remoteId && Platform.OS !== "web" ? (
+        <View style={styles.readFailed} testID="plate-read-failed">
+          <Icon name="info" size={14} color={c.inkMuted} />
+          <Text variant="caption" color={c.inkMuted} style={styles.grow}>
+            {`${V.plateReadFailed} · ${V.plateReadCode(photo.detectionFailure)}`}
+          </Text>
+        </View>
       ) : null}
       {photo && photo.rects.length > 0 ? (
         <View style={styles.hints}>
@@ -630,6 +640,7 @@ const styles = StyleSheet.create({
   },
   confirmRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space2 },
   hints: { gap: space2 },
+  readFailed: { flexDirection: "row", alignItems: "flex-start", gap: space1 + 2 },
   hint: { flexDirection: "row", alignItems: "flex-start", gap: space2 + 2 },
   block: { gap: space2 + 2, padding: 14, borderRadius: tokens.radius.radiusLg },
   blockHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },

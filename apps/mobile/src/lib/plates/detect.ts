@@ -7,7 +7,13 @@
 // reconnu est signalée « probable », jamais appliquée d'office (ni cadre, ni numéro) : la personne vérifie.
 import { formatPlate, type PlateRect, plateKind } from "@orasso/shared";
 
-import { recognizeText, type TextCorners, type TextFrame, type TextLineResult } from "./mlkit";
+import {
+  type RecognizeResult,
+  recognizeTextResult,
+  type TextCorners,
+  type TextFrame,
+  type TextLineResult,
+} from "./mlkit";
 import { normalizePlateText, plateReadings } from "./recognize";
 
 /** Agrandissement du rectangle détecté : la plaque entière, bords compris, est floutée. */
@@ -384,19 +390,76 @@ export function suggestedPlate(
   return rival ? null : formatPlate(best.plate);
 }
 
+/** Lot R3a : côté de la copie réduite du second essai, quand ML Kit ne lit rien sur une grande photo. */
+export const RETRY_SIDE = 1024;
+
+/** Raison d'une lecture impossible, montrée en petit à l'étape Plaque (phase de test) : code court, sans texte lu. */
+export type DetectionFailure = "absent" | "no-text" | `error:${string}`;
+
+export type DetectionResult = { found: FoundPlate[] | null; failure?: DetectionFailure; retried: boolean };
+
+export type DetectionDeps = {
+  recognize: (uri: string) => Promise<RecognizeResult>;
+  /** Copie réduite (côté le plus long `side`) ; absente : pas de second essai. */
+  shrink?: (uri: string, width: number, height: number, side: number) => Promise<{ uri: string; width: number; height: number }>;
+};
+
+/**
+ * Lot R3a (demande du coordinateur) : lecture de la plaque avec sa raison d'échec, et un second essai sur une copie
+ * réduite (`RETRY_SIDE`) quand ML Kit échoue ou ne lit aucune ligne sur une photo plus grande. Les cadres sont
+ * normalisés (0–1) : ceux de la copie valent pour l'original. Module absent : pas de second essai.
+ */
+export async function detectWithRetry(
+  uri: string,
+  width: number,
+  height: number,
+  deps: DetectionDeps,
+): Promise<DetectionResult> {
+  if (width <= 0 || height <= 0) return { found: null, failure: "absent", retried: false };
+  const first = await deps.recognize(uri).catch((e): RecognizeResult => ({ status: "error", code: String(e) }));
+  if (first.status === "ok" && first.lines.length > 0) {
+    return { found: logFound(findPlates(first.lines, width, height), width, height), retried: false };
+  }
+  if (first.status === "absent") return { found: null, failure: "absent", retried: false };
+  let result: RecognizeResult = first;
+  let size = { width, height };
+  let retried = false;
+  if (deps.shrink && Math.max(width, height) > RETRY_SIDE) {
+    try {
+      const small = await deps.shrink(uri, width, height, RETRY_SIDE);
+      const second = await deps.recognize(small.uri);
+      retried = true;
+      console.info(`[plaque] second essai sur ${small.width}×${small.height}`);
+      if (second.status === "ok" && second.lines.length > 0) {
+        result = second;
+        size = small;
+      } else if (first.status === "ok" && second.status === "error") result = second;
+    } catch (e) {
+      console.warn(`[plaque] copie réduite impossible : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (result.status === "ok" && result.lines.length > 0) {
+    // Les cadres sont normalisés sur la copie : ils valent pour l'original.
+    return { found: logFound(findPlates(result.lines, size.width, size.height), width, height), retried };
+  }
+  if (result.status === "error") return { found: null, failure: `error:${result.code}`, retried };
+  // Lecture faite sans aucune ligne : aucune plaque (tableau vide), avec la raison pour l'écran.
+  return { found: [], failure: "no-text", retried };
+}
+
+function logFound(found: FoundPlate[], width: number, height: number): FoundPlate[] {
+  // Trace de diagnostic au logcat (tailles et nombres seulement, jamais le texte ni le numéro).
+  const sure = surePlates(found).length;
+  console.info(`[plaque] photo ${width}×${height} : ${sure} plaque(s) sûre(s), ${found.length - sure} à vérifier`);
+  return found;
+}
+
 /**
  * Propose les plaques d'une photo locale, avec leur lecture. `null` : pas de détection possible ici (web, Expo Go,
  * erreur de ML Kit) ; tableau vide : aucune plaque repérée.
  */
 export async function detectPlateReadings(uri: string, width: number, height: number): Promise<FoundPlate[] | null> {
-  if (width <= 0 || height <= 0) return null;
-  const lines = await recognizeText(uri);
-  if (!lines) return null;
-  const found = findPlates(lines, width, height);
-  // Lot R3a : trace de diagnostic au logcat (tailles et nombres seulement, jamais le texte ni le numéro).
-  const sure = surePlates(found).length;
-  console.info(`[plaque] photo ${width}×${height} : ${sure} plaque(s) sûre(s), ${found.length - sure} à vérifier`);
-  return found;
+  return (await detectWithRetry(uri, width, height, { recognize: recognizeTextResult })).found;
 }
 
 /** Les cadres des plaques reconnues seuls (photo ajoutée après coup, contenus des médias) : jamais les probables. */

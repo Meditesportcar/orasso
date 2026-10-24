@@ -72,6 +72,18 @@ export async function cropSquare(
   return { uri: saved.uri, width: saved.width, height: saved.height };
 }
 
+/**
+ * Lot R3a : copie réduite d'une photo locale (côté le plus long `side`), pour le second essai de la lecture de plaque.
+ * Fichier temporaire de l'appli, jamais envoyé.
+ */
+export async function shrinkPhoto(uri: string, width: number, height: number, side: number): Promise<PickedPhoto> {
+  const context = ImageManipulator.manipulate(uri);
+  context.resize(width >= height ? { width: side } : { height: side });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
 async function toJpeg(asset: { uri: string; width: number; height: number }, maxSide: number): Promise<PickedPhoto> {
   const context = ImageManipulator.manipulate(asset.uri);
   const longest = Math.max(asset.width, asset.height);

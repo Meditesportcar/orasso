@@ -352,9 +352,10 @@ export function ShareBody({
         </SmButton>
       ) : null}
       {/* Tour 2 : une plaque détectée, le bouton principal est « La masquer » ; partager reste possible, confirmé. */}
+      {/* Lot R3a (retour 8) : côte à côte, « La masquer » s'écrasait en colonne (« L / A ») ; l'un sous l'autre. */}
       {check === "found" ? (
-        <View style={styles.row}>
-          <SmButton kind="p" big icon="eyeOff" onPress={maskPlates} style={styles.grow} testID="share-plate-mask">
+        <View style={styles.stack}>
+          <SmButton kind="p" big icon="eyeOff" onPress={maskPlates} style={styles.wide} testID="share-plate-mask">
             {L.plateMask}
           </SmButton>
           <SmButton
@@ -363,6 +364,7 @@ export function ShareBody({
             icon="share"
             disabled={!current || busy !== null}
             onPress={() => confirmShareAnyway(() => void send("share"))}
+            style={styles.wide}
             testID="share-anyway"
           >
             {L.shareAnyway}

@@ -63,6 +63,11 @@ export type DraftPhoto = {
    * du filet de sécurité (`probable`) sont gardées comme donnée « à vérifier », jamais appliquées d'office.
    */
   readings?: PlateReading[];
+  /**
+   * Lot R3a (phase de test) : raison d'une lecture automatique impossible (`DetectionFailure` de `lib/plates/detect` :
+   * « absent », « no-text », « error:<code> »), montrée en petit à l'étape Plaque.
+   */
+  detectionFailure?: string;
   /** Photo locale sans cadre : la personne a confirmé « Envoyer sans flouter : aucune plaque visible ». */
   noPlate?: boolean;
 };
