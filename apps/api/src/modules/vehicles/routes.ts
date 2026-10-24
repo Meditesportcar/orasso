@@ -114,7 +114,7 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   // Lot R3a, tour 2 : zones des textes d'Orasso sur l'affiche (la vérification de plaque de l'appli les écarte).
   .get("/me/vehicles/:id/share-zones", async (c) => {
     const v = await requireUser(c);
-    rateLimit("shareImage", v.user.id);
+    rateLimit("shareZones", v.user.id);
     const { format, style } = query(c, shareZonesQuery);
     return c.json(await vehiclesService.shareZones(v, uuidParam(c, "id"), format, style));
   })

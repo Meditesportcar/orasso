@@ -22,6 +22,11 @@ export const rateRules = {
   vehiclePhoto: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
   shareImage: { max: 40, windowMs: 3_600_000, message: "Trop d'affiches générées : réessaie plus tard." },
+  /**
+   * Lot R3a, tour 2 : zones des textes de l'affiche (mise en page sans photo, une par vérification de plaque) ; à part,
+   * pour ne pas entamer le quota des images.
+   */
+  shareZones: { max: 120, windowMs: 3_600_000, message: "Trop de vérifications d'affiche : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */
   accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
   /** Recherche du staff par début de plaque ou pseudo. */
