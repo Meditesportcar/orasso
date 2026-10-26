@@ -44,6 +44,15 @@ export function pollShare(votes: number, total: number): number {
   return total > 0 ? Math.round((votes / total) * 100) : 0;
 }
 
+/**
+ * Forme du cadre des photos d'une publication (appli et site) : celle de la première photo, bornée entre 4:5 et
+ * 1,91:1. Chaque photo s'y loge entière (jamais recadrée, D36), sur fond sombre.
+ */
+export function crewPhotoFrameRatio(photo: { width: number; height: number } | undefined): number {
+  if (!photo || photo.width <= 0 || photo.height <= 0) return 1;
+  return Math.min(1.91, Math.max(4 / 5, photo.width / photo.height));
+}
+
 /** Date de fin acceptée : dans le futur, et au plus `CREW_POLL_MAX_DAYS` jours plus tard. */
 export function pollEndsAtValid(endsAt: Date, now: Date): boolean {
   const t = endsAt.getTime();

@@ -3,26 +3,17 @@
 // bornée entre 4:5 et 1,91:1 ; une photo plus allongée s'y loge entière, sur fond sombre. Les images sont privées :
 // servies par l'API au membre connecté seulement (`PrivateImage`, jeton de session).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type CrewPostPhoto, crewFeedLabels } from "@orasso/shared";
+import { type CrewPostPhoto, crewFeedLabels, crewPhotoFrameRatio } from "@orasso/shared";
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { PrivateImage } from "@/features/boite/PrivateImage";
 
-const MIN_RATIO = 4 / 5;
-const MAX_RATIO = 1.91;
-
-/** Rapport largeur / hauteur du cadre : celui de la première photo, borné. */
-export function frameRatio(photo: Pick<CrewPostPhoto, "width" | "height"> | undefined): number {
-  if (!photo || photo.width <= 0 || photo.height <= 0) return 1;
-  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, photo.width / photo.height));
-}
-
 export function PostPhotos({ photos, pseudo }: { photos: CrewPostPhoto[]; pseudo: string }) {
   const { t } = useTheme();
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
-  const ratio = frameRatio(photos[0]);
+  const ratio = crewPhotoFrameRatio(photos[0]);
   const height = width > 0 ? width / ratio : 0;
   const n = photos.length;
   return (

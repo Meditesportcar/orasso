@@ -7,6 +7,7 @@ import {
   type CrewPostView,
   crewFeedLabels,
   crewFeedWhen,
+  crewPhotoFrameRatio,
   gradeLabels,
   pollShare,
 } from "@orasso/shared";
@@ -19,17 +20,16 @@ import { ReportDialog } from "../ReportDialog";
 
 export const whenOf = (iso: string) => crewFeedWhen(new Date(iso), now(), formatDay(iso));
 
-const MIN_RATIO = 4 / 5;
-const MAX_RATIO = 1.91;
-const ratioOf = (p: { width: number; height: number } | undefined) =>
-  p && p.width > 0 && p.height > 0 ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, p.width / p.height)) : 1;
-
 function Photos({ post }: { post: CrewPostView }) {
   const [index, setIndex] = useState(0);
   const n = post.photos.length;
   const pseudo = post.author?.pseudo ?? crewFeedLabels.deletedAccount;
   return (
-    <div className="cf-photos" style={{ aspectRatio: String(ratioOf(post.photos[0])) }} data-testid="crew-post-photos">
+    <div
+      className="cf-photos"
+      style={{ aspectRatio: String(crewPhotoFrameRatio(post.photos[0])) }}
+      data-testid="crew-post-photos"
+    >
       <div
         className="cf-photos__track"
         onScroll={(e) => {
