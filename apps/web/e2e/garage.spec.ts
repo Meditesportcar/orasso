@@ -189,7 +189,8 @@ test("certification : Kenji demande, Damien certifie, la puissance change et ell
   await expect(page.getByTestId("certification")).toContainText("Certifié depuis le");
 
   // Modifier la puissance : certification perdue.
-  await page.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator("summary").click();
+  // Lot R5a : la feuille contient aussi la ligne « Proposer un style » (un autre <summary>) : seulement le sien.
+  await page.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator(":scope > summary").click();
   // Une valeur différente de l'actuelle (lot 34 : un passage précédent a pu laisser 455 ch, rien ne changeait alors).
   const power = page.getByLabel("Puissance (ch)");
   await power.fill(String((Number(await power.inputValue()) || 450) + 1));

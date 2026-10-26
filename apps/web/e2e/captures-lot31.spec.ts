@@ -131,7 +131,7 @@ test("captures du garage et de la certification", async ({ browser }) => {
       await take(kenji as Cookie, "/app/garage", "01-garage");
       await take(kenji as Cookie, `/app/garage/${supra.id}`, "02-vehicule");
       await take(kenji as Cookie, `/app/garage/${supra.id}`, "03-vehicule-modifier", async (p) => {
-        await p.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator("summary").click();
+        await p.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator(":scope > summary").click();
       });
       await take(lea as Cookie, "/app/garage/nouveau", "04-nouveau-categories-grisees", async (p) => {
         await p.getByLabel("Marque", { exact: true }).selectOption({ label: "BMW" });

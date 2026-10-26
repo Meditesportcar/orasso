@@ -165,8 +165,12 @@ test("site R3b : année des dates, un seul lieu, sorties passées, rejoindre un 
       await expect(np.getByTestId("crew-join-create").getByTestId("crew-new")).toBeVisible();
       const row = near.getByTestId("crew-row").first();
       if (first) {
-        await row.getByTestId("crew-join").click();
         // Lot R5c2 (R5.8) : « Rejoindre » ouvre la fenêtre avec un mot pour le chef (facultatif) avant d'envoyer.
+        // La fenêtre s'ouvre par JavaScript : avant l'hydratation de la page, le clic ne fait rien ; on retouche.
+        await expect(async () => {
+          await row.getByTestId("crew-join").click();
+          await expect(row.getByTestId("crew-request-send")).toBeVisible({ timeout: 1_000 });
+        }).toPass({ timeout: 30_000 });
         await row.getByTestId("crew-request-send").click();
         await expect(row.getByTestId("crew-requested")).toBeVisible({ timeout: 30_000 });
         first = false;
