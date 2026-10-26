@@ -207,7 +207,7 @@ export function SmButton({
   // Dans un ticket mis en avant (`.tk.me`, lot C7) : l'encre de l'affiche, et le bouton bordé sans fond de carte.
   const onPoster = useOnTicketPoster();
   // Lot R5b : un libellé ne se coupe jamais en plein mot (le corps baisse jusqu'à 11 px au besoin).
-  const safe = useWordSafeLabel(big ? 14 : 12, children ?? "");
+  const safe = useWordSafeLabel(big ? 14 : 12, children);
   const ink = onPoster ? t.color.posterInk : t.color.ink;
   const look: Record<SmKind, { box: ViewStyle; color: string }> = {
     p: {

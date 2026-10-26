@@ -165,7 +165,8 @@ export function Button(props: ButtonProps) {
   }
   // Lot R5b : jamais de coupure en plein mot ; le corps baisse au besoin (11 px au plus bas).
   const baseSize = fontSize ?? BUTTON_FONT_SIZE;
-  const safe = useWordSafeLabel(baseSize, typeof children === "string" ? children : "");
+  // Tour 2 : la clé est le texte à plat, enfants JSX compris.
+  const safe = useWordSafeLabel(baseSize, children);
   if (safe.fontSize !== null) {
     lineHeight = Math.round(
       ((lineHeight ?? (fontSize ? fontSize + 2 : BUTTON_LINE_HEIGHT)) * safe.fontSize) / baseSize,

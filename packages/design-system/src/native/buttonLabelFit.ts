@@ -19,12 +19,51 @@ export function breaksInsideWord(lines: readonly string[]): boolean {
   return false;
 }
 
+/**
+ * Lot R5b, tour 2 (relecture Opus 5) : le texte à plat d'un libellé, enfants JSX compris (`<>Ajouter {nom}</>`,
+ * tableaux, nombres). C'est la clé de l'ajustement : un autre texte repart du corps de base.
+ */
+export function flatText(node: unknown): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(flatText).join("");
+  if (typeof node === "object" && "props" in node) {
+    return flatText((node as { props?: { children?: unknown } }).props?.children);
+  }
+  return "";
+}
+
+/** Pixels retirés après une coupure en plein mot : un de plus, jamais sous le plancher (`null` : déjà au plancher). */
+export function nextCut(base: number, cut: number): number | null {
+  return base - cut - 1 >= BUTTON_LABEL_MIN ? cut + 1 : null;
+}
+
+/**
+ * La place du libellé a-t-elle grandi depuis la dernière coupure vue (rotation, colonne élargie, cellule de liste
+ * mesurée d'abord à l'estimation) ? Le libellé remplissait alors toute sa place ; plus large maintenant, il repart du
+ * corps de base. `cutWidth` : sa largeur au moment de cette coupure.
+ */
+export function widthGrew(cutWidth: number | null, width: number): boolean {
+  return cutWidth !== null && width > cutWidth + 1;
+}
+
 type WebRect = { top: number; width: number };
 type WebRange = {
   setStart(node: unknown, offset: number): void;
   setEnd(node: unknown, offset: number): void;
+  selectNodeContents(node: unknown): void;
   getClientRects(): ArrayLike<WebRect>;
 };
+
+/** Nombre de lignes distinctes d'une suite de rectangles (leur haut, arrondi au pixel). */
+function lineCount(rects: ArrayLike<WebRect>): number {
+  const tops = new Set<number>();
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (r && r.width > 0) tops.add(Math.round(r.top));
+  }
+  return tops.size;
+}
 type WebTextNode = { textContent: string | null };
 type WebDocument = {
   createRange(): WebRange;
@@ -42,6 +81,9 @@ export function webLabelBreaksInsideWord(element: unknown): boolean {
   const doc = (globalThis as { document?: WebDocument }).document;
   if (!doc || !element) return false;
   const range = doc.createRange();
+  // Tour 2 : un libellé sur une seule ligne (presque tous) ne peut pas être coupé ; une seule mesure, pas une par mot.
+  range.selectNodeContents(element);
+  if (lineCount(range.getClientRects()) < 2) return false;
   const walker = doc.createTreeWalker(element, SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.textContent ?? "";
@@ -49,13 +91,7 @@ export function webLabelBreaksInsideWord(element: unknown): boolean {
       const start = m.index ?? 0;
       range.setStart(node, start);
       range.setEnd(node, start + m[0].length);
-      const tops = new Set<number>();
-      const rects = range.getClientRects();
-      for (let i = 0; i < rects.length; i++) {
-        const r = rects[i];
-        if (r && r.width > 0) tops.add(Math.round(r.top));
-      }
-      if (tops.size > 1) return true;
+      if (lineCount(range.getClientRects()) > 1) return true;
     }
   }
   return false;
