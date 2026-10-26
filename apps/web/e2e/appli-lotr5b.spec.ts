@@ -22,7 +22,7 @@ import { RELAIS } from "./relais";
 //   - profil d'un membre : tête, réseaux, nombres, « Ajouter en ami » et « Suivre » côte à côte, « Écrire » et « ⋯ » en
 //     haut, « Sa voiture » en carré, « Prochaine sortie » avec « Toi aussi », « Son garage » ; compte privé réduit ; aperçu ;
 //   - titres « SON » et boutons coupés : à 384 px (Pixel de Damien), aucun mot perdu ni coupé, chaque titre de section
-//     a de la marge à droite de son texte, l'aide passe dessous (rangée de moins de 400 dp, tour 2) ; police agrandie
+//     a de la marge à droite de son texte, l'aide reste à sa droite à police normale (tour 2) ; police agrandie
 //     ×1,15 et ×1,3 **simulée dans la page** : c'est un contrôle web, pas une preuve (l'appli web ignore le `fontScale`
 //     d'Android) ; la vraie preuve se fait sur l'APK, au téléphone (coordinateur).
 // Béton et Sable, 390 px. Lancer avec APP_URL (appli compilée : `node scripts/appli-compilee.mjs`), API seedée.
@@ -156,8 +156,11 @@ async function labelWhole(page: Page, testID: string, label: RegExp) {
   expect(m.overflow, `${testID} : libellé hors du bouton`).toBe(false);
 }
 
-/** Tour 2 (relecture Opus 3) : sous 400 dp de rangée, l'aide d'un titre de section passe sous le titre. */
-async function hintBelow(page: Page, title: string) {
+/**
+ * Tour 2 (décision du coordinateur) : à police normale, l'aide d'un titre de section reste à sa droite, sur la même
+ * ligne, comme dans l'artefact ; le titre garde tous ses mots sur une ligne.
+ */
+async function hintRight(page: Page, title: string) {
   const m = await page
     .getByRole("heading", { name: title, exact: true })
     .first()
@@ -165,15 +168,19 @@ async function hintBelow(page: Page, title: string) {
       const hint = h.nextElementSibling;
       const hb = h.getBoundingClientRect();
       const nb = hint?.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(h);
+      const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
       return {
         has: Boolean(hint),
-        below: nb ? nb.top >= hb.bottom - 1 : false,
-        left: nb ? Math.abs(nb.left - hb.left) : 99,
+        right: nb ? nb.left >= hb.right - 1 : false,
+        sameRow: nb ? nb.top < hb.bottom : false,
+        lines,
       };
     });
   expect(m.has, `${title} : pas d'aide`).toBe(true);
-  expect(m.below, `${title} : l'aide n'est pas dessous`).toBe(true);
-  expect(m.left, `${title} : l'aide n'est pas alignée sur le titre`).toBeLessThan(2);
+  expect(m.right && m.sameRow, `${title} : l'aide n'est pas à droite`).toBe(true);
+  expect(m.lines, `${title} : le titre passe à la ligne`).toBe(1);
 }
 
 /** Un véhicule (le `index`-ième modèle BMW) avec une photo sans plaque ; renvoie son identifiant et son nom. */
@@ -307,8 +314,8 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await expect(page.getByTestId("profile-garage-vehicle")).toHaveCount(1);
     await audit(page);
     await titlesKeepTheirWords(page, ["Sa voiture", "Prochaine sortie", "Son garage"]);
-    // Rangée de moins de 400 dp : l'aide passe sous le titre.
-    for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintBelow(page, title);
+    // Police normale : l'aide reste à droite du titre (comme l'artefact).
+    for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintRight(page, title);
     await labelWhole(page, "friend-add", /^Ajouter en ami$/i);
     await shot(page, `membre-${theme}-390`);
 
@@ -347,7 +354,6 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       expect((both?.x ?? 0) + (both?.width ?? 0)).toBeLessThanOrEqual((ticket?.x ?? 0) + (ticket?.width ?? 0) + 1);
       // Le libellé du bouton est entier : tout le texte, chaque mot sur une ligne, rien hors du bouton.
       await labelWhole(big.page, "friend-add", /^Ajouter en ami$/i);
-      for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintBelow(big.page, title);
       await shot(big.page, `membre-${theme}-384-police${Math.round(k * 100)}`);
       await big.ctx.close();
     }

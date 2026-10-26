@@ -88,6 +88,9 @@ test("R5b captures : appli", async ({ browser }) => {
     // Tour 2 : l'écran « Réglages » et l'Accueil (titres de section dont l'aide ou le lien passe dessous).
     ["kenji@orasso.local", "/reglages", "reglages-kenji"],
     ["kenji@orasso.local", "/accueil", "voisin-accueil-kenji"],
+    ["kenji@orasso.local", "/explorer?segment=personnes", "voisin-explorer-personnes-kenji"],
+    ["kenji@orasso.local", "/rejoindre-crew", "voisin-crews-kenji"],
+    ["damien@orasso.local", "/equipe", "voisin-equipe-damien"],
     ["kenji@orasso.local", "/reglages/profil", "reglages-profil-kenji"],
     ["kenji@orasso.local", "/reglages/compte", "reglages-compte-kenji"],
     ["kenji@orasso.local", "/profil-public", "profil-public-kenji"],
@@ -103,6 +106,13 @@ test("R5b captures : appli", async ({ browser }) => {
   if (vehicleId) screens.push(["kenji@orasso.local", `/vehicule/${vehicleId}`, "voisin-vehicule-kenji"]);
   if (eventSlug) screens.push(["kenji@orasso.local", `/e/${eventSlug}`, "voisin-fiche-kenji"]);
   // Police agrandie à 384 px : les écrans des défauts « SON » et « AJOUT/ER ».
+  // Tour 2 (décision du coordinateur) : les titres de section à police normale à 384 px aussi (aide à droite).
+  const normal384 = new Set([
+    "voisin-accueil-kenji",
+    "voisin-explorer-personnes-kenji",
+    "voisin-crews-kenji",
+    "voisin-equipe-damien",
+  ]);
   const big = new Set([
     "profil-public-damien",
     "u-julie-par-kenji",
@@ -119,6 +129,7 @@ test("R5b captures : appli", async ({ browser }) => {
         await signIn(page, who);
         for (const [, path, name] of mine) {
           if (width === 390) await shot(page, path, `${name}-${theme}-390`);
+          else if (normal384.has(name)) await shot(page, path, `${name}-${theme}-384`);
           else if (big.has(name)) {
             await shot(page, path, `${name}-${theme}-384`);
             await shot(page, path, `${name}-${theme}-384-police115`, 1.15);

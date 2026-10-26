@@ -59,7 +59,6 @@ const CLOUD_HEIGHT = 310;
 export function TeamScreen() {
   const { t } = useTheme();
   const c = t.color;
-  const secStack = useSecHeadStack();
   const router = useRouter();
   const { me } = useSession();
   const { structureId } = useOrga();
@@ -715,14 +714,10 @@ export function TeamScreen() {
         <Muted variant="body">{events.loading ? "Chargement…" : L2.rolesNoEvent}</Muted>
       ) : (
         <>
-          <View style={styles.secH} onLayout={secStack.onLayout}>
-            <Text variant="posterS" color={c.ink} style={[styles.secTitle, secStack.stacked && styles.secTitleStacked]}>
-              {event ? L2.rolesFor(event.title) : L2.rolesPresentFirst}
-            </Text>
-            <Muted variant="caption" style={[styles.secRight, secStack.stacked && styles.secRightStacked]}>
-              {list.length > 0 ? L2.presenceConfirmed(summary.present, list.length) : L2.rolesPresentFirst}
-            </Muted>
-          </View>
+          <RolesHead
+            title={event ? L2.rolesFor(event.title) : L2.rolesPresentFirst}
+            hint={list.length > 0 ? L2.presenceConfirmed(summary.present, list.length) : L2.rolesPresentFirst}
+          />
           {choices.length > 1 ? (
             <SelectField
               label={orgaLabels.staffEventPicker}
@@ -813,6 +808,31 @@ export function TeamScreen() {
 }
 
 /** Les rôles d'un membre pour un événement, avec ce que chacun permet. */
+/**
+ * Titre des rôles (lot R5b, tour 2) : l'indication reste à droite ; dessous avec une police agrandie ou si elle ne tient
+ * pas à côté du titre (`SecHead`, `secHeadLayout`).
+ */
+function RolesHead({ title, hint }: { title: string; hint: string }) {
+  const { t } = useTheme();
+  const { stacked, onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 16,
+    side: hint,
+    sideSize: tokens.type.caption.fontSize,
+    gap: 10,
+  });
+  return (
+    <View style={styles.secH} onLayout={onLayout}>
+      <Text variant="posterS" color={t.color.ink} style={[styles.secTitle, titleStyle]}>
+        {title}
+      </Text>
+      <Muted variant="caption" style={[styles.secRight, stacked && styles.secRightStacked]}>
+        {hint}
+      </Muted>
+    </View>
+  );
+}
+
 function GiveRole({
   member,
   events,
@@ -904,7 +924,6 @@ const styles = StyleSheet.create({
     marginTop: space2,
   },
   secTitle: { flex: 1, fontSize: 16, fontStyle: "italic", textTransform: "uppercase" },
-  secTitleStacked: { flexBasis: "100%" },
   secRight: { flexShrink: 1, textAlign: "right" },
   secRightStacked: { textAlign: "left" },
   rolesb: { gap: 8 },

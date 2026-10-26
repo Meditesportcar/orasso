@@ -43,21 +43,39 @@ const EM: Record<string, number> = {
   _: 0.679,
   ".": 0.381,
   "-": 0.6,
+  // Titres de section (lot R5b, tour 2) : l'espace et la ponctuation courante, estimés au-dessus de la chasse d'Archivo.
+  " ": 0.3,
+  "'": 0.3,
+  "’": 0.3,
+  ",": 0.4,
+  ":": 0.4,
+  "·": 0.4,
+  "!": 0.45,
+  "?": 0.8,
+  "/": 0.6,
+  "(": 0.5,
+  ")": 0.5,
+  "«": 0.7,
+  "»": 0.7,
+  "&": 1.05,
 };
 const UNKNOWN_EM = 1.05;
 /** Marge pour la pente de l'italique et les écarts d'arrondi entre plateformes. */
 const SAFETY = 1.04;
 
-/** Largeur d'un mot en capitales Archivo large noire italique, en corps (« 10 » = dix fois le corps). */
-export function wideWordEm(word: string): number {
+/**
+ * Largeur d'un texte en capitales Archivo large noire italique, en corps (« 10 » = dix fois le corps). `margin` : la
+ * marge appliquée à la somme des chasses (4 % par défaut ; 10 % pour l'encre des capitales italiques d'Android).
+ */
+export function wideWordEm(word: string, margin = SAFETY): number {
   let sum = 0;
   for (const ch of word.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()) sum += EM[ch] ?? UNKNOWN_EM;
-  return sum * SAFETY;
+  return sum * margin;
 }
 
 /** Corps (px) qui fait tenir le mot le plus large de `text` dans `width`, entre `min` et `max`. */
 export function fitWideWordSize(text: string, width: number, max: number, min: number): number {
   if (!(width > 0)) return max;
-  const widest = Math.max(1, ...text.split(/\s+/).map(wideWordEm));
+  const widest = Math.max(1, ...text.split(/\s+/).map((w) => wideWordEm(w)));
   return Math.max(min, Math.min(max, Math.floor(width / widest)));
 }

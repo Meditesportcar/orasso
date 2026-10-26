@@ -119,17 +119,19 @@ function Section({
   testID: string;
 }) {
   const { t } = useTheme();
-  // Lot R5b, tour 2 (relecture Opus 3) : police agrandie ou rangée de moins de 400 dp, l'aide passe sous le titre.
-  const { stacked, onLayout } = useSecHeadStack();
+  // Lot R5b, tour 2 : l'aide reste à droite ; dessous avec une police agrandie ou si elle ne tient pas à côté du titre
+  // (`SecHead`, `secHeadLayout` ; titre en Archivo normal).
+  const { stacked, onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 14.5,
+    titleWide: false,
+    side: hint,
+    sideSize: 12,
+  });
   return (
     <View style={styles.section} testID={testID}>
       <View style={styles.secH} onLayout={onLayout}>
-        <Text
-          variant="bodyStrong"
-          color={t.color.ink}
-          style={[styles.secTitle, stacked && styles.secTitleStacked]}
-          accessibilityRole="header"
-        >
+        <Text variant="bodyStrong" color={t.color.ink} style={[styles.secTitle, titleStyle]} accessibilityRole="header">
           {title}
         </Text>
         {hint ? (
@@ -586,7 +588,6 @@ const styles = StyleSheet.create({
     rowGap: 2,
   },
   secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 14.5, lineHeight: 18, fontFamily: archivoAt(100, 800) },
-  secTitleStacked: { flexBasis: "100%" },
   secHint: { flexShrink: 1, fontSize: 12, lineHeight: 15, textAlign: "right" },
   secHintStacked: { textAlign: "left" },
   row: {

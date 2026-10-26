@@ -58,16 +58,20 @@ export function SecH({
 }) {
   const { t } = useTheme();
   const c = t.color;
-  // Lot R5b, tour 2 : police agrandie ou rangée de moins de 400 dp, la mention et le lien passent dessous (`SecHead`).
-  const { stacked, onLayout } = useSecHeadStack();
+  // Lot R5b, tour 2 : la mention et le lien restent à droite ; dessous avec une police agrandie ou s'ils ne tiennent pas
+  // à côté du titre (`SecHead`, `secHeadLayout`).
+  const withLink = Boolean(link && onLink);
+  const { onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 16,
+    side: [meta, withLink ? link : null].filter(Boolean).join(" ") || null,
+    sideSize: 13,
+    sideExtra: (withLink ? 18 : 0) + (meta && withLink ? 10 : 0),
+    gap: 10,
+  });
   return (
     <View style={styles.secH} onLayout={onLayout} testID={testID}>
-      <Text
-        variant="posterM"
-        color={c.ink}
-        accessibilityRole="header"
-        style={[styles.secTitle, stacked && styles.secTitleStacked]}
-      >
+      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={[styles.secTitle, titleStyle]}>
         {title}
       </Text>
       {meta ? (
@@ -372,7 +376,6 @@ const styles = StyleSheet.create({
     marginTop: space2,
   },
   secTitle: { fontSize: 16, lineHeight: 18, flexGrow: 1, flexShrink: 1 },
-  secTitleStacked: { flexBasis: "100%" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
   wx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 4 },

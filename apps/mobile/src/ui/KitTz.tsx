@@ -250,16 +250,20 @@ export function SecH({
   onLink?: () => void;
 }) {
   const { t } = useTheme();
-  // Lot R5b, tour 2 : police agrandie ou rangée de moins de 400 dp, l'aide ou le lien passe dessous (`SecHead`).
-  const { stacked, onLayout } = useSecHeadStack();
+  // Lot R5b, tour 2 : l'aide ou le lien reste à droite ; dessous avec une police agrandie ou s'ils ne tiennent pas à
+  // côté du titre (`SecHead`, `secHeadLayout`).
+  const withLink = Boolean(link && onLink);
+  const { stacked, onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 16,
+    side: withLink ? link : hint,
+    sideSize: withLink ? 13 : tokens.type.caption.fontSize,
+    sideExtra: withLink ? 20 : 0,
+    gap: 10,
+  });
   return (
     <View style={styles.secH} onLayout={onLayout}>
-      <Text
-        variant="posterM"
-        color={t.color.ink}
-        accessibilityRole="header"
-        style={[styles.secTitle, stacked && styles.secTitleStacked]}
-      >
+      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={[styles.secTitle, titleStyle]}>
         {title}
       </Text>
       {link && onLink ? (
@@ -515,7 +519,6 @@ const styles = StyleSheet.create({
     rowGap: 2,
   },
   secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 16 },
-  secTitleStacked: { flexBasis: "100%" },
   secHint: { flexShrink: 1, textAlign: "right" },
   secHintStacked: { textAlign: "left" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
