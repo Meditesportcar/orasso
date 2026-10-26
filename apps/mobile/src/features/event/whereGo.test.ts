@@ -28,6 +28,12 @@ describe("kmToEvent", () => {
     expect(km).toBeGreaterThan(10);
     expect(km).toBeLessThan(13);
   });
+  it("ne dit jamais NaN : coordonnées absentes (undefined) ou invalides", () => {
+    expect(kmToEvent({ lat: 1, lng: 1 }, {})).toBeNull();
+    expect(kmToEvent({ lat: 1, lng: 1 }, { lat: undefined, lng: 3 })).toBeNull();
+    expect(kmToEvent({ lat: Number.NaN, lng: 1 }, { lat: 2, lng: 3 })).toBeNull();
+    expect(goDestination({ title: "x" })).toBeNull();
+  });
   it("répond null sans position ou sans coordonnées", () => {
     expect(kmToEvent(null, { lat: 42.7, lng: 3.03 })).toBeNull();
     expect(kmToEvent({ lat: 1, lng: 1 }, { lat: null, lng: null })).toBeNull();

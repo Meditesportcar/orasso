@@ -719,8 +719,9 @@ function EventPage({
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid="event-go-maps"
+                aria-label="Google Maps"
               >
-                Google Maps
+                Maps
               </Button>
               <Button
                 variant="secondary"

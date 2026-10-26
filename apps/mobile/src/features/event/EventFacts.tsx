@@ -153,7 +153,12 @@ function DistancePill({ km }: { km: number }) {
   const { t } = useTheme();
   const c = t.color;
   return (
-    <View style={[styles.distPill, { backgroundColor: c.accent }]} testID="event-distance">
+    <View
+      accessible
+      accessibilityLabel={L.awayFromYou(km)}
+      style={[styles.distPill, { backgroundColor: c.accent }]}
+      testID="event-distance"
+    >
       <Icon name="nav" size={13} color={c.accentInk} />
       <Text variant="meta" color={c.accentInk} style={styles.distText}>
         {L.awayFromYou(km)}
@@ -170,6 +175,7 @@ function AskDistance({ busy, onPress }: { busy: boolean; onPress: () => void }) 
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={L.seeDistance}
+      hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
       disabled={busy}
       onPress={onPress}
       testID="event-distance-ask"
@@ -258,16 +264,10 @@ export function EventRows({ event }: { event: EventPublic }) {
   const when = `${formatHour(event.startsAt)} → ${formatHour(event.endsAt)}${multi ? ` · ${event.days.length} jours` : ""}`;
   const whereTitle = event.addressLine ?? event.city ?? "";
   // Lot R5d : la distance est calculée sur le téléphone (position déjà accordée, ou demandée par le bouton).
-  const located = event.lat !== null && event.lng !== null;
+  const located = event.lat != null && event.lng != null;
   const device = useDistanceToEvent(located);
   const km = kmToEvent(device.position, event);
-  const whereSub = [
-    km === null && device.status !== "on" && event.distanceKm != null ? `${Math.round(event.distanceKm)} km` : null,
-    event.addressLine ? city : null,
-    event.entranceNote,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const whereSub = [event.addressLine ? city : null, event.entranceNote].filter(Boolean).join(" · ");
   const pub = event.arrivals?.public?.strict ? event.arrivals.public : null;
   const taken = event.remaining !== null && event.capacity ? (event.capacity - event.remaining) / event.capacity : null;
   const day = formatEventDay(event.startsAt, event.endsAt);
@@ -285,20 +285,18 @@ export function EventRows({ event }: { event: EventPublic }) {
           disabled={pins.length === 0}
           testID="event-where"
         >
-          <Row
-            icon="place"
-            title={whereTitle}
-            sub={whereSub || null}
-            extra={
-              km !== null ? (
-                <DistancePill km={km} />
-              ) : device.status === "ask" || device.status === "asking" ? (
-                <AskDistance busy={device.status === "asking"} onPress={() => void device.request()} />
-              ) : null
-            }
-            right={pins.length > 0 ? <MiniPlan /> : null}
-          />
+          <Row icon="place" title={whereTitle} sub={whereSub || null} right={pins.length > 0 ? <MiniPlan /> : null} />
         </Pressable>
+        {/* Hors du toucher « Où » : le lecteur d'écran atteint la distance et le bouton, et toucher à côté n'ouvre pas la carte. */}
+        {km !== null ? (
+          <View style={styles.distRow}>
+            <DistancePill km={km} />
+          </View>
+        ) : device.status === "ask" || device.status === "asking" ? (
+          <View style={styles.distRow}>
+            <AskDistance busy={device.status === "asking"} onPress={() => void device.request()} />
+          </View>
+        ) : null}
         <GoRow event={event} />
         {ended ? null : (
           <>
@@ -423,12 +421,12 @@ const styles = StyleSheet.create({
   rowB: { fontFamily: "Archivo-ExtraBold", fontSize: 14.5, lineHeight: 18 },
   rowSmall: { fontSize: 12.5, lineHeight: 16 },
   sep: { borderTopWidth: 1, borderStyle: "dashed", marginHorizontal: 0 },
+  distRow: { paddingLeft: 14 + 36 + space3, paddingRight: 14, paddingBottom: space2 + 2, alignItems: "flex-start" },
   distPill: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    marginTop: 7,
     minHeight: 26,
     paddingHorizontal: 10,
     paddingVertical: 3,

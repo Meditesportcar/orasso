@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
@@ -42,6 +43,22 @@ async function goto(page: Page, path: string) {
   if (await skip.isVisible().catch(() => false))
     await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+}
+
+/** Intercepte l'ouverture des liens (Linking.openURL de la version web appelle window.open). */
+async function recordOpens(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __opens: string[] };
+    w.__opens = [];
+    window.open = (url) => {
+      w.__opens.push(String(url));
+      return null;
+    };
+  });
+}
+async function opened(page: Page): Promise<string[]> {
+  await page.waitForTimeout(300);
+  return page.evaluate(() => (window as unknown as { __opens: string[] }).__opens);
 }
 
 async function shot(page: Page, name: string) {
@@ -88,6 +105,23 @@ test("Lot R5d : distance et « Y aller » dans la fiche", async ({ browser }) =>
   const address = { addressLine: "Parking du port", postalCode: "66140", city: "Canet-en-Roussillon" };
   const far = await eventIn(damien, 10, `R5d Loin ${id}`.slice(0, 34), { ...address, ...EVENT });
   const addressOnly = await eventIn(damien, 10, `R5d Adresse ${id}`.slice(0, 34), address);
+  // L'API géocode l'adresse à la création (service IGN) : on retire les coordonnées en base pour de bon.
+  {
+    const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await db.connect();
+    try {
+      await db.query("update events set lat = null, lng = null where id = $1", [addressOnly.id]);
+    } finally {
+      await db.end();
+    }
+    const check = await apiCall<{ lat: number | null; lng: number | null }>(
+      null,
+      "GET",
+      `/events/by-slug/${addressOnly.slug}`,
+    );
+    expect(check.data.lat ?? null).toBeNull();
+    expect(check.data.lng ?? null).toBeNull();
+  }
 
   for (const theme of THEMES) {
     for (const width of [390, 384]) {
@@ -151,13 +185,35 @@ test("Lot R5d : distance et « Y aller » dans la fiche", async ({ browser }) =>
     await ctx.close();
   }
 
-  // 4. Par l'adresse seule : Maps et Waze (« ni adresse ni coordonnées : rien » est couvert par `whereGo.test.ts` : l'API
-  // exige une adresse à la création).
+  // 4. Les liens : par les coordonnées, puis par l'adresse seule (sans coordonnées : pas de distance, pas de bouton
+  // « Voir la distance »). « Ni adresse ni coordonnées : rien » est couvert par `whereGo.test.ts` (l'API exige une adresse).
   {
-    const { ctx, page } = await open(browser, "sable", 390, false);
+    const { ctx, page } = await open(browser, "beton", 390, true);
+    await recordOpens(page);
+    await goto(page, `/e/${far.slug}`);
+    await page.getByTestId("event-go-maps").click();
+    await page.getByTestId("event-go-waze").click();
+    expect(await opened(page)).toEqual([
+      "https://www.google.com/maps/dir/?api=1&destination=42.6988%2C3.0334",
+      "https://waze.com/ul?ll=42.6988,3.0334&navigate=yes",
+    ]);
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await open(browser, "sable", 390, true);
+    await recordOpens(page);
     await goto(page, `/e/${addressOnly.slug}`);
     await expect(page.getByTestId("event-go-maps")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("event-go-waze")).toBeVisible();
+    await expect(page.getByTestId("event-distance-ask")).toHaveCount(0);
+    await expect(page.getByTestId("event-distance")).toHaveCount(0);
+    await page.getByTestId("event-go-maps").click();
+    await page.getByTestId("event-go-waze").click();
+    const q = encodeURIComponent("Parking du port, Canet-en-Roussillon");
+    expect(await opened(page)).toEqual([
+      `https://www.google.com/maps/dir/?api=1&destination=${q}`,
+      `https://waze.com/ul?q=${q}&navigate=yes`,
+    ]);
     await shot(page, "fiche-adresse-seule-sable-390");
     await ctx.close();
   }

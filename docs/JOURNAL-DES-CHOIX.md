@@ -3032,3 +3032,12 @@ Source : `corrections-r4e.md` (relais).
 - **Écart au système** : la pastille de distance est moutarde pleine (maquette). Elle ne porte pas de néon (ombre) ; le bouton principal de l'écran reste « Candidater » / « Mon QR ».
 - **Recette** : la version web de recette ne reçoit pas le `fontScale` d'Android ; la police agrandie est remplacée par un écran de 320 px (les boutons Maps et Waze passent à la ligne, rien ne déborde). À vérifier sur le Pixel.
 - **Accueil, à signaler** : `home-maps` / `home-waze` existent seulement dans `HeroCard` (Accueil des profils média, pro et prestataire) ; l'Accueil du passionné (ticket) n'en a pas. Les deux recettes qui disent « ni Maps ni Waze » (`appli-m5`, `appli-lot43`) vérifient le ticket du passionné : elles sont vraies. Rien changé.
+
+## Lot R5d, tour 2 (relecture Opus « fusionnable après corrections ») — 26/10/2026
+
+- **Accessibilité** : la pastille de distance et « Voir la distance » sortent du toucher « Où » ; ils sont juste dessous (comme « Y aller »). La pastille a un libellé accessible (« à 11 km de toi »), le bouton a une zone de toucher de 44 px (`hitSlop`, visuel inchangé) ; toucher à côté n'ouvre pas la carte.
+- **Refus mémorisé** pour la session de l'appli (drapeau de module, jamais écrit) : après un refus de « Voir la distance », plus de bouton sur aucune fiche jusqu'au prochain lancement (Android laisse `canAskAgain` vrai). Le « Plus tard » de l'Explorer ne compte pas.
+- **Délai de 10 s** sur la lecture de la position : sans réponse, retour à « Voir la distance » ; aucun changement d'état après le démontage.
+- **Plus de repli sur `event.distanceKm`** de l'API ; `!= null` pour `lat`, `lng` ; jamais « NaN km » (testé).
+- **Site** : « Maps » et « Waze » de même largeur sous « Y aller » à 390 px. Le libellé visible est « Maps » (« Google Maps » passait sur deux lignes), le nom accessible reste « Google Maps ».
+- **Recettes** : l'événement « adresse seule » perd ses coordonnées en base (l'API géocode à la création) ; les URL de Maps et Waze sont interceptées (`window.open`) : coordonnées, puis adresse encodée. Non testé en recette : le refus gardé d'une fiche à l'autre (il faut une navigation sans rechargement ; la logique est un drapeau de module).

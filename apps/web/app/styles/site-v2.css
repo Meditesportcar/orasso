@@ -1488,5 +1488,10 @@
   margin-top: var(--space-3);
 }
 .ev__go .o-t-label {
-  margin-right: var(--space-2);
+  flex: 0 0 100%;
+}
+.ev__go > a {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
 }
