@@ -21,6 +21,8 @@ import {
 import type { CatalogStyle } from "../../db/seed/style-catalog";
 import { syncStyleCatalog } from "./style-sync";
 
+type AdminRow = { id: string; slug: string; family: string; allowedVehicleTypes: string[] | null; position: number };
+
 afterAll(async () => {
   await pool.end();
 });
@@ -335,17 +337,24 @@ describe("R5.3 : catalogue des styles et file de l'administration", () => {
     expect(
       (await call(admin, "PATCH", `/admin/categories/${(await bySlug("jdm")).id}`, { family: "genre" })).status,
     ).toBe(400);
-    // Ordre des styles d'un type : ils reprennent leurs places entre eux.
+    // Ordre des styles d'un type (tous, tour 2) : « Supermotard » avant « Roadster », positions distinctes.
+    const motoIds = async () =>
+      ((await call(admin, "GET", "/admin/categories")).json as AdminRow[])
+        .filter((c) => c.family !== "pays" && (c.allowedVehicleTypes ?? ["moto"]).includes("moto"))
+        .map((c) => c.id);
     const roadster = await bySlug("roadster");
     const supermotard = await bySlug("supermotard");
-    const before = [roadster.position, supermotard.position].sort((a, b) => a - b);
-    const ordered = await call(admin, "PATCH", "/admin/categories/order", {
-      vehicleType: "moto",
-      ids: [supermotard.id, roadster.id],
-    });
+    const ids = (await motoIds()).filter((x) => x !== supermotard.id);
+    ids.splice(ids.indexOf(roadster.id), 0, supermotard.id);
+    const ordered = await call(admin, "PATCH", "/admin/categories/order", { vehicleType: "moto", ids });
     expect(ordered.status).toBe(200);
-    expect((await bySlug("supermotard")).position).toBe(before[0]);
-    expect((await bySlug("roadster")).position).toBe(before[1]);
+    expect(await motoIds()).toEqual(ids);
+    const positions = (await db.select({ position: categories.position }).from(categories)).map((r) => r.position);
+    expect(new Set(positions).size).toBe(positions.length);
+    // Une liste incomplète : 400 (recharger la page).
+    expect(
+      (await call(admin, "PATCH", "/admin/categories/order", { vehicleType: "moto", ids: ids.slice(1) })).status,
+    ).toBe(400);
     // Un style des voitures ne se range pas dans les motos.
     expect(
       (

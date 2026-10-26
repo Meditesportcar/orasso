@@ -21,10 +21,13 @@ import type { Executor } from "../../lib/tx";
 type CategoryRow = typeof categories.$inferSelect;
 export type CategoryWithRule = CategoryRow & { rule: CategoryRule };
 
-/** Catégories (actives, ou celles demandées) avec leur règle complète. */
-export async function loadCategoryRules(ex: Executor, ids?: string[]): Promise<CategoryWithRule[]> {
+/**
+ * Catégories (actives, ou celles demandées) avec leur règle complète. Lot R5a, tour 2 : `withPaused`, toutes (en pause
+ * comprises).
+ */
+export async function loadCategoryRules(ex: Executor, ids?: string[], withPaused = false): Promise<CategoryWithRule[]> {
   const rows = await ex.query.categories.findMany({
-    where: ids ? inArray(categories.id, ids) : eq(categories.active, true),
+    where: ids ? inArray(categories.id, ids) : withPaused ? undefined : eq(categories.active, true),
     orderBy: [asc(categories.position)],
   });
   const makes = rows.length
@@ -71,12 +74,15 @@ export async function loadVehicleFacts(
 /**
  * Catégories actives et cohérentes avec le véhicule ; refus listé avec sa raison. Lot R5a : `kept`, les catégories déjà
  * sur la fiche ; un style mis en pause depuis par l'admin y reste permis (il ne se propose plus, il ne disparaît pas).
+ * Tour 2 : `sameTypeAndMake` (type et marque de la fiche inchangés) : un style déjà sur la fiche refusé pour le type,
+ * la marque ou le pays (règles changées depuis : « 4x4 » d'un camion) y reste permis ; un refus pour l'âge, non.
  */
 export async function checkCategories(
   ex: Executor,
   ids: string[],
   vehicle: { vehicleType: string; makeId: string; modelId?: string | null; year: number | null },
   kept: readonly string[] = [],
+  sameTypeAndMake = false,
 ) {
   if (!ids.length) return;
   const unique = [...new Set(ids)];
@@ -87,6 +93,7 @@ export async function checkCategories(
   const facts = await loadVehicleFacts(ex, vehicle);
   const refused = rows.flatMap((c) => {
     const refusal = categoryRefusal(c.rule, facts, now());
+    if (refusal && refusal !== "age" && sameTypeAndMake && kept.includes(c.id)) return [];
     return refusal ? [{ category: c, refusal }] : [];
   });
   if (refused.length) {
@@ -106,7 +113,7 @@ export async function checkCategories(
  * `vehicleType` absent : tous les types.
  */
 export async function categoryOptions(query: CategoryReferenceQuery): Promise<CategoryOption[]> {
-  const rows = await loadCategoryRules(db);
+  const rows = await loadCategoryRules(db, undefined, query.paused === "1");
   const facts: VehicleFacts = query.makeId
     ? await loadVehicleFacts(db, {
         vehicleType: query.vehicleType ?? "car",
@@ -142,6 +149,7 @@ export async function categoryOptions(query: CategoryReferenceQuery): Promise<Ca
       eligible: refusal === null,
       refusal,
       reason: refusal ? categoryRefusalLabels[refusal] : null,
+      ...(c.active ? {} : { paused: true }),
     };
   });
 }

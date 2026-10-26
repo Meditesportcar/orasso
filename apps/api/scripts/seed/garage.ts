@@ -3,6 +3,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { SUPERCAR_MAKES } from "../../src/db/seed/style-catalog";
 import type { Executor } from "../../src/lib/tx";
 
 type Rule = { countries?: string[]; makes?: string[] };
@@ -14,20 +15,7 @@ export const CATEGORY_RULES: Record<string, Rule> = {
   francaise: { countries: ["FR"] },
   italienne: { countries: ["IT"] },
   americaine: { countries: ["US"] },
-  supercar: {
-    makes: [
-      "Ferrari",
-      "Lamborghini",
-      "McLaren",
-      "Porsche",
-      "Bugatti",
-      "Aston Martin",
-      "Maserati",
-      "Lotus",
-      "Koenigsegg",
-      "Pagani",
-    ],
-  },
+  supercar: { makes: [...SUPERCAR_MAKES] },
   // Lot R5a : les types admis (Moto, Utilitaire, 4x4…) viennent du catalogue des styles (`styleCatalog`), adopté une
   // seule fois puis géré par l'admin : ce script ne les réécrit plus (il le faisait à chaque seed, donc à chaque
   // déploiement).

@@ -125,6 +125,12 @@ export const categories = pgTable("categories", {
   icon: text("icon").notNull().default("star"),
   /** Lot R5a : libellé au masculin, pour un camion (« Ancien », « Préparé ») ; nul : le libellé vaut pour tous. */
   labelM: text("label_m"),
+  /**
+   * Lot R5a, tour 2 : le nom normalisé (`styleKey` : sans accents, casse, espaces, ponctuation ni apostrophe
+   * typographique), unique : « D’origine » ne crée pas un second style à côté de `origine`. Posé par l'API (création,
+   * renommage, acceptation, catalogue) ; les slugs historiques sont gardés.
+   */
+  labelKey: text("label_key").unique("categories_label_key_key"),
   ...timestamps,
 });
 

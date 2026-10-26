@@ -4,6 +4,7 @@
 import {
   type CategoryProposalInput,
   type CategoryProposalResult,
+  categoryLabelFor,
   styleFitsType,
   styleKey,
   type VehicleType,
@@ -43,9 +44,15 @@ export const styleProposalsService = {
     if (key.length < 2) throw validation("Le nom du style fait 2 à 24 caractères", { field: "label" });
     // Un style actif de même nom pour ce type existe déjà : rien à proposer, il est dans la liste.
     const same = (await db.select().from(categories).where(eq(categories.active, true))).find(
-      (c) => styleKey(c.label) === key && c.family !== "pays" && styleFitsType(c.allowedVehicleTypes, vehicleType),
+      // Tour 2 : le libellé au masculin compte aussi (« Ancien » pour « Ancienne »).
+      (c) =>
+        (styleKey(c.label) === key || (c.labelM !== null && styleKey(c.labelM) === key)) &&
+        c.family !== "pays" &&
+        styleFitsType(c.allowedVehicleTypes, vehicleType),
     );
-    if (same) throw conflict("conflict", `« ${same.label} » existe déjà : choisis-le dans la liste.`);
+    if (same) {
+      throw conflict("conflict", `« ${categoryLabelFor(same, vehicleType)} » existe déjà : choisis-le dans la liste.`);
+    }
     const pending = () =>
       db.query.categoryProposals.findFirst({
         where: and(

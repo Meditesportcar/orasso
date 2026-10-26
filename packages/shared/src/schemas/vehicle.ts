@@ -213,11 +213,15 @@ export type VehicleMake = {
   vehicleTypes?: VehicleType[];
 };
 
-/** Lot R5a : les marques d'un type (celles qui ont au moins un modèle de ce type), « Autre » toujours gardée. */
+/**
+ * Lot R5a : les marques d'un type (celles qui ont au moins un modèle de ce type), « Autre » toujours gardée. Tour 2 : une
+ * marque sans aucun modèle de la liste (créée par l'équipe, modèles à venir) vaut pour tous les types.
+ */
 export const makesForType = <T extends Pick<VehicleMake, "isOther" | "vehicleTypes">>(
   rows: readonly T[],
   type: VehicleType,
-): T[] => rows.filter((m) => m.isOther || !m.vehicleTypes || m.vehicleTypes.includes(type));
+): T[] =>
+  rows.filter((m) => m.isOther || !m.vehicleTypes || m.vehicleTypes.length === 0 || m.vehicleTypes.includes(type));
 export type VehicleModel = { id: string; makeId: string; name: string; vehicleType: VehicleType; isOther: boolean };
 export type VehicleGeneration = {
   id: string;

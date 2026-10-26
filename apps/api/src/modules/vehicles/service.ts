@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  categoryRefusal,
   cleanProposedName,
   cleanVehicleVersion,
   effectiveMainVehicleId,
@@ -41,7 +42,7 @@ import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
-import { checkCategories } from "./categories";
+import { checkCategories, loadCategoryRules, loadVehicleFacts } from "./categories";
 import { certificationService } from "./certification";
 import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "./photos-blur";
 import { plateTransferService } from "./plate-transfer";
@@ -164,6 +165,57 @@ function assertNotOwnPlate(holder: { ownerId: string } | null, ownerId: string) 
     throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un de tes véhicules actifs", {
       transferRequested: false,
     });
+  }
+}
+
+/**
+ * Lot R5a, tour 2 : les propositions de style faites pendant l'ajout, rattachées au véhicule créé (le sien, de son type,
+ * encore sans véhicule), verrouillées. Une proposition déjà acceptée ou rattachée pose son style, s'il est actif, si les
+ * règles l'acceptent et s'il reste de la place (10 catégories).
+ */
+async function linkStyleProposals(tx: Tx, ownerId: string, vehicleId: string, ids: readonly string[]) {
+  const rows = await tx
+    .select()
+    .from(categoryProposals)
+    .where(
+      and(
+        inArray(categoryProposals.id, [...ids]),
+        eq(categoryProposals.authorId, ownerId),
+        isNull(categoryProposals.vehicleId),
+      ),
+    )
+    .orderBy(asc(categoryProposals.id))
+    .for("update");
+  const [vehicle] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId));
+  if (!vehicle) return;
+  const mine = rows.filter((r) => r.vehicleType === vehicle.vehicleType);
+  if (!mine.length) return;
+  await tx
+    .update(categoryProposals)
+    .set({ vehicleId })
+    .where(
+      inArray(
+        categoryProposals.id,
+        mine.map((r) => r.id),
+      ),
+    );
+  const retained = [
+    ...new Set(
+      mine.flatMap((r) => (r.status !== "pending" && r.status !== "declined" && r.categoryId ? [r.categoryId] : [])),
+    ),
+  ];
+  if (!retained.length) return;
+  const facts = await loadVehicleFacts(tx, vehicle);
+  const links = await tx
+    .select({ id: vehicleCategories.categoryId })
+    .from(vehicleCategories)
+    .where(eq(vehicleCategories.vehicleId, vehicleId));
+  let count = links.length;
+  for (const style of await loadCategoryRules(tx, retained)) {
+    if (!style.active || links.some((l) => l.id === style.id) || count >= 10) continue;
+    if (categoryRefusal(style.rule, facts, now())) continue;
+    await tx.insert(vehicleCategories).values({ vehicleId, categoryId: style.id }).onConflictDoNothing();
+    count++;
   }
 }
 
@@ -323,21 +375,9 @@ export const vehiclesService = {
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
         await setCategories(tx, row.id, input.categoryIds);
-        // Lot R5a : les styles proposés pendant l'ajout (encore sans véhicule) sont rattachés au véhicule créé.
-        if (input.styleProposalIds?.length) {
-          await tx
-            .update(categoryProposals)
-            .set({ vehicleId: row.id })
-            .where(
-              and(
-                inArray(categoryProposals.id, input.styleProposalIds),
-                eq(categoryProposals.authorId, v.user.id),
-                eq(categoryProposals.vehicleType, input.vehicleType),
-                eq(categoryProposals.status, "pending"),
-                isNull(categoryProposals.vehicleId),
-              ),
-            );
-        }
+        // Lot R5a : les styles proposés pendant l'ajout (encore sans véhicule) sont rattachés au véhicule créé. Tour 2 :
+        // une proposition déjà acceptée ou rattachée entre-temps pose aussi son style, si les règles l'acceptent.
+        if (input.styleProposalIds?.length) await linkStyleProposals(tx, v.user.id, row.id, input.styleProposalIds);
         return row.id;
       });
       // Journal des amis (lot 17) : « <pseudo> a ajouté un véhicule » ; ne bloque jamais l'ajout.
@@ -419,29 +459,6 @@ export const vehiclesService = {
           proposedModel: input.proposedModel !== undefined ? input.proposedModel : current.proposedModel,
         })
       : {};
-    // Catégories revérifiées quand elles changent, ou quand ce qui les conditionne change (marque, type, année) :
-    // une fiche ancienne reste modifiable même si les règles ont été durcies depuis.
-    // Lot R5a : un style de la fiche mis en pause depuis par l'admin y reste permis.
-    if (input.categoryIds || referenceChanged || input.year !== undefined) {
-      const kept = (
-        await db
-          .select({ id: vehicleCategories.categoryId })
-          .from(vehicleCategories)
-          .where(eq(vehicleCategories.vehicleId, id))
-      ).map((r) => r.id);
-      const categoryIds = input.categoryIds ?? kept;
-      await checkCategories(
-        db,
-        categoryIds,
-        {
-          vehicleType: merged.vehicleType,
-          makeId: merged.makeId,
-          modelId: merged.modelId,
-          year: merged.year ?? null,
-        },
-        kept,
-      );
-    }
     // Plaque : changée ou véhicule réactivé → doublon chez soi refusé, chez un autre compte = demande de transfert.
     const wantsPlate = merged.status === "active" && Boolean(plateNormalized);
     const plateIsNew = plateNormalized !== current.plateNormalized || current.status !== "active";
@@ -460,6 +477,32 @@ export const vehiclesService = {
           locked.status !== current.status
         ) {
           throw conflict("conflict", "La fiche vient de changer : recharge-la et recommence.");
+        }
+        // Catégories revérifiées quand elles changent, ou quand ce qui les conditionne change (marque, type, année) :
+        // une fiche ancienne reste modifiable même si les règles ont été durcies depuis. Lot R5a : un style de la fiche
+        // mis en pause depuis par l'admin y reste permis ; tour 2 : aussi un style devenu refusé pour le type ou la marque
+        // tant qu'ils ne changent pas, et la vérification se fait ici, véhicule verrouillé, sur ses caractéristiques
+        // finales (un style posé entre-temps par l'équipe est relu).
+        if (input.categoryIds || referenceChanged || input.year !== undefined) {
+          const kept = (
+            await tx
+              .select({ id: vehicleCategories.categoryId })
+              .from(vehicleCategories)
+              .where(eq(vehicleCategories.vehicleId, id))
+          ).map((r) => r.id);
+          const final = {
+            vehicleType: input.vehicleType ?? locked.vehicleType,
+            makeId: input.makeId ?? locked.makeId,
+            modelId: input.modelId ?? locked.modelId,
+            year: input.year !== undefined ? input.year : locked.year,
+          };
+          await checkCategories(
+            tx,
+            input.categoryIds ?? kept,
+            final,
+            kept,
+            final.vehicleType === locked.vehicleType && final.makeId === locked.makeId,
+          );
         }
         const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
         const openedTransferId =

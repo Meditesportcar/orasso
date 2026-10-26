@@ -22,9 +22,11 @@ CREATE TABLE "category_proposals" (
 ALTER TABLE "categories" ADD COLUMN "family" "category_family" DEFAULT 'genre' NOT NULL;--> statement-breakpoint
 ALTER TABLE "categories" ADD COLUMN "icon" text DEFAULT 'star' NOT NULL;--> statement-breakpoint
 ALTER TABLE "categories" ADD COLUMN "label_m" text;--> statement-breakpoint
+ALTER TABLE "categories" ADD COLUMN "label_key" text;--> statement-breakpoint
 ALTER TABLE "category_proposals" ADD CONSTRAINT "category_proposals_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "category_proposals" ADD CONSTRAINT "category_proposals_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "category_proposals" ADD CONSTRAINT "category_proposals_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "category_proposals_status_key_idx" ON "category_proposals" USING btree ("status","key");--> statement-breakpoint
 CREATE INDEX "category_proposals_author_idx" ON "category_proposals" USING btree ("author_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "category_proposals_pending_key" ON "category_proposals" USING btree ("author_id","key","vehicle_type") WHERE "category_proposals"."status" = 'pending';
+CREATE UNIQUE INDEX "category_proposals_pending_key" ON "category_proposals" USING btree ("author_id","key","vehicle_type") WHERE "category_proposals"."status" = 'pending';--> statement-breakpoint
+ALTER TABLE "categories" ADD CONSTRAINT "categories_label_key_key" UNIQUE("label_key");

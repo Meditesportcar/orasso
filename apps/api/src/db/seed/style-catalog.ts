@@ -18,9 +18,25 @@ export type CatalogStyle = {
   types: string[] | null;
   minVehicleAge?: number;
   countries?: string[];
+  /** Lot R5a, tour 2 : liste blanche de marques (Supercar), posée par la synchronisation, sans dépendre du seed. */
+  makes?: readonly string[];
   /** En pause : ne se propose plus, reste sur les véhicules qui l'ont. */
   paused?: boolean;
 };
+
+/** Les marques de « Supercar » (ARCHITECTURE-SUITE § 14), aussi reprises par `applyCategoryRules`. */
+export const SUPERCAR_MAKES = [
+  "Ferrari",
+  "Lamborghini",
+  "McLaren",
+  "Porsche",
+  "Bugatti",
+  "Aston Martin",
+  "Maserati",
+  "Lotus",
+  "Koenigsegg",
+  "Pagani",
+] as const;
 
 const CAR = ["car"];
 const MOTO = ["moto"];
@@ -41,7 +57,7 @@ export const styleCatalog: readonly CatalogStyle[] = [
   // Genre : Roadster avant Sportive (ordre moto de la maquette), puis les voitures, les motos, les camions.
   { slug: "roadster", label: "Roadster", family: "genre", icon: "moto", types: MOTO },
   { slug: "sportive", label: "Sportive", family: "genre", icon: "power", types: ["car", "moto"] },
-  { slug: "supercar", label: "Supercar", family: "genre", icon: "spark", types: CAR },
+  { slug: "supercar", label: "Supercar", family: "genre", icon: "spark", types: CAR, makes: SUPERCAR_MAKES },
   { slug: "cabriolet", label: "Cabriolet", family: "genre", icon: "weatherClear", types: CAR },
   // « 4x4 » : voitures tout-terrain du référentiel seulement (lot M1, tour 2) ; le camion a « Tout-terrain ».
   { slug: "4x4", label: "4x4", family: "genre", icon: "mount", types: [OFFROAD_TYPE] },

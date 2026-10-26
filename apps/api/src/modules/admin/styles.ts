@@ -21,10 +21,17 @@ import {
   type VehicleType,
   vehicleTypes,
 } from "@orasso/shared";
-import { and, asc, count, eq, inArray, max } from "drizzle-orm";
+import { and, asc, count, eq, inArray, max, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories, categoryProposals, profiles, vehicleCategories, vehicles } from "../../db/schema";
+import {
+  categories,
+  categoryProposals,
+  certificationRequests,
+  profiles,
+  vehicleCategories,
+  vehicles,
+} from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound, validation } from "../../lib/errors";
@@ -87,6 +94,29 @@ function adminRow(c: typeof categories.$inferSelect, n: Map<string, Record<Vehic
   };
 }
 
+/**
+ * Tour 2 : le nom normalisé d'un style est unique (contrainte `categories_label_key_key`) ; on le vérifie avant d'écrire
+ * pour dire lequel existe déjà (une catégorie sans clé, plus ancienne, est comparée par son libellé).
+ */
+async function sameName(tx: Tx, label: string, exceptId?: string) {
+  const key = styleKey(label);
+  const rows = await tx
+    .select({ id: categories.id, label: categories.label, labelKey: categories.labelKey })
+    .from(categories);
+  return rows.find((r) => r.id !== exceptId && (r.labelKey ?? styleKey(r.label)) === key) ?? null;
+}
+
+/** Tour 2 : les positions s'attribuent une à la fois (création, acceptation, ordre, catalogue) : jamais deux pareilles. */
+async function lockPositions(tx: Tx) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('category-positions', 0))`);
+}
+
+async function nextPosition(tx: Tx) {
+  await lockPositions(tx);
+  const [{ last } = { last: -1 }] = await tx.select({ last: max(categories.position) }).from(categories);
+  return (last ?? -1) + 1;
+}
+
 async function categoryOrThrow(tx: Tx, id: string) {
   const [row] = await tx.select().from(categories).where(eq(categories.id, id)).for("update");
   if (!row) throw notFound("Style introuvable");
@@ -121,13 +151,25 @@ async function lockGroup(tx: Tx, key: string, version: string) {
  */
 async function applyToVehicles(tx: Tx, rows: (typeof categoryProposals.$inferSelect)[], categoryId: string) {
   const [rule] = await loadCategoryRules(tx, [categoryId]);
-  const served = new Map<string, string>();
+  const served = new Map<string, Served>();
   for (const r of rows) {
     if (!r.vehicleId || !rule) continue;
     const vehicle = await tx.query.vehicles.findFirst({ where: eq(vehicles.id, r.vehicleId) });
     if (!vehicle || vehicle.ownerId !== r.authorId) continue;
     const facts = await loadVehicleFacts(tx, vehicle);
     if (categoryRefusal(rule.rule, facts, now())) continue;
+    // Tour 2 : une fiche certifiée ou en demande de certification n'est pas touchée par l'équipe ; la personne ajoute
+    // le style elle-même (sa modification suit la règle de la certification).
+    const [pending] = await tx
+      .select({ id: certificationRequests.id })
+      .from(certificationRequests)
+      .where(and(eq(certificationRequests.vehicleId, vehicle.id), eq(certificationRequests.status, "pending")))
+      .limit(1);
+    if (vehicle.certifiedAt || pending) {
+      const full = await vehiclesRepo.findFullById(vehicle.id, tx);
+      served.set(r.id, { label: full ? vehicleLabel(full) : "ton véhicule", posed: false });
+      continue;
+    }
     const links = await tx
       .select({ id: vehicleCategories.categoryId })
       .from(vehicleCategories)
@@ -136,17 +178,21 @@ async function applyToVehicles(tx: Tx, rows: (typeof categoryProposals.$inferSel
     if (!has && links.length >= MAX_VEHICLE_CATEGORIES) continue;
     if (!has) await tx.insert(vehicleCategories).values({ vehicleId: vehicle.id, categoryId }).onConflictDoNothing();
     const full = await vehiclesRepo.findFullById(vehicle.id, tx);
-    served.set(r.id, full ? vehicleLabel(full) : "ton véhicule");
+    served.set(r.id, { label: full ? vehicleLabel(full) : "ton véhicule", posed: true });
   }
   return served;
 }
+
+/** Le véhicule d'une proposition : le style y est posé, ou non (fiche certifiée ou en demande de certification). */
+type Served = { label: string; posed: boolean };
+const appliedCount = (served: Map<string, Served>) => [...served.values()].filter((s) => s.posed).length;
 
 /** Une notification par proposition, dans la Boîte de son auteur (compte supprimé : rien). */
 async function notifyAuthors(
   tx: Tx,
   rows: (typeof categoryProposals.$inferSelect)[],
   text: (r: typeof categoryProposals.$inferSelect) => { title: string; body: string },
-  served: Map<string, string> = new Map(),
+  served: Map<string, Served> = new Map(),
 ) {
   const authors = await tx
     .select({ userId: profiles.userId, deletedAt: profiles.deletedAt })
@@ -164,7 +210,11 @@ async function notifyAuthors(
     const vehicle = served.get(r.id);
     await notificationsService.notify(tx, r.authorId, "style_proposal_decided", {
       title: t.title,
-      body: vehicle ? `${t.body} Il est posé sur ${vehicle}.` : t.body,
+      body: !vehicle
+        ? t.body
+        : vehicle.posed
+          ? `${t.body} Il est posé sur ${vehicle.label}.`
+          : `${t.body} Ta fiche « ${vehicle.label} » est certifiée ou en cours de certification : ajoute-le toi-même depuis ta fiche.`,
       ...(vehicle && r.vehicleId
         ? { link: { label: "Voir mon véhicule", path: `/app/garage/${r.vehicleId}` }, data: { vehicleId: r.vehicleId } }
         : {}),
@@ -220,7 +270,14 @@ export const stylesAdminService = {
     if (slug === "x" && styleKey(input.label) !== "x") throw validation("Ce nom ne fait pas un style : des lettres ?");
     return concurrent(() =>
       withTx(async (tx) => {
-        const [same] = await tx.select().from(categories).where(eq(categories.slug, slug)).for("update");
+        // Tour 2 : même nom normalisé (« D’origine » = « D'origine ») ou même slug : le style existant.
+        await lockPositions(tx);
+        const named = await sameName(tx, input.label);
+        const [same] = await tx
+          .select()
+          .from(categories)
+          .where(named ? eq(categories.id, named.id) : eq(categories.slug, slug))
+          .for("update");
         if (same) {
           if (same.family === "pays")
             throw conflict("conflict", `« ${same.label} » est un pays : il se déduit de la marque.`);
@@ -239,18 +296,19 @@ export const stylesAdminService = {
           });
           return { id: same.id, created: false };
         }
-        const [{ last } = { last: -1 }] = await tx.select({ last: max(categories.position) }).from(categories);
+        const position = await nextPosition(tx);
         const [row] = await tx
           .insert(categories)
           .values({
             slug,
             label: input.label,
             labelM: input.labelM ?? null,
+            labelKey: styleKey(input.label),
             family: input.family,
             icon: input.icon,
             minVehicleAge: input.minVehicleAge ?? null,
             allowedVehicleTypes: [input.vehicleType],
-            position: (last ?? -1) + 1,
+            position,
           })
           .returning();
         if (!row) throw new Error("Style non créé");
@@ -267,10 +325,14 @@ export const stylesAdminService = {
       withTx(async (tx) => {
         const row = await categoryOrThrow(tx, id);
         if (row.family === "pays" && input.family) throw validation("Un pays reste dans la ligne « Origine ».");
+        if (input.label !== undefined) {
+          const named = await sameName(tx, input.label, id);
+          if (named) throw conflict("conflict", `« ${named.label} » existe déjà : choisis un autre nom.`);
+        }
         const [updated] = await tx
           .update(categories)
           .set({
-            ...(input.label !== undefined ? { label: input.label } : {}),
+            ...(input.label !== undefined ? { label: input.label, labelKey: styleKey(input.label) } : {}),
             ...(input.labelM !== undefined ? { labelM: input.labelM } : {}),
             ...(input.family !== undefined ? { family: input.family } : {}),
             ...(input.icon !== undefined ? { icon: input.icon } : {}),
@@ -303,22 +365,30 @@ export const stylesAdminService = {
     if (ids.length !== input.ids.length) throw validation("Un style apparaît deux fois.");
     return concurrent(() =>
       withTx(async (tx) => {
-        const rows = await tx
+        // Tour 2 : sérialisé, et toutes les positions renumérotées 0, 1, 2… : deux styles n'ont jamais la même place,
+        // l'ordre demandé s'applique toujours ; les autres types gardent leur ordre relatif.
+        await lockPositions(tx);
+        const all = await tx
           .select()
           .from(categories)
-          .where(inArray(categories.id, ids))
-          .orderBy(asc(categories.id))
+          .orderBy(asc(categories.position), asc(categories.label), asc(categories.id))
           .for("update");
-        if (rows.length !== ids.length) throw notFound("Style introuvable");
-        if (rows.some((r) => r.family === "pays" || !styleFitsType(r.allowedVehicleTypes, input.vehicleType))) {
-          throw validation(`Seuls les styles des ${typeNames[input.vehicleType]} se rangent ici.`);
+        const wanted = new Set(ids);
+        const ofType = all.filter(
+          (r) => r.family !== "pays" && styleFitsType(r.allowedVehicleTypes, input.vehicleType),
+        );
+        if (ids.some((x) => !all.some((r) => r.id === x))) throw notFound("Style introuvable");
+        if (ofType.length !== ids.length || ofType.some((r) => !wanted.has(r.id))) {
+          throw validation(
+            `L'ordre doit compter tous les styles des ${typeNames[input.vehicleType]} : recharge la page.`,
+          );
         }
-        const slots = rows.map((r) => r.position).sort((a, b) => a - b);
-        for (const [i, id] of ids.entries()) {
-          await tx
-            .update(categories)
-            .set({ position: slots[i] ?? i })
-            .where(eq(categories.id, id));
+        const order = all.map((r) => r.id);
+        const slots = order.flatMap((x, i) => (wanted.has(x) ? [i] : []));
+        for (const [k, i] of slots.entries()) order[i] = ids[k] as string;
+        for (const [position, x] of order.entries()) {
+          if (all.find((r) => r.id === x)?.position === position) continue;
+          await tx.update(categories).set({ position }).where(eq(categories.id, x));
         }
         await audit(tx, v, {
           action: "category.reorder",
@@ -376,21 +446,29 @@ export const stylesAdminService = {
       withTx(async (tx, after) => {
         const rows = await lockGroup(tx, key, input.version);
         const slug = slugify(input.label);
-        const [same] = await tx.select().from(categories).where(eq(categories.slug, slug)).for("update");
+        if (slug === "x" && styleKey(input.label) !== "x")
+          throw validation("Ce nom ne fait pas un style : des lettres ?");
+        const position = await nextPosition(tx);
+        const named = await sameName(tx, input.label);
+        const [same] = await tx
+          .select()
+          .from(categories)
+          .where(named ? eq(categories.id, named.id) : eq(categories.slug, slug))
+          .for("update");
         if (same) throw conflict("conflict", `« ${same.label} » existe déjà : rattache la proposition à ce style.`);
         const types = vehicleTypes.filter((t) => rows.some((r) => r.vehicleType === t));
-        const [{ last } = { last: -1 }] = await tx.select({ last: max(categories.position) }).from(categories);
         const [style] = await tx
           .insert(categories)
           .values({
             slug,
             label: input.label,
             labelM: input.labelM ?? null,
+            labelKey: styleKey(input.label),
             family: input.family,
             icon: input.icon,
             minVehicleAge: input.minVehicleAge ?? null,
             allowedVehicleTypes: types,
-            position: (last ?? -1) + 1,
+            position,
           })
           .returning();
         if (!style) throw new Error("Style non créé");
@@ -412,7 +490,7 @@ export const stylesAdminService = {
           reason: `${style.label} · ${rows.length} proposition${rows.length > 1 ? "s" : ""} (${key})`,
         });
         after(() => notificationsService.kick());
-        return { categoryId: style.id, count: rows.length, applied: served.size };
+        return { categoryId: style.id, count: rows.length, applied: appliedCount(served) };
       }),
     );
   },
@@ -426,6 +504,15 @@ export const stylesAdminService = {
         const style = await categoryOrThrow(tx, input.categoryId);
         if (style.family === "pays") throw validation("Un pays ne se rattache pas : il se déduit de la marque.");
         if (!style.active) throw validation(`« ${style.label} » est en pause : réactive-le d'abord.`);
+        // Tour 2 : rattacher à un style d'un autre type est refusé, avec la raison (l'équipe ajoute d'abord le type).
+        const missing = vehicleTypes.filter(
+          (t) => rows.some((r) => r.vehicleType === t) && !styleFitsType(style.allowedVehicleTypes, t),
+        );
+        if (missing.length) {
+          throw validation(
+            `« ${style.label} » n'est pas proposé aux ${missing.map((t) => typeNames[t]).join(" ni aux ")} : ajoute d'abord le type au style.`,
+          );
+        }
         const served = await applyToVehicles(tx, rows, style.id);
         await decide(tx, rows, "merged", style.id);
         await notifyAuthors(
@@ -444,7 +531,7 @@ export const stylesAdminService = {
           reason: `${rows[0]?.label ?? key} → ${style.label} · ${rows.length} proposition${rows.length > 1 ? "s" : ""}`,
         });
         after(() => notificationsService.kick());
-        return { categoryId: style.id, count: rows.length, applied: served.size };
+        return { categoryId: style.id, count: rows.length, applied: appliedCount(served) };
       }),
     );
   },

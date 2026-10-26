@@ -103,3 +103,130 @@ export type CategoryProposalStatus = (typeof categoryProposalStatuses)[number];
 
 /** Propositions d'un même compte en 24 h (limite de fréquence de `POST /categories/proposals`). */
 export const STYLE_PROPOSALS_PER_DAY = 10;
+
+// --- Lot R5a, tour 2 : listes à modifier (fiche, centres d'intérêt, critères d'événement) -------------------------
+
+/** Familles d'une liste complète, pays compris (en dernier). */
+const allFamilies: readonly CategoryFamily[] = [...styleFamilies, "pays"];
+
+const typeNouns: Record<VehicleType, string> = { car: "voiture", moto: "moto", truck: "camion" };
+
+/**
+ * Les types d'un style restreint, en clair (« camion », « moto, camion », « voiture » pour les tout-terrain) ; null s'il
+ * vaut pour tous les types.
+ */
+export function styleTypesLabel(allowedVehicleTypes: readonly string[] | null | undefined): string | null {
+  if (!allowedVehicleTypes) return null;
+  const types = (["car", "moto", "truck"] as const).filter((t) => styleFitsType(allowedVehicleTypes, t));
+  if (types.length === 0 || types.length === 3) return null;
+  return types.map((t) => typeNouns[t]).join(", ");
+}
+
+/** Une ligne d'une liste de styles à cocher. */
+export type StyleChoice = {
+  id: string;
+  label: string;
+  icon: string | undefined;
+  family: CategoryFamily;
+  /** Faux : grisé, non cochable (sauf s'il est déjà choisi : il reste décochable). */
+  eligible: boolean;
+  reason: string | null;
+  /** Style mis en pause par l'admin, gardé tant qu'il est choisi. */
+  paused: boolean;
+  /** Déjà sur la fiche mais refusé pour le type ou la marque : gardé tant qu'il est choisi. */
+  kept: boolean;
+};
+
+type OptionLike = {
+  id: string;
+  label: string;
+  icon?: string;
+  family: CategoryFamily;
+  allowedVehicleTypes: string[] | null;
+  allowedCountries: string[] | null;
+  eligible: boolean;
+  refusal: string | null;
+  reason: string | null;
+  paused?: boolean;
+};
+type CurrentLike = { id: string; label: string; icon?: string; family?: CategoryFamily; paused?: boolean };
+
+/** Les groupes d'une liste, dans l'ordre des familles, pays en dernier ; les familles vides sont retirées. */
+function grouped<T extends { family: CategoryFamily }>(rows: readonly T[]): { family: CategoryFamily; rows: T[] }[] {
+  return allFamilies
+    .map((family) => ({ family, rows: rows.filter((r) => r.family === family) }))
+    .filter((g) => g.rows.length > 0);
+}
+
+/**
+ * Styles d'une fiche à modifier (site et appli) : ceux du type, par famille ; les origines de la marque (« Pays ») si
+ * `origins` ; et tout ce qui est déjà sur la fiche, coché et décochable, même s'il ne se propose plus : en pause
+ * (origine comprise), ou refusé pour le type ou la marque tant que `keepRefused` (type et marque inchangés). Un style
+ * refusé pour l'âge reste grisé avec sa raison (l'année a changé).
+ */
+export function vehicleStyleGroups(
+  options: readonly OptionLike[],
+  current: readonly CurrentLike[],
+  opts: { keepRefused: boolean; origins: boolean },
+): { family: CategoryFamily; rows: StyleChoice[] }[] {
+  const chosen = new Set(current.map((c) => c.id));
+  const rows: StyleChoice[] = [];
+  for (const o of options) {
+    const isChosen = chosen.has(o.id);
+    if (o.paused && !isChosen) continue;
+    const refused = o.refusal === "type" || o.refusal === "make" || o.refusal === "country";
+    const kept = !o.eligible && refused && isChosen && opts.keepRefused;
+    if (o.allowedCountries) {
+      if (!opts.origins && !o.paused) continue;
+      if (!o.eligible && !kept) continue;
+    } else if (refused && !kept) {
+      continue;
+    }
+    rows.push({
+      id: o.id,
+      label: o.label,
+      icon: o.icon,
+      family: o.allowedCountries ? "pays" : o.family,
+      eligible: o.eligible || kept || Boolean(o.paused),
+      reason: o.reason,
+      paused: Boolean(o.paused),
+      kept,
+    });
+  }
+  // Styles de la fiche absents de la liste : en pause (la liste n'a que les styles actifs).
+  for (const c of current) {
+    if (rows.some((r) => r.id === c.id) || options.some((o) => o.id === c.id)) continue;
+    rows.push({
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      family: c.family ?? "genre",
+      eligible: true,
+      reason: null,
+      paused: true,
+      kept: false,
+    });
+  }
+  return grouped(rows);
+}
+
+/**
+ * Centres d'intérêt et critères d'événement (lot R5a, tour 2) : tous les styles actifs, par famille, pays en dernier,
+ * avec leurs types quand ils sont restreints (« Américain · camion » à côté de « Américaine », « 4x4 · voiture »,
+ * « Tout-terrain · moto, camion ») ; un style en pause n'y est que s'il est déjà choisi (coché, décochable).
+ * `exclude` : catégories laissées à une autre question (les origines des critères d'événement).
+ */
+export function choiceGroups(
+  options: readonly OptionLike[],
+  chosen: readonly string[],
+  exclude: (o: OptionLike) => boolean = () => false,
+): { family: CategoryFamily; rows: { id: string; label: string; paused: boolean }[] }[] {
+  const rows = options
+    .filter((o) => (!o.paused || chosen.includes(o.id)) && (chosen.includes(o.id) || !exclude(o)))
+    .map((o) => {
+      const family: CategoryFamily = o.allowedCountries ? "pays" : o.family;
+      const types = family === "pays" ? null : styleTypesLabel(o.allowedVehicleTypes);
+      return { id: o.id, label: types ? `${o.label} · ${types}` : o.label, paused: Boolean(o.paused), family };
+    });
+  return grouped(rows);
+}

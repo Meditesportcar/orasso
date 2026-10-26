@@ -98,8 +98,9 @@ async function seedReference() {
   return { refs, find };
 }
 export async function seedBase(hash: string) {
-  const categories = await seedCategories();
+  // Lot R5a, tour 2 : le référentiel d'abord, pour que la liste blanche de Supercar trouve ses marques.
   const { refs, find } = await seedReference();
+  const categories = await seedCategories();
 
   // Comptes nommés (prototype validé).
   const damien = await createAccount(
