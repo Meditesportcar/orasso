@@ -196,6 +196,7 @@ export function FlowScreen({
   header,
   endGate,
   actions,
+  hideEndHint,
 }: Common & {
   title: string;
   facts?: string;
@@ -210,6 +211,11 @@ export function FlowScreen({
   header?: ReactNode;
   /** Lot R3a : le bas de la page doit être vu (voir `EndGate`). */
   endGate?: EndGate;
+  /**
+   * Lot R5a : l'indicateur « il y a plus bas » se cache (clavier ouvert à l'étape Marque et modèle : il se posait sur le
+   * champ). La règle de `endGate` ne change pas ; seule sa flèche disparaît.
+   */
+  hideEndHint?: boolean;
 }) {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -233,7 +239,7 @@ export function FlowScreen({
           />
           {header ? <View style={styles.flowHeader}>{header}</View> : null}
           <KeyboardSafe style={styles.fill}>
-            <Body onRefresh={onRefresh} endGate={endGate}>
+            <Body onRefresh={onRefresh} endGate={endGate} hideEndHint={hideEndHint}>
               {inInbox ? (
                 <Button
                   variant="plate"
@@ -283,12 +289,14 @@ function Body({
   onRefresh,
   bottom,
   endGate,
+  hideEndHint = false,
 }: {
   children: ReactNode;
   onRefresh?: () => Promise<unknown>;
   /** Marge sous le contenu (onglets : place de la barre flottante). */
   bottom?: number;
   endGate?: EndGate;
+  hideEndHint?: boolean;
 }) {
   const { t } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
@@ -423,7 +431,7 @@ function Body({
       {page}
       {/* Lot R3a : indicateur discret et immobile (rien à réduire en mouvement réduit) : un fondu en bas de la page et
           une petite flèche ; la toucher fait descendre. */}
-      {endGate.locked && !atEnd ? (
+      {endGate.locked && !atEnd && !hideEndHint ? (
         <View style={styles.endHint} pointerEvents="box-none" testID="flow-end-hint">
           <GradientFill css={`linear-gradient(180deg, ${withAlpha(ground, 0)} 0%, ${withAlpha(ground, 0.88)} 100%)`} />
           <Pressable

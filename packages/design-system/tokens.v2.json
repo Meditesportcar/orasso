@@ -324,6 +324,14 @@
   "added": {
     "color": [
       {
+        "name": "accent-soft",
+        "value": {
+          "beton": "rgba(233,184,36,0.16)",
+          "sable": "rgba(233,184,36,0.26)"
+        },
+        "usage": "fond moutarde léger de l'artefact DA v2 (--accent-soft) : un état choisi (flamme donnée, réponse d'un sondage) sans second aplat moutarde fort à l'écran (lot R5c1, tour 2)"
+      },
+      {
         "name": "plate-field",
         "value": {
           "beton": "#363941",

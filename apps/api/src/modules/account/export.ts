@@ -27,6 +27,7 @@ import { now } from "../../lib/deps";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { type CrewFeedExport, crewFeedExport } from "../crews/feed/export";
 
 export type AccountExport = {
   exportedAt: string;
@@ -45,6 +46,8 @@ export type AccountExport = {
     followingPros: { name: string; since: string }[];
     friendships: { pseudo: string; status: string; requestedByMe: boolean; since: string }[];
   };
+  /** Lot R5c1 : tes publications, commentaires et voix dans le fil des crews. */
+  crewFeed: CrewFeedExport;
 };
 
 export const accountExportService = {
@@ -212,6 +215,7 @@ export const accountExportService = {
           since: (f.respondedAt ?? f.createdAt).toISOString(),
         })),
       },
+      crewFeed: await crewFeedExport(userId),
     };
   },
 };

@@ -4,13 +4,14 @@
 // Lot R4a (maquette R4.8b) : en tête, la file « Modèles proposés » : les fiches dont le modèle (ou la marque) a été tapé,
 // regroupées par texte, la plus grosse file en tête ; un geste rattache tout le groupe (« Ajouter à la liste et rattacher
 // les N fiches », ou « Rattacher à un modèle existant »), la liste des fiches visible avant de valider.
-import { Button, SelectField, TextField } from "@orasso/design-system/web";
+import { Button, Chip, SelectField, TextField } from "@orasso/design-system/web";
 import {
   adminTexts,
   type OtherVehicleGroup,
   type ReferenceGeneration,
   type ReferenceMake,
   type ReferenceModel,
+  styleLabels,
   type VehicleProposalGroup,
   type VehicleProposalPage,
   vehicleTypeLabels,
@@ -33,13 +34,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const modelId = url.searchParams.get("modele");
   // Lot R4a, tour 2 : la file se lit par pages de groupes entiers (`?propositions=<curseur>`).
   const proposalCursor = url.searchParams.get("propositions");
-  const [makes, others, proposalPage] = await Promise.all([
+  const [makes, others, proposalPage, styleQueue] = await Promise.all([
     apiOrThrow<ReferenceMake[]>(request, "/admin/vehicle-reference/makes"),
     apiOrThrow<OtherVehicleGroup[]>(request, "/admin/vehicle-reference/others"),
     apiOrThrow<VehicleProposalPage>(
       request,
       `/admin/vehicle-reference/proposals${proposalCursor ? `?cursor=${encodeURIComponent(proposalCursor)}` : ""}`,
     ),
+    // Lot R5a : le nombre de styles proposés, sur l'onglet « Styles ».
+    apiOrThrow<{ total: number }>(request, "/admin/category-proposals"),
   ]);
   const proposals = proposalPage.items;
   // Modèles existants des marques connues de la file (« Rattacher à un modèle existant »).
@@ -75,6 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     make: makes.find((m) => m.id === makeId) ?? null,
     model: models.find((m) => m.id === modelId) ?? null,
     done: url.searchParams.get("fait"),
+    stylesProposed: styleQueue.total,
   };
 }
 
@@ -154,8 +158,19 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AdminVehicles({ loaderData, actionData }: Route.ComponentProps) {
-  const { makes, models, generations, others, proposals, proposalsNext, proposalModels, make, model, done } =
-    loaderData;
+  const {
+    makes,
+    models,
+    generations,
+    others,
+    proposals,
+    proposalsNext,
+    proposalModels,
+    make,
+    model,
+    done,
+    stylesProposed,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   const target = make && model && !model.isOther ? { make, model } : null;
   return (
@@ -166,6 +181,15 @@ export default function AdminVehicles({ loaderData, actionData }: Route.Componen
           <h1 className="s-title">Base véhicules</h1>
         </div>
       </div>
+      {/* Lot R5a (maquette R5.3) : l'onglet « Styles » de la base véhicules. */}
+      <nav className="s-tabs" aria-label="Base véhicules" data-testid="vehicle-base-tabs">
+        <a href="/admin/vehicules" aria-current="page">
+          <Chip selected>{styleLabels.baseTab}</Chip>
+        </a>
+        <a href="/admin/vehicules/styles">
+          <Chip>{styleLabels.adminTabCount(stylesProposed)}</Chip>
+        </a>
+      </nav>
       {done && (
         <p className="s-notice s-notice--ok" role="status" data-testid="vehicles-done">
           C'est fait. L'action est écrite au journal d'administration.

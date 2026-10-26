@@ -2,11 +2,13 @@
 // l'ordre : origines, styles (catégories), marques ; une phrase les résume. Les critères ne refusent personne d'office.
 import { Chip, ChipRow, TextField } from "@orasso/design-system/web";
 import {
-  type Category,
+  type CategoryOption,
+  categoryFamilyLabels,
+  choiceGroups,
   criteriaOrigins,
   eventEditorLabels as E,
   eventAdmissionLabels,
-  styleCategories,
+  styleLabels,
   summaryOfCriteria,
   type VehicleMake,
   wizardV2Labels as W,
@@ -20,7 +22,7 @@ export function CriteriaStep({
   set,
   categories,
   makes,
-}: StepProps & { categories: Category[]; makes: VehicleMake[] }) {
+}: StepProps & { categories: CategoryOption[]; makes: VehicleMake[] }) {
   const [q, setQ] = useState("");
   const chosenMakes = makes.filter((m) => d.makeIds.includes(m.id));
   const found =
@@ -79,17 +81,28 @@ export function CriteriaStep({
               <i>2</i>
               {W.q2}
             </h3>
-            <ChipRow className="s-chips-wrap">
-              {styleCategories(categories, d.categoryIds).map((c) => (
-                <Chip
-                  key={c.id}
-                  selected={d.categoryIds.includes(c.id)}
-                  onClick={() => set("categoryIds", toggle(d.categoryIds, c.id))}
-                >
-                  {c.label}
-                </Chip>
-              ))}
-            </ChipRow>
+            {/* Lot R5a, tour 2 : par famille, avec le type d'un style restreint ; les origines restent à la question 1 ; un
+                style en pause déjà choisi reste affiché, décochable. */}
+            <div className="s-stack s-stack--tight" data-testid="wizard-styles">
+              {choiceGroups(categories, d.categoryIds, (o) => criteriaOrigins.some((x) => x.chip === o.label)).map(
+                (g) => (
+                  <div key={g.family} className="s-stack s-stack--tight" data-testid={`wizard-family-${g.family}`}>
+                    <span className="o-t-caption s-muted">{categoryFamilyLabels[g.family]}</span>
+                    <ChipRow className="s-chips-wrap">
+                      {g.rows.map((c) => (
+                        <Chip
+                          key={c.id}
+                          selected={d.categoryIds.includes(c.id)}
+                          onClick={() => set("categoryIds", toggle(d.categoryIds, c.id))}
+                        >
+                          {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
+                        </Chip>
+                      ))}
+                    </ChipRow>
+                  </div>
+                ),
+              )}
+            </div>
           </div>
           <div className="wz-q">
             <h3 className="wz-h3">

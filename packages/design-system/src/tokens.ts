@@ -54,6 +54,7 @@ export const tokens = {
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
       "surfaceField": "#1e2025",
+      "accentSoft": "rgba(233,184,36,0.16)",
       "plateField": "#363941",
       "mapLand": "#1f2227",
       "mapLand2": "#262a30",
@@ -136,6 +137,7 @@ export const tokens = {
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
       "surfaceField": "#fffaf0",
+      "accentSoft": "rgba(233,184,36,0.26)",
       "plateField": "#fffaf0",
       "mapLand": "#e6dcc4",
       "mapLand2": "#dbcfb2",
@@ -1160,6 +1162,16 @@ export const tokensV2Overlay = [
       "fontStretch": "75%"
     },
     "why": "lot C1 (D33) : artefact DA v2, .credit : 75 % 700 9 px"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "accent-soft",
+    "value": {
+      "beton": "rgba(233,184,36,0.16)",
+      "sable": "rgba(233,184,36,0.26)"
+    },
+    "why": "fond moutarde léger de l'artefact DA v2 (--accent-soft) : un état choisi (flamme donnée, réponse d'un sondage) sans second aplat moutarde fort à l'écran (lot R5c1, tour 2)"
   },
   {
     "kind": "added",

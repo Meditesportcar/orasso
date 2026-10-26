@@ -36,6 +36,8 @@ export const uploadPurposes = [
   "media_content",
   // Lot 47 : photo de l'affiche générée d'un événement (publique une fois rattachée).
   "event_poster_photo",
+  // Lot R5c1 : photo du fil d'un crew (privée, jamais publique : D36).
+  "crew_post",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -43,7 +45,14 @@ export type UploadPurpose = (typeof uploadPurposes)[number];
  * Clés privées. `announcement` (lot 20) l'est **jusqu'à son rattachement** : la photo d'une annonce n'est copiée vers
  * une clé publique qu'à la publication de l'annonce (sinon la route servirait d'hébergement public d'images).
  */
-export const privateUploadPurposes: readonly UploadPurpose[] = ["message", "incident", "report", "announcement"];
+export const privateUploadPurposes: readonly UploadPurpose[] = [
+  "message",
+  "incident",
+  "report",
+  "announcement",
+  // Lot R5c1 (D36) : photo du fil d'un crew, servie seulement aux membres actifs du crew.
+  "crew_post",
+];
 
 /**
  * Usages acceptés par `POST /me/uploads` **aujourd'hui** : seulement ceux qui ont un consommateur (relecture du lot 18 :
@@ -64,4 +73,6 @@ export const acceptedUploadPurposes = [
   // Lot 47 : photo de l'affiche générée (`PATCH /events/:id`, `POST /events/:id/poster/generate`) ; l'aperçu
   // (`POST /posters/preview`) la lit sans la rattacher.
   "event_poster_photo",
+  // Lot R5c1 : photo du fil d'un crew (`POST /crews/:id/posts`).
+  "crew_post",
 ] as const satisfies readonly UploadPurpose[];

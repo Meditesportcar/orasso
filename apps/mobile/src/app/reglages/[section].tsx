@@ -19,6 +19,7 @@ import { helpLabels, moderationLabels, preferencesLabels } from "@orasso/shared"
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
+import { LeftCrewsSection } from "@/features/crews/feed/LeftCrewsSection"; // R5c1, tour 2
 import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
 import { DataSection } from "@/features/moi/DataSection";
 import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
@@ -178,6 +179,8 @@ export default function Reglages() {
         <>
           <VisibilitySection settings={settings.settings} save={settings.save} />
           <DataSection />
+          {/* R5c1, tour 2 : retirer mes publications des crews que j'ai quittés. */}
+          <LeftCrewsSection />
           <SectionTitle>Compte</SectionTitle>
           <Button variant="plate" icon="close" onPress={() => setSheet("delete")} fullWidth>
             Supprimer mon compte

@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { CrewFeed } from "@/features/crews/feed/CrewFeed"; // R5c1 : fil, à rebrancher dans l'onglet Fil
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { CrewDot, SmButton } from "@/features/passionne/kit";
 import { ReportButton } from "@/features/ReportSheet";
@@ -295,6 +296,8 @@ export default function CrewScreen() {
         </View>
       ) : null}
       {!member ? <Muted variant="caption">{crewLabels.membersPrivate}</Muted> : null}
+      {/* R5c1 : fil, à rebrancher dans l'onglet Fil */}
+      {member ? <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} /> : null}
 
       {/* `.cr-members` : rail des membres (rond, pseudo, grade ; « Responsable » pour le chef). */}
       {members.data ? (

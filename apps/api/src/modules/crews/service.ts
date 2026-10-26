@@ -58,6 +58,7 @@ import { notificationsService } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
 import { withdrawAwaitingForCrew } from "./awaiting";
+import { purgeCrewFeed } from "./feed/service";
 
 export type CrewRow = typeof crews.$inferSelect;
 export type CrewMemberRow = typeof crewMembers.$inferSelect;
@@ -69,7 +70,8 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
-const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
+// Lot R5c1 : `publier` (écran « Publier dans le crew » de l'appli, `/crew/publier`).
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug", "publier"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {
@@ -548,6 +550,9 @@ export const crewsService = {
       await systemMessage(tx, after, conversation.id, "crew_archived", null);
       await tx.update(conversations).set({ closedAt: at }).where(eq(conversations.id, conversation.id));
     }
+    // Lot R5c1, tour 2 : dissous par son chef, le fil part (publications et photos) ; retiré par la modération, il
+    // reste pour elle (le fil répond 404 à tous dans les deux cas).
+    const feedKeys = reason === "moderation" ? [] : await purgeCrewFeed(tx, crew.id);
     const members = (await activeCrewMembers(tx, crew.id)).filter((m) => m.role !== "leader");
     for (const m of members) {
       await notificationsService.notify(tx, m.userId, "crew_archived", {
@@ -562,7 +567,7 @@ export const crewsService = {
       });
     }
     publishInbox(after, ...pending.map((p) => p.userId), ...members.map((m) => m.userId));
-    return crew.logoKey ? [crew.logoKey] : [];
+    return [...(crew.logoKey ? [crew.logoKey] : []), ...feedKeys];
   },
 
   async viewById(v: Viewer, id: string): Promise<CrewView> {

@@ -23,8 +23,11 @@ import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { PillO, SmButton } from "@/features/passionne/kit";
 import { nowMs } from "@/lib/clock";
+import { openMaps, openWaze } from "@/lib/directions";
 import { formatEventDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
+import { useDistanceToEvent } from "./useDistanceToEvent";
+import { goDestination, kmToEvent } from "./whereGo";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -145,6 +148,67 @@ function Row({
   );
 }
 
+/** Lot R5d (maquette R5.11, `.r5dist`) : la distance à vol d'oiseau, en pastille moutarde. */
+function DistancePill({ km }: { km: number }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View
+      accessible
+      accessibilityLabel={L.awayFromYou(km)}
+      style={[styles.distPill, { backgroundColor: c.accent }]}
+      testID="event-distance"
+    >
+      <Icon name="nav" size={13} color={c.accentInk} />
+      <Text variant="meta" color={c.accentInk} style={styles.distText}>
+        {L.awayFromYou(km)}
+      </Text>
+    </View>
+  );
+}
+
+/** Lot R5d (`.r5distask`) : sans permission, un bouton qui la demande une fois. */
+function AskDistance({ busy, onPress }: { busy: boolean; onPress: () => void }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={L.seeDistance}
+      hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
+      disabled={busy}
+      onPress={onPress}
+      testID="event-distance-ask"
+      style={[styles.distPill, styles.distAsk, { borderColor: c.line }]}
+    >
+      <Icon name="rim" size={14} color={c.ink} />
+      <Text variant="meta" color={c.ink} style={styles.distText}>
+        {L.seeDistance}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Lot R5d (`.r5go`) : « Y aller », Maps et Waze, à toute date (l'adresse est publique). */
+function GoRow({ event }: { event: EventPublic }) {
+  const { t } = useTheme();
+  const destination = goDestination(event);
+  if (!destination) return null;
+  return (
+    <View style={styles.goRow} testID="event-go">
+      <Text variant="label" color={t.color.inkMuted} style={styles.goLabel}>
+        {L.goTo}
+      </Text>
+      <SmButton kind="s" icon="nav" onPress={() => openMaps(destination)} testID="event-go-maps">
+        Maps
+      </SmButton>
+      <SmButton kind="s" icon="nav" onPress={() => openWaze(destination)} testID="event-go-waze">
+        Waze
+      </SmButton>
+    </View>
+  );
+}
+
 /** Lot M4 : l'aperçu du lieu (`.miniplan`, 92 × 70) : terre, mer, routes aux jetons de la carte, l'épingle moutarde. */
 function MiniPlan() {
   const { t } = useTheme();
@@ -199,13 +263,11 @@ export function EventRows({ event }: { event: EventPublic }) {
   const multi = (event.days?.length ?? 0) > 1;
   const when = `${formatHour(event.startsAt)} → ${formatHour(event.endsAt)}${multi ? ` · ${event.days.length} jours` : ""}`;
   const whereTitle = event.addressLine ?? event.city ?? "";
-  const whereSub = [
-    event.distanceKm != null ? `${Math.round(event.distanceKm)} km` : null,
-    event.addressLine ? city : null,
-    event.entranceNote,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // Lot R5d : la distance est calculée sur le téléphone (position déjà accordée, ou demandée par le bouton).
+  const located = event.lat != null && event.lng != null;
+  const device = useDistanceToEvent(located);
+  const km = kmToEvent(device.position, event);
+  const whereSub = [event.addressLine ? city : null, event.entranceNote].filter(Boolean).join(" · ");
   const pub = event.arrivals?.public?.strict ? event.arrivals.public : null;
   const taken = event.remaining !== null && event.capacity ? (event.capacity - event.remaining) / event.capacity : null;
   const day = formatEventDay(event.startsAt, event.endsAt);
@@ -225,6 +287,17 @@ export function EventRows({ event }: { event: EventPublic }) {
         >
           <Row icon="place" title={whereTitle} sub={whereSub || null} right={pins.length > 0 ? <MiniPlan /> : null} />
         </Pressable>
+        {/* Hors du toucher « Où » : le lecteur d'écran atteint la distance et le bouton, et toucher à côté n'ouvre pas la carte. */}
+        {km !== null ? (
+          <View style={styles.distRow}>
+            <DistancePill km={km} />
+          </View>
+        ) : device.status === "ask" || device.status === "asking" ? (
+          <View style={styles.distRow}>
+            <AskDistance busy={device.status === "asking"} onPress={() => void device.request()} />
+          </View>
+        ) : null}
+        <GoRow event={event} />
         {ended ? null : (
           <>
             <View style={[styles.sep, { borderTopColor: c.line }]} />
@@ -250,6 +323,11 @@ export function EventRows({ event }: { event: EventPublic }) {
           testID="event-public"
         />
       </View>
+      {km !== null ? (
+        <Text variant="caption" color={c.inkMuted} style={styles.distNote} testID="event-distance-note">
+          {L.distanceNote}
+        </Text>
+      ) : null}
       {map && pins.length > 0 ? (
         <ExplorerMap pins={pins} selectedId={event.id} onSelect={() => undefined} reveal={false}>
           {whereTitle ? (
@@ -343,6 +421,30 @@ const styles = StyleSheet.create({
   rowB: { fontFamily: "Archivo-ExtraBold", fontSize: 14.5, lineHeight: 18 },
   rowSmall: { fontSize: 12.5, lineHeight: 16 },
   sep: { borderTopWidth: 1, borderStyle: "dashed", marginHorizontal: 0 },
+  distRow: { paddingLeft: 14 + 36 + space3, paddingRight: 14, paddingBottom: space2 + 2, alignItems: "flex-start" },
+  distPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    minHeight: 26,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  distAsk: { borderWidth: 1.5 },
+  distText: { fontFamily: "Archivo-ExtraBold", fontSize: 12, lineHeight: 15 },
+  distNote: { fontSize: 12.5, lineHeight: 17, paddingHorizontal: space1 },
+  goRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: space2,
+    paddingLeft: 14 + 36 + space3,
+    paddingRight: 14,
+    paddingBottom: 13,
+  },
+  goLabel: { marginRight: "auto", fontSize: 11 },
   miniplan: { width: 92, height: 70, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
   gauge: { height: 8, borderRadius: 4, overflow: "hidden", marginTop: 6 },
   gaugeFill: { height: 8, borderRadius: 4 },

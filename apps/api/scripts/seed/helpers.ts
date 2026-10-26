@@ -129,8 +129,7 @@ export async function createVehicle(
   if (!row) throw new Error("véhicule");
   const slugs = new Set<string>();
   const age = now.getUTCFullYear() - year;
-  if (ref.type === "moto") slugs.add("moto");
-  if (ref.type === "truck") slugs.add("utilitaire");
+  // Lot R5a, tour 2 : plus de « Moto » ni d'« Utilitaire » (en pause : le type le dit déjà).
   const byCountry: Record<string, string> = {
     JP: "jdm",
     DE: "allemande",

@@ -10,6 +10,7 @@ import { startJobs } from "../../src/jobs";
 import { deps } from "../../src/lib/deps";
 import { scheduleEventJobs } from "../../src/modules/events/jobs";
 import { syncVehicleReference } from "../../src/modules/vehicles/reference-sync";
+import { syncStyleCatalog } from "../../src/modules/vehicles/style-sync";
 import {
   type AppStatus,
   apply,
@@ -28,48 +29,21 @@ import {
 } from "./helpers";
 
 // --- Catégories -------------------------------------------------------------------------------------------------
-const CATEGORIES: [string, string, number | null][] = [
-  ["youngtimer", "Youngtimer", 20],
-  ["ancienne", "Ancienne", 30],
-  ["jdm", "JDM", null],
-  ["allemande", "Allemande", null],
-  ["francaise", "Française", null],
-  ["italienne", "Italienne", null],
-  ["americaine", "Américaine", null],
-  ["sportive", "Sportive", null],
-  ["supercar", "Supercar", null],
-  ["preparee", "Préparée", null],
-  ["stance", "Stance", null],
-  ["drift", "Drift", null],
-  ["track-day", "Track day", null],
-  ["origine", "Origine", null],
-  ["4x4", "4x4", null],
-  ["utilitaire", "Utilitaire", null],
-  ["moto", "Moto", null],
-];
 
+/**
+ * Lot R5a : les catégories (styles et pays) viennent du catalogue de départ des styles (`syncStyleCatalog`, aussi lancé au
+ * démarrage de l'API) : familles, icônes, types, « D'origine », « Moto » et « Utilitaire » en pause. Renvoie slug → id.
+ */
 async function seedCategories() {
-  const rows = await db
-    .insert(t.categories)
-    .values(CATEGORIES.map(([slug, label, minVehicleAge], position) => ({ slug, label, minVehicleAge, position })))
-    .returning();
+  await syncStyleCatalog();
+  const rows = await db.select({ id: t.categories.id, slug: t.categories.slug }).from(t.categories);
   return new Map(rows.map((c) => [c.slug, c.id]));
 }
 
-/** Lot M1 : « Track day » et « Origine » (styles de l'artefact) ajoutés à la fin d'une base déjà semée ; sans effet sinon. */
+/** Complète une base déjà semée (lots M1 et R5a) : le catalogue des styles, sans réécrire un style déjà vu. */
 export async function seedMissingCategories() {
-  const existing = new Set((await db.select({ slug: t.categories.slug }).from(t.categories)).map((c) => c.slug));
-  if (existing.size === 0) return; // base vide : seedCategories s'en charge
-  const [{ max } = { max: 0 }] = await db
-    .select({ max: sql<number>`coalesce(max(${t.categories.position}), -1)` })
-    .from(t.categories);
-  const missing = CATEGORIES.filter(([slug]) => ["track-day", "origine"].includes(slug) && !existing.has(slug));
-  if (!missing.length) return;
-  await db
-    .insert(t.categories)
-    .values(missing.map(([slug, label, minVehicleAge], i) => ({ slug, label, minVehicleAge, position: max + 1 + i })))
-    .onConflictDoNothing();
-  console.log(`Catégories ajoutées : ${missing.map(([slug]) => slug).join(", ")}.`);
+  const r = await syncStyleCatalog();
+  if (r.inserted || r.adopted) console.log(`Catalogue des styles : ${r.inserted} ajoutés, ${r.adopted} mis à jour.`);
 }
 
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
@@ -124,8 +98,9 @@ async function seedReference() {
   return { refs, find };
 }
 export async function seedBase(hash: string) {
-  const categories = await seedCategories();
+  // Lot R5a, tour 2 : le référentiel d'abord, pour que la liste blanche de Supercar trouve ses marques.
   const { refs, find } = await seedReference();
+  const categories = await seedCategories();
 
   // Comptes nommés (prototype validé).
   const damien = await createAccount(

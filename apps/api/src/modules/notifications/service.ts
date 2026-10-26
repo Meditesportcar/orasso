@@ -48,6 +48,15 @@ const stripInternal = (data: Record<string, unknown>) => {
 
 let inflight: Promise<void> = Promise.resolve();
 
+/** Lot R5c1, tour 2 : contrôle d'une notification à sa livraison (`false` : supprimée sans être envoyée). */
+export type DeliveryGuard = (n: NotificationRow) => Promise<boolean>;
+const deliveryGuards = new Map<string, DeliveryGuard>();
+
+/** Un domaine revérifie ses notifications au moment de les livrer (ex. : destinataire encore membre d'un crew). */
+export function registerDeliveryGuard(types: readonly NotificationType[], guard: DeliveryGuard): void {
+  for (const t of types) deliveryGuards.set(t, guard);
+}
+
 export const notificationsService = {
   /**
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
@@ -137,6 +146,11 @@ export const notificationsService = {
       .returning();
     for (const n of due) {
       try {
+        const guard = deliveryGuards.get(n.type);
+        if (guard && !(await guard(n))) {
+          await db.delete(notifications).where(eq(notifications.id, n.id));
+          continue;
+        }
         await deliverOne(n);
       } catch (error) {
         // Réessayée à la prochaine minute.

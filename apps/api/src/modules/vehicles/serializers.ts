@@ -1,5 +1,8 @@
 // Sérialiseurs par audience (ARCHITECTURE.md § 5.2) : la plaque ne sort que pour le propriétaire et l'organisateur.
 import {
+  type CategoryIcon,
+  type CategoryRef,
+  categoryLabelFor,
   formatPlate,
   maskedPhoto,
   maskedPhotos,
@@ -12,6 +15,23 @@ import {
 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
+
+/**
+ * Catégories d'un véhicule (lot R5a) : libellé au masculin pour un camion (« Ancien »), famille et icône du style, et
+ * `paused` quand l'admin l'a mis en pause (il ne se propose plus ; il reste sur la fiche).
+ */
+function categoryRefs(v: Pick<VehicleWithAll, "vehicleType" | "categories">): CategoryRef[] {
+  return v.categories
+    .map((c) => c.category)
+    .map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      label: categoryLabelFor(c, v.vehicleType),
+      family: c.family,
+      icon: c.icon as CategoryIcon,
+      paused: !c.active,
+    }));
+}
 
 /**
  * Lot R4a : marque et modèle tapés (niveau « Autre »). Obligatoires (tour 2) : toute lecture qui construit un nom de
@@ -79,7 +99,7 @@ function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): Vehic
     weightKg: v.weightKg,
     description: v.description,
     preparation: v.preparation,
-    categories: v.categories.map((c) => ({ id: c.category.id, slug: c.category.slug, label: c.category.label })),
+    categories: categoryRefs(v),
     photos: photos.map((p) => ({
       id: p.id,
       position: p.position,
@@ -149,6 +169,6 @@ export function vehiclePrivate(v: VehicleWithAll): VehiclePrivate {
     generationName: v.generation && !v.generation.isOther ? v.generation.name : null,
     // Lot R4b, tour 2 : seulement une photo dont la plaque est floutée (ou d'un véhicule sans plaque).
     photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
-    categories: v.categories.map((c) => ({ id: c.category.id, slug: c.category.slug, label: c.category.label })),
+    categories: categoryRefs(v),
   };
 }

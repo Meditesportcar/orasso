@@ -23,8 +23,11 @@ export function cleanProposedName(text: string | null | undefined): string | nul
  */
 const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\u061c\u00ad\u3164]/g;
 
-/** Texte tapé nettoyé (contrôles, bidi, invisibles, espaces réduits), coupé à `max` caractères. */
-function cleanTyped(text: string | null | undefined, max: number): string {
+/**
+ * Texte tapé nettoyé (contrôles, bidi, invisibles, espaces réduits), coupé à `max` caractères. Exporté au lot R5a : les
+ * styles proposés suivent le même nettoyage.
+ */
+export function cleanTyped(text: string | null | undefined, max: number): string {
   return (
     (text ?? "")
       // Lot R4a, tour 2 : contrôles C0 et C1 et marques de sens (bidi) remplacés par une espace.

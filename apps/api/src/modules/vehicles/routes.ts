@@ -1,4 +1,5 @@
 import {
+  categoryProposalSchema,
   categoryReferenceQuery,
   certificationRequestSchema,
   type PlateRect,
@@ -25,6 +26,7 @@ import { vehicleProsService } from "./pros";
 import { referenceSearch } from "./reference-search";
 import { vehiclesRepo } from "./repo";
 import { vehiclesService } from "./service";
+import { styleProposalsService } from "./style-proposals";
 
 const CACHE_1H = { "cache-control": "private, max-age=3600" };
 
@@ -51,6 +53,12 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .get("/vehicle-reference/categories", async (c) =>
     c.json(await categoryOptions(query(c, categoryReferenceQuery)), 200, CACHE_1H),
   )
+  // Lot R5a (maquette R5.2) : « Il manque un style ? Propose-le », limité par compte.
+  .post("/categories/proposals", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("categoryProposal", v.user.id);
+    return c.json(await styleProposalsService.propose(v, await body(c, categoryProposalSchema)), 201);
+  })
   // Garage.
   .get("/me/vehicles", async (c) => c.json(await vehiclesService.listMine(await requireUser(c))))
   .post("/me/vehicles", async (c) => {
