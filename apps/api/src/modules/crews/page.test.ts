@@ -4,7 +4,7 @@
 import { fromWallTime, HOUR } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   blurPlatesOf,
@@ -20,9 +20,11 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { applications, crewMembers, crewOutings, notifications } from "../../db/schema";
+import { applications, crewMembers, crewOutings, crews, notifications } from "../../db/schema";
+import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
+import { retryRemove } from "../vehicles/photos-blur";
 
 afterAll(async () => {
   await pool.end();
@@ -551,6 +553,64 @@ describe("bannière et « Où va le crew » (lot R5c2)", () => {
     const removed = await req(kenji, "DELETE", `/crews/${crew.id}/banner`);
     expect(removed.status).toBe(200);
     expect(removed.json.bannerUrl).toBeNull();
+  });
+
+  it("tour 2 : bannière dans l'espace privé, lue par une route qui revérifie à chaque lecture ; en-têtes de cache", async () => {
+    const kenji = await signUp("Kenji_b2");
+    const lea = await signUp("Lea_b2");
+    const sarah = await signUp("Sarah_b2");
+    const crew = await newCrew(kenji);
+    await addToCrew(crew.id, kenji, lea);
+    const get = async (u: TestUser | null, url: string) => {
+      const res = await app.request(url, { headers: { origin: ORIGIN, ...(u ? { cookie: u.cookie } : {}) } });
+      return { status: res.status, cache: res.headers.get("cache-control") };
+    };
+    const raw = await banner(kenji, crew.id);
+    const url = raw.json.bannerUrl as string;
+    expect(url).toMatch(new RegExp(`^/api/crews/${crew.id}/banner/[0-9a-f]{16}\\.webp$`));
+    const [row] = await db.select({ key: crews.bannerKey }).from(crews).where(eq(crews.id, crew.id));
+    expect(row?.key).toMatch(new RegExp(`^private/crew-banners/${crew.id}/[0-9a-f]{16}\\.webp$`));
+    // Jamais servie par l'adresse publique des fichiers.
+    expect((await get(kenji, `/api/files/${row?.key}`)).status).toBe(404);
+    // Sans décision de plaque : les membres, sans cache ; ni un non-membre, ni un visiteur sans compte.
+    expect(await get(lea, url)).toEqual({ status: 200, cache: "private, no-store" });
+    expect((await get(sarah, url)).status).toBe(404);
+    expect((await get(null, url)).status).toBe(401);
+    // Un ancien membre perd l'accès tout de suite.
+    expect((await req(lea, "DELETE", `/crews/${crew.id}/members/${lea.id}`)).status).toBe(204);
+    expect((await get(lea, url)).status).toBe(404);
+    // Avec décision : tout compte connecté (vitrine), une heure dans le cache privé.
+    const cleared = await banner(kenji, crew.id, { noPlate: true });
+    expect(await get(sarah, cleared.json.bannerUrl as string)).toEqual({ status: 200, cache: "private, max-age=3600" });
+    // L'ancienne adresse ne sert plus rien.
+    expect((await get(kenji, url)).status).toBe(404);
+  });
+
+  it("tour 2 : l'ancienne bannière est retirée du stockage (remplacée, retirée, crew dissous) ; une panne est reprise", async () => {
+    const kenji = await signUp("Kenji_b3");
+    const crew = await newCrew(kenji);
+    const keyOf = async () =>
+      (await db.select({ key: crews.bannerKey }).from(crews).where(eq(crews.id, crew.id)))[0]?.key ?? null;
+    await banner(kenji, crew.id, { noPlate: true });
+    const first = (await keyOf()) as string;
+    expect(await storage.get(first)).not.toBeNull();
+    await banner(kenji, crew.id, { noPlate: true });
+    const second = (await keyOf()) as string;
+    expect(await storage.get(first)).toBeNull();
+    // Le stockage tombe au retrait : la tâche `storage.remove` reprend la suppression.
+    const spy = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}/banner`)).status).toBe(200);
+    spy.mockRestore();
+    expect(await storage.get(second)).not.toBeNull();
+    const job = clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === second);
+    expect(job).toBeTruthy();
+    await retryRemove(second);
+    expect(await storage.get(second)).toBeNull();
+    // Dissolution : la bannière part avec le crew.
+    await banner(kenji, crew.id, { noPlate: true });
+    const third = (await keyOf()) as string;
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}`)).status).toBe(204);
+    expect(await storage.get(third)).toBeNull();
   });
 
   it("« Où va le crew » : membres retenus et inscriptions du crew ; jamais une invitation privée d'un membre", async () => {

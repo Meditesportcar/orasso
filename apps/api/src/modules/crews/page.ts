@@ -74,10 +74,21 @@ export async function vitrineMembers(members: ActiveMember[], viewerId: string):
   }));
 }
 
-/** Bannière vue par cette personne : hors du crew, seulement si la plaque est passée par la chaîne des photos. */
-export function bannerFor(crew: Pick<CrewRow, "bannerKey" | "bannerPlateCleared">, member: boolean): string | null {
+/** Lot R5c2, tour 2 : la bannière vit dans l'espace privé du stockage (jamais servie par `/api/files`). */
+export const CREW_BANNER_FOLDER = "private/crew-banners/";
+export const crewBannerKey = (crewId: string, name: string) => `${CREW_BANNER_FOLDER}${crewId}/${name}`;
+
+/**
+ * Bannière vue par cette personne : hors du crew, seulement si la plaque est passée par la chaîne des photos. Adresse
+ * protégée (`/api/crews/<crew>/banner/<nom>`), revérifiée à chaque lecture.
+ */
+export function bannerFor(
+  crew: Pick<CrewRow, "id" | "bannerKey" | "bannerPlateCleared">,
+  member: boolean,
+): string | null {
   if (!crew.bannerKey) return null;
-  return member || crew.bannerPlateCleared ? storage.url(crew.bannerKey) : null;
+  if (!(member || crew.bannerPlateCleared)) return null;
+  return `/api/crews/${crew.id}/banner/${crew.bannerKey.split("/").at(-1)}`;
 }
 
 /** Véhicules actifs des membres, rangés par membre (le principal d'abord). */

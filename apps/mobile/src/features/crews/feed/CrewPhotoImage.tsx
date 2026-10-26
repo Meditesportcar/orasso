@@ -20,10 +20,13 @@ export function CrewPhotoImage({
   url,
   style,
   accessibilityLabel,
+  resizeMode = "contain",
 }: {
   url: string;
   style: StyleProp<ImageStyle>;
   accessibilityLabel?: string;
+  /** Lot R5c2 : la bannière du crew (même lecture protégée) remplit son cadre. */
+  resizeMode?: "contain" | "cover";
 }) {
   const token = getSessionToken();
   const [uri, setUri] = useState<string | null>(null);
@@ -53,5 +56,5 @@ export function CrewPhotoImage({
     };
   }, [url, token]);
   if (!uri) return <View style={style} accessibilityLabel={accessibilityLabel} />;
-  return <Image source={{ uri }} style={style} resizeMode="contain" accessibilityLabel={accessibilityLabel} />;
+  return <Image source={{ uri }} style={style} resizeMode={resizeMode} accessibilityLabel={accessibilityLabel} />;
 }

@@ -71,6 +71,7 @@ import { purgeCrewFeed } from "./feed/service";
 import {
   activeMembersOf,
   bannerFor,
+  crewBannerKey,
   crewEvents,
   crewGarage,
   crewOutingViews,
@@ -593,7 +594,7 @@ export const crewsService = {
         throw new AppError(415, "unsupported_media_type", "Image illisible (HEIC : convertir en JPEG côté appli)");
       }
       if (plateRects?.length) output = await blurPlateRegions(output.data, plateRects);
-      key = `crews/${id}/banner-${randomBytes(8).toString("hex")}.webp`;
+      key = crewBannerKey(id, `${randomBytes(8).toString("hex")}.webp`);
       await storage.put(key, output.data);
     }
     let old: string | null;
@@ -610,8 +611,26 @@ export const crewsService = {
       if (key) await removeOrRetry(key);
       throw error;
     }
-    if (old && old !== key) await storage.remove(old).catch(() => undefined);
+    // Tour 2 : l'ancienne bannière est retirée pour de bon (reprise par la tâche `storage.remove` si le stockage échoue).
+    if (old && old !== key) await removeOrRetry(old);
     return this.viewById(v, id);
+  },
+
+  /**
+   * `GET /crews/:id/banner/:nom` (tour 2) : la bannière, lue à chaque fois : un membre actif, ou n'importe quel compte
+   * connecté si sa plaque est décidée (vitrine). Un ancien membre perd l'accès à une bannière sans décision.
+   */
+  async bannerFile(v: Viewer, id: string, name: string): Promise<{ data: Buffer; cleared: boolean }> {
+    if (!/^[0-9a-f]{16}\.webp$/.test(name)) throw notFound("Bannière introuvable");
+    const [crew] = await db.select().from(crews).where(eq(crews.id, id));
+    if (!crew || crew.deletedAt || crew.bannerKey !== crewBannerKey(crew.id, name)) {
+      throw notFound("Bannière introuvable");
+    }
+    const me = await memberRow(db, crew.id, v.user.id);
+    if (!(me?.status === "active" || crew.bannerPlateCleared)) throw notFound("Bannière introuvable");
+    const data = await storage.get(crew.bannerKey);
+    if (!data) throw notFound("Bannière introuvable");
+    return { data, cleared: crew.bannerPlateCleared };
   },
 
   /**
@@ -624,7 +643,7 @@ export const crewsService = {
       const crew = await requireLeader(tx, id, v);
       return this.archiveInTx(tx, after, crew, "leader");
     });
-    for (const k of keys) await storage.remove(k).catch(() => undefined);
+    for (const k of keys) await removeOrRetry(k);
   },
 
   /**

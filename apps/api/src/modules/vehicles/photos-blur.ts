@@ -148,9 +148,16 @@ export async function removeOrRetry(key: string): Promise<void> {
   }
 }
 
-/** Tâche `storage.remove` : seules les photos de véhicules sont concernées. */
+/** Clés que la tâche `storage.remove` peut retirer : photos de véhicules, bannières de crew (lot R5c2, tour 2). */
+const RETRY_REMOVABLE = [
+  /^vehicles\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
+  /^private\/crew-banners\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
+  /^crews\/[0-9a-f-]{36}\/banner-[0-9a-f]{16}\.webp$/,
+];
+
+/** Tâche `storage.remove` : seules les clés de `RETRY_REMOVABLE` sont concernées. */
 export async function retryRemove(key: string): Promise<void> {
-  if (!/^vehicles\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/.test(key)) return;
+  if (!RETRY_REMOVABLE.some((re) => re.test(key))) return;
   await storage.remove(key);
 }
 

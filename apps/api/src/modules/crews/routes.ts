@@ -98,6 +98,20 @@ export const crewsRoutes = new Hono<AppEnv>()
   .delete("/crews/:id/banner", async (c) =>
     c.json(await crewsService.setBanner(await requireUser(c), uuidParam(c, "id"), null, undefined, false)),
   )
+  // Tour 2 : la bannière (espace privé), lue avec une session et revérifiée à chaque lecture. Sans décision de plaque,
+  // jamais gardée en cache ; avec, une heure dans le cache privé du navigateur.
+  .get("/crews/:id/banner/:name", async (c) => {
+    const { data, cleared } = await crewsService.bannerFile(
+      await requireUser(c),
+      uuidParam(c, "id"),
+      c.req.param("name"),
+    );
+    return c.body(new Uint8Array(data), 200, {
+      "content-type": "image/webp",
+      "cache-control": cleared ? "private, max-age=3600" : "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
+  })
   // Lot R5c2 : sorties du crew (membres actifs).
   .post("/crews/:id/outings", async (c) => {
     const v = await requireUser(c);

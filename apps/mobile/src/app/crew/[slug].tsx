@@ -31,6 +31,7 @@ import { Alert, Linking, Platform, Pressable, StyleSheet, View } from "react-nat
 
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
 import { CrewFeed } from "@/features/crews/feed/CrewFeed";
+import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import {
   CrewEventRow,
   CrewSecHead,
@@ -235,11 +236,18 @@ export default function CrewScreen() {
       hero={
         <View style={styles.hero}>
           <Photo
-            source={mediaSource(v.bannerUrl)}
             placeholder={`linear-gradient(160deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
             style={StyleSheet.absoluteFill}
-            accessibilityLabel={v.bannerUrl ? `Bannière de ${v.name}` : undefined}
           />
+          {/* Tour 2 : la bannière est lue par une adresse protégée (session), en mémoire seulement. */}
+          {v.bannerUrl ? (
+            <CrewPhotoImage
+              url={v.bannerUrl}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              accessibilityLabel={`Bannière de ${v.name}`}
+            />
+          ) : null}
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <Photo
               placeholder={`linear-gradient(180deg, ${c.night}0d 0%, ${c.night}b3 100%)`}
