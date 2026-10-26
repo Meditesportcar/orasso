@@ -1,11 +1,11 @@
-// Lot R5b (maquettes R5.6 et R5.6b, retour 6 de Damien) : le profil d'un membre et l'aperÃ§u de son propre profil, un
-// seul Ã©cran. Ordre de Damien : la tÃªte (photo, pseudo, grade, dÃ©partement, crew, description, rÃ©seaux, les quatre
-// nombres), Â« Ajouter en ami Â» et Â« Suivre Â» cÃ´te Ã  cÃ´te, Â« Sa voiture Â» (le principal en carrÃ© pleine largeur, nom jamais
-// coupÃ©, catÃ©gories), Â« Prochaine sortie Â» (un ticket ; Â« Toi aussi Â» si la personne qui regarde y va aussi), Â« Son
-// garage Â» (les autres, deux par ligne, en carrÃ©), Â« Ses sorties Â» (les autres Ã  venir en lignes courtes) puis Â« Vu Ã  Â»
-// (ses tampons de la saison). Compte privÃ© : la tÃªte, les nombres, Â« Ajouter en ami Â», ses vÃ©hicules en marque et modÃ¨le,
-// et la ligne Â« Le reste est rÃ©servÃ© Ã  ses amis Â». Les cartes carrÃ©es n'existent que dans ce profil (le `VehicleCard` du
-// systÃ¨me reste en bandeau ailleurs). Â« Ã‰crire Â» et Â« â‹¯ Â» (signaler) sont dans l'en-tÃªte, posÃ©s par l'Ã©cran.
+// Lot R5b (maquettes R5.6 et R5.6b, retour 6 de Damien) : le profil d'un membre et l'aperçu de son propre profil, un
+// seul écran. Ordre de Damien : la tête (photo, pseudo, grade, département, crew, description, réseaux, les quatre
+// nombres), « Ajouter en ami » et « Suivre » côte à côte, « Sa voiture » (le principal en carré pleine largeur, nom jamais
+// coupé, catégories), « Prochaine sortie » (un ticket ; « Toi aussi » si la personne qui regarde y va aussi), « Son
+// garage » (les autres, deux par ligne, en carré), « Ses sorties » (les autres à venir en lignes courtes) puis « Vu à »
+// (ses tampons de la saison). Compte privé : la tête, les nombres, « Ajouter en ami », ses véhicules en marque et modèle,
+// et la ligne « Le reste est réservé à ses amis ». Les cartes carrées n'existent que dans ce profil (le `VehicleCard` du
+// système reste en bandeau ailleurs). « Écrire » et « ⋯ » (signaler) sont dans l'en-tête, posés par l'écran.
 import { Button, Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   filledSocials,
@@ -38,7 +38,7 @@ import { departmentCaption, FollowButton } from "./network";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-/** `live` : le profil d'un autre ; `self` : le sien par son lien ; `preview` : l'aperÃ§u (boutons inertes). */
+/** `live` : le profil d'un autre ; `self` : le sien par son lien ; `preview` : l'aperçu (boutons inertes). */
 export type PublicProfileMode = "live" | "self" | "preview";
 
 const NETWORK_ICON: Record<SocialNetwork, IconName> = {
@@ -51,7 +51,7 @@ const NETWORK_ICON: Record<SocialNetwork, IconName> = {
 
 const TYPE_ICON: Record<ProfileVehicle["vehicleType"], IconName> = { car: "vehicle", moto: "moto", truck: "truck" };
 
-/** L'avatar de la tÃªte : la photo, sinon l'initiale en rouge, comme dans l'onglet Profil (retour 6 : Â« DA Â» contre Â« D Â»). */
+/** L'avatar de la tête : la photo, sinon l'initiale en rouge, comme dans l'onglet Profil (retour 6 : « DA » contre « D »). */
 function HeadFace({ url, pseudo }: { url: string | null; pseudo: string }) {
   const { t } = useTheme();
   const source = mediaSource(url);
@@ -68,7 +68,7 @@ function HeadFace({ url, pseudo }: { url: string | null; pseudo: string }) {
   );
 }
 
-/** Une photo carrÃ©e de vÃ©hicule, ou la silhouette (pas de photo montrable). */
+/** Une photo carrée de véhicule, ou la silhouette (pas de photo montrable). */
 function SquarePhoto({ v }: { v: ProfileVehicle }) {
   const { t } = useTheme();
   const source = mediaSource(v.photoUrl);
@@ -83,7 +83,7 @@ function SquarePhoto({ v }: { v: ProfileVehicle }) {
   );
 }
 
-/** Â« Sa voiture Â» : le principal en carrÃ© pleine largeur (`.r5hero`), la pastille Â« Principale Â», le nom jamais coupÃ©. */
+/** « Sa voiture » : le principal en carré pleine largeur (`.r5hero`), la pastille « Principale », le nom jamais coupé. */
 function HeroVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }) {
   const { t } = useTheme();
   const c = t.color;
@@ -126,7 +126,7 @@ function HeroVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }) 
   );
 }
 
-/** Â« Son garage Â» : un autre vÃ©hicule en carrÃ© (`.r5sq`), deux par ligne. */
+/** « Son garage » : un autre véhicule en carré (`.r5sq`), deux par ligne. */
 function SquareVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }) {
   const { t } = useTheme();
   return (
@@ -149,7 +149,7 @@ function SquareVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }
   );
 }
 
-/** Les quatre nombres (`.r5n4`) : abonnÃ©s, abonnements, amis, sorties ; visibles de tout membre connectÃ©. */
+/** Les quatre nombres (`.r5n4`) : abonnés, abonnements, amis, sorties ; visibles de tout membre connecté. */
 function Numbers({ p }: { p: UserProfileView }) {
   const { t } = useTheme();
   const cells: [number | null, (n: number) => string][] = [
@@ -179,7 +179,7 @@ function Numbers({ p }: { p: UserProfileView }) {
   );
 }
 
-/** Les rÃ©seaux (`.r5socs`) : pastilles icÃ´ne + pseudo ; le lien est fabriquÃ© par Orasso (`socialUrl`). */
+/** Les réseaux (`.r5socs`) : pastilles icône + pseudo ; le lien est fabriqué par Orasso (`socialUrl`). */
 function Socials({ p }: { p: UserProfileView }) {
   const { t } = useTheme();
   const list = filledSocials(p.socials);
@@ -222,10 +222,10 @@ export function PublicProfile({
 }: {
   p: UserProfileView;
   mode: PublicProfileMode;
-  /** AperÃ§u Â« vu par un ami Â» : le bouton d'ami montre Â« Ami Â». */
+  /** Aperçu « vu par un ami » : le bouton d'ami montre « Ami ». */
   previewAsFriend?: boolean;
   onChanged?: () => void;
-  /** Un message sous la tÃªte (erreur de l'en-tÃªte Â« Ã‰crire Â»). */
+  /** Un message sous la tête (erreur de l'en-tête « Écrire »). */
   topNotice?: ReactNode;
 }) {
   const { t } = useTheme();
@@ -240,7 +240,7 @@ export function PublicProfile({
   const moreOutings = (p.upcomingEvents ?? []).filter((e) => e.slug !== next?.event.slug);
   const open = (v: ProfileVehicle) => (mode === "preview" ? undefined : () => router.push(`/v/${v.id}`));
   const days = next ? daysUntil(next.event.startsAt, now()) : 0;
-  // Tampons : trois par ligne dans la largeur de l'Ã©cran.
+  // Tampons : trois par ligne dans la largeur de l'écran.
   const stampSize = w > 0 ? Math.floor((w - 2 * space3) / 3) : 96;
 
   const actions =
@@ -255,7 +255,7 @@ export function PublicProfile({
         Modifier mon profil
       </Button>
     ) : mode === "preview" ? (
-      // Les boutons ne font rien dans l'aperÃ§u : c'est ce que voient les autres.
+      // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres.
       <View style={styles.inert} pointerEvents="none" accessibilityElementsHidden testID="preview-actions">
         <View style={styles.acts}>
           <View style={styles.act}>
@@ -285,7 +285,7 @@ export function PublicProfile({
             onChanged={() => onChanged?.()}
           />
         </View>
-        {/* Compte privÃ© : pas de Â« Suivre Â», seulement Â« Ajouter en ami Â» (validation R4.6c). */}
+        {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami » (validation R4.6c). */}
         {p.follow.canFollow || p.follow.following ? (
           <View style={styles.act}>
             <FollowButton pseudo={p.pseudo} following={p.follow.following} onChanged={() => onChanged?.()} wide />
@@ -296,7 +296,7 @@ export function PublicProfile({
 
   return (
     <View style={styles.page} onLayout={(e) => setW(e.nativeEvent.layout.width)} testID="profil">
-      {/* (1) La tÃªte (`.r5hd`). */}
+      {/* (1) La tête (`.r5hd`). */}
       <View style={styles.hd} testID="public-head">
         <HeadFace url={p.avatarUrl} pseudo={p.pseudo} />
         <View style={styles.hdText}>
@@ -347,7 +347,7 @@ export function PublicProfile({
       {!limited ? <Socials p={p} /> : null}
       <Numbers p={p} />
 
-      {/* (2) Â« Ajouter en ami Â» et Â« Suivre Â» cÃ´te Ã  cÃ´te ; ils s'empilent s'ils ne tiennent pas. */}
+      {/* (2) « Ajouter en ami » et « Suivre » côte à côte ; ils s'empilent s'ils ne tiennent pas. */}
       {actions}
       {mode === "preview" ? <Muted variant="caption">{P.inert}</Muted> : null}
       {topNotice}
@@ -377,11 +377,11 @@ export function PublicProfile({
         </>
       ) : (
         <>
-          {/* (3) Â« Sa voiture Â». */}
+          {/* (3) « Sa voiture ». */}
           <SecHead title={L.car} hint={L.carHint} />
           {main ? <HeroVehicle v={main} onOpen={open(main)} /> : <Muted variant="body">{L.noVehicle}</Muted>}
 
-          {/* (4) Â« Prochaine sortie Â» : un ticket, et Â« Toi aussi Â» pour la personne qui regarde. */}
+          {/* (4) « Prochaine sortie » : un ticket, et « Toi aussi » pour la personne qui regarde. */}
           {next ? (
             <>
               <SecHead title={L.next} hint={L.nextIn(days)} />
@@ -391,7 +391,7 @@ export function PublicProfile({
                 title={next.event.title}
                 detail={[formatHour(next.event.startsAt), next.event.city, next.event.structureName]
                   .filter(Boolean)
-                  .join(" Â· ")}
+                  .join(" · ")}
                 onPress={mode === "preview" ? undefined : () => router.push(`/e/${next.event.slug}`)}
                 testID="profile-next"
               >
@@ -407,7 +407,7 @@ export function PublicProfile({
             </>
           ) : null}
 
-          {/* (5) Â« Son garage Â» : les autres vÃ©hicules, deux par ligne. */}
+          {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}
           {others.length ? (
             <>
               <SecHead title={L.garage} hint={L.garageOthers(others.length)} />
@@ -419,7 +419,7 @@ export function PublicProfile({
             </>
           ) : null}
 
-          {/* (6) Â« Ses sorties Â» puis Â« Vu Ã  Â». */}
+          {/* (6) « Ses sorties » puis « Vu à ». */}
           {moreOutings.length ? (
             <>
               <SecHead title={L.outings} hint={L.outingsHint(moreOutings.length)} />
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   },
   faceText: { fontSize: 28, lineHeight: 30 },
   hdText: { flex: 1, minWidth: 0, gap: 6 },
-  // Le pseudo passe Ã  la ligne plutÃ´t que de se couper (identifiants longs sans espace : coupure du systÃ¨me).
+  // Le pseudo passe à la ligne plutôt que de se couper (identifiants longs sans espace : coupure du système).
   pseudo: { fontSize: 24, lineHeight: 25 },
   tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
   privateCap: { flexDirection: "row", alignItems: "center", gap: 4 },
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   n4: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   n4Cell: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: 2, gap: 1 },
   n4Label: { fontSize: 11.5, lineHeight: 14, textAlign: "center" },
-  // Lot R5b : cÃ´te Ã  cÃ´te s'ils tiennent (chacun au moins la largeur de son libellÃ©), sinon l'un sous l'autre.
+  // Lot R5b : côte à côte s'ils tiennent (chacun au moins la largeur de son libellé), sinon l'un sous l'autre.
   acts: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   act: { flexGrow: 1, flexBasis: "auto" },
   inert: { opacity: 0.6 },

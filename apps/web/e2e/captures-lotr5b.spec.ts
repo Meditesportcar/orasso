@@ -3,11 +3,11 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { RELAIS } from "./relais";
 
-// Lot R5b : captures Â« avant Â» et Â« aprÃ¨s Â» des Ã©crans du profil et de leurs voisins (titres de section, boutons, cartes
-// de vÃ©hicule), appli et site, BÃ©ton et Sable. MÃªme liste avant et aprÃ¨s : `CAPTURES_DIR` choisit le dossier
-// (`â€¦/lot-r5b-captures/avant` ou `â€¦/apres`). Aucune assertion sur le contenu : ce sont des photos Ã  comparer.
-// Appli : 390 px, puis 384 px (largeur du Pixel de Damien) avec la police agrandie (Ã—1,15 et Ã—1,3, posÃ©e par la page,
-// faute de `fontScale` sur le web). Site : 390 et 1280 px. Lancer avec APP_URL (appli compilÃ©e), API et site seedÃ©s.
+// Lot R5b : captures « avant » et « après » des écrans du profil et de leurs voisins (titres de section, boutons, cartes
+// de véhicule), appli et site, Béton et Sable. Même liste avant et après : `CAPTURES_DIR` choisit le dossier
+// (`…/lot-r5b-captures/avant` ou `…/apres`). Aucune assertion sur le contenu : ce sont des photos à comparer.
+// Appli : 390 px, puis 384 px (largeur du Pixel de Damien) avec la police agrandie (×1,15 et ×1,3, posée par la page,
+// faute de `fontScale` sur le web). Site : 390 et 1280 px. Lancer avec APP_URL (appli compilée), API et site seedés.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r5b-captures/avant`;
 test.use({ actionTimeout: 30_000 });
@@ -31,7 +31,7 @@ async function scaleFonts(page: Page, k: number) {
 }
 
 async function openApp(browser: Browser, theme: Theme, width: number) {
-  // Grande hauteur : tout l'Ã©cran dans une seule capture (le dÃ©filement de l'appli web est intÃ©rieur).
+  // Grande hauteur : tout l'écran dans une seule capture (le défilement de l'appli web est intérieur).
   const ctx = await browser.newContext({ viewport: { width, height: 2200 }, baseURL: APP });
   const page = await ctx.newPage();
   await page.goto("/");
@@ -99,7 +99,7 @@ test("R5b captures : appli", async ({ browser }) => {
   if (crewSlug) screens.push(["damien@orasso.local", `/crew/${crewSlug}`, "voisin-crew-damien"]);
   if (vehicleId) screens.push(["kenji@orasso.local", `/vehicule/${vehicleId}`, "voisin-vehicule-kenji"]);
   if (eventSlug) screens.push(["kenji@orasso.local", `/e/${eventSlug}`, "voisin-fiche-kenji"]);
-  // Police agrandie Ã  384 px : les Ã©crans des dÃ©fauts Â« SON Â» et Â« AJOUT/ER Â».
+  // Police agrandie à 384 px : les écrans des défauts « SON » et « AJOUT/ER ».
   const big = new Set(["profil-public-damien", "u-julie-par-kenji", "u-kenji-par-damien", "profil-kenji"]);
 
   for (const theme of THEMES) {
