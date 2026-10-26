@@ -289,9 +289,7 @@ describe("propositions et administration", () => {
       categoryId: (await bySlug("cabriolet")).id,
     });
     expect(res.status).toBe(400);
-    expect(res.json.error.message).toBe(
-      "« Cabriolet » n'est pas proposé aux motos : ajoute d'abord le type au style.",
-    );
+    expect(res.json.error.message).toBe("« Cabriolet » n'est pas proposé aux motos : ajoute d'abord le type au style.");
   });
 
   it("deux ajouts simultanés reçoivent des positions distinctes", async () => {

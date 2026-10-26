@@ -97,18 +97,23 @@ async function vehicle(
   return created.data.id;
 }
 
-/** Pose un style déjà en pause sur un véhicule (comme une fiche d'avant la pause : l'API ne le permet plus). */
-async function withPausedStyle(vehicleId: string, slug: string) {
+/** Une requête directe sur la base de dev (ce que l'API ne permet plus de poser). */
+async function sqlQuery(text: string, values: unknown[] = []) {
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
-    await client.query(
-      "insert into vehicle_categories (vehicle_id, category_id) select $1, id from categories where slug = $2 on conflict do nothing",
-      [vehicleId, slug],
-    );
+    return (await client.query(text, values)).rows;
   } finally {
     await client.end();
   }
+}
+
+/** Pose un style déjà en pause ou refusé sur un véhicule (comme une fiche d'avant le lot : l'API ne le permet plus). */
+async function withPausedStyle(vehicleId: string, slug: string) {
+  await sqlQuery(
+    "insert into vehicle_categories (vehicle_id, category_id) select $1, id from categories where slug = $2 on conflict do nothing",
+    [vehicleId, slug],
+  );
 }
 
 async function toStep(page: Page, id: string, n: number) {
@@ -131,6 +136,12 @@ for (const theme of ["beton", "sable"] as const) {
     const moto = await vehicle(cookie, { type: "moto", make: "Yamaha", model: "MT-07", year: 2019 });
     const truck = await vehicle(cookie, { type: "truck", make: "Scania", model: "Série R", year: 2008 });
     await withPausedStyle(moto, "moto");
+    // Tour 2 : « 4x4 » sur le camion (refusé pour un camion depuis le lot), et « Moto » parmi ses centres d'intérêt.
+    await withPausedStyle(truck, "4x4");
+    await sqlQuery(
+      "insert into profile_interests (user_id, category_id) select u.id, c.id from \"user\" u, categories c where u.email = $1 and c.slug = 'moto'",
+      [email],
+    );
     const { ctx, page } = await open(browser, theme);
     await signIn(page, email);
 
@@ -219,7 +230,55 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByRole("checkbox", { name: "Préparé" })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "Show truck" })).toBeVisible();
     await expect(page.getByTestId("vehicle-styles-note")).toContainText("sont grisés : ton camion est de 2008.");
+    // Tour 2 : « 4x4 » déjà sur la fiche reste coché et décochable, avec sa raison ; l'enregistrement le garde.
+    await expect(page.getByTestId("vehicle-style-kept")).toContainText("4x4");
+    await expect(page.getByTestId("vehicle-style-kept")).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("vehicle-styles-kept")).toContainText(
+      "4x4 : ne convient pas à ce type de véhicule ; il reste sur ta fiche tant que tu le gardes.",
+    );
     await shot(page, `${theme}-08-styles-camion`);
+    const truckSlugs = async () =>
+      (await apiCall<{ categories: { slug: string }[] }>(cookie, "GET", `/me/vehicles/${truck}`)).data.categories.map(
+        (c) => c.slug,
+      );
+    // « Modifier la fiche » (menu …) : la description change, « 4x4 » reste.
+    await page.goto(`/vehicule/${truck}`);
+    await afterOpening(page);
+    await page.getByTestId("vehicle-menu").click();
+    await page.getByTestId("vehicle-edit-open").click();
+    await expect(page.getByTestId("vehicle-edit-family-genre")).toContainText("4x4");
+    await expect(page.getByTestId("vehicle-edit-family-genre")).toContainText("Ne convient pas à ce type de véhicule");
+    await page.getByTestId("vehicle-description").fill("Tracteur routier de 2008, tout d'origine.");
+    await page.getByTestId("vehicle-edit-family-genre").scrollIntoViewIfNeeded();
+    await shot(page, `${theme}-08b-feuille-camion-4x4`);
+    await page.getByTestId("vehicle-save").click();
+    await expect.poll(truckSlugs, { timeout: 30_000 }).toContain("4x4");
+    // Puis l'année, par les étapes : « 4x4 » reste.
+    await toStep(page, truck, 4);
+    await page.getByTestId("vehicle-year").fill("2009");
+    await seeStepEnd(page);
+    await page.getByTestId("vehicle-step-next").click();
+    await seeStepEnd(page);
+    await page.getByTestId("vehicle-step-next").click();
+    await expect
+      .poll(async () => (await apiCall<{ year: number }>(cookie, "GET", `/me/vehicles/${truck}`)).data.year, {
+        timeout: 30_000,
+      })
+      .toBe(2009);
+    expect(await truckSlugs()).toContain("4x4");
+    // Centres d'intérêt : « Moto » en pause, déjà choisi, reste affiché et coché ; l'enregistrement ne le retire pas.
+    await page.goto("/preferences");
+    await afterOpening(page);
+    const prefGenre = page.getByTestId("pref-family-genre");
+    await expect(prefGenre).toContainText("Moto · en pause");
+    await expect(prefGenre).toContainText("Américain · camion");
+    await prefGenre.scrollIntoViewIfNeeded();
+    await shot(page, `${theme}-08c-centres-d-interet`);
+    await page.getByTestId("preferences-submit").click();
+    await page.waitForTimeout(1500);
+    const prefs = await apiCall<{ interests: string[] }>(cookie, "GET", "/me/preferences");
+    const [motoCategory] = await sqlQuery("select id from categories where slug = 'moto'");
+    expect(prefs.data.interests).toContain(motoCategory.id);
     await ctx.close();
 
     // --- R5.3 : catalogue des styles dans la casquette Administration ------------------------------------------------
@@ -251,5 +310,7 @@ for (const theme of ["beton", "sable"] as const) {
     // Posé sur la moto du proposant (les règles l'acceptent) ; il est prévenu dans sa Boîte.
     const mine = await apiCall<{ categories: { label: string }[] }>(cookie, "GET", `/me/vehicles/${moto}`);
     expect(mine.data.categories.map((c) => c.label)).toContain(styleName);
+    // Tour 2 : le style accepté par la recette ne reste pas dans le catalogue de dev.
+    await sqlQuery("delete from categories where label = $1", [styleName]);
   });
 }
