@@ -26,6 +26,12 @@ type NetworkRule = {
   postHosts?: readonly string[];
   /** Préfixe affiché devant le champ (« @ », « / »). */
   prefix: string;
+  /**
+   * Pages du réseau à la place d'un pseudo dans l'adresse (`instagram.com/explore/`) : refusées dans un lien collé
+   * comme dans un pseudo tapé (lot R5b, tour 2, relecture Codex 6). Seulement pour les réseaux dont l'adresse d'un
+   * profil est le pseudo seul (Instagram, Facebook).
+   */
+  reserved?: readonly string[];
   /** Le pseudo dans le chemin d'un lien de profil ; `null` si le lien mène à une publication (ou n'est pas un profil). */
   profileFromPath: (segments: string[], search: URLSearchParams) => string | null;
   url: (handle: string) => string;
@@ -37,6 +43,29 @@ const single = (reserved: readonly string[]) => (segments: string[], _search?: U
   return first;
 };
 
+const INSTAGRAM_RESERVED = ["p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct", "s"] as const;
+const FACEBOOK_RESERVED = [
+  "posts",
+  "photo",
+  "photo.php",
+  "photos",
+  "watch",
+  "groups",
+  "events",
+  "share",
+  "reel",
+  "reels",
+  "story.php",
+  "permalink.php",
+  "profile.php",
+  "stories",
+  "marketplace",
+  "hashtag",
+  "login",
+  "people",
+  "pages",
+] as const;
+
 const RULES: Record<SocialNetwork, NetworkRule> = {
   instagram: {
     label: "Instagram",
@@ -47,14 +76,12 @@ const RULES: Record<SocialNetwork, NetworkRule> = {
     max: 30,
     hosts: ["instagram.com", "www.instagram.com", "m.instagram.com", "instagr.am", "www.instagr.am"],
     prefix: "@",
+    reserved: INSTAGRAM_RESERVED,
     profileFromPath: (segments, search) => {
       // Les onglets d'un profil (`/kenji.supra/reels/`) restent un lien de profil.
       const [first, second, ...rest] = segments;
       if (second && (rest.length > 0 || !["reels", "tagged", "guides"].includes(second))) return null;
-      return single(["p", "reel", "reels", "tv", "stories", "explore", "accounts", "direct", "s"])(
-        first ? [first] : [],
-        search,
-      );
+      return single(INSTAGRAM_RESERVED)(first ? [first] : [], search);
     },
     url: (h) => `https://www.instagram.com/${encodeURIComponent(h)}/`,
   },
@@ -104,32 +131,14 @@ const RULES: Record<SocialNetwork, NetworkRule> = {
     hosts: ["facebook.com", "www.facebook.com", "m.facebook.com", "fb.com", "www.fb.com", "web.facebook.com"],
     postHosts: ["fb.watch", "fb.me"],
     prefix: "/",
+    reserved: FACEBOOK_RESERVED,
     profileFromPath: (segments, search) => {
       // `profile.php?id=…` : l'identifiant chiffré du profil, qui sert de pseudo (facebook.com/<identifiant>).
       if (segments.length === 1 && segments[0] === "profile.php") {
         const id = search.get("id");
         return id && /^\d{5,30}$/.test(id) ? id : null;
       }
-      return single([
-        "posts",
-        "photo",
-        "photo.php",
-        "photos",
-        "watch",
-        "groups",
-        "events",
-        "share",
-        "reel",
-        "reels",
-        "story.php",
-        "permalink.php",
-        "stories",
-        "marketplace",
-        "hashtag",
-        "login",
-        "people",
-        "pages",
-      ])(segments);
+      return single(FACEBOOK_RESERVED)(segments);
     },
     url: (h) => `https://www.facebook.com/${encodeURIComponent(h)}`,
   },
@@ -208,6 +217,14 @@ export function socialHandle(network: SocialNetwork, input: string | null | unde
   }
   if (handle.length < rule.min) {
     return { ok: false, reason: `${rule.min} caractères au moins pour un pseudo ${rule.label}.` };
+  }
+  // Tour 2 (relecture Codex 6) : « . » et « .. » feraient `instagram.com/./` ou `/../`, que le navigateur ramène à
+  // l'accueil du réseau ; un pseudo fait seulement de points n'en est pas un.
+  if (/^\.+$/.test(handle)) return { ok: false, reason: `Un pseudo ${rule.label} n'est pas fait que de points. ${fix}` };
+  // Une page du réseau tapée comme pseudo (« explore ») : le lien ne mènerait à aucun profil.
+  if (rule.reserved?.includes(handle.toLowerCase())) {
+    const of = /^[aeiouy]/i.test(rule.label) ? `d'${rule.label}` : `de ${rule.label}`;
+    return { ok: false, reason: `« ${handle} » est une page ${of}, pas un pseudo. ${fix}` };
   }
   return { ok: true, handle };
 }

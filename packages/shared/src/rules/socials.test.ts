@@ -95,6 +95,47 @@ describe("socialHandle : pseudo propre ou refus expliqué (lot R5b)", () => {
   });
 });
 
+describe("tour 2 (relecture Codex 6) : jamais un pseudo qui ne mène à aucun profil", () => {
+  it("« . » et « .. » refusés (le navigateur ramènerait /./ ou /../ à l'accueil du réseau)", () => {
+    for (const n of ["instagram", "tiktok", "youtube", "facebook"] as const) {
+      for (const dots of [".", "..", "@..", "....."]) {
+        const r = socialHandle(n, dots);
+        expect(r.ok, `${n} ${dots}`).toBe(false);
+      }
+    }
+    expect(socialHandle("instagram", "..")).toEqual({
+      ok: false,
+      reason: "Un pseudo Instagram n'est pas fait que de points. Mets ton pseudo Instagram, par exemple kenji.supra.",
+    });
+    expect(socialUrl("instagram", ".")).toBeNull();
+    expect(socialUrl("instagram", "..")).toBeNull();
+    // Des points dans un vrai pseudo restent permis.
+    expect(socialHandle("instagram", "kenji.supra")).toEqual({ ok: true, handle: "kenji.supra" });
+    expect(socialHandle("instagram", "_")).toEqual({ ok: true, handle: "_" });
+  });
+
+  it("une page du réseau tapée comme pseudo est refusée comme dans un lien (Instagram, Facebook)", () => {
+    for (const page of ["explore", "p", "reels", "Stories", "@accounts", "direct"]) {
+      const r = socialHandle("instagram", page);
+      expect(r.ok, page).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/est une page d'Instagram, pas un pseudo/);
+      // Le même mot dans un lien collé : refusé aussi.
+      expect(socialHandle("instagram", `https://www.instagram.com/${page.replace("@", "")}/`).ok).toBe(false);
+    }
+    for (const page of ["posts", "groups", "watch", "marketplace", "profile.php", "photo.php"]) {
+      const r = socialHandle("facebook", page);
+      expect(r.ok, page).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/est une page de Facebook, pas un pseudo/);
+      expect(socialUrl("facebook", page)).toBeNull();
+    }
+    // Un pseudo qui commence comme une page reste permis.
+    expect(socialHandle("instagram", "explorer.66")).toEqual({ ok: true, handle: "explorer.66" });
+    expect(socialHandle("facebook", "postsupra")).toEqual({ ok: true, handle: "postsupra" });
+    // TikTok, YouTube, Snapchat : l'adresse porte « @ » ou « /add/ », pas de collision avec une page.
+    expect(socialHandle("tiktok", "explore")).toEqual({ ok: true, handle: "explore" });
+  });
+});
+
 describe("socialUrl : Orasso fabrique le lien", () => {
   it("un lien par réseau, à partir du pseudo", () => {
     expect(socialUrl("instagram", "kenji.supra")).toBe("https://www.instagram.com/kenji.supra/");
