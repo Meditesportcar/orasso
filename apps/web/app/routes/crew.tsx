@@ -124,9 +124,31 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
   const outings = space ? (
     <aside className="crw-col crw-side" data-active={tab === "sorties" ? "" : undefined} data-testid="crew-outings">
       {space.canProposeOuting ? (
-        <Button icon="add" href={`${back}/sortie`} fullWidth data-testid="crew-propose-outing">
-          {L.proposeOuting}
-        </Button>
+        <>
+          {/* Tour 2 : un seul bouton principal par écran. Sur grand écran, le fil et son « Publier » sont à côté des
+              sorties : « Proposer une sortie » y passe en secondaire (CSS `crw-propose--narrow` / `crw-propose--wide`). */}
+          <Button
+            icon="add"
+            href={`${back}/sortie`}
+            fullWidth
+            className={main === "fil" ? "crw-propose--narrow" : undefined}
+            data-testid="crew-propose-outing"
+          >
+            {L.proposeOuting}
+          </Button>
+          {main === "fil" ? (
+            <Button
+              variant="secondary"
+              icon="add"
+              href={`${back}/sortie`}
+              fullWidth
+              className="crw-propose--wide"
+              data-testid="crew-propose-outing-wide"
+            >
+              {L.proposeOuting}
+            </Button>
+          ) : null}
+        </>
       ) : (
         <p className="o-t-caption s-muted" data-testid="crew-propose-reserved">
           {L.proposeReserved}

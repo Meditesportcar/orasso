@@ -48,7 +48,8 @@ test("site : page du crew, sorties, réglages, vitrine et demande avec message",
         await expect(k.getByTestId("crew-tab-sorties")).toBeHidden();
       }
       await shot(k, `01-chef-${tag}`);
-      await k.getByTestId("crew-propose-outing").click();
+      // Tour 2 : sur grand écran, à côté du fil, le bouton est en secondaire (un seul principal : « Publier »).
+      await k.getByTestId(width === 390 ? "crew-propose-outing" : "crew-propose-outing-wide").click();
       await k.waitForURL(/\/sortie$/);
       await k.waitForLoadState("networkidle");
       await expect(k.getByTestId("outing-missing")).toBeVisible();
