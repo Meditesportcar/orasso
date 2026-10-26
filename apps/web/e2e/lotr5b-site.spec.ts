@@ -65,11 +65,11 @@ async function vehicle(cookie: Cookie, index: number) {
   return { id: created.data.id, label: created.data.label };
 }
 
-async function openEvent(damien: Cookie, title: string) {
+async function openEvent(damien: Cookie, title: string, inDays = 6) {
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(damien, "GET", "/me");
   const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
   const start = new Date();
-  start.setDate(start.getDate() + 6);
+  start.setDate(start.getDate() + inDays);
   start.setHours(9, 0, 0, 0);
   const created = await apiCall<{ id: string; slug: string }>(damien, "POST", `/structures/${structureId}/events`, {
     title,
@@ -116,7 +116,8 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
   const bPseudo = `R5sB_${tag}`;
   const b = await signUpApi(bPseudo);
   await apiCall(b, "PATCH", "/me/profile", { departments: ["66"] });
-  await applyApi(b, event.id, (await vehicle(b, 0)).id);
+  // Tour 2 : « Toi aussi » seulement pour une personne retenue (une candidature en attente ne compte plus).
+  await decideApi(damien, event.id, await applyApi(b, event.id, (await vehicle(b, 0)).id), "accept");
   const cPseudo = `R5sC_${tag}`;
   const c = await signUpApi(cPseudo);
   await apiCall(c, "PATCH", "/me/profile", { departments: ["66"], visibility: "private" });
@@ -211,4 +212,54 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
       await ctxA.close();
     }
   }
+});
+
+test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand le compte suivi passe privé", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  mkdirSync(DIR, { recursive: true });
+  const tag = unique().slice(-6);
+  const damien = await login("damien@orasso.local");
+  // D : retenue à huit sorties à venir (une « Prochaine sortie » et sept autres : plus de six, relecture Codex 4).
+  const dPseudo = `R5sD_${tag}`;
+  const d = await signUpApi(dPseudo);
+  await apiCall(d, "PATCH", "/me/profile", { departments: ["66"], visibility: "public" });
+  const dCar = await vehicle(d, 0);
+  const titles: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const title = `R5b Sortie ${i + 1} ${tag}`;
+    const ev = await openEvent(damien, title, 6 + i);
+    await decideApi(damien, ev.id, await applyApi(d, ev.id, dCar.id), "accept");
+    titles.push(title);
+  }
+  const ePseudo = `R5sE_${tag}`;
+  await signUpApi(ePseudo);
+
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 1000 } });
+  const page = await ctx.newPage();
+  await setTheme(page, "beton");
+  await loginInBrowser(page, `${ePseudo.toLowerCase()}@e2e.orasso.test`, SEED_PASSWORD, "/app/moi");
+  await page.goto(`/u/${dPseudo}`);
+  await expect(page.getByTestId("profile-next")).toContainText(titles[0] ?? "");
+  const outings = page.getByTestId("profile-outings").locator("li");
+  await expect(outings).toHaveCount(7);
+  for (const title of titles.slice(1)) await expect(page.getByTestId("profile-outings")).toContainText(title);
+  await audit(page);
+  await page.screenshot({ path: `${DIR}/tour2-sorties-beton-390.png`, fullPage: true });
+
+  // Abonnement (compte public), puis le compte passe privé : « Suivi » reste pour se désabonner (relecture Codex 5).
+  await page.getByTestId("profile-follow").click();
+  await expect(page.getByTestId("profile-followed")).toBeVisible();
+  expect((await apiCall(d, "PATCH", "/me/profile", { visibility: "private" })).status).toBe(200);
+  await page.goto(`/u/${dPseudo}`);
+  await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
+  await expect(page.getByTestId("profile-followed")).toBeVisible();
+  await audit(page);
+  await page.screenshot({ path: `${DIR}/tour2-prive-suivi-beton-390.png`, fullPage: true });
+  await page.getByTestId("profile-followed").click();
+  // Désabonné d'un compte privé : plus de bouton (on ne suit pas un compte privé).
+  await expect(page.getByTestId("profile-followed")).toHaveCount(0);
+  await expect(page.getByTestId("profile-follow")).toHaveCount(0);
+  await ctx.close();
 });

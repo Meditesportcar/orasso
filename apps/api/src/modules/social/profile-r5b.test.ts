@@ -337,7 +337,9 @@ describe("« Vu à » : les tampons de la saison", () => {
     await passportService.stamp(db, julie.id, rally, "staff", { at: new Date(rally.startsAt.getTime() + 2000) });
     // Billet scanné (visite), avec le rare « première sortie » qui s'y rattache : rien sur le profil.
     await passportService.stamp(db, julie.id, visited, "visit", { at: visited.startsAt });
-    await passportService.stamp(db, julie.id, visited, "first_outing", { at: new Date(visited.startsAt.getTime() + 1) });
+    await passportService.stamp(db, julie.id, visited, "first_outing", {
+      at: new Date(visited.startsAt.getTime() + 1),
+    });
     // Staff seulement : rien.
     await passportService.stamp(db, julie.id, staffed, "staff", { at: staffed.startsAt });
     // Un tampon de participation sans candidature retenue : rien non plus.

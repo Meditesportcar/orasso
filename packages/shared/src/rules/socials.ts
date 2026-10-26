@@ -220,7 +220,8 @@ export function socialHandle(network: SocialNetwork, input: string | null | unde
   }
   // Tour 2 (relecture Codex 6) : « . » et « .. » feraient `instagram.com/./` ou `/../`, que le navigateur ramène à
   // l'accueil du réseau ; un pseudo fait seulement de points n'en est pas un.
-  if (/^\.+$/.test(handle)) return { ok: false, reason: `Un pseudo ${rule.label} n'est pas fait que de points. ${fix}` };
+  if (/^\.+$/.test(handle))
+    return { ok: false, reason: `Un pseudo ${rule.label} n'est pas fait que de points. ${fix}` };
   // Une page du réseau tapée comme pseudo (« explore ») : le lien ne mènerait à aucun profil.
   if (rule.reserved?.includes(handle.toLowerCase())) {
     const of = /^[aeiouy]/i.test(rule.label) ? `d'${rule.label}` : `de ${rule.label}`;

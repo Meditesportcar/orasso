@@ -21,8 +21,10 @@ import { RELAIS } from "./relais";
 //   - « Modifier mon profil » : réseaux vérifiés pendant la saisie (refus d'une publication), « Enregistrer » ;
 //   - profil d'un membre : tête, réseaux, nombres, « Ajouter en ami » et « Suivre » côte à côte, « Écrire » et « ⋯ » en
 //     haut, « Sa voiture » en carré, « Prochaine sortie » avec « Toi aussi », « Son garage » ; compte privé réduit ; aperçu ;
-//   - titres « SON » et boutons coupés : à 384 px (Pixel de Damien), police agrandie ×1,15 et ×1,3, aucun mot perdu ni
-//     coupé, chaque titre de section a de la marge à droite de son texte.
+//   - titres « SON » et boutons coupés : à 384 px (Pixel de Damien), aucun mot perdu ni coupé, chaque titre de section
+//     a de la marge à droite de son texte, l'aide passe dessous (rangée de moins de 400 dp, tour 2) ; police agrandie
+//     ×1,15 et ×1,3 **simulée dans la page** : c'est un contrôle web, pas une preuve (l'appli web ignore le `fontScale`
+//     d'Android) ; la vraie preuve se fait sur l'APK, au téléphone (coordinateur).
 // Béton et Sable, 390 px. Lancer avec APP_URL (appli compilée : `node scripts/appli-compilee.mjs`), API seedée.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r5b-captures/apres/recette`;
@@ -70,7 +72,11 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-/** Police agrandie : chaque texte multiplie son corps et son interligne (comme `fontScale` d'Android). */
+/**
+ * Contrôle web de la police agrandie (tour 2, relecture Opus 4) : chaque texte multiplie son corps et son interligne,
+ * comme le ferait `fontScale` d'Android. Ce n'est pas le rendu natif (ni `onTextLayout`, ni la mesure d'Android) :
+ * la preuve sur l'appareil reste à faire sur l'APK.
+ */
 async function scaleFonts(page: Page, k: number) {
   await page.evaluate((scale) => {
     for (const el of document.querySelectorAll<HTMLElement>("body *")) {
@@ -120,6 +126,54 @@ async function titlesKeepTheirWords(page: Page, titles: string[]) {
     expect(m.clipped, `${title} coupé en hauteur`).toBe(false);
     if (m.lines === 1) expect(m.slack, `${title} : pas de marge à droite`).toBeGreaterThan(4);
   }
+}
+
+/**
+ * Tour 2 (relecture Opus 4) : le libellé d'un bouton est entier, pas seulement présent. Son texte est exactement
+ * `label`, chacun de ses mots tient sur une seule ligne (jamais « AJOUT » / « ER »), et rien ne déborde de sa boîte.
+ */
+async function labelWhole(page: Page, testID: string, label: RegExp) {
+  const m = await page.getByTestId(testID).evaluate((el) => {
+    const range = document.createRange();
+    const split: string[] = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const w of (node.textContent ?? "").matchAll(/[\p{L}\p{N}]+/gu)) {
+        range.setStart(node, w.index ?? 0);
+        range.setEnd(node, (w.index ?? 0) + w[0].length);
+        const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+        if (tops.size > 1) split.push(w[0]);
+      }
+    }
+    const box = el.getBoundingClientRect();
+    range.selectNodeContents(el);
+    const text = [...range.getClientRects()].filter((r) => r.width > 0);
+    const overflow = text.some((r) => r.left < box.left - 1 || r.right > box.right + 1);
+    return { text: (el.textContent ?? "").replace(/\s+/g, " ").trim(), split, overflow };
+  });
+  expect(m.text).toMatch(label);
+  expect(m.split, `${testID} : mot coupé`).toEqual([]);
+  expect(m.overflow, `${testID} : libellé hors du bouton`).toBe(false);
+}
+
+/** Tour 2 (relecture Opus 3) : sous 400 dp de rangée, l'aide d'un titre de section passe sous le titre. */
+async function hintBelow(page: Page, title: string) {
+  const m = await page
+    .getByRole("heading", { name: title, exact: true })
+    .first()
+    .evaluate((h) => {
+      const hint = h.nextElementSibling;
+      const hb = h.getBoundingClientRect();
+      const nb = hint?.getBoundingClientRect();
+      return {
+        has: Boolean(hint),
+        below: nb ? nb.top >= hb.bottom - 1 : false,
+        left: nb ? Math.abs(nb.left - hb.left) : 99,
+      };
+    });
+  expect(m.has, `${title} : pas d'aide`).toBe(true);
+  expect(m.below, `${title} : l'aide n'est pas dessous`).toBe(true);
+  expect(m.left, `${title} : l'aide n'est pas alignée sur le titre`).toBeLessThan(2);
 }
 
 /** Un véhicule (le `index`-ième modèle BMW) avec une photo sans plaque ; renvoie son identifiant et son nom. */
@@ -205,11 +259,15 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
   const aMain = await vehicle(a, 0);
   await vehicle(a, 1);
   await decideApi(damien, event.id, await applyApi(a, event.id, aMain.id), "accept");
-  // La personne qui regarde : candidature en attente à la même sortie (« Toi aussi »).
+  // La personne qui regarde : retenue à la même sortie (« Toi aussi » ; tour 2 : une candidature en attente ne compte
+  // plus, « vous y serez » serait faux).
   const bPseudo = `R5bB_${tag}`;
   const b = await signUpApi(bPseudo);
   await apiCall(b, "PATCH", "/me/profile", { departments: ["66"] });
-  await applyApi(b, event.id, (await vehicle(b, 0)).id);
+  const bApplication = await applyApi(b, event.id, (await vehicle(b, 0)).id);
+  const pendingSeen = await apiCall<{ nextOuting: { together: boolean } | null }>(b, "GET", `/users/${aPseudo}`);
+  expect(pendingSeen.data.nextOuting?.together).toBe(false);
+  await decideApi(damien, event.id, bApplication, "accept");
   // Un compte privé.
   const cPseudo = `R5bC_${tag}`;
   const c = await signUpApi(cPseudo);
@@ -249,6 +307,9 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await expect(page.getByTestId("profile-garage-vehicle")).toHaveCount(1);
     await audit(page);
     await titlesKeepTheirWords(page, ["Sa voiture", "Prochaine sortie", "Son garage"]);
+    // Rangée de moins de 400 dp : l'aide passe sous le titre.
+    for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintBelow(page, title);
+    await labelWhole(page, "friend-add", /^Ajouter en ami$/i);
     await shot(page, `membre-${theme}-390`);
 
     // Compte privé : la tête, les nombres, « Ajouter en ami », ses véhicules en marque et modèle, la ligne.
@@ -265,7 +326,7 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await shot(page, `membre-prive-${theme}-390`);
     await ctx.close();
 
-    // --- Titres « SON » et « AJOUT/ER EN AMI » : 384 px, police agrandie ------------------------------------------
+    // --- Titres « SON » et « AJOUT/ER EN AMI » : 384 px, police agrandie simulée (contrôle web ; preuve : l'APK) ---
     for (const k of [1.15, 1.3]) {
       const big = await open(browser, theme, 384);
       await signIn(big.page, `${bPseudo.toLowerCase()}@e2e.orasso.test`);
@@ -284,8 +345,9 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       const ticket = await big.page.getByTestId("profile-next").boundingBox();
       const both = await big.page.getByTestId("profile-together").boundingBox();
       expect((both?.x ?? 0) + (both?.width ?? 0)).toBeLessThanOrEqual((ticket?.x ?? 0) + (ticket?.width ?? 0) + 1);
-      // Le libellé du bouton est entier (jamais « AJOUT » seul sur une ligne).
-      await expect(big.page.getByTestId("friend-add")).toContainText(/Ajouter en ami/i);
+      // Le libellé du bouton est entier : tout le texte, chaque mot sur une ligne, rien hors du bouton.
+      await labelWhole(big.page, "friend-add", /^Ajouter en ami$/i);
+      for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintBelow(big.page, title);
       await shot(big.page, `membre-${theme}-384-police${Math.round(k * 100)}`);
       await big.ctx.close();
     }

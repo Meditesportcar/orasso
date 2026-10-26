@@ -33,7 +33,13 @@ describe("« Modifier mon profil » : le profil renvoyé par le PATCH", () => {
       {
         pseudo: "Kenji_R5",
         bio: "Supra et glisse",
-        socials: { instagram: "https://www.instagram.com/kenji.supra/", tiktok: "", youtube: "", facebook: "", snapchat: "" },
+        socials: {
+          instagram: "https://www.instagram.com/kenji.supra/",
+          tiktok: "",
+          youtube: "",
+          facebook: "",
+          snapchat: "",
+        },
       },
       {
         // L'API ramène le lien collé au pseudo et retire les réseaux vides.
