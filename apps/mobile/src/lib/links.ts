@@ -18,6 +18,10 @@ const RECAP_LINK = /^\/app\/recap\/([0-9a-f-]{36})$/;
 const PASSPORT_LINK = "/app/passeport";
 /** Lot R4c : « … et 2 autres personnes te suivent » mène aux abonnés (`/app/reseau` du site → `/reseau`). */
 const NETWORK_LINK = "/app/reseau";
+/**
+ * Lot R5c2 : la page d'un crew (`/c/<adresse>` du site, `?onglet=sorties` pour une sortie du crew) → `/crew/<adresse>`.
+ */
+const CREW_LINK = /^\/c\/([a-z0-9-]{1,80})(\?onglet=sorties)?$/;
 
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -26,6 +30,8 @@ export function appLinkOf(value: unknown): string | null {
   if (recap) return `/recap/${recap[1]}`;
   if (value === PASSPORT_LINK) return "/mon-passeport";
   if (value === NETWORK_LINK) return "/reseau";
+  const crew = CREW_LINK.exec(value);
+  if (crew) return `/crew/${crew[1]}${crew[2] ?? ""}`;
   const review = REVIEW_LINK.exec(value);
   if (review) return `/acces?avis=${review[1]}`;
   const inbox = INBOX_LINK.exec(value);
