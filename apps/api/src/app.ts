@@ -20,6 +20,7 @@ import { accessRoutes } from "./modules/access/routes";
 import { accountRoutes } from "./modules/account/routes";
 import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
+import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
@@ -219,6 +220,8 @@ app.route("/", devMailRoutes);
 app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);
 app.route("/", recapRoutes);
+// Lot R5a : catalogue des styles et file « Styles proposés » (administration).
+app.route("/", stylesAdminRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).

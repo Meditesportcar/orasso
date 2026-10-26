@@ -185,6 +185,7 @@ export const iconShapes = {
   seat: [p("M7 3h4a2 2 0 0 1 2 2l-.8 8H18a2 2 0 0 1 2 2v3H6.2L5 5a2 2 0 0 1 2-2z"), p("M8 18v3M17 18v3")], // sellerie
   speaker: [r(5, 2, 14, 20, 2), c(12, 14, 4), c(12, 6.5, 1)], // audio et électronique, `#i-speaker`
   grid: [r(4, 4, 6, 6, 1.5), r(14, 4, 6, 6, 1.5), r(4, 14, 6, 6, 1.5), r(14, 14, 6, 6, 1.5)], // tous les métiers
+  mount: [p("M2.5 19l6.8-11.5 4.2 6.8 2.6-4.2 5.4 8.9z")], // lot R5a : tout-terrain (styles 4x4, Trail, Enduro), `#i-mount`
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

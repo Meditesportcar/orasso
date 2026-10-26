@@ -11,6 +11,8 @@ export const adminNotificationTypes = {
   vehicle_reassigned: "social",
   assistance_requested: "staff",
   assistance_closed: "staff",
+  // Lot R5a : réponse de l'équipe à un style proposé (ajouté, rattaché, refusé), famille du garage partagé.
+  style_proposal_decided: "social",
 } as const satisfies Record<string, NotificationFamily>;
 
 export const adminEmailAlwaysTypes = ["security_two_factor_reset"] as const;
@@ -20,4 +22,5 @@ export const adminNotificationLabels: Record<keyof typeof adminNotificationTypes
   vehicle_reassigned: "Véhicule rattaché au référentiel",
   assistance_requested: "Demande d'aide d'un organisateur",
   assistance_closed: "Demande d'aide close",
+  style_proposal_decided: "Réponse à un style proposé",
 };

@@ -9,19 +9,10 @@ import {
 import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import {
-  applications,
-  categories,
-  devices,
-  events,
-  proProfiles,
-  structureMembers,
-  structures,
-  vehicles,
-} from "../../db/schema";
+import { applications, devices, events, proProfiles, structureMembers, structures, vehicles } from "../../db/schema";
 import { hasPasskey, twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
-import { conflict, notFound, validation } from "../../lib/errors";
+import { conflict, notFound } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
@@ -29,6 +20,7 @@ import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
+import { assertInterests } from "../vehicles/categories";
 import { mainVehicleIdOf } from "../vehicles/main";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
@@ -185,13 +177,8 @@ export const profilesService = {
     if (input.pseudo && (await profilesRepo.pseudoTaken(input.pseudo, v.user.id))) {
       throw conflict("conflict", "Ce pseudo est déjà pris", { field: "pseudo" });
     }
-    if (input.interests?.length) {
-      const found = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(and(inArray(categories.id, input.interests), eq(categories.active, true)));
-      if (found.length !== new Set(input.interests).size) throw validation("Centre d'intérêt inconnu");
-    }
+    // Lot R5a : un centre d'intérêt mis en pause depuis (« Moto ») reste permis s'il était déjà choisi.
+    await assertInterests(db, v.user.id, input.interests);
     const { interests, notificationPrefs, ...rest } = input;
     return withTx(async (tx) => {
       const values = {

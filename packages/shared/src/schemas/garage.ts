@@ -13,6 +13,7 @@ import type { Grade } from "../grades";
 import type { HomeSponsored } from "../home";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import type { ProActivity } from "../rules/pro";
+import type { CategoryFamily, CategoryIcon } from "../rules/styles";
 import { optionalText } from "./common";
 import { type PlateRect, plateRectSchema } from "./vehicle";
 
@@ -94,7 +95,11 @@ export type AdminDecision = z.infer<typeof adminDecisionSchema>;
 export type CategoryOption = {
   id: string;
   slug: string;
+  /** Lot R5a : au masculin pour un camion quand le style en a un (« Ancien »), si `vehicleType` est donné. */
   label: string;
+  /** Lot R5a : famille (Époque, Genre, Préparation, Pratique ; Pays pour les origines) et icône du kit. */
+  family: CategoryFamily;
+  icon: CategoryIcon;
   minVehicleAge: number | null;
   allowedVehicleTypes: string[] | null;
   allowedCountries: string[] | null;

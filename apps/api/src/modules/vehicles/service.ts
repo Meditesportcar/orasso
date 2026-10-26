@@ -17,12 +17,13 @@ import {
   type VehicleUpdate,
   vehiclePlateIssue,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, max, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, max, ne } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
 import {
   applications,
+  categoryProposals,
   checkins,
   events,
   plateNormalizationConflicts,
@@ -322,6 +323,21 @@ export const vehiclesService = {
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
         await setCategories(tx, row.id, input.categoryIds);
+        // Lot R5a : les styles proposés pendant l'ajout (encore sans véhicule) sont rattachés au véhicule créé.
+        if (input.styleProposalIds?.length) {
+          await tx
+            .update(categoryProposals)
+            .set({ vehicleId: row.id })
+            .where(
+              and(
+                inArray(categoryProposals.id, input.styleProposalIds),
+                eq(categoryProposals.authorId, v.user.id),
+                eq(categoryProposals.vehicleType, input.vehicleType),
+                eq(categoryProposals.status, "pending"),
+                isNull(categoryProposals.vehicleId),
+              ),
+            );
+        }
         return row.id;
       });
       // Journal des amis (lot 17) : « <pseudo> a ajouté un véhicule » ; ne bloque jamais l'ajout.
@@ -405,21 +421,26 @@ export const vehiclesService = {
       : {};
     // Catégories revérifiées quand elles changent, ou quand ce qui les conditionne change (marque, type, année) :
     // une fiche ancienne reste modifiable même si les règles ont été durcies depuis.
+    // Lot R5a : un style de la fiche mis en pause depuis par l'admin y reste permis.
     if (input.categoryIds || referenceChanged || input.year !== undefined) {
-      const categoryIds =
-        input.categoryIds ??
-        (
-          await db
-            .select({ id: vehicleCategories.categoryId })
-            .from(vehicleCategories)
-            .where(eq(vehicleCategories.vehicleId, id))
-        ).map((r) => r.id);
-      await checkCategories(db, categoryIds, {
-        vehicleType: merged.vehicleType,
-        makeId: merged.makeId,
-        modelId: merged.modelId,
-        year: merged.year ?? null,
-      });
+      const kept = (
+        await db
+          .select({ id: vehicleCategories.categoryId })
+          .from(vehicleCategories)
+          .where(eq(vehicleCategories.vehicleId, id))
+      ).map((r) => r.id);
+      const categoryIds = input.categoryIds ?? kept;
+      await checkCategories(
+        db,
+        categoryIds,
+        {
+          vehicleType: merged.vehicleType,
+          makeId: merged.makeId,
+          modelId: merged.modelId,
+          year: merged.year ?? null,
+        },
+        kept,
+      );
     }
     // Plaque : changée ou véhicule réactivé → doublon chez soi refusé, chez un autre compte = demande de transfert.
     const wantsPlate = merged.status === "active" && Boolean(plateNormalized);

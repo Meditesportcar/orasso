@@ -28,6 +28,7 @@ export * from "./security";
 export * from "./social";
 export * from "./staff";
 export * from "./structures";
+export * from "./styles";
 export * from "./ticketing";
 export * from "./vehicles";
 export * from "./weather";

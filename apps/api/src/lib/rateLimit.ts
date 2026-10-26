@@ -129,6 +129,14 @@ export const rateRules = {
    * le rejoue quelques fois ; 30 laisse passer plusieurs téléphones derrière une même adresse d'opérateur.
    */
   pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
+  /** Lot R5a : « Il manque un style ? Propose-le », par compte. */
+  categoryProposal: {
+    max: 10,
+    windowMs: 86_400_000,
+    message: "Trop de styles proposés aujourd'hui : réessaie demain.",
+  },
+  /** Lot R5a : catalogue des styles et file des propositions (administration). */
+  categoryAdmin: { max: 120, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

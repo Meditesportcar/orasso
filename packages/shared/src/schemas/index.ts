@@ -24,6 +24,7 @@ export * from "./search";
 export * from "./shop";
 export * from "./social";
 export * from "./structure";
+export * from "./styles";
 export * from "./team";
 export * from "./ticketing";
 export * from "./vehicle";

@@ -23,7 +23,6 @@ import {
   account,
   adminAuditLog,
   applications,
-  categories,
   devices,
   emailOutbox,
   events,
@@ -52,7 +51,7 @@ import {
 } from "../../db/schema";
 import { env } from "../../env";
 import { deps, now } from "../../lib/deps";
-import { AppError, conflict, notFound, validation } from "../../lib/errors";
+import { AppError, conflict, notFound } from "../../lib/errors";
 import { mail, renderMail } from "../../lib/mail";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
@@ -77,6 +76,7 @@ import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
+import { assertInterests } from "../vehicles/categories";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -260,13 +260,8 @@ export const accountService = {
   },
 
   async updateSettings(v: Viewer, input: AccountSettingsUpdate): Promise<AccountSettings> {
-    if (input.interests?.length) {
-      const found = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(and(inArray(categories.id, input.interests), eq(categories.active, true)));
-      if (found.length !== new Set(input.interests).size) throw validation("Centre d'intérêt inconnu");
-    }
+    // Lot R5a : un centre d'intérêt mis en pause depuis (« Moto ») reste permis s'il était déjà choisi.
+    await assertInterests(db, v.user.id, input.interests);
     const { interests, notificationPrefs, mutedTypes, homeWidgets, ...rest } = input;
     const updated = await withTx(async (tx) => {
       const values = {

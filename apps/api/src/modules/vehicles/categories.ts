@@ -1,9 +1,11 @@
 // Catégories cohérentes avec le véhicule (lot 31, ARCHITECTURE-SUITE § 14) : âge, type, pays de la marque, liste blanche.
 // Les règles sont dans `@orasso/shared` (`categoryRefusal`) ; ici on charge les catégories et leurs marques.
 import {
+  type CategoryIcon,
   type CategoryOption,
   type CategoryReferenceQuery,
   type CategoryRule,
+  categoryLabelFor,
   categoryRefusal,
   categoryRefusalLabels,
   type VehicleFacts,
@@ -11,7 +13,7 @@ import {
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories, categoryMakes, vehicleMakes, vehicleModels } from "../../db/schema";
+import { categories, categoryMakes, profileInterests, vehicleMakes, vehicleModels } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { validation } from "../../lib/errors";
 import type { Executor } from "../../lib/tx";
@@ -66,16 +68,22 @@ export async function loadVehicleFacts(
   };
 }
 
-/** Catégories actives et cohérentes avec le véhicule ; refus listé avec sa raison. */
+/**
+ * Catégories actives et cohérentes avec le véhicule ; refus listé avec sa raison. Lot R5a : `kept`, les catégories déjà
+ * sur la fiche ; un style mis en pause depuis par l'admin y reste permis (il ne se propose plus, il ne disparaît pas).
+ */
 export async function checkCategories(
   ex: Executor,
   ids: string[],
   vehicle: { vehicleType: string; makeId: string; modelId?: string | null; year: number | null },
+  kept: readonly string[] = [],
 ) {
   if (!ids.length) return;
   const unique = [...new Set(ids)];
   const rows = await loadCategoryRules(ex, unique);
-  if (rows.length !== unique.length || rows.some((c) => !c.active)) throw validation("Catégorie inconnue");
+  if (rows.length !== unique.length || rows.some((c) => !c.active && !kept.includes(c.id))) {
+    throw validation("Catégorie inconnue");
+  }
   const facts = await loadVehicleFacts(ex, vehicle);
   const refused = rows.flatMap((c) => {
     const refusal = categoryRefusal(c.rule, facts, now());
@@ -123,7 +131,10 @@ export async function categoryOptions(query: CategoryReferenceQuery): Promise<Ca
     return {
       id: c.id,
       slug: c.slug,
-      label: c.label,
+      // Lot R5a : au masculin pour un camion (« Ancien », « Préparé »), famille et icône du catalogue des styles.
+      label: categoryLabelFor(c, query.vehicleType),
+      family: c.family,
+      icon: c.icon as CategoryIcon,
       minVehicleAge: c.minVehicleAge,
       allowedVehicleTypes: c.allowedVehicleTypes,
       allowedCountries: c.allowedCountries,
@@ -133,4 +144,25 @@ export async function categoryOptions(query: CategoryReferenceQuery): Promise<Ca
       reason: refusal ? categoryRefusalLabels[refusal] : null,
     };
   });
+}
+
+/**
+ * Centres d'intérêt envoyés (préférences, réglages, profil) : des catégories actives, ou déjà choisies par la personne.
+ * Lot R5a : un style mis en pause par l'admin (« Moto », « Utilitaire ») ne se propose plus, mais reste choisi : renvoyer
+ * ses choix tels quels ne doit pas être refusé.
+ */
+export async function assertInterests(ex: Executor, userId: string, ids: readonly string[] | undefined) {
+  if (!ids?.length) return;
+  const unique = [...new Set(ids)];
+  const [found, kept] = await Promise.all([
+    ex.select({ id: categories.id, active: categories.active }).from(categories).where(inArray(categories.id, unique)),
+    ex
+      .select({ id: profileInterests.categoryId })
+      .from(profileInterests)
+      .where(eq(profileInterests.userId, userId))
+      .then((rows) => new Set(rows.map((r) => r.id))),
+  ]);
+  if (found.length !== unique.length || found.some((c) => !c.active && !kept.has(c.id))) {
+    throw validation("Centre d'intérêt inconnu");
+  }
 }
