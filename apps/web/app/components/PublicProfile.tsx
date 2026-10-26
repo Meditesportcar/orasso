@@ -347,6 +347,21 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
               </a>
             </section>
           )}
+          {/* Ses sorties sont visibles mais aucune n'est à venir : on le dit, comme l'appli. */}
+          {!next && p.upcomingEvents && (
+            <section
+              className="pr5-block pr5-next"
+              aria-labelledby="pr5-next-t"
+              data-testid={preview ? "preview-upcoming" : "profile-next-none"}
+            >
+              <div className="pr5-sh">
+                <h2 id="pr5-next-t" className="s-h2">
+                  {L.next}
+                </h2>
+              </div>
+              <p className="s-muted">{L.noOuting}</p>
+            </section>
+          )}
 
           {outings.length > 0 && (
             <section

@@ -423,6 +423,14 @@ export function PublicProfile({
                 ) : null}
               </Ticket>
             </>
+          ) : p.upcomingEvents ? (
+            // Ses sorties sont visibles mais aucune n'est à venir : on le dit (au lieu d'une section absente).
+            <>
+              <SecHead title={L.next} />
+              <Muted variant="body" testID="profile-next-none">
+                {L.noOuting}
+              </Muted>
+            </>
           ) : null}
 
           {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}

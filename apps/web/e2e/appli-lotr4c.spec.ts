@@ -298,7 +298,7 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId("preview-banner")).toContainText("membre connecté");
     // Tour 2 : compte public, ses sorties à venir sont visibles de tout membre : l'aperçu les montre (R5b : le ticket
     // « Prochaine sortie »).
-    await expect(page.getByTestId("profile-next")).toBeVisible();
+    await expect(page.getByTestId(/^profile-next/).first()).toBeVisible();
     await shot(page, `09-apercu-membre-${theme}`);
     await audit(page);
     await page.getByTestId("preview-as-friend").click();
