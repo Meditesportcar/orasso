@@ -71,6 +71,17 @@ test("R5c2 : captures avant / après (page du crew, vitrine, rejoindre)", async 
         await shot(k, `appli-crew-chef-milieu-${tag}`);
         await scrollDown(k, 2);
         await shot(k, `appli-crew-chef-bas-${tag}`);
+        // Après le lot : chaque onglet de la page (absent avant).
+        if (await k.getByTestId("crew-tabs").count()) {
+          for (const tab of ["outings", "garage", "members"]) {
+            await k.goto(`/crew/${SLUG}`);
+            await skipOpening(k);
+            await k.getByTestId(`crew-tab-${tab}`).click();
+            await shot(k, `appli-crew-chef-onglet-${tab}-${tag}`);
+            await scrollDown(k);
+            await shot(k, `appli-crew-chef-onglet-${tab}-bas-${tag}`);
+          }
+        }
         await k.context().close();
 
         // Membre.
@@ -131,6 +142,13 @@ test("R5c2 : captures avant / après (page du crew, vitrine, rejoindre)", async 
         await shot(page, `site-crew-${who}-haut-${tag}`);
         await page.mouse.wheel(0, width === 390 ? 760 : 820);
         await shot(page, `site-crew-${who}-bas-${tag}`);
+        // Après le lot : les onglets de la page (absents avant).
+        if (who !== "vitrine" && (await page.getByTestId("crew-tabs").count())) {
+          for (const tab of ["sorties", "garage", "membres"]) {
+            await page.goto(`/c/${SLUG}?onglet=${tab}`);
+            await shot(page, `site-crew-${who}-onglet-${tab}-${tag}`);
+          }
+        }
         if (who === "vitrine") {
           await page.goto("/app/crews/rejoindre?q=Roussillon");
           await shot(page, `site-rejoindre-crew-${tag}`);
