@@ -15,7 +15,7 @@ test.use({ actionTimeout: 30_000 });
 type Theme = "beton" | "sable";
 const THEMES: Theme[] = ["beton", "sable"];
 
-/** Police agrandie : chaque texte multiplie son corps et son interligne (comme `fontScale` d'Android). */
+/** Police agrandie simulée (contrôle web) : chaque texte multiplie son corps et son interligne (comme `fontScale`). */
 async function scaleFonts(page: Page, k: number) {
   await page.evaluate((scale) => {
     for (const el of document.querySelectorAll<HTMLElement>("body *")) {
@@ -85,6 +85,9 @@ test("R5b captures : appli", async ({ browser }) => {
 
   const screens: [string, string, string][] = [
     ["kenji@orasso.local", "/profil", "profil-kenji"],
+    // Tour 2 : l'écran « Réglages » et l'Accueil (titres de section dont l'aide ou le lien passe dessous).
+    ["kenji@orasso.local", "/reglages", "reglages-kenji"],
+    ["kenji@orasso.local", "/accueil", "voisin-accueil-kenji"],
     ["kenji@orasso.local", "/reglages/profil", "reglages-profil-kenji"],
     ["kenji@orasso.local", "/reglages/compte", "reglages-compte-kenji"],
     ["kenji@orasso.local", "/profil-public", "profil-public-kenji"],
@@ -100,7 +103,13 @@ test("R5b captures : appli", async ({ browser }) => {
   if (vehicleId) screens.push(["kenji@orasso.local", `/vehicule/${vehicleId}`, "voisin-vehicule-kenji"]);
   if (eventSlug) screens.push(["kenji@orasso.local", `/e/${eventSlug}`, "voisin-fiche-kenji"]);
   // Police agrandie à 384 px : les écrans des défauts « SON » et « AJOUT/ER ».
-  const big = new Set(["profil-public-damien", "u-julie-par-kenji", "u-kenji-par-damien", "profil-kenji"]);
+  const big = new Set([
+    "profil-public-damien",
+    "u-julie-par-kenji",
+    "u-kenji-par-damien",
+    "profil-kenji",
+    "reglages-kenji",
+  ]);
 
   for (const theme of THEMES) {
     for (const who of ["kenji@orasso.local", "damien@orasso.local"]) {
