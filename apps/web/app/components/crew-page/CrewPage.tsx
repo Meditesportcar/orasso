@@ -268,16 +268,18 @@ export function RequestCard({ crewId, request, back }: { crewId: string; request
             {[`Grade ${gradeLabels[p.grade]}`, request.vehicleLabel].filter(Boolean).join(" · ")}
           </span>
         </span>
-        <Form method="post" preventScrollReset>
-          {hidden("crew_request_accept")}
-          <Button type="submit" variant="secondary" icon="check" data-testid="crew-request-accept">
-            {crewLabels.accept}
-          </Button>
-        </Form>
-        <Form method="post" preventScrollReset>
-          {hidden("crew_request_decline")}
-          <Button type="submit" variant="secondary" icon="close" aria-label={crewLabels.decline} />
-        </Form>
+        <span className="crw-req__acts">
+          <Form method="post" preventScrollReset>
+            {hidden("crew_request_accept")}
+            <Button type="submit" variant="secondary" icon="check" data-testid="crew-request-accept">
+              {crewLabels.accept}
+            </Button>
+          </Form>
+          <Form method="post" preventScrollReset>
+            {hidden("crew_request_decline")}
+            <Button type="submit" variant="secondary" icon="close" aria-label={crewLabels.decline} />
+          </Form>
+        </span>
       </div>
       <p className={`crw-quote${request.message ? "" : " s-muted"}`}>
         {request.message ? `« ${request.message} »` : L.requestNoMessage}

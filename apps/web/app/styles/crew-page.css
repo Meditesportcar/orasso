@@ -375,6 +375,16 @@
   align-items: center;
   gap: var(--space-2);
 }
+/* À 390 px, Accepter et Refuser passent ensemble sous le pseudo, à droite, au lieu d'écraser la ligne du grade et du
+   véhicule en une colonne d'un mot. */
+.crw-req__head > .crw-grow {
+  min-width: 150px;
+}
+.crw-req__acts {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
 .crw-quote {
   margin: 0;
   padding: 10px 12px;
