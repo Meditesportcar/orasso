@@ -3,7 +3,7 @@
 // ami, membre (compte public, compte privé), organisateur, aperçu, visiteur sans compte.
 import { fromWallTime } from "@orasso/shared";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   call,
@@ -18,11 +18,16 @@ import {
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import { applications, events, friendships, profiles } from "../../db/schema";
+import { storage } from "../../lib/storage";
 import { passportService } from "../passport/service";
 import { socialRepo } from "./repo";
 
 afterAll(async () => {
   await pool.end();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const DAY = 86_400_000;
@@ -51,7 +56,11 @@ async function befriend(a: TestUser, b: TestUser) {
   await socialRepo.recountFriends([a.id, b.id]);
 }
 
-async function apply(u: TestUser, eventId: string, status: "pending" | "accepted" | "refused" | "withdrawn") {
+async function apply(
+  u: TestUser,
+  eventId: string,
+  status: "pending" | "accepted" | "refused" | "withdrawn" | "waitlisted" | "offered",
+) {
   const v = await createVehicle(u.id, ref);
   await db.insert(applications).values({
     eventId,
@@ -191,6 +200,23 @@ describe("photo de profil retirée", () => {
     expect((await call(k, "DELETE", "/me/avatar")).status).toBe(204);
     expect((await call(null, "DELETE", "/me/avatar")).status).toBe(401);
   });
+
+  it("tour 2 : le stockage échoue, la photo reste (pas de 204) ; un nouvel essai la retire, fichier compris", async () => {
+    const k = await person("Kenji_R5f");
+    const key = `avatars/${k.id}/photo-r5b.webp`;
+    await storage.put(key, Buffer.from("photo"));
+    await db.update(profiles).set({ avatarKey: key }).where(eq(profiles.userId, k.id));
+    vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    const failed = await call(k, "DELETE", "/me/avatar");
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    // La référence est restée : la photo est toujours la sienne, et le fichier est là.
+    expect((await call(k, "GET", "/me")).json.profile.avatarUrl).toBe(storage.url(key));
+    expect(await storage.get(key)).not.toBeNull();
+    // Nouvel essai : fichier et référence retirés.
+    expect((await call(k, "DELETE", "/me/avatar")).status).toBe(204);
+    expect(await storage.get(key)).toBeNull();
+    expect((await call(k, "GET", "/me")).json.profile.avatarUrl).toBeNull();
+  });
 });
 
 describe("prochaine sortie et « Toi aussi »", () => {
@@ -217,8 +243,15 @@ describe("prochaine sortie et « Toi aussi »", () => {
       event: { slug: soon.slug, title: "Cars & Coffee", city: "Canet-en-Roussillon", structureName: "Club de test" },
     });
     expect(none.upcomingEvents.map((x: { slug: string }) => x.slug)).toEqual([soon.slug, later.slug]);
-    // Léa a une candidature en attente : elle y va aussi.
+    // Tour 2 (Opus 6) : Léa est en attente, puis en liste d'attente : « vous y serez » serait faux.
     await apply(lea, soon.id, "pending");
+    expect((await view(lea)).nextOuting.together).toBe(false);
+    await db.update(applications).set({ status: "waitlisted" }).where(eq(applications.userId, lea.id));
+    expect((await view(lea)).nextOuting.together).toBe(false);
+    // Une place offerte, puis retenue : elle y va aussi.
+    await db.update(applications).set({ status: "offered" }).where(eq(applications.userId, lea.id));
+    expect((await view(lea)).nextOuting.together).toBe(true);
+    await db.update(applications).set({ status: "accepted" }).where(eq(applications.userId, lea.id));
     expect((await view(lea)).nextOuting.together).toBe(true);
     // Une candidature refusée ou retirée n'en est pas une.
     await apply(kenji, soon.id, "withdrawn");
@@ -260,6 +293,8 @@ describe("« Vu à » : les tampons de la saison", () => {
     const live = await createEvent(s.id, { title: "En cours", startsAt: at(-1 / 24) });
     for (const u of [julie, priv]) {
       for (const e of [done1, done2, invite, draft, lastYear, live]) {
+        // Tour 2 (Opus 1) : « Vu à » ne montre que des participations retenues.
+        await apply(u, e.id, "accepted");
         await passportService.stamp(db, u.id, e, "participation", { at: e.startsAt });
       }
       await passportService.stamp(db, u.id, done2, "first_outing", { at: new Date(done2.startsAt.getTime() + 1000) });
@@ -284,5 +319,81 @@ describe("« Vu à » : les tampons de la saison", () => {
     // L'événement en cours apparaît une fois fini.
     clock.set(new Date(live.endsAt.getTime() + 60_000));
     expect((await call(member, "GET", "/users/Julie_R5c")).json.seenAt.events).toBe(3);
+  });
+
+  it("tour 2 (Opus 1) : seulement les participations retenues ; jamais un tampon de visite ni de staff", async () => {
+    const julie = await person("Julie_R5d");
+    const member = await person("Membre_R5d");
+    const s = await createStructure((await signUp("Orga_R5e")).id);
+    const at = (days: number) => new Date(clock.now.getTime() + days * DAY);
+    const rally = await createEvent(s.id, { title: "Rallye", startsAt: at(-20) });
+    const visited = await createEvent(s.id, { title: "Salon visité", startsAt: at(-15) });
+    const staffed = await createEvent(s.id, { title: "Staffé", startsAt: at(-12) });
+    const pending = await createEvent(s.id, { title: "Sans réponse", startsAt: at(-8) });
+    // Retenue et pointée au rallye (avec un rare) ; elle y était aussi au staff : ce tampon-là reste à elle seule.
+    await apply(julie, rally.id, "accepted");
+    await passportService.stamp(db, julie.id, rally, "participation", { at: rally.startsAt });
+    await passportService.stamp(db, julie.id, rally, "full_moon", { at: new Date(rally.startsAt.getTime() + 1000) });
+    await passportService.stamp(db, julie.id, rally, "staff", { at: new Date(rally.startsAt.getTime() + 2000) });
+    // Billet scanné (visite), avec le rare « première sortie » qui s'y rattache : rien sur le profil.
+    await passportService.stamp(db, julie.id, visited, "visit", { at: visited.startsAt });
+    await passportService.stamp(db, julie.id, visited, "first_outing", { at: new Date(visited.startsAt.getTime() + 1) });
+    // Staff seulement : rien.
+    await passportService.stamp(db, julie.id, staffed, "staff", { at: staffed.startsAt });
+    // Un tampon de participation sans candidature retenue : rien non plus.
+    await apply(julie, pending.id, "pending");
+    await passportService.stamp(db, julie.id, pending, "participation", { at: pending.startsAt });
+
+    for (const viewer of [member, julie]) {
+      const seen = (await call(viewer, "GET", "/users/Julie_R5d")).json.seenAt;
+      expect(seen.events).toBe(1);
+      expect(seen.stamps.map((x: { event: { title: string }; kind: string }) => [x.event.title, x.kind])).toEqual([
+        ["Rallye", "full_moon"],
+        ["Rallye", "participation"],
+      ]);
+    }
+    // Le passeport, lui, garde tout (à soi seul).
+    const passport = JSON.stringify((await call(julie, "GET", "/me/passport")).json);
+    for (const kind of ["visit", "staff", "first_outing"]) expect(passport).toContain(`"kind":"${kind}"`);
+  });
+});
+
+describe("compte suspendu", () => {
+  it("tour 2 (Codex 1, Opus 7) : 404 comme un compte inconnu, réseaux, sortie et tampons compris ; lui-même le voit", async () => {
+    const susp = await person("Susp_R5");
+    const member = await person("Membre_R5e");
+    const friend = await person("Ami_R5e");
+    await befriend(friend, susp);
+    await call(susp, "PATCH", "/me/profile", { socials: { instagram: "susp.66" }, bio: "Bientôt de retour" });
+    const s = await createStructure((await signUp("Orga_R5f")).id);
+    const next = await createEvent(s.id, { title: "Prochaine", startsAt: new Date(clock.now.getTime() + 3 * DAY) });
+    const done = await createEvent(s.id, { title: "Passée", startsAt: new Date(clock.now.getTime() - 10 * DAY) });
+    await apply(susp, next.id, "accepted");
+    await apply(susp, done.id, "accepted");
+    await passportService.stamp(db, susp.id, done, "participation", { at: done.startsAt });
+    // Avant la suspension : tout est là.
+    const before = (await call(member, "GET", "/users/Susp_R5")).json;
+    expect(before.socials).toEqual({ instagram: "susp.66" });
+    expect(before.nextOuting.event.title).toBe("Prochaine");
+    expect(before.seenAt.events).toBe(1);
+
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 7 * DAY) })
+      .where(eq(profiles.userId, susp.id));
+    const unknown = await call(member, "GET", "/users/Personne_R5");
+    for (const viewer of [member, friend]) {
+      const res = await call(viewer, "GET", "/users/Susp_R5");
+      expect(res.status).toBe(404);
+      expect(res.json).toEqual(unknown.json);
+      expect(JSON.stringify(res.json)).not.toMatch(/susp\.66|Prochaine|Passée|Bientôt/);
+    }
+    // Lui-même voit son profil.
+    const self = await call(susp, "GET", "/users/Susp_R5");
+    expect(self.status).toBe(200);
+    expect(self.json.socials).toEqual({ instagram: "susp.66" });
+    // Suspension finie : le profil revient.
+    clock.set(new Date(clock.now.getTime() + 8 * DAY));
+    expect((await call(member, "GET", "/users/Susp_R5")).status).toBe(200);
   });
 });

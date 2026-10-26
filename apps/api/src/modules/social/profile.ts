@@ -155,8 +155,9 @@ async function profileEvents(userId: string, at: Date) {
 
 /**
  * Lot R5b (maquette R5.6, « Toi aussi : vous y serez tous les deux ») : la personne qui regarde va aussi à cet
- * événement : candidature en cours (en attente, retenue, liste d'attente, place offerte) ou billet valide (ou déjà
- * contrôlé). Calculé pour elle seule ; rien n'est dit de la personne regardée qu'on ne voie déjà dans ses sorties.
+ * événement : retenue, une place offerte, ou un billet valide (ou déjà contrôlé). Tour 2 (relecture Opus 6) : une
+ * candidature en attente ou en liste d'attente n'est pas une venue (« vous y serez » serait faux). Calculé pour elle
+ * seule ; rien n'est dit de la personne regardée qu'on ne voie déjà dans ses sorties.
  */
 async function goesToo(viewerId: string, slug: string): Promise<boolean> {
   const result = await db.execute(sql`
@@ -167,7 +168,7 @@ async function goesToo(viewerId: string, slug: string): Promise<boolean> {
         exists (
           select 1 from applications a
           where a.event_id = e.id and a.user_id = ${viewerId}
-            and a.status in ('pending', 'accepted', 'waitlisted', 'offered')
+            and a.status in ('accepted', 'offered')
         )
         or exists (
           select 1 from tickets t
@@ -184,6 +185,9 @@ const SEEN_AT_MAX = 12;
 /**
  * Lot R5b : « Vu à », les tampons de la saison en cours d'une personne. Même règle que ses sorties passées : événement
  * publié, hors invitation, déjà fini (jamais de présence en direct : un tampon du jour n'apparaît qu'après la fin).
+ * Tour 2 (relecture Opus 1) : seulement ses participations retenues, c'est-à-dire le tampon de participation (et les
+ * rares qui s'y rattachent : même événement, participation tamponnée) d'un événement où sa candidature est retenue.
+ * Jamais un tampon de visite (billet scanné) ni de staff : ceux-là restent à soi seul, dans le passeport (`/me/passport`).
  */
 async function seenAtOf(userId: string, at: Date): Promise<{ events: number; stamps: PassportStamp[] }> {
   const season = seasonDates(seasonYear(at));
@@ -193,6 +197,14 @@ async function seenAtOf(userId: string, at: Date): Promise<{ events: number; sta
     eq(events.status, "published"),
     ne(events.admission, "invite_only"),
     lt(events.endsAt, at),
+    sql`(${passportStamps.kind} = 'participation' or (${passportStamps.rare} and exists (
+      select 1 from passport_stamps p
+      where p.user_id = ${passportStamps.userId} and p.event_id = ${passportStamps.eventId} and p.kind = 'participation'
+    )))`,
+    sql`exists (
+      select 1 from applications a
+      where a.event_id = ${passportStamps.eventId} and a.user_id = ${passportStamps.userId} and a.status = 'accepted'
+    )`,
   );
   const rows = await db
     .select({
@@ -256,13 +268,16 @@ export const socialProfile = {
   /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|friend`). */
   async view(viewer: Viewer, pseudo: string, opts: { as?: PreviewAs } = {}): Promise<UserProfileView> {
     const target = await profilesRepo.byPseudo(pseudo);
-    // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même.
-    if (!target || target.deletedAt || (target.bannedAt && target.userId !== viewer.user.id)) {
+    const at = now();
+    // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même. Lot R5b, tour 2 (relectures
+    // Codex 1 et Opus 7) : un compte suspendu non plus (réseaux, prochaine sortie, tampons…) ; il répond comme un compte
+    // inconnu, avant toute lecture de son profil.
+    const suspended = Boolean(target?.suspendedUntil && target.suspendedUntil > at);
+    if (!target || target.deletedAt || ((target.bannedAt || suspended) && target.userId !== viewer.user.id)) {
       throw notFound("Profil introuvable");
     }
     const { audience, friendshipId, state } = await audienceFor(viewer, target, opts);
     const fields = profileFields(audience);
-    const at = now();
 
     const active = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, target.userId), eq(vehicles.status, "active")));
     // Lot R4c : le véhicule principal en premier dans la vitrine.
