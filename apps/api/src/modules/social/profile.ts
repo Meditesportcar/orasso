@@ -283,6 +283,9 @@ export const socialProfile = {
             ),
             detailed: true,
             main: g.id === mainId,
+            vehicleType: g.vehicleType,
+            year: g.year,
+            categories: g.categories.map((c) => c.category.label),
           }
         : {
             id: g.id,
@@ -292,6 +295,9 @@ export const socialProfile = {
             photoUrl: null,
             detailed: false,
             main: g.id === mainId,
+            vehicleType: g.vehicleType,
+            year: null,
+            categories: [],
           },
     );
 

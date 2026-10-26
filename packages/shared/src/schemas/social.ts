@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { departmentSchema } from "../enums";
+import { departmentSchema, type VehicleType } from "../enums";
 import { gradeSchema } from "../grades";
 import type { ProfileSocials } from "../rules/socials";
 import { FRIEND_MESSAGE_MAX, type FriendshipState, type ProfileAudience } from "../rules/visibility";
@@ -95,6 +95,11 @@ export type ProfileVehicle = {
   detailed: boolean;
   /** Lot R4c : le véhicule principal de la personne (en premier dans la vitrine). */
   main: boolean;
+  /** Lot R5b : l'icône de la ligne (voiture, moto, camion). */
+  vehicleType: VehicleType;
+  /** Lot R5b (« Sa voiture ») : l'année et les catégories, seulement quand la fiche complète est consultable. */
+  year: number | null;
+  categories: string[];
 };
 
 export type ProfileEvent = {

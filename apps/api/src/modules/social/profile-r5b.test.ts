@@ -143,6 +143,31 @@ describe("réseaux du profil", () => {
     expect((await call(pub, "GET", "/me/public-preview?as=member")).json.socials).toEqual({ instagram: "kenji.supra" });
   });
 
+  it("véhicules : année et catégories pour la fiche complète seulement ; liste blanche des champs", async () => {
+    const pub = await person("PubV_R5");
+    const priv = await person("PrivV_R5", "private");
+    const member = await person("MembreV_R5");
+    for (const u of [pub, priv]) await createVehicle(u.id, ref, { year: 1997 });
+    const keys = [
+      "categories",
+      "detailed",
+      "id",
+      "label",
+      "main",
+      "makeName",
+      "modelName",
+      "photoUrl",
+      "vehicleType",
+      "year",
+    ];
+    const full = (await call(member, "GET", "/users/PubV_R5")).json.vehicles[0];
+    expect(Object.keys(full).sort()).toEqual(keys);
+    expect(full).toMatchObject({ detailed: true, year: 1997, vehicleType: "car", categories: [] });
+    const reduced = (await call(member, "GET", "/users/PrivV_R5")).json.vehicles[0];
+    expect(Object.keys(reduced).sort()).toEqual(keys);
+    expect(reduced).toMatchObject({ detailed: false, year: null, photoUrl: null, categories: [] });
+  });
+
   it("export des données : les réseaux y sont ; suppression du compte : ils partent", async () => {
     const k = await person("Kenji_R5c");
     await call(k, "PATCH", "/me/profile", { socials: { instagram: "kenji.supra", snapchat: "kenji66" } });
