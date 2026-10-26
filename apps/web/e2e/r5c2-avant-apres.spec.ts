@@ -93,9 +93,14 @@ test("R5c2 : captures avant / après (page du crew, vitrine, rejoindre)", async 
         await shot(s, `appli-crew-vitrine-bas-${tag}`);
         await s.goto("/rejoindre-crew");
         await skipOpening(s);
-        await s.getByTestId("crew-join-q").locator("input").first().fill("Roussillon").catch(async () => {
-          await s.getByTestId("crew-join-q").fill("Roussillon");
-        });
+        await s
+          .getByTestId("crew-join-q")
+          .locator("input")
+          .first()
+          .fill("Roussillon")
+          .catch(async () => {
+            await s.getByTestId("crew-join-q").fill("Roussillon");
+          });
         await expect(s.getByTestId("crew-row").first()).toBeVisible({ timeout: 20_000 });
         await shot(s, `appli-rejoindre-crew-${tag}`);
         await s.goto("/explorer");

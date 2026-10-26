@@ -5,8 +5,8 @@ import { Button, Icon } from "@orasso/design-system/web";
 import { type CrewCard, gradeLabels, type PersonCard, explorerR2Labels as R } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Form } from "react-router";
-
 import { CrewLogo } from "./Crews";
+import { CrewRequestDialog } from "./crew-page/CrewPage";
 import { deptLong } from "./ExplorerUi";
 import { PersonAvatar } from "./People";
 
@@ -125,7 +125,17 @@ export function PersonRowR2({
   );
 }
 
-export function CrewRowR2({ crew, mine, sent, busy }: { crew: CrewCard; mine: boolean; sent: boolean; busy: boolean }) {
+export function CrewRowR2({
+  crew,
+  mine,
+  sent,
+}: {
+  crew: CrewCard;
+  mine: boolean;
+  sent: boolean;
+  /** Gardé pour les appelants : la demande part maintenant par la fenêtre (lot R5c2), qui a son propre état. */
+  busy?: boolean;
+}) {
   return (
     <li className="s-person ex-row" data-testid="crew-row">
       <CrewLogo url={crew.logoUrl} name={crew.name} size={44} />
@@ -149,13 +159,8 @@ export function CrewRowR2({ crew, mine, sent, busy }: { crew: CrewCard; mine: bo
           {R.joinRequested}
         </Button>
       ) : (
-        <Form method="post">
-          <input type="hidden" name="intent" value="crew_request" />
-          <input type="hidden" name="crewId" value={crew.id} />
-          <Button type="submit" variant="secondary" icon="add" loading={busy} data-testid="crew-join">
-            {R.join}
-          </Button>
-        </Form>
+        // Lot R5c2 (R5.8) : la demande part toujours avec la fenêtre « un mot pour le chef », comme sur sa fiche.
+        <CrewRequestDialog crew={crew} leaderPseudo={null} testId="crew-join" label={R.join} />
       )}
     </li>
   );
