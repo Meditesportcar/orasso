@@ -21,6 +21,7 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { applications, crewMembers, crewOutings, crews, notifications, profiles } from "../../db/schema";
+import { rateRecord } from "../../lib/rateLimit";
 import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
@@ -210,6 +211,21 @@ describe("vitrine et page du crew (lot R5c2)", () => {
     const members = await req(lea, "GET", `/crews/${crew.id}/members`);
     expect(members.status).toBe(200);
     expect(members.json.map((m: { vehicleLabel: string | null }) => Boolean(m.vehicleLabel))).toEqual([true, true]);
+  });
+
+  it("tour 2 : la vitrine d'un non-membre est limitée en débit (429 « Trop de… »), pas l'espace d'un membre", async () => {
+    const kenji = await signUp("Kenji_rl");
+    const sarah = await signUp("Sarah_rl");
+    const crew = await newCrew(kenji);
+    for (let i = 0; i < 120; i++) {
+      rateRecord("crewVitrine", sarah.id);
+      rateRecord("crewVitrine", kenji.id);
+    }
+    const limited = await req(sarah, "GET", `/crews/by-slug/${crew.slug}`);
+    expect(limited.status).toBe(429);
+    expect(JSON.stringify(limited.json)).toContain("Trop de");
+    expect((await req(sarah, "GET", `/crews/${crew.id}`)).status).toBe(429);
+    expect((await req(kenji, "GET", `/crews/by-slug/${crew.slug}`)).status).toBe(200);
   });
 
   it("un ancien membre ne voit plus que la vitrine ; un compte suspendu disparaît des membres et du nombre", async () => {
@@ -505,8 +521,11 @@ describe("sorties du crew (lot R5c2)", () => {
     expect(view.json.space.outings[0].yes).toBe(0);
     clock.set(paris(10, 2, 10));
     expect((await req(kenji, "PATCH", `/crews/${crew.id}/outings/${id}`, { title: "Trop tard" })).status).toBe(409);
-    // Encore visible le jour même (12 h après le rendez-vous), plus le lendemain.
-    expect((await req(kenji, "GET", `/crews/by-slug/${crew.slug}`)).json.space.outings).toHaveLength(1);
+    // Encore visible le jour même (12 h après le rendez-vous), plus le lendemain. Tour 2 : capacités effectives, ni
+    // modification ni réponse une fois commencée.
+    const started = (await req(kenji, "GET", `/crews/by-slug/${crew.slug}`)).json.space.outings;
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ canManage: false, open: false });
     clock.set(paris(10, 3, 9));
     expect((await req(kenji, "GET", `/crews/by-slug/${crew.slug}`)).json.space.outings).toHaveLength(0);
   });

@@ -104,24 +104,31 @@ export function OutingCard({ crewId, slug, outing }: { crewId: string; slug: str
           {L.rsvpCount(outing.yes, outing.maybe)}
         </span>
       </div>
-      <Form method="post" preventScrollReset className="crw-seg crw-seg--acc" aria-label={L.rsvpA11y}>
-        <input type="hidden" name="intent" value="outing_rsvp" />
-        <input type="hidden" name="crewId" value={crewId} />
-        <input type="hidden" name="outingId" value={outing.id} />
-        {answers.map(([value, label]) => (
-          <button
-            key={value}
-            type="submit"
-            name="answer"
-            value={value}
-            className="crw-seg__btn o-t-body-strong"
-            aria-pressed={outing.mine === value}
-            data-testid={`outing-rsvp-${value}`}
-          >
-            {label}
-          </button>
-        ))}
-      </Form>
+      {/* Tour 2 : commencée, plus de réponse (les boutons échoueraient). */}
+      {outing.open ? (
+        <Form method="post" preventScrollReset className="crw-seg crw-seg--acc" aria-label={L.rsvpA11y}>
+          <input type="hidden" name="intent" value="outing_rsvp" />
+          <input type="hidden" name="crewId" value={crewId} />
+          <input type="hidden" name="outingId" value={outing.id} />
+          {answers.map(([value, label]) => (
+            <button
+              key={value}
+              type="submit"
+              name="answer"
+              value={value}
+              className="crw-seg__btn o-t-body-strong"
+              aria-pressed={outing.mine === value}
+              data-testid={`outing-rsvp-${value}`}
+            >
+              {label}
+            </button>
+          ))}
+        </Form>
+      ) : (
+        <p className="o-t-caption s-muted" data-testid="outing-started">
+          {L.outingStarted}
+        </p>
+      )}
       <div className="crw-out__acts">
         <Button variant="secondary" icon="nav" href={mapsHref(outing)} aria-label={L.mapsA11y(outing.place)}>
           {L.maps}

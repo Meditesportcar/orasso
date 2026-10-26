@@ -211,7 +211,13 @@ export function OutingCard({
           {L.rsvpCount(outing.yes, outing.maybe)}
         </Text>
       </View>
-      <RsvpSeg value={outing.mine} onChange={onAnswer} disabled={busy} />
+      {outing.open ? (
+        <RsvpSeg value={outing.mine} onChange={onAnswer} disabled={busy} />
+      ) : (
+        <Text variant="caption" color={c.inkMuted} testID="outing-started">
+          {L.outingStarted}
+        </Text>
+      )}
       <View style={styles.outActs}>
         <SmButton icon="nav" onPress={() => openMaps(dest)} accessibilityLabel={L.mapsA11y(outing.place)}>
           {L.maps}

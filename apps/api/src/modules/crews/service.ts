@@ -730,6 +730,8 @@ export const crewsService = {
     const isLeader = state === "leader";
     // Un crew dissous n'existe plus pour qui n'en était pas membre.
     if (crew.deletedAt && !isMember) throw notFound(crewErrors.notFound);
+    // Tour 2 : la vitrine d'un non-membre est limitée en débit (pas d'annuaire reconstruit par les vitrines).
+    if (!isMember) rateLimit("crewVitrine", v.user.id);
     const leader = await profilesRepo.byUserId(crew.createdBy);
     const leaderShown =
       leader && !leader.deletedAt && !leader.bannedAt && !(leader.suspendedUntil && leader.suspendedUntil > at);

@@ -214,7 +214,10 @@ export async function crewOutingViews(
       yes: yes.length,
       maybe: mine.filter((r) => r.answer === "maybe").length,
       mine: (mine.find((r) => r.userId === viewer.userId)?.answer ?? null) as CrewOutingRsvp | null,
-      canManage: canManageCrewOuting({ isAuthor: o.authorId === viewer.userId, isLeader: viewer.isLeader }),
+      // Tour 2 : capacités effectives ; commencée, la sortie ne se modifie plus et ne prend plus de réponse.
+      canManage:
+        o.startsAt > at && canManageCrewOuting({ isAuthor: o.authorId === viewer.userId, isLeader: viewer.isLeader }),
+      open: o.startsAt > at,
     };
   });
 }
@@ -285,7 +288,9 @@ export async function crewEvents(
     if (r.status === "accepted") e.goingIds.add(r.userId);
     if (r.crewId === crew.id) e.registeredIds.add(r.userId);
   }
-  return [...out.values()].slice(0, 12).map(({ goingIds, registeredIds, ...e }) => ({
+  // Tour 2 : plus de coupure silencieuse à 12 : la liste est complète (événements à venir des membres actifs, bornée par
+  // le nombre de membres d'un crew).
+  return [...out.values()].map(({ goingIds, registeredIds, ...e }) => ({
     ...e,
     going: [...goingIds].map((id) => faceOf(byId.get(id) as Profile)),
     registered: registeredIds.size,

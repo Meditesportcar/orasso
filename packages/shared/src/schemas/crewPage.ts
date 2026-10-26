@@ -82,8 +82,10 @@ export type CrewOutingView = {
   maybe: number;
   /** Ma réponse. */
   mine: CrewOutingRsvp | null;
-  /** Je peux la modifier ou l'annuler (auteur ou chef). */
+  /** Je peux la modifier ou l'annuler (auteur ou chef, avant le rendez-vous : capacité effective, tour 2). */
   canManage: boolean;
+  /** Encore à venir : on peut y répondre (pendant les 12 h après le rendez-vous, plus de réponse). */
+  open: boolean;
 };
 
 /** Un véhicule du garage du crew (photo seulement si la plaque est masquée, comme partout hors du garage). */

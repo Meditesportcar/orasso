@@ -142,6 +142,8 @@ export const rateRules = {
   },
   /** Lot R5a : catalogue des styles et file des propositions (administration). */
   categoryAdmin: { max: 120, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  // Lot R5c2, tour 2 : vitrines de crew ouvertes par un non-membre (pas d'annuaire reconstruit par les vitrines).
+  crewVitrine: { max: 120, windowMs: 3_600_000, message: "Trop de crews ouverts : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;
