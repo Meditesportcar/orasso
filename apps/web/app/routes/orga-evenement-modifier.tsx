@@ -1,5 +1,5 @@
 import {
-  type Category,
+  type CategoryOption,
   type EventOrganizer,
   eventResumeStep,
   eventWizardStepOf,
@@ -29,7 +29,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [structure, event, categories, makes] = await Promise.all([
     apiOrThrow<StructureOrganizer>(request, `/structures/${membership.structureId}`),
     apiOrThrow<EventOrganizer>(request, `/events/${params.eventId}`),
-    api<Category[]>(request, "/vehicle-reference/categories"),
+    // Lot R5a, tour 2 : les styles en pause aussi, pour garder ceux déjà choisis dans les critères.
+    api<CategoryOption[]>(request, "/vehicle-reference/categories?paused=1"),
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   if (event.structure.id !== structure.id) throw new Response("Événement introuvable.", { status: 404 });

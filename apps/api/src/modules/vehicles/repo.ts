@@ -1,3 +1,4 @@
+import { type VehicleType, vehicleTypes } from "@orasso/shared";
 import { asc, eq, inArray, type SQL } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -32,8 +33,24 @@ export const vehiclesRepo = {
   byId(id: string, ex: Executor = db) {
     return ex.query.vehicles.findFirst({ where: eq(vehicles.id, id) });
   },
-  makes() {
-    return db.query.vehicleMakes.findMany({ orderBy: [asc(vehicleMakes.isOther), asc(vehicleMakes.name)] });
+  /**
+   * Marques, avec les types de leurs modèles de la liste (lot R5a, maquette R5.1 : « Moto » ne montre que les marques
+   * qui ont au moins une moto ; Honda est dans les deux listes). « Autre » n'a pas de type : elle vaut pour tous.
+   */
+  async makes() {
+    const [rows, types] = await Promise.all([
+      db.query.vehicleMakes.findMany({ orderBy: [asc(vehicleMakes.isOther), asc(vehicleMakes.name)] }),
+      db
+        .selectDistinct({ makeId: vehicleModels.makeId, type: vehicleModels.vehicleType })
+        .from(vehicleModels)
+        .where(eq(vehicleModels.isOther, false)),
+    ]);
+    const byMake = new Map<string, VehicleType[]>();
+    for (const t of types) byMake.set(t.makeId, [...(byMake.get(t.makeId) ?? []), t.type]);
+    return rows.map((m) => ({
+      ...m,
+      vehicleTypes: vehicleTypes.filter((type) => byMake.get(m.id)?.includes(type)),
+    }));
   },
   models(makeId: string) {
     return db.query.vehicleModels.findMany({

@@ -40,6 +40,8 @@ const routes: Record<string, string> = {
   structures: "registries",
   pros: "registries",
   vehicules: "registries",
+  // Lot R5a : catalogue des styles (base véhicules).
+  styles: "registries",
   journal: "registries",
   parametres: "manage",
   newsletter: "manage",
@@ -63,6 +65,7 @@ const hidden = [
   "structures",
   "pros",
   "vehicules",
+  "styles",
   "journal",
   "parametres",
   "newsletter",

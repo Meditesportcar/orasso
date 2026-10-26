@@ -9,6 +9,8 @@
 import { Chip, franceDepartmentByCode, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   arriveeLabels,
+  categoryFamilyLabels,
+  choiceGroups,
   clampPreferenceRadius,
   type EventFormat,
   eventFormatLabels,
@@ -18,6 +20,7 @@ import {
   overseasDepartmentNames,
   PREFERENCE_RADIUS,
   preferenceNewEventsLabel,
+  styleLabels,
   travelTimeLabel,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -48,7 +51,8 @@ export default function TesPreferences() {
   const { premiere } = useLocalSearchParams<{ premiere?: string }>();
   const first = premiere === "1";
   const { preferences, error: loadError, save } = usePreferences();
-  const categories = useApi(() => api.categories(), [], { cacheKey: "categories" });
+  // Lot R5a, tour 2 : avec les styles en pause, pour garder ceux déjà choisis (cochés, décochables).
+  const categories = useApi(() => api.categories({ paused: "1" }), [], { cacheKey: "categories-all" });
   const [draft, setDraft] = useState<Draft | null>(null);
   // Les champs que la personne a touchés : une réponse fraîche (après le cache) ne les écrase pas, et seuls eux partent.
   const touched = useRef<TouchedFields>({});
@@ -247,16 +251,26 @@ export default function TesPreferences() {
             {L.interests}
           </Text>
           {categories.data ? (
-            <View style={styles.pchips} accessibilityLabel={L.interests} testID="pref-interests">
-              {categories.data.map((cat) => (
-                <Chip
-                  key={cat.id}
-                  selected={draft.interests.includes(cat.id)}
-                  onPress={() => set({ interests: toggleIn(draft.interests, cat.id) })}
-                  accessibilityRole="toggle"
-                >
-                  {cat.label}
-                </Chip>
+            // Lot R5a, tour 2 : par famille, pays en dernier, avec le type d'un style restreint.
+            <View style={styles.families} accessibilityLabel={L.interests} testID="pref-interests">
+              {choiceGroups(categories.data, draft.interests).map((g) => (
+                <View key={g.family} style={styles.family} testID={`pref-family-${g.family}`}>
+                  <Text variant="caption" color={c.inkMuted}>
+                    {categoryFamilyLabels[g.family]}
+                  </Text>
+                  <View style={styles.pchips}>
+                    {g.rows.map((cat) => (
+                      <Chip
+                        key={cat.id}
+                        selected={draft.interests.includes(cat.id)}
+                        onPress={() => set({ interests: toggleIn(draft.interests, cat.id) })}
+                        accessibilityRole="toggle"
+                      >
+                        {cat.paused ? `${cat.label} · ${styleLabels.paused}` : cat.label}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
               ))}
             </View>
           ) : (
@@ -312,6 +326,8 @@ const styles = StyleSheet.create({
   bar: { width: "92%", height: 6, borderRadius: 3 },
   head: { gap: 6 },
   pchips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  families: { gap: 12 },
+  family: { gap: 6 },
   h1: { fontSize: 30, lineHeight: 30 },
   card: { borderRadius: 18, padding: 14, gap: 10 },
   sliderOff: { opacity: 0.4 },

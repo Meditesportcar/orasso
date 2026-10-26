@@ -47,6 +47,7 @@ export * from "./sponsored";
 export * from "./squareCrop";
 export * from "./stampArt";
 export * from "./stamps";
+export * from "./styles";
 export * from "./templates";
 export * from "./ticketing";
 export * from "./time";

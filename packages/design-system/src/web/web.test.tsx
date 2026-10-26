@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { categoryIcons } from "@orasso/shared";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { battle, bezier, curve, duration, olive, park, shake, smoke } from "../motion";
@@ -31,6 +32,7 @@ import {
   Monogram,
   Outlined,
   PosterCard,
+  reservedIcons,
   ScanResult,
   SelectField,
   StatusBadge,
@@ -160,6 +162,13 @@ describe("rendu serveur des composants", () => {
   it("toute icône du jeu se rend, décorative par défaut", () => {
     for (const name of iconNames) expect(html(<Icon name={name} />)).toContain('aria-hidden="true"');
     expect(iconNames.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("lot R5a : les icônes permises pour un style sont des icônes du kit, aucune réservée", () => {
+    for (const icon of categoryIcons) {
+      expect(iconNames, icon).toContain(icon);
+      expect(Object.keys(reservedIcons), icon).not.toContain(icon);
+    }
   });
 
   it("Button : variantes, icône, lien, chargement, fermer", () => {

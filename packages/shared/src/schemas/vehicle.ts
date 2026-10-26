@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type VehicleStatus, type VehicleType, vehicleStatuses, vehicleTypes } from "../enums";
+import type { CategoryFamily, CategoryIcon } from "../rules/styles";
 import { optionalText } from "./common";
 import type { PlateTransferInfo, VehicleCertification } from "./garage";
 
@@ -72,7 +73,16 @@ function plateRule(v: Parameters<typeof vehiclePlateIssue>[0], ctx: z.Refinement
  * Création. Lot M1, tour 2 : `clientKey` facultative, tirée par l'appli à l'ouverture de l'ajout : la même clé renvoie
  * le véhicule déjà créé (« Reprendre » après une réponse perdue ne crée pas de doublon).
  */
-export const vehicleCreateSchema = vehicleFields.extend({ clientKey: z.uuid().optional() }).superRefine(plateRule);
+export const vehicleCreateSchema = vehicleFields
+  .extend({
+    clientKey: z.uuid().optional(),
+    /**
+     * Lot R5a : styles proposés pendant l'ajout (« Il manque un style ? Propose-le »), envoyés avant que le véhicule
+     * existe ; ils lui sont rattachés à sa création (posés dessus s'ils sont retenus).
+     */
+    styleProposalIds: z.array(z.uuid()).max(5).optional(),
+  })
+  .superRefine(plateRule);
 export type VehicleCreate = z.infer<typeof vehicleCreateSchema>;
 
 /** Mise à jour partielle ; la règle de plaque est revérifiée par le service sur la fiche complète. */
@@ -118,7 +128,15 @@ export type VehiclePhoto = {
   /** Une plaque a été floutée sur cette photo (pastille « Plaque floutée »). */
   plateBlurred: boolean;
 };
-export type CategoryRef = { id: string; slug: string; label: string };
+export type CategoryRef = {
+  id: string;
+  slug: string;
+  label: string;
+  /** Lot R5a (fiche du propriétaire) : famille et icône du style ; en pause (plus proposé, gardé sur la fiche). */
+  family?: CategoryFamily;
+  icon?: CategoryIcon;
+  paused?: boolean;
+};
 
 /** Fiche visible des autres utilisateurs connectés : jamais de plaque. */
 export type VehiclePublic = {
@@ -182,7 +200,28 @@ export type VehicleBrief = Pick<VehiclePublic, "id" | "label" | "makeName" | "mo
  */
 export type VehiclePrivate = VehicleBrief & Pick<VehiclePublic, "generationName" | "categories">;
 
-export type VehicleMake = { id: string; name: string; slug: string; country: string | null; isOther: boolean };
+export type VehicleMake = {
+  id: string;
+  name: string;
+  slug: string;
+  country: string | null;
+  isOther: boolean;
+  /**
+   * Lot R5a : les types de ses modèles de la liste (Honda : voiture et moto). Absent d'une réponse ancienne (cache) :
+   * la marque vaut pour tous les types.
+   */
+  vehicleTypes?: VehicleType[];
+};
+
+/**
+ * Lot R5a : les marques d'un type (celles qui ont au moins un modèle de ce type), « Autre » toujours gardée. Tour 2 : une
+ * marque sans aucun modèle de la liste (créée par l'équipe, modèles à venir) vaut pour tous les types.
+ */
+export const makesForType = <T extends Pick<VehicleMake, "isOther" | "vehicleTypes">>(
+  rows: readonly T[],
+  type: VehicleType,
+): T[] =>
+  rows.filter((m) => m.isOther || !m.vehicleTypes || m.vehicleTypes.length === 0 || m.vehicleTypes.includes(type));
 export type VehicleModel = { id: string; makeId: string; name: string; vehicleType: VehicleType; isOther: boolean };
 export type VehicleGeneration = {
   id: string;

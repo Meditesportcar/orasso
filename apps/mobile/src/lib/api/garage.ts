@@ -75,8 +75,16 @@ export const garageApi = {
    * Catégories ; avec marque, type et année : chacune dit si elle convient et pourquoi sinon. Lot M1, tour 2 : le
    * modèle dit s'il est tout-terrain (« 4x4 »).
    */
-  categories: (filter: { makeId?: string; modelId?: string; vehicleType?: string; year?: number } = {}) =>
-    request<CategoryOption[]>(`/api/vehicle-reference/categories${qs(filter)}`),
+  categories: (
+    filter: {
+      makeId?: string;
+      modelId?: string;
+      vehicleType?: string;
+      year?: number;
+      /** Lot R5a, tour 2 : les styles en pause aussi (`paused: true`), pour garder les choix déjà faits. */
+      paused?: "1";
+    } = {},
+  ) => request<CategoryOption[]>(`/api/vehicle-reference/categories${qs(filter)}`),
   requestCertification: (vehicleId: string, message?: string | null) =>
     request<VehicleCertification>(`/api/me/vehicles/${vehicleId}/certification-request`, {
       method: "POST",

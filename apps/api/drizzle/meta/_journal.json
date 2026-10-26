@@ -442,6 +442,13 @@
       "when": 1793027788659,
       "tag": "0062_crew-feed",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793037613897,
+      "tag": "0063_style-catalog",
+      "breakpoints": true
     }
   ]
 }

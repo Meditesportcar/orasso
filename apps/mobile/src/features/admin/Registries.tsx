@@ -53,6 +53,7 @@ import {
   SearchBox,
   useGesture,
 } from "./kit";
+import { useProposedStyles, VehicleBaseTabs } from "./Styles";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -275,6 +276,8 @@ function VehiclesBody() {
   const generations = useApi(() => api.referenceGenerations(modelId ?? ""), [modelId], { enabled: modelId !== null });
   const gesture = useGesture();
   const [notice, setNotice] = useState<string | null>(null);
+  // Lot R5a : l'onglet « Styles » de la base véhicules (avec le nombre de styles proposés).
+  const proposedStyles = useProposedStyles();
 
   const make: ReferenceMake | null = makes.data?.find((m) => m.id === makeId) ?? null;
   const modelList: ReferenceModel[] = makeId ? (models.data ?? []) : [];
@@ -370,6 +373,7 @@ function VehiclesBody() {
         </>
       }
     >
+      <VehicleBaseTabs current="base" proposed={proposedStyles} />
       <AdminFailure error={makes.error ?? others.error} />
       {notice ? <Notice>{notice}</Notice> : null}
       {formError ? <Notice tone="error">{formError}</Notice> : null}

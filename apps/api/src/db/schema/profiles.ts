@@ -1,5 +1,6 @@
 // Profils, centres d'intérêt, catégories, appareils (ARCHITECTURE.md § 1.1).
 import {
+  categoryFamilies,
   categoryMakeModes,
   defaultNotificationPrefs,
   devicePlatforms,
@@ -33,6 +34,7 @@ export const profileVisibilityEnum = pgEnum("profile_visibility", profileVisibil
 export const gradeEnum = pgEnum("grade", grades);
 export const devicePlatformEnum = pgEnum("device_platform", devicePlatforms);
 export const categoryMakeModeEnum = pgEnum("category_make_mode", categoryMakeModes);
+export const categoryFamilyEnum = pgEnum("category_family", categoryFamilies);
 export const mainProfileEnum = pgEnum("main_profile_enum", mainProfiles);
 
 /** Tout ce qui est métier sur un compte (1 pour 1 avec `user`, table de Better Auth). */
@@ -115,7 +117,20 @@ export const categories = pgTable("categories", {
   allowedCountries: text("allowed_countries").array(),
   /** `whitelist` : seules les marques de `category_makes` (ex. supercar). */
   makeMode: categoryMakeModeEnum("make_mode").notNull().default("any"),
+  /** Lot R5a : un style en pause (`false`) ne se propose plus ; il reste sur les véhicules qui l'ont. */
   active: boolean("active").notNull().default(true),
+  /** Lot R5a (maquette R5.2) : famille du style (Époque, Genre, Préparation, Pratique ; Pays pour les origines). */
+  family: categoryFamilyEnum("family").notNull().default("genre"),
+  /** Lot R5a : icône du kit, dans la liste fermée `categoryIcons` de `@orasso/shared`. */
+  icon: text("icon").notNull().default("star"),
+  /** Lot R5a : libellé au masculin, pour un camion (« Ancien », « Préparé ») ; nul : le libellé vaut pour tous. */
+  labelM: text("label_m"),
+  /**
+   * Lot R5a, tour 2 : le nom normalisé (`styleKey` : sans accents, casse, espaces, ponctuation ni apostrophe
+   * typographique), unique : « D’origine » ne crée pas un second style à côté de `origine`. Posé par l'API (création,
+   * renommage, acceptation, catalogue) ; les slugs historiques sont gardés.
+   */
+  labelKey: text("label_key").unique("categories_label_key_key"),
   ...timestamps,
 });
 

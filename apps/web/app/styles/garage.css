@@ -905,3 +905,54 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* Lot R5a (maquettes R5.1 et R5.2) : titre de liste (`.r5mh`), familles de styles, « Il manque un style ? » (`.r5prop`). */
+.g-listhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.g-listhead .o-t-caption,
+.g-fam-hint {
+  color: var(--ink-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.g-fam-hint {
+  font-size: inherit;
+}
+.g-pill > svg {
+  margin-right: var(--space-1);
+  flex: none;
+}
+.g-cat label > svg {
+  flex: none;
+}
+.g-propose {
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius-md);
+}
+.g-propose__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+}
+.g-propose__row::-webkit-details-marker {
+  display: none;
+}
+.g-propose__text {
+  flex: 1;
+  min-width: 0;
+}
+.g-propose__row .o-t-caption {
+  color: var(--ink-muted);
+}
+.g-propose__form {
+  padding: 0 var(--space-3) var(--space-3);
+}

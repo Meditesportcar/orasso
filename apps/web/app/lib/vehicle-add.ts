@@ -2,6 +2,7 @@
 // origine déduite de la marque, styles montrés ou grisés, années de la génération. Pur : testé sans réseau ni React.
 import {
   type CategoryOption,
+  styleLabels,
   vehicleAddLabels as V,
   type VehicleGeneration,
   type VehicleMake,
@@ -57,7 +58,8 @@ export function dimmedNote(rows: readonly CategoryOption[], year: number | undef
   const labels = visibleStyles(rows)
     .filter((c) => c.refusal === "age")
     .map((c) => c.label);
-  return labels.length ? V.stylesDimmed(labels, V.vehicleNoun[type], year) : null;
+  // Lot R5a : accordée au masculin pour un camion (« Youngtimer et Ancien sont grisés : ton camion est de 2008. »).
+  return labels.length ? styleLabels.dimmed(labels, V.vehicleNoun[type], year, type === "truck") : null;
 }
 
 /** Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. */

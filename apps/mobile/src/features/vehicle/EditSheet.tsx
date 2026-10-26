@@ -2,7 +2,14 @@
 // description, catégories (celles qui ne conviennent pas sont grisées avec la raison, comme à l'ajout) et plaque. Une
 // plaque déjà prise par un autre membre lance une demande de transfert : le véhicule reste, la plaque attend la réponse.
 import { Button, CheckboxField, Chip, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { garageAppLabels as L, VEHICLE_ENGINE_MAX, type VehicleFull } from "@orasso/shared";
+import {
+  categoryFamilyLabels,
+  garageAppLabels as L,
+  styleLabels,
+  VEHICLE_ENGINE_MAX,
+  type VehicleFull,
+  vehicleStyleGroups,
+} from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -57,6 +64,12 @@ export function EditSheet({
     [vehicle.makeId, vehicle.modelId, vehicle.vehicleType, yearValue],
     { enabled: visible },
   );
+
+  // Lot R5a : les styles du type, rangés par famille ; ceux d'un autre type ou réservés à d'autres marques, et les
+  // origines d'autres pays, ne sont pas listés. Tour 2 : tout ce qui est déjà sur la fiche reste affiché, coché et
+  // décochable : en pause (origine comprise), ou refusé pour le type ou la marque (« 4x4 » d'un camion), avec sa raison ;
+  // enregistrer autre chose ne le retire pas (règle commune `vehicleStyleGroups`, la même que le site).
+  const groups = vehicleStyleGroups(categories.data ?? [], vehicle.categories, { keepRefused: true, origins: true });
 
   const patch = (change: Partial<VehicleEditForm>) => setForm((f) => ({ ...f, ...change }));
   const toggleCategory = (id: string) =>
@@ -152,20 +165,25 @@ export function EditSheet({
         disabled={locked}
         onChange={(unregistered) => patch({ unregistered })}
       />
-      {categories.data && categories.data.length > 0 ? (
+      {groups.length > 0 ? (
         <>
           <Muted variant="label">{L.categories}</Muted>
-          {categories.data.map((c) => {
-            const chosen = form.categoryIds.includes(c.id);
-            return (
-              <View key={c.id} style={[styles.category, !c.eligible && !chosen && styles.off]}>
-                <Chip selected={chosen} onPress={c.eligible || chosen ? () => toggleCategory(c.id) : undefined}>
-                  {c.label}
-                </Chip>
-                {c.reason && !c.eligible ? <Muted variant="caption">{c.reason}</Muted> : null}
-              </View>
-            );
-          })}
+          {groups.map((g) => (
+            <View key={g.family} style={styles.family} testID={`vehicle-edit-family-${g.family}`}>
+              <Muted variant="caption">{categoryFamilyLabels[g.family]}</Muted>
+              {g.rows.map((c) => {
+                const chosen = form.categoryIds.includes(c.id);
+                return (
+                  <View key={c.id} style={[styles.category, !c.eligible && !chosen && styles.off]}>
+                    <Chip selected={chosen} onPress={c.eligible || chosen ? () => toggleCategory(c.id) : undefined}>
+                      {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
+                    </Chip>
+                    {c.reason && (!c.eligible || c.kept) ? <Muted variant="caption">{c.reason}</Muted> : null}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </>
       ) : null}
       <Feedback error={error} onPlate={false} testID="vehicle-edit" />
@@ -188,5 +206,6 @@ export function EditSheet({
 
 const styles = StyleSheet.create({
   category: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
+  family: { gap: space2 },
   off: { opacity: 0.55 },
 });

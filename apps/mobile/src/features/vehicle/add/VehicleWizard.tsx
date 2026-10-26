@@ -9,6 +9,7 @@ import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   cleanProposedName,
   vehicleWizardLabels as L,
+  styleLabels,
   vehicleAddLabels as V,
   type VehicleFull,
   type VehiclePreparation,
@@ -38,6 +39,7 @@ import { PREFERENCES_FIRST_ROUTE, routeAfterFirstVehicle } from "@/lib/preferenc
 import { useSession } from "@/lib/session";
 import { centerCrop, cropPixels, type SquareCrop } from "@/lib/squareCrop";
 import { useApi } from "@/lib/useApi";
+import { announce } from "@/ui/Announce";
 import { waitUploadParked } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
 import { SquareCropper } from "@/ui/SquareCropper";
@@ -74,6 +76,7 @@ import { DoneView, type PhotoState, SendingView } from "./SendViews";
 import { type PhotoSource, StepPhotos } from "./StepPhotos";
 import { photoToFix, StepPlate } from "./StepPlate";
 import { StepCategories, StepIdentity, StepSpecs } from "./Steps";
+import { StyleProposalSheet } from "./StyleProposal";
 import { DraftIncomplete, newSendMemo, photoPlan, runSend, type SendApi } from "./send";
 
 const { space2 } = tokens.spacing;
@@ -121,6 +124,13 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const pendingLeave = useRef<(() => void) | null>(null);
 
   const patch = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
+  // Lot R5a : clavier ouvert sur la recherche de l'étape Marque et modèle (écran replié), et « Propose-le ».
+  const [compact, setCompact] = useState(false);
+  const [proposing, setProposing] = useState(false);
+  // Styles de la fiche : en pause ou (tour 2) refusés pour le type ou la marque, ils restent affichés et gardés tant que
+  // la personne ne les retire pas ; refusés, seulement tant que le type et la marque ne changent pas.
+  const currentStyles = useMemo(() => vehicle?.categories ?? [], [vehicle]);
+  const keepRefused = Boolean(vehicle && draft.vehicleType === vehicle.vehicleType && draft.makeId === vehicle.makeId);
 
   // Lot R3a (retour 3 de Damien) : « Continuer » attend que le bas de l'étape ait été vu ; une étape vue le reste.
   // Avec un lecteur d'écran, aucun blocage (il lit tout sans défiler).
@@ -181,11 +191,18 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     const rows = categories.data;
     if (!rows) return;
     setDraft((d) => {
-      const next = keptCategories(d.categoryIds, rows, makeCountry, d.typing === "make");
+      const next = keptCategories(
+        d.categoryIds,
+        rows,
+        makeCountry,
+        d.typing === "make",
+        currentStyles.map((c) => c.id),
+        keepRefused,
+      );
       const same = next.length === d.categoryIds.length && next.every((id, i) => id === d.categoryIds[i]);
       return same ? d : { ...d, categoryIds: next };
     });
-  }, [categories.data, makeCountry]);
+  }, [categories.data, makeCountry, currentStyles, keepRefused]);
 
   // Pendant l'import ou le recadrage d'une photo, « Continuer » attend (lot M1, tour 2, vie privée de la plaque).
   const importing = busy || cropBusy || phase === "crop";
@@ -604,12 +621,41 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const blocked = continueBlocked(step, draft, importing);
   const unseen = waitsForEnd(seen, step, screenReader);
   const last = step === STEP_COUNT - 1;
+  // Lot R5a (maquette R5.1) : clavier ouvert sur la recherche, la carte « Ton véhicule », la barre « Continuer » et la
+  // flèche du bas se cachent ; les résultats prennent la place entre le champ et le clavier.
+  const kb = compact && step === STEP.identity;
+  const proposalSheet = (
+    <StyleProposalSheet
+      visible={proposing}
+      vehicleType={draft.vehicleType}
+      vehicleId={vehicle?.id}
+      vehicleName={make && !make.isOther ? make.name : null}
+      onClose={() => setProposing(false)}
+      onSent={(result) => {
+        setProposing(false);
+        // À l'ajout, la proposition est rattachée au véhicule quand il est créé.
+        if (!vehicle) {
+          setDraft((d) => ({
+            ...d,
+            styleProposalIds: [...new Set([...(d.styleProposalIds ?? []), result.id])].slice(0, 5),
+          }));
+        }
+        announce({ id: `style-${result.id}`, tone: "info", icon: "spark", title: styleLabels.toast(result.label) });
+      }}
+    />
+  );
   return (
     <FlowScreen
       title={title}
       facts={V.stepOf(step + 1, STEP_COUNT, V.steps[step] ?? "")}
       onClose={close}
-      overlays={quitSheet}
+      overlays={
+        <>
+          {quitSheet}
+          {proposalSheet}
+        </>
+      }
+      hideEndHint={kb}
       endGate={{
         key: step,
         locked: unseen,
@@ -622,44 +668,46 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       header={
         <>
           {bar(((step + 1) / STEP_COUNT) * 100)}
-          <LiveCard card={card} remoteCover={Boolean(draft.photos[0]?.remoteId)} />
+          {kb ? null : <LiveCard card={card} remoteCover={Boolean(draft.photos[0]?.remoteId)} />}
         </>
       }
       footer={
-        <>
-          {shownError && !blocked && (step !== STEP.plate || error) ? (
-            <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="vehicle-step-error">
-              {shownError}
-            </Text>
-          ) : null}
-          <View style={styles.footer}>
-            <SquareButton
-              icon={step === 0 ? "close" : "back"}
-              label={step === 0 ? V.close : V.back}
-              onPress={previous}
-              testID="vehicle-step-back"
-            />
-            <View style={styles.grow}>
-              <Button
-                variant="primary"
-                icon={last ? (editing ? "check" : "upload") : "next"}
-                onPress={next}
-                disabled={blocked || unseen}
-                fullWidth
-                testID="vehicle-step-next"
-                accessibilityHint={blocked ? (issue ?? undefined) : unseen ? V.seeRestHint : (issue ?? undefined)}
-              >
-                {last ? (editing ? L.save : V.send) : L.next}
-              </Button>
+        kb ? undefined : (
+          <>
+            {shownError && !blocked && (step !== STEP.plate || error) ? (
+              <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="vehicle-step-error">
+                {shownError}
+              </Text>
+            ) : null}
+            <View style={styles.footer}>
+              <SquareButton
+                icon={step === 0 ? "close" : "back"}
+                label={step === 0 ? V.close : V.back}
+                onPress={previous}
+                testID="vehicle-step-back"
+              />
+              <View style={styles.grow}>
+                <Button
+                  variant="primary"
+                  icon={last ? (editing ? "check" : "upload") : "next"}
+                  onPress={next}
+                  disabled={blocked || unseen}
+                  fullWidth
+                  testID="vehicle-step-next"
+                  accessibilityHint={blocked ? (issue ?? undefined) : unseen ? V.seeRestHint : (issue ?? undefined)}
+                >
+                  {last ? (editing ? L.save : V.send) : L.next}
+                </Button>
+              </View>
             </View>
-          </View>
-          {/* Lot R4a (invariant) : jamais de bouton grisé sans une ligne qui dit ce qui manque : aussi à Marque et modèle. */}
-          {blocked && (importing || step === STEP.photos || step === STEP.identity) ? (
-            <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
-              {importing ? V.importing : issue}
-            </Text>
-          ) : null}
-        </>
+            {/* Lot R4a (invariant) : jamais de bouton grisé sans une ligne qui dit ce qui manque : aussi à Marque et modèle. */}
+            {blocked && (importing || step === STEP.photos || step === STEP.identity) ? (
+              <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
+                {importing ? V.importing : issue}
+              </Text>
+            ) : null}
+          </>
+        )
       }
     >
       {step === STEP.photos ? (
@@ -703,13 +751,22 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           makes={makes.data ?? []}
           models={modelRows}
           generations={generations.data ?? []}
+          onCompact={setCompact}
         />
       ) : null}
       {step === STEP.specs ? (
         <StepSpecs draft={draft} patch={patch} generation={generation} onPreparation={onPreparation} />
       ) : null}
       {step === STEP.categories ? (
-        <StepCategories draft={draft} patch={patch} categories={categories.data ?? []} make={make} />
+        <StepCategories
+          draft={draft}
+          patch={patch}
+          categories={categories.data ?? []}
+          make={make}
+          current={currentStyles}
+          keepRefused={keepRefused}
+          onPropose={() => setProposing(true)}
+        />
       ) : null}
     </FlowScreen>
   );
