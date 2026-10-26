@@ -72,7 +72,7 @@ export const styleLabels = {
   up: "Monter",
   down: "Descendre",
   styleCount: (n: number) => `${n} style${n > 1 ? "s" : ""}`,
-  vehicles: (n: number) => (n > 0 ? `${n} véhicule${n > 1 ? "s" : ""}` : "nouveau"),
+  vehicles: (n: number) => (n > 0 ? `${n} véhicule${n > 1 ? "s" : ""}` : "aucun véhicule"),
   ageRule: (n: number | null) => (n ? `${n} ans et plus` : "—"),
   makesRule: "marques choisies",
   countriesRule: "déduit de la marque",

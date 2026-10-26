@@ -205,8 +205,8 @@ export default function AdminStyles({ loaderData, actionData }: Route.ComponentP
           <span className="adm-styles__name">
             <Icon name={s.icon as IconName} size={18} />
             <span className="o-never-truncate">{s.label}</span>
+            {s.labelM ? <span className="o-t-caption s-muted">({s.labelM})</span> : null}
           </span>
-          {s.labelM ? <span className="o-t-caption s-muted"> · {s.labelM}</span> : null}
         </td>
         <td className="o-t-caption">{rule}</td>
         <td className="o-t-caption">{S.vehicles(s.vehicles[type])}</td>
@@ -214,28 +214,30 @@ export default function AdminStyles({ loaderData, actionData }: Route.ComponentP
           {s.active ? null : <Chip>{S.pausedState}</Chip>}
           {movable ? (
             <>
-              <Button
+              <button
                 type="button"
-                variant="secondary"
-                icon="up"
+                className="adm-styles__arrow"
                 aria-label={`${S.up} ${s.label}`}
                 disabled={i === 0 || busy}
                 onClick={() => {
                   const prev = family[i - 1];
                   if (prev) moveTo(s.id, prev.id);
                 }}
-              />
-              <Button
+              >
+                <Icon name="up" size={16} />
+              </button>
+              <button
                 type="button"
-                variant="secondary"
-                icon="down"
+                className="adm-styles__arrow"
                 aria-label={`${S.down} ${s.label}`}
                 disabled={i === family.length - 1 || busy}
                 onClick={() => {
                   const next = family[i + 1];
                   if (next) moveTo(s.id, next.id);
                 }}
-              />
+              >
+                <Icon name="down" size={16} />
+              </button>
             </>
           ) : null}
           <details className="adm-styles__edit">

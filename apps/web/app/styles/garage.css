@@ -920,6 +920,9 @@
   letter-spacing: 0;
   font-weight: 600;
 }
+.g-fam-hint {
+  font-size: inherit;
+}
 .g-pill > svg {
   margin-right: var(--space-1);
   flex: none;

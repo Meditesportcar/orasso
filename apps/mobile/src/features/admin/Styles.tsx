@@ -351,7 +351,7 @@ function StylesBody() {
       />
       <Muted variant="caption">{S.adminIntroApp}</Muted>
       <Button variant="plate" icon="add" onPress={() => open({ kind: "create" })} fullWidth testID="style-create">
-        {S.addStyleTo(type)}
+        {S.addStyle}
       </Button>
       {!list.data ? <EmptyOrLoading loading={list.loading} empty={S.queueEmpty} /> : null}
       {styleFamilies.map((f) => {
@@ -412,6 +412,7 @@ function StylesBody() {
               {S.queueExisting(g.existing.label)}
             </Text>
           ) : null}
+          {/* Trois gestes l'un sous l'autre : aucun libellé ne passe sur deux lignes (384 px, police agrandie). */}
           <Button
             variant="plate"
             icon="check"
@@ -421,30 +422,24 @@ function StylesBody() {
           >
             {S.accept}
           </Button>
-          <View style={styles.two}>
-            <View style={styles.grow}>
-              <Button
-                variant="plate"
-                icon="layers"
-                onPress={() => open({ kind: "merge", group: g })}
-                fullWidth
-                testID="style-proposal-merge"
-              >
-                {S.merge}
-              </Button>
-            </View>
-            <View style={styles.grow}>
-              <Button
-                variant="plate"
-                icon="close"
-                onPress={() => open({ kind: "decline", group: g })}
-                fullWidth
-                testID="style-proposal-decline"
-              >
-                {S.decline}
-              </Button>
-            </View>
-          </View>
+          <Button
+            variant="plate"
+            icon="layers"
+            onPress={() => open({ kind: "merge", group: g })}
+            fullWidth
+            testID="style-proposal-merge"
+          >
+            {S.merge}
+          </Button>
+          <Button
+            variant="plate"
+            icon="close"
+            onPress={() => open({ kind: "decline", group: g })}
+            fullWidth
+            testID="style-proposal-decline"
+          >
+            {S.decline}
+          </Button>
         </Plate>
       ))}
     </AdminPage>
@@ -519,5 +514,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: space2,
   },
-  two: { flexDirection: "row", gap: space2 },
 });
