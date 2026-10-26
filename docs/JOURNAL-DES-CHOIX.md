@@ -3155,6 +3155,9 @@ Source : `corrections-r5c2.md` (relais).
 - **« Où va le crew »** : plus de coupure à 12 événements. Choix : la liste complète (événements à venir des membres actifs, bornée par la taille d'un crew), plutôt qu'un « et N autres ».
 - **Fichiers d'autres lots touchés** : `apps/api/src/modules/crews/feed/sources.ts`, `packages/shared/src/schemas/crewFeed.ts`, `apps/mobile/src/features/crews/feed/{CrewFeed,PostCard,CrewPhotoImage}.tsx`, `apps/web/app/components/crew-feed/{CrewFeed,PostCard}.tsx`, `apps/web/app/styles/crew-feed.css` (R5c1) ; `apps/api/src/modules/vehicles/photos-blur.ts` (tâche de reprise) ; `apps/api/src/lib/rateLimit.ts` (une règle ajoutée à la fin).
 
+- **Un seul bouton principal (site, grand écran)** : avec le vrai fil, « Publier » et « Proposer une sortie » se voyaient côte à côte, tous deux en moutarde. « Proposer une sortie » est maintenant secondaire dans la colonne des sorties à côté du fil. Sur téléphone, l'onglet Sorties est seul : le bouton y reste principal (maquette R5.7).
+- **Base de dev du lot** : recréée une deuxième fois après le passage de la bannière dans l'espace privé, pour que le seed (Roussillon Drift) ait une clé `private/crew-banners/…`. Les anciennes clés `crews/<id>/banner-…` n'existent que dans les bases de dev de ce lot.
+
 ### À revoir avec Damien (lot R5c2, tour 2)
 - **Vitrine et comptes privés** : la vitrine d'un crew montre ses membres (pseudo, avatar, grade, rôle), décision de Damien du 26/10. Mais un compte privé réserve son profil à ses amis, et la vitrine dit à n'importe quel compte connecté qu'il est dans ce crew. Gardé tel quel. Option possible : compter un compte privé non ami sans le nommer (« et 2 membres au compte privé »).
 - La recette d'API `events/arrivals.test.ts` (« créneau des exposants privé », lot M4) a échoué une fois dans la suite complète, sous charge. Relancée seule deux fois, elle passe : c'est une instabilité, sans lien avec le lot.
