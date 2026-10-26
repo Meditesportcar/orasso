@@ -159,13 +159,17 @@ app.on(
 app.route("/ws", ws);
 
 // Fichiers du pilote de stockage « disque » (photos, avatars, logos, affiches : publics par nature).
+// Lot R5c1, tour 2 : seulement une clé publique de forme stricte (minuscules, chiffres, tirets, barres simples, une
+// extension d'image servie) ; jamais `private/` (justificatifs des structures, photos du fil des crews, messages), ni
+// une autre graphie (`//private/…`, `%2F`, `\`, `./`, `..`, majuscules) : 404.
+const PUBLIC_FILE = /^[a-z0-9-]+(\/[a-z0-9-]+)*\.(webp|png|jpg)$/;
+const FILE_TYPES: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 app.get("/files/*", async (c) => {
-  const key = c.req.path.replace(/^\/api\/files\//, "");
-  // Justificatifs de vérification des structures (`private/`) : lus par l'administration seulement, jamais ici.
-  const data = key && !key.startsWith("private/") ? await storage.get(key) : null;
+  const key = c.req.path.startsWith("/api/files/") ? c.req.path.slice("/api/files/".length) : "";
+  const data = PUBLIC_FILE.test(key) && !key.startsWith("private/") ? await storage.get(key) : null;
   if (!data) throw notFound("Fichier introuvable");
   return c.body(new Uint8Array(data), 200, {
-    "content-type": key.endsWith(".webp") ? "image/webp" : "application/octet-stream",
+    "content-type": FILE_TYPES[key.slice(key.lastIndexOf(".") + 1)] ?? "application/octet-stream",
     "cache-control": "public, max-age=31536000, immutable",
   });
 });
