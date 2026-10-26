@@ -20,7 +20,7 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { applications, crewMembers, crewOutings, crews, notifications } from "../../db/schema";
+import { applications, crewMembers, crewOutings, crews, notifications, profiles } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
@@ -611,6 +611,60 @@ describe("bannière et « Où va le crew » (lot R5c2)", () => {
     const third = (await keyOf()) as string;
     expect((await req(kenji, "DELETE", `/crews/${crew.id}`)).status).toBe(204);
     expect(await storage.get(third)).toBeNull();
+  });
+
+  it("tour 2 : membre au compte privé vu par un membre non ami : marque et modèle, sans photo ; ses sorties seules restent privées", async () => {
+    const kenji = await signUp("Kenji_p1");
+    const lea = await signUp("Lea_p1");
+    const nina = await signUp("Nina_p1");
+    const owner = await signUp("Orga_p1");
+    const crew = await newCrew(kenji);
+    for (const m of [lea, nina]) await addToCrew(crew.id, kenji, m);
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, lea.id));
+    const car = await createVehicle(lea.id, ref);
+    await blurPlatesOf(lea.id);
+    const structure = await createStructure(owner.id);
+    const solo = await createEvent(structure.id, { startsAt: paris(10, 20, 9), title: "Cars & Coffee" });
+    const withCrew = await createEvent(structure.id, { startsAt: paris(10, 21, 9), title: "Nuit des Moteurs" });
+    for (const [e, crewId] of [
+      [solo, null],
+      [withCrew, crew.id],
+    ] as const) {
+      await db.insert(applications).values({
+        eventId: e.id,
+        userId: lea.id,
+        vehicleId: car.id,
+        status: "accepted",
+        crewId,
+        rulesAcceptedAt: new Date(),
+        followStructure: true,
+      });
+    }
+    const seen = async (u: TestUser) => {
+      const v = await req(u, "GET", `/crews/by-slug/${crew.slug}`);
+      const members = await req(u, "GET", `/crews/${crew.id}/members`);
+      return {
+        garage: (v.json.space.garage as { id: string; label: string; photoUrl: string | null }[]).find(
+          (g) => g.id === car.id,
+        ),
+        events: (v.json.space.events as { title: string }[]).map((e) => e.title),
+        label: (members.json as { pseudo: string; vehicleLabel: string | null }[]).find((m) => m.pseudo === lea.pseudo)
+          ?.vehicleLabel,
+      };
+    };
+    // Nina, membre non amie : ni photo ni génération ; sa participation seule n'apparaît pas, celle avec le crew oui.
+    const byNina = await seen(nina);
+    expect(byNina.garage?.photoUrl).toBeNull();
+    expect(byNina.events).toEqual(["Nuit des Moteurs"]);
+    // Kenji, ami de Léa : tout.
+    await befriend(kenji, lea);
+    const byKenji = await seen(kenji);
+    expect(byKenji.garage?.photoUrl).toBeTruthy();
+    expect(byKenji.events).toEqual(["Cars & Coffee", "Nuit des Moteurs"]);
+    expect(byNina.garage?.label.length).toBeLessThanOrEqual(byKenji.garage?.label.length ?? 0);
+    expect(byNina.label).toBe(byNina.garage?.label);
+    // Léa elle-même : tout.
+    expect((await seen(lea)).garage?.photoUrl).toBeTruthy();
   });
 
   it("« Où va le crew » : membres retenus et inscriptions du crew ; jamais une invitation privée d'un membre", async () => {

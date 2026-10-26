@@ -17,6 +17,7 @@ import {
   garageOrder,
   HOUR,
   maskedPhoto,
+  profileFields,
 } from "@orasso/shared";
 import { and, asc, eq, gt, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 
@@ -31,12 +32,14 @@ import {
   profiles,
   vehicles,
 } from "../../db/schema";
+import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
 import type { Profile } from "../profiles/repo";
+import { audienceFor } from "../social/profile";
 import { socialRepo } from "../social/repo";
 import { vehiclesRepo } from "../vehicles/repo";
-import { vehicleLabel } from "../vehicles/serializers";
+import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
 
 type CrewRow = typeof crews.$inferSelect;
 
@@ -91,6 +94,24 @@ export function bannerFor(
   return `/api/crews/${crew.id}/banner/${crew.bannerKey.split("/").at(-1)}`;
 }
 
+/**
+ * Tour 2 (relectures Opus et Codex) : les personnes dont celle qui regarde voit le détail des véhicules, avec les règles
+ * du profil (lot 17) comme l'inscription en crew (`registration.ts`). Un compte privé vu par un membre qui n'est pas son
+ * ami : marque et modèle seulement, sans photo, et ses participations individuelles ne sont pas montrées.
+ */
+export async function detailedFor(v: Viewer, people: Profile[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const p of people) {
+    if (p.visibility === "public" || p.userId === v.user.id) {
+      out.add(p.userId);
+      continue;
+    }
+    const { audience } = await audienceFor(v, p);
+    if (profileFields(audience).vehicleDetails) out.add(p.userId);
+  }
+  return out;
+}
+
 /** Véhicules actifs des membres, rangés par membre (le principal d'abord). */
 async function vehiclesByOwner(members: ActiveMember[]) {
   const owners = members.map((m) => m.profile.userId);
@@ -107,10 +128,15 @@ async function vehiclesByOwner(members: ActiveMember[]) {
 }
 
 /** Le véhicule principal de chaque membre (« Toyota Supra Mk4 »), pour la liste des membres. */
-export async function mainVehicleLabels(members: ActiveMember[]): Promise<Map<string, string | null>> {
+export async function mainVehicleLabels(
+  members: ActiveMember[],
+  detailed: Set<string>,
+): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   for (const { member, list } of await vehiclesByOwner(members)) {
-    out.set(member.profile.userId, list[0] ? vehicleLabel(list[0]) : null);
+    const main = list[0];
+    const full = detailed.has(member.profile.userId);
+    out.set(member.profile.userId, main ? (full ? vehicleLabel(main) : vehicleBriefLabel(main)) : null);
   }
   return out;
 }
@@ -119,17 +145,18 @@ export async function mainVehicleLabels(members: ActiveMember[]): Promise<Map<st
  * Garage du crew (membres seulement) : les véhicules actifs des membres, en carrés. La photo ne sort que si sa plaque est
  * masquée ou « aucune plaque visible » confirmé (invariant « Plaques et photos ») ; sinon la silhouette.
  */
-export async function crewGarage(members: ActiveMember[]): Promise<CrewGarageVehicle[]> {
-  return (await vehiclesByOwner(members)).flatMap(({ member, mainId, list }) =>
-    list.map((v) => ({
+export async function crewGarage(members: ActiveMember[], detailed: Set<string>): Promise<CrewGarageVehicle[]> {
+  return (await vehiclesByOwner(members)).flatMap(({ member, mainId, list }) => {
+    const full = detailed.has(member.profile.userId);
+    return list.map((v) => ({
       id: v.id,
-      label: vehicleLabel(v),
+      label: full ? vehicleLabel(v) : vehicleBriefLabel(v),
       vehicleType: v.vehicleType,
-      photoUrl: storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null),
+      photoUrl: full ? storage.url(maskedPhoto(v.photos, v.unregistered)?.storageKey ?? null) : null,
       ownerPseudo: member.profile.pseudo,
       isMain: v.id === mainId,
-    })),
-  );
+    }));
+  });
 }
 
 /** Sorties du crew encore à afficher (à venir, ou commencées depuis moins de 12 h), non annulées. */
@@ -199,7 +226,12 @@ const LIVE_CREW_STATUSES = ["pending", "awaiting_member", "accepted", "waitliste
  * « Où va le crew » : les événements Orasso à venir où des membres actifs sont retenus (candidature acceptée ; un
  * événement sur invitation seulement si c'est le crew qui y est inscrit), et ceux où le crew est inscrit.
  */
-export async function crewEvents(crew: CrewRow, members: ActiveMember[], at: Date): Promise<CrewEventView[]> {
+export async function crewEvents(
+  crew: CrewRow,
+  members: ActiveMember[],
+  at: Date,
+  detailed: Set<string>,
+): Promise<CrewEventView[]> {
   const ids = members.map((m) => m.profile.userId);
   if (!ids.length) return [];
   const rows = await db
@@ -233,6 +265,9 @@ export async function crewEvents(crew: CrewRow, members: ActiveMember[], at: Dat
   const byId = new Map(members.map((m) => [m.profile.userId, m.profile]));
   const out = new Map<string, CrewEventView & { goingIds: Set<string>; registeredIds: Set<string> }>();
   for (const r of rows) {
+    // Tour 2 : la participation individuelle d'un compte privé reste privée pour qui n'est pas son ami ; les
+    // inscriptions faites avec le crew restent.
+    if (r.crewId !== crew.id && !detailed.has(r.userId)) continue;
     let e = out.get(r.eventId);
     if (!e) {
       e = {

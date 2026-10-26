@@ -75,6 +75,7 @@ import {
   crewEvents,
   crewGarage,
   crewOutingViews,
+  detailedFor,
   mainVehicleLabels,
   reachableProfileSql,
   vitrineMembers,
@@ -752,6 +753,13 @@ export const crewsService = {
     }
     const members = await activeMembersOf(crew.id, at);
     const conversation = isMember ? await conversationOf(db, crew.id) : null;
+    // Tour 2 : comptes privés, ce que la personne qui regarde voit de leurs véhicules et de leurs sorties.
+    const detailed = isMember
+      ? await detailedFor(
+          v,
+          members.map((m) => m.profile),
+        )
+      : new Set<string>();
     const space =
       isMember && !crew.deletedAt
         ? {
@@ -761,8 +769,8 @@ export const crewsService = {
             membersCanProposeOutings: crew.membersCanProposeOutings,
             canProposeOuting: canProposeCrewOuting({ isLeader, membersCanPropose: crew.membersCanProposeOutings }),
             outings: await crewOutingViews(crew.id, members, { userId: v.user.id, isLeader }, at),
-            garage: await crewGarage(members),
-            events: await crewEvents(crew, members, at),
+            garage: await crewGarage(members, detailed),
+            events: await crewEvents(crew, members, at, detailed),
           }
         : null;
     return {
@@ -863,7 +871,13 @@ export const crewsService = {
     const me = await memberRow(db, crew.id, v.user.id);
     if (me?.status !== "active") throw forbidden(crewErrors.membersOnly);
     const members = await activeMembersOf(crew.id, now());
-    const vehicles = await mainVehicleLabels(members);
+    const vehicles = await mainVehicleLabels(
+      members,
+      await detailedFor(
+        v,
+        members.map((m) => m.profile),
+      ),
+    );
     return members.map((m) => ({
       ...personOf(m.profile),
       role: m.role,
@@ -892,7 +906,13 @@ export const crewsService = {
       .orderBy(asc(crewMembers.updatedAt));
     // Lot R5c2 (R5.8) : le chef voit le véhicule principal de qui demande (la feuille de demande le dit).
     const requesters = rows.filter((r) => r.status === "requested");
-    const labels = await mainVehicleLabels(requesters.map((r) => ({ profile: r.p, role: "member", joinedAt: null })));
+    const labels = await mainVehicleLabels(
+      requesters.map((r) => ({ profile: r.p, role: "member", joinedAt: null })),
+      await detailedFor(
+        v,
+        requesters.map((r) => r.p),
+      ),
+    );
     const view = (r: (typeof rows)[number]) => ({
       person: personOf(r.p),
       message: r.message,
