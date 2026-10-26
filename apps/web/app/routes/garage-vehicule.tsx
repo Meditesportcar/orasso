@@ -1,8 +1,9 @@
-import { Button, Chip, Icon, Plate, TextField } from "@orasso/design-system/web";
+import { Button, Chip, Icon, type IconName, Plate, TextField } from "@orasso/design-system/web";
 import {
   applicationStatusLabels,
   archiveStatusChoices,
   type CategoryOption,
+  categoryFamilyLabels,
   certificationConditions,
   certificationLine,
   certificationLineLabels,
@@ -11,10 +12,12 @@ import {
   certificationStatusLabels,
   cleanVehicleVersion,
   countryLabel,
+  groupByFamily,
   type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
   shareSheetLabels,
+  styleLabels,
   VEHICLE_ENGINE_MAX,
   VEHICLE_VERSION_MAX,
   type VehicleDetail,
@@ -29,6 +32,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { ShareCard } from "../components/ShareButtons";
+import { StyleProposal, styleItems } from "../components/StylePicker";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import { plateFields } from "../lib/vehicle-add";
@@ -216,6 +220,19 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
   const cert = v.certification;
   const archived = v.status !== "active";
   const chosen = new Set(v.categories.map((c) => c.id));
+  // Lot R5a : familles des styles du type, puis les origines de la marque (« Pays »).
+  const editGroups = [
+    ...groupByFamily(
+      styleItems(
+        categories.filter((c) => !c.allowedCountries && c.refusal !== "type" && c.refusal !== "make"),
+        v.categories.filter((c) => c.paused),
+      ),
+    ),
+    ...(() => {
+      const origins = categories.filter((c) => c.allowedCountries && (c.eligible || chosen.has(c.id)));
+      return origins.length ? [{ family: "pays" as const, rows: styleItems(origins) }] : [];
+    })(),
+  ];
   const missing = new Set(cert.missing);
   const line = certificationLine(cert, v.photos.length);
   const country = countryLabel(v.country);
@@ -512,24 +529,32 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
           </div>
           <TextAreaField label="Préparation" name="preparation" rows={3} defaultValue={v.preparation ?? ""} />
           <TextAreaField label="Description" name="description" rows={4} defaultValue={v.description ?? ""} />
-          <fieldset className="g-cats">
-            <legend className="o-field__label o-t-label">Catégories</legend>
-            {categories.map((c) => (
-              <div key={c.id} className={c.eligible || chosen.has(c.id) ? "g-cat" : "g-cat is-off"}>
-                <label>
-                  <input
-                    type="checkbox"
-                    name="categoryIds"
-                    value={c.id}
-                    defaultChecked={chosen.has(c.id)}
-                    disabled={!c.eligible && !chosen.has(c.id)}
-                  />
-                  {c.label}
-                </label>
-                {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
-              </div>
+          {/* Lot R5a : les styles du type, rangés par famille ; ceux d'un autre type ou d'autres marques et les origines
+              d'autres pays ne sont plus listés ; un style de la fiche mis en pause reste affiché « en pause ». */}
+          <div className="s-stack" data-testid="vehicle-edit-categories">
+            <span className="o-field__label o-t-label">Catégories</span>
+            {editGroups.map((g) => (
+              <fieldset key={g.family} className="g-cats" data-testid={`edit-family-${g.family}`}>
+                <legend className="o-t-caption">{categoryFamilyLabels[g.family]}</legend>
+                {g.rows.map((c) => (
+                  <div key={c.id} className={c.eligible || chosen.has(c.id) ? "g-cat" : "g-cat is-off"}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="categoryIds"
+                        value={c.id}
+                        defaultChecked={chosen.has(c.id)}
+                        disabled={!c.eligible && !chosen.has(c.id)}
+                      />
+                      <Icon name={(c.icon ?? "star") as IconName} size={16} />
+                      {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
+                    </label>
+                    {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
+                  </div>
+                ))}
+              </fieldset>
             ))}
-          </fieldset>
+          </div>
           {v.certified && (
             <p className="s-notice">
               Modifier les champs techniques (moteur, puissance, poids, année), les catégories ou les photos fait perdre
@@ -540,6 +565,8 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
             Enregistrer
           </Button>
         </Form>
+        {/* Lot R5a : « Il manque un style ? Propose-le », pour ce véhicule (posé dessus s'il est retenu). */}
+        <StyleProposal vehicleType={v.vehicleType} vehicleId={v.id} vehicleName={v.makeName} />
       </details>
 
       {archived ? (
