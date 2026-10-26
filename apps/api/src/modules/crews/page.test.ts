@@ -74,7 +74,10 @@ async function banner(u: TestUser, crewId: string, decision: { noPlate?: boolean
     headers: { origin: ORIGIN, cookie: u.cookie },
     body: form,
   });
-  return { status: res.status, json: await res.json().catch(() => null) };
+  return {
+    status: res.status,
+    json: (await res.json().catch(() => null)) as { bannerUrl: string | null; bannerHiddenOutside: boolean | null },
+  };
 }
 
 let n = 0;
