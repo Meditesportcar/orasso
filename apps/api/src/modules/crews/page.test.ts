@@ -20,8 +20,9 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { applications, crewOutings, notifications } from "../../db/schema";
+import { applications, crewMembers, crewOutings, notifications } from "../../db/schema";
 import { accountService } from "../account/service";
+import { notificationsService } from "../notifications/service";
 
 afterAll(async () => {
   await pool.end();
@@ -383,6 +384,97 @@ describe("sorties du crew (lot R5c2)", () => {
     clock.set(paris(10, 1, 11));
     expect((await req(kenji, "DELETE", `/crews/${crew.id}/outings/${id}`)).status).toBe(204);
     expect(await itemOf(lea)).toBeUndefined();
+  });
+
+  describe("notifications de sortie revérifiées à la livraison (tour 2)", () => {
+    /** Simule les heures calmes : les notifications de ce type attendent 8 h le lendemain. */
+    async function deferToMorning(type: string) {
+      await notificationsService.flush();
+      await db
+        .update(notifications)
+        .set({ deliveredAt: null, deliverAfter: paris(10, 2, 8) })
+        .where(eq(notifications.type, type));
+    }
+    const rowsOf = (type: string) =>
+      db
+        .select({ userId: notifications.userId, deliveredAt: notifications.deliveredAt })
+        .from(notifications)
+        .where(eq(notifications.type, type));
+
+    it("sortie créée la nuit, puis départ et retrait : rien à 8 h pour ceux qui sont partis, les autres la reçoivent", async () => {
+      clock.set(paris(10, 1, 23));
+      const kenji = await signUp("Kenji_n1");
+      const lea = await signUp("Lea_n1");
+      const nina = await signUp("Nina_n1");
+      const theo = await signUp("Theo_n1");
+      const crew = await newCrew(kenji);
+      for (const m of [lea, nina, theo]) await addToCrew(crew.id, kenji, m);
+      expect((await req(kenji, "POST", `/crews/${crew.id}/outings`, outing())).status).toBe(201);
+      await deferToMorning("crew_outing_new");
+      expect((await req(lea, "DELETE", `/crews/${crew.id}/members/${lea.id}`)).status).toBe(204);
+      // Au départ, sa notification encore différée est retirée tout de suite.
+      expect((await rowsOf("crew_outing_new")).map((r) => r.userId)).not.toContain(lea.id);
+      // Une ligne qui aurait échappé au retrait : la livraison la revérifie (ici Théo, retiré après coup).
+      expect((await req(kenji, "DELETE", `/crews/${crew.id}/members/${theo.id}`)).status).toBe(204);
+      clock.set(paris(10, 2, 8, 1));
+      await notificationsService.deliverDue();
+      const rows = await rowsOf("crew_outing_new");
+      expect(rows.map((r) => r.userId)).toEqual([nina.id]);
+      expect(rows[0]?.deliveredAt).not.toBeNull();
+    });
+
+    it("garde de livraison : membre parti ou crew dissous, la notification est supprimée sans être envoyée", async () => {
+      clock.set(paris(10, 1, 23));
+      const kenji = await signUp("Kenji_n2");
+      const lea = await signUp("Lea_n2");
+      const crew = await newCrew(kenji);
+      await addToCrew(crew.id, kenji, lea);
+      expect((await req(kenji, "POST", `/crews/${crew.id}/outings`, outing())).status).toBe(201);
+      await deferToMorning("crew_outing_new");
+      // Départ écrit sans passer par le service (la ligne reste) : la garde de livraison la supprime.
+      await db
+        .update(crewMembers)
+        .set({ status: "left" })
+        .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.userId, lea.id)));
+      clock.set(paris(10, 2, 8, 1));
+      await notificationsService.deliverDue();
+      expect(await rowsOf("crew_outing_new")).toEqual([]);
+      // Dissolution : les notifications du crew encore différées partent avec lui.
+      const kenji2 = await signUp("Kenji_n3");
+      const nina = await signUp("Nina_n3");
+      const crew2 = await newCrew(kenji2);
+      await addToCrew(crew2.id, kenji2, nina);
+      clock.set(paris(10, 2, 23));
+      expect((await req(kenji2, "POST", `/crews/${crew2.id}/outings`, outing())).status).toBe(201);
+      await notificationsService.flush();
+      await db
+        .update(notifications)
+        .set({ deliveredAt: null, deliverAfter: paris(10, 3, 8) })
+        .where(eq(notifications.type, "crew_outing_new"));
+      expect((await req(kenji2, "DELETE", `/crews/${crew2.id}`)).status).toBe(204);
+      expect(await rowsOf("crew_outing_new")).toEqual([]);
+    });
+
+    it("annulée avant 8 h : jamais « nouvelle » puis « annulée » ; une seule notification pour qui venait, rien sinon", async () => {
+      clock.set(paris(10, 1, 23));
+      const kenji = await signUp("Kenji_n4");
+      const nina = await signUp("Nina_n4");
+      const theo = await signUp("Theo_n4");
+      const crew = await newCrew(kenji);
+      for (const m of [nina, theo]) await addToCrew(crew.id, kenji, m);
+      const id = (await req(kenji, "POST", `/crews/${crew.id}/outings`, outing())).json.id as string;
+      await deferToMorning("crew_outing_new");
+      expect((await req(nina, "PUT", `/crews/${crew.id}/outings/${id}/rsvp`, { answer: "yes" })).status).toBe(200);
+      clock.set(paris(10, 2, 1));
+      expect((await req(kenji, "DELETE", `/crews/${crew.id}/outings/${id}`)).status).toBe(204);
+      await deferToMorning("crew_outing_cancelled");
+      clock.set(paris(10, 2, 8, 1));
+      await notificationsService.deliverDue();
+      expect(await rowsOf("crew_outing_new")).toEqual([]);
+      const cancelled = await rowsOf("crew_outing_cancelled");
+      expect(cancelled.map((r) => r.userId)).toEqual([nina.id]);
+      expect(cancelled[0]?.deliveredAt).not.toBeNull();
+    });
   });
 
   it("une sortie passée ne se modifie plus ; un membre parti ne compte plus ; un compte suspendu n'est pas prévenu", async () => {

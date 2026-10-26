@@ -18,14 +18,16 @@ import {
 import { and, count, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { crewMembers, crewOutingReplies, crewOutings, profiles } from "../../db/schema";
+import { crewMembers, crewOutingReplies, crewOutings, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
-import { notificationsService } from "../notifications/service";
+import { notificationsService, registerDeliveryGuard } from "../notifications/service";
+import { isUuid } from "./feed/access";
+import { activeVisibleMember } from "./feed/service";
 import { activeMembersOf, crewOutingViews, reachableProfileSql } from "./page";
 import { assertWritable, type CrewRow, lockCrew, memberRow } from "./service";
 
@@ -189,6 +191,17 @@ export const crewOutingsService = {
         throw forbidden(crewOutingErrors.manageForbidden);
       }
       await tx.update(crewOutings).set({ cancelledAt: at }).where(eq(crewOutings.id, outing.id));
+      // Tour 2 : une « nouvelle sortie » encore différée (heures calmes) ne partira plus : jamais « nouvelle » puis
+      // « annulée » pour la même sortie.
+      await tx
+        .delete(notifications)
+        .where(
+          and(
+            eq(notifications.type, "crew_outing_new"),
+            isNull(notifications.deliveredAt),
+            sql`${notifications.data} ->> 'outingId' = ${outing.id}`,
+          ),
+        );
       const coming = await tx
         .select({ userId: crewOutingReplies.userId })
         .from(crewOutingReplies)
@@ -229,3 +242,20 @@ export const crewOutingsService = {
     return this.one(v, crewId, outingId);
   },
 };
+
+/**
+ * Tour 2 (relectures Opus et Codex) : une notification de sortie différée (heures calmes) est revérifiée à sa livraison :
+ * crew non dissous et destinataire encore membre actif ; pour « nouvelle sortie », une sortie ni annulée ni commencée.
+ * Sinon elle est supprimée sans être envoyée (ni push ni e-mail).
+ */
+registerDeliveryGuard(["crew_outing_new", "crew_outing_cancelled"], async (n) => {
+  const { crewId, outingId } = n.data as { crewId?: unknown; outingId?: unknown };
+  if (typeof crewId !== "string" || !isUuid(crewId) || !(await activeVisibleMember(db, crewId, n.userId))) return false;
+  if (n.type !== "crew_outing_new") return true;
+  if (typeof outingId !== "string" || !isUuid(outingId)) return false;
+  const [outing] = await db
+    .select({ cancelledAt: crewOutings.cancelledAt, startsAt: crewOutings.startsAt })
+    .from(crewOutings)
+    .where(and(eq(crewOutings.id, outingId), eq(crewOutings.crewId, crewId)));
+  return Boolean(outing && !outing.cancelledAt && outing.startsAt.getTime() > now().getTime());
+});

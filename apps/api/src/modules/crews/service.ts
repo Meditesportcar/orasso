@@ -28,6 +28,8 @@ import {
   MESSAGE_PREVIEW_MAX,
   type MyCrew,
   messagePreview,
+  type NotificationType,
+  notificationTypes,
   type Page,
   PENDING_INVITATIONS_PER_CREW,
   type PlateRect,
@@ -371,6 +373,28 @@ async function join(tx: Tx, after: After, crew: CrewRow, person: Pick<Profile, "
 }
 
 /** Départ (parti, retiré) : ligne, compteur, discussion, message d'information. */
+/** Types de notification d'un crew (`crew_…` : demandes, invitations, fil, sorties, dissolution). */
+const CREW_NOTIFICATION_TYPES = (Object.keys(notificationTypes) as NotificationType[]).filter((t) =>
+  t.startsWith("crew_"),
+);
+
+/**
+ * Lot R5c2, tour 2 : au départ et au retrait d'un membre, ses notifications du crew encore différées (heures calmes) ne
+ * partiront plus ; à la dissolution, celles de tout le monde. Appelé avant d'écrire les notifications du geste lui-même.
+ */
+async function dropPendingCrewNotifications(tx: Tx, crewId: string, userId?: string) {
+  await tx
+    .delete(notifications)
+    .where(
+      and(
+        inArray(notifications.type, CREW_NOTIFICATION_TYPES),
+        isNull(notifications.deliveredAt),
+        sql`${notifications.data} ->> 'crewId' = ${crewId}`,
+        userId ? eq(notifications.userId, userId) : undefined,
+      ),
+    );
+}
+
 async function depart(
   tx: Tx,
   after: After,
@@ -378,6 +402,7 @@ async function depart(
   person: Pick<Profile, "userId" | "pseudo">,
   status: "left" | "removed",
 ) {
+  await dropPendingCrewNotifications(tx, crew.id, person.userId);
   await tx
     .update(crewMembers)
     .set({ status, respondedAt: now() })
@@ -613,6 +638,7 @@ export const crewsService = {
     reason: "leader" | "account_deleted" | "moderation",
   ): Promise<string[]> {
     const at = now();
+    await dropPendingCrewNotifications(tx, crew.id);
     // Lot R5c2 : la bannière part avec le logo.
     await tx.update(crews).set({ deletedAt: at, logoKey: null, bannerKey: null }).where(eq(crews.id, crew.id));
     // Venues à confirmer avec ce crew : retirées (sans malus) ; les venues déjà confirmées vivent seules.
