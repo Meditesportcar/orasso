@@ -134,6 +134,7 @@ export const profilesService = {
         phone: p.phone,
         avatarUrl: storage.url(p.avatarKey),
         bio: p.bio,
+        socials: p.socials ?? {},
         visibility: p.visibility,
         departments: p.departments,
         radiusKm: p.radiusKm,
@@ -211,6 +212,13 @@ export const profilesService = {
     if (v.profile.avatarKey) await storage.remove(v.profile.avatarKey);
     await profilesRepo.update(v.user.id, { avatarKey: key });
     return storage.url(key) ?? "";
+  },
+
+  /** Lot R5b (feuille « Ta photo de profil ») : retirer la photo ; l'initiale la remplace. Sans photo : rien à faire. */
+  async removeAvatar(v: Viewer): Promise<void> {
+    if (!v.profile.avatarKey) return;
+    await profilesRepo.update(v.user.id, { avatarKey: null });
+    await storage.remove(v.profile.avatarKey);
   },
 
   /** `sessionId` : la session qui inscrit l'appareil (lot M6, tour 4) ; sa fin coupe les push de cet appareil. */

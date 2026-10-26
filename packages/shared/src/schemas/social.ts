@@ -2,9 +2,11 @@ import { z } from "zod";
 
 import { departmentSchema } from "../enums";
 import { gradeSchema } from "../grades";
+import type { ProfileSocials } from "../rules/socials";
 import { FRIEND_MESSAGE_MAX, type FriendshipState, type ProfileAudience } from "../rules/visibility";
 import { optionalText, pageQuery } from "./common";
 import type { CrewCard } from "./crews";
+import type { PassportStamp } from "./passport";
 import type { PublicProfile } from "./profile";
 import { pseudoSchema } from "./profile";
 import type { VehiclePrivate, VehiclePublic } from "./vehicle";
@@ -130,6 +132,22 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   outingsCount: number | null;
   /** Lot R4c : « Suivre » (compte public seulement, jamais soi-même) et si je suis déjà la personne. */
   follow: { canFollow: boolean; following: boolean };
+  /**
+   * Lot R5b (maquette R5.5) : ses réseaux, pseudos seuls (le lien vient de `socialUrl`). Mêmes audiences que la
+   * description : tout membre connecté pour un compte public, ses amis pour un compte privé ; `null` sinon.
+   */
+  socials: ProfileSocials | null;
+  /**
+   * Lot R5b (maquette R5.6) : la première sortie à venir (la première de `upcomingEvents`), et « Toi aussi » : la personne
+   * qui regarde y va aussi (candidature en cours ou billet valide), calculé pour elle seule. `null` sans sortie à venir
+   * ou quand les sorties ne sont pas visibles.
+   */
+  nextOuting: { event: ProfileEvent; together: boolean } | null;
+  /**
+   * Lot R5b : « Vu à », ses tampons de la saison en cours (les plus récents d'abord, 12 au plus) et le nombre de sorties
+   * tamponnées. Mêmes données et même visibilité que ses sorties passées : événements publiés, hors invitation, finis.
+   */
+  seenAt: { events: number; stamps: PassportStamp[] } | null;
 };
 
 export type FriendRequestView = {

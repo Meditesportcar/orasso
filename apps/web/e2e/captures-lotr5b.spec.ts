@@ -1,4 +1,4 @@
-﻿import { mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { RELAIS } from "./relais";

@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "socials" jsonb DEFAULT '{}'::jsonb NOT NULL;

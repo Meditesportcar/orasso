@@ -32,6 +32,8 @@ export type ProfileFields = {
   pastEvents: boolean;
   crews: boolean;
   friendsCount: boolean;
+  /** Lot R5b : les réseaux, comme le profil complet (compte public : membres connectés ; compte privé : amis). */
+  socials: boolean;
   /** Nom, prénom, téléphone, e-mail : l'organisateur seulement. */
   contact: boolean;
 };
@@ -46,6 +48,7 @@ export function profileFields(audience: ProfileAudience): ProfileFields {
     pastEvents: everything,
     crews: everything,
     friendsCount: everything,
+    socials: everything,
     contact: audience === "organizer",
   };
 }

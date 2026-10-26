@@ -40,6 +40,8 @@ describe("audience d'un profil", () => {
     for (const audience of ["self", "friend", "public_full", "organizer"] as const) {
       const f = profileFields(audience);
       expect(f.bio && f.departments && f.vehicleDetails && f.upcomingEvents && f.pastEvents && f.crews).toBe(true);
+      // Lot R5b : les réseaux suivent le profil complet.
+      expect(f.socials).toBe(true);
     }
   });
 });
