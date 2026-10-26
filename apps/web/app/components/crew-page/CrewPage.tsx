@@ -145,10 +145,9 @@ export function OutingCard({ crewId, slug, outing }: { crewId: string; slug: str
               variant="secondary"
               icon="edit"
               href={`/c/${slug}/sortie?sortie=${outing.id}`}
+              aria-label={L.editOutingA11y(outing.title)}
               data-testid="outing-edit"
-            >
-              {L.editOuting}
-            </Button>
+            />
             <Form
               method="post"
               preventScrollReset
@@ -165,9 +164,7 @@ export function OutingCard({ crewId, slug, outing }: { crewId: string; slug: str
                 icon="close"
                 aria-label={L.cancelOuting}
                 data-testid="outing-cancel"
-              >
-                {L.cancelOuting}
-              </Button>
+              />
             </Form>
           </>
         ) : null}
@@ -280,9 +277,7 @@ export function RequestCard({ crewId, request, back }: { crewId: string; request
         </Form>
         <Form method="post" preventScrollReset>
           {hidden("crew_request_decline")}
-          <Button type="submit" variant="secondary" icon="close" aria-label={crewLabels.decline}>
-            {crewLabels.decline}
-          </Button>
+          <Button type="submit" variant="secondary" icon="close" aria-label={crewLabels.decline} />
         </Form>
       </div>
       <p className={`crw-quote${request.message ? "" : " s-muted"}`}>

@@ -452,3 +452,18 @@ fieldset.crw-seg {
   border: 0;
   min-inline-size: 0;
 }
+/* Quatre onglets à 390 px : « Membres · 1 » tient sur une ligne. */
+.crw-tabs a {
+  padding: 4px 3px;
+  font-size: 12.5px;
+}
+.crw-acts__main > * {
+  min-width: 0;
+}
+/* La vitrine suit l'en-tête (alignée à gauche), sur une colonne lisible. */
+.crw-vitrine {
+  width: 100%;
+  max-width: 640px;
+  display: grid;
+  gap: var(--space-3);
+}

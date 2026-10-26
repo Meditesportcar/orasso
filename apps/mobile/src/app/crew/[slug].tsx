@@ -24,6 +24,7 @@ import { CrewFeedSlot } from "@/features/crews/page/CrewFeedSlot";
 import {
   CrewEventRow,
   CrewSecHead,
+  CrewTabs,
   FriendsBox,
   GarageTile,
   InfoBox,
@@ -42,7 +43,6 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { CrewDot, SmButton } from "@/ui/Kit";
-import { SegBlock } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
@@ -336,7 +336,7 @@ export default function CrewScreen() {
 
       {space ? (
         <>
-          <SegBlock<Tab>
+          <CrewTabs<Tab>
             items={[
               { id: "feed", label: L.tabFeed, testID: "crew-tab-feed" },
               { id: "outings", label: L.tabCount(L.tabOutings, space.outings.length), testID: "crew-tab-outings" },
@@ -349,7 +349,6 @@ export default function CrewScreen() {
             ]}
             value={tab}
             onChange={setTab}
-            testID="crew-tabs"
           />
 
           {tab === "feed" ? <CrewFeedSlot crewId={v.id} leader={leader} /> : null}

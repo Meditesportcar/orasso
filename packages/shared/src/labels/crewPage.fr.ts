@@ -53,6 +53,9 @@ export const crewPageLabels = {
   mapsA11y: (place: string) => `Ouvrir Maps vers ${place}`,
   wazeA11y: (place: string) => `Ouvrir Waze vers ${place}`,
   editOuting: "Modifier",
+  editOutingA11y: (title: string) => `Modifier la sortie « ${title} »`,
+  removeMemberA11y: (pseudo: string) => `Retirer ${pseudo} du crew`,
+  nameTooShort: "Le nom du crew : 3 caractères au moins.",
   cancelOuting: "Annuler la sortie",
   cancelOutingConfirm: (title: string) =>
     `Annuler « ${title} » ? Ceux qui venaient sont prévenus, la sortie disparaît de la page.`,

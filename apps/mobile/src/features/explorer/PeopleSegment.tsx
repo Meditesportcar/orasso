@@ -20,6 +20,7 @@ import { mediaSource } from "@/lib/media";
 import { createRequestGate } from "@/lib/requestGate";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
+import { Overlay } from "@/ui/Overlay";
 import { deptLong } from "./ExplorerSheets";
 import type { PeopleFilters, PeopleShow } from "./explorerChoice";
 import {
@@ -259,15 +260,18 @@ function CrewAction({
       >
         {R.join}
       </SmallButton>
+      {/* La feuille va dans la zone des feuilles de l'écran (`Overlay`) : posée dans la liste, elle ne couvrirait qu'elle. */}
       {opened ? (
-        <CrewRequestSheet
-          crew={asking ? { id: crew.id, name: crew.name, leaderPseudo: null } : null}
-          onClose={() => setAsking(false)}
-          onSent={() => {
-            setAsking(false);
-            onSent();
-          }}
-        />
+        <Overlay>
+          <CrewRequestSheet
+            crew={asking ? { id: crew.id, name: crew.name, leaderPseudo: null } : null}
+            onClose={() => setAsking(false)}
+            onSent={() => {
+              setAsking(false);
+              onSent();
+            }}
+          />
+        </Overlay>
       ) : null}
     </>
   );

@@ -75,6 +75,49 @@ export function AvatarStack({
   );
 }
 
+/**
+ * `.seg.r5tabs` : les quatre onglets de la page (Fil, Sorties, Garage, Membres), l'onglet ouvert à l'encre. Plus serrés
+ * que le segment du socle : « Membres · 1 » tient sur une ligne à 384 px ; avec une grande police, il passe à la ligne
+ * (jamais coupé).
+ */
+export function CrewTabs<T extends string>({
+  items,
+  value,
+  onChange,
+}: {
+  items: readonly { id: T; label: string; testID: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View style={[styles.seg, { backgroundColor: c.surfaceRaised }]} accessibilityRole="tablist" testID="crew-tabs">
+      {items.map((it) => {
+        const on = value === it.id;
+        return (
+          <Pressable
+            key={it.id}
+            onPress={() => onChange(it.id)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            aria-selected={on}
+            accessibilityLabel={it.label}
+            testID={it.testID}
+            style={styles.segHit}
+          >
+            <View style={[styles.tabBtn, on && { backgroundColor: c.ink }]}>
+              <Text variant="bodyStrong" color={on ? c.ground : c.inkMuted} style={styles.tabText}>
+                {it.label}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /** `.r5out .seg` : « Je viens | Peut-être | Non », le choix fait en moutarde. */
 function RsvpSeg({
   value,
@@ -179,9 +222,14 @@ export function OutingCard({
         <View style={styles.grow} />
         {outing.canManage ? (
           <>
-            <SmButton kind="g" icon="edit" onPress={onEdit} testID="outing-edit">
-              {L.editOuting}
-            </SmButton>
+            <SmButton
+              kind="g"
+              icon="edit"
+              onPress={onEdit}
+              accessibilityLabel={L.editOutingA11y(outing.title)}
+              testID="outing-edit"
+            />
+
             <SmButton
               kind="g"
               icon="close"
@@ -445,6 +493,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   segText: { fontSize: 13, lineHeight: 15, textAlign: "center" },
+  tabBtn: {
+    minHeight: 38,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    paddingVertical: 4,
+  },
+  tabText: { fontSize: 12.5, lineHeight: 15, textAlign: "center" },
   out: { gap: space2 + 2, padding: space3 + 2, borderRadius: tokens.radius.radiusLg },
   outHead: { flexDirection: "row", gap: space3, alignItems: "flex-start" },
   outTitle: { fontSize: 17, lineHeight: 18, marginBottom: 4 },

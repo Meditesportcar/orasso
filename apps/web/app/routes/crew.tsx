@@ -227,9 +227,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
                 href={`${back}/reglages`}
                 aria-label={L.settingsA11y}
                 data-testid="crew-settings"
-              >
-                {L.settingsTitle}
-              </Button>
+              />
             ) : null}
           </div>
         ) : null}
@@ -344,7 +342,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
         ) : null}
 
         {!member ? (
-          <section className="crw-col crw-narrow" data-testid="crew-vitrine">
+          <section className="crw-vitrine" data-testid="crew-vitrine">
             <FriendsBox friends={crew.members.filter((m) => m.friend)} />
             <CrewSecHead title={L.membersTitle} hint={String(crew.membersCount)} />
             <ul className="crw-list">

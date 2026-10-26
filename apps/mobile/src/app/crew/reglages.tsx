@@ -96,10 +96,6 @@ export default function CrewSettings() {
     );
   }
 
-  const changed =
-    name.trim() !== v.name ||
-    description.trim() !== (v.description ?? "") ||
-    instagram.trim() !== (v.instagram ? `@${v.instagram}` : "");
   const others = (members.data ?? []).filter((m) => m.role !== "leader");
 
   return (
@@ -120,28 +116,35 @@ export default function CrewSettings() {
         />
       }
       footer={
-        <SmButton
-          kind="p"
-          big
-          wide
-          icon="check"
-          disabled={busy || !changed || name.trim().length < 3}
-          onPress={() =>
-            void run(async () => {
-              const next = await api.updateCrewSettings(v.id, {
-                name: name.trim(),
-                description: description.trim() || null,
-                instagram: instagram.trim() || null,
-              });
-              setInstagram(next.instagram ? `@${next.instagram}` : "");
-              if (next.slug !== v.slug) router.setParams({ crew: next.slug });
-              return next;
-            }, L.saved)
-          }
-          testID="crew-settings-save"
-        >
-          {crewLabels.save}
-        </SmButton>
+        <View style={styles.footer}>
+          {name.trim().length < 3 ? (
+            <Muted variant="caption" testID="crew-settings-missing">
+              {L.nameTooShort}
+            </Muted>
+          ) : null}
+          <SmButton
+            kind="p"
+            big
+            wide
+            icon="check"
+            disabled={busy || name.trim().length < 3}
+            onPress={() =>
+              void run(async () => {
+                const next = await api.updateCrewSettings(v.id, {
+                  name: name.trim(),
+                  description: description.trim() || null,
+                  instagram: instagram.trim() || null,
+                });
+                setInstagram(next.instagram ? `@${next.instagram}` : "");
+                if (next.slug !== v.slug) router.setParams({ crew: next.slug });
+                return next;
+              }, L.saved)
+            }
+            testID="crew-settings-save"
+          >
+            {crewLabels.save}
+          </SmButton>
+        </View>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -262,12 +265,12 @@ export default function CrewSettings() {
               kind="g"
               icon="close"
               disabled={busy}
+              accessibilityLabel={L.removeMemberA11y(m.pseudo)}
               onPress={async () => {
                 if (await ask(crewLabels.removeConfirm(m.pseudo))) void run(() => api.removeCrewMember(v.id, m.userId));
               }}
-            >
-              {crewLabels.remove}
-            </SmButton>
+              testID="crew-settings-remove"
+            />
           }
         />
       ))}
@@ -297,4 +300,5 @@ export default function CrewSettings() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   end: { height: space3 },
+  footer: { gap: space2 },
 });

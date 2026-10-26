@@ -68,9 +68,13 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await pageL.getByTestId("crew-results").getByRole("link", { name: crewName }).click();
   await pageL.waitForURL(crewPath);
   await expect(pageL.getByTestId("crew-members")).toHaveCount(0);
-  await pageL.getByLabel("Un mot pour le chef (facultatif)").fill("Je peux venir avec ma BMW ?");
+  // Lot R5c2 (R5.8) : la vitrine ; « Demander à rejoindre » ouvre la fenêtre avec un mot pour le chef.
+  await expect(pageL.getByTestId("crew-vitrine")).toBeVisible();
+  await pageL.waitForLoadState("networkidle");
   await pageL.getByTestId("crew-request").click();
-  await expect(pageL.getByTestId("crew-requested")).toBeVisible();
+  await pageL.getByTestId("crew-request-message").fill("Je peux venir avec ma BMW ?");
+  await pageL.getByTestId("crew-request-send").click();
+  await expect(pageL.getByTestId("crew-request-sent")).toBeVisible();
 
   // Kenji accepte depuis Boîte > Demandes.
   await pageK.goto("/app/boite/demandes");
@@ -89,7 +93,8 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   );
   expect((await apiCall(kCookie, "POST", `/crews/${crew.data.id}/invitations`, { pseudo: nina })).status).toBe(201);
   expect((await apiCall(nCookie, "POST", `/me/crew-invitations/${crew.data.id}/accept`)).status).toBe(200);
-  await pageL.goto(crewPath);
+  // Lot R5c2 : les membres ont leur onglet.
+  await pageL.goto(`${crewPath}?onglet=membres`);
   await expect(pageL.getByTestId("crew-members")).toBeVisible();
   await pageL.getByTestId("crew-discussion").click();
   await pageL.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);

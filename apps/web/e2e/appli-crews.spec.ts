@@ -74,6 +74,8 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await k.page.goto(`/crew/${crew.slug}`);
+    // Lot R5c2 : demandes et membres dans l'onglet Membres de la page à onglets.
+    await k.page.getByTestId("crew-tab-members").click({ timeout: 30_000 });
     await expect(k.page.getByTestId("crew-pending-request")).toBeVisible({ timeout: 30_000 });
     await expect(k.page.getByTestId("crew-member")).toHaveCount(2);
     await shot(k.page, `01-crew-chef-${theme}`);
