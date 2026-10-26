@@ -1,7 +1,7 @@
 // Lot R5b (maquette R5.4, remarque 6 de Damien) : la feuille « Ta photo de profil », ouverte en touchant sa photo dans
 // l'onglet Profil ou dans « Modifier mon profil » : prendre une photo (carrée, recadrée à l'étape suivante), choisir dans
 // la galerie, retirer la photo (l'initiale la remplace). Les mêmes lignes que les réglages (`.setlist` de la maquette).
-import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { profilePhotoLabels as L } from "@orasso/shared";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -94,9 +94,12 @@ export function PhotoSheet({
 
   return (
     <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.sheetTitle}>
-      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.title}>
-        {L.sheetTitle}
-      </Text>
+      <View style={styles.head}>
+        <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.title}>
+          {L.sheetTitle}
+        </Text>
+        <Button variant="close" label="Fermer" onPress={onClose} testID="photo-sheet-close" />
+      </View>
       <View style={[styles.list, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]} testID="photo-sheet">
         {rows.map((r, i) => (
           <Pressable
@@ -134,12 +137,12 @@ export function PhotoSheet({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 18, lineHeight: 20 },
+  head: { flexDirection: "row", alignItems: "center", gap: space2 },
+  title: { flex: 1, fontSize: 18, lineHeight: 20 },
   list: { borderRadius: 18, overflow: "hidden" },
   row: { flexDirection: "row", alignItems: "center", gap: space3, paddingVertical: 13, paddingHorizontal: 14 },
   text: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 14.5, lineHeight: 19, fontWeight: "800" },
   rowCaption: { fontSize: 12, lineHeight: 16 },
   pressed: { opacity: 0.7 },
-  gap: { gap: space2 },
 });

@@ -190,7 +190,14 @@ export function EditProfileScreen() {
   const pseudoHelp =
     pseudoState === "checking" ? "Vérification…" : pseudoState === "free" ? "Ce pseudo est libre." : L.pseudoHelp;
   // Jamais de bouton principal grisé sans la ligne qui dit ce qui manque.
-  const missing = canSave ? null : !changed ? L.nothingChanged : L.fixErrors;
+  const hasErrors = pseudoState === "taken" || pseudoState === "invalid" || socialErrors.length > 0;
+  const missing = canSave
+    ? null
+    : hasErrors
+      ? L.fixErrors
+      : pseudoState === "checking"
+        ? "Vérification du pseudo…"
+        : L.nothingChanged;
 
   async function save() {
     setBusy(true);

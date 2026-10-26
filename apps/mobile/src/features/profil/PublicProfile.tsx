@@ -21,8 +21,9 @@ import {
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { daysUntil } from "@/features/media/model";
 import { Stamp } from "@/features/passport/Stamp";
 import { FriendButton } from "@/features/social/FriendButton";
@@ -50,6 +51,9 @@ const NETWORK_ICON: Record<SocialNetwork, IconName> = {
 };
 
 const TYPE_ICON: Record<ProfileVehicle["vehicleType"], IconName> = { car: "vehicle", moto: "moto", truck: "truck" };
+
+/** À partir de cette échelle de police du système, « Ajouter en ami » et « Suivre » s'empilent. */
+const STACK_FONT_SCALE = 1.6;
 
 /** L'avatar de la tête : la photo, sinon l'initiale en rouge, comme dans l'onglet Profil (retour 6 : « DA » contre « D »). */
 function HeadFace({ url, pseudo }: { url: string | null; pseudo: string }) {
@@ -232,6 +236,15 @@ export function PublicProfile({
   const c = t.color;
   const router = useRouter();
   const [w, setW] = useState(0);
+  const [headW, setHeadW] = useState(0);
+  const { fontScale } = useWindowDimensions();
+  // Un pseudo long rapetisse (jusqu'à 14 px) au lieu de se couper ; l'échelle de police du système compte.
+  const pseudoSize = fitWordSize(p.pseudo, headW / Math.max(1, fontScale), 24, 14, WIDE_EM);
+  // Très grande police du système : les deux boutons l'un sous l'autre (sinon côte à côte, libellés jamais coupés).
+  const stacked = fontScale >= STACK_FONT_SCALE;
+  const actsStyle = [styles.acts, stacked && styles.actsStacked];
+  const actStyle = stacked ? null : styles.act;
+  const actSecondStyle = stacked ? null : styles.actSecond;
   const limited = p.audience === "public_limited";
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
@@ -257,14 +270,14 @@ export function PublicProfile({
     ) : mode === "preview" ? (
       // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres.
       <View style={styles.inert} pointerEvents="none" accessibilityElementsHidden testID="preview-actions">
-        <View style={styles.acts}>
-          <View style={styles.act}>
+        <View style={actsStyle}>
+          <View style={actStyle}>
             <Button variant="primary" icon={previewAsFriend ? "check" : "add"} fullWidth>
               {previewAsFriend ? "Ami" : "Ajouter en ami"}
             </Button>
           </View>
           {p.follow.canFollow ? (
-            <View style={styles.act}>
+            <View style={actSecondStyle}>
               <Button variant="secondary" icon="add" fullWidth>
                 {N.follow}
               </Button>
@@ -273,8 +286,8 @@ export function PublicProfile({
         </View>
       </View>
     ) : (
-      <View style={styles.acts} testID="profile-actions">
-        <View style={styles.act}>
+      <View style={actsStyle} testID="profile-actions">
+        <View style={actStyle}>
           <FriendButton
             state={p.friendship.state}
             requestId={p.friendship.id}
@@ -287,7 +300,7 @@ export function PublicProfile({
         </View>
         {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami » (validation R4.6c). */}
         {p.follow.canFollow || p.follow.following ? (
-          <View style={styles.act}>
+          <View style={actSecondStyle}>
             <FollowButton pseudo={p.pseudo} following={p.follow.following} onChanged={() => onChanged?.()} wide />
           </View>
         ) : null}
@@ -299,8 +312,13 @@ export function PublicProfile({
       {/* (1) La tête (`.r5hd`). */}
       <View style={styles.hd} testID="public-head">
         <HeadFace url={p.avatarUrl} pseudo={p.pseudo} />
-        <View style={styles.hdText}>
-          <Text variant="posterL" color={c.ink} style={styles.pseudo}>
+        <View style={styles.hdText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
+          <Text
+            variant="posterL"
+            color={c.ink}
+            style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
+            testID="profile-pseudo"
+          >
             {p.pseudo}
           </Text>
           <View style={styles.tags}>
@@ -507,9 +525,12 @@ const styles = StyleSheet.create({
   n4: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   n4Cell: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: 2, gap: 1 },
   n4Label: { fontSize: 11.5, lineHeight: 14, textAlign: "center" },
-  // Lot R5b : côte à côte s'ils tiennent (chacun au moins la largeur de son libellé), sinon l'un sous l'autre.
-  acts: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  act: { flexGrow: 1, flexBasis: "auto" },
+  // Lot R5b : côte à côte (1,5 pour « Ajouter en ami », 1 pour « Suivre », comme la maquette) ; un libellé passe à la
+  // ligne entre deux mots, ou réduit son corps (`useWordSafeLabel`) ; avec une très grande police, l'un sous l'autre.
+  acts: { flexDirection: "row", alignItems: "flex-start", gap: space2 },
+  actsStacked: { flexDirection: "column", alignItems: "stretch" },
+  act: { flex: 3, minWidth: 0 },
+  actSecond: { flex: 2, minWidth: 0 },
   inert: { opacity: 0.6 },
   hero: { borderRadius: 18, overflow: "hidden" },
   square: { width: "100%", aspectRatio: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
@@ -530,11 +551,14 @@ const styles = StyleSheet.create({
   cats: { flexDirection: "row", flexWrap: "wrap", gap: space1 + 2, marginTop: 2 },
   cat: { paddingVertical: 3, paddingHorizontal: space2, borderRadius: 6 },
   catText: { fontSize: 10.5, lineHeight: 13 },
+  // Dans la rangée des boutons du ticket : jamais plus large que le ticket (la phrase passe à la ligne).
   both: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     alignSelf: "flex-start",
+    flexShrink: 1,
+    maxWidth: "100%",
     paddingVertical: 5,
     paddingHorizontal: space2,
     borderRadius: 10,

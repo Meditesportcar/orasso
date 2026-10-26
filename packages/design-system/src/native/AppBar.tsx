@@ -301,7 +301,13 @@ export function AppBar({
                 {title}
               </Text>
               {facts ? (
-                <Text variant="caption" color={c.inkMuted} numberOfLines={1} style={styles.flowFacts}>
+                <Text
+                  variant="caption"
+                  color={c.inkMuted}
+                  // Lot R5b : avec des boutons à côté, la ligne de faits passe à la ligne au lieu de finir en « … ».
+                  numberOfLines={actions ? undefined : 1}
+                  style={styles.flowFacts}
+                >
                   {facts}
                 </Text>
               ) : null}
