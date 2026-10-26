@@ -78,6 +78,23 @@ export const crewFeedLabels = {
   yesterday: "hier",
   daysAgo: (n: number) => `il y a ${n} jours`,
   membersOnly: "Le fil est réservé aux membres du crew.",
+  optionsError: "Les réglages de publication du crew n'ont pas pu se charger.",
+  optionsLoading: "Chargement des réglages du crew…",
+  // Tour 2 : Réglages › Confidentialité, retrait de ses contenus des crews quittés.
+  leftCrewsTitle: "Crews que j'ai quittés",
+  leftCrewsHint:
+    "Tes publications et tes commentaires restent dans le fil d'un crew que tu quittes. Tu peux les retirer tous d'un coup.",
+  leftCrewsAction: "Retirer mes publications des crews que j'ai quittés",
+  leftCrewsConfirm:
+    "Tes publications (photos comprises) et tes commentaires dans ces crews seront retirés. C'est définitif.",
+  leftCrewsConfirmAction: "Oui, tout retirer",
+  cancel: "Annuler",
+  leftCrewsDone: (posts: number, comments: number) =>
+    posts + comments === 0
+      ? "Rien à retirer : aucune publication dans un crew que tu as quitté."
+      : `Retiré : ${posts > 1 ? `${posts} publications` : `${posts} publication`} et ${
+          comments > 1 ? `${comments} commentaires` : `${comments} commentaire`
+        }.`,
 } as const;
 
 /** « il y a 2 h », « hier », « il y a 3 jours », puis la date (`dateLabel`, déjà formatée par l'appelant). */

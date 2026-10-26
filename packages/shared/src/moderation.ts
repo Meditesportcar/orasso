@@ -135,6 +135,11 @@ export type ReportTargetView = {
   title: string;
   text: string | null;
   imageUrl: string | null;
+  /**
+   * Lot R5c1, tour 2 : toutes les images de la cible, quand elle en a plusieurs (photos d'une publication de crew
+   * signalée, servies aux seuls modérateurs) ; la première est aussi `imageUrl`.
+   */
+  imageUrls?: string[];
   /** Page publique de la cible (site), quand elle existe. */
   link: string | null;
   /** La cible n'existe plus (supprimée entre-temps). */

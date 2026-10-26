@@ -42,6 +42,11 @@ export const crewPosts = pgTable(
     text: text("text"),
     vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
     eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+    /**
+     * Tour 2 : identifiant tiré par l'appareil, gardé entre les tentatives ; une réponse perdue puis un nouvel essai
+     * rendent la même publication (unique par auteur).
+     */
+    clientId: uuid("client_id"),
     deletedAt: tstz("deleted_at"),
     deletedBy: text("deleted_by").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
@@ -49,6 +54,7 @@ export const crewPosts = pgTable(
   (t) => [
     index("crew_posts_feed_idx").on(t.crewId, t.createdAt.desc(), t.id.desc()).where(sql`${t.deletedAt} is null`),
     index("crew_posts_author_idx").on(t.authorId),
+    uniqueIndex("crew_posts_client_key").on(t.authorId, t.clientId).where(sql`${t.clientId} is not null`),
     check("crew_posts_text_check", sql`${t.text} is null or char_length(${t.text}) <= 500`),
   ],
 );

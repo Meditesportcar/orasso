@@ -4,6 +4,7 @@ import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../../lib/session";
 import { body, query, uuidParam } from "../../../lib/validate";
+import { crewPhotoForModeration } from "../../moderation/targets/crewFeed";
 import { crewFeedService } from "./service";
 
 export const crewFeedRoutes = new Hono<AppEnv>()
@@ -55,7 +56,17 @@ export const crewFeedRoutes = new Hono<AppEnv>()
     const data = await crewFeedService.photo(v, uuidParam(c, "id"), c.req.param("name"));
     return c.body(new Uint8Array(data), 200, {
       "content-type": "image/webp",
-      // D36 : jamais dans un cache partagé, et revalidée à chaque affichage (un membre parti perd l'accès).
-      "cache-control": "private, no-cache",
+      // D36 (tour 2) : jamais gardée en cache, ni partagé ni sur l'appareil (un membre parti perd l'accès).
+      "cache-control": "private, no-store",
     });
+  })
+  // Tour 2 : Réglages › Confidentialité, « Retirer mes publications des crews que j'ai quittés ».
+  .delete("/me/crew-content/left-crews", async (c) =>
+    c.json(await crewFeedService.withdrawFromLeftCrews(await requireUser(c))),
+  )
+  // Tour 2 : photo d'une publication signalée, dans le dossier de signalement, pour la modération seulement.
+  .get("/admin/reports/:id/crew-photos/:name", async (c) => {
+    const v = await requireUser(c);
+    const data = await crewPhotoForModeration(v, uuidParam(c, "id"), c.req.param("name"));
+    return c.body(new Uint8Array(data), 200, { "content-type": "image/webp", "cache-control": "private, no-store" });
   });

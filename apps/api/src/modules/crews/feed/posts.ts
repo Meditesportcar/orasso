@@ -23,6 +23,7 @@ import {
 } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
+import { canSeeEvent } from "../../invitations/access";
 import type { Profile } from "../../profiles/repo";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { type FeedAccess, visibleProfile } from "./access";
@@ -120,11 +121,20 @@ export async function loadPostViews(
   const eventIds = [...new Set(rows.map((r) => r.post.eventId).filter((x): x is string => Boolean(x)))];
   const eventRows = eventIds.length
     ? await ex
-        .select({ id: events.id, slug: events.slug, title: events.title, startsAt: events.startsAt })
+        .select({
+          id: events.id,
+          slug: events.slug,
+          title: events.title,
+          startsAt: events.startsAt,
+          admission: events.admission,
+          structureId: events.structureId,
+        })
         .from(events)
         .where(and(inArray(events.id, eventIds), eq(events.status, "published")))
     : [];
-  const eventById = new Map(eventRows.map((e) => [e.id, e]));
+  // Tour 2 : un événement privé (sur invitation) n'apparaît qu'à qui peut le voir (ni titre, ni date, ni adresse).
+  const eventById = new Map<string, (typeof eventRows)[number]>();
+  for (const e of eventRows) if (await canSeeEvent(e, access.viewer, ex)) eventById.set(e.id, e);
 
   const pollIds = rows.filter((r) => r.post.kind === "poll").map((r) => r.post.id);
   const polls = new Map<string, CrewPollView>();

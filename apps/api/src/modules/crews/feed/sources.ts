@@ -8,6 +8,7 @@ import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { db } from "../../../db/client";
 import { profiles, vehicles } from "../../../db/schema";
 import type { Executor } from "../../../lib/tx";
+import { canSeeEvent } from "../../invitations/access";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { type FeedAccess, visibleProfile } from "./access";
 import { loadPostViews, personOf } from "./posts";
@@ -105,7 +106,7 @@ const crewAcceptedSource: FeedSource = {
   async hydrate(ex, rows, access, at) {
     const ids = rows.map((r) => r.id);
     const result = await ex.execute(sql`
-      select e.id, e.slug, e.title, e.starts_at, e.city,
+      select e.id, e.slug, e.title, e.starts_at, e.city, e.admission, e.structure_id,
         array_agg(pr.pseudo order by coalesce(ap.decided_at, ap.updated_at), pr.pseudo) as pseudos
       from applications ap
         join events e on e.id = ap.event_id
@@ -122,6 +123,8 @@ const crewAcceptedSource: FeedSource = {
       title: string;
       starts_at: Date | string;
       city: string | null;
+      admission: string;
+      structure_id: string;
       pseudos: string[];
     };
     const byId = new Map((result.rows as Row[]).map((r) => [r.id, r]));
@@ -129,6 +132,10 @@ const crewAcceptedSource: FeedSource = {
     for (const r of rows) {
       const e = byId.get(r.id);
       if (!e) continue;
+      // Tour 2 : un événement privé (sur invitation) n'apparaît qu'à qui peut le voir.
+      if (!(await canSeeEvent({ id: e.id, structureId: e.structure_id, admission: e.admission }, access.viewer, ex))) {
+        continue;
+      }
       const key = `crew_accepted:${r.id}`;
       out.set(key, {
         type: "crew_accepted",

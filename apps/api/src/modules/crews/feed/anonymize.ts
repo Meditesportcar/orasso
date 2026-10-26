@@ -16,6 +16,16 @@ import {
 import type { Tx } from "../../../lib/tx";
 
 export async function anonymizeCrewFeedForDeletedAccount(tx: Tx, userId: string): Promise<string[]> {
+  // Tour 2 : même ordre de verrous que les écritures du fil : d'abord tous les crews concernés (ses publications, ses
+  // commentaires, ses appartenances), par identifiant, puis les publications et les commentaires.
+  await tx.execute(sql`
+    select c.id from crews c
+    where c.id in (select p.crew_id from crew_posts p where p.author_id = ${userId})
+       or c.id in (select p.crew_id from crew_posts p join crew_post_comments m on m.post_id = p.id
+                   where m.author_id = ${userId})
+       or c.id in (select cm.crew_id from crew_members cm where cm.user_id = ${userId})
+    order by c.id
+    for update`);
   const posts = await tx.select({ id: crewPosts.id }).from(crewPosts).where(eq(crewPosts.authorId, userId));
   const postIds = posts.map((p) => p.id);
   let keys: string[] = [];

@@ -19,10 +19,17 @@ import { optionalText } from "./common";
 const uploadKey = z.string().min(10).max(200);
 const requiredText = (max: number) => z.string().trim().min(1).max(max);
 
+/**
+ * Tour 2 : identifiant tiré par l'appareil, gardé entre les tentatives d'envoi ; un nouvel essai après une réponse
+ * perdue rend la même publication (ni doublon ni « Photo inconnue ou déjà utilisée »).
+ */
+const clientId = z.uuid().nullish();
+
 /** Véhicule (de l'auteur) et événement facultatifs, communs aux publications photo et texte. */
 const postLinks = {
   vehicleId: z.uuid().nullish(),
   eventId: z.uuid().nullish(),
+  clientId,
 };
 
 export const crewPollInputSchema = z
@@ -54,7 +61,7 @@ export const crewPostCreateSchema = z.discriminatedUnion("kind", [
     ...postLinks,
   }),
   z.object({ kind: z.literal("text"), text: requiredText(CREW_POST_TEXT_MAX), ...postLinks }),
-  z.object({ kind: z.literal("poll"), poll: crewPollInputSchema }),
+  z.object({ kind: z.literal("poll"), poll: crewPollInputSchema, clientId }),
 ]);
 export type CrewPostCreate = z.infer<typeof crewPostCreateSchema>;
 

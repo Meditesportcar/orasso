@@ -74,6 +74,7 @@ CREATE TABLE "crew_posts" (
 	"text" text,
 	"vehicle_id" uuid,
 	"event_id" uuid,
+	"client_id" uuid,
 	"deleted_at" timestamp with time zone,
 	"deleted_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -106,4 +107,5 @@ CREATE INDEX "crew_post_comments_author_idx" ON "crew_post_comments" USING btree
 CREATE UNIQUE INDEX "crew_post_photos_position_key" ON "crew_post_photos" USING btree ("post_id","position");--> statement-breakpoint
 CREATE INDEX "crew_post_reactions_user_idx" ON "crew_post_reactions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "crew_posts_feed_idx" ON "crew_posts" USING btree ("crew_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "crew_posts"."deleted_at" is null;--> statement-breakpoint
-CREATE INDEX "crew_posts_author_idx" ON "crew_posts" USING btree ("author_id");
+CREATE INDEX "crew_posts_author_idx" ON "crew_posts" USING btree ("author_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "crew_posts_client_key" ON "crew_posts" USING btree ("author_id","client_id") WHERE "crew_posts"."client_id" is not null;

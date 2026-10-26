@@ -221,7 +221,7 @@ describe("photos (D36)", () => {
     expect(meta.format).toBe("webp");
     const served = await raw(lea, url.replace(/^\/api/, ""), true);
     expect(served.status).toBe(200);
-    expect(served.headers.get("cache-control")).toBe("private, no-cache");
+    expect(served.headers.get("cache-control")).toBe("private, no-store");
     expect((await sharp(Buffer.from(await served.arrayBuffer())).metadata()).exif).toBeUndefined();
     // Jamais public : /api/files refuse les clés privées ; un autre crew ne la sert pas.
     expect((await raw(kenji, `/files/${up1.json.key}`)).status).toBe(404);
@@ -339,7 +339,7 @@ describe("flamme et commentaires", () => {
     const notes = await db.select().from(notifications).where(eq(notifications.type, "crew_post_comment"));
     expect(notes).toHaveLength(1);
     expect(notes[0]!.userId).toBe(nina.id);
-    expect(notes[0]!.body).toContain("et 1 autre ont commenté");
+    expect(notes[0]!.body).toContain("et 1 autre personne ont commenté");
     expect(notes[0]!.family).toBe("social");
     const blob = JSON.stringify(notes[0]);
     expect(blob).not.toContain("Top la STI");

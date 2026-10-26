@@ -53,6 +53,19 @@ export function crewPhotoFrameRatio(photo: { width: number; height: number } | u
   return Math.min(1.91, Math.max(4 / 5, photo.width / photo.height));
 }
 
+/**
+ * Tour 2 : commentaires fusionnés par identifiant (une page qui arrive après un envoi ne double rien) et rangés dans
+ * l'ordre chronologique, au-delà des 50 de la première page.
+ */
+export function mergeCrewComments<T extends { id: string; createdAt: string }>(
+  current: readonly T[],
+  incoming: readonly T[],
+): T[] {
+  const byId = new Map(current.map((c) => [c.id, c]));
+  for (const c of incoming) byId.set(c.id, c);
+  return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}
+
 /** Date de fin acceptée : dans le futur, et au plus `CREW_POLL_MAX_DAYS` jours plus tard. */
 export function pollEndsAtValid(endsAt: Date, now: Date): boolean {
   const t = endsAt.getTime();

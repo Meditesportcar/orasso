@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { crewFeedLabels, crewFeedWhen } from "../labels/crewFeed.fr";
 import { crewCommentCreateSchema, crewPostCreateSchema } from "../schemas/crewFeed";
-import { canRemoveCrewContent, crewPhotoFrameRatio, crewPollOpen, pollEndsAtValid, pollShare } from "./crewFeed";
+import {
+  canRemoveCrewContent,
+  crewPhotoFrameRatio,
+  crewPollOpen,
+  mergeCrewComments,
+  pollEndsAtValid,
+  pollShare,
+} from "./crewFeed";
 
 const NOW = new Date("2026-10-26T12:00:00Z");
 const HOUR = 3_600_000;
@@ -34,6 +41,14 @@ describe("fil du crew (lot R5c1)", () => {
     expect(crewPhotoFrameRatio({ width: 1200, height: 900 })).toBeCloseTo(4 / 3);
     expect(crewPhotoFrameRatio({ width: 683, height: 2048 })).toBe(0.8);
     expect(crewPhotoFrameRatio(undefined)).toBe(1);
+  });
+
+  it("commentaires fusionnés par identifiant, dans l'ordre chronologique", () => {
+    const c = (id: string, at: string) => ({ id, createdAt: `2026-10-26T12:00:${at}Z` });
+    const mine = c("z", "40");
+    const merged = mergeCrewComments([c("a", "01"), mine], [c("b", "20"), c("z", "40"), c("c", "30")]);
+    expect(merged.map((x) => x.id)).toEqual(["a", "b", "c", "z"]);
+    expect(mergeCrewComments([], [c("b", "10"), c("a", "10")]).map((x) => x.id)).toEqual(["a", "b"]);
   });
 
   it("parts des réponses en pourcentage entier", () => {
