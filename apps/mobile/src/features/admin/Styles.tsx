@@ -353,7 +353,8 @@ function StylesBody() {
       <Button variant="plate" icon="add" onPress={() => open({ kind: "create" })} fullWidth testID="style-create">
         {S.addStyle}
       </Button>
-      {!list.data ? <EmptyOrLoading loading={list.loading} empty={S.queueEmpty} /> : null}
+      {/* Une erreur n'est jamais une liste vide : elle est dite par `AdminFailure`, en tête. */}
+      {!list.data && !list.error ? <EmptyOrLoading loading={list.loading} empty={S.queueEmpty} /> : null}
       {styleFamilies.map((f) => {
         const family = active.filter((s) => s.family === f);
         if (!family.length) return null;
@@ -379,7 +380,9 @@ function StylesBody() {
 
       <SectionTitle>{`${S.queueTitle} · ${queue.data?.total ?? 0}`}</SectionTitle>
       {!queue.data ? (
-        <EmptyOrLoading loading={queue.loading} empty={S.queueEmpty} />
+        queue.error ? null : (
+          <EmptyOrLoading loading={queue.loading} empty={S.queueEmpty} />
+        )
       ) : queue.data.items.length === 0 ? (
         <Notice>{S.queueEmpty}</Notice>
       ) : null}
