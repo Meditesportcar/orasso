@@ -203,6 +203,9 @@ test.describe("le lot M5 à l'écran", () => {
     await expect(page.getByTestId("casquette-fan").getByTestId("casquette-active")).toBeVisible();
     await expect(page.getByText("Mes casquettes", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Où je suis staff", { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
+    // Lot R5b (remarque 6 de Damien) : les réglages sont derrière la roue dentée de la carte du profil.
+    await page.getByTestId("profil-gear").click();
     for (const id of [
       "reglage-compte",
       "reglage-notifications",
@@ -213,7 +216,6 @@ test.describe("le lot M5 à l'écran", () => {
       await expect(page.getByTestId(id)).toBeVisible();
     await expect(page.getByTestId("reglage-compte")).toContainText("sanctions");
     await expect(page.getByTestId("reglage-confidentialite")).toContainText("export");
-    await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     await ctx.close();
   });
 

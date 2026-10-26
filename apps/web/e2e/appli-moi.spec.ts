@@ -61,7 +61,6 @@ async function shot(page: Page, name: string) {
 /** Lot 40 : l'écran Moi est devenu Mon profil ; ses sections vivent dans les réglages en tuiles (`/reglages/<section>`). */
 const SECTION_OF: Record<string, string> = {
   "moi-profile": "profil",
-  "moi-public-preview": "profil",
   "notif-family-event": "notifications",
   "visibility-public": "confidentialite",
   "moi-data": "confidentialite",
@@ -117,10 +116,13 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   await page.getByLabel("Pseudo", { exact: true }).fill(newPseudo);
   await expect(page.getByText("Ce pseudo est libre.")).toBeVisible({ timeout: 10_000 });
   await page.getByLabel("Description").fill("Passionné de youngtimers, balades du dimanche.");
-  await page.getByRole("button", { name: "Enregistrer le profil" }).click();
+  // Lot R5b (maquette R5.5) : « Modifier mon profil », un seul bouton principal « Enregistrer » fixé en bas.
+  await page.getByTestId("edit-profile-save").click();
   await expect(page.getByTestId("moi-profile-message")).toHaveText("Profil enregistré.", { timeout: 20_000 });
+  // Lot R5b : « Changer la photo » ouvre la feuille « Ta photo de profil » (prendre, galerie, retirer).
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Changer la photo" }).click();
+  await page.getByTestId("edit-profile-photo").click();
+  await page.getByTestId("photo-pick").click();
   await (await chooser).setFiles({ name: "avatar.png", mimeType: "image/png", buffer: samplePhoto() });
   await expect(page.getByTestId("moi-profile-message")).toHaveText("Photo enregistrée.", { timeout: 30_000 });
   const preview = await apiCall<{ pseudo: string; bio: string | null; avatarUrl: string | null }>(
@@ -131,7 +133,9 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   expect(preview.data.pseudo).toBe(newPseudo);
   expect(preview.data.bio).toBe("Passionné de youngtimers, balades du dimanche.");
   expect(preview.data.avatarUrl).toBeTruthy();
-  await expect(page.getByTestId("moi-public-preview")).toContainText(newPseudo);
+  // Lot R5b : l'aperçu « ce que voient les autres » est l'écran « Mon profil public » (bouton œil à côté d'« Enregistrer »).
+  await page.getByTestId("edit-profile-public").click();
+  await expect(page.getByTestId("public-head")).toContainText(newPseudo, { timeout: 30_000 });
 
   // Notifications : couper un type → muted_types à jour.
   await reveal(page, "notif-family-event");

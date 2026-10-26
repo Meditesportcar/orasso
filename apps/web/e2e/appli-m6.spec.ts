@@ -334,6 +334,8 @@ test("tour 2 : les annonces en attente d'un compte ne s'affichent jamais devant 
   await expect(page.getByTestId(/announce-/).first()).toBeVisible({ timeout: 30_000 });
   // A se déconnecte depuis Mon profil (sans recharger la page : la file vivrait encore si rien ne la purgeait).
   await page.getByRole("tab", { name: "Profil" }).click();
+  // Lot R5b : « Se déconnecter » est dans l'écran « Réglages » (roue dentée de la carte du profil).
+  await page.getByTestId("profil-gear").click();
   await page.getByTestId("profil-sign-out").click();
   await page.waitForURL(/\/auth/, { timeout: 30_000 });
   await page.getByLabel("E-mail").fill(emailB);

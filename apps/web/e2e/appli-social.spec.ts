@@ -79,7 +79,9 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     // Profil d'un compte privé : réduit.
     await page.goto(`/u/${bravo}`);
     await expect(page.getByTestId("profil")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Profil privé")).toBeVisible();
+    // Lot R5b (maquette R5.6) : « Compte privé » dans la tête, et la ligne « Le reste est réservé à ses amis ».
+    await expect(page.getByTestId("public-head")).toContainText("Compte privé");
+    await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
     await expect(page.getByText("secret", { exact: true })).toHaveCount(0);
     await shot(page, `03-profil-prive-reduit-${theme}`);
 
