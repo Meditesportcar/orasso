@@ -6,6 +6,7 @@ export * from "./auth";
 export * from "./certification";
 export * from "./checkins";
 export * from "./communication";
+export * from "./crewFeed";
 export * from "./crews";
 export * from "./devClock";
 export * from "./events";

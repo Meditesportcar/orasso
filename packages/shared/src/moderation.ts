@@ -13,6 +13,9 @@ export const reportTargets = [
   "pro",
   "provider",
   "announcement",
+  // Lot R5c1 : publication et commentaire du fil d'un crew (signalables par les membres du crew).
+  "crew_post",
+  "crew_comment",
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
 
@@ -80,6 +83,8 @@ export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]
   pro: ["fake_pro", "scam", "discount_not_applied", "fake_reviews", "other"],
   provider: ["fake_pro", "scam", "fake_reviews", "other"],
   announcement: ["misleading_info", "shocking", "insult", "spam", "other"],
+  crew_post: ["shocking", "insult", "harassment", "plate_or_face", "spam", "other"],
+  crew_comment: ["insult", "harassment", "spam", "other"],
 };
 
 /** Le motif est-il proposé pour ce type ? (contrôle de l'API, `reportCreateSchema`). */

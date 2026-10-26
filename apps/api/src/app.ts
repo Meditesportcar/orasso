@@ -26,6 +26,7 @@ import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
 import { audiencePrizeService } from "./modules/audience-prize/service";
 import { checkinsRoutes } from "./modules/checkins/routes";
 import { communicationRoutes } from "./modules/communication/routes";
+import { crewFeedRoutes } from "./modules/crews/feed/routes";
 import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
 import { devMailRoutes } from "./modules/dev-mail/routes";
@@ -207,6 +208,8 @@ app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
 app.route("/", crewsRoutes);
+// Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
+app.route("/", crewFeedRoutes);
 app.route("/", invitationsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);

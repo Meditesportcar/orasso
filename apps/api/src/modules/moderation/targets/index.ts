@@ -2,6 +2,7 @@
 import type { ReportTarget } from "@orasso/shared";
 
 import { crewTarget, proTarget, providerTarget } from "./community";
+import { crewCommentTarget, crewPostTarget } from "./crewFeed";
 import { announcementTarget, eventTarget, reviewTarget } from "./event";
 import { messageTarget } from "./message";
 import { profileTarget } from "./profile";
@@ -19,6 +20,8 @@ const registry: Record<ReportTarget, TargetRules> = {
   pro: proTarget,
   provider: providerTarget,
   announcement: announcementTarget,
+  crew_post: crewPostTarget,
+  crew_comment: crewCommentTarget,
 };
 
 export const targetOf = (type: ReportTarget): TargetRules => registry[type];

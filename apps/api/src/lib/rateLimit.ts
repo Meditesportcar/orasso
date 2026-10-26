@@ -129,6 +129,11 @@ export const rateRules = {
    * le rejoue quelques fois ; 30 laisse passer plusieurs téléphones derrière une même adresse d'opérateur.
    */
   pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
+  /** Lot R5c1 : fil d'un crew. Photos envoyées (6 par publication), publications, commentaires, flammes et voix. */
+  crewPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
+  crewPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
+  crewComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
+  crewReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

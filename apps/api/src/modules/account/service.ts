@@ -62,6 +62,7 @@ import { notesService } from "../after-event/notes";
 import { applicationsService } from "../applications/service";
 import { anonymizeCommunicationForDeletedAccount } from "../communication/anonymize";
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
+import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
@@ -453,6 +454,8 @@ export const accountService = {
       await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
       await anonymizeSocialForDeletedAccount(tx, userId);
+      // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
+      photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
