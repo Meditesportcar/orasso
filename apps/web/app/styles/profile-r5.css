@@ -198,14 +198,6 @@
 .pr5-photo form {
   display: contents;
 }
-.pr5-photo input[type="file"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
 .pr5-count {
   justify-self: end;
   font-size: 12px;
@@ -821,4 +813,62 @@
     font-size: 24px;
     line-height: 1.05;
   }
+}
+
+/* La tête : la photo, sinon l'initiale sur le rouge du grade, comme l'onglet Profil de l'appli (retour 6 de Damien). */
+.pr5-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--win);
+  color: var(--win-ink);
+  box-shadow: var(--shadow-card);
+  font-weight: 900;
+  font-stretch: 125%;
+  font-style: italic;
+  font-size: 30px;
+  line-height: 1;
+}
+.pr5-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Dans le profil, un lien garde l'encre de son bloc (pas la couleur de lien de l'espace connecté) ; le nom de la voiture
+   reste clair sur la photo, dans les deux thèmes. */
+.app__body .pr5 a:where(:not(.o-button)) {
+  color: inherit;
+}
+.app__body .pr5 .pr5-hero {
+  color: var(--photo-ink);
+}
+
+/* Bureau (maquette R5.6b) : la page du profil prend la largeur du site (1 120 px) au lieu de la colonne de 880 px. */
+@media (min-width: 1024px) {
+  .app__body:has(.pr5) {
+    max-width: 1120px;
+  }
+}
+/* Un pseudo (sans espace) rapetisse pour tenir sur sa ligne au lieu de se couper, comme `fitWordSize` dans l'appli : le
+   corps suit la largeur de la colonne et le nombre de signes (`--len`), entre 14 px et le corps d'affiche L. */
+.pr5-me__id,
+.pr5-hd__id {
+  container-type: inline-size;
+}
+.pr5-me__name,
+.pr5-hd h1,
+.pr5-hd h2 {
+  font-size: clamp(14px, calc(100cqi / (var(--len, 10) * 0.92)), var(--type-poster-l-size));
+} /* La colonne du pseudo prend toute la largeur (sa largeur mesure le corps du pseudo, jamais l'inverse). */
+.pr5-me__id,
+.pr5-hd__id {
+  justify-self: stretch;
+  width: 100%;
 }

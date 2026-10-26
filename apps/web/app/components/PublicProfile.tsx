@@ -15,14 +15,14 @@ import {
   socialUrl,
   type UserProfileView,
 } from "@orasso/shared";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Form, useNavigation } from "react-router";
 
 import { now } from "../lib/clock";
 import { formatDay, formatTime } from "../lib/format";
 import { withRetour } from "../lib/retour";
 import { PassportStamp } from "./PassportStamp";
-import { FriendAction, PersonAvatar } from "./People";
+import { FriendAction } from "./People";
 import { ReportDialog } from "./ReportDialog";
 import "../styles/passport.css";
 import "../styles/profile-r5.css";
@@ -102,9 +102,12 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
     <div className={limited ? "pr5 pr5--limited" : "pr5"}>
       <aside className="pr5-card" data-testid="public-head">
         <div className="pr5-hd">
-          <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={76} />
+          {/* Retour 6 de Damien : la même tête que l'appli (la photo, sinon l'initiale sur le rouge du grade). */}
+          <span className="pr5-face" aria-hidden="true">
+            {p.avatarUrl ? <img src={p.avatarUrl} alt="" /> : p.pseudo.charAt(0).toUpperCase()}
+          </span>
           <div className="pr5-hd__id">
-            <Title>{p.pseudo}</Title>
+            <Title style={{ "--len": p.pseudo.length } as CSSProperties}>{p.pseudo}</Title>
             <div className="pr5-tags">
               <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
               {limited ? (
@@ -287,11 +290,12 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 <>
                   <Photo v={car} big />
                   <span className="pr5-hero__fav">
-                    <Icon name="check" size={13} /> {L.mainTag}
+                    <Icon name="star" size={13} /> {L.mainTag}
                   </span>
                   <span className="pr5-hero__cap">
-                    <b className="o-never-truncate">{car.label}</b>
-                    {car.year && <small>{car.year}</small>}
+                    {/* Texte posé sur la photo : le contour couleur du fond (écart 1 de la DA v2). */}
+                    <b className="o-never-truncate o-onphoto">{car.label}</b>
+                    {car.year && <small className="o-onphoto">{car.year}</small>}
                     {car.categories.length > 0 && (
                       <span className="pr5-cats">
                         {car.categories.map((c) => (

@@ -20,7 +20,7 @@ import {
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, type TextStyle, View } from "react-native";
 import { PhotoSheet } from "@/features/profil/PhotoSheet";
 import { HeadAvatar } from "@/features/profil/parts";
 import { api, authApi } from "@/lib/api";
@@ -95,7 +95,7 @@ function SocialField({
           maxLength={300}
           accessibilityLabel={socialsLabels.field(network)}
           testID={`social-${network}`}
-          style={[styles.socialInput, { color: c.ink }]}
+          style={[styles.socialInput, styles.noOutline, { color: c.ink, fontWeight: value ? "700" : "400" }]}
         />
         {ok ? <Icon name="check" size={16} color={c.accentText} /> : null}
       </View>
@@ -371,7 +371,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   socialName: { width: 72, fontSize: 12.5 },
-  socialInput: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, fontWeight: "700", paddingVertical: 0 },
+  socialInput: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 15, paddingVertical: 0 },
+  // Comme les champs du système : pas de contour du navigateur sur le web (le bord du champ dit le focus).
+  noOutline: { outlineStyle: "none" } as unknown as TextStyle,
   socialError: { flexDirection: "row", alignItems: "flex-start", gap: space1 + 2 },
   socialErrorText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
   note: { flexDirection: "row", gap: space2, alignItems: "flex-start", padding: space3, borderRadius: 14 },

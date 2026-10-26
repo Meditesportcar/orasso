@@ -22,6 +22,7 @@ import {
   profileVisibilityRules,
   settingsHubLabels as S,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { PersonAvatar } from "../components/People";
@@ -201,7 +202,9 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </a>
           </div>
           <div className="pr5-me__id">
-            <p className="pr5-me__name">{me.profile.pseudo}</p>
+            <p className="pr5-me__name" style={{ "--len": me.profile.pseudo.length } as CSSProperties}>
+              {me.profile.pseudo}
+            </p>
             <div className="pr5-me__tags">
               <Chip variant="accent">{gradeLabels[me.profile.grade]}</Chip>
               {me.profile.departments.length > 0 && (

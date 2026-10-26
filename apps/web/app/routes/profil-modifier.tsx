@@ -140,6 +140,8 @@ export default function ProfilModifier({ loaderData, actionData: rawAction }: Ro
                   accept="image/*"
                   aria-label={PH.changeButton}
                   tabIndex={-1}
+                  // Caché (le bouton « Changer la photo » l'ouvre) : un champ fichier d'un pixel compterait comme coupé.
+                  hidden
                   data-testid="avatar-file"
                   onChange={(e) => {
                     if (e.currentTarget.files?.length) photoForm.current?.requestSubmit();
@@ -173,7 +175,12 @@ export default function ProfilModifier({ loaderData, actionData: rawAction }: Ro
           )}
         </section>
 
-        <Form method="post" className="pr5-edit">
+        {/* Recréé quand le profil enregistré change : les champs reprennent les pseudos ramenés par l'API. */}
+        <Form
+          method="post"
+          className="pr5-edit"
+          key={JSON.stringify([loaderData.pseudo, loaderData.bio, loaderData.socials])}
+        >
           <input type="hidden" name="intent" value="profile" />
           <TextField
             label={E.pseudo}
