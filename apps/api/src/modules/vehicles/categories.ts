@@ -74,8 +74,8 @@ export async function loadVehicleFacts(
 /**
  * Catégories actives et cohérentes avec le véhicule ; refus listé avec sa raison. Lot R5a : `kept`, les catégories déjà
  * sur la fiche ; un style mis en pause depuis par l'admin y reste permis (il ne se propose plus, il ne disparaît pas).
- * Tour 2 : `sameTypeAndMake` (type et marque de la fiche inchangés) : un style déjà sur la fiche refusé pour le type,
- * la marque ou le pays (règles changées depuis : « 4x4 » d'un camion) y reste permis ; un refus pour l'âge, non.
+ * Tour 2 : `sameTypeAndMake` (type et marque de la fiche inchangés) : un style déjà sur la fiche refusé pour le type
+ * ou la marque (règles changées depuis : « 4x4 » d'un camion) y reste permis ; un refus pour l'âge ou le pays, non.
  */
 export async function checkCategories(
   ex: Executor,
@@ -93,7 +93,7 @@ export async function checkCategories(
   const facts = await loadVehicleFacts(ex, vehicle);
   const refused = rows.flatMap((c) => {
     const refusal = categoryRefusal(c.rule, facts, now());
-    if (refusal && refusal !== "age" && sameTypeAndMake && kept.includes(c.id)) return [];
+    if ((refusal === "type" || refusal === "make") && sameTypeAndMake && kept.includes(c.id)) return [];
     return refusal ? [{ category: c, refusal }] : [];
   });
   if (refused.length) {

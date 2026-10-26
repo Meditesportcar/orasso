@@ -175,10 +175,12 @@ export function vehicleStyleGroups(
     const isChosen = chosen.has(o.id);
     if (o.paused && !isChosen) continue;
     const refused = o.refusal === "type" || o.refusal === "make" || o.refusal === "country";
-    const kept = !o.eligible && refused && isChosen && opts.keepRefused;
+    // Gardés : les refus de type et de marque seulement (comme l'API) ; une origine d'un autre pays ne l'est pas.
+    const kept = !o.eligible && (o.refusal === "type" || o.refusal === "make") && isChosen && opts.keepRefused;
     if (o.allowedCountries) {
       if (!opts.origins && !o.paused) continue;
-      if (!o.eligible && !kept) continue;
+      // Une origine déjà posée reste affichée, cochée (grisée si la marque n'est plus de ce pays).
+      if (!o.eligible && !isChosen) continue;
     } else if (refused && !kept) {
       continue;
     }

@@ -263,7 +263,7 @@ export const styleCategories = (rows: readonly CategoryOption[]) => rows.filter(
 /**
  * Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. Lot R5a : `current`, les
  * catégories de la fiche : celles mises en pause par l'admin (absentes de la liste proposée) sont gardées tant que la
- * personne ne les retire pas ; tour 2 : aussi celles refusées pour le type, la marque ou le pays tant que `keepRefused`
+ * personne ne les retire pas ; tour 2 : aussi celles refusées pour le type ou la marque tant que `keepRefused`
  * (type et marque inchangés). Un refus pour l'âge les retire (l'année a changé).
  */
 export function keptCategories(
@@ -281,7 +281,7 @@ export function keptCategories(
     if (!current.includes(id)) return false;
     const row = rows.find((c) => c.id === id);
     if (!row) return true;
-    return keepRefused && (row.refusal === "type" || row.refusal === "make" || row.refusal === "country");
+    return keepRefused && (row.refusal === "type" || row.refusal === "make");
   };
   const styles = ids.filter((id) => (eligible.has(id) || kept(id)) && !origins.includes(id));
   return [...origins, ...styles].slice(0, MAX_CATEGORIES);

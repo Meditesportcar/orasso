@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import {
   apiCall,
   type Cookie,
@@ -80,6 +81,22 @@ async function garage(pseudo: string) {
   const car = await vehicle(cookie, { type: "car", make: "Peugeot", model: "206", year: 2003 });
   const moto = await vehicle(cookie, { type: "moto", make: "Yamaha", model: "MT-07", generation: "Gen 1", year: 2019 });
   const truck = await vehicle(cookie, { type: "truck", make: "Scania", model: "Série R", year: 2008 });
+  // Tour 2 : des choix d'avant le lot, que les formulaires gardent : « 4x4 » sur le camion, « Moto » en centre d'intérêt.
+  // (Sans effet sur une base d'avant le lot : le camion y accepte « 4x4 », « Moto » y est actif.)
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      "insert into vehicle_categories (vehicle_id, category_id) select $1, id from categories where slug = '4x4' on conflict do nothing",
+      [truck],
+    );
+    await client.query(
+      "insert into profile_interests (user_id, category_id) select u.id, c.id from \"user\" u, categories c where u.email = $1 and c.slug = 'moto' on conflict do nothing",
+      [email],
+    );
+  } finally {
+    await client.end();
+  }
   return { email, cookie, car, moto, truck };
 }
 
@@ -190,6 +207,12 @@ for (const theme of ["beton", "sable"] as const) {
         await page.waitForTimeout(600);
         await shot(page, dir, `${theme}-${width}-${label}`);
       }
+      // Tour 2 : « Tes préférences » (centres d'intérêt par famille, « Moto » gardé).
+      await page.goto("/preferences");
+      await afterOpening(page);
+      await expect(page.getByTestId("pref-interests")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("pref-interests").scrollIntoViewIfNeeded();
+      await shot(page, dir, `${theme}-${width}-11-preferences`);
       await ctx.close();
     });
 
@@ -242,6 +265,10 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByText("Modifier la fiche", { exact: true }).click();
       await page.getByTestId("vehicle-edit").locator("fieldset").last().scrollIntoViewIfNeeded();
       await shot(page, dir, name("03-modifier-categories-camion"));
+      // Tour 2 : « Tes préférences » (centres d'intérêt par famille).
+      await page.goto("/app/preferences");
+      await page.getByTestId("pref-interests").scrollIntoViewIfNeeded();
+      await shot(page, dir, name("05-preferences"));
       await ctx.close();
 
       const admin = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
