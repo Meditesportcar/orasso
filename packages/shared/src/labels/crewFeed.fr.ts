@@ -55,6 +55,7 @@ export const crewFeedLabels = {
   noComments: "Aucun commentaire pour l'instant.",
   commentPlaceholder: "Ton commentaire…",
   commentSend: "Envoyer",
+  commentMissing: "Écris ton commentaire.",
   more: "Plus d'actions",
   remove: "Retirer",
   removePostConfirm: "Retirer cette publication du fil ?",

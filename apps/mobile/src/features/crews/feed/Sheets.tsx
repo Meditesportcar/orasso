@@ -80,7 +80,11 @@ export function CommentsSheet({
   }, [postId, load]);
 
   async function send() {
-    if (!postId || !text.trim()) return;
+    if (!postId) return;
+    if (!text.trim()) {
+      setError(crewFeedLabels.commentMissing);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -179,15 +183,7 @@ export function CommentsSheet({
           multiline
           testID="crew-comment-input"
         />
-        <SmButton
-          kind="p"
-          big
-          wide
-          icon="send"
-          disabled={busy || !text.trim()}
-          onPress={() => void send()}
-          testID="crew-comment-send"
-        >
+        <SmButton kind="p" big wide icon="send" disabled={busy} onPress={() => void send()} testID="crew-comment-send">
           {crewFeedLabels.commentSend}
         </SmButton>
       </AppSheet>

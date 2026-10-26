@@ -64,7 +64,11 @@ export function CommentsDialog({
   }, [postId]);
 
   async function send() {
-    if (!postId || !text.trim()) return;
+    if (!postId) return;
+    if (!text.trim()) {
+      setError(crewFeedLabels.commentMissing);
+      return;
+    }
     setBusy(true);
     setError(null);
     const res = await apiFetch<CrewCommentView>(`/crews/${crewId}/posts/${postId}/comments`, {
@@ -173,13 +177,7 @@ export function CommentsDialog({
           onChange={(e) => setText(e.target.value)}
           data-testid="crew-comment-input"
         />
-        <Button
-          icon="send"
-          disabled={busy || !text.trim()}
-          loading={busy}
-          onClick={() => void send()}
-          data-testid="crew-comment-send"
-        >
+        <Button icon="send" disabled={busy} loading={busy} onClick={() => void send()} data-testid="crew-comment-send">
           {crewFeedLabels.commentSend}
         </Button>
       </div>

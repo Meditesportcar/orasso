@@ -52,7 +52,8 @@ test("site R5c1 : publier, flamme, commentaire, sondage, accès retiré, non-mem
     await loginInBrowser(page, email(nina), undefined, `/c/${crew.slug}`);
     await page.goto(`/c/${crew.slug}`);
     await expect(page.getByTestId("crew-feed")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("crew-feed-empty")).toBeVisible({ timeout: 20_000 });
+    // Les arrivées de Nina et de Léa sont déjà dans le fil (événements automatiques).
+    await expect(page.getByTestId("crew-auto")).toHaveCount(2, { timeout: 20_000 });
     await page.getByTestId("crew-feed-publish").click();
     await expect(page.getByTestId("crew-publish")).toBeVisible();
     await expect(page.getByTestId("crew-publish-missing")).toHaveText("Ajoute au moins une photo ou un mot.");
@@ -72,6 +73,13 @@ test("site R5c1 : publier, flamme, commentaire, sondage, accès retiré, non-mem
       .toBeGreaterThan(0);
     const [w, h] = await img.evaluate((el: HTMLImageElement) => [el.naturalWidth, el.naturalHeight]);
     expect(w).not.toBe(h);
+    // Jamais recadrée (D36) : la photo entière tient dans le cadre (`contain`), elle n'en dépasse pas.
+    const fit = await img.evaluate((el: HTMLImageElement) => {
+      const frame = el.closest(".cf-photos")?.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      return { fit: getComputedStyle(el).objectFit, inside: !!frame && box.height <= frame.height + 1 };
+    });
+    expect(fit).toEqual({ fit: "contain", inside: true });
     await ctx.close();
   }
 

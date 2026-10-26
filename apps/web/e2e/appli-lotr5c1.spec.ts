@@ -135,7 +135,8 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
     await expect(card).toBeVisible({ timeout: 30_000 });
     if (theme === "beton") {
       await card.getByTestId("crew-post-fire").click();
-      await expect(card.getByTestId("crew-post-fire")).toHaveAttribute("aria-selected", "true");
+      // L'état se lit dans le nom accessible (« Retirer ta flamme » une fois donnée).
+      await expect(card.getByTestId("crew-post-fire")).toHaveAttribute("aria-label", "Retirer ta flamme, 1 en tout");
       await expect(card.getByTestId("crew-post-fire")).toContainText("1");
       await card.getByTestId("crew-post-comments").click();
       await k.page.getByTestId("crew-comment-input").fill("Superbe, la STI !");

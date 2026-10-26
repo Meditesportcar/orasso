@@ -102,21 +102,22 @@
   overflow: hidden;
   background: var(--night);
 }
+/* La piste couvre tout le cadre : chaque photo s'y loge entière (`contain`), jamais plus haute que le cadre. */
 .cf-photos__track {
+  position: absolute;
+  inset: 0;
   display: flex;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
-  height: 100%;
 }
 .cf-photos__track::-webkit-scrollbar {
   display: none;
 }
 .cf-photos__slide {
   flex: 0 0 100%;
+  height: 100%;
   scroll-snap-align: start;
-  display: grid;
-  place-items: center;
 }
 .cf-photos__slide img {
   width: 100%;
