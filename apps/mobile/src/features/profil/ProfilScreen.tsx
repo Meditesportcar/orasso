@@ -131,39 +131,42 @@ export function ProfilScreen() {
               </Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={qrLabel}
-            onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
-            testID="profil-account-qr"
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.qrb,
-              base
-                ? { backgroundColor: t.color.surfaceRaised }
-                : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
-          </Pressable>
-          {/* Lot R5b (remarque 6 de Damien) : la roue dentée, à côté du QR, ouvre l'écran « Réglages ». */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={settingsHubLabels.open}
-            onPress={() => router.push("/reglages")}
-            testID="profil-gear"
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.qrb,
-              base
-                ? { backgroundColor: t.color.surfaceRaised }
-                : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon name="gear" size={22} color={t.color.ink} />
-          </Pressable>
+          {/* Lot R5b : le QR et la roue dentée l'un sur l'autre : le pseudo garde toute sa largeur (il ne se coupe pas). */}
+          <View style={styles.headBtns}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={qrLabel}
+              onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
+              testID="profil-account-qr"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.qrb,
+                base
+                  ? { backgroundColor: t.color.surfaceRaised }
+                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
+            </Pressable>
+            {/* Lot R5b (remarque 6 de Damien) : la roue dentée, à côté du QR, ouvre l'écran « Réglages ». */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={settingsHubLabels.open}
+              onPress={() => router.push("/reglages")}
+              testID="profil-gear"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.qrb,
+                base
+                  ? { backgroundColor: t.color.surfaceRaised }
+                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name="gear" size={22} color={t.color.ink} />
+            </Pressable>
+          </View>
         </View>
         {base && profile?.bio ? (
           <Text variant="body" color={t.color.inkMuted} numberOfLines={2} style={styles.bio} testID="profil-bio">
@@ -246,6 +249,7 @@ const styles = StyleSheet.create({
   headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
   headCaption: { flexShrink: 1 },
   qrb: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  headBtns: { gap: space1 + 4 },
   pressed: { opacity: 0.8 },
   // Lot R5b : l'avatar touchable et son petit appareil photo (`.r5cam` de la maquette : rond moutarde en bas à droite).
   avatarBtn: { position: "relative" },
