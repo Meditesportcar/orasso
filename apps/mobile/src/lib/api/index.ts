@@ -28,6 +28,7 @@ import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
 import { structureApi } from "./structure";
+import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
 import { ticketsApi } from "./tickets";
 import { triageApi } from "./triage";
@@ -39,6 +40,7 @@ export { authApi } from "./auth";
 export type { GeocodeMatch } from "./eventEditor";
 export type { FieldAlert, FieldIncident } from "./orga";
 export type { StructureBan } from "./structure";
+export type { StyleProposalPage } from "./styles";
 export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
 
 export const api = {
@@ -74,4 +76,5 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...stylesApi,
 };

@@ -5,10 +5,16 @@
 // barrés avec une seule phrase d'explication).
 import { Icon, type IconName, Text, TextField, textStyles, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type CategoryFamily,
   type CategoryOption,
+  type CategoryRef,
+  categoryFamilyLabels,
   cleanProposedName,
+  groupByFamily,
   vehicleWizardLabels as L,
+  makesForType,
   PROPOSED_NAME_MAX,
+  styleLabels as S,
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
   VEHICLE_ENGINE_MAX,
@@ -25,12 +31,13 @@ import {
   vehicleTypes,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { createRequestGate } from "@/lib/requestGate";
+import { useKeyboardShown } from "@/ui/KeyboardSafe";
 
 import { ColorPicker } from "./ColorPicker";
 import { typeIcon } from "./LiveCard";
@@ -45,6 +52,7 @@ import {
   yearChoices,
 } from "./model";
 import { Crumb, FieldLabel, Pill, SelectRow, StepHead, StepNote, TypeButton, YearChip } from "./parts";
+import { ProposeStyleRow } from "./StyleProposal";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -63,22 +71,11 @@ const PREP_ICONS = {
   wrap: "drop",
 } as const satisfies Record<VehiclePreparation, IconName>;
 
-/** Pictogramme des styles (artefact `s-vadd`, maquette 1.7) ; les autres catégories prennent l'étoile. */
-const STYLE_ICONS: Record<string, IconName> = {
-  jdm: "spark",
-  sportive: "power",
-  preparee: "wrench",
-  "track-day": "flag",
-  drift: "weatherWind",
-  stance: "layers",
-  origine: "drop",
-  youngtimer: "wait",
-  ancienne: "star",
-  supercar: "trophy",
-  moto: "moto",
-  utilitaire: "truck",
-  "4x4": "vehicle",
-};
+/**
+ * Lot R5a : l'icône d'un style vient du catalogue (`categories.icon`, liste fermée d'icônes du kit, testée dans le
+ * système de design) ; une réponse ancienne sans icône prend l'étoile.
+ */
+const styleIcon = (icon: string | undefined): IconName => (icon ?? "star") as IconName;
 
 // --- 3. Marque, modèle, génération (1.5) ------------------------------------------------------------------------
 
@@ -131,16 +128,32 @@ export function StepIdentity({
   makes,
   models,
   generations,
+  onCompact,
 }: {
   draft: Draft;
   patch: Patch;
   makes: VehicleMake[];
   models: VehicleModel[];
   generations: VehicleGeneration[];
+  /**
+   * Lot R5a (maquette R5.1, défaut du 24/10) : clavier ouvert sur la recherche, l'écran se replie (carte « Ton
+   * véhicule », titre, barre « Continuer » et flèche du bas) pour laisser la place aux résultats.
+   */
+  onCompact?: (on: boolean) => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const [search, setSearch] = useState("");
+  // Champ en saisie (clavier ouvert dans l'appli ; dans le navigateur, le champ qui a le focus).
+  const [focused, setFocused] = useState(false);
+  const keyboard = useKeyboardShown();
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (blurTimer.current) clearTimeout(blurTimer.current);
+    },
+    [],
+  );
   const make = makes.find((m) => m.id === draft.makeId);
   const model = models.find((m) => m.id === draft.modelId);
   const otherMake = makes.find((m) => m.isOther);
@@ -157,6 +170,16 @@ export function StepIdentity({
   const pickType = (vehicleType: Draft["vehicleType"]) =>
     patch({ vehicleType, ...reset, ...(draft.typing === "make" ? { makeId: undefined } : {}) });
   const q = search.trim();
+  // Lot R5a : repliée tant que le champ est en saisie et le clavier ouvert ; tout revient au premier toucher dans la
+  // liste (le clavier se ferme) ou à la fermeture du clavier.
+  const compact = focused && level !== "typed" && (Platform.OS === "web" || keyboard);
+  useEffect(() => {
+    onCompact?.(compact);
+  }, [compact, onCompact]);
+  useEffect(() => () => onCompact?.(false), [onCompact]);
+  useEffect(() => {
+    if (level === "typed") setFocused(false);
+  }, [level]);
   // Au niveau Modèle, la marque choisie fait partie de la recherche (« peugeot 207 ») : ses modèles passent en tête.
   const remote = useReferenceSearch(
     level === "make" ? q : level === "model" && q && make && !make.isOther ? `${make.name} ${q}` : "",
@@ -210,7 +233,8 @@ export function StepIdentity({
         add = { label: L.addTypedMake(q), onPress: () => typeMake(q) };
       }
     } else {
-      rows = filterRows(makes, search).map((m) => ({
+      // Lot R5a (maquette R5.1) : seulement les marques qui ont un modèle du type choisi (« Autre » toujours).
+      rows = filterRows(makesForType(makes, draft.vehicleType), search).map((m) => ({
         id: m.id,
         title: m.isOther ? L.makeAbsent : m.name,
         detail: m.isOther ? L.absentHint : null,
@@ -313,10 +337,25 @@ export function StepIdentity({
       : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null);
   const next = typing ? L.generationOptional : level === "model" ? L.model : L.generation;
+  // Lot R5a : le titre de la liste dit ce qu'elle montre (« Marques de motos », « Résultats », « Modèles Yamaha ») ;
+  // plus jamais « Marque » au-dessus de résultats.
+  const listed = rows.filter((r) => !r.other).length;
+  const head: { title: string; aside: string | null } | null =
+    level === "make" || level === "model"
+      ? searched
+        ? rows.length
+          ? { title: S.results, aside: S.resultsCount(rows.length, draft.vehicleType) }
+          : null
+        : level === "make"
+          ? { title: S.makesOfType(draft.vehicleType), aside: S.makesCount(listed) }
+          : make && !make.isOther
+            ? { title: S.modelsOf(make.name), aside: S.makesCount(listed) }
+            : null
+      : null;
 
   return (
     <>
-      <StepHead title={L.identityTitle[draft.vehicleType]} text={L.identityText} />
+      {compact ? null : <StepHead title={L.identityTitle[draft.vehicleType]} text={L.identityText} />}
       <View style={styles.types} accessibilityRole="radiogroup">
         {vehicleTypes.map((v) => (
           <TypeButton
@@ -336,6 +375,14 @@ export function StepIdentity({
             accessibilityLabel={L.search}
             value={search}
             onChangeText={setSearch}
+            onFocus={() => {
+              if (blurTimer.current) clearTimeout(blurTimer.current);
+              setFocused(true);
+            }}
+            // Le retour se fait un instant après : un toucher dans la liste se termine avant que l'écran se déplie.
+            onBlur={() => {
+              blurTimer.current = setTimeout(() => setFocused(false), 180);
+            }}
             autoCorrect={false}
             placeholder={L.search}
             placeholderTextColor={c.inkFaint}
@@ -356,13 +403,8 @@ export function StepIdentity({
           ) : null}
         </View>
       ) : null}
-      {crumbs.length ? (
-        <Crumb items={crumbs} next={next} />
-      ) : (
-        <Text variant="label" color={c.inkMuted}>
-          {L.make}
-        </Text>
-      )}
+      {crumbs.length ? <Crumb items={crumbs} next={next} /> : null}
+      {head ? <ListHead title={head.title} aside={head.aside} /> : null}
       {typing ? (
         <TypedName
           typing={typing}
@@ -383,7 +425,14 @@ export function StepIdentity({
         </Text>
       ) : null}
       {add ? <AddTyped label={add.label} onPress={add.onPress} /> : null}
-      <View style={styles.list}>
+      {/* Lot R5a : le premier toucher dans la liste ferme le clavier (la ligne touchée est choisie) et l'écran revient. */}
+      <View
+        style={styles.list}
+        onTouchEnd={() => {
+          if (compact && Platform.OS !== "web") Keyboard.dismiss();
+        }}
+        testID="vehicle-ref-list"
+      >
         {rows.map((r) => (
           <SelectRow
             key={r.id}
@@ -404,6 +453,23 @@ export function StepIdentity({
         </StepNote>
       ) : null}
     </>
+  );
+}
+
+/** Titre de la liste (`.r5mh`) : « Marques de motos · de A à Z, 39 », « Résultats · 3 motos », « Modèles Yamaha ». */
+function ListHead({ title, aside }: { title: string; aside: string | null }) {
+  const { t } = useTheme();
+  return (
+    <View style={styles.listHead} testID="vehicle-list-head">
+      <Text variant="label" color={t.color.inkMuted} accessibilityRole="header" style={styles.grow}>
+        {title}
+      </Text>
+      {aside ? (
+        <Text variant="caption" color={t.color.inkMuted}>
+          {aside}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -627,21 +693,62 @@ export function StepSpecs({
 
 // --- 5. Catégories (1.7) ------------------------------------------------------------------------------------------
 
+/** Un style de l'étape : proposé par le catalogue, ou en pause et gardé sur la fiche (lot R5a). */
+type StyleItem = {
+  id: string;
+  label: string;
+  icon: string | undefined;
+  family: CategoryFamily;
+  eligible: boolean;
+  reason: string | null;
+  paused: boolean;
+};
+
 export function StepCategories({
   draft,
   patch,
   categories,
   make,
+  paused = [],
+  onPropose,
 }: {
   draft: Draft;
   patch: Patch;
   categories: CategoryOption[];
   make: VehicleMake | undefined;
+  /** Lot R5a : les styles de la fiche mis en pause par l'admin (ils ne se proposent plus ; ils restent affichés). */
+  paused?: readonly CategoryRef[];
+  /** Lot R5a : « Il manque un style ? Propose-le ». */
+  onPropose?: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const origins = originCategories(categories, make?.isOther ? null : make?.country);
-  const styles2 = visibleStyles(categories);
+  // Lot R5a (maquette R5.2) : les styles du type, rangés par famille (Époque, Genre, Préparation, Pratique), l'icône du
+  // catalogue ; un style en pause de la fiche reste dans sa famille, signalé « en pause ».
+  const items: StyleItem[] = [
+    ...visibleStyles(categories).map((s) => ({
+      id: s.id,
+      label: s.label,
+      icon: s.icon,
+      family: s.family ?? "genre",
+      eligible: s.eligible,
+      reason: s.reason,
+      paused: false,
+    })),
+    ...paused
+      .filter((p) => !categories.some((x) => x.id === p.id))
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        icon: p.icon,
+        family: p.family ?? "genre",
+        eligible: true,
+        reason: null,
+        paused: true,
+      })),
+  ];
+  const families = groupByFamily(items);
   const note = dimmedNote(categories, draft.year, draft.vehicleType);
   const prepared = categories.find((x) => x.slug === "preparee");
   const preparedNote = draft.preparation.length > 0 && prepared && draft.categoryIds.includes(prepared.id);
@@ -653,7 +760,7 @@ export function StepCategories({
     });
   return (
     <>
-      <StepHead title={L.categoriesTitle} text={L.categoriesText} />
+      <StepHead title={L.categoriesTitle} text={S.categoriesText} />
       {origins.map((o) => {
         const line = V.originLine(o.label, make?.country ?? null, make?.name ?? "");
         return (
@@ -697,26 +804,45 @@ export function StepCategories({
           </View>
         </>
       ) : null}
-      <FieldLabel>{L.styles}</FieldLabel>
-      <View style={styles.pills}>
-        {styles2.map((s) => (
-          <Pill
-            key={s.id}
-            label={s.label}
-            icon={STYLE_ICONS[s.slug] ?? "star"}
-            selected={draft.categoryIds.includes(s.id)}
-            off={!s.eligible}
-            hint={s.eligible ? null : s.reason}
-            onPress={() => toggle(s.id)}
-            testID={s.eligible ? "vehicle-style" : "vehicle-style-off"}
-          />
+      <View style={styles.families}>
+        {families.map((g) => (
+          <View key={g.family} style={styles.family} testID={`vehicle-family-${g.family}`}>
+            {/* `.r5fam .t-label` : la famille, et « · plusieurs choix » juste après pour le Genre. */}
+            <View style={styles.familyLabel} accessibilityRole="header">
+              <Text variant="label" color={c.inkMuted}>
+                {categoryFamilyLabels[g.family]}
+              </Text>
+              {g.family === "genre" ? (
+                <Text variant="caption" color={c.inkMuted}>
+                  {`· ${S.manyHint}`}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.pills}>
+              {g.rows.map((s) => (
+                <Pill
+                  key={s.id}
+                  label={s.paused ? `${s.label} · ${S.paused}` : s.label}
+                  icon={styleIcon(s.icon)}
+                  selected={draft.categoryIds.includes(s.id)}
+                  off={!s.eligible}
+                  hint={s.paused ? S.pausedHint : s.eligible ? null : s.reason}
+                  onPress={() => toggle(s.id)}
+                  testID={s.paused ? "vehicle-style-paused" : s.eligible ? "vehicle-style" : "vehicle-style-off"}
+                />
+              ))}
+            </View>
+          </View>
         ))}
       </View>
       {note || preparedNote ? (
         <StepNote icon="info" testID="vehicle-styles-note">
-          {[note, preparedNote ? V.preparedChecked : null].filter(Boolean).join(" ")}
+          {[note, preparedNote && prepared ? S.preparedChecked(prepared.label, draft.vehicleType === "truck") : null]
+            .filter(Boolean)
+            .join(" ")}
         </StepNote>
       ) : null}
+      {onPropose ? <ProposeStyleRow onPress={onPropose} /> : null}
     </>
   );
 }
@@ -778,6 +904,10 @@ const styles = StyleSheet.create({
   },
   grow: { flex: 1, minWidth: 0 },
   list: { gap: space2 },
+  listHead: { flexDirection: "row", alignItems: "baseline", gap: space2 },
+  families: { gap: space3 },
+  family: { gap: space2 },
+  familyLabel: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: space1 + 2 },
   stack: { gap: space2 },
   two: { flexDirection: "row", gap: space2 },
   years: { gap: space1 + 2, paddingRight: space2 },

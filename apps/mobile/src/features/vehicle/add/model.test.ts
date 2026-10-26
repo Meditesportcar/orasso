@@ -37,6 +37,8 @@ const cat = (slug: string, over: Partial<CategoryOption> = {}): CategoryOption =
   id: `id-${slug}`,
   slug,
   label: slug.toUpperCase(),
+  family: "genre",
+  icon: "star",
   minVehicleAge: null,
   allowedVehicleTypes: null,
   allowedCountries: null,
@@ -461,5 +463,30 @@ describe("modèle absent de la liste (lot R4a, maquette R4.8)", () => {
     const fr = cat("francaise", { id: "id-fr", allowedCountries: ["FR"] });
     expect(keptCategories(["id-fr"], [fr], null)).toEqual([]);
     expect(keptCategories(["id-fr"], [fr], null, true)).toEqual(["id-fr"]);
+  });
+});
+
+describe("lot R5a : styles en pause, masculin, styles proposés à l'ajout", () => {
+  it("un style de la fiche mis en pause (absent de la liste) reste gardé ; un style inconnu non", () => {
+    const rows = [cat("sportive")];
+    expect(keptCategories(["id-sportive", "id-moto", "id-x"], rows, null, false, ["id-moto"])).toEqual([
+      "id-sportive",
+      "id-moto",
+    ]);
+    // Sans la liste des styles en pause : retiré, comme avant.
+    expect(keptCategories(["id-moto"], rows, null)).toEqual([]);
+  });
+
+  it("la phrase des styles grisés s'accorde au masculin pour un camion", () => {
+    const rows = [
+      cat("youngtimer", { label: "Youngtimer", eligible: false, refusal: "age" }),
+      cat("ancienne", { label: "Ancien", eligible: false, refusal: "age" }),
+    ];
+    expect(dimmedNote(rows, 2008, "truck")).toBe("Youngtimer et Ancien sont grisés : ton camion est de 2008.");
+  });
+
+  it("les styles proposés pendant l'ajout partent avec la création", () => {
+    expect(createBody(filled({ styleProposalIds: ["p-1"] })).styleProposalIds).toEqual(["p-1"]);
+    expect("styleProposalIds" in createBody(filled())).toBe(false);
   });
 });

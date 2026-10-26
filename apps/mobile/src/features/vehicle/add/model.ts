@@ -12,6 +12,7 @@ import {
   normalizePlate,
   type PlateRect,
   parsePreparation,
+  styleLabels,
   vehicleAddLabels as V,
   type VehicleCreate,
   type VehicleFull,
@@ -111,6 +112,11 @@ export type Draft = {
   typing?: "model" | "make";
   proposedMake?: string;
   proposedModel?: string;
+  /**
+   * Lot R5a : styles proposés pendant l'ajout (« Il manque un style ? Propose-le ») : rattachés au véhicule à sa
+   * création, pour y être posés s'ils sont retenus.
+   */
+  styleProposalIds?: string[];
 };
 
 /** Une plaque lue sur une photo, telle que l'étape Plaque la garde (sans le cadre). */
@@ -254,17 +260,23 @@ export const pickableOrigins = (rows: readonly CategoryOption[]) =>
 /** Les autres catégories à choisir (les origines d'autres pays ne sont pas des styles : on ne les montre pas). */
 export const styleCategories = (rows: readonly CategoryOption[]) => rows.filter((c) => !c.allowedCountries);
 
-/** Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. */
+/**
+ * Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. Lot R5a : `paused`, les styles
+ * de la fiche mis en pause par l'admin (absents de la liste proposée) : gardés tant que la personne ne les retire pas.
+ */
 export function keptCategories(
   ids: readonly string[],
   rows: readonly CategoryOption[],
   makeCountry: string | null,
   /** Lot R4a : marque tapée, l'origine se choisit à la main (elle ne se déduit pas). */
   pickOrigins = false,
+  paused: readonly string[] = [],
 ) {
   const origins = originCategories(rows, makeCountry).map((c) => c.id);
   const eligible = new Set((pickOrigins ? rows : styleCategories(rows)).filter((c) => c.eligible).map((c) => c.id));
-  const styles = ids.filter((id) => eligible.has(id) && !origins.includes(id));
+  const styles = ids.filter(
+    (id) => (eligible.has(id) || (paused.includes(id) && !rows.some((c) => c.id === id))) && !origins.includes(id),
+  );
   return [...origins, ...styles].slice(0, MAX_CATEGORIES);
 }
 
@@ -275,13 +287,16 @@ export function keptCategories(
 export const visibleStyles = (rows: readonly CategoryOption[]) =>
   styleCategories(rows).filter((c) => c.refusal !== "type" && c.refusal !== "make");
 
-/** « Youngtimer et Ancienne sont grisées : ta voiture est de 2021. » (lot M1, une seule phrase sous les styles). */
+/**
+ * « Youngtimer et Ancienne sont grisées : ta voiture est de 2021. » (lot M1, une seule phrase sous les styles) ; lot R5a :
+ * accordée au masculin pour un camion (« Youngtimer et Ancien sont grisés : ton camion est de 2008. »).
+ */
 export function dimmedNote(rows: readonly CategoryOption[], year: number | undefined, type: VehicleType) {
   if (!year) return null;
   const labels = visibleStyles(rows)
     .filter((c) => c.refusal === "age")
     .map((c) => c.label);
-  return labels.length ? V.stylesDimmed(labels, V.vehicleNoun[type], year) : null;
+  return labels.length ? styleLabels.dimmed(labels, V.vehicleNoun[type], year, type === "truck") : null;
 }
 
 /** Catégorie « Préparée » à cocher d'office quand une préparation est choisie (maquette 1.7), si elle convient. */
@@ -489,6 +504,7 @@ export function createBody(d: Draft): VehicleCreate {
     categoryIds: d.categoryIds,
     proposedMake: d.typing === "make" ? cleanProposedName(d.proposedMake) : null,
     proposedModel: d.typing ? cleanProposedName(d.proposedModel) : null,
+    ...(d.styleProposalIds?.length ? { styleProposalIds: d.styleProposalIds } : {}),
   };
 }
 

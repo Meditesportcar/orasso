@@ -170,6 +170,29 @@ for (const theme of ["beton", "sable"] as const) {
       await ctx.close();
     });
 
+    test(`appli (${theme}, ${width} px) : « Modifier la fiche » (feuille du menu …)`, async ({ browser }) => {
+      test.skip(!APP, "Appli : lancer avec APP_URL");
+      test.setTimeout(180_000);
+      const dir = `${ROOT}/appli`;
+      const g = await garage(`R5aF${unique()}`.slice(0, 20));
+      const { ctx, page } = await openApp(browser, theme, width);
+      await signIn(page, g.email);
+      for (const [id, label] of [
+        [g.moto, "09-feuille-modifier-moto"],
+        [g.truck, "10-feuille-modifier-camion"],
+      ] as const) {
+        await page.goto(`/vehicule/${id}`);
+        await afterOpening(page);
+        await page.getByTestId("vehicle-menu").click();
+        await page.getByTestId("vehicle-edit-open").click();
+        await expect(page.getByTestId("vehicle-save")).toBeVisible({ timeout: 30_000 });
+        await page.getByTestId("vehicle-save").scrollIntoViewIfNeeded();
+        await page.waitForTimeout(600);
+        await shot(page, dir, `${theme}-${width}-${label}`);
+      }
+      await ctx.close();
+    });
+
     test(`appli (${theme}, ${width} px) : base véhicules de l'administration`, async ({ browser }) => {
       test.skip(!APP, "Appli : lancer avec APP_URL");
       test.setTimeout(180_000);
