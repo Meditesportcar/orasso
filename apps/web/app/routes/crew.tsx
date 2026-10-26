@@ -1,4 +1,4 @@
-import { Button, Icon, TextField } from "@orasso/design-system/web";
+import { Button, departmentChoices, Icon, TextField } from "@orasso/design-system/web";
 import {
   type CrewMemberView,
   type CrewPendingList,
@@ -163,7 +163,13 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
           </span>
           <div className="crw-id__text">
             <h1 className="s-title o-never-truncate">{crew.name}</h1>
-            <span className="o-t-caption s-muted">{L.idLine(crew.department, crew.membersCount, since)}</span>
+            <span className="o-t-caption s-muted">
+              {L.idLine(
+                departmentChoices.find((d) => d.code === crew.department)?.name ?? crew.department,
+                crew.membersCount,
+                since,
+              )}
+            </span>
           </div>
         </div>
         {crew.description ? (

@@ -6,7 +6,17 @@
 // - non-membre : la vitrine (image du crew, description, Instagram, amis membres, membres) et « Demander à rejoindre »,
 //   qui ouvre la feuille avec un mot pour le chef ; puis « Demande envoyée à … » et « Annuler la demande ».
 // Les réglages du chef (logo, bannière, Instagram, sorties, retirer, dissoudre) ont leur écran (`/crew/reglages`).
-import { Icon, initialsOf, Photo, Tag, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  departmentChoices,
+  Icon,
+  initialsOf,
+  Photo,
+  Tag,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import {
   type CrewOutingRsvp,
   type CrewOutingView,
@@ -255,7 +265,7 @@ export default function CrewScreen() {
             {v.name}
           </Text>
           <Text variant="caption" color={c.inkMuted}>
-            {L.idLine(v.department, v.membersCount, since)}
+            {L.idLine(departmentName(v.department), v.membersCount, since)}
           </Text>
         </View>
       </View>
@@ -548,6 +558,11 @@ function pairs<T>(items: readonly T[]): T[][] {
   return out;
 }
 
+/** « Crew · Pyrénées-Orientales · … » (maquette R5.7) : le nom du département, son numéro s'il est inconnu. */
+function departmentName(code: string): string {
+  return departmentChoices.find((d) => d.code === code)?.name ?? code;
+}
+
 /** Glyphe Instagram du kit, à la taille de la pastille `.r5sc`. */
 function InstagramGlyph() {
   const { t } = useTheme();
@@ -556,10 +571,12 @@ function InstagramGlyph() {
 
 const styles = StyleSheet.create({
   hero: { height: 190, width: "100%" },
-  id: { flexDirection: "row", alignItems: "flex-end", gap: space3 + 2, marginTop: -46 },
+  // Le nom commence sous la bannière (maquette `.cr-id .stack` : padding-top 48 px, plus l'anneau du logo) : sur une
+  // photo de bannière, l'encre du thème Sable ne se lirait pas.
+  id: { flexDirection: "row", alignItems: "flex-start", gap: space3 + 2, marginTop: -46 },
   logoRing: { borderRadius: 46, padding: 4 },
   logoImg: { width: 84, height: 84, borderRadius: 42, overflow: "hidden" },
-  idText: { flex: 1, minWidth: 0, gap: space1, paddingBottom: space1 },
+  idText: { flex: 1, minWidth: 0, gap: space1, paddingTop: 50, paddingBottom: space1 },
   name: { fontSize: 24, lineHeight: 23 },
   bio: { fontSize: 13.5, lineHeight: 19.5 },
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
