@@ -179,9 +179,9 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
   }
 
   // 3. Léa, retirée du crew : plus de fil, plus de photo, tout de suite ; ses publications, elle peut les retirer.
-  expect((await apiCall(cLea, "POST", `/crews/${crew.id}/posts`, { kind: "text", text: "Je pars bientôt" })).status).toBe(
-    201,
-  );
+  expect(
+    (await apiCall(cLea, "POST", `/crews/${crew.id}/posts`, { kind: "text", text: "Je pars bientôt" })).status,
+  ).toBe(201);
   expect(await rawStatus(cLea, photoUrl)).toBe(200);
   const leaId = (await apiCall<{ user: { id: string } }>(cLea, "GET", "/me")).data.user.id;
   expect((await apiCall(cKenji, "DELETE", `/crews/${crew.id}/members/${leaId}`)).status).toBe(204);

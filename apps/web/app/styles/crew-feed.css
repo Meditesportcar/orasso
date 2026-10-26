@@ -191,9 +191,6 @@
   background: var(--accent-soft);
   color: var(--ink);
 }
-.cf-rx__btn[aria-pressed="true"] svg {
-  color: var(--accent-text);
-}
 .cf-rx__btn:disabled {
   opacity: 0.6;
   cursor: default;
@@ -235,10 +232,6 @@
 .cf-poll__opt[aria-pressed="true"] {
   border-color: var(--accent-text);
 }
-.cf-poll__opt[aria-pressed="true"] .cf-poll__dot {
-  border-color: var(--accent-text);
-  color: var(--accent-text);
-}
 .cf-poll__opt:disabled {
   cursor: default;
 }
@@ -246,9 +239,6 @@
   position: absolute;
   inset: 0 auto 0 0;
   background: var(--surface-raised);
-}
-.cf-poll__opt[aria-pressed="true"] .cf-poll__bar {
-  background: var(--accent-soft);
 }
 .cf-poll__label,
 .cf-poll__share,
@@ -486,4 +476,16 @@
 .cf-answer > :first-child {
   flex: 1;
   min-width: 0;
+}
+
+/* États choisis (tour 2, moutarde léger), après les règles de base. */
+.cf-rx__btn[aria-pressed="true"] svg {
+  color: var(--accent-text);
+}
+.cf-poll__opt[aria-pressed="true"] .cf-poll__dot {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+}
+.cf-poll__opt[aria-pressed="true"] .cf-poll__bar {
+  background: var(--accent-soft);
 }

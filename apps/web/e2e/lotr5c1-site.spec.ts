@@ -142,7 +142,11 @@ test("site R5c1 : publier, flamme, commentaire, sondage, accès retiré, non-mem
   }
 
   // 4. D36 (tour 2) : la photo n'est servie par aucune autre graphie de `/api/files`, ni après la dissolution.
-  const feed = await apiCall<{ items: { post?: { photos: { url: string }[] } }[] }>(cNina, "GET", `/crews/${crew.id}/feed`);
+  const feed = await apiCall<{ items: { post?: { photos: { url: string }[] } }[] }>(
+    cNina,
+    "GET",
+    `/crews/${crew.id}/feed`,
+  );
   const photoUrl = feed.data.items.find((i) => i.post?.photos.length)?.post?.photos[0]?.url ?? "";
   const name = photoUrl.split("/").at(-1);
   expect(name).toMatch(/\.webp$/);
