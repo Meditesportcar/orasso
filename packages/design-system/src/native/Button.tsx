@@ -8,10 +8,13 @@ import { withAlpha } from "./color";
 import { Icon } from "./Icon";
 import { usePressScale } from "./motionHooks";
 import { OLoader } from "./olive/OLoader";
-import { Text } from "./text";
+import { Text, textStyles } from "./text";
 import { radius, spacing, useTheme } from "./theme";
+import { useWordSafeLabel } from "./useWordSafeLabel";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const BUTTON_FONT_SIZE = textStyles.button.fontSize ?? 14;
+const BUTTON_LINE_HEIGHT = textStyles.button.lineHeight ?? 18;
 
 type Common = Omit<PressableProps, "children" | "style"> & {
   children?: ReactNode;
@@ -160,6 +163,15 @@ export function Button(props: ButtonProps) {
     fontSize = 11;
     lineHeight = 13;
   }
+  // Lot R5b : jamais de coupure en plein mot ; le corps baisse au besoin (11 px au plus bas).
+  const baseSize = fontSize ?? BUTTON_FONT_SIZE;
+  const safe = useWordSafeLabel(baseSize, typeof children === "string" ? children : "");
+  if (safe.fontSize !== null) {
+    lineHeight = Math.round(
+      ((lineHeight ?? (fontSize ? fontSize + 2 : BUTTON_LINE_HEIGHT)) * safe.fontSize) / baseSize,
+    );
+    fontSize = safe.fontSize;
+  }
   const inactive = disabled || loading;
   const labelStyle: TextStyle = {
     color: ink,
@@ -202,7 +214,11 @@ export function Button(props: ButtonProps) {
           ) : (
             icon && <Icon name={icon} size={iconSize(variant, layout)} color={ink} />
           )}
-          <Text variant="button" style={[styles.label, layout === "column" && styles.columnLabel, labelStyle]}>
+          <Text
+            variant="button"
+            style={[styles.label, layout === "column" && styles.columnLabel, labelStyle]}
+            {...safe.textProps}
+          >
             {children}
           </Text>
           {next && <Icon name="next" size={18} color={ink} />}

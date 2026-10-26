@@ -1,18 +1,18 @@
 // Lot R4c (maquette R4.6c) : « Mon profil public », en aperçu. Mon profil tel que le voit un membre connecté (bascule
 // « vu par un ami »), calculé par l'API (`/me/public-preview?as=`) avec les règles de `GET /users/:pseudo`. Bandeau
-// « Aperçu », boutons inertes, garage en vitrine (le principal en premier), « Régler la confidentialité ».
-import { Button, Icon, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
-import { mainVehicleLabels, networkLabels, publicPreviewLabels as P, type PreviewAs } from "@orasso/shared";
+// « Aperçu », boutons inertes, « Régler la confidentialité ».
+// Lot R5b (maquette R5.6) : le même écran que le profil d'un membre (`PublicProfile`) ; l'aperçu ajoute seulement le
+// bandeau et « Modifier » en haut (vers « Modifier mon profil »).
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { publicPreviewLabels as P, type PreviewAs, publicProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { SmButton } from "@/features/passionne/kit";
-import { PublicHead } from "@/features/profil/network";
+import { PublicProfile } from "@/features/profil/PublicProfile";
 import { api } from "@/lib/api";
-import { formatDay } from "@/lib/format";
-import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
+import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
@@ -36,6 +36,11 @@ export default function ProfilPublic() {
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/profil"))}
       closeLabel="Retour au profil"
       onRefresh={preview.reload}
+      actions={
+        <SmButton kind="s" icon="edit" onPress={() => router.push("/reglages/profil")} testID="preview-edit">
+          {publicProfileLabels.edit}
+        </SmButton>
+      }
     >
       <View style={[styles.seg, { backgroundColor: c.surfaceRaised }]} accessibilityRole="tablist" testID="preview-as">
         {(["member", "friend"] as const).map((x) => {
@@ -64,140 +69,18 @@ export default function ProfilPublic() {
 
       {preview.error ? <Notice tone="error">{preview.error.message}</Notice> : null}
       {!p ? <Muted variant="body">Chargement…</Muted> : null}
+      {p ? <PublicProfile p={p} mode="preview" previewAsFriend={as === "friend"} /> : null}
 
-      {p ? (
-        <>
-          <PublicHead
-            p={p}
-            actions={
-              // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres.
-              <View style={styles.inert} pointerEvents="none" accessibilityElementsHidden testID="preview-actions">
-                <View style={styles.grow}>
-                  <Button variant="primary" icon={as === "friend" ? "check" : "add"} fullWidth>
-                    {as === "friend" ? "Ami" : "Ajouter en ami"}
-                  </Button>
-                </View>
-                {p.follow.canFollow ? (
-                  <Button variant="secondary" icon="add">
-                    {networkLabels.follow}
-                  </Button>
-                ) : null}
-                <SmButton kind="s" icon="chat" big accessibilityLabel="Écrire" />
-              </View>
-            }
-          />
-          <Muted variant="caption">{P.inert}</Muted>
-
-          {limited ? (
-            <>
-              <View style={styles.secHead}>
-                <Text variant="posterM" color={c.ink}>
-                  {P.vehiclesPrivate}
-                </Text>
-                <Muted variant="caption">{P.vehiclesPrivateHint}</Muted>
-              </View>
-              <View style={styles.plist} testID="preview-vehicles">
-                {p.vehicles.map((v) => (
-                  <View key={v.id} style={[styles.pitem, { backgroundColor: c.surface }]}>
-                    <Icon name="vehicle" size={16} color={c.ink} />
-                    <Text variant="bodyStrong" color={c.ink}>
-                      {v.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              <View style={[styles.note, { backgroundColor: c.surface }]}>
-                <Icon name="lock" size={16} color={c.inkMuted} />
-                <Text variant="caption" color={c.inkMuted} style={styles.bannerText}>
-                  {P.privateRest}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              {/* Tour 2 : tout ce qu'un membre voit vraiment (champs de GET /users/:pseudo pour ce regard). */}
-              {p.upcomingEvents ? (
-                <>
-                  <View style={styles.secHead}>
-                    <Text variant="posterM" color={c.ink}>
-                      {P.upcoming}
-                    </Text>
-                    <Muted variant="caption">{String(p.upcomingEvents.length)}</Muted>
-                  </View>
-                  <View style={styles.plist} testID="preview-upcoming">
-                    {p.upcomingEvents.length === 0 ? <Muted variant="body">{P.noUpcoming}</Muted> : null}
-                    {p.upcomingEvents.slice(0, 5).map((e) => (
-                      <View key={e.slug} style={[styles.pitem, { backgroundColor: c.surface }]}>
-                        <Icon name="calendar" size={16} color={c.ink} />
-                        <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
-                          {e.title}
-                        </Text>
-                        <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-              {p.crews && p.crews.length > 0 ? (
-                <>
-                  <View style={styles.secHead}>
-                    <Text variant="posterM" color={c.ink}>
-                      {P.crew}
-                    </Text>
-                  </View>
-                  <View style={styles.plist} testID="preview-crews">
-                    {p.crews.map((cr) => (
-                      <View key={cr.id} style={[styles.pitem, { backgroundColor: c.surface }]}>
-                        <Icon name="crew" size={16} color={c.ink} />
-                        <Text variant="bodyStrong" color={c.ink}>
-                          {cr.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-              <View style={styles.secHead}>
-                <Text variant="posterM" color={c.ink}>
-                  {P.garage}
-                </Text>
-                <Muted variant="caption">{`${p.vehicles.length} véhicule${p.vehicles.length > 1 ? "s" : ""}`}</Muted>
-              </View>
-              <View style={styles.plist} testID="preview-vehicles">
-                {p.vehicles.map((v, i) => (
-                  <VehicleCard
-                    key={v.id}
-                    first={i === 0}
-                    name={v.label}
-                    facts={v.main ? `★ ${mainVehicleLabels.tag}` : undefined}
-                    photo={{
-                      source: mediaSource(v.photoUrl),
-                      placeholder: `linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`,
-                    }}
-                  />
-                ))}
-              </View>
-            </>
-          )}
-        </>
-      ) : null}
-
-      <View style={styles.buttons}>
-        <SmButton
-          kind="s"
-          icon="lock"
-          big
-          wide
-          onPress={() => router.push("/reglages/confidentialite")}
-          testID="preview-privacy"
-        >
-          {P.privacy}
-        </SmButton>
-        {/* Photo, pseudo, description : l'édition était derrière l'ancienne ligne « Mon profil public » des réglages. */}
-        <SmButton kind="g" icon="edit" wide onPress={() => router.push("/reglages/profil")} testID="preview-edit">
-          Modifier ma photo, mon pseudo, ma description
-        </SmButton>
-      </View>
+      <SmButton
+        kind="s"
+        icon="lock"
+        big
+        wide
+        onPress={() => router.push("/reglages/confidentialite")}
+        testID="preview-privacy"
+      >
+        {P.privacy}
+      </SmButton>
     </FlowScreen>
   );
 }
@@ -214,11 +97,4 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   bannerText: { flex: 1, fontSize: 12.5, lineHeight: 17 },
-  inert: { flexDirection: "row", gap: space2, opacity: 0.6, alignItems: "center" },
-  grow: { flex: 1 },
-  secHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
-  plist: { gap: space2 },
-  pitem: { flexDirection: "row", alignItems: "center", gap: space2, padding: space3, borderRadius: 12 },
-  note: { flexDirection: "row", gap: space2, alignItems: "flex-start", padding: space3, borderRadius: 14 },
-  buttons: { gap: space2 },
 });

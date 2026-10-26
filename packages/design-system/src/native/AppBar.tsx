@@ -174,6 +174,8 @@ export type AppBarProps = {
   onInbox?: () => void;
   inboxOn?: boolean;
   inboxCount?: number;
+  /** Écran de flux (lot R5b) : boutons posés avant le ✕ (`AppBarFlowAction`, ou un petit bouton « Modifier »). */
+  actions?: ReactNode;
   /** ✕ Fermer (obligatoire en flux ; facultatif en barre `tab`). */
   onClose?: () => void;
   closeLabel?: string;
@@ -210,6 +212,37 @@ function CloseX({ label, onPress, onBar }: { label: string; onPress?: () => void
 }
 
 /**
+ * Lot R5b (maquette R5.6) : un bouton carré de l'en-tête de fiche, à gauche du ✕ (« Écrire », « ⋯ » du profil d'un
+ * membre) : même carré que le ✕ en flux (38 px, rayon 12, fond de carte, filet de plaque).
+ */
+export function AppBarFlowAction({
+  icon,
+  label,
+  onPress,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  onPress?: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={HIT_38}
+      testID={testID}
+      style={[styles.action, { backgroundColor: c.surface, borderColor: c.plateLine, borderWidth: 1.5 }]}
+    >
+      <Icon name={icon} size={20} color={c.ink} />
+    </Pressable>
+  );
+}
+
+/**
  * L'en-tête d'onglet : 58 px de barre unie bordée d'un filet moutarde. La marque est toujours le premier élément à
  * gauche ; la navigation « Fermer » est toujours à droite.
  */
@@ -238,6 +271,7 @@ export function AppBar({
   onInbox,
   inboxOn,
   inboxCount,
+  actions,
   onClose,
   closeLabel = "Fermer",
   bleed = false,
@@ -283,6 +317,7 @@ export function AppBar({
             </View>
           </View>
         ) : null}
+        {actions ? <View style={styles.flowActions}>{actions}</View> : null}
         {onClose || kind === "flow" ? <CloseX label={closeLabel} onPress={onClose} onBar={false} /> : null}
       </View>
     );
@@ -382,6 +417,7 @@ const styles = StyleSheet.create({
   // Au moins la hauteur du ✕ : un titre d'une ligne reste centré sur lui, comme avant le lot M7.
   heading: { flex: 1, minWidth: 0, minHeight: 38, justifyContent: "center" },
   closeTop: { alignSelf: "flex-start" },
+  flowActions: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8 },
   counter: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.radiusSm },
   action: {
     width: BAR_ACTION,

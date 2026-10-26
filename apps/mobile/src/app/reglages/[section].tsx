@@ -27,7 +27,7 @@ import { HelpSection } from "@/features/moi/HelpSection";
 import { NotificationsSection } from "@/features/moi/NotificationsSection";
 import { PasskeysSheet } from "@/features/moi/PasskeysSheet";
 import { PointsSection } from "@/features/moi/PointsSection";
-import { ProfileSection } from "@/features/moi/ProfileSection";
+import { EditProfileScreen } from "@/features/moi/ProfileSection";
 import { QrSecretSheet } from "@/features/moi/QrSecretSheet";
 import { SecuritySection, type SecuritySheet } from "@/features/moi/SecuritySection";
 import { SessionsSheet } from "@/features/moi/SessionsSheet";
@@ -47,7 +47,8 @@ const SECTIONS = {
   // Ancien chemin (lot 40) : même écran que Compte.
   securite: "Compte",
   confidentialite: "Confidentialité",
-  profil: "Mon profil public",
+  // Lot R5b : « Modifier mon profil » (son propre écran, `EditProfileScreen`).
+  profil: "Modifier mon profil",
   aide: "Aide",
   points: "Mes points",
 } as const;
@@ -72,11 +73,14 @@ export default function Reglages() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const close = () => setSheet(null);
 
+  // Lot R5b (maquette R5.5) : « Modifier mon profil » a son écran, avec « Enregistrer » fixé en bas.
+  if (section === "profil") return <EditProfileScreen />;
+
   return (
     <FlowScreen
       title={SECTIONS[section]}
       facts={section === "aide" ? helpLabels.subtitle : undefined}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/moi"))}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/reglages"))}
       onRefresh={async () => {
         await Promise.all([refreshMe(), settings.reload()]);
       }}
@@ -178,23 +182,6 @@ export default function Reglages() {
           <Button variant="plate" icon="close" onPress={() => setSheet("delete")} fullWidth>
             Supprimer mon compte
           </Button>
-        </>
-      ) : null}
-
-      {section === "profil" ? (
-        <>
-          <ProfileSection />
-          {me ? (
-            <Button
-              variant="plate"
-              icon="eye"
-              next
-              fullWidth
-              onPress={() => router.push(`/u/${encodeURIComponent(me.profile.pseudo)}`)}
-            >
-              Voir ma page publique
-            </Button>
-          ) : null}
         </>
       ) : null}
 

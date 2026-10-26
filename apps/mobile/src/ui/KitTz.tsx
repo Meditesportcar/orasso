@@ -497,8 +497,16 @@ const styles = StyleSheet.create({
   dirBig: { flexDirection: "row", gap: 10 },
   dirTile: { flex: 1, minWidth: 0, borderRadius: 20, padding: 14, gap: 4 },
   dirNum: { fontSize: 64, lineHeight: 60 },
-  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
-  secTitle: { flexShrink: 1, fontSize: 16 },
+  // Lot R5b (titres « SON ») : le titre prend la place restante (jamais un mot perdu), l'aide passe dessous au besoin.
+  secH: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 2,
+  },
+  secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 16 },
   secHint: { flexShrink: 1, textAlign: "right" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13 },
