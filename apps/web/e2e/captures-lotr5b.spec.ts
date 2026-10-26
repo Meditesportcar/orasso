@@ -88,9 +88,7 @@ test("R5b captures : appli", async ({ browser }) => {
     // Tour 2 : l'écran « Réglages » et l'Accueil (titres de section dont l'aide ou le lien passe dessous).
     ["kenji@orasso.local", "/reglages", "reglages-kenji"],
     ["kenji@orasso.local", "/accueil", "voisin-accueil-kenji"],
-    ["kenji@orasso.local", "/explorer?segment=personnes", "voisin-explorer-personnes-kenji"],
     ["kenji@orasso.local", "/rejoindre-crew", "voisin-crews-kenji"],
-    ["damien@orasso.local", "/equipe", "voisin-equipe-damien"],
     ["kenji@orasso.local", "/reglages/profil", "reglages-profil-kenji"],
     ["kenji@orasso.local", "/reglages/compte", "reglages-compte-kenji"],
     ["kenji@orasso.local", "/profil-public", "profil-public-kenji"],
@@ -107,12 +105,7 @@ test("R5b captures : appli", async ({ browser }) => {
   if (eventSlug) screens.push(["kenji@orasso.local", `/e/${eventSlug}`, "voisin-fiche-kenji"]);
   // Police agrandie à 384 px : les écrans des défauts « SON » et « AJOUT/ER ».
   // Tour 2 (décision du coordinateur) : les titres de section à police normale à 384 px aussi (aide à droite).
-  const normal384 = new Set([
-    "voisin-accueil-kenji",
-    "voisin-explorer-personnes-kenji",
-    "voisin-crews-kenji",
-    "voisin-equipe-damien",
-  ]);
+  const normal384 = new Set(["voisin-accueil-kenji", "voisin-crews-kenji"]);
   const big = new Set([
     "profil-public-damien",
     "u-julie-par-kenji",
@@ -138,6 +131,38 @@ test("R5b captures : appli", async ({ browser }) => {
         }
         await ctx.close();
       }
+    }
+  }
+});
+
+// Tour 2 (décision du coordinateur) : les titres de section de l'Explorer (Personnes et crews) et de l'équipe de
+// l'organisateur, à police normale, 390 et 384 px : l'aide reste à droite quand elle tient.
+test("R5b captures : Explorer et équipe", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  test.setTimeout(900_000);
+  mkdirSync(`${DIR}/appli`, { recursive: true });
+  for (const theme of THEMES) {
+    for (const width of [390, 384]) {
+      const kenji = await openApp(browser, theme, width);
+      await signIn(kenji.page, "kenji@orasso.local");
+      await kenji.page.goto("/explorer");
+      await afterOpening(kenji.page);
+      await kenji.page.getByText("Personnes et crews", { exact: true }).first().click();
+      await kenji.page.waitForTimeout(2500);
+      await kenji.page.screenshot({ path: `${DIR}/appli/voisin-explorer-personnes-kenji-${theme}-${width}.png` });
+      await kenji.ctx.close();
+
+      const damien = await openApp(browser, theme, width);
+      await signIn(damien.page, "damien@orasso.local");
+      await damien.page.goto("/moi");
+      await afterOpening(damien.page);
+      await damien.page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).first().click();
+      await damien.page.waitForURL(/direct/, { timeout: 20_000 });
+      await damien.page.getByRole("tab", { name: "Équipe" }).click();
+      await damien.page.waitForURL(/equipe/, { timeout: 20_000 });
+      await damien.page.waitForTimeout(2500);
+      await damien.page.screenshot({ path: `${DIR}/appli/voisin-equipe-damien-${theme}-${width}.png` });
+      await damien.ctx.close();
     }
   }
 });
