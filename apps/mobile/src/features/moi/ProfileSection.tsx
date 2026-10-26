@@ -30,11 +30,11 @@ import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
+import { type EditSocials, editFormOf, emptySocials, saveEditProfile } from "./editProfileModel";
 
 const { space1, space2, space3 } = tokens.spacing;
 
 type PseudoState = "same" | "checking" | "free" | "taken" | "invalid";
-type Socials = Record<SocialNetwork, string>;
 
 const NETWORK_ICON: Record<SocialNetwork, IconName> = {
   instagram: "instagram",
@@ -43,8 +43,6 @@ const NETWORK_ICON: Record<SocialNetwork, IconName> = {
   facebook: "facebook",
   snapchat: "snapchat",
 };
-
-const emptySocials = (): Socials => ({ instagram: "", tiktok: "", youtube: "", facebook: "", snapchat: "" });
 
 /** Une ligne « Mes réseaux » (`.r5sf` de la maquette) : icône, nom, préfixe, saisie, coche quand le pseudo est bon. */
 function SocialField({
@@ -121,11 +119,11 @@ export function EditProfileScreen() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const { me, refreshMe } = useSession();
+  const { me, refreshMe, adoptMe } = useSession();
   const profile = me?.profile;
   const [pseudo, setPseudo] = useState("");
   const [bio, setBio] = useState("");
-  const [socials, setSocials] = useState<Socials>(emptySocials);
+  const [socials, setSocials] = useState<EditSocials>(emptySocials);
   const [pseudoState, setPseudoState] = useState<PseudoState>("same");
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -137,9 +135,10 @@ export function EditProfileScreen() {
   useEffect(() => {
     if (!profile || filled.current) return;
     filled.current = true;
-    setPseudo(profile.pseudo);
-    setBio(profile.bio ?? "");
-    setSocials({ ...emptySocials(), ...(profile.socials ?? {}) });
+    const form = editFormOf(profile);
+    setPseudo(form.pseudo);
+    setBio(form.bio);
+    setSocials(form.socials);
   }, [profile]);
 
   // Disponibilité du pseudo pendant la saisie ; garder le sien n'est pas « pris ».
@@ -203,9 +202,12 @@ export function EditProfileScreen() {
     setBusy(true);
     setMessage(null);
     try {
-      await api.updateProfile({ pseudo, bio, socials });
-      await refreshMe();
-      filled.current = false;
+      // Tour 2 : le formulaire et le compte prennent le profil renvoyé par le PATCH (jamais un `/me` relu, qui hors
+      // ligne rendrait l'ancien cache).
+      const form = await saveEditProfile({ pseudo, bio, socials }, { update: api.updateProfile, adopt: adoptMe });
+      setPseudo(form.pseudo);
+      setBio(form.bio);
+      setSocials(form.socials);
       setMessage({ tone: "ok", text: L.saved });
     } catch (e) {
       setMessage({ tone: "error", text: errorMessage(e) });
