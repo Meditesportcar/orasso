@@ -13,6 +13,7 @@ import {
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
+import { CrewFeed } from "../components/crew-feed/CrewFeed"; // R5c1 : fil, à rebrancher dans l'onglet Fil
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
@@ -199,6 +200,8 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
           </Button>
         )}
         {!member && <p className="o-t-caption s-muted">{crewLabels.membersPrivate}</p>}
+        {/* R5c1 : fil, à rebrancher dans l'onglet Fil */}
+        {member && <CrewFeed crew={{ id: crew.id, slug: crew.slug, archived: crew.archived }} />}
         {!leader && !crew.archived && <ReportDialog look="link" targetType="crew" targetId={crew.id} />}
 
         {leader && pending && (

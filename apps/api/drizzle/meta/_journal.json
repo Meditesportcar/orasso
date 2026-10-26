@@ -435,6 +435,13 @@
       "when": 1792854619974,
       "tag": "0061_vehicle-version",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793027788659,
+      "tag": "0062_crew-feed",
+      "breakpoints": true
     }
   ]
 }

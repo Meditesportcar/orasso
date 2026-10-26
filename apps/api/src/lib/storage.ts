@@ -2,16 +2,25 @@
 // servi par /api/files/*.
 // Le pilote S3 OVH viendra quand les clés existeront (H7) : même interface.
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import { env, repoRoot } from "../env";
 
 const dataDir = isAbsolute(env.DATA_DIR) ? env.DATA_DIR : resolve(repoRoot, env.DATA_DIR);
 const storageDir = env.UPLOADS_DIR ? resolve(repoRoot, env.UPLOADS_DIR) : join(dataDir, "storage");
 
-function pathOf(key: string): string {
-  const p = normalize(join(storageDir, key));
-  if (!p.startsWith(storageDir) || key.includes("..")) throw new Error(`Clé de stockage invalide : ${key}`);
+/**
+ * Chemin d'une clé, toujours **sous** le dossier de stockage (lot R5c1, tour 2 : `/api/files//private/…` retombait dans
+ * `storage/private/…`). Refusés : barre initiale, barre inverse, segment vide, `.` ou `..`, caractère de contrôle.
+ */
+export function pathOf(key: string): string {
+  const invalid = () => new Error("Clé de stockage invalide");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: on refuse justement les caractères de contrôle.
+  if (!key || key.startsWith("/") || key.includes("\\") || /[\u0000-\u001f\u007f]/.test(key)) throw invalid();
+  const parts = key.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) throw invalid();
+  const p = resolve(storageDir, ...parts);
+  if (!p.startsWith(storageDir + sep)) throw invalid();
   return p;
 }
 

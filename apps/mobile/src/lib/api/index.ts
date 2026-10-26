@@ -6,6 +6,7 @@ import { adminApi } from "./admin";
 import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
+import { crewFeedApi } from "./crewFeed";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventsApi } from "./events";
@@ -61,6 +62,7 @@ export const api = {
   ...securityApi,
   ...messagingApi,
   ...crewsApi,
+  ...crewFeedApi,
   ...communicationApi,
   ...moderationApi,
   ...invitationsApi,
