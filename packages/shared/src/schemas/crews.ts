@@ -54,7 +54,8 @@ export const crewInstagramSchema = z
 export const crewUpdateSchema = z
   .object({
     name: crewName.optional(),
-    description: optionalText(CREW_DESCRIPTION_MAX),
+    // Lot R5c2 : absente, la description ne change pas (un réglage seul ne l'efface plus) ; vide, elle est retirée.
+    description: optionalText(CREW_DESCRIPTION_MAX).optional(),
     department: departmentSchema.optional(),
     instagram: crewInstagramSchema.optional(),
     /** Lot R5c2 (Damien, 26/10) : « Les membres peuvent proposer une sortie » ; le chef peut toujours. */

@@ -252,6 +252,17 @@ describe("vitrine et page du crew (lot R5c2)", () => {
     const leaView = await req(lea, "GET", `/crews/by-slug/${crew.slug}`);
     expect(leaView.json.space.canProposeOuting).toBe(false);
   });
+
+  it("un réglage seul ne touche pas au reste : la description reste ; vide, elle est retirée", async () => {
+    const kenji = await signUp("Kenji_r5e");
+    const crew = await newCrew(kenji);
+    expect((await req(kenji, "PATCH", `/crews/${crew.id}`, { description: "Japonaises et glisse." })).status).toBe(200);
+    const right = await req(kenji, "PATCH", `/crews/${crew.id}`, { membersCanProposeOutings: false });
+    expect(right.json.description).toBe("Japonaises et glisse.");
+    const insta = await req(kenji, "PATCH", `/crews/${crew.id}`, { instagram: "roussillondrift" });
+    expect(insta.json.description).toBe("Japonaises et glisse.");
+    expect((await req(kenji, "PATCH", `/crews/${crew.id}`, { description: "" })).json.description).toBeNull();
+  });
 });
 
 describe("sorties du crew (lot R5c2)", () => {

@@ -19,6 +19,7 @@ import { seedAfterEvent } from "./seed/after-event";
 import { seedBase, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
+import { seedCrewPage } from "./seed/crew-page";
 import { seedCrews } from "./seed/crews";
 import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
@@ -118,6 +119,8 @@ async function main() {
   await seedMessaging();
   // Lot 19 : crew « Roussillon Drift », demandes et invitation, inscription en crew sur l'Expo Rivesaltes.
   await seedCrews();
+  // Lot R5c2 : bannière, Instagram et une sortie du crew « Roussillon Drift » (page à onglets).
+  await seedCrewPage();
   // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
   await seedExplorer(hash);
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
