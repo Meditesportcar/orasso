@@ -1478,3 +1478,15 @@
     gap: var(--space-2) var(--space-4);
   }
 }
+
+/* ---------- Lot R5d : « Y aller » (Google Maps, Waze) sous l'adresse de l'événement ---------- */
+.ev__go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.ev__go .o-t-label {
+  margin-right: var(--space-2);
+}

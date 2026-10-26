@@ -58,6 +58,7 @@ import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
+import { routeLinks } from "../lib/directions";
 import { formatDateTime, formatDateTimeYear, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
@@ -419,6 +420,7 @@ function EventPage({
   const place = [event.addressLine, [event.postalCode, event.city].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
+  const routes = routeLinks(event);
   const bandText =
     ended && state.kind !== "cancelled"
       ? "Événement terminé"
@@ -707,6 +709,31 @@ function EventPage({
             <EventMap lat={event.lat} lng={event.lng} label={place} startsAt={event.startsAt} />
           )}
           <p className="s-muted">{place || "Adresse communiquée par l'équipe organisatrice."}</p>
+          {routes && (
+            <div className="ev__go" data-testid="event-go">
+              <span className="o-t-label">Y aller</span>
+              <Button
+                variant="secondary"
+                icon="nav"
+                href={routes.maps}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="event-go-maps"
+              >
+                Google Maps
+              </Button>
+              <Button
+                variant="secondary"
+                icon="nav"
+                href={routes.waze}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="event-go-waze"
+              >
+                Waze
+              </Button>
+            </div>
+          )}
         </section>
 
         {reviews && (ended || reviews.count > 0) && <ReviewsSection reviews={reviews} connected={connected} />}
