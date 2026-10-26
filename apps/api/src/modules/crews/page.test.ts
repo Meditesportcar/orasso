@@ -352,6 +352,39 @@ describe("sorties du crew (lot R5c2)", () => {
     expect((await req(nina, "PUT", `/crews/${crew.id}/outings/${id}/rsvp`, { answer: "yes" })).status).toBe(409);
   });
 
+  it("le fil du crew montre la sortie proposée (« Je viens », compteurs) ; passée, sans réponse ; annulée, elle part", async () => {
+    const kenji = await signUp("Kenji_of");
+    const lea = await signUp("Lea_of");
+    const crew = await newCrew(kenji);
+    await addToCrew(crew.id, kenji, lea);
+    const created = await req(kenji, "POST", `/crews/${crew.id}/outings`, outing());
+    const id = created.json.id as string;
+    expect((await req(lea, "PUT", `/crews/${crew.id}/outings/${id}/rsvp`, { answer: "yes" })).status).toBe(200);
+    const itemOf = async (u: TestUser) =>
+      (
+        (await req(u, "GET", `/crews/${crew.id}/feed`)).json.items as { type: string; key: string; outing?: unknown }[]
+      ).find((x) => x.type === "crew_outing");
+    const item = await itemOf(lea);
+    expect(item).toMatchObject({
+      key: `crew_outing:${id}`,
+      outing: { id, title: "Balade des Aspres", authorPseudo: kenji.pseudo, yes: 1, maybe: 0, mine: "yes", open: true },
+    });
+    expect(Object.keys(item?.outing as object).sort()).toEqual(
+      ["authorPseudo", "id", "maybe", "mine", "open", "place", "startsAt", "title", "yes"].sort(),
+    );
+    expect(await itemOf(kenji)).toMatchObject({ outing: { mine: null, yes: 1 } });
+    // Un non-membre n'a pas de fil.
+    const outsider = await signUp("Out_of");
+    expect((await req(outsider, "GET", `/crews/${crew.id}/feed`)).status).toBe(404);
+    // Passée : elle reste dans le fil, sans « Je viens ».
+    clock.set(paris(11, 2, 9));
+    expect(await itemOf(lea)).toMatchObject({ outing: { open: false } });
+    // Annulée : elle quitte le fil.
+    clock.set(paris(10, 1, 11));
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}/outings/${id}`)).status).toBe(204);
+    expect(await itemOf(lea)).toBeUndefined();
+  });
+
   it("une sortie passée ne se modifie plus ; un membre parti ne compte plus ; un compte suspendu n'est pas prévenu", async () => {
     const kenji = await signUp("Kenji_o3");
     const lea = await signUp("Lea_o3");

@@ -2,13 +2,22 @@
 // d'origine, texte, véhicule, sortie, sondage, flamme et commentaires) ou événement automatique (un membre arrive, le
 // crew est retenu à un événement).
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type CrewFeedItem, type CrewPostView, crewFeedLabels, crewFeedWhen, gradeLabels } from "@orasso/shared";
+import {
+  type CrewFeedItem,
+  type CrewFeedOuting,
+  type CrewPostView,
+  crewFeedLabels,
+  crewFeedWhen,
+  crewPageLabels,
+  gradeLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { now } from "@/lib/clock";
-import { formatDay } from "@/lib/format";
+import { formatDay, formatHour } from "@/lib/format";
 import { Avatar } from "@/ui/Avatar";
+import { SmButton } from "@/ui/Kit";
 
 import { PollBlock } from "./PollBlock";
 import { PostPhotos } from "./PostPhotos";
@@ -135,11 +144,21 @@ export function PostCard({
   );
 }
 
-/** Événement automatique : un membre arrive, le crew est retenu à un événement. */
-export function AutoCard({ item }: { item: Exclude<CrewFeedItem, { type: "post" }> }) {
+/** Événement automatique : un membre arrive, le crew est retenu à un événement, une sortie est proposée (R5c2). */
+export function AutoCard({
+  item,
+  busy,
+  onGoing,
+}: {
+  item: Exclude<CrewFeedItem, { type: "post" }>;
+  busy?: boolean;
+  /** « Je viens » sur une sortie proposée (absent : crew dissous). */
+  onGoing?: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
+  if (item.type === "crew_outing") return <OutingAuto outing={item.outing} busy={busy} onGoing={onGoing} />;
   const body =
     item.type === "member_joined" ? (
       <>
@@ -185,6 +204,43 @@ export function AutoCard({ item }: { item: Exclude<CrewFeedItem, { type: "post" 
   return (
     <View style={box} testID="crew-auto">
       {content}
+    </View>
+  );
+}
+
+/**
+ * Lot R5c2 (maquette R5.7, `.r5auto`) : « Kenji_66 propose une sortie : Balade des Aspres », le jour, le rendez-vous, qui
+ * vient, et « Je viens » tant qu'elle est à venir (les autres réponses sont dans l'onglet Sorties).
+ */
+function OutingAuto({ outing: o, busy, onGoing }: { outing: CrewFeedOuting; busy?: boolean; onGoing?: () => void }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View style={[styles.auto, { backgroundColor: c.surface, borderColor: c.line }]} testID="crew-auto-outing">
+      <View style={[styles.autoIcon, { backgroundColor: c.surfaceSunken }]}>
+        <Icon name="calendar" size={20} color={c.accentText} />
+      </View>
+      <View style={styles.grow}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.autoTitle}>
+          {crewPageLabels.feedOuting(o.authorPseudo, o.title)}
+        </Text>
+        <Text variant="caption" color={c.inkMuted}>
+          {[
+            formatDay(o.startsAt),
+            crewPageLabels.outingRdv(formatHour(o.startsAt), o.place),
+            crewPageLabels.rsvpCount(o.yes, o.maybe),
+          ].join(" · ")}
+        </Text>
+      </View>
+      {o.open && o.mine === "yes" ? (
+        <Text variant="caption" color={c.inkMuted} testID="crew-auto-outing-going">
+          {crewPageLabels.feedOutingYouGo}
+        </Text>
+      ) : o.open && onGoing ? (
+        <SmButton kind="s" icon="check" disabled={busy} onPress={onGoing} testID="crew-auto-outing-yes">
+          {crewPageLabels.rsvpYes}
+        </SmButton>
+      ) : null}
     </View>
   );
 }

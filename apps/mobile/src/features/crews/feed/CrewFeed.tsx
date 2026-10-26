@@ -2,7 +2,13 @@
 // principal de l'onglet), puis les publications et les événements automatiques, 20 par page. Réservé aux membres
 // actifs : l'API répond 404 à tout autre compte. Composant autonome, monté par la page du crew (onglet Fil, lot R5c2).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type CrewFeedItem, type CrewPostView, crewFeedLabels } from "@orasso/shared";
+import {
+  type CrewFeedItem,
+  type CrewFeedOuting,
+  type CrewPostView,
+  crewFeedLabels,
+  crewPageLabels,
+} from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -38,6 +44,8 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [ok, setOk] = useState<string | null>(null);
   const [comments, setComments] = useState<CrewPostView | null>(null);
   const [menu, setMenu] = useState<CrewPostView | null>(null);
+  // Lot R5c2 : sorties auxquelles on vient de répondre « Je viens » depuis le fil.
+  const [outings, setOutings] = useState<Record<string, CrewFeedOuting>>({});
 
   // Tour 2 : les changements faits sur place (retrait, voix, flamme) survivent au chargement d'une page suivante ; ils
   // ne s'effacent qu'à une relecture complète du fil (le serveur les reflète alors).
@@ -45,11 +53,15 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const reload = useCallback(async () => {
     await reloadPaged();
     setChanged({});
+    setOutings({});
   }, [reloadPaged]);
   // Changement de compte : rien de l'ancien compte ne reste.
   const account = cacheScope();
   // biome-ignore lint/correctness/useExhaustiveDependencies: `account` vide les changements.
-  useEffect(() => setChanged({}), [account]);
+  useEffect(() => {
+    setChanged({});
+    setOutings({});
+  }, [account]);
   // Retour de « Publier dans le crew » : le fil se relit.
   useFocusEffect(
     useCallback(() => {
@@ -93,6 +105,12 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
       setMenu(null);
       setOk(crewFeedLabels.pollClosedToast);
     });
+  const going = (o: CrewFeedOuting) =>
+    act(o.id, async () => {
+      const v = await api.answerCrewOuting(crew.id, o.id, "yes");
+      setOutings((m) => ({ ...m, [o.id]: { ...o, yes: v.yes, maybe: v.maybe, mine: v.mine } }));
+      setOk(crewPageLabels.feedOutingYesToast(o.title));
+    });
   const remove = async (p: CrewPostView) => {
     if (!(await confirmRemove(crewFeedLabels.removePostConfirm))) return;
     await act(p.id, async () => {
@@ -134,6 +152,17 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         </Muted>
       ) : (
         items.map((item) => {
+          if (item.type === "crew_outing") {
+            const o = outings[item.outing.id] ?? item.outing;
+            return (
+              <AutoCard
+                key={item.key}
+                item={{ ...item, outing: o }}
+                busy={busy === o.id}
+                onGoing={crew.archived ? undefined : () => void going(o)}
+              />
+            );
+          }
           if (item.type !== "post") return <AutoCard key={item.key} item={item} />;
           const p = current(item.post);
           if (!p) return null;

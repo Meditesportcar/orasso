@@ -1,12 +1,14 @@
 // Une entrée du fil du crew sur le site (lot R5c1, maquette R5.7 `.r5post`, `.r5auto`) : mêmes champs et mêmes mots
 // que l'appli. Photos au format d'origine (D36), adresse protégée par l'appartenance au crew (cookie de session).
-import { Icon } from "@orasso/design-system/web";
+import { Button, Icon } from "@orasso/design-system/web";
 import {
   type CrewFeedItem,
+  type CrewFeedOuting,
   type CrewPollView,
   type CrewPostView,
   crewFeedLabels,
   crewFeedWhen,
+  crewPageLabels,
   crewPhotoFrameRatio,
   gradeLabels,
   pollShare,
@@ -14,7 +16,7 @@ import {
 import { useState } from "react";
 
 import { now } from "../../lib/clock";
-import { formatDateTime, formatDay } from "../../lib/format";
+import { formatDateTime, formatDay, formatTime } from "../../lib/format";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
 
@@ -215,7 +217,18 @@ export function PostCard({
   );
 }
 
-export function AutoCard({ item }: { item: Exclude<CrewFeedItem, { type: "post" }> }) {
+/** Événement automatique : un membre arrive, le crew est retenu à un événement, une sortie est proposée (R5c2). */
+export function AutoCard({
+  item,
+  busy,
+  onGoing,
+}: {
+  item: Exclude<CrewFeedItem, { type: "post" }>;
+  busy?: boolean;
+  /** « Je viens » sur une sortie proposée (absent : crew dissous). */
+  onGoing?: () => void;
+}) {
+  if (item.type === "crew_outing") return <OutingAuto outing={item.outing} busy={busy} onGoing={onGoing} />;
   if (item.type === "member_joined") {
     return (
       <div className="cf-auto" data-testid="crew-auto">
@@ -243,5 +256,38 @@ export function AutoCard({ item }: { item: Exclude<CrewFeedItem, { type: "post" 
         <small>{[crewFeedLabels.autoAcceptedMembers(item.members), formatDay(item.event.startsAt)].join(" · ")}</small>
       </span>
     </a>
+  );
+}
+
+/**
+ * Lot R5c2 (maquette R5.7, `.r5auto`) : « Kenji_66 propose une sortie : Balade des Aspres », le jour, le rendez-vous, qui
+ * vient, et « Je viens » tant qu'elle est à venir (les autres réponses sont dans l'onglet Sorties).
+ */
+function OutingAuto({ outing: o, busy, onGoing }: { outing: CrewFeedOuting; busy?: boolean; onGoing?: () => void }) {
+  return (
+    <div className="cf-auto cf-auto--act" data-testid="crew-auto-outing">
+      <span className="cf-auto__icon" aria-hidden="true">
+        <Icon name="calendar" size={20} />
+      </span>
+      <span>
+        <b>{crewPageLabels.feedOuting(o.authorPseudo, o.title)}</b>
+        <small>
+          {[
+            formatDay(o.startsAt),
+            crewPageLabels.outingRdv(formatTime(o.startsAt), o.place),
+            crewPageLabels.rsvpCount(o.yes, o.maybe),
+          ].join(" · ")}
+        </small>
+      </span>
+      {o.open && o.mine === "yes" ? (
+        <small data-testid="crew-auto-outing-going">{crewPageLabels.feedOutingYouGo}</small>
+      ) : o.open && onGoing ? (
+        <Button variant="secondary" icon="check" loading={busy} onClick={onGoing} data-testid="crew-auto-outing-yes">
+          {crewPageLabels.rsvpYes}
+        </Button>
+      ) : (
+        <span />
+      )}
+    </div>
   );
 }

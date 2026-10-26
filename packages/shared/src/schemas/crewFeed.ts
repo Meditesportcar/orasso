@@ -12,6 +12,7 @@ import {
   CREW_POST_TEXT_MAX,
   type CrewPostKind,
 } from "../rules/crewFeed";
+import type { CrewOutingRsvp } from "../rules/crewPage";
 import { optionalText } from "./common";
 
 // Fil d'un crew (lot R5c1) : routes `GET /crews/:id/feed`, `POST /crews/:id/posts`, réactions, commentaires, sondages.
@@ -109,7 +110,7 @@ export type CrewPostView = {
 
 /**
  * Une entrée du fil. Les publications et des **événements automatiques** lus dans les tables existantes : arrivée d'un
- * membre, crew retenu à un événement. Union ouverte : les sorties du crew (lot R5c2) s'y ajoutent à la fusion.
+ * membre, crew retenu à un événement, sortie proposée dans le crew (lot R5c2).
  */
 export type CrewFeedItem =
   | { type: "post"; key: string; at: string; post: CrewPostView }
@@ -128,7 +129,28 @@ export type CrewFeedItem =
       event: { id: string; slug: string; title: string; startsAt: string; city: string | null };
       /** Pseudos des membres retenus (comptes actifs). */
       members: string[];
-    };
+    }
+  | { type: "crew_outing"; key: string; at: string; outing: CrewFeedOuting };
+
+/**
+ * Lot R5c2 (maquette R5.7) : une sortie proposée dans le crew, « Kenji_66 propose une sortie : Balade des Aspres ». Une
+ * sortie annulée n'est plus dans le fil ; une sortie passée y reste, sans « Je viens ».
+ */
+export type CrewFeedOuting = {
+  id: string;
+  title: string;
+  startsAt: string;
+  place: string;
+  /** Auteur (`null` : compte supprimé ou suspendu). */
+  authorPseudo: string | null;
+  /** Membres actifs qui viennent. */
+  yes: number;
+  maybe: number;
+  /** Ma réponse. */
+  mine: CrewOutingRsvp | null;
+  /** Encore à venir : on peut y répondre. */
+  open: boolean;
+};
 
 export type CrewFeedPage = { items: CrewFeedItem[]; nextCursor: string | null };
 

@@ -46,6 +46,11 @@ export const crewPageLabels = {
       .join(" · "),
   outingRdv: (hour: string, place: string) => `RDV ${hour} · ${place}`,
   outingBy: (pseudo: string | null) => (pseudo ? `Proposée par ${pseudo}.` : "Proposée par un ancien membre."),
+  /** Fil du crew (maquette R5.7) : « Kenji_66 propose une sortie : Balade des Aspres ». */
+  feedOuting: (pseudo: string | null, title: string) =>
+    pseudo ? `${pseudo} propose une sortie : ${title}` : `Sortie du crew : ${title}`,
+  feedOutingYouGo: "Tu viens",
+  feedOutingYesToast: (title: string) => `Tu viens à ${title} : le crew le voit.`,
   maps: "Maps",
   waze: "Waze",
   mapsA11y: (place: string) => `Ouvrir Maps vers ${place}`,
