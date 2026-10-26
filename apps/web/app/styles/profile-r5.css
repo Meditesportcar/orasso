@@ -856,8 +856,9 @@
     max-width: 1120px;
   }
 }
-/* Un pseudo (sans espace) rapetisse pour tenir sur sa ligne au lieu de se couper, comme `fitWordSize` dans l'appli : le
-   corps suit la largeur de la colonne et le nombre de signes (`--len`), entre 14 px et le corps d'affiche L. */
+/* Un pseudo (sans espace) rapetisse pour tenir sur sa ligne au lieu de se couper, comme `fitWideWordSize` dans l'appli :
+   le corps suit la largeur de la colonne et la chasse du pseudo en corps (`--em`, `wideWordEm` : tour 2, la chasse de
+   chaque signe, « R5SD_MNGKQ0 » se coupait avec la moyenne), entre 14 px et le corps d'affiche L. */
 .pr5-me__id,
 .pr5-hd__id {
   container-type: inline-size;
@@ -865,7 +866,7 @@
 .pr5-me__name,
 .pr5-hd h1,
 .pr5-hd h2 {
-  font-size: clamp(14px, calc(100cqi / (var(--len, 10) * 0.92)), var(--type-poster-l-size));
+  font-size: clamp(14px, calc(100cqi / var(--em, 10)), var(--type-poster-l-size));
 } /* La colonne du pseudo prend toute la largeur (sa largeur mesure le corps du pseudo, jamais l'inverse). */
 .pr5-me__id,
 .pr5-hd__id {

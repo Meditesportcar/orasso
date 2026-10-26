@@ -9,6 +9,7 @@
 import { Button, Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   filledSocials,
+  fitWideWordSize,
   gradeLabels,
   publicProfileLabels as L,
   networkLabels as N,
@@ -23,7 +24,6 @@ import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { daysUntil } from "@/features/media/model";
 import { Stamp } from "@/features/passport/Stamp";
 import { FriendButton } from "@/features/social/FriendButton";
@@ -239,7 +239,8 @@ export function PublicProfile({
   const [headW, setHeadW] = useState(0);
   const { fontScale } = useWindowDimensions();
   // Un pseudo long rapetisse (jusqu'à 14 px) au lieu de se couper ; l'échelle de police du système compte.
-  const pseudoSize = fitWordSize(p.pseudo, headW / Math.max(1, fontScale), 24, 14, WIDE_EM);
+  // Tour 2 : la chasse de chaque signe (« M », « W » dépassent la moyenne), comme le site.
+  const pseudoSize = fitWideWordSize(p.pseudo, headW / Math.max(1, fontScale), 24, 14);
   // Très grande police du système : les deux boutons l'un sous l'autre (sinon côte à côte, libellés jamais coupés).
   const stacked = fontScale >= STACK_FONT_SCALE;
   const actsStyle = [styles.acts, stacked && styles.actsStacked];

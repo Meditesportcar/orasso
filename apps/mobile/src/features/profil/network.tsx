@@ -9,6 +9,7 @@ import {
   type FollowPerson,
   type FriendItem,
   type FriendRequestView,
+  fitWideWordSize,
   gradeLabels,
   networkLabels as N,
   type NetworkCounts,
@@ -18,7 +19,7 @@ import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { fitWordSize, WIDE_EM } from "@/features/home/fit";
+import { fitWordSize } from "@/features/home/fit";
 import { CrewDot, Num, SmButton, TagWin } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -521,7 +522,7 @@ export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactN
   const { t } = useTheme();
   const c = t.color;
   const [textW, setTextW] = useState(0);
-  const size = fitWordSize(p.pseudo, textW, 24, 14, WIDE_EM);
+  const size = fitWideWordSize(p.pseudo, textW, 24, 14);
   const privateView = p.audience === "public_limited";
   const crew = p.crews?.[0]?.name;
   const place = [departmentCaption(p.departments?.[0]), crew ? `crew ${crew}` : null].filter(Boolean).join(" · ");

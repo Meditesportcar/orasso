@@ -11,13 +11,19 @@
 // chacun ouvre sa liste (`/reseau`), puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
 // réglages (avec « Amis et crews »).
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { capLabels, gradeLabels, passportScreenTexts, profilePhotoLabels, settingsHubLabels } from "@orasso/shared";
+import {
+  capLabels,
+  fitWideWordSize,
+  gradeLabels,
+  passportScreenTexts,
+  profilePhotoLabels,
+  settingsHubLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
-import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TagWin } from "@/features/passionne/kit";
@@ -59,7 +65,7 @@ export function ProfilScreen() {
   const department = profile?.departments[0];
   const crew = crews.data?.[0];
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
-  const pseudoSize = fitWordSize(profile?.pseudo ?? "", headW, 22, 14, WIDE_EM);
+  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW, 22, 14);
 
   return (
     <TabScreen

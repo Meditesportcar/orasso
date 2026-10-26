@@ -58,3 +58,4 @@ export * from "./vehicleSearch";
 export * from "./visibility";
 export * from "./waitlistDeadline";
 export * from "./weather";
+export * from "./wideWord";

@@ -14,6 +14,7 @@ import {
   socialsLabels,
   socialUrl,
   type UserProfileView,
+  wideWordEm,
 } from "@orasso/shared";
 import type { CSSProperties, ReactNode } from "react";
 import { Form, useNavigation } from "react-router";
@@ -107,7 +108,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
             {p.avatarUrl ? <img src={p.avatarUrl} alt="" /> : p.pseudo.charAt(0).toUpperCase()}
           </span>
           <div className="pr5-hd__id">
-            <Title style={{ "--len": p.pseudo.length } as CSSProperties}>{p.pseudo}</Title>
+            <Title style={{ "--em": wideWordEm(p.pseudo) } as CSSProperties}>{p.pseudo}</Title>
             <div className="pr5-tags">
               <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
               {limited ? (
