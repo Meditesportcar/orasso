@@ -268,8 +268,15 @@ export function PublicProfile({
         Modifier mon profil
       </Button>
     ) : mode === "preview" ? (
-      // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres.
-      <View style={styles.inert} pointerEvents="none" accessibilityElementsHidden testID="preview-actions">
+      // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. Tour 2 (relecture Opus 8) : masqués aussi
+      // pour TalkBack (`importantForAccessibility`, Android) comme pour VoiceOver (`accessibilityElementsHidden`, iOS).
+      <View
+        style={styles.inert}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        testID="preview-actions"
+      >
         <View style={actsStyle}>
           <View style={actStyle}>
             <Button variant="primary" icon={previewAsFriend ? "check" : "add"} fullWidth>

@@ -190,8 +190,9 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 primary
                 busy={busy}
               />
-              {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami ». */}
-              {!limited && (p.follow.canFollow || p.follow.following) && (
+              {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami ». Tour 2 (relecture Codex 5) : un compte
+                  suivi qui passe privé garde le bouton pour se désabonner (`following`), comme l'appli. */}
+              {(p.follow.canFollow || p.follow.following) && (
                 <Form method="post">
                   <input type="hidden" name="pseudo" value={p.pseudo} />
                   <Button
@@ -376,7 +377,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 <small>{L.outingsHint(outings.length)}</small>
               </div>
               <ul className="pr5-ups">
-                {outings.slice(0, 5).map((e) => (
+                {/* Tour 2 (relecture Codex 4) : toutes les sorties à venir reçues, comme l'appli (plus de coupure à cinq). */}
+                {outings.map((e) => (
                   <li key={e.slug}>
                     <a className="pr5-up" href={`/e/${e.slug}`}>
                       <Icon name="calendar" size={17} />
