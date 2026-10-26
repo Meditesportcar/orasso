@@ -138,9 +138,8 @@ export function OutingCard({ crewId, slug, outing }: { crewId: string; slug: str
         <Button variant="secondary" icon="nav" href={wazeHref(outing)} aria-label={L.wazeA11y(outing.place)}>
           {L.waze}
         </Button>
-        <span className="crw-grow" />
         {outing.canManage ? (
-          <>
+          <span className="crw-out__manage">
             <Button
               variant="secondary"
               icon="edit"
@@ -166,7 +165,7 @@ export function OutingCard({ crewId, slug, outing }: { crewId: string; slug: str
                 data-testid="outing-cancel"
               />
             </Form>
-          </>
+          </span>
         ) : null}
       </div>
     </article>

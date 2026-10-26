@@ -26,9 +26,10 @@
   object-fit: cover;
   display: block;
 }
+/* Le nom du crew commence sous la bannière (maquette .cr-id .stack : padding-top 48 px, plus l'anneau du logo). */
 .crw-id {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-3);
   margin-top: -46px;
   position: relative;
@@ -49,6 +50,7 @@
   min-width: 0;
   display: grid;
   gap: var(--space-1);
+  padding-top: 50px;
   padding-bottom: var(--space-1);
 }
 .crw-id__text .s-title {
@@ -466,4 +468,10 @@ fieldset.crw-seg {
   max-width: 640px;
   display: grid;
   gap: var(--space-3);
+}
+/* Modifier et annuler une sortie : ensemble, à droite (sur la ligne suivante s'il le faut). */
+.crw-out__manage {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: auto;
 }
