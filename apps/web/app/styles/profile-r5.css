@@ -1,0 +1,824 @@
+/* Lot R5b (maquettes R5.4, R5.5, R5.6, R5.6b) : Réglages, Modifier mon profil, profil d'un membre et son aperçu.
+   Jetons seulement (les deux thèmes viennent des variables). Préfixe `pr5-`. */
+
+/* Un titre ne se coupe jamais au milieu d'un mot ; l'indication à droite passe dessous s'il n'y a pas la place. */
+.pr5-sh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+}
+.pr5-sh h2 {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+.pr5-sh small {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.pr5-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.pr5-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pr5-btns > * {
+  flex: 1 1 auto;
+  min-width: max-content;
+}
+.pr5-btns form {
+  display: contents;
+}
+
+/* ---------- Carte du profil de « Mon compte » (R5.4) ---------- */
+.pr5-me {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+.pr5-me__av {
+  position: relative;
+  flex: none;
+}
+.pr5-me__cam {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.pr5-me__id {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.pr5-me__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: var(--stretch-wide);
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: var(--type-poster-l-size);
+  line-height: var(--type-poster-l-line);
+  overflow-wrap: anywhere;
+}
+.pr5-me__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pr5-me__gear {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--ground);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pr5-me__gear:focus-visible,
+.pr5-me__cam:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pr5-bio {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pr5-me__bio {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Réglages : une liste de lignes ---------- */
+.pr5-hub {
+  display: grid;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pr5-hub > li + li {
+  border-top: 1px solid var(--line);
+}
+.pr5-hub__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pr5-hub__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.pr5-hub__ico {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+}
+.pr5-hub__row b {
+  display: block;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.pr5-hub__row small {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--ink-muted);
+}
+.pr5-hub__row > svg:last-child {
+  color: var(--ink-muted);
+}
+.pr5-hub__row--out {
+  color: var(--accent-text);
+}
+.pr5-hub__form {
+  display: block;
+}
+
+/* ---------- Modifier mon profil (R5.5) ---------- */
+.pr5-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.pr5-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.pr5-photo__btns {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.pr5-photo form {
+  display: contents;
+}
+.pr5-photo input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.pr5-count {
+  justify-self: end;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.pr5-socf {
+  display: grid;
+  gap: var(--space-2);
+}
+.pr5-sf {
+  display: grid;
+  grid-template-columns: auto minmax(0, 76px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 50px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.pr5-sf:focus-within {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pr5-sf.is-bad {
+  box-shadow: inset 0 0 0 2px var(--win);
+}
+.pr5-sf svg {
+  color: var(--ink);
+}
+.pr5-sf__name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.pr5-sf__pre {
+  font-weight: 800;
+  color: var(--ink-muted);
+}
+.pr5-sf input {
+  min-width: 0;
+  height: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  outline: none;
+}
+.pr5-sf input::placeholder {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+.pr5-err {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 var(--space-1);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--win-text);
+}
+.pr5-err svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* ---------- Profil d'un membre (R5.6, R5.6b) : un composant, deux mises en page ---------- */
+.pr5 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+.pr5-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+.pr5-hd {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+}
+.pr5-hd__id {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  justify-items: start;
+}
+.pr5-hd h1,
+.pr5-hd h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: var(--stretch-wide);
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: var(--type-poster-l-size);
+  line-height: var(--type-poster-l-line);
+  overflow-wrap: anywhere;
+}
+.pr5-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pr5-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.pr5-crew {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 var(--space-3) 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.pr5-crew i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 900;
+}
+.pr5-socs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pr5-soc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  font-weight: 750;
+  font-size: 12.5px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.pr5-soc:focus-visible,
+.pr5-crew:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pr5-n4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-radius: var(--radius-md);
+  background: var(--ground);
+  overflow: hidden;
+}
+.pr5-n4 span {
+  display: grid;
+  justify-items: center;
+  padding: var(--space-2) 2px;
+  text-align: center;
+}
+.pr5-n4 span + span {
+  border-left: 1px solid var(--line);
+}
+.pr5-n4 b {
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.pr5-n4 small {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.pr5-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pr5-acts > *,
+.pr5-acts form {
+  flex: 1 1 auto;
+}
+.pr5-acts form > * {
+  width: 100%;
+}
+.pr5-acts > * {
+  min-width: max-content;
+}
+.pr5-acts--inert {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.pr5-write {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pr5-write form {
+  flex: 1 1 auto;
+}
+.pr5-write form > * {
+  width: 100%;
+}
+.pr5-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--ground);
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.pr5-note svg {
+  flex: none;
+  margin-top: 1px;
+}
+.pr5-note strong {
+  color: var(--ink);
+}
+
+/* Sa voiture : carré, pleine largeur de sa colonne. */
+.pr5-hero {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  box-shadow: var(--shadow-card);
+  color: var(--photo-ink);
+  text-decoration: none;
+}
+.pr5-hero img,
+.pr5-sq__p img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pr5-hero__none,
+.pr5-sq__none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+.pr5-hero__fav {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pr5-hero__cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 6px;
+  padding: 60px var(--space-4) var(--space-3);
+  background: linear-gradient(180deg, transparent, var(--scrim) 62%);
+}
+.pr5-hero__cap b {
+  font-weight: 900;
+  font-stretch: 125%;
+  font-style: italic;
+  text-transform: uppercase;
+  font-size: 22px;
+  line-height: 1.04;
+}
+.pr5-hero__cap small {
+  font-size: 13px;
+}
+.pr5-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pr5-cats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--bar-chip);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Prochaine sortie : un ticket. */
+.pr5-nx {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  color: var(--ink);
+  text-decoration: none;
+}
+.pr5-nx:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pr5-nx__stub {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: var(--space-3) var(--space-1);
+  background: var(--poster);
+  color: var(--poster-ink);
+  border-right: 2px dashed var(--poster-muted);
+}
+.pr5-nx__stub small {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--poster-muted);
+}
+.pr5-nx__stub b {
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 34px;
+  line-height: 1;
+}
+.pr5-nx__main {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+.pr5-nx__tag {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.pr5-nx__main h3 {
+  margin: 0;
+  font-weight: 900;
+  font-stretch: 125%;
+  font-style: italic;
+  text-transform: uppercase;
+  font-size: 17px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.pr5-nx__main small {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+.pr5-both {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: var(--space-1);
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.pr5-both svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent-text);
+}
+
+/* Ses sorties : lignes courtes. */
+.pr5-ups {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pr5-up {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 9px var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.pr5-up svg {
+  color: var(--ink-muted);
+}
+.pr5-up b {
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.pr5-up small {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.pr5-up:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Son garage : carrés, deux par ligne (quatre en bureau). */
+.pr5-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.pr5-sq {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+.pr5-sq__p {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  box-shadow: var(--shadow-card);
+}
+.pr5-sq b {
+  font-weight: 900;
+  font-stretch: 115%;
+  font-style: italic;
+  text-transform: uppercase;
+  font-size: 14px;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+.pr5-sq small {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.pr5-sq:focus-visible,
+.pr5-hero:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Vu à : les tampons. */
+.pr5-seen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.pr5-seen > a {
+  display: block;
+  aspect-ratio: 1;
+}
+.pr5-seen > a:nth-child(n + 4) {
+  display: none;
+}
+.pr5-seen svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Compte privé : marque et modèle en lignes. */
+.pr5-plist {
+  display: grid;
+  gap: 6px;
+}
+.pr5-plist span {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-weight: 800;
+  font-size: 13.5px;
+}
+.pr5-plist svg {
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.pr5-narrow {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+.pr5-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+@media (min-width: 1024px) {
+  .pr5 {
+    max-width: none;
+    grid-template-columns: 340px minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas:
+      "card car next"
+      "card car outings"
+      "card garage garage"
+      "card seen seen";
+    column-gap: 36px;
+    row-gap: var(--space-6);
+    align-items: start;
+  }
+  .pr5-card {
+    grid-area: card;
+    position: sticky;
+    top: var(--space-4);
+    padding: var(--space-6) 20px;
+  }
+  .pr5-hd {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+  .pr5-car {
+    grid-area: car;
+  }
+  .pr5-next {
+    grid-area: next;
+  }
+  .pr5-outings {
+    grid-area: outings;
+  }
+  .pr5-garage {
+    grid-area: garage;
+  }
+  .pr5-seenat {
+    grid-area: seen;
+  }
+  .pr5-priv {
+    grid-column: 2 / -1;
+    grid-row: 1 / span 4;
+  }
+  .pr5-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .pr5-seen {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .pr5-seen > a:nth-child(n + 4) {
+    display: block;
+  }
+  .pr5-after {
+    grid-column: 2 / -1;
+  }
+  .pr5-sh h2 {
+    font-size: 24px;
+    line-height: 1.05;
+  }
+}

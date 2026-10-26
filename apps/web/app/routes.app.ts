@@ -42,6 +42,8 @@ export default [
     // Lot R4c : « Ton réseau » (abonnés, abonnements, amis) et l'aperçu de mon profil public.
     route("app/reseau", "routes/reseau.tsx"),
     route("app/profil-public", "routes/profil-public.tsx"),
+    // Lot R5b : « Modifier mon profil » (photo, pseudo, description, réseaux).
+    route("app/profil/modifier", "routes/profil-modifier.tsx"),
     route("app/journal", "routes/journal.tsx"),
     route("u/:pseudo", "routes/profil.tsx"),
     route("v/:id", "routes/vehicule.tsx"),
