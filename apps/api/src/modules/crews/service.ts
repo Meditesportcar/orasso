@@ -69,7 +69,8 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
-const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
+// Lot R5c1 : `publier` (écran « Publier dans le crew » de l'appli, `/crew/publier`).
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug", "publier"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {

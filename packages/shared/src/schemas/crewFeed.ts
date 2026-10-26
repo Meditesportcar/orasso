@@ -137,6 +137,8 @@ export type CrewCommentView = {
 /** Composeur « Publier dans le crew » : mes véhicules actifs, mes événements proches, le nombre de membres. */
 export type CrewPostOptions = {
   crew: { id: string; slug: string; name: string; membersCount: number };
+  /** Le membre qui publie (avatar du composeur du site). */
+  me: CrewFeedPerson;
   vehicles: { id: string; label: string; vehicleType: VehicleType }[];
   events: { id: string; title: string; startsAt: string }[];
 };

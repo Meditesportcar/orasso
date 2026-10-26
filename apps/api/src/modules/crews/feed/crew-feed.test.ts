@@ -576,6 +576,7 @@ describe("fil : sources et pagination", () => {
     // Options du composeur : mes véhicules, l'événement, le nombre de membres.
     const opts = await req(nina, "GET", `/crews/${crew.id}/post-options`);
     expect(opts.json.crew).toMatchObject({ id: crew.id, membersCount: 3 });
+    expect(opts.json.me).toEqual({ userId: nina.id, pseudo: nina.pseudo, avatarUrl: null, grade: "rodage" });
     expect(opts.json.vehicles.map((v: { id: string }) => v.id)).toEqual([vehicle.id]);
   });
 });

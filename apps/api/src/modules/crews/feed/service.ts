@@ -193,6 +193,7 @@ export const crewFeedService = {
         name: access.crew.name,
         membersCount: access.crew.membersCount,
       },
+      me: personOf(v.profile),
       vehicles: mine.map((x) => ({ id: x.id, label: vehicleLabel(x), vehicleType: x.vehicleType })),
       events: eventRows.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt.toISOString() })),
     };
