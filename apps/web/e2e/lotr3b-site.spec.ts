@@ -167,7 +167,7 @@ test("site R3b : année des dates, un seul lieu, sorties passées, rejoindre un 
       if (first) {
         await row.getByTestId("crew-join").click();
         // Lot R5c2 (R5.8) : « Rejoindre » ouvre la fenêtre avec un mot pour le chef (facultatif) avant d'envoyer.
-        await np.getByTestId("crew-request-send").click();
+        await row.getByTestId("crew-request-send").click();
         await expect(row.getByTestId("crew-requested")).toBeVisible({ timeout: 30_000 });
         first = false;
       }
