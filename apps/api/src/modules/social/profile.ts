@@ -8,17 +8,21 @@ import {
   maskedPhoto,
   networkCountsVisible,
   type OtherVehicle,
+  type PassportStamp,
   type PreviewAs,
   type ProfileAudience,
   type ProfileVehicle,
   profileAudience,
   profileFields,
+  type StampInk,
+  seasonDates,
+  seasonYear,
   type UserProfileView,
 } from "@orasso/shared";
 import { and, asc, desc, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, events, structures, user, vehicles } from "../../db/schema";
+import { applications, events, passportStamps, seasons, structures, user, vehicles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
@@ -149,6 +153,99 @@ async function profileEvents(userId: string, at: Date) {
   };
 }
 
+/**
+ * Lot R5b (maquette R5.6, « Toi aussi : vous y serez tous les deux ») : la personne qui regarde va aussi à cet
+ * événement : retenue, une place offerte, ou un billet valide (ou déjà contrôlé). Tour 2 (relecture Opus 6) : une
+ * candidature en attente ou en liste d'attente n'est pas une venue (« vous y serez » serait faux). Calculé pour elle
+ * seule ; rien n'est dit de la personne regardée qu'on ne voie déjà dans ses sorties.
+ */
+async function goesToo(viewerId: string, slug: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    select 1
+    from events e
+    where e.slug = ${slug}
+      and (
+        exists (
+          select 1 from applications a
+          where a.event_id = e.id and a.user_id = ${viewerId}
+            and a.status in ('accepted', 'offered')
+        )
+        or exists (
+          select 1 from tickets t
+          where t.event_id = e.id and t.user_id = ${viewerId} and t.status in ('valid', 'used')
+        )
+      )
+    limit 1`);
+  return result.rows.length > 0;
+}
+
+/** Tampons de « Vu à » gardés sur le profil (les plus récents). */
+const SEEN_AT_MAX = 12;
+
+/**
+ * Lot R5b : « Vu à », les tampons de la saison en cours d'une personne. Même règle que ses sorties passées : événement
+ * publié, hors invitation, déjà fini (jamais de présence en direct : un tampon du jour n'apparaît qu'après la fin).
+ * Tour 2 (relecture Opus 1) : seulement ses participations retenues, c'est-à-dire le tampon de participation (et les
+ * rares qui s'y rattachent : même événement, participation tamponnée) d'un événement où sa candidature est retenue.
+ * Jamais un tampon de visite (billet scanné) ni de staff : ceux-là restent à soi seul, dans le passeport (`/me/passport`).
+ */
+async function seenAtOf(userId: string, at: Date): Promise<{ events: number; stamps: PassportStamp[] }> {
+  const season = seasonDates(seasonYear(at));
+  const where = and(
+    eq(passportStamps.userId, userId),
+    eq(seasons.startsOn, season.startsOn),
+    eq(events.status, "published"),
+    ne(events.admission, "invite_only"),
+    lt(events.endsAt, at),
+    sql`(${passportStamps.kind} = 'participation' or (${passportStamps.rare} and exists (
+      select 1 from passport_stamps p
+      where p.user_id = ${passportStamps.userId} and p.event_id = ${passportStamps.eventId} and p.kind = 'participation'
+    )))`,
+    sql`exists (
+      select 1 from applications a
+      where a.event_id = ${passportStamps.eventId} and a.user_id = ${passportStamps.userId} and a.status = 'accepted'
+    )`,
+  );
+  const rows = await db
+    .select({
+      stamp: passportStamps,
+      event: {
+        id: events.id,
+        slug: events.slug,
+        title: events.title,
+        format: events.format,
+        startsAt: events.startsAt,
+        city: events.city,
+        department: events.department,
+      },
+    })
+    .from(passportStamps)
+    .innerJoin(events, eq(events.id, passportStamps.eventId))
+    .innerJoin(seasons, eq(seasons.id, passportStamps.seasonId))
+    .where(where)
+    .orderBy(desc(passportStamps.stampedAt), desc(passportStamps.createdAt))
+    .limit(SEEN_AT_MAX);
+  const [count] = await db
+    .select({ n: sql<number>`count(distinct ${passportStamps.eventId})::int` })
+    .from(passportStamps)
+    .innerJoin(events, eq(events.id, passportStamps.eventId))
+    .innerJoin(seasons, eq(seasons.id, passportStamps.seasonId))
+    .where(where);
+  return {
+    events: count?.n ?? 0,
+    stamps: rows.map(({ stamp: s, event: e }) => ({
+      id: s.id,
+      kind: s.kind,
+      shape: s.shape,
+      ink: s.ink as StampInk,
+      seed: s.seed,
+      rare: s.rare,
+      stampedAt: s.stampedAt.toISOString(),
+      event: { ...e, startsAt: e.startsAt.toISOString() },
+    })),
+  };
+}
+
 /** Sorties d'une personne : retenue à un événement publié (hors invitation), à venir ou fini depuis moins d'un an. */
 async function outingsCount(userId: string, at: Date): Promise<number> {
   const [row] = await db
@@ -171,13 +268,16 @@ export const socialProfile = {
   /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|friend`). */
   async view(viewer: Viewer, pseudo: string, opts: { as?: PreviewAs } = {}): Promise<UserProfileView> {
     const target = await profilesRepo.byPseudo(pseudo);
-    // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même.
-    if (!target || target.deletedAt || (target.bannedAt && target.userId !== viewer.user.id)) {
+    const at = now();
+    // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même. Lot R5b, tour 2 (relectures
+    // Codex 1 et Opus 7) : un compte suspendu non plus (réseaux, prochaine sortie, tampons…) ; il répond comme un compte
+    // inconnu, avant toute lecture de son profil.
+    const suspended = Boolean(target?.suspendedUntil && target.suspendedUntil > at);
+    if (!target || target.deletedAt || ((target.bannedAt || suspended) && target.userId !== viewer.user.id)) {
       throw notFound("Profil introuvable");
     }
     const { audience, friendshipId, state } = await audienceFor(viewer, target, opts);
     const fields = profileFields(audience);
-    const at = now();
 
     const active = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, target.userId), eq(vehicles.status, "active")));
     // Lot R4c : le véhicule principal en premier dans la vitrine.
@@ -198,6 +298,9 @@ export const socialProfile = {
             ),
             detailed: true,
             main: g.id === mainId,
+            vehicleType: g.vehicleType,
+            year: g.year,
+            categories: g.categories.map((c) => c.category.label),
           }
         : {
             id: g.id,
@@ -207,6 +310,9 @@ export const socialProfile = {
             photoUrl: null,
             detailed: false,
             main: g.id === mainId,
+            vehicleType: g.vehicleType,
+            year: null,
+            categories: [],
           },
     );
 
@@ -230,6 +336,12 @@ export const socialProfile = {
     const unavailableTarget = Boolean(
       target.deletedAt || target.bannedAt || (target.suspendedUntil && target.suspendedUntil > at),
     );
+    // Lot R5b : la prochaine sortie (la première à venir) et « Toi aussi », pour la personne qui regarde seulement (ni
+    // soi-même, ni l'aperçu).
+    const first = fields.upcomingEvents && ev ? ev.upcoming[0] : undefined;
+    const nextOuting = first
+      ? { event: first, together: isSelf || opts.as ? false : await goesToo(viewer.user.id, first.slug) }
+      : null;
     return {
       userId: target.userId,
       audience,
@@ -254,6 +366,9 @@ export const socialProfile = {
         canFollow: canFollowUser({ isSelf, visibility: target.visibility, unavailable: unavailableTarget }),
         following: isSelf || opts.as ? false : await followsService.isFollowing(viewer.user.id, target.userId),
       },
+      socials: fields.socials ? (target.socials ?? {}) : null,
+      nextOuting,
+      seenAt: fields.pastEvents ? await seenAtOf(target.userId, at) : null,
     };
   },
 

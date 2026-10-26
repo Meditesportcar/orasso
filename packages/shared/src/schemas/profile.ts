@@ -13,6 +13,7 @@ import { arriveeLabels } from "../labels/arrivee.fr";
 import type { SuspensionInfo } from "../moderation";
 import { PREFERENCE_RADIUS } from "../preferences";
 import type { PlatformRole, StaffRole, StructureRole } from "../roles";
+import { type ProfileSocials, socialHandle, socialNetworks } from "../rules/socials";
 import { optionalText } from "./common";
 
 /** Pseudo : 3 à 24 caractères, lettres, chiffres, « _ » et « . », unique sans tenir compte de la casse. */
@@ -20,6 +21,32 @@ export const pseudoSchema = z
   .string()
   .trim()
   .regex(/^[A-Za-z0-9_.]{3,24}$/, "3 à 24 caractères : lettres, chiffres, « _ » ou « . »");
+
+const socialInput = z.string().max(300).nullish();
+
+/**
+ * Lot R5b (maquette R5.5) : les cinq réseaux tels que saisis (pseudo, « @pseudo » ou lien de profil), ramenés au pseudo
+ * par `socialHandle`. Remplace tous les réseaux du profil (un réseau absent ou vide est retiré). Un refus porte sur le
+ * réseau (`socials.instagram`) avec la phrase qui dit quoi faire.
+ */
+export const socialsInputSchema = z
+  .object({
+    instagram: socialInput,
+    tiktok: socialInput,
+    youtube: socialInput,
+    facebook: socialInput,
+    snapchat: socialInput,
+  })
+  .strict()
+  .transform((value, ctx) => {
+    const out: ProfileSocials = {};
+    for (const network of socialNetworks) {
+      const checked = socialHandle(network, value[network]);
+      if (!checked.ok) ctx.addIssue({ code: "custom", message: checked.reason, path: [network] });
+      else if (checked.handle) out[network] = checked.handle;
+    }
+    return out;
+  });
 
 export const profileUpdateSchema = z
   .object({
@@ -40,6 +67,7 @@ export const profileUpdateSchema = z
     firstName: optionalText(60),
     lastName: optionalText(60),
     phone: optionalText(30),
+    socials: socialsInputSchema,
   })
   .partial();
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;
@@ -112,6 +140,8 @@ export type Me = {
     phone: string | null;
     avatarUrl: string | null;
     bio: string | null;
+    /** Lot R5b : mes réseaux (pseudos seuls). */
+    socials: ProfileSocials;
     visibility: (typeof profileVisibilities)[number];
     departments: string[];
     /** Distance habituelle (10 à 200 km) ; `null` = partout en France. */

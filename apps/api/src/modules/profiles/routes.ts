@@ -42,6 +42,11 @@ export const profilesRoutes = new Hono<AppEnv>()
     }
     return c.json({ avatarUrl: await profilesService.setAvatar(v, image) });
   })
+  // Lot R5b : « Retirer la photo » (onglet Profil et « Modifier mon profil », appli et site).
+  .delete("/me/avatar", async (c) => {
+    await profilesService.removeAvatar(await requireUser(c));
+    return c.body(null, 204);
+  })
   .get("/me/devices", async (c) => c.json(await profilesService.listDevices(await requireUser(c))))
   .post("/me/devices", async (c) => {
     const v = await requireUser(c);

@@ -11,7 +11,8 @@ import { forgetArrivee } from "@/features/arrivee/persist";
 import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
-import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
+import { bindCacheScope, cacheScope, kvDel, kvGet, kvSet, purgeCaches } from "./kv";
+import { cachedMe, forgetMe, rememberMe } from "./meStore";
 import { leavePush, queueSignOut, registerThisDevice, setPushAccount, watchPendingPush } from "./push";
 import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
@@ -31,6 +32,12 @@ type SessionValue = {
   signOut: () => Promise<void>;
   /** Recharge `/api/me` (compteurs, grade, points). */
   refreshMe: () => Promise<Me | null>;
+  /**
+   * Lot R5b, tour 2 : un profil frais renvoyé par l'API (réponse de `PATCH /me/profile`) devient celui du compte, à
+   * l'écran et dans le cache hors ligne, sans relire `/me` (qui, sans réseau, rendrait l'ancien cache). Ignoré s'il
+   * n'est pas celui du compte lié.
+   */
+  adoptMe: (fresh: Me) => Promise<void>;
   /** Better Auth a remplacé la session (mot de passe changé, double authentification activée ou désactivée) : nouveau jeton. */
   adoptToken: (token: string) => Promise<void>;
 };
@@ -38,7 +45,6 @@ type SessionValue = {
 const SessionContext = createContext<SessionValue | null>(null);
 
 const TOKEN_KEY = "session-token";
-const ME_KEY = "me";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
@@ -56,7 +62,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPushAccount(fresh.user.id);
       setMe(fresh);
       setOffline(false);
-      void kvSetJson(ME_KEY, fresh);
+      void rememberMe(fresh);
       return fresh;
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 401) {
@@ -68,7 +74,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return null;
       }
       // Pas de réseau : on garde le dernier profil connu.
-      const cached = await kvGetJson<Me>(ME_KEY);
+      const cached = await cachedMe();
       if (cached) {
         await bindCacheScope(cached.user.id);
         setPushAccount(cached.user.id);
@@ -155,6 +161,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setStatus("out");
       },
       refreshMe: loadMe,
+      adoptMe: async (fresh) => {
+        if (cacheScope() !== fresh.user.id) return;
+        setMe(fresh);
+        setOffline(false);
+        await rememberMe(fresh);
+      },
       adoptToken: async (token) => {
         setSessionToken(token);
         await kvSet(TOKEN_KEY, token);
@@ -179,7 +191,7 @@ async function clearSession() {
   realtime.stop();
   await Promise.all([
     kvDel(TOKEN_KEY),
-    kvDel(ME_KEY),
+    forgetMe(),
     clearAccountQrSecret(),
     clearKits(),
     kvDel("announced"),

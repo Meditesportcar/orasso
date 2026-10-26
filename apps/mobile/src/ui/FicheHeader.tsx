@@ -18,9 +18,11 @@ export type FicheHeaderProps = {
   onClose: () => void;
   /** Nom accessible du ✕ (« Quitter le scan ») ; « Fermer » par défaut. */
   closeLabel?: string;
+  /** Lot R5b : boutons avant le ✕ (« Écrire », « ⋯ » du profil d'un membre ; « Modifier » de l'aperçu). */
+  actions?: ReactNode;
 };
 
-export function FicheHeader({ title, facts, counter, band, onClose, closeLabel }: FicheHeaderProps) {
+export function FicheHeader({ title, facts, counter, band, onClose, closeLabel, actions }: FicheHeaderProps) {
   const insets = useSafeAreaInsets();
   return (
     <AppBar
@@ -29,6 +31,7 @@ export function FicheHeader({ title, facts, counter, band, onClose, closeLabel }
       facts={facts}
       counter={counter}
       lead={band}
+      actions={actions}
       onClose={onClose}
       closeLabel={closeLabel}
       safeTop={insets.top}

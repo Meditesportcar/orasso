@@ -409,8 +409,9 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
   },
   visitor: {
     tab: ["Profil", "profil"],
-    open: (page) => page.getByTestId("reglage-preferences").first().click(),
-    page: /\/reglages\/preferences/,
+    // Lot R5b : les réglages sont derrière la roue dentée de la carte du profil (écran « Réglages », mode fiche).
+    open: (page) => page.getByTestId("profil-gear").first().click(),
+    page: /\/reglages(\?|$)/,
   },
   organizer: {
     tab: ["Structure", "structure"],
@@ -427,13 +428,15 @@ const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Prom
   },
   provider: {
     tab: ["Profil", "profil"],
-    open: (page) => page.getByTestId("reglage-notifications").first().click(),
-    page: /\/reglages\/notifications/,
+    // Lot R5b : les réglages sont derrière la roue dentée de la carte du profil (écran « Réglages », mode fiche).
+    open: (page) => page.getByTestId("profil-gear").first().click(),
+    page: /\/reglages(\?|$)/,
   },
   media: {
     tab: ["Profil", "profil"],
-    open: (page) => page.getByTestId("reglage-preferences").first().click(),
-    page: /\/reglages\/preferences/,
+    // Lot R5b : les réglages sont derrière la roue dentée de la carte du profil (écran « Réglages », mode fiche).
+    open: (page) => page.getByTestId("profil-gear").first().click(),
+    page: /\/reglages(\?|$)/,
   },
   admin: {
     tab: ["Registres", "registres"],

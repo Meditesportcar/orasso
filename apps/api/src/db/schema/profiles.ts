@@ -7,6 +7,7 @@ import {
   grades,
   mainProfiles,
   type NotificationPrefs,
+  type ProfileSocials,
   platformRoles,
   profileVisibilities,
 } from "@orasso/shared";
@@ -50,6 +51,8 @@ export const profiles = pgTable(
     phone: text("phone"),
     avatarKey: text("avatar_key"),
     bio: text("bio"),
+    /** Lot R5b (maquette R5.5) : les réseaux, pseudos seuls (`socialHandle`), jamais une adresse ; le lien est fabriqué. */
+    socials: jsonb("socials").$type<ProfileSocials>().notNull().default({}),
     visibility: profileVisibilityEnum("visibility").notNull().default("public"),
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
     /** Distance habituelle (10 à 200 km) autour du coin (départements) ; null = partout en France (lot M6, tour 2). */

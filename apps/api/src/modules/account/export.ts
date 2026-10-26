@@ -138,6 +138,8 @@ export const accountExportService = {
             lastName: p.lastName,
             phone: p.phone,
             bio: p.bio,
+            // Lot R5b : les réseaux du profil (pseudos).
+            socials: p.socials ?? {},
             avatarUrl: storage.url(p.avatarKey),
             visibility: p.visibility,
             departments: p.departments,

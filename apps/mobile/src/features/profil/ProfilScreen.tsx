@@ -11,13 +11,19 @@
 // chacun ouvre sa liste (`/reseau`), puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
 // réglages (avec « Amis et crews »).
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { capLabels, gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";
+import {
+  capLabels,
+  fitWideWordSize,
+  gradeLabels,
+  passportScreenTexts,
+  profilePhotoLabels,
+  settingsHubLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
-import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TagWin } from "@/features/passionne/kit";
@@ -29,19 +35,17 @@ import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
 import { departmentCaption, NetworkCounters, ProfileLinks } from "./network";
-
-import { CapRows, CreateSheet, HeadAvatar, HubRow, LinkRow, RowIcon, SeasonBlock, SetList, SetRow } from "./parts";
+import { PhotoSheet } from "./PhotoSheet";
+import { CapRows, CreateSheet, HeadAvatar, HubRow, LinkRow, RowIcon, SeasonBlock } from "./parts";
 
 const { space1, space3 } = tokens.spacing;
 
-const visibilityCaption = { public: "Profil public", private: "Profil privé" } as const;
-
 export function ProfilScreen() {
-  const { t, preference } = useTheme();
+  const { t } = useTheme();
   const router = useRouter();
-  const { me, refreshMe, signOut } = useSession();
+  const { me, refreshMe } = useSession();
   const { persona, active, entries } = usePersona();
-  const [sheet, setSheet] = useState<"qr" | "create" | "staff" | null>(null);
+  const [sheet, setSheet] = useState<"qr" | "create" | "staff" | "photo" | null>(null);
   const [headW, setHeadW] = useState(0);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
@@ -60,11 +64,8 @@ export function ProfilScreen() {
   const profile = me?.profile;
   const department = profile?.departments[0];
   const crew = crews.data?.[0];
-  const theme = preference === "sable" ? "Sable" : preference === "auto" ? "Automatique" : "Béton";
-  // Lot M6 : la tuile Préférences devient « Apparence » (thème, animations) ; coin et distance sont dans « Tes préférences ».
-  const preferencesCaption = `Thème ${theme}`;
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
-  const pseudoSize = fitWordSize(profile?.pseudo ?? "", headW, 22, 14, WIDE_EM);
+  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW, 22, 14);
 
   return (
     <TabScreen
@@ -84,6 +85,7 @@ export function ProfilScreen() {
           <AccountQrSheet visible={sheet === "qr"} onClose={close} />
           <CreateSheet visible={sheet === "create"} onClose={close} />
           <StaffRequestSheet visible={sheet === "staff"} onClose={close} />
+          <PhotoSheet visible={sheet === "photo"} onClose={close} />
         </>
       }
     >
@@ -97,10 +99,24 @@ export function ProfilScreen() {
         testID="profil-card"
       >
         <View style={styles.head} testID="profil-head">
-          <HeadAvatar
-            url={base ? profile?.avatarUrl : active.logoUrl}
-            name={(base ? profile?.pseudo : active.label) ?? "?"}
-          />
+          {base ? (
+            // Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={profilePhotoLabels.change}
+              onPress={() => setSheet("photo")}
+              hitSlop={4}
+              testID="profil-avatar"
+              style={({ pressed }) => [styles.avatarBtn, pressed && styles.pressed]}
+            >
+              <HeadAvatar url={profile?.avatarUrl} name={profile?.pseudo ?? "?"} />
+              <View style={[styles.cam, { backgroundColor: t.color.accent, borderColor: t.color.surface }]}>
+                <Icon name="camera" size={13} color={t.color.accentInk} />
+              </View>
+            </Pressable>
+          ) : (
+            <HeadAvatar url={active.logoUrl} name={active.label ?? "?"} />
+          )}
           <View style={styles.headText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
             <Text
               variant="posterL"
@@ -121,23 +137,48 @@ export function ProfilScreen() {
               </Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={qrLabel}
-            onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
-            testID="profil-account-qr"
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.qrb,
-              base
-                ? { backgroundColor: t.color.surfaceRaised }
-                : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
-          </Pressable>
+          {/* Lot R5b : le QR et la roue dentée l'un sur l'autre : le pseudo garde toute sa largeur (il ne se coupe pas). */}
+          <View style={styles.headBtns}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={qrLabel}
+              onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
+              testID="profil-account-qr"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.qrb,
+                base
+                  ? { backgroundColor: t.color.surfaceRaised }
+                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
+            </Pressable>
+            {/* Lot R5b (remarque 6 de Damien) : la roue dentée, à côté du QR, ouvre l'écran « Réglages ». */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={settingsHubLabels.open}
+              onPress={() => router.push("/reglages")}
+              testID="profil-gear"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.qrb,
+                base
+                  ? { backgroundColor: t.color.surfaceRaised }
+                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name="gear" size={22} color={t.color.ink} />
+            </Pressable>
+          </View>
         </View>
+        {base && profile?.bio ? (
+          <Text variant="body" color={t.color.inkMuted} numberOfLines={2} style={styles.bio} testID="profil-bio">
+            {profile.bio}
+          </Text>
+        ) : null}
         {base ? (
           <>
             <NetworkCounters
@@ -201,66 +242,7 @@ export function ProfilScreen() {
         />
       </View>
 
-      <SecHead title="Réglages" />
-      <SetList>
-        <SetRow
-          first
-          icon="profile"
-          title="Compte"
-          caption="E-mail, mot de passe, appareils, mes sanctions"
-          onPress={() => router.push("/reglages/compte")}
-          testID="reglage-compte"
-        />
-        <SetRow
-          icon="bell"
-          title="Notifications"
-          caption="Candidatures, jour J, messages, abonnés"
-          onPress={() => router.push("/reglages/notifications")}
-          testID="reglage-notifications"
-        />
-        <SetRow
-          icon="lock"
-          title="Confidentialité"
-          caption={`${profile ? visibilityCaption[profile.visibility] : "Profil public"}, export de mes données, suppression`}
-          onPress={() => router.push("/reglages/confidentialite")}
-          testID="reglage-confidentialite"
-        />
-        <SetRow
-          icon="explore"
-          title={preferencesLabels.settingsRow}
-          caption={
-            department
-              ? `${department} favori, distance, types, centres d'intérêt`
-              : preferencesLabels.settingsRowCaption
-          }
-          onPress={() => router.push("/preferences")}
-          testID="reglage-tes-preferences-tuile"
-        />
-        <SetRow
-          icon="gear"
-          title="Apparence"
-          caption={preferencesCaption}
-          onPress={() => router.push("/reglages/preferences")}
-          testID="reglage-preferences"
-        />
-        <SetRow
-          icon="help"
-          title="Aide"
-          caption="Tutos, questions fréquentes, nous écrire"
-          onPress={() => router.push("/reglages/aide")}
-          testID="profil-help"
-        />
-        <SetRow
-          icon="logout"
-          title="Se déconnecter"
-          tone="out"
-          onPress={async () => {
-            await signOut();
-            router.replace("/auth");
-          }}
-          testID="profil-sign-out"
-        />
-      </SetList>
+      {/* Lot R5b (remarque 6 de Damien) : les réglages ont quitté l'onglet ; la roue dentée de la carte les ouvre. */}
     </TabScreen>
   );
 }
@@ -273,7 +255,22 @@ const styles = StyleSheet.create({
   headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
   headCaption: { flexShrink: 1 },
   qrb: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  headBtns: { gap: space1 + 4 },
   pressed: { opacity: 0.8 },
+  // Lot R5b : l'avatar touchable et son petit appareil photo (`.r5cam` de la maquette : rond moutarde en bas à droite).
+  avatarBtn: { position: "relative" },
+  cam: {
+    position: "absolute",
+    right: -6,
+    bottom: -6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bio: { fontSize: 13.5, lineHeight: 19 },
   capsay: { fontSize: 13.5, lineHeight: 19 },
   links: { gap: 0 },
 });

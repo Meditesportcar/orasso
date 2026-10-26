@@ -396,6 +396,8 @@ export const accountService = {
           lastName: null,
           phone: null,
           bio: null,
+          // Lot R5b : les réseaux partent avec le reste du profil.
+          socials: {},
           avatarKey: null,
           deletedAt: at,
           newsletterOptIn: false,

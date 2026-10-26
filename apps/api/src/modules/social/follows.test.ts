@@ -310,7 +310,8 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     await call(a, "POST", "/users/T2_Susp/follow");
     await call(a, "POST", "/users/T2_DevPrive/follow");
     await suspendByModeration(s);
-    expect((await call(a, "GET", "/users/T2_Susp")).json.follow.canFollow).toBe(false);
+    // Lot R5b, tour 2 (relectures Codex 1, Opus 7) : le profil d'un compte suspendu répond 404, comme un inconnu.
+    expect((await call(a, "GET", "/users/T2_Susp")).status).toBe(404);
     expect((await call(a, "DELETE", "/users/T2_Susp/follow")).status).toBe(404);
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, p.id));
     expect((await call(a, "DELETE", "/users/T2_DevPrive/follow")).json).toEqual({ following: false });

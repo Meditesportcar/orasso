@@ -1,9 +1,8 @@
-import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-system/web";
+import { Button, CheckboxField, Chip, Icon, type IconName, TextField } from "@orasso/design-system/web";
 import {
   type AccountSettings,
   accountAppLabels,
   gradeLabels,
-  helpLabels,
   type MyCrew,
   moderationLabels,
   mutableTypesByFamily,
@@ -14,34 +13,38 @@ import {
   notificationFamilyLabels,
   notificationTypeLabels,
   type PersonaKind,
-  type PublicPreview,
   personaKindLabels,
   preferencesLabels,
+  profilePhotoLabels,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
   profileVisibilityRules,
+  settingsHubLabels as S,
+  wideWordEm,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
-import { TextAreaField } from "../components/Fields";
+import { PersonAvatar } from "../components/People";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
 import "../styles/network.css";
+import "../styles/profile-r5.css";
 
-// Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : profil, aperçu public, notifications par type, compte
-// public ou privé, apparence (thème ; le coin, la distance et les centres d'intérêt sont dans « Tes préférences »,
-// `/app/preferences`), sécurité, suppression du compte.
+// Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : notifications par type, compte public ou privé,
+// apparence (thème ; le coin, la distance et les centres d'intérêt sont dans « Tes préférences », `/app/preferences`),
+// sécurité, suppression du compte. Lot R5b (maquette R5.4) : la carte du profil en tête avec sa roue dentée, puis la
+// liste « Réglages » comme l'appli ; le pseudo, la description, la photo et les réseaux sont dans « Modifier mon profil ».
 export function meta() {
   return [{ title: "Mon compte · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  const [settings, preview, network, crews] = await Promise.all([
+  const [settings, network, crews] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
-    apiOrThrow<PublicPreview>(request, "/me/public-preview"),
     // Lot R4c : abonnés, abonnements, amis ; le crew à côté de « Mon profil public ».
     api<NetworkCounts>(request, "/me/network"),
     api<MyCrew[]>(request, "/me/crews"),
@@ -50,7 +53,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     me,
     settings,
-    preview,
     network: network.ok ? network.data : null,
     crew: crews.ok ? (crews.data[0] ?? null) : null,
     saved: url.searchParams.get("fait"),
@@ -63,14 +65,6 @@ const FAMILIES = notificationFamilies.filter((f) => MUTABLE[f]?.length) as Notif
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
-  if (intent === "profile") {
-    const res = await api(request, "/me/profile", {
-      method: "PATCH",
-      json: { pseudo: String(form.get("pseudo") ?? "").trim(), bio: String(form.get("bio") ?? "") },
-    });
-    if (!res.ok) return data({ scope: "profile", error: res.error.message }, { status: res.status });
-    return redirect("/app/moi?fait=profil");
-  }
   if (intent === "settings") {
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
@@ -121,13 +115,12 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 const SAVED: Record<string, string> = {
-  profil: "Profil enregistré.",
   reglages: "Réglages enregistrés.",
   email: "E-mail de confirmation renvoyé.",
 };
 
 export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
-  const { me, settings, preview, saved } = loaderData;
+  const { me, settings, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
@@ -151,6 +144,41 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         label: p.label,
       })),
   ];
+  const hubRows: { key: string; href: string; icon: IconName; title: string; caption: string; testId?: string }[] = [
+    {
+      key: "profil",
+      href: "/app/profil/modifier",
+      icon: "edit",
+      title: S.editProfile,
+      caption: S.editProfileCaption,
+      testId: "reglage-profil",
+    },
+    { key: "compte", href: "#compte", icon: "profile", title: S.account, caption: S.accountCaption },
+    {
+      key: "notifications",
+      href: "#notifications",
+      icon: "bell",
+      title: S.notifications,
+      caption: S.notificationsCaption,
+    },
+    {
+      key: "confidentialite",
+      href: "#confidentialite",
+      icon: "lock",
+      title: S.privacy,
+      caption: S.privacyCaption(settings.visibility === "private"),
+    },
+    {
+      key: "preferences",
+      href: "/app/preferences",
+      icon: "explore",
+      title: preferencesLabels.settingsRow,
+      caption: preferencesLabels.settingsRowCaption,
+      testId: "reglage-preferences",
+    },
+    { key: "apparence", href: "#apparence", icon: "gear", title: S.appearance, caption: "Béton sombre ou Sable clair" },
+    { key: "aide", href: "/app/aide", icon: "help", title: S.help, caption: S.helpCaption, testId: "help-link" },
+  ];
   return (
     <div className="s-narrow s-stack" data-testid="moi">
       <div className="s-row s-row--between">
@@ -159,8 +187,37 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           {gradeLabels[me.profile.grade]} · {me.profile.pointsSeason} pts
         </Chip>
       </div>
-      {/* Lot R4c (maquette R4.6) : trois compteurs, chacun ouvre sa liste ; « Mon profil public » et le crew. */}
+      {/* Lot R5b (maquette R5.4) : la carte du profil (photo, nom, grade, secteur, description, roue dentée), puis, comme
+          au lot R4c, trois compteurs (chacun ouvre sa liste), « Mon profil public » et le crew. */}
       <div className="n-me" data-testid="profil-card">
+        <div className="pr5-me">
+          <div className="pr5-me__av">
+            <PersonAvatar url={me.profile.avatarUrl} pseudo={me.profile.pseudo} size={76} />
+            <a
+              className="pr5-me__cam"
+              href="/app/profil/modifier"
+              aria-label={profilePhotoLabels.change}
+              data-testid="profil-photo"
+            >
+              <Icon name="camera" size={14} />
+            </a>
+          </div>
+          <div className="pr5-me__id">
+            <p className="pr5-me__name" style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}>
+              {me.profile.pseudo}
+            </p>
+            <div className="pr5-me__tags">
+              <Chip variant="accent">{gradeLabels[me.profile.grade]}</Chip>
+              {me.profile.departments.length > 0 && (
+                <span className="o-t-caption s-muted">{me.profile.departments.join(", ")}</span>
+              )}
+            </div>
+          </div>
+          <a className="pr5-me__gear" href="#reglages" aria-label={S.open} data-testid="profil-settings">
+            <Icon name="gear" size={22} />
+          </a>
+          {me.profile.bio && <p className="pr5-bio pr5-me__bio">{me.profile.bio}</p>}
+        </div>
         <nav className="n-counts" aria-label={N.countsGroup} data-testid="profil-counters">
           {(
             [
@@ -196,6 +253,9 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           </a>
         </div>
       </div>
+      <Button variant="secondary" icon="crew" href="/app/amis">
+        Mes amis
+      </Button>
       {saved && SAVED[saved] && (
         <p className="s-notice s-notice--ok" role="status">
           {SAVED[saved]}
@@ -233,52 +293,49 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </section>
       )}
 
+      {/* Lot R5b (maquette R5.4) : « Réglages », une liste de lignes comme l'appli ; les sections détaillées suivent. */}
       <section
         className={hats.length || isVisitor ? "s-section" : "s-section s-section--first"}
-        aria-labelledby="profil-titre"
+        id="reglages"
+        aria-labelledby="reglages-titre"
+        data-testid="settings-hub"
       >
-        <h2 id="profil-titre" className="s-h2">
-          Profil
+        <h2 id="reglages-titre" className="s-h2">
+          {S.title}
         </h2>
-        <Form method="post" className="s-form">
-          <input type="hidden" name="intent" value="profile" />
-          <TextField label="Pseudo" name="pseudo" defaultValue={me.profile.pseudo} autoComplete="username" required />
-          <TextAreaField label="Description" name="bio" defaultValue={me.profile.bio ?? ""} maxLength={500} rows={3} />
-          {err("profile") && (
-            <p className="s-error" role="alert">
-              {err("profile")}
-            </p>
-          )}
-          <Button type="submit" variant="secondary" icon="check" loading={busy}>
-            Enregistrer le profil
-          </Button>
-        </Form>
-        <Button variant="secondary" icon="crew" href="/app/amis">
-          Mes amis
-        </Button>
-        <div className="s-card s-stack s-stack--tight" data-testid="public-preview">
-          <div className="s-label o-t-label">Ce que voient les autres</div>
-          <strong>
-            {preview.pseudo} · {gradeLabels[preview.grade]}
-          </strong>
-          {preview.bio && <p>{preview.bio}</p>}
-          {preview.departments && preview.departments.length > 0 && (
-            <p className="o-t-caption s-muted">Secteur : {preview.departments.join(", ")}</p>
-          )}
-          {preview.vehicles.length > 0 ? (
-            <ul className="s-docs">
-              {preview.vehicles.map((v) => (
-                <li key={v.id}>{v.label}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="o-t-caption s-muted">Aucun véhicule.</p>
-          )}
-        </div>
+        <ul className="pr5-hub">
+          {hubRows.map((r) => (
+            <li key={r.key}>
+              <a className="pr5-hub__row" href={r.href} data-testid={r.testId}>
+                <span className="pr5-hub__ico">
+                  <Icon name={r.icon} size={18} />
+                </span>
+                <span>
+                  <b>{r.title}</b>
+                  <small>{r.caption}</small>
+                </span>
+                <Icon name="next" size={16} />
+              </a>
+            </li>
+          ))}
+          <li>
+            <Form method="post" action="/deconnexion" className="pr5-hub__form">
+              <button type="submit" className="pr5-hub__row pr5-hub__row--out" data-testid="reglage-deconnexion">
+                <span className="pr5-hub__ico">
+                  <Icon name="logout" size={18} />
+                </span>
+                <span>
+                  <b>{S.signOut}</b>
+                </span>
+                <Icon name="next" size={16} />
+              </button>
+            </Form>
+          </li>
+        </ul>
       </section>
 
       {/* Lot M5 (parité de la maquette 7.2) : « Compte » réunit l'e-mail, la sécurité et mes sanctions. */}
-      <section className="s-section" aria-labelledby="email-titre" data-testid="account-section">
+      <section className="s-section" id="compte" aria-labelledby="email-titre" data-testid="account-section">
         <h2 id="email-titre" className="s-h2">
           Compte
         </h2>
@@ -310,7 +367,12 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
 
       <Form method="post" className="s-stack">
         <input type="hidden" name="intent" value="settings" />
-        <section className="s-section" aria-labelledby="notif-titre" data-testid="notification-settings">
+        <section
+          className="s-section"
+          id="notifications"
+          aria-labelledby="notif-titre"
+          data-testid="notification-settings"
+        >
           <h2 id="notif-titre" className="s-h2">
             Notifications
           </h2>
@@ -341,7 +403,12 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </section>
 
         {/* Lot M5 (parité de la maquette 7.2) : « Confidentialité » = compte public ou privé, export des données. */}
-        <section className="s-section" aria-labelledby="visibilite-titre" data-testid="privacy-section">
+        <section
+          className="s-section"
+          id="confidentialite"
+          aria-labelledby="visibilite-titre"
+          data-testid="privacy-section"
+        >
           <h2 id="visibilite-titre" className="s-h2">
             Confidentialité
           </h2>
@@ -373,7 +440,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <LeftCrewsSection />
         </section>
 
-        <section className="s-section" aria-labelledby="apparence-titre" data-testid="appearance">
+        <section className="s-section" id="apparence" aria-labelledby="apparence-titre" data-testid="appearance">
           <h2 id="apparence-titre" className="s-h2">
             Apparence
           </h2>
@@ -392,28 +459,6 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           Enregistrer les réglages
         </Button>
       </Form>
-
-      {/* Lot M5 (parité de la maquette 7.3) : l'Aide, ses questions fréquentes et le contact. */}
-      <section className="s-section" aria-labelledby="aide-titre">
-        <h2 id="aide-titre" className="s-h2">
-          {helpLabels.title}
-        </h2>
-        <p className="s-muted">Questions fréquentes, nous écrire, signaler un problème.</p>
-        <Button href="/app/aide" variant="secondary" icon="help" data-testid="help-link">
-          Ouvrir l'aide
-        </Button>
-      </section>
-
-      <section className="s-section" aria-labelledby="session-titre">
-        <h2 id="session-titre" className="s-h2">
-          Session
-        </h2>
-        <Form method="post" action="/deconnexion">
-          <Button type="submit" variant="secondary" icon="close">
-            Déconnexion
-          </Button>
-        </Form>
-      </section>
 
       <section className="s-section" aria-labelledby="suppression-titre" data-testid="delete-account">
         <h2 id="suppression-titre" className="s-h2">

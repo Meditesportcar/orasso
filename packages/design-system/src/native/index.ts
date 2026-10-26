@@ -11,7 +11,14 @@ export * from "../map";
 export { ClusterPin, EventPin, MePin, ProPin } from "../map/native";
 export * from "../motion";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
-export { APP_BAR_HEIGHT, AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";
+export {
+  APP_BAR_HEIGHT,
+  AppBar,
+  AppBarAction,
+  AppBarFlowAction,
+  type AppBarPersona,
+  type AppBarProps,
+} from "./AppBar";
 export { BigTitle, type BigTitleProps, bigTitleSize } from "./BigTitle";
 export {
   type BrandTone,
@@ -22,6 +29,8 @@ export {
   PoweredBy,
 } from "./Brand";
 export { Button, type ButtonProps } from "./Button";
+// Lot R5b : libellé de bouton jamais coupé en plein mot.
+export { BUTTON_LABEL_MIN, breaksInsideWord } from "./buttonLabelFit";
 export { Chip, type ChipProps, ChipRow } from "./Chip";
 export { type CounterItem, Counters, type CountersProps } from "./Counters";
 export { Cover, type CoverProps } from "./Cover";
@@ -93,4 +102,5 @@ export {
   useTheme,
 } from "./theme";
 export { FIT_TITLE_MIN_SCALE, FIT_TITLE_SAFETY, fitTitle, titleWords } from "./titleFit";
+export { useWordSafeLabel, type WordSafeLabel } from "./useWordSafeLabel";
 export { VehicleCard, type VehicleCardProps, VehicleThumb, type VehicleThumbProps } from "./VehicleCard";

@@ -1,31 +1,24 @@
-import { Button, Chip, type IconName, Plate, VehicleCard } from "@orasso/design-system/web";
+import { Button, type IconName } from "@orasso/design-system/web";
 import {
   CONTACT_MESSAGE_MAX,
-  gradeLabels,
   type MyCrew,
-  mainVehicleLabels,
   mediaAppLabels,
   messagingLabels,
-  networkLabels,
   type PassportView,
   type PersonaKind,
   passportScreenTexts,
   personaKindLabels,
-  socialLabels,
   type UserProfileView,
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
-import { CrewRow } from "../components/Crews";
-import { FriendAction, PersonAvatar } from "../components/People";
-import { ReportDialog } from "../components/ReportDialog";
+import { PublicProfile } from "../components/PublicProfile";
 import { api, apiOrThrow, getMe, safeReturn } from "../lib/api.server";
-import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
-import { withRetour } from "../lib/retour";
 import "../styles/passport.css";
 import "../styles/network.css";
+import "../styles/profile-r5.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/profil";
 
@@ -161,227 +154,75 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
   const actionData = rawAction as ({ friendError?: string | null } & Partial<MessageActionData>) | undefined;
   const busy = useNavigation().state !== "idle";
   const isSelf = p.audience === "self";
-  const limited = p.audience === "public_limited";
+  // Lot R5b : le profil est le composant commun (comme l'aperçu) ; les coordonnées de l'organisateur et le hub restent ici.
+  const notices = (
+    <>
+      {actionData?.friendError && (
+        <p className="s-error" role="alert">
+          {actionData.friendError}
+        </p>
+      )}
+      {actionData?.messageError && (
+        <p className="s-error" role="alert">
+          {actionData.messageError}
+        </p>
+      )}
+      {actionData?.contactSent && (
+        <p className="s-notice s-notice--ok" data-testid="contact-sent">
+          {messagingLabels.contactRequestSent(actionData.contactSent)}
+        </p>
+      )}
+      {actionData?.contact && (
+        <Form method="post" className="s-form s-card" data-testid="contact-form">
+          <h2 className="s-h2">{messagingLabels.contactRequest}</h2>
+          <p className="o-t-caption s-muted">{messagingLabels.contactRequestHint}</p>
+          <input type="hidden" name="intent" value="contact_request" />
+          <input type="hidden" name="pseudo" value={p.pseudo} />
+          <label className="s-label o-t-label" htmlFor="contact-message">
+            Message
+          </label>
+          <textarea
+            id="contact-message"
+            name="message"
+            className="s-textarea"
+            rows={4}
+            maxLength={CONTACT_MESSAGE_MAX}
+            placeholder={messagingLabels.contactRequestPlaceholder}
+            required
+          />
+          <Button type="submit" variant="secondary" icon="chat" loading={busy}>
+            {messagingLabels.contactRequestSend}
+          </Button>
+        </Form>
+      )}
+    </>
+  );
+  const after = (
+    <>
+      {isSelf && loaderData.hub && <ProfileHub hub={loaderData.hub} />}
+      {p.contact && (
+        <section className="s-section" aria-labelledby="contact-titre" data-testid="profil-contact">
+          <h2 id="contact-titre" className="s-h2">
+            Coordonnées
+          </h2>
+          <p className="o-t-caption s-muted">Visibles de toi parce qu'il ou elle est inscrit à tes événements.</p>
+          <dl className="s-recap">
+            <dt>Nom</dt>
+            <dd>{[p.contact.firstName, p.contact.lastName].filter(Boolean).join(" ") || "—"}</dd>
+            <dt>Téléphone</dt>
+            <dd>{p.contact.phone ?? "—"}</dd>
+            <dt>E-mail</dt>
+            <dd>{p.contact.email ?? "—"}</dd>
+          </dl>
+        </section>
+      )}
+    </>
+  );
   return (
     <>
       <FicheBar heading={false} title="Profil" back={loaderData.back} />
-      <div className="s-narrow s-stack" data-testid="profil" data-audience={p.audience}>
-        <div className="s-row s-row--top">
-          <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={72} />
-          <div className="s-grow s-stack s-stack--tight">
-            <h1 className="s-title">{p.pseudo}</h1>
-            <div className="s-row s-row--tight">
-              <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
-              {p.departments && p.departments.length > 0 && <Chip>{p.departments.join(", ")}</Chip>}
-            </div>
-          </div>
-        </div>
-        {p.friendsCount !== null && (
-          <p className="n-pub__counts" data-testid="public-counts">
-            {p.followersCount !== null && (
-              <span>
-                <b>{p.followersCount}</b> {networkLabels.followers(p.followersCount)}
-              </span>
-            )}
-            {p.followingCount !== null && (
-              <span>
-                <b>{p.followingCount}</b> {networkLabels.following(p.followingCount)}
-              </span>
-            )}
-            <span>
-              <b>{p.friendsCount}</b> {networkLabels.friends(p.friendsCount)}
-            </span>
-            {p.outingsCount !== null && (
-              <span>
-                <b>{p.outingsCount}</b> {networkLabels.outings(p.outingsCount)}
-              </span>
-            )}
-          </p>
-        )}
-
-        {p.bio && <p className="s-prewrap">{p.bio}</p>}
-        {limited && <p className="s-notice">{socialLabels.privateNotice}</p>}
-        {actionData?.friendError && (
-          <p className="s-error" role="alert">
-            {actionData.friendError}
-          </p>
-        )}
-
-        {isSelf ? (
-          <>
-            <Button variant="secondary" icon="profile" href="/app/moi">
-              Modifier mon profil
-            </Button>
-            {loaderData.hub && <ProfileHub hub={loaderData.hub} />}
-          </>
-        ) : (
-          <div className="s-row">
-            <FriendAction
-              state={p.friendship.state}
-              pseudo={p.pseudo}
-              userId={p.userId}
-              requestId={p.friendship.id}
-              primary
-              busy={busy}
-            />
-            {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami » (R4.6c). */}
-            {(p.follow.canFollow || p.follow.following) && (
-              <Form method="post">
-                <input type="hidden" name="pseudo" value={p.pseudo} />
-                <Button
-                  type="submit"
-                  name="intent"
-                  value={p.follow.following ? "unfollow" : "follow"}
-                  variant="secondary"
-                  icon={p.follow.following ? "check" : "add"}
-                  loading={busy}
-                  data-testid={p.follow.following ? "profile-followed" : "profile-follow"}
-                >
-                  {p.follow.following ? networkLabels.followed : networkLabels.follow}
-                </Button>
-              </Form>
-            )}
-            {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signaler : lot 32. */}
-            <Form method="post">
-              <input type="hidden" name="intent" value="message_open" />
-              <input type="hidden" name="userId" value={p.userId} />
-              <Button type="submit" variant="secondary" icon="chat" loading={busy} data-testid="message-open">
-                {messagingLabels.message}
-              </Button>
-            </Form>
-            <ReportDialog targetType="profile" targetId={p.userId} />
-          </div>
-        )}
-
-        {actionData?.messageError && (
-          <p className="s-error" role="alert">
-            {actionData.messageError}
-          </p>
-        )}
-        {actionData?.contactSent && (
-          <p className="s-notice s-notice--ok" data-testid="contact-sent">
-            {messagingLabels.contactRequestSent(actionData.contactSent)}
-          </p>
-        )}
-        {actionData?.contact && (
-          <Form method="post" className="s-form s-card" data-testid="contact-form">
-            <h2 className="s-h2">{messagingLabels.contactRequest}</h2>
-            <p className="o-t-caption s-muted">{messagingLabels.contactRequestHint}</p>
-            <input type="hidden" name="intent" value="contact_request" />
-            <input type="hidden" name="pseudo" value={p.pseudo} />
-            <label className="s-label o-t-label" htmlFor="contact-message">
-              Message
-            </label>
-            <textarea
-              id="contact-message"
-              name="message"
-              className="s-textarea"
-              rows={4}
-              maxLength={CONTACT_MESSAGE_MAX}
-              placeholder={messagingLabels.contactRequestPlaceholder}
-              required
-            />
-            <Button type="submit" variant="secondary" icon="chat" loading={busy}>
-              {messagingLabels.contactRequestSend}
-            </Button>
-          </Form>
-        )}
-
-        {p.contact && (
-          <section className="s-section" aria-labelledby="contact-titre" data-testid="profil-contact">
-            <h2 id="contact-titre" className="s-h2">
-              Coordonnées
-            </h2>
-            <p className="o-t-caption s-muted">Visibles de toi parce qu'il ou elle est inscrit à tes événements.</p>
-            <dl className="s-recap">
-              <dt>Nom</dt>
-              <dd>{[p.contact.firstName, p.contact.lastName].filter(Boolean).join(" ") || "—"}</dd>
-              <dt>Téléphone</dt>
-              <dd>{p.contact.phone ?? "—"}</dd>
-              <dt>E-mail</dt>
-              <dd>{p.contact.email ?? "—"}</dd>
-            </dl>
-          </section>
-        )}
-
-        <section className="s-section" aria-labelledby="vehicules-titre">
-          <h2 id="vehicules-titre" className="s-h2">
-            {socialLabels.vehicles}
-          </h2>
-          {p.vehicles.length === 0 ? (
-            <p className="s-muted">{socialLabels.noVehicles}</p>
-          ) : (
-            <div className="s-grid">
-              {p.vehicles.map((v) => (
-                <a
-                  key={v.id}
-                  className="s-cardlink"
-                  href={withRetour(`/v/${v.id}`, `/u/${encodeURIComponent(p.pseudo)}`)}
-                  data-testid="profil-vehicle"
-                >
-                  {v.photoUrl ? (
-                    <VehicleCard
-                      first
-                      name={v.label}
-                      photo={<img src={v.photoUrl} alt="" loading="lazy" />}
-                      facts={v.main ? `★ ${mainVehicleLabels.tag}` : undefined}
-                    />
-                  ) : (
-                    <Plate as="article" className="s-vrow">
-                      <span className="o-t-poster-m o-never-truncate">{v.label}</span>
-                      {v.main && <span className="o-t-caption">★ {mainVehicleLabels.tag}</span>}
-                    </Plate>
-                  )}
-                </a>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {p.upcomingEvents && (
-          <section className="s-section" aria-labelledby="evenements-titre">
-            <h2 id="evenements-titre" className="s-h2">
-              {socialLabels.upcomingEvents}
-            </h2>
-            {p.upcomingEvents.length === 0 ? (
-              <p className="s-muted">{socialLabels.noUpcoming}</p>
-            ) : (
-              <ul className="s-docs">
-                {p.upcomingEvents.map((e) => (
-                  <li key={e.slug}>
-                    <a href={`/e/${e.slug}`}>{e.title}</a>{" "}
-                    <span className="o-t-caption s-muted">
-                      {formatDay(e.startsAt)} · {formatTime(e.startsAt)}
-                      {e.city ? ` · ${e.city}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {p.pastEvents && p.pastEvents.count > 0 && (
-              <p className="o-t-caption s-muted">
-                {socialLabels.pastEventsCount(p.pastEvents.count)} : {p.pastEvents.titles.join(" · ")}
-              </p>
-            )}
-          </section>
-        )}
-
-        {p.crews && (
-          <section className="s-section" aria-labelledby="crews-titre">
-            <h2 id="crews-titre" className="s-h2">
-              {socialLabels.crews}
-            </h2>
-            {p.crews.length === 0 ? (
-              <p className="s-muted">{socialLabels.crewsEmpty}</p>
-            ) : (
-              <ul className="s-people" data-testid="profil-crews">
-                {p.crews.map((c) => (
-                  <CrewRow key={c.id} crew={c} />
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
+      <div data-testid="profil" data-audience={p.audience}>
+        <PublicProfile profile={p} mode={isSelf ? "self" : "live"} notices={notices} after={after} />
       </div>
     </>
   );

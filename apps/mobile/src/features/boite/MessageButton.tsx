@@ -1,7 +1,7 @@
 // Bouton « Message » du profil d'un autre (lot 18) : conversation existante ou entre amis → elle s'ouvre ; pas amis →
 // feuille « Demande de contact ».
-import { Button } from "@orasso/design-system/native";
-import { messagingLabels } from "@orasso/shared";
+import { AppBarFlowAction, Button } from "@orasso/design-system/native";
+import { messagingLabels, publicProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 
@@ -40,6 +40,48 @@ export function MessageButton({ userId, pseudo }: { userId: string; pseudo: stri
         {messagingLabels.message}
       </Button>
       {error ? <Notice tone="error">{error}</Notice> : null}
+      <ContactRequestSheet pseudo={contact ? pseudo : null} onClose={() => setContact(false)} />
+    </>
+  );
+}
+
+/**
+ * Lot R5b (maquette R5.6) : « Écrire » passe dans l'en-tête du profil d'un membre (carré à gauche du ✕). Même logique
+ * que `MessageButton` : conversation entre amis, sinon la feuille « Demande de contact ». L'erreur est rendue à l'écran.
+ */
+export function WriteHeaderAction({
+  userId,
+  pseudo,
+  onError,
+}: {
+  userId: string;
+  pseudo: string;
+  onError: (message: string | null) => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [contact, setContact] = useState(false);
+  return (
+    <>
+      <AppBarFlowAction
+        icon="chat"
+        label={publicProfileLabels.writeTo(pseudo)}
+        testID="message-open"
+        onPress={async () => {
+          if (busy) return;
+          setBusy(true);
+          onError(null);
+          try {
+            const { id } = await api.openDirect(userId);
+            router.push(`/boite/${id}`);
+          } catch (e) {
+            if (e instanceof ApiRequestError && e.code === "not_friends") setContact(true);
+            else onError(errorMessage(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
       <ContactRequestSheet pseudo={contact ? pseudo : null} onClose={() => setContact(false)} />
     </>
   );

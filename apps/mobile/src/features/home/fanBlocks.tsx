@@ -16,6 +16,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 import { temperatureRange } from "@/lib/weather";
+import { useSecHeadStack } from "@/ui/SecHead";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -57,9 +58,20 @@ export function SecH({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Lot R5b, tour 2 : la mention et le lien restent à droite ; dessous avec une police agrandie ou s'ils ne tiennent pas
+  // à côté du titre (`SecHead`, `secHeadLayout`).
+  const withLink = Boolean(link && onLink);
+  const { onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 16,
+    side: [meta, withLink ? link : null].filter(Boolean).join(" ") || null,
+    sideSize: 13,
+    sideExtra: (withLink ? 18 : 0) + (meta && withLink ? 10 : 0),
+    gap: 10,
+  });
   return (
-    <View style={styles.secH} testID={testID}>
-      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.secTitle}>
+    <View style={styles.secH} onLayout={onLayout} testID={testID}>
+      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={[styles.secTitle, titleStyle]}>
         {title}
       </Text>
       {meta ? (
@@ -353,8 +365,17 @@ const styles = StyleSheet.create({
   card: { borderRadius: 18, padding: space4 },
   greet: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingTop: space2 },
   greetTitle: { fontSize: 32, lineHeight: 31, marginTop: 2 },
-  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },
-  secTitle: { fontSize: 16, lineHeight: 18, flexShrink: 1 },
+  // Lot R5b (titres « SON ») : le titre prend la place restante (jamais un mot perdu), la mention passe dessous au besoin.
+  secH: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 2,
+    marginTop: space2,
+  },
+  secTitle: { fontSize: 16, lineHeight: 18, flexGrow: 1, flexShrink: 1 },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
   wx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 4 },

@@ -293,10 +293,12 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await goto(page, "/profil-public");
     await expect(page.getByTestId("public-head")).toContainText(mePseudo, { timeout: 30_000 });
     await expect(page.getByTestId("public-counts")).toContainText("abonnés");
-    await expect(page.getByTestId("preview-vehicles")).toContainText("★ Principal");
+    // Lot R5b (maquette R5.6) : l'aperçu est le profil d'un membre ; « Sa voiture » porte la pastille « Principale ».
+    await expect(page.getByTestId("profile-car")).toContainText("Principale");
     await expect(page.getByTestId("preview-banner")).toContainText("membre connecté");
-    // Tour 2 : compte public, ses sorties à venir sont visibles de tout membre : l'aperçu les montre.
-    await expect(page.getByTestId("preview-upcoming")).toBeVisible();
+    // Tour 2 : compte public, ses sorties à venir sont visibles de tout membre : l'aperçu les montre (R5b : le ticket
+    // « Prochaine sortie »).
+    await expect(page.getByTestId(/^profile-next/).first()).toBeVisible();
     await shot(page, `09-apercu-membre-${theme}`);
     await audit(page);
     await page.getByTestId("preview-as-friend").click();

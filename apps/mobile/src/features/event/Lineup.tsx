@@ -216,7 +216,7 @@ export function LineupBlock({ eventId, slug }: { eventId: string; slug: string }
   return (
     <View style={[styles.block, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]} testID="lineup-block">
       <View style={styles.blockHead}>
-        <Text variant="posterM" color={c.ink} accessibilityRole="header">
+        <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.blockTitle}>
           {L.title}
         </Text>
         <Text variant="caption" color={c.inkMuted}>
@@ -304,7 +304,15 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   strong: { fontWeight: "800" },
   block: { gap: space2 + 2, padding: 14, borderRadius: radiusLg },
-  blockHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
+  // Lot R5b (titres « SON ») : le titre prend la place restante, l'aide passe dessous au besoin.
+  blockHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: space2,
+  },
+  blockTitle: { flexGrow: 1, flexShrink: 1 },
   thumbs: { flexDirection: "row", gap: 6 },
   thumb: { flex: 1, aspectRatio: 1, position: "relative" },
   thumbIn: { flex: 1, borderRadius: 11, overflow: "hidden" },

@@ -4,7 +4,16 @@
 // jetons viennent du socle. Lot C7 : ces pièces-ci y sont versées à leur tour (`@/ui/Kit`, ancien
 // `features/passionne/kit.tsx`, qui les réexporte encore) ; `SmButton` prend l'encre de l'affiche dans un `Ticket` mis en avant.
 // Valeurs relevées dans `.claude/prototype-v2/index.html` (feuille de style principale).
-import { claimNeon, Icon, type IconName, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  claimNeon,
+  Icon,
+  type IconName,
+  Monogram,
+  Text,
+  tokens,
+  useTheme,
+  useWordSafeLabel,
+} from "@orasso/design-system/native";
 import { useIsFocused } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, type StyleProp, StyleSheet, type TextStyle, View, type ViewStyle } from "react-native";
@@ -197,6 +206,8 @@ export function SmButton({
   const neon = useNeonRight(kind === "p" && !disabled);
   // Dans un ticket mis en avant (`.tk.me`, lot C7) : l'encre de l'affiche, et le bouton bordé sans fond de carte.
   const onPoster = useOnTicketPoster();
+  // Lot R5b : un libellé ne se coupe jamais en plein mot (le corps baisse jusqu'à 11 px au besoin).
+  const safe = useWordSafeLabel(big ? 14 : 12, children);
   const ink = onPoster ? t.color.posterInk : t.color.ink;
   const look: Record<SmKind, { box: ViewStyle; color: string }> = {
     p: {
@@ -232,7 +243,15 @@ export function SmButton({
     >
       <Icon name={icon} size={big ? 20 : 16} color={look[kind].color} />
       {children ? (
-        <Text variant="button" color={look[kind].color} style={big ? styles.bigText : styles.smText}>
+        <Text
+          variant="button"
+          color={look[kind].color}
+          style={[
+            big ? styles.bigText : styles.smText,
+            safe.fontSize !== null && { fontSize: safe.fontSize, lineHeight: safe.fontSize + 2 },
+          ]}
+          {...safe.textProps}
+        >
           {children}
         </Text>
       ) : null}

@@ -9,6 +9,7 @@ import {
   type FollowPerson,
   type FriendItem,
   type FriendRequestView,
+  fitWideWordSize,
   gradeLabels,
   networkLabels as N,
   type NetworkCounts,
@@ -18,7 +19,7 @@ import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { fitWordSize, WIDE_EM } from "@/features/home/fit";
+import { fitWordSize } from "@/features/home/fit";
 import { CrewDot, Num, SmButton, TagWin } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -474,10 +475,13 @@ export function FollowButton({
   pseudo,
   following,
   onChanged,
+  wide = false,
 }: {
   pseudo: string;
   following: boolean;
   onChanged: () => void;
+  /** Lot R5b : pleine largeur de sa colonne (à côté d'« Ajouter en ami », ou dessous quand ils s'empilent). */
+  wide?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -489,6 +493,7 @@ export function FollowButton({
         loading={busy}
         accessibilityLabel={following ? `${N.unfollow} ${pseudo}` : `${N.follow} ${pseudo}`}
         testID={following ? "profile-followed" : "profile-follow"}
+        fullWidth={wide}
         onPress={async () => {
           setBusy(true);
           setError(null);
@@ -517,7 +522,7 @@ export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactN
   const { t } = useTheme();
   const c = t.color;
   const [textW, setTextW] = useState(0);
-  const size = fitWordSize(p.pseudo, textW, 24, 14, WIDE_EM);
+  const size = fitWideWordSize(p.pseudo, textW, 24, 14);
   const privateView = p.audience === "public_limited";
   const crew = p.crews?.[0]?.name;
   const place = [departmentCaption(p.departments?.[0]), crew ? `crew ${crew}` : null].filter(Boolean).join(" · ");
@@ -594,8 +599,15 @@ const styles = StyleSheet.create({
   logo: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   logoPro: { borderRadius: 12 },
   group: { gap: space2 },
-  groupHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
-  groupTitle: { fontSize: 15 },
+  // Lot R5b (titres « SON ») : le titre prend la place restante, le nombre passe dessous au besoin.
+  groupHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: space2,
+  },
+  groupTitle: { fontSize: 15, flexGrow: 1, flexShrink: 1 },
   groupBody: { borderRadius: 16, paddingHorizontal: space3, paddingVertical: space1 },
   row: { flexDirection: "row", alignItems: "center", gap: space2, paddingVertical: space2 },
   rowBelow: { flexDirection: "column", alignItems: "flex-end" },

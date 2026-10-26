@@ -195,6 +195,7 @@ export function FlowScreen({
   overlays,
   header,
   endGate,
+  actions,
   hideEndHint,
 }: Common & {
   title: string;
@@ -202,6 +203,8 @@ export function FlowScreen({
   counter?: string;
   /** Lot M7 : une bande à la place du titre dans l'en-tête de fiche (l'organisateur). */
   band?: ReactNode;
+  /** Lot R5b : boutons de l'en-tête de fiche, avant le ✕. */
+  actions?: ReactNode;
   onClose: () => void;
   closeLabel?: string;
   /** Lot M1 : zone fixe sous l'en-tête, qui ne défile pas (barre de progression, fiche en construction). */
@@ -230,6 +233,7 @@ export function FlowScreen({
             facts={facts}
             counter={counter}
             band={band}
+            actions={actions}
             onClose={onClose}
             closeLabel={closeLabel}
           />

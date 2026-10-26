@@ -9,7 +9,16 @@ import {
 import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, devices, events, proProfiles, structureMembers, structures, vehicles } from "../../db/schema";
+import {
+  applications,
+  devices,
+  events,
+  profiles,
+  proProfiles,
+  structureMembers,
+  structures,
+  vehicles,
+} from "../../db/schema";
 import { hasPasskey, twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound } from "../../lib/errors";
@@ -126,6 +135,7 @@ export const profilesService = {
         phone: p.phone,
         avatarUrl: storage.url(p.avatarKey),
         bio: p.bio,
+        socials: p.socials ?? {},
         visibility: p.visibility,
         departments: p.departments,
         radiusKm: p.radiusKm,
@@ -198,6 +208,22 @@ export const profilesService = {
     if (v.profile.avatarKey) await storage.remove(v.profile.avatarKey);
     await profilesRepo.update(v.user.id, { avatarKey: key });
     return storage.url(key) ?? "";
+  },
+
+  /**
+   * Lot R5b (feuille « Ta photo de profil ») : retirer la photo ; l'initiale la remplace. Sans photo : rien à faire.
+   * Tour 2 (relectures Codex 2 et Opus 8) : le fichier part **avant** la référence. Si le stockage échoue, la clé reste
+   * en base et la requête échoue (jamais un 204 avec une photo encore servie) ; un nouvel essai la retire. La référence
+   * n'est effacée que si elle désigne encore ce fichier (une photo envoyée entre-temps n'est pas effacée).
+   */
+  async removeAvatar(v: Viewer): Promise<void> {
+    const key = v.profile.avatarKey;
+    if (!key) return;
+    await storage.remove(key);
+    await db
+      .update(profiles)
+      .set({ avatarKey: null })
+      .where(and(eq(profiles.userId, v.user.id), eq(profiles.avatarKey, key)));
   },
 
   /** `sessionId` : la session qui inscrit l'appareil (lot M6, tour 4) ; sa fin coupe les push de cet appareil. */

@@ -67,8 +67,9 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   await page.goto(`/u/${bravo}`);
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
   await expect(page.getByText("secret-de-bravo")).toHaveCount(0);
-  await expect(page.getByText(/Profil privé/)).toBeVisible();
-  await expect(page.getByTestId("profil-vehicle")).toHaveCount(1);
+  // Lot R5b (maquette R5.6) : la ligne « Le reste est réservé à ses amis » ; ses véhicules en marque et modèle.
+  await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
+  await expect(page.getByTestId("profile-vehicles-private")).toContainText(/\S/);
 
   // Fiche du véhicule d'un compte public : complète, avec « Autres propriétaires près de chez moi ».
   await page.goto(`/u/${alpha}`);

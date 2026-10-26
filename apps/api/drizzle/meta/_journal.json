@@ -449,6 +449,13 @@
       "when": 1793037613897,
       "tag": "0063_style-catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793039063658,
+      "tag": "0064_profile-socials",
+      "breakpoints": true
     }
   ]
 }

@@ -50,6 +50,8 @@ async function signIn(page: Page, email: string) {
 async function signOut(page: Page) {
   await page.goto("/moi");
   await afterOpening(page);
+  // Lot R5b : « Se déconnecter » est dans l'écran « Réglages » (roue dentée de la carte du profil).
+  await page.getByTestId("profil-gear").click();
   await page.getByTestId("profil-sign-out").click();
   await page.waitForURL(/auth/, { timeout: 30_000 });
 }
@@ -285,6 +287,7 @@ test("Caches de lecture : la réponse tardive d'un compte déconnecté n'est ni 
 
   // Déconnexion de A puis connexion de B (Sofia, aucune place à venir), sans recharger l'appli.
   await page.getByRole("tab", { name: "Profil", exact: true }).first().click();
+  await page.getByTestId("profil-gear").click();
   await page.getByTestId("profil-sign-out").click();
   await page.waitForURL(/auth/, { timeout: 30_000 });
   await page.getByLabel("E-mail").fill("sofia@orasso.local");

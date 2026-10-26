@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { stubOf } from "@/features/explorer/EventCardV2";
 
 import { mediaSource } from "@/lib/media";
+import { useSecHeadStack } from "@/ui/SecHead";
 
 /** Cible tactile d'un segment : le jeton `touch` (48 px), quand le segment n'en montre que 38 (lot 54b). */
 const SEG_H = 38;
@@ -249,9 +250,20 @@ export function SecH({
   onLink?: () => void;
 }) {
   const { t } = useTheme();
+  // Lot R5b, tour 2 : l'aide ou le lien reste à droite ; dessous avec une police agrandie ou s'ils ne tiennent pas à
+  // côté du titre (`SecHead`, `secHeadLayout`).
+  const withLink = Boolean(link && onLink);
+  const { stacked, onLayout, titleStyle } = useSecHeadStack({
+    title,
+    titleSize: 16,
+    side: withLink ? link : hint,
+    sideSize: withLink ? 13 : tokens.type.caption.fontSize,
+    sideExtra: withLink ? 20 : 0,
+    gap: 10,
+  });
   return (
-    <View style={styles.secH}>
-      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={styles.secTitle}>
+    <View style={styles.secH} onLayout={onLayout}>
+      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={[styles.secTitle, titleStyle]}>
         {title}
       </Text>
       {link && onLink ? (
@@ -262,7 +274,7 @@ export function SecH({
           <Icon name="next" size={16} color={t.color.accentText} />
         </Pressable>
       ) : hint ? (
-        <Text variant="caption" color={t.color.inkMuted} style={styles.secHint}>
+        <Text variant="caption" color={t.color.inkMuted} style={[styles.secHint, stacked && styles.secHintStacked]}>
           {hint}
         </Text>
       ) : null}
@@ -497,9 +509,18 @@ const styles = StyleSheet.create({
   dirBig: { flexDirection: "row", gap: 10 },
   dirTile: { flex: 1, minWidth: 0, borderRadius: 20, padding: 14, gap: 4 },
   dirNum: { fontSize: 64, lineHeight: 60 },
-  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
-  secTitle: { flexShrink: 1, fontSize: 16 },
+  // Lot R5b (titres « SON ») : le titre prend la place restante (jamais un mot perdu), l'aide passe dessous au besoin.
+  secH: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 2,
+  },
+  secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 16 },
   secHint: { flexShrink: 1, textAlign: "right" },
+  secHintStacked: { textAlign: "left" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13 },
   tag: {

@@ -29,6 +29,8 @@ export const settingsApi = {
   updateProfile: (body: ProfileUpdate) => request<Me>("/api/me/profile", { method: "PATCH", body }),
   uploadAvatar: (form: FormData) =>
     request<{ avatarUrl: string }>("/api/me/avatar", { method: "POST", form, timeout: 60_000 }),
+  /** Lot R5b : « Retirer la photo » (l'initiale la remplace). */
+  removeAvatar: () => request<unknown>("/api/me/avatar", { method: "DELETE" }),
   resendVerification: () => request<unknown>("/api/me/email/resend-verification", { method: "POST" }),
   sessions: () => request<SessionView[]>("/api/me/sessions"),
   revokeSession: (id: string) => request<unknown>(`/api/me/sessions/${id}`, { method: "DELETE" }),

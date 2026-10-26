@@ -175,7 +175,9 @@ async function addKey(page: Page, name: string) {
 async function signInWithKey(page: Page, retour: string) {
   // Lot C5 : la déconnexion est dans Profil (`/app/moi`), plus dans l'en-tête.
   await page.goto("/app/moi");
-  await page.getByRole("button", { name: "Déconnexion" }).first().click();
+  // Lot R5b : « Se déconnecter » est une ligne de « Réglages » dans /app/moi.
+  await page.getByTestId("reglage-deconnexion").click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/app"));
   await page.goto(`/connexion?retour=${retour}`);
   await page.getByRole("button", { name: "Se connecter avec une clé d'accès" }).click();
 }
@@ -280,7 +282,8 @@ test("suppression du compte depuis /app/moi → anonymisé, connexion impossible
   await signUpInBrowser(page, `Partant_${s}`.slice(0, 24), email, "motdepasse-e2e-123");
   const since = Date.now();
   await page.goto("/app/moi");
-  await expect(page.getByTestId("public-preview")).toContainText(`Partant_${s}`.slice(0, 24));
+  // Lot R5b : la carte du profil en tête de /app/moi (l'aperçu est sur /app/profil-public).
+  await expect(page.getByTestId("profil-card")).toContainText(`Partant_${s}`.slice(0, 24));
   const zone = page.getByTestId("delete-account");
   await zone.getByLabel("Ton mot de passe", { exact: true }).fill("motdepasse-e2e-123");
   await zone.getByText("Je comprends que la suppression est définitive.").click();

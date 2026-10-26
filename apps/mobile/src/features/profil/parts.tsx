@@ -566,18 +566,28 @@ export function SetRow({
  * Avatar de l'en-tête compact `.mh .me-av` (maquette 7.2) : carré de 62 px, rayon 18, incliné de −6°, fond rouge (photo
  * du compte si elle existe), initiale en Archivo large italique.
  */
-export function HeadAvatar({ url, name }: { url?: string | null; name: string }) {
+export function HeadAvatar({ url, name, size = 62 }: { url?: string | null; name: string; size?: number }) {
   const { t } = useTheme();
   const source = mediaSource(url);
+  // Lot R5b : la même tête partout (onglet Profil, « Modifier mon profil »), à la taille demandée.
+  const k = size / 62;
   return (
     <View
-      style={[styles.meAv, { backgroundColor: t.color.win, boxShadow: t.shadow.shadowCard }]}
+      style={[
+        styles.meAv,
+        { width: size, height: size, borderRadius: 18 * k },
+        { backgroundColor: t.color.win, boxShadow: t.shadow.shadowCard },
+      ]}
       accessibilityElementsHidden
     >
       {source ? (
-        <Photo source={source} style={styles.meAvImg} />
+        <Photo source={source} style={{ width: size, height: size }} />
       ) : (
-        <Text variant="posterL" color={t.color.winInk} style={styles.meAvText}>
+        <Text
+          variant="posterL"
+          color={t.color.winInk}
+          style={[styles.meAvText, { fontSize: 26 * k, lineHeight: 28 * k }]}
+        >
           {name.charAt(0).toUpperCase()}
         </Text>
       )}
