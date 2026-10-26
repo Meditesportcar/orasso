@@ -144,6 +144,15 @@ export const crewPageLabels = {
   outingMissingDay: "le jour",
   outingMissingTime: "l'heure de rendez-vous",
   outingMissingPlace: "le point de rendez-vous",
+  /** Tour 2 : jour ou heure qui n'existe pas, adresse changée après le placement du point. */
+  outingNoSuchDay: "Ce jour n'existe pas : vérifie le jour du mois.",
+  outingNoSuchHour: "Cette heure n'existe pas ce jour-là (passage à l'heure d'été) : choisis-en une autre.",
+  /** Tour 2 : modifier une sortie sans en avoir le droit (ni auteur ni chef, ou rendez-vous passé). */
+  outingCannotEdit:
+    "Tu ne peux pas modifier cette sortie : seuls son auteur et le chef la modifient, avant le rendez-vous.",
+  /** Tour 2 : la sortie a commencé, les réponses sont closes. */
+  outingStarted: "C'est parti : les réponses sont closes.",
+  outingPointReset: "L'adresse a changé : replace le point sur la carte, ou laisse Maps et Waze chercher l'adresse.",
   outingProposed: "Sortie proposée : le crew est prévenu.",
   outingSaved: "Sortie enregistrée.",
 

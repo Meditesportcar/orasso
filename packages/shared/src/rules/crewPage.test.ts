@@ -6,6 +6,7 @@ import {
   crewInstagramHandle,
   crewOutingDateIssue,
   crewOutingShown,
+  crewOutingWallInstant,
 } from "./crewPage";
 import { HOUR } from "./time";
 
@@ -43,5 +44,29 @@ describe("page du crew (lot R5c2)", () => {
     expect(crewInstagramHandle("https://evil.example/roussillon")).toBeUndefined();
     expect(crewInstagramHandle("rouss illon")).toBeUndefined();
     expect(crewInstagramHandle("a".repeat(31))).toBeUndefined();
+  });
+});
+
+describe("jour et heure d'une sortie, lus strictement (tour 2)", () => {
+  it("lit le jour et l'heure à l'heure de Paris", () => {
+    expect(crewOutingWallInstant("2026-11-01", "09:00").at?.toISOString()).toBe("2026-11-01T08:00:00.000Z");
+    expect(crewOutingWallInstant("2028-02-29", "9h30").at?.toISOString()).toBe("2028-02-29T08:30:00.000Z");
+  });
+  it("refuse un jour qui n'existe pas, jamais décalé au mois suivant", () => {
+    expect(crewOutingWallInstant("2027-02-31", "09:00").issue).toBe("no_such_day");
+    expect(crewOutingWallInstant("2027-02-29", "09:00").issue).toBe("no_such_day");
+    expect(crewOutingWallInstant("2026-11-31", "09:00").issue).toBe("no_such_day");
+    expect(crewOutingWallInstant("2026-11-00", "09:00").issue).toBe("no_such_day");
+  });
+  it("refuse une heure qui n'existe pas (passage à l'heure d'été) ; l'heure qui se répète en octobre reste lisible", () => {
+    expect(crewOutingWallInstant("2027-03-28", "02:30").issue).toBe("no_such_hour");
+    expect(crewOutingWallInstant("2027-03-28", "03:00").issue).toBeNull();
+    expect(crewOutingWallInstant("2027-10-31", "02:30").issue).toBeNull();
+  });
+  it("refuse ce qui ne se lit pas", () => {
+    expect(crewOutingWallInstant("01/11/2026", "09:00").issue).toBe("unreadable");
+    expect(crewOutingWallInstant("2026-13-01", "09:00").issue).toBe("unreadable");
+    expect(crewOutingWallInstant("2026-11-01", "25:00").issue).toBe("unreadable");
+    expect(crewOutingWallInstant("2026-11-01", "").issue).toBe("unreadable");
   });
 });

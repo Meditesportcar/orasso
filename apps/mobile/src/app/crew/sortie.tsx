@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { outingDayReady, outingInstant } from "@/features/crews/page/outingForm";
+import { outingDayReady, outingInstant, outingWhenIssue } from "@/features/crews/page/outingForm";
 import { InfoBox } from "@/features/crews/page/parts";
 import { useDateTimePicker } from "@/features/orga/wizard/datePicker";
 import { PinMap } from "@/features/orga/wizard/PinMap";
@@ -54,6 +54,8 @@ export default function CrewOutingForm() {
   const editing = v?.space?.outings.find((o) => o.id === sortie) ?? null;
   const [d, setD] = useState<Draft>(EMPTY);
   const filled = useRef(false);
+  // Tour 2 : seule la dernière recherche d'adresse compte (une réponse arrivée après un changement est ignorée).
+  const geo = useRef(0);
   const [status, setStatus] = useState<string | null>(null);
   const [finding, setFinding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -79,32 +81,47 @@ export default function CrewOutingForm() {
 
   const set = (patch: Partial<Draft>) => setD((p) => ({ ...p, ...patch }));
   const at = outingInstant(d.day, d.time);
+  // Tour 2 : un jour ou une heure qui n'existe pas se dit, au lieu d'être décalé en silence.
+  const issue = outingDayReady(d.day) && d.time.trim() ? outingWhenIssue(d.day, d.time) : null;
+  const whenIssue = issue === "no_such_day" ? L.outingNoSuchDay : issue === "no_such_hour" ? L.outingNoSuchHour : null;
   const missing = [
     d.title.trim().length < CREW_OUTING_TITLE_MIN ? L.outingMissingName : null,
     outingDayReady(d.day) ? null : L.outingMissingDay,
-    at || !outingDayReady(d.day) ? null : L.outingMissingTime,
+    at || !outingDayReady(d.day) || whenIssue ? null : L.outingMissingTime,
     d.place.trim().length < CREW_OUTING_PLACE_MIN ? L.outingMissingPlace : null,
   ].filter((x) => x !== null) as string[];
 
   async function find() {
-    if (d.place.trim().length < CREW_OUTING_PLACE_MIN) return;
+    const place = d.place.trim();
+    if (place.length < CREW_OUTING_PLACE_MIN) return;
+    const mine = ++geo.current;
     setFinding(true);
     setStatus(L.outingFinding);
     try {
-      const { match } = await api.geocode(d.place.trim());
+      const { match } = await api.geocode(place);
+      if (mine !== geo.current) return;
       if (match) {
         set({ lat: match.lat, lng: match.lng });
         setStatus(L.outingFound(match.label));
       } else setStatus(L.outingNotFound);
     } catch (e) {
-      setStatus(errorMessage(e));
+      if (mine === geo.current) setStatus(errorMessage(e));
     } finally {
-      setFinding(false);
+      if (mine === geo.current) setFinding(false);
     }
   }
 
+  /** Tour 2 : l'adresse change, le point placé pour l'ancienne n'est plus sûr (à replacer). */
+  function changePlace(place: string) {
+    geo.current++;
+    setFinding(false);
+    const hadPoint = d.lat !== null;
+    set({ place, lat: null, lng: null });
+    setStatus(hadPoint ? L.outingPointReset : null);
+  }
+
   async function send() {
-    if (!v || !at || missing.length) return;
+    if (!v || !at || missing.length || whenIssue) return;
     setBusy(true);
     setError(null);
     const body = {
@@ -156,12 +173,17 @@ export default function CrewOutingForm() {
               {L.outingMissing(missing)}
             </Muted>
           ) : null}
+          {whenIssue ? (
+            <Muted variant="caption" testID="outing-when-issue">
+              {whenIssue}
+            </Muted>
+          ) : null}
           <SmButton
             kind="p"
             big
             wide
             icon="send"
-            disabled={busy || missing.length > 0}
+            disabled={busy || missing.length > 0 || whenIssue !== null}
             onPress={() => void send()}
             testID="outing-send"
           >
@@ -211,7 +233,7 @@ export default function CrewOutingForm() {
       <TextField
         label={L.outingPlace}
         value={d.place}
-        onChangeText={(place) => set({ place })}
+        onChangeText={changePlace}
         maxLength={CREW_OUTING_PLACE_MAX}
         placeholder={L.outingPlacePlaceholder}
         testID="outing-place"

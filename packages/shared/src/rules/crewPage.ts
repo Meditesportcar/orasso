@@ -1,4 +1,4 @@
-import { HOUR } from "./time";
+import { fromWallTime, HOUR, wallTime } from "./time";
 
 // Page du crew (lot R5c2, maquettes R5.7 à R5.9, validées par Damien le 26/10) : sorties du crew, droits de les proposer,
 // Instagram du crew. Règles pures : l'API les applique, l'appli et le site affichent le résultat.
@@ -39,6 +39,39 @@ export function crewOutingDateIssue(startsAt: Date, now: Date): "past" | "too_fa
   if (Number.isNaN(startsAt.getTime()) || startsAt.getTime() <= now.getTime()) return "past";
   if (startsAt.getTime() > now.getTime() + CREW_OUTING_MAX_AHEAD_DAYS * 24 * HOUR) return "too_far";
   return null;
+}
+
+/**
+ * Tour 2 : le jour et l'heure tapés dans « Proposer une sortie » (« AAAA-MM-JJ », « HH:MM » ou « 9h30 »), à l'heure de
+ * Paris, lus strictement : un jour qui n'existe pas (31 février) et une heure qui n'existe pas (passage à l'heure d'été,
+ * 2 h 30 le dernier dimanche de mars) sont refusés, jamais décalés en silence.
+ */
+export function crewOutingWallInstant(
+  day: string,
+  time: string,
+): { at: Date; issue: null } | { at: null; issue: "unreadable" | "no_such_day" | "no_such_hour" } {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim());
+  const h = /^(\d{1,2})[:h ]?(\d{2})$/.exec(time.trim());
+  if (!d || !h) return { at: null, issue: "unreadable" };
+  const [year, month, dayOfMonth, hour, minute] = [d[1], d[2], d[3], h[1], h[2]].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  if (month < 1 || month > 12 || hour > 23 || minute > 59) return { at: null, issue: "unreadable" };
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (dayOfMonth < 1 || dayOfMonth > daysInMonth) return { at: null, issue: "no_such_day" };
+  const at = fromWallTime({ year, month, day: dayOfMonth, hour, minute });
+  const back = wallTime(at);
+  const same =
+    back.year === year &&
+    back.month === month &&
+    back.day === dayOfMonth &&
+    back.hour === hour &&
+    back.minute === minute;
+  return same ? { at, issue: null } : { at: null, issue: "no_such_hour" };
 }
 
 /** La sortie est encore à afficher (à venir, ou commencée depuis moins de 12 h). */

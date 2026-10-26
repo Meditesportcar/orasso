@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { outingDayReady, outingInstant } from "./outingForm";
+import { outingDayReady, outingInstant, outingWhenIssue } from "./outingForm";
 
 describe("formulaire de sortie du crew (lot R5c2)", () => {
   it("lit le jour et l'heure à l'heure de Paris", () => {
@@ -14,6 +14,13 @@ describe("formulaire de sortie du crew (lot R5c2)", () => {
     expect(outingInstant("2026-11-01", "25:00")).toBeNull();
     expect(outingDayReady("2026-11-01")).toBe(true);
     expect(outingDayReady("2026-11")).toBe(false);
+  });
+  it("tour 2 : un jour ou une heure qui n'existe pas est refusé et dit pourquoi", () => {
+    expect(outingInstant("2027-02-31", "09:00")).toBeNull();
+    expect(outingWhenIssue("2027-02-31", "09:00")).toBe("no_such_day");
+    expect(outingInstant("2027-03-28", "02:30")).toBeNull();
+    expect(outingWhenIssue("2027-03-28", "02:30")).toBe("no_such_hour");
+    expect(outingWhenIssue("2027-03-28", "03:30")).toBeNull();
   });
 });
 

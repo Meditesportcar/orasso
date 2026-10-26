@@ -6,11 +6,11 @@ import {
   type CrewOutingView,
   type CrewView,
   crewErrors,
-  fromWallTime,
+  crewOutingWallInstant,
   crewPageLabels as L,
   wallTime,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { InfoBox } from "../components/crew-page/CrewPage";
@@ -46,22 +46,23 @@ export async function action({ request, params }: Route.ActionArgs) {
   const form = await request.formData();
   const crewId = encodeURIComponent(String(form.get("crewId") ?? ""));
   const outingId = String(form.get("outingId") ?? "");
-  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(form.get("day") ?? "").trim());
-  const time = /^(\d{1,2}):(\d{2})$/.exec(String(form.get("time") ?? "").trim());
-  if (!day || !time) return data<{ errors: Errors }>({ errors: { form: L.outingMissing([L.outingMissingDay]) } }, 400);
-  const [year, month, dayOfMonth, hour, minute] = [day[1], day[2], day[3], time[1], time[2]].map(Number) as [
-    number,
-    number,
-    number,
-    number,
-    number,
-  ];
+  // Tour 2 : jour et heure lus strictement (un 31 février ou une heure sautée au passage à l'heure d'été : refusés).
+  const when = crewOutingWallInstant(String(form.get("day") ?? ""), String(form.get("time") ?? ""));
+  if (!when.at) {
+    const message =
+      when.issue === "no_such_day"
+        ? L.outingNoSuchDay
+        : when.issue === "no_such_hour"
+          ? L.outingNoSuchHour
+          : L.outingMissing([L.outingMissingDay]);
+    return data<{ errors: Errors }>({ errors: { form: message } }, 400);
+  }
   const lat = Number.parseFloat(String(form.get("lat") ?? ""));
   const lng = Number.parseFloat(String(form.get("lng") ?? ""));
   const point = Number.isFinite(lat) && Number.isFinite(lng);
   const body = {
     title: String(form.get("title") ?? "").trim(),
-    startsAt: fromWallTime({ year, month, day: dayOfMonth, hour, minute }).toISOString(),
+    startsAt: when.at.toISOString(),
     place: String(form.get("place") ?? "").trim(),
     lat: point ? lat : null,
     lng: point ? lng : null,
@@ -101,24 +102,48 @@ export default function CrewOuting({ loaderData, actionData }: Route.ComponentPr
     time ? null : L.outingMissingTime,
     place.trim().length < 3 ? L.outingMissingPlace : null,
   ].filter((x) => x !== null) as string[];
+  // Tour 2 : un jour ou une heure qui n'existe pas se dit, au lieu d'être décalé en silence.
+  const issue = day && time ? crewOutingWallInstant(day, time).issue : null;
+  const whenIssue = issue === "no_such_day" ? L.outingNoSuchDay : issue === "no_such_hour" ? L.outingNoSuchHour : null;
+  // Tour 2 : seule la dernière recherche d'adresse compte.
+  const geo = useRef(0);
 
   async function find() {
-    if (place.trim().length < 3) return;
+    const typed = place.trim();
+    if (typed.length < 3) return;
+    const mine = ++geo.current;
     setStatus(L.outingFinding);
-    const res = await apiFetch<{ match: Match | null }>(`/geocode?q=${encodeURIComponent(place.trim())}`);
+    const res = await apiFetch<{ match: Match | null }>(`/geocode?q=${encodeURIComponent(typed)}`);
+    if (mine !== geo.current) return;
     if (res.ok && res.data.match) {
       setPin({ lat: res.data.match.lat, lng: res.data.match.lng });
       setStatus(L.outingFound(res.data.match.label));
-    } else setStatus(L.outingNotFound);
+    } else setStatus(res.ok ? L.outingNotFound : res.error.message);
   }
 
-  if (!crew.space || missing || (!editing && !crew.space.canProposeOuting)) {
+  /** Tour 2 : l'adresse change, le point placé pour l'ancienne n'est plus sûr (à replacer). */
+  function changePlace(next: string) {
+    geo.current++;
+    setStatus(pin.lat !== null ? L.outingPointReset : null);
+    setPin({ lat: null, lng: null });
+    setPlace(next);
+  }
+
+  // Tour 2 : sans le droit de la modifier (ni auteur ni chef, ou rendez-vous passé), pas de formulaire.
+  const refused = !crew.space
+    ? crewErrors.membersOnly
+    : missing || (!editing && !crew.space.canProposeOuting)
+      ? L.proposeReserved
+      : editing && !editing.canManage
+        ? L.outingCannotEdit
+        : null;
+  if (refused) {
     return (
       <>
         <FicheBar title={heading} back={back} />
         <div className="crw-narrow">
-          <p className="s-error" role="alert">
-            {crew.space ? L.proposeReserved : crewErrors.membersOnly}
+          <p className="s-error" role="alert" data-testid="outing-refused">
+            {refused}
           </p>
         </div>
       </>
@@ -168,7 +193,7 @@ export default function CrewOuting({ loaderData, actionData }: Route.ComponentPr
           label={L.outingPlace}
           name="place"
           value={place}
-          onChange={(e) => setPlace(e.currentTarget.value)}
+          onChange={(e) => changePlace(e.currentTarget.value)}
           maxLength={CREW_OUTING_PLACE_MAX}
           placeholder={L.outingPlacePlaceholder}
           required
@@ -212,11 +237,16 @@ export default function CrewOuting({ loaderData, actionData }: Route.ComponentPr
             {L.outingMissing(lacking)}
           </p>
         ) : null}
+        {whenIssue ? (
+          <p className="o-t-caption s-muted" data-testid="outing-when-issue">
+            {whenIssue}
+          </p>
+        ) : null}
         <Button
           type="submit"
           icon="send"
           loading={busy}
-          disabled={lacking.length > 0}
+          disabled={lacking.length > 0 || whenIssue !== null}
           fullWidth
           data-testid="outing-send"
         >
