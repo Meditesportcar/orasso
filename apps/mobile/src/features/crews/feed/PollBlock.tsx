@@ -40,27 +40,24 @@ export function PollBlock({
               }
               disabled={!poll.open || busy || mine}
               onPress={() => onVote(o.id)}
-              style={[styles.option, { borderColor: mine ? c.accent : c.line, backgroundColor: c.surface }]}
+              style={[styles.option, { borderColor: mine ? c.accentText : c.line, backgroundColor: c.surface }]}
               testID="crew-poll-option"
             >
               {showResults ? (
                 <View
-                  style={[styles.bar, { width: `${share}%`, backgroundColor: mine ? c.accent : c.surfaceRaised }]}
+                  // Tour 2 : la réponse choisie en moutarde léger (un seul aplat moutarde fort par écran).
+                  style={[styles.bar, { width: `${share}%`, backgroundColor: mine ? c.accentSoft : c.surfaceRaised }]}
                   pointerEvents="none"
                 />
               ) : null}
-              <View style={[styles.dot, { borderColor: mine ? c.accentInk : c.inkMuted }]}>
-                {mine ? <Icon name="check" size={12} color={mine && showResults ? c.accentInk : c.ink} /> : null}
+              <View style={[styles.dot, { borderColor: mine ? c.accentText : c.inkMuted }]}>
+                {mine ? <Icon name="check" size={12} color={c.accentText} /> : null}
               </View>
-              <Text
-                variant="bodyStrong"
-                color={mine && showResults && share > 40 ? c.accentInk : c.ink}
-                style={styles.label}
-              >
+              <Text variant="bodyStrong" color={c.ink} style={styles.label}>
                 {o.label}
               </Text>
               {showResults ? (
-                <Text variant="caption" color={mine && share > 85 ? c.accentInk : c.inkMuted} style={styles.votes}>
+                <Text variant="caption" color={c.inkMuted} style={styles.votes}>
                   {`${share} %`}
                 </Text>
               ) : null}

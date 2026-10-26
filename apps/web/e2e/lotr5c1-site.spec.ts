@@ -140,4 +140,27 @@ test("site R5c1 : publier, flamme, commentaire, sondage, accès retiré, non-mem
     expect(res.status()).toBe(404);
     await ctx.close();
   }
+
+  // 4. D36 (tour 2) : la photo n'est servie par aucune autre graphie de `/api/files`, ni après la dissolution.
+  const feed = await apiCall<{ items: { post?: { photos: { url: string }[] } }[] }>(cNina, "GET", `/crews/${crew.id}/feed`);
+  const photoUrl = feed.data.items.find((i) => i.post?.photos.length)?.post?.photos[0]?.url ?? "";
+  const name = photoUrl.split("/").at(-1);
+  expect(name).toMatch(/\.webp$/);
+  const nina2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const np = await nina2.newPage();
+  await loginInBrowser(np, email(nina), undefined, `/c/${crew.slug}`);
+  expect((await np.request.get(photoUrl)).status()).toBe(200);
+  for (const variant of [
+    `/api/files/private/crew-posts/${name}`,
+    `/api/files//private/crew-posts/${name}`,
+    `/api/files/%2Fprivate/crew-posts/${name}`,
+    `/api/files/./private/crew-posts/${name}`,
+  ]) {
+    expect((await np.request.get(variant)).status(), variant).toBe(404);
+  }
+  // Dissous par son chef : plus de fil ni de photo, pour personne.
+  expect((await apiCall(cKenji, "DELETE", `/crews/${crew.id}`)).status).toBe(204);
+  expect((await np.request.get(`/api/crews/${crew.id}/feed`)).status()).toBe(404);
+  expect((await np.request.get(photoUrl)).status()).toBe(404);
+  await nina2.close();
 });

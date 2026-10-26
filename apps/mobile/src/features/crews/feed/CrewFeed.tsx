@@ -11,6 +11,7 @@ import { usePaged } from "@/features/explorer/usePaged";
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { cacheScope } from "@/lib/kv";
 import { useSession } from "@/lib/session";
 import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
@@ -38,14 +39,22 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [comments, setComments] = useState<CrewPostView | null>(null);
   const [menu, setMenu] = useState<CrewPostView | null>(null);
 
-  // Une nouvelle liste remplace les changements faits sur l'ancienne.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `paged.items` relance la remise à zéro.
-  useEffect(() => setChanged({}), [paged.items]);
+  // Tour 2 : les changements faits sur place (retrait, voix, flamme) survivent au chargement d'une page suivante ; ils
+  // ne s'effacent qu'à une relecture complète du fil (le serveur les reflète alors).
+  const reloadPaged = paged.reload;
+  const reload = useCallback(async () => {
+    await reloadPaged();
+    setChanged({});
+  }, [reloadPaged]);
+  // Changement de compte : rien de l'ancien compte ne reste.
+  const account = cacheScope();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `account` vide les changements.
+  useEffect(() => setChanged({}), [account]);
   // Retour de « Publier dans le crew » : le fil se relit.
   useFocusEffect(
     useCallback(() => {
-      if (takeCrewFeedDirty(crew.id)) void paged.reload();
-    }, [crew.id, paged.reload]),
+      if (takeCrewFeedDirty(crew.id)) void reload();
+    }, [crew.id, reload]),
   );
 
   const current = (p: CrewPostView) => (p.id in changed ? changed[p.id] : p);
@@ -116,7 +125,7 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ok ? <Notice>{ok}</Notice> : null}
       {paged.error && !items?.length ? (
-        <LoadError message={paged.error || crewFeedLabels.loadError} onRetry={() => void paged.reload()} />
+        <LoadError message={paged.error || crewFeedLabels.loadError} onRetry={() => void reload()} />
       ) : items === null ? (
         <Muted variant="body">…</Muted>
       ) : items.length === 0 ? (

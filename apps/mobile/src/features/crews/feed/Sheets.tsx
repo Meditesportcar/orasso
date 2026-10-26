@@ -7,6 +7,7 @@ import {
   type CrewCommentView,
   type CrewPostView,
   crewFeedLabels,
+  mergeCrewComments,
   moderationLabels,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,14 +45,28 @@ export function CommentsSheet({
 }) {
   const { t } = useTheme();
   const c = t.color;
-  const [items, setItems] = useState<CrewCommentView[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
+  // Tour 2 : chaque réponse est rangée sous sa publication (et le compte de départ, `requestGate`) ; ouvrir une autre
+  // publication entre-temps ne mélange rien et garde le brouillon de chacune.
+  const [byPost, setByPost] = useState<Record<string, { items: CrewCommentView[]; cursor: string | null }>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const gate = useRef(createRequestGate(cacheScope)).current;
   const postId = post?.id ?? null;
+  const account = cacheScope();
+  const current = postId ? byPost[postId] : undefined;
+  const items = current?.items ?? null;
+  const cursor = current?.cursor ?? null;
+  const text = postId ? (drafts[postId] ?? "") : "";
+
+  // Changement de compte : rien de l'ancien compte ne reste (commentaires, brouillons).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `account` vide les états.
+  useEffect(() => {
+    gate.invalidate();
+    setByPost({});
+    setDrafts({});
+  }, [account, gate]);
 
   const load = useCallback(
     async (from?: string) => {
@@ -60,8 +75,13 @@ export function CommentsSheet({
       try {
         const page = await api.crewPostComments(crewId, postId, from);
         if (!ticket.current()) return;
-        setItems((current) => (from ? [...(current ?? []), ...page.items] : page.items));
-        setCursor(page.nextCursor);
+        setByPost((all) => ({
+          ...all,
+          [postId]: {
+            items: mergeCrewComments(from ? (all[postId]?.items ?? []) : [], page.items),
+            cursor: page.nextCursor,
+          },
+        }));
         setLoadError(null);
       } catch (e) {
         if (ticket.current()) setLoadError(errorMessage(e));
@@ -71,27 +91,33 @@ export function CommentsSheet({
   );
 
   useEffect(() => {
-    setItems(null);
-    setCursor(null);
     setError(null);
     setLoadError(null);
-    setText("");
     if (postId) void load();
   }, [postId, load]);
 
   async function send() {
-    if (!postId) return;
-    if (!text.trim()) {
+    const target = postId;
+    if (!target) return;
+    const body = (drafts[target] ?? "").trim();
+    if (!body) {
       setError(crewFeedLabels.commentMissing);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const created = await api.commentCrewPost(crewId, postId, text.trim());
-      setItems((current) => [...(current ?? []), created]);
-      setText("");
-      onCount(postId, 1);
+      const created = await api.commentCrewPost(crewId, target, body);
+      // La réponse va à sa publication, même si une autre est ouverte entre-temps.
+      setByPost((all) => ({
+        ...all,
+        [target]: {
+          items: mergeCrewComments(all[target]?.items ?? [], [created]),
+          cursor: all[target]?.cursor ?? null,
+        },
+      }));
+      setDrafts((all) => ({ ...all, [target]: "" }));
+      onCount(target, 1);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -100,13 +126,20 @@ export function CommentsSheet({
   }
 
   async function remove(comment: CrewCommentView) {
-    if (!postId || !(await confirmRemove(crewFeedLabels.removeCommentConfirm))) return;
+    const target = postId;
+    if (!target || !(await confirmRemove(crewFeedLabels.removeCommentConfirm))) return;
     setBusy(true);
     setError(null);
     try {
       await api.removeCrewComment(crewId, comment.id);
-      setItems((current) => (current ?? []).filter((x) => x.id !== comment.id));
-      onCount(postId, -1);
+      setByPost((all) => ({
+        ...all,
+        [target]: {
+          items: (all[target]?.items ?? []).filter((x) => x.id !== comment.id),
+          cursor: all[target]?.cursor ?? null,
+        },
+      }));
+      onCount(target, -1);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -178,7 +211,7 @@ export function CommentsSheet({
         <TextField
           label={crewFeedLabels.commentPlaceholder}
           value={text}
-          onChangeText={setText}
+          onChangeText={(value) => postId && setDrafts((all) => ({ ...all, [postId]: value }))}
           maxLength={CREW_COMMENT_MAX}
           multiline
           testID="crew-comment-input"

@@ -27,6 +27,7 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [options, setOptions] = useState<CrewPostOptions | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -55,12 +56,18 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
     [crew.id],
   );
 
+  // Tour 2 : un échec des réglages du composeur se dit (message et « Réessayer »), le brouillon reste.
+  const loadOptions = useCallback(async () => {
+    setOptionsError(null);
+    const res = await apiFetch<CrewPostOptions>(`/crews/${crew.id}/post-options`);
+    if (res.ok) setOptions(res.data);
+    else setOptionsError(res.error.message);
+  }, [crew.id]);
+
   useEffect(() => {
     void load();
-    void apiFetch<CrewPostOptions>(`/crews/${crew.id}/post-options`).then((res) => {
-      if (res.ok) setOptions(res.data);
-    });
-  }, [crew.id, load]);
+    void loadOptions();
+  }, [load, loadOptions]);
 
   const put = (post: CrewPostView | null, id: string) =>
     setItems((list) =>
@@ -206,6 +213,8 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
       <PublishDialog
         open={publishing}
         options={options}
+        optionsError={optionsError}
+        onRetryOptions={() => void loadOptions()}
         onClose={() => setPublishing(false)}
         onPublished={() => {
           setPublishing(false);

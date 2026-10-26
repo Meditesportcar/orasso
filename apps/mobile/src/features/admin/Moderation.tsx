@@ -227,7 +227,10 @@ function ReportBody() {
             </Chip>
             {d.target.gone ? <Notice>{moderationLabels.targetGone}</Notice> : null}
             {d.target.removed ? <Notice>{moderationLabels.targetRemoved}</Notice> : null}
-            {d.target.imageUrl ? <PrivateImage url={d.target.imageUrl} style={styles.image} /> : null}
+            {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
+            {(d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
+              <PrivateImage key={url} url={url} style={styles.image} />
+            ))}
             {d.target.text && d.targetType !== "message" ? (
               <Text variant="body" color={t.color.plateInk}>
                 {d.target.text}

@@ -178,7 +178,10 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
     await k.ctx.close();
   }
 
-  // 3. Léa, retirée du crew : plus de fil, plus de photo, tout de suite.
+  // 3. Léa, retirée du crew : plus de fil, plus de photo, tout de suite ; ses publications, elle peut les retirer.
+  expect((await apiCall(cLea, "POST", `/crews/${crew.id}/posts`, { kind: "text", text: "Je pars bientôt" })).status).toBe(
+    201,
+  );
   expect(await rawStatus(cLea, photoUrl)).toBe(200);
   const leaId = (await apiCall<{ user: { id: string } }>(cLea, "GET", "/me")).data.user.id;
   expect((await apiCall(cKenji, "DELETE", `/crews/${crew.id}/members/${leaId}`)).status).toBe(204);
@@ -187,7 +190,17 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
   const l = await appLogin(browser, lea, "beton");
   await openCrew(l.page, crew.slug);
   await expect(l.page.getByTestId("crew-feed")).toHaveCount(0);
+  // Réglages › Confidentialité : « Retirer mes publications des crews que j'ai quittés » (confirmation dans l'écran).
+  await l.page.goto("/reglages/confidentialite");
+  await skipOpening(l.page);
+  await l.page.getByTestId("left-crews-open").click();
+  await expect(l.page.getByTestId("left-crews-confirm")).toBeVisible();
+  await shot(l.page, "07-crews-quittes-beton");
+  await l.page.getByTestId("left-crews-yes").click();
+  await expect(l.page.getByText("Retiré : 1 publication et 0 commentaire.")).toBeVisible({ timeout: 20_000 });
   await l.ctx.close();
+  const after = await apiCall<{ items: { post?: { text: string } }[] }>(cKenji, "GET", `/crews/${crew.id}/feed`);
+  expect(after.data.items.some((i) => i.post?.text === "Je pars bientôt")).toBe(false);
 
   // 4. Paul, hors du crew : ni fil ni photo.
   expect(await rawStatus(cPaul, photoUrl)).toBe(404);

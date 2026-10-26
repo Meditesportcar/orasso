@@ -186,9 +186,13 @@
   color: var(--ink);
   cursor: pointer;
 }
+/* Tour 2 : un seul aplat moutarde fort par écran (« Publier ») : la flamme donnée en moutarde léger. */
 .cf-rx__btn[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.cf-rx__btn[aria-pressed="true"] svg {
+  color: var(--accent-text);
 }
 .cf-rx__btn:disabled {
   opacity: 0.6;
@@ -229,7 +233,11 @@
   cursor: pointer;
 }
 .cf-poll__opt[aria-pressed="true"] {
-  border-color: var(--accent);
+  border-color: var(--accent-text);
+}
+.cf-poll__opt[aria-pressed="true"] .cf-poll__dot {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
 }
 .cf-poll__opt:disabled {
   cursor: default;
@@ -240,8 +248,7 @@
   background: var(--surface-raised);
 }
 .cf-poll__opt[aria-pressed="true"] .cf-poll__bar {
-  background: var(--accent);
-  opacity: 0.45;
+  background: var(--accent-soft);
 }
 .cf-poll__label,
 .cf-poll__share,
@@ -461,6 +468,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.cf-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .cf-answer {
   display: flex;

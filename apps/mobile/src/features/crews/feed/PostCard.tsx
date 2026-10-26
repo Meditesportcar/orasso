@@ -106,11 +106,12 @@ export function PostCard({
           }
           onPress={onFire}
           disabled={busy}
-          style={[styles.rxBtn, { backgroundColor: post.firedByMe ? c.accent : c.ground }]}
+          // Tour 2 : un seul aplat moutarde fort par écran (« Publier ») ; la flamme donnée est en moutarde léger.
+          style={[styles.rxBtn, { backgroundColor: post.firedByMe ? c.accentSoft : c.ground }]}
           testID="crew-post-fire"
         >
-          <Icon name="fire" size={17} color={post.firedByMe ? c.accentInk : c.ink} />
-          <Text variant="bodyStrong" color={post.firedByMe ? c.accentInk : c.ink} style={styles.rxText}>
+          <Icon name="fire" size={17} color={post.firedByMe ? c.accentText : c.ink} />
+          <Text variant="bodyStrong" color={c.ink} style={styles.rxText}>
             {String(post.firesCount)}
           </Text>
         </Pressable>

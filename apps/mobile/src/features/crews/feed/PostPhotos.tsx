@@ -1,13 +1,13 @@
 // Photos d'une publication du fil (lot R5c1, `.r5pph` de la maquette R5.7) : au format d'origine, jamais recadrées
 // (D36) ; plusieurs photos en défilement horizontal avec « 1 / 2 ». Le cadre prend la forme de la première photo,
 // bornée entre 4:5 et 1,91:1 ; une photo plus allongée s'y loge entière, sur fond sombre. Les images sont privées :
-// servies par l'API au membre connecté seulement (`PrivateImage`, jeton de session).
+// servies par l'API au membre connecté seulement, gardées en mémoire seulement (`CrewPhotoImage`, tour 2).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type CrewPostPhoto, crewFeedLabels, crewPhotoFrameRatio } from "@orasso/shared";
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
-import { PrivateImage } from "@/features/boite/PrivateImage";
+import { CrewPhotoImage } from "./CrewPhotoImage";
 
 export function PostPhotos({ photos, pseudo }: { photos: CrewPostPhoto[]; pseudo: string }) {
   const { t } = useTheme();
@@ -36,7 +36,7 @@ export function PostPhotos({ photos, pseudo }: { photos: CrewPostPhoto[]; pseudo
         >
           {photos.map((p, i) => (
             <View key={p.id} style={{ width, height }}>
-              <PrivateImage
+              <CrewPhotoImage
                 url={p.url}
                 style={{ width, height }}
                 accessibilityLabel={crewFeedLabels.photoAlt(pseudo, i + 1, n)}

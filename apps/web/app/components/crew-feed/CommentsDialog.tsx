@@ -1,7 +1,14 @@
 // Commentaires d'une publication du fil, sur le site (lot R5c1) : une feuille (`<dialog>`), 300 caractères, Signaler,
 // Retirer pour son auteur ou le chef. Mêmes règles que l'appli (toutes dans l'API).
 import { Button } from "@orasso/design-system/web";
-import { CREW_COMMENT_MAX, type CrewCommentView, type CrewPostView, crewFeedLabels, type Page } from "@orasso/shared";
+import {
+  CREW_COMMENT_MAX,
+  type CrewCommentView,
+  type CrewPostView,
+  crewFeedLabels,
+  mergeCrewComments,
+  type Page,
+} from "@orasso/shared";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
@@ -22,39 +29,46 @@ export function CommentsDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const [items, setItems] = useState<CrewCommentView[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
+  // Tour 2 : chaque réponse est rangée sous sa publication ; ouvrir une autre publication entre-temps ne mélange rien
+  // et garde le brouillon de chacune. Fusion par identifiant, ordre chronologique.
+  const [byPost, setByPost] = useState<Record<string, { items: CrewCommentView[]; cursor: string | null }>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const postId = post?.id ?? null;
+  const items = postId ? (byPost[postId]?.items ?? null) : null;
+  const cursor = postId ? (byPost[postId]?.cursor ?? null) : null;
+  const text = postId ? (drafts[postId] ?? "") : "";
   // Seule la dernière lecture compte (changement de publication pendant une lecture).
   const seq = useRef(0);
 
   async function load(from?: string) {
-    if (!postId) return;
+    const target = postId;
+    if (!target) return;
     const mine = from ? seq.current : ++seq.current;
     const res = await apiFetch<Page<CrewCommentView>>(
-      `/crews/${crewId}/posts/${postId}/comments${from ? `?cursor=${encodeURIComponent(from)}` : ""}`,
+      `/crews/${crewId}/posts/${target}/comments${from ? `?cursor=${encodeURIComponent(from)}` : ""}`,
     );
     if (mine !== seq.current) return;
     if (!res.ok) {
       setLoadError(res.error.message);
       return;
     }
-    setItems((current) => (from ? [...(current ?? []), ...res.data.items] : res.data.items));
-    setCursor(res.data.nextCursor);
+    setByPost((all) => ({
+      ...all,
+      [target]: {
+        items: mergeCrewComments(from ? (all[target]?.items ?? []) : [], res.data.items),
+        cursor: res.data.nextCursor,
+      },
+    }));
     setLoadError(null);
   }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: une nouvelle publication relit ses commentaires.
   useEffect(() => {
-    setItems(null);
-    setCursor(null);
     setError(null);
     setLoadError(null);
-    setText("");
     if (!postId) {
       if (ref.current?.open) ref.current.close();
       return;
@@ -64,29 +78,36 @@ export function CommentsDialog({
   }, [postId]);
 
   async function send() {
-    if (!postId) return;
-    if (!text.trim()) {
+    const target = postId;
+    if (!target) return;
+    const body = (drafts[target] ?? "").trim();
+    if (!body) {
       setError(crewFeedLabels.commentMissing);
       return;
     }
     setBusy(true);
     setError(null);
-    const res = await apiFetch<CrewCommentView>(`/crews/${crewId}/posts/${postId}/comments`, {
+    const res = await apiFetch<CrewCommentView>(`/crews/${crewId}/posts/${target}/comments`, {
       method: "POST",
-      json: { text: text.trim() },
+      json: { text: body },
     });
     setBusy(false);
     if (!res.ok) {
       setError(res.error.message);
       return;
     }
-    setItems((current) => [...(current ?? []), res.data]);
-    setText("");
-    onCount(postId, 1);
+    // La réponse va à sa publication, même si une autre est ouverte entre-temps.
+    setByPost((all) => ({
+      ...all,
+      [target]: { items: mergeCrewComments(all[target]?.items ?? [], [res.data]), cursor: all[target]?.cursor ?? null },
+    }));
+    setDrafts((all) => ({ ...all, [target]: "" }));
+    onCount(target, 1);
   }
 
   async function remove(c: CrewCommentView) {
-    if (!postId || !window.confirm(crewFeedLabels.removeCommentConfirm)) return;
+    const target = postId;
+    if (!target || !window.confirm(crewFeedLabels.removeCommentConfirm)) return;
     setBusy(true);
     const res = await apiFetch(`/crews/${crewId}/comments/${c.id}`, { method: "DELETE" });
     setBusy(false);
@@ -94,8 +115,11 @@ export function CommentsDialog({
       setError(res.error.message);
       return;
     }
-    setItems((current) => (current ?? []).filter((x) => x.id !== c.id));
-    onCount(postId, -1);
+    setByPost((all) => ({
+      ...all,
+      [target]: { items: (all[target]?.items ?? []).filter((x) => x.id !== c.id), cursor: all[target]?.cursor ?? null },
+    }));
+    onCount(target, -1);
   }
 
   return (
@@ -174,7 +198,10 @@ export function CommentsDialog({
           rows={2}
           maxLength={CREW_COMMENT_MAX}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (postId) setDrafts((all) => ({ ...all, [postId]: value }));
+          }}
           data-testid="crew-comment-input"
         />
         <Button icon="send" disabled={busy} loading={busy} onClick={() => void send()} data-testid="crew-comment-send">

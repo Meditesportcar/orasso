@@ -14,6 +14,7 @@ import {
   crewFeedLabels,
   crewLabels,
 } from "@orasso/shared";
+import { randomUUID } from "expo-crypto";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
@@ -67,6 +68,14 @@ export default function PublishInCrew() {
   const [answers, setAnswers] = useState<string[]>(["", ""]);
   const [endDays, setEndDays] = useState<(typeof END_CHOICES)[number]>(0);
   const [busy, setBusy] = useState(false);
+  // Tour 2 : identifiant de la publication, gardé entre les tentatives (une réponse perdue ne crée pas de doublon).
+  const [clientId] = useState(() => randomUUID());
+  // Tour 2 : pendant l'envoi, rien ne bouge (photos, texte, choix) ; un échec garde toutes les saisies.
+  const guard =
+    <A extends unknown[]>(fn: (...args: A) => void) =>
+    (...args: A) => {
+      if (!busy) fn(...args);
+    };
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,6 +112,7 @@ export default function PublishInCrew() {
       if (mode === "poll") {
         body = {
           kind: "poll",
+          clientId,
           poll: {
             question: question.trim(),
             options: filledAnswers,
@@ -119,13 +129,14 @@ export default function PublishInCrew() {
         }
         body = {
           kind: "photo",
+          clientId,
           text: text.trim() || null,
           photoKeys: photos.map((p) => sent[p.uri] as string),
           vehicleId,
           eventId,
         };
       } else {
-        body = { kind: "text", text: text.trim(), vehicleId, eventId };
+        body = { kind: "text", clientId, text: text.trim(), vehicleId, eventId };
       }
       setProgress(null);
       await api.createCrewPost(crewId, body);
@@ -188,7 +199,7 @@ export default function PublishInCrew() {
       <View testID="crew-publish">
         <Seg<Mode>
           value={mode}
-          onChange={setMode}
+          onChange={guard(setMode)}
           options={[
             { value: "photo", label: crewFeedLabels.publishPhoto, icon: "camera" },
             { value: "poll", label: crewFeedLabels.publishPoll, icon: "list" },
@@ -206,6 +217,7 @@ export default function PublishInCrew() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={crewFeedLabels.removePhoto}
+                  disabled={busy}
                   onPress={() => setPhotos((list) => list.filter((_, j) => j !== i))}
                   style={[styles.tileX, { backgroundColor: `${c.night}c7` }]}
                   hitSlop={6}
@@ -218,6 +230,7 @@ export default function PublishInCrew() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${crewFeedLabels.addPhoto}, ${crewFeedLabels.photosCount(photos.length)}`}
+                disabled={busy}
                 onPress={() => void add("gallery")}
                 style={[styles.tile, styles.addTile, { borderColor: c.line }]}
                 testID="crew-publish-add"
@@ -240,10 +253,10 @@ export default function PublishInCrew() {
           </View>
           {photos.length < CREW_POST_PHOTOS_MAX ? (
             <View style={styles.row}>
-              <SmButton kind="s" icon="gallery" onPress={() => void add("gallery")}>
+              <SmButton kind="s" icon="gallery" disabled={busy} onPress={() => void add("gallery")}>
                 {crewFeedLabels.pickPhotos}
               </SmButton>
-              <SmButton kind="s" icon="camera" onPress={() => void add("camera")}>
+              <SmButton kind="s" icon="camera" disabled={busy} onPress={() => void add("camera")}>
                 {crewFeedLabels.takePhoto}
               </SmButton>
             </View>
@@ -252,6 +265,7 @@ export default function PublishInCrew() {
             label={crewFeedLabels.word}
             value={text}
             onChangeText={setText}
+            editable={!busy}
             placeholder={crewFeedLabels.wordPlaceholder}
             maxLength={CREW_POST_TEXT_MAX}
             multiline
@@ -265,7 +279,7 @@ export default function PublishInCrew() {
                   <Chip
                     key={x.id}
                     selected={vehicleId === x.id}
-                    onPress={() => setVehicleId(vehicleId === x.id ? null : x.id)}
+                    onPress={guard(() => setVehicleId(vehicleId === x.id ? null : x.id))}
                   >
                     {x.label}
                   </Chip>
@@ -281,7 +295,7 @@ export default function PublishInCrew() {
                   <Chip
                     key={x.id}
                     selected={eventId === x.id}
-                    onPress={() => setEventId(eventId === x.id ? null : x.id)}
+                    onPress={guard(() => setEventId(eventId === x.id ? null : x.id))}
                   >
                     {x.title}
                   </Chip>
@@ -296,6 +310,7 @@ export default function PublishInCrew() {
             label={crewFeedLabels.pollQuestion}
             value={question}
             onChangeText={setQuestion}
+            editable={!busy}
             placeholder={crewFeedLabels.pollQuestionPlaceholder}
             maxLength={CREW_POLL_QUESTION_MAX}
             testID="crew-poll-question"
@@ -309,6 +324,7 @@ export default function PublishInCrew() {
                   label={crewFeedLabels.pollOption(i + 1)}
                   value={a}
                   onChangeText={(value) => setAnswers((list) => list.map((x, j) => (j === i ? value : x)))}
+                  editable={!busy}
                   maxLength={CREW_POLL_OPTION_MAX}
                   style={styles.grow}
                   testID="crew-poll-answer"
@@ -318,13 +334,20 @@ export default function PublishInCrew() {
                     kind="g"
                     icon="trash"
                     accessibilityLabel={crewFeedLabels.pollRemoveOption(i + 1)}
+                    disabled={busy}
                     onPress={() => setAnswers((list) => list.filter((_, j) => j !== i))}
                   />
                 ) : null}
               </View>
             ))}
             {answers.length < CREW_POLL_OPTIONS_MAX ? (
-              <SmButton kind="s" icon="add" onPress={() => setAnswers((list) => [...list, ""])} testID="crew-poll-add">
+              <SmButton
+                kind="s"
+                icon="add"
+                disabled={busy}
+                onPress={() => setAnswers((list) => [...list, ""])}
+                testID="crew-poll-add"
+              >
                 {crewFeedLabels.pollAddOption}
               </SmButton>
             ) : null}
@@ -333,7 +356,7 @@ export default function PublishInCrew() {
             <Label text={crewFeedLabels.pollEnd} optional />
             <View style={styles.chips}>
               {END_CHOICES.map((d) => (
-                <Chip key={d} selected={endDays === d} onPress={() => setEndDays(d)}>
+                <Chip key={d} selected={endDays === d} onPress={guard(() => setEndDays(d))}>
                   {d === 0 ? crewFeedLabels.pollNoEnd : crewFeedLabels.pollEndIn(d)}
                 </Chip>
               ))}

@@ -41,17 +41,24 @@ async function uploadFile(file: File): Promise<{ ok: true; key: string } | { ok:
 export function PublishDialog({
   open,
   options,
+  optionsError,
+  onRetryOptions,
   onClose,
   onPublished,
 }: {
   open: boolean;
   options: CrewPostOptions | null;
+  /** Tour 2 : les réglages du crew n'ont pas pu se charger ; « Réessayer » les relit sans rien perdre du brouillon. */
+  optionsError: string | null;
+  onRetryOptions: () => void;
   onClose: () => void;
   onPublished: (post: CrewPostView) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [mode, setMode] = useState<Mode>("photo");
+  // Tour 2 : identifiant de la publication, gardé entre les tentatives (une réponse perdue ne crée pas de doublon).
+  const [clientId, setClientId] = useState(() => crypto.randomUUID());
   const [photos, setPhotos] = useState<Picked[]>([]);
   const [text, setText] = useState("");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -96,6 +103,9 @@ export function PublishDialog({
         : filled.length < CREW_POLL_OPTIONS_MIN
           ? crewFeedLabels.missingOptions
           : null;
+  // Jamais de bouton principal grisé sans une ligne qui dise ce qui manque.
+  const blocked =
+    missing ?? (options ? null : optionsError ? crewFeedLabels.optionsError : crewFeedLabels.optionsLoading);
 
   function reset() {
     for (const p of photos) {
@@ -111,16 +121,18 @@ export function PublishDialog({
     setEndDays(0);
     setError(null);
     setMode("photo");
+    setClientId(crypto.randomUUID());
   }
 
   async function publish() {
-    if (!options || missing) return;
+    if (!options || blocked) return;
     setBusy(true);
     setError(null);
     let body: CrewPostCreate;
     if (mode === "poll") {
       body = {
         kind: "poll",
+        clientId,
         poll: {
           question: question.trim(),
           options: filled,
@@ -145,13 +157,14 @@ export function PublishDialog({
       setPhotos(sent);
       body = {
         kind: "photo",
+        clientId,
         text: text.trim() || null,
         photoKeys: sent.map((p) => p.key as string),
         vehicleId,
         eventId,
       };
     } else {
-      body = { kind: "text", text: text.trim(), vehicleId, eventId };
+      body = { kind: "text", clientId, text: text.trim(), vehicleId, eventId };
     }
     setProgress(null);
     const res = await apiFetch<CrewPostView>(`/crews/${options.crew.id}/posts`, { method: "POST", json: body });
@@ -173,178 +186,192 @@ export function PublishDialog({
           </h2>
           <Button variant="close" label="Fermer" onClick={() => ref.current?.close()} />
         </div>
-        <div className="cf-chips" role="tablist">
-          {(["photo", "poll"] as const).map((m) => (
-            <Chip key={m} selected={mode === m} onClick={() => setMode(m)}>
-              {m === "photo" ? crewFeedLabels.publishPhoto : crewFeedLabels.publishPoll}
-            </Chip>
-          ))}
-        </div>
+        {/* Tour 2 : pendant l'envoi, rien ne bouge (photos, texte, choix) ; un échec garde toutes les saisies. */}
+        <fieldset className="cf-fieldset" disabled={busy}>
+          <div className="cf-chips" role="tablist">
+            {(["photo", "poll"] as const).map((m) => (
+              <Chip key={m} selected={mode === m} onClick={() => setMode(m)}>
+                {m === "photo" ? crewFeedLabels.publishPhoto : crewFeedLabels.publishPoll}
+              </Chip>
+            ))}
+          </div>
 
-        {mode === "photo" ? (
-          <>
-            <div className="cf-pub-grid">
-              {photos.map((p, i) => (
-                <div key={p.url} className="cf-pub-tile" data-testid="crew-publish-photo">
-                  <img src={p.url} alt="" />
-                  <button type="button" aria-label={crewFeedLabels.removePhoto} onClick={() => dropPhoto(i)}>
-                    <Icon name="trash" size={14} />
-                  </button>
-                </div>
-              ))}
-              {photos.length < CREW_POST_PHOTOS_MAX && (
-                <label className="cf-pub-add" data-testid="crew-publish-add">
-                  <Icon name="add" size={22} />
-                  <span>{crewFeedLabels.addPhoto}</span>
-                  <small>{crewFeedLabels.photosCount(photos.length)}</small>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/heic"
-                    multiple
-                    data-testid="crew-publish-file"
-                    onChange={(e) => {
-                      const files = [...(e.target.files ?? [])].slice(0, CREW_POST_PHOTOS_MAX - photos.length);
-                      setPhotos((list) => [
-                        ...list,
-                        ...files.map((file) => {
-                          const url = URL.createObjectURL(file);
-                          previews.current.add(url);
-                          return { file, url, key: null };
-                        }),
-                      ]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              )}
-            </div>
-            <p className="cf-note">
-              <Icon name="lock" size={16} />
-              <span className="o-t-caption">{crewFeedLabels.photosNote}</span>
-            </p>
-            <label className="s-label o-t-label" htmlFor={`${titleId}-word`}>
-              {crewFeedLabels.word}
-            </label>
-            <textarea
-              id={`${titleId}-word`}
-              className="s-textarea"
-              rows={3}
-              maxLength={CREW_POST_TEXT_MAX}
-              placeholder={crewFeedLabels.wordPlaceholder}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              data-testid="crew-publish-text"
-            />
-            {options && options.vehicles.length > 0 && (
-              <>
-                <span className="s-label o-t-label">
-                  {crewFeedLabels.withVehicle} <span className="s-muted">{crewFeedLabels.optional}</span>
-                </span>
-                <div className="cf-chips">
-                  {options.vehicles.map((x) => (
-                    <Chip
-                      key={x.id}
-                      selected={vehicleId === x.id}
-                      onClick={() => setVehicleId(vehicleId === x.id ? null : x.id)}
-                    >
-                      {x.label}
-                    </Chip>
-                  ))}
-                </div>
-              </>
-            )}
-            {options && options.events.length > 0 && (
-              <>
-                <span className="s-label o-t-label">
-                  {crewFeedLabels.forEvent} <span className="s-muted">{crewFeedLabels.optional}</span>
-                </span>
-                <div className="cf-chips">
-                  {options.events.map((x) => (
-                    <Chip
-                      key={x.id}
-                      selected={eventId === x.id}
-                      onClick={() => setEventId(eventId === x.id ? null : x.id)}
-                    >
-                      {x.title}
-                    </Chip>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <TextField
-              label={crewFeedLabels.pollQuestion}
-              value={question}
-              maxLength={CREW_POLL_QUESTION_MAX}
-              placeholder={crewFeedLabels.pollQuestionPlaceholder}
-              onChange={(e) => setQuestion(e.target.value)}
-              data-testid="crew-poll-question"
-            />
-            <span className="s-label o-t-label">{crewFeedLabels.pollOptions}</span>
-            {answers.map((a, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: les réponses sont des champs à leur place.
-              <div key={i} className="cf-answer">
-                <TextField
-                  label={crewFeedLabels.pollOption(i + 1)}
-                  value={a}
-                  maxLength={CREW_POLL_OPTION_MAX}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setAnswers((list) => list.map((x, j) => (j === i ? value : x)));
-                  }}
-                  data-testid="crew-poll-answer"
-                />
-                {answers.length > CREW_POLL_OPTIONS_MIN && (
-                  <Button
-                    variant="secondary"
-                    icon="trash"
-                    aria-label={crewFeedLabels.pollRemoveOption(i + 1)}
-                    onClick={() => setAnswers((list) => list.filter((_, j) => j !== i))}
-                  />
+          {mode === "photo" ? (
+            <>
+              <div className="cf-pub-grid">
+                {photos.map((p, i) => (
+                  <div key={p.url} className="cf-pub-tile" data-testid="crew-publish-photo">
+                    <img src={p.url} alt="" />
+                    <button type="button" aria-label={crewFeedLabels.removePhoto} onClick={() => dropPhoto(i)}>
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </div>
+                ))}
+                {photos.length < CREW_POST_PHOTOS_MAX && (
+                  <label className="cf-pub-add" data-testid="crew-publish-add">
+                    <Icon name="add" size={22} />
+                    <span>{crewFeedLabels.addPhoto}</span>
+                    <small>{crewFeedLabels.photosCount(photos.length)}</small>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic"
+                      multiple
+                      data-testid="crew-publish-file"
+                      onChange={(e) => {
+                        const files = [...(e.target.files ?? [])].slice(0, CREW_POST_PHOTOS_MAX - photos.length);
+                        setPhotos((list) => [
+                          ...list,
+                          ...files.map((file) => {
+                            const url = URL.createObjectURL(file);
+                            previews.current.add(url);
+                            return { file, url, key: null };
+                          }),
+                        ]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
                 )}
               </div>
-            ))}
-            {answers.length < CREW_POLL_OPTIONS_MAX && (
-              <Button variant="secondary" icon="add" onClick={() => setAnswers((list) => [...list, ""])}>
-                {crewFeedLabels.pollAddOption}
-              </Button>
-            )}
-            <span className="s-label o-t-label">
-              {crewFeedLabels.pollEnd} <span className="s-muted">{crewFeedLabels.optional}</span>
-            </span>
-            <div className="cf-chips">
-              {END_CHOICES.map((d) => (
-                <Chip key={d} selected={endDays === d} onClick={() => setEndDays(d)}>
-                  {d === 0 ? crewFeedLabels.pollNoEnd : crewFeedLabels.pollEndIn(d)}
-                </Chip>
+              <p className="cf-note">
+                <Icon name="lock" size={16} />
+                <span className="o-t-caption">{crewFeedLabels.photosNote}</span>
+              </p>
+              <label className="s-label o-t-label" htmlFor={`${titleId}-word`}>
+                {crewFeedLabels.word}
+              </label>
+              <textarea
+                id={`${titleId}-word`}
+                className="s-textarea"
+                rows={3}
+                maxLength={CREW_POST_TEXT_MAX}
+                placeholder={crewFeedLabels.wordPlaceholder}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                data-testid="crew-publish-text"
+              />
+              {options && options.vehicles.length > 0 && (
+                <>
+                  <span className="s-label o-t-label">
+                    {crewFeedLabels.withVehicle} <span className="s-muted">{crewFeedLabels.optional}</span>
+                  </span>
+                  <div className="cf-chips">
+                    {options.vehicles.map((x) => (
+                      <Chip
+                        key={x.id}
+                        selected={vehicleId === x.id}
+                        onClick={() => setVehicleId(vehicleId === x.id ? null : x.id)}
+                      >
+                        {x.label}
+                      </Chip>
+                    ))}
+                  </div>
+                </>
+              )}
+              {options && options.events.length > 0 && (
+                <>
+                  <span className="s-label o-t-label">
+                    {crewFeedLabels.forEvent} <span className="s-muted">{crewFeedLabels.optional}</span>
+                  </span>
+                  <div className="cf-chips">
+                    {options.events.map((x) => (
+                      <Chip
+                        key={x.id}
+                        selected={eventId === x.id}
+                        onClick={() => setEventId(eventId === x.id ? null : x.id)}
+                      >
+                        {x.title}
+                      </Chip>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <TextField
+                label={crewFeedLabels.pollQuestion}
+                value={question}
+                maxLength={CREW_POLL_QUESTION_MAX}
+                placeholder={crewFeedLabels.pollQuestionPlaceholder}
+                onChange={(e) => setQuestion(e.target.value)}
+                data-testid="crew-poll-question"
+              />
+              <span className="s-label o-t-label">{crewFeedLabels.pollOptions}</span>
+              {answers.map((a, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: les réponses sont des champs à leur place.
+                <div key={i} className="cf-answer">
+                  <TextField
+                    label={crewFeedLabels.pollOption(i + 1)}
+                    value={a}
+                    maxLength={CREW_POLL_OPTION_MAX}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAnswers((list) => list.map((x, j) => (j === i ? value : x)));
+                    }}
+                    data-testid="crew-poll-answer"
+                  />
+                  {answers.length > CREW_POLL_OPTIONS_MIN && (
+                    <Button
+                      variant="secondary"
+                      icon="trash"
+                      aria-label={crewFeedLabels.pollRemoveOption(i + 1)}
+                      onClick={() => setAnswers((list) => list.filter((_, j) => j !== i))}
+                    />
+                  )}
+                </div>
               ))}
-            </div>
-            <p className="o-t-caption s-muted">{crewFeedLabels.pollHint}</p>
-          </>
-        )}
+              {answers.length < CREW_POLL_OPTIONS_MAX && (
+                <Button variant="secondary" icon="add" onClick={() => setAnswers((list) => [...list, ""])}>
+                  {crewFeedLabels.pollAddOption}
+                </Button>
+              )}
+              <span className="s-label o-t-label">
+                {crewFeedLabels.pollEnd} <span className="s-muted">{crewFeedLabels.optional}</span>
+              </span>
+              <div className="cf-chips">
+                {END_CHOICES.map((d) => (
+                  <Chip key={d} selected={endDays === d} onClick={() => setEndDays(d)}>
+                    {d === 0 ? crewFeedLabels.pollNoEnd : crewFeedLabels.pollEndIn(d)}
+                  </Chip>
+                ))}
+              </div>
+              <p className="o-t-caption s-muted">{crewFeedLabels.pollHint}</p>
+            </>
+          )}
+        </fieldset>
 
-        <div className="cf-vis" data-testid="crew-publish-visibility">
-          <Icon name="lock" size={20} />
-          <div>
-            <b>{crewFeedLabels.visibleTo(options?.crew.membersCount ?? 0)}</b>
-            <small>{crewFeedLabels.visibleHint}</small>
+        {options ? (
+          <div className="cf-vis" data-testid="crew-publish-visibility">
+            <Icon name="lock" size={20} />
+            <div>
+              <b>{crewFeedLabels.visibleTo(options.crew.membersCount)}</b>
+              <small>{crewFeedLabels.visibleHint}</small>
+            </div>
           </div>
-        </div>
+        ) : optionsError ? (
+          <div className="s-stack" data-testid="crew-publish-options-error">
+            <p className="s-error" role="alert">
+              {crewFeedLabels.optionsError} {optionsError}
+            </p>
+            <Button type="button" variant="secondary" icon="undo" onClick={onRetryOptions}>
+              {crewFeedLabels.retry}
+            </Button>
+          </div>
+        ) : null}
         {error && (
           <p className="s-error" role="alert">
             {error}
           </p>
         )}
-        {(missing || progress) && (
+        {(blocked || progress) && (
           <p className="o-t-caption s-muted" data-testid="crew-publish-missing">
-            {missing ?? progress}
+            {blocked ?? progress}
           </p>
         )}
         <Button
           icon="upload"
-          disabled={busy || Boolean(missing) || !options}
+          disabled={busy || Boolean(blocked)}
           loading={busy}
           onClick={() => void publish()}
           data-testid="crew-publish-send"

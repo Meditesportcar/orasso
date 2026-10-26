@@ -23,7 +23,7 @@ import {
   profileVisibilityRules,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
 import { TextAreaField } from "../components/Fields";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
@@ -369,6 +369,8 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <Button href="/app/mes-donnees" variant="secondary" icon="export" data-testid="export-data">
             {accountAppLabels.export}
           </Button>
+          {/* R5c1, tour 2 : retirer mes publications des crews que j'ai quittés. */}
+          <LeftCrewsSection />
         </section>
 
         <section className="s-section" aria-labelledby="apparence-titre" data-testid="appearance">

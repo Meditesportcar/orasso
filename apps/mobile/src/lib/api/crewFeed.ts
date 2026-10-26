@@ -31,4 +31,7 @@ export const crewFeedApi = {
     request<CrewPostView>(`/api/crews/${crewId}/posts/${postId}/vote`, { method: "PUT", body: { optionId } }),
   closeCrewPoll: (crewId: string, postId: string) =>
     request<CrewPostView>(`/api/crews/${crewId}/posts/${postId}/close`, { method: "POST" }),
+  /** Tour 2 : retire mes publications et commentaires des crews que j'ai quittés. */
+  withdrawFromLeftCrews: () =>
+    request<{ posts: number; comments: number }>("/api/me/crew-content/left-crews", { method: "DELETE" }),
 };
