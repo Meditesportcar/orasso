@@ -3,7 +3,7 @@
 // fichiers à effacer après la validation (logos des crews dissous).
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { crewMembers, crews, messages, notifications } from "../../db/schema";
+import { crewMembers, crewOutingReplies, crewOutings, crews, messages, notifications } from "../../db/schema";
 import type { Tx } from "../../lib/tx";
 import { crewsService } from "./service";
 
@@ -17,6 +17,9 @@ const CREW_TYPES = [
   "crew_member_confirmed",
   "crew_member_declined",
   "crew_member_expired",
+  // Lot R5c2 : sorties du crew.
+  "crew_outing_new",
+  "crew_outing_cancelled",
 ];
 
 /**
@@ -24,7 +27,8 @@ const CREW_TYPES = [
  * - ses appartenances, demandes et invitations : supprimées ; les crews qu'il quitte sont recomptés et leur discussion
  *   resynchronisée (ses messages sont effacés par l'anonymisation de la messagerie, appelée ensuite) ;
  * - les messages d'information qui citent son pseudo (« X a rejoint le crew ») : pseudo retiré ;
- * - les notifications des autres qui le citent (demande, invitation, venue confirmée…) : supprimées.
+ * - les notifications des autres qui le citent (demande, invitation, venue confirmée…) : supprimées ;
+ * - lot R5c2 : ses sorties du crew et ses réponses aux sorties : supprimées.
  * Ses candidatures en crew restent régies par l'anonymisation des candidatures (désistées si à venir).
  */
 export async function anonymizeCrewsForDeletedAccount(tx: Tx, userId: string): Promise<string[]> {
@@ -49,6 +53,9 @@ export async function anonymizeCrewsForDeletedAccount(tx: Tx, userId: string): P
       await crewsService.syncConversation(tx, crew);
     }
   }
+  // Lot R5c2 : ses sorties du crew disparaissent (avec leurs réponses), et ses réponses aux sorties des autres.
+  await tx.delete(crewOutings).where(eq(crewOutings.authorId, userId));
+  await tx.delete(crewOutingReplies).where(eq(crewOutingReplies.userId, userId));
   // Les invitations qu'il a envoyées en tant que chef ont disparu avec la dissolution ; `invited_by` des autres lignes
   // (invitations acceptées) ne doit plus le désigner.
   await tx.update(crewMembers).set({ invitedBy: null }).where(eq(crewMembers.invitedBy, userId));

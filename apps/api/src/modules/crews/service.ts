@@ -4,6 +4,8 @@
 // Verrous, toujours dans cet ordre : la ligne du crew (`FOR UPDATE`), puis le verrou consultatif de la personne
 // (`crews:user:<id>`, limite de 5 crews), puis la conversation. Une ligne `crew_members` par paire (clé primaire) :
 // une seule demande ou invitation ouverte, un seul membre par paire.
+
+import { randomBytes } from "node:crypto";
 import {
   CREW_CREATIONS_PER_DAY,
   CREW_REQUESTS_PER_DAY,
@@ -17,6 +19,7 @@ import {
   type CrewSearchQuery,
   type CrewUpdate,
   type CrewView,
+  canProposeCrewOuting,
   crewErrors,
   crewJoinOutcome,
   crewLabels,
@@ -27,9 +30,11 @@ import {
   messagePreview,
   type Page,
   PENDING_INVITATIONS_PER_CREW,
+  type PlateRect,
   shorten,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import sharp from "sharp";
 
 import { db } from "../../db/client";
 import {
@@ -51,13 +56,29 @@ import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { activeCrewMembers, crewRules } from "../messaging/access/crew";
-import { publishToConversation, serializeMessage } from "../messaging/core";
+import { publishToConversation, serializeMessage, unreadCountOf } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { nextMessageAt } from "../messaging/service";
 import { notificationsService } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
+import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "../vehicles/photos-blur";
+import { MAX_PHOTO_BYTES } from "../vehicles/service";
 import { withdrawAwaitingForCrew } from "./awaiting";
+import {
+  activeMembersOf,
+  bannerFor,
+  crewEvents,
+  crewGarage,
+  crewOutingViews,
+  mainVehicleLabels,
+  reachableProfileSql,
+  vitrineMembers,
+} from "./page";
+
+/** Bannière : mêmes formats que les photos de véhicule, 2 048 px au plus, WebP. */
+const BANNER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+const BANNER_MAX_SIDE = 2048;
 
 export type CrewRow = typeof crews.$inferSelect;
 export type CrewMemberRow = typeof crewMembers.$inferSelect;
@@ -69,7 +90,8 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
-const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
+// Lot R5c2 : `/crew/sortie` et `/crew/reglages` (écrans de l'appli) s'ajoutent aux adresses réservées.
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug", "sortie", "reglages"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {
@@ -97,7 +119,7 @@ const actorOf = (p: Pick<Profile, "userId" | "pseudo" | "avatarKey">) => ({
 });
 
 /** Écritures interdites à un compte suspendu (lecture seule, ARCHITECTURE-SUITE § 0.4). */
-function assertWritable(v: Viewer) {
+export function assertWritable(v: Viewer) {
   if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
     throw forbidden("Ton compte est suspendu : lecture seule.");
   }
@@ -116,14 +138,14 @@ async function findCrew(ex: Executor, id: string): Promise<CrewRow> {
 }
 
 /** Ligne du crew verrouillée ; un crew dissous ne bouge plus (404 pour qui n'en est pas membre, 409 sinon). */
-async function lockCrew(tx: Tx, id: string): Promise<CrewRow> {
+export async function lockCrew(tx: Tx, id: string): Promise<CrewRow> {
   const [row] = await tx.select().from(crews).where(eq(crews.id, id)).for("update");
   if (!row) throw notFound(crewErrors.notFound);
   if (row.deletedAt) throw conflict("conflict", crewErrors.archived);
   return row;
 }
 
-async function memberRow(ex: Executor, crewId: string, userId: string): Promise<CrewMemberRow | null> {
+export async function memberRow(ex: Executor, crewId: string, userId: string): Promise<CrewMemberRow | null> {
   const [row] = await ex
     .select()
     .from(crewMembers)
@@ -473,6 +495,11 @@ export const crewsService = {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.department !== undefined ? { department: input.department } : {}),
+          // Lot R5c2 : Instagram (pseudo seul) et « Les membres peuvent proposer une sortie ».
+          ...(input.instagram !== undefined ? { instagram: input.instagram } : {}),
+          ...(input.membersCanProposeOutings !== undefined
+            ? { membersCanProposeOutings: input.membersCanProposeOutings }
+            : {}),
         })
         .where(eq(crews.id, id));
     }).catch((error) => {
@@ -503,6 +530,64 @@ export const crewsService = {
   },
 
   /**
+   * `POST /crews/:id/banner` (chef, lot R5c2) : la bannière se voit hors du crew, donc elle passe par la chaîne des
+   * photos de véhicule : recompressée (2 048 px, WebP, métadonnées retirées), plaque floutée avant le stockage
+   * (`plateRects`, l'original n'est jamais écrit) ou « aucune plaque visible » confirmé (`noPlate`). Sans l'un ni
+   * l'autre, elle est gardée mais seuls les membres la voient. `file = null` la retire.
+   */
+  async setBanner(
+    v: Viewer,
+    id: string,
+    file: File | null,
+    plateRects: PlateRect[] | undefined,
+    noPlate: boolean,
+  ): Promise<CrewView> {
+    assertWritable(v);
+    rateLimit("crewWrite", v.user.id);
+    // Contrôle rapide avant le traitement de l'image (refait sous verrou à l'écriture).
+    const crew = await findCrew(db, id);
+    const me = await memberRow(db, crew.id, v.user.id);
+    if (me?.role !== "leader" || me.status !== "active") throw forbidden(crewErrors.leaderOnly);
+    let key: string | null = null;
+    if (file) {
+      if (file.size > MAX_PHOTO_BYTES)
+        throw new AppError(413, "payload_too_large", "Photo trop lourde (15 Mo au plus)");
+      if (!BANNER_TYPES.includes(file.type)) {
+        throw new AppError(415, "unsupported_media_type", "Formats acceptés : JPEG, PNG, WebP, HEIC");
+      }
+      let output: { data: Buffer; info: { width: number; height: number; size: number } };
+      try {
+        output = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: MAX_INPUT_PIXELS })
+          .rotate()
+          .resize(BANNER_MAX_SIDE, BANNER_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer({ resolveWithObject: true });
+      } catch {
+        throw new AppError(415, "unsupported_media_type", "Image illisible (HEIC : convertir en JPEG côté appli)");
+      }
+      if (plateRects?.length) output = await blurPlateRegions(output.data, plateRects);
+      key = `crews/${id}/banner-${randomBytes(8).toString("hex")}.webp`;
+      await storage.put(key, output.data);
+    }
+    let old: string | null;
+    try {
+      old = await withTx(async (tx) => {
+        const locked = await requireLeader(tx, id, v);
+        await tx
+          .update(crews)
+          .set({ bannerKey: key, bannerPlateCleared: Boolean(key && (plateRects?.length || noPlate)) })
+          .where(eq(crews.id, id));
+        return locked.bannerKey;
+      });
+    } catch (error) {
+      if (key) await removeOrRetry(key);
+      throw error;
+    }
+    if (old && old !== key) await storage.remove(old).catch(() => undefined);
+    return this.viewById(v, id);
+  },
+
+  /**
    * `DELETE /crews/:id` (chef) : le crew est dissous (`deleted_at`), son logo effacé, les demandes et invitations en
    * attente retirées ; la discussion devient lisible seulement. Les membres sont prévenus.
    */
@@ -526,7 +611,8 @@ export const crewsService = {
     reason: "leader" | "account_deleted" | "moderation",
   ): Promise<string[]> {
     const at = now();
-    await tx.update(crews).set({ deletedAt: at, logoKey: null }).where(eq(crews.id, crew.id));
+    // Lot R5c2 : la bannière part avec le logo.
+    await tx.update(crews).set({ deletedAt: at, logoKey: null, bannerKey: null }).where(eq(crews.id, crew.id));
     // Venues à confirmer avec ce crew : retirées (sans malus) ; les venues déjà confirmées vivent seules.
     await withdrawAwaitingForCrew(tx, after, crew.id);
     const pending = await tx
@@ -562,7 +648,7 @@ export const crewsService = {
       });
     }
     publishInbox(after, ...pending.map((p) => p.userId), ...members.map((m) => m.userId));
-    return crew.logoKey ? [crew.logoKey] : [];
+    return [crew.logoKey, crew.bannerKey].filter((k): k is string => Boolean(k));
   },
 
   async viewById(v: Viewer, id: string): Promise<CrewView> {
@@ -575,41 +661,77 @@ export const crewsService = {
     return this.toView(v, crew);
   },
 
-  /** Fiche (S16) : identique pour toute personne connectée ; discussion et compteurs du chef en plus pour les membres. */
+  /**
+   * Fiche d'un crew. Lot R5c2 (décision de Damien du 26/10) : pour un non-membre, la vitrine seule (image du crew,
+   * description, Instagram, membres : pseudo, avatar, grade, rôle) ; pour un membre actif, l'espace du crew en plus
+   * (sorties, garage, « Où va le crew », non-lus de la discussion) ; pour le chef, ses compteurs. Liste blanche de champs.
+   */
   async toView(v: Viewer, crew: CrewRow): Promise<CrewView> {
+    const at = now();
     const me = await memberRow(db, crew.id, v.user.id);
     const state = crewViewerState(
       me
         ? { status: me.status, respondedAt: me.respondedAt, role: me.role, requestedByMe: me.invitedBy === null }
         : null,
-      now(),
+      at,
     );
     const isMember = state === "member" || state === "leader";
+    const isLeader = state === "leader";
     // Un crew dissous n'existe plus pour qui n'en était pas membre.
     if (crew.deletedAt && !isMember) throw notFound(crewErrors.notFound);
     const leader = await profilesRepo.byUserId(crew.createdBy);
+    const leaderShown =
+      leader && !leader.deletedAt && !leader.bannedAt && !(leader.suspendedUntil && leader.suspendedUntil > at);
     let pendingRequests: number | null = null;
     let pendingInvitations: number | null = null;
-    if (state === "leader") {
+    if (isLeader) {
       const rows = await db
         .select({ status: crewMembers.status, n: count() })
         .from(crewMembers)
-        .where(and(eq(crewMembers.crewId, crew.id), inArray(crewMembers.status, ["requested", "invited"])))
+        .innerJoin(profiles, eq(profiles.userId, crewMembers.userId))
+        .where(
+          and(
+            eq(crewMembers.crewId, crew.id),
+            inArray(crewMembers.status, ["requested", "invited"]),
+            reachableProfileSql(at),
+          ),
+        )
         .groupBy(crewMembers.status);
       pendingRequests = rows.find((r) => r.status === "requested")?.n ?? 0;
       pendingInvitations = rows.find((r) => r.status === "invited")?.n ?? 0;
     }
+    const members = await activeMembersOf(crew.id, at);
     const conversation = isMember ? await conversationOf(db, crew.id) : null;
+    const space =
+      isMember && !crew.deletedAt
+        ? {
+            unreadCount: conversation
+              ? await unreadCountOf(db, conversation.id, { userId: v.user.id, side: "member" })
+              : 0,
+            membersCanProposeOutings: crew.membersCanProposeOutings,
+            canProposeOuting: canProposeCrewOuting({ isLeader, membersCanPropose: crew.membersCanProposeOutings }),
+            outings: await crewOutingViews(crew.id, members, { userId: v.user.id, isLeader }, at),
+            garage: await crewGarage(members),
+            events: await crewEvents(crew, members, at),
+          }
+        : null;
     return {
       ...crewCard(crew),
+      // Les comptes suspendus ou bannis ne comptent pas (le compteur en cache ne retire que les comptes supprimés).
+      membersCount: members.length,
       description: crew.description,
-      leader: leader && !leader.deletedAt ? { pseudo: leader.pseudo, avatarUrl: storage.url(leader.avatarKey) } : null,
+      leader: leaderShown ? { pseudo: leader.pseudo, avatarUrl: storage.url(leader.avatarKey) } : null,
       createdAt: crew.createdAt.toISOString(),
       archived: Boolean(crew.deletedAt),
       viewerState: state,
+      bannerUrl: bannerFor(crew, isMember),
+      instagram: crew.instagram,
+      members: await vitrineMembers(members, v.user.id),
       conversationId: conversation?.id ?? null,
+      space,
       pendingRequests,
       pendingInvitations,
+      bannerHiddenOutside: isLeader ? Boolean(crew.bannerKey && !crew.bannerPlateCleared) : null,
     };
   },
 
@@ -682,18 +804,22 @@ export const crewsService = {
     return (await this.mine(userId)).map(({ role: _role, ...card }) => card);
   },
 
-  /** `GET /crews/:id/members` : membres actifs, visibles des seuls membres (S16). */
+  /**
+   * `GET /crews/:id/members` : membres actifs, réservés aux membres (S16), avec leur véhicule principal (lot R5c2).
+   * Comptes supprimés, bannis ou suspendus exclus.
+   */
   async members(v: Viewer, id: string): Promise<CrewMemberView[]> {
     const crew = await findCrew(db, id);
     const me = await memberRow(db, crew.id, v.user.id);
     if (me?.status !== "active") throw forbidden(crewErrors.membersOnly);
-    const rows = await db
-      .select({ p: profiles, role: crewMembers.role, joinedAt: crewMembers.joinedAt })
-      .from(crewMembers)
-      .innerJoin(profiles, eq(profiles.userId, crewMembers.userId))
-      .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.status, "active"), sql`${profiles.deletedAt} is null`))
-      .orderBy(sql`${crewMembers.role} = 'leader' desc`, asc(crewMembers.joinedAt));
-    return rows.map((r) => ({ ...personOf(r.p), role: r.role, joinedAt: r.joinedAt?.toISOString() ?? null }));
+    const members = await activeMembersOf(crew.id, now());
+    const vehicles = await mainVehicleLabels(members);
+    return members.map((m) => ({
+      ...personOf(m.profile),
+      role: m.role,
+      joinedAt: m.joinedAt?.toISOString() ?? null,
+      vehicleLabel: vehicles.get(m.profile.userId) ?? null,
+    }));
   },
 
   /** `GET /crews/:id/requests` (chef) : demandes reçues et invitations envoyées en attente. */
@@ -709,17 +835,22 @@ export const crewsService = {
         and(
           eq(crewMembers.crewId, crew.id),
           inArray(crewMembers.status, ["requested", "invited"]),
-          sql`${profiles.deletedAt} is null`,
+          // Lot R5c2 : comme la Boîte, sans les comptes suspendus ou bannis.
+          reachableProfileSql(now()),
         ),
       )
       .orderBy(asc(crewMembers.updatedAt));
+    // Lot R5c2 (R5.8) : le chef voit le véhicule principal de qui demande (la feuille de demande le dit).
+    const requesters = rows.filter((r) => r.status === "requested");
+    const labels = await mainVehicleLabels(requesters.map((r) => ({ profile: r.p, role: "member", joinedAt: null })));
     const view = (r: (typeof rows)[number]) => ({
       person: personOf(r.p),
       message: r.message,
       createdAt: r.at.toISOString(),
+      vehicleLabel: null as string | null,
     });
     return {
-      requests: rows.filter((r) => r.status === "requested").map(view),
+      requests: requesters.map((r) => ({ ...view(r), vehicleLabel: labels.get(r.p.userId) ?? null })),
       invitations: rows.filter((r) => r.status === "invited").map((r) => ({ ...view(r), message: null })),
     };
   },

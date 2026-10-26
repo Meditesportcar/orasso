@@ -14,6 +14,7 @@ import {
   communicationNoEmailTypes,
   communicationNotificationTypes,
 } from "./notifications/communication";
+import { crewOutingNotificationTypes } from "./notifications/crew-outings";
 import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
@@ -180,6 +181,7 @@ export const notificationTypes = {
   ...mediaNotificationTypes,
   ...providersV2NotificationTypes,
   ...passportNotificationTypes,
+  ...crewOutingNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 

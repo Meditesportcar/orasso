@@ -6,6 +6,7 @@ export * from "./application";
 export * from "./auth";
 export * from "./common";
 export * from "./communication";
+export * from "./crewPage";
 export * from "./crews";
 export * from "./event";
 export * from "./garage";
