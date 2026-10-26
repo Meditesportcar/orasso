@@ -251,7 +251,11 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.getByText("Enregistré.")).toBeVisible();
       expect(await slugs()).toContain("4x4");
-      await page.getByText("Modifier la fiche", { exact: true }).click();
+      // Enregistrée par le routeur (page hydratée), la feuille reste ouverte : la rouvrir seulement si elle est fermée.
+      const sheet = page.locator("details.g-sheet", { hasText: "Modifier la fiche" });
+      if (!(await sheet.evaluate((d) => (d as HTMLDetailsElement).open))) {
+        await page.getByText("Modifier la fiche", { exact: true }).click();
+      }
       await page.getByLabel("Année").fill("2009");
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.getByText("Enregistré.")).toBeVisible();

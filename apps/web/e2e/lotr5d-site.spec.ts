@@ -75,8 +75,13 @@ test("Lot R5d (site) : « Y aller » sous l'adresse, sans distance", async ({ br
         await expect(waze).toHaveAttribute("href", "https://waze.com/ul?ll=42.6988,3.0334&navigate=yes");
         await expect(waze).toHaveAttribute("target", "_blank");
         // Deux boutons de même largeur, sur la même ligne, sous « Y aller ».
-        const [bm, bw] = [await maps.boundingBox(), await waze.boundingBox()];
-        expect(bm && bw && Math.abs(bm.y - bw.y) < 2 && Math.abs(bm.width - bw.width) < 2).toBe(true);
+        // La section bouge encore juste après l'affichage (blocs chargés au-dessus) : on mesure jusqu'à ce qu'elle tienne.
+        await expect
+          .poll(async () => {
+            const [bm, bw] = [await maps.boundingBox(), await waze.boundingBox()];
+            return !!(bm && bw && Math.abs(bm.y - bw.y) < 2 && Math.abs(bm.width - bw.width) < 2);
+          })
+          .toBe(true);
         // Le site ne demande jamais la position : pas de distance, pas de bouton.
         await expect(page.getByTestId("event-distance")).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
