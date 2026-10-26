@@ -16,6 +16,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 import { temperatureRange } from "@/lib/weather";
+import { useSecHeadStack } from "@/ui/SecHead";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -57,9 +58,16 @@ export function SecH({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Lot R5b, tour 2 : police agrandie ou rangée de moins de 400 dp, la mention et le lien passent dessous (`SecHead`).
+  const { stacked, onLayout } = useSecHeadStack();
   return (
-    <View style={styles.secH} testID={testID}>
-      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.secTitle}>
+    <View style={styles.secH} onLayout={onLayout} testID={testID}>
+      <Text
+        variant="posterM"
+        color={c.ink}
+        accessibilityRole="header"
+        style={[styles.secTitle, stacked && styles.secTitleStacked]}
+      >
         {title}
       </Text>
       {meta ? (
@@ -364,6 +372,7 @@ const styles = StyleSheet.create({
     marginTop: space2,
   },
   secTitle: { fontSize: 16, lineHeight: 18, flexGrow: 1, flexShrink: 1 },
+  secTitleStacked: { flexBasis: "100%" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
   wx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 4 },

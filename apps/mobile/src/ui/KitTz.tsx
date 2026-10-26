@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { stubOf } from "@/features/explorer/EventCardV2";
 
 import { mediaSource } from "@/lib/media";
+import { useSecHeadStack } from "@/ui/SecHead";
 
 /** Cible tactile d'un segment : le jeton `touch` (48 px), quand le segment n'en montre que 38 (lot 54b). */
 const SEG_H = 38;
@@ -249,9 +250,16 @@ export function SecH({
   onLink?: () => void;
 }) {
   const { t } = useTheme();
+  // Lot R5b, tour 2 : police agrandie ou rangée de moins de 400 dp, l'aide ou le lien passe dessous (`SecHead`).
+  const { stacked, onLayout } = useSecHeadStack();
   return (
-    <View style={styles.secH}>
-      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={styles.secTitle}>
+    <View style={styles.secH} onLayout={onLayout}>
+      <Text
+        variant="posterM"
+        color={t.color.ink}
+        accessibilityRole="header"
+        style={[styles.secTitle, stacked && styles.secTitleStacked]}
+      >
         {title}
       </Text>
       {link && onLink ? (
@@ -262,7 +270,7 @@ export function SecH({
           <Icon name="next" size={16} color={t.color.accentText} />
         </Pressable>
       ) : hint ? (
-        <Text variant="caption" color={t.color.inkMuted} style={styles.secHint}>
+        <Text variant="caption" color={t.color.inkMuted} style={[styles.secHint, stacked && styles.secHintStacked]}>
           {hint}
         </Text>
       ) : null}
@@ -507,7 +515,9 @@ const styles = StyleSheet.create({
     rowGap: 2,
   },
   secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 16 },
+  secTitleStacked: { flexBasis: "100%" },
   secHint: { flexShrink: 1, textAlign: "right" },
+  secHintStacked: { textAlign: "left" },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13 },
   tag: {

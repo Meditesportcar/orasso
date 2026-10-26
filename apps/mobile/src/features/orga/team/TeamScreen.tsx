@@ -44,6 +44,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { useSecHeadStack } from "@/ui/SecHead";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Bubble, RequestBubble } from "./Bubble";
@@ -58,6 +59,7 @@ const CLOUD_HEIGHT = 310;
 export function TeamScreen() {
   const { t } = useTheme();
   const c = t.color;
+  const secStack = useSecHeadStack();
   const router = useRouter();
   const { me } = useSession();
   const { structureId } = useOrga();
@@ -713,11 +715,11 @@ export function TeamScreen() {
         <Muted variant="body">{events.loading ? "Chargement…" : L2.rolesNoEvent}</Muted>
       ) : (
         <>
-          <View style={styles.secH}>
-            <Text variant="posterS" color={c.ink} style={styles.secTitle}>
+          <View style={styles.secH} onLayout={secStack.onLayout}>
+            <Text variant="posterS" color={c.ink} style={[styles.secTitle, secStack.stacked && styles.secTitleStacked]}>
               {event ? L2.rolesFor(event.title) : L2.rolesPresentFirst}
             </Text>
-            <Muted variant="caption" style={styles.secRight}>
+            <Muted variant="caption" style={[styles.secRight, secStack.stacked && styles.secRightStacked]}>
               {list.length > 0 ? L2.presenceConfirmed(summary.present, list.length) : L2.rolesPresentFirst}
             </Muted>
           </View>
@@ -891,9 +893,20 @@ const styles = StyleSheet.create({
   bubbles: { height: CLOUD_HEIGHT, borderRadius: 24, overflow: "hidden" },
   cloudEmpty: { padding: space3 },
   placed: { position: "absolute" },
-  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },
+  // Lot R5b, tour 2 (titres « SON ») : police agrandie ou rangée de moins de 400 dp, l'indication passe dessous.
+  secH: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 2,
+    marginTop: space2,
+  },
   secTitle: { flex: 1, fontSize: 16, fontStyle: "italic", textTransform: "uppercase" },
+  secTitleStacked: { flexBasis: "100%" },
   secRight: { flexShrink: 1, textAlign: "right" },
+  secRightStacked: { textAlign: "left" },
   rolesb: { gap: 8 },
   role: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1 },
   allows: { fontSize: 12 },

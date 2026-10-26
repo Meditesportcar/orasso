@@ -19,6 +19,7 @@ import { mediaSource } from "@/lib/media";
 import { createRequestGate } from "@/lib/requestGate";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
+import { useSecHeadStack } from "@/ui/SecHead";
 import { deptLong } from "./ExplorerSheets";
 import type { PeopleFilters, PeopleShow } from "./explorerChoice";
 import {
@@ -118,14 +119,21 @@ function Section({
   testID: string;
 }) {
   const { t } = useTheme();
+  // Lot R5b, tour 2 (relecture Opus 3) : police agrandie ou rangée de moins de 400 dp, l'aide passe sous le titre.
+  const { stacked, onLayout } = useSecHeadStack();
   return (
     <View style={styles.section} testID={testID}>
-      <View style={styles.secH}>
-        <Text variant="bodyStrong" color={t.color.ink} style={styles.secTitle} accessibilityRole="header">
+      <View style={styles.secH} onLayout={onLayout}>
+        <Text
+          variant="bodyStrong"
+          color={t.color.ink}
+          style={[styles.secTitle, stacked && styles.secTitleStacked]}
+          accessibilityRole="header"
+        >
           {title}
         </Text>
         {hint ? (
-          <Text variant="caption" color={t.color.inkMuted} style={styles.secHint}>
+          <Text variant="caption" color={t.color.inkMuted} style={[styles.secHint, stacked && styles.secHintStacked]}>
             {hint}
           </Text>
         ) : null}
@@ -569,9 +577,18 @@ const styles = StyleSheet.create({
   col: { gap: 18 },
   grow: { flex: 1, minWidth: 0 },
   section: { gap: space2 },
-  secH: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
-  secTitle: { flexShrink: 1, fontSize: 14.5, lineHeight: 18, fontFamily: archivoAt(100, 800) },
+  secH: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    columnGap: space2,
+    rowGap: 2,
+  },
+  secTitle: { flexGrow: 1, flexShrink: 1, fontSize: 14.5, lineHeight: 18, fontFamily: archivoAt(100, 800) },
+  secTitleStacked: { flexBasis: "100%" },
   secHint: { flexShrink: 1, fontSize: 12, lineHeight: 15, textAlign: "right" },
+  secHintStacked: { textAlign: "left" },
   row: {
     flexDirection: "row",
     alignItems: "center",
