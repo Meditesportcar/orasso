@@ -183,7 +183,23 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await openCrew(k2, crew.slug, "?onglet=sorties");
     await expect(k2.getByTestId("crew-outing")).toHaveCount(2);
     await shot(k2, `12-chef-sorties-384-${theme}`);
+    // Tour 2 : le vrai fil (lot R5c1) dans l'onglet Fil, avec les sorties proposées et « Je viens ».
+    await k2.getByTestId("crew-tab-feed").click();
+    await expect(k2.getByTestId("crew-feed")).toBeVisible();
+    await expect(k2.getByTestId("crew-auto-outing").first()).toBeVisible({ timeout: 30_000 });
+    await shot(k2, `13-chef-fil-384-${theme}`);
     await k2.context().close();
+
+    // ---------- Tour 2 : un compte privé vu par un membre non ami (le chef) : marque et modèle, sans photo.
+    expect((await apiCall(crew.lea.cookie, "PATCH", "/me/profile", { visibility: "private" })).status).toBeLessThan(
+      300,
+    );
+    const k3 = await appLogin(browser, crew.chef, theme);
+    await openCrew(k3, crew.slug);
+    await k3.getByTestId("crew-tab-garage").click();
+    await expect(k3.getByTestId("crew-garage-vehicle")).toHaveCount(2);
+    await shot(k3, `14-garage-prive-non-ami-${theme}`);
+    await k3.context().close();
   }
   expect(
     errors.filter((e) => !/favicon|DevTools|Sentry|expo-notifications|push|maplibre|tiles|glyphs/i.test(e)),

@@ -123,6 +123,19 @@ test("site : page du crew, sorties, réglages, vitrine et demande avec message",
       expect(pending.data.requests.find((r) => r.person.pseudo === crew.paul.pseudo)?.message).toBe(
         "Je cherche un crew pour rouler le dimanche.",
       );
+
+      // Tour 2 : le vrai fil (lot R5c1) avec la sortie proposée ; le garage d'un compte privé vu par un membre non ami.
+      expect((await apiCall(crew.lea.cookie, "PATCH", "/me/profile", { visibility: "private" })).status).toBeLessThan(
+        300,
+      );
+      const g = await open(browser, crew.chef, theme, width, base);
+      await expect(g.getByTestId("crew-feed")).toBeVisible();
+      await expect(g.getByTestId("crew-auto-outing").first()).toBeVisible();
+      await shot(g, `10-fil-sortie-${tag}`);
+      await g.goto(`${base}?onglet=garage`);
+      await expect(g.getByTestId("crew-garage-vehicle")).toHaveCount(2);
+      await shot(g, `11-garage-prive-non-ami-${tag}`);
+      await g.context().close();
     }
   }
 });
