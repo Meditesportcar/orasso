@@ -214,6 +214,8 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
     const row = n.page.getByTestId("suggest-crews").getByTestId("crew-row").first();
     if (i === 0) {
       await row.getByTestId("crew-join").click();
+      // Lot R5c2 (R5.8) : « Rejoindre » ouvre la feuille avec un mot pour le chef (facultatif) avant d'envoyer.
+      await n.page.getByTestId("crew-request-send").click({ timeout: 30_000 });
       await expect(row.getByTestId("crew-requested")).toBeVisible({ timeout: 30_000 });
     }
     await audit(n.page);
