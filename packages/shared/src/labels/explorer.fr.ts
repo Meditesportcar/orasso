@@ -194,6 +194,11 @@ export const eventPageLabels = {
   where: "Où",
   seeMap: "voir la carte",
   hideMap: "masquer la carte",
+  /** Lot R5d (maquette R5.11) : distance à vol d'oiseau depuis la position de l'appareil, calculée sur le téléphone. */
+  awayFromYou: (km: number) => `à ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km de toi`,
+  seeDistance: "Voir la distance",
+  distanceNote: "La distance est calculée sur ton téléphone, à vol d'oiseau : ta position ne part pas chez Orasso.",
+  goTo: "Y aller",
   exhibitors: "Exposants",
   seatsLeft: "places restantes",
   noLimit: "sans limite de places",

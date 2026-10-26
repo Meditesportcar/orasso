@@ -3021,3 +3021,23 @@ Source : `corrections-r4e.md` (relais).
 - **Notification de « Rattacher ce véhicule »** : elle dit la version (« … au référentiel : Peugeot 207 SW. »).
 - **Clavier** : la version se tape en `words` (« Phase 2 », pas « PHASE 2 »).
 - **Recette de l'appli** : la vitrine du propriétaire est vérifiée avec une photo sans décision de plaque (lui la voit, un autre membre non). Une version de 30 caractères sans espace est vérifiée à 390 px sur la fiche, le garage et la fiche qui se construit (`FitTitle`) : le nom ne déborde jamais.
+
+## Lot R5d : fiche de l'événement, distance et « Y aller » (maquette R5.11, 26/10/2026)
+
+- **Position de la fiche : un petit hook à part** (`features/event/useDistanceToEvent.ts`), pas `useExplorerPosition`. Raison : celui de l'Explorer porte la carte « Activer / Plus tard », la mémoire de « Plus tard » et la position arrondie au dixième de degré (faite pour la requête de liste). La fiche, elle, lit la position seulement si l'appareil l'a déjà accordée (sans rien demander), sinon propose « Voir la distance » (une demande, au toucher) ; refusée, plus rien, sans relance. La position n'est pas arrondie (la distance affichée l'est), reste dans l'état de l'écran, n'est ni envoyée ni écrite.
+- **Format** : la règle des cartes de l'Explorer (moins de 10 km, une décimale ; sinon entier) dans `eventPageLabels.awayFromYou` (« à 11 km de toi »). La phrase de vie privée de la maquette est reprise sous les lignes quand la distance est affichée, pas après un refus.
+- **« Y aller »** sous la ligne « Où » : Maps et Waze, à toute date, par les coordonnées ou, sans elles, par l'adresse ; une ville seule ne suffit pas (elle mènerait au mauvais endroit), donc rien (`whereGo.ts`, testé). `directionsOpen` reste pour Mon QR et le jour J.
+- **Site** : « Y aller » (Google Maps, Waze) sous l'adresse, liens `target="_blank"` `rel="noopener noreferrer"` (`apps/web/app/lib/directions.ts`, testé). Pas de distance : le site ne demande jamais la position.
+- **L'ancienne distance de la ligne « Où »** (`event.distanceKm`, entière, venue de l'API quand une liste l'a fournie) n'est gardée que tant que la distance du téléphone n'est pas là : pas de doublon.
+- **Écart au système** : la pastille de distance est moutarde pleine (maquette). Elle ne porte pas de néon (ombre) ; le bouton principal de l'écran reste « Candidater » / « Mon QR ».
+- **Recette** : la version web de recette ne reçoit pas le `fontScale` d'Android ; la police agrandie est remplacée par un écran de 320 px (les boutons Maps et Waze passent à la ligne, rien ne déborde). À vérifier sur le Pixel.
+- **Accueil, à signaler** : `home-maps` / `home-waze` existent seulement dans `HeroCard` (Accueil des profils média, pro et prestataire) ; l'Accueil du passionné (ticket) n'en a pas. Les deux recettes qui disent « ni Maps ni Waze » (`appli-m5`, `appli-lot43`) vérifient le ticket du passionné : elles sont vraies. Rien changé.
+
+## Lot R5d, tour 2 (relecture Opus « fusionnable après corrections ») — 26/10/2026
+
+- **Accessibilité** : la pastille de distance et « Voir la distance » sortent du toucher « Où » ; ils sont juste dessous (comme « Y aller »). La pastille a un libellé accessible (« à 11 km de toi »), le bouton a une zone de toucher de 44 px (`hitSlop`, visuel inchangé) ; toucher à côté n'ouvre pas la carte.
+- **Refus mémorisé** pour la session de l'appli (drapeau de module, jamais écrit) : après un refus de « Voir la distance », plus de bouton sur aucune fiche jusqu'au prochain lancement (Android laisse `canAskAgain` vrai). Le « Plus tard » de l'Explorer ne compte pas.
+- **Délai de 10 s** sur la lecture de la position : sans réponse, retour à « Voir la distance » ; aucun changement d'état après le démontage.
+- **Plus de repli sur `event.distanceKm`** de l'API ; `!= null` pour `lat`, `lng` ; jamais « NaN km » (testé).
+- **Site** : « Maps » et « Waze » de même largeur sous « Y aller » à 390 px. Le libellé visible est « Maps » (« Google Maps » passait sur deux lignes), le nom accessible reste « Google Maps ».
+- **Recettes** : l'événement « adresse seule » perd ses coordonnées en base (l'API géocode à la création) ; les URL de Maps et Waze sont interceptées (`window.open`) : coordonnées, puis adresse encodée. Non testé en recette : le refus gardé d'une fiche à l'autre (il faut une navigation sans rechargement ; la logique est un drapeau de module).
