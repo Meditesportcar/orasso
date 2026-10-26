@@ -477,6 +477,17 @@ describe("lot R5a : styles en pause, masculin, styles proposés à l'ajout", () 
     expect(keptCategories(["id-moto"], rows, null)).toEqual([]);
   });
 
+  it("tour 2 : un style de la fiche refusé pour le type reste tant que le type et la marque ne changent pas", () => {
+    const rows = [
+      cat("4x4", { eligible: false, refusal: "type" }),
+      cat("ancienne", { eligible: false, refusal: "age" }),
+      cat("poids-lourd"),
+    ];
+    const ids = ["id-4x4", "id-ancienne", "id-poids-lourd"];
+    expect(keptCategories(ids, rows, null, false, ids, true)).toEqual(["id-4x4", "id-poids-lourd"]);
+    expect(keptCategories(ids, rows, null, false, ids, false)).toEqual(["id-poids-lourd"]);
+  });
+
   it("la phrase des styles grisés s'accorde au masculin pour un camion", () => {
     const rows = [
       cat("youngtimer", { label: "Youngtimer", eligible: false, refusal: "age" }),

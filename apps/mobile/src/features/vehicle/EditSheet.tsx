@@ -3,13 +3,12 @@
 // plaque déjà prise par un autre membre lance une demande de transfert : le véhicule reste, la plaque attend la réponse.
 import { Button, CheckboxField, Chip, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  type CategoryFamily,
   categoryFamilyLabels,
-  groupByFamily,
   garageAppLabels as L,
   styleLabels,
   VEHICLE_ENGINE_MAX,
   type VehicleFull,
+  vehicleStyleGroups,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -67,36 +66,10 @@ export function EditSheet({
   );
 
   // Lot R5a : les styles du type, rangés par famille ; ceux d'un autre type ou réservés à d'autres marques, et les
-  // origines d'autres pays, ne sont plus listés (le catalogue compte désormais les styles des motos et des camions) ;
-  // un style de la fiche mis en pause par l'admin reste affiché, « en pause ».
-  const rows = categories.data ?? [];
-  type Item = { id: string; label: string; family: CategoryFamily; eligible: boolean; reason: string | null };
-  const items: Item[] = [
-    ...rows
-      .filter((c) => !c.allowedCountries && c.refusal !== "type" && c.refusal !== "make")
-      .map((c) => ({ id: c.id, label: c.label, family: c.family, eligible: c.eligible, reason: c.reason })),
-    ...vehicle.categories
-      .filter((c) => c.paused && !rows.some((r) => r.id === c.id))
-      .map((c) => ({
-        id: c.id,
-        label: `${c.label} · ${styleLabels.paused}`,
-        family: c.family ?? "genre",
-        eligible: true,
-        reason: null,
-      })),
-  ];
-  const origins = rows.filter((c) => c.allowedCountries && c.eligible);
-  const groups = [
-    ...groupByFamily(items),
-    ...(origins.length
-      ? [
-          {
-            family: "pays" as const,
-            rows: origins.map((c) => ({ id: c.id, label: c.label, family: c.family, eligible: true, reason: null })),
-          },
-        ]
-      : []),
-  ];
+  // origines d'autres pays, ne sont pas listés. Tour 2 : tout ce qui est déjà sur la fiche reste affiché, coché et
+  // décochable : en pause (origine comprise), ou refusé pour le type ou la marque (« 4x4 » d'un camion), avec sa raison ;
+  // enregistrer autre chose ne le retire pas (règle commune `vehicleStyleGroups`, la même que le site).
+  const groups = vehicleStyleGroups(categories.data ?? [], vehicle.categories, { keepRefused: true, origins: true });
 
   const patch = (change: Partial<VehicleEditForm>) => setForm((f) => ({ ...f, ...change }));
   const toggleCategory = (id: string) =>
@@ -203,9 +176,9 @@ export function EditSheet({
                 return (
                   <View key={c.id} style={[styles.category, !c.eligible && !chosen && styles.off]}>
                     <Chip selected={chosen} onPress={c.eligible || chosen ? () => toggleCategory(c.id) : undefined}>
-                      {c.label}
+                      {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
                     </Chip>
-                    {c.reason && !c.eligible ? <Muted variant="caption">{c.reason}</Muted> : null}
+                    {c.reason && (!c.eligible || c.kept) ? <Muted variant="caption">{c.reason}</Muted> : null}
                   </View>
                 );
               })}

@@ -3,7 +3,16 @@ import { describe, expect, it } from "vitest";
 import { styleLabels } from "../labels/styles.fr";
 import { categoryProposalSchema } from "../schemas/styles";
 import { makesForType } from "../schemas/vehicle";
-import { categoryLabelFor, cleanStyleName, groupByFamily, styleFitsType, styleKey } from "./styles";
+import {
+  categoryLabelFor,
+  choiceGroups,
+  cleanStyleName,
+  groupByFamily,
+  styleFitsType,
+  styleKey,
+  styleTypesLabel,
+  vehicleStyleGroups,
+} from "./styles";
 
 describe("styles", () => {
   it("nom tapé : nettoyé comme les noms du lot R4a, 2 à 24 caractères", () => {
@@ -57,5 +66,78 @@ describe("styles", () => {
     ];
     expect(makesForType(makes, "moto").map((m) => m.name)).toEqual(["Honda", "Autre"]);
     expect(makesForType(makes, "car").map((m) => m.name)).toEqual(["Seat", "Honda", "Autre"]);
+    // Tour 2 : une marque sans modèle de la liste vaut pour tous les types.
+    expect(makesForType([{ isOther: false, vehicleTypes: [] }], "truck")).toHaveLength(1);
+  });
+
+  it("tour 2 : fiche à modifier : styles refusés ou en pause déjà posés, gardés et décochables", () => {
+    const opt = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      label: id,
+      family: "genre" as const,
+      allowedVehicleTypes: null,
+      allowedCountries: null,
+      eligible: true,
+      refusal: null,
+      reason: null,
+      ...over,
+    });
+    const options = [
+      opt("4x4", { eligible: false, refusal: "type", reason: "Ne convient pas à ce type de véhicule" }),
+      opt("drift", { eligible: false, refusal: "type", reason: "Ne convient pas à ce type de véhicule" }),
+      opt("poids-lourd"),
+      opt("ancienne", { family: "epoque", eligible: false, refusal: "age", reason: "Véhicule trop récent" }),
+      opt("allemande", { allowedCountries: ["DE"], eligible: false, refusal: "country" }),
+      opt("suedoise", { allowedCountries: ["SE"] }),
+    ];
+    const current = [
+      { id: "4x4", label: "4x4" },
+      { id: "jdm", label: "JDM", family: "pays" as const, paused: true },
+      { id: "moto", label: "Moto", family: "genre" as const, paused: true },
+    ];
+    const groups = vehicleStyleGroups(options, current, { keepRefused: true, origins: true });
+    const flat = groups.flatMap((g) => g.rows.map((r) => `${g.family}:${r.id}:${r.eligible}:${r.kept || r.paused}`));
+    expect(flat).toEqual([
+      "epoque:ancienne:false:false",
+      "genre:4x4:true:true",
+      "genre:poids-lourd:true:false",
+      "genre:moto:true:true",
+      "pays:suedoise:true:false",
+      "pays:jdm:true:true",
+    ]);
+    // Type ou marque changés : le style refusé n'est plus gardé.
+    const changed = vehicleStyleGroups(options, current, { keepRefused: false, origins: false });
+    expect(changed.flatMap((g) => g.rows.map((r) => r.id))).toEqual(["ancienne", "poids-lourd", "moto", "jdm"]);
+  });
+
+  it("tour 2 : centres d'intérêt et critères : par famille, pays en dernier, types restreints, pause gardée si choisie", () => {
+    expect(styleTypesLabel(["truck"])).toBe("camion");
+    expect(styleTypesLabel(["offroad"])).toBe("voiture");
+    expect(styleTypesLabel(["moto", "truck"])).toBe("moto, camion");
+    expect(styleTypesLabel(null)).toBeNull();
+    const o = (id: string, label: string, family: string, types: string[] | null, over = {}) => ({
+      id,
+      label,
+      family: family as "genre",
+      allowedVehicleTypes: types,
+      allowedCountries: null as string[] | null,
+      eligible: true,
+      refusal: null,
+      reason: null,
+      ...over,
+    });
+    const options = [
+      o("americain", "Américain", "genre", ["truck"]),
+      o("americaine", "Américaine", "pays", null, { allowedCountries: ["US"] }),
+      o("youngtimer", "Youngtimer", "epoque", null),
+      o("moto", "Moto", "genre", ["moto"], { paused: true }),
+      o("utilitaire", "Utilitaire", "genre", ["truck"], { paused: true }),
+    ];
+    const groups = choiceGroups(options, ["moto"]);
+    expect(groups.map((g) => [g.family, g.rows.map((r) => r.label)])).toEqual([
+      ["epoque", ["Youngtimer"]],
+      ["genre", ["Américain · camion", "Moto"]],
+      ["pays", ["Américaine"]],
+    ]);
   });
 });

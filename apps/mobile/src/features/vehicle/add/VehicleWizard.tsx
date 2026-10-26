@@ -127,8 +127,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   // Lot R5a : clavier ouvert sur la recherche de l'étape Marque et modèle (écran replié), et « Propose-le ».
   const [compact, setCompact] = useState(false);
   const [proposing, setProposing] = useState(false);
-  // Styles de la fiche mis en pause par l'admin : ils restent affichés et gardés tant que la personne ne les retire pas.
-  const pausedStyles = useMemo(() => vehicle?.categories.filter((c) => c.paused) ?? [], [vehicle]);
+  // Styles de la fiche : en pause ou (tour 2) refusés pour le type ou la marque, ils restent affichés et gardés tant que
+  // la personne ne les retire pas ; refusés, seulement tant que le type et la marque ne changent pas.
+  const currentStyles = useMemo(() => vehicle?.categories ?? [], [vehicle]);
+  const keepRefused = Boolean(vehicle && draft.vehicleType === vehicle.vehicleType && draft.makeId === vehicle.makeId);
 
   // Lot R3a (retour 3 de Damien) : « Continuer » attend que le bas de l'étape ait été vu ; une étape vue le reste.
   // Avec un lecteur d'écran, aucun blocage (il lit tout sans défiler).
@@ -194,12 +196,13 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         rows,
         makeCountry,
         d.typing === "make",
-        pausedStyles.map((c) => c.id),
+        currentStyles.map((c) => c.id),
+        keepRefused,
       );
       const same = next.length === d.categoryIds.length && next.every((id, i) => id === d.categoryIds[i]);
       return same ? d : { ...d, categoryIds: next };
     });
-  }, [categories.data, makeCountry, pausedStyles]);
+  }, [categories.data, makeCountry, currentStyles, keepRefused]);
 
   // Pendant l'import ou le recadrage d'une photo, « Continuer » attend (lot M1, tour 2, vie privée de la plaque).
   const importing = busy || cropBusy || phase === "crop";
@@ -760,7 +763,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           patch={patch}
           categories={categories.data ?? []}
           make={make}
-          paused={pausedStyles}
+          current={currentStyles}
+          keepRefused={keepRefused}
           onPropose={() => setProposing(true)}
         />
       ) : null}

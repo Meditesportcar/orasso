@@ -36,12 +36,14 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { api } from "@/lib/api";
+import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
 import { Segments } from "@/ui/Segments";
 import { AdminFailure, AdminGate, AdminPage, EmptyOrLoading, useGesture } from "./kit";
+import { mergeProposalPages } from "./stylesModel";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -146,6 +148,23 @@ function StylesBody() {
   const [type, setType] = useState<VehicleType>("car");
   const list = useApi(() => api.adminCategories(), []);
   const queue = useApi(() => api.styleProposals(), []);
+  // Tour 2 : la file par pages de 50 groupes, « Charger la suite » ajoute la suivante.
+  const [more, setMore] = useState<{ items: AdminStyleProposalGroup[]; next: string | null } | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const groups = mergeProposalPages(queue.data?.items ?? [], more?.items ?? []);
+  const nextCursor = more ? more.next : (queue.data?.nextCursor ?? null);
+  async function loadMore() {
+    if (!nextCursor) return;
+    setMoreBusy(true);
+    try {
+      const page = await api.styleProposals(nextCursor);
+      setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], next: page.nextCursor }));
+    } catch (e) {
+      gesture.setError(errorMessage(e));
+    } finally {
+      setMoreBusy(false);
+    }
+  }
   const gesture = useGesture();
   const [sheet, setSheet] = useState<Sheet>(null);
   const [form, setForm] = useState<Form>(emptyForm);
@@ -163,6 +182,7 @@ function StylesBody() {
     all.filter((s) => s.family !== "pays" && s.active && styleFitsType(s.allowedVehicleTypes, v)).length;
 
   const reload = async () => {
+    setMore(null);
     await Promise.all([list.reload(), queue.reload()]);
   };
   const open = (next: NonNullable<Sheet>) => {
@@ -383,10 +403,10 @@ function StylesBody() {
         queue.error ? null : (
           <EmptyOrLoading loading={queue.loading} empty={S.queueEmpty} />
         )
-      ) : queue.data.items.length === 0 ? (
+      ) : groups.length === 0 ? (
         <Notice>{S.queueEmpty}</Notice>
       ) : null}
-      {(queue.data?.items ?? []).map((g) => (
+      {groups.map((g) => (
         <Plate key={g.key} style={styles.group} testID="style-proposal">
           <View style={styles.groupHead}>
             <View style={[styles.badge, { backgroundColor: c.accent }]}>
@@ -445,6 +465,18 @@ function StylesBody() {
           </Button>
         </Plate>
       ))}
+      {nextCursor ? (
+        <Button
+          variant="plate"
+          icon="down"
+          loading={moreBusy}
+          onPress={() => void loadMore()}
+          fullWidth
+          testID="style-proposals-more"
+        >
+          {S.loadMore}
+        </Button>
+      ) : null}
     </AdminPage>
   );
 }

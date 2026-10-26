@@ -162,14 +162,15 @@ export function EventWizard({
   const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const refs = useApi<{ categories: CategoryOption[]; makes: VehicleMake[] }>(
     async () => {
-      const [categories, makes] = await Promise.allSettled([api.categories(), api.makes()]);
+      // Lot R5a, tour 2 : avec les styles en pause, pour garder ceux déjà choisis dans les critères.
+      const [categories, makes] = await Promise.allSettled([api.categories({ paused: "1" }), api.makes()]);
       return {
         categories: categories.status === "fulfilled" ? categories.value : [],
         makes: makes.status === "fulfilled" ? makes.value : [],
       };
     },
     [],
-    { cacheKey: "wizard-references" },
+    { cacheKey: "wizard-references-all" },
   );
 
   // À l'ouverture : missions enregistrées (lot 46), mémoire du brouillon, puis saisie gardée sur le téléphone.

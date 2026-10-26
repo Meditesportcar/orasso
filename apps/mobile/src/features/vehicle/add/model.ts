@@ -261,8 +261,10 @@ export const pickableOrigins = (rows: readonly CategoryOption[]) =>
 export const styleCategories = (rows: readonly CategoryOption[]) => rows.filter((c) => !c.allowedCountries);
 
 /**
- * Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. Lot R5a : `paused`, les styles
- * de la fiche mis en pause par l'admin (absents de la liste proposée) : gardés tant que la personne ne les retire pas.
+ * Catégories gardées : origines déduites + styles choisis encore éligibles, 10 au plus. Lot R5a : `current`, les
+ * catégories de la fiche : celles mises en pause par l'admin (absentes de la liste proposée) sont gardées tant que la
+ * personne ne les retire pas ; tour 2 : aussi celles refusées pour le type, la marque ou le pays tant que `keepRefused`
+ * (type et marque inchangés). Un refus pour l'âge les retire (l'année a changé).
  */
 export function keptCategories(
   ids: readonly string[],
@@ -270,13 +272,18 @@ export function keptCategories(
   makeCountry: string | null,
   /** Lot R4a : marque tapée, l'origine se choisit à la main (elle ne se déduit pas). */
   pickOrigins = false,
-  paused: readonly string[] = [],
+  current: readonly string[] = [],
+  keepRefused = false,
 ) {
   const origins = originCategories(rows, makeCountry).map((c) => c.id);
   const eligible = new Set((pickOrigins ? rows : styleCategories(rows)).filter((c) => c.eligible).map((c) => c.id));
-  const styles = ids.filter(
-    (id) => (eligible.has(id) || (paused.includes(id) && !rows.some((c) => c.id === id))) && !origins.includes(id),
-  );
+  const kept = (id: string) => {
+    if (!current.includes(id)) return false;
+    const row = rows.find((c) => c.id === id);
+    if (!row) return true;
+    return keepRefused && (row.refusal === "type" || row.refusal === "make" || row.refusal === "country");
+  };
+  const styles = ids.filter((id) => (eligible.has(id) || kept(id)) && !origins.includes(id));
   return [...origins, ...styles].slice(0, MAX_CATEGORIES);
 }
 

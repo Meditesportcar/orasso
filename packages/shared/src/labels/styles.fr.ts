@@ -27,6 +27,10 @@ export const styleLabels = {
   manyHint: "plusieurs choix",
   paused: "en pause",
   pausedHint: "Ce style n'est plus proposé ; il reste sur ta fiche tant que tu le gardes.",
+  /** Tour 2 : un style de la fiche devenu refusé (« 4x4 » d'un camion). */
+  keptNote: (label: string, reason: string) =>
+    `${label} : ${reason.charAt(0).toLowerCase()}${reason.slice(1)} ; il reste sur ta fiche tant que tu le gardes.`,
+  loadMore: "Charger la suite",
   proposeTitle: "Il manque un style ?",
   proposeText: "Propose-le : l'équipe Orasso l'ajoute pour tout le monde.",
   sheetTitle: "Proposer un style",

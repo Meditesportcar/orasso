@@ -226,7 +226,14 @@ export function choiceGroups(
     .map((o) => {
       const family: CategoryFamily = o.allowedCountries ? "pays" : o.family;
       const types = family === "pays" ? null : styleTypesLabel(o.allowedVehicleTypes);
-      return { id: o.id, label: types ? `${o.label} · ${types}` : o.label, paused: Boolean(o.paused), family };
+      // « Moto · moto » ne dit rien de plus : le type n'est ajouté que s'il diffère du nom.
+      const redundant = types !== null && styleKey(types) === styleKey(o.label);
+      return {
+        id: o.id,
+        label: types && !redundant ? `${o.label} · ${types}` : o.label,
+        paused: Boolean(o.paused),
+        family,
+      };
     });
   return grouped(rows);
 }

@@ -5,12 +5,10 @@
 // barrés avec une seule phrase d'explication).
 import { Icon, type IconName, Text, TextField, textStyles, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  type CategoryFamily,
   type CategoryOption,
   type CategoryRef,
   categoryFamilyLabels,
   cleanProposedName,
-  groupByFamily,
   vehicleWizardLabels as L,
   makesForType,
   PROPOSED_NAME_MAX,
@@ -27,6 +25,7 @@ import {
   type VehicleType,
   vehiclePreparationLabels,
   vehiclePreparations,
+  vehicleStyleGroups,
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
@@ -48,7 +47,6 @@ import {
   generationYears,
   originCategories,
   pickableOrigins,
-  visibleStyles,
   yearChoices,
 } from "./model";
 import { Crumb, FieldLabel, Pill, SelectRow, StepHead, StepNote, TypeButton, YearChip } from "./parts";
@@ -694,30 +692,25 @@ export function StepSpecs({
 // --- 5. Catégories (1.7) ------------------------------------------------------------------------------------------
 
 /** Un style de l'étape : proposé par le catalogue, ou en pause et gardé sur la fiche (lot R5a). */
-type StyleItem = {
-  id: string;
-  label: string;
-  icon: string | undefined;
-  family: CategoryFamily;
-  eligible: boolean;
-  reason: string | null;
-  paused: boolean;
-};
-
 export function StepCategories({
   draft,
   patch,
   categories,
   make,
-  paused = [],
+  current = [],
+  keepRefused = false,
   onPropose,
 }: {
   draft: Draft;
   patch: Patch;
   categories: CategoryOption[];
   make: VehicleMake | undefined;
-  /** Lot R5a : les styles de la fiche mis en pause par l'admin (ils ne se proposent plus ; ils restent affichés). */
-  paused?: readonly CategoryRef[];
+  /**
+   * Lot R5a : les styles de la fiche (modification) : en pause, ils restent affichés ; tour 2 : refusés pour le type ou
+   * la marque, ils restent aussi, tant que `keepRefused` (type et marque inchangés).
+   */
+  current?: readonly CategoryRef[];
+  keepRefused?: boolean;
   /** Lot R5a : « Il manque un style ? Propose-le ». */
   onPropose?: () => void;
 }) {
@@ -725,30 +718,11 @@ export function StepCategories({
   const c = t.color;
   const origins = originCategories(categories, make?.isOther ? null : make?.country);
   // Lot R5a (maquette R5.2) : les styles du type, rangés par famille (Époque, Genre, Préparation, Pratique), l'icône du
-  // catalogue ; un style en pause de la fiche reste dans sa famille, signalé « en pause ».
-  const items: StyleItem[] = [
-    ...visibleStyles(categories).map((s) => ({
-      id: s.id,
-      label: s.label,
-      icon: s.icon,
-      family: s.family ?? "genre",
-      eligible: s.eligible,
-      reason: s.reason,
-      paused: false,
-    })),
-    ...paused
-      .filter((p) => !categories.some((x) => x.id === p.id))
-      .map((p) => ({
-        id: p.id,
-        label: p.label,
-        icon: p.icon,
-        family: p.family ?? "genre",
-        eligible: true,
-        reason: null,
-        paused: true,
-      })),
-  ];
-  const families = groupByFamily(items);
+  // catalogue ; un style en pause de la fiche reste dans sa famille, signalé « en pause ». Tour 2 : règle commune avec
+  // le site (`vehicleStyleGroups`) : un style de la fiche refusé pour le type ou la marque reste aussi, coché et
+  // décochable, et une origine en pause reste sous « Pays ».
+  const families = vehicleStyleGroups(categories, current, { keepRefused, origins: false });
+  const kept = families.flatMap((g) => g.rows.filter((r) => r.kept && draft.categoryIds.includes(r.id)));
   const note = dimmedNote(categories, draft.year, draft.vehicleType);
   const prepared = categories.find((x) => x.slug === "preparee");
   const preparedNote = draft.preparation.length > 0 && prepared && draft.categoryIds.includes(prepared.id);
@@ -826,9 +800,17 @@ export function StepCategories({
                   icon={styleIcon(s.icon)}
                   selected={draft.categoryIds.includes(s.id)}
                   off={!s.eligible}
-                  hint={s.paused ? S.pausedHint : s.eligible ? null : s.reason}
+                  hint={s.paused ? S.pausedHint : s.kept || !s.eligible ? s.reason : null}
                   onPress={() => toggle(s.id)}
-                  testID={s.paused ? "vehicle-style-paused" : s.eligible ? "vehicle-style" : "vehicle-style-off"}
+                  testID={
+                    s.paused
+                      ? "vehicle-style-paused"
+                      : s.kept
+                        ? "vehicle-style-kept"
+                        : s.eligible
+                          ? "vehicle-style"
+                          : "vehicle-style-off"
+                  }
                 />
               ))}
             </View>
@@ -842,6 +824,11 @@ export function StepCategories({
             .join(" ")}
         </StepNote>
       ) : null}
+      {kept.map((k) => (
+        <StepNote key={k.id} icon="info" testID="vehicle-styles-kept">
+          {S.keptNote(k.label, k.reason ?? "")}
+        </StepNote>
+      ))}
       {onPropose ? <ProposeStyleRow onPress={onPropose} /> : null}
     </>
   );

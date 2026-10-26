@@ -20,6 +20,8 @@ import {
   arrivalTexts as A,
   type ArrivalSlot,
   arrivalLabel,
+  categoryFamilyLabels,
+  choiceGroups,
   criteriaOrigins,
   defaultArrivalSlot,
   defaultEventRules,
@@ -45,7 +47,7 @@ import {
   rulesCount,
   rulesReplaceNeedsConfirm,
   rulesTemplates,
-  styleCategories,
+  styleLabels,
   summaryOfCriteria,
   vendorTypeLabels,
   wizardV2Labels as W,
@@ -470,13 +472,29 @@ export function CriteresTemps(ctx: StepContext) {
             onToggle={(v) => set("countries", toggle(d.countries, v))}
             testID="wizard-origins"
           />
-          <MultiChoices
-            label={`2 · ${W.q2}`}
-            options={styleCategories(categories, d.categoryIds).map((c) => ({ value: c.id, label: c.label }))}
-            values={d.categoryIds}
-            onToggle={(v) => set("categoryIds", toggle(d.categoryIds, v))}
-            testID="wizard-categories"
-          />
+          {/* Lot R5a, tour 2 : par famille, avec le type d'un style restreint ; les origines restent à la question 1 ;
+              un style en pause déjà choisi reste affiché, décochable. */}
+          <Group label={`2 · ${W.q2}`} testID="wizard-categories">
+            {choiceGroups(categories, d.categoryIds, (o) => criteriaOrigins.some((x) => x.chip === o.label)).map(
+              (g) => (
+                <View key={g.family} style={styles.family} testID={`wizard-family-${g.family}`}>
+                  <Muted variant="caption">{categoryFamilyLabels[g.family]}</Muted>
+                  <View style={styles.chips}>
+                    {g.rows.map((c) => (
+                      <Chip
+                        key={c.id}
+                        selected={d.categoryIds.includes(c.id)}
+                        onPress={() => set("categoryIds", toggle(d.categoryIds, c.id))}
+                        accessibilityLabel={c.label}
+                      >
+                        {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
+              ),
+            )}
+          </Group>
           <Group label={`3 · ${W.q3}`}>
             <TextField
               label={L.makesSearch}
@@ -912,6 +930,7 @@ const styles = StyleSheet.create({
   gap2: { gap: space2 },
   row: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  family: { gap: space2 },
   panel: { borderWidth: 1.5, borderRadius: tokens.radius.radiusMd },
   panelHead: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, minHeight: 56 },
   panelBody: { gap: space3, paddingHorizontal: space3, paddingBottom: space3 },

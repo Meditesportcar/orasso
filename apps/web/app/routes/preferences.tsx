@@ -1,6 +1,8 @@
 import { Button, CheckboxField } from "@orasso/design-system/web";
 import {
-  type Category,
+  type CategoryOption,
+  categoryFamilyLabels,
+  choiceGroups,
   clampPreferenceRadius,
   eventFormatLabels,
   eventFormats,
@@ -9,6 +11,7 @@ import {
   PREFERENCE_RADIUS,
   type Preferences,
   preferenceNewEventsLabel,
+  styleLabels,
   travelTimeLabel,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
@@ -34,7 +37,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
   const [preferences, categories] = await Promise.all([
     apiOrThrow<Preferences>(request, "/me/preferences"),
-    apiOrThrow<Category[]>(request, "/vehicle-reference/categories"),
+    // Lot R5a, tour 2 : les styles en pause aussi, pour garder ceux déjà choisis (cochés, décochables).
+    apiOrThrow<CategoryOption[]>(request, "/vehicle-reference/categories?paused=1"),
   ]);
   return { preferences, categories, saved: new URL(request.url).searchParams.get("fait") === "1" };
 }
@@ -139,15 +143,23 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
 
           <fieldset className="s-fieldset">
             <legend className="s-label o-t-label">{L.interests}</legend>
-            <div className="s-checklist" data-testid="pref-interests">
-              {categories.map((c) => (
-                <CheckboxField
-                  key={c.id}
-                  name="interest"
-                  value={c.id}
-                  label={c.label}
-                  defaultChecked={preferences.interests.includes(c.id)}
-                />
+            {/* Lot R5a, tour 2 : par famille, pays en dernier, avec le type d'un style restreint (« Américain · camion »). */}
+            <div className="s-stack" data-testid="pref-interests">
+              {choiceGroups(categories, preferences.interests).map((g) => (
+                <div key={g.family} className="s-stack s-stack--tight" data-testid={`pref-family-${g.family}`}>
+                  <span className="o-t-caption s-muted">{categoryFamilyLabels[g.family]}</span>
+                  <div className="s-checklist">
+                    {g.rows.map((c) => (
+                      <CheckboxField
+                        key={c.id}
+                        name="interest"
+                        value={c.id}
+                        label={c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
+                        defaultChecked={preferences.interests.includes(c.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </fieldset>

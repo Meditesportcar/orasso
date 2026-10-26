@@ -12,7 +12,6 @@ import {
   certificationStatusLabels,
   cleanVehicleVersion,
   countryLabel,
-  groupByFamily,
   type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
@@ -24,6 +23,7 @@ import {
   type VehicleHistoryItem,
   vehicleAddLabels,
   vehicleStatusLabels,
+  vehicleStyleGroups,
   vehicleTypeLabels,
   vehicleWizardLabels,
 } from "@orasso/shared";
@@ -32,7 +32,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { ShareCard } from "../components/ShareButtons";
-import { StyleProposal, styleItems } from "../components/StylePicker";
+import { StyleProposal } from "../components/StylePicker";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import { plateFields } from "../lib/vehicle-add";
@@ -221,18 +221,9 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
   const archived = v.status !== "active";
   const chosen = new Set(v.categories.map((c) => c.id));
   // Lot R5a : familles des styles du type, puis les origines de la marque (« Pays »).
-  const editGroups = [
-    ...groupByFamily(
-      styleItems(
-        categories.filter((c) => !c.allowedCountries && c.refusal !== "type" && c.refusal !== "make"),
-        v.categories.filter((c) => c.paused),
-      ),
-    ),
-    ...(() => {
-      const origins = categories.filter((c) => c.allowedCountries && (c.eligible || chosen.has(c.id)));
-      return origins.length ? [{ family: "pays" as const, rows: styleItems(origins) }] : [];
-    })(),
-  ];
+  // Lot R5a, tour 2 : tout ce qui est déjà sur la fiche reste affiché, coché et décochable : en pause (origine comprise,
+  // sous « Pays »), ou refusé pour le type ou la marque (« 4x4 » d'un camion) ; enregistrer autre chose ne le retire pas.
+  const editGroups = vehicleStyleGroups(categories, v.categories, { keepRefused: true, origins: true });
   const missing = new Set(cert.missing);
   const line = certificationLine(cert, v.photos.length);
   const country = countryLabel(v.country);
@@ -549,7 +540,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                       <Icon name={(c.icon ?? "star") as IconName} size={16} />
                       {c.paused ? `${c.label} · ${styleLabels.paused}` : c.label}
                     </label>
-                    {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
+                    {(!c.eligible || c.kept) && c.reason ? <span className="o-t-meta">{c.reason}</span> : null}
                   </div>
                 ))}
               </fieldset>
