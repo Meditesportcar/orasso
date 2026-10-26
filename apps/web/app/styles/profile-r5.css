@@ -414,9 +414,9 @@
 .pr5-acts form > * {
   width: 100%;
 }
-.pr5-acts > * {
-  min-width: max-content;
-}
+/* Tour 2 : plus de `min-width: max-content` (« Écrire à <pseudo long> » de l'aperçu élargissait la carte au-delà de
+   l'écran à 390 px). Un bouton passe à la ligne suivante s'il ne tient pas à côté (`flex-wrap`), et seul sur sa ligne,
+   son libellé passe à la ligne entre deux mots (largeur mini = le mot le plus long). */
 .pr5-acts--inert {
   opacity: 0.6;
   pointer-events: none;
