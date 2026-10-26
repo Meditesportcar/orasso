@@ -106,6 +106,7 @@ test("site : « Médite », événements terminés, choix gardé, plus de statio
       expect((await ctx.cookies()).find((c) => c.name === "orasso-explorer")).toBeDefined();
       await page.goto("/app/moi");
       // Lot R5b : « Se déconnecter » est une ligne de « Réglages » dans /app/moi.
+      await page.getByTestId("reglage-deconnexion").click();
       await expect.poll(async () => (await ctx.cookies()).find((c) => c.name === "orasso-explorer")).toBeUndefined();
       await ctx.close();
     }

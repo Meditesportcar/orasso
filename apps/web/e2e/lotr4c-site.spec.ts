@@ -215,6 +215,7 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await page.goto("/app/profil-public");
       await expect(page.getByTestId("public-head")).toContainText(mePseudo);
       // Lot R5b (maquette R5.6) : « Sa voiture » porte la pastille « Principale ».
+      await expect(page.getByTestId("preview-vehicles")).toContainText("Principale");
       await expect(page.getByTestId("preview-upcoming")).toBeVisible();
       await audit(page);
       await shot("08-apercu-membre");
