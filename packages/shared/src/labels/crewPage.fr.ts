@@ -26,8 +26,6 @@ export const crewPageLabels = {
   tabGarage: "Garage",
   tabMembers: "Membres",
   tabCount: (label: string, n: number) => (n > 0 ? `${label} · ${n}` : label),
-  /** Emplacement du fil (lot R5c1, posé à la fusion). */
-  feedSlot: "Le fil du crew arrive ici.",
 
   // Sorties.
   proposeOuting: "Proposer une sortie",

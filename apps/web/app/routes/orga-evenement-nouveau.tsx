@@ -1,4 +1,4 @@
-import type { Category, StructureOrganizer, VehicleMake } from "@orasso/shared";
+import type { CategoryOption, StructureOrganizer, VehicleMake } from "@orasso/shared";
 
 import { EventWizard } from "../components/EventWizard";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -20,7 +20,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const [structure, categories, makes] = await Promise.all([
     apiOrThrow<StructureOrganizer>(request, `/structures/${membership.structureId}`),
-    api<Category[]>(request, "/vehicle-reference/categories"),
+    api<CategoryOption[]>(request, "/vehicle-reference/categories?paused=1"),
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   return {

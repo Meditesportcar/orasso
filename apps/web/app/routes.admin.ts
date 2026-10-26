@@ -26,6 +26,8 @@ export default [
     route("structures", "routes/admin/structures.tsx"),
     route("pros", "routes/admin/pros.tsx"),
     route("vehicules", "routes/admin/vehicules.tsx"),
+    // Lot R5a (maquette R5.3) : catalogue des styles et file « Styles proposés ».
+    route("vehicules/styles", "routes/admin/vehicules-styles.tsx"),
     route("journal", "routes/admin/journal.tsx"),
     route("assistance", "routes/admin/assistance.tsx"),
     route("contestations", "routes/admin/contestations.tsx"),

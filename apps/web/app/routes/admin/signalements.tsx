@@ -99,7 +99,10 @@ function Detail({ d, back, busy, error }: { d: AdminReportDetail; back: string; 
       </div>
       {d.target.gone && <p className="s-notice">{moderationLabels.targetGone}</p>}
       {d.target.removed && <p className="s-notice">{moderationLabels.targetRemoved}</p>}
-      {d.target.imageUrl && <img className="mod-target__img" src={d.target.imageUrl} alt="" />}
+      {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
+      {(d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
+        <img key={url} className="mod-target__img" src={url} alt="" />
+      ))}
       {d.target.text && d.targetType !== "message" && <p className="s-prewrap">{d.target.text}</p>}
       {d.target.link && (
         <a href={d.target.link} target="_blank" rel="noopener">

@@ -1,5 +1,5 @@
 // Page du crew sur le site (lot R5c2, maquettes R5.7 à R5.9, même logique que l'appli) : les morceaux de la page.
-// Le fil vit dans `../crew-feed/` (lot R5c1) : `CrewFeedSlot` en garde la place jusqu'à la fusion.
+// Le fil (onglet Fil) est le `CrewFeed` du lot R5c1 (`../crew-feed/`).
 import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
   CREW_REQUEST_MESSAGE_MAX,
@@ -66,15 +66,6 @@ export function AvatarStack({ faces, size = 26 }: { faces: readonly CrewFace[]; 
         <PersonAvatar key={f.pseudo} url={f.avatarUrl} pseudo={f.pseudo} size={size} />
       ))}
     </span>
-  );
-}
-
-/** Emplacement de l'onglet Fil : remplacé à la fusion par le `CrewFeed` du lot R5c1. */
-export function CrewFeedSlot(_props: { crewId: string; leader: boolean }) {
-  return (
-    <p className="crw-slot o-t-body s-muted" data-testid="crew-feed-slot">
-      {L.feedSlot}
-    </p>
   );
 }
 

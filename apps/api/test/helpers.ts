@@ -32,6 +32,7 @@ const TABLES = [
   "categories",
   "vehicle_makes",
   "vehicle_reference_seen",
+  "category_catalog_seen",
   "structures",
   "email_outbox",
   "admin_audit_log",

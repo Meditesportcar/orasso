@@ -11,9 +11,9 @@ import {
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
+import { CrewFeed } from "../components/crew-feed/CrewFeed";
 import {
   CrewEventRow,
-  CrewFeedSlot,
   CrewRequestDialog,
   CrewSecHead,
   FriendsBox,
@@ -33,7 +33,7 @@ import type { Route } from "./+types/crew";
 // Page d'un crew. Lot 19 : fiche, membres, demandes, invitations. Lot M7 : mode B (en-tête de fiche).
 // Lot R5c2 (maquettes R5.7 et R5.8, décisions de Damien du 26/10), comme l'appli :
 // - membre : bannière, logo, nom, « Crew · département · N membres · depuis », description, « Tu es le chef »,
-//   Instagram ; Discussion (non-lus), Réglages (chef) ; onglets Fil (emplacement du lot R5c1), Sorties, Garage,
+//   Instagram ; Discussion (non-lus), Réglages (chef) ; onglets Fil (le fil du lot R5c1), Sorties, Garage,
 //   Membres (`?onglet=`) ; sur grand écran, les sorties à droite ;
 // - non-membre : la vitrine (image du crew, description, Instagram, amis membres, membres) et « Demander à rejoindre »,
 //   qui ouvre la fenêtre avec un mot pour le chef.
@@ -257,7 +257,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
               <div className="crw-col">
                 {main === "fil" ? (
                   <div className={tab === "sorties" ? "crw-wide-only" : undefined}>
-                    <CrewFeedSlot crewId={crew.id} leader={leader} />
+                    <CrewFeed crew={{ id: crew.id, slug: crew.slug, archived: crew.archived }} />
                   </div>
                 ) : null}
                 {main === "garage" ? (

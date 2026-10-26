@@ -185,6 +185,13 @@ export const iconShapes = {
   seat: [p("M7 3h4a2 2 0 0 1 2 2l-.8 8H18a2 2 0 0 1 2 2v3H6.2L5 5a2 2 0 0 1 2-2z"), p("M8 18v3M17 18v3")], // sellerie
   speaker: [r(5, 2, 14, 20, 2), c(12, 14, 4), c(12, 6.5, 1)], // audio et électronique, `#i-speaker`
   grid: [r(4, 4, 6, 6, 1.5), r(14, 4, 6, 6, 1.5), r(4, 14, 6, 6, 1.5), r(14, 14, 6, 6, 1.5)], // tous les métiers
+  // Lot R5c1 (maquette R5.7, fil du crew) : la flamme, seule réaction d'une publication (`#i-fire` de la maquette).
+  fire: [
+    p(
+      "M12 21c-3.8 0-6.4-2.6-6.4-6 0-3.3 2.2-5.2 3.5-7.6.4 1.5 1.1 2.6 2.3 3.3.2-2.9 1.7-5.4 3.9-7.2-.3 2.5.7 4.4 2.1 6.2 1.2 1.5 1.8 3 1.8 4.9 0 3.7-2.9 6.4-7.2 6.4z",
+    ),
+  ],
+  mount: [p("M2.5 19l6.8-11.5 4.2 6.8 2.6-4.2 5.4 8.9z")], // lot R5a : tout-terrain (styles 4x4, Trail, Enduro), `#i-mount`
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

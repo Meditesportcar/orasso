@@ -15,6 +15,7 @@ import {
   communicationNotificationTypes,
 } from "./notifications/communication";
 import { crewOutingNotificationTypes } from "./notifications/crew-outings";
+import { crewFeedNotificationTypes } from "./notifications/crewFeed";
 import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
@@ -173,6 +174,7 @@ export const notificationTypes = {
   ...garageNotificationTypes,
   ...messagingNotificationTypes,
   ...crewNotificationTypes,
+  ...crewFeedNotificationTypes,
   ...communicationNotificationTypes,
   ...moderationNotificationTypes,
   ...invitationNotificationTypes,

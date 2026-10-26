@@ -12,7 +12,7 @@ import { Button } from "@orasso/design-system/web";
 import {
   afterNeedWrites,
   afterZoneWrites,
-  type Category,
+  type CategoryOption,
   createdNeedDiffers,
   draftStart,
   type EventDraft,
@@ -78,7 +78,7 @@ type Props = {
   structureName: string;
   followers: number | null;
   verified: boolean;
-  categories: Category[];
+  categories: CategoryOption[];
   makes: VehicleMake[];
   event?: EventOrganizer;
   /** Temps où ouvrir (`?temps=`, ou celui d'un brouillon : `eventResumeStep`). */

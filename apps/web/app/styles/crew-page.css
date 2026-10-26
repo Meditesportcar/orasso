@@ -220,14 +220,6 @@
   box-shadow: 0 0 0 2px var(--surface);
   border-radius: 50%;
 }
-.crw-slot {
-  margin: 0;
-  padding: var(--space-4);
-  border: 1.5px dashed var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  text-align: center;
-}
 .crw-date {
   flex: none;
   display: grid;

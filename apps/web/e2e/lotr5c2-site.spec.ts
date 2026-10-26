@@ -38,7 +38,7 @@ test("site : page du crew, sorties, réglages, vitrine et demande avec message",
       // Chef : proposer une sortie (onglet Sorties sur téléphone, colonne de droite sur grand écran).
       const k = await open(browser, crew.chef, theme, width, base);
       await expect(k.getByTestId("crew")).toHaveAttribute("data-state", "leader");
-      await expect(k.getByTestId("crew-feed-slot")).toBeVisible();
+      await expect(k.getByTestId("crew-feed")).toBeVisible();
       await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
       if (width === 390) {
         await expect(k.getByTestId("crew-propose-outing")).toBeHidden();

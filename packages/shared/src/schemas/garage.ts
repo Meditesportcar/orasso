@@ -13,6 +13,7 @@ import type { Grade } from "../grades";
 import type { HomeSponsored } from "../home";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import type { ProActivity } from "../rules/pro";
+import type { CategoryFamily, CategoryIcon } from "../rules/styles";
 import { optionalText } from "./common";
 import { type PlateRect, plateRectSchema } from "./vehicle";
 
@@ -23,6 +24,11 @@ export const categoryReferenceQuery = z.object({
   modelId: z.uuid().optional(),
   vehicleType: z.enum(vehicleTypes).optional(),
   year: z.coerce.number().int().min(1885).max(2200).optional(),
+  /**
+   * Lot R5a, tour 2 : `1` ajoute les styles en pause (`paused: true`) : les centres d'intérêt et les critères déjà
+   * choisis restent affichés, cochés et décochables.
+   */
+  paused: z.literal("1").optional(),
 });
 export type CategoryReferenceQuery = z.infer<typeof categoryReferenceQuery>;
 
@@ -94,7 +100,13 @@ export type AdminDecision = z.infer<typeof adminDecisionSchema>;
 export type CategoryOption = {
   id: string;
   slug: string;
+  /** Lot R5a : au masculin pour un camion quand le style en a un (« Ancien »), si `vehicleType` est donné. */
   label: string;
+  /** Lot R5a : famille (Époque, Genre, Préparation, Pratique ; Pays pour les origines) et icône du kit. */
+  family: CategoryFamily;
+  icon: CategoryIcon;
+  /** Lot R5a, tour 2 : en pause (renvoyé seulement avec `?paused=1`, pour garder les choix déjà faits). */
+  paused?: boolean;
   minVehicleAge: number | null;
   allowedVehicleTypes: string[] | null;
   allowedCountries: string[] | null;

@@ -1,7 +1,7 @@
 // Page d'un crew. Lot 19 : fiche, membres, demandes, invitations. Lot C2b : écran à affiche (`s-crew`).
 // Lot R5c2 (maquettes R5.7 et R5.8, décisions de Damien du 26/10) :
 // - membre : bannière, logo, nom, « Crew · département · N membres · depuis », description, « Tu es le chef », Instagram ;
-//   Discussion (avec ses non-lus), Inviter et Réglages (chef) ; onglets Fil (emplacement du lot R5c1), Sorties (sorties
+//   Discussion (avec ses non-lus), Inviter et Réglages (chef) ; onglets Fil (le fil du lot R5c1), Sorties (sorties
 //   du crew, « Où va le crew »), Garage (carrés), Membres (demandes avec leur message pour le chef, membres, inviter) ;
 // - non-membre : la vitrine (image du crew, description, Instagram, amis membres, membres) et « Demander à rejoindre »,
 //   qui ouvre la feuille avec un mot pour le chef ; puis « Demande envoyée à … » et « Annuler la demande ».
@@ -30,7 +30,7 @@ import { useState } from "react";
 import { Alert, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
-import { CrewFeedSlot } from "@/features/crews/page/CrewFeedSlot";
+import { CrewFeed } from "@/features/crews/feed/CrewFeed";
 import {
   CrewEventRow,
   CrewSecHead,
@@ -361,7 +361,7 @@ export default function CrewScreen() {
             onChange={setTab}
           />
 
-          {tab === "feed" ? <CrewFeedSlot crewId={v.id} leader={leader} /> : null}
+          {tab === "feed" ? <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} /> : null}
 
           {tab === "outings" ? (
             <View style={styles.col} testID="crew-outings">

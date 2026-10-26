@@ -1,12 +1,12 @@
 // Lot 31 : règles de cohérence des catégories (pays de la marque, type, liste blanche de marques) et un véhicule
 // certifié de démonstration. Idempotent ; `applyCategoryRules` est aussi appelé par les tests et par le déploiement.
-import { OFFROAD_TYPE } from "@orasso/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { SUPERCAR_MAKES } from "../../src/db/seed/style-catalog";
 import type { Executor } from "../../src/lib/tx";
 
-type Rule = { countries?: string[]; types?: string[]; makes?: string[] };
+type Rule = { countries?: string[]; makes?: string[] };
 
 /** ARCHITECTURE-SUITE § 14. Les catégories absentes de la base sont ignorées. */
 export const CATEGORY_RULES: Record<string, Rule> = {
@@ -15,25 +15,10 @@ export const CATEGORY_RULES: Record<string, Rule> = {
   francaise: { countries: ["FR"] },
   italienne: { countries: ["IT"] },
   americaine: { countries: ["US"] },
-  supercar: {
-    makes: [
-      "Ferrari",
-      "Lamborghini",
-      "McLaren",
-      "Porsche",
-      "Bugatti",
-      "Aston Martin",
-      "Maserati",
-      "Lotus",
-      "Koenigsegg",
-      "Pagani",
-    ],
-  },
-  moto: { types: ["moto"] },
-  utilitaire: { types: ["truck"] },
-  // Lot M1 (retour 07, consigne de Damien) : « 4x4 » n'est pas proposé à une voiture… sauf aux vrais tout-terrain du
-  // référentiel (lot M1, tour 2 : Defender, Wrangler, Classe G, Pajero, Land Cruiser… marqués `offroad`).
-  "4x4": { types: ["truck", OFFROAD_TYPE] },
+  supercar: { makes: [...SUPERCAR_MAKES] },
+  // Lot R5a : les types admis (Moto, Utilitaire, 4x4…) viennent du catalogue des styles (`styleCatalog`), adopté une
+  // seule fois puis géré par l'admin : ce script ne les réécrit plus (il le faisait à chaque seed, donc à chaque
+  // déploiement).
 };
 
 export async function applyCategoryRules(ex: Executor = db): Promise<number> {
@@ -45,7 +30,6 @@ export async function applyCategoryRules(ex: Executor = db): Promise<number> {
       .update(t.categories)
       .set({
         allowedCountries: rule.countries ?? null,
-        allowedVehicleTypes: rule.types ?? null,
         makeMode: rule.makes ? "whitelist" : "any",
       })
       .where(eq(t.categories.id, category.id));

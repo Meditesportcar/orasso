@@ -72,7 +72,7 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     watch(k);
     await openCrew(k, crew.slug);
     await expect(k.getByTestId("crew-tabs")).toBeVisible();
-    await expect(k.getByTestId("crew-feed-slot")).toBeVisible();
+    await expect(k.getByTestId("crew-feed")).toBeVisible();
     await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
     await expect(k.getByText("Tu es le chef")).toBeVisible();
     await shot(k, `01-chef-fil-${theme}`);

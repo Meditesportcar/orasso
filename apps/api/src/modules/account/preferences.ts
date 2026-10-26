@@ -14,15 +14,14 @@ import {
   type Preferences,
   type PreferencesUpdate,
 } from "@orasso/shared";
-import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { notFound, validation } from "../../lib/errors";
+import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { profilesRepo } from "../profiles/repo";
+import { assertInterests } from "../vehicles/categories";
 
 type ProfileRow = Viewer["profile"];
 
@@ -53,13 +52,8 @@ export const preferencesService = {
 
   /** Enregistre ce qui est envoyé et marque l'étape comme vue (un envoi vide = « Passer »). */
   async update(v: Viewer, input: PreferencesUpdate): Promise<Preferences> {
-    if (input.interests?.length) {
-      const found = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(and(inArray(categories.id, input.interests), eq(categories.active, true)));
-      if (found.length !== new Set(input.interests).size) throw validation("Centre d'intérêt inconnu");
-    }
+    // Lot R5a : un centre d'intérêt mis en pause depuis (« Moto ») reste permis s'il était déjà choisi.
+    await assertInterests(db, v.user.id, input.interests);
     const muted = new Set(v.profile.mutedTypes);
     const prefs: Record<string, boolean> = { ...v.profile.notificationPrefs };
     let prefsChanged = false;

@@ -13,6 +13,9 @@ export const reportTargets = [
   "pro",
   "provider",
   "announcement",
+  // Lot R5c1 : publication et commentaire du fil d'un crew (signalables par les membres du crew).
+  "crew_post",
+  "crew_comment",
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
 
@@ -80,6 +83,8 @@ export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]
   pro: ["fake_pro", "scam", "discount_not_applied", "fake_reviews", "other"],
   provider: ["fake_pro", "scam", "fake_reviews", "other"],
   announcement: ["misleading_info", "shocking", "insult", "spam", "other"],
+  crew_post: ["shocking", "insult", "harassment", "plate_or_face", "spam", "other"],
+  crew_comment: ["insult", "harassment", "spam", "other"],
 };
 
 /** Le motif est-il proposé pour ce type ? (contrôle de l'API, `reportCreateSchema`). */
@@ -130,6 +135,11 @@ export type ReportTargetView = {
   title: string;
   text: string | null;
   imageUrl: string | null;
+  /**
+   * Lot R5c1, tour 2 : toutes les images de la cible, quand elle en a plusieurs (photos d'une publication de crew
+   * signalée, servies aux seuls modérateurs) ; la première est aussi `imageUrl`.
+   */
+  imageUrls?: string[];
   /** Page publique de la cible (site), quand elle existe. */
   link: string | null;
   /** La cible n'existe plus (supprimée entre-temps). */

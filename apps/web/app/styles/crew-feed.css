@@ -1,0 +1,491 @@
+/* Le fil du crew (lot R5c1, maquettes R5.7 onglet Fil et R5.10) : une colonne centrale. Jetons seulement. */
+
+.cf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+/* Composeur (`.r5comp`) : avatar, invitation, « Publier ». */
+.cf-comp {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--space-2) + 2px);
+  align-items: center;
+  padding: calc(var(--space-2) + 2px);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Publication (`.r5post`). */
+.cf-post {
+  display: grid;
+  gap: calc(var(--space-2) + 2px);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.cf-post__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--space-2) + 2px);
+  align-items: center;
+}
+.cf-post__who {
+  min-width: 0;
+}
+.cf-post__who b {
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.cf-post__who small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.cf-post__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Le menu « ⋯ » (`<details>`) : Signaler, Clore le sondage, Retirer. */
+.cf-menu {
+  position: relative;
+}
+.cf-menu > summary {
+  list-style: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.cf-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.cf-menu > summary:focus-visible {
+  outline: 2px solid var(--accent-text);
+}
+.cf-menu__list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 5;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 220px;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--line);
+}
+
+/* Photos au format d'origine (`.r5pph`), en défilement avec « 1 / 2 » ; jamais recadrées (D36). */
+.cf-photos {
+  position: relative;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+/* La piste couvre tout le cadre : chaque photo s'y loge entière (`contain`), jamais plus haute que le cadre. */
+.cf-photos__track {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.cf-photos__track::-webkit-scrollbar {
+  display: none;
+}
+.cf-photos__slide {
+  flex: 0 0 100%;
+  height: 100%;
+  scroll-snap-align: start;
+}
+.cf-photos__slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.cf-photos__count {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  background: var(--night);
+  opacity: 0.85;
+  color: var(--night-ink);
+  font-weight: 800;
+  font-size: 11.5px;
+}
+
+/* Véhicule et sortie (`.r5pv`). */
+.cf-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  font-weight: 750;
+  font-size: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.cf-pill svg {
+  color: var(--ink-muted);
+  flex: none;
+}
+
+/* Flamme et commentaires (`.r5rx`). */
+.cf-rx {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.cf-rx__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  font: inherit;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+/* Tour 2 : un seul aplat moutarde fort par écran (« Publier ») : la flamme donnée en moutarde léger. */
+.cf-rx__btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.cf-rx__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.cf-rx__cap {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Sondage. */
+.cf-poll {
+  display: grid;
+  gap: calc(var(--space-2) + 2px);
+}
+.cf-poll__q {
+  margin: 0;
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.cf-poll__opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.cf-poll__opt[aria-pressed="true"] {
+  border-color: var(--accent-text);
+}
+.cf-poll__opt:disabled {
+  cursor: default;
+}
+.cf-poll__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--surface-raised);
+}
+.cf-poll__label,
+.cf-poll__share,
+.cf-poll__dot {
+  position: relative;
+}
+.cf-poll__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 750;
+}
+.cf-poll__share {
+  font-weight: 800;
+  font-size: 12px;
+}
+.cf-poll__dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-muted);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.cf-poll__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Événement automatique (`.r5auto`). */
+.cf-auto {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: calc(var(--radius-lg) - 2px);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.cf-auto__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunken);
+  color: var(--accent-text);
+}
+.cf-auto b {
+  display: block;
+  font-weight: 800;
+  font-size: 13.5px;
+  line-height: 1.25;
+}
+.cf-auto small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.3;
+}
+
+/* Feuilles (`<dialog>`) : commentaires et publication. */
+.cf-sheet {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(86vh, 900px);
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+}
+.cf-sheet::backdrop {
+  background: var(--scrim);
+}
+.cf-sheet__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.cf-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cf-sheet__head h2 {
+  flex: 1;
+  margin: 0;
+}
+.cf-comments {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cf-comment {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--space-2) + 2px);
+  align-items: start;
+}
+.cf-comment p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cf-comment__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.cf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+/* Publier dans le crew (R5.10) : vignettes au format d'origine, « Ajouter », la visibilité. */
+.cf-pub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.cf-pub-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.cf-pub-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cf-pub-tile button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: var(--night);
+  opacity: 0.85;
+  color: var(--night-ink);
+  cursor: pointer;
+}
+.cf-pub-add {
+  aspect-ratio: 1;
+  border-radius: calc(var(--radius-md) + 2px);
+  border: 1.5px dashed var(--line);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cf-pub-add small {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.cf-pub-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.cf-note,
+.cf-vis {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) calc(var(--space-3) + 2px);
+  border-radius: calc(var(--radius-md) + 2px);
+  background: var(--surface-sunken);
+}
+.cf-note svg,
+.cf-vis svg {
+  color: var(--ink-muted);
+}
+.cf-vis b {
+  display: block;
+  font-weight: 800;
+  font-size: 13.5px;
+}
+.cf-vis small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.cf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cf-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.cf-answer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.cf-answer > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* États choisis (tour 2, moutarde léger), après les règles de base. */
+.cf-rx__btn[aria-pressed="true"] svg {
+  color: var(--accent-text);
+}
+.cf-poll__opt[aria-pressed="true"] .cf-poll__dot {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+}
+.cf-poll__opt[aria-pressed="true"] .cf-poll__bar {
+  background: var(--accent-soft);
+}

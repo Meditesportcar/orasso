@@ -40,3 +40,25 @@ export function KeyboardSafe({ children, style }: { children: ReactNode; style?:
     </View>
   );
 }
+
+/**
+ * Lot R5a (défaut relevé le 24/10, étape Marque et modèle) : le clavier est-il ouvert ? Toujours faux dans le
+ * navigateur (il gère son clavier). Ne change rien aux écrans qui utilisent `KeyboardSafe`.
+ */
+export function useKeyboardShown(): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () =>
+      setShown(true),
+    );
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () =>
+      setShown(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return shown;
+}

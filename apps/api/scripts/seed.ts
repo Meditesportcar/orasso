@@ -57,6 +57,7 @@ const TABLES = [
   "categories",
   "vehicle_makes",
   "vehicle_reference_seen",
+  "category_catalog_seen",
   "structures",
   "events",
   "email_outbox",

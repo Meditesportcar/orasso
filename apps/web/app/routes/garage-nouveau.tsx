@@ -12,7 +12,9 @@ import {
   cleanVehicleVersion,
   formatPreparation,
   vehicleWizardLabels as L,
+  makesForType,
   PREPARED_CATEGORY_SLUG,
+  styleLabels as S,
   vehicleAddLabels as V,
   VEHICLE_DESCRIPTION_MAX,
   VEHICLE_ENGINE_MAX,
@@ -37,6 +39,7 @@ import { ColorPicker } from "../components/ColorPicker";
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, plateDecisionError } from "../components/PlateFrame";
 import { SquareCrop } from "../components/SquareCrop";
+import { StylePicker, StyleProposal, styleItems } from "../components/StylePicker";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import {
@@ -173,6 +176,12 @@ export async function action({ request }: Route.ActionArgs) {
     description: text("description") || null,
     preparation: formatPreparation(preparation),
     categoryIds,
+    // Lot R5a : styles proposés pendant l'ajout, rattachés au véhicule créé.
+    styleProposalIds: form
+      .getAll("styleProposalIds")
+      .map(String)
+      .filter((id) => /^[0-9a-f-]{36}$/.test(id))
+      .slice(0, 5),
   };
   const created = await api<VehicleFull>(request, "/me/vehicles", { method: "POST", json: body });
   if (!created.ok) {
@@ -210,7 +219,6 @@ const SITE = {
   type: "Type de véhicule",
   generation: "Génération",
   chooseGeneration: "Choisir la génération",
-  styles: "Style · plusieurs choix",
 } as const;
 
 /** Les pastilles de photos conseillées (1, 2, 3). */
@@ -272,6 +280,8 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [preparation, setPreparation] = useState<string[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  // Lot R5a : styles proposés pendant l'ajout (rattachés au véhicule à sa création).
+  const [proposalIds, setProposalIds] = useState<string[]>([]);
   const [unregistered, setUnregistered] = useState(false);
   const [former, setFormer] = useState(false);
   const [status, setStatus] = useState<string>(archiveStatusChoices[0]?.status ?? "keepsake");
@@ -393,7 +403,13 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const make = makes.find((m) => m.id === makeId);
   const model = models.find((m) => m.id === modelId);
   const typing: "make" | "model" | null = make?.isOther ? "make" : model?.isOther ? "model" : null;
-  const sortedMakes = useMemo(() => sortRows(makes), [makes]);
+  // Lot R5a (maquette R5.1) : seulement les marques qui ont un modèle du type choisi (« Autre » toujours).
+  const sortedMakes = useMemo(() => sortRows(makesForType(makes, type as "car" | "moto" | "truck")), [makes, type]);
+  const makesCount = sortedMakes.filter((m) => !m.isOther).length;
+  // Une marque d'un autre type que celui choisi ensuite : le choix se refait.
+  useEffect(() => {
+    if (makeId && !sortedMakes.some((m) => m.id === makeId)) setMakeId("");
+  }, [makeId, sortedMakes]);
   const visibleModels = useMemo(
     () => sortRows(modelsForType(models, type as "car" | "moto" | "truck")),
     [models, type],
@@ -402,7 +418,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const years = yearChoices(generation, new Date().getFullYear());
   const origins = originCategories(categories, make);
   const originChoices = typing === "make" ? pickableOrigins(categories) : [];
-  const styles = visibleStyles(categories);
+  const styles = styleItems(visibleStyles(categories));
   const prepared = preparedCategory(categories, PREPARED_CATEGORY_SLUG);
   const numericYear = /^\d{4}$/.test(year) ? Number(year) : undefined;
   const note = dimmedNote(categories, numericYear, type as "car" | "moto" | "truck");
@@ -543,6 +559,15 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
                   autoComplete="off"
                 />
                 {found?.length ? (
+                  // Lot R5a : « Résultats », jamais « Marque », au-dessus des résultats.
+                  <div className="g-listhead" data-testid="add-search-head">
+                    <span className="o-t-label">{S.results}</span>
+                    <span className="o-t-caption">
+                      {S.resultsCount(found.length, type as "car" | "moto" | "truck")}
+                    </span>
+                  </div>
+                ) : null}
+                {found?.length ? (
                   <ul className="g-hits" data-testid="add-search-hits">
                     {found.map((h) => (
                       <li key={`${h.kind}:${h.generationId ?? h.modelId ?? h.makeId}`}>
@@ -589,7 +614,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
               name="makeId"
               value={makeId}
               onChange={(e) => setMakeId(e.currentTarget.value)}
-              placeholder="Choisir une marque"
+              placeholder={`${S.makesOfType(type as "car" | "moto" | "truck")} · ${S.makesCount(makesCount)}`}
               options={sortedMakes.map((m) => ({ value: m.id, label: m.isOther ? L.makeAbsent : m.name }))}
               error={errors.makeId}
             />
@@ -807,38 +832,23 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
                 ))}
               </fieldset>
             ) : null}
-            <fieldset className="g-pills" data-testid="categories">
-              <legend className="o-field__label o-t-label">{SITE.styles}</legend>
-              {styles.map((c) => (
-                <label
-                  key={c.id}
-                  className={
-                    !c.eligible
-                      ? "g-opt g-pill is-off"
-                      : categoryIds.includes(c.id)
-                        ? "g-opt g-pill is-on"
-                        : "g-opt g-pill"
-                  }
-                  title={c.eligible ? undefined : (c.reason ?? undefined)}
-                >
-                  <input
-                    type="checkbox"
-                    name="categoryIds"
-                    value={c.id}
-                    checked={c.eligible && categoryIds.includes(c.id)}
-                    disabled={!c.eligible}
-                    data-testid={c.eligible ? "add-style" : "add-style-off"}
-                    onChange={() => toggleStyle(c.id)}
-                  />
-                  <span className="o-t-body">{c.label}</span>
-                </label>
-              ))}
-            </fieldset>
+            {/* Lot R5a (maquette R5.2) : les styles du type, rangés par famille, avec l'icône du catalogue. */}
+            <StylePicker items={styles} chosen={categoryIds} onToggle={toggleStyle} />
             {note || preparedNote ? (
               <p className="s-notice" data-testid="add-styles-note">
-                {[note, preparedNote ? V.preparedChecked : null].filter(Boolean).join(" ")}
+                {[note, preparedNote && prepared ? S.preparedChecked(prepared.label, type === "truck") : null]
+                  .filter(Boolean)
+                  .join(" ")}
               </p>
             ) : null}
+            {proposalIds.map((id) => (
+              <input key={id} type="hidden" name="styleProposalIds" value={id} />
+            ))}
+            <StyleProposal
+              vehicleType={type as "car" | "moto" | "truck"}
+              vehicleName={make && !make.isOther ? make.name : null}
+              onSent={(r) => setProposalIds((ids) => [...new Set([...ids, r.id])].slice(0, 5))}
+            />
           </section>
 
           {errors.form && (
