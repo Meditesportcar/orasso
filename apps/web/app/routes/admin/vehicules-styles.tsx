@@ -204,9 +204,9 @@ export default function AdminStyles({ loaderData, actionData }: Route.ComponentP
         <td>
           <span className="adm-styles__name">
             <Icon name={s.icon as IconName} size={18} />
-            <span className="o-never-truncate">{s.label}</span>
-            {s.labelM ? <span className="o-t-caption s-muted">({s.labelM})</span> : null}
+            <span>{s.label}</span>
           </span>
+          {s.labelM ? <span className="o-t-caption s-muted adm-styles__m">({s.labelM})</span> : null}
         </td>
         <td className="o-t-caption">{rule}</td>
         <td className="o-t-caption">{S.vehicles(s.vehicles[type])}</td>

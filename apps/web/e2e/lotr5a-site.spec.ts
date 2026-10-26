@@ -146,6 +146,7 @@ for (const theme of ["beton", "sable"] as const) {
       const genre = pa.getByTestId("styles-family-genre");
       await expect(genre).toContainText("Supermotard");
       await expect(genre).not.toContainText("Drift");
+      await genre.scrollIntoViewIfNeeded();
       await shot(pa, `${theme}-${width}-04-admin-styles-moto`);
       // Ordre : « Trail » monte d'un cran dans sa famille.
       const names = async () => genre.locator(".adm-styles__name").allInnerTexts();
