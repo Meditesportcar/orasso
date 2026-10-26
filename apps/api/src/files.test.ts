@@ -1,5 +1,6 @@
 // Fichiers publics `/api/files/*` (lot R5c1, tour 2, défaut antérieur au lot) : une clé publique de forme stricte est
-// servie ; `private/…` ne l'est jamais, quelle que soit sa graphie (`//`, `%2F`, `\`, `%5C`, `./`, `..`, majuscules).
+// servie ; `private/…` ne l'est jamais, quelle que soit sa graphie (`//`, `%2F`, `\`, `%5C`, `./`, `..`) ni sa casse
+// (`PRIVATE/`). Les majuscules d'une clé publique sont permises (identifiants de compte dans les avatars).
 // `pathOf` garde tout chemin sous le dossier de stockage.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -12,11 +13,14 @@ afterAll(async () => {
 });
 
 const PUBLIC = "vehicles/0f0f0f0f-test/abc123-photo.webp";
+// Identifiant de compte de Better Auth (a-z, A-Z, 0-9) dans la clé d'un avatar (`profiles/service.ts`).
+const AVATAR = "avatars/Xk3TqZ9rLm2PbV7wNc4Ys8Hd1Gf6Je0A/3fa2b1c4d5e6.webp";
 const PRIVATE = "private/crew-posts/11111111-2222-4333-8444-555555555555.webp";
 const PROOF = "private/verification/s1/0123456789abcdef.png";
 
 beforeAll(async () => {
   await storage.put(PUBLIC, Buffer.from("public"));
+  await storage.put(AVATAR, Buffer.from("avatar"));
   await storage.put(PRIVATE, Buffer.from("secret du crew"));
   await storage.put(PROOF, Buffer.from("justificatif"));
 });
@@ -27,6 +31,12 @@ describe("GET /api/files/*", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/webp");
     expect(await res.text()).toBe("public");
+  });
+
+  it("sert l'avatar d'un compte dont l'identifiant a des majuscules", async () => {
+    const res = await app.request(`/api/files/${AVATAR}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("avatar");
   });
 
   it.each([
@@ -43,10 +53,11 @@ describe("GET /api/files/*", () => {
     `/api/files/vehicles/..%2F${PRIVATE}`,
     `/api/files/PRIVATE/crew-posts/11111111-2222-4333-8444-555555555555.webp`,
     `/api/files/Private/crew-posts/11111111-2222-4333-8444-555555555555.webp`,
+    `/api/files/pRiVaTe/verification/s1/0123456789abcdef.png`,
     `/api/files//${PROOF}`,
     `/api/files/%2F${PROOF}`,
-    "/api/files/vehicles/0f0f0f0f-test/ABC123-photo.webp",
     "/api/files/vehicles/0f0f0f0f-test/abc123-photo.webp%00",
+    "/api/files/vehicles/0f0f0f0f-test/abc123-photo.WEBP",
   ])("refuse %s", async (path) => {
     const res = await app.request(path);
     expect(res.status).toBe(404);
