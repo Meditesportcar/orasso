@@ -1,15 +1,16 @@
 // Fil d'un crew (lot R5c1) : les sources du fil, réunies par une seule requête `union all` triée par date, puis
 // hydratées source par source. Une source = des lignes `(type, id, at)` et une fonction qui les transforme en entrées.
-// Pour ajouter une source (les sorties du crew, lot R5c2, à la fusion) : écrire un objet `FeedSource` et l'ajouter à
-// `feedSources` ; ni la pagination ni le tri ne changent.
+// Pour ajouter une source : écrire un objet `FeedSource` et l'ajouter à `feedSources` ; ni la pagination ni le tri ne
+// changent. Lot R5c2 : les sorties du crew.
 import type { CrewFeedItem } from "@orasso/shared";
-import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
-import { profiles, vehicles } from "../../../db/schema";
+import { crewOutingReplies, crewOutings, profiles, vehicles } from "../../../db/schema";
 import type { Executor } from "../../../lib/tx";
 import { canSeeEvent } from "../../invitations/access";
 import { vehicleLabel } from "../../vehicles/serializers";
+import { activeMembersOf } from "../page";
 import { type FeedAccess, visibleProfile } from "./access";
 import { loadPostViews, personOf } from "./posts";
 
@@ -155,8 +156,67 @@ const crewAcceptedSource: FeedSource = {
   },
 };
 
+/**
+ * Lot R5c2 (maquette R5.7) : une sortie proposée dans le crew, à sa date de création. Une sortie annulée quitte le fil ;
+ * une sortie passée y reste, sans « Je viens ». Seules comptent les réponses des membres actifs du moment.
+ */
+const crewOutingSource: FeedSource = {
+  type: "crew_outing",
+  rows: (access) => sql`
+    select 'crew_outing'::text as type, o.id::text as id, date_trunc('milliseconds', o.created_at) as at
+    from crew_outings o
+    where o.crew_id = ${access.crew.id} and o.cancelled_at is null`,
+  async hydrate(ex, rows, access, at) {
+    const ids = rows.map((r) => r.id);
+    const outings = await ex
+      .select({ o: crewOutings, author: profiles })
+      .from(crewOutings)
+      .leftJoin(profiles, eq(profiles.userId, crewOutings.authorId))
+      .where(and(inArray(crewOutings.id, ids), isNull(crewOutings.cancelledAt)));
+    const active = new Set((await activeMembersOf(access.crew.id, at, ex)).map((m) => m.profile.userId));
+    const replies = (
+      await ex
+        .select({
+          outingId: crewOutingReplies.outingId,
+          userId: crewOutingReplies.userId,
+          answer: crewOutingReplies.answer,
+        })
+        .from(crewOutingReplies)
+        .where(inArray(crewOutingReplies.outingId, ids))
+    ).filter((r) => active.has(r.userId));
+    const byId = new Map(outings.map((r) => [r.o.id, r]));
+    const out = new Map<string, CrewFeedItem>();
+    for (const r of rows) {
+      const found = byId.get(r.id);
+      if (!found) continue;
+      const { o, author } = found;
+      const shown =
+        author && !author.deletedAt && !author.bannedAt && !(author.suspendedUntil && author.suspendedUntil > at);
+      const answers = replies.filter((x) => x.outingId === o.id);
+      const key = `crew_outing:${o.id}`;
+      out.set(key, {
+        type: "crew_outing",
+        key,
+        at: r.at.toISOString(),
+        outing: {
+          id: o.id,
+          title: o.title,
+          startsAt: o.startsAt.toISOString(),
+          place: o.place,
+          authorPseudo: shown ? author.pseudo : null,
+          yes: answers.filter((x) => x.answer === "yes").length,
+          maybe: answers.filter((x) => x.answer === "maybe").length,
+          mine: answers.find((x) => x.userId === access.viewerId)?.answer ?? null,
+          open: o.startsAt > at,
+        },
+      });
+    }
+    return out;
+  },
+};
+
 /** Les sources du fil, dans l'ordre de départage d'une même date (le `type` le plus grand d'abord). */
-export const feedSources: FeedSource[] = [postsSource, memberJoinedSource, crewAcceptedSource];
+export const feedSources: FeedSource[] = [postsSource, memberJoinedSource, crewAcceptedSource, crewOutingSource];
 
 export type FeedCursor = { at: Date; type: string; id: string };
 

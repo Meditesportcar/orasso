@@ -7,6 +7,7 @@ import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
 import { crewFeedApi } from "./crewFeed";
+import { crewPageApi } from "./crewPage";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventsApi } from "./events";
@@ -38,6 +39,7 @@ import { weatherApi } from "./weather";
 export type { NotificationItem } from "./account";
 export type { AdminSettings, NewsletterDraft, PlacementCreate, StructureRegistryRow } from "./admin";
 export { authApi } from "./auth";
+export type { CrewOutingInput, CrewSettingsInput } from "./crewPage";
 export type { GeocodeMatch } from "./eventEditor";
 export type { FieldAlert, FieldIncident } from "./orga";
 export type { StructureBan } from "./structure";
@@ -78,5 +80,6 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...crewPageApi,
   ...stylesApi,
 };

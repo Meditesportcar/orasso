@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ApplicationStatus } from "../application";
 import { departmentSchema } from "../enums";
 import type { Grade } from "../grades";
+import { crewInstagramHandle } from "../rules/crewPage";
 import {
   CREW_DESCRIPTION_MAX,
   CREW_NAME_MAX,
@@ -13,6 +14,7 @@ import {
   MEMBERS_PER_CREW,
 } from "../rules/crews";
 import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
+import type { CrewSpace, CrewVitrineMember } from "./crewPage";
 import { pseudoSchema } from "./profile";
 
 // Crews et inscription en crew (lot 19). Routes : ARCHITECTURE-SUITE § 4.3.
@@ -31,11 +33,33 @@ export const crewCreateSchema = z.object({
 });
 export type CrewCreate = z.infer<typeof crewCreateSchema>;
 
+/**
+ * Lot R5c2 : Instagram du crew, le pseudo seul (« @pseudo », « pseudo » ou l'adresse du compte sont acceptés) ; vide
+ * le retire. Une publication, un autre site ou des caractères interdits sont refusés.
+ */
+export const crewInstagramSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .nullable()
+  .transform((v, ctx) => {
+    const handle = crewInstagramHandle(v);
+    if (handle === undefined) {
+      ctx.addIssue({ code: "custom", message: "Indique le pseudo Instagram du crew (ex. @roussillondrift)." });
+      return z.NEVER;
+    }
+    return handle;
+  });
+
 export const crewUpdateSchema = z
   .object({
     name: crewName.optional(),
-    description: optionalText(CREW_DESCRIPTION_MAX),
+    // Lot R5c2 : absente, la description ne change pas (un réglage seul ne l'efface plus) ; vide, elle est retirée.
+    description: optionalText(CREW_DESCRIPTION_MAX).optional(),
     department: departmentSchema.optional(),
+    instagram: crewInstagramSchema.optional(),
+    /** Lot R5c2 (Damien, 26/10) : « Les membres peuvent proposer une sortie » ; le chef peut toujours. */
+    membersCanProposeOutings: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Rien à modifier" });
 export type CrewUpdate = z.infer<typeof crewUpdateSchema>;
@@ -109,8 +133,10 @@ export type MyCrew = CrewCard & { role: CrewRole };
 export type CrewPerson = { userId: string; pseudo: string; avatarUrl: string | null; grade: Grade };
 
 /**
- * Fiche d'un crew pour toute personne connectée (S16 : nom, logo, description, département, nombre de membres, chef).
- * La discussion et la liste des membres sont réservées aux membres.
+ * Fiche d'un crew pour toute personne connectée. Lot R5c2 (décision de Damien du 26/10) : un non-membre voit la vitrine,
+ * c'est-à-dire l'image du crew (logo, bannière dont la plaque est traitée), la description, l'Instagram et les membres
+ * (pseudo, avatar, grade, rôle) ; rien d'autre : ni garage, ni fil, ni sorties, ni discussion (`space` et
+ * `conversationId` à `null`).
  */
 export type CrewView = CrewCard & {
   description: string | null;
@@ -118,17 +144,34 @@ export type CrewView = CrewCard & {
   createdAt: string;
   archived: boolean;
   viewerState: CrewViewerState;
+  /** Bannière ; hors du crew, seulement si sa plaque est masquée ou « aucune plaque visible » confirmé. */
+  bannerUrl: string | null;
+  /** Pseudo Instagram du crew (sans « @ »). */
+  instagram: string | null;
+  /** Membres actifs (comptes supprimés, bannis ou suspendus exclus), le chef d'abord. */
+  members: CrewVitrineMember[];
   /** Membres seulement. */
   conversationId: string | null;
+  /** Membres actifs seulement (crew non dissous) : sorties, garage, « Où va le crew », non-lus de la discussion. */
+  space: CrewSpace | null;
   /** Chef seulement : demandes et invitations en attente. */
   pendingRequests: number | null;
   pendingInvitations: number | null;
+  /** Chef seulement : la bannière existe mais n'est pas montrée hors du crew (aucune décision sur la plaque). */
+  bannerHiddenOutside: boolean | null;
 };
 
-export type CrewMemberView = CrewPerson & { role: CrewRole; joinedAt: string | null };
+/** Lot R5c2 : le véhicule principal du membre (« Toyota Supra Mk4 »), `null` sans véhicule actif. */
+export type CrewMemberView = CrewPerson & { role: CrewRole; joinedAt: string | null; vehicleLabel: string | null };
 
 /** Chef : demandes reçues et invitations envoyées en attente. */
-export type CrewPendingView = { person: CrewPerson; message: string | null; createdAt: string };
+export type CrewPendingView = {
+  person: CrewPerson;
+  message: string | null;
+  createdAt: string;
+  /** Lot R5c2 : demande reçue, le véhicule principal de la personne (la feuille de demande le lui dit). */
+  vehicleLabel: string | null;
+};
 export type CrewPendingList = { requests: CrewPendingView[]; invitations: CrewPendingView[] };
 
 /** Boîte > Demandes : demande reçue par le chef, ou invitation reçue. */

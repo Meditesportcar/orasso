@@ -11,6 +11,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -19,6 +20,7 @@ import { mediaSource } from "@/lib/media";
 import { createRequestGate } from "@/lib/requestGate";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
+import { Overlay } from "@/ui/Overlay";
 import { useSecHeadStack } from "@/ui/SecHead";
 import { deptLong } from "./ExplorerSheets";
 import type { PeopleFilters, PeopleShow } from "./explorerChoice";
@@ -239,8 +241,9 @@ function CrewAction({
   onSent: () => void;
 }) {
   const { t } = useTheme();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  // Lot R5c2 (R5.8) : « Rejoindre » ouvre la feuille de demande avec un mot pour le chef, comme la vitrine du crew.
+  const [asking, setAsking] = useState(false);
+  const [opened, setOpened] = useState(false);
   if (mine) {
     return (
       <View style={styles.go} accessibilityElementsHidden>
@@ -256,24 +259,31 @@ function CrewAction({
     );
   }
   return (
-    <SmallButton
-      icon="add"
-      disabled={busy}
-      testID="crew-join"
-      onPress={async () => {
-        setBusy(true);
-        try {
-          await api.requestCrew(crew.id, null);
-          onSent();
-        } catch {
-          router.push(`/crew/${crew.slug}`);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {R.join}
-    </SmallButton>
+    <>
+      <SmallButton
+        icon="add"
+        testID="crew-join"
+        onPress={() => {
+          setOpened(true);
+          setAsking(true);
+        }}
+      >
+        {R.join}
+      </SmallButton>
+      {/* La feuille va dans la zone des feuilles de l'écran (`Overlay`) : posée dans la liste, elle ne couvrirait qu'elle. */}
+      {opened ? (
+        <Overlay>
+          <CrewRequestSheet
+            crew={asking ? { id: crew.id, name: crew.name, leaderPseudo: null } : null}
+            onClose={() => setAsking(false)}
+            onSent={() => {
+              setAsking(false);
+              onSent();
+            }}
+          />
+        </Overlay>
+      ) : null}
+    </>
   );
 }
 

@@ -285,6 +285,10 @@
   color: var(--ink);
   text-decoration: none;
 }
+/* Lot R5c2 : une sortie proposée, avec « Je viens » à droite. */
+.cf-auto--act {
+  grid-template-columns: auto 1fr auto;
+}
 .cf-auto__icon {
   width: 40px;
   height: 40px;

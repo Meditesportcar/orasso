@@ -52,5 +52,8 @@ export default [
     // Lot R3b : « Rejoins ou crée un crew » du profil propose d'abord de rejoindre.
     route("app/crews/rejoindre", "routes/crews-rejoindre.tsx"),
     route("c/:slug", "routes/crew.tsx"),
+    // Lot R5c2 : proposer une sortie du crew, réglages du crew (chef).
+    route("c/:slug/sortie", "routes/crew-sortie.tsx"),
+    route("c/:slug/reglages", "routes/crew-reglages.tsx"),
   ]),
 ] satisfies RouteConfig;

@@ -5,17 +5,23 @@ import {
   crewInviteSchema,
   crewLogoSchema,
   crewOptionsQuery,
+  crewOutingCreateSchema,
+  crewOutingRsvpSchema,
+  crewOutingUpdateSchema,
   crewRegistrationSchema,
   crewRequestSchema,
   crewSearchQuery,
   crewUpdateSchema,
+  type PlateRect,
+  plateRectsSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
-import { body, query, uuidParam } from "../../lib/validate";
+import { body, parse, query, uuidParam } from "../../lib/validate";
 import { applicationsQueries } from "../applications/queries";
+import { crewOutingsService } from "./outings";
 import { crewRegistrationService } from "./registration";
 import { crewsService } from "./service";
 import "./inbox";
@@ -68,6 +74,62 @@ export const crewsRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const { key } = await body(c, crewLogoSchema);
     return c.json(await crewsService.setLogo(v, uuidParam(c, "id"), key));
+  })
+  // Lot R5c2 : bannière (chef ; même chaîne de plaque que les photos de véhicule), multipart `banner`, `plateRects`
+  // (JSON) ou `noPlate=true`.
+  .post("/crews/:id/banner", async (c) => {
+    const v = await requireUser(c);
+    const form = await c.req.parseBody();
+    if (!(form.banner instanceof File)) throw validation("Champ « banner » attendu (fichier)");
+    let plateRects: PlateRect[] | undefined;
+    if (typeof form.plateRects === "string" && form.plateRects.trim()) {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(form.plateRects);
+      } catch {
+        throw validation("Champ « plateRects » : JSON attendu");
+      }
+      plateRects = parse(plateRectsSchema, raw);
+    }
+    return c.json(
+      await crewsService.setBanner(v, uuidParam(c, "id"), form.banner, plateRects, form.noPlate === "true"),
+    );
+  })
+  .delete("/crews/:id/banner", async (c) =>
+    c.json(await crewsService.setBanner(await requireUser(c), uuidParam(c, "id"), null, undefined, false)),
+  )
+  // Tour 2 : la bannière (espace privé), lue avec une session et revérifiée à chaque lecture. Sans décision de plaque,
+  // jamais gardée en cache ; avec, une heure dans le cache privé du navigateur.
+  .get("/crews/:id/banner/:name", async (c) => {
+    const { data, cleared } = await crewsService.bannerFile(
+      await requireUser(c),
+      uuidParam(c, "id"),
+      c.req.param("name"),
+    );
+    return c.body(new Uint8Array(data), 200, {
+      "content-type": "image/webp",
+      "cache-control": cleared ? "private, max-age=3600" : "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
+  })
+  // Lot R5c2 : sorties du crew (membres actifs).
+  .post("/crews/:id/outings", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await crewOutingsService.create(v, uuidParam(c, "id"), await body(c, crewOutingCreateSchema)), 201);
+  })
+  .patch("/crews/:id/outings/:outingId", async (c) => {
+    const v = await requireUser(c);
+    const input = await body(c, crewOutingUpdateSchema);
+    return c.json(await crewOutingsService.update(v, uuidParam(c, "id"), uuidParam(c, "outingId"), input));
+  })
+  .delete("/crews/:id/outings/:outingId", async (c) => {
+    await crewOutingsService.cancel(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "outingId"));
+    return c.body(null, 204);
+  })
+  .put("/crews/:id/outings/:outingId/rsvp", async (c) => {
+    const v = await requireUser(c);
+    const { answer } = await body(c, crewOutingRsvpSchema);
+    return c.json(await crewOutingsService.rsvp(v, uuidParam(c, "id"), uuidParam(c, "outingId"), answer));
   })
   .get("/crews/:id/members", async (c) => c.json(await crewsService.members(await requireUser(c), uuidParam(c, "id"))))
   .delete("/crews/:id/members/:userId", async (c) => {

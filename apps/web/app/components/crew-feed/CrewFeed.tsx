@@ -4,11 +4,14 @@
 import { Button } from "@orasso/design-system/web";
 import {
   type CrewFeedItem,
+  type CrewFeedOuting,
   type CrewFeedPage,
   type CrewFireState,
+  type CrewOutingView,
   type CrewPostOptions,
   type CrewPostView,
   crewFeedLabels,
+  crewPageLabels,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -86,6 +89,21 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
     if (failure) setError(failure);
   }
 
+  // Lot R5c2 : « Je viens » sur une sortie proposée, depuis le fil.
+  const going = (o: CrewFeedOuting) =>
+    act(o.id, async () => {
+      const res = await apiFetch<CrewOutingView>(`/crews/${crew.id}/outings/${o.id}/rsvp`, {
+        method: "PUT",
+        json: { answer: "yes" },
+      });
+      if (!res.ok) return res.error.message;
+      const next = { ...o, yes: res.data.yes, maybe: res.data.maybe, mine: res.data.mine };
+      setItems((current) =>
+        (current ?? []).map((x) => (x.type === "crew_outing" && x.outing.id === o.id ? { ...x, outing: next } : x)),
+      );
+      setOk(crewPageLabels.feedOutingYesToast(o.title));
+      return null;
+    });
   const fire = (p: CrewPostView) =>
     act(p.id, async () => {
       const on = !p.firedByMe;
@@ -176,7 +194,12 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
               onClosePoll={() => void closePoll(item.post)}
             />
           ) : (
-            <AutoCard key={item.key} item={item} />
+            <AutoCard
+              key={item.key}
+              item={item}
+              busy={item.type === "crew_outing" && busy === item.outing.id}
+              onGoing={item.type === "crew_outing" && !crew.archived ? () => void going(item.outing) : undefined}
+            />
           ),
         )
       )}
