@@ -1,6 +1,19 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 24/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 26/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+
+## État au 26/10/2026 : R5 en ligne (retours de Damien sur le passionné : véhicule, profil, crew vivant, fiche)
+
+- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`62db6f5e`** (poussé). Migrations jusqu'à `0065` (0062 fil du crew, 0063 catalogue des styles, 0064 réseaux du profil, 0065 page du crew).
+- **APK** : `Orasso APK/Orasso-2026-10-26-62db6f5e-R5.apk` sur le Drive, installé sur le Xiaomi et essayé (aucun plantage). Pas vérifiés sur un téléphone : le clavier à l'étape « Marque et modèle » et la police système agrandie (à voir sur le Pixel 10 Pro XL de Damien).
+- **Contenu** (maquette « Orasso maquettes R5 » validée avec les remarques de Damien, `validation-maquette-r5-2026-10-26.md` du relais) :
+  - **R5a véhicule** : marques filtrées par type, clavier qui laisse la place aux résultats, styles par type rangés en familles (catalogue de départ synchronisé au démarrage, « D'origine »), « Propose-le », admin des styles sur le site et dans l'appli.
+  - **R5b profil** : roue dentée et écran « Réglages », photo touchable, réseaux du profil (pseudos seuls), profil d'un membre et aperçu en un seul écran (principale en carré, prochaine sortie et « Toi aussi », « Vu à »), titres de section et boutons jamais coupés.
+  - **R5c crew vivant** : page à onglets Fil, Sorties, Garage, Membres ; fil avec photos (sans floutage, jamais hors du crew : D36), flamme, commentaires, sondages ; sorties du crew ; vitrine pour un non-membre (image, description, membres) ; demande avec message partout ; bannière dans l'espace privé.
+  - **R5d fiche** : « à N km de toi » calculé sur le téléphone, « Y aller » avec Maps et Waze à toute date.
+  - **Sécurité** : `/api/files` ne sert plus un fichier privé par une autre graphie (`//private/…`), défaut antérieur corrigé.
+- **Vérification d'ensemble** : 1 h 34 sur 3 piles ; API 1 209/1 209 ; recettes 425 passées.
+- **Suite** : retours de Damien sur l'APK R5 jusqu'à la validation du passionné, puis les autres profils, puis le lot 58.
 
 ## État au 24/10/2026 : R3 + R4 + C7 en ligne (corrections des retours, plateau, suivi, véhicule principal, cadre par modes)
 
