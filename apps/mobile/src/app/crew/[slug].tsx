@@ -14,8 +14,8 @@ import {
   type CrewView,
   crewInstagramUrl,
   crewLabels,
-  crewPageLabels as L,
   fitWideWordSize,
+  crewPageLabels as L,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
