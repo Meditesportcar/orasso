@@ -76,7 +76,7 @@ function activeTab(pathname: string): string {
   if (pathname.startsWith("/app/explorer")) return "explore";
   if (pathname.startsWith("/app/garage")) return "garage";
   if (pathname.startsWith("/app/passeport")) return "passport";
-  return /^\/app\/(moi|securite|sanctions|aide|amis|reseau|profil-public|crews|media|prestataire|structure|pro)(\/|$)/.test(
+  return /^\/app\/(moi|securite|sanctions|aide|reseau|profil-public|crews|media|prestataire|structure|pro)(\/|$)/.test(
     pathname,
   )
     ? "profile"

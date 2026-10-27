@@ -43,7 +43,7 @@ import { EventTile } from "../components/EventTile";
 import { CrewRowR2, PeopleEmpty, PeopleSection, PersonRowR2, PrivacyNote } from "../components/ExplorerPeople";
 import { ExplorerProTile } from "../components/ExplorerPro";
 import { ChipGroup, ChoiceList, deptLong, Hidden, PillSheet, WhereForm } from "../components/ExplorerUi";
-import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
+import { cardVisibility, FollowAction, PersonAvatar, PersonRow } from "../components/People";
 import { ProsMap } from "../components/ProsMap";
 import { ProTile } from "../components/ProTile";
 import { api, apiOrThrow, getMe } from "../lib/api.server";
@@ -72,7 +72,7 @@ import {
   preferredFormats,
   prosParams,
 } from "../lib/explorerQuery";
-import { friendAction } from "../lib/friends.server";
+import { followAction } from "../lib/follow.server";
 import { isMessageIntent, messageAction } from "../lib/messaging.server";
 import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/app-explorer";
@@ -397,7 +397,7 @@ export async function action({ request }: Route.ActionArgs) {
     // Quel crew vient de recevoir une demande : sa ligne passe à « Demande envoyée ».
     return data({ ...res.data, crewId: String(form.get("crewId") ?? "") }, res.init ?? undefined);
   }
-  return friendAction(request, form);
+  return followAction(request, form);
 }
 
 /** Adresse de l'Explorer avec les réglages donnés (les valeurs vides sont omises). */
@@ -464,14 +464,14 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   const busy = useNavigation().state !== "idle";
   const done = actionData as unknown as
     | {
-        friendError?: string | null;
+        followError?: string | null;
         crewError?: string | null;
         crewOk?: string | null;
         crewId?: string;
         messageError?: string | null;
       }
     | undefined;
-  const actionError = done?.friendError ?? done?.crewError ?? done?.messageError ?? null;
+  const actionError = done?.followError ?? done?.crewError ?? done?.messageError ?? null;
   const sentCrew = done && !done.crewError && done.crewId ? done.crewId : null;
 
   /** L'adresse avec les réglages courants (`cur`) et la recherche, modifiés par `over` (`null` retire un réglage). */
@@ -1201,12 +1201,13 @@ function ResultGroups({ results, busy, q }: { results: SearchResults; busy: bool
                 key={person.userId}
                 person={person}
                 action={
-                  <FriendAction
-                    state={person.friendship}
+                  <FollowAction
                     pseudo={person.pseudo}
-                    userId={person.userId}
-                    requestId={person.friendshipId}
-                    source="search"
+                    mine={person.follow.mine}
+                    followsMe={person.follow.followsMe}
+                    canFollow
+                    visibility={cardVisibility(person)}
+                    size="small"
                     busy={busy}
                   />
                 }

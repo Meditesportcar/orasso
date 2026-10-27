@@ -2,15 +2,15 @@ import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useNavigation } from "react-router";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
-import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
+import { cardVisibility, FollowAction, PersonAvatar, PersonRow } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
-import { friendAction } from "../lib/friends.server";
+import { followAction } from "../lib/follow.server";
 import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/vehicule";
 
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
-// public ou ami, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
+// public ou abonné accepté, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
 export const handle = ficheHandle;
 
@@ -31,7 +31,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  return friendAction(request, await request.formData());
+  return followAction(request, await request.formData());
 }
 
 export default function Vehicule({ loaderData, actionData }: Route.ComponentProps) {
@@ -154,9 +154,9 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
             {socialLabels.ownersNearby}
           </h2>
           <p className="o-t-caption s-muted">{socialLabels.ownersNearbyHint}</p>
-          {actionData?.friendError && (
+          {actionData?.followError && (
             <p className="s-error" role="alert">
-              {actionData.friendError}
+              {actionData.followError}
             </p>
           )}
           {!nearby ? null : nearby.sector.length === 0 ? (
@@ -175,11 +175,13 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
                   key={person.userId}
                   person={person}
                   action={
-                    <FriendAction
-                      state={person.friendship}
+                    <FollowAction
                       pseudo={person.pseudo}
-                      userId={person.userId}
-                      requestId={person.friendshipId}
+                      mine={person.follow.mine}
+                      followsMe={person.follow.followsMe}
+                      canFollow
+                      visibility={cardVisibility(person)}
+                      size="small"
                       busy={busy}
                     />
                   }

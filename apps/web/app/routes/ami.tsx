@@ -1,13 +1,14 @@
 import { Button } from "@orasso/design-system/web";
-import { socialLabels } from "@orasso/shared";
+import { type FollowState, networkLabels as N } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
 import { api, getMe } from "../lib/api.server";
 import { setInviteCookie } from "../lib/invite.server";
 import type { Route } from "./+types/ami";
 
-// Lien d'ami (lot 15, ARCHITECTURE-SUITE § 1.3). Sans compte : cookie `orasso-invite` (24 h) puis inscription, le
-// parrain gagne ses points quand l'adresse est confirmée. Connecté (lot 17) : demande d'ami vers le propriétaire du lien.
+// Lien de profil (lot 15, ARCHITECTURE-SUITE § 1.3). Sans compte : cookie `orasso-invite` (24 h) puis inscription, le
+// parrain gagne ses points quand l'adresse est confirmée. Connecté (lot 17, R6b) : suivre le propriétaire du lien (une
+// demande si son compte est privé). L'adresse `/ami/:jeton` est gardée pour les liens déjà partagés.
 export function meta({ loaderData }: Route.MetaArgs) {
   const who = loaderData?.pseudo ? `${loaderData.pseudo} t'invite sur Orasso` : "Invitation · Orasso";
   return [{ title: who }, { name: "robots", content: "noindex" }];
@@ -29,7 +30,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const res = await api<{ status: "pending" | "accepted"; pseudo: string }>(request, "/friends/requests/by-invite", {
+  const res = await api<{ mine: FollowState; pseudo: string }>(request, "/follows/by-invite", {
     method: "POST",
     json: { token: params.jeton },
   });
@@ -44,7 +45,7 @@ export default function Ami({ loaderData, actionData }: Route.ComponentProps) {
     return (
       <div className="s-narrow s-stack">
         <h1 className="s-title">Lien inconnu</h1>
-        <p className="s-notice">Ce lien d'ami n'existe pas ou plus.</p>
+        <p className="s-notice">Ce lien n'existe pas ou plus.</p>
         <Button href="/" icon="home">
           Découvrir Orasso
         </Button>
@@ -57,28 +58,29 @@ export default function Ami({ loaderData, actionData }: Route.ComponentProps) {
       {connected ? (
         <>
           {own ? (
-            <p className="s-lead">C'est ton propre lien d'ami : partage-le pour inviter tes amis sur Orasso.</p>
+            <p className="s-lead" data-testid="ami-own">
+              {N.ownInviteLink}
+            </p>
           ) : actionData?.sent ? (
             <p className="s-notice s-notice--ok" role="status" data-testid="ami-sent">
-              {actionData.sent.status === "accepted"
-                ? `Vous êtes amis avec ${actionData.sent.pseudo}.`
-                : socialLabels.requestSentTo(actionData.sent.pseudo)}
+              {actionData.sent.mine === "accepted"
+                ? N.followedNow(actionData.sent.pseudo)
+                : N.requestedNow(actionData.sent.pseudo)}
             </p>
           ) : (
             <Form method="post" className="s-stack">
-              <p className="s-lead">Envoie une demande d'ami à {pseudo}.</p>
               {actionData?.error && (
                 <p className="s-error" role="alert">
                   {actionData.error}
                 </p>
               )}
-              <Button type="submit" variant="primary" icon="add" loading={busy}>
-                {socialLabels.addFriend}
+              <Button type="submit" variant="primary" icon="add" loading={busy} data-testid="follow-button">
+                {N.followPseudo(pseudo)}
               </Button>
             </Form>
           )}
-          <Button variant="secondary" href={own ? "/app/amis" : `/u/${encodeURIComponent(pseudo)}`} icon="profile">
-            {own ? socialLabels.myFriends : `Voir le profil de ${pseudo}`}
+          <Button variant="secondary" href={own ? "/app/reseau" : `/u/${encodeURIComponent(pseudo)}`} icon="profile">
+            {own ? N.title : `Voir le profil de ${pseudo}`}
           </Button>
         </>
       ) : (

@@ -1,5 +1,5 @@
 // Actions de messagerie du site (lot 18), partagées par le profil d'un autre, la page d'une structure et celle d'un
-// événement : ouvrir une conversation (ami ou organisateur) ou envoyer une demande de contact.
+// événement : ouvrir une conversation (abonné ou organisateur) ou envoyer une demande de contact.
 import type { OpenConversationResult } from "@orasso/shared";
 import { data, redirect } from "react-router";
 
@@ -14,7 +14,7 @@ export function isMessageIntent(intent: string): boolean {
 }
 
 /**
- * `message_open` (userId) : conversation existante ou entre amis → redirection ; pas amis → `{contact: true}` (le
+ * `message_open` (userId) : conversation existante ou permise entre abonnés → redirection ; sinon → `{contact: true}` (le
  * formulaire de demande de contact s'affiche). `contact_organizer` (structureId) : conversation avec la structure.
  * `contact_request` (pseudo, message) : demande de contact (une seule possible).
  */

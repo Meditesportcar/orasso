@@ -1,8 +1,18 @@
-import { Button, Chip } from "@orasso/design-system/web";
-import { type FriendshipState, friendStateLabels, gradeLabels, type PersonCard, socialLabels } from "@orasso/shared";
+import { Button, Chip, Icon, type IconName } from "@orasso/design-system/web";
+import {
+  type FollowButtonKind,
+  type FollowState,
+  followButtonKind,
+  gradeLabels,
+  networkLabels as N,
+  type PersonCard,
+  type ProfileVisibility,
+} from "@orasso/shared";
+import type { MouseEvent } from "react";
 import { Form } from "react-router";
 
-// Éléments sociaux communs du site (lot 17) : avatar, bouton d'ami, ligne de personne.
+// Éléments sociaux communs du site (lot 17 ; lot R6b : le bouton « Suivre » remplace celui d'ami) : avatar, bouton de
+// suivi, ligne de personne.
 
 export function PersonAvatar({ url, pseudo, size = 40 }: { url: string | null; pseudo: string; size?: number }) {
   return (
@@ -12,75 +22,150 @@ export function PersonAvatar({ url, pseudo, size = 40 }: { url: string | null; p
   );
 }
 
+const FOLLOW_LABEL: Record<FollowButtonKind, string> = {
+  follow: N.follow,
+  follow_back: N.followBack,
+  request: N.request,
+  following: N.followed,
+  requested: N.requested,
+};
+const FOLLOW_ICON: Record<FollowButtonKind, IconName> = {
+  follow: "add",
+  follow_back: "add",
+  request: "add",
+  following: "check",
+  requested: "wait",
+};
+/** Identifiants de test de la version compacte (listes). */
+const SMALL_TEST_ID: Record<FollowButtonKind, string> = {
+  follow: "net-follow",
+  follow_back: "net-follow-back",
+  request: "net-follow",
+  following: "net-followed",
+  requested: "net-requested",
+};
+
+/** Un abonnement à poser (principal sur le profil) ou un état déjà posé (secondaire, confirmation avant de le défaire). */
+const isAction = (k: FollowButtonKind) => k === "follow" || k === "follow_back" || k === "request";
+
+/** « Garder » : referme la confirmation en place (sans script, le clic sur le bouton « Abonné » la referme aussi). */
+function keep(e: MouseEvent<HTMLElement>) {
+  const d = e.currentTarget.closest("details");
+  if (d) d.open = false;
+}
+
 /**
- * Bouton d'ami selon la relation : Ajouter / Demande envoyée / Accepter (+ Refuser) / Ami (retirer). Un seul bouton
- * principal par écran : `primary` le réserve à l'action qui compte ici.
+ * Le bouton unique « Suivre » (lot R6b, D37 : il remplace l'amitié ; maquettes R6.1 et R6.2), selon `followButtonKind` :
+ * Suivre / Suivre en retour / Demander à suivre posent l'abonnement ; Abonné / Demandé ouvrent, en place, la
+ * confirmation « Ne plus suivre X ? » / « Annuler ta demande à X ? ». Tout passe par des formulaires (`intent` `follow`
+ * ou `unfollow`) et une confirmation `<details>` : ça marche sans JavaScript.
+ * `full` : pleine largeur de sa colonne, principal pour s'abonner (profil). `small` : compact et toujours secondaire (listes).
  */
-export function FriendAction({
-  state,
+export function FollowAction({
   pseudo,
-  userId,
-  requestId,
-  primary = false,
-  source = "profile",
+  mine,
+  followsMe,
+  canFollow,
+  visibility,
+  size = "full",
+  inert = false,
   busy = false,
 }: {
-  state: FriendshipState;
   pseudo: string;
-  userId: string;
-  requestId: string | null;
-  primary?: boolean;
-  source?: "profile" | "search";
+  mine: FollowState;
+  followsMe: boolean;
+  canFollow: boolean;
+  visibility: ProfileVisibility;
+  size?: "full" | "small";
+  /** Aperçu : le bouton ne fait rien. */
+  inert?: boolean;
   busy?: boolean;
 }) {
-  if (state === "pending_out") {
+  const kind = followButtonKind({ canFollow, mine, followsMe, visibility });
+  if (!kind) return null;
+  const small = size === "small";
+  const testId = small ? SMALL_TEST_ID[kind] : "follow-button";
+  const label = FOLLOW_LABEL[kind];
+  const buttonClass = small ? "fl-sm" : undefined;
+  if (inert) {
     return (
-      <Button variant="secondary" icon="wait" disabled data-testid="friend-state">
-        {friendStateLabels.pending_out}
+      <Button
+        variant={isAction(kind) && !small ? "primary" : "secondary"}
+        icon={FOLLOW_ICON[kind]}
+        fullWidth={!small}
+        className={buttonClass}
+        tabIndex={-1}
+        data-testid={testId}
+      >
+        {label}
       </Button>
     );
   }
-  if (state === "pending_in" && requestId) {
+  if (isAction(kind)) {
     return (
-      <div className="s-row">
-        <Form method="post">
-          <input type="hidden" name="intent" value="friend_accept" />
-          <input type="hidden" name="id" value={requestId} />
-          <Button type="submit" variant={primary ? "primary" : "secondary"} icon="check" loading={busy}>
-            {socialLabels.accept}
-          </Button>
-        </Form>
-        <Form method="post">
-          <input type="hidden" name="intent" value="friend_decline" />
-          <input type="hidden" name="id" value={requestId} />
-          <Button type="submit" variant="secondary" icon="close" loading={busy}>
-            {socialLabels.decline}
-          </Button>
-        </Form>
-      </div>
-    );
-  }
-  if (state === "friends") {
-    return (
-      <Form method="post">
-        <input type="hidden" name="intent" value="friend_remove" />
-        <input type="hidden" name="userId" value={userId} />
-        <Button type="submit" variant="secondary" icon="close" loading={busy} data-testid="friend-remove">
-          {socialLabels.removeFriend}
+      <Form method="post" className="fl-form">
+        <input type="hidden" name="pseudo" value={pseudo} />
+        <Button
+          type="submit"
+          name="intent"
+          value="follow"
+          variant={small ? "secondary" : "primary"}
+          icon={FOLLOW_ICON[kind]}
+          fullWidth={!small}
+          className={buttonClass}
+          loading={busy}
+          aria-label={`${label} ${pseudo}`}
+          data-testid={testId}
+        >
+          {label}
         </Button>
       </Form>
     );
   }
+  const cancel = kind === "requested";
   return (
-    <Form method="post">
-      <input type="hidden" name="intent" value="friend_add" />
-      <input type="hidden" name="pseudo" value={pseudo} />
-      <input type="hidden" name="source" value={source} />
-      <Button type="submit" variant={primary ? "primary" : "secondary"} icon="add" loading={busy}>
-        {socialLabels.addFriend}
-      </Button>
-    </Form>
+    <details className={small ? "fl-conf fl-conf--sm" : "fl-conf"}>
+      <summary
+        className={`o-button o-t-button o-button--secondary${small ? " fl-sm" : " o-button--full"}`}
+        aria-label={`${label} ${pseudo}`}
+        data-testid={testId}
+      >
+        <Icon name={FOLLOW_ICON[kind]} size={18} />
+        <span className="o-button__label">{label}</span>
+      </summary>
+      <div className="fl-confirm" data-testid="follow-confirm">
+        <p className="fl-confirm__q">{cancel ? N.cancelRequestConfirm(pseudo) : N.unfollowConfirm(pseudo)}</p>
+        {!cancel && visibility === "private" && <p className="o-t-caption s-muted">{N.unfollowPrivateHint}</p>}
+        <Form method="post" className="fl-form">
+          <input type="hidden" name="pseudo" value={pseudo} />
+          <Button
+            type="submit"
+            name="intent"
+            value="unfollow"
+            variant="alert"
+            icon="close"
+            fullWidth
+            loading={busy}
+            data-testid="follow-confirm-yes"
+          >
+            {cancel ? N.cancelRequest : N.unfollow}
+          </Button>
+        </Form>
+        <Button variant="secondary" icon="back" fullWidth onClick={keep} data-testid="follow-confirm-keep">
+          {N.keep}
+        </Button>
+      </div>
+    </details>
   );
+}
+
+/**
+ * Une carte de personne (recherche, propriétaires près de chez moi) ne dit pas si le compte est privé : ses départements
+ * sont absents d'un compte privé dont on n'est pas abonné accepté. Sert seulement à choisir « Suivre » ou « Demander à
+ * suivre » ; l'API tranche (même règle que l'appli).
+ */
+export function cardVisibility(person: Pick<PersonCard, "departments" | "follow">): ProfileVisibility {
+  return person.departments === null && person.follow.mine !== "accepted" ? "private" : "public";
 }
 
 /** Une personne dans une liste : avatar, pseudo, grade, secteur, véhicules (le nom d'un véhicule ne se tronque jamais). */

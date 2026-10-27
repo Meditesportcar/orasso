@@ -3,7 +3,7 @@ import {
   type ContactRequestView,
   type ConversationPage,
   type ConversationSummary,
-  type FriendRequestView,
+  type FollowRequestsPage,
   type InboxSummary,
   messagingLabels,
   type NotificationFamily,
@@ -20,7 +20,7 @@ import { formatDay, formatTime } from "../lib/format";
 import { byRecent, inboxSources } from "../lib/inbox-feed";
 import type { Route } from "./+types/journal";
 
-// Journal (lot 17, ARCHITECTURE-SUITE § 2.4) : le fil d'actualité des amis et les notifications, dans un seul fil
+// Journal (lot 17, ARCHITECTURE-SUITE § 2.4) : le fil d'actualité des personnes suivies et les notifications, dans un seul fil
 // chronologique. 7 jours en arrière, sauf ce qui n'a pas été lu. Lot C5 : c'est le segment « Tout » de la Boîte.
 export function meta() {
   return [{ title: "Boîte · Orasso" }, { name: "robots", content: "noindex" }];
@@ -39,7 +39,7 @@ type JournalItem = {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const cursor = new URL(request.url).searchParams.get("suite");
-  const [page, summary, conversations, friends, contacts] = await Promise.all([
+  const [page, summary, conversations, follows, contacts] = await Promise.all([
     apiOrThrow<{ items: JournalItem[]; nextCursor: string | null }>(
       request,
       `/me/notifications?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
@@ -48,10 +48,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     // « Tout » réunit messages, demandes et notifications (`sh-inbox`) : les plus récents de chaque sorte, sur la
     // première page seulement (« Plus ancien » ne pagine que les notifications).
     cursor ? null : api<ConversationPage>(request, "/me/conversations?limit=10"),
-    cursor ? null : api<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
+    cursor ? null : api<FollowRequestsPage>(request, "/me/follow-requests"),
     cursor ? null : api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
   ]);
-  return { ...page, summary, ...inboxSources(conversations, friends, contacts) };
+  return { ...page, summary, ...inboxSources(conversations, follows, contacts) };
 }
 
 export async function action({ request }: Route.ActionArgs) {

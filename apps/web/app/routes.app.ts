@@ -37,9 +37,10 @@ export default [
     route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
     route("app/prestataire", "routes/prestataire.tsx"),
     route("app/billets", "routes/billets.tsx"),
-    // Social (lot 17) : amis, Journal, profils et véhicules des autres (connectés seulement).
+    // Social (lot 17) : Journal, profils et véhicules des autres (connectés seulement). Lot R6b : « Mes amis » redirige
+    // vers « Ton réseau » (plus d'amitié).
     route("app/amis", "routes/amis.tsx"),
-    // Lot R4c : « Ton réseau » (abonnés, abonnements, amis) et l'aperçu de mon profil public.
+    // Lot R4c : « Ton réseau » (abonnés, abonnements, demandes) et l'aperçu de mon profil public.
     route("app/reseau", "routes/reseau.tsx"),
     route("app/profil-public", "routes/profil-public.tsx"),
     // Lot R5b : « Modifier mon profil » (photo, pseudo, description, réseaux).

@@ -102,7 +102,7 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
       : "Inscription impossible pour le moment.";
     return { ok: false, errors, status: res.status === 422 ? 409 : 400, values };
   }
-  // Copie modifiable des en-têtes (cookies de session + effacement du cookie de lien d'ami, lot 15).
+  // Copie modifiable des en-têtes (cookies de session + effacement du cookie de lien de profil, lot 15).
   const headers = withCookies(res.headers);
   const cookie = cookieFrom(res.headers);
   await applyInviteAfterSignup(request, cookie, headers);

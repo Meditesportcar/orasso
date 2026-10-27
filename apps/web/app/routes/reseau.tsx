@@ -3,37 +3,39 @@ import {
   type FollowersPage,
   type FollowingPage,
   type FollowPerson,
-  type FriendItem,
-  type FriendRequestView,
+  type FollowRequestsPage,
   gradeLabels,
   networkLabels as N,
   type NetworkCounts,
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
-import { PersonAvatar } from "../components/People";
+import { FollowAction, PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
-import { friendAction, isFriendIntent } from "../lib/friends.server";
+import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import type { Route } from "./+types/reseau";
 import "../styles/network.css";
 
-// Lot R4c (maquette R4.6b) : « Ton réseau » sur le site, comme l'appli : trois onglets (abonnés, abonnements, amis),
-// recherche dans la liste (côté serveur), 30 par page (« Suivants »), « Suivre aussi » / « Suivi », demandes d'amis en
-// tête des amis. Toi seul vois ces listes : la page ne lit que les routes `/me/...` de la personne connectée.
+// Lot R4c (maquette R4.6b), puis lot R6b (D37, maquette R6.2) : « Ton réseau » sur le site, comme l'appli : onglets
+// « N abonnés », « N abonnements » et, pour un compte privé (ou s'il y en a), « N demandes » ; `?liste=` choisit la liste.
+// Recherche dans la liste (côté serveur), 30 par page (« Suivants »). Abonnés : « Suivre en retour » / « Abonné » /
+// « Demandé ». Demandes : « Accepter » et ✕. Toi seul vois ces listes : la page ne lit que les routes `/me/...`.
 export function meta() {
   return [{ title: "Ton réseau · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
-const TABS = ["abonnes", "abonnements", "amis"] as const;
+const TABS = ["abonnes", "abonnements", "demandes"] as const;
 type Tab = (typeof TABS)[number];
+
+type PeoplePage = Extract<FollowingPage, { kind: "people" }>;
+type OrgPage = Extract<FollowingPage, { kind: "structures" | "pros" }>;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const url = new URL(request.url);
-  const raw = url.searchParams.get("onglet") ?? "abonnes";
-  const tab: Tab = (TABS as readonly string[]).includes(raw) ? (raw as Tab) : "abonnes";
+  const raw = url.searchParams.get("liste") ?? "abonnes";
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 40);
-  // Tour 2 : un curseur par groupe (personnes ou abonnés, organisateurs, pros), chacun avec son « Suivants ».
+  // Un curseur par groupe (personnes ou abonnés, organisateurs, pros), chacun avec son « Suivants ».
   const cursor = url.searchParams.get("apres") ?? "";
   const cursors: Record<"people" | "structures" | "pros", string> = {
     people: cursor,
@@ -46,106 +48,145 @@ export async function loader({ request }: Route.LoaderArgs) {
     return s ? `?${s}` : "";
   };
   const network = await apiOrThrow<NetworkCounts>(request, "/me/network");
+  const requestsTab = network.private || network.requestsIn > 0 || raw === "demandes";
+  const tab: Tab = raw === "abonnements" ? "abonnements" : raw === "demandes" && requestsTab ? "demandes" : "abonnes";
+  const base = { me, tab, q, network, requestsTab, error: null as string | null };
+  const none = { followers: null, following: null, requests: null };
+
   if (tab === "abonnes") {
-    const followers = await apiOrThrow<FollowersPage>(request, `/me/followers${qs(cursor ? { cursor } : {})}`);
-    return { me, tab, q, network, followers, following: null, friends: null };
+    const res = await api<FollowersPage>(request, `/me/followers${qs(cursor ? { cursor } : {})}`);
+    return res.ok
+      ? { ...base, ...none, followers: res.data }
+      : { ...base, ...none, error: res.error.message || "Impossible de lire cette liste." };
   }
-  if (tab === "abonnements") {
-    type PeoplePage = Extract<FollowingPage, { kind: "people" }>;
-    type OrgPage = Extract<FollowingPage, { kind: "structures" | "pros" }>;
-    const page = (kind: "people" | "structures" | "pros") =>
-      apiOrThrow<FollowingPage>(
-        request,
-        `/me/following${qs({ kind, ...(cursors[kind] ? { cursor: cursors[kind] } : {}) })}`,
-      );
-    const [people, structures, pros] = (await Promise.all([page("people"), page("structures"), page("pros")])) as [
-      PeoplePage,
-      OrgPage,
-      OrgPage,
-    ];
-    return { me, tab, q, network, followers: null, following: { people, structures, pros }, friends: null };
+  if (tab === "demandes") {
+    const res = await api<FollowRequestsPage>(request, `/me/follow-requests${qs(cursor ? { cursor } : {})}`);
+    return res.ok
+      ? { ...base, ...none, requests: res.data }
+      : { ...base, ...none, error: res.error.message || "Impossible de lire cette liste." };
   }
-  const [friends, requests] = await Promise.all([
-    apiOrThrow<{ items: FriendItem[] }>(request, `/me/friends${qs({})}`),
-    q ? Promise.resolve(null) : api<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
-  ]);
+  const page = (kind: "people" | "structures" | "pros") =>
+    api<FollowingPage>(request, `/me/following${qs({ kind, ...(cursors[kind] ? { cursor: cursors[kind] } : {}) })}`);
+  const [people, structures, pros] = await Promise.all([page("people"), page("structures"), page("pros")]);
+  if (!people.ok || !structures.ok || !pros.ok) {
+    const failed = [people, structures, pros].find((r) => !r.ok);
+    return {
+      ...base,
+      ...none,
+      error: (failed && !failed.ok && failed.error.message) || "Impossible de lire cette liste.",
+    };
+  }
   return {
-    me,
-    tab,
-    q,
-    network,
-    followers: null,
-    following: null,
-    friends: { items: friends.items, requests: requests?.ok ? requests.data.items : [] },
+    ...base,
+    ...none,
+    following: {
+      people: people.data as PeoplePage,
+      structures: structures.data as OrgPage,
+      pros: pros.data as OrgPage,
+    },
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
-  if (isFriendIntent(intent)) return friendAction(request, form);
-  if (intent === "follow" || intent === "unfollow") {
-    const res = await api(request, `/users/${encodeURIComponent(String(form.get("pseudo") ?? ""))}/follow`, {
-      method: intent === "follow" ? "POST" : "DELETE",
-    });
-    return { friendError: res.ok ? null : res.error.message };
-  }
-  return { friendError: "Action inconnue." };
+  if (isFollowIntent(intent)) return followAction(request, form);
+  return { followError: "Action inconnue." } satisfies FollowActionData;
 }
 
 function caption(p: FollowPerson) {
-  return [p.vehicle ?? gradeLabels[p.grade], p.friend ? N.yourFriend : null].filter(Boolean).join(" · ");
+  return p.vehicle ?? gradeLabels[p.grade];
+}
+
+function PersonLine({ p }: { p: FollowPerson }) {
+  return (
+    <a className="r6row__main" href={`/u/${encodeURIComponent(p.pseudo)}?retour=/app/reseau`}>
+      <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={42} />
+      <span>
+        <b>{p.pseudo}</b>
+        <small className="o-never-truncate">{caption(p)}</small>
+      </span>
+    </a>
+  );
 }
 
 function PersonRows({ items, busy }: { items: FollowPerson[]; busy: boolean }) {
   return (
-    <ul className="n-list">
+    <ul className="r6list">
       {items.map((p) => (
-        <li key={p.userId} className="n-row" data-testid="net-person">
-          <a className="n-row__main" href={`/u/${encodeURIComponent(p.pseudo)}?retour=/app/reseau`}>
-            <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} />
-            <span>
-              <strong>{p.pseudo}</strong>
-              <small>{caption(p)}</small>
-            </span>
-          </a>
-          {(p.following || p.canFollow) && (
-            <Form method="post">
-              <input type="hidden" name="pseudo" value={p.pseudo} />
-              <Button
-                type="submit"
-                name="intent"
-                value={p.following ? "unfollow" : "follow"}
-                variant="secondary"
-                icon={p.following ? "check" : "add"}
-                loading={busy}
-                data-testid={p.following ? "net-followed" : "net-follow"}
-              >
-                {p.following ? N.followed : N.followBack}
-              </Button>
-            </Form>
-          )}
+        <li key={p.userId} className="r6row" data-testid="net-person">
+          <PersonLine p={p} />
+          <FollowAction
+            pseudo={p.pseudo}
+            mine={p.mine}
+            followsMe={p.followsMe}
+            canFollow={p.canFollow}
+            visibility={p.visibility}
+            size="small"
+            busy={busy}
+          />
         </li>
       ))}
     </ul>
   );
 }
 
-export default function Reseau({ loaderData, actionData }: Route.ComponentProps) {
-  const { me, tab, q, network, followers, following, friends } = loaderData;
+function RequestRows({ items, busy }: { items: FollowPerson[]; busy: boolean }) {
+  return (
+    <ul className="r6list">
+      {items.map((p) => (
+        <li key={p.userId} className="r6row" data-testid="net-request">
+          <PersonLine p={p} />
+          <Form method="post" className="r6row__acts">
+            <input type="hidden" name="userId" value={p.userId} />
+            <input type="hidden" name="pseudo" value={p.pseudo} />
+            <Button
+              type="submit"
+              name="intent"
+              value="follow_accept"
+              variant="secondary"
+              icon="check"
+              className="fl-sm"
+              loading={busy}
+              data-testid="net-request-accept"
+            >
+              {N.accept}
+            </Button>
+            <Button
+              type="submit"
+              name="intent"
+              value="follow_decline"
+              variant="close"
+              label={N.decline(p.pseudo)}
+              className="fl-x"
+              disabled={busy}
+              data-testid="net-request-decline"
+            />
+          </Form>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function Reseau({ loaderData, actionData: raw }: Route.ComponentProps) {
+  const { me, tab, q, network, requestsTab, error, followers, following, requests } = loaderData;
+  const actionData = raw as FollowActionData | undefined;
   const busy = useNavigation().state !== "idle";
   const label = (t: Tab) =>
     t === "abonnes"
       ? `${network.followers} ${N.followers(network.followers)}`
       : t === "abonnements"
         ? `${network.following} ${N.following(network.following)}`
-        : `${network.friends} ${N.friends(network.friends)}`;
+        : `${network.requestsIn} ${N.requests(network.requestsIn)}`;
+  const tabs = TABS.filter((t) => t !== "demandes" || requestsTab);
+  const here = `/app/reseau?${new URLSearchParams({ liste: tab, ...(q ? { q } : {}) }).toString()}`;
   const next = (cursor: string | null, param: "apres" | "apres_org" | "apres_pro" = "apres") =>
     cursor ? (
       <Button
         variant="secondary"
         icon="down"
-        href={`/app/reseau?${new URLSearchParams({ onglet: tab, ...(q ? { q } : {}), [param]: cursor }).toString()}`}
+        href={`/app/reseau?${new URLSearchParams({ liste: tab, ...(q ? { q } : {}), [param]: cursor }).toString()}`}
         data-testid={param === "apres" ? "net-next" : `net-next-${param === "apres_org" ? "structures" : "pros"}`}
       >
         Suivants
@@ -162,11 +203,11 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
         <h1 className="s-title">{me.profile.pseudo}</h1>
         <p className="o-t-caption s-muted">{N.title}</p>
       </div>
-      <nav className="n-tabs" aria-label={N.title} data-testid="net-tabs">
-        {TABS.map((t) => (
+      <nav className={tabs.length === 2 ? "n-tabs n-tabs--two" : "n-tabs"} aria-label={N.title} data-testid="net-tabs">
+        {tabs.map((t) => (
           <a
             key={t}
-            href={`/app/reseau?onglet=${t}`}
+            href={`/app/reseau?liste=${t}`}
             aria-current={t === tab ? "page" : undefined}
             data-testid={`net-tab-${t}`}
           >
@@ -175,16 +216,30 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
         ))}
       </nav>
       <Form method="get" className="n-search" role="search">
-        <input type="hidden" name="onglet" value={tab} />
+        <input type="hidden" name="liste" value={tab} />
         <TextField label={N.searchLabel} name="q" defaultValue={q} placeholder={N.search} data-testid="net-search" />
         <Button type="submit" variant="secondary" icon="search">
           Chercher
         </Button>
       </Form>
-      {actionData?.friendError && (
+      {actionData?.followError && (
         <p className="s-error" role="alert">
-          {actionData.friendError}
+          {actionData.followError}
         </p>
+      )}
+      {actionData?.followNotice && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="net-notice">
+          {actionData.followNotice}
+        </p>
+      )}
+
+      {error && (
+        <div className="s-stack s-stack--tight" role="alert" data-testid="net-error">
+          <p className="s-error">{error}</p>
+          <Button variant="secondary" icon="undo" href={here}>
+            Réessayer
+          </Button>
+        </div>
       )}
 
       {followers &&
@@ -196,6 +251,20 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
         ) : (
           empty(N.emptyFollowers)
         ))}
+
+      {requests && (
+        <>
+          <p className="o-t-caption s-muted">{N.requestsHint}</p>
+          {requests.items.length ? (
+            <div className="n-group" data-testid="net-requests">
+              <RequestRows items={requests.items} busy={busy} />
+              {next(requests.nextCursor)}
+            </div>
+          ) : (
+            empty(N.emptyRequests)
+          )}
+        </>
+      )}
 
       {following &&
         (following.people.total + following.structures.total + following.pros.total === 0 ? (
@@ -243,80 +312,6 @@ export default function Reseau({ loaderData, actionData }: Route.ComponentProps)
             )}
           </>
         ))}
-
-      {friends && (
-        <>
-          {friends.items.length + friends.requests.length === 0 && empty(N.emptyFriends)}
-          {friends.requests.length > 0 && (
-            <section className="n-group" data-testid="net-requests">
-              <div className="n-group__head">
-                <h2 className="s-h2">{N.requestsIn}</h2>
-                <span className="o-t-caption">{friends.requests.length}</span>
-              </div>
-              <ul className="n-list">
-                {friends.requests.map((r) => (
-                  <li key={r.id} className="n-row">
-                    <a className="n-row__main" href={`/u/${encodeURIComponent(r.person.pseudo)}?retour=/app/reseau`}>
-                      <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} />
-                      <span>
-                        <strong>{r.person.pseudo}</strong>
-                        <small>{r.message ?? gradeLabels[r.person.grade]}</small>
-                      </span>
-                    </a>
-                    <Form method="post" className="n-actions">
-                      <input type="hidden" name="id" value={r.id} />
-                      <Button
-                        type="submit"
-                        name="intent"
-                        value="friend_accept"
-                        variant="secondary"
-                        icon="check"
-                        loading={busy}
-                      >
-                        Accepter
-                      </Button>
-                      <Button
-                        type="submit"
-                        name="intent"
-                        value="friend_decline"
-                        variant="secondary"
-                        icon="close"
-                        loading={busy}
-                      >
-                        Refuser
-                      </Button>
-                    </Form>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {friends.items.length > 0 && (
-            <section className="n-group" data-testid="net-friends">
-              <div className="n-group__head">
-                <h2 className="s-h2">{N.myFriends}</h2>
-                <span className="o-t-caption">{friends.items.length}</span>
-              </div>
-              <ul className="n-list">
-                {friends.items.map((f) => (
-                  <li key={f.userId} className="n-row">
-                    <a className="n-row__main" href={`/u/${encodeURIComponent(f.pseudo)}?retour=/app/reseau`}>
-                      <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} />
-                      <span>
-                        <strong>{f.pseudo}</strong>
-                        <small>{gradeLabels[f.grade]}</small>
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          <Button variant="secondary" icon="add" href="/app/amis" data-testid="net-add-friend">
-            Ajouter un ami
-          </Button>
-        </>
-      )}
 
       <p className="n-note" data-testid="net-privacy">
         <Icon name="lock" size={16} />

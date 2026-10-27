@@ -8,6 +8,7 @@ import {
   gradeLabels,
   publicProfileLabels as L,
   networkLabels,
+  type PreviewAs,
   type ProfileEvent,
   type ProfileVehicle,
   publicPreviewLabels as PV,
@@ -23,7 +24,7 @@ import { now } from "../lib/clock";
 import { formatDay, formatTime } from "../lib/format";
 import { withRetour } from "../lib/retour";
 import { PassportStamp } from "./PassportStamp";
-import { FriendAction } from "./People";
+import { FollowAction } from "./People";
 import { ReportDialog } from "./ReportDialog";
 import "../styles/passport.css";
 import "../styles/profile-r5.css";
@@ -50,7 +51,7 @@ type Props = {
   /** `live` : le profil d'un autre ; `self` : le mien sur `/u/:pseudo` ; `preview` : l'aperçu (boutons inertes). */
   mode: PublicProfileMode;
   /** Aperçu seulement : le regard choisi. */
-  previewAs?: "member" | "friend";
+  previewAs?: PreviewAs;
   /** Dans la carte, sous les boutons : erreurs, formulaire de demande de contact. */
   notices?: ReactNode;
   /** Sous « Vu à » : coordonnées de l'organisateur, hub de mon profil. */
@@ -78,7 +79,6 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
   const counts = [
     [p.followersCount, networkLabels.followers],
     [p.followingCount, networkLabels.following],
-    [p.friendsCount, networkLabels.friends],
     [p.outingsCount, networkLabels.outings],
   ].filter((c): c is [number, (n: number) => string] => c[0] !== null);
   const Title = preview ? "h2" : "h1";
@@ -111,6 +111,11 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
             <Title style={{ "--em": wideWordEm(p.pseudo) } as CSSProperties}>{p.pseudo}</Title>
             <div className="pr5-tags">
               <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
+              {live && p.follow.followsMe && (
+                <span className="r6tag" data-testid="follows-you">
+                  {networkLabels.followsYou}
+                </span>
+              )}
               {limited ? (
                 <span className="pr5-lock">
                   <Icon name="lock" size={14} /> {L.privateAccount}
@@ -182,36 +187,20 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
 
         {live && (
           <>
-            <div className="pr5-acts">
-              <FriendAction
-                state={p.friendship.state}
+            <div className="pr5-acts r6acts">
+              {/* Lot R6b (D37, maquette R6.1) : UN seul bouton, selon le lien : Suivre, Suivre en retour, Demander à suivre,
+                  Abonné, Demandé. */}
+              <FollowAction
                 pseudo={p.pseudo}
-                userId={p.userId}
-                requestId={p.friendship.id}
-                primary
+                mine={p.follow.mine}
+                followsMe={p.follow.followsMe}
+                canFollow={p.follow.canFollow}
+                visibility={p.visibility}
                 busy={busy}
               />
-              {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami ». Tour 2 (relecture Codex 5) : un compte
-                  suivi qui passe privé garde le bouton pour se désabonner (`following`), comme l'appli. */}
-              {(p.follow.canFollow || p.follow.following) && (
-                <Form method="post">
-                  <input type="hidden" name="pseudo" value={p.pseudo} />
-                  <Button
-                    type="submit"
-                    name="intent"
-                    value={p.follow.following ? "unfollow" : "follow"}
-                    variant="secondary"
-                    icon={p.follow.following ? "check" : "add"}
-                    loading={busy}
-                    data-testid={p.follow.following ? "profile-followed" : "profile-follow"}
-                  >
-                    {p.follow.following ? networkLabels.followed : networkLabels.follow}
-                  </Button>
-                </Form>
-              )}
             </div>
             <div className="pr5-write">
-              {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signaler : lot 32. */}
+              {/* Messagerie (lot 18) : conversation existante → conversation ; sinon demande de contact. Signaler : lot 32. */}
               <Form method="post">
                 <input type="hidden" name="intent" value="message_open" />
                 <input type="hidden" name="userId" value={p.userId} />
@@ -227,15 +216,16 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
         {preview && (
           <>
             {/* Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. */}
-            <div className="pr5-acts pr5-acts--inert" aria-hidden="true" data-testid="preview-actions">
-              <Button variant="primary" icon={previewAs === "friend" ? "check" : "add"} tabIndex={-1}>
-                {previewAs === "friend" ? "Ami" : "Ajouter en ami"}
-              </Button>
-              {!limited && p.follow.canFollow && (
-                <Button variant="secondary" icon="add" tabIndex={-1}>
-                  {networkLabels.follow}
-                </Button>
-              )}
+            <div className="pr5-acts r6acts pr5-acts--inert" aria-hidden="true" data-testid="preview-actions">
+              {/* Vu par un membre : le bouton qu'un inconnu verrait ; vu par un abonné : « Abonné ». */}
+              <FollowAction
+                pseudo={p.pseudo}
+                mine={previewAs === "follower" ? "accepted" : "none"}
+                followsMe={false}
+                canFollow
+                visibility={p.visibility}
+                inert
+              />
               {!limited && (
                 <Button variant="secondary" icon="chat" tabIndex={-1}>
                   {L.writeTo(p.pseudo)}
@@ -267,8 +257,17 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
           <p className="pr5-note" data-testid="profile-private-note">
             <Icon name="lock" size={16} />
             <span>
-              <strong>{L.privateRestStrong}</strong>
-              {L.privateRest}
+              {preview ? (
+                <>
+                  <strong>{L.privateRestStrong}</strong>
+                  {L.privateRest}
+                </>
+              ) : (
+                <>
+                  <strong>{networkLabels.privateLineStrong}</strong>{" "}
+                  {p.follow.mine === "pending" ? networkLabels.privateLineWaiting : networkLabels.privateLineAsk}
+                </>
+              )}
             </span>
           </p>
         </section>
