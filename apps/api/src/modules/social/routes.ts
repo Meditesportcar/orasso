@@ -85,6 +85,12 @@ export const socialRoutes = new Hono<AppEnv>()
     const q = query(c, followingListQuery);
     return c.json(await followsService.following(v, q.kind, q.q, q.cursor));
   })
+  // Lot R6b, tour 2 (relectures Opus 1, Codex 1) : « Retirer cet abonné », par le titulaire seul, sans prévenir.
+  .delete("/me/followers/:userId", async (c) => {
+    const v = await requireUser(c);
+    await followsService.removeFollower(v, c.req.param("userId"));
+    return c.body(null, 204);
+  })
   .get("/me/follow-requests", async (c) => {
     const v = await requireUser(c);
     const q = query(c, networkListQuery);

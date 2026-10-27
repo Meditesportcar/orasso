@@ -1,10 +1,11 @@
 // Conversation à deux (`direct`, ARCHITECTURE-SUITE § 3.2). Lecture : les deux participants (comptes non supprimés).
 // Écriture (lot R6b, D37 : « un message va directement à quelqu'un qui te suit ; sinon demande de contact ») : la
-// personne à qui j'écris me suit (abonnement accepté), ou une demande de contact a été acceptée entre nous (S11), ou elle
-// m'a déjà écrit dans cette conversation (je lui réponds). Un abonnement retiré, sans échange, rend la conversation
-// lisible seulement.
+// personne à qui j'écris me suit (abonnement accepté), ou une demande de contact a été acceptée entre nous (S11), ou le
+// dernier message de la conversation vient d'elle (je lui réponds). Tour 2 (relecture Opus 3) : répondre n'est pas un
+// droit permanent ; une fois ma réponse partie, c'est à elle d'écrire. Un abonnement retiré rend donc la conversation
+// lisible seulement, tant qu'elle ne m'écrit pas.
 import { messagingLabels } from "@orasso/shared";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import { contactRequests, conversationParticipants, messages, profiles, userFollows } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
@@ -13,7 +14,7 @@ import type { KindRules } from "./types";
 
 /**
  * `from` peut écrire directement à `to` : `to` suit `from` (abonnement accepté), ou demande de contact acceptée dans un
- * sens ou dans l'autre, ou `to` a déjà écrit dans la conversation `conversationId`.
+ * sens ou dans l'autre, ou le dernier message (ni système, ni supprimé) de la conversation `conversationId` vient de `to`.
  */
 export async function canTalkDirect(ex: Executor, from: string, to: string, conversationId?: string): Promise<boolean> {
   const [follows] = await ex
@@ -39,12 +40,13 @@ export async function canTalkDirect(ex: Executor, from: string, to: string, conv
     .limit(1);
   if (contact) return true;
   if (!conversationId) return false;
-  const [wrote] = await ex
-    .select({ id: messages.id })
+  const [last] = await ex
+    .select({ senderId: messages.senderId })
     .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.senderId, to)))
+    .where(and(eq(messages.conversationId, conversationId), ne(messages.kind, "system"), isNull(messages.deletedAt)))
+    .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(1);
-  return Boolean(wrote);
+  return last?.senderId === to;
 }
 
 async function activeParticipants(ex: Executor, conversationId: string) {

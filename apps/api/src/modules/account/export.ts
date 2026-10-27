@@ -1,12 +1,14 @@
 // Export des données personnelles (lot 35c, D20) : tout ce que le compte a saisi ou produit, en un fichier JSON lisible,
 // pour le titulaire seulement. Jamais de secret (mot de passe, secret du QR de compte, clés d'accès) ni de donnée d'un
 // autre compte (messages, coordonnées des autres). Les photos ne sont pas incluses : leurs adresses suffisent.
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   events,
+  followTraces,
+  friendships,
   pointEntries,
   proFollows,
   profiles,
@@ -46,6 +48,14 @@ export type AccountExport = {
     followers: { pseudo: string; status: string; since: string; acceptedAt: string | null }[];
     followingOrganizers: { name: string; since: string }[];
     followingPros: { name: string; since: string }[];
+    /** Lot R6b, tour 2 : les demandes que tu as refusées et les abonnés que tu as retirés (30 jours sans alerte). */
+    declinedByMe: { pseudo: string; at: string }[];
+    /**
+     * Lot R6b, tour 2 (relecture Opus 5) : l'archive de tes anciennes amitiés et demandes d'ami (table `friendships`,
+     * plus lue depuis D37), tant qu'elle existe. Le refus reste silencieux : pour le demandeur, une demande refusée
+     * s'exporte « en attente ».
+     */
+    friendshipsArchive: { pseudo: string; status: string; requestedByMe: boolean; since: string }[];
   };
   /** Lot R5c1 : tes publications, commentaires et voix dans le fil des crews. */
   crewFeed: CrewFeedExport;
@@ -133,6 +143,19 @@ export const accountExportService = {
       .from(proFollows)
       .innerJoin(proProfiles, eq(proProfiles.id, proFollows.proId))
       .where(eq(proFollows.userId, userId));
+    const declined = await db
+      .select({ pseudo: profiles.pseudo, at: followTraces.declinedAt })
+      .from(followTraces)
+      .innerJoin(profiles, eq(profiles.userId, followTraces.followerId))
+      .where(and(eq(followTraces.followedId, userId), isNotNull(followTraces.declinedAt)));
+    const friendRows = await db
+      .select({ f: friendships, pseudo: profiles.pseudo })
+      .from(friendships)
+      .innerJoin(
+        profiles,
+        sql`${profiles.userId} = case when ${friendships.requesterId} = ${userId} then ${friendships.addresseeId} else ${friendships.requesterId} end`,
+      )
+      .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
 
     return {
       exportedAt: now().toISOString(),
@@ -213,6 +236,13 @@ export const accountExportService = {
         followers: followers.map(followOut),
         followingOrganizers: orgs.map((r) => ({ name: r.name, since: r.at.toISOString() })),
         followingPros: pros.map((r) => ({ name: r.name, since: r.at.toISOString() })),
+        declinedByMe: declined.flatMap((r) => (r.at ? [{ pseudo: r.pseudo, at: r.at.toISOString() }] : [])),
+        friendshipsArchive: friendRows.map(({ f, pseudo }) => ({
+          pseudo,
+          status: f.status === "declined" && f.requesterId === userId ? "pending" : f.status,
+          requestedByMe: f.requesterId === userId,
+          since: (f.respondedAt ?? f.createdAt).toISOString(),
+        })),
       },
       crewFeed: await crewFeedExport(userId),
     };

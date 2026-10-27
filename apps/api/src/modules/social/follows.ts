@@ -3,12 +3,15 @@
 // demande (`pending`), notification « X demande à te suivre » ; la personne accepte (« X a accepté ta demande ») ou
 // refuse sans prévenir (la ligne disparaît). L'abonné accepté voit ce que voyait l'ami (profil complet d'un compte privé,
 // Journal, messagerie directe vers lui). Un compte qui passe de privé à public accepte toutes ses demandes en attente.
+// Tour 2 : le titulaire retire un abonné sans le prévenir ; une trace par paire (`follow_traces`) limite les alertes.
 // Les listes (abonnés, abonnements, demandes) ne sont lisibles que par leur titulaire (routes `/me/...` uniquement) ;
 // les autres ne voient que les nombres. Les comptes supprimés, bannis ou suspendus ne figurent dans aucune liste ni
 // aucun nombre, et une action vers eux répond comme pour un compte inconnu (404).
 import {
   canFollowUser,
   effectiveMainVehicleId,
+  FOLLOW_DECLINED_QUIET_MS,
+  FOLLOW_NOTIFY_WINDOW_MS,
   FOLLOW_PAGE_SIZE,
   type FollowedPage,
   type FollowersPage,
@@ -30,10 +33,11 @@ import {
   networkLabels,
   socialLabels,
 } from "@orasso/shared";
-import { type AnyColumn, and, asc, desc, eq, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, desc, eq, inArray, isNull, lte, or, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  followTraces,
   notifications,
   proFollows,
   profiles,
@@ -365,43 +369,56 @@ const actorOf = (p: Pick<Profile, "userId" | "pseudo" | "avatarKey">) => ({
   avatarUrl: storage.url(p.avatarKey),
 });
 
-/** Une alerte de ce type, de cette personne, vers cette cible, dans les dernières 24 h ? */
-async function notifiedRecently(
-  tx: Tx,
-  type: string,
-  actorId: string,
-  targetId: string,
-  actorPath: "actorIds" | "actor",
-) {
-  const who =
-    actorPath === "actorIds"
-      ? sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${actorId}::text)`
-      : sql`${notifications.data} -> 'actor' ->> 'userId' = ${actorId}`;
-  const [recent] = await tx
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, targetId),
-        eq(notifications.type, type),
-        who,
-        sql`${notifications.createdAt} > now() - interval '24 hours'`,
+/**
+ * Lot R6b, tour 2 (relectures Opus 2, Codex 2 et 3) : réserve l'alerte de cette paire sur sa trace (`follow_traces`), à
+ * l'horloge de l'appli (`now()`, celle des tests et de l'horloge simulée), jamais à celle de PostgreSQL. Refusée si une
+ * alerte est partie il y a moins de 24 h, même retirée depuis par une annulation (demander, annuler, demander), ou si la
+ * personne a été refusée ou retirée des abonnés il y a moins de 30 jours. Une seule instruction (insertion ou mise à
+ * jour conditionnelle) : deux demandes simultanées n'obtiennent pas chacune leur alerte.
+ */
+async function claimAlert(tx: Tx, followerId: string, followedId: string): Promise<boolean> {
+  const at = now();
+  const alertBefore = new Date(at.getTime() - FOLLOW_NOTIFY_WINDOW_MS);
+  const declinedBefore = new Date(at.getTime() - FOLLOW_DECLINED_QUIET_MS);
+  const [claimed] = await tx
+    .insert(followTraces)
+    .values({ followerId, followedId, lastAlertAt: at })
+    .onConflictDoUpdate({
+      target: [followTraces.followerId, followTraces.followedId],
+      set: { lastAlertAt: at },
+      setWhere: and(
+        or(isNull(followTraces.lastAlertAt), lte(followTraces.lastAlertAt, alertBefore)),
+        or(isNull(followTraces.declinedAt), lte(followTraces.declinedAt, declinedBefore)),
       ),
-    )
-    .limit(1);
-  return Boolean(recent);
+    })
+    .returning({ id: followTraces.followerId });
+  return Boolean(claimed);
 }
+
+/** Refus d'une demande ou retrait d'un abonné : 30 jours sans alerte de cette personne (elle peut redemander). */
+async function markDeclined(tx: Tx, followerId: string, followedId: string) {
+  const at = now();
+  await tx
+    .insert(followTraces)
+    .values({ followerId, followedId, declinedAt: at })
+    .onConflictDoUpdate({ target: [followTraces.followerId, followTraces.followedId], set: { declinedAt: at } });
+}
+
+const pairTrace = (followerId: string, followedId: string) =>
+  and(eq(followTraces.followerId, followerId), eq(followTraces.followedId, followedId));
 
 /**
  * « Kenji_66 te suit », regroupée : une notification non lue des dernières 24 h est complétée (« … et 2 autres
  * personnes te suivent ») au lieu d'en créer une nouvelle ; au plus une alerte par paire et par 24 h (suivre, ne plus
- * suivre, suivre). Préférences (famille `social`, type coupable) et heures calmes : celles de `notificationsService`.
+ * suivre, suivre), comptée sur la trace de la paire. Préférences (famille `social`, type coupable) et heures calmes :
+ * celles de `notificationsService`.
  */
 async function notifyFollow(tx: Tx, follower: Profile, targetId: string): Promise<boolean> {
   // Tour 2 : deux suivis simultanés vers la même personne ne créent pas deux notifications (lecture puis écriture
   // sérialisées par destinataire).
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`user-followed:${targetId}`}))`);
-  if (await notifiedRecently(tx, "user_followed", follower.userId, targetId, "actorIds")) return false;
+  if (!(await claimAlert(tx, follower.userId, targetId))) return false;
+  // Regroupement : `created_at` est écrit par la base, la fenêtre se lit donc à l'horloge de la base (aucun mélange).
   const window = sql`${notifications.createdAt} > now() - interval '24 hours'`;
   const actor = actorOf(follower);
   const [open] = await tx
@@ -420,8 +437,9 @@ async function notifyFollow(tx: Tx, follower: Profile, targetId: string): Promis
     .for("update");
   if (open) {
     const data = open.data as { actorIds?: string[]; pseudos?: string[] };
-    const actorIds = [follower.userId, ...(data.actorIds ?? [])];
-    const pseudos = [follower.pseudo, ...(data.pseudos ?? [])].slice(0, 2);
+    // La même personne déjà citée (horloge simulée) remonte en tête sans compter deux fois.
+    const actorIds = [follower.userId, ...(data.actorIds ?? []).filter((id) => id !== follower.userId)];
+    const pseudos = [follower.pseudo, ...(data.pseudos ?? []).filter((p) => p !== follower.pseudo)].slice(0, 2);
     await tx
       .update(notifications)
       .set({
@@ -440,9 +458,12 @@ async function notifyFollow(tx: Tx, follower: Profile, targetId: string): Promis
   return true;
 }
 
-/** Lot R6b : « Kenji_66 demande à te suivre », au plus une alerte par paire et par 24 h (demander, annuler, demander). */
+/**
+ * Lot R6b : « Kenji_66 demande à te suivre », au plus une alerte par paire et par 24 h (demander, annuler, demander), et
+ * aucune pendant 30 jours après un refus : la demande apparaît alors seulement dans Demandes.
+ */
 async function notifyFollowRequest(tx: Tx, follower: Profile, targetId: string): Promise<boolean> {
-  if (await notifiedRecently(tx, "follow_request", follower.userId, targetId, "actor")) return false;
+  if (!(await claimAlert(tx, follower.userId, targetId))) return false;
   await notificationsService.notify(tx, targetId, "follow_request", {
     title: followRequestNotificationTitle,
     body: followRequestNotificationBody(follower.pseudo),
@@ -463,6 +484,69 @@ async function closeRequestNotifications(tx: Tx, targetId: string, followerIds?:
         eq(notifications.type, "follow_request"),
         isNull(notifications.readAt),
         followerIds ? inArray(sql<string>`${notifications.data} -> 'actor' ->> 'userId'`, followerIds) : undefined,
+      ),
+    );
+}
+
+/**
+ * Tour 2 (« Retirer cet abonné ») : mes alertes « … te suit » encore non lues ne citent plus cette personne. Seule
+ * citée : l'alerte disparaît ; regroupée : elle garde les autres, son texte recompté.
+ */
+async function withdrawFollowAlert(tx: Tx, targetId: string, followerId: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`user-followed:${targetId}`}))`);
+  const open = await tx
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, targetId),
+        eq(notifications.type, "user_followed"),
+        isNull(notifications.readAt),
+        sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${followerId}::text)`,
+      ),
+    )
+    .for("update");
+  for (const n of open) {
+    const data = n.data as { actorIds?: string[] };
+    const actorIds = (data.actorIds ?? []).filter((id) => id !== followerId);
+    if (!actorIds.length) {
+      await tx.delete(notifications).where(eq(notifications.id, n.id));
+      continue;
+    }
+    const firsts = await tx
+      .select({ userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey })
+      .from(profiles)
+      .where(inArray(profiles.userId, actorIds.slice(0, 2)));
+    const byId = new Map(firsts.map((p) => [p.userId, p]));
+    const shown = actorIds.slice(0, 2).flatMap((id) => {
+      const p = byId.get(id);
+      return p ? [p] : [];
+    });
+    const lead = shown[0];
+    if (!lead) {
+      await tx.delete(notifications).where(eq(notifications.id, n.id));
+      continue;
+    }
+    const pseudos = shown.map((p) => p.pseudo);
+    await tx
+      .update(notifications)
+      .set({
+        body: followNotificationBody(pseudos, actorIds.length),
+        data: { ...n.data, actor: actorOf(lead), actorIds, pseudos },
+      })
+      .where(eq(notifications.id, n.id));
+  }
+}
+
+/** Actualités du Journal de cette personne qui me citent (« … va à », « … a ajouté ») : retirées avec l'abonnement. */
+async function withdrawJournalItems(tx: Tx, readerId: string, actorId: string) {
+  await tx
+    .delete(notifications)
+    .where(
+      and(
+        eq(notifications.userId, readerId),
+        inArray(notifications.type, ["friend_going_event", "friend_new_vehicle"]),
+        sql`${notifications.data} -> 'actor' ->> 'userId' = ${actorId}`,
       ),
     );
 }
@@ -573,6 +657,8 @@ export const followsService = {
         .returning({ id: userFollows.followerId });
       if (!row) throw notFound("Demande introuvable");
       await closeRequestNotifications(tx, me, [followerId]);
+      // Tour 2 : un ancien refus ne compte plus une fois la personne acceptée.
+      await tx.update(followTraces).set({ declinedAt: null }).where(pairTrace(followerId, me));
       await notificationsService.notify(tx, followerId, "follow_accepted", {
         title: followAcceptedNotificationTitle,
         body: followAcceptedNotificationBody(viewer.profile.pseudo),
@@ -587,7 +673,10 @@ export const followsService = {
     return card;
   },
 
-  /** `POST /me/follow-requests/:userId/decline` : la demande disparaît, sans prévenir la personne. */
+  /**
+   * `POST /me/follow-requests/:userId/decline` : la demande disparaît, sans prévenir la personne. Tour 2 (choix du
+   * coordinateur) : elle peut redemander, mais pendant 30 jours sans alerte (sa demande apparaît seulement dans Demandes).
+   */
   async declineRequest(viewer: Viewer, followerId: string): Promise<void> {
     const me = viewer.user.id;
     await withTx(async (tx, after) => {
@@ -603,7 +692,29 @@ export const followsService = {
         .returning({ id: userFollows.followerId });
       if (!row) throw notFound("Demande introuvable");
       await closeRequestNotifications(tx, me, [followerId]);
+      await markDeclined(tx, followerId, me);
       after(() => inboxService.publish(me));
+    });
+  },
+
+  /**
+   * `DELETE /me/followers/:userId` (tour 2, relectures Opus 1 et Codex 1 : « Retirer cet abonné ») : par le titulaire du
+   * compte suivi seulement (route `/me`), sans prévenir la personne. Ce que l'abonnement lui ouvrait se referme tout de
+   * suite, puisque tout se relit à chaque requête : profil complet d'un compte privé, photos, sorties, crew, messagerie
+   * directe de moi vers elle, Journal (ses actualités qui me citent disparaissent aussi). Mon alerte « … te suit » encore
+   * non lue ne la cite plus. Elle peut redemander (ou suivre de nouveau un compte public), sans alerte pendant 30 jours.
+   */
+  async removeFollower(viewer: Viewer, followerId: string): Promise<void> {
+    const me = viewer.user.id;
+    await withTx(async (tx) => {
+      const [row] = await tx
+        .delete(userFollows)
+        .where(and(eq(userFollows.followerId, followerId), eq(userFollows.followedId, me), accepted))
+        .returning({ id: userFollows.followerId });
+      if (!row) throw notFound("Abonné introuvable");
+      await markDeclined(tx, followerId, me);
+      await withdrawFollowAlert(tx, me, followerId);
+      await withdrawJournalItems(tx, followerId, me);
     });
   },
 
@@ -721,6 +832,8 @@ export const followsService = {
       .from(userFollows)
       .where(eq(userFollows.followerId, userId));
     await tx.delete(userFollows).where(or(eq(userFollows.followerId, userId), eq(userFollows.followedId, userId)));
+    // Tour 2 : les traces de ses paires (alertes, refus) partent avec lui.
+    await tx.delete(followTraces).where(or(eq(followTraces.followerId, userId), eq(followTraces.followedId, userId)));
     return followed.map((r) => r.id);
   },
 };

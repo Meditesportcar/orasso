@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, signUp, type TestUser } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { friendships, profiles, userFollows } from "../../db/schema";
+import { followTraces, friendships, profiles, userFollows } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -41,16 +41,31 @@ const row = async (follower: TestUser, followed: TestUser) =>
       .where(and(eq(userFollows.followerId, follower.id), eq(userFollows.followedId, followed.id)))
   )[0];
 
+const fixedNow = Date.now();
+/** Il y a `n` jours (à la milliseconde, figé pour tout le fichier : le test compare des dates). */
+const daysAgo = (n: number) => new Date(fixedNow - n * 86_400_000);
+
 const setPrivate = (u: TestUser) => db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
 
 describe("migration des amitiés en abonnements (lot R6b)", () => {
   it("amitié acceptée → deux abonnements ; demande → demande d'abonnement ; refus : rien ; sans doublon", async () => {
     expect(file).toBeDefined();
-    const [kenji, lea, marc, julie, nina, damien, theo, sarah, paul] = (await Promise.all(
-      ["Kenji_M", "Lea_M", "Marc_M", "Julie_M", "Nina_M", "Damien_M", "Theo_M", "Sarah_M", "Paul_M"].map((p) =>
+    const [kenji, lea, marc, julie, nina, damien, theo, sarah, paul, lou] = (await Promise.all(
+      ["Kenji_M", "Lea_M", "Marc_M", "Julie_M", "Nina_M", "Damien_M", "Theo_M", "Sarah_M", "Paul_M", "Lou_M"].map((p) =>
         signUp(p),
       ),
-    )) as TestUser[] as [TestUser, TestUser, TestUser, TestUser, TestUser, TestUser, TestUser, TestUser, TestUser];
+    )) as TestUser[] as [
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+      TestUser,
+    ];
     await setPrivate(marc);
     await setPrivate(sarah);
     const at = new Date("2026-09-01T10:00:00Z");
@@ -62,8 +77,9 @@ describe("migration des amitiés en abonnements (lot R6b)", () => {
       // Demandes en attente : Théo → Marc (privé), Nina → Damien (public).
       { requesterId: theo.id, addresseeId: marc.id, status: "pending", createdAt: at },
       { requesterId: nina.id, addresseeId: damien.id, status: "pending", createdAt: at },
-      // Refusée : rien.
-      { requesterId: paul.id, addresseeId: sarah.id, status: "declined", createdAt: at, respondedAt: accepted },
+      // Refusées : rien, sinon une trace de refus si elle a moins de 30 jours (tour 2).
+      { requesterId: paul.id, addresseeId: sarah.id, status: "declined", createdAt: at, respondedAt: daysAgo(40) },
+      { requesterId: lou.id, addresseeId: sarah.id, status: "declined", createdAt: daysAgo(5), respondedAt: daysAgo(3) },
     ]);
     // Abonnements existants (lot R4c) : Kenji → Léa (recouvre l'amitié), Paul → Marc (compte devenu privé depuis, sans
     // amitié), Julie → Marc (compte devenu privé, amitié acceptée), Théo → Damien (public).
@@ -73,6 +89,8 @@ describe("migration des amitiés en abonnements (lot R6b)", () => {
       { followerId: paul.id, followedId: marc.id, createdAt: before },
       { followerId: julie.id, followedId: marc.id, createdAt: before },
       { followerId: theo.id, followedId: damien.id, createdAt: before },
+      // Tour 2 (relecture Opus 6) : Paul suivait Sarah, devenue privée, qui avait refusé sa demande d'ami.
+      { followerId: paul.id, followedId: sarah.id, createdAt: before },
     ]);
 
     await migrate();
@@ -86,8 +104,13 @@ describe("migration des amitiés en abonnements (lot R6b)", () => {
     // Demandes : vers un privé, une demande ; vers un public, acceptée.
     expect(await row(theo, marc)).toMatchObject({ status: "pending", acceptedAt: null });
     expect(await row(nina, damien)).toMatchObject({ status: "accepted", acceptedAt: at });
-    // Refus : rien.
+    // Refus : rien ; l'abonnement de Paul vers Sarah (qui l'avait refusé) est supprimé, pas remis en demande.
     expect(await row(paul, sarah)).toBeUndefined();
+    expect(await row(lou, sarah)).toBeUndefined();
+    // Un refus récent devient une trace (30 jours sans alerte) ; un refus ancien, rien.
+    const traces = await db.select().from(followTraces);
+    expect(traces.map((t) => [t.followerId, t.followedId])).toEqual([[lou.id, sarah.id]]);
+    expect(traces[0]?.declinedAt).toEqual(daysAgo(3));
     // Un compte devenu privé ne s'ouvre pas à qui le suivait sans amitié : l'abonnement redevient une demande.
     expect(await row(paul, marc)).toMatchObject({ status: "pending", acceptedAt: null });
     // Un abonnement vers un compte public reste accepté, daté de sa création.
@@ -97,7 +120,7 @@ describe("migration des amitiés en abonnements (lot R6b)", () => {
     expect(all).toHaveLength(8);
     expect(new Set(all.map((r) => `${r.followerId}>${r.followedId}`)).size).toBe(all.length);
     // L'archive `friendships` reste telle quelle (retirée dans un lot suivant).
-    expect(await db.select().from(friendships)).toHaveLength(5);
+    expect(await db.select().from(friendships)).toHaveLength(6);
   });
 
   it("rejouée sur une base déjà migrée : rien ne change", async () => {

@@ -691,6 +691,11 @@ describe("bannière et « Où va le crew » (lot R5c2)", () => {
     expect(byNina.label).toBe(byNina.garage?.label);
     // Léa elle-même : tout.
     expect((await seen(lea)).garage?.photoUrl).toBeTruthy();
+    // Lot R6b, tour 2 : Léa retire Kenji de ses abonnés ; le crew se referme pour lui tout de suite.
+    expect((await req(lea, "DELETE", `/me/followers/${kenji.id}`)).status).toBe(204);
+    const afterRemoval = await seen(kenji);
+    expect(afterRemoval.garage?.photoUrl).toBeNull();
+    expect(afterRemoval.events).toEqual(["Nuit des Moteurs"]);
   });
 
   it("« Où va le crew » : membres retenus et inscriptions du crew ; jamais une invitation privée d'un membre", async () => {
