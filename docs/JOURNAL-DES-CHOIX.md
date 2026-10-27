@@ -3226,6 +3226,8 @@ Source : `corrections-r5c2.md` (relais).
 - **Boîte** (Codex 4) : appli, « Voir plus (N) » charge la page suivante des demandes (au-delà de 30) ; site, « Suivants » (`?apres=`) et « Retour aux plus récentes », comme « Ton réseau ».
 - **Export** (Opus 5) : `friendshipsArchive` rend l'archive des anciennes amitiés et demandes d'ami tant que la table existe (le refus reste « en attente » pour le demandeur).
 - **Jetons** (Opus 9) : « Te suit » (appli et site) au style `label` et au rayon `radius-sm` ; confirmation du bouton « Suivre » au rayon `radius-md` ; tailles de police ajoutées par le lot dans `site.css` passées aux jetons (`--type-*`).
+- **Lignes de « Ton réseau »** (vu dans les captures) : « Suivre en retour » et le menu ⋯ côte à côte ne laissaient au pseudo et au véhicule qu'une colonne où les mots se coupaient (« Roda/ge »). Appli : sous deux fois `space-12` de largeur, les boutons passent sous le nom, une fois pour toutes (`MIN_TEXT_WIDTH`, pas d'aller-retour). Site : la ligne passe à la ligne (`flex-wrap`), les confirmations compactes s'ouvrent sous la ligne entière. « Chercher » ne se coupe plus (défaut antérieur, R4c).
+- **« Ton réseau » du site en fiche (mode B)** : comme l'appli et comme l'ancien « Mes amis » qu'il remplace (la recette lotm7, adaptée au tour 1, l'attendait) : en-tête « Ton réseau », le pseudo en petit, ✕ vers Moi ; plus de bande ORASSO ni de barre d'onglets sur cette page.
 
 ### À revoir avec Damien (lot R6b, tour 2)
 - **Retrait = refus de 30 jours** : un abonné retiré qui suit de nouveau un compte public n'envoie pas d'alerte pendant 30 jours (il apparaît dans la liste des abonnés). Choix fait pour éviter le harcèlement ; à confirmer.
