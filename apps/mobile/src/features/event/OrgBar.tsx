@@ -4,11 +4,13 @@
 // Elle remplace la pastille O et la croix flottantes ; le nom de l'organisateur ne se répète pas sur l'affiche.
 // Lot M7 (fusion) : elle se pose dans l'emplacement `band` de `PosterFlow` (en-tête de fiche `FicheHeader`) : l'aplat,
 // la zone sûre et le ✕ (à droite, à sa place habituelle, à la place du retour) viennent de l'en-tête.
-import { Icon, OrgLogo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, OrgLogo, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import { eventPageLabels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 const { space1, space2 } = tokens.spacing;
+/** Plus petit corps du nom de l'organisateur (avant l'échelle de police du système). */
+const NAME_MIN = 9;
 
 export type OrgBarProps = {
   name: string;
@@ -50,10 +52,19 @@ export function OrgBar({
         <View style={styles.text}>
           <View style={styles.nameRow}>
             {/* Tour 2 (relecture Opus) : un nom long passe sur deux lignes plutôt que d'être coupé (la réduction de la
-                police n'existe pas sur le web) ; jamais coupé au milieu d'un mot. */}
-            <Text variant="bodyStrong" color={c.barInk} style={styles.name} numberOfLines={2}>
+                police n'existe pas sur le web) ; jamais coupé au milieu d'un mot. Lot R6-police (« MéditeSpo / rtCar »
+                avec la police du système agrandie) : un mot qui ne tient pas fait baisser le corps, mesuré tel que
+                posé, jusqu'à 9 px ; sans coupure, rien ne change. */}
+            <WordSafeText
+              variant="bodyStrong"
+              base={styles.name.fontSize}
+              min={NAME_MIN}
+              color={c.barInk}
+              style={styles.name}
+              numberOfLines={2}
+            >
               {name}
-            </Text>
+            </WordSafeText>
             {verified ? <Icon name="check" size={15} strokeWidth={3} color={c.accent} /> : null}
           </View>
           <Text variant="caption" color={c.barMuted} style={styles.small} numberOfLines={2}>

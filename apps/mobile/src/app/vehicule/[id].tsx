@@ -4,7 +4,17 @@
 // affiche (photo de couverture pleine largeur, étiquettes inclinées, nom, trois chiffres étroits) et range ses actions
 // comme le demande l'audit (§ 5.2) : un seul crayon (l'assistant prérempli), le partage reste au Garage, et le reste
 // (modifier la fiche, certification, vendu / souvenir / accidenté, supprimer) passe dans le menu « … ».
-import { Chip, ChipRow, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Chip,
+  ChipRow,
+  Photo,
+  Tag,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeGroup,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
   certificationLine,
@@ -312,16 +322,24 @@ export default function VehiculeFiche() {
           </Text>
         ) : null}
       </View>
-      <View style={[styles.specs, { borderColor: c.line }]}>
-        {specs.map(([value, unit], i) => (
-          <View key={unit} style={[styles.spec, i > 0 && [styles.specSep, { borderColor: c.line }]]}>
-            <Num size={28}>{value}</Num>
-            <Text variant="caption" color={c.inkMuted} style={styles.specUnit}>
-              {unit}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {/* Lot R6-police : police agrandie, une unité ne se coupe jamais ; les trois gardent le même corps. */}
+      <WordSafeGroup>
+        <View style={[styles.specs, { borderColor: c.line }]}>
+          {specs.map(([value, unit], i) => (
+            <View key={unit} style={[styles.spec, i > 0 && [styles.specSep, { borderColor: c.line }]]}>
+              <Num size={28}>{value}</Num>
+              <WordSafeText
+                variant="caption"
+                base={styles.specUnit.fontSize}
+                color={c.inkMuted}
+                style={styles.specUnit}
+              >
+                {unit}
+              </WordSafeText>
+            </View>
+          ))}
+        </View>
+      </WordSafeGroup>
       <View style={styles.actions}>
         <SmButton
           kind="s"
