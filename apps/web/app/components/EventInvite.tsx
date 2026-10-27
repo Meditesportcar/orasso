@@ -93,10 +93,13 @@ export function InviteBanner({ invitation }: { invitation: ReceivedEventInvitati
 export function WhoGoes({ going, slug }: { going: FollowingGoing | null; slug: string }) {
   return (
     <div className="ri-who" data-testid="who-goes">
-      <div className="ri-who__head">
-        <span className="s-label o-t-label">{L.whoGoes}</span>
-        <small className="o-t-caption s-muted">{L.whoGoesHint}</small>
-      </div>
+      {/* Comme l'appli : le titre « Qui y va » seulement quand quelqu'un que je suis y va. */}
+      {going && going.total > 0 && (
+        <div className="ri-who__head">
+          <span className="s-label o-t-label">{L.whoGoes}</span>
+          <small className="o-t-caption s-muted">{L.whoGoesHint}</small>
+        </div>
+      )}
       {going && going.total > 0 && (
         <div className="ri-who__row" data-testid="who-goes-people">
           <span className="ri-faces">
