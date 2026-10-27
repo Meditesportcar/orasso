@@ -1,6 +1,6 @@
 // Lot 47 : créneaux d'arrivée (exposants, public) sur l'événement, case « J'ai vu » à la candidature (seule, chef de
 // crew, membre qui confirme), note visible au tri, consignes préfixées du créneau.
-import { fromWallTime } from "@orasso/shared";
+import { fromWallTime, keepUnits } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -512,8 +512,10 @@ describe("consignes aux retenus", () => {
     const sent = await call(orga, "POST", `/events/${e.id}/instructions/send`, { instructions: "Gilet jaune." });
     expect(sent.status).toBe(200);
     const [entry] = await db.select().from(eventAnnouncements).where(eq(eventAnnouncements.eventId, e.id));
-    expect(entry?.body).toBe("Arrivée 18 h 30 – 19 h 15 (strict) · Entrée côté capitainerie.\n\nGilet jaune.");
+    // Lot R6-police : « 18 h 30 » ne se coupe jamais (espace insécable, `keepUnits`).
+    expect(entry?.body).toBe(keepUnits("Arrivée 18 h 30 – 19 h 15 (strict) · Entrée côté capitainerie.\n\nGilet jaune."));
     const [notif] = await db.select().from(notifications).where(eq(notifications.userId, kenji.id));
+    // La notification est un extrait aux espaces normalisés : l'espace insécable n'y reste pas.
     expect(notif?.body.startsWith("Arrivée 18 h 30 – 19 h 15 (strict)")).toBe(true);
   });
 });

@@ -87,6 +87,8 @@ test.describe("Lot R6-retouches, site", () => {
   }
 
   test("Titre de la fiche : aucun mot coupé, de 390 à 1 440 px, Béton et Sable", async ({ page }) => {
+    // 30 pages (2 thèmes × 3 fiches × 5 largeurs) : 2 min ne suffisent pas sur une machine chargée (vérification R6-police).
+    test.setTimeout(6 * 60_000);
     const damien = await login("damien@orasso.local");
     const single = await createEvent(damien, { title: "Rassemblementdesmécaniques" });
     for (const theme of ["beton", "sable"] as const) {
