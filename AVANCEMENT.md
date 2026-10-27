@@ -4,15 +4,16 @@
 
 ## État au 27/10/2026 : R6 en ligne (crew en direct, « Suivre » comme sur Instagram, inviter entre passionnés)
 
-- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`4a836e1d`** (poussé). Migrations jusqu'à `0067` (0066 demandes d'abonnement et conversion des amitiés, 0067 invitations entre passionnés).
-- **APK** : `Orasso APK/Orasso-2026-10-27-4a836e1d-R6.apk` sur le Drive, essayé sur le Xiaomi (fiche, Qui y va, Inviter, profil, réseau, crew : aucun plantage).
+- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`edd369a0`** (poussé ; R6 + lot R6-police). Migrations jusqu'à `0067` (0066 demandes d'abonnement et conversion des amitiés, 0067 invitations entre passionnés).
+- **APK** : `Orasso APK/Orasso-2026-10-27-2e1a9272-R6-police.apk` sur le Drive (même code d'appli que `edd369a0`), essayé sur le Xiaomi à la police normale et agrandie (×1,3) : aucun plantage. L'APK précédent `Orasso-2026-10-27-4a836e1d-R6.apk` reste sur le Drive.
+- **R6-police** : avec la police du téléphone agrandie, plus aucun mot coupé (barre d'onglets, compteurs, nom de l'organisateur et du crew), étiquettes non rognées, « 7 h » et « jour J » insécables ; à la police normale, rien ne change (120 captures comparées). Vérification d'ensemble refaite : API 1 254, recettes toutes vertes (échecs dus à la charge de la machine, tous repassés seuls).
 - **Contenu** (retours de Damien du 27/10, maquette « Orasso maquettes R6 » validée avec les choix par défaut, `validation-maquette-r6-2026-10-27.md` du relais) :
   - **R6a crew en direct** : un post, un commentaire ou un vote apparaît sur la page du crew sans recharger.
   - **R6b « Suivre » (D37)** : plus d'« ami » ; un compte privé reçoit des demandes d'abonnement (Boîte) ; « Retirer cet abonné » referme tout de suite l'accès au profil privé, aux photos, aux sorties, au crew et à la messagerie directe ; les anciennes amitiés converties en abonnements.
   - **R6c inviter** : inviter des personnes suivies à un événement (« Inviter du monde », « Qui y va » parmi ceux que je suis, carte après candidature) et dans un crew (le chef fait entrer, l'invitation d'un membre est confirmée par le chef) ; « Ne plus recevoir d'invitations de… » sans que l'autre puisse le deviner ; une notification par personne et par 24 h.
   - **Retouches du site** : en-tête jamais chevauché, titres jamais coupés au milieu d'un mot (site et fiche de l'appli), accords au singulier (« 1 abonné »).
 - **Vérification d'ensemble** : 1 h 31 sur 3 piles ; API 1 254/1 254 ; recettes 454 passées ; conversion des amitiés vérifiée sur tous les cas.
-- **En cours** : lot `lot-r6-police` (mots coupés et étiquettes rognées quand la police du téléphone est agrandie ; rien ne change à taille normale).
+- **Décision de Damien (27/10)** : un véhicule déclaré sans plaque montre ses photos telles quelles (journal des choix).
 - **Suite** : retours de Damien sur l'APK R6 jusqu'à la validation du passionné, puis les autres profils, puis le lot 58.
 
 ## État au 26/10/2026 : R5 en ligne (retours de Damien sur le passionné : véhicule, profil, crew vivant, fiche)
