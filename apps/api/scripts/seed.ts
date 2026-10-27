@@ -123,10 +123,11 @@ async function main() {
   await seedCrews();
   // Lot R5c2 : bannière, Instagram et une sortie du crew « Roussillon Drift » (page à onglets).
   await seedCrewPage();
-  // Lot R6c : Julie et Théo invitent Kenji au Rassemblement de Narbonne.
-  await seedEventInvites();
   // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
   await seedExplorer(hash);
+  // Lot R6c : Julie et Théo invitent Kenji au Rassemblement de Narbonne (créé par le seed de l'Explorer, juste avant :
+  // tour 2, sur une base neuve la démonstration manquait).
+  await seedEventInvites();
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
   await seedCommunication();
   // Lot 24 : rôle boutique du Salon Argelès (billets gratuits, staff boutique) et une demande de staff en attente.
