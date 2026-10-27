@@ -133,6 +133,12 @@ export const crewMembers = pgTable(
     /** Mot de la demande pour rejoindre (≤ 300). */
     message: text("message"),
     invitedBy: text("invited_by").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Lot R6c (R6.7) : l'invitation d'un membre (pas du chef) acceptée par la personne. La ligne passe alors en
+     * `requested` (« à confirmer par le chef ») en gardant `invited_by` (« Invitée par Julie_66 ») ; le chef accepte ou
+     * refuse comme une demande. Une demande ainsi née compte comme la démarche de la personne (refus silencieux).
+     */
+    inviteAcceptedAt: tstz("invite_accepted_at"),
     respondedAt: tstz("responded_at"),
     joinedAt: tstz("joined_at"),
     ...timestamps,
