@@ -1,5 +1,13 @@
 import { Button, Icon, LiveO, OLoader, Outlined, StampDrop } from "@orasso/design-system/web";
-import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscounts, withYear } from "@orasso/shared";
+import {
+  countFr,
+  departments,
+  type EventCard,
+  siteLabels as L,
+  type Page,
+  proPitchDiscounts,
+  withYear,
+} from "@orasso/shared";
 
 import { EventTile, PosterFace } from "../components/EventTile";
 import { Qr } from "../components/Qr";
@@ -63,7 +71,7 @@ function tickerDay(iso: string): string {
 
 function tickerState(event: EventCard): string {
   if (event.remaining === null) return "ouvert";
-  return event.remaining > 0 ? `${event.remaining} places` : "liste d'attente";
+  return event.remaining > 0 ? countFr(event.remaining, "place") : "liste d'attente";
 }
 
 /** Bandeau moutarde des prochaines dates : défile (le jeu est copié pour la boucle), fixe en mouvement réduit. */

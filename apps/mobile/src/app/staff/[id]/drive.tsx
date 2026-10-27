@@ -17,7 +17,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { type AccessListEntry, driveLabels as L, scanRefusalLabels } from "@orasso/shared";
+import { type AccessListEntry, countFr, driveLabels as L, scanRefusalLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
@@ -167,7 +167,7 @@ export default function Drive() {
       <FicheHeader
         title={L.title}
         facts={state ? `Liste à jour ${clock(state.meta.syncedAt)}` : "Liste absente : synchronise"}
-        counter={count ? `${count.arrived} entrés` : undefined}
+        counter={count ? countFr(count.arrived, "entré") : undefined}
         onClose={close}
         closeLabel="Quitter l'accueil drive"
       />

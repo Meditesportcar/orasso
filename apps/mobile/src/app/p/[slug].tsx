@@ -2,7 +2,15 @@
 // remises par grade, partenaires. Ce que la fiche montre suit `proVisibility` (fiche de base après le 21/06/2027 sans
 // abonnement) : l'API ne renvoie ni remises ni publications dans ce cas. Ouverte sans compte ; suivre demande un compte.
 import { Button, Chip, ChipRow, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { explorerLabels, gradeLabels, grades, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import {
+  countFr,
+  explorerLabels,
+  gradeLabels,
+  grades,
+  proActivityLabels,
+  weekdayLabels,
+  weekdays,
+} from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -136,7 +144,7 @@ export default function ProPage() {
               {explorerLabels.verifiedPro}
             </Chip>
           ) : null}
-          <Chip surface="plate">{`${p.followersCount} abonnés`}</Chip>
+          <Chip surface="plate">{countFr(p.followersCount, "abonné")}</Chip>
         </ChipRow>
         {p.description ? (
           <Text variant="body" color={t.color.plateInk}>

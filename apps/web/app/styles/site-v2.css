@@ -1280,10 +1280,16 @@
   align-items: flex-start;
   gap: var(--space-3);
   min-width: 0;
+  container-type: inline-size;
 }
+/* Lot R6-retouches : le titre ne se coupe qu'entre deux mots. Son corps descend sous celui du jeton quand le mot le plus
+   large (`--em`, `widestWordEm`, la chasse de chaque signe en corps) ne tient pas dans la colonne ; l'interligne suit
+   (écart du jeton entre corps et interligne). `overflow-wrap` ne reste qu'en dernier recours. */
 .ev__feature-title {
   margin: 0;
   overflow-wrap: anywhere;
+  font-size: min(var(--type-poster-xl-size), calc(100cqi / var(--em, 10)));
+  line-height: calc(1em + var(--type-poster-xl-line) - var(--type-poster-xl-size));
 }
 .ev__poster-frame {
   position: relative;
@@ -1474,7 +1480,8 @@
     flex: 1 1 0;
     flex-wrap: wrap;
     justify-content: flex-end;
-    min-width: 0;
+    /* R6-retouches : au moins le lien le plus large ; s'il ne tient pas à côté du logo, le compte passe dessous. */
+    min-width: min-content;
     gap: var(--space-2) var(--space-4);
   }
 }
@@ -1494,4 +1501,40 @@
   flex: 1 1 0;
   justify-content: center;
   min-width: 0;
+}
+
+/* ---------- Lot R6-retouches : l'en-tête ne se chevauche jamais ----------
+   La navigation et le compte vivent dans une rangée (`.w-head__rest`). Dès 900 px, elle passe à la ligne quand les deux
+   ne tiennent plus côte à côte (`wrap-reverse` : le compte monte à droite, la navigation reste dessous, près du logo) ;
+   le compte peut encore passer à la ligne entre ses liens, jamais au milieu d'un mot. Sous 900 px, la rangée s'efface et
+   l'en-tête du téléphone ne change pas. Quand tout tient, la ligne est celle d'avant : navigation à gauche, compte à droite. */
+.w-head__rest {
+  display: contents;
+}
+.w-account > a {
+  white-space: nowrap;
+}
+@media (min-width: 900px) {
+  .s-header.w-head {
+    padding-block: var(--space-2);
+  }
+  .w-head__rest {
+    display: flex;
+    flex: 1 1 0;
+    flex-wrap: wrap-reverse;
+    align-items: center;
+    min-width: 0;
+    gap: var(--space-1) 0;
+    column-gap: inherit;
+  }
+  .w-head__rest .w-nav {
+    flex: none;
+  }
+  .w-head__rest .w-account {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    margin-left: auto;
+  }
 }

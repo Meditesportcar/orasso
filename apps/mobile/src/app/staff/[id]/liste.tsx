@@ -3,7 +3,7 @@
 // les 3 premiers caractères de la plaque, valide, suivant »), coordonnées pour le super staff seulement. Hors ligne.
 
 import { Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type AccessListEntry, checkinStaffRoles, eventDaysLabels, formatDayDate } from "@orasso/shared";
+import { type AccessListEntry, checkinStaffRoles, countFr, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
@@ -92,7 +92,11 @@ export default function StaffList() {
     <Ground animated={false} style={styles.fill}>
       <FicheHeader
         title={state ? `Liste · ${state.meta.title}` : "Liste"}
-        facts={count ? `${count.arrived} arrivés · ${count.expected - count.arrived} attendus` : undefined}
+        facts={
+          count
+            ? `${countFr(count.arrived, "arrivé")} · ${countFr(count.expected - count.arrived, "attendu")}`
+            : undefined
+        }
         onClose={close}
       />
       {state === null ? (

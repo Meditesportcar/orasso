@@ -2682,3 +2682,14 @@
     transition-duration: 120ms;
   }
 }
+
+/* Lot R6-retouches : un grand nom (structure, pro, crew) ne se coupe qu'entre deux mots. Le parent porte `.s-fit` (sa
+   largeur ne dépend pas du texte), le titre `.s-title--fit` et `--em` (`widestWordEm`, la chasse du mot le plus large
+   en corps) : le corps descend sous celui du jeton seulement quand ce mot ne tient pas dans la colonne. */
+.s-fit {
+  container-type: inline-size;
+}
+.s-title--fit {
+  font-size: min(var(--type-poster-l-size), calc(100cqi / var(--em, 10)));
+  line-height: calc(1em + var(--type-poster-l-line) - var(--type-poster-l-size));
+}

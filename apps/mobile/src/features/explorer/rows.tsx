@@ -2,6 +2,7 @@
 // (d'événement, de pro, de véhicule) ne se tronque jamais.
 import { Chip, ChipRow, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  countFr,
   type EventCard,
   eventFormatLabels,
   eventHints,
@@ -53,7 +54,11 @@ export function EventRow({ event, hints = true }: { event: EventCard; hints?: bo
             {event.city ? ` · ${event.city}` : ""}
           </Text>
           <Text variant="meta" color={t.color.plateMuted}>
-            {event.remaining === null ? "Places libres" : event.remaining > 0 ? `${event.remaining} places` : "Complet"}
+            {event.remaining === null
+              ? "Places libres"
+              : event.remaining > 0
+                ? countFr(event.remaining, "place")
+                : "Complet"}
             {` · ${event.structure.name}`}
           </Text>
           {chips.length > 0 ? (

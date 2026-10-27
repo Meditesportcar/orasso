@@ -4,6 +4,7 @@
 import { Button, Chip, TextField } from "@orasso/design-system/web";
 import {
   applicationStatusLabels,
+  countFr,
   type EventOrganizer,
   INVITATION_MESSAGE_MAX,
   type InvitationCandidate,
@@ -208,7 +209,7 @@ export default function OrgaInvitations({ loaderData, actionData, params }: Rout
                 <Form method="post" key={src.id} className="s-stack s-stack--tight">
                   <input type="hidden" name="sourceEventId" value={src.id} />
                   <span className="o-t-caption s-muted">
-                    {formatDay(src.startsAt)} · {src.acceptedCount} retenus
+                    {formatDay(src.startsAt)} · {countFr(src.acceptedCount, "retenu")}
                   </span>
                   <Button
                     type="submit"

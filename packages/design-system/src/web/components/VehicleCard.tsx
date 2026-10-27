@@ -1,3 +1,4 @@
+import { countFr } from "@orasso/shared";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Chip } from "./Chip";
 import { cx } from "./cx";
@@ -51,7 +52,7 @@ export function VehicleCard({
       <div className={cx("o-vehicle__photo", first && "is-first")}>
         {photo}
         {certified && <span className="o-vehicle__tag o-t-credit">Certifié</span>}
-        {photoCount ? <span className="o-vehicle__count o-t-credit">{photoCount} photos</span> : null}
+        {photoCount ? <span className="o-vehicle__count o-t-credit">{countFr(photoCount, "photo")}</span> : null}
       </div>
       <div className="o-vehicle__body">
         <h3 className="o-vehicle__title">

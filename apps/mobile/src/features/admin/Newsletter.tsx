@@ -4,6 +4,7 @@
 // acceptée (adresse confirmée), avec un lien de désinscription dans chaque e-mail. Super admin seulement.
 import { Button, Chip, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  countFr,
   adminAppLabels as L,
   markdownToText,
   type NewsletterView,
@@ -383,7 +384,7 @@ function NewsletterBody() {
             </Text>
             <Text variant="caption" color={t.color.plateMuted}>
               {newsletterStatusLabels[n.status]}
-              {n.status === "sent" ? ` · ${n.recipientsCount} destinataires` : ""}
+              {n.status === "sent" ? ` · ${countFr(n.recipientsCount, "destinataire")}` : ""}
             </Text>
           </Plate>
         </Pressable>

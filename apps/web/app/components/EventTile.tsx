@@ -1,5 +1,5 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { type EventCard, eventFormatLabels, yearToShow } from "@orasso/shared";
+import { countFr, type EventCard, eventFormatLabels, yearToShow } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
@@ -146,7 +146,7 @@ export function EventTile({
                 {where}
               </span>
             )}
-            <span>{event.remaining === null ? "Sans limite" : `${event.remaining} places`}</span>
+            <span>{event.remaining === null ? "Sans limite" : countFr(event.remaining, "place")}</span>
           </span>
           {taken !== null && (
             <span className="w-card__gauge" aria-hidden="true">

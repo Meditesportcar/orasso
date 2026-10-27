@@ -70,23 +70,28 @@ export function SiteHeader({
       <a className="s-header__brand" href="/" aria-label="Orasso, accueil">
         <Logo width={128} />
       </a>
-      {nav && (
-        <nav className="w-nav o-t-button" aria-label="Site">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined}>
-              {item.label}
-            </a>
-          ))}
-        </nav>
-      )}
-      <nav className="s-nav w-account o-t-button" aria-label="Compte">
-        {children}
-        {download && (
-          <Button variant="secondary" icon="export" className="w-small" href="/appli">
-            {L.download}
-          </Button>
+      {/* Lot R6-retouches : la navigation et le compte partagent une rangée qui passe à la ligne quand ils ne tiennent
+          plus côte à côte (le compte monte, la navigation reste dessous) : jamais de chevauchement, quel que soit le
+          compte. Sous 900 px, la rangée s'efface (`display: contents`) et l'en-tête du téléphone reste tel quel. */}
+      <div className="w-head__rest">
+        {nav && (
+          <nav className="w-nav o-t-button" aria-label="Site">
+            {NAV.map((item) => (
+              <a key={item.href} href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined}>
+                {item.label}
+              </a>
+            ))}
+          </nav>
         )}
-      </nav>
+        <nav className="s-nav w-account o-t-button" aria-label="Compte">
+          {children}
+          {download && (
+            <Button variant="secondary" icon="export" className="w-small" href="/appli">
+              {L.download}
+            </Button>
+          )}
+        </nav>
+      </div>
     </header>
   );
 }

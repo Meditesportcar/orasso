@@ -489,3 +489,8 @@ fieldset.crw-seg {
     display: none;
   }
 }
+
+/* Lot R6-retouches : le nom du crew rapetisse pour que son mot le plus large tienne (voir `.s-title--fit`). */
+.crw-id__text .s-title.s-title--fit {
+  font-size: min(var(--type-poster-l-size), calc(100cqi / var(--em, 10)));
+}

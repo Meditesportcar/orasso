@@ -1,5 +1,5 @@
 import { Chip } from "@orasso/design-system/web";
-import { type ProCard, proActivityLabels } from "@orasso/shared";
+import { countFr, type ProCard, proActivityLabels } from "@orasso/shared";
 
 const initials = (name: string) =>
   name
@@ -45,7 +45,7 @@ export function ProTile({ pro, hints = [] }: { pro: ProCard; hints?: string[] })
             Pro vérifié
           </span>
         )}
-        <Chip>{pro.followersCount} abonnés</Chip>
+        <Chip>{countFr(pro.followersCount, "abonné")}</Chip>
         {hints.map((hint) => (
           <Chip key={hint}>{hint}</Chip>
         ))}

@@ -16,6 +16,7 @@ import {
   arrivalLabel,
   arrivalTime,
   type Category,
+  countFr,
   crewLabels,
   type EventLineup,
   type EventPublic,
@@ -44,8 +45,10 @@ import {
   type TicketOffer,
   vehicleTypeLabels,
   weatherTexts,
+  widestWordEm,
   wizardEndLabels,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
@@ -483,7 +486,7 @@ function EventPage({
                 </span>
               )}
             </strong>
-            <span className="o-t-caption">{structure.followersCount} abonnés · organisateur</span>
+            <span className="o-t-caption">{countFr(structure.followersCount, "abonné")} · organisateur</span>
           </span>
         </a>
         {connected ? (
@@ -545,7 +548,13 @@ function EventPage({
                 {eventFormatLabels[event.format]} · <a href="#organisateur">{event.structure.name}</a>{" "}
                 {structure.verified && <span className="s-verified">Structure vérifiée</span>}
               </div>
-              <Outlined on="ground" as="h1" id="ev-title" className="o-t-poster-xl ev__feature-title">
+              <Outlined
+                on="ground"
+                as="h1"
+                id="ev-title"
+                className="o-t-poster-xl ev__feature-title"
+                style={{ "--em": widestWordEm(event.title) } as CSSProperties}
+              >
                 {event.title}
               </Outlined>
               <div className="o-t-meta">
@@ -785,7 +794,7 @@ function EventPage({
             {structure.verified && <span className="s-verified o-t-label">Vérifié</span>}
           </p>
           {structure.description && <p className="s-muted">{structure.description}</p>}
-          <p className="o-t-caption s-muted">{structure.followersCount} abonnés</p>
+          <p className="o-t-caption s-muted">{countFr(structure.followersCount, "abonné")}</p>
         </section>
       </div>
 

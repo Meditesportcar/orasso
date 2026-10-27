@@ -2,6 +2,7 @@
 // Lot M7 : page masquée du groupe ouverte depuis Ma fiche, c'est un parcours : mode B (en-tête de fiche, ✕ revient à Ma
 // fiche), sans barre d'onglets.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { countFr, pluralFr } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
@@ -69,7 +70,7 @@ export default function ProPublier() {
               {pro.postsUsed} / {pro.postsLimit}
             </Text>
             <Text variant="caption" color={t.color.plateMuted}>
-              {pro.followersCount} abonné{pro.followersCount > 1 ? "s" : ""} voient tes publications.
+              {`${countFr(pro.followersCount, "abonné")} ${pluralFr(pro.followersCount, "voit", "voient")} tes publications.`}
             </Text>
           </Plate>
           {pro.postsRemaining === 0 ? (
