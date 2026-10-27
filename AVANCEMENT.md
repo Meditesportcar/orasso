@@ -1,6 +1,19 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 26/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 27/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+
+## État au 27/10/2026 : R6 en ligne (crew en direct, « Suivre » comme sur Instagram, inviter entre passionnés)
+
+- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`4a836e1d`** (poussé). Migrations jusqu'à `0067` (0066 demandes d'abonnement et conversion des amitiés, 0067 invitations entre passionnés).
+- **APK** : `Orasso APK/Orasso-2026-10-27-4a836e1d-R6.apk` sur le Drive, essayé sur le Xiaomi (fiche, Qui y va, Inviter, profil, réseau, crew : aucun plantage).
+- **Contenu** (retours de Damien du 27/10, maquette « Orasso maquettes R6 » validée avec les choix par défaut, `validation-maquette-r6-2026-10-27.md` du relais) :
+  - **R6a crew en direct** : un post, un commentaire ou un vote apparaît sur la page du crew sans recharger.
+  - **R6b « Suivre » (D37)** : plus d'« ami » ; un compte privé reçoit des demandes d'abonnement (Boîte) ; « Retirer cet abonné » referme tout de suite l'accès au profil privé, aux photos, aux sorties, au crew et à la messagerie directe ; les anciennes amitiés converties en abonnements.
+  - **R6c inviter** : inviter des personnes suivies à un événement (« Inviter du monde », « Qui y va » parmi ceux que je suis, carte après candidature) et dans un crew (le chef fait entrer, l'invitation d'un membre est confirmée par le chef) ; « Ne plus recevoir d'invitations de… » sans que l'autre puisse le deviner ; une notification par personne et par 24 h.
+  - **Retouches du site** : en-tête jamais chevauché, titres jamais coupés au milieu d'un mot (site et fiche de l'appli), accords au singulier (« 1 abonné »).
+- **Vérification d'ensemble** : 1 h 31 sur 3 piles ; API 1 254/1 254 ; recettes 454 passées ; conversion des amitiés vérifiée sur tous les cas.
+- **En cours** : lot `lot-r6-police` (mots coupés et étiquettes rognées quand la police du téléphone est agrandie ; rien ne change à taille normale).
+- **Suite** : retours de Damien sur l'APK R6 jusqu'à la validation du passionné, puis les autres profils, puis le lot 58.
 
 ## État au 26/10/2026 : R5 en ligne (retours de Damien sur le passionné : véhicule, profil, crew vivant, fiche)
 
