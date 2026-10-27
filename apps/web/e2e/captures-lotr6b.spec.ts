@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
+import { lineupFixture } from "./helpers/lotr4b";
 import { RELAIS } from "./relais";
 
 // Lot R6b (D37, « Suivre » comme sur Instagram) : captures « avant » et « après » du profil d'un membre dans ses états,
@@ -97,6 +98,62 @@ test("R6b captures : site", async ({ browser }) => {
         await page.waitForTimeout(1200);
         await page.screenshot({ path: `${DIR}/site/${name}-${theme}-${width}.png`, fullPage: true });
       }
+      await ctx.close();
+    }
+  }
+});
+
+// Tour 2 (corrections R6b) : le menu ⋯ d'un abonné et sa confirmation « Retirer » (sans confirmer : le seed reste
+// intact), et la feuille de la voiture d'un compte privé sur le plateau (« Demander à suivre », puis « Demandé »).
+test("R6b tour 2 captures : appli (réseau « Retirer », plateau)", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  test.setTimeout(900_000);
+  mkdirSync(`${DIR}/appli`, { recursive: true });
+  const fx = await lineupFixture();
+  for (const theme of THEMES) {
+    for (const width of [390, 384]) {
+      const { ctx, page } = await openApp(browser, theme, width);
+      await page.setViewportSize({ width, height: 844 });
+      await signIn(page, "kenji@orasso.local");
+      await page.goto("/reseau");
+      await afterOpening(page);
+      await page.getByTestId("net-person-more").first().click();
+      await expect(page.getByTestId("net-follower-menu")).toBeVisible();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `${DIR}/appli/reseau-menu-retirer-${theme}-${width}.png` });
+      await page.getByTestId("net-remove").click();
+      await expect(page.getByTestId("net-remove-confirm")).toBeVisible();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `${DIR}/appli/reseau-retirer-confirmation-${theme}-${width}.png` });
+      await page.getByTestId("net-remove-keep").click();
+      await page.goto(`/e/${fx.event.slug}/plateau`);
+      await afterOpening(page);
+      await page.getByTestId("lineup-car-private").click();
+      await expect(page.getByTestId("lineup-ask-follow")).toBeVisible();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `${DIR}/appli/plateau-prive-${theme}-${width}.png` });
+      await ctx.close();
+    }
+  }
+});
+
+test("R6b tour 2 captures : site (réseau « Retirer »)", async ({ browser }) => {
+  test.setTimeout(600_000);
+  mkdirSync(`${DIR}/site`, { recursive: true });
+  const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+  for (const theme of THEMES) {
+    for (const width of [390, 1280]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 }, baseURL: WEB });
+      const page = await ctx.newPage();
+      await setTheme(page, theme);
+      await loginInBrowser(page, "kenji@orasso.local", SEED_PASSWORD, "/app/reseau");
+      await page.goto("/app/reseau?liste=abonnes");
+      const row = page.getByTestId("net-person").first();
+      await row.getByTestId("net-person-more").click();
+      await row.getByTestId("net-remove").click();
+      await expect(row.getByTestId("net-remove-confirm")).toBeVisible();
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: `${DIR}/site/reseau-retirer-confirmation-${theme}-${width}.png`, fullPage: true });
       await ctx.close();
     }
   }

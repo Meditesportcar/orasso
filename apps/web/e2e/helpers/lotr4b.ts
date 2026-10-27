@@ -4,6 +4,7 @@ import {
   addVehicleApi,
   apiCall,
   applyApi,
+  type Cookie,
   type CreatedEvent,
   createEvent,
   decideApi,
@@ -13,7 +14,8 @@ import {
   unique,
 } from "../helpers";
 
-export type LineupFixture = { event: CreatedEvent; publicPseudo: string; privatePseudo: string };
+/** Lot R6b, tour 2 : `privateCookie` (le compte privé répond aux demandes d'abonnement de la recette). */
+export type LineupFixture = { event: CreatedEvent; publicPseudo: string; privatePseudo: string; privateCookie: Cookie };
 
 export async function lineupFixture(): Promise<LineupFixture> {
   const damien = await login("damien@orasso.local");
@@ -21,12 +23,14 @@ export async function lineupFixture(): Promise<LineupFixture> {
   const tag = unique().slice(-6);
   const publicPseudo = `R4bPub_${tag}`;
   const privatePseudo = `R4bPriv_${tag}`;
+  let privateCookie: Cookie | null = null;
   for (const [pseudo, priv] of [
     [publicPseudo, false],
     [privatePseudo, true],
   ] as const) {
     const cookie = await signUpApi(pseudo);
     if (priv) {
+      privateCookie = cookie;
       const res = await apiCall(cookie, "PATCH", "/me/profile", { visibility: "private" });
       if (res.status !== 200) throw new Error(`Compte privé : ${res.status} ${JSON.stringify(res.data)}`);
     }
@@ -34,7 +38,8 @@ export async function lineupFixture(): Promise<LineupFixture> {
     const applicationId = await applyApi(cookie, event.id, vehicleId);
     await decideApi(damien, event.id, applicationId, "accept");
   }
-  return { event, publicPseudo, privatePseudo };
+  if (!privateCookie) throw new Error("Compte privé du plateau absent");
+  return { event, publicPseudo, privatePseudo, privateCookie };
 }
 
 /** Lot R4b, tour 2 : un événement sans voiture retenue, avec un photographe retenu (plateau de pros seulement). */

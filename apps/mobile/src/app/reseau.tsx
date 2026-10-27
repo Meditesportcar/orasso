@@ -22,7 +22,6 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
-import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;

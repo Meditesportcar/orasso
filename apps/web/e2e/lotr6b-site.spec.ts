@@ -1,11 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, type Cookie, loginInBrowser, SEED_PASSWORD, setTheme, signUpApi, unique } from "./helpers";
+import { privateWithRequests } from "./helpers/lotr6b";
 import { RELAIS } from "./relais";
 
 // Lot R6b (D37 : « Suivre » comme sur Instagram ; maquettes R6.1 et R6.2), côté site : les mêmes parcours que l'appli
 // (suivre un public, ne plus suivre avec confirmation, demander à un privé, accepter et refuser dans « Ton réseau »,
 // « Suivre en retour », « Te suit », trois nombres dans Moi). Béton et Sable, 390 et 1280 px. API et site seedés.
+// Tour 2 : « Retirer cet abonné » (menu ⋯ de la ligne, confirmation en place) ; la Boîte au-delà de 30 demandes.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r6b-captures/apres/recette-site`;
 test.use({ actionTimeout: 30_000 });
 
@@ -99,8 +101,46 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(page.getByText(/sorties?/).first()).toBeVisible();
       await expect(page.getByText(/^\d+\s*amis?$/)).toHaveCount(0);
       await shot(page, `06-moi-${tag}`);
+
+      // 6. Tour 2 : la personne privée retire Moi de ses abonnés (menu ⋯, confirmation) ; Moi n'est pas prévenu.
+      await other.page.goto("/app/reseau?liste=abonnes");
+      const row = other.page.getByTestId("net-person").filter({ hasText: me.pseudo });
+      await row.getByTestId("net-person-more").click();
+      await expect(row.getByTestId("net-follower-menu")).toBeVisible();
+      await shot(other.page, `07-reseau-menu-abonne-${tag}`);
+      await row.getByTestId("net-remove").click();
+      await expect(row.getByTestId("net-remove-confirm")).toContainText(`Retirer ${me.pseudo} de tes abonnés ?`);
+      await shot(other.page, `08-reseau-retirer-confirmation-${tag}`);
+      await row.getByTestId("net-remove-yes").click();
+      await expect(other.page.getByTestId("net-notice")).toContainText(`${me.pseudo} ne fait plus partie de tes abonnés.`);
+      await expect(other.page.getByTestId("net-person").filter({ hasText: me.pseudo })).toHaveCount(0);
+      await shot(other.page, `09-reseau-abonne-retire-${tag}`);
+      await page.goto(`/u/${priv.pseudo}`);
+      await expect(page.getByTestId("follow-button")).toHaveText(/Demander à suivre/i);
+      await expect(page.getByTestId("profile-private-note")).toBeVisible();
       await other.ctx.close();
       await mine.ctx.close();
     });
   }
 }
+
+test("R6b site (beton, 390) : Boîte, 31 demandes d'abonnement, « Suivants » montre la plus ancienne", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  mkdirSync(DIR, { recursive: true });
+  const target = await privateWithRequests("R6sBoite", 31);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+  const page = await ctx.newPage();
+  await setTheme(page, "beton");
+  await loginInBrowser(page, target.email, SEED_PASSWORD, "/app/boite/demandes");
+  await page.goto("/app/boite/demandes");
+  await expect(page.getByTestId("request-follow")).toHaveCount(30);
+  await expect(page.getByText(target.askers[0] as string)).toHaveCount(0);
+  await shot(page, "10-boite-31-demandes-beton-390");
+  await page.getByTestId("request-follow-more").click();
+  await expect(page.getByTestId("request-follow")).toHaveCount(1);
+  await expect(page.getByText(target.askers[0] as string)).toBeVisible();
+  await expect(page.getByTestId("request-follow-more")).toHaveCount(0);
+  await ctx.close();
+});
