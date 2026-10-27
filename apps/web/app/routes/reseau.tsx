@@ -10,6 +10,7 @@ import {
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FollowAction, FollowerMenu, PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
@@ -20,7 +21,11 @@ import "../styles/network.css";
 // « N abonnés », « N abonnements » et, pour un compte privé (ou s'il y en a), « N demandes » ; `?liste=` choisit la liste.
 // Recherche dans la liste (côté serveur), 30 par page (« Suivants »). Abonnés : « Suivre en retour » / « Abonné » /
 // « Demandé ». Demandes : « Accepter » et ✕. Toi seul vois ces listes : la page ne lit que les routes `/me/...`.
-// Tour 2 : dans Abonnés, le menu ⋯ d'une ligne propose « Retirer cet abonné », avec confirmation.
+// Tour 2 : dans Abonnés, le menu ⋯ d'une ligne propose « Retirer cet abonné », avec confirmation. Comme l'appli (et comme
+// l'ancien « Mes amis » qu'il remplace), « Ton réseau » est une fiche (mode B) : en-tête « Ton réseau », le pseudo en
+// petit, ✕ vers Moi.
+export const handle = ficheHandle;
+
 export function meta() {
   return [{ title: "Ton réseau · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -202,127 +207,133 @@ export default function Reseau({ loaderData, actionData: raw }: Route.ComponentP
     </p>
   );
   return (
-    <div className="s-narrow s-stack" data-testid="reseau">
-      <div className="s-stack s-stack--tight">
-        <h1 className="s-title">{me.profile.pseudo}</h1>
-        <p className="o-t-caption s-muted">{N.title}</p>
-      </div>
-      <nav className={tabs.length === 2 ? "n-tabs n-tabs--two" : "n-tabs"} aria-label={N.title} data-testid="net-tabs">
-        {tabs.map((t) => (
-          <a
-            key={t}
-            href={`/app/reseau?liste=${t}`}
-            aria-current={t === tab ? "page" : undefined}
-            data-testid={`net-tab-${t}`}
-          >
-            {label(t)}
-          </a>
-        ))}
-      </nav>
-      <Form method="get" className="n-search" role="search">
-        <input type="hidden" name="liste" value={tab} />
-        <TextField label={N.searchLabel} name="q" defaultValue={q} placeholder={N.search} data-testid="net-search" />
-        <Button type="submit" variant="secondary" icon="search">
-          Chercher
-        </Button>
-      </Form>
-      {actionData?.followError && (
-        <p className="s-error" role="alert">
-          {actionData.followError}
-        </p>
-      )}
-      {actionData?.followNotice && (
-        <p className="s-notice s-notice--ok" role="status" data-testid="net-notice">
-          {actionData.followNotice}
-        </p>
-      )}
-
-      {error && (
-        <div className="s-stack s-stack--tight" role="alert" data-testid="net-error">
-          <p className="s-error">{error}</p>
-          <Button variant="secondary" icon="undo" href={here}>
-            Réessayer
+    <>
+      <FicheBar title={N.title} facts={me.profile.pseudo} back="/app/moi" />
+      <div className="s-narrow s-stack" data-testid="reseau">
+        <nav
+          className={tabs.length === 2 ? "n-tabs n-tabs--two" : "n-tabs"}
+          aria-label={N.title}
+          data-testid="net-tabs"
+        >
+          {tabs.map((t) => (
+            <a
+              key={t}
+              href={`/app/reseau?liste=${t}`}
+              aria-current={t === tab ? "page" : undefined}
+              data-testid={`net-tab-${t}`}
+            >
+              {label(t)}
+            </a>
+          ))}
+        </nav>
+        <Form method="get" className="n-search" role="search">
+          <input type="hidden" name="liste" value={tab} />
+          <TextField label={N.searchLabel} name="q" defaultValue={q} placeholder={N.search} data-testid="net-search" />
+          <Button type="submit" variant="secondary" icon="search">
+            Chercher
           </Button>
-        </div>
-      )}
+        </Form>
+        {actionData?.followError && (
+          <p className="s-error" role="alert">
+            {actionData.followError}
+          </p>
+        )}
+        {actionData?.followNotice && (
+          <p className="s-notice s-notice--ok" role="status" data-testid="net-notice">
+            {actionData.followNotice}
+          </p>
+        )}
 
-      {followers &&
-        (followers.items.length ? (
-          <div className="n-group" data-testid="net-followers">
-            <PersonRows items={followers.items} busy={busy} removable />
-            {next(followers.nextCursor)}
+        {error && (
+          <div className="s-stack s-stack--tight" role="alert" data-testid="net-error">
+            <p className="s-error">{error}</p>
+            <Button variant="secondary" icon="undo" href={here}>
+              Réessayer
+            </Button>
           </div>
-        ) : (
-          empty(N.emptyFollowers)
-        ))}
+        )}
 
-      {requests && (
-        <>
-          <p className="o-t-caption s-muted">{N.requestsHint}</p>
-          {requests.items.length ? (
-            <div className="n-group" data-testid="net-requests">
-              <RequestRows items={requests.items} busy={busy} />
-              {next(requests.nextCursor)}
+        {followers &&
+          (followers.items.length ? (
+            <div className="n-group" data-testid="net-followers">
+              <PersonRows items={followers.items} busy={busy} removable />
+              {next(followers.nextCursor)}
             </div>
           ) : (
-            empty(N.emptyRequests)
-          )}
-        </>
-      )}
+            empty(N.emptyFollowers)
+          ))}
 
-      {following &&
-        (following.people.total + following.structures.total + following.pros.total === 0 ? (
-          empty(N.emptyFollowing)
-        ) : (
+        {requests && (
           <>
-            {following.people.total > 0 && (
-              <section className="n-group" data-testid="net-people">
-                <div className="n-group__head">
-                  <h2 className="s-h2">{N.groupPeople}</h2>
-                  <span className="o-t-caption">{following.people.total}</span>
-                </div>
-                <PersonRows items={following.people.items} busy={busy} />
-                {next(following.people.nextCursor)}
-              </section>
-            )}
-            {([following.structures, following.pros] as const).map((page) =>
-              page.total > 0 ? (
-                <section key={page.kind} className="n-group" data-testid={`net-${page.kind}`}>
-                  <div className="n-group__head">
-                    <h2 className="s-h2">{page.kind === "structures" ? N.groupStructures : N.groupPros}</h2>
-                    <span className="o-t-caption">{page.total}</span>
-                  </div>
-                  <ul className="n-list">
-                    {page.items.map((o) => (
-                      <li key={o.id} className="n-row">
-                        <a className="n-row__main" href={page.kind === "structures" ? `/o/${o.slug}` : `/p/${o.slug}`}>
-                          <span className={page.kind === "pros" ? "n-face n-face--pro" : "n-face"}>
-                            {o.logoUrl ? <img src={o.logoUrl} alt="" /> : o.name.slice(0, 3).toUpperCase()}
-                          </span>
-                          <span>
-                            <strong>{o.name}</strong>
-                            <small>{o.caption}</small>
-                          </span>
-                        </a>
-                        <span className="o-t-caption s-muted">
-                          <Icon name="check" size={14} /> {N.followed}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  {next(page.nextCursor, page.kind === "structures" ? "apres_org" : "apres_pro")}
-                </section>
-              ) : null,
+            <p className="o-t-caption s-muted">{N.requestsHint}</p>
+            {requests.items.length ? (
+              <div className="n-group" data-testid="net-requests">
+                <RequestRows items={requests.items} busy={busy} />
+                {next(requests.nextCursor)}
+              </div>
+            ) : (
+              empty(N.emptyRequests)
             )}
           </>
-        ))}
+        )}
 
-      <p className="n-note" data-testid="net-privacy">
-        <Icon name="lock" size={16} />
-        <span>
-          <strong>{N.privacyNoteStrong}</strong> {N.privacyNote}
-        </span>
-      </p>
-    </div>
+        {following &&
+          (following.people.total + following.structures.total + following.pros.total === 0 ? (
+            empty(N.emptyFollowing)
+          ) : (
+            <>
+              {following.people.total > 0 && (
+                <section className="n-group" data-testid="net-people">
+                  <div className="n-group__head">
+                    <h2 className="s-h2">{N.groupPeople}</h2>
+                    <span className="o-t-caption">{following.people.total}</span>
+                  </div>
+                  <PersonRows items={following.people.items} busy={busy} />
+                  {next(following.people.nextCursor)}
+                </section>
+              )}
+              {([following.structures, following.pros] as const).map((page) =>
+                page.total > 0 ? (
+                  <section key={page.kind} className="n-group" data-testid={`net-${page.kind}`}>
+                    <div className="n-group__head">
+                      <h2 className="s-h2">{page.kind === "structures" ? N.groupStructures : N.groupPros}</h2>
+                      <span className="o-t-caption">{page.total}</span>
+                    </div>
+                    <ul className="n-list">
+                      {page.items.map((o) => (
+                        <li key={o.id} className="n-row">
+                          <a
+                            className="n-row__main"
+                            href={page.kind === "structures" ? `/o/${o.slug}` : `/p/${o.slug}`}
+                          >
+                            <span className={page.kind === "pros" ? "n-face n-face--pro" : "n-face"}>
+                              {o.logoUrl ? <img src={o.logoUrl} alt="" /> : o.name.slice(0, 3).toUpperCase()}
+                            </span>
+                            <span>
+                              <strong>{o.name}</strong>
+                              <small>{o.caption}</small>
+                            </span>
+                          </a>
+                          <span className="o-t-caption s-muted">
+                            <Icon name="check" size={14} /> {N.followed}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {next(page.nextCursor, page.kind === "structures" ? "apres_org" : "apres_pro")}
+                  </section>
+                ) : null,
+              )}
+            </>
+          ))}
+
+        <p className="n-note" data-testid="net-privacy">
+          <Icon name="lock" size={16} />
+          <span>
+            <strong>{N.privacyNoteStrong}</strong> {N.privacyNote}
+          </span>
+        </p>
+      </div>
+    </>
   );
 }

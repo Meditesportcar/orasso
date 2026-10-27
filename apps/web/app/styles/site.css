@@ -2614,8 +2614,13 @@
   padding: 0;
   list-style: none;
 }
+/* Tour 2 : quand le nom n'a plus la place (« Suivre en retour » et le menu ⋯ à 390 px), les boutons passent à la ligne,
+   à droite, au lieu de couper le pseudo lettre par lettre. Les confirmations des boutons compacts s'ouvrent sous la
+   ligne entière. */
 .r6row {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -2624,7 +2629,7 @@
   box-shadow: var(--shadow-card);
 }
 .r6row__main {
-  flex: 1;
+  flex: 1 1 calc(var(--space-12) * 2);
   min-width: 0;
   display: flex;
   align-items: center;
@@ -2650,7 +2655,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin: 0;
+  margin: 0 0 0 auto;
+}
+.r6row .fl-conf--sm {
+  position: static;
+}
+.r6row .fl-conf--sm .fl-confirm {
+  right: var(--space-2);
+  width: min(calc(var(--space-12) * 7), calc(100% - var(--space-4)));
 }
 /* Tour 2 : le menu ⋯ d'un abonné et l'étape « Retirer cet abonné » (un second `<details>` dans le premier). */
 .fl-step > summary {

@@ -206,6 +206,16 @@
   flex: 1;
   min-width: 0;
 }
+/* Lot R6b, tour 2 : « Chercher » ne se coupe plus ; le champ prend la place restante. */
+.n-search > :not(input):not(.o-button) {
+  flex: 1;
+  min-width: 0;
+}
+.n-search > .o-button {
+  flex: none;
+  align-self: flex-end;
+  white-space: nowrap;
+}
 .n-group {
   display: grid;
   gap: var(--space-2);

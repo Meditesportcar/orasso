@@ -162,6 +162,9 @@ function Face({ url, name, size = 40 }: { url: string | null; name: string; size
   );
 }
 
+/** Largeur sous laquelle la colonne du nom couperait un mot (« Rodage », « Volkswagen ») : deux fois `space-12`. */
+const MIN_TEXT_WIDTH = tokens.spacing.space12 * 2;
+
 /** `.prow` : une personne, un organisateur ou un pro, avec son action à droite. */
 function Row({
   face,
@@ -183,10 +186,14 @@ function Row({
 }) {
   const { t } = useTheme();
   const [w, setW] = useState(0);
+  // Tour 2 : « Suivre en retour » et le menu ⋯ côte à côte laisseraient au pseudo et au véhicule une colonne où les mots
+  // se couperaient ; sous `MIN_TEXT_WIDTH`, les boutons passent sous le nom, une fois pour toutes (pas d'aller-retour).
+  const [narrow, setNarrow] = useState(false);
+  const below = actionBelow || narrow;
   // Un pseudo long rapetisse (jusqu'à 11 px) au lieu de se couper à côté des boutons.
   const size = fitWordSize(name, w, 14, 11, 0.62);
   return (
-    <View style={[styles.row, actionBelow && styles.rowBelow]} testID={testID}>
+    <View style={[styles.row, below && styles.rowBelow]} testID={testID}>
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={name}
@@ -194,7 +201,14 @@ function Row({
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         {face}
-        <View style={styles.rowText} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+        <View
+          style={styles.rowText}
+          onLayout={(e) => {
+            const width = e.nativeEvent.layout.width;
+            setW(width);
+            if (!below && action && width > 0 && width < MIN_TEXT_WIDTH) setNarrow(true);
+          }}
+        >
           <Text variant="bodyStrong" color={t.color.ink} style={[styles.rowName, { fontSize: size }]}>
             {name}
           </Text>
