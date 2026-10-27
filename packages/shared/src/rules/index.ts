@@ -6,6 +6,7 @@ export * from "./applicationTransitions";
 export * from "./arrival";
 export * from "./audiencePrize";
 export * from "./crewFeed";
+export * from "./crewLive";
 export * from "./crewPage";
 export * from "./crews";
 export * from "./dateYear";

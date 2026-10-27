@@ -78,6 +78,34 @@ export const realtime = {
       }
     }
   },
+  /**
+   * Lot R6a : retire tout de suite les connexions choisies d'un canal (droit perdu : membre retiré, crew dissous) et le
+   * leur dit (`revoked`), sans attendre la revérification périodique.
+   */
+  revoke(channel: string, match: (socket: RealtimeSocket) => boolean = () => true) {
+    const set = channels.get(channel);
+    if (!set) return;
+    const message = JSON.stringify({ type: "revoked", channel });
+    for (const socket of [...set]) {
+      if (!match(socket)) continue;
+      set.delete(socket);
+      try {
+        socket.send(message);
+      } catch {
+        // Connexion déjà fermée : rien à prévenir.
+      }
+    }
+    if (set.size === 0) channels.delete(channel);
+  },
+  /**
+   * Lot R6a, tour 2 : retire tout de suite une personne de tous les canaux d'une famille (`crew:` : compte suspendu ou
+   * supprimé), sur toutes ses connexions, avec `revoked`.
+   */
+  revokeUser(prefix: string, userId: string) {
+    for (const channel of [...channels.keys()]) {
+      if (channel.startsWith(prefix)) this.revoke(channel, (socket) => socket.userId === userId);
+    }
+  },
   subscriberCount(channel: string): number {
     return channels.get(channel)?.size ?? 0;
   },

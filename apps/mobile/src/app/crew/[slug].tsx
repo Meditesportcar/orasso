@@ -26,12 +26,13 @@ import {
   crewPageLabels as L,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Alert, Linking, Platform, Pressable, type ScrollView, StyleSheet, View } from "react-native";
 
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
-import { CrewFeed } from "@/features/crews/feed/CrewFeed";
+import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
+import { useCrewLive } from "@/features/crews/feed/useCrewLive";
 import {
   CrewEventRow,
   CrewSecHead,
@@ -90,6 +91,24 @@ export default function CrewScreen() {
   const pending = useApi(() => api.crewPending(v?.id ?? ""), [v?.id, leader], {
     enabled: Boolean(v && leader && live),
   });
+  // Lot R6a : en direct. Un signal de sortie, d'arrivée, de départ ou de réglage relit la page (onglets Sorties, Garage,
+  // Membres) ; retiré du crew (`revoked`), la page se relit et montre la vitrine.
+  useCrewLive(
+    v && member && live ? v.id : null,
+    async (needs) => {
+      if (needs.page) await Promise.all([crew.reload(), members.reload(), pending.reload()]);
+    },
+    { onRevoked: () => void crew.reload() },
+  );
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollY = useRef(0);
+  const scroller = useMemo<CrewFeedScroller>(
+    () => ({
+      scrollTo: (y, animated) => scrollRef.current?.scrollTo({ y, animated }),
+      y: () => scrollY.current,
+    }),
+    [],
+  );
   const [tab, setTab] = useState<Tab>(onglet === "sorties" ? "outings" : "feed");
   const [asking, setAsking] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -225,6 +244,10 @@ export default function CrewScreen() {
     <PosterFlow
       onClose={close}
       onRefresh={reloadAll}
+      scrollRef={scrollRef}
+      onScrollY={(y) => {
+        scrollY.current = y;
+      }}
       overlays={
         <>
           {leader ? inviteSheet : null}
@@ -369,7 +392,9 @@ export default function CrewScreen() {
             onChange={setTab}
           />
 
-          {tab === "feed" ? <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} /> : null}
+          {tab === "feed" ? (
+            <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} scroller={scroller} />
+          ) : null}
 
           {tab === "outings" ? (
             <View style={styles.col} testID="crew-outings">

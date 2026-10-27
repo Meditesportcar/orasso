@@ -324,7 +324,7 @@ export const moderationService = {
       .update(reports)
       .set({ sanctionId: s.id })
       .where(and(inArray(reports.id, reportIds), isNull(reports.sanctionId)));
-    await recomputeSuspension(tx, ownerId);
+    await recomputeSuspension(tx, ownerId, after);
     await notifySanction(tx, s);
     await notificationsService.notifyMany(tx, team, "moderation_priority_alert", {
       ...texts.priorityAlert(owner.pseudo, reporters.size),
@@ -639,7 +639,7 @@ export const moderationService = {
             updatedAt: at,
           })
           .returning()) as [SanctionRow];
-        const state = await recomputeSuspension(tx, subjectId);
+        const state = await recomputeSuspension(tx, subjectId, after);
         if (state.banned) await revokeSessions(tx, subjectId);
         await notifySanction(tx, sanction);
         await audit(
@@ -717,7 +717,7 @@ export const moderationService = {
           updatedAt: at,
         })
         .returning()) as [SanctionRow];
-      const state = await recomputeSuspension(tx, userId);
+      const state = await recomputeSuspension(tx, userId, after);
       if (state.banned) await revokeSessions(tx, userId);
       await notifySanction(tx, sanction);
       await audit(
@@ -799,7 +799,7 @@ export const moderationService = {
           updatedAt: at,
         })
         .where(eq(sanctions.id, id));
-      if (lifted) await recomputeSuspension(tx, s.userId);
+      if (lifted) await recomputeSuspension(tx, s.userId, after);
       await notificationsService.notify(tx, s.userId, "sanction_contest_decided", {
         ...texts.contestDecided(lifted, input.note),
         data: { sanctionId: s.id },
@@ -838,7 +838,7 @@ export const moderationService = {
           updatedAt: at,
         })
         .where(eq(sanctions.id, id));
-      await recomputeSuspension(tx, s.userId);
+      await recomputeSuspension(tx, s.userId, after);
       await notificationsService.notify(tx, s.userId, "sanction_lifted", {
         ...texts.sanctionLifted(note),
         data: { sanctionId: s.id },

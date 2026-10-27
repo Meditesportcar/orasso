@@ -26,8 +26,9 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { notificationsService, registerDeliveryGuard } from "../notifications/service";
-import { isUuid } from "./feed/access";
+import { isUuid, requireCrewMember } from "./feed/access";
 import { activeVisibleMember } from "./feed/service";
+import { signalCrew } from "./live";
 import { activeMembersOf, crewOutingViews, reachableProfileSql } from "./page";
 import { assertWritable, type CrewRow, lockCrew, memberRow } from "./service";
 
@@ -108,6 +109,15 @@ export const crewOutingsService = {
     return view;
   },
 
+  /**
+   * `GET /crews/:id/outings/:outingId` (lot R6a, tour 2) : la sortie relue à un signal pour sa carte du fil. Mêmes droits
+   * que le fil (membre actif et visible d'un crew non dissous, 404 sinon) ; 404 une fois annulée.
+   */
+  async read(v: Viewer, crewId: string, outingId: string): Promise<CrewOutingView> {
+    await requireCrewMember(db, v, crewId);
+    return this.one(v, crewId, outingId);
+  },
+
   /** `POST /crews/:id/outings` : la sortie arrive dans les notifications des membres (calmes : préférences, nuit). */
   async create(v: Viewer, crewId: string, input: CrewOutingCreate): Promise<CrewOutingView> {
     assertWritable(v);
@@ -148,6 +158,7 @@ export const crewOutingsService = {
         link: { label: "Voir la sortie", path: outingLink(crew) },
       });
       after(() => notificationsService.kick());
+      signalCrew(after, crew.id, "outing.created", { outingId: row.id });
       return row.id;
     }).catch(concurrency);
     return this.one(v, crewId, id);
@@ -159,12 +170,13 @@ export const crewOutingsService = {
     rateLimit("crewWrite", v.user.id);
     const at = now();
     if (input.startsAt) dateCheck(input.startsAt, at);
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       const { isLeader } = await lockAsMember(tx, crewId, v);
       const outing = await lockOuting(tx, crewId, outingId, at);
       if (!canManageCrewOuting({ isAuthor: outing.authorId === v.user.id, isLeader })) {
         throw forbidden(crewOutingErrors.manageForbidden);
       }
+      signalCrew(after, outing.crewId, "outing.updated", { outingId: outing.id });
       await tx
         .update(crewOutings)
         .set({
@@ -220,6 +232,7 @@ export const crewOutingsService = {
         link: { label: "Voir le crew", path: `/c/${crew.slug}` },
       });
       after(() => notificationsService.kick());
+      signalCrew(after, crew.id, "outing.cancelled", { outingId: outing.id });
     }).catch(concurrency);
   },
 
@@ -228,9 +241,10 @@ export const crewOutingsService = {
     assertWritable(v);
     rateLimit("crewWrite", v.user.id);
     const at = now();
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       await lockAsMember(tx, crewId, v);
       const outing = await lockOuting(tx, crewId, outingId, at);
+      signalCrew(after, outing.crewId, "outing.rsvp", { outingId: outing.id });
       await tx
         .insert(crewOutingReplies)
         .values({ outingId: outing.id, userId: v.user.id, answer, answeredAt: at })

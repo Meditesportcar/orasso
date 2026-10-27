@@ -9,6 +9,7 @@ import {
   crewFeedLabels,
   mergeCrewComments,
   moderationLabels,
+  readCrewComments,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -28,6 +29,7 @@ import { Overlay } from "@/ui/Overlay";
 
 import { confirmRemove } from "./confirm";
 import { whenOf } from "./PostCard";
+import { useCrewLive } from "./useCrewLive";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -95,6 +97,32 @@ export function CommentsSheet({
     setLoadError(null);
     if (postId) void load();
   }, [postId, load]);
+
+  // Lot R6a : feuille ouverte, les commentaires des autres arrivent (et partent) sans la rouvrir.
+  const byPostRef = useRef(byPost);
+  byPostRef.current = byPost;
+  useCrewLive(postId ? crewId : null, async (needs) => {
+    const target = postId;
+    if (!target) return;
+    if (needs.removedComments.length) {
+      const gone = new Set(needs.removedComments);
+      setByPost((all) =>
+        Object.fromEntries(
+          Object.entries(all).map(([id, v]) => [id, { ...v, items: v.items.filter((x) => !gone.has(x.id)) }]),
+        ),
+      );
+    }
+    if (!needs.comments.includes(target) && !needs.full) return;
+    const shown = byPostRef.current[target];
+    if (!shown) return; // Pas encore lue : sa première lecture suffit.
+    const ticket = gate.follow();
+    // Tour 2 : relue jusqu'à couvrir l'affiché (toute la liste si elle était complète : les nouveaux sont à la fin). Une
+    // page en échec rejette tout : la liste et son curseur restent, la relecture est retentée. Au-delà de la limite de
+    // pages, le vrai curseur est gardé (« Voir la suite »).
+    const next = await readCrewComments((cursor) => api.crewPostComments(crewId, target, cursor ?? undefined), shown);
+    if (!ticket.current()) return;
+    setByPost((all) => ({ ...all, [target]: next }));
+  });
 
   async function send() {
     const target = postId;

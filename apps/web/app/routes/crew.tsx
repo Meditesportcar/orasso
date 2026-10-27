@@ -12,6 +12,7 @@ import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
 import { CrewFeed } from "../components/crew-feed/CrewFeed";
+import { CrewLiveProvider } from "../components/crew-feed/CrewLive";
 import {
   CrewEventRow,
   CrewRequestDialog,
@@ -172,8 +173,9 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
     </aside>
   ) : null;
 
+  // Lot R6a : en direct (membre d'un crew non dissous) ; une sortie, une arrivée, un départ ou un réglage relit la page.
   return (
-    <>
+    <CrewLiveProvider crewId={member && live ? crew.id : null}>
       <FicheBar heading={false} title={crewLabels.crew} back="/app/crews" />
       <div className="crw-page" data-testid="crew" data-state={crew.viewerState}>
         <div className="crw-hero">
@@ -445,6 +447,6 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
 
         {!leader && live ? <ReportDialog look="link" targetType="crew" targetId={crew.id} /> : null}
       </div>
-    </>
+    </CrewLiveProvider>
   );
 }

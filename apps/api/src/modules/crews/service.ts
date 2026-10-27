@@ -68,6 +68,7 @@ import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "../vehicles/p
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
 import { withdrawAwaitingForCrew } from "./awaiting";
 import { purgeCrewFeed } from "./feed/service";
+import { revokeCrew, revokeCrewMember, signalCrew } from "./live";
 import {
   activeMembersOf,
   bannerFor,
@@ -371,6 +372,8 @@ async function join(tx: Tx, after: After, crew: CrewRow, person: Pick<Profile, "
   await recount(tx, crew.id);
   const conversationId = await syncConversation(tx, crew);
   await systemMessage(tx, after, conversationId, "crew_member_joined", person);
+  // Lot R6a : les pages ouvertes du crew relisent le fil (« … a rejoint le crew »), les membres et le garage.
+  signalCrew(after, crew.id, "member.joined");
   return conversationId;
 }
 
@@ -420,6 +423,9 @@ async function depart(
     status === "left" ? "crew_member_left" : "crew_member_removed",
     person,
   );
+  // Lot R6a : la personne ne reçoit plus rien du crew, tout de suite ; les autres relisent le fil et les membres.
+  revokeCrewMember(after, crew.id, person.userId);
+  signalCrew(after, crew.id, "member.left");
 }
 
 function publishInbox(after: After, ...userIds: string[]) {
@@ -516,8 +522,9 @@ export const crewsService = {
   async update(v: Viewer, id: string, input: CrewUpdate): Promise<CrewView> {
     assertWritable(v);
     rateLimit("crewWrite", v.user.id);
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       await requireLeader(tx, id, v);
+      signalCrew(after, id, "crew.updated");
       await tx
         .update(crews)
         .set({
@@ -545,8 +552,9 @@ export const crewsService = {
   async setLogo(v: Viewer, id: string, key: string | null): Promise<CrewView> {
     assertWritable(v);
     rateLimit("crewWrite", v.user.id);
-    const old = await withTx(async (tx) => {
+    const old = await withTx(async (tx, after) => {
       const crew = await requireLeader(tx, id, v);
+      signalCrew(after, id, "crew.updated");
       if (key) {
         const upload = await uploadsService.consume(tx, v.user.id, key, "crew_logo");
         if (!upload) throw validation("Image inconnue ou déjà utilisée");
@@ -600,8 +608,9 @@ export const crewsService = {
     }
     let old: string | null;
     try {
-      old = await withTx(async (tx) => {
+      old = await withTx(async (tx, after) => {
         const locked = await requireLeader(tx, id, v);
+        signalCrew(after, id, "crew.updated");
         await tx
           .update(crews)
           .set({ bannerKey: key, bannerPlateCleared: Boolean(key && (plateRects?.length || noPlate)) })
@@ -699,6 +708,8 @@ export const crewsService = {
       });
     }
     publishInbox(after, ...pending.map((p) => p.userId), ...members.map((m) => m.userId));
+    // Lot R6a : crew dissous, plus personne ne reçoit rien de son canal ; les pages ouvertes se relisent (`revoked`).
+    revokeCrew(after, crew.id);
     return [...[crew.logoKey, crew.bannerKey].filter((k): k is string => Boolean(k)), ...feedKeys];
   },
 
