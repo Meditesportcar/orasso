@@ -36,7 +36,7 @@ const TUTOS: Record<Profile, { titles: string[]; first: string; last: string }> 
       "Tu retrouves ta bande",
     ],
     first: "Explorer liste tout ce qui se passe autour de toi, du plus proche au plus loin.",
-    last: "Explorer montre aussi les personnes et les crews du coin. Tu suis tes amis, tu rejoins un crew, vous vous écrivez et vous candidatez ensemble.",
+    last: "Explorer montre aussi les personnes et les crews du coin. Tu suis d'autres passionnés, tu rejoins un crew, vous vous écrivez et vous candidatez ensemble.",
   },
   visitor: {
     titles: [
@@ -49,7 +49,7 @@ const TUTOS: Record<Profile, { titles: string[]; first: string; last: string }> 
     ],
     first:
       "Explorer liste les rassemblements et les expos autour de toi. Pas besoin de voiture pour venir voir celles des autres.",
-    last: "Explorer montre aussi les personnes et les crews du coin. Tu suis tes amis et tes crews préférés, vous vous écrivez, et tu vois qui va où.",
+    last: "Explorer montre aussi les personnes et les crews du coin. Tu suis d'autres passionnés et tes crews préférés, vous vous écrivez, et tu vois qui va où.",
   },
   pro: {
     titles: [

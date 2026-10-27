@@ -305,7 +305,11 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
     // par le lien de la carte.
     await page.locator("a.g-card-link").first().click();
     await expect(page.getByTestId("share-card")).toBeVisible();
-    await page.getByTestId("share-style-neon").click();
+    // Le choix du style est un état du navigateur : un clic avant l'hydratation est perdu, on retouche jusqu'à ce qu'il compte.
+    await expect(async () => {
+      await page.getByTestId("share-style-neon").click();
+      await expect(page.getByTestId("share-style-neon")).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
     const download = page.waitForEvent("download");
     await page.getByTestId("share-story").click();
     expect((await download).suggestedFilename()).toBe("orasso-story-neon.png");

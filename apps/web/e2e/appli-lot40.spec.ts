@@ -212,8 +212,9 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
       await expect(page.getByTestId(id).first()).toBeVisible();
     }
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
-    // Lot R4c (maquette R4.6) : « Mon profil public » et les amis montent dans l'en-tête du profil.
-    for (const id of ["profil-public", "profil-count-amis"]) await expect(page.getByTestId(id)).toBeVisible();
+    // Lot R4c (maquette R4.6) : « Mon profil public » et les compteurs montent dans l'en-tête du profil. Lot R6b (D37) :
+    // plus d'« amis », le troisième compteur est celui des sorties.
+    for (const id of ["profil-public", "profil-count-sorties"]) await expect(page.getByTestId(id)).toBeVisible();
     await page.screenshot({ path: `${DIR}/profil-hub-${theme}.png`, fullPage: true });
     // Lot M5 (maquette 7.2) : réglages en lignes groupées, « Compte » (e-mail, mot de passe, sanctions) à la place de
     // « Sécurité ». Lot R5b (remarque 6 de Damien) : ils sont derrière la roue dentée de la carte du profil.
