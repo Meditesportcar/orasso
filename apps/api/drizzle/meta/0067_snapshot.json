@@ -1,5 +1,5 @@
 {
-  "id": "9cde4005-c59e-4c0e-9c63-f705a0e53f18",
+  "id": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "prevId": "bb770182-d636-467e-9f02-f7b4c9c079aa",
   "version": "7",
   "dialect": "postgresql",
@@ -5121,6 +5121,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "notified_at": {
+          "name": "notified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -5183,6 +5189,33 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_peer_invitations_pair_idx": {
+          "name": "event_peer_invitations_pair_idx",
+          "columns": [
+            {
+              "expression": "inviter_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "invitee_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "notified_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

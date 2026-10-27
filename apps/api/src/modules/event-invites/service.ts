@@ -28,6 +28,7 @@ import {
   type InviteCandidatesPage,
   type InviteCrew,
   inviteCaption,
+  inviteNoteLines,
   type ReceivedEventInvitation,
 } from "@orasso/shared";
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
@@ -43,7 +44,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { canSeeEvent, inviteOnlyError } from "../invitations/access";
-import { notificationsService, registerDeliveryGuard } from "../notifications/service";
+import { type NotificationRow, notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 
 const DAY = 86_400_000;
@@ -220,25 +221,114 @@ async function sentToday(ex: Executor, me: string, at: Date): Promise<number> {
 const dateLine = (e: Pick<EventRow, "startsAt" | "city">) =>
   `${formatDateTime(e.startsAt)}${e.city ? ` · ${e.city}` : ""}`;
 
-const bodyOf = (e: Pick<EventRow, "startsAt" | "city">, note: string | null) =>
-  `${dateLine(e)}${note ? `\n« ${note} »` : ""}`;
+type InviteData = { actorIds?: unknown; link?: unknown; linkLabel?: unknown; eventSlug?: unknown };
 
-type InviteData = { actor?: unknown; actorIds?: string[]; pseudos?: string[]; note?: string | null };
+const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/** Les auteurs rattachés à une notification d'invitation (`data.actorIds`). */
+const actorIdsOf = (n: Pick<NotificationRow, "data">): string[] => {
+  const ids = (n.data as InviteData).actorIds;
+  return isStringArray(ids) ? ids : [];
+};
+
+/** Un seul regroupement à la fois pour une personne et un événement (envoi, livraison, coupure, compte supprimé). */
+const lockGroup = (ex: Executor, inviteeId: string, eventId: string) =>
+  ex.execute(sql`select pg_advisory_xact_lock(hashtext(${`event-invited:${inviteeId}:${eventId}`}))`);
+
+type Author = { userId: string; pseudo: string; avatarKey: string | null; note: string | null };
+
+/**
+ * Tour 2 (relecture Codex 2 et Opus 7) : parmi ces auteurs, ceux dont l'invitation tient encore (enregistrée, compte en
+ * règle, pas coupé par l'invité), la plus récente d'abord, chacun avec son mot.
+ */
+async function authorsOf(
+  ex: Executor,
+  eventId: string,
+  inviteeId: string,
+  actorIds: readonly string[],
+  at: Date,
+): Promise<Author[]> {
+  if (!actorIds.length) return [];
+  const result = await ex.execute(sql`
+    select i.inviter_id, p.pseudo, p.avatar_key, i.note
+    from event_peer_invitations i
+    join profiles p on p.user_id = i.inviter_id
+    where i.event_id = ${eventId} and i.invitee_id = ${inviteeId} and i.inviter_id in (${list(actorIds)})
+      and ${reachableSql(at)}
+      and not exists (
+        select 1 from invitation_mutes m where m.user_id = ${inviteeId} and m.muted_user_id = i.inviter_id
+      )
+    order by i.created_at desc, i.id`);
+  return (result.rows as { inviter_id: string; pseudo: string; avatar_key: string | null; note: string | null }[]).map(
+    (r) => ({ userId: r.inviter_id, pseudo: r.pseudo, avatarKey: r.avatar_key, note: r.note }),
+  );
+}
+
+/**
+ * Titre, corps et données de « Kenji_66 t'invite à Nocturne de Canet » d'après ses auteurs : la date et le lieu, puis
+ * chaque mot attribué à son auteur quand ils sont plusieurs (« Kenji_66 : « … » »). `base` garde le lien de la ligne.
+ */
+function invitedContent(e: EventRow, authors: readonly Author[], base: Record<string, unknown>) {
+  const [first] = authors;
+  if (!first) throw new Error("Invitation sans auteur");
+  const notes = inviteNoteLines(authors);
+  return {
+    title: eventInvitedTitle(
+      authors.slice(0, 2).map((a) => a.pseudo),
+      authors.length,
+      e.title,
+    ),
+    body: [dateLine(e), ...notes].join("\n"),
+    data: {
+      ...(typeof base.link === "string" ? { link: base.link } : {}),
+      ...(typeof base.linkLabel === "string" ? { linkLabel: base.linkLabel } : {}),
+      eventSlug: e.slug,
+      actor: { userId: first.userId, pseudo: first.pseudo, avatarUrl: storage.url(first.avatarKey) },
+      actorIds: authors.map((a) => a.userId),
+      actors: authors.map((a) => ({ userId: a.userId, pseudo: a.pseudo })),
+      notes,
+    },
+  };
+}
+
+/**
+ * Recompose une notification d'invitation d'après les invitations encore valables de ses auteurs (`without` : un auteur
+ * qui sort du groupe, coupé ou supprimé, sans effacer les autres). Plus aucun auteur : supprimée, `null`. Sous le verrou
+ * du regroupement, dans la transaction de l'appelant.
+ */
+async function recompose(tx: Tx, n: NotificationRow, at: Date, without?: string): Promise<NotificationRow | null> {
+  const e = n.eventId ? await tx.query.events.findFirst({ where: eq(events.id, n.eventId) }) : undefined;
+  if (e) await lockGroup(tx, n.userId, e.id);
+  const [fresh] = await tx.select().from(notifications).where(eq(notifications.id, n.id)).for("update");
+  if (!fresh) return null;
+  const ids = actorIdsOf(fresh).filter((id) => id !== without);
+  const authors = e ? await authorsOf(tx, e.id, fresh.userId, ids, at) : [];
+  if (!e || !authors.length) {
+    await tx.delete(notifications).where(eq(notifications.id, fresh.id));
+    return null;
+  }
+  const [row] = await tx
+    .update(notifications)
+    .set(invitedContent(e, authors, fresh.data))
+    .where(eq(notifications.id, fresh.id))
+    .returning();
+  return row ?? null;
+}
 
 /**
  * « Kenji_66 t'invite à Nocturne de Canet », regroupée par événement : une notification non lue de cet événement est
- * complétée (« Kenji_66 et Julie_66 t'invitent ») au lieu d'en créer une nouvelle. Heures calmes et préférences : celles
- * de `notificationsService` (famille `social`, type `event_invited` coupable).
+ * recomposée avec ce nouvel auteur (« Kenji_66 et Julie_66 t'invitent ») au lieu d'en créer une nouvelle. Heures calmes
+ * et préférences : celles de `notificationsService` (famille `social`, type `event_invited` coupable).
+ * Tour 2 (relecture Opus 4) : au plus une notification par paire auteur-invité et par 24 h, tous événements confondus ;
+ * au-delà, l'invitation reste enregistrée (bandeau de la fiche) sans notification. Rend vrai si elle est notifiée.
  */
-async function notifyInvited(
-  tx: Tx,
-  inviteeId: string,
-  e: EventRow,
-  inviter: { userId: string; pseudo: string; avatarKey: string | null },
-  note: string | null,
-) {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`event-invited:${inviteeId}:${e.id}`}))`);
-  const actor = { userId: inviter.userId, pseudo: inviter.pseudo, avatarUrl: storage.url(inviter.avatarKey) };
+async function notifyInvited(tx: Tx, inviteeId: string, e: EventRow, inviterId: string, at: Date): Promise<boolean> {
+  const recent = await tx.execute(sql`
+    select 1 from event_peer_invitations
+    where inviter_id = ${inviterId} and invitee_id = ${inviteeId} and notified_at > ${new Date(at.getTime() - DAY)}
+    limit 1`);
+  if (recent.rows.length) return false;
+  await lockGroup(tx, inviteeId, e.id);
   const [open] = await tx
     .select()
     .from(notifications)
@@ -253,29 +343,36 @@ async function notifyInvited(
     .orderBy(desc(notifications.createdAt))
     .limit(1)
     .for("update");
+  const ids = [inviterId, ...(open ? actorIdsOf(open).filter((id) => id !== inviterId) : [])];
+  const authors = await authorsOf(tx, e.id, inviteeId, ids, at);
+  if (!authors.some((a) => a.userId === inviterId)) return false;
   if (open) {
-    const data = open.data as InviteData;
-    const actorIds = [inviter.userId, ...(data.actorIds ?? []).filter((id) => id !== inviter.userId)];
-    const pseudos = [inviter.pseudo, ...(data.pseudos ?? []).filter((p) => p !== inviter.pseudo)].slice(0, 2);
-    const kept = note ?? data.note ?? null;
     await tx
       .update(notifications)
-      .set({
-        title: eventInvitedTitle(pseudos, actorIds.length, e.title),
-        body: bodyOf(e, kept),
-        data: { ...open.data, actor, actorIds, pseudos, note: kept },
-      })
+      .set(invitedContent(e, authors, open.data))
       .where(eq(notifications.id, open.id));
-    return;
+  } else {
+    const content = invitedContent(e, authors, {});
+    await notificationsService.notify(tx, inviteeId, "event_invited", {
+      title: content.title,
+      body: content.body,
+      eventId: e.id,
+      eventStartsAt: e.startsAt,
+      data: content.data,
+      link: { label: eventInviteLabels.notificationLink, path: `/e/${e.slug}` },
+    });
   }
-  await notificationsService.notify(tx, inviteeId, "event_invited", {
-    title: eventInvitedTitle([inviter.pseudo], 1, e.title),
-    body: bodyOf(e, note),
-    eventId: e.id,
-    eventStartsAt: e.startsAt,
-    data: { actor, actorIds: [inviter.userId], pseudos: [inviter.pseudo], note, eventSlug: e.slug },
-    link: { label: eventInviteLabels.notificationLink, path: `/e/${e.slug}` },
-  });
+  await tx
+    .update(eventPeerInvitations)
+    .set({ notifiedAt: at })
+    .where(
+      and(
+        eq(eventPeerInvitations.eventId, e.id),
+        eq(eventPeerInvitations.inviterId, inviterId),
+        eq(eventPeerInvitations.inviteeId, inviteeId),
+      ),
+    );
+  return true;
 }
 
 const isUniqueViolation = (error: unknown) => {
@@ -425,8 +522,9 @@ export const eventInvitesService = {
           .where(and(eq(invitationMutes.mutedUserId, me), inArray(invitationMutes.userId, toInsert)));
         const mutedIds = new Set(muted.map((r) => r.id));
         const notifiable = toInsert.filter((id) => !going.has(id) && !mutedIds.has(id));
-        for (const id of notifiable) await notifyInvited(tx, id, e, viewer.profile, input.note);
-        if (notifiable.length) after(() => notificationsService.kick());
+        let notified = 0;
+        for (const id of notifiable) if (await notifyInvited(tx, id, e, me, at)) notified += 1;
+        if (notified) after(() => notificationsService.kick());
       }
       return {
         invited: toInsert.length,
@@ -468,9 +566,14 @@ export const eventInvitesService = {
       note: string | null;
     }[];
     if (!rows.length) return null;
+    // Tour 2 (relecture Opus 7) : chaque auteur avec son mot ; l'écran les attribue quand ils sont plusieurs.
     return {
-      inviters: rows.map((r) => ({ userId: r.inviter_id, pseudo: r.pseudo, avatarUrl: storage.url(r.avatar_key) })),
-      note: rows.find((r) => r.note)?.note ?? null,
+      inviters: rows.map((r) => ({
+        userId: r.inviter_id,
+        pseudo: r.pseudo,
+        avatarUrl: storage.url(r.avatar_key),
+        note: r.note,
+      })),
     };
   },
 
@@ -485,13 +588,44 @@ export const eventInvitesService = {
     return rows.map((r) => ({ userId: r.userId, pseudo: r.pseudo, avatarUrl: storage.url(r.avatarKey) }));
   },
 
-  /** `POST /me/invitation-mutes {userId}` : « Ne plus recevoir d'invitations de Kenji_66 » (idempotent). */
+  /**
+   * `POST /me/invitation-mutes {userId}` : « Ne plus recevoir d'invitations de Kenji_66 » (idempotent), à un événement et
+   * dans un crew, même s'il en est le chef. Tour 2 (relectures Codex 2 et 4, Opus 5) : ses invitations sortent tout de
+   * suite des notifications non lues (une invitation regroupée est recomposée sans lui, les autres auteurs restent) ;
+   * ses invitations dans un crew encore en attente de livraison ne partiront plus.
+   */
   async mute(viewer: Viewer, userId: string): Promise<{ muted: true }> {
     rateLimit("invitationMute", viewer.user.id);
-    if (userId === viewer.user.id) throw validation(eventInviteLabels.selfInvite);
+    const me = viewer.user.id;
+    if (userId === me) throw validation(eventInviteLabels.selfInvite);
     const target = await profilesRepo.byUserId(userId);
     if (!target || target.deletedAt) throw notFound("Profil introuvable");
-    await db.insert(invitationMutes).values({ userId: viewer.user.id, mutedUserId: userId }).onConflictDoNothing();
+    await withTx(async (tx) => {
+      await tx.insert(invitationMutes).values({ userId: me, mutedUserId: userId }).onConflictDoNothing();
+      const cited = await tx
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, me),
+            eq(notifications.type, "event_invited"),
+            isNull(notifications.readAt),
+            sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${userId}::text)`,
+          ),
+        );
+      const at = now();
+      for (const n of cited) await recompose(tx, n, at, userId);
+      await tx
+        .delete(notifications)
+        .where(
+          and(
+            eq(notifications.userId, me),
+            eq(notifications.type, "crew_invitation"),
+            isNull(notifications.deliveredAt),
+            sql`${notifications.data} -> 'actor' ->> 'userId' = ${userId}`,
+          ),
+        );
+    });
     return { muted: true };
   },
 
@@ -519,24 +653,30 @@ export const eventInvitesService = {
 };
 
 /**
- * Compte supprimé (anonymisé) : ses invitations envoyées et reçues, ses invitations coupées (dans les deux sens), et les
- * notifications d'invitation des autres qui le citent disparaissent. Dans la transaction de `accountService.anonymize`.
+ * Compte supprimé (anonymisé) : ses invitations envoyées et reçues et ses invitations coupées (dans les deux sens)
+ * disparaissent. Tour 2 (relecture Opus 9) : dans les notifications d'invitation des autres, il sort du groupe sans
+ * effacer les autres auteurs (« Kenji_66 et Julie_66 t'invitent » devient « Julie_66 t'invite ») ; seul, la notification
+ * disparaît. Dans la transaction de `accountService.anonymize`.
  */
 export async function anonymizeEventInvitesForDeletedAccount(tx: Tx, userId: string) {
+  const cited = await tx
+    .select()
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.type, "event_invited"),
+        sql`${notifications.userId} <> ${userId}`,
+        sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${userId}::text)`,
+      ),
+    );
   await tx
     .delete(eventPeerInvitations)
     .where(or(eq(eventPeerInvitations.inviterId, userId), eq(eventPeerInvitations.inviteeId, userId)));
   await tx
     .delete(invitationMutes)
     .where(or(eq(invitationMutes.userId, userId), eq(invitationMutes.mutedUserId, userId)));
-  await tx
-    .delete(notifications)
-    .where(
-      and(
-        eq(notifications.type, "event_invited"),
-        sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${userId}::text)`,
-      ),
-    );
+  const at = now();
+  for (const n of cited) await recompose(tx, n, at, userId);
 }
 
 /** Export RGPD : invitations envoyées (avec mon mot), reçues (sans le mot d'un autre), personnes coupées. */
@@ -572,26 +712,19 @@ export async function eventInvitesExport(userId: string) {
   };
 }
 
-const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
-
 /**
  * Garde de livraison (heures calmes : la notification part plus tard) : l'événement se partage encore (publié, pas sur
- * invitation, ni annulé ni fini) et l'invité peut le voir, il n'y va pas déjà, et au moins une des personnes qui
- * l'invitent est en règle et n'a pas été coupée. Sinon la notification disparaît sans être envoyée.
+ * invitation, ni annulé ni fini) et l'invité peut le voir, il n'y va pas déjà. Tour 2 (relecture Codex 2) : la
+ * notification est recomposée à partir des seules invitations encore valables (auteur en règle, pas coupé entre-temps) :
+ * auteurs, titre et mots ; un auteur coupé ne laisse ni son nom ni son mot. Plus aucun auteur : elle disparaît sans partir.
  */
 registerDeliveryGuard(["event_invited"], async (n) => {
   if (!n.eventId) return false;
+  const at = now();
   const e = await db.query.events.findFirst({ where: eq(events.id, n.eventId) });
-  if (!e || !shareable(e, now())) return false;
+  if (!e || !shareable(e, at)) return false;
   if (!(await canSeeEvent(e, { user: { id: n.userId, email: "", emailVerified: false } }))) return false;
   if ((await goingInfo(db, e.id, [n.userId])).size > 0) return false;
-  const actorIds = (n.data as InviteData).actorIds;
-  if (!isStringArray(actorIds) || !actorIds.length) return false;
-  const at = now();
-  const result = await db.execute(sql`
-    select 1 from profiles p
-    where p.user_id in (${list(actorIds)}) and ${reachableSql(at)}
-      and not exists (select 1 from invitation_mutes m where m.user_id = ${n.userId} and m.muted_user_id = p.user_id)
-    limit 1`);
-  return result.rows.length > 0;
+  const row = await withTx((tx) => recompose(tx, n, at));
+  return row ?? false;
 });

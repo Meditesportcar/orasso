@@ -108,11 +108,12 @@ export type EventInviteResult = {
   remainingToday: number;
 };
 
-/** Le bandeau « Kenji_66 t'invite » de la fiche (`GET /events/:id/invitations/received`). */
+/**
+ * Le bandeau « Kenji_66 t'invite » de la fiche (`GET /events/:id/peer-invitations/received`), la plus récente d'abord.
+ * Tour 2 (relecture Opus 7) : chaque auteur avec son mot (`inviteNoteLines` les attribue quand ils sont plusieurs).
+ */
 export type ReceivedEventInvitation = {
-  inviters: { userId: string; pseudo: string; avatarUrl: string | null }[];
-  /** Le mot de l'invitation la plus récente. */
-  note: string | null;
+  inviters: { userId: string; pseudo: string; avatarUrl: string | null; note: string | null }[];
 };
 
 /** Personne dont j'ai coupé les invitations. */
@@ -129,7 +130,7 @@ export function inviteCaption(state: InviteCandidateState, rel: InviteRelation):
 }
 
 /** Qui l'invitation nomme : « Kenji_66 », « Kenji_66 et Julie_66 », « Kenji_66, Julie_66 et 2 autres ». */
-function inviterNames(pseudos: readonly string[], total: number): string {
+export function inviterNames(pseudos: readonly string[], total: number): string {
   const [a, b] = pseudos;
   if (!a) return "";
   if (total <= 1 || !b) return total <= 1 ? a : `${a} et ${others(total - 1)}`;
@@ -145,6 +146,23 @@ export function eventInvitedTitle(pseudos: readonly string[], total: number, eve
 /** Bandeau de la fiche : « Kenji_66 t'invite », « Kenji_66 et Julie_66 t'invitent ». */
 export function eventInvitedBanner(pseudos: readonly string[], total: number): string {
   return `${inviterNames(pseudos, total)} ${total > 1 ? "t'invitent" : "t'invite"}`;
+}
+
+/** Mots d'une invitation montrés au plus (notification, bandeau), les plus récents d'abord. */
+export const INVITE_NOTES_SHOWN = 3;
+
+/**
+ * Les mots d'une invitation (tour 2, relecture Opus 7) : « « Viens ! » » quand une seule personne invite ; quand elles
+ * sont plusieurs, chacun à son auteur : « Kenji_66 : « Viens ! » ». Les auteurs sans mot n'ont pas de ligne.
+ */
+export function inviteNoteLines(
+  authors: readonly { pseudo: string; note: string | null }[],
+  max: number = INVITE_NOTES_SHOWN,
+): string[] {
+  return authors
+    .filter((a) => a.note)
+    .slice(0, max)
+    .map((a) => (authors.length > 1 ? `${a.pseudo} : « ${a.note} »` : `« ${a.note} »`));
 }
 
 /** « Inviter 3 personnes ». */
@@ -223,6 +241,8 @@ export const eventInviteLabels = {
   settings: "Réglages des invitations",
   settingsHint: "Réglages › Notifications : invitations, oui ou non",
   report: "Signaler",
+  /** Une invitation regroupée : signaler chacun de ses auteurs. */
+  reportWho: (pseudo: string) => `Signaler ${pseudo}`,
   seeEvent: "Voir la fiche",
   moreA11y: "Plus d'options sur cette invitation",
   // Notification.
@@ -261,7 +281,8 @@ export const crewInviteLabels = {
   sentByLeader: "Si la personne accepte, elle entre tout de suite dans le crew.",
   invitedBy: (pseudo: string) => `Invité(e) par ${pseudo}`,
   alreadyInvited: "déjà invité(e)",
-  alreadyRequested: "a déjà demandé à rejoindre",
+  /** Tour 2 (relecture Opus 6) : une demande en cours, ou un refus du chef de moins de 30 jours, sans dire lequel. */
+  alreadyRequested: "déjà en cours",
   member: "déjà membre",
   empty: "Personne à inviter pour l'instant : suis des passionnés pour les inviter.",
   noMatch: "Personne de ton réseau ne commence par ces lettres.",

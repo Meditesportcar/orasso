@@ -29,11 +29,18 @@ export const eventPeerInvitations = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     note: text("note"),
     createdAt: tstz("created_at").notNull().defaultNow(),
+    /**
+     * Tour 2 (relecture Opus 4) : l'invitation a donné lieu à une notification (créée, ou rattachée à la notification
+     * regroupée de l'événement). Au plus une par paire auteur-invité et par 24 h, tous événements confondus : les
+     * suivantes restent enregistrées (bandeau de chaque fiche), sans notification.
+     */
+    notifiedAt: tstz("notified_at"),
   },
   (t) => [
     uniqueIndex("event_peer_invitations_key").on(t.eventId, t.inviteeId, t.inviterId),
     index("event_peer_invitations_invitee_idx").on(t.inviteeId, t.eventId),
     index("event_peer_invitations_inviter_created_idx").on(t.inviterId, t.createdAt),
+    index("event_peer_invitations_pair_idx").on(t.inviterId, t.inviteeId, t.notifiedAt),
     check("event_peer_invitations_not_self_check", sql`${t.inviterId} <> ${t.inviteeId}`),
     check("event_peer_invitations_note_check", sql`${t.note} is null or char_length(${t.note}) <= 140`),
   ],

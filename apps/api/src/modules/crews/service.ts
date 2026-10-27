@@ -20,6 +20,7 @@ import {
   type CrewUpdate,
   type CrewView,
   canProposeCrewOuting,
+  crewCooldownActive,
   crewErrors,
   crewInviteLabels,
   crewJoinOutcome,
@@ -63,12 +64,13 @@ import { activeCrewMembers, crewRules } from "../messaging/access/crew";
 import { publishToConversation, serializeMessage, unreadCountOf } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { nextMessageAt } from "../messaging/service";
-import { notificationsService } from "../notifications/service";
+import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "../vehicles/photos-blur";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
 import { withdrawAwaitingForCrew } from "./awaiting";
+import { isUuid } from "./feed/access";
 import { purgeCrewFeed } from "./feed/service";
 import { revokeCrew, revokeCrewMember, signalCrew } from "./live";
 import {
@@ -166,8 +168,29 @@ export async function memberRow(ex: Executor, crewId: string, userId: string): P
  * Lot R6c : la démarche vient de la personne (sa demande, ou l'invitation d'un membre qu'elle a acceptée, « à confirmer
  * par le chef »), et non d'une invitation qu'elle n'a pas encore acceptée. Sert au refus silencieux et au délai de 30 jours.
  */
-const byPerson = (r: Pick<CrewMemberRow, "invitedBy" | "inviteAcceptedAt">) =>
+export const byPerson = (r: Pick<CrewMemberRow, "invitedBy" | "inviteAcceptedAt">) =>
   r.invitedBy === null || r.inviteAcceptedAt !== null;
+
+/**
+ * Lot R6c, tour 2 (relecture Opus 6) : après un refus du chef (demande, ou invitation d'un membre acceptée puis refusée)
+ * ou un retrait, un membre ne réinvite pas la personne pendant 30 jours (le chef, lui, le peut). Répond « déjà en cours ».
+ */
+export function memberInviteBlocked(
+  r: Pick<CrewMemberRow, "status" | "respondedAt" | "invitedBy" | "inviteAcceptedAt">,
+  at: Date,
+): boolean {
+  return (r.status === "removed" || (r.status === "declined" && byPerson(r))) && crewCooldownActive(r, at);
+}
+
+/**
+ * Lot R6c, tour 2 (relectures Codex 3 et 4, Opus 8) : une invitation dont j'ai coupé l'auteur (chef compris) m'est
+ * invisible : ni demande reçue, ni pastille, ni bouton sur la page du crew ; on ne peut ni l'accepter ni la refuser.
+ * Elle reste pour l'auteur comme une invitation en attente (mêmes réponses), et réapparaît si je le rétablis.
+ */
+async function hiddenFrom(ex: Executor, row: CrewMemberRow | null, userId: string): Promise<boolean> {
+  if (row?.status !== "invited" || !row.invitedBy) return false;
+  return eventInvitesService.isMuted(userId, row.invitedBy, ex);
+}
 
 async function requireLeader(tx: Tx, crewId: string, v: Viewer): Promise<CrewRow> {
   const crew = await lockCrew(tx, crewId);
@@ -458,7 +481,11 @@ async function pendingCount(userId: string, ex: Executor = db): Promise<number> 
       +
       (select count(*) from crew_members i
         join crews c on c.id = i.crew_id and c.deleted_at is null
-        where i.user_id = ${userId} and i.status = 'invited') as n`);
+        where i.user_id = ${userId} and i.status = 'invited'
+          -- Lot R6c, tour 2 : sans les invitations d'une personne dont j'ai coupé les invitations.
+          and not exists (
+            select 1 from invitation_mutes im where im.user_id = ${userId} and im.muted_user_id = i.invited_by
+          )) as n`);
   return Number((result.rows[0] as { n?: number | string } | undefined)?.n ?? 0);
 }
 
@@ -475,21 +502,21 @@ async function inNetwork(ex: Executor, me: string, other: string): Promise<boole
 }
 
 /**
- * Un membre actif invite une personne de son réseau (abonnés, abonnements acceptés). Pas de doublon : une demande ou une
- * invitation en cours répond « déjà en cours ». Une personne qui a coupé ses invitations reçoit la même réponse, sans
- * que rien ne soit écrit. Mêmes limites que le chef (20 invitations en attente, une alerte par paire et par 24 h).
+ * Enregistre une invitation (du chef ou d'un membre) et prévient la personne. Lot R6c, tour 2 (relectures Opus 2,
+ * Codex 3, choix du coordinateur Opus 8) : si elle a coupé les invitations de l'auteur, chef compris, l'invitation est
+ * enregistrée de la même façon avec une trace silencieuse à la place de la notification (rien ne lui arrive, rien ne
+ * s'affiche pour elle) : doublon, 409, limite de 24 h, compte des invitations en attente et liste des candidats
+ * répondent à l'auteur exactement comme pour une autre.
  */
-async function inviteByMember(tx: Tx, after: After, crewId: string, v: Viewer, target: Profile) {
-  const crew = await lockCrew(tx, crewId);
-  if (!(await inNetwork(tx, v.user.id, target.userId))) throw forbidden(crewInviteLabels.notInNetwork);
-  const row = await memberRow(tx, crew.id, target.userId);
-  const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "invite", now());
-  if (outcome.kind === "error") throw joinError(outcome.code);
-  // Une demande de la personne attend déjà le chef : le membre n'a rien à y ajouter.
-  if (outcome.kind === "accept") throw joinError("already_pending");
-  if (await eventInvitesService.isMuted(target.userId, v.user.id, tx)) {
-    return { pseudo: target.pseudo, status: "invited" as const };
-  }
+async function recordInvitation(
+  tx: Tx,
+  after: After,
+  crew: CrewRow,
+  v: Viewer,
+  target: Profile,
+  body: string,
+  extra: Record<string, unknown> = {},
+) {
   const [pending] = await tx
     .select({ n: count() })
     .from(crewMembers)
@@ -509,32 +536,53 @@ async function inviteByMember(tx: Tx, after: After, crewId: string, v: Viewer, t
     .insert(crewMembers)
     .values({ crewId: crew.id, userId: target.userId, ...values })
     .onConflictDoUpdate({ target: [crewMembers.crewId, crewMembers.userId], set: values });
-  const leader = await profilesRepo.byUserId(crew.createdBy, tx);
+  const silent = await eventInvitesService.isMuted(target.userId, v.user.id, tx);
   await notificationsService.notify(tx, target.userId, "crew_invitation", {
     title: "Invitation à un crew",
-    body: crewInviteLabels.memberInviteBody(
-      v.profile.pseudo,
-      crew.name,
-      leader?.pseudo ?? crewInviteLabels.leaderFallback,
-    ),
-    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes", leaderConfirms: true },
+    body,
+    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes", ...extra },
     link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
+    silent,
   });
-  publishInbox(after, target.userId);
+  if (!silent) publishInbox(after, target.userId);
   return { pseudo: target.pseudo, status: "invited" as const };
+}
+
+/**
+ * Un membre actif invite une personne de son réseau (abonnés, abonnements acceptés). Pas de doublon : une demande ou une
+ * invitation en cours répond « déjà en cours », comme un refus du chef de moins de 30 jours (tour 2). Mêmes limites que
+ * le chef (20 invitations en attente, une alerte par paire et par 24 h). Le crew est déjà verrouillé par l'appelant.
+ */
+async function inviteByMember(tx: Tx, after: After, crew: CrewRow, v: Viewer, target: Profile) {
+  if (!(await inNetwork(tx, v.user.id, target.userId))) throw forbidden(crewInviteLabels.notInNetwork);
+  const row = await memberRow(tx, crew.id, target.userId);
+  const at = now();
+  if (row && memberInviteBlocked(row, at)) throw joinError("cooldown");
+  const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "invite", at);
+  if (outcome.kind === "error") throw joinError(outcome.code);
+  // Une demande de la personne attend déjà le chef : le membre n'a rien à y ajouter.
+  if (outcome.kind === "accept") throw joinError("already_pending");
+  const leader = await profilesRepo.byUserId(crew.createdBy, tx);
+  const body = crewInviteLabels.memberInviteBody(
+    v.profile.pseudo,
+    crew.name,
+    leader?.pseudo ?? crewInviteLabels.leaderFallback,
+  );
+  return recordInvitation(tx, after, crew, v, target, body, { leaderConfirms: true });
 }
 
 /**
  * L'invitation d'un membre acceptée : la ligne passe « à confirmer par le chef » (`requested`, `invite_accepted_at`,
  * `invited_by` gardé), le chef est prévenu (« Marc_66 a accepté l'invitation de Julie_66 : confirme son arrivée »).
+ * Tour 2 : `inviterId` nul (auteur introuvable) : « un membre ».
  */
-async function acceptMemberInvitation(tx: Tx, after: After, crew: CrewRow, v: Viewer, inviterId: string) {
+async function acceptMemberInvitation(tx: Tx, after: After, crew: CrewRow, v: Viewer, inviterId: string | null) {
   await tx
     .update(crewMembers)
     .set({ status: "requested", inviteAcceptedAt: now(), message: null, respondedAt: null })
     .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.userId, v.user.id)));
   await closeNotification(tx, v.user.id, "crew_invitation", crew.id);
-  const inviter = await profilesRepo.byUserId(inviterId, tx);
+  const inviter = inviterId ? await profilesRepo.byUserId(inviterId, tx) : null;
   const inviterName = inviter && !inviter.deletedAt ? inviter.pseudo : crewInviteLabels.memberFallback;
   await notificationsService.notify(tx, crew.createdBy, "crew_request", {
     title: crewInviteLabels.confirmTitle,
@@ -833,7 +881,9 @@ export const crewsService = {
    */
   async toView(v: Viewer, crew: CrewRow): Promise<CrewView> {
     const at = now();
-    const me = await memberRow(db, crew.id, v.user.id);
+    const mine = await memberRow(db, crew.id, v.user.id);
+    // Tour 2 : une invitation dont j'ai coupé l'auteur ne se voit pas sur la page du crew (ni « Accepter », ni « Refuser »).
+    const me = (await hiddenFrom(db, mine, v.user.id)) ? null : mine;
     const state = crewViewerState(
       me ? { status: me.status, respondedAt: me.respondedAt, role: me.role, requestedByMe: byPerson(me) } : null,
       at,
@@ -1057,7 +1107,11 @@ export const crewsService = {
     await withTx(async (tx, after) => {
       const crew = await lockCrew(tx, id);
       const row = await memberRow(tx, crew.id, v.user.id);
-      const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "request", now());
+      // Tour 2 : une invitation dont j'ai coupé l'auteur m'est invisible ; ma demande est une demande ordinaire (elle
+      // remplace l'invitation, le chef la voit comme telle).
+      const outcome = (await hiddenFrom(tx, row, v.user.id))
+        ? ({ kind: "open" } as const)
+        : crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "request", now());
       if (outcome.kind === "error") throw joinError(outcome.code);
       if (outcome.kind === "accept") {
         await this.acceptInvitationInTx(tx, after, crew, v);
@@ -1150,10 +1204,13 @@ export const crewsService = {
     const target = reachable(await profilesRepo.byPseudo(pseudo));
     if (target.userId === v.user.id) throw validation("C'est ton propre compte.");
     return withTx(async (tx, after) => {
+      // Lot R6c, tour 2 (relecture Codex 5) : le verrou du crew d'abord, puis l'appartenance de l'auteur : un retrait en
+      // cours passe avant, et l'auteur retiré ne peut plus inviter.
+      const crew = await lockCrew(tx, id);
+      const mine = await memberRow(tx, crew.id, v.user.id);
       // Lot R6c : un membre actif (pas le chef) passe par `inviteByMember`.
-      const mine = await memberRow(tx, id, v.user.id);
-      if (mine?.status === "active" && mine.role !== "leader") return inviteByMember(tx, after, id, v, target);
-      const crew = await requireLeader(tx, id, v);
+      if (mine?.status === "active" && mine.role !== "leader") return inviteByMember(tx, after, crew, v, target);
+      if (mine?.role !== "leader" || mine.status !== "active") throw forbidden(crewErrors.leaderOnly);
       const row = await memberRow(tx, crew.id, target.userId);
       const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "invite", now());
       if (outcome.kind === "error") throw joinError(outcome.code);
@@ -1169,33 +1226,7 @@ export const crewsService = {
         publishInbox(after, v.user.id, target.userId);
         return { pseudo: target.pseudo, status: "active" as const };
       }
-      const [pending] = await tx
-        .select({ n: count() })
-        .from(crewMembers)
-        .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.status, "invited")));
-      if ((pending?.n ?? 0) >= PENDING_INVITATIONS_PER_CREW) throw conflict("conflict", crewErrors.tooManyInvitations);
-      await assertNoRecentNotification(tx, target.userId, "crew_invitation", crew.id, v.user.id);
-      const values = {
-        status: "invited" as const,
-        role: "member" as const,
-        message: null,
-        invitedBy: v.user.id,
-        inviteAcceptedAt: null,
-        respondedAt: null,
-        joinedAt: null,
-      };
-      await tx
-        .insert(crewMembers)
-        .values({ crewId: crew.id, userId: target.userId, ...values })
-        .onConflictDoUpdate({ target: [crewMembers.crewId, crewMembers.userId], set: values });
-      await notificationsService.notify(tx, target.userId, "crew_invitation", {
-        title: "Invitation à un crew",
-        body: `${v.profile.pseudo} t'invite à rejoindre « ${crew.name} ».`,
-        data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes" },
-        link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
-      });
-      publishInbox(after, target.userId);
-      return { pseudo: target.pseudo, status: "invited" as const };
+      return recordInvitation(tx, after, crew, v, target, `${v.profile.pseudo} t'invite à rejoindre « ${crew.name} ».`);
     });
   },
 
@@ -1205,16 +1236,20 @@ export const crewsService = {
     await withTx(async (tx, after) => {
       const crew = await lockCrew(tx, crewId);
       const row = await memberRow(tx, crew.id, v.user.id);
-      if (row?.status !== "invited") throw notFound("Invitation introuvable");
+      // Tour 2 : une invitation dont j'ai coupé l'auteur n'existe pas pour moi.
+      if (row?.status !== "invited" || (await hiddenFrom(tx, row, v.user.id))) {
+        throw notFound("Invitation introuvable");
+      }
       await this.acceptInvitationInTx(tx, after, crew, v);
     });
     return this.viewById(v, crewId);
   },
 
   async acceptInvitationInTx(tx: Tx, after: After, crew: CrewRow, v: Viewer) {
-    // Lot R6c (R6.7) : l'invitation d'un membre acceptée attend la confirmation du chef.
+    // Lot R6c (R6.7) : l'invitation d'un membre acceptée attend la confirmation du chef. Tour 2 (bloquant, Opus 1 et
+    // Codex 1) : seule l'invitation du chef fait entrer tout de suite ; toute autre (auteur inconnu compris) attend le chef.
     const row = await memberRow(tx, crew.id, v.user.id);
-    if (row?.invitedBy && row.invitedBy !== crew.createdBy) {
+    if (row && row.invitedBy !== crew.createdBy) {
       await acceptMemberInvitation(tx, after, crew, v, row.invitedBy);
       return;
     }
@@ -1232,6 +1267,10 @@ export const crewsService = {
   /** `POST /me/crew-invitations/:crewId/decline` : refus silencieux pour le chef. */
   async declineInvitation(v: Viewer, crewId: string) {
     await withTx(async (tx, after) => {
+      // Tour 2 : une invitation dont j'ai coupé l'auteur n'existe pas pour moi.
+      if (await hiddenFrom(tx, await memberRow(tx, crewId, v.user.id), v.user.id)) {
+        throw notFound("Invitation introuvable");
+      }
       const [row] = await tx
         .update(crewMembers)
         .set({ status: "declined", respondedAt: now() })
@@ -1310,7 +1349,12 @@ export const crewsService = {
           isNull(crews.deletedAt),
           or(
             and(eq(crewMembers.status, "requested"), inArray(crewMembers.crewId, led)),
-            and(eq(crewMembers.status, "invited"), eq(crewMembers.userId, v.user.id)),
+            and(
+              eq(crewMembers.status, "invited"),
+              eq(crewMembers.userId, v.user.id),
+              // Lot R6c, tour 2 (relecture Codex 4) : pas les invitations d'une personne dont j'ai coupé les invitations.
+              sql`not exists (select 1 from invitation_mutes im where im.user_id = ${v.user.id} and im.muted_user_id = ${crewMembers.invitedBy})`,
+            ),
           ),
           sql`${profiles.deletedAt} is null`,
           sql`(${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at} or ${crewMembers.userId} = ${v.user.id})`,
@@ -1358,3 +1402,16 @@ export const crewsService = {
     });
   },
 };
+
+/**
+ * Lot R6c, tour 2 (relecture Codex 4) : une invitation dans un crew différée par les heures calmes est revérifiée à sa
+ * livraison : l'invitation est encore en attente (ni annulée, ni acceptée, ni refusée) et la personne n'a pas coupé ses
+ * invitations entre-temps (auteur, chef compris). Sinon la notification disparaît sans partir.
+ */
+registerDeliveryGuard(["crew_invitation"], async (n) => {
+  const { crewId } = n.data as { crewId?: unknown };
+  if (typeof crewId !== "string" || !isUuid(crewId)) return false;
+  const row = await memberRow(db, crewId, n.userId);
+  if (row?.status !== "invited") return false;
+  return !(await hiddenFrom(db, row, n.userId));
+});

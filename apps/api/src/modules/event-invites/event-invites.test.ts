@@ -303,9 +303,21 @@ describe("inviter du monde", () => {
     const rows = await invitedOf(julie.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.title).toBe("Theo_66 et Kenji_66 t'invitent à Nocturne de Canet");
+    // Tour 2 : le mot est attribué à son auteur dans un groupe.
+    expect(rows[0]?.body).toContain("Kenji_66 : « Viens avec ta R1 »");
+    expect(rows[0]?.data).toMatchObject({
+      actorIds: [theo.id, kenji.id],
+      actors: [
+        { userId: theo.id, pseudo: "Theo_66" },
+        { userId: kenji.id, pseudo: "Kenji_66" },
+      ],
+      notes: ["Kenji_66 : « Viens avec ta R1 »"],
+    });
     const banner = await call(julie, "GET", `/events/${e.id}/peer-invitations/received`);
-    expect(banner.json.inviters.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Theo_66", "Kenji_66"]);
-    expect(banner.json.note).toBe("Viens avec ta R1");
+    expect(banner.json.inviters).toEqual([
+      { userId: theo.id, pseudo: "Theo_66", avatarUrl: null, note: null },
+      { userId: kenji.id, pseudo: "Kenji_66", avatarUrl: null, note: "Viens avec ta R1" },
+    ]);
     // Un autre ne voit pas les invitations de Julie.
     expect((await call(kenji, "GET", `/events/${e.id}/peer-invitations/received`)).json).toBeNull();
   });
@@ -444,12 +456,12 @@ describe("inviter dans un crew (R6.7)", () => {
     expect((await call(kenji, "POST", `/crews/${crew.id}/invitations`, { pseudo: theo.pseudo })).status).toBe(201);
     expect((await call(theo, "POST", `/me/crew-invitations/${crew.id}/accept`)).json.viewerState).toBe("member");
 
-    // Sarah a coupé les invitations de Julie : même réponse, rien d'écrit.
+    // Sarah a coupé les invitations de Julie : même réponse ; tour 2 : une trace silencieuse (rien pour Sarah).
     await call(sarah, "POST", "/me/invitation-mutes", { userId: julie.id });
     const muted = await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: sarah.pseudo });
     expect(muted.status).toBe(201);
     expect(muted.json).toEqual({ pseudo: "Sarah_66", status: "invited" });
-    expect(await db.select().from(crewMembers).where(eq(crewMembers.userId, sarah.id))).toHaveLength(0);
+    expect((await call(sarah, "GET", "/me/crew-requests")).json).toEqual([]);
   });
 });
 
@@ -488,5 +500,301 @@ describe("export et suppression du compte", () => {
     expect(await db.select().from(invitationMutes)).toEqual([expect.objectContaining({ userId: julie.id })]);
     // La notification regroupée qui le citait disparaît.
     expect(await invitedOf(julie.id)).toHaveLength(0);
+  });
+});
+
+describe("tour 2 : corrections des relectures", () => {
+  const pendingOf = (userId: string, type: "event_invited" | "crew_invitation") =>
+    db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.type, type)));
+
+  /** Comme différées par les heures calmes : les notifications de cette personne ne sont pas encore livrées. */
+  const deferAll = (userId: string) =>
+    db.update(notifications).set({ deliveredAt: null }).where(eq(notifications.userId, userId));
+
+  it("[bloquant] un membre invite puis supprime son compte : l'invitation disparaît, jamais d'entrée sans le chef", async () => {
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    const marc = await person("Marc_66");
+    const nina = await person("Nina_34");
+    const crew = await newCrew(kenji, [julie]);
+    await follow(marc, julie);
+    await follow(nina, julie);
+    expect((await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo })).status).toBe(201);
+    expect((await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: nina.pseudo })).status).toBe(201);
+    // Nina accepte avant la suppression : elle attend le chef.
+    expect((await call(nina, "POST", `/me/crew-invitations/${crew.id}/accept`)).json.viewerState).toBe("requested");
+    await notificationsService.flush();
+    await deferAll(marc.id);
+    await accountService.anonymize(julie.id, null);
+
+    // Marc ne peut plus accepter : l'invitation n'existe plus, ni sa notification.
+    expect((await call(marc, "POST", `/me/crew-invitations/${crew.id}/accept`)).status).toBe(404);
+    expect((await call(marc, "GET", "/me/crew-requests")).json).toEqual([]);
+    expect(await pendingOf(marc.id, "crew_invitation")).toHaveLength(0);
+    expect((await call(marc, "GET", `/crews/${crew.id}`)).json.viewerState).toBe("none");
+    // Nina reste une demande que le chef confirme ou refuse.
+    expect((await call(nina, "GET", `/crews/${crew.id}`)).json.viewerState).toBe("requested");
+    expect((await call(kenji, "GET", `/crews/${crew.id}/requests`)).json.requests).toEqual([
+      expect.objectContaining({ person: expect.objectContaining({ pseudo: "Nina_34" }), invitedBy: null }),
+    ]);
+    // Même une ligne « invitée » sans auteur ne fait pas entrer : elle attend le chef.
+    await db
+      .insert(crewMembers)
+      .values({ crewId: crew.id, userId: marc.id, status: "invited", role: "member", invitedBy: null });
+    expect((await call(marc, "POST", `/me/crew-invitations/${crew.id}/accept`)).json.viewerState).toBe("requested");
+  });
+
+  it("crew : pas d'oracle sur la coupure (deux envois, liste, 24 h), rien pour la personne qui a coupé", async () => {
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    const marc = await person("Marc_66");
+    const sarah = await person("Sarah_66");
+    const crew = await newCrew(kenji, [julie]);
+    await follow(marc, julie);
+    await follow(sarah, julie);
+    await call(sarah, "POST", "/me/invitation-mutes", { userId: julie.id });
+
+    const send = (who: TestUser) => call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: who.pseudo });
+    const [toMarc, toSarah] = [await send(marc), await send(sarah)];
+    expect([toMarc.status, toSarah.status]).toEqual([201, 201]);
+    expect(toSarah.json).toEqual({ ...toMarc.json, pseudo: "Sarah_66" });
+    // Deuxième envoi : même 409 « déjà en cours » dans les deux cas.
+    const [again1, again2] = [await send(marc), await send(sarah)];
+    expect([again1.status, again2.status]).toEqual([409, 409]);
+    expect(again2.json).toEqual(again1.json);
+    // La liste des candidats : le même état pour les deux.
+    const list = await call(julie, "GET", `/crews/${crew.id}/invite-candidates`);
+    const states = Object.fromEntries(
+      list.json.people.map((p: { pseudo: string; state: string; caption: string }) => [p.pseudo, [p.state, p.caption]]),
+    );
+    expect(states).toEqual({
+      Marc_66: ["invited", "déjà invité(e) par toi"],
+      Sarah_66: ["invited", "déjà invité(e) par toi"],
+    });
+    // Le chef voit deux invitations en attente.
+    expect((await call(kenji, "GET", `/crews/${crew.id}`)).json.pendingInvitations).toBe(2);
+
+    // Rien pour Sarah : ni notification, ni demande, ni pastille, ni bouton sur la page du crew.
+    await notificationsService.flush();
+    expect((await call(sarah, "GET", "/me/notifications")).json.items).toEqual([]);
+    expect((await call(sarah, "GET", "/me/crew-requests")).json).toEqual([]);
+    expect((await call(sarah, "GET", "/me/inbox/summary")).json.requests.crew).toBe(0);
+    expect((await call(sarah, "GET", `/crews/${crew.id}`)).json.viewerState).toBe("none");
+    expect((await call(sarah, "POST", `/me/crew-invitations/${crew.id}/accept`)).status).toBe(404);
+    expect((await call(sarah, "POST", `/me/crew-invitations/${crew.id}/decline`)).status).toBe(404);
+    expect((await call(marc, "GET", "/me/inbox/summary")).json.requests.crew).toBe(1);
+
+    // Le chef annule les deux ; Julie réinvite dans les 24 h : même refus (429) pour les deux.
+    for (const who of [marc, sarah]) {
+      expect((await call(kenji, "DELETE", `/crews/${crew.id}/members/${who.id}`)).status).toBe(204);
+    }
+    const [later1, later2] = [await send(marc), await send(sarah)];
+    expect([later1.status, later2.status]).toEqual([429, 429]);
+    expect(later2.json).toEqual(later1.json);
+
+    // Sarah demande d'elle-même : une demande ordinaire, que le chef voit sans « invitée par ».
+    await db.delete(notifications);
+    clock.advance(25 * 3_600_000);
+    expect((await send(sarah)).status).toBe(201);
+    const asked = await call(sarah, "POST", `/crews/${crew.id}/requests`, { message: "Salut !" });
+    expect(asked.json.viewerState).toBe("requested");
+    expect((await call(kenji, "GET", `/crews/${crew.id}/requests`)).json.requests).toEqual([
+      expect.objectContaining({ message: "Salut !", invitedBy: null }),
+    ]);
+  });
+
+  it("crew : invitation, puis coupure, puis livraison : rien ne part, la demande disparaît (chef compris)", async () => {
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    const marc = await person("Marc_66");
+    const paul = await person("Paul_66");
+    const crew = await newCrew(kenji, [julie]);
+    await follow(marc, julie);
+    // Julie (membre) invite Marc ; le chef invite Paul ; les deux notifications attendent le matin.
+    expect((await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo })).status).toBe(201);
+    expect((await call(kenji, "POST", `/crews/${crew.id}/invitations`, { pseudo: paul.pseudo })).status).toBe(201);
+    await notificationsService.flush();
+    await deferAll(marc.id);
+    await deferAll(paul.id);
+    // Marc coupe Julie par l'API : la notification en attente est retirée tout de suite.
+    expect((await call(marc, "POST", "/me/invitation-mutes", { userId: julie.id })).status).toBe(200);
+    expect(await pendingOf(marc.id, "crew_invitation")).toHaveLength(0);
+    // Paul coupe le chef sans passer par l'API (garde de livraison seule) : rien ne part.
+    await db.insert(invitationMutes).values({ userId: paul.id, mutedUserId: kenji.id });
+    await notificationsService.deliverDue();
+    expect(await pendingOf(paul.id, "crew_invitation")).toHaveLength(0);
+    // Les invitations ne s'affichent plus pour eux.
+    for (const who of [marc, paul]) {
+      expect((await call(who, "GET", "/me/crew-requests")).json).toEqual([]);
+      expect((await call(who, "GET", `/crews/${crew.id}`)).json.viewerState).toBe("none");
+    }
+    // Rétablie, l'invitation de Julie réapparaît dans les demandes de Marc (sans nouvelle notification).
+    expect((await call(marc, "DELETE", `/me/invitation-mutes/${julie.id}`)).status).toBe(200);
+    expect((await call(marc, "GET", "/me/crew-requests")).json).toEqual([
+      expect.objectContaining({ kind: "invitation", person: expect.objectContaining({ pseudo: "Julie_66" }) }),
+    ]);
+  });
+
+  it("crew : un retrait en cours passe avant l'invitation de la personne retirée", async () => {
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    const marc = await person("Marc_66");
+    const crew = await newCrew(kenji, [julie]);
+    await follow(marc, julie);
+    let locked!: () => void;
+    let release!: () => void;
+    const lockTaken = new Promise<void>((r) => {
+      locked = r;
+    });
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    // Le retrait de Julie tient le verrou du crew.
+    const removal = db.transaction(async (tx) => {
+      await tx.execute(sql`select 1 from crews where id = ${crew.id} for update`);
+      await tx
+        .update(crewMembers)
+        .set({ status: "removed", respondedAt: new Date() })
+        .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.userId, julie.id)));
+      locked();
+      await gate;
+    });
+    await lockTaken;
+    const inviting = call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo });
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    await removal;
+    expect((await inviting).status).toBe(403);
+    expect(await db.select().from(crewMembers).where(eq(crewMembers.userId, marc.id))).toHaveLength(0);
+  });
+
+  it("notification regroupée recomposée à la livraison : l'auteur coupé disparaît, son mot aussi, les autres restent", async () => {
+    const e = await newEvent();
+    const kenji = await person("Kenji_66");
+    const theo = await person("Theo_66");
+    const julie = await person("Julie_66");
+    await follow(kenji, julie);
+    await follow(theo, julie);
+    await call(kenji, "POST", `/events/${e.id}/peer-invitations`, { userIds: [julie.id], note: "Viens avec ta R1" });
+    clock.advance(60_000);
+    await call(theo, "POST", `/events/${e.id}/peer-invitations`, { userIds: [julie.id], note: "Mot de Théo" });
+    await notificationsService.flush();
+    await deferAll(julie.id);
+    const [grouped] = await pendingOf(julie.id, "event_invited");
+    expect(grouped?.body).toContain("Theo_66 : « Mot de Théo »");
+    // Julie coupe Théo sans passer par l'API : la garde recompose avant l'envoi.
+    await db.insert(invitationMutes).values({ userId: julie.id, mutedUserId: theo.id });
+    await notificationsService.deliverDue();
+    const [sent] = await pendingOf(julie.id, "event_invited");
+    expect(sent?.deliveredAt).not.toBeNull();
+    expect(sent?.title).toBe("Kenji_66 t'invite à Nocturne de Canet");
+    expect(sent?.body).toContain("« Viens avec ta R1 »");
+    expect(sent?.body).not.toContain("Théo");
+    expect(sent?.data).toMatchObject({
+      actorIds: [kenji.id],
+      actor: { userId: kenji.id, pseudo: "Kenji_66" },
+      notes: ["« Viens avec ta R1 »"],
+    });
+  });
+
+  it("couper un auteur ou supprimer son compte le retire du groupe sans effacer les autres", async () => {
+    const e = await newEvent();
+    const kenji = await person("Kenji_66");
+    const theo = await person("Theo_66");
+    const lea = await person("Lea_11");
+    const julie = await person("Julie_66");
+    for (const u of [kenji, theo, lea]) await follow(u, julie);
+    for (const [u, note] of [
+      [kenji, "Mot de Kenji"],
+      [theo, "Mot de Théo"],
+      [lea, null],
+    ] as const) {
+      await call(u, "POST", `/events/${e.id}/peer-invitations`, { userIds: [julie.id], note });
+      clock.advance(60_000);
+    }
+    await notificationsService.flush();
+    const [three] = await pendingOf(julie.id, "event_invited");
+    expect(three?.title).toBe("Lea_11, Theo_66 et 1 autre t'invitent à Nocturne de Canet");
+    // Couper Théo par le menu : recomposée sans lui.
+    expect((await call(julie, "POST", "/me/invitation-mutes", { userId: theo.id })).status).toBe(200);
+    const [two] = await pendingOf(julie.id, "event_invited");
+    expect(two?.title).toBe("Lea_11 et Kenji_66 t'invitent à Nocturne de Canet");
+    expect(two?.body).toContain("Kenji_66 : « Mot de Kenji »");
+    expect(two?.body).not.toContain("Théo");
+    // Kenji supprime son compte : il sort du groupe, Léa reste.
+    await accountService.anonymize(kenji.id, null);
+    const [one] = await pendingOf(julie.id, "event_invited");
+    expect(one?.title).toBe("Lea_11 t'invite à Nocturne de Canet");
+    expect(one?.data).toMatchObject({ actorIds: [lea.id], notes: [] });
+  });
+
+  it("une notification par paire et par 24 h, tous événements confondus ; les invitations restent dans chaque bandeau", async () => {
+    const [e1, e2, e3] = [await newEvent(), await newEvent(), await newEvent()];
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    await follow(kenji, julie);
+    const invite = (e: { id: string }) =>
+      call(kenji, "POST", `/events/${e.id}/peer-invitations`, { userIds: [julie.id], note: "Viens !" });
+    expect((await invite(e1)).json.invited).toBe(1);
+    clock.advance(3_600_000);
+    // Même réponse pour Kenji, mais pas de deuxième notification pour Julie.
+    expect((await invite(e2)).json).toMatchObject({ invited: 1, alreadyInvited: [], going: [] });
+    await notificationsService.flush();
+    const rows = await pendingOf(julie.id, "event_invited");
+    expect(rows.map((r) => r.eventId)).toEqual([e1.id]);
+    for (const e of [e1, e2]) {
+      const banner = await call(julie, "GET", `/events/${e.id}/peer-invitations/received`);
+      expect(banner.json.inviters).toEqual([expect.objectContaining({ pseudo: "Kenji_66", note: "Viens !" })]);
+    }
+    // Plus de 24 h après la dernière notification : la suivante part.
+    clock.advance(24 * 3_600_000);
+    await invite(e3);
+    await notificationsService.flush();
+    expect((await pendingOf(julie.id, "event_invited")).map((r) => r.eventId).sort()).toEqual([e1.id, e3.id].sort());
+  });
+
+  it("refus du chef : un membre ne réinvite pas pendant 30 jours (« déjà en cours ») ; le chef, si", async () => {
+    const kenji = await person("Kenji_66");
+    const julie = await person("Julie_66");
+    const marc = await person("Marc_66");
+    const nina = await person("Nina_34");
+    const crew = await newCrew(kenji, [julie]);
+    await follow(marc, julie);
+    await follow(nina, julie);
+    await follow(kenji, marc);
+    await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo });
+    await call(marc, "POST", `/me/crew-invitations/${crew.id}/accept`);
+    // Nina demande d'elle-même : pour Julie, « déjà en cours », sans dire que c'est une demande.
+    await call(nina, "POST", `/crews/${crew.id}/requests`, { message: null });
+    expect((await call(kenji, "POST", `/crews/${crew.id}/requests/${marc.id}/decline`)).status).toBe(204);
+    await db.delete(notifications);
+    clock.advance(25 * 3_600_000);
+    const again = await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo });
+    expect(again.status).toBe(409);
+    expect(again.json.error.details).toEqual({ reason: "already_pending" });
+    const list = await call(julie, "GET", `/crews/${crew.id}/invite-candidates`);
+    const states = Object.fromEntries(
+      list.json.people.map((p: { pseudo: string; state: string; caption: string }) => [p.pseudo, [p.state, p.caption]]),
+    );
+    expect(states).toEqual({ Marc_66: ["requested", "déjà en cours"], Nina_34: ["requested", "déjà en cours"] });
+    // Le chef peut inviter la personne qu'il avait refusée.
+    expect((await call(kenji, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo })).status).toBe(201);
+    // Au-delà de 30 jours, un membre peut de nouveau inviter quelqu'un que le chef avait refusé.
+    await call(kenji, "DELETE", `/crews/${crew.id}/members/${marc.id}`);
+    await db
+      .insert(crewMembers)
+      .values({
+        crewId: crew.id,
+        userId: marc.id,
+        status: "declined",
+        role: "member",
+        respondedAt: new Date(clock.now.getTime() - 31 * 86_400_000),
+      })
+      .onConflictDoNothing();
+    await db.delete(notifications);
+    expect((await call(julie, "POST", `/crews/${crew.id}/invitations`, { pseudo: marc.pseudo })).status).toBe(201);
   });
 });

@@ -6,6 +6,7 @@ import {
   eventInvitedTitle,
   followingGoingText,
   inviteCaption,
+  inviteNoteLines,
   inviteResultText,
   inviteSendLabel,
 } from "./eventInvites";
@@ -37,6 +38,20 @@ describe("invitations entre passionnés (lot R6c)", () => {
     expect(inviteResultText({ invited: 2, alreadyInvited: ["a"], going: ["b", "c"] })).toBe(
       "2 invitations envoyées. 1 personne déjà invitée par toi. 2 personnes y vont déjà.",
     );
+  });
+
+  it("les mots d'une invitation : seul, sans auteur ; regroupés, chacun à son auteur (tour 2)", () => {
+    expect(inviteNoteLines([{ pseudo: "Kenji_66", note: "Viens !" }])).toEqual(["« Viens ! »"]);
+    expect(
+      inviteNoteLines([
+        { pseudo: "Theo_66", note: null },
+        { pseudo: "Kenji_66", note: "Viens avec ta R1" },
+        { pseudo: "Julie_66", note: "On y va" },
+      ]),
+    ).toEqual(["Kenji_66 : « Viens avec ta R1 »", "Julie_66 : « On y va »"]);
+    const many = ["A", "B", "C", "D"].map((p) => ({ pseudo: p, note: `mot de ${p}` }));
+    expect(inviteNoteLines(many)).toHaveLength(3);
+    expect(inviteNoteLines([{ pseudo: "Kenji_66", note: null }])).toEqual([]);
   });
 
   it("le mot : facultatif, 140 caractères, vide = aucun", () => {

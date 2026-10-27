@@ -5,6 +5,7 @@ CREATE TABLE "event_peer_invitations" (
 	"invitee_id" text NOT NULL,
 	"note" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"notified_at" timestamp with time zone,
 	CONSTRAINT "event_peer_invitations_not_self_check" CHECK ("event_peer_invitations"."inviter_id" <> "event_peer_invitations"."invitee_id"),
 	CONSTRAINT "event_peer_invitations_note_check" CHECK ("event_peer_invitations"."note" is null or char_length("event_peer_invitations"."note") <= 140)
 );
@@ -26,4 +27,5 @@ ALTER TABLE "invitation_mutes" ADD CONSTRAINT "invitation_mutes_muted_user_id_us
 CREATE UNIQUE INDEX "event_peer_invitations_key" ON "event_peer_invitations" USING btree ("event_id","invitee_id","inviter_id");--> statement-breakpoint
 CREATE INDEX "event_peer_invitations_invitee_idx" ON "event_peer_invitations" USING btree ("invitee_id","event_id");--> statement-breakpoint
 CREATE INDEX "event_peer_invitations_inviter_created_idx" ON "event_peer_invitations" USING btree ("inviter_id","created_at");--> statement-breakpoint
+CREATE INDEX "event_peer_invitations_pair_idx" ON "event_peer_invitations" USING btree ("inviter_id","invitee_id","notified_at");--> statement-breakpoint
 CREATE INDEX "invitation_mutes_muted_idx" ON "invitation_mutes" USING btree ("muted_user_id");
