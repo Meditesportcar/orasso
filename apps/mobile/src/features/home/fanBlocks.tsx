@@ -107,7 +107,8 @@ export function WeatherCard({
   // `--accent-soft` de l'artefact : moutarde à 16 % (Béton) ou 26 % (Sable).
   const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
   const label = weatherCodeLabels[s.code];
-  const title = weather.kind === "event" ? "Météo prévue sur place le jour J" : "Météo du jour";
+  // Lot R6-police : le libellé commun, « jour J » insécable (« LE JOUR / J » avec la police agrandie).
+  const title = weather.kind === "event" ? homeProfileLabels.weatherDayJ : "Météo du jour";
   const line = [place, when].filter(Boolean).join(", ");
   return (
     <View

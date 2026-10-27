@@ -1,4 +1,5 @@
 import type { HomeNudgeKind, HomeWidgetId } from "../home";
+import { keepUnits } from "./units.fr";
 
 // Accueil (lot 30) : titres des widgets, réorganisation, incitations, sources des données ouvertes.
 
@@ -167,7 +168,8 @@ export const homeProfileLabels = {
   passportNext: "Le prochain t'attend à ta prochaine sortie.",
   tutoTitle: "Découvre ce qu'il y a de nouveau",
   tutoBody: "Un tour rapide de ton espace.",
-  weatherDayJ: "Météo prévue sur place le jour J",
+  // Lot R6-police : « jour J » ne se coupe jamais (espace insécable).
+  weatherDayJ: keepUnits("Météo prévue sur place le jour J"),
   // Pro.
   discountsThisWeek: "Remises cette semaine",
   profileViews: "Vues de ta fiche",

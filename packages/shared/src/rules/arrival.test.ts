@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { arrivalProblems } from "../labels/arrival.fr";
+import { keepUnits } from "../labels/units.fr";
 import {
   type Arrivals,
   arrivalInstant,
@@ -21,17 +22,18 @@ const nocturne: Arrivals = {
   public: { from: "19:30", to: null, strict: false, note: null },
 };
 
+// Lot R6-police : les heures portent des espaces insécables (`keepUnits`, testée à part).
 describe("arrivalLabel", () => {
   it("écrit le créneau comme le prototype", () => {
-    expect(arrivalLabel(nocturne.exhibitors!)).toBe("Arrivée 18 h 30 – 19 h 15 (strict)");
+    expect(arrivalLabel(nocturne.exhibitors!)).toBe(keepUnits("Arrivée 18 h 30 – 19 h 15 (strict)"));
     // Lot M4 : jamais « conseillé ».
-    expect(arrivalLabel(nocturne.public!)).toBe("Arrivée dès 19 h 30");
-    expect(arrivalLabel({ from: "19:00", to: "23:00", strict: false, note: null })).toBe("Arrivée 19 h – 23 h");
+    expect(arrivalLabel(nocturne.public!)).toBe(keepUnits("Arrivée dès 19 h 30"));
+    expect(arrivalLabel({ from: "19:00", to: "23:00", strict: false, note: null })).toBe(keepUnits("Arrivée 19 h – 23 h"));
   });
 
   it("formate une heure murale", () => {
-    expect(arrivalTime("08:05")).toBe("8 h 05");
-    expect(arrivalTime("21:00")).toBe("21 h");
+    expect(arrivalTime("08:05")).toBe(keepUnits("8 h 05"));
+    expect(arrivalTime("21:00")).toBe(keepUnits("21 h"));
   });
 });
 

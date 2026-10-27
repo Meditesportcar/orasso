@@ -45,8 +45,8 @@ const staff = (id: string, days: number, presence: MyStaffEvent["presence"], ope
 
 describe("créneau d'arrivée", () => {
   it("dit la plage ou « dès », sinon rien", () => {
-    expect(arrivalPhrase({ from: "18:30", to: "19:15", strict: true, note: null })).toBe("arrivée 18 h 30 – 19 h 15");
-    expect(arrivalPhrase({ from: "19:30", to: null, strict: false, note: null })).toBe("arrivée dès 19 h 30");
+    expect(arrivalPhrase({ from: "18:30", to: "19:15", strict: true, note: null })).toBe("arrivée 18\u00a0h\u00a030 – 19\u00a0h\u00a015");
+    expect(arrivalPhrase({ from: "19:30", to: null, strict: false, note: null })).toBe("arrivée dès 19\u00a0h\u00a030");
     expect(arrivalPhrase(null)).toBeNull();
     expect(arrivalPhrase(undefined)).toBeNull();
   });
