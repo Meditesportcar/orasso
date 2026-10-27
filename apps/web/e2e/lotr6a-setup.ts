@@ -62,8 +62,11 @@ export function trackSockets() {
   window.WebSocket = Tracked;
 }
 
+/** Coupe les connexions temps réel d'Orasso (`/api/ws`) ; pas celle du serveur de développement (rechargement). */
 export async function cutSockets(page: Page) {
   await page.evaluate(() => {
-    for (const s of (window as unknown as { __orassoSockets?: WebSocket[] }).__orassoSockets ?? []) s.close();
+    for (const s of (window as unknown as { __orassoSockets?: WebSocket[] }).__orassoSockets ?? []) {
+      if (s.url.includes("/api/ws")) s.close();
+    }
   });
 }
