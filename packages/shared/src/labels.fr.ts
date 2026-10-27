@@ -53,6 +53,7 @@ export * from "./labels/styles.fr";
 export * from "./labels/tickets-app.fr";
 export * from "./labels/triageApp.fr";
 export * from "./labels/tuto.fr";
+export * from "./labels/units.fr";
 export * from "./labels/vehicle-add.fr";
 export * from "./labels/vehicles.fr";
 export * from "./labels/weather.fr";

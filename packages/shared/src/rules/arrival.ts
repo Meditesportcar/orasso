@@ -3,6 +3,7 @@
 // son fuseau. Fonctions pures, partagées par l'API, le site et l'appli.
 import { BUSINESS_TIMEZONE } from "../enums";
 import { type arrivalProblems, arrivalTexts } from "../labels/arrival.fr";
+import { keepUnits } from "../labels/units.fr";
 import { addDays, fromWallTime, wallTime } from "./time";
 
 /** Un créneau : début obligatoire, fin facultative (« dès 19 h 30 »), strict ou conseillé, note facultative. */
@@ -21,12 +22,12 @@ export function arrivalMinutes(value: string): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-/** « 18:30 » → « 18 h 30 », « 19:00 » → « 19 h ». */
+/** « 18:30 » → « 18 h 30 », « 19:00 » → « 19 h » ; lot R6-police : espaces insécables (`keepUnits`). */
 export function arrivalTime(value: string): string {
   const m = HHMM.exec(value);
   if (!m) return value;
   const h = String(Number(m[1]));
-  return m[2] === "00" ? `${h} h` : `${h} h ${m[2]}`;
+  return keepUnits(m[2] === "00" ? `${h} h` : `${h} h ${m[2]}`);
 }
 
 /**

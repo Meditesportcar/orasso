@@ -5,7 +5,17 @@
 // « Partager » · « Modifier ». Véhicules suivants `.veh.sm` : vignette carrée à gauche, une étiquette, nom, sous-ligne.
 // Lot R4c (maquette R4.5) : la mini-fiche est celle du véhicule principal, avec l'étiquette « ★ Principal » (une marque,
 // pas un bouton) et le menu « ⋯ » ; les autres véhicules passent en lignes compactes (`.r4vrow`), chacune avec son « ⋯ ».
-import { Chip, Icon, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Chip,
+  Icon,
+  Photo,
+  Tag,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeGroup,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import {
   vehicleWizardLabels as L,
   mainVehicleLabels as M,
@@ -220,16 +230,24 @@ export function GarageCard({
         </View>
       ) : null}
 
-      <View style={[styles.specs, { borderColor: c.line }]}>
-        {specs.map(([value, unit], i) => (
-          <View key={unit} style={[styles.spec, i > 0 && [styles.specSep, { borderColor: c.line }]]}>
-            <Num size={22}>{value}</Num>
-            <Text variant="caption" color={c.inkMuted} style={styles.specUnit}>
-              {unit}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {/* Lot R6-police : police agrandie, une unité ne se coupe jamais ; les trois gardent le même corps. */}
+      <WordSafeGroup>
+        <View style={[styles.specs, { borderColor: c.line }]}>
+          {specs.map(([value, unit], i) => (
+            <View key={unit} style={[styles.spec, i > 0 && [styles.specSep, { borderColor: c.line }]]}>
+              <Num size={22}>{value}</Num>
+              <WordSafeText
+                variant="caption"
+                base={styles.specUnit.fontSize}
+                color={c.inkMuted}
+                style={styles.specUnit}
+              >
+                {unit}
+              </WordSafeText>
+            </View>
+          ))}
+        </View>
+      </WordSafeGroup>
       {facts ? (
         <Text variant="caption" color={c.inkMuted}>
           {facts}

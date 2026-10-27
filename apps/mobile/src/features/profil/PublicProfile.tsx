@@ -6,7 +6,17 @@
 // (ses tampons de la saison). Compte privé non suivi : la tête, les nombres, « Demander à suivre », ses véhicules en marque
 // et modèle, et la ligne « Ses photos, ses sorties… sont pour ses abonnés ». Les cartes carrées n'existent que dans ce profil (le `VehicleCard` du
 // système reste en bandeau ailleurs). « Écrire » et « ⋯ » (signaler) sont dans l'en-tête, posés par l'écran.
-import { Button, Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Button,
+  Icon,
+  type IconName,
+  Photo,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeGroup,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import {
   filledSocials,
   fitWideWordSize,
@@ -176,22 +186,30 @@ function Numbers({ p }: { p: UserProfileView }) {
   ];
   const shown = cells.filter(([n]) => n !== null) as [number, (n: number) => string][];
   if (!shown.length) return null;
+  // Lot R6-police : police agrandie, un libellé ne se coupe jamais ; les trois gardent le même corps.
   return (
-    <View
-      style={[styles.n4, { backgroundColor: t.color.surface }]}
-      accessibilityRole="summary"
-      accessibilityLabel={shown.map(([n, label]) => `${n} ${label(n)}`).join(", ")}
-      testID="public-counts"
-    >
-      {shown.map(([n, label], i) => (
-        <View key={label(2)} style={[styles.n4Cell, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.line }]}>
-          <Num size={22}>{String(n)}</Num>
-          <Text variant="caption" color={t.color.inkMuted} style={styles.n4Label}>
-            {label(n)}
-          </Text>
-        </View>
-      ))}
-    </View>
+    <WordSafeGroup>
+      <View
+        style={[styles.n4, { backgroundColor: t.color.surface }]}
+        accessibilityRole="summary"
+        accessibilityLabel={shown.map(([n, label]) => `${n} ${label(n)}`).join(", ")}
+        testID="public-counts"
+      >
+        {shown.map(([n, label], i) => (
+          <View key={label(2)} style={[styles.n4Cell, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.line }]}>
+            <Num size={22}>{String(n)}</Num>
+            <WordSafeText
+              variant="caption"
+              base={styles.n4Label.fontSize}
+              color={t.color.inkMuted}
+              style={styles.n4Label}
+            >
+              {label(n)}
+            </WordSafeText>
+          </View>
+        ))}
+      </View>
+    </WordSafeGroup>
   );
 }
 

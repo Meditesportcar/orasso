@@ -3,10 +3,19 @@
 // montrent leur valeur (`.pills` / `.pill`) : l'icône, la valeur en gras, ▾. Contour = tes réglages habituels ; plein
 // (encre) = une valeur choisie ; nombre moutarde = les filtres actifs. Sur un téléphone étroit, la ligne défile au doigt.
 // Il se pose sous la bande ORASSO de l'onglet (décision de Damien du 24/10 : « on garde toujours Orasso »).
-import { archivoAt, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  archivoAt,
+  Icon,
+  type IconName,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeGroup,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import { explorerR2Labels as R } from "@orasso/shared";
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 
 import type { ExplorerSegment } from "./explorerChoice";
 
@@ -22,7 +31,12 @@ const SEGMENTS: { id: ExplorerSegment; label: string }[] = [
 export function SegmentBar({ value, onChange }: { value: ExplorerSegment; onChange: (s: ExplorerSegment) => void }) {
   const { t } = useTheme();
   const c = t.color;
-  return (
+  // Lot R6-police (« Événeme… », « Pr… » avec la police du système agrandie) : un libellé n'est plus tronqué ; il passe
+  // à la ligne entre deux mots, jamais au milieu (corps réduit au besoin, le même pour les trois). À l'échelle 1, rien
+  // ne change (une ligne, 38 px).
+  const { fontScale } = useWindowDimensions();
+  const big = fontScale > 1;
+  const bar = (
     <View
       style={[styles.seg, { backgroundColor: c.surfaceRaised }]}
       accessibilityRole="tablist"
@@ -38,17 +52,29 @@ export function SegmentBar({ value, onChange }: { value: ExplorerSegment; onChan
             accessibilityState={{ selected: on }}
             aria-selected={on}
             onPress={() => onChange(s.id)}
-            style={[styles.segItem, on && { backgroundColor: c.ink }]}
+            style={[styles.segItem, big && styles.segItemBig, on && { backgroundColor: c.ink }]}
             testID={`segment-${s.id}`}
           >
-            <Text variant="caption" color={on ? c.ground : c.inkMuted} style={styles.segText} numberOfLines={1}>
-              {s.label}
-            </Text>
+            {big ? (
+              <WordSafeText
+                variant="caption"
+                base={styles.segText.fontSize}
+                color={on ? c.ground : c.inkMuted}
+                style={[styles.segText, styles.segTextBig]}
+              >
+                {s.label}
+              </WordSafeText>
+            ) : (
+              <Text variant="caption" color={on ? c.ground : c.inkMuted} style={styles.segText} numberOfLines={1}>
+                {s.label}
+              </Text>
+            )}
           </Pressable>
         );
       })}
     </View>
   );
+  return big ? <WordSafeGroup>{bar}</WordSafeGroup> : bar;
 }
 
 /** `.exsearch` : la recherche du segment actif, ✕ pour l'effacer. */
@@ -176,7 +202,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 9,
   },
+  segItemBig: { height: undefined, minHeight: 38, paddingVertical: 4 },
   segText: { fontSize: 13, lineHeight: 16, fontFamily: archivoAt(100, 750) },
+  segTextBig: { textAlign: "center" },
   search: {
     flexDirection: "row",
     alignItems: "center",

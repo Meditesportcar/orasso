@@ -2,6 +2,7 @@ import type { InvitationStatus } from "../enums";
 import { type Grade, gradeLabels, grades } from "../grades";
 import { gradeRank } from "../rules/invitations";
 import type { InvitationSkipReason } from "../schemas/invitations";
+import { keepUnits } from "./units.fr";
 
 // Invitations nominatives, événement privé, avantages des hauts grades (lot 25) : libellés du site et de l'appli.
 
@@ -39,7 +40,8 @@ export function previewSummary(e: {
   if (e.previewHours > 0) parts.push(`abonnés ${e.previewHours} h`);
   if (e.highGradePreviewHours > 0) parts.push(`grades ${highGradesText(e.highGradeMin)} ${e.highGradePreviewHours} h`);
   if (!parts.length) return null;
-  return `Avant-première ${parts.join(" · ")}`;
+  // Lot R6-police : « 24 h » ne se coupe jamais (espace insécable).
+  return keepUnits(`Avant-première ${parts.join(" · ")}`);
 }
 
 export const invitationLabels = {

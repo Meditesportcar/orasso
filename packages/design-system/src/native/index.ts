@@ -104,3 +104,4 @@ export {
 export { FIT_TITLE_MIN_SCALE, FIT_TITLE_SAFETY, fitTitle, titleWords } from "./titleFit";
 export { useWordSafeLabel, type WordSafeLabel } from "./useWordSafeLabel";
 export { VehicleCard, type VehicleCardProps, VehicleThumb, type VehicleThumbProps } from "./VehicleCard";
+export { COUNTER_LABEL_MIN, WordSafeGroup, WordSafeText, type WordSafeTextProps } from "./WordSafeText";

@@ -12,12 +12,12 @@ describe("dates", () => {
   const now = new Date("2026-10-18T14:50:00Z");
 
   it("heure de Paris, quel que soit le fuseau de l'appareil", () => {
-    expect(formatDayHour("2026-10-17T13:12:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 15 h 12");
+    expect(formatDayHour("2026-10-17T13:12:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 15\u00a0h\u00a012");
   });
 
   it("l'année s'affiche quand elle n'est pas l'année en cours", () => {
-    expect(formatDayHourYear("2026-10-17T13:12:00Z", now)).toBe("Sam 17 oct · 15 h 12");
-    expect(formatDayHourYear("2027-10-16T13:12:00Z", now)).toBe("Sam 16 oct 2027 · 15 h 12");
+    expect(formatDayHourYear("2026-10-17T13:12:00Z", now)).toBe("Sam 17 oct · 15\u00a0h\u00a012");
+    expect(formatDayHourYear("2027-10-16T13:12:00Z", now)).toBe("Sam 16 oct 2027 · 15\u00a0h\u00a012");
   });
 });
 

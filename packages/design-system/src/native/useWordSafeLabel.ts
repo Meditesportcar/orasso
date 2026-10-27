@@ -12,7 +12,7 @@
 // - pas de mesure inutile : sur le web, une seule mesure tant que le libellé tient sur une ligne ; sur le téléphone,
 //   la largeur n'est suivie qu'après une coupure ; plus rien au plancher.
 
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   type NativeSyntheticEvent,
@@ -35,19 +35,22 @@ export type WordSafeLabel = {
 
 type Box = { sig: string; width: number | null; cutWidth: number | null; regrown: boolean };
 
-/** `base` : corps du libellé ; `label` : le libellé (texte ou enfants JSX). */
-export function useWordSafeLabel(base: number, label: ReactNode): WordSafeLabel {
+/**
+ * `base` : corps du libellé ; `label` : le libellé (texte ou enfants JSX) ; `min` : le plancher (libellé de bouton,
+ * 11 px, par défaut ; lot R6-police : plus bas pour un libellé de compteur sous son chiffre).
+ */
+export function useWordSafeLabel(base: number, label: ReactNode, min?: number): WordSafeLabel {
   const { width: windowWidth, fontScale } = useWindowDimensions();
-  const sig = `${base}|${Math.round(windowWidth)}|${fontScale}|${flatText(label)}`;
+  const sig = `${base}|${min ?? ""}|${Math.round(windowWidth)}|${fontScale}|${flatText(label)}`;
   const [fit, setFit] = useState({ sig, cut: 0 });
   const cut = fit.sig === sig ? fit.cut : 0;
   const box = useRef<Box>({ sig, width: null, cutWidth: null, regrown: false });
   if (box.current.sig !== sig) box.current = { sig, width: null, cutWidth: null, regrown: false };
   const ref = useRef<unknown>(null);
-  const atFloor = nextCut(base, cut) === null;
+  const atFloor = nextCut(base, cut, min) === null;
 
   const shrink = () => {
-    const next = nextCut(base, cut);
+    const next = nextCut(base, cut, min);
     if (next === null) return;
     box.current.cutWidth = box.current.width;
     setFit({ sig, cut: next });
@@ -66,6 +69,15 @@ export function useWordSafeLabel(base: number, label: ReactNode): WordSafeLabel 
       setFit({ sig, cut: 0 });
     }
   };
+
+  // Lot R6-police : sur le web, un corps plus petit ne change pas toujours la boîte du libellé (même largeur, toujours
+  // deux lignes) : aucun nouvel `onLayout`, la descente s'arrêtait au premier pixel. Après chaque pixel retiré, on
+  // remesure une fois le libellé posé. Sans coupure (cut = 0), rien ne se passe.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une mesure par pixel retiré, pas à chaque rendu.
+  useEffect(() => {
+    if (Platform.OS !== "web" || cut === 0 || atFloor) return;
+    if (webLabelBreaksInsideWord(ref.current)) shrink();
+  }, [cut, sig]);
 
   const textProps: WordSafeLabel["textProps"] =
     Platform.OS === "web"

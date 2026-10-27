@@ -33,9 +33,12 @@ export function flatText(node: unknown): string {
   return "";
 }
 
-/** Pixels retirés après une coupure en plein mot : un de plus, jamais sous le plancher (`null` : déjà au plancher). */
-export function nextCut(base: number, cut: number): number | null {
-  return base - cut - 1 >= BUTTON_LABEL_MIN ? cut + 1 : null;
+/**
+ * Pixels retirés après une coupure en plein mot : un de plus, jamais sous le plancher (`null` : déjà au plancher).
+ * `min` : le plancher (libellé de bouton par défaut ; lot R6-police : plus bas pour un petit libellé de compteur).
+ */
+export function nextCut(base: number, cut: number, min = BUTTON_LABEL_MIN): number | null {
+  return base - cut - 1 >= min ? cut + 1 : null;
 }
 
 /**

@@ -120,14 +120,14 @@ describe("QR d'accès : fenêtre de consultation (D34)", () => {
 describe("Formats", () => {
   it("dates et heures de l'événement en heure de Paris", () => {
     expect(formatDay("2026-10-17T17:00:00Z", undefined, IN_2026)).toBe("Sam 17 oct");
-    expect(formatHour("2026-10-17T17:00:00Z")).toBe("19 h");
-    expect(formatHour("2026-10-17T17:30:00Z")).toBe("19 h 30");
-    expect(formatDayHour("2026-10-17T17:00:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 19 h");
+    expect(formatHour("2026-10-17T17:00:00Z")).toBe("19\u00a0h");
+    expect(formatHour("2026-10-17T17:30:00Z")).toBe("19\u00a0h\u00a030");
+    expect(formatDayHour("2026-10-17T17:00:00Z", undefined, IN_2026)).toBe("Sam 17 oct · 19\u00a0h");
   });
   it("durées et compte à rebours", () => {
-    expect(formatDuration(102 * 60_000)).toBe("1 h 42");
-    expect(formatDuration(12 * 60_000)).toBe("12 min");
-    expect(formatDuration(45_000)).toBe("45 s");
+    expect(formatDuration(102 * 60_000)).toBe("1\u00a0h\u00a042");
+    expect(formatDuration(12 * 60_000)).toBe("12\u00a0min");
+    expect(formatDuration(45_000)).toBe("45\u00a0s");
     expect(dayCountdown("2026-10-17T17:00:00Z", new Date("2026-10-15T10:00:00Z"))).toBe("J-2");
     expect(dayCountdown("2026-10-17T17:00:00Z", new Date("2026-10-17T05:00:00Z"))).toBe("Aujourd'hui");
   });

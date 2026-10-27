@@ -75,7 +75,8 @@ describe("avant-premières (S26 : la plus longue l'emporte)", () => {
     expect(registrationOpensAt(e, false)).toEqual(open);
   });
   it("résumé affiché sur la page", () => {
-    expect(previewSummary(e)).toBe("Avant-première abonnés 24 h · grades Circuit et Légende 48 h");
+    // Lot R6-police : l'unité ne se sépare jamais de son nombre (espace insécable).
+    expect(previewSummary(e)).toBe("Avant-première abonnés 24\u00a0h · grades Circuit et Légende 48\u00a0h");
     expect(previewSummary({ ...e, previewHours: 0, highGradePreviewHours: 0 })).toBeNull();
     expect(highGradesText("legende")).toBe("Légende");
     expect(highGradesText("sport")).toBe("Sport, Circuit et Légende");

@@ -14,11 +14,21 @@ import {
   type CrewView,
   crewInstagramUrl,
   crewLabels,
+  fitWideWordSize,
   crewPageLabels as L,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import { Alert, Linking, Platform, Pressable, type ScrollView, StyleSheet, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  type ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
@@ -62,6 +72,27 @@ function ask(message: string): Promise<boolean> {
       { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
       { text: "Confirmer", style: "destructive", onPress: () => resolve(true) },
     ]),
+  );
+}
+
+/**
+ * Lot R6-police (« ROUSSILLO / N DRIFT » avec la police du système agrandie) : le nom du crew ne se coupe qu'entre deux
+ * mots ; il rapetisse (jusqu'à 14 px) quand son mot le plus large ne tient pas, échelle de police comprise (comme le
+ * titre de la fiche). Tant qu'il tient, rien ne change.
+ */
+function CrewName({ name, color }: { name: string; color: string }) {
+  const [width, setWidth] = useState(0);
+  const { fontScale } = useWindowDimensions();
+  const size = fitWideWordSize(name, width / Math.max(1, fontScale), styles.name.fontSize, 14);
+  return (
+    <Text
+      variant="posterL"
+      color={color}
+      style={[styles.name, { fontSize: size, lineHeight: size + styles.name.lineHeight - styles.name.fontSize }]}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+    >
+      {name}
+    </Text>
   );
 }
 
@@ -269,9 +300,7 @@ export default function CrewScreen() {
           )}
         </View>
         <View style={styles.idText}>
-          <Text variant="posterL" color={c.ink} style={styles.name}>
-            {v.name}
-          </Text>
+          <CrewName name={v.name} color={c.ink} />
           <Text variant="caption" color={c.inkMuted}>
             {L.idLine(departmentName(v.department), v.membersCount, since)}
           </Text>

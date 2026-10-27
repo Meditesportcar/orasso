@@ -6,6 +6,7 @@ import { CERTIFICATION_MIN_PHOTOS } from "../garage";
 import { gradeLabels, grades } from "../grades";
 import { CERTIFICATION_MIN_GRADE } from "../rules/garage";
 import { OFFER_DELAY_DAY, OFFER_DELAY_DEFAULT, OFFER_DELAY_EVE } from "../rules/waitlistDeadline";
+import { keepUnits } from "./units.fr";
 
 const HOUR = 3_600_000;
 
@@ -54,7 +55,9 @@ export const helpFaq: readonly { id: string; q: string; a: string }[] = [
   {
     id: "attente",
     q: "Liste d'attente et délais",
-    a: `Si une place se libère, tu es prévenu et tu as un délai pour l'accepter : ${OFFER_DELAY_DEFAULT / HOUR} h en général, ${OFFER_DELAY_EVE / HOUR} h la veille, ${OFFER_DELAY_DAY / HOUR} h le jour J. Passé ce délai, elle part au suivant. Tu peux te retirer sans pénalité jusqu'à la date indiquée sur ton ticket.`,
+    a: keepUnits(
+      `Si une place se libère, tu es prévenu et tu as un délai pour l'accepter : ${OFFER_DELAY_DEFAULT / HOUR} h en général, ${OFFER_DELAY_EVE / HOUR} h la veille, ${OFFER_DELAY_DAY / HOUR} h le jour J. Passé ce délai, elle part au suivant. Tu peux te retirer sans pénalité jusqu'à la date indiquée sur ton ticket.`,
+    ),
   },
   {
     id: "qr",

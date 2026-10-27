@@ -3,7 +3,17 @@
 // côte à côte. Écran des listes (mode fiche) : segment abonnés / abonnements / demandes, recherche, un bouton « Suivre »
 // par ligne, « Accepter » et ✕ pour les demandes, « Toi seul vois ces listes ». Tour 2 : dans Abonnés, le menu ⋯ d'une
 // ligne propose « Retirer cet abonné », avec confirmation dans une feuille.
-import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Button,
+  departmentChoices,
+  Icon,
+  Photo,
+  Text,
+  tokens,
+  useTheme,
+  WordSafeGroup,
+  WordSafeText,
+} from "@orasso/design-system/native";
 import {
   type FollowedPage,
   type FollowPerson,
@@ -27,6 +37,8 @@ import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 
 const { space1, space2, space3 } = tokens.spacing;
+/** Corps du libellé d'un compteur (`.r4cnt span`). */
+const COUNT_LABEL_SIZE = 12;
 
 /** Les trois listes de « Ton réseau » (`?liste=`). */
 export type NetworkTab = "abonnes" | "abonnements" | "demandes";
@@ -55,33 +67,36 @@ export function NetworkCounters({
     ["abonnements", counts?.following ?? null, N.following],
     ["sorties", counts?.outings ?? null, N.outings],
   ];
+  // Lot R6-police : police agrandie, un libellé ne se coupe jamais (« abonnement / s ») ; les trois gardent le même corps.
   return (
-    <View
-      style={[styles.counts, { backgroundColor: c.ground }]}
-      accessibilityRole="summary"
-      accessibilityLabel={N.countsGroup}
-      testID="profil-counters"
-    >
-      {cells.map(([tab, n, label], i) => (
-        <Pressable
-          key={tab}
-          accessibilityRole="button"
-          accessibilityLabel={n === null ? label(2) : `${n} ${label(n)}`}
-          onPress={() => onOpen(tab)}
-          testID={`profil-count-${tab}`}
-          style={({ pressed }) => [
-            styles.count,
-            i > 0 && { borderLeftWidth: 1, borderLeftColor: c.line },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Num size={28}>{n === null ? "—" : String(n)}</Num>
-          <Text variant="caption" color={c.inkMuted} style={styles.countLabel}>
-            {label(n ?? 2)}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+    <WordSafeGroup>
+      <View
+        style={[styles.counts, { backgroundColor: c.ground }]}
+        accessibilityRole="summary"
+        accessibilityLabel={N.countsGroup}
+        testID="profil-counters"
+      >
+        {cells.map(([tab, n, label], i) => (
+          <Pressable
+            key={tab}
+            accessibilityRole="button"
+            accessibilityLabel={n === null ? label(2) : `${n} ${label(n)}`}
+            onPress={() => onOpen(tab)}
+            testID={`profil-count-${tab}`}
+            style={({ pressed }) => [
+              styles.count,
+              i > 0 && { borderLeftWidth: 1, borderLeftColor: c.line },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Num size={28}>{n === null ? "—" : String(n)}</Num>
+            <WordSafeText variant="caption" base={COUNT_LABEL_SIZE} color={c.inkMuted} style={styles.countLabel}>
+              {label(n ?? 2)}
+            </WordSafeText>
+          </Pressable>
+        ))}
+      </View>
+    </WordSafeGroup>
   );
 }
 
@@ -584,7 +599,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   counts: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   count: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: space1, gap: 1 },
-  countLabel: { fontSize: 12, fontFamily: "Archivo-ExtraBold" },
+  countLabel: { fontSize: COUNT_LABEL_SIZE, fontFamily: "Archivo-ExtraBold" },
   links: { flexDirection: "row", gap: space2 },
   link: {
     flex: 1,

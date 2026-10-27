@@ -2,6 +2,7 @@ import type { EventCard } from "../schemas/event";
 import type { ProCard } from "../schemas/pro";
 import type { SearchGroup } from "../schemas/search";
 import { countFr } from "./plural.fr";
+import { keepUnits } from "./units.fr";
 
 // Recherche de premier niveau et Explorer (lot 29) : libellés d'interface.
 
@@ -196,7 +197,8 @@ export const eventPageLabels = {
   seeMap: "voir la carte",
   hideMap: "masquer la carte",
   /** Lot R5d (maquette R5.11) : distance à vol d'oiseau depuis la position de l'appareil, calculée sur le téléphone. */
-  awayFromYou: (km: number) => `à ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km de toi`,
+  // Lot R6-police : « 4,8 km » ne se coupe jamais (espace insécable).
+  awayFromYou: (km: number) => keepUnits(`à ${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km de toi`),
   seeDistance: "Voir la distance",
   distanceNote: "La distance est calculée sur ton téléphone, à vol d'oiseau : ta position ne part pas chez Orasso.",
   goTo: "Y aller",
@@ -320,7 +322,7 @@ export const explorerR2Labels = {
   pillMine: (codes: readonly string[]) => (codes.length ? `Mon coin (${codes.join(", ")})` : "Mon coin"),
   pillDept: (name: string, code: string) => `${name} (${code})`,
   pillAll: "Partout en France",
-  lineMe: (km: number) => `jusqu'à ${km} km de toi`,
+  lineMe: (km: number) => keepUnits(`jusqu'à ${km} km de toi`),
   lineAll: "partout en France",
   seeEvents: (n: number | null) =>
     n === null

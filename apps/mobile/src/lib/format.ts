@@ -1,7 +1,7 @@
 // Dates et durées en français, dans le fuseau de l'événement (Europe/Paris par défaut), comme dans les maquettes :
 // « Sam 17 oct », « 19 h », « 19 h 30 », « J-2 », « dans 1 h 42 ».
 // Lot R3b (retour 10) : une date hors de l'année en cours dit son année (« Dim 17 oct 2027 »), à l'heure d'Orasso.
-import { BUSINESS_TIMEZONE, calendarDaysBetween, rangeYears, wallTime, withYear } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, calendarDaysBetween, keepUnits, rangeYears, wallTime, withYear } from "@orasso/shared";
 
 import { now as orassoNow } from "./clock";
 
@@ -47,10 +47,10 @@ export function formatShortDate(iso: string | Date, timeZone = BUSINESS_TIMEZONE
   return withYear(`${w.day} ${MONTHS[w.month - 1]}`, iso, now, timeZone);
 }
 
-/** « 19 h » ou « 19 h 30 » */
+/** « 19 h » ou « 19 h 30 » ; lot R6-police : « 19 » et « h » ne se séparent jamais (espace insécable, `keepUnits`). */
 export function formatHour(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {
   const w = wallTime(new Date(iso), timeZone);
-  return w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`;
+  return keepUnits(w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`);
 }
 
 /** « Sam 17 oct · 19 h » (« Dim 17 oct 2027 · 19 h » hors de l'année en cours). */
@@ -72,8 +72,12 @@ export function formatStamp(iso: string | Date, timeZone = BUSINESS_TIMEZONE): s
   return `${formatShortDate(iso, timeZone)} à ${formatHour(iso, timeZone)}`;
 }
 
-/** « 1 h 42 », « 12 min », « 45 s » : durée jusqu'à une échéance (au moins 1 s). */
+/** « 1 h 42 », « 12 min », « 45 s » : durée jusqu'à une échéance (au moins 1 s), unités jamais isolées (R6-police). */
 export function formatDuration(ms: number): string {
+  return keepUnits(rawDuration(ms));
+}
+
+function rawDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
   if (total >= 24 * 3600) {
     const d = Math.floor(total / 86400);
