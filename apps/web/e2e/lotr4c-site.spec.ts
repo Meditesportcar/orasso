@@ -234,7 +234,7 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await expect(page.getByTestId("preview-banner")).toContainText("abonné");
       await shot("09-apercu-abonne");
 
-      // Suivre : public (« Abonné », puis « Ne plus suivre » après confirmation), puis privé (« Demander à suivre »).
+      // Suivre : public (« Abonné », puis « Ne plus suivre » après confirmation), puis privé qui me suit (« Suivre en retour »).
       await page.goto(`/u/${stranger.pseudo}`);
       await page.getByTestId("follow-button").click();
       await expect(page.getByTestId("follow-button")).toContainText("Abonné");
@@ -245,7 +245,9 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await expect(page.getByTestId("follow-button")).not.toContainText("Abonné");
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("profil")).toBeVisible();
-      await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
+      // Le compte privé me suit déjà : « Te suit » et « Suivre en retour » (une demande partira, son compte est privé).
+      await expect(page.getByTestId("follows-you")).toBeVisible();
+      await expect(page.getByTestId("follow-button")).toContainText("Suivre en retour");
       // Damien, 24/10 : les nombres d'un compte privé sont visibles de tout membre (les listes, non).
       await expect(page.getByTestId("public-counts")).toContainText("abonné");
       await shot("11-profil-prive");

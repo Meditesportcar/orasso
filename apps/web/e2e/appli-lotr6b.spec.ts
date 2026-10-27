@@ -85,7 +85,7 @@ for (const theme of ["beton", "sable"] as const) {
     // 1. Compte public : « Suivre » → « Abonné », puis ne plus suivre avec confirmation.
     await goto(mine.page, `/u/${pub.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/^Suivre$/i);
-    await expect(mine.page.getByTestId("public-counts")).toContainText("abonnés");
+    await expect(mine.page.getByTestId("public-counts")).toContainText("abonnement");
     await expect(mine.page.getByTestId("public-counts")).not.toContainText(/\bamis?\b/);
     await shot(mine.page, `01-public-suivre-${theme}`);
     await followButton(mine.page).click();

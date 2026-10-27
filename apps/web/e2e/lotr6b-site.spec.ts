@@ -73,6 +73,8 @@ for (const theme of ["beton", "sable"] as const) {
       await shot(other.page, `04-reseau-demandes-${tag}`);
       await other.page.getByRole("button", { name: `Refuser la demande de ${asker.pseudo}` }).click();
       await expect(other.page.getByTestId("net-notice")).toContainText("La personne n'est pas prévenue");
+      // La liste se relit après l'action : la demande refusée disparaît.
+      await expect(other.page.getByTestId("net-request")).toHaveCount(1);
       await other.page.getByTestId("net-request-accept").click();
       await expect(other.page.getByTestId("net-notice")).toContainText(`${me.pseudo} te suit maintenant.`);
       expect(
