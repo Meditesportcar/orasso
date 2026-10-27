@@ -1,30 +1,29 @@
 // Conversation à deux (`direct`, ARCHITECTURE-SUITE § 3.2). Lecture : les deux participants (comptes non supprimés).
-// Écriture : amis, ou demande de contact acceptée entre eux (S11) ; une amitié retirée rend la conversation lisible
-// seulement (docs/01 : « on ne peut pas écrire librement à quelqu'un qui n'est pas son ami »).
+// Écriture (lot R6b, D37 : « un message va directement à quelqu'un qui te suit ; sinon demande de contact ») : la
+// personne à qui j'écris me suit (abonnement accepté), ou une demande de contact a été acceptée entre nous (S11), ou elle
+// m'a déjà écrit dans cette conversation (je lui réponds). Un abonnement retiré, sans échange, rend la conversation
+// lisible seulement.
 import { messagingLabels } from "@orasso/shared";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 
-import { contactRequests, conversationParticipants, friendships, profiles } from "../../../db/schema";
+import { contactRequests, conversationParticipants, messages, profiles, userFollows } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
 import type { Executor } from "../../../lib/tx";
 import type { KindRules } from "./types";
 
-/** Amis acceptés, ou demande de contact acceptée dans un sens ou dans l'autre. */
-export async function canTalkDirect(ex: Executor, a: string, b: string): Promise<boolean> {
-  const [friend] = await ex
-    .select({ id: friendships.id })
-    .from(friendships)
-    .where(
-      and(
-        eq(friendships.status, "accepted"),
-        or(
-          and(eq(friendships.requesterId, a), eq(friendships.addresseeId, b)),
-          and(eq(friendships.requesterId, b), eq(friendships.addresseeId, a)),
-        ),
-      ),
-    )
+/**
+ * `from` peut écrire directement à `to` : `to` suit `from` (abonnement accepté), ou demande de contact acceptée dans un
+ * sens ou dans l'autre, ou `to` a déjà écrit dans la conversation `conversationId`.
+ */
+export async function canTalkDirect(ex: Executor, from: string, to: string, conversationId?: string): Promise<boolean> {
+  const [follows] = await ex
+    .select({ id: userFollows.followerId })
+    .from(userFollows)
+    .where(and(eq(userFollows.followerId, to), eq(userFollows.followedId, from), eq(userFollows.status, "accepted")))
     .limit(1);
-  if (friend) return true;
+  if (follows) return true;
+  const a = from;
+  const b = to;
   const [contact] = await ex
     .select({ id: contactRequests.id })
     .from(contactRequests)
@@ -38,7 +37,14 @@ export async function canTalkDirect(ex: Executor, a: string, b: string): Promise
       ),
     )
     .limit(1);
-  return Boolean(contact);
+  if (contact) return true;
+  if (!conversationId) return false;
+  const [wrote] = await ex
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.senderId, to)))
+    .limit(1);
+  return Boolean(wrote);
 }
 
 async function activeParticipants(ex: Executor, conversationId: string) {
@@ -66,7 +72,7 @@ export const directRules: KindRules = {
   async writeBlock(ex, conversation, viewer) {
     const other = (await activeParticipants(ex, conversation.id)).find((p) => p.userId !== viewer.userId);
     if (!other) return "account_deleted";
-    return (await canTalkDirect(ex, viewer.userId, other.userId)) ? null : "not_friends";
+    return (await canTalkDirect(ex, viewer.userId, other.userId, conversation.id)) ? null : "not_friends";
   },
 
   async describe(ex, conversation, viewer) {

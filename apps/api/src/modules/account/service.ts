@@ -74,6 +74,7 @@ import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
+import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
@@ -272,6 +273,11 @@ export const accountService = {
         ...(homeWidgets !== undefined ? { homeWidgets } : {}),
       };
       const row = Object.keys(values).length ? await profilesRepo.update(v.user.id, values, tx) : v.profile;
+      // Lot R6b : un compte qui passe de privé à public accepte toutes ses demandes d'abonnement en attente (sous le
+      // verrou de la ligne du profil, posé par la mise à jour : une demande simultanée est acceptée aussi).
+      if (rest.visibility === "public") {
+        await followsService.acceptAllPending(tx, v.user.id);
+      }
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!row) throw notFound();
       return row;
@@ -281,7 +287,7 @@ export const accountService = {
 
   /**
    * Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi ») ; lot
-   * R4c : `as=friend` pour le regard d'un ami.
+   * R4c, R6b : `as=follower` pour le regard d'un abonné.
    */
   publicPreview(v: Viewer, as: PreviewAs = "member"): Promise<PublicPreview> {
     return socialProfile.view(v, v.profile.pseudo, { as });

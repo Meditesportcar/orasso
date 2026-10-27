@@ -1,13 +1,12 @@
 // Export des données personnelles (lot 35c, D20) : tout ce que le compte a saisi ou produit, en un fichier JSON lisible,
 // pour le titulaire seulement. Jamais de secret (mot de passe, secret du QR de compte, clés d'accès) ni de donnée d'un
 // autre compte (messages, coordonnées des autres). Les photos ne sont pas incluses : leurs adresses suffisent.
-import { desc, eq, or, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   events,
-  friendships,
   pointEntries,
   proFollows,
   profiles,
@@ -38,17 +37,26 @@ export type AccountExport = {
   tickets: Record<string, unknown>[];
   points: { season: string; kind: string; points: number; event: string | null; note: string | null; at: string }[];
   structures: { name: string; role: string; status: string }[];
-  /** Lot R4c, tour 2 : abonnements (personnes, organisateurs, pros), abonnés et amitiés, par pseudo ou nom. */
+  /**
+   * Lot R4c, tour 2 : abonnements (personnes, organisateurs, pros) et abonnés, par pseudo ou nom ; lot R6b : le statut
+   * de chaque abonnement entre personnes (accepté, ou demande en attente) et la date d'acceptation.
+   */
   network: {
-    following: { pseudo: string; since: string }[];
-    followers: { pseudo: string; since: string }[];
+    following: { pseudo: string; status: string; since: string; acceptedAt: string | null }[];
+    followers: { pseudo: string; status: string; since: string; acceptedAt: string | null }[];
     followingOrganizers: { name: string; since: string }[];
     followingPros: { name: string; since: string }[];
-    friendships: { pseudo: string; status: string; requestedByMe: boolean; since: string }[];
   };
   /** Lot R5c1 : tes publications, commentaires et voix dans le fil des crews. */
   crewFeed: CrewFeedExport;
 };
+
+const followOut = (r: { pseudo: string; status: string; at: Date; acceptedAt: Date | null }) => ({
+  pseudo: r.pseudo,
+  status: r.status,
+  since: r.at.toISOString(),
+  acceptedAt: r.acceptedAt?.toISOString() ?? null,
+});
 
 export const accountExportService = {
   /** `GET /me/export` : limité à 5 par heure (chaque export relit tout le compte). */
@@ -99,13 +107,19 @@ export const accountExportService = {
       .innerJoin(structures, eq(structures.id, structureMembers.structureId))
       .where(eq(structureMembers.userId, userId));
 
+    const followRow = {
+      pseudo: profiles.pseudo,
+      status: userFollows.status,
+      at: userFollows.createdAt,
+      acceptedAt: userFollows.acceptedAt,
+    };
     const following = await db
-      .select({ pseudo: profiles.pseudo, at: userFollows.createdAt })
+      .select(followRow)
       .from(userFollows)
       .innerJoin(profiles, eq(profiles.userId, userFollows.followedId))
       .where(eq(userFollows.followerId, userId));
     const followers = await db
-      .select({ pseudo: profiles.pseudo, at: userFollows.createdAt })
+      .select(followRow)
       .from(userFollows)
       .innerJoin(profiles, eq(profiles.userId, userFollows.followerId))
       .where(eq(userFollows.followedId, userId));
@@ -119,14 +133,6 @@ export const accountExportService = {
       .from(proFollows)
       .innerJoin(proProfiles, eq(proProfiles.id, proFollows.proId))
       .where(eq(proFollows.userId, userId));
-    const friendRows = await db
-      .select({ f: friendships, pseudo: profiles.pseudo })
-      .from(friendships)
-      .innerJoin(
-        profiles,
-        sql`${profiles.userId} = case when ${friendships.requesterId} = ${userId} then ${friendships.addresseeId} else ${friendships.requesterId} end`,
-      )
-      .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
 
     return {
       exportedAt: now().toISOString(),
@@ -203,17 +209,10 @@ export const accountExportService = {
       })),
       structures: memberRows,
       network: {
-        following: following.map((r) => ({ pseudo: r.pseudo, since: r.at.toISOString() })),
-        followers: followers.map((r) => ({ pseudo: r.pseudo, since: r.at.toISOString() })),
+        following: following.map(followOut),
+        followers: followers.map(followOut),
         followingOrganizers: orgs.map((r) => ({ name: r.name, since: r.at.toISOString() })),
         followingPros: pros.map((r) => ({ name: r.name, since: r.at.toISOString() })),
-        friendships: friendRows.map(({ f, pseudo }) => ({
-          pseudo,
-          // Le refus reste silencieux (S7) : pour le demandeur, une demande refusée s'exporte « en attente ».
-          status: f.status === "declined" && f.requesterId === userId ? "pending" : f.status,
-          requestedByMe: f.requesterId === userId,
-          since: (f.respondedAt ?? f.createdAt).toISOString(),
-        })),
       },
       crewFeed: await crewFeedExport(userId),
     };

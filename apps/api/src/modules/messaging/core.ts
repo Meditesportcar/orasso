@@ -88,7 +88,7 @@ export async function writeBlockOf(ex: Executor, actor: Actor, access: Access): 
 export function writeBlockError(block: ConversationWriteBlock): AppError {
   switch (block) {
     case "not_friends":
-      return new AppError(409, "not_friends", "Vous n'êtes pas amis : envoie une demande de contact.");
+      return new AppError(409, "not_friends", "Cette personne ne te suit pas : envoie une demande de contact.");
     case "closed":
       return new AppError(403, "conversation_closed", "Cette conversation est fermée.");
     case "account_deleted":

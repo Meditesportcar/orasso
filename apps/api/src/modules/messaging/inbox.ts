@@ -10,7 +10,6 @@ import { now } from "../../lib/deps";
 import { realtime } from "../../lib/realtime";
 import type { Executor } from "../../lib/tx";
 import { registerOrganizerBadge } from "../profiles/personas";
-import { socialRepo } from "../social/repo";
 
 type Counter = (userId: string, ex: Executor) => Promise<number>;
 const counters = new Map<keyof InboxRequestCounts, Counter>();
@@ -36,7 +35,7 @@ export async function pendingContactCount(userId: string, ex: Executor = db): Pr
   return row?.n ?? 0;
 }
 
-registerInboxCounter("friend", (userId, ex) => socialRepo.pendingIncomingCount(userId, ex));
+// Lot R6b : le compteur des demandes d'abonnement (`follow`) est déclaré par `social/follows.ts`.
 registerInboxCounter("contact", pendingContactCount);
 
 /** Condition SQL « ce message est non lu pour `userId` », `m` et `p` (sa ligne de participant) étant dans la requête. */
@@ -80,7 +79,7 @@ export async function unreadConversationCount(
 
 export const inboxService = {
   async summary(userId: string, opts: { includeStructure: boolean }, ex: Executor = db): Promise<InboxSummary> {
-    const requests = { friend: 0, contact: 0 } as InboxRequestCounts;
+    const requests = { follow: 0, contact: 0 } as InboxRequestCounts;
     for (const [key, counter] of counters) requests[key] = await counter(userId, ex);
     return { unreadMessages: await unreadConversationCount(userId, opts, ex), requests };
   },
