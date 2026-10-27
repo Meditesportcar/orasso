@@ -1,4 +1,5 @@
 import type { StructureSuspensionReason } from "../enums";
+import { countFr } from "./plural.fr";
 
 // Après l'événement et badge de structure (lot 27) : libellés du site et de l'appli.
 
@@ -35,7 +36,7 @@ export const afterEventLabels = {
     average ? `${count} avis · moyenne ${average} / 3` : `${count} avis · moyenne dès 3 avis`,
   scans: "Lectures de QR",
   scansValue: (total: number, duplicates: number, overrides: number) =>
-    `${total} lectures · ${duplicates} doublons · ${overrides} acceptés quand même`,
+    `${countFr(total, "lecture")} · ${countFr(duplicates, "doublon")} · ${countFr(overrides, "accepté")} quand même`,
   points: "Points attribués",
   pointsValue: (participations: number, malus: number) =>
     `${participations} ${participations > 1 ? "participations" : "participation"} · ${malus} malus`,

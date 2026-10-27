@@ -1,9 +1,10 @@
 import { CREW_OUTING_MAX_AHEAD_DAYS, CREW_OUTINGS_UPCOMING_MAX } from "../rules/crewPage";
+import { pluralFr } from "./plural.fr";
 
 // Page du crew (lot R5c2, maquettes R5.7 à R5.9 validées par Damien le 26/10) : page à onglets, sorties du crew,
 // vitrine, demande avec message, réglages. Mêmes mots dans l'appli et sur le site.
 
-const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const plural = pluralFr;
 
 export const crewPageLabels = {
   // En-tête de la page.

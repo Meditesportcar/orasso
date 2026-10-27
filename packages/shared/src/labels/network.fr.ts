@@ -1,7 +1,9 @@
+import { pluralFr } from "./plural.fr";
+
 // Lot R4c (maquettes R4.5, R4.5b, R4.6, R4.6b, R4.6c) : véhicule principal, suivre une personne, listes du réseau,
 // aperçu du profil public. Mêmes mots dans l'appli et sur le site.
 
-const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const plural = pluralFr;
 
 export const mainVehicleLabels = {
   /** Étiquette du principal dans le Garage (une marque, pas un bouton). */

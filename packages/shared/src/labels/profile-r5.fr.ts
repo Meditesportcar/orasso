@@ -2,8 +2,9 @@
 // dentée et l'écran « Réglages », « Modifier mon profil » avec les réseaux, le profil d'un membre et son aperçu. Mêmes
 // mots dans l'appli et sur le site.
 import { type SocialNetwork, socialLabel } from "../rules/socials";
+import { pluralFr } from "./plural.fr";
 
-const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const plural = pluralFr;
 
 export const settingsHubLabels = {
   title: "Réglages",

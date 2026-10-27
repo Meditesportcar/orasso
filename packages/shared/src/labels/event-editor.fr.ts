@@ -240,7 +240,9 @@ export const eventEditorLabels = {
   removed: "Invitation retirée.",
   fromEventTitle: "Inviter les retenus ?",
   fromEventBody: (title: string, n: number) =>
-    `Les ${n} retenus de « ${title} » reçoivent une invitation (déjà invités et bannis exceptés).`,
+    n > 1
+      ? `Les ${n} retenus de « ${title} » reçoivent une invitation (déjà invités et bannis exceptés).`
+      : `Le retenu de « ${title} » reçoit une invitation (s'il n'est pas déjà invité ni banni).`,
   previousEdition: "Édition précédente",
   invitedNotice: "Chaque invité reçoit une notification ; une adresse sans compte reçoit un e-mail.",
   lockedInvitations: "Inscriptions verrouillées : les invitations ne sont plus possibles.",
