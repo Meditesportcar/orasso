@@ -1,4 +1,4 @@
-// Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
+// Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un abonné accepté, réduit
 // (pseudo, photo, grade, marque et modèle) pour un compte privé. Jamais la plaque. Réservé aux connectés.
 // Lot R5b (maquette R5.6, retour 6 de Damien) : le même écran que l'aperçu (`PublicProfile`) ; « Écrire » et « ⋯ »
 // (signaler) passent dans l'en-tête, à gauche du ✕.
@@ -53,7 +53,7 @@ export default function UserProfile() {
       actions={
         isSelf ? undefined : (
           <>
-            {/* Messagerie (lot 18) : ami → conversation, sinon demande de contact. Signaler : lot 32. */}
+            {/* Messagerie (lot 18) : abonné → conversation, sinon demande de contact. Signaler : lot 32. */}
             <WriteHeaderAction userId={p.userId} pseudo={p.pseudo} onError={setWriteError} />
             <AppBarFlowAction
               icon="more"

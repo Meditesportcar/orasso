@@ -154,8 +154,11 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
       await pb.screenshot({ path: `${DIR}/membre-${name}.png`, fullPage: true });
       // Compte privé.
       await pb.goto(`/u/${cPseudo}`);
-      await expect(pb.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
-      await expect(pb.getByTestId("profile-follow")).toHaveCount(0);
+      await expect(pb.getByTestId("profile-private-note")).toContainText(
+        "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+      );
+      // Lot R6b : un compte privé se suit sur demande.
+      await expect(pb.getByTestId("follow-button")).toContainText("Demander à suivre");
       await expect(pb.getByTestId("profile-car")).toHaveCount(0);
       await expect(pb.getByTestId("profile-socials")).toHaveCount(0);
       await audit(pb);
@@ -248,18 +251,21 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await audit(page);
   await page.screenshot({ path: `${DIR}/tour2-sorties-beton-390.png`, fullPage: true });
 
-  // Abonnement (compte public), puis le compte passe privé : « Suivi » reste pour se désabonner (relecture Codex 5).
-  await page.getByTestId("profile-follow").click();
-  await expect(page.getByTestId("profile-followed")).toBeVisible();
+  // Abonnement (compte public), puis le compte passe privé : l'abonné accepté garde tout et « Abonné » reste pour se
+  // désabonner (relecture Codex 5). Lot R6b : une fois désabonné, le compte privé se suit sur demande.
+  await page.getByTestId("follow-button").click();
+  await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   expect((await apiCall(d, "PATCH", "/me/profile", { visibility: "private" })).status).toBe(200);
   await page.goto(`/u/${dPseudo}`);
-  await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
-  await expect(page.getByTestId("profile-followed")).toBeVisible();
+  await expect(page.getByTestId("profile-private-note")).toHaveCount(0);
+  await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   await audit(page);
   await page.screenshot({ path: `${DIR}/tour2-prive-suivi-beton-390.png`, fullPage: true });
-  await page.getByTestId("profile-followed").click();
-  // Désabonné d'un compte privé : plus de bouton (on ne suit pas un compte privé).
-  await expect(page.getByTestId("profile-followed")).toHaveCount(0);
-  await expect(page.getByTestId("profile-follow")).toHaveCount(0);
+  await page.getByTestId("follow-button").click();
+  await page.getByTestId("follow-confirm-yes").click();
+  await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
+  await expect(page.getByTestId("profile-private-note")).toContainText(
+    "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+  );
   await ctx.close();
 });

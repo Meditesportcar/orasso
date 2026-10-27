@@ -1,7 +1,7 @@
-// Demandes de contact (lot 18, docs/01 « Social ») : on n'écrit pas librement à quelqu'un qui n'est pas son ami ; le
-// message part en demande de contact, rangée à part, et **une seule demande est possible** (ligne unique par sens,
+// Demandes de contact (lot 18, docs/01 « Social » ; lot R6b : D37) : on n'écrit pas librement à quelqu'un qui ne nous
+// suit pas ; le message part en demande de contact, rangée à part, et **une seule demande est possible** (ligne unique par sens,
 // jamais supprimée par son auteur : pas de harcèlement par suppression puis nouvelle demande). Le refus est
-// silencieux (l'auteur voit toujours « Demande envoyée »). Une demande acceptée ouvre la conversation, sans amitié
+// silencieux (l'auteur voit toujours « Demande envoyée »). Une demande acceptée ouvre la conversation, sans abonnement
 // (S11), avec le message comme premier message.
 import {
   CONTACT_REQUESTS_PER_DAY,
@@ -17,7 +17,7 @@ import {
 import { and, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { contactRequests, conversations, friendships, messages, notifications, profiles } from "../../db/schema";
+import { contactRequests, conversations, messages, notifications, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
@@ -58,9 +58,9 @@ async function closeNotification(tx: Tx, userId: string, requestId: string) {
 
 export const contactsService = {
   /**
-   * `POST /contact-requests {pseudo, message}` → `201` ; `409 already_friends` (amis : écrire directement),
-   * `409 use_direct` (conversation déjà ouverte et permise), `409 contact_request_exists` (déjà demandé, dans un sens
-   * ou dans l'autre) ; 10 demandes par jour comptées en base.
+   * `POST /contact-requests {pseudo, message}` → `201` ; `409 use_direct` (la personne me suit, ou conversation déjà
+   * ouverte et permise : écrire directement), `409 contact_request_exists` (déjà demandé, dans un sens ou dans
+   * l'autre) ; 10 demandes par jour comptées en base.
    */
   async create(v: Viewer, input: ContactRequestCreate): Promise<ContactRequestResult> {
     if (actorOf(v).suspended) throw forbidden("Ton compte est suspendu : lecture seule.");
@@ -83,23 +83,14 @@ export const contactsService = {
     }
     const id = await withTx(async (tx, after) => {
       await lockPair(tx, me, target.userId);
-      const [friend] = await tx
-        .select({ id: friendships.id })
-        .from(friendships)
-        .where(
-          and(
-            eq(friendships.status, "accepted"),
-            sql`least(${friendships.requesterId}, ${friendships.addresseeId}) = least(${me}, ${target.userId})`,
-            sql`greatest(${friendships.requesterId}, ${friendships.addresseeId}) = greatest(${me}, ${target.userId})`,
-          ),
-        );
-      if (friend) throw conflict("already_friends", "Vous êtes déjà amis : écris-lui directement.");
       const [conversation] = await tx
         .select({ id: conversations.id })
         .from(conversations)
         .where(eq(conversations.directKey, directKey(me, target.userId)));
-      if (conversation && (await canTalkDirect(tx, me, target.userId))) {
-        throw conflict("use_direct", "Vous pouvez déjà vous écrire.", { conversationId: conversation.id });
+      if (await canTalkDirect(tx, me, target.userId, conversation?.id)) {
+        throw conflict("use_direct", "Tu peux déjà lui écrire directement.", {
+          conversationId: conversation?.id ?? null,
+        });
       }
       const existing = await tx
         .select({ id: contactRequests.id, from: contactRequests.fromUserId, status: contactRequests.status })

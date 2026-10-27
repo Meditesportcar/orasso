@@ -139,7 +139,7 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     const vitrine = s.getByTestId("crew-vitrine");
     await expect(vitrine).toBeVisible();
     await expect(s.getByTestId("crew-tabs")).toHaveCount(0);
-    await expect(s.getByTestId("crew-friends")).toContainText("1 de tes amis en fait partie");
+    await expect(s.getByTestId("crew-friends")).toContainText("1 personne que tu suis en fait partie");
     await expect(vitrine.getByTestId("crew-member")).toHaveCount(2);
     await expect(s.getByTestId("crew-members-only")).toBeVisible();
     await expect(s.getByText("Balade des Aspres")).toHaveCount(0);
@@ -190,7 +190,7 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await shot(k2, `13-chef-fil-384-${theme}`);
     await k2.context().close();
 
-    // ---------- Tour 2 : un compte privé vu par un membre non ami (le chef) : marque et modèle, sans photo.
+    // ---------- Tour 2 : un compte privé vu par un membre qui ne le suit pas (le chef) : marque et modèle, sans photo.
     expect((await apiCall(crew.lea.cookie, "PATCH", "/me/profile", { visibility: "private" })).status).toBeLessThan(
       300,
     );

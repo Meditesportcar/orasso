@@ -72,7 +72,7 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
     [`Xav_${s}`, `Ana_${s}`, `Bea_${s}`, `Cyr_${s}`].map((p) => signUpApi(p)),
   )) as [Cookie, Cookie, Cookie, Cookie];
   const ids = await Promise.all([xCookie, aCookie, bCookie, cCookie].map(userId));
-  const [xId, , , cId] = ids as [string, string, string, string];
+  const [xId, aId, , cId] = ids as [string, string, string, string];
   await age(ids.slice(1));
   for (const cookie of [aCookie, bCookie]) {
     const r = await apiCall(cookie, "POST", "/reports", { targetType: "profile", targetId: xId, reason: "harassment" });
@@ -144,9 +144,12 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   await expect(pageD.getByTestId("sanction").filter({ hasText: `Xav_${s}` })).toHaveCount(0);
   expect((await apiCall(xCookie, "PATCH", "/me/profile", { bio: "Libre" })).status).toBe(200);
 
-  // Message signalé : A et C deviennent amis, C écrit, A signale depuis la conversation.
-  const req = await apiCall<{ id: string }>(aCookie, "POST", "/friends/requests", { pseudo: `Cyr_${s}` });
-  await apiCall(cCookie, "POST", `/friends/requests/${req.data.id}/accept`);
+  // Message signalé : A et C se suivent (lot R6b, D37 : plus d'amitié), C écrit, A signale depuis la conversation.
+  // Un compte privé répondrait « pending » : la cible accepterait alors la demande.
+  const followed = await apiCall<{ mine: string }>(aCookie, "POST", `/users/Cyr_${s}/follow`);
+  if (followed.data.mine === "pending") await apiCall(cCookie, "POST", `/me/follow-requests/${aId}/accept`);
+  const followedBack = await apiCall<{ mine: string }>(cCookie, "POST", `/users/Ana_${s}/follow`);
+  if (followedBack.data.mine === "pending") await apiCall(aCookie, "POST", `/me/follow-requests/${cId}/accept`);
   const conv = await apiCall<{ id: string }>(aCookie, "POST", "/conversations/direct", { userId: cId });
   for (const body of ["Salut", "Tu es nul", "Vraiment nul"]) {
     await apiCall(cCookie, "POST", `/conversations/${conv.data.id}/messages`, { clientId: crypto.randomUUID(), body });

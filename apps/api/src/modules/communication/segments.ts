@@ -1,7 +1,7 @@
 // Destinataires d'un message groupé (lot 20, ARCHITECTURE-SUITE § 5.2). Calculés en base, jamais rendus à
 // l'organisateur (il ne voit qu'un nombre). Toujours exclus : comptes supprimés ou suspendus, l'auteur, les
 // organisateurs de la structure (ils sont de l'autre côté de la conversation), les bannis de la structure. Abonnés :
-// sans ceux qui ont coupé « Annonce d'un organisateur suivi » ou la famille « Amis et messages » (anti-spam).
+// sans ceux qui ont coupé « Annonce d'un organisateur suivi » ou la famille « Abonnements et messages » (anti-spam).
 import type { MessageSegment } from "@orasso/shared";
 import { type SQL, sql } from "drizzle-orm";
 

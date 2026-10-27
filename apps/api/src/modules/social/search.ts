@@ -3,9 +3,9 @@
 //
 // Confidentialité : un compte privé n'est trouvable que par ce qu'il montre à tout le monde (pseudo, marque, modèle,
 // grade). Sa génération, son département et ses centres d'intérêt ne servent à aucun filtre pour un inconnu : sinon
-// la recherche les révélerait. Les amis voient tout, donc tout sert. Comptes supprimés et suspendus : jamais.
+// la recherche les révélerait. Ses abonnés acceptés voient tout, donc tout sert (lot R6b). Comptes supprimés et
+// suspendus : jamais.
 import {
-  friendshipState,
   hasPeopleSearchCriteria,
   type PeopleSearchPage,
   type PeopleSearchQuery,
@@ -24,8 +24,8 @@ import { storage } from "../../lib/storage";
 import { profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
+import { followsService } from "./follows";
 import { socialProfile } from "./profile";
-import { socialRepo } from "./repo";
 
 /**
  * Lot R4a, tour 2 : nom affiché d'une fiche dans les recherches (alias `v`, `mk`, `md`) : le nom tapé quand le niveau
@@ -35,12 +35,13 @@ export const typedMakeSql = sql`(case when mk.is_other then coalesce(v.proposed_
 export const typedModelSql = sql`(case when md.is_other then coalesce(v.proposed_model, md.name) else md.name end)`;
 
 /**
- * Condition SQL (alias `p` = profiles) : la fiche complète de la personne est visible de `viewerId` (compte public, ou ami).
- * Un compte privé non ami ne montre que pseudo, photo, grade, marque et modèle : tout filtre ou tri qui lirait autre chose
- * (génération, département, centres d'intérêt) doit passer par cette condition.
+ * Condition SQL (alias `p` = profiles) : la fiche complète de la personne est visible de `viewerId` (compte public, ou
+ * `viewerId` la suit, abonnement accepté : lot R6b). Un compte privé que l'on ne suit pas ne montre que pseudo, photo,
+ * grade, marque et modèle : tout filtre ou tri qui lirait autre chose (génération, département, centres d'intérêt) doit
+ * passer par cette condition.
  */
 export function detailVisibleSql(viewerId: string): SQL {
-  return sql`(p.visibility = 'public' or exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = p.user_id) or (f.requester_id = p.user_id and f.addressee_id = ${viewerId}))))`;
+  return sql`(p.visibility = 'public' or exists (select 1 from user_follows uf where uf.status = 'accepted' and uf.follower_id = ${viewerId} and uf.followed_id = p.user_id))`;
 }
 
 type Row = {
@@ -58,7 +59,7 @@ type Options = {
   /** Départements dont l'un au moins doit être celui de la personne (propriétaires près de chez moi). */
   departmentsAny?: string[];
   exclude?: string[];
-  /** Lot R2 (suggestions) : seulement les comptes publics, jamais mes amis. */
+  /** Lot R2 (suggestions) : seulement les comptes publics, jamais ceux que je suis ou à qui j'ai demandé. */
   publicStrangers?: boolean;
 };
 
@@ -84,7 +85,7 @@ async function run(
   const exclude = [viewerId, ...(options.exclude ?? [])];
   const q = query.q?.trim();
 
-  // `d.detail` : la fiche complète de la personne est visible de moi (compte public ou ami).
+  // `d.detail` : la fiche complète de la personne est visible de moi (compte public, ou je la suis).
   const detail = detailVisibleSql(viewerId);
 
   const where: SQL[] = [
@@ -127,7 +128,7 @@ async function run(
     where.push(sql`(${pseudoMatch} or ${text})`);
   }
   // Lot R2, tour 2 (relecture : plus aucun annuaire) : les filtres de détail (véhicule, département, centre d'intérêt,
-  // grade) ne portent que sur des comptes dont la fiche complète m'est visible (public, ou ami).
+  // grade) ne portent que sur des comptes dont la fiche complète m'est visible (public, ou je la suis).
   const filters: SQL[] = [];
   if (query.makeId) filters.push(sql`v.make_id = ${query.makeId}`);
   if (query.modelId) filters.push(sql`v.model_id = ${query.modelId}`);
@@ -152,7 +153,7 @@ async function run(
   if (options.publicStrangers) {
     where.push(sql`p.visibility = 'public'`);
     where.push(
-      sql`not exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = p.user_id) or (f.requester_id = p.user_id and f.addressee_id = ${viewerId})))`,
+      sql`not exists (select 1 from user_follows uf where uf.follower_id = ${viewerId} and uf.followed_id = p.user_id)`,
     );
   }
   if (cursor) where.push(sql`(lower(p.pseudo), p.user_id) > (${cursor.pseudo}, ${cursor.id})`);
@@ -171,7 +172,7 @@ async function cards(viewer: Viewer, rows: Row[]): Promise<PersonCard[]> {
   const garage = ids.length
     ? await vehiclesRepo.findFull(and(inArray(vehicles.ownerId, ids), eq(vehicles.status, "active")))
     : [];
-  const relations = await socialRepo.relationsWith(viewer.user.id, ids);
+  const relations = await followsService.relationsWith(viewer.user.id, ids);
   return rows.map((r) => ({
     userId: r.user_id,
     pseudo: r.pseudo,
@@ -182,8 +183,7 @@ async function cards(viewer: Viewer, rows: Row[]): Promise<PersonCard[]> {
       .filter((g) => g.ownerId === r.user_id)
       .slice(0, 3)
       .map((g) => ({ id: g.id, label: r.detail ? vehicleLabel(g) : vehicleBriefLabel(g) })),
-    friendship: friendshipState(relations.get(r.user_id), viewer.user.id, now()),
-    friendshipId: relations.get(r.user_id)?.status === "pending" ? (relations.get(r.user_id)?.id ?? null) : null,
+    follow: relations.get(r.user_id) ?? { mine: "none", followsMe: false },
   }));
 }
 
@@ -216,8 +216,9 @@ export const peopleSearch = {
 
   /**
    * `GET /users/suggestions` (lot R2, Personnes et crews à l'ouverture) : « Même modèle que toi », tiré des garages
-   * publics seulement. Le premier de mes véhicules dont le modèle a au moins un autre propriétaire public (ni moi ni mes
-   * amis), trois au plus, dans le département choisi s'il y en a un. Rien d'autre : pas de liste d'amis, pas de sorties.
+   * publics seulement. Le premier de mes véhicules dont le modèle a au moins un autre propriétaire public (ni moi ni
+   * ceux que je suis), trois au plus, dans le département choisi s'il y en a un. Rien d'autre : pas de liste, pas de
+   * sorties.
    */
   async suggestions(viewer: Viewer, departments: string[] = []): Promise<PeopleSuggestions> {
     const mine = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, viewer.user.id), eq(vehicles.status, "active")));

@@ -4,7 +4,7 @@ import { expect } from "@playwright/test";
 import { addVehicleApi, apiCall, type Cookie, randomPlate, signUpApi } from "./helpers";
 
 // Lot R5c2 : un crew complet créé par l'API, comme le ferait l'appli, pour les recettes de la page du crew (appli et
-// site). Comptes neufs à chaque passage : le chef, une membre, une personne du dehors amie de la membre, un chercheur
+// site). Comptes neufs à chaque passage : le chef, une membre, une personne du dehors qui suit la membre, un chercheur
 // de crew et une personne qui a déjà demandé avec un message. Bannière : une photo d'essai du seed, plaque confirmée
 // absente (chaîne des photos de véhicule).
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
@@ -65,10 +65,13 @@ export async function r5Crew(tag: string): Promise<R5Crew> {
   expect((await apiCall(chef.cookie, "PATCH", `/crews/${crew.id}`, { instagram: "@roussillondrift" })).status).toBe(
     200,
   );
-  // Sarah est amie de Léa : « 1 de tes amis en fait partie ».
-  const friend = await apiCall<{ id: string }>(sarah.cookie, "POST", "/friends/requests", { pseudo: lea.pseudo });
-  expect(friend.status).toBe(201);
-  expect((await apiCall(lea.cookie, "POST", `/friends/requests/${friend.data.id}/accept`)).status).toBe(200);
+  // Lot R6b (D37) : Sarah suit Léa : « 1 personne que tu suis en fait partie ». Si le compte de Léa est privé, la demande
+  // attend son acceptation.
+  const follow = await apiCall<{ mine: string }>(sarah.cookie, "POST", `/users/${lea.pseudo}/follow`);
+  expect(follow.status).toBeLessThan(300);
+  if (follow.data.mine === "pending") {
+    expect((await apiCall(lea.cookie, "POST", `/me/follow-requests/${sarah.id}/accept`)).status).toBeLessThan(300);
+  }
   // Nina a déjà demandé, avec un message (Demandes du chef).
   expect(
     (

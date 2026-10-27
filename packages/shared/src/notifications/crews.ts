@@ -1,7 +1,7 @@
 import type { NotificationFamily } from "../enums";
 
 /**
- * Crews (lot 19, ARCHITECTURE-SUITE § 4.3) : famille `social` (« Amis et messages »), sauf la venue à confirmer, qui
+ * Crews (lot 19, ARCHITECTURE-SUITE § 4.3) : famille `social` (« Abonnements et messages »), sauf la venue à confirmer, qui
  * est une candidature (famille `application`) : un membre qui coupe le social ne doit pas laisser passer son délai sans
  * le savoir. `crew_archived` : le crew est dissous (son chef a supprimé son compte, S15).
  */

@@ -1,17 +1,20 @@
-// Amitiés (lot 17, ARCHITECTURE-SUITE § 2.1) : suivi d'amis avec acceptation des deux côtés.
-import { friendSources, friendshipStatuses } from "@orasso/shared";
+// Amitiés (lot 17) puis abonnements (lot R4c, lot R6b : D37, « Suivre » comme sur Instagram).
+import { followStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import { check, index, pgEnum, pgTable, primaryKey, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 
-export const friendshipStatusEnum = pgEnum("friendship_status", friendshipStatuses);
-export const friendSourceEnum = pgEnum("friend_source", friendSources);
+export const friendshipStatusEnum = pgEnum("friendship_status", ["pending", "accepted", "declined"]);
+export const friendSourceEnum = pgEnum("friend_source", ["search", "qr", "invite_link", "profile", "event"]);
+export const followStatusEnum = pgEnum("follow_status", followStatuses);
 
 /**
- * Une seule ligne par paire de personnes, quel que soit le sens de la demande (index unique d'expression sur
- * `(least, greatest)`) : A→B puis B→A est refusé tant que la relation existe. Un refus garde la ligne 30 jours (S7).
+ * ARCHIVE depuis le lot R6b (D37) : plus aucun code ne lit ni n'écrit cette table, sauf la suppression d'un compte
+ * (`anonymize.ts`, données personnelles) et l'export des données (tour 2, `friendshipsArchive`). Sa migration a
+ * recopié chaque amitié acceptée en deux abonnements acceptés et
+ * chaque demande en attente en demande d'abonnement. Elle sera retirée dans un lot suivant, après la mise en ligne.
  */
 export const friendships = pgTable(
   "friendships",
@@ -42,8 +45,10 @@ export const friendships = pgTable(
 );
 
 /**
- * Lot R4c (maquettes 10.2 et R4.6) : suivre une personne, sans acceptation (seulement un compte public). Suivre ne montre
- * rien de plus que le profil déjà visible ; les listes ne sont visibles que par soi. Compteurs lus par index (pas de cache).
+ * Lot R4c (maquettes 10.2 et R4.6), lot R6b (D37, maquettes R6.1 et R6.2) : suivre une personne. Compte public :
+ * abonnement accepté tout de suite ; compte privé : demande (`pending`) que la personne accepte (`accepted`, date
+ * d'acceptation) ou refuse (la ligne disparaît, sans prévenir). L'abonné accepté voit ce que voyait l'ami. Les listes ne
+ * sont visibles que par soi. Compteurs lus par index (pas de cache).
  */
 export const userFollows = pgTable(
   "user_follows",
@@ -54,11 +59,40 @@ export const userFollows = pgTable(
     followedId: text("followed_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    status: followStatusEnum("status").notNull().default("accepted"),
     createdAt: tstz("created_at").notNull().defaultNow(),
+    /** Date d'acceptation (tout de suite pour un compte public), `null` tant que la demande attend. */
+    acceptedAt: tstz("accepted_at"),
   },
   (t) => [
     primaryKey({ name: "user_follows_pkey", columns: [t.followerId, t.followedId] }),
     index("user_follows_followed_idx").on(t.followedId, t.createdAt),
+    index("user_follows_followed_status_idx").on(t.followedId, t.status),
+    index("user_follows_follower_status_idx").on(t.followerId, t.status),
     check("user_follows_not_self_check", sql`${t.followerId} <> ${t.followedId}`),
+  ],
+);
+
+/**
+ * Lot R6b, tour 2 (relectures Opus 2, Codex 2 et 3) : trace d'une paire, indépendante des notifications et de la ligne
+ * d'abonnement : date de la dernière alerte (« … te suit », « … demande à te suivre » ; au plus une par 24 h, même après
+ * une annulation qui retire l'alerte) et date du dernier refus ou retrait (30 jours sans alerte). Dates à l'horloge de
+ * l'appli. Supprimée avec le compte de l'un ou de l'autre.
+ */
+export const followTraces = pgTable(
+  "follow_traces",
+  {
+    followerId: text("follower_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    followedId: text("followed_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    lastAlertAt: tstz("last_alert_at"),
+    declinedAt: tstz("declined_at"),
+  },
+  (t) => [
+    primaryKey({ name: "follow_traces_pkey", columns: [t.followerId, t.followedId] }),
+    index("follow_traces_followed_idx").on(t.followedId),
   ],
 );

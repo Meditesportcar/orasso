@@ -1,7 +1,8 @@
-// Lien d'ami `orasso://ami/<jeton>` (lot 17, ARCHITECTURE-SUITE § 1.3) : connecté, la demande d'ami part vers le
-// propriétaire du lien ; déconnecté, on propose de se connecter (le lien se rouvre ensuite).
+// Lien de profil `orasso://ami/<jeton>` (lot 17, ARCHITECTURE-SUITE § 1.3 ; lot R6b : on suit la personne, ou on lui
+// demande si son compte est privé). Le chemin garde son nom (les liens déjà partagés continuent de marcher).
+// Déconnecté, on propose de se connecter (le lien se rouvre ensuite).
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { socialLabels } from "@orasso/shared";
+import { type FollowState, networkLabels as N, socialLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -20,7 +21,7 @@ export default function AmiLink() {
   const router = useRouter();
   const { token } = useLocalSearchParams<{ token: string }>();
   const { status } = useSession();
-  const [result, setResult] = useState<{ status: "pending" | "accepted"; pseudo: string } | null>(null);
+  const [result, setResult] = useState<{ mine: FollowState; pseudo: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,21 +29,22 @@ export default function AmiLink() {
     setBusy(true);
     setError(null);
     try {
-      setResult(await api.requestFriendByInvite(token));
+      setResult(await api.followByInvite(token));
     } catch (e) {
-      setError(errorMessage(e));
+      const message = errorMessage(e);
+      setError(message === socialLabels.selfRequest ? N.ownInviteLink : message);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <FlowScreen title="Lien d'ami" onClose={() => router.replace(status === "in" ? "/" : "/auth")}>
+    <FlowScreen title="Lien de profil" onClose={() => router.replace(status === "in" ? "/" : "/auth")}>
       <View style={styles.col}>
         {status !== "in" ? (
           <>
             <Text variant="body" color={t.color.ink}>
-              Connecte-toi pour envoyer ta demande d'ami, puis rouvre ce lien.
+              Connecte-toi pour suivre cette personne, puis rouvre ce lien.
             </Text>
             <Button variant="primary" icon="entry" onPress={() => router.replace("/auth")} fullWidth>
               Se connecter
@@ -50,11 +52,7 @@ export default function AmiLink() {
           </>
         ) : result ? (
           <>
-            <Notice>
-              {result.status === "accepted"
-                ? `Vous êtes amis avec ${result.pseudo}.`
-                : socialLabels.requestSentTo(result.pseudo)}
-            </Notice>
+            <Notice>{result.mine === "accepted" ? N.followedNow(result.pseudo) : N.requestedNow(result.pseudo)}</Notice>
             <Button
               variant="secondary"
               icon="profile"
@@ -66,10 +64,10 @@ export default function AmiLink() {
           </>
         ) : (
           <>
-            <Muted variant="body">Quelqu'un t'invite à devenir ami sur Orasso.</Muted>
+            <Muted variant="body">Quelqu'un te propose son profil Orasso. Tu peux le suivre.</Muted>
             {error ? <Notice tone="error">{error}</Notice> : null}
             <Button variant="primary" icon="add" loading={busy} onPress={() => void send()} fullWidth>
-              {socialLabels.addFriend}
+              {N.follow}
             </Button>
           </>
         )}

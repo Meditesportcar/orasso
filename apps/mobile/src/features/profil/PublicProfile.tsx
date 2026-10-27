@@ -1,15 +1,16 @@
 // Lot R5b (maquettes R5.6 et R5.6b, retour 6 de Damien) : le profil d'un membre et l'aperçu de son propre profil, un
 // seul écran. Ordre de Damien : la tête (photo, pseudo, grade, département, crew, description, réseaux, les quatre
-// nombres), « Ajouter en ami » et « Suivre » côte à côte, « Sa voiture » (le principal en carré pleine largeur, nom jamais
+// nombres), le bouton unique « Suivre » (lot R6b, D37), « Sa voiture » (le principal en carré pleine largeur, nom jamais
 // coupé, catégories), « Prochaine sortie » (un ticket ; « Toi aussi » si la personne qui regarde y va aussi), « Son
 // garage » (les autres, deux par ligne, en carré), « Ses sorties » (les autres à venir en lignes courtes) puis « Vu à »
-// (ses tampons de la saison). Compte privé : la tête, les nombres, « Ajouter en ami », ses véhicules en marque et modèle,
-// et la ligne « Le reste est réservé à ses amis ». Les cartes carrées n'existent que dans ce profil (le `VehicleCard` du
+// (ses tampons de la saison). Compte privé non suivi : la tête, les nombres, « Demander à suivre », ses véhicules en marque
+// et modèle, et la ligne « Ses photos, ses sorties… sont pour ses abonnés ». Les cartes carrées n'existent que dans ce profil (le `VehicleCard` du
 // système reste en bandeau ailleurs). « Écrire » et « ⋯ » (signaler) sont dans l'en-tête, posés par l'écran.
 import { Button, Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   filledSocials,
   fitWideWordSize,
+  followButtonKind,
   gradeLabels,
   publicProfileLabels as L,
   networkLabels as N,
@@ -26,7 +27,7 @@ import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react
 
 import { daysUntil } from "@/features/media/model";
 import { Stamp } from "@/features/passport/Stamp";
-import { FriendButton } from "@/features/social/FriendButton";
+import { FollowButton } from "@/features/social/FollowButton";
 import { now } from "@/lib/clock";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
@@ -35,7 +36,7 @@ import { AngledTag } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
 import { SecHead } from "@/ui/SecHead";
 import { Ticket } from "@/ui/Ticket";
-import { departmentCaption, FollowButton } from "./network";
+import { departmentCaption } from "./network";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -52,8 +53,20 @@ const NETWORK_ICON: Record<SocialNetwork, IconName> = {
 
 const TYPE_ICON: Record<ProfileVehicle["vehicleType"], IconName> = { car: "vehicle", moto: "moto", truck: "truck" };
 
-/** À partir de cette échelle de police du système, « Ajouter en ami » et « Suivre » s'empilent. */
-const STACK_FONT_SCALE = 1.6;
+const FOLLOW_ICON = {
+  follow: "add",
+  follow_back: "add",
+  request: "add",
+  following: "check",
+  requested: "wait",
+} as const;
+const FOLLOW_LABEL = {
+  follow: N.follow,
+  follow_back: N.followBack,
+  request: N.request,
+  following: N.followed,
+  requested: N.requested,
+} as const;
 
 /** L'avatar de la tête : la photo, sinon l'initiale en rouge, comme dans l'onglet Profil (retour 6 : « DA » contre « D »). */
 function HeadFace({ url, pseudo }: { url: string | null; pseudo: string }) {
@@ -153,13 +166,12 @@ function SquareVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }
   );
 }
 
-/** Les quatre nombres (`.r5n4`) : abonnés, abonnements, amis, sorties ; visibles de tout membre connecté. */
+/** Les trois nombres (`.r5n4 .r6n3`) : abonnés, abonnements, sorties ; visibles de tout membre connecté. */
 function Numbers({ p }: { p: UserProfileView }) {
   const { t } = useTheme();
   const cells: [number | null, (n: number) => string][] = [
     [p.followersCount, N.followers],
     [p.followingCount, N.following],
-    [p.friendsCount, N.friends],
     [p.outingsCount, N.outings],
   ];
   const shown = cells.filter(([n]) => n !== null) as [number, (n: number) => string][];
@@ -220,14 +232,14 @@ function Socials({ p }: { p: UserProfileView }) {
 export function PublicProfile({
   p,
   mode,
-  previewAsFriend = false,
+  previewAsFollower = false,
   onChanged,
   topNotice,
 }: {
   p: UserProfileView;
   mode: PublicProfileMode;
-  /** Aperçu « vu par un ami » : le bouton d'ami montre « Ami ». */
-  previewAsFriend?: boolean;
+  /** Aperçu « vu par un abonné » : le bouton montre « Abonné » (sinon celui qu'un inconnu verrait). */
+  previewAsFollower?: boolean;
   onChanged?: () => void;
   /** Un message sous la tête (erreur de l'en-tête « Écrire »). */
   topNotice?: ReactNode;
@@ -241,11 +253,6 @@ export function PublicProfile({
   // Un pseudo long rapetisse (jusqu'à 14 px) au lieu de se couper ; l'échelle de police du système compte.
   // Tour 2 : la chasse de chaque signe (« M », « W » dépassent la moyenne), comme le site.
   const pseudoSize = fitWideWordSize(p.pseudo, headW / Math.max(1, fontScale), 24, 14);
-  // Très grande police du système : les deux boutons l'un sous l'autre (sinon côte à côte, libellés jamais coupés).
-  const stacked = fontScale >= STACK_FONT_SCALE;
-  const actsStyle = [styles.acts, stacked && styles.actsStacked];
-  const actStyle = stacked ? null : styles.act;
-  const actSecondStyle = stacked ? null : styles.actSecond;
   const limited = p.audience === "public_limited";
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
@@ -256,6 +263,11 @@ export function PublicProfile({
   const days = next ? daysUntil(next.event.startsAt, now()) : 0;
   // Tampons : trois par ligne dans la largeur de l'écran.
   const stampSize = w > 0 ? Math.floor((w - 2 * space3) / 3) : 96;
+
+  // Aperçu : le bouton qu'un inconnu verrait (« Suivre » ou « Demander à suivre » selon mon réglage), ou « Abonné ».
+  const previewKind = previewAsFollower
+    ? "following"
+    : (followButtonKind({ canFollow: true, mine: "none", followsMe: false, visibility: p.visibility }) ?? "follow");
 
   const actions =
     mode === "self" ? (
@@ -278,40 +290,27 @@ export function PublicProfile({
         importantForAccessibility="no-hide-descendants"
         testID="preview-actions"
       >
-        <View style={actsStyle}>
-          <View style={actStyle}>
-            <Button variant="primary" icon={previewAsFriend ? "check" : "add"} fullWidth>
-              {previewAsFriend ? "Ami" : "Ajouter en ami"}
-            </Button>
-          </View>
-          {p.follow.canFollow ? (
-            <View style={actSecondStyle}>
-              <Button variant="secondary" icon="add" fullWidth>
-                {N.follow}
-              </Button>
-            </View>
-          ) : null}
+        <View style={styles.acts}>
+          <Button
+            variant={previewKind === "following" ? "secondary" : "primary"}
+            icon={FOLLOW_ICON[previewKind]}
+            fullWidth
+          >
+            {FOLLOW_LABEL[previewKind]}
+          </Button>
         </View>
       </View>
     ) : (
-      <View style={actsStyle} testID="profile-actions">
-        <View style={actStyle}>
-          <FriendButton
-            state={p.friendship.state}
-            requestId={p.friendship.id}
-            pseudo={p.pseudo}
-            userId={p.userId}
-            primary
-            wide
-            onChanged={() => onChanged?.()}
-          />
-        </View>
-        {/* Compte privé : pas de « Suivre », seulement « Ajouter en ami » (validation R4.6c). */}
-        {p.follow.canFollow || p.follow.following ? (
-          <View style={actSecondStyle}>
-            <FollowButton pseudo={p.pseudo} following={p.follow.following} onChanged={() => onChanged?.()} wide />
-          </View>
-        ) : null}
+      // Lot R6b : un seul bouton pleine largeur (`.r6acts`), « Écrire » et « ⋯ » restent dans l'en-tête de l'écran.
+      <View style={styles.acts} testID="profile-actions">
+        <FollowButton
+          pseudo={p.pseudo}
+          mine={p.follow.mine}
+          followsMe={p.follow.followsMe}
+          canFollow={p.follow.canFollow}
+          visibility={p.visibility}
+          onChanged={() => onChanged?.()}
+        />
       </View>
     );
 
@@ -331,6 +330,13 @@ export function PublicProfile({
           </Text>
           <View style={styles.tags}>
             <TagWin>{gradeLabels[p.grade]}</TagWin>
+            {mode === "live" && p.follow.followsMe ? (
+              <View style={[styles.followsYou, { backgroundColor: c.surfaceRaised }]} testID="follows-you">
+                <Text variant="label" color={c.inkMuted}>
+                  {N.followsYou.toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
             {limited ? (
               <View style={styles.privateCap}>
                 <Icon name="lock" size={13} color={c.inkMuted} />
@@ -373,7 +379,7 @@ export function PublicProfile({
       {!limited ? <Socials p={p} /> : null}
       <Numbers p={p} />
 
-      {/* (2) « Ajouter en ami » et « Suivre » côte à côte ; ils s'empilent s'ils ne tiennent pas. */}
+      {/* (2) Le bouton unique « Suivre ». */}
       {actions}
       {mode === "preview" ? <Muted variant="caption">{P.inert}</Muted> : null}
       {topNotice}
@@ -395,9 +401,9 @@ export function PublicProfile({
             <Icon name="lock" size={16} color={c.inkMuted} />
             <Text variant="caption" color={c.inkMuted} style={styles.noteText}>
               <Text variant="caption" color={c.ink} style={styles.noteStrong}>
-                {L.privateRestStrong}
-              </Text>
-              {L.privateRest}
+                {N.privateLineStrong}
+              </Text>{" "}
+              {p.follow.mine === "pending" ? N.privateLineWaiting : N.privateLineAsk}
             </Text>
           </View>
         </>
@@ -541,12 +547,16 @@ const styles = StyleSheet.create({
   n4: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   n4Cell: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: 2, gap: 1 },
   n4Label: { fontSize: 11.5, lineHeight: 14, textAlign: "center" },
-  // Lot R5b : côte à côte (1,5 pour « Ajouter en ami », 1 pour « Suivre », comme la maquette) ; un libellé passe à la
-  // ligne entre deux mots, ou réduit son corps (`useWordSafeLabel`) ; avec une très grande police, l'un sous l'autre.
-  acts: { flexDirection: "row", alignItems: "flex-start", gap: space2 },
-  actsStacked: { flexDirection: "column", alignItems: "stretch" },
-  act: { flex: 3, minWidth: 0 },
-  actSecond: { flex: 2, minWidth: 0 },
+  // Lot R6b (`.r6acts`) : un seul bouton pleine largeur ; son libellé passe à la ligne ou réduit son corps, jamais coupé.
+  acts: { gap: space2 },
+  // `.r6tag` : petite pastille majuscule, fond de surface secondaire, texte atténué.
+  // Tour 2 (relecture Opus 9) : jetons seulement ; le style « label » (11/14) et 4 px dessus et dessous font 22 px.
+  followsYou: {
+    paddingVertical: space1,
+    paddingHorizontal: space2,
+    borderRadius: tokens.radius.radiusSm,
+    justifyContent: "center",
+  },
   inert: { opacity: 0.6 },
   hero: { borderRadius: 18, overflow: "hidden" },
   square: { width: "100%", aspectRatio: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },

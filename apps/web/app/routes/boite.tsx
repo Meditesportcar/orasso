@@ -3,7 +3,7 @@ import { ConversationRow, InboxSegments } from "../components/Messaging";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/boite";
 
-// Boîte (lot 18, docs/02) : ce qu'on m'écrit. Segment Messages : amis, organisateurs (et, côté structure, les
+// Boîte (lot 18, docs/02) : ce qu'on m'écrit. Segment Messages : abonnés, organisateurs (et, côté structure, les
 // personnes qui écrivent à mes structures). Mise à jour en direct par le canal `user:{id}`.
 export function meta() {
   return [{ title: "Boîte · Orasso" }, { name: "robots", content: "noindex" }];

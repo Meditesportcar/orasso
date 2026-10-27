@@ -70,12 +70,11 @@ describe("présélection de la candidature (R4.5b)", () => {
   });
 });
 
-describe("suivre une personne (R4.6)", () => {
-  it("seulement un compte public, jamais soi-même, jamais un compte indisponible", () => {
-    expect(canFollowUser({ isSelf: false, visibility: "public" })).toBe(true);
-    expect(canFollowUser({ isSelf: false, visibility: "private" })).toBe(false);
-    expect(canFollowUser({ isSelf: true, visibility: "public" })).toBe(false);
-    expect(canFollowUser({ isSelf: false, visibility: "public", unavailable: true })).toBe(false);
+describe("suivre une personne (R4.6, R6.1)", () => {
+  it("tout compte disponible (privé : une demande), jamais soi-même, jamais un compte indisponible", () => {
+    expect(canFollowUser({ isSelf: false })).toBe(true);
+    expect(canFollowUser({ isSelf: true })).toBe(false);
+    expect(canFollowUser({ isSelf: false, unavailable: true })).toBe(false);
   });
   it("nombres : visibles de tout membre connecté, même d'un compte privé (Damien, 24/10)", () => {
     expect(networkCountsVisible({ connected: true })).toBe(true);

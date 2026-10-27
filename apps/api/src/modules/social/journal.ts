@@ -1,5 +1,7 @@
-// Actualité du Journal (ARCHITECTURE-SUITE § 2.4) : « un ami va à un événement », « un ami a ajouté un véhicule ».
-// Items sans push ni e-mail, livrés tout de suite (`journalOnlyNotificationTypes`), dédoublonnés.
+// Actualité du Journal (ARCHITECTURE-SUITE § 2.4 ; lot R6b, D37) : « une personne que tu suis va à un événement »,
+// « … a ajouté un véhicule ». Destinataires : ses abonnés acceptés (une demande en attente ne reçoit rien). Items sans
+// push ni e-mail, livrés tout de suite (`journalOnlyNotificationTypes`), dédoublonnés. Les types gardent leur nom
+// (`friend_going_event`, `friend_new_vehicle`) : des notifications existent en base.
 import { socialLabels } from "@orasso/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
@@ -13,7 +15,7 @@ import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
-import { socialRepo } from "./repo";
+import { followsService } from "./follows";
 
 async function actorOf(userId: string, tx: Tx | typeof db) {
   const p = await profilesRepo.byUserId(userId, tx);
@@ -23,9 +25,9 @@ async function actorOf(userId: string, tx: Tx | typeof db) {
 
 export const socialJournal = {
   /**
-   * Appelé par `ApplicationService.transition` quand une candidature passe à « retenue » : chaque ami de la personne
-   * reçoit « <pseudo> va à <événement> », une seule fois par ami, personne et événement. Événements publiés et
-   * ouverts seulement (jamais un événement sur invitation). Un ami voit tout d'un profil, public ou privé.
+   * Appelé par `ApplicationService.transition` quand une candidature passe à « retenue » : chaque abonné accepté de la
+   * personne reçoit « <pseudo> va à <événement> », une seule fois par abonné, personne et événement. Événements publiés
+   * et ouverts seulement (jamais un événement sur invitation). Un abonné accepté voit tout d'un profil, public ou privé.
    */
   async friendGoingEvent(tx: Tx, app: { userId: string; eventId: string; kind: string }) {
     if (app.kind !== "vehicle") return;
@@ -33,9 +35,9 @@ export const socialJournal = {
     if (event?.status !== "published" || event.admission === "invite_only") return;
     const actor = await actorOf(app.userId, tx);
     if (!actor) return;
-    const friendIds = await socialRepo.friendIds(app.userId, tx);
+    const friendIds = await followsService.followerIds(app.userId, tx);
     if (!friendIds.length) return;
-    // Deux candidatures retenues de la même personne au même événement : une seule actualité par ami.
+    // Deux candidatures retenues de la même personne au même événement : une seule actualité par abonné.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`journal:going:${event.id}:${app.userId}`}))`);
     const already = await tx
       .select({ userId: notifications.userId })
@@ -62,15 +64,16 @@ export const socialJournal = {
   },
 
   /**
-   * Appelé à la création d'un véhicule actif : les amis d'un profil public en sont prévenus (« profil public » :
-   * pour un compte privé, rien n'est annoncé). Une seule actualité par ami et par véhicule.
+   * Appelé à la création d'un véhicule actif : les abonnés acceptés d'un profil public en sont prévenus (« profil
+   * public » : pour un compte privé, rien n'est annoncé, comme avant le lot R6b). Une seule actualité par abonné et par
+   * véhicule.
    */
   async friendNewVehicle(ownerId: string, vehicleId: string) {
     const actor = await actorOf(ownerId, db);
     if (actor?.visibility !== "public") return 0;
     const vehicle = await vehiclesRepo.findFullById(vehicleId);
     if (vehicle?.status !== "active") return 0;
-    const friendIds = await socialRepo.friendIds(ownerId);
+    const friendIds = await followsService.followerIds(ownerId);
     if (!friendIds.length) return 0;
     const already = await db
       .select({ userId: notifications.userId })

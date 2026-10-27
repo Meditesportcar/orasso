@@ -17,10 +17,9 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, events, friendships, profiles } from "../../db/schema";
+import { applications, events, profiles, userFollows } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { passportService } from "../passport/service";
-import { socialRepo } from "./repo";
 
 afterAll(async () => {
   await pool.end();
@@ -49,11 +48,12 @@ async function person(pseudo: string, visibility: "public" | "private" = "public
   return u;
 }
 
+/** Lot R6b : deux abonnements acceptés (ce que la migration fait d'une ancienne amitié). */
 async function befriend(a: TestUser, b: TestUser) {
-  await db
-    .insert(friendships)
-    .values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
-  await socialRepo.recountFriends([a.id, b.id]);
+  await db.insert(userFollows).values([
+    { followerId: a.id, followedId: b.id, status: "accepted", acceptedAt: new Date() },
+    { followerId: b.id, followedId: a.id, status: "accepted", acceptedAt: new Date() },
+  ]);
 }
 
 async function apply(
@@ -144,9 +144,9 @@ describe("réseaux du profil", () => {
     expect(await seen(friend, "Priv_R5")).toEqual({ status: 200, socials: { instagram: "kenji.supra" } });
     expect(await seen(orga, "Priv_R5")).toEqual({ status: 200, socials: { instagram: "kenji.supra" } });
     expect((await seen(null, "Pub_R5")).status).toBe(401);
-    // Aperçu de son profil : vu par un membre (privé : rien), vu par un ami (tout).
+    // Aperçu de son profil : vu par un membre (privé : rien), vu par un abonné (tout).
     expect((await call(priv, "GET", "/me/public-preview?as=member")).json.socials).toBeNull();
-    expect((await call(priv, "GET", "/me/public-preview?as=friend")).json.socials).toEqual({
+    expect((await call(priv, "GET", "/me/public-preview?as=follower")).json.socials).toEqual({
       instagram: "kenji.supra",
     });
     expect((await call(pub, "GET", "/me/public-preview?as=member")).json.socials).toEqual({ instagram: "kenji.supra" });
@@ -263,7 +263,7 @@ describe("prochaine sortie et « Toi aussi »", () => {
     expect((await view(paul)).nextOuting.together).toBe(true);
     // Soi-même et l'aperçu : jamais « Toi aussi ».
     expect((await view(julie)).nextOuting.together).toBe(false);
-    expect((await call(julie, "GET", "/me/public-preview?as=friend")).json.nextOuting.together).toBe(false);
+    expect((await call(julie, "GET", "/me/public-preview?as=follower")).json.nextOuting.together).toBe(false);
   });
 
   it("compte privé vu par un membre : pas de sortie ; sans sortie à venir : rien", async () => {

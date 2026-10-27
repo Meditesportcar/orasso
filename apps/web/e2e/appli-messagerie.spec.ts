@@ -4,14 +4,31 @@ import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Messagerie et Boîte (lot 18) : l'appli en version web de recette (`expo start --web` derrière
-// `apps/mobile/scripts/web-isolated.mjs`) face au site. A (appli) écrit à son ami B (site) : B reçoit sans recharger,
+// `apps/mobile/scripts/web-isolated.mjs`) face au site. A (appli) écrit à B, qui le suit (site) : B reçoit sans recharger,
 // A voit « Lu par B » ; B répond, A reçoit en direct par le WebSocket de l'appli (jeton porté par le sous-protocole
 // dans un navigateur) ; Boîte (segments, Demandes : demande de contact acceptée), feuille « Demande de contact » d'un
-// non-ami. Deux thèmes à 390 px. Lancer avec APP_URL=http://localhost:8191 (CORS_ORIGINS de l'API = même origine).
+// personne qui ne le suit pas. Deux thèmes à 390 px. Lancer avec APP_URL=http://localhost:8191 (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-18-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
+
+// Lot R6b (D37) : A et B se suivent. Un compte privé répond « pending » : la cible accepte alors la demande.
+async function followBoth(a: string, aCookie: string, b: string, bCookie: string) {
+  const idOf = async (cookie: string) => (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data.user.id;
+  const [aId, bId] = [await idOf(aCookie), await idOf(bCookie)];
+  const pairs = [
+    [aCookie, b, bCookie, aId],
+    [bCookie, a, aCookie, bId],
+  ] as const;
+  for (const [cookie, target, targetCookie, myId] of pairs) {
+    const r = await apiCall<{ mine: string }>(cookie, "POST", `/users/${target}/follow`);
+    expect(r.status).toBeLessThan(300);
+    if (r.data.mine === "pending") {
+      expect((await apiCall(targetCookie, "POST", `/me/follow-requests/${myId}/accept`)).status).toBeLessThan(300);
+    }
+  }
+}
 
 async function shot(page: Page, name: string) {
   await page.waitForTimeout(1500);
@@ -64,8 +81,8 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     const aCookie = await signUpApi(a);
     const bCookie = await signUpApi(b);
     const cCookie = await signUpApi(c);
-    const r = await apiCall<{ id: string }>(aCookie, "POST", "/friends/requests", { pseudo: b });
-    await apiCall(bCookie, "POST", `/friends/requests/${r.data.id}/accept`);
+    // Lot R6b (D37) : plus d'amitié ; A et B se suivent (chacun écrit directement à qui le suit).
+    await followBoth(a, aCookie, b, bCookie);
 
     const { ctx, page } = await appLogin(browser, a, theme);
     page.on("console", (m) => {
@@ -103,7 +120,7 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     await shot(page, `04-appui-long-${theme}`);
     await page.keyboard.press("Escape");
 
-    // C (non ami) demande le contact de A ; A l'accepte dans Boîte > Demandes.
+    // C (qui ne le suit pas) demande le contact de A ; A l'accepte dans Boîte > Demandes.
     await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, ta voiture est superbe !" });
     // L'onglet Boîte (l'adresse `/boite` existe aussi dans les casquettes Organisateur et Prestataire).
     await page.goto("/accueil");
@@ -120,7 +137,7 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     await page.waitForURL(/\/boite\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await expect(page.getByTestId("messages")).toContainText("Bonjour, ta voiture est superbe !");
 
-    // Profil d'un non-ami : Message ouvre la feuille « Demande de contact ».
+    // Profil d'une personne qui ne me suit pas : Message ouvre la feuille « Demande de contact ».
     const d = `AppD_${theme}_${s}`;
     await signUpApi(d);
     await page.goto(`/u/${d}`);

@@ -14,7 +14,7 @@ import { Form, useNavigation } from "react-router";
 
 import { PublicProfile } from "../components/PublicProfile";
 import { api, apiOrThrow, getMe, safeReturn } from "../lib/api.server";
-import { friendAction } from "../lib/friends.server";
+import { followAction, isFollowIntent } from "../lib/follow.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
 import "../styles/passport.css";
 import "../styles/network.css";
@@ -22,11 +22,11 @@ import "../styles/profile-r5.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/profil";
 
-// Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
+// Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un abonné accepté, réduit
 // (pseudo, photo, grade, marque et modèle) pour un compte privé. Jamais la plaque. Réservé aux connectés.
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
-// Lot R4c (maquettes 10.2 et R4.6c) : abonnés, abonnements et amis sur une ligne (aux audiences qui voient tout),
-// « Suivre » secondaire à côté de « Ajouter en ami » (compte public seulement), le véhicule principal en premier.
+// Lot R4c (maquettes 10.2 et R4.6c) : abonnés, abonnements et sorties sur une ligne (aux audiences qui voient tout), le
+// véhicule principal en premier. Lot R6b (D37, maquette R6.1) : un seul bouton « Suivre » (pas d'amitié).
 export const handle = ficheHandle;
 
 export function meta({ params }: Route.MetaArgs) {
@@ -73,18 +73,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
-  // Message (lot 18) : conversation entre amis, sinon demande de contact.
+  // Message (lot 18) : conversation existante, sinon demande de contact.
   const intent = String(form.get("intent") ?? "");
   if (isMessageIntent(intent)) return messageAction(request, form);
-  // Lot R4c : suivre une personne (compte public), ou ne plus la suivre.
-  if (intent === "follow" || intent === "unfollow") {
-    const pseudo = String(form.get("pseudo") ?? "");
-    const res = await api(request, `/users/${encodeURIComponent(pseudo)}/follow`, {
-      method: intent === "follow" ? "POST" : "DELETE",
-    });
-    return { friendError: res.ok ? null : res.error.message };
-  }
-  return friendAction(request, form);
+  // Lot R6b : suivre (ou demander à suivre), ne plus suivre, annuler une demande.
+  if (isFollowIntent(intent)) return followAction(request, form);
+  return { followError: "Action inconnue." };
 }
 
 type Hub = NonNullable<Route.ComponentProps["loaderData"]["hub"]>;
@@ -151,15 +145,15 @@ function ProfileHub({ hub }: { hub: Hub }) {
 
 export default function Profil({ loaderData, actionData: rawAction }: Route.ComponentProps) {
   const p = loaderData.profile;
-  const actionData = rawAction as ({ friendError?: string | null } & Partial<MessageActionData>) | undefined;
+  const actionData = rawAction as ({ followError?: string | null } & Partial<MessageActionData>) | undefined;
   const busy = useNavigation().state !== "idle";
   const isSelf = p.audience === "self";
   // Lot R5b : le profil est le composant commun (comme l'aperçu) ; les coordonnées de l'organisateur et le hub restent ici.
   const notices = (
     <>
-      {actionData?.friendError && (
+      {actionData?.followError && (
         <p className="s-error" role="alert">
-          {actionData.friendError}
+          {actionData.followError}
         </p>
       )}
       {actionData?.messageError && (

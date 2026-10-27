@@ -1,6 +1,6 @@
 // Page du crew (lot R5c2, maquettes R5.7 et R5.8, décisions de Damien du 26/10) : ce que la fiche d'un crew montre.
 // - Tout le monde (connecté) : la vitrine, c'est-à-dire l'image du crew, la description, l'Instagram et les membres
-//   (pseudo, avatar, grade, rôle ; `friend` pour les amis de la personne qui regarde). Rien d'autre.
+//   (pseudo, avatar, grade, rôle ; `friend` : la personne qui regarde la suit, lot R6b). Rien d'autre.
 // - Membres actifs : l'espace du crew (`CrewSpace`) : sorties, garage, « Où va le crew », non-lus de la discussion.
 // Les comptes supprimés, bannis ou suspendus sont exclus partout (listes et nombres).
 import {
@@ -36,8 +36,8 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
 import type { Profile } from "../profiles/repo";
+import { followsService } from "../social/follows";
 import { audienceFor } from "../social/profile";
-import { socialRepo } from "../social/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
 
@@ -65,9 +65,9 @@ const faceOf = (p: Pick<Profile, "pseudo" | "avatarKey">): CrewFace => ({
   avatarUrl: storage.url(p.avatarKey),
 });
 
-/** Vitrine : liste blanche (pseudo, avatar, grade, rôle, ami) ; jamais l'identifiant de compte. */
+/** Vitrine : liste blanche (pseudo, avatar, grade, rôle, suivi par moi) ; jamais l'identifiant de compte. */
 export async function vitrineMembers(members: ActiveMember[], viewerId: string): Promise<CrewVitrineMember[]> {
-  const friends = new Set(await socialRepo.friendIds(viewerId));
+  const friends = new Set(await followsService.followingIds(viewerId));
   return members.map((m) => ({
     pseudo: m.profile.pseudo,
     avatarUrl: storage.url(m.profile.avatarKey),
@@ -97,7 +97,8 @@ export function bannerFor(
 /**
  * Tour 2 (relectures Opus et Codex) : les personnes dont celle qui regarde voit le détail des véhicules, avec les règles
  * du profil (lot 17) comme l'inscription en crew (`registration.ts`). Un compte privé vu par un membre qui n'est pas son
- * ami : marque et modèle seulement, sans photo, et ses participations individuelles ne sont pas montrées.
+ * abonné accepté (lot R6b) : marque et modèle seulement, sans photo, et ses participations individuelles ne sont pas
+ * montrées.
  */
 export async function detailedFor(v: Viewer, people: Profile[]): Promise<Set<string>> {
   const out = new Set<string>();

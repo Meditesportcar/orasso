@@ -24,7 +24,7 @@ export const securityMails = {
       "Confirme ton adresse e-mail",
       [
         `Bonjour ${pseudo},`,
-        "Bienvenue sur Orasso. Confirme ton adresse pour sécuriser ton compte et valider les points de parrainage de l'ami qui t'a invité.",
+        "Bienvenue sur Orasso. Confirme ton adresse pour sécuriser ton compte et valider les points de parrainage de la personne qui t'a invité.",
         "Le lien est valable une heure ; tu peux en demander un nouveau depuis ton compte.",
       ],
       { label: "Confirmer mon adresse", url },

@@ -197,7 +197,7 @@ function PickRing() {
   );
 }
 
-/** La bande : crew et personne du coin (suivre, rejoindre), discussion, amis qui y vont. */
+/** La bande : crew et personne du coin (suivre, rejoindre), discussion, personnes suivies qui y vont. */
 export function SocialBand({ crewAction }: { crewAction: "join" | "follow" }) {
   const a = useArt();
   const s = tutoArt.social;

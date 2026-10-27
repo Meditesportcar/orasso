@@ -5,11 +5,11 @@
 // le staff n'y est que si la personne a des missions), « Devenir organisateur ou pro », « Rejoindre une équipe staff »,
 // puis les réglages en lignes groupées : Compte (e-mail, mot de passe, sanctions), Notifications, Confidentialité
 // (profil public, export des données, suppression), Tes préférences (lot M6 : coin, distance, types, centres
-// d'intérêt), Apparence (thème, animations), Mon profil public, Amis et crews, Aide, Se déconnecter.
+// d'intérêt), Apparence (thème, animations), Mon profil public, crews, Aide, Se déconnecter.
 // Plus d'accès flottant ici (retour 31).
-// Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, amis),
-// chacun ouvre sa liste (`/reseau`), puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
-// réglages (avec « Amis et crews »).
+// Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, sorties),
+// les deux premiers ouvrent leur liste (`/reseau`), les sorties l'onglet Sorties, puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
+// réglages.
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   capLabels,
@@ -57,7 +57,7 @@ export function ProfilScreen() {
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
   // Relecture C2b : sans véhicule actif (casquette visiteur, pas d'onglet Garage), les archives restent joignables ici.
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
-  // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, amis).
+  // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, sorties ; lot R6b).
   const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
   const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
 
@@ -183,7 +183,11 @@ export function ProfilScreen() {
           <>
             <NetworkCounters
               counts={network.data}
-              onOpen={(tab) => router.push({ pathname: "/reseau", params: { tab } })}
+              onOpen={(target) =>
+                target === "sorties"
+                  ? router.push("/sorties")
+                  : router.push({ pathname: "/reseau", params: { liste: target } })
+              }
             />
             <ProfileLinks
               crew={

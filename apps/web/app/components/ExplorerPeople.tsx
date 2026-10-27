@@ -4,11 +4,10 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import { type CrewCard, gradeLabels, type PersonCard, explorerR2Labels as R } from "@orasso/shared";
 import type { ReactNode } from "react";
-import { Form } from "react-router";
 import { CrewLogo } from "./Crews";
 import { CrewRequestDialog } from "./crew-page/CrewPage";
 import { deptLong } from "./ExplorerUi";
-import { PersonAvatar } from "./People";
+import { cardVisibility, FollowAction, PersonAvatar } from "./People";
 
 export function PeopleSection({
   title,
@@ -49,43 +48,18 @@ export function PrivacyNote({ children }: { children: string }) {
   );
 }
 
-/** « Ajouter » (demande d'ami), « Demande envoyée », ou « Écrire » à un ami. */
+/** Le bouton « Suivre » compact d'une ligne (lot R6b) : Suivre, Demander à suivre, Abonné ou Demandé. */
 function PersonAction({ person, busy }: { person: PersonCard; busy: boolean }) {
-  if (person.friendship === "friends") {
-    return (
-      <Form method="post">
-        <input type="hidden" name="intent" value="message_open" />
-        <input type="hidden" name="userId" value={person.userId} />
-        <Button type="submit" variant="secondary" icon="chat" loading={busy} data-testid="person-write">
-          {R.write}
-        </Button>
-      </Form>
-    );
-  }
-  if (person.friendship === "pending_out") {
-    return (
-      <Button variant="secondary" icon="check" disabled data-testid="person-requested">
-        {R.requested}
-      </Button>
-    );
-  }
-  if (person.friendship === "pending_in") {
-    // Il m'a déjà demandé : son profil propose d'accepter.
-    return (
-      <Button variant="secondary" icon="add" href={`/u/${encodeURIComponent(person.pseudo)}`} data-testid="person-add">
-        {R.add}
-      </Button>
-    );
-  }
   return (
-    <Form method="post">
-      <input type="hidden" name="intent" value="friend_add" />
-      <input type="hidden" name="pseudo" value={person.pseudo} />
-      <input type="hidden" name="source" value="search" />
-      <Button type="submit" variant="secondary" icon="add" loading={busy} data-testid="person-add">
-        {R.add}
-      </Button>
-    </Form>
+    <FollowAction
+      pseudo={person.pseudo}
+      mine={person.follow.mine}
+      followsMe={person.follow.followsMe}
+      canFollow
+      visibility={cardVisibility(person)}
+      size="small"
+      busy={busy}
+    />
   );
 }
 
@@ -98,7 +72,7 @@ export function PersonRowR2({
   busy: boolean;
   testId?: string;
 }) {
-  // Compte privé (non ami) : ses départements ne sont pas donnés par l'API.
+  // Compte privé (non abonné) : ses départements ne sont pas donnés par l'API.
   const hidden = person.departments === null;
   const firstDept = !hidden ? person.departments?.[0] : null;
   const caption = [

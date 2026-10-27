@@ -116,7 +116,10 @@ export type CrewVitrineMember = {
   avatarUrl: string | null;
   grade: Grade;
   role: CrewRole;
-  /** Ami de la personne qui regarde (« 2 de tes amis en font partie »). */
+  /**
+   * Lot R6b : la personne qui regarde la suit (abonnement accepté), « 2 personnes que tu suis en font partie ». Le nom
+   * du champ reste (plus petit changement, lot R6a en parallèle sur la page du crew).
+   */
   friend: boolean;
 };
 

@@ -1,9 +1,11 @@
 import type { NotificationFamily } from "../enums";
 
 /**
- * Social (lot 17) : demandes d'ami et fil d'actualité du Journal. Famille `social` (se coupe comme les autres).
- * `friend_request` et `friend_accepted` partent en push ; les types « actualité » n'en ont jamais (voir
- * `journalOnlyNotificationTypes`).
+ * Social (lot 17 ; lot R6b : « Suivre » remplace l'amitié) : abonnements et fil d'actualité du Journal. Famille `social`
+ * (se coupe comme les autres). Les demandes partent en push ; les types « actualité » n'en ont jamais (voir
+ * `journalOnlyNotificationTypes`). `friend_request` et `friend_accepted` ne sont plus envoyées : les notifications déjà
+ * reçues restent lisibles dans la Boîte. Les noms `friend_going_event` et `friend_new_vehicle` restent (données en base) :
+ * ils visent désormais les abonnés acceptés.
  */
 export const socialNotificationTypes = {
   friend_request: "social",
@@ -12,18 +14,30 @@ export const socialNotificationTypes = {
   friend_new_vehicle: "social",
   /** Lot R4c : « Kenji_66 te suit », regroupée (une ligne non lue complétée au lieu d'une nouvelle). */
   user_followed: "social",
+  /** Lot R6b : « Kenji_66 demande à te suivre » (compte privé). */
+  follow_request: "social",
+  /** Lot R6b : « Julie_66 a accepté ta demande ». */
+  follow_accepted: "social",
 } as const satisfies Record<string, NotificationFamily>;
 
 /** Items d'actualité du Journal : ni push, ni e-mail, livrés tout de suite (ARCHITECTURE-SUITE § 2.4). */
 export const journalOnlyNotificationTypes: readonly string[] = ["friend_going_event", "friend_new_vehicle"];
 
-/** Libellés des types (réglages des notifications). */
+/**
+ * Lot R6b, tour 2 : types qui ne partent plus (l'ancienne amitié). Leurs notifications restent lisibles dans la Boîte,
+ * mais ils ne figurent plus parmi les types qu'on règle un par un.
+ */
+export const retiredNotificationTypes: readonly string[] = ["friend_request", "friend_accepted"];
+
+/** Libellés des types (réglages des notifications ; les types retirés n'y sont plus montrés). */
 export const socialNotificationLabels: Record<keyof typeof socialNotificationTypes, string> = {
-  friend_request: "Demande d'ami",
-  friend_accepted: "Demande d'ami acceptée",
-  friend_going_event: "Un ami va à un événement",
-  friend_new_vehicle: "Un ami ajoute un véhicule",
+  friend_request: "Ancienne demande, avant les abonnements",
+  friend_accepted: "Ancienne demande acceptée, avant les abonnements",
+  friend_going_event: "Une personne que tu suis va à un événement",
+  friend_new_vehicle: "Une personne que tu suis ajoute un véhicule",
   user_followed: "Nouvel abonné",
+  follow_request: "Demande d'abonnement",
+  follow_accepted: "Demande d'abonnement acceptée",
 };
 
 /** Lot R4c : un nouvel abonné ne vaut pas un e-mail (push et Journal seulement). */

@@ -1,4 +1,4 @@
-// Feuille « Demande de contact » (lot 18, docs/01) : pas amis → le message part en demande, rangée à part chez
+// Feuille « Demande de contact » (lot 18, docs/01) : pas de lien d'abonnement → le message part en demande, rangée à part chez
 // l'autre ; texte obligatoire ; une seule demande possible.
 import { Button, Text, TextField, useTheme } from "@orasso/design-system/native";
 import { CONTACT_MESSAGE_MAX, messagingLabels } from "@orasso/shared";

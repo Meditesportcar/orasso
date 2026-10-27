@@ -172,7 +172,7 @@ function Shell() {
         return;
       }
       backToBase();
-      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
+      // Un lien de l'appli (profil d'un membre, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
       const link = appLinkOf(data?.link);
       if (link) router.navigate(link as never);
       else router.navigate("/acces");

@@ -15,7 +15,7 @@ export const crewLabels = {
   crew: "Crew",
   crews: "Crews",
   myCrews: "Mes crews",
-  noCrews: "Tu n'as pas encore de crew. Crées-en un, ou cherche celui de tes amis dans Explorer.",
+  noCrews: "Tu n'as pas encore de crew. Crées-en un, ou cherche-en un dans Explorer.",
   createCrew: "Créer un crew",
   createCrewHint: "Un crew est privé : seuls ses membres voient la liste des membres et la discussion.",
   name: "Nom du crew",
@@ -67,7 +67,7 @@ export const crewLabels = {
   yourCrews: "Tes crews",
   // Lot R3b (retour 16) : « Crée ou rejoins un crew » du profil propose d'abord de rejoindre.
   joinTitle: "Rejoindre un crew",
-  joinHint: "Cherche le crew de tes amis par son nom, ou regarde ceux de ton coin. Le chef reçoit ta demande.",
+  joinHint: "Cherche un crew par son nom, ou regarde ceux de ton coin. Le chef reçoit ta demande.",
   joinSearchPlaceholder: "Nom du crew",
   joinOrCreate: "Aucun ne te va ?",
   limitCrews: `Tu fais déjà partie de ${CREWS_PER_PERSON} crews (maximum).`,

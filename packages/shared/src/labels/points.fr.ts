@@ -6,7 +6,7 @@ import type { ContestStatus, PointKind } from "../rules/points";
 export const pointKindLabels: Record<PointKind, string> = {
   participation: "Présent à un événement",
   staff: "Staff sur un événement",
-  referral: "Ami invité",
+  referral: "Parrainage",
   malus: "Absent sans désistement",
   malus_reversal: "Malus annulé",
   season_carryover: "Report de la saison précédente",

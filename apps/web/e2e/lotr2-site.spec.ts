@@ -203,6 +203,7 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("person-row")).toHaveCount(0);
       await expect(page.getByTestId("people-privacy")).toContainText("comptes publics");
       await expect(page.getByTestId("crew-new")).toHaveAttribute("href", "/app/crews");
+      // Lot R6b (D37) : plus d'ami nulle part ; la ligne « Amis de tes amis » reste absente.
       await expect(page.getByText("Amis de tes amis")).toHaveCount(0);
       await expect(page.getByText("Vus aux mêmes sorties")).toHaveCount(0);
       await shot(page, `personnes-${tag}`);

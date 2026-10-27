@@ -1,5 +1,5 @@
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
-// public ou ami, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
+// public ou abonné accepté, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
 import { Button, Chip, Photo, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
 import { gradeLabels, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";

@@ -1,4 +1,4 @@
-// Le Journal, derrière la cloche : le fil d'actualité des amis et les notifications de l'utilisateur dans un seul fil
+// Le Journal, derrière la cloche : le fil d'actualité des personnes suivies et les notifications de l'utilisateur dans un seul fil
 // chronologique (lot 17, ARCHITECTURE-SUITE § 2.4). Sept jours en arrière, sauf ce qui n'a pas été lu.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { SET_OUTLOOK_UNCERTAIN_ACTION, socialLabels, weatherTexts } from "@orasso/shared";

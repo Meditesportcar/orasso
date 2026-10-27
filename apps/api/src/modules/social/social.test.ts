@@ -1,4 +1,6 @@
-// Social (lot 17) : audiences des profils, amis, QR ami, recherche de personnes, Journal des amis.
+// Social (lot 17, lot R6b) : audiences des profils, suivre et demandes d'abonnement, QR de compte, recherche de
+// personnes, Journal des personnes suivies. Tour 2 : retirer un abonné, alertes répétées (annuler, refuser), horloge.
+import { randomUUID } from "node:crypto";
 import { accountQrPayload, fromWallTime, privateVehicleFields } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -27,6 +29,7 @@ import {
   profileInterests,
   profiles,
   structures,
+  userFollows,
   vehicleGenerations,
   vehicleMakes,
   vehicleModels,
@@ -35,13 +38,13 @@ import {
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
 import { anonymizeSocialForDeletedAccount } from "./anonymize";
-import { socialRepo } from "./repo";
 
 afterAll(async () => {
   await pool.end();
 });
 
 const DAY = 86_400_000;
+const HOUR = DAY / 24;
 let clock: ReturnType<typeof useClock>;
 let ref: Awaited<ReturnType<typeof seedReference>>;
 let supra: { makeId: string; modelId: string; generationId: string };
@@ -81,9 +84,6 @@ async function person(
 }
 
 const flush = () => notificationsService.flush();
-/** Vieillit les notifications de demande d'ami (le garde-fou de 24 h lit l'horloge de la base). */
-const ageRequests = () =>
-  db.execute(sql`update notifications set created_at = created_at - interval '2 days' where type = 'friend_request'`);
 const journal = async (u: TestUser) =>
   (await call(u, "GET", "/me/notifications")).json.items as {
     type: string;
@@ -92,12 +92,20 @@ const journal = async (u: TestUser) =>
     data: { actor?: { pseudo: string; userId: string }; link?: string };
   }[];
 
-/** Amitié acceptée posée directement en base. */
+/** `follower` suit `followed`, abonnement accepté, posé directement en base. */
+async function follows(follower: TestUser, followed: TestUser, status: "accepted" | "pending" = "accepted") {
+  await db.insert(userFollows).values({
+    followerId: follower.id,
+    followedId: followed.id,
+    status,
+    acceptedAt: status === "accepted" ? new Date() : null,
+  });
+}
+
+/** Deux abonnements acceptés (ce que la migration fait d'une ancienne amitié). */
 async function befriend(a: TestUser, b: TestUser) {
-  await db
-    .insert(friendships)
-    .values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
-  await socialRepo.recountFriends([a.id, b.id]);
+  await follows(a, b);
+  await follows(b, a);
 }
 
 describe("audience d'un profil", () => {
@@ -171,19 +179,28 @@ describe("audience d'un profil", () => {
     expect((await call(b, "GET", "/users/Alpha_Pub")).status).toBe(404);
   });
 
-  it("un ami voit tout d'un profil privé ; l'aperçu « ce que voient les autres » est celui d'un inconnu", async () => {
+  it("un abonné accepté voit tout d'un profil privé ; celui que le privé suit, non ; l'aperçu est celui d'un inconnu", async () => {
     const b = await person("Bravo_Priv", { visibility: "private", bio: "secret" });
     const c = await person("Charlie_C");
+    const d = await person("Delta_D");
     await createVehicle(b.id, ref);
-    await befriend(b, c);
+    await follows(c, b);
+    await follows(b, d);
     const res = await call(c, "GET", "/users/Bravo_Priv");
-    expect(res.json).toMatchObject({ audience: "friend", bio: "secret", departments: ["66"] });
+    expect(res.json).toMatchObject({ audience: "follower", bio: "secret", departments: ["66"] });
     expect(res.json.vehicles[0]).toMatchObject({ label: "BMW Série 3 E36", detailed: true });
-    expect(res.json.friendship.state).toBe("friends");
-    expect(res.json.friendsCount).toBe(1);
-    // Aperçu de Bravo : réduit, même s'il est ami avec Charlie.
+    expect(res.json.follow).toEqual({ canFollow: true, mine: "accepted", followsMe: false });
+    expect(res.json).toMatchObject({ followersCount: 1, followingCount: 1 });
+    // Bravo suit Delta, Delta ne suit pas Bravo : Delta ne voit que le réduit, avec « Te suit ».
+    const fromD = await call(d, "GET", "/users/Bravo_Priv");
+    expect(fromD.json).toMatchObject({ audience: "public_limited", bio: null });
+    expect(fromD.json.follow).toEqual({ canFollow: true, mine: "none", followsMe: true });
+    // Aperçu de Bravo : réduit, même s'il a des abonnés ; vu par un abonné : tout.
     const preview = await call(b, "GET", "/me/public-preview");
     expect(preview.json).toMatchObject({ audience: "public_limited", bio: null, departments: null });
+    const asFollower = await call(b, "GET", "/me/public-preview?as=follower");
+    expect(asFollower.json).toMatchObject({ audience: "follower", bio: "secret" });
+    expect(asFollower.json.follow.mine).toBe("accepted");
   });
 
   it("l'équipe organisatrice d'un événement où la personne a candidaté voit ses coordonnées, personne d'autre", async () => {
@@ -254,176 +271,316 @@ describe("audience d'un profil", () => {
   });
 });
 
-describe("demandes d'ami", () => {
-  it("C demande B, B accepte : C voit tout de B ; notifications, pastille et compteurs", async () => {
-    const b = await person("Bravo_Priv", { visibility: "private", bio: "secret" });
+describe("suivre, demandes d'abonnement (lot R6b, D37)", () => {
+  const followRow = async (follower: TestUser, followed: TestUser) =>
+    (
+      await db
+        .select()
+        .from(userFollows)
+        .where(and(eq(userFollows.followerId, follower.id), eq(userFollows.followedId, followed.id)))
+    )[0];
+
+  it("compte public : abonné tout de suite (« X te suit ») ; compte privé : demande (« X demande à te suivre »)", async () => {
+    const pub = await person("Alpha_Pub");
+    const priv = await person("Bravo_Priv", { visibility: "private", bio: "secret" });
     const c = await person("Charlie_C");
-    await createVehicle(b.id, ref);
+    await createVehicle(priv.id, ref);
 
-    const req = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_Priv", message: "Salut !" });
-    expect(req.status).toBe(201);
-    expect(req.json).toMatchObject({ status: "pending", pseudo: "Bravo_Priv" });
+    expect((await call(c, "POST", "/users/Alpha_Pub/follow")).json).toEqual({ mine: "accepted" });
+    expect((await followRow(c, pub))?.acceptedAt).not.toBeNull();
+    const asked = await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(asked.json).toEqual({ mine: "pending" });
+    expect(await followRow(c, priv)).toMatchObject({ status: "pending", acceptedAt: null });
+    // Idempotent : une deuxième demande ne change rien.
+    expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
     await flush();
+    const types = (await journal(priv)).map((n) => n.type);
+    expect(types.filter((t) => t === "follow_request")).toHaveLength(1);
+    expect((await journal(pub)).map((n) => n.type)).toContain("user_followed");
 
-    expect((await call(c, "GET", "/users/Bravo_Priv")).json.friendship.state).toBe("pending_out");
-    const asB = await call(b, "GET", "/users/Charlie_C");
-    expect(asB.json.friendship.state).toBe("pending_in");
-    expect((await call(b, "GET", "/me/inbox/summary")).json).toMatchObject({ requests: { friend: 1 } });
-    const incoming = (await call(b, "GET", "/me/friends/requests?direction=in")).json.items;
-    expect(incoming).toHaveLength(1);
-    expect(incoming[0]).toMatchObject({ direction: "in", message: "Salut !", person: { pseudo: "Charlie_C" } });
-    expect((await call(c, "GET", "/me/friends/requests?direction=out")).json.items).toHaveLength(1);
-    const notif = (await journal(b)).find((n) => n.type === "friend_request");
-    expect(notif?.data.actor?.pseudo).toBe("Charlie_C");
-    expect(notif?.readAt).toBeNull();
-
-    // B ne peut pas accepter à la place de C ; C ne peut pas accepter sa propre demande.
-    expect((await call(c, "POST", `/friends/requests/${req.json.id}/accept`)).status).toBe(404);
-    const accepted = await call(b, "POST", `/friends/requests/${req.json.id}/accept`);
-    expect(accepted.status).toBe(200);
-    expect(accepted.json.status).toBe("accepted");
-    await flush();
-
+    // Une demande en attente ne donne rien de plus, ni dans les nombres.
     const seen = await call(c, "GET", "/users/Bravo_Priv");
-    expect(seen.json).toMatchObject({ audience: "friend", bio: "secret", departments: ["66"], friendsCount: 1 });
-    expect(seen.json.vehicles[0].detailed).toBe(true);
-    expect((await call(b, "GET", "/me/inbox/summary")).json).toMatchObject({ requests: { friend: 0 } });
-    expect((await journal(c)).some((n) => n.type === "friend_accepted")).toBe(true);
-    expect((await journal(b)).find((n) => n.type === "friend_request")?.readAt).not.toBeNull();
-    const friendsOfC = (await call(c, "GET", "/me/friends")).json.items;
-    expect(friendsOfC.map((f: { pseudo: string }) => f.pseudo)).toEqual(["Bravo_Priv"]);
-    const row = await db.query.profiles.findFirst({ where: eq(profiles.userId, c.id) });
-    expect(row?.friendsCount).toBe(1);
+    expect(seen.json).toMatchObject({ audience: "public_limited", bio: null, followersCount: 0 });
+    expect(seen.json.follow).toEqual({ canFollow: true, mine: "pending", followsMe: false });
+    expect(seen.json).not.toHaveProperty("friendsCount");
+    expect(seen.json).not.toHaveProperty("friendship");
 
-    // Retrait : la ligne disparaît, plus d'accès complet ; pas de nouvelle demande avant 24 h (une seule notification
-    // de demande par paire et par 24 h).
-    expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
-    expect((await call(c, "GET", "/users/Bravo_Priv")).json.audience).toBe("public_limited");
-    expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(404);
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_Priv" })).status).toBe(429);
-    await ageRequests();
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_Priv" })).status).toBe(201);
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, b.id) }))?.friendsCount).toBe(0);
-  });
-
-  it("une seule relation par paire : A→B puis B→A vaut acceptation ; l'index refuse deux lignes", async () => {
-    const a = await person("Alpha_A");
-    const b = await person("Bravo_B");
-    expect((await call(a, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(201);
-    // Deuxième demande identique : 409.
-    const again = await call(a, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    expect(again.status).toBe(409);
-    expect(again.json.error.code).toBe("friendship_exists");
-    // Demande croisée : B demande A, qui l'avait déjà demandé → amis.
-    const cross = await call(b, "POST", "/friends/requests", { pseudo: "Alpha_A" });
-    expect(cross.status).toBe(201);
-    expect(cross.json.status).toBe("accepted");
-    expect(await db.select().from(friendships)).toHaveLength(1);
-    expect((await call(a, "GET", "/users/Bravo_B")).json.friendship.state).toBe("friends");
-    expect((await call(a, "POST", "/friends/requests", { pseudo: "Bravo_B" })).json.error.code).toBe("already_friends");
-    // Garde-fou en base, indépendant du service : (A, B) et (B, A) sont la même paire.
-    await expect(
-      db.insert(friendships).values({ requesterId: b.id, addresseeId: a.id, status: "pending" }),
-    ).rejects.toThrow();
-    // Pas de demande vers soi-même.
-    expect((await call(a, "POST", "/friends/requests", { pseudo: "Alpha_A" })).status).toBe(400);
-    expect((await call(a, "POST", "/friends/requests", { pseudo: "Inconnu_X" })).status).toBe(404);
-  });
-
-  it("refus : le demandeur attend 30 jours, le destinataire du refus peut demander tout de suite", async () => {
-    const b = await person("Bravo_B");
-    const c = await person("Charlie_C");
-    const req = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    expect((await call(b, "POST", `/friends/requests/${req.json.id}/decline`)).status).toBe(204);
-    // Déjà traitée : 409. Le demandeur n'est pas prévenu.
-    expect((await call(b, "POST", `/friends/requests/${req.json.id}/decline`)).status).toBe(409);
-    await flush();
-    expect((await journal(c)).some((n) => n.type === "friend_accepted")).toBe(false);
-    // Refus silencieux : pour C la demande reste « envoyée » (profil, liste des envoyées), rien ne dit qu'elle a été refusée.
-    expect((await call(c, "GET", "/users/Bravo_B")).json.friendship.state).toBe("pending_out");
-    const sent = (await call(c, "GET", "/me/friends/requests?direction=out")).json.items;
-    expect(sent.map((r: { person: { pseudo: string } }) => r.person.pseudo)).toEqual(["Bravo_B"]);
-    // B, lui, n'a plus de demande reçue.
-    expect((await call(b, "GET", "/me/friends/requests?direction=in")).json.items).toEqual([]);
-    expect((await call(b, "GET", "/users/Charlie_C")).json.friendship.state).toBe("none");
-    // « Annuler » ne change rien pendant le délai.
-    expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
-    expect(await db.select().from(friendships)).toHaveLength(1);
-
-    clock.advance(29 * DAY);
-    const early = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    expect(early.status).toBe(409);
-    expect(early.json.error.code).toBe("friendship_exists");
-    expect(early.json.error.message).toBe("Une demande est déjà en cours");
-    // B peut demander à C : la ligne s'inverse.
-    const reverse = await call(b, "POST", "/friends/requests", { pseudo: "Charlie_C" });
-    expect(reverse.status).toBe(201);
-    const row = (await db.select().from(friendships))[0]!;
-    expect(row).toMatchObject({ requesterId: b.id, addresseeId: c.id, status: "pending" });
-    // C accepte : amis.
-    expect((await call(c, "POST", `/friends/requests/${reverse.json.id}/accept`)).status).toBe(200);
-    expect(await db.select().from(friendships)).toHaveLength(1);
-  });
-
-  it("refus : après 30 jours le même demandeur peut redemander (la ligne repasse en attente)", async () => {
-    const b = await person("Bravo_B");
-    const c = await person("Charlie_C");
-    const req = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    await call(b, "POST", `/friends/requests/${req.json.id}/decline`);
-    clock.advance(30 * DAY);
-    await ageRequests();
-    // Passé le délai, la demande « envoyée » n'apparaît plus et on peut redemander.
-    expect((await call(c, "GET", "/users/Bravo_B")).json.friendship.state).toBe("none");
-    const again = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B", message: "On réessaie" });
-    expect(again.status).toBe(201);
-    expect(again.json.id).toBe(req.json.id);
-    expect(await db.select().from(friendships)).toHaveLength(1);
-    expect((await db.select().from(friendships))[0]).toMatchObject({
-      status: "pending",
-      message: "On réessaie",
-      respondedAt: null,
-    });
-  });
-
-  it("retirer une demande envoyée ; message limité à 200 caractères ; 20 demandes par jour", async () => {
-    const b = await person("Bravo_B");
-    const c = await person("Charlie_C");
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B", message: "x".repeat(201) })).status).toBe(
-      400,
+    // Les demandes reçues : moi seul, avec la pastille de la Boîte.
+    const reqs = await call(priv, "GET", "/me/follow-requests");
+    expect(reqs.json.total).toBe(1);
+    expect(Object.keys(reqs.json.items[0]).sort()).toEqual(
+      ["avatarUrl", "canFollow", "followsMe", "grade", "mine", "pseudo", "userId", "vehicle", "visibility"].sort(),
     );
-    await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    // Le destinataire ne retire pas la demande (il la refuse) ; l'envoyeur la retire.
-    expect((await call(b, "DELETE", `/friends/${c.id}`)).status).toBe(404);
-    expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
-    expect(await db.select().from(friendships)).toHaveLength(0);
-    // Retirer puis redemander tout de suite : 24 h d'attente (en base), puis c'est possible.
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(429);
-    await ageRequests();
-    // Limite : chaque tentative compte, même refusée (409 sur une demande déjà en cours).
-    await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
-    let last = 0;
-    for (let i = 0; i < 20; i++) last = (await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status;
-    expect(last).toBe(429);
+    expect(reqs.json.items[0]).toMatchObject({ pseudo: "Charlie_C", mine: "none", followsMe: false });
+    expect((await call(priv, "GET", "/me/inbox/summary")).json.requests.follow).toBe(1);
+    expect((await call(priv, "GET", "/me/network")).json).toMatchObject({ requestsIn: 1, private: true, followers: 0 });
+
+    // Accepter : la personne est prévenue, elle voit tout.
+    const acc = await call(priv, "POST", `/me/follow-requests/${c.id}/accept`);
+    expect(acc.status).toBe(200);
+    expect(acc.json).toMatchObject({ pseudo: "Charlie_C", followsMe: true });
+    await flush();
+    const accepted = (await journal(c)).find((n) => n.type === "follow_accepted");
+    expect(accepted?.data.actor?.pseudo).toBe("Bravo_Priv");
+    const full = await call(c, "GET", "/users/Bravo_Priv");
+    expect(full.json).toMatchObject({ audience: "follower", bio: "secret", followersCount: 1 });
+    expect(full.json.vehicles[0]).toMatchObject({ detailed: true });
+    expect((await call(priv, "GET", "/me/inbox/summary")).json.requests.follow).toBe(0);
+    // Elle voit « Te suit » chez lui.
+    expect((await call(priv, "GET", "/users/Charlie_C")).json.follow).toMatchObject({ mine: "none", followsMe: true });
+    // Une demande déjà traitée : 404.
+    expect((await call(priv, "POST", `/me/follow-requests/${c.id}/accept`)).status).toBe(404);
   });
 
-  it("demandes acceptées ou envoyées par des comptes supprimés ou suspendus : absents des listes d'amis", async () => {
-    const a = await person("Alpha_A");
-    const b = await person("Bravo_B");
+  it("refuser : la demande disparaît sans prévenir ; annuler une demande envoyée retire son alerte", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
     const c = await person("Charlie_C");
-    await befriend(a, b);
-    await befriend(a, c);
-    await db
-      .update(profiles)
-      .set({ suspendedUntil: new Date(Date.now() + DAY * 400) })
-      .where(eq(profiles.userId, b.id));
-    await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, c.id));
-    expect((await call(a, "GET", "/me/friends")).json.items).toEqual([]);
-    await socialRepo.removeAllFor(c.id, db as never);
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, a.id) }))?.friendsCount).toBe(1);
+    const d = await person("Delta_D");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    await call(d, "POST", "/users/Bravo_Priv/follow");
+    await flush();
+    const before = (await journal(c)).length;
+    expect((await call(priv, "POST", `/me/follow-requests/${c.id}/decline`)).status).toBe(204);
+    expect(await followRow(c, priv)).toBeUndefined();
+    await flush();
+    expect((await journal(c)).length).toBe(before);
+    expect((await call(c, "GET", "/users/Bravo_Priv")).json.follow.mine).toBe("none");
+    // L'alerte de la demande refusée est lue.
+    const reqNotif = await db.query.notifications.findMany({
+      where: and(eq(notifications.userId, priv.id), eq(notifications.type, "follow_request")),
+    });
+    expect(
+      reqNotif.find((n) => (n.data as { actor?: { userId: string } }).actor?.userId === c.id)?.readAt,
+    ).not.toBeNull();
+
+    // Annuler (« Demandé ») : la ligne et l'alerte disparaissent.
+    expect((await call(d, "DELETE", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "none" });
+    expect(await followRow(d, priv)).toBeUndefined();
+    const left = await db.query.notifications.findMany({
+      where: and(eq(notifications.userId, priv.id), eq(notifications.type, "follow_request")),
+    });
+    expect(left.some((n) => (n.data as { actor?: { userId: string } }).actor?.userId === d.id)).toBe(false);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(0);
+    // Redemander dans les 24 h : la demande existe, sans nouvelle alerte.
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    await flush();
+    const again = await db.query.notifications.findMany({
+      where: and(eq(notifications.userId, priv.id), eq(notifications.type, "follow_request")),
+    });
+    expect(again.filter((n) => (n.data as { actor?: { userId: string } }).actor?.userId === c.id)).toHaveLength(1);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+  });
+
+  it("passer de privé à public accepte toutes les demandes en attente", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
+    const c = await person("Charlie_C");
+    const d = await person("Delta_D");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    await call(d, "POST", "/users/Bravo_Priv/follow");
+    expect((await call(priv, "PATCH", "/me/settings", { visibility: "public" })).status).toBe(200);
+    expect((await followRow(c, priv))?.status).toBe("accepted");
+    expect((await followRow(d, priv))?.acceptedAt).not.toBeNull();
+    expect((await call(priv, "GET", "/me/network")).json).toMatchObject({
+      followers: 2,
+      requestsIn: 0,
+      private: false,
+    });
+    // Repasser privé ne retire personne (comme Instagram) ; un nouveau venu redemande.
+    await call(priv, "PATCH", "/me/settings", { visibility: "private" });
+    expect((await call(c, "GET", "/users/Bravo_Priv")).json.audience).toBe("follower");
+    const e = await person("Echo_E");
+    expect((await call(e, "POST", "/users/Bravo_Priv/follow")).json.mine).toBe("pending");
+    // Même règle par « Modifier mon profil » (`PATCH /me/profile`).
+    expect((await call(priv, "PATCH", "/me/profile", { visibility: "public" })).status).toBe(200);
+    expect((await followRow(e, priv))?.status).toBe("accepted");
+  });
+
+  const requestAlerts = async (target: TestUser, from: TestUser) =>
+    (
+      await db.query.notifications.findMany({
+        where: and(eq(notifications.userId, target.id), eq(notifications.type, "follow_request")),
+      })
+    ).filter((n) => (n.data as { actor?: { userId: string } }).actor?.userId === from.id).length;
+
+  it("tour 2 : demander, annuler, redemander ne renvoie pas d'alerte ; les 24 h se comptent à l'horloge de l'appli", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
+    const c = await person("Charlie_C");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(1);
+    // Annuler retire l'alerte ; la trace de la paire reste : redemander ne l'envoie pas de nouveau.
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(0);
+    expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+    expect(await requestAlerts(priv, c)).toBe(0);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+    // 23 h plus tard (horloge de l'appli, pas celle de la base) : toujours rien ; 25 h : une alerte.
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(23 * HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(0);
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(2 * HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(1);
+  });
+
+  it("tour 2 : refusée, la personne peut redemander sans le savoir, mais sans alerte pendant 30 jours", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
+    const c = await person("Charlie_C");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    await call(priv, "POST", `/me/follow-requests/${c.id}/decline`);
+    // Rien ne dit le refus : le bouton revient à « Demander à suivre ».
+    expect((await call(c, "GET", "/users/Bravo_Priv")).json.follow.mine).toBe("none");
+    // J+2, J+15, J+29 : la demande est là (Demandes, pastille de la Boîte), sans nouvelle alerte.
+    for (const step of [2, 13, 14]) {
+      clock.advance(step * DAY);
+      const alertsBefore = await requestAlerts(priv, c);
+      expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+      expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+      expect((await call(priv, "GET", "/me/inbox/summary")).json.requests.follow).toBe(1);
+      expect(await requestAlerts(priv, c)).toBe(alertsBefore);
+      await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    }
+    // J+31 : de nouveau une alerte.
+    clock.advance(2 * DAY);
+    const beforeAlert = await requestAlerts(priv, c);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(beforeAlert + 1);
+    // Acceptée, puis plus suivie, puis redemandée le lendemain : l'ancien refus ne compte plus.
+    await call(priv, "POST", `/me/follow-requests/${c.id}/accept`);
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(DAY + HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(beforeAlert + 2);
+  });
+
+  it("tour 2 : « Retirer cet abonné » referme tout de suite profil, photos, sorties, messagerie et Journal, sans prévenir", async () => {
+    const orga = await signUp("Orga_66", { twoFactor: true });
+    const s = await createStructure(orga.id);
+    const e1 = await createEvent(s.id, { admission: "open", capacity: 5, title: "Nocturne de Canet" });
+    const e2 = await createEvent(s.id, { admission: "open", capacity: 5, title: "Cars & Coffee" });
+    const priv = await person("Bravo_Priv", { visibility: "private", bio: "secret" });
+    const c = await person("Charlie_C");
+    const d = await person("Delta_D");
+    const v = await createVehicle(priv.id, ref);
+    await blurPlatesOf(priv.id);
+    for (const u of [c, d]) {
+      await call(u, "POST", "/users/Bravo_Priv/follow");
+      await call(priv, "POST", `/me/follow-requests/${u.id}/accept`);
+    }
+    const form = (vehicleId: string) => ({
+      vehicleIds: [vehicleId],
+      rulesAccepted: true as const,
+      followStructure: false,
+      newsletterOptIn: false,
+      companions: 0,
+      message: null,
+    });
+    await applicationsService.apply(await viewerOf(priv), e1.id, form(v.id));
+    await flush();
+    const going = async (u: TestUser) => (await journal(u)).filter((n) => n.type === "friend_going_event").length;
+    expect(await going(c)).toBe(1);
+    // Avant : Charlie voit tout (profil, photos, sorties) ; Bravo lui écrit directement (Charlie le suit).
+    const before = await call(c, "GET", "/users/Bravo_Priv");
+    expect(before.json).toMatchObject({ audience: "follower", bio: "secret" });
+    expect(before.json.upcomingEvents.map((e: { title: string }) => e.title)).toEqual(["Nocturne de Canet"]);
+    expect(before.json.vehicles[0].photoUrl).toContain("test/");
+    expect((await call(c, "GET", `/vehicles/${v.id}`)).json.detailed).toBe(true);
+    const conv = await call(priv, "POST", "/conversations/direct", { userId: c.id });
+    expect(conv.status).toBe(201);
+    const journalBefore = (await journal(c)).length;
+
+    // Le titulaire seul : la route est la sienne (`/me`) ; Delta ne retire personne chez Bravo.
+    expect((await call(null, "DELETE", `/me/followers/${c.id}`)).status).toBe(401);
+    expect((await call(d, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+    expect(await followRow(c, priv)).toMatchObject({ status: "accepted" });
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(204);
+    expect(await followRow(c, priv)).toBeUndefined();
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+
+    // Profil, photos, sorties, crew : réduits tout de suite.
+    const after = await call(c, "GET", "/users/Bravo_Priv");
+    expect(after.json).toMatchObject({
+      audience: "public_limited",
+      bio: null,
+      upcomingEvents: null,
+      pastEvents: null,
+      crews: null,
+      follow: { mine: "none", followsMe: false },
+    });
+    expect(after.json.vehicles[0]).toMatchObject({ detailed: false, photoUrl: null });
+    expect((await call(c, "GET", `/vehicles/${v.id}`)).json.detailed).toBe(false);
+    // Messagerie : Bravo n'écrit plus directement à Charlie.
+    const blocked = await call(priv, "POST", `/conversations/${conv.json.id}/messages`, {
+      clientId: randomUUID(),
+      body: "Toujours là ?",
+    });
+    expect(blocked.status).toBe(409);
+    // Journal : ses actualités qui citent Bravo disparaissent, et plus rien n'arrive ; Delta, lui, reçoit tout.
+    expect(await going(c)).toBe(0);
+    await applicationsService.apply(await viewerOf(priv), e2.id, form(v.id));
+    await flush();
+    expect(await going(c)).toBe(0);
+    expect(await going(d)).toBe(2);
+    // Sans prévenir : aucune notification nouvelle chez Charlie (une de moins : l'actualité retirée).
+    expect((await journal(c)).length).toBe(journalBefore - 1);
+    // Il peut redemander, sans alerte pendant 30 jours.
+    expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+    expect(await requestAlerts(priv, c)).toBe(1);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+    // Une demande n'est pas un abonné : la retirer passe par le refus.
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+  });
+
+  it("tour 2 : retirer un abonné retire son « … te suit » non lu (regroupé : les autres restent) ; lu, il reste", async () => {
+    const pub = await person("Alpha_Pub");
+    const [k, l, m] = [await person("Kenji_K"), await person("Lea_L"), await person("Marc_M")];
+    await call(k, "POST", "/users/Alpha_Pub/follow");
+    await call(l, "POST", "/users/Alpha_Pub/follow");
+    const followed = () =>
+      db.query.notifications.findMany({
+        where: and(eq(notifications.userId, pub.id), eq(notifications.type, "user_followed")),
+      });
+    expect((await followed()).map((n) => n.body)).toEqual(["Lea_L et Kenji_K te suivent."]);
+    expect((await call(pub, "DELETE", `/me/followers/${k.id}`)).status).toBe(204);
+    const [left] = await followed();
+    expect(left?.body).toBe("Lea_L te suit.");
+    expect((left?.data as { actorIds?: string[] } | undefined)?.actorIds).toEqual([l.id]);
+    expect(JSON.stringify(left?.data)).not.toContain(k.id);
+    expect((await call(pub, "DELETE", `/me/followers/${l.id}`)).status).toBe(204);
+    expect(await followed()).toHaveLength(0);
+    // Compte public : Kenji peut le suivre de nouveau tout de suite, mais sans alerte pendant 30 jours.
+    expect((await call(k, "POST", "/users/Alpha_Pub/follow")).json).toEqual({ mine: "accepted" });
+    expect(await followed()).toHaveLength(0);
+    // Une alerte déjà lue reste telle quelle.
+    await call(m, "POST", "/users/Alpha_Pub/follow");
+    await call(pub, "POST", "/me/notifications/read", { all: true });
+    expect((await call(pub, "DELETE", `/me/followers/${m.id}`)).status).toBe(204);
+    expect((await followed()).map((n) => n.body)).toEqual(["Marc_M te suit."]);
+  });
+
+  it("ni soi-même, ni un compte supprimé, banni ou suspendu (404) ; listes et demandes sans eux", async () => {
+    const a = await person("Alpha_Pub", { visibility: "private" });
+    const c = await person("Charlie_C");
+    const s = await person("Sierra_S");
+    expect((await call(a, "POST", "/users/Alpha_Pub/follow")).status).toBe(400);
+    await call(s, "POST", "/users/Alpha_Pub/follow");
+    await call(c, "POST", "/users/Alpha_Pub/follow");
+    await suspendByModeration(s, "suspension_7d");
+    expect((await call(a, "GET", "/me/follow-requests")).json.items.map((p: { pseudo: string }) => p.pseudo)).toEqual([
+      "Charlie_C",
+    ]);
+    expect((await call(c, "POST", "/users/Sierra_S/follow")).status).toBe(404);
+    expect((await call(a, "POST", `/me/follow-requests/${s.id}/accept`)).status).toBe(404);
+    await db.update(profiles).set({ bannedAt: new Date() }).where(eq(profiles.userId, c.id));
+    expect((await call(a, "GET", "/me/follow-requests")).json.total).toBe(0);
+    // Les anciennes routes d'amitié n'existent plus.
+    expect((await call(c, "POST", "/friends/requests", { pseudo: "Alpha_Pub" })).status).toBe(404);
+    expect((await call(c, "GET", "/me/friends")).status).toBe(404);
   });
 });
 
-describe("QR ami", () => {
+describe("QR de compte et lien de profil (lot R6b : suivre)", () => {
   async function qrOf(u: TestUser, at = clock.now) {
     const res = await call(u, "GET", "/me/account-qr-secret");
     const { hmacSha1 } = await import("../account-qr/service");
@@ -435,58 +592,47 @@ describe("QR ami", () => {
     );
   }
 
-  it("QR de compte de B scanné par C : demande d'ami (source qr) ; rejeu, expiré, déjà amis, soi-même", async () => {
+  it("QR de compte de B scanné par C : C suit B ; rejeu, expiré, soi-même ; compte privé : demande", async () => {
     const b = await person("Bravo_B");
     const c = await person("Charlie_C");
     const payload = await qrOf(b);
-    const ok = await call(c, "POST", "/friends/requests/by-qr", { payload });
-    expect(ok.status).toBe(201);
-    expect(ok.json).toMatchObject({ status: "pending", pseudo: "Bravo_B" });
-    expect((await db.select().from(friendships))[0]).toMatchObject({ source: "qr", requesterId: c.id });
+    const ok = await call(c, "POST", "/follows/by-qr", { payload });
+    expect(ok.status).toBe(200);
+    expect(ok.json).toEqual({ mine: "accepted", pseudo: "Bravo_B" });
 
-    // Le même code ne sert qu'une fois.
-    const replay = await call(c, "POST", "/friends/requests/by-qr", { payload });
+    const replay = await call(c, "POST", "/follows/by-qr", { payload });
     expect(replay.status).toBe(400);
     expect(replay.json.error.details.reason).toBe("replayed");
-    // Un code périmé (capture d'écran d'il y a plus de 2 minutes).
     const old = await qrOf(b, new Date(clock.now.getTime() - 3 * 60_000));
-    expect((await call(c, "POST", "/friends/requests/by-qr", { payload: old })).json.error.details.reason).toBe(
-      "expired",
-    );
-    // Pas un QR de compte.
-    const bad = await call(c, "POST", "/friends/requests/by-qr", { payload: "OR1ABCDEFGHIJKL" });
-    expect(bad.status).toBe(400);
+    expect((await call(c, "POST", "/follows/by-qr", { payload: old })).json.error.details.reason).toBe("expired");
+    const bad = await call(c, "POST", "/follows/by-qr", { payload: "OR1ABCDEFGHIJKL" });
     expect(bad.json.error.details.reason).toBe("malformed");
-    // Déjà amis (B accepte, puis nouveau code).
-    await call(b, "POST", `/friends/requests/${ok.json.id}/accept`);
     clock.advance(2 * 60_000);
-    const friends = await call(c, "POST", "/friends/requests/by-qr", { payload: await qrOf(b) });
-    expect(friends.status).toBe(409);
-    expect(friends.json.error.code).toBe("already_friends");
-    expect(friends.json.error.message).toBe("Vous êtes déjà amis");
-    // Son propre QR.
+    expect((await call(c, "POST", "/follows/by-qr", { payload: await qrOf(c) })).status).toBe(400);
+
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, c.id));
     clock.advance(2 * 60_000);
-    expect((await call(c, "POST", "/friends/requests/by-qr", { payload: await qrOf(c) })).status).toBe(400);
+    expect((await call(b, "POST", "/follows/by-qr", { payload: await qrOf(c) })).json).toEqual({
+      mine: "pending",
+      pseudo: "Charlie_C",
+    });
   });
 
   it("trop de codes refusés : le lecteur est bloqué", async () => {
     const c = await person("Charlie_C");
     for (let i = 0; i < 10; i++) {
-      expect((await call(c, "POST", "/friends/requests/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(
-        400,
-      );
+      expect((await call(c, "POST", "/follows/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(400);
     }
-    expect((await call(c, "POST", "/friends/requests/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(429);
+    expect((await call(c, "POST", "/follows/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(429);
   });
 
-  it("lien d'ami : demande avec source invite_link", async () => {
+  it("lien de profil : suivre la personne ; jeton inconnu : 404", async () => {
     const b = await person("Bravo_B");
     const c = await person("Charlie_C");
     const token = (await db.query.profiles.findFirst({ where: eq(profiles.userId, b.id) }))!.inviteToken;
-    const res = await call(c, "POST", "/friends/requests/by-invite", { token });
-    expect(res.status).toBe(201);
-    expect((await db.select().from(friendships))[0]?.source).toBe("invite_link");
-    expect((await call(c, "POST", "/friends/requests/by-invite", { token: "inconnu-inconnu" })).status).toBe(404);
+    const res = await call(c, "POST", "/follows/by-invite", { token });
+    expect(res.json).toEqual({ mine: "accepted", pseudo: "Bravo_B" });
+    expect((await call(c, "POST", "/follows/by-invite", { token: "inconnu-inconnu" })).status).toBe(404);
   });
 });
 
@@ -528,7 +674,11 @@ describe("recherche de personnes", () => {
     expect(pseudos).not.toContain("Supra_Susp");
     expect(pseudos).not.toContain("Moi_Meme");
     const priv = bySupra.json.items.find((i: { pseudo: string }) => i.pseudo === "Priv_Owner");
-    expect(priv).toMatchObject({ departments: null, vehicles: [{ label: "Toyota Supra" }], friendship: "none" });
+    expect(priv).toMatchObject({
+      departments: null,
+      vehicles: [{ label: "Toyota Supra" }],
+      follow: { mine: "none", followsMe: false },
+    });
     const pub = bySupra.json.items.find((i: { pseudo: string }) => i.pseudo === "Supra_Fan");
     expect(pub.departments).toEqual(["66", "11"]);
     expect(pub.vehicles.map((v: { label: string }) => v.label)).toContain("Toyota Supra MK4");
@@ -652,14 +802,18 @@ describe("Journal des amis", () => {
     message: null,
   });
 
-  it("A retenu à un événement : « A va à … » dans le Journal de son ami, une fois, avec son avatar", async () => {
+  it("A retenu : « A va à … » dans le Journal de ses abonnés acceptés, une fois ; rien pour une demande", async () => {
     const orga = await signUp("Orga_66", { twoFactor: true });
     const s = await createStructure(orga.id);
     const e = await createEvent(s.id, { admission: "open", capacity: 5, title: "Nocturne de Canet" });
     const a = await person("Alpha_A", { visibility: "private" });
-    const friend = await person("Ami_F");
+    const friend = await person("Abonne_F");
     const stranger = await person("Inconnu_I");
-    await befriend(a, friend);
+    const followed = await person("Suivi_S");
+    // Abonné accepté (sens unique) : reçoit ; demande en attente : rien ; quelqu'un qu'A suit : rien.
+    await follows(friend, a);
+    await follows(stranger, a, "pending");
+    await follows(a, followed);
     const v1 = await createVehicle(a.id, ref);
 
     await applicationsService.apply(await viewerOf(a), e.id, form([v1.id]));
@@ -670,6 +824,7 @@ describe("Journal des amis", () => {
     expect(items[0]?.data.actor?.pseudo).toBe("Alpha_A");
     expect(items[0]?.data.link).toMatch(/^\/e\//);
     expect((await journal(stranger)).filter((n) => n.type === "friend_going_event")).toHaveLength(0);
+    expect((await journal(followed)).filter((n) => n.type === "friend_going_event")).toHaveLength(0);
     expect((await journal(a)).filter((n) => n.type === "friend_going_event")).toHaveLength(0);
     // Ni push ni e-mail : jamais « livrée » par un canal, uniquement dans le Journal.
     const row = await db.query.notifications.findFirst({
@@ -732,7 +887,7 @@ describe("Journal des amis", () => {
     expect((await journal(friend)).filter((n) => n.type === "friend_going_event")).toHaveLength(1);
   });
 
-  it("nouveau véhicule : annoncé aux amis d'un profil public, pas d'un profil privé ; une seule fois", async () => {
+  it("nouveau véhicule : annoncé aux abonnés acceptés d'un profil public, pas d'un profil privé ; une seule fois", async () => {
     const pub = await person("Alpha_Pub");
     const priv = await person("Bravo_Priv", { visibility: "private" });
     const friend = await person("Ami_F");
@@ -795,17 +950,19 @@ describe("Journal des amis", () => {
 });
 
 describe("compte supprimé", () => {
-  it("amitiés et demandes disparaissent, les compteurs des autres suivent", async () => {
+  it("abonnements et demandes disparaissent dans les deux sens, les nombres des autres suivent", async () => {
     const a = await person("Alpha_A");
     const b = await person("Bravo_B");
-    const c = await person("Charlie_C");
+    const c = await person("Charlie_C", { visibility: "private" });
     await befriend(a, b);
-    await befriend(a, c);
-    await db.insert(friendships).values({ requesterId: c.id, addresseeId: b.id, status: "pending" });
-    await db.transaction((tx) => socialRepo.removeAllFor(a.id, tx));
-    expect(await db.select().from(friendships)).toHaveLength(1);
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, b.id) }))?.friendsCount).toBe(0);
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, c.id) }))?.friendsCount).toBe(0);
+    await follows(a, c, "pending");
+    await follows(b, c, "pending");
+    await db.transaction((tx) => anonymizeSocialForDeletedAccount(tx, a.id));
+    const left = await db.select().from(userFollows);
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatchObject({ followerId: b.id, followedId: c.id, status: "pending" });
+    expect((await call(b, "GET", "/me/network")).json).toMatchObject({ followers: 0, following: 0 });
+    expect((await call(c, "GET", "/me/network")).json).toMatchObject({ requestsIn: 1 });
   });
 });
 
@@ -875,38 +1032,41 @@ describe("relecture de confidentialité (lot 17)", () => {
 
   it("suspendus : pas de demande vers eux, absents des demandes reçues, aucune actualité émise", async () => {
     const b = await person("Bravo_B");
-    const c = await person("Charlie_C");
+    const c = await person("Charlie_C", { visibility: "private" });
     const d = await person("Delta_D");
     // Lot 32 : suspension par la vraie route de la modération.
     await suspendByModeration(b);
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(404);
+    expect((await call(c, "POST", "/users/Bravo_B/follow")).status).toBe(404);
     // Demande reçue d'un compte devenu suspendu : n'apparaît plus.
-    await call(d, "POST", "/friends/requests", { pseudo: "Charlie_C" });
-    expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toHaveLength(1);
+    await call(d, "POST", "/users/Charlie_C/follow");
+    expect((await call(c, "GET", "/me/follow-requests")).json.items).toHaveLength(1);
     await suspendByModeration(d);
-    expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toEqual([]);
-    // Un suspendu qui a un ami ne produit aucune actualité.
+    expect((await call(c, "GET", "/me/follow-requests")).json.items).toEqual([]);
+    expect((await call(c, "GET", "/me/inbox/summary")).json.requests.follow).toBe(0);
+    // Un suspendu qui a des abonnés ne produit aucune actualité.
     const { socialJournal } = await import("./journal");
-    await db.update(friendships).set({ status: "accepted" });
+    await follows(c, d);
     await createVehicle(d.id, ref);
     const v = (await db.query.vehicles.findFirst({ where: (t, { eq: e }) => e(t.ownerId, d.id) }))!;
     expect(await socialJournal.friendNewVehicle(d.id, v.id)).toBe(0);
   });
 
-  it("anonymisation : les notifications des autres qui citent le compte supprimé disparaissent avec les amitiés", async () => {
-    const b = await person("Bravo_B");
+  it("anonymisation : les notifications des autres qui le citent disparaissent, et l'archive des amitiés aussi", async () => {
+    const b = await person("Bravo_B", { visibility: "private" });
     const c = await person("Charlie_C");
     const e = await person("Echo_E");
-    await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
+    await call(c, "POST", "/users/Bravo_B/follow");
     await befriend(c, e);
+    // Archive d'avant le lot R6b : plus lue, mais ses lignes sont des données personnelles.
+    await db.insert(friendships).values({ requesterId: c.id, addresseeId: e.id, status: "accepted" });
     await flush();
-    expect((await journal(b)).some((n) => n.type === "friend_request" && n.data.actor?.pseudo === "Charlie_C")).toBe(
+    expect((await journal(b)).some((n) => n.type === "follow_request" && n.data.actor?.pseudo === "Charlie_C")).toBe(
       true,
     );
     await db.transaction((tx) => anonymizeSocialForDeletedAccount(tx, c.id));
     expect((await journal(b)).some((n) => n.data.actor?.userId === c.id)).toBe(false);
     expect(await db.select().from(friendships)).toHaveLength(0);
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, e.id) }))?.friendsCount).toBe(0);
+    expect(await db.select().from(userFollows)).toHaveLength(0);
   });
 
   it("recherche : le texte cherche aussi dans le pseudo quand un filtre de marque est posé", async () => {

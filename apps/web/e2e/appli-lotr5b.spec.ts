@@ -19,8 +19,8 @@ import { RELAIS } from "./relais";
 //   - onglet Profil : roue dentée → « Réglages » (les réglages quittent l'onglet), photo touchable → « Ta photo de
 //     profil », description sous le nom ;
 //   - « Modifier mon profil » : réseaux vérifiés pendant la saisie (refus d'une publication), « Enregistrer » ;
-//   - profil d'un membre : tête, réseaux, nombres, « Ajouter en ami » et « Suivre » côte à côte, « Écrire » et « ⋯ » en
-//     haut, « Sa voiture » en carré, « Prochaine sortie » avec « Toi aussi », « Son garage » ; compte privé réduit ; aperçu ;
+//   - profil d'un membre : tête, réseaux, nombres, un seul bouton « Suivre » (lot R6b : plus d'« Ajouter en ami »),
+//     « Écrire » et « ⋯ » en haut, « Sa voiture » en carré, « Prochaine sortie » avec « Toi aussi », « Son garage » ; compte privé réduit ; aperçu ;
 //   - titres « SON » et boutons coupés : à 384 px (Pixel de Damien), aucun mot perdu ni coupé, chaque titre de section
 //     a de la marge à droite de son texte, l'aide reste à sa droite à police normale (tour 2) ; police agrandie
 //     ×1,15 et ×1,3 **simulée dans la page** : c'est un contrôle web, pas une preuve (l'appli web ignore le `fontScale`
@@ -303,10 +303,9 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     // « Écrire » et « ⋯ » dans l'en-tête.
     await expect(page.getByTestId("message-open")).toBeVisible();
     await expect(page.getByTestId("report-open-profile")).toBeVisible();
-    // « Ajouter en ami » et « Suivre » côte à côte à 390 px.
-    const add = await page.getByTestId("friend-add").boundingBox();
-    const follow = await page.getByTestId("profile-follow").boundingBox();
-    expect(Math.abs((add?.y ?? 0) - (follow?.y ?? 99))).toBeLessThan(2);
+    // Lot R6b : un seul bouton, « Suivre » (B ne suit pas A et A ne suit pas B).
+    await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    await expect(page.getByTestId("friend-add")).toHaveCount(0);
     await expect(page.getByTestId("profile-car")).toContainText(aMain.label);
     await expect(page.getByTestId("profile-car")).toContainText("Principale");
     await expect(page.getByTestId("profile-next")).toContainText(`R5b Balade ${tag}`);
@@ -316,16 +315,17 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await titlesKeepTheirWords(page, ["Sa voiture", "Prochaine sortie", "Son garage"]);
     // Police normale : l'aide reste à droite du titre (comme l'artefact).
     for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintRight(page, title);
-    await labelWhole(page, "friend-add", /^Ajouter en ami$/i);
+    await labelWhole(page, "follow-button", /^Suivre$/i);
     await shot(page, `membre-${theme}-390`);
 
-    // Compte privé : la tête, les nombres, « Ajouter en ami », ses véhicules en marque et modèle, la ligne.
+    // Compte privé : la tête, les nombres, « Demander à suivre », ses véhicules en marque et modèle, la ligne.
     await goto(page, `/u/${cPseudo}`);
-    await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis", {
-      timeout: 30_000,
-    });
+    await expect(page.getByTestId("profile-private-note")).toContainText(
+      "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+      { timeout: 30_000 },
+    );
     await expect(page.getByTestId("profile-vehicles-private")).toBeVisible();
-    await expect(page.getByTestId("profile-follow")).toHaveCount(0);
+    await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
     await expect(page.getByTestId("profile-car")).toHaveCount(0);
     await expect(page.getByTestId("profile-socials")).toHaveCount(0);
     await audit(page);
@@ -333,7 +333,7 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await shot(page, `membre-prive-${theme}-390`);
     await ctx.close();
 
-    // --- Titres « SON » et « AJOUT/ER EN AMI » : 384 px, police agrandie simulée (contrôle web ; preuve : l'APK) ---
+    // --- Titres « SON » et « SUIVRE » : 384 px, police agrandie simulée (contrôle web ; preuve : l'APK) ---
     for (const k of [1.15, 1.3]) {
       const big = await open(browser, theme, 384);
       await signIn(big.page, `${bPseudo.toLowerCase()}@e2e.orasso.test`);
@@ -353,7 +353,7 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       const both = await big.page.getByTestId("profile-together").boundingBox();
       expect((both?.x ?? 0) + (both?.width ?? 0)).toBeLessThanOrEqual((ticket?.x ?? 0) + (ticket?.width ?? 0) + 1);
       // Le libellé du bouton est entier : tout le texte, chaque mot sur une ligne, rien hors du bouton.
-      await labelWhole(big.page, "friend-add", /^Ajouter en ami$/i);
+      await labelWhole(big.page, "follow-button", /^Suivre$/i);
       await shot(big.page, `membre-${theme}-384-police${Math.round(k * 100)}`);
       await big.ctx.close();
     }

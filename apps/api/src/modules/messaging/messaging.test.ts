@@ -18,7 +18,7 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { contactRequests, conversations, messages, notifications, structureMembers } from "../../db/schema";
+import { contactRequests, conversations, messages, notifications, profiles, structureMembers } from "../../db/schema";
 import { type RealtimeSocket, realtime } from "../../lib/realtime";
 import { storage } from "../../lib/storage";
 import { resolveWsSession, wsCredentials } from "../../ws";
@@ -90,11 +90,11 @@ const jpeg = () =>
     .jpeg()
     .toBuffer();
 
-/** Amis par le vrai chemin : demande puis acceptation. */
+/** Lot R6b : deux personnes qui se suivent, par le vrai chemin. */
 async function befriend(a: TestUser, b: TestUser) {
-  const r = await req(a, "POST", "/friends/requests", { pseudo: b.pseudo });
-  expect(r.status).toBe(201);
-  expect((await req(b, "POST", `/friends/requests/${r.json.id}/accept`)).status).toBe(200);
+  // Lot R6b : chacun suit l'autre (comptes publics : abonnements acceptés tout de suite).
+  expect((await req(a, "POST", `/users/${b.pseudo}/follow`)).json).toEqual({ mine: "accepted" });
+  expect((await req(b, "POST", `/users/${a.pseudo}/follow`)).json).toEqual({ mine: "accepted" });
 }
 
 async function directBetween(a: TestUser, b: TestUser) {
@@ -116,7 +116,7 @@ const pushesTo = async (userId: string) =>
   ).length;
 
 describe.each(MODES)("conversation à deux (%s)", (mode) => {
-  it("amis : ouverture, envoi, réception, accès refusé aux autres", async () => {
+  it("qui se suivent : ouverture, envoi, réception, accès refusé aux autres", async () => {
     const [kenji, lea, intrus] = [await signUp("Kenji"), await signUp("Lea"), await signUp("Intrus")];
     await befriend(kenji, lea);
     const opened = await req(kenji, "POST", "/conversations/direct", { userId: lea.id }, mode);
@@ -155,23 +155,65 @@ describe.each(MODES)("conversation à deux (%s)", (mode) => {
     expect(await realtime.canSubscribe(intrus.id, "conversation:pas-un-uuid")).toBe(false);
   });
 
-  it("non amis : 409 not_friends ; amitié retirée : lecture seule", async () => {
+  it("D37 : on écrit directement à qui nous suit, il peut répondre ; sinon 409 not_friends ; abonnement retiré : lecture seule", async () => {
     const [a, b] = [await signUp("Anna"), await signUp("Bruno")];
     const refused = await req(a, "POST", "/conversations/direct", { userId: b.id }, mode);
     expect(refused.status).toBe(409);
     expect(refused.json.error.code).toBe("not_friends");
-
-    const id = await directBetween(a, b);
+    // Suivre quelqu'un ne donne pas le droit de lui écrire : c'est lui qui doit me suivre.
+    await req(a, "POST", `/users/${b.pseudo}/follow`);
+    expect((await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).status).toBe(409);
+    // Bruno suit Anna (abonnement accepté) : Anna lui écrit directement.
+    await req(b, "POST", `/users/${a.pseudo}/follow`);
+    await req(a, "DELETE", `/users/${b.pseudo}/follow`);
+    const opened = await req(a, "POST", "/conversations/direct", { userId: b.id }, mode);
+    expect(opened.status).toBe(201);
+    const id = opened.json.id as string;
     expect((await send(a, id, "Hello", mode)).status).toBe(201);
-    expect((await req(a, "DELETE", `/friends/${b.id}`)).status).toBe(204);
-    const blocked = await send(b, id, "Toujours là ?", mode);
+    // Bruno ne suit plus Anna, sans avoir répondu : la conversation reste lisible, Anna ne peut plus écrire.
+    await req(b, "DELETE", `/users/${a.pseudo}/follow`);
+    const blocked = await send(a, id, "Toujours là ?", mode);
     expect(blocked.status).toBe(409);
     expect(blocked.json.error.code).toBe("not_friends");
-    const view = await req(b, "GET", `/conversations/${id}`, undefined, mode);
+    const view = await req(a, "GET", `/conversations/${id}`, undefined, mode);
     expect(view.status).toBe(200);
     expect(view.json.canWrite).toBe(false);
     expect(view.json.writeBlocked).toBe("not_friends");
-    expect((await req(b, "GET", `/conversations/${id}/messages`, undefined, mode)).json.items).toHaveLength(1);
+    expect((await req(a, "GET", `/conversations/${id}/messages`, undefined, mode)).json.items).toHaveLength(1);
+    // Bruno répond (Anna lui a écrit) : Anna peut répondre à son tour, une fois ; ensuite c'est à Bruno d'écrire.
+    expect((await send(b, id, "Oui ?", mode)).status).toBe(201);
+    expect((await send(a, id, "Super", mode)).status).toBe(201);
+    expect((await send(a, id, "Et sinon ?", mode)).status).toBe(409);
+  });
+
+  it("tour 2 (relecture Opus 3) : après un échange, Bruno ne suit plus Anna : Anna ne peut plus écrire directement", async () => {
+    const [a, b] = [await signUp("Anna"), await signUp("Bruno")];
+    await req(b, "POST", `/users/${a.pseudo}/follow`);
+    const id = (await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).json.id as string;
+    expect((await send(a, id, "Salut", mode)).status).toBe(201);
+    // Bruno répond (le dernier message vient d'Anna), Anna relance (Bruno la suit).
+    expect((await send(b, id, "Salut !", mode)).status).toBe(201);
+    expect((await send(a, id, "Tu viens samedi ?", mode)).status).toBe(201);
+    // Bruno ne suit plus Anna : avoir écrit un jour ne donne pas un droit permanent.
+    await req(b, "DELETE", `/users/${a.pseudo}/follow`);
+    const blocked = await send(a, id, "Bruno ?", mode);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error.code).toBe("not_friends");
+    expect((await req(a, "GET", `/conversations/${id}`, undefined, mode)).json.writeBlocked).toBe("not_friends");
+    // Bruno, lui, peut répondre (le dernier message vient d'Anna) ; Anna lui répond une fois.
+    expect((await send(b, id, "Oui, j'y serai", mode)).status).toBe(201);
+    expect((await send(a, id, "Top", mode)).status).toBe(201);
+    expect((await send(a, id, "À samedi", mode)).status).toBe(409);
+  });
+
+  it("D37 : un abonnement en attente (compte privé) n'ouvre pas la messagerie directe", async () => {
+    const [a, b] = [await signUp("Anna"), await signUp("Bruno")];
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, a.id));
+    expect((await req(b, "POST", `/users/${a.pseudo}/follow`)).json).toEqual({ mine: "pending" });
+    // Bruno a seulement demandé à suivre Anna : Anna ne peut pas lui écrire directement.
+    expect((await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).status).toBe(409);
+    await req(a, "POST", `/me/follow-requests/${b.id}/accept`);
+    expect((await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).status).toBe(201);
   });
 
   it("idempotence par clientId", async () => {
@@ -304,7 +346,7 @@ describe("demandes de contact", () => {
     expect(reverse.status).toBe(409);
     expect(reverse.json.error.code).toBe("contact_request_exists");
 
-    expect((await req(a, "GET", "/me/inbox/summary")).json.requests).toMatchObject({ contact: 1, friend: 0 });
+    expect((await req(a, "GET", "/me/inbox/summary")).json.requests).toMatchObject({ contact: 1, follow: 0 });
     const incoming = await req(a, "GET", "/me/contact-requests?direction=in");
     expect(incoming.json.items).toHaveLength(1);
     expect(incoming.json.items[0].message).toBe("Bonjour, ta 205 est à vendre ?");
@@ -320,7 +362,7 @@ describe("demandes de contact", () => {
     const page = await req(a, "GET", `/conversations/${id}/messages`);
     expect(page.json.items).toHaveLength(1);
     expect(page.json.items[0]).toMatchObject({ body: "Bonjour, ta 205 est à vendre ?", mine: false });
-    // Conversation ouverte sans amitié (S11) : les deux peuvent écrire.
+    // Conversation ouverte sans abonnement (S11) : les deux peuvent écrire.
     expect((await send(a, id, "Oui, elle l'est")).status).toBe(201);
     expect((await send(c, id, "Super")).status).toBe(201);
     const useDirect = await req(c, "POST", "/conversations/direct", { userId: a.id });
@@ -330,7 +372,7 @@ describe("demandes de contact", () => {
     expect((await req(a, "POST", `/contact-requests/${created.json.id}/accept`)).status).toBe(409);
   });
 
-  it("refus silencieux, amis, limite de 10 par jour en base", async () => {
+  it("refus silencieux, qui me suit, limite de 10 par jour en base", async () => {
     const [a, d, f] = [await signUp("Anna"), await signUp("Dany"), await signUp("Fred")];
     const r = await req(d, "POST", "/contact-requests", { pseudo: a.pseudo, message: "Salut" });
     expect((await req(a, "POST", `/contact-requests/${r.json.id}/decline`)).status).toBe(204);
@@ -339,11 +381,13 @@ describe("demandes de contact", () => {
     expect(out.json.items).toHaveLength(1);
     expect(JSON.stringify(out.json)).not.toContain("declined");
     expect((await req(d, "POST", "/contact-requests", { pseudo: a.pseudo, message: "Encore" })).status).toBe(409);
-    // Amis : pas de demande de contact.
-    await befriend(a, f);
+    // Lot R6b : la personne me suit, pas de demande de contact : j'écris directement.
+    await req(a, "POST", `/users/${f.pseudo}/follow`);
     const friends = await req(f, "POST", "/contact-requests", { pseudo: a.pseudo, message: "?" });
     expect(friends.status).toBe(409);
-    expect(friends.json.error.code).toBe("already_friends");
+    expect(friends.json.error.code).toBe("use_direct");
+    // Sens inverse : Fred ne suit pas Anna, Anna passe par une demande de contact.
+    expect((await req(a, "POST", "/contact-requests", { pseudo: f.pseudo, message: "Coucou" })).status).toBe(201);
     // Texte obligatoire.
     expect((await req(d, "POST", "/contact-requests", { pseudo: f.pseudo, message: "  " })).status).toBe(400);
     // 10 par jour.

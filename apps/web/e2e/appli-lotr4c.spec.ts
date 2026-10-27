@@ -19,8 +19,11 @@ import { RELAIS } from "./relais";
 //     lignes compactes ;
 //   - candidature : le principal présélectionné (« ★ Véhicule principal ») ;
 //   - profil : trois compteurs, « Mon profil public » et le crew côte à côte ; « Ton réseau » (trois onglets, recherche,
-//     « Suivre aussi » / « Suivi », compte privé sans « Suivre », « Toi seul vois ces listes ») ;
-//   - aperçu du profil public (vu par un membre, par un ami) ; « Suivre » sur un profil public, absent d'un compte privé.
+//     « Suivre en retour » / « Abonné », « Toi seul vois ces listes ») ;
+//   - aperçu du profil public (vu par un membre, par un abonné) ; « Suivre » sur un profil public, « Demander à suivre »
+//     sur un compte privé.
+// Lot R6b (D37) : plus d'« ami » ; deux personnes qui se suivent remplacent l'ami, l'onglet Demandes (compte privé)
+// remplace l'onglet Amis, un seul bouton `follow-button` remplace « Suivre » et « Ajouter en ami ».
 // Béton et Sable, 390 px. Lancer avec APP_URL (appli compilée : `node scripts/appli-compilee.mjs`), API seedée.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r4c-captures/appli`;
@@ -159,27 +162,28 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
   await apiCall(me, "PATCH", "/me/profile", { departments: ["66"], visibility: "public" });
   const first = await vehicle(me, "Toyota", 0);
   const second = await vehicle(me, "Nissan", 0);
-  // Un ami, un abonné public (que je suis aussi), un abonné privé, un compte privé à visiter ; MéditeSportCar suivie.
+  // Une personne qui me suit et que je suis (mutuel), un abonné public (que je suis aussi), un abonné privé, un compte
+  // privé à visiter, un inconnu à suivre ; MéditeSportCar suivie.
   const mk = async (p: string, visibility: "public" | "private") => {
     const pseudo = `${p}_${tag}`;
     const cookie = await signUpApi(pseudo);
     await apiCall(cookie, "PATCH", "/me/profile", { departments: ["66"], visibility });
     return { pseudo, cookie };
   };
-  const friend = await mk("R4cAmi", "public");
+  const mutual = await mk("R4cMut", "public");
+  const stranger = await mk("R4cNew", "public");
   const fan = await mk("R4cFan", "public");
   const shy = await mk("R4cDis", "private");
   const priv = await mk("R4cPri", "private");
   await vehicle(priv.cookie, "Toyota", 1);
-  const req = await apiCall<{ id: string }>(me, "POST", "/friends/requests", { pseudo: friend.pseudo });
-  expect((await apiCall(friend.cookie, "POST", `/friends/requests/${req.data.id}/accept`)).status).toBe(200);
+  expect((await apiCall(me, "POST", `/users/${mutual.pseudo}/follow`)).status).toBe(200);
+  expect((await apiCall(mutual.cookie, "POST", `/users/${mePseudo}/follow`)).status).toBe(200);
   expect((await apiCall(fan.cookie, "POST", `/users/${mePseudo}/follow`)).status).toBe(200);
   expect((await apiCall(shy.cookie, "POST", `/users/${mePseudo}/follow`)).status).toBe(200);
   expect((await apiCall(me, "POST", `/users/${fan.pseudo}/follow`)).status).toBe(200);
   await apiCall(me, "POST", `/structures/${event.structureId}/follow`);
-  // Une demande d'ami reçue (en tête de l'onglet Amis).
+  // Une personne qui demandera à me suivre (onglet Demandes, une fois mon compte passé en privé en fin de tour).
   const asker = await mk("R4cDem", "public");
-  await apiCall(asker.cookie, "POST", "/friends/requests", { pseudo: mePseudo });
   const errors: string[] = [];
   const email = `${mePseudo.toLowerCase()}@e2e.orasso.test`;
 
@@ -245,9 +249,10 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
 
     // --- R4.6 Profil : trois compteurs, deux accès ----------------------------------------------------------------
     await goto(page, "/profil");
-    await expect(page.getByTestId("profil-count-abonnes")).toContainText("2", { timeout: 30_000 });
-    await expect(page.getByTestId("profil-count-abonnements")).toContainText("2");
-    await expect(page.getByTestId("profil-count-amis")).toContainText("1");
+    await expect(page.getByTestId("profil-count-abonnes")).toContainText("3", { timeout: 30_000 });
+    await expect(page.getByTestId("profil-count-abonnements")).toContainText("3");
+    // Lot R6b : plus de compteur « amis ».
+    await expect(page.getByTestId("profil-count-amis")).toHaveCount(0);
     await expect(page.getByTestId("profil-public")).toBeVisible();
     await expect(page.getByTestId("profil-crew")).toBeVisible();
     await expect(page.getByTestId("reglage-profil")).toHaveCount(0);
@@ -261,13 +266,14 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     const followers = page.getByTestId("net-followers");
     await expect(followers).toContainText(fan.pseudo, { timeout: 30_000 });
     await expect(followers).toContainText(shy.pseudo);
-    // Je suis déjà « Fan » : « Suivi » ; « Discret » est privé : pas de « Suivre aussi ».
+    // Je suis déjà « Fan » : « Abonné » ; « Discret » me suit et je ne le suis pas : « Suivre en retour ».
     await expect(
       page.getByTestId("net-person").filter({ hasText: fan.pseudo }).getByTestId("net-followed"),
     ).toBeVisible();
-    await expect(page.getByTestId("net-person").filter({ hasText: shy.pseudo }).getByTestId("net-follow")).toHaveCount(
-      0,
-    );
+    await expect(followers).toContainText(mutual.pseudo);
+    await expect(
+      page.getByTestId("net-person").filter({ hasText: shy.pseudo }).getByTestId("net-follow-back"),
+    ).toBeVisible();
     await expect(page.getByTestId("net-privacy")).toContainText("Toi seul vois ces listes.");
     await shot(page, `06-reseau-abonnes-${theme}`);
     await audit(page);
@@ -279,15 +285,8 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId("net-structures")).toContainText("MéditeSportCar");
     await shot(page, `07-reseau-abonnements-${theme}`);
     await audit(page);
-    await page.getByTestId("net-tab-amis").click();
-    await expect(page.getByTestId("net-requests")).toContainText(asker.pseudo, { timeout: 30_000 });
-    await expect(page.getByTestId("net-friends")).toContainText(friend.pseudo);
-    // Les demandes reçues passent avant les amis.
-    const reqBox = await page.getByTestId("net-requests").boundingBox();
-    const frBox = await page.getByTestId("net-friends").boundingBox();
-    expect((reqBox?.y ?? 0) < (frBox?.y ?? 0)).toBe(true);
-    await shot(page, `08-reseau-amis-${theme}`);
-    await audit(page);
+    // Lot R6b : l'onglet Amis n'existe plus ; les demandes reçues (onglet Demandes) sont vues en fin de tour.
+    await expect(page.getByTestId("net-tab-amis")).toHaveCount(0);
 
     // --- R4.6c Mon profil public, en aperçu ------------------------------------------------------------------------
     await goto(page, "/profil-public");
@@ -301,31 +300,52 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId(/^profile-next/).first()).toBeVisible();
     await shot(page, `09-apercu-membre-${theme}`);
     await audit(page);
-    await page.getByTestId("preview-as-friend").click();
-    await expect(page.getByTestId("preview-banner")).toContainText("ami", { timeout: 15_000 });
-    await shot(page, `10-apercu-ami-${theme}`);
+    await page.getByTestId("preview-as-follower").click();
+    await expect(page.getByTestId("preview-banner")).toContainText("abonné", { timeout: 15_000 });
+    await shot(page, `10-apercu-abonne-${theme}`);
 
     // --- Suivre une personne : public (Suivre secondaire), privé (pas de Suivre, nombres cachés) ---------------------
-    await goto(page, `/u/${friend.pseudo}`);
+    await goto(page, `/u/${stranger.pseudo}`);
     await expect(page.getByTestId("public-head")).toBeVisible({ timeout: 30_000 });
-    await page.getByTestId("profile-follow").click();
-    await expect(page.getByTestId("profile-followed")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("follow-button")).toContainText("Suivre");
+    await page.getByTestId("follow-button").click();
+    await expect(page.getByTestId("follow-button")).toContainText("Abonné", { timeout: 15_000 });
     await shot(page, `11-profil-autre-suivi-${theme}`);
     await audit(page, false);
-    await page.getByTestId("profile-followed").click();
-    await expect(page.getByTestId("profile-follow")).toBeVisible({ timeout: 15_000 });
+    // Se désabonner demande une confirmation.
+    await page.getByTestId("follow-button").click();
+    await page.getByTestId("follow-confirm-yes").click();
+    await expect(page.getByTestId("follow-button")).toContainText("Suivre", { timeout: 15_000 });
+    await expect(page.getByTestId("follow-button")).not.toContainText("Abonné");
     await goto(page, `/u/${priv.pseudo}`);
     await expect(page.getByTestId("public-head")).toContainText("Compte privé", { timeout: 30_000 });
-    await expect(page.getByTestId("profile-follow")).toHaveCount(0);
+    await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
     // Damien, 24/10 : les nombres d'un compte privé sont visibles de tout membre (les listes, non).
     await expect(page.getByTestId("public-counts")).toContainText("abonné");
     await shot(page, `12-profil-prive-${theme}`);
     await audit(page, false);
+
+    // --- Mon compte en privé : l'onglet Demandes (refuser), puis retour en public -----------------------------------
+    const patchVisibility = (visibility: "public" | "private") =>
+      apiCall(me, "PATCH", "/me/profile", { departments: ["66"], visibility });
+    expect((await patchVisibility("private")).status).toBe(200);
+    const ask = await apiCall<{ mine: string }>(asker.cookie, "POST", `/users/${mePseudo}/follow`);
+    expect(ask.data.mine).toBe("pending");
+    await goto(page, "/reseau?liste=demandes");
+    await expect(page.getByTestId("net-requests")).toContainText(asker.pseudo, { timeout: 30_000 });
+    await shot(page, `08-reseau-demandes-${theme}`);
+    await audit(page);
+    // Refuser : la ligne disparaît ; l'état redevient celui du début du tour.
+    await page.getByTestId("net-request").filter({ hasText: asker.pseudo }).getByTestId("net-request-decline").click();
+    await expect(page.getByTestId("net-request-info")).toBeVisible({ timeout: 15_000 });
+    expect((await patchVisibility("public")).status).toBe(200);
     await ctx.close();
   }
 
-  // Vie privée côté API : aucune liste d'un autre, « Suivre » refusé vers un compte privé.
+  // Vie privée côté API : aucune liste d'un autre ; suivre un compte privé = une demande, pas un abonnement.
   expect((await apiCall(fan.cookie, "GET", `/users/${mePseudo}/followers`)).status).toBe(404);
-  expect((await apiCall(me, "POST", `/users/${priv.pseudo}/follow`)).status).toBe(403);
+  const toPrivate = await apiCall<{ mine: string }>(me, "POST", `/users/${priv.pseudo}/follow`);
+  expect(toPrivate.status).toBe(200);
+  expect(toPrivate.data.mine).toBe("pending");
   expect(errors.filter((e) => !/favicon|ResizeObserver|Failed to load resource/i.test(e))).toEqual([]);
 });

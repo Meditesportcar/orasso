@@ -96,10 +96,17 @@ async function addToCrew(crewId: string, leader: TestUser, member: TestUser) {
   expect((await req(leader, "POST", `/crews/${crewId}/requests/${member.id}/accept`)).status).toBe(204);
 }
 
+/** Lot R6b : chacun suit l'autre par le vrai chemin (vers un compte privé, demande puis acceptation). */
 async function befriend(a: TestUser, b: TestUser) {
-  const r = await req(a, "POST", "/friends/requests", { pseudo: b.pseudo });
-  expect(r.status).toBe(201);
-  expect((await req(b, "POST", `/friends/requests/${r.json.id}/accept`)).status).toBe(200);
+  for (const [from, to] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const r = await req(from, "POST", `/users/${to.pseudo}/follow`);
+    if (r.json.mine === "pending") {
+      expect((await req(to, "POST", `/me/follow-requests/${from.id}/accept`)).status).toBe(200);
+    } else expect(r.json).toEqual({ mine: "accepted" });
+  }
 }
 
 const outing = (over: Record<string, unknown> = {}) => ({
@@ -684,6 +691,11 @@ describe("bannière et « Où va le crew » (lot R5c2)", () => {
     expect(byNina.label).toBe(byNina.garage?.label);
     // Léa elle-même : tout.
     expect((await seen(lea)).garage?.photoUrl).toBeTruthy();
+    // Lot R6b, tour 2 : Léa retire Kenji de ses abonnés ; le crew se referme pour lui tout de suite.
+    expect((await req(lea, "DELETE", `/me/followers/${kenji.id}`)).status).toBe(204);
+    const afterRemoval = await seen(kenji);
+    expect(afterRemoval.garage?.photoUrl).toBeNull();
+    expect(afterRemoval.events).toEqual(["Nuit des Moteurs"]);
   });
 
   it("« Où va le crew » : membres retenus et inscriptions du crew ; jamais une invitation privée d'un membre", async () => {

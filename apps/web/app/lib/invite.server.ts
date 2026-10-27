@@ -1,4 +1,4 @@
-// Lien d'ami `/ami/:jeton` (lot 15, ARCHITECTURE-SUITE § 1.3) : sans compte, le jeton est gardé 24 h dans le cookie
+// Lien de profil `/ami/:jeton` (lot 15, ARCHITECTURE-SUITE § 1.3) : sans compte, le jeton est gardé 24 h dans le cookie
 // `orasso-invite`, puis rattaché au compte créé (`POST /me/referral`) juste après l'inscription.
 import { api } from "./api.server";
 
@@ -31,7 +31,7 @@ export function clearInviteCookie(request: Request): string {
 }
 
 /**
- * Après une inscription : rattache le parrain si un lien d'ami a été ouvert, puis efface le cookie. Sans effet (et
+ * Après une inscription : rattache le parrain si un lien de profil a été ouvert, puis efface le cookie. Sans effet (et
  * sans erreur) si le lien ne s'applique pas (compte trop ancien, propre lien…).
  */
 export async function applyInviteAfterSignup(request: Request, sessionCookie: string, headers: Headers) {

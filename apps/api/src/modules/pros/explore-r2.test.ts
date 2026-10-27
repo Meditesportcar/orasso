@@ -18,7 +18,7 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { crews, friendships, proDiscounts, proFollows, profiles } from "../../db/schema";
+import { crews, proDiscounts, proFollows, profiles, userFollows } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -152,7 +152,8 @@ describe("Personnes et crews : suggestions", () => {
       .set({ departments: ["66"] })
       .where(eq(profiles.userId, away.id));
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, priv.id));
-    await db.insert(friendships).values({ requesterId: fan.id, addresseeId: friend.id, status: "accepted" });
+    // Lot R6b : quelqu'un que je suis déjà n'est pas suggéré.
+    await db.insert(userFollows).values({ followerId: fan.id, followedId: friend.id });
     const res = await call(fan, "GET", "/users/suggestions");
     expect(res.json.sameModel).toMatchObject({ model: "Série 3", vehicle: "BMW Série 3 E36" });
     expect(res.json.sameModel.items.map((p: { pseudo: string }) => p.pseudo).sort()).toEqual([

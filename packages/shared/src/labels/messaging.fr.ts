@@ -6,7 +6,8 @@ export const messagingLabels = {
   all: "Tout",
   messages: "Messages",
   requests: "Demandes",
-  noConversations: "Aucune conversation pour l'instant. Écris à un ami depuis son profil, ou contacte un organisateur.",
+  noConversations:
+    "Aucune conversation pour l'instant. Écris à quelqu'un qui te suit depuis son profil, ou contacte un organisateur.",
   noRequests: "Aucune demande en attente.",
   message: "Message",
   send: "Envoyer",
@@ -46,18 +47,17 @@ export const messagingLabels = {
   structureSuspended: "Cette structure est suspendue.",
   contactRequest: "Demande de contact",
   contactRequestHint:
-    "Vous n'êtes pas amis : ton message part en demande de contact, rangée à part. Une seule demande est possible.",
+    "Cette personne ne te suit pas : ton message part en demande de contact, rangée à part. Une seule demande est possible.",
   contactRequestPlaceholder: "Présente-toi et dis pourquoi tu écris…",
   contactRequestSend: "Envoyer la demande",
   contactRequestSent: (pseudo: string) => `Demande de contact envoyée à ${pseudo}`,
   contactRequestFrom: "Demande de contact",
-  friendRequestFrom: "Demande d'ami",
   accept: "Accepter",
   decline: "Refuser",
   pendingOut: "Demande envoyée",
   writeBlocked: {
     not_friends:
-      "Vous n'êtes plus amis : la conversation reste lisible. Pour écrire, envoie une demande d'ami ou de contact.",
+      "Cette personne ne te suit plus : la conversation reste lisible. Pour écrire, envoie une demande de contact.",
     closed: "Cette conversation est fermée : plus de nouveaux messages.",
     suspended: "Ton compte est suspendu : lecture seule.",
     account_deleted: "Ce compte a été supprimé : la conversation reste lisible.",

@@ -68,7 +68,6 @@ export const rateRules = {
   twoFactorVerify: { max: 5, windowMs: 15 * 60_000, message: "Trop d'essais : réessaie dans un quart d'heure." },
   emailVerificationResend: { max: 3, windowMs: 3_600_000, message: "Trop de relances : réessaie dans une heure." },
   /** Demandes d'ami (lot 17) : 20 par personne et par jour. */
-  friendRequest: { max: 20, windowMs: 86_400_000, message: "Trop de demandes d'ami aujourd'hui : réessaie demain." },
   /** Suivre ou ne plus suivre une personne (lot R4c) : 60 par heure. */
   userFollow: { max: 60, windowMs: 3_600_000, message: "Trop d'abonnements en peu de temps : réessaie plus tard." },
   /** Recherche de personnes (lot 17). */

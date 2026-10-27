@@ -1,5 +1,5 @@
 // Lot R4c (maquette R4.6c) : « Mon profil public », en aperçu. Mon profil tel que le voit un membre connecté (bascule
-// « vu par un ami »), calculé par l'API (`/me/public-preview?as=`) avec les règles de `GET /users/:pseudo`. Bandeau
+// « Vu par un membre » / « Vu par un abonné », lot R6b), calculé par l'API (`/me/public-preview?as=`) avec les règles de `GET /users/:pseudo`. Bandeau
 // « Aperçu », boutons inertes, « Régler la confidentialité ».
 // Lot R5b (maquette R5.6) : le même écran que le profil d'un membre (`PublicProfile`) ; l'aperçu ajoute seulement le
 // bandeau et « Modifier » en haut (vers « Modifier mon profil »).
@@ -27,7 +27,7 @@ export default function ProfilPublic() {
   const preview = useApi(() => api.publicPreviewAs(as), [as]);
   const p = preview.data;
   const limited = p?.audience === "public_limited";
-  const banner = as === "friend" ? P.bannerFriend : limited ? P.bannerMemberPrivate : P.bannerMemberPublic;
+  const banner = as === "follower" ? P.bannerFollower : limited ? P.bannerMemberPrivate : P.bannerMemberPublic;
 
   return (
     <FlowScreen
@@ -43,7 +43,7 @@ export default function ProfilPublic() {
       }
     >
       <View style={[styles.seg, { backgroundColor: c.surfaceRaised }]} accessibilityRole="tablist" testID="preview-as">
-        {(["member", "friend"] as const).map((x) => {
+        {(["member", "follower"] as const).map((x) => {
           const on = x === as;
           return (
             <SmButton
@@ -54,7 +54,7 @@ export default function ProfilPublic() {
               style={styles.segBtn}
               testID={`preview-as-${x}`}
             >
-              {x === "member" ? P.asMember : P.asFriend}
+              {x === "member" ? P.asMember : P.asFollower}
             </SmButton>
           );
         })}
@@ -69,7 +69,7 @@ export default function ProfilPublic() {
 
       {preview.error ? <Notice tone="error">{preview.error.message}</Notice> : null}
       {!p ? <Muted variant="body">Chargement…</Muted> : null}
-      {p ? <PublicProfile p={p} mode="preview" previewAsFriend={as === "friend"} /> : null}
+      {p ? <PublicProfile p={p} mode="preview" previewAsFollower={as === "follower"} /> : null}
 
       <SmButton
         kind="s"

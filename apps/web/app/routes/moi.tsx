@@ -45,7 +45,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const [settings, network, crews] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
-    // Lot R4c : abonnés, abonnements, amis ; le crew à côté de « Mon profil public ».
+    // Lot R4c : abonnés, abonnements, sorties (R6b) ; le crew à côté de « Mon profil public ».
     api<NetworkCounts>(request, "/me/network"),
     api<MyCrew[]>(request, "/me/crews"),
   ]);
@@ -221,12 +221,13 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         <nav className="n-counts" aria-label={N.countsGroup} data-testid="profil-counters">
           {(
             [
-              ["abonnes", loaderData.network?.followers, N.followers],
-              ["abonnements", loaderData.network?.following, N.following],
-              ["amis", loaderData.network?.friends, N.friends],
+              ["abonnes", loaderData.network?.followers, N.followers, "/app/reseau?liste=abonnes"],
+              ["abonnements", loaderData.network?.following, N.following, "/app/reseau?liste=abonnements"],
+              // Lot R6b (D37) : plus d'amis ; le troisième nombre est celui de mes sorties (page des sorties).
+              ["sorties", loaderData.network?.outings, N.outings, "/app/sorties"],
             ] as const
-          ).map(([tab, n, label]) => (
-            <a key={tab} href={`/app/reseau?onglet=${tab}`} data-testid={`profil-count-${tab}`}>
+          ).map(([tab, n, label, href]) => (
+            <a key={tab} href={href} data-testid={`profil-count-${tab}`}>
               <strong>{n ?? "—"}</strong>
               <small>{label(n ?? 2)}</small>
             </a>
@@ -253,9 +254,6 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           </a>
         </div>
       </div>
-      <Button variant="secondary" icon="crew" href="/app/amis">
-        Mes amis
-      </Button>
       {saved && SAVED[saved] && (
         <p className="s-notice s-notice--ok" role="status">
           {SAVED[saved]}

@@ -66,7 +66,7 @@ export const socialsLabels = {
   } satisfies Record<SocialNetwork, string>,
   field: (network: SocialNetwork) => `Pseudo ${socialLabel(network)}`,
   visibilityStrong: "Tes réseaux se voient sur ton profil complet",
-  visibilityRest: " : par tous les membres si ton compte est public, par tes amis s'il est privé.",
+  visibilityRest: " : par tous les membres si ton compte est public, par tes abonnés s'il est privé.",
   /** Nom accessible d'un lien de réseau sur un profil. */
   link: (network: SocialNetwork, handle: string) => `${handle} sur ${socialLabel(network)}`,
   group: "Ses réseaux",
@@ -89,7 +89,7 @@ export const publicProfileLabels = {
   seenAtHint: (n: number) => `${n} ${plural(n, "sortie", "sorties")} cette saison`,
   vehiclesPrivate: "Ses véhicules",
   vehiclesPrivateHint: "marque et modèle",
-  privateRestStrong: "Le reste est réservé à ses amis",
+  privateRestStrong: "Le reste est réservé à ses abonnés",
   privateRest: " : photos, sorties, crew, réseaux.",
   privateAccount: "Compte privé",
   write: "Écrire",

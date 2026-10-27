@@ -74,6 +74,7 @@ import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
+import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
@@ -221,13 +222,14 @@ export const accountService = {
       now().getTime() - created.getTime() < REFERRAL_WINDOW_MS &&
       !(await isExpressAccount(v.user.email));
     if (!applicable)
-      throw conflict("referral_not_applicable", "Ce lien d'ami ne peut plus être utilisé pour ce compte");
+      throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
     const [row] = await db
       .update(profiles)
       .set({ invitedByUserId: sponsor.userId })
       .where(and(eq(profiles.userId, v.user.id), isNull(profiles.invitedByUserId)))
       .returning({ userId: profiles.userId });
-    if (!row) throw conflict("referral_not_applicable", "Ce lien d'ami ne peut plus être utilisé pour ce compte");
+    if (!row)
+      throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
     if (v.user.emailVerified) await pointsService.awardReferral(sponsor.userId, v.user.id);
     return { sponsor: sponsor.pseudo };
   },
@@ -235,7 +237,7 @@ export const accountService = {
   /** `GET /referral/:token` (public) : pseudo et photo du parrain, 404 si le lien est inconnu. */
   async referrer(token: string) {
     const p = token.length <= 64 ? await db.query.profiles.findFirst({ where: eq(profiles.inviteToken, token) }) : null;
-    if (!p || p.deletedAt) throw notFound("Lien d'ami inconnu");
+    if (!p || p.deletedAt) throw notFound("Lien de parrainage inconnu");
     return { pseudo: p.pseudo, avatarUrl: storage.url(p.avatarKey) };
   },
 
@@ -272,6 +274,11 @@ export const accountService = {
         ...(homeWidgets !== undefined ? { homeWidgets } : {}),
       };
       const row = Object.keys(values).length ? await profilesRepo.update(v.user.id, values, tx) : v.profile;
+      // Lot R6b : un compte qui passe de privé à public accepte toutes ses demandes d'abonnement en attente (sous le
+      // verrou de la ligne du profil, posé par la mise à jour : une demande simultanée est acceptée aussi).
+      if (rest.visibility === "public") {
+        await followsService.acceptAllPending(tx, v.user.id);
+      }
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!row) throw notFound();
       return row;
@@ -281,7 +288,7 @@ export const accountService = {
 
   /**
    * Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi ») ; lot
-   * R4c : `as=friend` pour le regard d'un ami.
+   * R4c, R6b : `as=follower` pour le regard d'un abonné.
    */
   publicPreview(v: Viewer, as: PreviewAs = "member"): Promise<PublicPreview> {
     return socialProfile.view(v, v.profile.pseudo, { as });

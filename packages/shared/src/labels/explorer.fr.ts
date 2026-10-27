@@ -382,7 +382,7 @@ export const explorerR2Labels = {
   showSheet: "Montrer",
   // Lot R2, tour 2 : les filtres affinent une recherche par texte ; sans texte, aucune liste de personnes.
   peopleFiltersHint:
-    "Les filtres affinent une recherche par pseudo, crew ou modèle. Le centre d'intérêt, le grade et le département ne trouvent que les comptes publics et tes amis.",
+    "Les filtres affinent une recherche par pseudo, crew ou modèle. Le centre d'intérêt, le grade et le département ne trouvent que les comptes publics et ceux que tu suis.",
   peopleFiltersNeedText:
     "Saisis au moins deux caractères : les filtres affinent une recherche, ils ne listent personne seuls.",
   broadened: "Recherche dans toute la France : aucun lieu choisi.",
@@ -397,7 +397,7 @@ export const explorerR2Labels = {
   privacyOpen:
     "Ici, seulement des comptes publics, et ce que leur profil montre déjà. Un compte privé se trouve par la recherche. Jamais plus précis que le département.",
   privacyResults:
-    "Un compte privé montre son pseudo, son grade, la marque et le modèle de ses véhicules. Le reste est pour ses amis.",
+    "Un compte privé montre son pseudo, son grade, la marque et le modèle de ses véhicules. Le reste est pour ses abonnés.",
   noSuggestions: "Rien à te suggérer pour l'instant. Cherche un pseudo, un crew ou un modèle.",
   peopleGroup: (n: number, more: boolean) => `Personnes · ${n}${more ? "+" : ""}`,
   peopleGroupHint: "Pseudo ou véhicule",

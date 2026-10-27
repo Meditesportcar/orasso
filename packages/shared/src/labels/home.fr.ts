@@ -92,7 +92,7 @@ export const homeNudges: Record<HomeNudgeKind, { title: string; body: string; ac
   },
   create_crew: {
     title: "Crée ton crew",
-    body: "Rassemble tes amis et inscrivez-vous ensemble aux événements.",
+    body: "Rassemble ta bande et inscrivez-vous ensemble aux événements.",
     action: "Créer un crew",
   },
 };

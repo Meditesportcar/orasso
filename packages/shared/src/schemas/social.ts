@@ -2,28 +2,22 @@ import { z } from "zod";
 
 import { departmentSchema, type VehicleType } from "../enums";
 import { gradeSchema } from "../grades";
+import type { FollowState } from "../rules/follows";
 import type { ProfileSocials } from "../rules/socials";
-import { FRIEND_MESSAGE_MAX, type FriendshipState, type ProfileAudience } from "../rules/visibility";
-import { optionalText, pageQuery } from "./common";
+import type { ProfileAudience } from "../rules/visibility";
+import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";
 import type { PassportStamp } from "./passport";
 import type { PublicProfile } from "./profile";
-import { pseudoSchema } from "./profile";
 import type { VehiclePrivate, VehiclePublic } from "./vehicle";
 
-// Social (lot 17) : amis, profils des autres, recherche de personnes. Routes : ARCHITECTURE-SUITE § 2.3.
+// Social (lot 17, puis lot R6b : « Suivre » remplace l'amitié) : profils des autres, recherche de personnes, réseau.
+// Routes : ARCHITECTURE-SUITE § 2.3.
 
-export const friendRequestCreateSchema = z.object({
-  pseudo: pseudoSchema,
-  message: optionalText(FRIEND_MESSAGE_MAX),
-  /** Où la demande a été faite (le QR et le lien d'ami ont leurs propres routes). */
-  source: z.enum(["search", "profile", "event"]).optional(),
-});
-export type FriendRequestCreate = z.infer<typeof friendRequestCreateSchema>;
-
-/** Charge utile lue dans le QR de compte (`OA1…`). */
-export const friendRequestByQrSchema = z.object({ payload: z.string().min(8).max(200) });
-export const friendRequestByInviteSchema = z.object({ token: z.string().min(6).max(64) });
+/** Charge utile lue dans le QR de compte (`OA1…`) : suivre la personne (ou lui demander, compte privé). */
+export const followByQrSchema = z.object({ payload: z.string().min(8).max(200) });
+/** Lien de profil `/ami/:jeton` (ancien « lien d'ami ») : suivre la personne. */
+export const followByInviteSchema = z.object({ token: z.string().min(6).max(64) });
 
 export const peopleSearchQuery = pageQuery.extend({
   q: z.string().trim().max(60).optional(),
@@ -41,26 +35,26 @@ export const peopleSearchQuery = pageQuery.extend({
 });
 export type PeopleSearchQuery = z.infer<typeof peopleSearchQuery>;
 
-export const friendsListQuery = pageQuery.extend({ direction: z.enum(["in", "out"]).optional() });
+/** Mon lien avec une personne : mon abonnement vers elle (`mine`), et si elle me suit (abonnement accepté). */
+export type FollowRelation = { mine: FollowState; followsMe: boolean };
 
-/** Carte d'une personne (recherche, propriétaires près de chez moi, amis). Jamais de plaque, de nom ni de contact. */
+/** Carte d'une personne (recherche, propriétaires près de chez moi). Jamais de plaque, de nom ni de contact. */
 export type PersonCard = {
   userId: string;
   pseudo: string;
   avatarUrl: string | null;
   grade: z.infer<typeof gradeSchema>;
-  /** Départements du secteur : absents d'un compte privé que l'on n'est pas ami avec. */
+  /** Départements du secteur : absents d'un compte privé dont on n'est pas abonné accepté. */
   departments: string[] | null;
   /** Marque + modèle (+ génération si le profil le permet, jamais l'année ni la plaque). */
   vehicles: { id: string; label: string }[];
-  friendship: FriendshipState;
-  /** Demande d'ami en cours (pour l'accepter depuis une liste), sinon null. */
-  friendshipId: string | null;
+  /** Lot R6b : mon lien avec elle (bouton « Suivre », étiquette « Te suit »). */
+  follow: FollowRelation;
 };
 
 /** Fiche d'un véhicule d'un autre (`GET /vehicles/:id`) : complète ou réduite, avec son propriétaire. */
 export type OtherVehicle = (VehiclePublic | VehiclePrivate) & {
-  /** Vrai si la fiche complète est consultable (compte public ou ami). */
+  /** Vrai si la fiche complète est consultable (compte public ou abonné accepté). */
   detailed: boolean;
   owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
 };
@@ -69,8 +63,8 @@ export type PeopleSearchPage = { items: PersonCard[]; nextCursor: string | null 
 
 /**
  * Lot R2 (Personnes et crews à l'ouverture, maquette R2.6) : des suggestions courtes, tirées de données publiques
- * seulement. « Même modèle que toi » : des comptes publics (jamais mes amis ni moi) dont le garage a le modèle d'un de mes
- * véhicules. Ni « Amis de tes amis » (aucune liste d'amis n'est publique) ni « Vus aux mêmes sorties » (il faudrait
+ * seulement. « Même modèle que toi » : des comptes publics (ni moi, ni ceux que je suis) dont le garage a le modèle d'un
+ * de mes véhicules. Ni « Suivis par tes abonnements » (aucune liste n'est publique) ni « Vus aux mêmes sorties » (il faudrait
  * l'accord de chacun : v2.1, « Le plateau »).
  */
 export type PeopleSuggestions = {
@@ -117,7 +111,6 @@ export type ProfileEvent = {
 export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   userId: string;
   audience: ProfileAudience;
-  friendsCount: number | null;
   vehicles: ProfileVehicle[];
   upcomingEvents: ProfileEvent[] | null;
   /** Événements passés des 12 derniers mois : le nombre et les titres. */
@@ -126,20 +119,23 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   crews: CrewCard[] | null;
   /** Organisateur seulement : coordonnées déjà accessibles dans son tri. */
   contact: { firstName: string | null; lastName: string | null; phone: string | null; email: string | null } | null;
-  friendship: { state: FriendshipState; id: string | null };
   /**
-   * Lot R4c : abonnés et abonnements ; tour 2 (Damien, 24/10) : visibles de tout membre connecté, comme `friendsCount`
-   * et `outingsCount`, même pour un compte privé.
+   * Lot R4c : abonnés et abonnements ; tour 2 (Damien, 24/10) : visibles de tout membre connecté, comme
+   * `outingsCount`, même pour un compte privé. Lot R6b : abonnés acceptés seulement (une demande ne compte pas).
    */
   followersCount: number | null;
   followingCount: number | null;
   /** Nombre de sorties (retenu, 12 derniers mois et à venir, hors événements sur invitation). */
   outingsCount: number | null;
-  /** Lot R4c : « Suivre » (compte public seulement, jamais soi-même) et si je suis déjà la personne. */
-  follow: { canFollow: boolean; following: boolean };
+  /**
+   * Lot R6b (maquette R6.1) : le bouton unique. `canFollow` : suivre ou demander est possible (ni soi-même, ni un compte
+   * indisponible) ; `mine` : mon abonnement (aucun, demande en attente, accepté) ; `followsMe` : la personne me suit
+   * (abonnement accepté), d'où l'étiquette « Te suit » et « Suivre en retour ».
+   */
+  follow: { canFollow: boolean } & FollowRelation;
   /**
    * Lot R5b (maquette R5.5) : ses réseaux, pseudos seuls (le lien vient de `socialUrl`). Mêmes audiences que la
-   * description : tout membre connecté pour un compte public, ses amis pour un compte privé ; `null` sinon.
+   * description : tout membre connecté pour un compte public, ses abonnés acceptés pour un compte privé ; `null` sinon.
    */
   socials: ProfileSocials | null;
   /**
@@ -155,43 +151,40 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   seenAt: { events: number; stamps: PassportStamp[] } | null;
 };
 
-export type FriendRequestView = {
-  id: string;
-  direction: "in" | "out";
-  message: string | null;
-  createdAt: string;
-  person: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
-};
-
-export type FriendItem = Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade"> & { since: string };
-
-export type FriendRequestResult = { id: string; status: "pending" | "accepted"; pseudo: string };
-
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */
 export type JournalActor = { userId: string; pseudo: string; avatarUrl: string | null };
 
 // --- Réseau (lot R4c) : suivre une personne, listes visibles par soi seul ----------------------------------------------
 
-/** `GET /me/network` : les trois nombres de l'en-tête du profil (abonnements = personnes + organisateurs + pros). */
+/**
+ * `GET /me/network` : les nombres de l'en-tête du profil (abonnements = personnes + organisateurs + pros) et les
+ * demandes reçues en attente (onglet Demandes de « Ton réseau », compte privé).
+ */
 export type NetworkCounts = {
   followers: number;
   following: number;
-  friends: number;
   followingBy: { people: number; structures: number; pros: number };
-  /** Demandes d'ami reçues en attente (en tête de l'onglet Amis). */
-  friendRequestsIn: number;
+  /** Lot R6b (maquette R6.2) : le troisième nombre de l'onglet Profil, mes sorties (même règle que mon profil). */
+  outings: number;
+  /** Lot R6b : demandes d'abonnement reçues en attente. */
+  requestsIn: number;
+  /** Lot R6b : mon compte est privé (l'onglet Demandes n'existe que pour lui). */
+  private: boolean;
 };
 
-/** Une personne des listes Abonnés / Abonnements. */
-export type FollowPerson = Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade"> & {
-  /** Son véhicule principal (marque et modèle, jamais la plaque), `null` sans véhicule actif. */
-  vehicle: string | null;
-  friend: boolean;
-  /** Je suis cette personne. */
-  following: boolean;
-  /** « Suivre aussi » possible (compte public). */
-  canFollow: boolean;
-};
+/** Une personne des listes Abonnés / Abonnements / Demandes. */
+export type FollowPerson = Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade"> &
+  FollowRelation & {
+    /** Son véhicule principal (marque et modèle, jamais la plaque), `null` sans véhicule actif. */
+    vehicle: string | null;
+    /** Suivre (ou demander) est possible. */
+    canFollow: boolean;
+    /** Son compte est public (« Suivre en retour » suit tout de suite) ou privé (une demande). */
+    visibility: "public" | "private";
+  };
+
+/** Lot R6b : une demande d'abonnement reçue (`GET /me/follow-requests`) ; `id` = identifiant de son compte. */
+export type FollowRequestsPage = { items: FollowPerson[]; nextCursor: string | null; total: number };
 
 /** Un organisateur ou un pro suivi (onglet Abonnements). */
 export type FollowedPage = { id: string; slug: string; name: string; logoUrl: string | null; caption: string | null };
@@ -210,10 +203,11 @@ export type FollowingPage =
   | { kind: "people"; items: FollowPerson[]; nextCursor: string | null; total: number }
   | { kind: "structures" | "pros"; items: FollowedPage[]; nextCursor: string | null; total: number };
 
-export type FollowResult = { following: boolean };
+/** Lot R6b : après « Suivre », « Ne plus suivre » ou « Annuler la demande » : mon abonnement vers la personne. */
+export type FollowResult = { mine: FollowState };
 
-/** `GET /me/public-preview?as=member|friend` (lot R4c) : mon profil vu par un membre, ou par un ami. */
-export const publicPreviewQuery = z.object({ as: z.enum(["member", "friend"]).default("member") });
+/** `GET /me/public-preview?as=member|follower` (lot R4c, R6b) : mon profil vu par un membre, ou par un abonné. */
+export const publicPreviewQuery = z.object({ as: z.enum(["member", "follower"]).default("member") });
 export type PreviewAs = z.infer<typeof publicPreviewQuery>["as"];
 
 /** `PUT /me/main-vehicle` (lot R4c). */

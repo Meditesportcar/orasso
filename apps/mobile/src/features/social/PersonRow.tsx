@@ -1,12 +1,12 @@
 // Une personne dans une liste (recherche, propriétaires près de chez moi) : avatar, pseudo, grade, secteur et véhicules
-// (le nom d'un véhicule ne se tronque jamais), puis le bouton d'ami.
+// (le nom d'un véhicule ne se tronque jamais), puis le bouton « Suivre » (lot R6b).
 import { Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, type PersonCard } from "@orasso/shared";
+import { gradeLabels, networkLabels as N, type PersonCard } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Avatar } from "@/ui/Avatar";
-import { FriendButton } from "./FriendButton";
+import { cardVisibility, FollowButton } from "./FollowButton";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -28,6 +28,11 @@ export function PersonRow({ person, onChanged }: { person: PersonCard; onChanged
           </Text>
           <View style={styles.chips}>
             <Chip surface="plate">{gradeLabels[person.grade]}</Chip>
+            {person.follow.followsMe ? (
+              <View testID="follows-you">
+                <Chip surface="plate">{N.followsYou.toUpperCase()}</Chip>
+              </View>
+            ) : null}
             {person.departments && person.departments.length > 0 ? (
               <Text variant="meta" color={t.color.plateMuted}>
                 {person.departments.join(", ")}
@@ -41,13 +46,14 @@ export function PersonRow({ person, onChanged }: { person: PersonCard; onChanged
           ))}
         </View>
       </Pressable>
-      <FriendButton
-        state={person.friendship}
-        requestId={person.friendshipId}
+      <FollowButton
+        size="small"
         pseudo={person.pseudo}
-        userId={person.userId}
-        source="search"
-        onChanged={onChanged}
+        mine={person.follow.mine}
+        followsMe={person.follow.followsMe}
+        canFollow
+        visibility={cardVisibility(person)}
+        onChanged={() => onChanged()}
       />
     </Plate>
   );

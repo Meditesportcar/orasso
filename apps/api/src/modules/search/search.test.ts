@@ -21,12 +21,12 @@ import { db, pool } from "../../db/client";
 import {
   applications,
   eventDays,
-  friendships,
   profileInterests,
   profiles,
   proProfiles,
   structureFollows,
   structures,
+  userFollows,
   vehicleGenerations,
   vehicleMakes,
   vehicleModels,
@@ -35,7 +35,6 @@ import {
 import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { fold } from "../../lib/text-search";
-import { socialRepo } from "../social/repo";
 
 afterAll(async () => {
   await pool.end();
@@ -105,11 +104,12 @@ async function person(
   return u;
 }
 
+/** Lot R6b : deux abonnements acceptés (ce que la migration fait d'une ancienne amitié). */
 async function befriend(a: TestUser, b: TestUser) {
-  await db
-    .insert(friendships)
-    .values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
-  await socialRepo.recountFriends([a.id, b.id]);
+  await db.insert(userFollows).values([
+    { followerId: a.id, followedId: b.id, status: "accepted", acceptedAt: new Date() },
+    { followerId: b.id, followedId: a.id, status: "accepted", acceptedAt: new Date() },
+  ]);
 }
 
 const ids = (items: { slug?: string; id?: string }[]) => items.map((i) => i.slug ?? i.id);

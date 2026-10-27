@@ -164,7 +164,7 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["reglages-compte", "/reglages/compte"],
         ["reglages-confidentialite", "/reglages/confidentialite"],
         ["aide", "/reglages/aide"],
-        ["amis", "/amis"],
+        ["reseau", "/reseau"], // Lot R6b : « Mes amis » est devenu « Ton réseau »
         ["billets", "/billets"],
         ["passeport", "/mon-passeport"],
         ["archives", "/vehicules-archives"],

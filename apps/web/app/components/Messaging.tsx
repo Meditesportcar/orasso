@@ -100,7 +100,7 @@ export function ContactOrganizer({
 }
 
 /**
- * Segments de la Boîte (artefact DA v2, `sh-inbox`) : Tout (le fil du Journal : notifications et activité des amis),
+ * Segments de la Boîte (artefact DA v2, `sh-inbox`) : Tout (le fil du Journal : notifications et activité des personnes suivies),
  * Messages, Demandes, avec leur compteur. La cloche du Journal n'existe plus : le Journal est le segment « Tout ».
  */
 export function InboxSegments({

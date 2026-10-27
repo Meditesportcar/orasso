@@ -130,8 +130,9 @@ function announce(conversationId: string, userIds: string[]) {
 
 export const messagingService = {
   /**
-   * `POST /conversations/direct {userId}` : la conversation existante (200), sinon créée entre amis ou après une
-   * demande de contact acceptée (201), sinon `409 not_friends` (le client propose une demande de contact).
+   * `POST /conversations/direct {userId}` : la conversation existante (200), sinon créée si la personne me suit
+   * (abonnement accepté) ou après une demande de contact acceptée (201), sinon `409 not_friends` (le client propose une
+   * demande de contact ; le code garde son nom, lot R6b).
    */
   async openDirect(v: Viewer, otherUserId: string): Promise<OpenConversationResult> {
     if (otherUserId === v.user.id) throw validation("C'est ton propre compte.");
@@ -140,7 +141,7 @@ export const messagingService = {
     const [existing] = await db.select().from(conversations).where(eq(conversations.directKey, key));
     if (existing) return { id: existing.id, created: false };
     if (!(await canTalkDirect(db, v.user.id, otherUserId))) {
-      throw new AppError(409, "not_friends", "Vous n'êtes pas amis : envoie une demande de contact.");
+      throw new AppError(409, "not_friends", "Cette personne ne te suit pas : envoie une demande de contact.");
     }
     return withTx(async (tx) => {
       const { conversation, created } = await getOrCreate(tx, key, { kind: "direct", createdBy: v.user.id });

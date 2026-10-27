@@ -18,6 +18,13 @@ describe("préférences de notification (lot 15)", () => {
     expect(mutableTypesByFamily().event).toContain("event_nearby_interest");
   });
 
+  it("lot R6b, tour 2 : les anciennes demandes d'ami ne se règlent plus, le suivi oui", () => {
+    const social = mutableTypesByFamily().social ?? [];
+    expect(social).not.toContain("friend_request");
+    expect(social).not.toContain("friend_accepted");
+    expect(social).toEqual(expect.arrayContaining(["user_followed", "follow_request", "follow_accepted"]));
+  });
+
   it("types fusionnés par domaine, e-mail toujours pour la sécurité", () => {
     expect(notificationTypes.security_new_login).toBe("account");
     expect(notificationTypes.referral_confirmed).toBe("grade");

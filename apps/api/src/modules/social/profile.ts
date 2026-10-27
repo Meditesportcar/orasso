@@ -3,7 +3,7 @@
 import {
   canFollowUser,
   effectiveMainVehicleId,
-  friendshipState,
+  type FollowRelation,
   garageOrder,
   maskedPhoto,
   networkCountsVisible,
@@ -40,7 +40,6 @@ import {
   vehiclePublic,
 } from "../vehicles/serializers";
 import { followsService } from "./follows";
-import { socialRepo } from "./repo";
 
 const DAY = 86_400_000;
 
@@ -73,28 +72,36 @@ export async function isOrganizerOf(viewerId: string, targetId: string, at: Date
   return result.rows.length > 0;
 }
 
+/**
+ * Lot R6b (D37) : l'audience vient de l'abonnement. La personne qui regarde suit la cible, demande acceptée : elle
+ * voit ce que voyait l'ami ; une demande en attente ne donne rien de plus.
+ */
 export async function audienceFor(
   viewer: Viewer,
   target: Profile,
   opts: { as?: PreviewAs } = {},
-): Promise<{ audience: ProfileAudience; friendshipId: string | null; state: ReturnType<typeof friendshipState> }> {
-  // Aperçu de son propre profil (lot R4c) : vu par un membre connecté, ou par un ami (jamais par un organisateur).
+): Promise<{ audience: ProfileAudience; relation: FollowRelation }> {
+  // Aperçu de son propre profil (lot R4c) : vu par un membre connecté, ou par un abonné (jamais par un organisateur).
   if (opts.as) {
-    const isFriend = opts.as === "friend";
+    const isFollower = opts.as === "follower";
     return {
-      audience: profileAudience({ isSelf: false, isFriend, isOrganizer: false, visibility: target.visibility }),
-      friendshipId: null,
-      state: isFriend ? "friends" : "none",
+      audience: profileAudience({ isSelf: false, isFollower, isOrganizer: false, visibility: target.visibility }),
+      relation: { mine: isFollower ? "accepted" : "none", followsMe: false },
     };
   }
   const isSelf = target.userId === viewer.user.id;
-  const row = isSelf ? null : await socialRepo.pair(viewer.user.id, target.userId);
-  const state = friendshipState(row, viewer.user.id, now());
+  const relation: FollowRelation = isSelf
+    ? { mine: "none", followsMe: false }
+    : await followsService.relation(viewer.user.id, target.userId);
   const isOrganizer = isSelf ? false : await isOrganizerOf(viewer.user.id, target.userId);
   return {
-    audience: profileAudience({ isSelf, isFriend: state === "friends", isOrganizer, visibility: target.visibility }),
-    friendshipId: row && row.status !== "declined" ? row.id : null,
-    state,
+    audience: profileAudience({
+      isSelf,
+      isFollower: relation.mine === "accepted",
+      isOrganizer,
+      visibility: target.visibility,
+    }),
+    relation,
   };
 }
 
@@ -247,7 +254,7 @@ async function seenAtOf(userId: string, at: Date): Promise<{ events: number; sta
 }
 
 /** Sorties d'une personne : retenue à un événement publié (hors invitation), à venir ou fini depuis moins d'un an. */
-async function outingsCount(userId: string, at: Date): Promise<number> {
+export async function outingsCount(userId: string, at: Date = now()): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(applications)
@@ -265,7 +272,7 @@ async function outingsCount(userId: string, at: Date): Promise<number> {
 }
 
 export const socialProfile = {
-  /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|friend`). */
+  /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview?as=member|follower`). */
   async view(viewer: Viewer, pseudo: string, opts: { as?: PreviewAs } = {}): Promise<UserProfileView> {
     const target = await profilesRepo.byPseudo(pseudo);
     const at = now();
@@ -276,7 +283,7 @@ export const socialProfile = {
     if (!target || target.deletedAt || ((target.bannedAt || suspended) && target.userId !== viewer.user.id)) {
       throw notFound("Profil introuvable");
     }
-    const { audience, friendshipId, state } = await audienceFor(viewer, target, opts);
+    const { audience, relation } = await audienceFor(viewer, target, opts);
     const fields = profileFields(audience);
 
     const active = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, target.userId), eq(vehicles.status, "active")));
@@ -292,7 +299,7 @@ export const socialProfile = {
             modelName: modelNameOf(g),
             // Vague R4, après fusion : la vitrine sort du garage, seulement une photo à plaque floutée ou sans plaque.
             // Lot R4e (Damien) : le propriétaire qui regarde sa propre vitrine voit sa couverture, sans masque ; son
-            // aperçu « vu par un membre / un ami » garde la règle des autres.
+            // aperçu « vu par un membre / un abonné » garde la règle des autres.
             photoUrl: storage.url(
               (audience === "self" ? g.photos[0] : maskedPhoto(g.photos, g.unregistered))?.storageKey ?? null,
             ),
@@ -351,7 +358,6 @@ export const socialProfile = {
       visibility: target.visibility,
       bio: fields.bio ? target.bio : null,
       departments: fields.departments ? target.departments : null,
-      friendsCount: showCounts ? await socialRepo.visibleFriendsCount(target.userId) : null,
       outingsCount: showCounts ? await outingsCount(target.userId, at) : null,
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
@@ -359,12 +365,14 @@ export const socialProfile = {
       // Crews actifs (lot 19), pour les audiences qui voient tout le profil (docs/01 : public = profil complet).
       crews: fields.crews ? await crewsService.ofUser(target.userId) : null,
       contact,
-      friendship: { state, id: friendshipId },
       followersCount: counts?.followers ?? null,
       followingCount: counts?.following ?? null,
+      // Lot R6b : le bouton unique (« Suivre », « Suivre en retour », « Demander à suivre », « Abonné », « Demandé »).
+      // L'aperçu montre le bouton d'un inconnu (ou « Abonné » vu par un abonné), jamais mon lien réel.
       follow: {
-        canFollow: canFollowUser({ isSelf, visibility: target.visibility, unavailable: unavailableTarget }),
-        following: isSelf || opts.as ? false : await followsService.isFollowing(viewer.user.id, target.userId),
+        canFollow: canFollowUser({ isSelf, unavailable: unavailableTarget }),
+        mine: isSelf ? "none" : relation.mine,
+        followsMe: isSelf || opts.as ? false : relation.followsMe,
       },
       socials: fields.socials ? (target.socials ?? {}) : null,
       nextOuting,
