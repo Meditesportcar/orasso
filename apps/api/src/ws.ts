@@ -82,6 +82,28 @@ export async function checkWsSession(
   return { action: "keep", secondFactor: current.secondFactor };
 }
 
+/**
+ * Abonnement demandé par une connexion : droit vérifié, abonnement posé, puis droit **revérifié** (lot R6a, tour 2).
+ * Sans la seconde vérification, un retrait validé pendant la première (membre retiré d'un crew : sa révocation n'a alors
+ * rien trouvé à retirer) laisserait l'abonnement ouvert jusqu'à la revérification de 30 s. Droit perdu entre-temps :
+ * abonnement retiré, `revoked`. Une erreur passagère à la seconde vérification garde l'abonnement (comme la
+ * revérification périodique).
+ */
+export async function subscribeChecked(
+  userId: string,
+  channel: string,
+  socket: RealtimeSocket,
+): Promise<"subscribed" | "forbidden" | "revoked"> {
+  const ctx = { secondFactor: socket.secondFactor ?? null };
+  const ok = await realtime.canSubscribe(userId, channel, ctx).catch(() => false);
+  if (!ok) return "forbidden";
+  realtime.subscribe(channel, socket);
+  const still = await realtime.canSubscribe(userId, channel, { ...ctx, revalidation: true }).catch(() => true);
+  if (still) return "subscribed";
+  realtime.unsubscribe(channel, socket);
+  return "revoked";
+}
+
 /** Connexions ouvertes au plus par personne : au-delà, la plus ancienne est fermée (4008). */
 export const MAX_WS_PER_USER = 5;
 const openConnections = new Map<string, (() => void)[]>();
@@ -184,11 +206,8 @@ export const ws = new Hono().get(
             ws.close(4429, "rate_limited");
             return;
           }
-          const ok = await realtime
-            .canSubscribe(userId, msg.channel, { secondFactor: socket.secondFactor ?? null })
-            .catch(() => false);
-          if (ok) realtime.subscribe(msg.channel, socket);
-          ws.send(JSON.stringify({ type: ok ? "subscribed" : "forbidden", channel: msg.channel }));
+          const result = await subscribeChecked(userId, msg.channel, socket);
+          ws.send(JSON.stringify({ type: result, channel: msg.channel }));
         } else if (msg.type === "unsubscribe" && typeof msg.channel === "string") {
           if (msg.channel !== `user:${userId}`) realtime.unsubscribe(msg.channel, socket);
         } else if (msg.type === "ping") {

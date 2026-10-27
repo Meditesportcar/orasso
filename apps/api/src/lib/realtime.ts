@@ -97,6 +97,15 @@ export const realtime = {
     }
     if (set.size === 0) channels.delete(channel);
   },
+  /**
+   * Lot R6a, tour 2 : retire tout de suite une personne de tous les canaux d'une famille (`crew:` : compte suspendu ou
+   * supprimé), sur toutes ses connexions, avec `revoked`.
+   */
+  revokeUser(prefix: string, userId: string) {
+    for (const channel of [...channels.keys()]) {
+      if (channel.startsWith(prefix)) this.revoke(channel, (socket) => socket.userId === userId);
+    }
+  },
   subscriberCount(channel: string): number {
     return channels.get(channel)?.size ?? 0;
   },

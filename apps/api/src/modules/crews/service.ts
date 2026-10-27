@@ -524,7 +524,7 @@ export const crewsService = {
     rateLimit("crewWrite", v.user.id);
     await withTx(async (tx, after) => {
       await requireLeader(tx, id, v);
-      signalCrew(after, id, "crew.updated", {}, v.user.id);
+      signalCrew(after, id, "crew.updated");
       await tx
         .update(crews)
         .set({
@@ -554,7 +554,7 @@ export const crewsService = {
     rateLimit("crewWrite", v.user.id);
     const old = await withTx(async (tx, after) => {
       const crew = await requireLeader(tx, id, v);
-      signalCrew(after, id, "crew.updated", {}, v.user.id);
+      signalCrew(after, id, "crew.updated");
       if (key) {
         const upload = await uploadsService.consume(tx, v.user.id, key, "crew_logo");
         if (!upload) throw validation("Image inconnue ou déjà utilisée");
@@ -610,7 +610,7 @@ export const crewsService = {
     try {
       old = await withTx(async (tx, after) => {
         const locked = await requireLeader(tx, id, v);
-        signalCrew(after, id, "crew.updated", {}, v.user.id);
+        signalCrew(after, id, "crew.updated");
         await tx
           .update(crews)
           .set({ bannerKey: key, bannerPlateCleared: Boolean(key && (plateRects?.length || noPlate)) })

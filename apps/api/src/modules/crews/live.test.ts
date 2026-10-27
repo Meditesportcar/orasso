@@ -1,7 +1,10 @@
 // La page du crew en direct (lot R6a) : droit du canal `crew:<id>` (membre, chef, non-membre, demande en attente,
 // membre retiré ou parti, crew dissous, compte suspendu), signal émis après la validation et jamais après une
-// annulation, signal sans contenu (ni texte, ni pseudo, ni nombre), l'auteur ne reçoit pas le sien, un membre retiré
-// est coupé tout de suite (`revoked`), et la relecture d'une publication (`GET /crews/:id/posts/:postId`).
+// annulation, signal sans contenu (ni texte, ni pseudo, ni nombre), un membre retiré est coupé tout de suite
+// (`revoked`), et la relecture d'une publication (`GET /crews/:id/posts/:postId`).
+// Tour 2 : l'auteur reçoit aussi son signal (ses autres appareils) ; révocation immédiate à la suspension (manuelle ou
+// automatique) et à la suppression d'un compte (membre ou chef) ; abonnement revérifié juste après sa pose (course
+// avec un retrait) ; relecture d'une sortie (`GET /crews/:id/outings/:outingId`) ; retrait par la modération signalé.
 import { crewChannel, crewSignalTypes, fromWallTime, HOUR } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,9 +12,13 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { profiles } from "../../db/schema";
+import { profiles, sanctions } from "../../db/schema";
 import { type RealtimeSocket, realtime } from "../../lib/realtime";
+import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
+import { subscribeChecked } from "../../ws";
+import { recomputeSuspension } from "../moderation/suspension";
+import { crewCommentTarget, crewPostTarget } from "../moderation/targets/crewFeed";
 import { canSubscribeCrew, signalCrew } from "./live";
 
 afterAll(async () => {
@@ -137,7 +144,7 @@ describe("droit du canal crew:<id>", () => {
 });
 
 describe("signaux", () => {
-  it("chaque geste envoie un signal sans contenu aux autres membres, jamais à son auteur", async () => {
+  it("chaque geste envoie un signal sans contenu aux membres, auteur compris (ses autres appareils)", async () => {
     const { kenji, julie, lea, crew } = await crewOf3();
     const k = await listen(kenji, crew.id);
     const j = await listen(julie, crew.id);
@@ -204,16 +211,17 @@ describe("signaux", () => {
       postId,
       commentId: c.json.id,
     });
-    // L'auteur ne reçoit rien de ses propres gestes (son écran les affiche déjà).
-    expect(j.socket.messages).toEqual([]);
+    // Tour 2 : l'auteur reçoit aussi ses signaux (ses autres appareils les voient ; l'écran du geste fusionne).
+    expect(j.socket.messages).toEqual(k.socket.messages);
 
     // Le chef change les réglages, et un membre arrive : les pages ouvertes se relisent.
+    const before = j.socket.messages.length;
     expect((await req(kenji, "PATCH", `/crews/${crew.id}`, { description: "Nouvelle description" })).status).toBe(200);
-    expect(j.socket.messages.map((m) => m.type)).toEqual(["crew.updated"]);
+    expect(j.socket.messages.slice(before).map((m) => m.type)).toEqual(["crew.updated"]);
     const paul = await signUp("Paul");
     expect((await req(paul, "POST", `/crews/${crew.id}/requests`, { message: null })).status).toBe(201);
     expect((await req(kenji, "POST", `/crews/${crew.id}/requests/${paul.id}/accept`)).status).toBe(204);
-    expect(j.socket.messages.map((m) => m.type)).toEqual(["crew.updated", "member.joined"]);
+    expect(j.socket.messages.slice(before).map((m) => m.type)).toEqual(["crew.updated", "member.joined"]);
     expect(lea).toBeDefined();
   });
 
@@ -294,5 +302,170 @@ describe("GET /crews/:id/posts/:postId", () => {
     expect((await req(kenji, "GET", `/crews/${crew.id}/posts/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
     expect((await req(julie, "DELETE", `/crews/${crew.id}/posts/${postId}`)).status).toBe(204);
     expect((await req(kenji, "GET", `/crews/${crew.id}/posts/${postId}`)).status).toBe(404);
+  });
+});
+
+describe("tour 2 : révocation immédiate partout", () => {
+  it("compte déjà abonné puis suspendu (sanction directe) : revoked tout de suite, plus aucun signal", async () => {
+    const { kenji, julie, lea, crew } = await crewOf3();
+    const admin = await signUp("Damien", { twoFactor: true, role: "super_admin" });
+    const j = await listen(julie, crew.id);
+    const k = await listen(kenji, crew.id);
+    expect(j.ok && k.ok).toBe(true);
+    const res = await req(admin, "POST", `/admin/users/${julie.id}/sanction`, {
+      kind: "suspension_7d",
+      reason: "harassment",
+      note: "Messages répétés",
+    });
+    expect(res.status).toBe(201);
+    expect(j.socket.messages).toContainEqual({ type: "revoked", channel: crewChannel(crew.id) });
+    expect(k.socket.messages.map((m) => m.type)).not.toContain("revoked");
+    const before = j.socket.messages.length;
+    expect((await req(lea, "POST", `/crews/${crew.id}/posts`, { kind: "text", text: "Après" })).status).toBe(201);
+    expect(j.socket.messages).toHaveLength(before);
+    expect(k.socket.messages.map((m) => m.type)).toContain("post.created");
+  });
+
+  it("suspension automatique (même chemin, `recomputeSuspension`) : revoked après la validation seulement", async () => {
+    const { julie, crew } = await crewOf3();
+    const j = await listen(julie, crew.id);
+
+    let duringTx = -1;
+    await withTx(async (tx, after) => {
+      await tx.insert(sanctions).values({
+        userId: julie.id,
+        kind: "suspension_7d",
+        reason: "spam",
+        reportIds: [],
+        startsAt: clock.now,
+        endsAt: new Date(clock.now.getTime() + 7 * 24 * HOUR),
+        auto: true,
+        createdAt: clock.now,
+        updatedAt: clock.now,
+      });
+      await recomputeSuspension(tx, julie.id, after);
+      duringTx = j.socket.messages.length;
+    });
+    expect(duringTx).toBe(0);
+    expect(j.socket.messages).toEqual([{ type: "revoked", channel: crewChannel(crew.id) }]);
+  });
+
+  it("suppression du compte d'un membre : revoked pour lui, member.left pour les autres", async () => {
+    const { kenji, julie, crew } = await crewOf3();
+    const j = await listen(julie, crew.id);
+    const k = await listen(kenji, crew.id);
+    expect((await req(julie, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(200);
+    expect(j.socket.messages).toContainEqual({ type: "revoked", channel: crewChannel(crew.id) });
+    expect(k.socket.messages.map((m) => m.type)).toEqual(["member.left"]);
+  });
+
+  it("suppression du compte du chef : crew dissous, tous les abonnés coupés", async () => {
+    const { kenji, julie, lea, crew } = await crewOf3();
+    const j = await listen(julie, crew.id);
+    const l = await listen(lea, crew.id);
+    expect((await req(kenji, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(200);
+    expect(j.socket.messages).toContainEqual({ type: "revoked", channel: crewChannel(crew.id) });
+    expect(l.socket.messages).toContainEqual({ type: "revoked", channel: crewChannel(crew.id) });
+    expect(realtime.subscriberCount(crewChannel(crew.id))).toBe(0);
+  });
+});
+
+describe("tour 2 : course entre l'abonnement et un retrait", () => {
+  it("droit perdu pendant la vérification : l'abonnement posé est retiré (revoked)", async () => {
+    let calls = 0;
+    realtime.registerAuthorizer("essai-course:", async () => {
+      calls += 1;
+      // Première vérification : membre ; le retrait est validé avant la seconde.
+      return calls === 1;
+    });
+    const socket: Probe = { userId: "u1", send: () => undefined, messages: [] };
+    sockets.push(socket);
+    expect(await subscribeChecked("u1", "essai-course:x", socket)).toBe("revoked");
+    expect(realtime.subscriberCount("essai-course:x")).toBe(0);
+    calls = 0;
+    realtime.registerAuthorizer("essai-course:", async () => true);
+    expect(await subscribeChecked("u1", "essai-course:x", socket)).toBe("subscribed");
+    expect(realtime.subscriberCount("essai-course:x")).toBe(1);
+    realtime.registerAuthorizer("essai-course:", async () => false);
+    expect(await subscribeChecked("u1", "essai-course:y", socket)).toBe("forbidden");
+    expect(realtime.subscriberCount("essai-course:y")).toBe(0);
+  });
+
+  it("membre retiré pendant son abonnement au canal du crew : aucun abonnement ne reste, quel que soit l'ordre", async () => {
+    const { kenji, julie, crew } = await crewOf3();
+    const messages: Received[] = [];
+    const socket: Probe = { userId: julie.id, send: (d) => messages.push(JSON.parse(d) as Received), messages };
+    sockets.push(socket);
+    const pending = subscribeChecked(julie.id, crewChannel(crew.id), socket);
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}/members/${julie.id}`)).status).toBe(204);
+    const result = await pending;
+    expect(realtime.channelsOf(socket)).toEqual([]);
+    // Abonnée avant le retrait : la révocation du retrait l'a trouvée et prévenue.
+    if (result === "subscribed") expect(messages).toContainEqual({ type: "revoked", channel: crewChannel(crew.id) });
+  });
+});
+
+describe("tour 2 : GET /crews/:id/outings/:outingId", () => {
+  it("la sortie telle que la page la montre au membre ; 404 hors du crew, une fois annulée ; 401 sans session", async () => {
+    const { kenji, julie, crew } = await crewOf3();
+    const paul = await signUp("Paul");
+    const startsAt = new Date(clock.now.getTime() + 5 * 24 * HOUR).toISOString();
+    const created = await req(julie, "POST", `/crews/${crew.id}/outings`, {
+      title: "Balade des Aspres",
+      startsAt,
+      place: "Thuir",
+      program: null,
+    });
+    expect(created.status).toBe(201);
+    const id = created.json.id as string;
+    expect((await req(kenji, "PUT", `/crews/${crew.id}/outings/${id}/rsvp`, { answer: "yes" })).status).toBe(200);
+    const one = await req(kenji, "GET", `/crews/${crew.id}/outings/${id}`);
+    expect(one.status).toBe(200);
+    expect(Object.keys(one.json).sort()).toEqual(
+      [
+        "authorPseudo",
+        "canManage",
+        "going",
+        "id",
+        "lat",
+        "lng",
+        "maybe",
+        "mine",
+        "open",
+        "place",
+        "program",
+        "startsAt",
+        "title",
+        "yes",
+      ].sort(),
+    );
+    expect(one.json).toMatchObject({ id, yes: 1, mine: "yes", canManage: true, open: true });
+    expect((await req(paul, "GET", `/crews/${crew.id}/outings/${id}`)).status).toBe(404);
+    expect((await req(null, "GET", `/crews/${crew.id}/outings/${id}`)).status).toBe(401);
+    expect((await req(julie, "DELETE", `/crews/${crew.id}/outings/${id}`)).status).toBe(204);
+    expect((await req(kenji, "GET", `/crews/${crew.id}/outings/${id}`)).status).toBe(404);
+  });
+});
+
+describe("tour 2 : retrait par la modération", () => {
+  it("publication et commentaire retirés par la modération : signal aux pages ouvertes", async () => {
+    const { kenji, julie, crew } = await crewOf3();
+    const k = await listen(kenji, crew.id);
+    const post = await req(julie, "POST", `/crews/${crew.id}/posts`, { kind: "text", text: "À modérer" });
+    const postId = post.json.id as string;
+    const comment = await req(julie, "POST", `/crews/${crew.id}/posts/${postId}/comments`, { text: "Aussi" });
+    const modo = { user: { id: kenji.id } } as unknown as Viewer;
+    await withTx(async (tx, after) => {
+      await crewCommentTarget.remove?.(tx, modo, { targetId: comment.json.id } as never, after);
+      await crewPostTarget.remove?.(tx, modo, { targetId: postId } as never, after);
+    });
+    const types = k.socket.messages.map((m) => m.type);
+    expect(types.slice(-2)).toEqual(["comment.removed", "post.removed"]);
+    expect(k.socket.messages.at(-2)?.payload).toEqual({
+      type: "comment.removed",
+      crewId: crew.id,
+      postId,
+      commentId: comment.json.id,
+    });
   });
 });

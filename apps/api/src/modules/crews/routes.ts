@@ -117,6 +117,11 @@ export const crewsRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await crewOutingsService.create(v, uuidParam(c, "id"), await body(c, crewOutingCreateSchema)), 201);
   })
+  // Lot R6a, tour 2 : une sortie relue à un signal (modifiée, réponse), pour sa carte du fil, où qu'elle soit ; 404 une
+  // fois annulée (la carte quitte le fil).
+  .get("/crews/:id/outings/:outingId", async (c) =>
+    c.json(await crewOutingsService.read(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "outingId"))),
+  )
   .patch("/crews/:id/outings/:outingId", async (c) => {
     const v = await requireUser(c);
     const input = await body(c, crewOutingUpdateSchema);

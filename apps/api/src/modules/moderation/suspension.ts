@@ -1,12 +1,19 @@
 // État de suspension d'un compte (lot 32) : `profiles.suspended_until` reste le seul champ lu par le reste de l'API
 // (lots 17 à 29 : comptes suspendus filtrés partout) ; la modération le tient à jour à partir des sanctions actives.
 // Sans dépendance vers les autres services (importé par `GET /me` et la session).
-import { BAN_UNTIL, canContestSanction, isSanctionActive, type SuspensionInfo } from "@orasso/shared";
+import {
+  BAN_UNTIL,
+  CREW_CHANNEL_PREFIX,
+  canContestSanction,
+  isSanctionActive,
+  type SuspensionInfo,
+} from "@orasso/shared";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { profiles, sanctions } from "../../db/schema";
 import { now } from "../../lib/deps";
+import { realtime } from "../../lib/realtime";
 import type { Executor, Tx } from "../../lib/tx";
 
 export type SanctionRow = typeof sanctions.$inferSelect;
@@ -28,8 +35,14 @@ export async function activeSanctions(ex: Executor, userId: string, at: Date = n
 /**
  * Recalcule `suspended_until` (fin de la sanction active la plus longue, `BAN_UNTIL` pour un bannissement, `null` sinon)
  * et `banned_at`. À appeler dans la transaction de la décision, sous le verrou du compte.
+ * Lot R6a, tour 2 : un compte suspendu (ou banni) est retiré tout de suite, après la validation, des canaux temps réel
+ * des crews (le fil d'un crew est réservé aux membres visibles), sans attendre la revérification de 30 s.
  */
-export async function recomputeSuspension(tx: Tx, userId: string): Promise<{ until: Date | null; banned: boolean }> {
+export async function recomputeSuspension(
+  tx: Tx,
+  userId: string,
+  after: (cb: () => unknown) => void,
+): Promise<{ until: Date | null; banned: boolean }> {
   const at = now();
   const active = await activeSanctions(tx, userId, at);
   const top = active[0];
@@ -40,6 +53,7 @@ export async function recomputeSuspension(tx: Tx, userId: string): Promise<{ unt
     .update(profiles)
     .set({ suspendedUntil: until, bannedAt: banned ? (current?.bannedAt ?? at) : null })
     .where(eq(profiles.userId, userId));
+  if (until && until > at) after(() => realtime.revokeUser(CREW_CHANNEL_PREFIX, userId));
   return { until, banned };
 }
 

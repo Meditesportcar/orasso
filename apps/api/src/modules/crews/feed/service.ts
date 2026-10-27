@@ -374,7 +374,7 @@ export const crewFeedService = {
           after(() => notificationsService.kick());
         }
         // Lot R6a : les pages ouvertes du crew relisent leur fil (après la validation, jamais après une annulation).
-        signalCrew(after, crewId, "post.created", { postId: post.id }, v.user.id);
+        signalCrew(after, crewId, "post.created", { postId: post.id });
         return { id: post.id, access };
       });
     const { id, access } = await run().catch(async (error) => {
@@ -402,7 +402,7 @@ export const crewFeedService = {
       if (!canRemoveCrewContent(post.authorId, { userId: v.user.id, leader: access.leader })) {
         throw forbidden("Seuls son auteur et le chef du crew peuvent retirer cette publication.");
       }
-      signalCrew(after, crewId, "post.removed", { postId: post.id }, v.user.id);
+      signalCrew(after, crewId, "post.removed", { postId: post.id });
       return softDeletePost(tx, post.id, v.user.id);
     });
     await removeFiles(keys);
@@ -414,7 +414,7 @@ export const crewFeedService = {
     const access = await withTx(async (tx, after) => {
       const a = await requireCrewMember(tx, v, crewId, "write");
       const post = await lockPost(tx, crewId, postId);
-      signalCrew(after, crewId, "post.fire", { postId: post.id }, v.user.id);
+      signalCrew(after, crewId, "post.fire", { postId: post.id });
       if (on) {
         await tx.insert(crewPostReactions).values({ postId: post.id, userId: v.user.id }).onConflictDoNothing();
       } else {
@@ -479,7 +479,7 @@ export const crewFeedService = {
       if (!created) throw new Error("Commentaire non enregistré");
       await notifyComment(tx, post, access, v.profile.pseudo);
       after(() => notificationsService.kick());
-      signalCrew(after, crewId, "comment.created", { postId: post.id, commentId: created.id }, v.user.id);
+      signalCrew(after, crewId, "comment.created", { postId: post.id, commentId: created.id });
       return { created, leader: access.leader };
     }).catch(raceToConflict);
     return {
@@ -520,7 +520,7 @@ export const crewFeedService = {
         .update(crewPostComments)
         .set({ deletedAt: now(), deletedBy: v.user.id })
         .where(eq(crewPostComments.id, commentId));
-      signalCrew(after, crewId, "comment.removed", { postId: row.c.postId, commentId }, v.user.id);
+      signalCrew(after, crewId, "comment.removed", { postId: row.c.postId, commentId });
     });
   },
 
@@ -533,7 +533,7 @@ export const crewFeedService = {
       const [poll] = await tx.select().from(crewPolls).where(eq(crewPolls.postId, post.id)).for("update");
       if (!poll) throw postGone();
       if (!crewPollOpen(poll, now())) throw validation("Ce sondage est clos.");
-      signalCrew(after, crewId, "poll.voted", { postId: post.id }, v.user.id);
+      signalCrew(after, crewId, "poll.voted", { postId: post.id });
       const [option] = await tx
         .select({ id: crewPollOptions.id })
         .from(crewPollOptions)
@@ -560,7 +560,7 @@ export const crewFeedService = {
       }
       if (!poll.closedAt) {
         await tx.update(crewPolls).set({ closedAt: now(), closedBy: v.user.id }).where(eq(crewPolls.postId, post.id));
-        signalCrew(after, crewId, "poll.closed", { postId: post.id }, v.user.id);
+        signalCrew(after, crewId, "poll.closed", { postId: post.id });
       }
       return a;
     });
