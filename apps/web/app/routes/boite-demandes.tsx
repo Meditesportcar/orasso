@@ -30,8 +30,10 @@ import { type FollowActionData, followAction, isFollowIntent } from "../lib/foll
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/boite-demandes";
 
-// Boîte > Demandes (lot 18) : rangées à part — demandes d'abonnement (lot R6b, elles remplacent les demandes d'ami) et demandes de contact (le message est
-// affiché, on accepte ou on refuse ; le refus est silencieux). Les lots 19 et suivants ajoutent leurs sortes ici.
+// Boîte > Demandes (lot 18) : rangées à part — demandes d'abonnement (lot R6b : elles remplacent les anciennes demandes)
+// et demandes de contact (le message est affiché, on accepte ou on refuse ; le refus est silencieux). Les lots 19 et
+// suivants ajoutent leurs sortes ici. Lot R6b, tour 2 (relecture Codex 4) : les demandes d'abonnement vont par 30,
+// « Suivants » (`?apres=`) ouvre la page suivante : aucune n'est cachée.
 /** Lot R6c : libellé court local (pas dans `crewInviteLabels`) d'une invitation reçue d'un membre. */
 const LEADER_CONFIRMS = "Si tu acceptes, le chef confirme ton arrivée.";
 
@@ -41,8 +43,12 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
+  const cursor = new URL(request.url).searchParams.get("apres") ?? "";
   const [follows, contacts, summary, crews, confirmations, staffInvitations] = await Promise.all([
-    apiOrThrow<FollowRequestsPage>(request, "/me/follow-requests"),
+    apiOrThrow<FollowRequestsPage>(
+      request,
+      `/me/follow-requests${cursor ? `?${new URLSearchParams({ cursor }).toString()}` : ""}`,
+    ),
     apiOrThrow<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
     // Crews (lot 19) : demandes reçues par un chef, invitations reçues, venues en crew à confirmer.
@@ -55,6 +61,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const invitations = await api<ReceivedInvitation[]>(request, "/me/event-invitations");
   return {
     follows: follows.items,
+    followsNext: follows.nextCursor,
+    followsAfter: cursor !== "",
     contactsIn: contacts.items.filter((c) => c.direction === "in"),
     contactsOut: contacts.items.filter((c) => c.direction === "out"),
     summary,
@@ -161,7 +169,18 @@ function Decide({ id, busy }: { id: string; busy: boolean }) {
 }
 
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const { follows, contactsIn, contactsOut, summary, crews, confirmations, staffInvitations, invitations } = loaderData;
+  const {
+    follows,
+    followsNext,
+    followsAfter,
+    contactsIn,
+    contactsOut,
+    summary,
+    crews,
+    confirmations,
+    staffInvitations,
+    invitations,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
@@ -212,6 +231,25 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
             </li>
           ))}
         </ul>
+      )}
+      {(followsNext || followsAfter) && (
+        <div className="s-row" data-testid="request-follow-pages">
+          {followsAfter && (
+            <Button variant="secondary" icon="back" href="/app/boite/demandes">
+              {networkLabels.firstPage}
+            </Button>
+          )}
+          {followsNext && (
+            <Button
+              variant="secondary"
+              icon="down"
+              href={`/app/boite/demandes?${new URLSearchParams({ apres: followsNext }).toString()}`}
+              data-testid="request-follow-more"
+            >
+              {networkLabels.next}
+            </Button>
+          )}
+        </div>
       )}
       {invitations.length > 0 && (
         <section className="s-section" aria-labelledby="invitations-titre">

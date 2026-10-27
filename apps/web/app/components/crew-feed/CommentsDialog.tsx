@@ -8,12 +8,14 @@ import {
   crewFeedLabels,
   mergeCrewComments,
   type Page,
+  readCrewComments,
 } from "@orasso/shared";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
+import { useCrewLiveNeeds } from "./CrewLive";
 import { whenOf } from "./PostCard";
 
 export function CommentsDialog({
@@ -76,6 +78,37 @@ export function CommentsDialog({
     if (!ref.current?.open) ref.current?.showModal();
     void load();
   }, [postId]);
+
+  // Lot R6a : fenêtre ouverte, les commentaires des autres arrivent (et partent) sans la rouvrir.
+  const byPostRef = useRef(byPost);
+  byPostRef.current = byPost;
+  useCrewLiveNeeds(async (needs) => {
+    const target = postId;
+    if (!target) return;
+    if (needs.removedComments.length) {
+      const gone = new Set(needs.removedComments);
+      setByPost((all) =>
+        Object.fromEntries(
+          Object.entries(all).map(([id, v]) => [id, { ...v, items: v.items.filter((x) => !gone.has(x.id)) }]),
+        ),
+      );
+    }
+    if (!needs.comments.includes(target) && !needs.full) return;
+    const shown = byPostRef.current[target];
+    if (!shown) return; // Pas encore lue : sa première lecture suffit.
+    const mine = seq.current;
+    // Tour 2 : relue jusqu'à couvrir l'affiché (toute la liste si elle était complète : les nouveaux sont à la fin). Une
+    // page en échec rejette tout : la liste et son curseur restent, la relecture est retentée. Au-delà de la limite de
+    // pages, le vrai curseur est gardé (« Voir la suite »).
+    const path = `/crews/${crewId}/posts/${target}/comments`;
+    const next = await readCrewComments(async (from) => {
+      const res = await apiFetch<Page<CrewCommentView>>(from ? `${path}?cursor=${encodeURIComponent(from)}` : path);
+      if (!res.ok) throw new Error(res.error.message);
+      return res.data;
+    }, shown);
+    if (mine !== seq.current) return;
+    setByPost((all) => ({ ...all, [target]: next }));
+  }, postId !== null);
 
   async function send() {
     const target = postId;

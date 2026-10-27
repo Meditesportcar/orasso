@@ -223,13 +223,14 @@ export const accountService = {
       now().getTime() - created.getTime() < REFERRAL_WINDOW_MS &&
       !(await isExpressAccount(v.user.email));
     if (!applicable)
-      throw conflict("referral_not_applicable", "Ce lien d'ami ne peut plus être utilisé pour ce compte");
+      throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
     const [row] = await db
       .update(profiles)
       .set({ invitedByUserId: sponsor.userId })
       .where(and(eq(profiles.userId, v.user.id), isNull(profiles.invitedByUserId)))
       .returning({ userId: profiles.userId });
-    if (!row) throw conflict("referral_not_applicable", "Ce lien d'ami ne peut plus être utilisé pour ce compte");
+    if (!row)
+      throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
     if (v.user.emailVerified) await pointsService.awardReferral(sponsor.userId, v.user.id);
     return { sponsor: sponsor.pseudo };
   },
@@ -237,7 +238,7 @@ export const accountService = {
   /** `GET /referral/:token` (public) : pseudo et photo du parrain, 404 si le lien est inconnu. */
   async referrer(token: string) {
     const p = token.length <= 64 ? await db.query.profiles.findFirst({ where: eq(profiles.inviteToken, token) }) : null;
-    if (!p || p.deletedAt) throw notFound("Lien d'ami inconnu");
+    if (!p || p.deletedAt) throw notFound("Lien de parrainage inconnu");
     return { pseudo: p.pseudo, avatarUrl: storage.url(p.avatarKey) };
   },
 
@@ -462,7 +463,7 @@ export const accountService = {
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
-      photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
+      photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
       await anonymizeStaffForDeletedAccount(tx, userId);

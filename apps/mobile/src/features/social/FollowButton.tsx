@@ -24,6 +24,7 @@ import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 
 const { space2, space3 } = tokens.spacing;
+const { radiusMd } = tokens.radius;
 
 const SMALL_TEST_ID: Record<FollowButtonKind, string> = {
   follow: "net-follow",
@@ -216,6 +217,6 @@ export function FollowButton({
 
 const styles = StyleSheet.create({
   full: { gap: space2 },
-  confirm: { borderRadius: 14, padding: space3 },
+  confirm: { borderRadius: radiusMd, padding: space3 },
   confirmBody: { gap: space2 },
 });

@@ -1,5 +1,6 @@
 // Social (lot 17, lot R6b) : audiences des profils, suivre et demandes d'abonnement, QR de compte, recherche de
-// personnes, Journal des personnes suivies.
+// personnes, Journal des personnes suivies. Tour 2 : retirer un abonné, alertes répétées (annuler, refuser), horloge.
+import { randomUUID } from "node:crypto";
 import { accountQrPayload, fromWallTime, privateVehicleFields } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -43,6 +44,7 @@ afterAll(async () => {
 });
 
 const DAY = 86_400_000;
+const HOUR = DAY / 24;
 let clock: ReturnType<typeof useClock>;
 let ref: Awaited<ReturnType<typeof seedReference>>;
 let supra: { makeId: string; modelId: string; generationId: string };
@@ -391,6 +393,170 @@ describe("suivre, demandes d'abonnement (lot R6b, D37)", () => {
     // Même règle par « Modifier mon profil » (`PATCH /me/profile`).
     expect((await call(priv, "PATCH", "/me/profile", { visibility: "public" })).status).toBe(200);
     expect((await followRow(e, priv))?.status).toBe("accepted");
+  });
+
+  const requestAlerts = async (target: TestUser, from: TestUser) =>
+    (
+      await db.query.notifications.findMany({
+        where: and(eq(notifications.userId, target.id), eq(notifications.type, "follow_request")),
+      })
+    ).filter((n) => (n.data as { actor?: { userId: string } }).actor?.userId === from.id).length;
+
+  it("tour 2 : demander, annuler, redemander ne renvoie pas d'alerte ; les 24 h se comptent à l'horloge de l'appli", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
+    const c = await person("Charlie_C");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(1);
+    // Annuler retire l'alerte ; la trace de la paire reste : redemander ne l'envoie pas de nouveau.
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(0);
+    expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+    expect(await requestAlerts(priv, c)).toBe(0);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+    // 23 h plus tard (horloge de l'appli, pas celle de la base) : toujours rien ; 25 h : une alerte.
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(23 * HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(0);
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(2 * HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(1);
+  });
+
+  it("tour 2 : refusée, la personne peut redemander sans le savoir, mais sans alerte pendant 30 jours", async () => {
+    const priv = await person("Bravo_Priv", { visibility: "private" });
+    const c = await person("Charlie_C");
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    await call(priv, "POST", `/me/follow-requests/${c.id}/decline`);
+    // Rien ne dit le refus : le bouton revient à « Demander à suivre ».
+    expect((await call(c, "GET", "/users/Bravo_Priv")).json.follow.mine).toBe("none");
+    // J+2, J+15, J+29 : la demande est là (Demandes, pastille de la Boîte), sans nouvelle alerte.
+    for (const step of [2, 13, 14]) {
+      clock.advance(step * DAY);
+      const alertsBefore = await requestAlerts(priv, c);
+      expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+      expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+      expect((await call(priv, "GET", "/me/inbox/summary")).json.requests.follow).toBe(1);
+      expect(await requestAlerts(priv, c)).toBe(alertsBefore);
+      await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    }
+    // J+31 : de nouveau une alerte.
+    clock.advance(2 * DAY);
+    const beforeAlert = await requestAlerts(priv, c);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(beforeAlert + 1);
+    // Acceptée, puis plus suivie, puis redemandée le lendemain : l'ancien refus ne compte plus.
+    await call(priv, "POST", `/me/follow-requests/${c.id}/accept`);
+    await call(c, "DELETE", "/users/Bravo_Priv/follow");
+    clock.advance(DAY + HOUR);
+    await call(c, "POST", "/users/Bravo_Priv/follow");
+    expect(await requestAlerts(priv, c)).toBe(beforeAlert + 2);
+  });
+
+  it("tour 2 : « Retirer cet abonné » referme tout de suite profil, photos, sorties, messagerie et Journal, sans prévenir", async () => {
+    const orga = await signUp("Orga_66", { twoFactor: true });
+    const s = await createStructure(orga.id);
+    const e1 = await createEvent(s.id, { admission: "open", capacity: 5, title: "Nocturne de Canet" });
+    const e2 = await createEvent(s.id, { admission: "open", capacity: 5, title: "Cars & Coffee" });
+    const priv = await person("Bravo_Priv", { visibility: "private", bio: "secret" });
+    const c = await person("Charlie_C");
+    const d = await person("Delta_D");
+    const v = await createVehicle(priv.id, ref);
+    await blurPlatesOf(priv.id);
+    for (const u of [c, d]) {
+      await call(u, "POST", "/users/Bravo_Priv/follow");
+      await call(priv, "POST", `/me/follow-requests/${u.id}/accept`);
+    }
+    const form = (vehicleId: string) => ({
+      vehicleIds: [vehicleId],
+      rulesAccepted: true as const,
+      followStructure: false,
+      newsletterOptIn: false,
+      companions: 0,
+      message: null,
+    });
+    await applicationsService.apply(await viewerOf(priv), e1.id, form(v.id));
+    await flush();
+    const going = async (u: TestUser) => (await journal(u)).filter((n) => n.type === "friend_going_event").length;
+    expect(await going(c)).toBe(1);
+    // Avant : Charlie voit tout (profil, photos, sorties) ; Bravo lui écrit directement (Charlie le suit).
+    const before = await call(c, "GET", "/users/Bravo_Priv");
+    expect(before.json).toMatchObject({ audience: "follower", bio: "secret" });
+    expect(before.json.upcomingEvents.map((e: { title: string }) => e.title)).toEqual(["Nocturne de Canet"]);
+    expect(before.json.vehicles[0].photoUrl).toContain("test/");
+    expect((await call(c, "GET", `/vehicles/${v.id}`)).json.detailed).toBe(true);
+    const conv = await call(priv, "POST", "/conversations/direct", { userId: c.id });
+    expect(conv.status).toBe(201);
+    const journalBefore = (await journal(c)).length;
+
+    // Le titulaire seul : la route est la sienne (`/me`) ; Delta ne retire personne chez Bravo.
+    expect((await call(null, "DELETE", `/me/followers/${c.id}`)).status).toBe(401);
+    expect((await call(d, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+    expect(await followRow(c, priv)).toMatchObject({ status: "accepted" });
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(204);
+    expect(await followRow(c, priv)).toBeUndefined();
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+
+    // Profil, photos, sorties, crew : réduits tout de suite.
+    const after = await call(c, "GET", "/users/Bravo_Priv");
+    expect(after.json).toMatchObject({
+      audience: "public_limited",
+      bio: null,
+      upcomingEvents: null,
+      pastEvents: null,
+      crews: null,
+      follow: { mine: "none", followsMe: false },
+    });
+    expect(after.json.vehicles[0]).toMatchObject({ detailed: false, photoUrl: null });
+    expect((await call(c, "GET", `/vehicles/${v.id}`)).json.detailed).toBe(false);
+    // Messagerie : Bravo n'écrit plus directement à Charlie.
+    const blocked = await call(priv, "POST", `/conversations/${conv.json.id}/messages`, {
+      clientId: randomUUID(),
+      body: "Toujours là ?",
+    });
+    expect(blocked.status).toBe(409);
+    // Journal : ses actualités qui citent Bravo disparaissent, et plus rien n'arrive ; Delta, lui, reçoit tout.
+    expect(await going(c)).toBe(0);
+    await applicationsService.apply(await viewerOf(priv), e2.id, form(v.id));
+    await flush();
+    expect(await going(c)).toBe(0);
+    expect(await going(d)).toBe(2);
+    // Sans prévenir : aucune notification nouvelle chez Charlie (une de moins : l'actualité retirée).
+    expect((await journal(c)).length).toBe(journalBefore - 1);
+    // Il peut redemander, sans alerte pendant 30 jours.
+    expect((await call(c, "POST", "/users/Bravo_Priv/follow")).json).toEqual({ mine: "pending" });
+    expect(await requestAlerts(priv, c)).toBe(1);
+    expect((await call(priv, "GET", "/me/follow-requests")).json.total).toBe(1);
+    // Une demande n'est pas un abonné : la retirer passe par le refus.
+    expect((await call(priv, "DELETE", `/me/followers/${c.id}`)).status).toBe(404);
+  });
+
+  it("tour 2 : retirer un abonné retire son « … te suit » non lu (regroupé : les autres restent) ; lu, il reste", async () => {
+    const pub = await person("Alpha_Pub");
+    const [k, l, m] = [await person("Kenji_K"), await person("Lea_L"), await person("Marc_M")];
+    await call(k, "POST", "/users/Alpha_Pub/follow");
+    await call(l, "POST", "/users/Alpha_Pub/follow");
+    const followed = () =>
+      db.query.notifications.findMany({
+        where: and(eq(notifications.userId, pub.id), eq(notifications.type, "user_followed")),
+      });
+    expect((await followed()).map((n) => n.body)).toEqual(["Lea_L et Kenji_K te suivent."]);
+    expect((await call(pub, "DELETE", `/me/followers/${k.id}`)).status).toBe(204);
+    const [left] = await followed();
+    expect(left?.body).toBe("Lea_L te suit.");
+    expect((left?.data as { actorIds?: string[] } | undefined)?.actorIds).toEqual([l.id]);
+    expect(JSON.stringify(left?.data)).not.toContain(k.id);
+    expect((await call(pub, "DELETE", `/me/followers/${l.id}`)).status).toBe(204);
+    expect(await followed()).toHaveLength(0);
+    // Compte public : Kenji peut le suivre de nouveau tout de suite, mais sans alerte pendant 30 jours.
+    expect((await call(k, "POST", "/users/Alpha_Pub/follow")).json).toEqual({ mine: "accepted" });
+    expect(await followed()).toHaveLength(0);
+    // Une alerte déjà lue reste telle quelle.
+    await call(m, "POST", "/users/Alpha_Pub/follow");
+    await call(pub, "POST", "/me/notifications/read", { all: true });
+    expect((await call(pub, "DELETE", `/me/followers/${m.id}`)).status).toBe(204);
+    expect((await followed()).map((n) => n.body)).toEqual(["Marc_M te suit."]);
   });
 
   it("ni soi-même, ni un compte supprimé, banni ou suspendu (404) ; listes et demandes sans eux", async () => {

@@ -1,6 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, type Cookie, MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { lineupFixture } from "./helpers/lotr4b";
+import { privateWithRequests } from "./helpers/lotr6b";
 import { RELAIS } from "./relais";
 
 // Lot R6b (D37 : « Suivre » comme sur Instagram ; maquettes R6.1 et R6.2), côté appli (version web compilée) :
@@ -10,6 +12,8 @@ import { RELAIS } from "./relais";
 //   - « Suivre en retour » dans la liste des abonnés, l'étiquette « Te suit » ;
 //   - passage de privé à public : les demandes en attente sont acceptées ;
 //   - messagerie : on écrit directement à qui nous suit, sinon demande de contact.
+// Tour 2 : « Retirer cet abonné » (menu ⋯ de la ligne, confirmation), le bouton du plateau qui suit l'abonnement, la
+// Boîte au-delà de 30 demandes.
 // Béton et Sable, 390 px, captures des états. Lancer avec APP_URL (appli compilée), API et site seedés.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r6b-captures/apres/recette-appli`;
@@ -176,7 +180,82 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(mine.page.getByText(/^\d+\s*amis?$/)).toHaveCount(0);
     await shot(mine.page, `10-onglet-profil-${theme}`);
 
+    // 8. Tour 2 : « Retirer cet abonné » (menu ⋯ de la ligne, confirmation) ; Moi n'en est pas prévenu, il ne suit plus.
+    expect((await apiCall(priv.cookie, "PATCH", "/me/settings", { visibility: "private" })).status).toBe(200);
+    await goto(other.page, "/reseau?liste=abonnes");
+    const row = other.page.getByTestId("net-person").filter({ hasText: me.pseudo });
+    await expect(row).toBeVisible();
+    await row.getByTestId("net-person-more").click();
+    await expect(other.page.getByTestId("net-follower-menu")).toBeVisible();
+    await shot(other.page, `11-reseau-menu-abonne-${theme}`);
+    await other.page.getByTestId("net-remove").click();
+    await expect(other.page.getByTestId("net-remove-confirm")).toContainText(`Retirer ${me.pseudo} de tes abonnés ?`);
+    await shot(other.page, `12-reseau-retirer-confirmation-${theme}`);
+    await other.page.getByTestId("net-remove-yes").click();
+    await expect(other.page.getByTestId("net-remove-info")).toContainText(
+      `${me.pseudo} ne fait plus partie de tes abonnés.`,
+    );
+    await expect(other.page.getByTestId("net-person").filter({ hasText: me.pseudo })).toHaveCount(0);
+    await shot(other.page, `13-reseau-abonne-retire-${theme}`);
+    await goto(mine.page, `/u/${priv.pseudo}`);
+    await expect(followButton(mine.page)).toHaveText(/Demander à suivre/i);
+    await expect(mine.page.getByTestId("profile-private-note")).toBeVisible();
+
     await other.ctx.close();
     await mine.ctx.close();
   });
+
+  test(`R6b appli (${theme}) : plateau, le bouton de la voiture d'un compte privé suit l'abonnement`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    mkdirSync(DIR, { recursive: true });
+    const fx = await lineupFixture();
+    const me = await person("R6bPla", "public");
+    const mine = await open(browser, theme);
+    await signIn(mine.page, me.email);
+    const sheetButton = async () => {
+      await goto(mine.page, `/e/${fx.event.slug}/plateau`);
+      await mine.page.getByTestId("lineup-car-private").click();
+      await expect(mine.page.getByTestId("lineup-private-sheet")).toBeVisible();
+      return mine.page.getByTestId("lineup-ask-follow");
+    };
+    let ask = await sheetButton();
+    await expect(ask).toHaveText(/Demander à suivre/i);
+    await ask.click();
+    await expect(ask).toHaveText(/Demandé/i);
+    await shot(mine.page, `14-plateau-demande-${theme}`);
+    // Rouverte plus tard : « Demandé » (lu sur le lien), puis « Abonné » une fois la demande acceptée.
+    ask = await sheetButton();
+    await expect(ask).toHaveText(/Demandé/i);
+    const accepted = await apiCall(fx.privateCookie, "POST", `/me/follow-requests/${me.id}/accept`);
+    expect(accepted.status).toBe(200);
+    ask = await sheetButton();
+    await expect(ask).toHaveText(/Abonné/i);
+    await shot(mine.page, `15-plateau-abonne-${theme}`);
+    await mine.ctx.close();
+  });
 }
+
+test("R6b appli (beton) : Boîte, 31 demandes d'abonnement, « Voir plus » montre la plus ancienne", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  mkdirSync(DIR, { recursive: true });
+  const target = await privateWithRequests("R6bBoite", 31);
+  const mine = await open(browser, "beton");
+  await signIn(mine.page, target.email);
+  await goto(mine.page, "/boite?segment=demandes");
+  const cards = mine.page.getByTestId("request-follow");
+  await expect(cards).toHaveCount(30);
+  await expect(mine.page.getByText(target.askers[0] as string)).toHaveCount(0);
+  const more = mine.page.getByTestId("request-follow-more");
+  await expect(more).toContainText("(1)");
+  await more.scrollIntoViewIfNeeded();
+  await shot(mine.page, "16-boite-31-demandes-beton");
+  await more.click();
+  await expect(cards).toHaveCount(31);
+  await expect(mine.page.getByText(target.askers[0] as string)).toBeVisible();
+  await expect(more).toHaveCount(0);
+  await mine.ctx.close();
+});

@@ -35,6 +35,13 @@ export function useChannel(
         }
         if (message.type === "subscribed" && message.channel === channel) setConnected(true);
         else if (message.channel === channel && typeof message.type === "string") {
+          if (message.type === "revoked") {
+            // Lot R6a, tour 2 : abonnement retiré par le serveur. Plus connecté (les relectures de secours reprennent),
+            // et le canal se rouvre : droit encore là (réacceptée, revérification passagère) → `subscribed` ; sinon
+            // `forbidden`, et rien ne repart.
+            setConnected(false);
+            socket?.send(JSON.stringify({ type: "subscribe", channel }));
+          }
           handler.current({ channel, type: message.type, payload: message.payload });
         }
       };

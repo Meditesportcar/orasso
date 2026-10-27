@@ -25,6 +25,7 @@ import { audit } from "../../admin/audit";
 import { requireCrewMember } from "../../crews/feed/access";
 import { CREW_POST_FOLDER } from "../../crews/feed/posts";
 import { softDeletePost } from "../../crews/feed/service";
+import { signalCrew } from "../../crews/live";
 import { goneView, type TargetRules, UUID_RE } from "./types";
 
 /** Adresse d'une photo dans le dossier d'un signalement (modération seulement). */
@@ -122,9 +123,11 @@ export const crewPostTarget: TargetRules = {
       removed: Boolean(post.deletedAt),
     };
   },
-  async remove(tx, v, report) {
+  async remove(tx, v, report, after) {
     const [post] = await tx.select().from(crewPosts).where(eq(crewPosts.id, report.targetId)).for("update");
     if (!post || post.deletedAt) return [];
+    // Lot R6a, tour 2 : la publication retirée par la modération quitte aussi les pages ouvertes du crew.
+    signalCrew(after, post.crewId, "post.removed", { postId: post.id });
     return softDeletePost(tx, post.id, v.user.id);
   },
 };
@@ -149,11 +152,20 @@ export const crewCommentTarget: TargetRules = {
       removed: Boolean(row.c.deletedAt),
     };
   },
-  async remove(tx, v, report) {
-    await tx
+  async remove(tx, v, report, after) {
+    const [removed] = await tx
       .update(crewPostComments)
       .set({ deletedAt: now(), deletedBy: v.user.id })
-      .where(and(eq(crewPostComments.id, report.targetId), isNull(crewPostComments.deletedAt)));
+      .where(and(eq(crewPostComments.id, report.targetId), isNull(crewPostComments.deletedAt)))
+      .returning({ id: crewPostComments.id, postId: crewPostComments.postId });
+    // Lot R6a, tour 2 : le commentaire retiré par la modération quitte aussi les pages ouvertes du crew.
+    if (removed) {
+      const [post] = await tx
+        .select({ crewId: crewPosts.crewId })
+        .from(crewPosts)
+        .where(eq(crewPosts.id, removed.postId));
+      if (post) signalCrew(after, post.crewId, "comment.removed", { postId: removed.postId, commentId: removed.id });
+    }
     return [];
   },
 };

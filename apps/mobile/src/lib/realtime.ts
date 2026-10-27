@@ -25,6 +25,8 @@ class RealtimeClient {
   private token: string | null = null;
   private readonly handlers = new Map<string, Set<Handler>>();
   private readonly subscribedHandlers = new Map<string, Set<SubscribedHandler>>();
+  /** Lot R6a : droit perdu sur un canal (`revoked` : membre retiré d'un crew, crew dissous). */
+  private readonly revokedHandlers = new Map<string, Set<SubscribedHandler>>();
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private paused = false;
@@ -32,7 +34,12 @@ class RealtimeClient {
   private appStateBound = false;
 
   /** S'abonne à un canal ; renvoie la fonction de désabonnement. */
-  subscribe(channel: string, handler: Handler, onSubscribed?: SubscribedHandler): () => void {
+  subscribe(
+    channel: string,
+    handler: Handler,
+    onSubscribed?: SubscribedHandler,
+    onRevoked?: SubscribedHandler,
+  ): () => void {
     let set = this.handlers.get(channel);
     const first = !set;
     if (!set) {
@@ -45,6 +52,11 @@ class RealtimeClient {
       subs.add(onSubscribed);
       this.subscribedHandlers.set(channel, subs);
     }
+    if (onRevoked) {
+      const subs = this.revokedHandlers.get(channel) ?? new Set<SubscribedHandler>();
+      subs.add(onRevoked);
+      this.revokedHandlers.set(channel, subs);
+    }
     this.stopped = false;
     this.bindAppState();
     if (getSessionToken() !== this.token) this.reconnectNow();
@@ -55,9 +67,11 @@ class RealtimeClient {
       if (!current) return;
       current.delete(handler);
       if (onSubscribed) this.subscribedHandlers.get(channel)?.delete(onSubscribed);
+      if (onRevoked) this.revokedHandlers.get(channel)?.delete(onRevoked);
       if (current.size === 0) {
         this.handlers.delete(channel);
         this.subscribedHandlers.delete(channel);
+        this.revokedHandlers.delete(channel);
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({ type: "unsubscribe", channel }));
         }
@@ -71,6 +85,7 @@ class RealtimeClient {
     this.stopped = true;
     this.handlers.clear();
     this.subscribedHandlers.clear();
+    this.revokedHandlers.clear();
     this.close();
   }
 
@@ -146,7 +161,15 @@ class RealtimeClient {
         for (const fn of [...(this.subscribedHandlers.get(message.channel) ?? [])]) fn();
         return;
       }
-      if (message.type === "forbidden" || message.type === "revoked") return;
+      if (message.type === "revoked") {
+        // Lot R6a : le serveur a retiré l'abonnement (droit perdu) ; l'écran relit ce qu'il montre.
+        for (const fn of [...(this.revokedHandlers.get(message.channel) ?? [])]) fn();
+        // Tour 2 : le canal se rouvre tant qu'un écran l'écoute. Encore membre (réacceptée, revérification passagère) :
+        // `subscribed`, et les écrans relisent tout ; sinon `forbidden`, et rien ne repart.
+        if (this.handlers.has(message.channel)) this.sendSubscribe(message.channel);
+        return;
+      }
+      if (message.type === "forbidden") return;
       const set = this.handlers.get(message.channel);
       if (!set) return;
       for (const handler of [...set])
@@ -178,17 +201,25 @@ export const realtime = new RealtimeClient();
  * Abonnement d'un écran à un canal (`conversation:{id}`, `user:{id}`) tant qu'il est monté. Le canal `user:{id}` est
  * ouvert d'office par le serveur pour la connexion ; on s'y « abonne » ici seulement pour recevoir ses messages.
  */
-export function useChannel(channel: string | null, handler: Handler, onSubscribed?: SubscribedHandler) {
+export function useChannel(
+  channel: string | null,
+  handler: Handler,
+  onSubscribed?: SubscribedHandler,
+  onRevoked?: SubscribedHandler,
+) {
   const ref = useRef(handler);
   ref.current = handler;
   const subscribedRef = useRef(onSubscribed);
   subscribedRef.current = onSubscribed;
+  const revokedRef = useRef(onRevoked);
+  revokedRef.current = onRevoked;
   useEffect(() => {
     if (!channel) return;
     return realtime.subscribe(
       channel,
       (event) => ref.current(event),
       () => subscribedRef.current?.(),
+      () => revokedRef.current?.(),
     );
   }, [channel]);
 }

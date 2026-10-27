@@ -52,7 +52,6 @@ export const messagingLabels = {
   contactRequestSend: "Envoyer la demande",
   contactRequestSent: (pseudo: string) => `Demande de contact envoyée à ${pseudo}`,
   contactRequestFrom: "Demande de contact",
-  friendRequestFrom: "Demande d'ami",
   accept: "Accepter",
   decline: "Refuser",
   pendingOut: "Demande envoyée",

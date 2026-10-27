@@ -15,7 +15,15 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { notifications, profiles, structureFollows, userFollows, vehicles } from "../../db/schema";
+import {
+  followTraces,
+  friendships,
+  notifications,
+  profiles,
+  structureFollows,
+  userFollows,
+  vehicles,
+} from "../../db/schema";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { anonymizeSocialForDeletedAccount } from "./anonymize";
@@ -25,10 +33,11 @@ afterAll(async () => {
 });
 
 let ref: Awaited<ReturnType<typeof seedReference>>;
+let clock: ReturnType<typeof useClock>;
 
 beforeEach(async () => {
   await resetDb();
-  useClock(fromWallTime({ year: 2026, month: 10, day: 17, hour: 15, minute: 0 }));
+  clock = useClock(fromWallTime({ year: 2026, month: 10, day: 17, hour: 15, minute: 0 }));
   ref = await seedReference();
 });
 
@@ -270,8 +279,11 @@ describe("suivre une personne", () => {
     const b = await person("Del_B");
     await call(a, "POST", "/users/Del_B/follow");
     await call(b, "POST", "/users/Del_A/follow");
+    expect(await db.select().from(followTraces)).toHaveLength(2);
     await withTx((tx) => anonymizeSocialForDeletedAccount(tx, a.id));
     expect(await db.select().from(userFollows)).toHaveLength(0);
+    // Tour 2 : les traces de ses paires partent avec lui.
+    expect(await db.select().from(followTraces)).toHaveLength(0);
     expect(
       await db
         .select()
@@ -359,19 +371,62 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     expect(rows[0]?.body).toMatch(/et 2 autres personnes te suivent\.$/);
   });
 
-  it("l'export des données contient abonnements, abonnés et demandes avec leur statut ; plus d'amitiés", async () => {
+  it("l'export des données contient abonnements, abonnés et demandes avec leur statut, l'archive des amitiés, les refus", async () => {
     const a = await person("T2_Export");
     const b = await person("T2_Suivi");
-    await person("T2_Prive", "private");
+    const p = await person("T2_Prive", "private");
+    const x = await person("T2_Refuse");
     await call(a, "POST", "/users/T2_Suivi/follow");
     await call(b, "POST", "/users/T2_Export/follow");
     await call(a, "POST", "/users/T2_Prive/follow");
+    // Tour 2 (relecture Opus 5) : l'archive des anciennes amitiés et demandes d'ami, tant que la table existe ; un refus
+    // reçu reste silencieux (« en attente » pour le demandeur).
+    await db.insert(friendships).values([
+      { requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() },
+      { requesterId: a.id, addresseeId: p.id, status: "declined", respondedAt: new Date() },
+    ]);
     const net = (await call(a, "GET", "/me/export")).json.network;
-    const following = Object.fromEntries(net.following.map((x: { pseudo: string }) => [x.pseudo, x]));
+    const following = Object.fromEntries(net.following.map((f: { pseudo: string }) => [f.pseudo, f]));
     expect(following.T2_Suivi).toMatchObject({ status: "accepted", acceptedAt: expect.any(String) });
     expect(following.T2_Prive).toMatchObject({ status: "pending", acceptedAt: null });
-    expect(net.followers.map((x: { pseudo: string }) => x.pseudo)).toEqual(["T2_Suivi"]);
-    expect(net).not.toHaveProperty("friendships");
+    expect(net.followers.map((f: { pseudo: string }) => f.pseudo)).toEqual(["T2_Suivi"]);
+    const archive = Object.fromEntries(net.friendshipsArchive.map((f: { pseudo: string }) => [f.pseudo, f]));
+    expect(archive.T2_Suivi).toMatchObject({ status: "accepted", requestedByMe: true });
+    expect(archive.T2_Prive).toMatchObject({ status: "pending", requestedByMe: true });
+    expect((await call(p, "GET", "/me/export")).json.network.friendshipsArchive[0]).toMatchObject({
+      pseudo: "T2_Export",
+      status: "declined",
+      requestedByMe: false,
+    });
+    // Les refus que j'ai faits (30 jours sans alerte) sont dans mon export, jamais dans celui de la personne refusée.
+    await call(x, "POST", "/users/T2_Prive/follow");
+    await call(p, "POST", `/me/follow-requests/${x.id}/decline`);
+    expect((await call(p, "GET", "/me/export")).json.network.declinedByMe).toEqual([
+      { pseudo: "T2_Refuse", at: expect.any(String) },
+    ]);
+    expect((await call(x, "GET", "/me/export")).json.network.declinedByMe).toEqual([]);
+  });
+
+  it("tour 2 (relecture Codex 3) : « … te suit » au plus une fois par 24 h, comptées à l'horloge de l'appli", async () => {
+    const t = await person("T2_Horloge");
+    const k = await person("T2_Kenji");
+    const rows = () =>
+      db
+        .select()
+        .from(notifications)
+        .where(sql`${notifications.userId} = ${t.id} and ${notifications.type} = 'user_followed'`);
+    await call(k, "POST", "/users/T2_Horloge/follow");
+    expect(await rows()).toHaveLength(1);
+    // Lue : une nouvelle alerte créerait une nouvelle ligne (rien à regrouper).
+    await call(t, "POST", "/me/notifications/read", { all: true });
+    await call(k, "DELETE", "/users/T2_Horloge/follow");
+    clock.advance(23 * 3_600_000);
+    await call(k, "POST", "/users/T2_Horloge/follow");
+    expect(await rows()).toHaveLength(1);
+    await call(k, "DELETE", "/users/T2_Horloge/follow");
+    clock.advance(2 * 3_600_000);
+    await call(k, "POST", "/users/T2_Horloge/follow");
+    expect(await rows()).toHaveLength(2);
   });
 
   it("aperçu : chaque élément visible correspond à un champ de GET /users/:pseudo pour ce regard", async () => {

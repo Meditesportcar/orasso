@@ -28,10 +28,16 @@ export const socialNotificationTypes = {
 /** Items d'actualité du Journal : ni push, ni e-mail, livrés tout de suite (ARCHITECTURE-SUITE § 2.4). */
 export const journalOnlyNotificationTypes: readonly string[] = ["friend_going_event", "friend_new_vehicle"];
 
-/** Libellés des types (réglages des notifications). */
+/**
+ * Lot R6b, tour 2 : types qui ne partent plus (l'ancienne amitié). Leurs notifications restent lisibles dans la Boîte,
+ * mais ils ne figurent plus parmi les types qu'on règle un par un.
+ */
+export const retiredNotificationTypes: readonly string[] = ["friend_request", "friend_accepted"];
+
+/** Libellés des types (réglages des notifications ; les types retirés n'y sont plus montrés). */
 export const socialNotificationLabels: Record<keyof typeof socialNotificationTypes, string> = {
-  friend_request: "Ancienne demande d'ami",
-  friend_accepted: "Ancienne demande d'ami acceptée",
+  friend_request: "Ancienne demande, avant les abonnements",
+  friend_accepted: "Ancienne demande acceptée, avant les abonnements",
   friend_going_event: "Une personne que tu suis va à un événement",
   friend_new_vehicle: "Une personne que tu suis ajoute un véhicule",
   user_followed: "Nouvel abonné",

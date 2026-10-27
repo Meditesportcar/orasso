@@ -2,12 +2,13 @@
 // réseau », la Boîte et le lien de profil : un seul formulaire POST par action, l'intention est dans le champ `intent`.
 // `follow` / `unfollow` (champ `pseudo`) : suivre ou demander ; ne plus suivre ou annuler une demande.
 // `follow_accept` / `follow_decline` (champs `userId` et `pseudo`) : répondre à une demande reçue.
+// `follower_remove` (champs `userId` et `pseudo`, tour 2) : « Retirer cet abonné », sans le prévenir.
 import { type FollowState, networkLabels as N } from "@orasso/shared";
 import { data } from "react-router";
 
 import { api } from "./api.server";
 
-export const FOLLOW_INTENTS = ["follow", "unfollow", "follow_accept", "follow_decline"] as const;
+export const FOLLOW_INTENTS = ["follow", "unfollow", "follow_accept", "follow_decline", "follower_remove"] as const;
 
 export function isFollowIntent(intent: string): boolean {
   return (FOLLOW_INTENTS as readonly string[]).includes(intent);
@@ -15,7 +16,7 @@ export function isFollowIntent(intent: string): boolean {
 
 export type FollowActionData = {
   followError: string | null;
-  /** Après « Accepter » ou le refus : la phrase à afficher. */
+  /** Après « Accepter », le refus ou le retrait d'un abonné : la phrase à afficher. */
   followNotice?: string | null;
   /** Après « Suivre » : mon nouvel état. */
   followMine?: FollowState;
@@ -40,6 +41,11 @@ export async function followAction(request: Request, form: FormData) {
     });
     if (!res.ok) return data<FollowActionData>({ followError: res.error.message }, { status: res.status });
     return data<FollowActionData>({ followError: null, followNotice: accept ? N.accepted(pseudo) : N.declined });
+  }
+  if (intent === "follower_remove") {
+    const res = await api(request, `/me/followers/${userId}`, { method: "DELETE" });
+    if (!res.ok) return data<FollowActionData>({ followError: res.error.message }, { status: res.status });
+    return data<FollowActionData>({ followError: null, followNotice: N.removed(pseudo) });
   }
   return data<FollowActionData>({ followError: "Action inconnue." }, { status: 400 });
 }

@@ -22,7 +22,6 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
-import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -234,6 +233,22 @@ export default function Reseau() {
             pages={followers as FollowersPage}
             onMore={() => void more("followers")}
             onChanged={onFollowChanged}
+            // Tour 2 : « Retirer cet abonné » ; la ligne disparaît, les nombres se relisent.
+            onRemove={(p) => {
+              setLists((l) =>
+                l.followers
+                  ? {
+                      ...l,
+                      followers: {
+                        ...l.followers,
+                        items: l.followers.items.filter((x) => x.userId !== p.userId),
+                        total: Math.max(0, l.followers.total - 1),
+                      },
+                    }
+                  : l,
+              );
+              void counts.reload();
+            }}
             testID="net-followers"
           />
         ) : (

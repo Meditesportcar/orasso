@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { crewMembers, crewOutingReplies, crewOutings, crews, messages, notifications } from "../../db/schema";
 import type { Tx } from "../../lib/tx";
+import { revokeCrewChannelsOf, signalCrew } from "./live";
 import { crewsService } from "./service";
 
 /** Types de notification des crews qui citent une personne (`data.actor`). */
@@ -30,11 +31,17 @@ const CREW_TYPES = [
  * - les notifications des autres qui le citent (demande, invitation, venue confirmée…) : supprimées ;
  * - lot R5c2 : ses sorties du crew et ses réponses aux sorties : supprimées.
  * Ses candidatures en crew restent régies par l'anonymisation des candidatures (désistées si à venir).
+ * Lot R6a, tour 2 : après la validation (`after` de la transaction de l'anonymisation), il est retiré des canaux temps
+ * réel de ses crews, les crews dissous coupent leur canal (`revoked`), et les pages ouvertes des crews qu'il quitte se
+ * relisent (`member.left`).
  */
-export async function anonymizeCrewsForDeletedAccount(tx: Tx, userId: string): Promise<string[]> {
+export async function anonymizeCrewsForDeletedAccount(
+  tx: Tx,
+  userId: string,
+  after: (cb: () => unknown) => void,
+): Promise<string[]> {
   const keys: string[] = [];
-  const afterCallbacks: (() => unknown)[] = [];
-  const after = (cb: () => unknown) => afterCallbacks.push(cb);
+  revokeCrewChannelsOf(after, userId);
   const led = await tx
     .select()
     .from(crews)
@@ -51,6 +58,7 @@ export async function anonymizeCrewsForDeletedAccount(tx: Tx, userId: string): P
     for (const crew of rows) {
       await crewsService.recount(tx, crew.id);
       await crewsService.syncConversation(tx, crew);
+      signalCrew(after, crew.id, "member.left");
     }
   }
   // Lot R5c2 : ses sorties du crew disparaissent (avec leurs réponses), et ses réponses aux sorties des autres.
@@ -70,8 +78,6 @@ export async function anonymizeCrewsForDeletedAccount(tx: Tx, userId: string): P
     .where(
       and(inArray(notifications.type, CREW_TYPES), sql`${notifications.data} -> 'actor' ->> 'userId' = ${userId}`),
     );
-  // Diffusions (dissolution) : rien à faire de plus dans la transaction de l'anonymisation ; les appareils des membres
-  // rechargent au prochain accès. Les fichiers sont effacés par l'appelant après la validation.
-  void afterCallbacks;
+  // Les fichiers sont effacés par l'appelant après la validation.
   return keys;
 }

@@ -180,9 +180,30 @@ describe.each(MODES)("conversation à deux (%s)", (mode) => {
     expect(view.json.canWrite).toBe(false);
     expect(view.json.writeBlocked).toBe("not_friends");
     expect((await req(a, "GET", `/conversations/${id}/messages`, undefined, mode)).json.items).toHaveLength(1);
-    // Bruno répond (Anna lui a écrit) : Anna peut répondre à son tour.
+    // Bruno répond (Anna lui a écrit) : Anna peut répondre à son tour, une fois ; ensuite c'est à Bruno d'écrire.
     expect((await send(b, id, "Oui ?", mode)).status).toBe(201);
     expect((await send(a, id, "Super", mode)).status).toBe(201);
+    expect((await send(a, id, "Et sinon ?", mode)).status).toBe(409);
+  });
+
+  it("tour 2 (relecture Opus 3) : après un échange, Bruno ne suit plus Anna : Anna ne peut plus écrire directement", async () => {
+    const [a, b] = [await signUp("Anna"), await signUp("Bruno")];
+    await req(b, "POST", `/users/${a.pseudo}/follow`);
+    const id = (await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).json.id as string;
+    expect((await send(a, id, "Salut", mode)).status).toBe(201);
+    // Bruno répond (le dernier message vient d'Anna), Anna relance (Bruno la suit).
+    expect((await send(b, id, "Salut !", mode)).status).toBe(201);
+    expect((await send(a, id, "Tu viens samedi ?", mode)).status).toBe(201);
+    // Bruno ne suit plus Anna : avoir écrit un jour ne donne pas un droit permanent.
+    await req(b, "DELETE", `/users/${a.pseudo}/follow`);
+    const blocked = await send(a, id, "Bruno ?", mode);
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error.code).toBe("not_friends");
+    expect((await req(a, "GET", `/conversations/${id}`, undefined, mode)).json.writeBlocked).toBe("not_friends");
+    // Bruno, lui, peut répondre (le dernier message vient d'Anna) ; Anna lui répond une fois.
+    expect((await send(b, id, "Oui, j'y serai", mode)).status).toBe(201);
+    expect((await send(a, id, "Top", mode)).status).toBe(201);
+    expect((await send(a, id, "À samedi", mode)).status).toBe(409);
   });
 
   it("D37 : un abonnement en attente (compte privé) n'ouvre pas la messagerie directe", async () => {

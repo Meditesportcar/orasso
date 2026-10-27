@@ -12,7 +12,8 @@ export const followStatusEnum = pgEnum("follow_status", followStatuses);
 
 /**
  * ARCHIVE depuis le lot R6b (D37) : plus aucun code ne lit ni n'écrit cette table, sauf la suppression d'un compte
- * (`anonymize.ts`, données personnelles). Sa migration a recopié chaque amitié acceptée en deux abonnements acceptés et
+ * (`anonymize.ts`, données personnelles) et l'export des données (tour 2, `friendshipsArchive`). Sa migration a
+ * recopié chaque amitié acceptée en deux abonnements acceptés et
  * chaque demande en attente en demande d'abonnement. Elle sera retirée dans un lot suivant, après la mise en ligne.
  */
 export const friendships = pgTable(
@@ -69,5 +70,29 @@ export const userFollows = pgTable(
     index("user_follows_followed_status_idx").on(t.followedId, t.status),
     index("user_follows_follower_status_idx").on(t.followerId, t.status),
     check("user_follows_not_self_check", sql`${t.followerId} <> ${t.followedId}`),
+  ],
+);
+
+/**
+ * Lot R6b, tour 2 (relectures Opus 2, Codex 2 et 3) : trace d'une paire, indépendante des notifications et de la ligne
+ * d'abonnement : date de la dernière alerte (« … te suit », « … demande à te suivre » ; au plus une par 24 h, même après
+ * une annulation qui retire l'alerte) et date du dernier refus ou retrait (30 jours sans alerte). Dates à l'horloge de
+ * l'appli. Supprimée avec le compte de l'un ou de l'autre.
+ */
+export const followTraces = pgTable(
+  "follow_traces",
+  {
+    followerId: text("follower_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    followedId: text("followed_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    lastAlertAt: tstz("last_alert_at"),
+    declinedAt: tstz("declined_at"),
+  },
+  (t) => [
+    primaryKey({ name: "follow_traces_pkey", columns: [t.followerId, t.followedId] }),
+    index("follow_traces_followed_idx").on(t.followedId),
   ],
 );

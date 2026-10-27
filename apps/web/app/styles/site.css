@@ -1,4 +1,4 @@
-﻿/* Mise en page du site : espacements, grilles et surfaces, toutes les valeurs de style viennent des jetons du
+/* Mise en page du site : espacements, grilles et surfaces, toutes les valeurs de style viennent des jetons du
    système de design (aucune couleur, police ni durée écrite ici). */
 
 /* ---------- Structure générale ---------- */
@@ -2530,17 +2530,19 @@
    sa colonne), sa confirmation en place, l'étiquette « Te suit », les lignes de « Ton réseau » et des demandes.
    Jetons du système de design seulement.
    ================================================================================================================ */
+/* Tour 2 (relecture Opus 9) : le style « label » des jetons ; 4 px dessus et dessous font 22 px. */
 .r6tag {
   display: inline-flex;
   align-items: center;
-  height: 22px;
-  padding: 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--ink-muted);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-narrow);
+  font-weight: var(--type-label-weight);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-spacing);
   text-transform: uppercase;
 }
 /* Un seul bouton, pleine largeur de la colonne (le libellé ne se coupe jamais). */
@@ -2586,7 +2588,7 @@
 .o-button.fl-sm {
   min-height: 36px;
   padding: 0 var(--space-3);
-  font-size: 11.5px;
+  font-size: var(--type-meta-size);
   white-space: nowrap;
 }
 .fl-conf--sm {
@@ -2612,8 +2614,13 @@
   padding: 0;
   list-style: none;
 }
+/* Tour 2 : quand le nom n'a plus la place (« Suivre en retour » et le menu ⋯ à 390 px), les boutons passent à la ligne,
+   à droite, au lieu de couper le pseudo lettre par lettre. Les confirmations des boutons compacts s'ouvrent sous la
+   ligne entière. */
 .r6row {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -2622,7 +2629,7 @@
   box-shadow: var(--shadow-card);
 }
 .r6row__main {
-  flex: 1;
+  flex: 1 1 calc(var(--space-12) * 2);
   min-width: 0;
   display: flex;
   align-items: center;
@@ -2636,19 +2643,39 @@
 }
 .r6row__main b {
   font-weight: 800;
-  font-size: 14px;
+  font-size: var(--type-body-strong-size);
   line-height: 1.2;
 }
 .r6row__main small {
   color: var(--ink-muted);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
 }
 .r6row__acts {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin: 0;
+  margin: 0 0 0 auto;
+}
+.r6row .fl-conf--sm {
+  position: static;
+}
+.r6row .fl-conf--sm .fl-confirm {
+  right: var(--space-2);
+  width: min(calc(var(--space-12) * 7), calc(100% - var(--space-4)));
+}
+/* Tour 2 : le menu ⋯ d'un abonné et l'étape « Retirer cet abonné » (un second `<details>` dans le premier). */
+.fl-step > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.fl-step > summary::-webkit-details-marker {
+  display: none;
+}
+.fl-step__body {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 @media (prefers-reduced-motion: reduce) {
   .fl-conf .o-button {

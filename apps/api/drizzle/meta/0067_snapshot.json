@@ -1,6 +1,6 @@
 {
-  "id": "87361d8e-bda6-4df8-a5a9-9b2313d60107",
-  "prevId": "12014714-df00-4910-9216-8666fdd30d45",
+  "id": "9cde4005-c59e-4c0e-9c63-f705a0e53f18",
+  "prevId": "bb770182-d636-467e-9f02-f7b4c9c079aa",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -13519,6 +13519,94 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.follow_traces": {
+      "name": "follow_traces",
+      "schema": "",
+      "columns": {
+        "follower_id": {
+          "name": "follower_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "followed_id": {
+          "name": "followed_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_alert_at": {
+          "name": "last_alert_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declined_at": {
+          "name": "declined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "follow_traces_followed_idx": {
+          "name": "follow_traces_followed_idx",
+          "columns": [
+            {
+              "expression": "followed_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "follow_traces_follower_id_user_id_fk": {
+          "name": "follow_traces_follower_id_user_id_fk",
+          "tableFrom": "follow_traces",
+          "tableTo": "user",
+          "columnsFrom": [
+            "follower_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "follow_traces_followed_id_user_id_fk": {
+          "name": "follow_traces_followed_id_user_id_fk",
+          "tableFrom": "follow_traces",
+          "tableTo": "user",
+          "columnsFrom": [
+            "followed_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "follow_traces_pkey": {
+          "name": "follow_traces_pkey",
+          "columns": [
+            "follower_id",
+            "followed_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

@@ -29,6 +29,8 @@ export const crewPageApi = {
   setCrewBanner: (id: string, form: FormData) =>
     request<CrewView>(`/api/crews/${id}/banner`, { method: "POST", form, timeout: 60_000 }),
   removeCrewBanner: (id: string) => request<CrewView>(`/api/crews/${id}/banner`, { method: "DELETE" }),
+  /** Lot R6a, tour 2 : une sortie relue à un signal (sa carte du fil) ; 404 une fois annulée. */
+  crewOuting: (crewId: string, outingId: string) => request<CrewOutingView>(`/api/crews/${crewId}/outings/${outingId}`),
   createCrewOuting: (crewId: string, body: CrewOutingInput) =>
     request<CrewOutingView>(`/api/crews/${crewId}/outings`, { method: "POST", body }),
   updateCrewOuting: (crewId: string, outingId: string, body: Partial<CrewOutingInput>) =>

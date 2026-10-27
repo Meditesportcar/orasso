@@ -1,7 +1,7 @@
 import type { NotificationFamily } from "../enums";
 
 /**
- * Sorties du crew (lot R5c2, maquette R5.9) : famille `social` (« Amis et messages »), donc coupées avec elle, et
+ * Sorties du crew (lot R5c2, maquette R5.9) : famille `social` (« Abonnements et messages »), donc coupées avec elle, et
  * livrées après les heures calmes. Une nouvelle sortie prévient les membres du crew ; son annulation, ceux qui venaient.
  */
 export const crewOutingNotificationTypes = {
