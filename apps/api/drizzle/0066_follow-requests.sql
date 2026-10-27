@@ -20,10 +20,10 @@ WHERE p."user_id" = uf."followed_id" AND p."visibility" = 'private'
 -- 2. Chaque amitié acceptée devient deux abonnements acceptés (un abonnement qui existe déjà est accepté, sa date
 --    d'origine gardée).
 INSERT INTO "user_follows" ("follower_id", "followed_id", "status", "created_at", "accepted_at")
-SELECT f."requester_id", f."addressee_id", 'accepted', f."created_at", coalesce(f."responded_at", f."created_at")
+SELECT f."requester_id", f."addressee_id", 'accepted'::"follow_status", f."created_at", coalesce(f."responded_at", f."created_at")
 FROM "friendships" f WHERE f."status" = 'accepted'
 UNION ALL
-SELECT f."addressee_id", f."requester_id", 'accepted', f."created_at", coalesce(f."responded_at", f."created_at")
+SELECT f."addressee_id", f."requester_id", 'accepted'::"follow_status", f."created_at", coalesce(f."responded_at", f."created_at")
 FROM "friendships" f WHERE f."status" = 'accepted'
 ON CONFLICT ("follower_id", "followed_id") DO UPDATE
   SET "status" = 'accepted', "accepted_at" = coalesce("user_follows"."accepted_at", excluded."accepted_at");--> statement-breakpoint

@@ -96,10 +96,17 @@ async function addToCrew(crewId: string, leader: TestUser, member: TestUser) {
   expect((await req(leader, "POST", `/crews/${crewId}/requests/${member.id}/accept`)).status).toBe(204);
 }
 
+/** Lot R6b : chacun suit l'autre par le vrai chemin (vers un compte privé, demande puis acceptation). */
 async function befriend(a: TestUser, b: TestUser) {
-  const r = await req(a, "POST", "/friends/requests", { pseudo: b.pseudo });
-  expect(r.status).toBe(201);
-  expect((await req(b, "POST", `/friends/requests/${r.json.id}/accept`)).status).toBe(200);
+  for (const [from, to] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const r = await req(from, "POST", `/users/${to.pseudo}/follow`);
+    if (r.json.mine === "pending") {
+      expect((await req(to, "POST", `/me/follow-requests/${from.id}/accept`)).status).toBe(200);
+    } else expect(r.json).toEqual({ mine: "accepted" });
+  }
 }
 
 const outing = (over: Record<string, unknown> = {}) => ({

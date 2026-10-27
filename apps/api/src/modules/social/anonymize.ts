@@ -1,9 +1,8 @@
 // Compte supprimé (anonymisé) : tout ce que le module social garde de lui disparaît (lot 17, lot R6b). Appelé par
 // `accountService.anonymize`, dans sa transaction.
 import { and, eq, inArray, or, sql } from "drizzle-orm";
-
-import type { Tx } from "../../lib/tx";
 import { friendships, notifications, profiles } from "../../db/schema";
+import type { Tx } from "../../lib/tx";
 import { followsService } from "./follows";
 
 /**

@@ -10,8 +10,6 @@ import {
   canFollowUser,
   effectiveMainVehicleId,
   FOLLOW_PAGE_SIZE,
-  followAcceptedNotificationBody,
-  followAcceptedNotificationTitle,
   type FollowedPage,
   type FollowersPage,
   type FollowingKind,
@@ -21,6 +19,8 @@ import {
   type FollowRequestsPage,
   type FollowResult,
   type FollowState,
+  followAcceptedNotificationBody,
+  followAcceptedNotificationTitle,
   followNotificationBody,
   followNotificationTitle,
   followRequestNotificationBody,
@@ -123,12 +123,7 @@ function requestsCount(userId: string, at: Date, q?: string, ex: Executor = db) 
       .from(userFollows)
       .innerJoin(profiles, eq(profiles.userId, userFollows.followerId))
       .where(
-        and(
-          eq(userFollows.followedId, userId),
-          eq(userFollows.status, "pending"),
-          visibleProfile(at),
-          pseudoStarts(q),
-        ),
+        and(eq(userFollows.followedId, userId), eq(userFollows.status, "pending"), visibleProfile(at), pseudoStarts(q)),
       ),
   );
 }
@@ -267,7 +262,8 @@ async function peoplePage(
   const status = side === "requests" ? eq(userFollows.status, "pending") : accepted;
   // Abonnés et abonnements : rangés par date d'acceptation (une demande acceptée hier passe devant) ; demandes : par
   // date de la demande.
-  const at0 = side === "requests" ? userFollows.createdAt : sql`coalesce(${userFollows.acceptedAt}, ${userFollows.createdAt})`;
+  const at0 =
+    side === "requests" ? userFollows.createdAt : sql`coalesce(${userFollows.acceptedAt}, ${userFollows.createdAt})`;
   const c = decodeCursor(cursor);
   const rows = await db
     .select({ profile: profiles, createdAt: sql<Date>`${at0}`.mapWith(userFollows.createdAt) })
@@ -370,7 +366,13 @@ const actorOf = (p: Pick<Profile, "userId" | "pseudo" | "avatarKey">) => ({
 });
 
 /** Une alerte de ce type, de cette personne, vers cette cible, dans les dernières 24 h ? */
-async function notifiedRecently(tx: Tx, type: string, actorId: string, targetId: string, actorPath: "actorIds" | "actor") {
+async function notifiedRecently(
+  tx: Tx,
+  type: string,
+  actorId: string,
+  targetId: string,
+  actorPath: "actorIds" | "actor",
+) {
   const who =
     actorPath === "actorIds"
       ? sql`${notifications.data} -> 'actorIds' @> jsonb_build_array(${actorId}::text)`
@@ -460,9 +462,7 @@ async function closeRequestNotifications(tx: Tx, targetId: string, followerIds?:
         eq(notifications.userId, targetId),
         eq(notifications.type, "follow_request"),
         isNull(notifications.readAt),
-        followerIds
-          ? inArray(sql<string>`${notifications.data} -> 'actor' ->> 'userId'`, followerIds)
-          : undefined,
+        followerIds ? inArray(sql<string>`${notifications.data} -> 'actor' ->> 'userId'`, followerIds) : undefined,
       ),
     );
 }

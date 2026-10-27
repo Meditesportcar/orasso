@@ -485,8 +485,8 @@ describe("retrait du contenu", () => {
     async (mode) => {
       const { damien, moderatrice } = await team();
       const [a, b] = await oldUsers("Alice", "Bruno");
-      const fr = await req(a, "POST", "/friends/requests", { pseudo: b.pseudo }, mode);
-      await req(b, "POST", `/friends/requests/${fr.json.id}/accept`, undefined, mode);
+      // Lot R6b : Bruno suit Alice, Alice lui écrit directement.
+      await req(b, "POST", `/users/${a.pseudo}/follow`, undefined, mode);
       const conv = (await req(a, "POST", "/conversations/direct", { userId: b.id }, mode)).json.id as string;
       const ids: string[] = [];
       for (let i = 0; i < 13; i += 1) {

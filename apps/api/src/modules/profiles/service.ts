@@ -29,6 +29,7 @@ import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
+import { followsService } from "../social/follows";
 import { assertInterests } from "../vehicles/categories";
 import { mainVehicleIdOf } from "../vehicles/main";
 import { personasOf } from "./personas";
@@ -198,6 +199,8 @@ export const profilesService = {
       const updated = Object.keys(values).length ? await profilesRepo.update(v.user.id, values, tx) : v.profile;
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!updated) throw notFound();
+      // Lot R6b : un compte qui passe public accepte toutes ses demandes d'abonnement en attente (comme /me/settings).
+      if (rest.visibility === "public") await followsService.acceptAllPending(tx, v.user.id);
       return updated;
     });
   },

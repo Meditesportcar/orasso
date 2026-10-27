@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import { departmentSchema, type VehicleType } from "../enums";
 import { gradeSchema } from "../grades";
-import type { ProfileSocials } from "../rules/socials";
 import type { FollowState } from "../rules/follows";
+import type { ProfileSocials } from "../rules/socials";
 import type { ProfileAudience } from "../rules/visibility";
 import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";

@@ -6,7 +6,8 @@ export const messagingLabels = {
   all: "Tout",
   messages: "Messages",
   requests: "Demandes",
-  noConversations: "Aucune conversation pour l'instant. Écris à quelqu'un qui te suit depuis son profil, ou contacte un organisateur.",
+  noConversations:
+    "Aucune conversation pour l'instant. Écris à quelqu'un qui te suit depuis son profil, ou contacte un organisateur.",
   noRequests: "Aucune demande en attente.",
   message: "Message",
   send: "Envoyer",

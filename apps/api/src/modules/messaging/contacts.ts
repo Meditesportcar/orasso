@@ -88,7 +88,9 @@ export const contactsService = {
         .from(conversations)
         .where(eq(conversations.directKey, directKey(me, target.userId)));
       if (await canTalkDirect(tx, me, target.userId, conversation?.id)) {
-        throw conflict("use_direct", "Tu peux déjà lui écrire directement.", { conversationId: conversation?.id ?? null });
+        throw conflict("use_direct", "Tu peux déjà lui écrire directement.", {
+          conversationId: conversation?.id ?? null,
+        });
       }
       const existing = await tx
         .select({ id: contactRequests.id, from: contactRequests.fromUserId, status: contactRequests.status })

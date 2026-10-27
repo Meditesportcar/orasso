@@ -15,11 +15,10 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { friendships, notifications, profiles, structureFollows, userFollows, vehicles } from "../../db/schema";
+import { notifications, profiles, structureFollows, userFollows, vehicles } from "../../db/schema";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { anonymizeSocialForDeletedAccount } from "./anonymize";
-import { socialRepo } from "./repo";
 
 afterAll(async () => {
   await pool.end();
@@ -42,11 +41,12 @@ async function person(pseudo: string, visibility: "public" | "private" = "public
   return u;
 }
 
+/** Deux abonnements acceptés (ce que la migration du lot R6b fait d'une ancienne amitié). */
 async function befriend(a: TestUser, b: TestUser) {
-  await db
-    .insert(friendships)
-    .values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
-  await socialRepo.recountFriends([a.id, b.id]);
+  await db.insert(userFollows).values([
+    { followerId: a.id, followedId: b.id, status: "accepted", acceptedAt: new Date() },
+    { followerId: b.id, followedId: a.id, status: "accepted", acceptedAt: new Date() },
+  ]);
 }
 
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000);
@@ -102,55 +102,54 @@ describe("suivre une personne", () => {
   it("suivre un compte public : idempotent, nombres visibles, « Suivi » sur son profil, ne plus suivre", async () => {
     const a = await person("Fol_A");
     const b = await person("Fol_B");
-    expect((await call(a, "POST", "/users/Fol_B/follow")).json).toEqual({ following: true });
+    expect((await call(a, "POST", "/users/Fol_B/follow")).json).toEqual({ mine: "accepted" });
     expect((await call(a, "POST", "/users/fol_b/follow")).status).toBe(200);
     const seen = await call(a, "GET", "/users/Fol_B");
     expect(seen.json).toMatchObject({
       followersCount: 1,
       followingCount: 0,
-      follow: { canFollow: true, following: true },
+      follow: { canFollow: true, mine: "accepted", followsMe: false },
     });
+    // Lot R6b : « Te suit » et « Suivre en retour » chez celui qui est suivi.
     expect((await call(b, "GET", "/users/Fol_A")).json).toMatchObject({
       followersCount: 0,
       followingCount: 1,
-      follow: { following: false },
+      follow: { mine: "none", followsMe: true },
     });
-    expect((await call(a, "DELETE", "/users/Fol_B/follow")).json).toEqual({ following: false });
+    expect((await call(a, "DELETE", "/users/Fol_B/follow")).json).toEqual({ mine: "none" });
     expect((await call(a, "GET", "/users/Fol_B")).json).toMatchObject({
       followersCount: 0,
-      follow: { following: false },
+      follow: { mine: "none" },
     });
   });
 
-  it("compte privé : pas de « Suivre » (403), nombres visibles de tout membre, profil sans compte refusé", async () => {
+  it("compte privé : « Demander à suivre » (demande), nombres visibles de tout membre, profil sans compte refusé", async () => {
     const a = await person("Priv_A");
     const p = await person("Priv_P", "private");
     const f = await person("Priv_F");
     await befriend(p, f);
-    const refused = await call(a, "POST", "/users/Priv_P/follow");
-    expect(refused.status).toBe(403);
-    expect(await db.select().from(userFollows)).toHaveLength(0);
-    // Damien, 24/10 : les nombres sont visibles de tout membre connecté, même d'un compte privé.
+    expect((await call(a, "POST", "/users/Priv_P/follow")).json).toEqual({ mine: "pending" });
+    // Damien, 24/10 : les nombres sont visibles de tout membre connecté, même d'un compte privé ; la demande n'y compte
+    // pas.
     const stranger = await call(a, "GET", "/users/Priv_P");
     expect(stranger.json).toMatchObject({
-      followersCount: 0,
-      followingCount: 0,
-      friendsCount: 1,
+      followersCount: 1,
+      followingCount: 1,
       outingsCount: 0,
-      follow: { canFollow: false, following: false },
+      follow: { canFollow: true, mine: "pending", followsMe: false },
     });
-    // Le reste du profil privé reste réservé aux amis.
+    expect(stranger.json).not.toHaveProperty("friendsCount");
+    // Le reste du profil privé reste réservé aux abonnés acceptés.
     expect(stranger.json).toMatchObject({ audience: "public_limited", upcomingEvents: null, crews: null, bio: null });
     expect((await call(null, "GET", "/users/Priv_P")).status).toBe(401);
-    // Un ami voit les nombres ; « Suivre » n'existe toujours pas vers un compte privé (même pour un ami).
+    // Un abonné accepté voit tout, avec « Abonné » et « Te suit ».
     const friend = await call(f, "GET", "/users/Priv_P");
     expect(friend.json).toMatchObject({
-      followersCount: 0,
-      followingCount: 0,
-      friendsCount: 1,
-      follow: { canFollow: false },
+      audience: "follower",
+      followersCount: 1,
+      followingCount: 1,
+      follow: { canFollow: true, mine: "accepted", followsMe: true },
     });
-    expect((await call(f, "POST", "/users/Priv_P/follow")).status).toBe(403);
   });
 
   it("jamais soi-même ; compte suspendu ou banni exclu des suivis, des listes et des nombres", async () => {
@@ -187,7 +186,7 @@ describe("suivre une personne", () => {
     ]);
   });
 
-  it("listes : « Suivre aussi » / « Suivi », amis, groupes, recherche, pagination par 30", async () => {
+  it("listes : « Suivre en retour » / « Abonné », groupes, recherche, pagination par 30", async () => {
     const me = await person("Net_Me");
     const lea = await person("Net_Lea");
     const priv = await person("Net_Priv", "private");
@@ -201,15 +200,17 @@ describe("suivre une personne", () => {
     const fol = (await call(me, "GET", "/me/followers")).json;
     expect(fol.total).toBe(2);
     const byPseudo = Object.fromEntries(fol.items.map((p: { pseudo: string }) => [p.pseudo, p]));
-    expect(byPseudo.Net_Lea).toMatchObject({ friend: true, following: true, canFollow: true });
-    expect(byPseudo.Net_Priv).toMatchObject({ friend: false, following: false, canFollow: false });
+    expect(byPseudo.Net_Lea).toMatchObject({ followsMe: true, mine: "accepted", canFollow: true });
+    expect(byPseudo.Net_Priv).toMatchObject({ followsMe: true, mine: "none", canFollow: true, visibility: "private" });
 
     const net = (await call(me, "GET", "/me/network")).json;
-    expect(net).toMatchObject({
+    expect(net).toEqual({
       followers: 2,
       following: 2,
-      friends: 1,
       followingBy: { people: 1, structures: 1, pros: 0 },
+      outings: 0,
+      requestsIn: 0,
+      private: false,
     });
     expect((await call(me, "GET", "/me/following?kind=structures")).json.items[0]).toMatchObject({
       name: "Club de test",
@@ -217,7 +218,7 @@ describe("suivre une personne", () => {
     expect(
       (await call(me, "GET", "/me/followers?q=net_l")).json.items.map((p: { pseudo: string }) => p.pseudo),
     ).toEqual(["Net_Lea"]);
-    expect((await call(me, "GET", "/me/friends?q=zz")).json.items).toEqual([]);
+    expect((await call(me, "GET", "/me/friends?q=zz")).status).toBe(404);
 
     // 32 abonnés de plus : une page de 30, puis la suite.
     for (let i = 0; i < 32; i++) {
@@ -289,17 +290,20 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     await db.insert(structureFollows).values({ structureId: s.id, userId: p.id, source: "manual" });
     const asOrga = (await call(orgaUser, "GET", "/users/T2_Prive")).json;
     expect(asOrga.audience).toBe("organizer");
-    expect(asOrga).toMatchObject({ followersCount: 0, followingCount: 1, friendsCount: 0 });
+    expect(asOrga).toMatchObject({ followersCount: 0, followingCount: 1 });
     expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({
       followersCount: 0,
       followingCount: 1,
-      friendsCount: 0,
       outingsCount: 0,
     });
     await befriend(p, member);
-    expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({ friendsCount: 1 });
+    expect((await call(member, "GET", "/users/T2_Prive")).json).toMatchObject({
+      audience: "follower",
+      followersCount: 1,
+      followingCount: 2,
+    });
     await person("T2_Public");
-    expect((await call(member, "GET", "/users/T2_Public")).json).toMatchObject({ followersCount: 0, friendsCount: 0 });
+    expect((await call(member, "GET", "/users/T2_Public")).json).toMatchObject({ followersCount: 0 });
     expect((await call(member, "GET", "/users/T2_Prive/followers")).status).toBe(404);
   });
 
@@ -314,7 +318,7 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     expect((await call(a, "GET", "/users/T2_Susp")).status).toBe(404);
     expect((await call(a, "DELETE", "/users/T2_Susp/follow")).status).toBe(404);
     await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, p.id));
-    expect((await call(a, "DELETE", "/users/T2_DevPrive/follow")).json).toEqual({ following: false });
+    expect((await call(a, "DELETE", "/users/T2_DevPrive/follow")).json).toEqual({ mine: "none" });
   });
 
   it("31 organisateurs suivis au même instant : deux pages, aucun perdu ni répété (curseur à la milliseconde)", async () => {
@@ -333,17 +337,17 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     expect(new Set([...p1.items, ...p2.items].map((x: { id: string }) => x.id)).size).toBe(31);
   });
 
-  it("amis : un compte banni ou suspendu n'est ni listé ni compté", async () => {
+  it("abonnements : un compte banni n'est ni listé ni compté, dans un sens comme dans l'autre", async () => {
     const a = await person("T2_Amis");
     const b = await person("T2_Banni");
     const c = await person("T2_Ok");
     await befriend(a, b);
     await befriend(a, c);
     await suspendByModeration(b, "ban");
-    expect((await call(a, "GET", "/me/friends")).json.items.map((f: { pseudo: string }) => f.pseudo)).toEqual([
+    expect((await call(a, "GET", "/me/following")).json.items.map((f: { pseudo: string }) => f.pseudo)).toEqual([
       "T2_Ok",
     ]);
-    expect((await call(a, "GET", "/me/network")).json.friends).toBe(1);
+    expect((await call(a, "GET", "/me/network")).json).toMatchObject({ followers: 1, following: 1 });
   });
 
   it("suivis simultanés : une seule notification regroupée", async () => {
@@ -355,21 +359,19 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
     expect(rows[0]?.body).toMatch(/et 2 autres personnes te suivent\.$/);
   });
 
-  it("l'export des données contient abonnements, abonnés et amitiés ; un refus reste silencieux", async () => {
+  it("l'export des données contient abonnements, abonnés et demandes avec leur statut ; plus d'amitiés", async () => {
     const a = await person("T2_Export");
     const b = await person("T2_Suivi");
-    const c = await person("T2_Refus");
+    await person("T2_Prive", "private");
     await call(a, "POST", "/users/T2_Suivi/follow");
     await call(b, "POST", "/users/T2_Export/follow");
-    await db
-      .insert(friendships)
-      .values({ requesterId: a.id, addresseeId: c.id, status: "declined", respondedAt: new Date() });
+    await call(a, "POST", "/users/T2_Prive/follow");
     const net = (await call(a, "GET", "/me/export")).json.network;
-    expect(net.following.map((x: { pseudo: string }) => x.pseudo)).toEqual(["T2_Suivi"]);
+    const following = Object.fromEntries(net.following.map((x: { pseudo: string }) => [x.pseudo, x]));
+    expect(following.T2_Suivi).toMatchObject({ status: "accepted", acceptedAt: expect.any(String) });
+    expect(following.T2_Prive).toMatchObject({ status: "pending", acceptedAt: null });
     expect(net.followers.map((x: { pseudo: string }) => x.pseudo)).toEqual(["T2_Suivi"]);
-    expect(net.friendships).toEqual([
-      expect.objectContaining({ pseudo: "T2_Refus", status: "pending", requestedByMe: true }),
-    ]);
+    expect(net).not.toHaveProperty("friendships");
   });
 
   it("aperçu : chaque élément visible correspond à un champ de GET /users/:pseudo pour ce regard", async () => {
@@ -383,7 +385,6 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
       "crews",
       "followersCount",
       "followingCount",
-      "friendsCount",
       "departments",
       "bio",
     ]) {
@@ -396,26 +397,27 @@ describe("tour 2 : nombres, comptes indisponibles, concurrence, export", () => {
 });
 
 describe("aperçu de mon profil public", () => {
-  it("vu par un membre ou par un ami ; jamais les coordonnées ; boutons d'un autre", async () => {
+  it("vu par un membre ou par un abonné ; jamais les coordonnées ; boutons d'un autre", async () => {
     const p = await person("Prev_P", "private");
     await createVehicle(p.id, ref);
     const member = (await call(p, "GET", "/me/public-preview")).json;
     expect(member).toMatchObject({ audience: "public_limited", followersCount: 0, contact: null });
     expect(member.vehicles[0]).toMatchObject({ detailed: false, photoUrl: null });
-    const friend = (await call(p, "GET", "/me/public-preview?as=friend")).json;
+    const friend = (await call(p, "GET", "/me/public-preview?as=follower")).json;
     expect(friend).toMatchObject({
-      audience: "friend",
+      audience: "follower",
       followersCount: 0,
       contact: null,
-      friendship: { state: "friends" },
+      follow: { mine: "accepted", followsMe: false },
     });
+    expect((await call(p, "GET", "/me/public-preview?as=friend")).status).toBe(400);
     expect(friend.vehicles[0].detailed).toBe(true);
     await db.update(profiles).set({ visibility: "public" }).where(eq(profiles.userId, p.id));
     const pub = (await call(p, "GET", "/me/public-preview?as=member")).json;
     expect(pub).toMatchObject({
       audience: "public_full",
       followersCount: 0,
-      follow: { canFollow: true, following: false },
+      follow: { canFollow: true, mine: "none", followsMe: false },
     });
     expect((await call(p, "GET", "/me/public-preview?as=organizer")).status).toBe(400);
   });
