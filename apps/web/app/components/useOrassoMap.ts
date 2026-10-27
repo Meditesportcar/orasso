@@ -3,6 +3,10 @@
 // lui-même (`public/map-fonts/`) ; repli raster si OpenFreeMap ne répond pas (dans `createOrassoMap`).
 // `VITE_MAP_TILES_URL` remplace l'adresse des tuiles (recette du repli : une adresse fausse).
 import { createOrassoMap, type OrassoMap, useTheme } from "@orasso/design-system/web";
+// MapLibre 6 cherche son worker par une adresse calculée à l'exécution (`./maplibre-gl-worker.mjs` à côté de son
+// propre fichier) : la compilation du site ne le voit pas et ne le copie pas, la carte en ligne restait vide
+// (« Worker failed to load », retour de Damien du 27/10). L'adresse du fichier copié lui est donnée ici.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { type RefObject, useEffect, useRef, useState } from "react";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -33,6 +37,7 @@ export function useOrassoMap(
       try {
         const maplibre = await import("maplibre-gl");
         if (cancelled || !container.current) return;
+        if (maplibre.getWorkerUrl() !== maplibreWorkerUrl) maplibre.setWorkerUrl(maplibreWorkerUrl);
         const created = createOrassoMap(maplibre, container.current, {
           theme: themeRef.current,
           glyphsOrigin: window.location.origin,
