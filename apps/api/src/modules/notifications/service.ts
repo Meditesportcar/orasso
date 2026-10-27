@@ -38,6 +38,12 @@ export type NotifyInput = {
   email?: MailContent;
   /** Faux : push seulement, absent du Journal (ex. message reçu, lot 18). */
   inJournal?: boolean;
+  /**
+   * Lot R6c, tour 2 : trace silencieuse, jamais envoyée ni montrée (ni Journal, ni push, ni e-mail, ni temps réel) ; elle
+   * compte seulement pour les limites par paire. Sert à répondre à l'auteur d'une invitation comme si elle était partie
+   * quand la personne a coupé ses invitations.
+   */
+  silent?: boolean;
 };
 
 /** Champs internes de `data` jamais renvoyés aux clients. */
@@ -48,8 +54,12 @@ const stripInternal = (data: Record<string, unknown>) => {
 
 let inflight: Promise<void> = Promise.resolve();
 
-/** Lot R5c1, tour 2 : contrôle d'une notification à sa livraison (`false` : supprimée sans être envoyée). */
-export type DeliveryGuard = (n: NotificationRow) => Promise<boolean>;
+/**
+ * Lot R5c1, tour 2 : contrôle d'une notification à sa livraison (`false` : supprimée sans être envoyée). Lot R6c, tour 2 :
+ * le domaine peut aussi rendre la ligne recomposée (ex. invitation regroupée sans un auteur coupé entre-temps) : c'est
+ * elle qui part.
+ */
+export type DeliveryGuard = (n: NotificationRow) => Promise<boolean | NotificationRow>;
 const deliveryGuards = new Map<string, DeliveryGuard>();
 
 /** Un domaine revérifie ses notifications au moment de les livrer (ex. : destinataire encore membre d'un crew). */
@@ -81,9 +91,12 @@ export const notificationsService = {
           ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
           ...(input.email ? { _email: input.email } : {}),
         },
-        inJournal: input.inJournal ?? true,
+        inJournal: input.silent ? false : (input.inJournal ?? true),
         eventId: input.eventId ?? null,
-        deliverAfter: immediate || !env.NOTIFY_QUIET_HOURS ? at : deliverAfter(at, input.eventStartsAt ?? null),
+        deliverAfter:
+          immediate || input.silent || !env.NOTIFY_QUIET_HOURS ? at : deliverAfter(at, input.eventStartsAt ?? null),
+        // Trace silencieuse : déjà « livrée » et lue, elle n'est jamais reprise par `deliverDue`.
+        ...(input.silent ? { deliveredAt: at, readAt: at } : {}),
       })
       .returning();
     if (!row) throw new Error("Notification non enregistrée");
@@ -147,11 +160,12 @@ export const notificationsService = {
     for (const n of due) {
       try {
         const guard = deliveryGuards.get(n.type);
-        if (guard && !(await guard(n))) {
+        const verdict = guard ? await guard(n) : true;
+        if (verdict === false) {
           await db.delete(notifications).where(eq(notifications.id, n.id));
           continue;
         }
-        await deliverOne(n);
+        await deliverOne(verdict === true ? n : verdict);
       } catch (error) {
         // Réessayée à la prochaine minute.
         console.error("Livraison de notification :", error);

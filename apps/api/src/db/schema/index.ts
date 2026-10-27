@@ -9,6 +9,7 @@ export * from "./communication";
 export * from "./crewFeed";
 export * from "./crews";
 export * from "./devClock";
+export * from "./eventInvites";
 export * from "./events";
 export * from "./field";
 export * from "./home";

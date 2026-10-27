@@ -1,6 +1,6 @@
 // Demandes de crew (lot 19) dans Boîte > Demandes : demande reçue par le chef (accepter / refuser, refus silencieux) et
 // invitation reçue (accepter / refuser).
-import { crewLabels } from "@orasso/shared";
+import { crewInviteLabels, crewLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 
 import { api } from "@/lib/api";
@@ -29,10 +29,15 @@ export function CrewRequests({ onChanged, refreshKey }: RequestSectionProps) {
               ? crewLabels.requestFrom(r.person.pseudo, r.crew.name)
               : crewLabels.invitationFrom(r.crew.name)
           }
+          // Lot R6c (R6.7) : l'invitation d'un membre (le chef confirmera), une demande née de cette invitation.
           detail={
             r.kind === "invitation"
-              ? crewLabels.leaderOf(r.person.pseudo)
-              : crewLabels.membersCount(r.crew.membersCount)
+              ? r.leaderConfirms
+                ? `${crewInviteLabels.invitedBy(r.person.pseudo)} · ${crewInviteLabels.leaderConfirmsShort}`
+                : crewLabels.leaderOf(r.person.pseudo)
+              : r.invitedBy
+                ? crewInviteLabels.invitedBy(r.invitedBy)
+                : crewLabels.membersCount(r.crew.membersCount)
           }
           message={r.message}
           onOpenProfile={() =>

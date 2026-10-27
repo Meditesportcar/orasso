@@ -10,6 +10,7 @@ import {
   type CrewOutingView,
   type CrewPendingView,
   type CrewVitrineMember,
+  crewInviteLabels,
   crewLabels,
   gradeLabels,
   crewPageLabels as L,
@@ -400,6 +401,12 @@ export function RequestCard({
           <Text variant="caption" color={c.inkMuted}>
             {[`Grade ${gradeLabels[p.grade]}`, request.vehicleLabel].filter(Boolean).join(" · ")}
           </Text>
+          {/* Lot R6c (R6.7) : la personne a accepté l'invitation d'un membre ; le chef confirme son arrivée. */}
+          {request.invitedBy ? (
+            <Text variant="caption" color={c.accentText} testID="request-invited-by">
+              {crewInviteLabels.invitedBy(request.invitedBy)}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.reqActs}>
           <SmButton icon="check" disabled={busy} onPress={onAccept} testID="crew-request-accept">

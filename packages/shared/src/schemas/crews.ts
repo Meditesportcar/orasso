@@ -171,6 +171,11 @@ export type CrewPendingView = {
   createdAt: string;
   /** Lot R5c2 : demande reçue, le véhicule principal de la personne (la feuille de demande le lui dit). */
   vehicleLabel: string | null;
+  /**
+   * Lot R6c (R6.7) : demande née de l'invitation d'un membre, acceptée par la personne (« Invitée par Julie_66 ») ;
+   * invitation envoyée : qui l'a envoyée. `null` sinon.
+   */
+  invitedBy?: string | null;
 };
 export type CrewPendingList = { requests: CrewPendingView[]; invitations: CrewPendingView[] };
 
@@ -181,6 +186,10 @@ export type CrewInboxRequest = {
   person: CrewPerson;
   message: string | null;
   createdAt: string;
+  /** Lot R6c : demande née de l'invitation d'un membre (« Invitée par Julie_66 »). */
+  invitedBy?: string | null;
+  /** Lot R6c : invitation reçue d'un membre (pas du chef) : si j'accepte, le chef confirme mon arrivée. */
+  leaderConfirms?: boolean;
 };
 
 /** Boîte > Demandes : venue en crew à confirmer (candidature `awaiting_member`). */

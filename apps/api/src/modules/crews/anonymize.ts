@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { crewMembers, crewOutingReplies, crewOutings, crews, messages, notifications } from "../../db/schema";
 import type { Tx } from "../../lib/tx";
+import { inboxService } from "../messaging/inbox";
 import { revokeCrewChannelsOf, signalCrew } from "./live";
 import { crewsService } from "./service";
 
@@ -64,8 +65,17 @@ export async function anonymizeCrewsForDeletedAccount(
   // Lot R5c2 : ses sorties du crew disparaissent (avec leurs réponses), et ses réponses aux sorties des autres.
   await tx.delete(crewOutings).where(eq(crewOutings.authorId, userId));
   await tx.delete(crewOutingReplies).where(eq(crewOutingReplies.userId, userId));
-  // Les invitations qu'il a envoyées en tant que chef ont disparu avec la dissolution ; `invited_by` des autres lignes
-  // (invitations acceptées) ne doit plus le désigner.
+  // Les invitations qu'il a envoyées en tant que chef ont disparu avec la dissolution. Lot R6c, tour 2 (bloquant, Opus 1
+  // et Codex 1) : celles qu'il a envoyées en tant que membre, encore en attente, disparaissent aussi (jamais d'entrée sans
+  // le chef) ; leurs notifications, livrées ou non, sont supprimées plus bas avec toutes celles qui le citent.
+  const dropped = await tx
+    .delete(crewMembers)
+    .where(and(eq(crewMembers.invitedBy, userId), eq(crewMembers.status, "invited")))
+    .returning({ userId: crewMembers.userId });
+  after(() => {
+    for (const r of dropped) inboxService.publish(r.userId);
+  });
+  // `invited_by` des autres lignes (invitations acceptées, à confirmer par le chef) ne doit plus le désigner.
   await tx.update(crewMembers).set({ invitedBy: null }).where(eq(crewMembers.invitedBy, userId));
   await tx.execute(sql`
     update ${messages} m

@@ -18,6 +18,11 @@ export const socialNotificationTypes = {
   follow_request: "social",
   /** Lot R6b : « Julie_66 a accepté ta demande ». */
   follow_accepted: "social",
+  /**
+   * Lot R6c : « Kenji_66 t'invite à Nocturne de Canet », regroupée par événement (« Kenji_66 et Julie_66 t'invitent »).
+   * Revérifiée à la livraison (garde) : événement encore visible et à venir, invité qui n'y va pas, pas coupé.
+   */
+  event_invited: "social",
 } as const satisfies Record<string, NotificationFamily>;
 
 /** Items d'actualité du Journal : ni push, ni e-mail, livrés tout de suite (ARCHITECTURE-SUITE § 2.4). */
@@ -38,7 +43,11 @@ export const socialNotificationLabels: Record<keyof typeof socialNotificationTyp
   user_followed: "Nouvel abonné",
   follow_request: "Demande d'abonnement",
   follow_accepted: "Demande d'abonnement acceptée",
+  event_invited: "Invitations à un événement",
 };
 
-/** Lot R4c : un nouvel abonné ne vaut pas un e-mail (push et Journal seulement). */
-export const socialNoEmailTypes: readonly string[] = ["user_followed"];
+/**
+ * Lot R4c : un nouvel abonné ne vaut pas un e-mail (push et Journal seulement). Lot R6c : une invitation entre passionnés
+ * non plus (aucun courrier déclenché par un autre membre).
+ */
+export const socialNoEmailTypes: readonly string[] = ["user_followed", "event_invited"];

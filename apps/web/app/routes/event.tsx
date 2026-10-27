@@ -24,6 +24,7 @@ import {
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
+  type FollowingGoing,
   invitationLabels,
   siteLabels as L,
   LINEUP_BLOCK_SIZE,
@@ -35,6 +36,7 @@ import {
   mediaPlatformLabels,
   previewSummary,
   publicAccessText,
+  type ReceivedEventInvitation,
   registrationBlock,
   registrationBlockText,
   registrationFullText,
@@ -47,6 +49,7 @@ import {
 import { data, Form, redirect, useNavigation } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
+import { InviteBanner, WhoGoes } from "../components/EventInvite";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
 import { CarGrid, ProItem, VisitorNotice } from "../components/Lineup";
@@ -59,6 +62,7 @@ import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { routeLinks } from "../lib/directions";
+import { type InviteNoticeData, isShareable, muteInviterAction } from "../lib/eventInvite.server";
 import { formatDateTime, formatDateTimeYear, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
@@ -107,9 +111,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Prix du public (lot 49) : le gagnant, une fois l'événement réglé (connecté seulement : le classement exige un compte).
   const ended = new Date(event.endsAt).getTime() <= nowMs();
   const board = me && ended ? await api<AudiencePrizeBoard>(request, `/events/${event.id}/audience-prize`) : null;
+  // Lot R6c (R6.3, R6.6) : « Qui y va » et le bandeau de l'invité, pour un membre connecté, sur un événement qui se
+  // partage. Une erreur ne casse pas la fiche : le bloc disparaît.
+  const shareable = Boolean(me) && isShareable(event);
+  const [going, invited] = shareable
+    ? await Promise.all([
+        api<FollowingGoing>(request, `/events/${event.id}/following-going`),
+        api<ReceivedEventInvitation | null>(request, `/events/${event.id}/peer-invitations/received`),
+      ])
+    : [null, null];
   return {
     event,
     structure,
+    shareable,
+    going: going?.ok ? going.data : null,
+    invited: invited?.ok ? invited.data : null,
     leadsCrew: Boolean(crews?.ok && crews.data.some((c) => c.role === "leader")),
     reviews: reviews.ok ? reviews.data : null,
     lineup: lineup.ok ? lineup.data : null,
@@ -190,6 +206,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
   // Contacter l'organisateur (lot 18).
   if (intent === "contact_organizer") return messageAction(request, form);
+  // Lot R6c : couper les invitations d'une personne (« ⋯ » du bandeau).
+  if (intent === "invite_mute") return muteInviterAction(request, form);
   // Billets : réservation gratuite (billet et QR tout de suite) ou paiement de démonstration (Stripe en mode test).
   if (intent === "reserve" || intent === "checkout") {
     const eventId = String(form.get("eventId") ?? "");
@@ -404,7 +422,11 @@ function EventPage({
     media,
     prize,
     leadsCrew,
+    shareable,
+    going,
+    invited,
   } = loaderData;
+  const inviteResult = actionData as InviteNoticeData | undefined;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
     .map((id) => categories.find((c) => c.id === id)?.label)
@@ -501,6 +523,18 @@ function EventPage({
             {wizardEndLabels.previewBanner}
           </p>
         )}
+        {/* Lot R6c (R6.6) : le bandeau de l'invité, en haut de la fiche. */}
+        {inviteResult?.inviteNotice && (
+          <p className="s-notice s-notice--ok" role="status" data-testid="invite-muted">
+            {inviteResult.inviteNotice}
+          </p>
+        )}
+        {inviteResult?.inviteError && (
+          <p className="s-error" role="alert">
+            {inviteResult.inviteError}
+          </p>
+        )}
+        {shareable && invited && invited.inviters.length > 0 && <InviteBanner invitation={invited} />}
         <Reveal>
           {/* DA v2 (lot 56) : l'affiche générée en vedette, le titre en contour sur le fond ; sans affiche générée,
               le gabarit « Minimal » (jamais l'affiche perso, qui vit plus bas dans le détail). */}
@@ -542,6 +576,9 @@ function EventPage({
             </span>
           )}
         </div>
+
+        {/* Lot R6c (R6.3) : « Qui y va » et « Inviter du monde » (membre connecté, événement qui se partage). */}
+        {shareable && connected && <WhoGoes going={going} slug={event.slug} />}
 
         {/* Lot 26 : jours d'un événement sur plusieurs jours (date, horaires, places restantes, mode d'accès). */}
         <EventDays

@@ -29,6 +29,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type CrewFeedExport, crewFeedExport } from "../crews/feed/export";
+import { eventInvitesExport } from "../event-invites/service";
 
 export type AccountExport = {
   exportedAt: string;
@@ -59,6 +60,11 @@ export type AccountExport = {
   };
   /** Lot R5c1 : tes publications, commentaires et voix dans le fil des crews. */
   crewFeed: CrewFeedExport;
+  /**
+   * Lot R6c : invitations à un événement envoyées (avec ton mot) et reçues (sans le mot d'un autre), personnes dont tu as
+   * coupé les invitations.
+   */
+  eventInvitations: Awaited<ReturnType<typeof eventInvitesExport>>;
 };
 
 const followOut = (r: { pseudo: string; status: string; at: Date; acceptedAt: Date | null }) => ({
@@ -245,6 +251,7 @@ export const accountExportService = {
         })),
       },
       crewFeed: await crewFeedExport(userId),
+      eventInvitations: await eventInvitesExport(userId),
     };
   },
 };

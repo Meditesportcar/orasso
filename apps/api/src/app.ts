@@ -31,6 +31,7 @@ import { crewFeedRoutes } from "./modules/crews/feed/routes";
 import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
 import { devMailRoutes } from "./modules/dev-mail/routes";
+import { eventInvitesRoutes } from "./modules/event-invites/routes";
 import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
@@ -197,6 +198,8 @@ app.route("/", structuresRoutes);
 app.route("/", providersRoutes);
 app.route("/", mediaRoutes);
 app.route("/", eventsRoutes);
+// Lot R6c : « Qui y va », invitations entre passionnés, invitations coupées.
+app.route("/", eventInvitesRoutes);
 app.route("/", posterRoutes);
 app.route("/", applicationsRoutes);
 app.route("/", notificationsRoutes);

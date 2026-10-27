@@ -95,6 +95,13 @@ export const rateRules = {
   crewSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   crewInvite: { max: 50, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
   crewWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /**
+   * Lot R6c : « Qui y va », la liste « Inviter du monde » (lectures), et les envois d'invitations (rafales ; le plafond
+   * de 30 invitations par jour est compté en base).
+   */
+  eventInviteRead: { max: 120, windowMs: 60_000, message: "Trop de demandes : réessaie dans une minute." },
+  eventInviteWrite: { max: 30, windowMs: 3_600_000, message: "Trop d'envois : réessaie plus tard." },
+  invitationMute: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Accueil (lot 30) : lecture agrégée, réglages (widgets, garage favori) et clics sur l'emplacement sponsorisé. */
   homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },

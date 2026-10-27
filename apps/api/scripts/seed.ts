@@ -23,6 +23,7 @@ import { seedCrewPage } from "./seed/crew-page";
 import { seedCrews } from "./seed/crews";
 import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
+import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
@@ -124,6 +125,9 @@ async function main() {
   await seedCrewPage();
   // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
   await seedExplorer(hash);
+  // Lot R6c : Julie et Théo invitent Kenji au Rassemblement de Narbonne (créé par le seed de l'Explorer, juste avant :
+  // tour 2, sur une base neuve la démonstration manquait).
+  await seedEventInvites();
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
   await seedCommunication();
   // Lot 24 : rôle boutique du Salon Argelès (billets gratuits, staff boutique) et une demande de staff en attente.

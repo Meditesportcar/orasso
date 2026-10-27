@@ -4,6 +4,7 @@ import {
   type CrewPendingList,
   type CrewView,
   crewInstagramUrl,
+  crewInviteLabels,
   crewLabels,
   crewOutingRsvps,
   crewPageLabels as L,
@@ -308,6 +309,18 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
                       </>
                     ) : null}
                     <CrewSecHead title={L.membersTitle} hint={String(members?.length ?? crew.membersCount)} />
+                    {/* Lot R6c (R6.7) : tout membre actif invite quelqu'un de son réseau (page à part). */}
+                    {live ? (
+                      <Button
+                        variant="secondary"
+                        icon="add"
+                        href={`${back}/inviter`}
+                        fullWidth
+                        data-testid="crew-invite-someone"
+                      >
+                        {crewInviteLabels.inviteSomeone}
+                      </Button>
+                    ) : null}
                     <ul className="crw-list">
                       {(members ?? []).map((m) => (
                         <MemberRow
@@ -338,7 +351,11 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
                                   key={r.person.userId}
                                   pseudo={r.person.pseudo}
                                   avatarUrl={r.person.avatarUrl}
-                                  caption={crewLabels.pendingInvitations}
+                                  caption={
+                                    r.invitedBy
+                                      ? `${crewLabels.pendingInvitations} · ${crewInviteLabels.invitedBy(r.invitedBy)}`
+                                      : crewLabels.pendingInvitations
+                                  }
                                   leader={false}
                                   back={back}
                                 >

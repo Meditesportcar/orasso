@@ -43,6 +43,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { arrivalBody } from "@/features/arrival/ArrivalSeen";
+import { AfterInviteCard } from "@/features/event/invite/AfterInviteCard";
 import { CheckBox, CrewDot, Seg, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
@@ -71,11 +72,14 @@ export function CandSheet({
   crewSlug,
   initialDay,
   alreadyFollowing = false,
+  onInvite,
 }: {
   event: EventPublic;
   visible: boolean;
   onClose: () => void;
   onSent: () => void;
+  /** Lot R6c (R6.5) : « Inviter » de la carte « Invite du monde à venir » (la fiche ouvre la feuille d'invitation). */
+  onInvite?: () => void;
   /** Mode à l'ouverture : `crew` depuis « Inscrire mon crew ». */
   mode?: "solo" | "crew";
   /** Faux quand la candidature personnelle n'est plus possible (déjà candidat) : seul le mode crew reste. */
@@ -315,6 +319,16 @@ export function CandSheet({
                 : "L'équipe organisatrice te répond au fil des candidatures. Tu retrouves ta candidature dans Sorties."}
           </Text>
           <NotificationAsk reason="Active les notifications pour recevoir la réponse tout de suite, même appli fermée." />
+          {/* Lot R6c (R6.5) : « Invite du monde à venir », trois visages et « Inviter » ; fermée, elle ne revient pas. */}
+          {onInvite ? (
+            <AfterInviteCard
+              eventId={e.id}
+              onInvite={() => {
+                closeAll();
+                onInvite();
+              }}
+            />
+          ) : null}
           <SmButton
             kind="p"
             big

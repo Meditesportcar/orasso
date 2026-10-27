@@ -6,18 +6,9 @@
 // - non-membre : la vitrine (image du crew, description, Instagram, amis membres, membres) et « Demander à rejoindre »,
 //   qui ouvre la feuille avec un mot pour le chef ; puis « Demande envoyée à … » et « Annuler la demande ».
 // Les réglages du chef (logo, bannière, Instagram, sorties, retirer, dissoudre) ont leur écran (`/crew/reglages`).
+import { departmentChoices, Icon, initialsOf, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  departmentChoices,
-  Icon,
-  initialsOf,
-  Photo,
-  Tag,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
-import {
+  crewInviteLabels as CL,
   type CrewOutingRsvp,
   type CrewOutingView,
   type CrewView,
@@ -29,6 +20,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Platform, Pressable, type ScrollView, StyleSheet, View } from "react-native";
 
+import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
 import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
@@ -53,7 +45,6 @@ import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
-import { AppSheet } from "@/ui/AppSheet";
 import { CrewDot, SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -112,7 +103,6 @@ export default function CrewScreen() {
   const [tab, setTab] = useState<Tab>(onglet === "sorties" ? "outings" : "feed");
   const [asking, setAsking] = useState(false);
   const [inviting, setInviting] = useState(false);
-  const [invite, setInvite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -177,35 +167,22 @@ export default function CrewScreen() {
   const friends = v.members.filter((m) => m.friend);
   const requests = pending.data?.requests ?? [];
 
+  // Lot R6c (R6.7) : tout membre actif invite une personne de son réseau ; le chef confirme son arrivée. Le chef garde
+  // l'invitation par pseudo dans la même feuille.
   const inviteSheet = (
-    <AppSheet visible={inviting} onClose={() => setInviting(false)} accessibilityLabel={crewLabels.invite}>
-      <Text variant="posterM" color={c.ink}>
-        {crewLabels.invite}
-      </Text>
-      <TextField label={crewLabels.invitePseudo} value={invite} onChangeText={setInvite} autoCapitalize="none" />
-      <SmButton
-        kind="p"
-        big
-        wide
-        icon="send"
-        disabled={busy || !invite.trim()}
-        onPress={() =>
-          void run(async () => {
-            await api.inviteToCrew(v.id, invite.trim());
-            setInvite("");
-            setInviting(false);
-          }, crewLabels.invited(invite.trim()))
-        }
-        testID="crew-invite-send"
-      >
-        {crewLabels.invite}
-      </SmButton>
-      {pending.data && pending.data.invitations.length > 0 ? (
-        <Muted variant="caption">
-          {crewLabels.pendingInvitations} : {pending.data.invitations.map((i) => i.person.pseudo).join(", ")}
-        </Muted>
-      ) : null}
-    </AppSheet>
+    <CrewInviteSheet
+      crew={inviting ? { id: v.id, name: v.name, leaderPseudo: v.leader?.pseudo ?? null } : null}
+      leader={leader}
+      onClose={() => setInviting(false)}
+      onSent={(pseudo) => {
+        setInviting(false);
+        setError(null);
+        setOk(
+          `${CL.sentTitle(pseudo)}. ${leader ? CL.sentByLeader : CL.sentByMember(v.leader?.pseudo ?? CL.leaderFallback)}`,
+        );
+        void reloadAll();
+      }}
+    />
   );
   const requestSheet = (
     <CrewRequestSheet
@@ -250,7 +227,7 @@ export default function CrewScreen() {
       }}
       overlays={
         <>
-          {leader ? inviteSheet : null}
+          {member && live ? inviteSheet : null}
           {requestSheet}
         </>
       }
@@ -497,8 +474,16 @@ export default function CrewScreen() {
                   onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}
                 />
               ))}
-              {leader ? (
-                <SmButton kind="s" big wide icon="add" onPress={() => setInviting(true)} testID="crew-invite-someone">
+              {/* Lot R6c (R6.7) : « Inviter quelqu'un » pour tout membre (chef compris). */}
+              {live ? (
+                <SmButton
+                  kind={leader ? "s" : "p"}
+                  big
+                  wide
+                  icon="add"
+                  onPress={() => setInviting(true)}
+                  testID="crew-invite-someone"
+                >
                   {L.inviteSomeone}
                 </SmButton>
               ) : null}

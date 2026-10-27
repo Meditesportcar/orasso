@@ -56,5 +56,7 @@ export default [
     // Lot R5c2 : proposer une sortie du crew, réglages du crew (chef).
     route("c/:slug/sortie", "routes/crew-sortie.tsx"),
     route("c/:slug/reglages", "routes/crew-reglages.tsx"),
+    // Lot R6c : inviter quelqu'un dans le crew (tout membre actif).
+    route("c/:slug/inviter", "routes/crew-inviter.tsx"),
   ]),
 ] satisfies RouteConfig;

@@ -9,6 +9,7 @@ import {
   type CrewOutingView,
   type CrewPendingView,
   type CrewVitrineMember,
+  crewInviteLabels,
   crewLabels,
   gradeLabels,
   crewPageLabels as L,
@@ -265,6 +266,12 @@ export function RequestCard({ crewId, request, back }: { crewId: string; request
           <span className="o-t-caption s-muted">
             {[`Grade ${gradeLabels[p.grade]}`, request.vehicleLabel].filter(Boolean).join(" · ")}
           </span>
+          {/* Lot R6c (R6.7) : la personne a accepté l'invitation d'un membre ; le chef confirme son arrivée. */}
+          {request.invitedBy ? (
+            <span className="o-t-caption crw-block" data-testid="request-invited-by">
+              {crewInviteLabels.invitedBy(request.invitedBy)}
+            </span>
+          ) : null}
         </span>
         <span className="crw-req__acts">
           <Form method="post" preventScrollReset>
