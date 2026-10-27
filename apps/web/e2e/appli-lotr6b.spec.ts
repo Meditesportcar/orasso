@@ -192,7 +192,9 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(other.page.getByTestId("net-remove-confirm")).toContainText(`Retirer ${me.pseudo} de tes abonnés ?`);
     await shot(other.page, `12-reseau-retirer-confirmation-${theme}`);
     await other.page.getByTestId("net-remove-yes").click();
-    await expect(other.page.getByTestId("net-remove-info")).toContainText(`${me.pseudo} ne fait plus partie de tes abonnés.`);
+    await expect(other.page.getByTestId("net-remove-info")).toContainText(
+      `${me.pseudo} ne fait plus partie de tes abonnés.`,
+    );
     await expect(other.page.getByTestId("net-person").filter({ hasText: me.pseudo })).toHaveCount(0);
     await shot(other.page, `13-reseau-abonne-retire-${theme}`);
     await goto(mine.page, `/u/${priv.pseudo}`);
