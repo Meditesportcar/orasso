@@ -12,7 +12,7 @@
 // - pas de mesure inutile : sur le web, une seule mesure tant que le libellé tient sur une ligne ; sur le téléphone,
 //   la largeur n'est suivie qu'après une coupure ; plus rien au plancher.
 
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   type NativeSyntheticEvent,
@@ -69,6 +69,15 @@ export function useWordSafeLabel(base: number, label: ReactNode, min?: number): 
       setFit({ sig, cut: 0 });
     }
   };
+
+  // Lot R6-police : sur le web, un corps plus petit ne change pas toujours la boîte du libellé (même largeur, toujours
+  // deux lignes) : aucun nouvel `onLayout`, la descente s'arrêtait au premier pixel. Après chaque pixel retiré, on
+  // remesure une fois le libellé posé. Sans coupure (cut = 0), rien ne se passe.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une mesure par pixel retiré, pas à chaque rendu.
+  useEffect(() => {
+    if (Platform.OS !== "web" || cut === 0 || atFloor) return;
+    if (webLabelBreaksInsideWord(ref.current)) shrink();
+  }, [cut, sig]);
 
   const textProps: WordSafeLabel["textProps"] =
     Platform.OS === "web"

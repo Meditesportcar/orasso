@@ -54,9 +54,9 @@ describe("créneau d'arrivée", () => {
   });
 
   it("la liste d'attente annonce les délais réels des règles", () => {
-    expect(waitlistPhrase).toContain("24 h");
-    expect(waitlistPhrase).toContain("3 h la veille");
-    expect(waitlistPhrase).toContain("2 h le jour J");
+    expect(waitlistPhrase).toContain("24\u00a0h");
+    expect(waitlistPhrase).toContain("3\u00a0h la veille");
+    expect(waitlistPhrase).toContain("2\u00a0h le jour\u00a0J");
   });
 });
 

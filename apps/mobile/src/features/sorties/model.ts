@@ -6,6 +6,7 @@ import {
   BUSINESS_TIMEZONE,
   calendarDaysBetween,
   inNearWindow,
+  keepUnits,
   type MyApplication,
   type MyStaffEvent,
   type MyTicket,
@@ -35,7 +36,10 @@ export function arrivalPhrase(slot: ArrivalSlot | null | undefined): string | nu
 }
 
 /** « Si une place se libère, tu as 24 h pour l'accepter » : les délais réels (24 h, 3 h la veille, 2 h le jour J). */
-export const waitlistPhrase = `Si une place se libère, tu as ${OFFER_DELAY_DEFAULT / HOUR} h pour l'accepter (${OFFER_DELAY_EVE / HOUR} h la veille, ${OFFER_DELAY_DAY / HOUR} h le jour J).`;
+// Lot R6-police : unités et « jour J » insécables (`keepUnits`).
+export const waitlistPhrase = keepUnits(
+  `Si une place se libère, tu as ${OFFER_DELAY_DEFAULT / HOUR} h pour l'accepter (${OFFER_DELAY_EVE / HOUR} h la veille, ${OFFER_DELAY_DAY / HOUR} h le jour J).`,
+);
 
 /** Candidatures encore vivantes : refusées, retirées, expirées ou annulées ne sont plus des sorties. */
 export const LIVE_STATUSES = ["pending", "waitlisted", "offered", "accepted", "awaiting_member"] as const;
