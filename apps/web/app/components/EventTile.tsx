@@ -1,6 +1,6 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { type EventCard, eventFormatLabels, yearToShow } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { countFr, type EventCard, eventFormatLabels, widestWordEm, yearToShow } from "@orasso/shared";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
 import { formatDayShort, formatTime } from "../lib/format";
@@ -59,7 +59,12 @@ export function PosterFace({
   return (
     <span className="w-card__minimal" data-testid="poster-minimal">
       <span className="o-t-label w-card__minimal-format">{eventFormatLabels[event.format]}</span>
-      <span className="o-t-poster-s w-card__minimal-title">{event.title}</span>
+      <span
+        className="o-t-poster-s w-card__minimal-title"
+        style={{ "--em": widestWordEm(event.title) } as CSSProperties}
+      >
+        {event.title}
+      </span>
       <span className="o-t-credit w-card__minimal-credit">Orasso</span>
     </span>
   );
@@ -126,7 +131,9 @@ export function EventTile({
             {stub.year !== null && <span data-testid="event-tile-date">{formatDayShort(event.startsAt)} · </span>}
             {formatTime(event.startsAt)}
           </span>
-          <h3 className="w-card__title o-t-poster-s">{event.title}</h3>
+          <h3 className="w-card__title o-t-poster-s" style={{ "--em": widestWordEm(event.title) } as CSSProperties}>
+            {event.title}
+          </h3>
           {showStructure && (
             <span className="w-card__org o-t-meta">
               <span className="w-card__logo" aria-hidden="true">
@@ -146,7 +153,7 @@ export function EventTile({
                 {where}
               </span>
             )}
-            <span>{event.remaining === null ? "Sans limite" : `${event.remaining} places`}</span>
+            <span>{event.remaining === null ? "Sans limite" : countFr(event.remaining, "place")}</span>
           </span>
           {taken !== null && (
             <span className="w-card__gauge" aria-hidden="true">

@@ -1,6 +1,7 @@
 import type { EventCard } from "../schemas/event";
 import type { ProCard } from "../schemas/pro";
 import type { SearchGroup } from "../schemas/search";
+import { countFr } from "./plural.fr";
 
 // Recherche de premier niveau et Explorer (lot 29) : libellés d'interface.
 
@@ -270,7 +271,7 @@ export const eventPageLabels = {
   withdrawLate: "Après le verrouillage : un malus s'applique",
 } as const;
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) => countFr(n, one, many);
 
 /**
  * Explorer R2 (maquette « Explorer R2 », validée par Damien le 24/10 : « Parfait ! Juste l'entête, on garde toujours

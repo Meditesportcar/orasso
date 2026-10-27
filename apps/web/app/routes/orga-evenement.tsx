@@ -14,6 +14,7 @@ import {
 import {
   type AudiencePrizeBoard,
   audiencePrizeTexts,
+  countFr,
   describeRecurrence,
   type EventOrganizer,
   type EventTicketing,
@@ -26,6 +27,7 @@ import {
   isBadWeather,
   orgaPosterLabels,
   orgaPrizeLabels,
+  pluralFr,
   posterStyleLabels,
   posterStyles,
   RECURRENCE_MAX_COUNT,
@@ -434,8 +436,8 @@ function PrizePanel({ prize, slug }: { prize: AudiencePrizeBoard; slug: string }
         </ol>
       )}
       <p className="o-t-caption s-muted">
-        {audiencePrizeTexts.votes(prize.total)} · {prize.vehicles} véhicules pointés ·{" "}
-        <a href={`/app/vote/${slug}`}>{orgaPrizeLabels.open}</a>
+        {audiencePrizeTexts.votes(prize.total)} · {countFr(prize.vehicles, "véhicule")}{" "}
+        {pluralFr(prize.vehicles, "pointé", "pointés")} · <a href={`/app/vote/${slug}`}>{orgaPrizeLabels.open}</a>
       </p>
     </section>
   );

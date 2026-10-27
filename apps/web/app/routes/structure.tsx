@@ -1,5 +1,6 @@
 import { Button, Chip, Icon, Plate } from "@orasso/design-system/web";
 import {
+  countFr,
   type EventCard,
   type Page,
   type ProCard,
@@ -7,7 +8,9 @@ import {
   type StructurePublic,
   staffRequestLabels,
   structureKindLabels,
+  widestWordEm,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, redirect } from "react-router";
 
 import { EventTile } from "../components/EventTile";
@@ -54,7 +57,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   const where = [structure.city, structure.department].filter(Boolean).join(" ");
   const description =
     structure.description?.slice(0, 160) ||
-    `${structureKindLabels[structure.kind]}${where ? ` · ${where}` : ""} · ${structure.followersCount} abonnés. Événements à venir sur Orasso.`;
+    `${structureKindLabels[structure.kind]}${where ? ` · ${where}` : ""} · ${countFr(structure.followersCount, "abonné")}. Événements à venir sur Orasso.`;
   const title = `${structure.name} · Orasso`;
   const image = structure.logoUrl ? new URL(structure.logoUrl, origin).toString() : `${origin}/og-image.png`;
   return [
@@ -108,7 +111,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
             <Icon name="staff" size={36} />
           )}
         </div>
-        <div className="s-grow s-stack s-stack--tight">
+        <div className="s-grow s-stack s-stack--tight s-fit">
           <div className="o-t-label s-tile__muted">
             {structureKindLabels[structure.kind]}
             {structure.verified && (
@@ -120,7 +123,11 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
               </>
             )}
           </div>
-          <h1 id="so-title" className="s-title">
+          <h1
+            id="so-title"
+            className="s-title s-title--fit"
+            style={{ "--em": widestWordEm(structure.name) } as CSSProperties}
+          >
             {structure.name}
           </h1>
           {where && <div className="o-t-meta s-tile__muted">{where}</div>}
@@ -138,7 +145,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
               </span>
             )}
           </div>
-          <div className="o-t-caption s-tile__muted">{structure.followersCount} abonnés</div>
+          <div className="o-t-caption s-tile__muted">{countFr(structure.followersCount, "abonné")}</div>
         </div>
         <div className="so__actions">
           {connected ? (

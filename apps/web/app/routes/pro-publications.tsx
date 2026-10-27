@@ -1,7 +1,7 @@
 // Espace pro, publications (`/pro/<slug>/publications`) : offres et actualités visibles par les abonnés, avec une
 // limite par mois (docs/01 « Professionnels »).
 import { Button, Chip, Counters, Plate, TextField } from "@orasso/design-system/web";
-import type { ProOwner } from "@orasso/shared";
+import { type ProOwner, pluralFr } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
@@ -58,7 +58,10 @@ export default function ProPublications({ loaderData, actionData }: Route.Compon
         size="site"
         items={[
           { value: pro.postsRemaining, label: "publications restantes ce mois-ci" },
-          { value: pro.followersCount, label: "abonnés qui les voient" },
+          {
+            value: pro.followersCount,
+            label: pluralFr(pro.followersCount, "abonné qui les voit", "abonnés qui les voient"),
+          },
         ]}
       />
 

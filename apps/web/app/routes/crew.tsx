@@ -8,7 +8,9 @@ import {
   crewLabels,
   crewOutingRsvps,
   crewPageLabels as L,
+  widestWordEm,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
@@ -186,8 +188,13 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
           <span className="crw-id__ring">
             <CrewLogo url={crew.logoUrl} name={crew.name} size={84} />
           </span>
-          <div className="crw-id__text">
-            <h1 className="s-title o-never-truncate">{crew.name}</h1>
+          <div className="crw-id__text s-fit">
+            <h1
+              className="s-title s-title--fit o-never-truncate"
+              style={{ "--em": widestWordEm(crew.name) } as CSSProperties}
+            >
+              {crew.name}
+            </h1>
             <span className="o-t-caption s-muted">
               {L.idLine(
                 departmentChoices.find((d) => d.code === crew.department)?.name ?? crew.department,

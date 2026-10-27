@@ -1,8 +1,17 @@
 // Fiche publique d'un pro (`/p/<slug>`, docs/01 « Professionnels » : logo, activités, adresse ou zone d'intervention,
 // horaires, photos de réalisations, contact, réseaux, remises par grade, organisateurs partenaires).
 import { Button, Chip, ChipRow, Icon, Plate } from "@orasso/design-system/web";
-import { gradeLabels, grades, type ProPublic, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
-import { useEffect } from "react";
+import {
+  countFr,
+  gradeLabels,
+  grades,
+  type ProPublic,
+  proActivityLabels,
+  weekdayLabels,
+  weekdays,
+  widestWordEm,
+} from "@orasso/shared";
+import { type CSSProperties, useEffect } from "react";
 import { Form, redirect } from "react-router";
 
 import { ReportDialog } from "../components/ReportDialog";
@@ -110,7 +119,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
         <div className="so__logo" aria-hidden={!pro.logoUrl}>
           {pro.logoUrl ? <img src={pro.logoUrl} alt={`Logo de ${pro.name}`} /> : <Icon name="vehicle" size={36} />}
         </div>
-        <div className="s-grow s-stack s-stack--tight">
+        <div className="s-grow s-stack s-stack--tight s-fit">
           <div className="o-t-label s-tile__muted">
             {pro.activities.map((a) => proActivityLabels[a]).join(" · ")}
             {pro.verified && (
@@ -123,7 +132,11 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
               </>
             )}
           </div>
-          <h1 id="pro-title" className="s-title">
+          <h1
+            id="pro-title"
+            className="s-title s-title--fit"
+            style={{ "--em": widestWordEm(pro.name) } as CSSProperties}
+          >
             {pro.name}
           </h1>
           {where ? (
@@ -135,7 +148,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
               </div>
             )
           )}
-          <div className="o-t-caption s-tile__muted">{pro.followersCount} abonnés</div>
+          <div className="o-t-caption s-tile__muted">{countFr(pro.followersCount, "abonné")}</div>
         </div>
         <div className="so__actions">
           {connected ? (

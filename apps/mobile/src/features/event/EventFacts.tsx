@@ -10,6 +10,7 @@ import {
   type EventPublic,
   eventAdmissionLabels,
   eventFormatLabels,
+  fitWideWordSize,
   eventPageLabels as L,
   previewSummary,
   publicAccessText,
@@ -17,7 +18,7 @@ import {
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
@@ -39,13 +40,23 @@ export function EventTitle({
 }) {
   const { t } = useTheme();
   const free = event.publicAccess === "free" || event.publicAccess === "free_reservation";
+  // Lot R6-retouches : le titre ne se coupe qu'entre deux mots ; il rapetisse (jusqu'à 14 px) quand son mot le plus
+  // large ne tient pas dans la largeur, échelle de police du système comprise (comme le pseudo du profil).
+  const [width, setWidth] = useState(0);
+  const { fontScale } = useWindowDimensions();
+  const size = fitWideWordSize(event.title, width / Math.max(1, fontScale), styles.title.fontSize, 14);
   return (
-    <View style={styles.titleBlock}>
+    <View style={styles.titleBlock} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <View style={styles.tags}>
         <Tag tone="acc">{eventFormatLabels[event.format]}</Tag>
         {free ? <Tag tone="line">{L.free}</Tag> : null}
       </View>
-      <Text variant="posterL" color={t.color.ink} accessibilityRole="header" style={styles.title}>
+      <Text
+        variant="posterL"
+        color={t.color.ink}
+        accessibilityRole="header"
+        style={[styles.title, { fontSize: size, lineHeight: size + styles.title.lineHeight - styles.title.fontSize }]}
+      >
         {event.title}
       </Text>
       {event.description ? (

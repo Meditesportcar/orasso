@@ -76,6 +76,14 @@ export function wideWordEm(word: string, margin = SAFETY): number {
 /** Corps (px) qui fait tenir le mot le plus large de `text` dans `width`, entre `min` et `max`. */
 export function fitWideWordSize(text: string, width: number, max: number, min: number): number {
   if (!(width > 0)) return max;
-  const widest = Math.max(1, ...text.split(/\s+/).map((w) => wideWordEm(w)));
+  const widest = widestWordEm(text);
   return Math.max(min, Math.min(max, Math.floor(width / widest)));
+}
+
+/**
+ * Lot R6-retouches : la chasse (en corps) du mot le plus large d'un titre, pour qu'un titre ne se coupe qu'entre deux
+ * mots. Le site en fait `--em` : corps = min(corps du jeton, largeur de la colonne / `--em`).
+ */
+export function widestWordEm(text: string): number {
+  return Math.max(1, ...text.split(/\s+/).map((w) => wideWordEm(w)));
 }

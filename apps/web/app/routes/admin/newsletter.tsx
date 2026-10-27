@@ -4,6 +4,7 @@
 // de désinscription dans chaque e-mail.
 import { Button, Chip, TextField } from "@orasso/design-system/web";
 import {
+  countFr,
   markdownToHtml,
   type NewsletterAudience,
   type NewsletterView,
@@ -240,7 +241,7 @@ export default function AdminNewsletter({ loaderData, actionData }: Route.Compon
         {current && !editable && (
           <p className="o-t-caption" data-testid="newsletter-progress">
             {current.status === "sent"
-              ? `Envoyée le ${formatDateTime(current.sentAt ?? current.updatedAt)} à ${current.recipientsCount} personnes.`
+              ? `Envoyée le ${formatDateTime(current.sentAt ?? current.updatedAt)} à ${countFr(current.recipientsCount, "personne")}.`
               : newsletterTexts.progress(current.delivered, current.failed)}
           </p>
         )}
@@ -258,7 +259,7 @@ export default function AdminNewsletter({ loaderData, actionData }: Route.Compon
               <li key={n.id}>
                 <a href={`/admin/newsletter?id=${n.id}`} aria-current={current?.id === n.id ? "true" : undefined}>
                   {n.subject} · {newsletterStatusLabels[n.status]}
-                  {n.status === "sent" ? ` · ${n.recipientsCount} destinataires` : ""}
+                  {n.status === "sent" ? ` · ${countFr(n.recipientsCount, "destinataire")}` : ""}
                 </a>
               </li>
             ))}

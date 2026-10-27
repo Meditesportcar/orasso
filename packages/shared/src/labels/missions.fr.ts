@@ -1,5 +1,6 @@
 import type { ProviderPower } from "../provider";
 import { formatMenuPrice } from "../rules/menu";
+import { countFr, pluralFr } from "./plural.fr";
 
 // Prestataires v2 (lot 46) : missions, emplacement, vitrine et avis des organisateurs. Textes du prototype DA v2
 // (`s-missions`, `s-pcand`, `s-vitrine`), au « tu ».
@@ -27,7 +28,7 @@ export const missionTexts = {
       ? `${remaining} place${remaining > 1 ? "s" : ""} sur ${quantity}`
       : `${quantity} ${trade.toLowerCase()}${quantity > 1 ? "s" : ""}`,
   distance: (km: number) => `${Math.round(km)} km`,
-  expectedVisitors: (n: number) => `${n} visiteurs attendus`,
+  expectedVisitors: (n: number) => `${countFr(n, "visiteur")} ${pluralFr(n, "attendu", "attendus")}`,
   /** Ce que l'organisateur fournit (carte de mission). */
   power: (p: ProviderPower) =>
     p === "none"

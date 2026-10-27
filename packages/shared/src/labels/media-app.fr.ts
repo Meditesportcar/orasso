@@ -1,10 +1,11 @@
 import type { MediaContentView, MediaPlatform } from "../schemas/media";
+import { pluralFr } from "./plural.fr";
 
 // Casquette Média de l'appli (lot 55, prototype DA v2 `s-agenda`, `s-accred`, `s-contenus`) : textes des écrans
 // Explorer, Presse, Contenus, de la création du profil média et des blocs de la fiche événement. Les libellés de l'API
 // (états d'accréditation, temps de route) restent dans `media.fr.ts` (`mediaLabels`). Pas de numéro de carte de presse (D26).
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("fr-FR")} ${pluralFr(n, one, many)}`;
 
 export const mediaAppLabels = {
   // --- Explorer ---------------------------------------------------------------------------------------------------------

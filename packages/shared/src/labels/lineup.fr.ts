@@ -1,9 +1,10 @@
 import { type Grade, gradeLabels } from "../grades";
 import type { LineupPhase } from "../rules/lineup";
+import { pluralFr } from "./plural.fr";
 
 // Le plateau (lot R4b, maquette R4.3, R4.3b, R4.4, R4.7) : mêmes mots dans l'appli et sur le site.
 
-const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
+const plural = pluralFr;
 
 export const lineupLabels = {
   title: "Le plateau",
@@ -32,7 +33,7 @@ export const lineupLabels = {
   /** En tête du plein écran, sous le grand nombre. */
   headAccepted: "À jour à chaque acceptation",
   headPresent: (day: string) => `Pointées à l'accueil le ${day}`,
-  places: (n: number) => `${n} places`,
+  places: (n: number) => `${n} ${plural(n, "place", "places")}`,
   /** La règle, en bas du plein écran. */
   rule: "Tout le monde y apparaît dès son acceptation, sans réglage. Les plaques sont toujours masquées et aucune heure d'arrivée n'est montrée. Un compte privé montre sa voiture et son pseudo ; son profil reste fermé.",
   prosNote: (organizer: string) =>

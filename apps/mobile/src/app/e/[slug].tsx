@@ -15,6 +15,7 @@
 
 import { Button, Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  countFr,
   crewLabels,
   dayAccessLabels,
   type EventCard,
@@ -627,7 +628,7 @@ export default function EventPage() {
                 ? ""
                 : d.remaining === 0
                   ? ` · ${eventDaysLabels.dayFull}`
-                  : ` · ${d.remaining} places`}
+                  : ` · ${countFr(d.remaining, "place")}`}
             </Text>
           ))}
         </Plate>

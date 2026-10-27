@@ -3,6 +3,7 @@ import { type Grade, gradeLabels } from "../grades";
 import { weekdayNames } from "../rules/recurrence";
 import { isRare, type StampInk, type StampKind, type StampShape } from "../rules/stamps";
 import { wallTime } from "../rules/time";
+import { countFr } from "./plural.fr";
 
 // Passeport, prix du public, récap (lot 49) : textes du prototype DA v2 (`s-passport`, `s-vote`, `s-recap`), au « tu ».
 // Les écrans (lots 50 et 57) les reprennent tels quels ; l'API s'en sert pour les notifications et le texte du récap.
@@ -62,7 +63,7 @@ export function frOrdinal(n: number): string {
   return n === 1 ? "1er" : `${n}e`;
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) => countFr(n, one, many);
 
 /**
  * Phrase du tampon (récap, notification) : « Nouveau tampon de nuit dans ton passeport, encre sang et or du 66. » ;
@@ -142,7 +143,7 @@ export const recapTexts = {
   /** « +60 points : présence, prix du public. Plus que 460 avant Circuit. » */
   points: (total: number, labels: readonly string[], next: { grade: Grade; in: number } | null) => {
     const sign = total >= 0 ? "+" : "";
-    const head = `${sign}${total} points${labels.length ? ` : ${labels.join(", ").toLowerCase()}` : ""}.`;
+    const head = `${sign}${plural(total, "point", "points")}${labels.length ? ` : ${labels.join(", ").toLowerCase()}` : ""}.`;
     return next ? `${head} Plus que ${next.in} avant ${gradeLabels[next.grade]}.` : head;
   },
   projected: "Points prévus : acquis au règlement, deux jours après l'événement.",

@@ -7,6 +7,7 @@
 import { Button, CheckboxField, Chip, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
+  countFr,
   eventEditorLabels as EL,
   INVITATION_MESSAGE_MAX,
   type InvitationCreateResult,
@@ -258,7 +259,7 @@ export default function Inviter() {
             sources.data.map((src) => (
               <Plate key={src.id} style={styles.card} testID="invite-source">
                 <Text variant="caption" color={t.color.plateMuted}>
-                  {`${formatDay(src.startsAt)} · ${src.acceptedCount} retenus`}
+                  {`${formatDay(src.startsAt)} · ${countFr(src.acceptedCount, "retenu")}`}
                 </Text>
                 <Button
                   variant="plate"
