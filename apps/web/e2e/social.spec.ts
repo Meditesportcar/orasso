@@ -4,10 +4,11 @@ import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, deliverNow, login, loginInBrowser, randomPlate, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
-// Social (lot 17) sur le site : profil d'un autre (public / privé / ami), véhicule d'un autre, recherche de personnes
-// dans Explorer, demande d'ami et acceptation, Journal avec l'actualité des amis, cloche. Avec CAPTURES=1, captures dans
+// Social (lot 17) sur le site : profil d'un autre (public / privé / abonné), véhicule d'un autre, recherche de personnes
+// dans Explorer, suivre et demander à suivre (acceptation), Journal avec l'actualité des abonnements, cloche. Avec CAPTURES=1, captures dans
 // les deux thèmes, au bureau et sur téléphone, avec le contrôle automatique du système de design.
-// Prérequis : site et API lancés sur la base locale avec le seed (Kenji ↔ Léa amis, Nina → Damien en attente, Marc privé).
+// Prérequis : site et API lancés sur la base locale avec le seed (Kenji ↔ Léa se suivent, Nina suit Damien, Marc privé suivi par Julie, Théo demande à suivre Marc).
+// Lot R6b (D37) : plus d'« ami » ; « Demander à suivre » (compte privé) et l'onglet Demandes remplacent la demande d'ami.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-17-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
@@ -36,7 +37,7 @@ async function shot(page: Page, theme: string, view: string, name: string) {
   audits[`${name}-${theme}-${view}`] = await auditPage(page);
 }
 
-test("social : profils selon l'audience, recherche, demande d'ami, acceptation, Journal", async ({ browser }) => {
+test("social : profils selon l'audience, recherche, demande à suivre, acceptation, Journal", async ({ browser }) => {
   test.setTimeout(300_000);
   const s = unique();
   const alpha = `AlphaPub_${s}`;
@@ -67,8 +68,11 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   await page.goto(`/u/${bravo}`);
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
   await expect(page.getByText("secret-de-bravo")).toHaveCount(0);
-  // Lot R5b (maquette R5.6) : la ligne « Le reste est réservé à ses amis » ; ses véhicules en marque et modèle.
-  await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
+  // Lot R5b (maquette R5.6) : la ligne « Ses photos, … sont pour ses abonnés » ; ses véhicules en marque et modèle.
+  await expect(page.getByTestId("profile-private-note")).toContainText(
+    "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+  );
+  await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
   await expect(page.getByTestId("profile-vehicles-private")).toContainText(/\S/);
 
   // Fiche du véhicule d'un compte public : complète, avec « Autres propriétaires près de chez moi ».
@@ -83,38 +87,39 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   await page.goto(`/app/explorer?segment=personnes&q=${bravo.slice(0, 12)}`);
   const row = page.getByTestId("person-row").filter({ hasText: bravo });
   await expect(row).toBeVisible();
-  // Demande d'ami depuis la liste.
-  // Lot R2 : « Ajouter », puis « Demande envoyée » (comme l'appli).
-  await row.getByRole("button", { name: "Ajouter", exact: true }).click();
-  await expect(page.getByTestId("person-row").filter({ hasText: bravo }).getByTestId("person-requested")).toContainText(
-    "Demande envoyée",
+  // Demande à suivre depuis la liste (Bravo est privé).
+  // Lot R6b : « Demander à suivre », puis « Demandé » (comme l'appli).
+  await row.getByTestId("net-follow").click();
+  await expect(page.getByTestId("person-row").filter({ hasText: bravo }).getByTestId("net-requested")).toContainText(
+    "Demandé",
   );
 
-  // Bravo accepte sur « Mes amis ».
+  // Bravo accepte dans « Ton réseau », onglet Demandes.
   const bravoPage = await browser.newPage();
-  await loginInBrowser(bravoPage, `${bravo.toLowerCase()}@e2e.orasso.test`, undefined, "/app/amis");
-  const incoming = bravoPage.getByTestId("requests-in");
+  await loginInBrowser(bravoPage, `${bravo.toLowerCase()}@e2e.orasso.test`, undefined, "/app/reseau?liste=demandes");
+  const incoming = bravoPage.getByTestId("net-requests");
   await expect(incoming).toContainText(charlie);
-  await incoming.getByRole("button", { name: "Accepter" }).click();
-  await expect(bravoPage.getByTestId("friends-list")).toContainText(charlie);
+  await incoming.getByTestId("net-request-accept").click();
+  await expect(bravoPage.getByTestId("net-notice")).toContainText(charlie);
 
   // Charlie voit maintenant tout de Bravo, et a une notification dans le Journal.
   await page.goto(`/u/${bravo}`);
-  await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "friend");
+  await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "follower");
   await expect(page.getByText("secret-de-bravo")).toBeVisible();
-  await expect(page.getByTestId("friend-remove")).toBeVisible();
+  await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
   deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
   await page.goto("/app/journal");
   await expect(page.getByTestId("journal-item").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
   await expect(page.getByRole("link", { name: "Boîte" }).first()).toBeVisible();
 
-  // Retrait d'ami : le profil redevient réduit.
+  // Se désabonner : le profil redevient réduit.
   await page.goto(`/u/${bravo}`);
-  await page.getByTestId("friend-remove").click();
+  await page.getByTestId("follow-button").click();
+  await page.getByTestId("follow-confirm-yes").click();
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
 
-  // Journal de Léa : l'actualité de son ami Kenji (retenues du seed), jamais plus de sept jours en arrière sauf non lues.
+  // Journal de Léa : l'actualité de Kenji, qu'elle suit (retenues du seed), jamais plus de sept jours en arrière sauf non lues.
   const lea = await browser.newPage();
   await loginInBrowser(lea, "lea@orasso.local", undefined, "/app/journal");
   // Les specs précédentes ajoutent des entrées au Journal de Léa : on cherche l'entrée attendue à travers la pagination
@@ -165,24 +170,24 @@ test("captures du social", async ({ browser }) => {
       await shot(n, theme, view.id, "05-explorer-personnes");
       await n.context().close();
 
-      // Damien : la demande de Nina en attente, le Journal et la cloche.
+      // Damien : Nina parmi ses abonnés, le Journal et la cloche.
       const d = await (await context(browser, theme, view, damien)).newPage();
-      await d.goto("/app/amis");
-      await shot(d, theme, view.id, "06-mes-amis-demande-recue");
+      await d.goto("/app/reseau?liste=abonnes");
+      await shot(d, theme, view.id, "06-reseau-abonnes");
       await d.goto("/app/journal");
       await shot(d, theme, view.id, "07-journal");
       await d.context().close();
 
-      // Julie, amie de Marc : voit tout de son profil privé.
+      // Julie, abonnée de Marc : voit tout de son profil privé.
       const j = await (await context(browser, theme, view, julie)).newPage();
       await j.goto("/u/Marc_66");
-      await shot(j, theme, view.id, "08-profil-prive-vu-par-un-ami");
+      await shot(j, theme, view.id, "08-profil-prive-vu-par-un-abonne");
       await j.context().close();
 
-      // Léa : l'actualité de son ami Kenji dans le Journal.
+      // Léa : l'actualité de Kenji, qu'elle suit, dans le Journal.
       const l = await (await context(browser, theme, view, lea)).newPage();
       await l.goto("/app/journal");
-      await shot(l, theme, view.id, "09-journal-actualite-amis");
+      await shot(l, theme, view.id, "09-journal-actualite-abonnements");
       await l.context().close();
     }
   }

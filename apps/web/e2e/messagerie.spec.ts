@@ -4,8 +4,8 @@ import { type Audit, auditPage } from "./audit";
 import { apiCall, login, samplePhoto, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
-// Messagerie et Boîte (lot 18) sur le site, critère de fin : A écrit à son ami B, B voit le message arriver sans
-// recharger, A voit « Lu par B » ; image visible des deux, adresse privée refusée sans session ; C (non ami) envoie
+// Messagerie et Boîte (lot 18) sur le site, critère de fin : A écrit à B, qui le suit, B voit le message arriver sans
+// recharger, A voit « Lu par B » ; image visible des deux, adresse privée refusée sans session ; C (qui ne le suit pas) envoie
 // une demande de contact, la seconde est refusée, A accepte → conversation ; une personne contacte MéditeSportCar et
 // Damien répond depuis /app/boite. Avec CAPTURES=1 : Boîte, Demandes, conversation dans les deux thèmes, au bureau et
 // à 390 px, avec le contrôle automatique du système de design.
@@ -34,11 +34,21 @@ async function context(
   return ctx;
 }
 
+// Lot R6b (D37) : plus d'amitié ; A et B se suivent (chacun écrit directement à qui le suit). Un compte privé répond « pending » : la cible accepte alors la demande.
 async function befriend(a: string, aCookie: string, b: string, bCookie: string) {
-  const r = await apiCall<{ id: string }>(aCookie, "POST", "/friends/requests", { pseudo: b });
-  expect(r.status).toBe(201);
-  expect((await apiCall(bCookie, "POST", `/friends/requests/${r.data.id}/accept`)).status).toBe(200);
-  void a;
+  const idOf = async (cookie: string) => (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data.user.id;
+  const [aId, bId] = [await idOf(aCookie), await idOf(bCookie)];
+  const pairs = [
+    [aCookie, b, bCookie, aId],
+    [bCookie, a, aCookie, bId],
+  ] as const;
+  for (const [cookie, target, targetCookie, myId] of pairs) {
+    const r = await apiCall<{ mine: string }>(cookie, "POST", `/users/${target}/follow`);
+    expect(r.status).toBeLessThan(300);
+    if (r.data.mine === "pending") {
+      expect((await apiCall(targetCookie, "POST", `/me/follow-requests/${myId}/accept`)).status).toBeLessThan(300);
+    }
+  }
 }
 
 async function send(page: Page, text: string) {
@@ -46,7 +56,7 @@ async function send(page: Page, text: string) {
   await page.getByRole("button", { name: "Envoyer", exact: true }).click();
 }
 
-test("messagerie : amis en direct, lu par, image privée, demande de contact, organisateur joignable", async ({
+test("messagerie : abonnés en direct, lu par, image privée, demande de contact, organisateur joignable", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -61,7 +71,7 @@ test("messagerie : amis en direct, lu par, image privée, demande de contact, or
   const uCookie = await signUpApi(u);
   await befriend(a, aCookie, b, bCookie);
 
-  // A écrit à son ami B depuis son profil.
+  // A écrit à B, qui le suit depuis son profil.
   const ctxA = await context(browser, aCookie);
   const pageA = await ctxA.newPage();
   await pageA.goto(`/u/${b}`);
@@ -100,7 +110,7 @@ test("messagerie : amis en direct, lu par, image privée, demande de contact, or
   const name = src?.split("/").pop() ?? "";
   expect((await fetch(`${WEB}/api/files/private/messages/${name}`, { headers: { cookie: aCookie } })).status).toBe(404);
 
-  // C (non ami) : demande de contact, une seule possible.
+  // C (qui ne le suit pas) : demande de contact, une seule possible.
   const ctxC = await context(browser, cCookie);
   const pageC = await ctxC.newPage();
   await pageC.goto(`/u/${a}`);

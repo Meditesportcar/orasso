@@ -62,7 +62,7 @@ function fiches(id: Ids): [string, string][] {
     ["securite", "/app/securite"],
     ["sanctions", "/app/sanctions"],
     ["billets", "/app/billets"],
-    ["amis", "/app/amis"],
+    ["reseau", "/app/reseau"], // Lot R6b : « Mes amis » est devenu « Ton réseau »
     ["crews", "/app/crews"],
     ["creer-structure", "/app/structure/nouvelle"],
     ["creer-fiche-pro", "/app/pro/nouvelle"],
@@ -205,7 +205,7 @@ test("✕ du site sans JavaScript : un lien vers l'écran d'origine (?retour=), 
   const close = page.locator(".o-appbar--flow a.o-appbar__close");
   const cases: [string, string][] = [
     [`/app/garage/${id.vehicle}`, "/app/garage"],
-    [`/u/${id.pseudo}?retour=${encodeURIComponent("/app/amis")}`, "/app/amis"],
+    [`/u/${id.pseudo}?retour=${encodeURIComponent("/app/reseau")}`, "/app/reseau"],
     [`/u/${id.pseudo}?retour=${encodeURIComponent("//evil.example")}`, "/app"],
     [`/v/${id.publicVehicle}?retour=${encodeURIComponent(`/u/${id.pseudo}`)}`, `/u/${id.pseudo}`],
   ];
@@ -216,8 +216,8 @@ test("✕ du site sans JavaScript : un lien vers l'écran d'origine (?retour=), 
     await expect(page.locator("h1"), `${path} : un seul h1`).toHaveCount(1);
   }
   // Sans JavaScript, le lien ramène bien à l'écran d'origine.
-  await page.goto(`${web}/u/${id.pseudo}?retour=${encodeURIComponent("/app/amis")}`);
+  await page.goto(`${web}/u/${id.pseudo}?retour=${encodeURIComponent("/app/reseau")}`);
   await close.click();
-  await page.waitForURL(/\/app\/amis$/, { timeout: 30_000 });
+  await page.waitForURL(/\/app\/reseau$/, { timeout: 30_000 });
   await ctx.close();
 });

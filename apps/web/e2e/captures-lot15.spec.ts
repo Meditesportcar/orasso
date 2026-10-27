@@ -6,7 +6,7 @@ import { RELAIS } from "./relais";
 
 // Captures du lot 15 (compte et sécurité) dans les deux thèmes, au bureau et sur téléphone (390 px), avec le contrôle
 // automatique du système de design : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test captures-lot15`.
-// Prérequis : base locale avec le seed (noe@orasso.local : adresse à confirmer ; Kenji : lien d'ami).
+// Prérequis : base locale avec le seed (noe@orasso.local : adresse à confirmer ; Kenji : lien de profil /ami/:jeton).
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-15-captures/site`;
 test.skip(!process.env.CAPTURES, "Captures : lancer avec CAPTURES=1");
 

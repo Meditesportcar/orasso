@@ -18,7 +18,10 @@ import { RELAIS } from "./relais";
 
 // Lot R4c, côté site (raccord de l'appli) : Garage (« ★ Principal », « Mettre en avant »), candidature qui présélectionne
 // le principal, /app/moi (trois compteurs, « Mon profil public », crew), /app/reseau (onglets, recherche, vie privée),
-// /app/profil-public (membre, ami), « Suivre » sur /u/:pseudo (absent d'un compte privé). Béton et Sable, 390 et 1280 px.
+// /app/profil-public (membre, abonné), « Suivre » sur /u/:pseudo (« Demander à suivre » sur un compte privé). Béton et
+// Sable, 390 et 1280 px.
+// Lot R6b (D37) : plus d'« ami » ; deux personnes qui se suivent remplacent l'ami, l'onglet Demandes (compte privé)
+// remplace l'onglet Amis, un seul bouton `follow-button` remplace « Suivre » et « Ajouter en ami ».
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r4c-captures/site`;
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
@@ -105,11 +108,13 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
     await apiCall(cookie, "PATCH", "/me/profile", { departments: ["66"], visibility });
     return { pseudo, cookie };
   };
-  const friend = await mk("R4sAmi", "public");
+  const mutual = await mk("R4sMut", "public");
+  const stranger = await mk("R4sNew", "public");
+  const asker = await mk("R4sDem", "public");
   const fan = await mk("R4sFan", "public");
   const priv = await mk("R4sPrive", "private");
-  const req = await apiCall<{ id: string }>(me, "POST", "/friends/requests", { pseudo: friend.pseudo });
-  await apiCall(friend.cookie, "POST", `/friends/requests/${req.data.id}/accept`);
+  await apiCall(me, "POST", `/users/${mutual.pseudo}/follow`);
+  await apiCall(mutual.cookie, "POST", `/users/${mePseudo}/follow`);
   await apiCall(fan.cookie, "POST", `/users/${mePseudo}/follow`);
   await apiCall(priv.cookie, "POST", `/users/${mePseudo}/follow`);
   const email = `${mePseudo.toLowerCase()}@e2e.orasso.test`;
@@ -182,16 +187,22 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
 
       // Moi : compteurs et accès.
       await page.goto("/app/moi");
-      await expect(page.getByTestId("profil-count-abonnes")).toContainText("2");
-      await expect(page.getByTestId("profil-count-amis")).toContainText("1");
+      await expect(page.getByTestId("profil-count-abonnes")).toContainText("3");
+      // Lot R6b : plus de compteur « amis ».
+      await expect(page.getByTestId("profil-count-amis")).toHaveCount(0);
       await audit(page);
       await shot("05-moi");
       await page.getByTestId("profil-count-abonnes").click();
-      await expect(page).toHaveURL(/\/app\/reseau\?onglet=abonnes/);
+      await expect(page).toHaveURL(/\/app\/reseau\?liste=abonnes/);
       await expect(page.getByTestId("net-followers")).toContainText(fan.pseudo);
+      await expect(page.getByTestId("net-followers")).toContainText(mutual.pseudo);
+      // Un abonné que je ne suis pas : « Suivre en retour » ; un que je suis : « Abonné ».
       await expect(
-        page.getByTestId("net-person").filter({ hasText: priv.pseudo }).getByTestId("net-follow"),
-      ).toHaveCount(0);
+        page.getByTestId("net-person").filter({ hasText: priv.pseudo }).getByTestId("net-follow-back"),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId("net-person").filter({ hasText: mutual.pseudo }).getByTestId("net-followed"),
+      ).toBeVisible();
       await expect(page.getByTestId("net-privacy")).toContainText("Toi seul vois ces listes.");
       await audit(page);
       await shot("06-reseau-abonnes");
@@ -202,14 +213,14 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await page.getByTestId("net-next-pros").click();
       await expect(page.getByTestId("net-pros").locator(".n-row")).toHaveCount(1);
       await expect(page.getByTestId("net-structures").locator(".n-row")).toHaveCount(30);
-      await page.goto("/app/reseau?onglet=abonnements");
+      await page.goto("/app/reseau?liste=abonnements");
       await page.getByTestId("net-next-structures").click();
       await expect(page.getByTestId("net-structures").locator(".n-row")).toHaveCount(1);
       await shot("06b-reseau-abonnements");
-      await page.goto("/app/reseau?onglet=abonnes");
-      await page.getByTestId("net-tab-amis").click();
-      await expect(page.getByTestId("net-friends")).toContainText(friend.pseudo);
-      await shot("07-reseau-amis");
+      // Lot R6b : plus d'onglet Amis ; l'onglet Demandes n'existe que pour un compte privé (vu en fin de tour).
+      await page.goto("/app/reseau?liste=abonnes");
+      await expect(page.getByTestId("net-tab-amis")).toHaveCount(0);
+      await expect(page.getByTestId("net-tab-demandes")).toHaveCount(0);
 
       // Aperçu public.
       await page.goto("/app/profil-public");
@@ -219,24 +230,41 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await expect(page.getByTestId("preview-upcoming")).toBeVisible();
       await audit(page);
       await shot("08-apercu-membre");
-      await page.getByTestId("preview-as-friend").click();
-      await expect(page.getByTestId("preview-banner")).toContainText("ami");
-      await shot("09-apercu-ami");
+      await page.getByTestId("preview-as-follower").click();
+      await expect(page.getByTestId("preview-banner")).toContainText("abonné");
+      await shot("09-apercu-abonne");
 
-      // Suivre : public, puis privé.
-      await page.goto(`/u/${friend.pseudo}`);
-      await page.getByTestId("profile-follow").click();
-      await expect(page.getByTestId("profile-followed")).toBeVisible();
+      // Suivre : public (« Abonné », puis « Ne plus suivre » après confirmation), puis privé (« Demander à suivre »).
+      await page.goto(`/u/${stranger.pseudo}`);
+      await page.getByTestId("follow-button").click();
+      await expect(page.getByTestId("follow-button")).toContainText("Abonné");
       await audit(page);
       await shot("10-profil-suivi");
-      await page.getByTestId("profile-followed").click();
-      await expect(page.getByTestId("profile-follow")).toBeVisible();
+      await page.getByTestId("follow-button").click();
+      await page.getByTestId("follow-confirm-yes").click();
+      await expect(page.getByTestId("follow-button")).not.toContainText("Abonné");
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("profil")).toBeVisible();
-      await expect(page.getByTestId("profile-follow")).toHaveCount(0);
+      await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
       // Damien, 24/10 : les nombres d'un compte privé sont visibles de tout membre (les listes, non).
       await expect(page.getByTestId("public-counts")).toContainText("abonné");
       await shot("11-profil-prive");
+
+      // Mon compte en privé : l'onglet Demandes (refuser), puis retour en public.
+      const patchVisibility = (visibility: "public" | "private") =>
+        apiCall(me, "PATCH", "/me/profile", { departments: ["66"], visibility });
+      expect((await patchVisibility("private")).status).toBe(200);
+      await apiCall(asker.cookie, "POST", `/users/${mePseudo}/follow`);
+      await page.goto("/app/reseau?liste=demandes");
+      await expect(page.getByTestId("net-requests")).toContainText(asker.pseudo);
+      await shot("07-reseau-demandes");
+      await page
+        .getByTestId("net-request")
+        .filter({ hasText: asker.pseudo })
+        .getByTestId("net-request-decline")
+        .click();
+      await expect(page.getByTestId("net-notice")).toBeVisible();
+      expect((await patchVisibility("public")).status).toBe(200);
       await ctx.close();
     }
   }

@@ -77,7 +77,7 @@ test("inscription → e-mail de vérification → lien → adresse confirmée", 
   await ctx.close();
 });
 
-test("lien d'ami → inscription → adresse confirmée → +10 points au parrain", async ({ browser }) => {
+test("lien de profil (/ami/:jeton) → inscription → adresse confirmée → +10 points au parrain", async ({ browser }) => {
   // Parrain neuf à chaque passage (lot 34) : Kenji partage ses points avec d'autres recettes et atteint vite le plafond
   // de 20 parrainages par saison sur une base rejouée sans --reset.
   const s = unique();

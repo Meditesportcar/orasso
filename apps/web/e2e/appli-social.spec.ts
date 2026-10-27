@@ -14,8 +14,10 @@ import { RELAIS } from "./relais";
 
 // Social (lot 17) dans l'appli, version web de recette (`expo start --web` derrière `apps/mobile/scripts/web-isolated.mjs`) :
 // Explorer > Personnes et crews, profil d'un autre, fiche d'un véhicule d'un autre et propriétaires près de chez moi,
-// demande d'ami, scan du QR d'un ami (charge utile saisie dans le champ « Recette », pas de caméra dans le navigateur),
-// Mes amis, Journal avec avatars. Deux thèmes à 390 px.
+// suivre une personne, scan du QR d'un compte (charge utile saisie dans le champ « Recette », pas de caméra dans le
+// navigateur) qui demande à suivre un compte privé, Ton réseau, Journal avec avatars. Deux thèmes à 390 px.
+// Lot R6b (D37) : plus d'« ami » ; « Suivre » (compte public) et « Demander à suivre » (compte privé, accepté par la
+// personne) remplacent la demande d'ami.
 // Lancer avec APP_URL=http://localhost:8141 (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-17-captures/appli`;
@@ -26,7 +28,7 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Journal", async ({ browser }) => {
+test("appli : personnes, profil, véhicule, suivre, QR de compte, Ton réseau, Journal", async ({ browser }) => {
   test.setTimeout(600_000);
   mkdirSync(DIR, { recursive: true });
   // Le pseudo est limité à 24 caractères : « BravoApp_sable_ » en prend 15, le suffixe en garde 9 au plus. Avec le suffixe entier,
@@ -79,9 +81,13 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     // Profil d'un compte privé : réduit.
     await page.goto(`/u/${bravo}`);
     await expect(page.getByTestId("profil")).toBeVisible({ timeout: 30_000 });
-    // Lot R5b (maquette R5.6) : « Compte privé » dans la tête, et la ligne « Le reste est réservé à ses amis ».
+    // Lot R5b (maquette R5.6) : « Compte privé » dans la tête, et la ligne « Ses photos, … sont pour ses abonnés ».
     await expect(page.getByTestId("public-head")).toContainText("Compte privé");
-    await expect(page.getByTestId("profile-private-note")).toContainText("Le reste est réservé à ses amis");
+    await expect(page.getByTestId("profile-private-note")).toContainText(
+      "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+    );
+    // Lot R6b : un compte privé se suit sur demande.
+    await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
     await expect(page.getByText("secret", { exact: true })).toHaveCount(0);
     await shot(page, `03-profil-prive-reduit-${theme}`);
 
@@ -94,15 +100,15 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await expect(page.getByText("Autres propriétaires près de chez moi")).toBeVisible();
     await shot(page, `05-vehicule-autre-${theme}`);
 
-    // Demande d'ami depuis le profil.
+    // Suivre depuis le profil (compte public : d'un toucher).
     await page.goto(`/u/${alpha}`);
-    await page.getByTestId("friend-add").click();
-    await expect(page.getByTestId("friend-state")).toContainText("Demande envoyée", { ignoreCase: true });
-    await shot(page, `06-profil-demande-envoyee-${theme}`);
+    await page.getByTestId("follow-button").click();
+    await expect(page.getByTestId("follow-button")).toContainText("Abonné", { timeout: 15_000 });
+    await shot(page, `06-profil-suivi-${theme}`);
 
-    // Scan du QR de compte de Bravo depuis Mes amis (charge utile saisie : pas de caméra dans le navigateur). Le bouton
-    // était dans le Garage avant le garage v2 (lot 51) ; il vit dans Mes amis.
-    await page.goto("/amis");
+    // Scan du QR de compte de Bravo depuis Ton réseau (charge utile saisie : pas de caméra dans le navigateur). Le
+    // bouton était dans le Garage avant le garage v2 (lot 51) ; il vit au bas de Ton réseau.
+    await page.goto("/reseau");
     await page.getByTestId("friend-scan-open").click();
     // Un code par minute et par passage (dérive d'une minute acceptée) : le deuxième passage n'est pas un rejeu.
     const payload = accountQrPayload(bravoQr.secret, bravoQr.shortId, new Date());
@@ -111,28 +117,25 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await field.press("Enter");
     const result = page.getByTestId("friend-scan-result");
     await expect(result).toContainText(`Demande envoyée à ${bravo}`, { timeout: 20_000 });
-    await shot(page, `07-scan-qr-ami-${theme}`);
+    await shot(page, `07-scan-qr-compte-${theme}`);
     // Le même code rejoué est refusé.
     await field.fill(`${payload} `);
     await field.press("Enter");
     await page.waitForTimeout(600);
 
-    // Alpha accepte via l'API : Journal et Mes amis côté Charlie.
+    // Bravo (compte privé) accepte la demande de Charlie via l'API : Journal et Ton réseau côté Charlie.
     const pending = (
-      await apiCall<{ items: { id: string; person: { pseudo: string } }[] }>(
-        alphaCookie,
-        "GET",
-        "/me/friends/requests?direction=in",
-      )
+      await apiCall<{ items: { userId: string; pseudo: string }[] }>(bravoCookie, "GET", "/me/follow-requests")
     ).data;
-    const fromCharlie = pending.items.find((r) => r.person.pseudo === charlie);
-    if (fromCharlie) await apiCall(alphaCookie, "POST", `/friends/requests/${fromCharlie.id}/accept`);
-    await page.goto("/amis");
+    const fromCharlie = pending.items.find((r) => r.pseudo === charlie);
+    if (fromCharlie) await apiCall(bravoCookie, "POST", `/me/follow-requests/${fromCharlie.userId}/accept`);
+    await page.goto("/reseau?liste=abonnements");
     await expect(page.getByText(alpha).first()).toBeVisible({ timeout: 30_000 });
-    await shot(page, `08-mes-amis-${theme}`);
+    await expect(page.getByText(bravo).first()).toBeVisible();
+    await shot(page, `08-ton-reseau-${theme}`);
     await page.goto("/moi");
-    // Lot R4c : les amis s'ouvrent par le compteur de l'en-tête du profil (la ligne « Amis et crews » a quitté les réglages).
-    await expect(page.getByTestId("profil-count-amis")).toBeVisible({ timeout: 30_000 });
+    // Lot R4c : les abonnements s'ouvrent par le compteur de l'en-tête du profil.
+    await expect(page.getByTestId("profil-count-abonnements")).toBeVisible({ timeout: 30_000 });
     // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
     deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
     // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
