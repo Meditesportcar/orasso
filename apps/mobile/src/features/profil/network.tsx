@@ -1,26 +1,22 @@
-// Lot R4c (maquettes R4.6, R4.6b, R4.6c) : le réseau d'un passionné. En-tête du profil : trois compteurs (abonnés,
-// abonnements, amis), chacun ouvre sa liste ; « Mon profil public » et le crew côte à côte. Écran des listes (mode
-// fiche) : trois onglets, recherche, « Suivre aussi » / « Suivi », demandes d'amis en tête des amis, « Toi seul vois ces
-// listes ». En-tête compact d'un profil public (le sien en aperçu, ou celui d'un autre) : avatar à gauche, compteurs sur
-// une ligne, « Ajouter en ami » principal, « Suivre » secondaire, ✉ en icône.
-import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot R4c (maquettes R4.6, R4.6b), refait au lot R6b (D37, maquette R6.2) : le réseau d'un passionné. Onglet Profil : trois
+// compteurs (abonnés, abonnements, sorties), les deux premiers ouvrent leur liste ; « Mon profil public » et le crew
+// côte à côte. Écran des listes (mode fiche) : segment abonnés / abonnements / demandes, recherche, un bouton « Suivre »
+// par ligne, « Accepter » et ✕ pour les demandes, « Toi seul vois ces listes ».
+import { departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type FollowedPage,
   type FollowPerson,
-  type FriendItem,
-  type FriendRequestView,
-  fitWideWordSize,
   gradeLabels,
   networkLabels as N,
   type NetworkCounts,
-  type UserProfileView,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { fitWordSize } from "@/features/home/fit";
-import { CrewDot, Num, SmButton, TagWin } from "@/features/passionne/kit";
+import { CrewDot, Num, SmButton } from "@/features/passionne/kit";
+import { FollowButton } from "@/features/social/FollowButton";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -28,7 +24,10 @@ import { Notice } from "@/ui/Notice";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-export type NetworkTab = "abonnes" | "abonnements" | "amis";
+/** Les trois listes de « Ton réseau » (`?liste=`). */
+export type NetworkTab = "abonnes" | "abonnements" | "demandes";
+/** Ce que le compteur d'un nombre ouvre : une liste du réseau, ou l'écran des sorties. */
+export type CounterTarget = "abonnes" | "abonnements" | "sorties";
 
 /** « Pyrénées-Orientales (66) ». */
 export function departmentCaption(code: string | undefined): string | null {
@@ -37,20 +36,20 @@ export function departmentCaption(code: string | undefined): string | null {
   return name ? `${name} (${code})` : `Département ${code}`;
 }
 
-/** `.r4cnt` : trois compteurs, chacun ouvre sa liste. */
+/** `.r4cnt` : trois compteurs (abonnés, abonnements, sorties), chacun ouvre son écran. */
 export function NetworkCounters({
   counts,
   onOpen,
 }: {
-  counts: Pick<NetworkCounts, "followers" | "following" | "friends"> | null;
-  onOpen: (tab: NetworkTab) => void;
+  counts: Pick<NetworkCounts, "followers" | "following" | "outings"> | null;
+  onOpen: (target: CounterTarget) => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
-  const cells: [NetworkTab, number | null, (n: number) => string][] = [
+  const cells: [CounterTarget, number | null, (n: number) => string][] = [
     ["abonnes", counts?.followers ?? null, N.followers],
     ["abonnements", counts?.following ?? null, N.following],
-    ["amis", counts?.friends ?? null, N.friends],
+    ["sorties", counts?.outings ?? null, N.outings],
   ];
   return (
     <View
@@ -175,7 +174,7 @@ function Row({
   action?: ReactNode;
   onPress: () => void;
   testID: string;
-  /** Les boutons sous le nom (demande d'ami : « Accepter » et ✕ laissent toute la largeur au pseudo). */
+  /** Les boutons sous le nom (demande d'abonnement, très grande police : toute la largeur au pseudo). */
   actionBelow?: boolean;
 }) {
   const { t } = useTheme();
@@ -207,7 +206,7 @@ function Row({
   );
 }
 
-/** `.sug` : un groupe titré (Personnes, Organisateurs, Pros, Demandes reçues, Tes amis). */
+/** `.sug` : un groupe titré (Personnes, Organisateurs, Pros). */
 function Group({
   title,
   count,
@@ -241,61 +240,21 @@ function Group({
   );
 }
 
-/** « Suivre aussi » / « Suivi » d'une personne (toucher « Suivi » ne la suit plus). */
-function FollowToggle({
-  person,
-  onError,
-  onChanged,
-}: {
-  person: FollowPerson;
-  onError: (m: string) => void;
-  onChanged?: () => void;
-}) {
-  const [following, setFollowing] = useState(person.following);
-  const [busy, setBusy] = useState(false);
-  if (!following && !person.canFollow) return null;
-  return (
-    <SmButton
-      kind={following ? "g" : "s"}
-      icon={following ? "check" : "add"}
-      disabled={busy}
-      accessibilityLabel={following ? `${N.unfollow} ${person.pseudo}` : `${N.followBack} ${person.pseudo}`}
-      testID={following ? "net-followed" : "net-follow"}
-      onPress={async () => {
-        setBusy(true);
-        try {
-          const r = following ? await api.unfollow(person.pseudo) : await api.follow(person.pseudo);
-          setFollowing(r.following);
-          onChanged?.();
-        } catch (e) {
-          onError(errorMessage(e));
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {following ? N.followed : N.followBack}
-    </SmButton>
-  );
-}
-
 function personCaption(p: FollowPerson): string {
-  return [p.vehicle ?? gradeLabels[p.grade], p.friend ? N.yourFriend : null].filter(Boolean).join(" · ");
+  return p.vehicle ?? gradeLabels[p.grade];
 }
 
 /** Liste paginée de personnes (abonnés, ou personnes suivies). */
 export function PeopleList({
   pages,
   onMore,
-  onError,
   testID,
   title,
   onChanged,
 }: {
   pages: { items: FollowPerson[]; total: number; nextCursor: string | null };
   onMore: () => void;
-  onError: (m: string) => void;
-  /** Tour 2 : après suivre / ne plus suivre (les nombres se relisent). */
+  /** Après suivre, demander, ne plus suivre (les nombres se relisent). */
   onChanged?: () => void;
   testID: string;
   title?: string;
@@ -311,13 +270,112 @@ export function PeopleList({
             name={p.pseudo}
             caption={personCaption(p)}
             onPress={() => router.push(`/u/${p.pseudo}`)}
-            action={<FollowToggle person={p} onError={onError} onChanged={onChanged} />}
+            action={
+              <FollowButton
+                size="small"
+                pseudo={p.pseudo}
+                mine={p.mine}
+                followsMe={p.followsMe}
+                canFollow={p.canFollow}
+                visibility={p.visibility}
+                onChanged={() => onChanged?.()}
+              />
+            }
             testID="net-person"
           />
         ))}
       </Group>
       {pages.nextCursor ? (
         <SmButton kind="s" icon="down" wide onPress={onMore} testID={`${testID}-more`}>
+          {`${N.more} (${pages.total - pages.items.length})`}
+        </SmButton>
+      ) : null}
+    </>
+  );
+}
+
+/** Au-delà de cette échelle de police du système, « Accepter » et ✕ passent sous le pseudo. */
+const BELOW_FONT_SCALE = 1.3;
+
+/** Demandes d'abonnement reçues (compte privé) : « Accepter » et ✕ ; la ligne disparaît et une ligne d'info le dit. */
+export function RequestsList({
+  pages,
+  onMore,
+  onChanged,
+}: {
+  pages: { items: FollowPerson[]; total: number; nextCursor: string | null };
+  onMore: () => void;
+  onChanged: () => void;
+}) {
+  const router = useRouter();
+  const { fontScale } = useWindowDimensions();
+  const [done, setDone] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (p: FollowPerson, accept: boolean) => {
+    setBusy(p.userId);
+    setError(null);
+    try {
+      if (accept) await api.acceptFollow(p.userId);
+      else await api.declineFollow(p.userId);
+      setDone((d) => ({ ...d, [p.userId]: p.pseudo }));
+      setInfo(accept ? N.accepted(p.pseudo) : N.declined);
+      onChanged();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const items = pages.items.filter((p) => !done[p.userId]);
+  return (
+    <>
+      {info ? (
+        <View testID="net-request-info">
+          <Notice>{info}</Notice>
+        </View>
+      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {items.length ? (
+        <Group testID="net-requests">
+          {items.map((p) => (
+            <Row
+              key={p.userId}
+              face={<Face url={p.avatarUrl} name={p.pseudo} />}
+              name={p.pseudo}
+              caption={personCaption(p)}
+              onPress={() => router.push(`/u/${encodeURIComponent(p.pseudo)}`)}
+              action={
+                <View style={styles.actions}>
+                  <SmButton
+                    kind="s"
+                    icon="check"
+                    disabled={busy !== null}
+                    accessibilityLabel={`${N.accept} ${p.pseudo}`}
+                    onPress={() => void run(p, true)}
+                    testID="net-request-accept"
+                  >
+                    {N.accept}
+                  </SmButton>
+                  <SmButton
+                    kind="g"
+                    icon="close"
+                    disabled={busy !== null}
+                    accessibilityLabel={N.decline(p.pseudo)}
+                    onPress={() => void run(p, false)}
+                    testID="net-request-decline"
+                  />
+                </View>
+              }
+              testID="net-request"
+              actionBelow={fontScale >= BELOW_FONT_SCALE}
+            />
+          ))}
+        </Group>
+      ) : null}
+      {pages.nextCursor ? (
+        <SmButton kind="s" icon="down" wide onPress={onMore} testID="net-requests-more">
           {`${N.more} (${pages.total - pages.items.length})`}
         </SmButton>
       ) : null}
@@ -385,199 +443,8 @@ export function PagesList({
   );
 }
 
-/** Onglet Amis : demandes reçues en tête, puis les amis avec ✉. */
-export function FriendsList({
-  requests,
-  friends,
-  onChanged,
-}: {
-  requests: FriendRequestView[];
-  friends: FriendItem[];
-  onChanged: () => void;
-}) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<unknown>) => {
-    setError(null);
-    try {
-      await fn();
-      onChanged();
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-  return (
-    <>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {requests.length ? (
-        <Group title={N.requestsIn} count={requests.length} testID="net-requests">
-          {requests.map((r) => (
-            <Row
-              key={r.id}
-              face={<Face url={r.person.avatarUrl} name={r.person.pseudo} />}
-              name={r.person.pseudo}
-              caption={r.message ?? gradeLabels[r.person.grade]}
-              onPress={() => router.push(`/u/${r.person.pseudo}`)}
-              action={
-                <View style={styles.actions}>
-                  <SmButton kind="s" icon="check" onPress={() => run(() => api.acceptFriend(r.id))} testID="net-accept">
-                    Accepter
-                  </SmButton>
-                  <SmButton
-                    kind="g"
-                    icon="close"
-                    accessibilityLabel={`Refuser ${r.person.pseudo}`}
-                    onPress={() => run(() => api.declineFriend(r.id))}
-                    testID="net-decline"
-                  />
-                </View>
-              }
-              testID="net-request"
-              actionBelow
-            />
-          ))}
-        </Group>
-      ) : null}
-      {friends.length ? (
-        <Group title={N.myFriends} count={friends.length} testID="net-friends">
-          {friends.map((f) => (
-            <Row
-              key={f.userId}
-              face={<Face url={f.avatarUrl} name={f.pseudo} />}
-              name={f.pseudo}
-              caption={gradeLabels[f.grade]}
-              onPress={() => router.push(`/u/${f.pseudo}`)}
-              action={
-                <SmButton
-                  kind="s"
-                  icon="chat"
-                  accessibilityLabel={N.write(f.pseudo)}
-                  onPress={() =>
-                    run(async () => {
-                      const { id } = await api.openDirect(f.userId);
-                      router.push(`/boite/${id}`);
-                    })
-                  }
-                  testID="net-write"
-                />
-              }
-              testID="net-friend"
-            />
-          ))}
-        </Group>
-      ) : null}
-    </>
-  );
-}
-
-/** « Suivre » (secondaire) d'un profil public ; « Suivi » ne suit plus. Seulement vers un compte public (API). */
-export function FollowButton({
-  pseudo,
-  following,
-  onChanged,
-  wide = false,
-}: {
-  pseudo: string;
-  following: boolean;
-  onChanged: () => void;
-  /** Lot R5b : pleine largeur de sa colonne (à côté d'« Ajouter en ami », ou dessous quand ils s'empilent). */
-  wide?: boolean;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <View style={styles.followCol}>
-      <Button
-        variant="secondary"
-        icon={following ? "check" : "add"}
-        loading={busy}
-        accessibilityLabel={following ? `${N.unfollow} ${pseudo}` : `${N.follow} ${pseudo}`}
-        testID={following ? "profile-followed" : "profile-follow"}
-        fullWidth={wide}
-        onPress={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            await (following ? api.unfollow(pseudo) : api.follow(pseudo));
-            onChanged();
-          } catch (e) {
-            setError(errorMessage(e));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {following ? N.followed : N.follow}
-      </Button>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-    </View>
-  );
-}
-
-/**
- * En-tête compact d'un profil public (R4.6c ; correction de Damien : l'en-tête de 10.2 prenait 40 % de l'écran) :
- * avatar à gauche, pseudo, grade, département et crew (ou « Compte privé »), compteurs sur une ligne, puis les actions.
- */
-export function PublicHead({ p, actions }: { p: UserProfileView; actions: ReactNode }) {
-  const { t } = useTheme();
-  const c = t.color;
-  const [textW, setTextW] = useState(0);
-  const size = fitWideWordSize(p.pseudo, textW, 24, 14);
-  const privateView = p.audience === "public_limited";
-  const crew = p.crews?.[0]?.name;
-  const place = [departmentCaption(p.departments?.[0]), crew ? `crew ${crew}` : null].filter(Boolean).join(" · ");
-  const counts: [number | null, (n: number) => string][] = [
-    [p.followersCount, N.followers],
-    [p.followingCount, N.following],
-    [p.friendsCount, N.friends],
-    [p.outingsCount, N.outings],
-  ];
-  const shown = counts.filter(([n]) => n !== null) as [number, (n: number) => string][];
-  return (
-    <View style={styles.pubHead} testID="public-head">
-      <View style={styles.pubTop}>
-        <Face url={p.avatarUrl} name={p.pseudo} size={64} />
-        <View style={styles.pubText} onLayout={(e) => setTextW(e.nativeEvent.layout.width)}>
-          <Text variant="posterL" color={c.ink} style={[styles.pubPseudo, { fontSize: size, lineHeight: size + 1 }]}>
-            {p.pseudo}
-          </Text>
-          <View style={styles.pubTags}>
-            <TagWin>{gradeLabels[p.grade]}</TagWin>
-            {privateView ? (
-              <View style={styles.privateCap}>
-                <Icon name="lock" size={13} color={c.inkMuted} />
-                <Text variant="caption" color={c.inkMuted}>
-                  Compte privé
-                </Text>
-              </View>
-            ) : place ? (
-              <Text variant="caption" color={c.inkMuted} style={styles.pubCaption}>
-                {place}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      </View>
-      {shown.length ? (
-        <View style={styles.pubCounts} testID="public-counts">
-          {shown.map(([n, label]) => (
-            <Text key={label(2)} variant="caption" color={c.inkMuted} style={styles.pubCount}>
-              <Text variant="bodyStrong" color={c.ink} style={styles.pubCountN}>
-                {String(n)}
-              </Text>{" "}
-              {label(n)}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-      {actions}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
-  followCol: { gap: space2 },
   counts: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
   count: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: space1, gap: 1 },
   countLabel: { fontSize: 12, fontFamily: "Archivo-ExtraBold" },
@@ -617,14 +484,4 @@ const styles = StyleSheet.create({
   rowCaption: { fontSize: 12, lineHeight: 15 },
   actions: { flexDirection: "row", gap: space1 },
   followedTag: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space1 },
-  pubHead: { gap: space3 },
-  pubTop: { flexDirection: "row", alignItems: "center", gap: space3 },
-  pubText: { flex: 1, minWidth: 0, gap: 5 },
-  pubPseudo: { fontSize: 24, lineHeight: 25 },
-  pubTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
-  pubCaption: { flexShrink: 1 },
-  privateCap: { flexDirection: "row", alignItems: "center", gap: 4 },
-  pubCounts: { flexDirection: "row", flexWrap: "wrap", columnGap: space3 + 4, rowGap: space1 },
-  pubCount: { fontSize: 13 },
-  pubCountN: { fontSize: 13 },
 });

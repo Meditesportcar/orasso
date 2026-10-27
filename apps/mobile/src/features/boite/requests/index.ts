@@ -8,7 +8,7 @@ import { ContactRequests } from "./contact";
 import { CrewRequests } from "./crew";
 import { CrewConfirmations } from "./crewConfirmation";
 import { EventInvitations } from "./eventInvitation";
-import { FriendRequests } from "./friend";
+import { FollowRequests } from "./follow";
 import { PlateTransferRequests } from "./plateTransfer";
 import { StaffInvitations } from "./staffInvitation";
 import type { RequestSectionProps } from "./types";
@@ -20,7 +20,7 @@ export type RequestSection = {
 };
 
 export const requestSections: RequestSection[] = [
-  { kind: "friend", Section: FriendRequests },
+  { kind: "follow", Section: FollowRequests },
   { kind: "contact", Section: ContactRequests },
   { kind: "crewConfirmation", Section: CrewConfirmations },
   { kind: "crew", Section: CrewRequests },

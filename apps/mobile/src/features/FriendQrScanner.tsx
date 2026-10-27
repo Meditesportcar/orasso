@@ -1,7 +1,8 @@
-// Scanner le QR de compte d'un ami (lot 17) : la caméra lit le QR dynamique de l'autre (`OA1…`), l'API vérifie le code
-// (fenêtre d'une minute, jamais présenté deux fois) et envoie la demande d'ami. Résultat : « Demande envoyée à <pseudo> ».
+// Scanner le QR de compte d'un passionné (lot 17 ; lot R6b : on le suit, ou on lui demande si son compte est privé) : la
+// caméra lit le QR dynamique de l'autre (`OA1…`), l'API vérifie le code (fenêtre d'une minute, jamais présenté deux fois).
+// Résultat : « Tu suis <pseudo>. » ou « Demande envoyée à <pseudo> : elle accepte ou non. »
 import { Button, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { socialLabels } from "@orasso/shared";
+import { networkLabels as N, socialLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -50,13 +51,10 @@ export function FriendQrScanner({
       seen.current = { payload, at: Date.now() };
       setBusy(true);
       try {
-        const result = await api.requestFriendByQr(payload);
+        const result = await api.followByQr(payload);
         setOutcome({
           state: "ok",
-          text:
-            result.status === "accepted"
-              ? `Vous êtes amis avec ${result.pseudo}.`
-              : socialLabels.requestSentTo(result.pseudo),
+          text: result.mine === "accepted" ? N.followedNow(result.pseudo) : N.requestedNow(result.pseudo),
         });
         onDone?.();
       } catch (e) {
@@ -114,10 +112,7 @@ export function FriendQrScanner({
         ) : null}
       </View>
       {outcome ? (
-        <View
-          testID="friend-scan-result"
-          accessibilityLabel={outcome.state === "ok" ? "Demande envoyée" : "Scan refusé"}
-        >
+        <View testID="friend-scan-result" accessibilityLabel={outcome.state === "ok" ? "Scan réussi" : "Scan refusé"}>
           <Notice tone={outcome.state === "ok" ? "info" : "error"}>{outcome.text}</Notice>
         </View>
       ) : null}

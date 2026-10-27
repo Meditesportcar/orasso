@@ -13,8 +13,7 @@ const page = (pseudos: string[], nextCursor: string | null = null): PeopleSearch
     grade: "route",
     departments: ["66"],
     vehicles: [],
-    friendship: "none",
-    friendshipId: null,
+    follow: { mine: "none", followsMe: false },
   })),
   nextCursor,
 });

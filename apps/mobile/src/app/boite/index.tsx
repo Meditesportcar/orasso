@@ -1,7 +1,7 @@
 // Boîte (lot 18, docs/02 ; lot C2a : feuille de l'artefact DA v2 `sh-inbox`). Ouverte par l'icône de la barre du haut,
 // elle monte en feuille par-dessus l'écran (route en modale transparente) : poignée, « Boîte » et ✕, puis trois segments
 // `.seg` — « Tout » (messages non lus, demandes et notifications : l'ancien Journal de la cloche y est fondu),
-// « Messages » (amis, organisateurs, crews) et « Demandes » (ami, contact, crew, staff, invitations, transferts de
+// « Messages » (personnes, organisateurs, crews) et « Demandes » (abonnement, contact, crew, staff, invitations, transferts de
 // plaque ; `features/boite/requests/`). Lignes `.cap` : logo ou avatar 44 px, nom en gras, aperçu, pastille moutarde.
 // Mise à jour en direct par le canal `user:{id}` (messages, demandes, notifications) ; tirer pour actualiser.
 // Relecture du lot C2a : « Tout » ne marque lues que les notifications affichées (les suivantes se chargent par « Voir
@@ -79,12 +79,7 @@ export default function Boite() {
   }, [conversations.reload, summary.reload, refreshMe]);
 
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
-    if (
-      event.type === "conversation.updated" ||
-      event.type === "inbox.changed" ||
-      event.type === "friend.request" ||
-      event.type === "notification"
-    ) {
+    if (event.type === "conversation.updated" || event.type === "inbox.changed" || event.type === "notification") {
       void reloadAll();
     }
   });

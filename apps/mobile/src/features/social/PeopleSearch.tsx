@@ -8,6 +8,7 @@ import {
   gradeLabels,
   grades,
   hasPeopleSearchCriteria,
+  networkLabels,
   type PeopleSearchPage,
   socialLabels,
 } from "@orasso/shared";
@@ -147,8 +148,8 @@ export function PeopleSearch({
 
       {renderCrews?.({ q: q.trim(), department })}
 
-      <Button variant="plate" icon="profile" onPress={() => router.push("/amis")} fullWidth>
-        {socialLabels.myFriends}
+      <Button variant="plate" icon="profile" onPress={() => router.push("/reseau")} fullWidth>
+        {networkLabels.title}
       </Button>
     </View>
   );

@@ -1,31 +1,32 @@
-// Lot R4c (maquette R4.6b) : « Ton réseau », plein écran en mode fiche. Trois onglets (abonnés, abonnements, amis) pour
-// passer de l'un à l'autre sans revenir ; recherche dans la liste (côté serveur) ; 30 par page. Toi seul vois ces listes.
+// Lot R4c (maquette R4.6b), refait au lot R6b (D37, maquette R6.2) : « Ton réseau », plein écran en mode fiche. Segment
+// abonnés / abonnements / demandes (Demandes seulement pour un compte privé ou s'il y en a) ; `?liste=` ouvre la bonne ;
+// recherche dans la liste (côté serveur) ; 30 par page. Toi seul vois ces listes.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type FollowedPage,
   type FollowersPage,
   type FollowPerson,
-  type FriendItem,
-  type FriendRequestView,
   networkLabels as N,
+  socialLabels,
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-
+import { FriendQrScanner } from "@/features/FriendQrScanner";
 import { SmButton } from "@/features/passionne/kit";
-import { FriendsList, type NetworkTab, PagesList, PeopleList } from "@/features/profil/network";
+import { type NetworkTab, PagesList, PeopleList, RequestsList } from "@/features/profil/network";
 import { createNetworkLoader } from "@/features/profil/networkLoad";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
-const TABS: NetworkTab[] = ["abonnes", "abonnements", "amis"];
+const TABS: NetworkTab[] = ["abonnes", "abonnements", "demandes"];
 
 type Paged<T> = { items: T[]; total: number; nextCursor: string | null };
 type Lists = {
@@ -33,8 +34,7 @@ type Lists = {
   people?: Paged<FollowPerson>;
   structures?: Paged<FollowedPage>;
   pros?: Paged<FollowedPage>;
-  friends?: FriendItem[];
-  requests?: FriendRequestView[];
+  requests?: Paged<FollowPerson>;
 };
 
 export default function Reseau() {
@@ -42,10 +42,11 @@ export default function Reseau() {
   const c = t.color;
   const router = useRouter();
   const { me } = useSession();
-  const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<NetworkTab>(
-    TABS.includes(params.tab as NetworkTab) ? (params.tab as NetworkTab) : "abonnes",
-  );
+  // `?liste=demandes` (lien de la notification « demande d'abonnement ») ; `abonnements` ; `tab` : ancien nom du paramètre.
+  const params = useLocalSearchParams<{ liste?: string; tab?: string }>();
+  const wanted = params.liste ?? params.tab;
+  const [tab, setTab] = useState<NetworkTab>(TABS.includes(wanted as NetworkTab) ? (wanted as NetworkTab) : "abonnes");
+  const [scan, setScan] = useState(false);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [lists, setLists] = useState<Lists>({});
@@ -81,11 +82,7 @@ export default function Reseau() {
               pros: pros as Paged<FollowedPage>,
             };
           }
-          const [friends, requests] = await Promise.all([
-            api.friendsSearch(term),
-            term ? Promise.resolve({ items: [] as FriendRequestView[] }) : api.friendRequests(),
-          ]);
-          return { friends: friends.items, requests: requests.items.filter((r) => r.direction === "in") };
+          return { requests: await api.followRequests(term) };
         },
         apply: (result) => setLists((l) => ({ ...l, ...result })),
         onError: (e) => setError(errorMessage(e)),
@@ -125,7 +122,7 @@ export default function Reseau() {
     void load();
   }, [load]);
 
-  const more = async (which: "followers" | "people" | "structures" | "pros") => {
+  const more = async (which: "followers" | "people" | "structures" | "pros" | "requests") => {
     const current = lists[which];
     if (!current?.nextCursor) return;
     const cursor = current.nextCursor;
@@ -133,7 +130,9 @@ export default function Reseau() {
       () =>
         which === "followers"
           ? api.followers(query || undefined, cursor)
-          : api.following(which, query || undefined, cursor),
+          : which === "requests"
+            ? api.followRequests(query || undefined, cursor)
+            : api.following(which, query || undefined, cursor),
       (page) =>
         setLists((l) => {
           const now = l[which];
@@ -155,10 +154,12 @@ export default function Reseau() {
 
   const n = counts.data;
   const tabLabel = (x: NetworkTab) => {
-    const value = x === "abonnes" ? n?.followers : x === "abonnements" ? n?.following : n?.friends;
-    const word = x === "abonnes" ? N.followers : x === "abonnements" ? N.following : N.friends;
+    const value = x === "abonnes" ? n?.followers : x === "abonnements" ? n?.following : n?.requestsIn;
+    const word = x === "abonnes" ? N.followers : x === "abonnements" ? N.following : N.requests;
     return value === undefined ? word(2) : `${value} ${word(value)}`;
   };
+  // Les demandes n'existent que pour un compte privé, ou tant qu'il en reste (ou si on arrive par leur lien).
+  const tabs = TABS.filter((x) => x !== "demandes" || tab === "demandes" || n?.private || (n?.requestsIn ?? 0) > 0);
 
   const followers = lists.followers;
   const empty = (text: string) => (
@@ -177,9 +178,19 @@ export default function Reseau() {
       onRefresh={async () => {
         await Promise.all([load(), counts.reload()]);
       }}
+      overlays={
+        <FriendQrScanner
+          visible={scan}
+          onClose={() => setScan(false)}
+          onDone={() => {
+            void load();
+            void counts.reload();
+          }}
+        />
+      }
     >
       <View style={[styles.seg, { backgroundColor: c.surfaceRaised }]} accessibilityRole="tablist" testID="net-tabs">
-        {TABS.map((x) => {
+        {tabs.map((x) => {
           const on = x === tab;
           return (
             <Pressable
@@ -213,7 +224,8 @@ export default function Reseau() {
         />
       </View>
 
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {tab === "demandes" && !error ? <Muted variant="caption">{N.requestsHint}</Muted> : null}
+      {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
       {loading && !error ? <Muted variant="body">Chargement…</Muted> : null}
 
       {!loading && tab === "abonnes" && followers ? (
@@ -221,7 +233,6 @@ export default function Reseau() {
           <PeopleList
             pages={followers as FollowersPage}
             onMore={() => void more("followers")}
-            onError={setError}
             onChanged={onFollowChanged}
             testID="net-followers"
           />
@@ -240,7 +251,6 @@ export default function Reseau() {
                 title={N.groupPeople}
                 pages={lists.people}
                 onMore={() => void more("people")}
-                onError={setError}
                 onChanged={onFollowChanged}
                 testID="net-people"
               />
@@ -251,23 +261,22 @@ export default function Reseau() {
         )
       ) : null}
 
-      {!loading && tab === "amis" && lists.friends && lists.requests ? (
-        <>
-          {lists.friends.length + lists.requests.length === 0 ? empty(N.emptyFriends) : null}
-          <FriendsList
-            requests={lists.requests}
-            friends={lists.friends}
-            onChanged={() => {
-              void load();
-              void counts.reload();
-            }}
+      {!loading && tab === "demandes" && lists.requests ? (
+        lists.requests.items.length ? (
+          <RequestsList
+            pages={lists.requests}
+            onMore={() => void more("requests")}
+            onChanged={() => void counts.reload()}
           />
-          {/* Ajouter un ami (recherche, QR) : l'écran des amis, qui a quitté les réglages du profil. */}
-          <SmButton kind="s" icon="add" wide onPress={() => router.push("/amis")} testID="net-add-friend">
-            Ajouter un ami
-          </SmButton>
-        </>
+        ) : (
+          empty(N.emptyRequests)
+        )
       ) : null}
+
+      {/* Suivre quelqu'un en face de soi : son QR de compte (la recherche de personnes est dans Explorer). */}
+      <SmButton kind="s" icon="qr" wide onPress={() => setScan(true)} testID="friend-scan-open">
+        {socialLabels.scanFriend}
+      </SmButton>
 
       <View style={[styles.note, { backgroundColor: c.surface }]} testID="net-privacy">
         <Icon name="lock" size={16} color={c.inkMuted} />

@@ -1,10 +1,10 @@
 // Explorer, segment Personnes et crews (lot R2, maquettes R2.6 et R2.7 ; il remplace la feuille « tout le monde » du lot
 // C2a) : aucun annuaire. À l'ouverture, la recherche (pseudo, crew, modèle) et des suggestions courtes, chacune avec sa
-// raison, tirées de données publiques seulement : « D'autres Supra » (des garages publics, ni moi ni mes amis) et « Crews
-// du 66 » (les crews, publics par nature). Ni « Amis de tes amis » (aucune liste d'amis n'est publique) ni « Vus aux
+// raison, tirées de données publiques seulement : « D'autres Supra » (des garages publics, ni moi ni mes abonnements) et « Crews
+// du 66 » (les crews, publics par nature). Ni « Abonnés de tes abonnés » (aucune liste n'est publique) ni « Vus aux
 // mêmes sorties » (il faudrait l'accord de chacun : v2.1, « Le plateau »). Une recherche montre Personnes puis Crews ;
 // un compte privé n'y montre que ce qu'il montre déjà à tout le monde (pseudo, grade, marque et modèle), sans
-// département (l'API le garantit). Une action par ligne (« Ajouter », « Rejoindre »), secondaire, avec son icône.
+// département (l'API le garantit). Une action par ligne (« Suivre », « Rejoindre »), secondaire, avec son icône.
 import { archivoAt, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type CrewCard, gradeLabels, type PeopleWhere, type PersonCard, explorerR2Labels as R } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -12,6 +12,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
+import { cardVisibility, FollowButton } from "@/features/social/FollowButton";
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -158,73 +159,18 @@ function Empty({ children }: { children: string }) {
   );
 }
 
-/** « Ajouter » (demande d'ami), « Demande envoyée », ou « Écrire » à un ami. */
+/** Le bouton « Suivre » compact d'une ligne (lot R6b) : Suivre, Demander à suivre, Abonné ou Demandé. */
 function PersonAction({ person }: { person: PersonCard }) {
-  const router = useRouter();
-  const [state, setState] = useState(person.friendship);
-  const [busy, setBusy] = useState(false);
-  if (state === "friends") {
-    return (
-      <SmallButton
-        icon="chat"
-        disabled={busy}
-        testID="person-write"
-        onPress={async () => {
-          setBusy(true);
-          try {
-            const { id } = await api.openDirect(person.userId);
-            router.push(`/boite/${id}`);
-          } catch {
-            // Plus amis entre-temps : le profil propose la demande de contact.
-            router.push(`/u/${encodeURIComponent(person.pseudo)}`);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {R.write}
-      </SmallButton>
-    );
-  }
-  if (state === "pending_out") {
-    return (
-      <SmallButton icon="check" disabled testID="person-requested">
-        {R.requested}
-      </SmallButton>
-    );
-  }
-  if (state === "pending_in") {
-    // Il m'a déjà demandé : son profil propose d'accepter.
-    return (
-      <SmallButton
-        icon="add"
-        onPress={() => router.push(`/u/${encodeURIComponent(person.pseudo)}`)}
-        testID="person-add"
-      >
-        {R.add}
-      </SmallButton>
-    );
-  }
   return (
-    <SmallButton
-      icon="add"
-      disabled={busy}
-      testID="person-add"
-      onPress={async () => {
-        setBusy(true);
-        try {
-          const res = await api.requestFriend(person.pseudo, "search");
-          setState(res.status === "accepted" ? "friends" : "pending_out");
-        } catch {
-          // La demande se refait depuis le profil (limite, compte bloqué…).
-          router.push(`/u/${encodeURIComponent(person.pseudo)}`);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {R.add}
-    </SmallButton>
+    <FollowButton
+      size="small"
+      pseudo={person.pseudo}
+      mine={person.follow.mine}
+      followsMe={person.follow.followsMe}
+      canFollow
+      visibility={cardVisibility(person)}
+      testIDFor={(kind) => (kind === "requested" ? "person-requested" : "person-add")}
+    />
   );
 }
 
@@ -290,7 +236,7 @@ function CrewAction({
 function PersonRow({ person, testID = "person-row" }: { person: PersonCard; testID?: string }) {
   const { t } = useTheme();
   const router = useRouter();
-  // Compte privé (non ami) : ses départements ne sont pas donnés par l'API.
+  // Compte privé (non abonné) : ses départements ne sont pas donnés par l'API.
   const hidden = person.departments === null;
   const caption = (
     <>

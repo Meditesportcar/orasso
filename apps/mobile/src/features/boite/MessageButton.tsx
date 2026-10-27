@@ -1,4 +1,4 @@
-// Bouton « Message » du profil d'un autre (lot 18) : conversation existante ou entre amis → elle s'ouvre ; pas amis →
+// Bouton « Message » du profil d'un autre (lot 18) : conversation existante ou autorisée (D37) → elle s'ouvre ; sinon →
 // feuille « Demande de contact ».
 import { AppBarFlowAction, Button } from "@orasso/design-system/native";
 import { messagingLabels, publicProfileLabels } from "@orasso/shared";
@@ -47,7 +47,7 @@ export function MessageButton({ userId, pseudo }: { userId: string; pseudo: stri
 
 /**
  * Lot R5b (maquette R5.6) : « Écrire » passe dans l'en-tête du profil d'un membre (carré à gauche du ✕). Même logique
- * que `MessageButton` : conversation entre amis, sinon la feuille « Demande de contact ». L'erreur est rendue à l'écran.
+ * que `MessageButton` : conversation autorisée, sinon la feuille « Demande de contact ». L'erreur est rendue à l'écran.
  */
 export function WriteHeaderAction({
   userId,

@@ -111,7 +111,7 @@ export default function LineupScreen() {
         await event.reload();
         await lineup.reload();
       }}
-      overlays={<PrivateCarSheet car={sheet} onClose={() => setSheet(null)} canAskFriend={status === "in"} />}
+      overlays={<PrivateCarSheet car={sheet} onClose={() => setSheet(null)} canAskFollow={status === "in"} />}
     >
       {event.error && !e ? (
         <Notice tone="error" testID="lineup-event-error">
@@ -237,11 +237,11 @@ export default function LineupScreen() {
 function PrivateCarSheet({
   car,
   onClose,
-  canAskFriend,
+  canAskFollow,
 }: {
   car: LineupCarMember | null;
   onClose: () => void;
-  canAskFriend: boolean;
+  canAskFollow: boolean;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -259,7 +259,7 @@ function PrivateCarSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.requestFriend(car.pseudo, "profile");
+      await api.follow(car.pseudo);
       setSent(car.pseudo);
     } catch (err) {
       setError(errorMessage(err));
@@ -305,7 +305,7 @@ function PrivateCarSheet({
             </Muted>
           </View>
           {error ? <Notice tone="error">{error}</Notice> : null}
-          {canAskFriend ? (
+          {canAskFollow ? (
             <Button
               variant="secondary"
               icon={sent === car.pseudo ? "check" : "profile"}
