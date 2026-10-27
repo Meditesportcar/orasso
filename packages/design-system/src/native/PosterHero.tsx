@@ -410,6 +410,15 @@ const styles = StyleSheet.create({
   orgImage: { width: "100%", height: "100%" },
   orgFallback: { borderRadius: 10, alignItems: "center", justifyContent: "center" },
   orgInitials: { fontFamily: archivoAt(70, 900), letterSpacing: 0.26 },
-  tag: { height: 22, paddingHorizontal: 9, borderRadius: 4, justifyContent: "center", alignSelf: "flex-start" },
-  tagText: { fontFamily: archivoAt(80, 800), fontSize: 11, letterSpacing: 0.66, textTransform: "uppercase" },
+  // Lot R6-police (« GRATUIT », « YOUNGTIMER » rognés en bas, police du système agrandie) : hauteur minimale au lieu
+  // d'une hauteur fixe, et un interligne à la mesure du corps (celui du texte courant, 22 px, débordait d'une étiquette
+  // de 22 px dès que la police grandissait). À l'échelle 1, l'étiquette garde ses 22 px et le texte reste centré.
+  tag: { minHeight: 22, paddingHorizontal: 9, borderRadius: 4, justifyContent: "center", alignSelf: "flex-start" },
+  tagText: {
+    fontFamily: archivoAt(80, 800),
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.66,
+    textTransform: "uppercase",
+  },
 });

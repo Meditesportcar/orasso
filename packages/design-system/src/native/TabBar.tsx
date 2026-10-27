@@ -5,14 +5,14 @@
 // 22 px vers le haut, bordé de `--bar-line` (moutarde s'il est actif), son libellé dessous. Plus de métal brossé.
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, type TextStyle, useWindowDimensions, View, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import type { IconName } from "../icons";
 import { type TabSetName, tabSets } from "../labels";
 import { Icon } from "./Icon";
 import { useParkStyle } from "./motionHooks";
 import { CenterTabO } from "./olive/CenterTabO";
-import { LABEL_ROOM, tabLabelFit } from "./tabLabel";
+import { LABEL_ROOM, tabBarLabelFits } from "./tabLabel";
 import { Text } from "./text";
 import { radius, useTheme } from "./theme";
 
@@ -69,12 +69,15 @@ function TabEntry({
   moved,
   onSelect,
   centerSlot,
+  labelFit,
 }: {
   tab: TabItem;
   active: boolean;
   moved: boolean;
   onSelect?: (id: string) => void;
   centerSlot?: ReactNode;
+  /** Corps (et instance) du libellé, choisi pour toute la barre (`tabBarLabelFits`). */
+  labelFit: TextStyle;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -105,7 +108,7 @@ function TabEntry({
             <Icon name={tab.icon} size={30} color={active ? c.accent : c.barInk} />
           )}
         </View>
-        <Text variant="tab" color={ink} style={[styles.label, tabLabelFit(tab.label)]}>
+        <Text variant="tab" color={ink} style={[styles.label, labelFit]}>
           {tab.label}
         </Text>
       </Pressable>
@@ -120,7 +123,7 @@ function TabEntry({
       style={[styles.tab, styles.sideTab]}
     >
       <TabIcon tab={tab} active={active} moved={moved} ink={ink} />
-      <Text variant="tab" color={ink} style={[styles.label, tabLabelFit(tab.label)]}>
+      <Text variant="tab" color={ink} style={[styles.label, labelFit]}>
         {tab.label}
       </Text>
       {active ? (
@@ -144,6 +147,12 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
   const { t } = useTheme();
   const c = t.color;
   const items: readonly TabItem[] = tabs ?? tabSets[set];
+  // Lot R6-police : police du système agrandie, un seul corps pour les cinq libellés, chacun sur une ligne.
+  const { fontScale } = useWindowDimensions();
+  const fits = tabBarLabelFits(
+    items.map((tab) => tab.label),
+    fontScale,
+  );
   const previous = useRef(active);
   const [moved, setMoved] = useState(false);
   useEffect(() => {
@@ -165,7 +174,7 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
         ]}
       />
       <View accessibilityRole="tablist" pointerEvents="box-none" style={styles.row}>
-        {items.map((tab) => (
+        {items.map((tab, i) => (
           <TabEntry
             key={tab.id}
             tab={tab}
@@ -173,6 +182,7 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
             moved={moved}
             onSelect={onSelect}
             centerSlot={centerSlot}
+            labelFit={fits[i] ?? {}}
           />
         ))}
       </View>

@@ -110,3 +110,12 @@ describe("ajustement du libellé, tour 2 (relecture Opus 5)", () => {
     }
   });
 });
+
+describe("nextCut, plancher choisi (lot R6-police)", () => {
+  it("descend sous 11 px quand le plancher le permet", () => {
+    expect(nextCut(12, 0)).toBe(1);
+    expect(nextCut(12, 1)).toBeNull();
+    expect(nextCut(12, 1, 8)).toBe(2);
+    expect(nextCut(12, 4, 8)).toBeNull();
+  });
+});
