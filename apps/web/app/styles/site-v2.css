@@ -1538,3 +1538,16 @@
     margin-left: auto;
   }
 }
+
+/* Lot R6-retouches : le titre d'une carte d'événement ne se coupe qu'entre deux mots (comme le titre de la fiche) : le
+   corps descend sous celui du jeton seulement quand le mot le plus large (`--em`) ne tient pas dans la carte. */
+.w-card__body {
+  container-type: inline-size;
+}
+.w-card--row .w-card__body {
+  flex: 1 1 0;
+}
+.w-card__body .w-card__title {
+  font-size: min(var(--type-poster-s-size), calc(100cqi / var(--em, 10)));
+  line-height: calc(1em + var(--type-poster-s-line) - var(--type-poster-s-size));
+}

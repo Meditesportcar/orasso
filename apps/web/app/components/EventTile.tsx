@@ -1,6 +1,6 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { countFr, type EventCard, eventFormatLabels, yearToShow } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { countFr, type EventCard, eventFormatLabels, widestWordEm, yearToShow } from "@orasso/shared";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
 import { formatDayShort, formatTime } from "../lib/format";
@@ -126,7 +126,9 @@ export function EventTile({
             {stub.year !== null && <span data-testid="event-tile-date">{formatDayShort(event.startsAt)} · </span>}
             {formatTime(event.startsAt)}
           </span>
-          <h3 className="w-card__title o-t-poster-s">{event.title}</h3>
+          <h3 className="w-card__title o-t-poster-s" style={{ "--em": widestWordEm(event.title) } as CSSProperties}>
+            {event.title}
+          </h3>
           {showStructure && (
             <span className="w-card__org o-t-meta">
               <span className="w-card__logo" aria-hidden="true">
