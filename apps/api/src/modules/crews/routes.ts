@@ -12,6 +12,7 @@ import {
   crewRequestSchema,
   crewSearchQuery,
   crewUpdateSchema,
+  eventInviteCandidatesQuery,
   type PlateRect,
   plateRectsSchema,
 } from "@orasso/shared";
@@ -21,6 +22,7 @@ import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { applicationsQueries } from "../applications/queries";
+import { crewInviteCandidates } from "./invite-candidates";
 import { crewOutingsService } from "./outings";
 import { crewRegistrationService } from "./registration";
 import { crewsService } from "./service";
@@ -154,6 +156,13 @@ export const crewsRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const { pseudo } = await body(c, crewInviteSchema);
     return c.json(await crewsService.invite(v, uuidParam(c, "id"), pseudo), 201);
+  })
+  // Lot R6c (R6.7) : la feuille « Inviter dans <crew> » d'un membre : son réseau, avec l'état de chacun dans le crew.
+  .get("/crews/:id/invite-candidates", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await crewInviteCandidates(v, uuidParam(c, "id"), query(c, eventInviteCandidatesQuery)), 200, {
+      "cache-control": "private, no-store",
+    });
   })
   // Inscription en crew.
   .get("/events/:id/crew-applications/options", async (c) => {

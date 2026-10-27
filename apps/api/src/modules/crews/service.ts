@@ -21,6 +21,7 @@ import {
   type CrewView,
   canProposeCrewOuting,
   crewErrors,
+  crewInviteLabels,
   crewJoinOutcome,
   crewLabels,
   crewViewerState,
@@ -57,6 +58,7 @@ import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { eventInvitesService } from "../event-invites/service";
 import { activeCrewMembers, crewRules } from "../messaging/access/crew";
 import { publishToConversation, serializeMessage, unreadCountOf } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
@@ -158,6 +160,13 @@ export async function memberRow(ex: Executor, crewId: string, userId: string): P
     .where(and(eq(crewMembers.crewId, crewId), eq(crewMembers.userId, userId)));
   return row ?? null;
 }
+
+/**
+ * Lot R6c : la démarche vient de la personne (sa demande, ou l'invitation d'un membre qu'elle a acceptée, « à confirmer
+ * par le chef »), et non d'une invitation qu'elle n'a pas encore acceptée. Sert au refus silencieux et au délai de 30 jours.
+ */
+const byPerson = (r: Pick<CrewMemberRow, "invitedBy" | "inviteAcceptedAt">) =>
+  r.invitedBy === null || r.inviteAcceptedAt !== null;
 
 async function requireLeader(tx: Tx, crewId: string, v: Viewer): Promise<CrewRow> {
   const crew = await lockCrew(tx, crewId);
@@ -447,6 +456,100 @@ async function pendingCount(userId: string, ex: Executor = db): Promise<number> 
   return Number((result.rows[0] as { n?: number | string } | undefined)?.n ?? 0);
 }
 
+// --- Lot R6c (maquette R6.7) : invitation d'un membre, confirmée par le chef ---------------------------------------
+
+/** La personne est dans le réseau de `me` : abonnement accepté dans un sens ou dans l'autre. */
+async function inNetwork(ex: Executor, me: string, other: string): Promise<boolean> {
+  const result = await ex.execute(sql`
+    select 1 from user_follows f
+    where f.status = 'accepted'
+      and ((f.follower_id = ${me} and f.followed_id = ${other}) or (f.follower_id = ${other} and f.followed_id = ${me}))
+    limit 1`);
+  return result.rows.length > 0;
+}
+
+/**
+ * Un membre actif invite une personne de son réseau (abonnés, abonnements acceptés). Pas de doublon : une demande ou une
+ * invitation en cours répond « déjà en cours ». Une personne qui a coupé ses invitations reçoit la même réponse, sans
+ * que rien ne soit écrit. Mêmes limites que le chef (20 invitations en attente, une alerte par paire et par 24 h).
+ */
+async function inviteByMember(tx: Tx, after: After, crewId: string, v: Viewer, target: Profile) {
+  const crew = await lockCrew(tx, crewId);
+  if (!(await inNetwork(tx, v.user.id, target.userId))) throw forbidden(crewInviteLabels.notInNetwork);
+  const row = await memberRow(tx, crew.id, target.userId);
+  const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "invite", now());
+  if (outcome.kind === "error") throw joinError(outcome.code);
+  // Une demande de la personne attend déjà le chef : le membre n'a rien à y ajouter.
+  if (outcome.kind === "accept") throw joinError("already_pending");
+  if (await eventInvitesService.isMuted(target.userId, v.user.id, tx)) {
+    return { pseudo: target.pseudo, status: "invited" as const };
+  }
+  const [pending] = await tx
+    .select({ n: count() })
+    .from(crewMembers)
+    .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.status, "invited")));
+  if ((pending?.n ?? 0) >= PENDING_INVITATIONS_PER_CREW) throw conflict("conflict", crewErrors.tooManyInvitations);
+  await assertNoRecentNotification(tx, target.userId, "crew_invitation", crew.id, v.user.id);
+  const values = {
+    status: "invited" as const,
+    role: "member" as const,
+    message: null,
+    invitedBy: v.user.id,
+    inviteAcceptedAt: null,
+    respondedAt: null,
+    joinedAt: null,
+  };
+  await tx
+    .insert(crewMembers)
+    .values({ crewId: crew.id, userId: target.userId, ...values })
+    .onConflictDoUpdate({ target: [crewMembers.crewId, crewMembers.userId], set: values });
+  const leader = await profilesRepo.byUserId(crew.createdBy, tx);
+  await notificationsService.notify(tx, target.userId, "crew_invitation", {
+    title: "Invitation à un crew",
+    body: crewInviteLabels.memberInviteBody(
+      v.profile.pseudo,
+      crew.name,
+      leader?.pseudo ?? crewInviteLabels.leaderFallback,
+    ),
+    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes", leaderConfirms: true },
+    link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
+  });
+  publishInbox(after, target.userId);
+  return { pseudo: target.pseudo, status: "invited" as const };
+}
+
+/**
+ * L'invitation d'un membre acceptée : la ligne passe « à confirmer par le chef » (`requested`, `invite_accepted_at`,
+ * `invited_by` gardé), le chef est prévenu (« Marc_66 a accepté l'invitation de Julie_66 : confirme son arrivée »).
+ */
+async function acceptMemberInvitation(tx: Tx, after: After, crew: CrewRow, v: Viewer, inviterId: string) {
+  await tx
+    .update(crewMembers)
+    .set({ status: "requested", inviteAcceptedAt: now(), message: null, respondedAt: null })
+    .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.userId, v.user.id)));
+  await closeNotification(tx, v.user.id, "crew_invitation", crew.id);
+  const inviter = await profilesRepo.byUserId(inviterId, tx);
+  const inviterName = inviter && !inviter.deletedAt ? inviter.pseudo : crewInviteLabels.memberFallback;
+  await notificationsService.notify(tx, crew.createdBy, "crew_request", {
+    title: crewInviteLabels.confirmTitle,
+    body: crewInviteLabels.confirmBody(v.profile.pseudo, inviterName, crew.name),
+    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes" },
+    link: { label: "Voir la demande", path: "/app/boite/demandes" },
+  });
+  publishInbox(after, v.user.id, crew.createdBy);
+}
+
+/** Pseudos de ceux qui ont invité (comptes supprimés exclus). */
+async function inviterPseudos(ids: (string | null)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!unique.length) return new Map();
+  const rows = await db
+    .select({ id: profiles.userId, pseudo: profiles.pseudo })
+    .from(profiles)
+    .where(and(inArray(profiles.userId, unique), isNull(profiles.deletedAt)));
+  return new Map(rows.map((r) => [r.id, r.pseudo]));
+}
+
 export const crewsService = {
   syncConversation,
   systemMessage,
@@ -721,9 +824,7 @@ export const crewsService = {
     const at = now();
     const me = await memberRow(db, crew.id, v.user.id);
     const state = crewViewerState(
-      me
-        ? { status: me.status, respondedAt: me.respondedAt, role: me.role, requestedByMe: me.invitedBy === null }
-        : null,
+      me ? { status: me.status, respondedAt: me.respondedAt, role: me.role, requestedByMe: byPerson(me) } : null,
       at,
     );
     const isMember = state === "member" || state === "leader";
@@ -836,7 +937,7 @@ export const crewsService = {
         .filter(
           (m) =>
             crewViewerState(
-              { status: m.status, respondedAt: m.respondedAt, role: m.role, requestedByMe: m.invitedBy === null },
+              { status: m.status, respondedAt: m.respondedAt, role: m.role, requestedByMe: byPerson(m) },
               at,
             ) === "requested",
         )
@@ -894,7 +995,13 @@ export const crewsService = {
     const me = await memberRow(db, crew.id, v.user.id);
     if (me?.role !== "leader" || me.status !== "active" || crew.deletedAt) throw forbidden(crewErrors.leaderOnly);
     const rows = await db
-      .select({ p: profiles, status: crewMembers.status, message: crewMembers.message, at: crewMembers.updatedAt })
+      .select({
+        p: profiles,
+        status: crewMembers.status,
+        message: crewMembers.message,
+        at: crewMembers.updatedAt,
+        invitedBy: crewMembers.invitedBy,
+      })
       .from(crewMembers)
       .innerJoin(profiles, eq(profiles.userId, crewMembers.userId))
       .where(
@@ -915,11 +1022,14 @@ export const crewsService = {
         requesters.map((r) => r.p),
       ),
     );
+    // Lot R6c : « Invitée par Julie_66 » (invitation d'un membre, acceptée ou envoyée) ; jamais le chef lui-même.
+    const inviters = await inviterPseudos(rows.map((r) => (r.invitedBy === v.user.id ? null : r.invitedBy)));
     const view = (r: (typeof rows)[number]) => ({
       person: personOf(r.p),
       message: r.message,
       createdAt: r.at.toISOString(),
       vehicleLabel: null as string | null,
+      invitedBy: r.invitedBy ? (inviters.get(r.invitedBy) ?? null) : null,
     });
     return {
       requests: requesters.map((r) => ({ ...view(r), vehicleLabel: labels.get(r.p.userId) ?? null })),
@@ -936,7 +1046,7 @@ export const crewsService = {
     await withTx(async (tx, after) => {
       const crew = await lockCrew(tx, id);
       const row = await memberRow(tx, crew.id, v.user.id);
-      const outcome = crewJoinOutcome(row && { ...row, wasInvitation: row.invitedBy !== null }, "request", now());
+      const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "request", now());
       if (outcome.kind === "error") throw joinError(outcome.code);
       if (outcome.kind === "accept") {
         await this.acceptInvitationInTx(tx, after, crew, v);
@@ -961,6 +1071,7 @@ export const crewsService = {
         role: "member" as const,
         message,
         invitedBy: null,
+        inviteAcceptedAt: null,
         respondedAt: null,
         joinedAt: null,
       };
@@ -1019,7 +1130,8 @@ export const crewsService = {
 
   /**
    * `POST /crews/:id/invitations {pseudo}` (chef) : 20 invitations en attente au plus ; demande déjà reçue de cette
-   * personne → acceptée ; une notification par paire et par 24 h.
+   * personne → acceptée ; une notification par paire et par 24 h. Lot R6c (R6.7) : un membre actif invite aussi, une
+   * personne de son réseau (`inviteByMember`) ; le chef confirme ensuite son arrivée.
    */
   async invite(v: Viewer, id: string, pseudo: string) {
     assertWritable(v);
@@ -1027,9 +1139,12 @@ export const crewsService = {
     const target = reachable(await profilesRepo.byPseudo(pseudo));
     if (target.userId === v.user.id) throw validation("C'est ton propre compte.");
     return withTx(async (tx, after) => {
+      // Lot R6c : un membre actif (pas le chef) passe par `inviteByMember`.
+      const mine = await memberRow(tx, id, v.user.id);
+      if (mine?.status === "active" && mine.role !== "leader") return inviteByMember(tx, after, id, v, target);
       const crew = await requireLeader(tx, id, v);
       const row = await memberRow(tx, crew.id, target.userId);
-      const outcome = crewJoinOutcome(row && { ...row, wasInvitation: row.invitedBy !== null }, "invite", now());
+      const outcome = crewJoinOutcome(row && { ...row, wasInvitation: !byPerson(row) }, "invite", now());
       if (outcome.kind === "error") throw joinError(outcome.code);
       if (outcome.kind === "accept") {
         await join(tx, after, crew, target);
@@ -1054,6 +1169,7 @@ export const crewsService = {
         role: "member" as const,
         message: null,
         invitedBy: v.user.id,
+        inviteAcceptedAt: null,
         respondedAt: null,
         joinedAt: null,
       };
@@ -1085,6 +1201,12 @@ export const crewsService = {
   },
 
   async acceptInvitationInTx(tx: Tx, after: After, crew: CrewRow, v: Viewer) {
+    // Lot R6c (R6.7) : l'invitation d'un membre acceptée attend la confirmation du chef.
+    const row = await memberRow(tx, crew.id, v.user.id);
+    if (row?.invitedBy && row.invitedBy !== crew.createdBy) {
+      await acceptMemberInvitation(tx, after, crew, v, row.invitedBy);
+      return;
+    }
     await join(tx, after, crew, v.profile);
     await closeNotification(tx, v.user.id, "crew_invitation", crew.id);
     await notificationsService.notify(tx, crew.createdBy, "crew_member_joined", {
@@ -1194,6 +1316,8 @@ export const crewsService = {
         }
       }
     }
+    // Lot R6c : « Invitée par Julie_66 » sur une demande née de l'invitation d'un membre.
+    const requestInviters = await inviterPseudos(rows.map((r) => (r.m.status === "requested" ? r.m.invitedBy : null)));
     return rows.flatMap((r): CrewInboxRequest[] => {
       if (r.m.status === "requested") {
         return [
@@ -1203,6 +1327,7 @@ export const crewsService = {
             person: personOf(r.p),
             message: r.m.message,
             createdAt: r.m.updatedAt.toISOString(),
+            invitedBy: r.m.invitedBy ? (requestInviters.get(r.m.invitedBy) ?? null) : null,
           },
         ];
       }
@@ -1215,6 +1340,8 @@ export const crewsService = {
           person: personOf(leader),
           message: null,
           createdAt: r.m.updatedAt.toISOString(),
+          // Lot R6c : invitation d'un membre, le chef confirmera l'arrivée.
+          leaderConfirms: r.m.invitedBy !== null && r.m.invitedBy !== r.crew.createdBy,
         },
       ];
     });
