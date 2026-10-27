@@ -18,7 +18,7 @@ export const profileVisibilityRules: Record<ProfileVisibility, string> = {
   public:
     "Les autres utilisateurs connectés voient ton profil complet : garage, photos, événements, crews. Ton compte reste trouvable et peut recevoir des demandes d'ami ou de contact.",
   private:
-    "Les autres utilisateurs voient seulement ton pseudo, ta photo de profil, ton grade, et la marque et le modèle de tes véhicules ; tes amis voient tout. Ton compte reste trouvable et peut recevoir des demandes d'ami ou de contact.",
+    "Les autres utilisateurs voient seulement ton pseudo, ta photo de profil, ton grade, et la marque et le modèle de tes véhicules ; tes abonnés voient tout. Pour te suivre, chacun te demande, et tu acceptes ou non. Ton compte reste trouvable et peut recevoir des demandes de contact.",
 };
 
 /**

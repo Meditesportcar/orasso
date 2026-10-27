@@ -1,4 +1,4 @@
-// Profils, centres d'intérêt, catégories, appareils (ARCHITECTURE.md § 1.1).
+﻿// Profils, centres d'intérêt, catégories, appareils (ARCHITECTURE.md § 1.1).
 import {
   categoryFamilies,
   categoryMakeModes,
@@ -88,7 +88,7 @@ export const profiles = pgTable(
     mutedTypes: text("muted_types").array().notNull().default(sql`'{}'::text[]`),
     /** Widgets de l'accueil réglés par l'utilisateur (posée au lot 15, utilisée au lot 30) ; null = par défaut. */
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
-    /** Lot 17 : nombre d'amis acceptés (cache, tenu par le service social). */
+    /** Lot 17 : nombre d'amis acceptés. ARCHIVE depuis le lot R6b (plus lu ni écrit) ; retiré avec la table `friendships`. */
     friendsCount: integer("friends_count").notNull().default(0),
     /**
      * Lot R4c (maquette R4.5) : le véhicule principal choisi (« Mettre en avant »). Nul = le plus ancien véhicule actif ;

@@ -129,7 +129,8 @@ export type ContactAcceptResult = { conversationId: string };
 
 /** Compteurs des Demandes de la Boîte ; chaque lot ajoute sa clé (crew, invitation à un événement, staff…). */
 export type InboxRequestCounts = {
-  friend: number;
+  /** Lot R6b : demandes d'abonnement reçues en attente (compte privé). */
+  follow: number;
   contact: number;
   /** Lot 19 : demandes reçues par un chef de crew et invitations reçues ; venues en crew à confirmer. */
   crew: number;

@@ -1,22 +1,9 @@
-import type { FriendshipState } from "../rules/visibility";
-
-// Social (lot 17) : amis, profils des autres, recherche de personnes, Journal. Libellés d'interface.
-
-export const friendStateLabels: Record<FriendshipState, string> = {
-  none: "Ajouter en ami",
-  friends: "Ami",
-  pending_out: "Demande envoyée",
-  pending_in: "Accepter",
-};
+// Social (lot 17 ; lot R6b : « Suivre » remplace l'amitié) : profils des autres, recherche de personnes, Journal.
+// Libellés d'interface.
 
 export const socialLabels = {
-  addFriend: "Ajouter en ami",
-  friend: "Ami",
-  requestSent: "Demande envoyée",
   accept: "Accepter",
   decline: "Refuser",
-  removeFriend: "Retirer des amis",
-  removeFriendConfirm: "Retirer cette personne de tes amis ?",
   message: "Message",
   messageSoon: "Message · bientôt",
   report: "Signaler",
@@ -30,14 +17,10 @@ export const socialLabels = {
   crewsEmpty: "Aucun crew pour l'instant.",
   noVehicles: "Aucun véhicule visible.",
   noUpcoming: "Aucun événement à venir.",
-  privateNotice: "Profil privé : seuls la marque et le modèle des véhicules sont visibles. Les amis voient tout.",
-  friendsCount: (n: number) => (n > 1 ? `${n} amis` : `${n} ami`),
-  requestSentTo: (pseudo: string) => `Demande envoyée à ${pseudo}`,
-  alreadyFriends: "Vous êtes déjà amis",
-  alreadyRequested: "Une demande est déjà en cours",
+  privateNotice: "Profil privé : seuls la marque et le modèle des véhicules sont visibles. Ses abonnés voient tout.",
   selfRequest: "C'est ton propre compte.",
-  scanFriend: "Scanner le QR d'un ami",
-  scanFriendHint: "Cadre le QR de compte de la personne : une demande d'ami lui est envoyée.",
+  scanFriend: "Scanner le QR d'un passionné",
+  scanFriendHint: "Cadre le QR de compte de la personne : tu la suis (ou tu lui demandes, si son compte est privé).",
   scanFriendNotAccount: "Ce QR n'est pas un QR de compte Orasso.",
   scanFriendExpired: "Ce QR a expiré ou a déjà servi : demande à la personne d'en afficher un nouveau.",
   ownersNearby: "Autres propriétaires près de chez moi",
@@ -55,10 +38,6 @@ export const socialLabels = {
   filterInterest: "Centre d'intérêt",
   filterGrade: "Grade minimum",
   filterAnyGrade: "Tous les grades",
-  myFriends: "Mes amis",
-  friendRequestsIn: "Demandes reçues",
-  friendRequestsOut: "Demandes envoyées",
-  noFriends: "Pas encore d'ami. Cherche une personne ou scanne son QR de compte.",
   noRequests: "Aucune demande en attente.",
   journal: "Journal",
   journalEmpty: "Rien de nouveau ces 7 derniers jours.",

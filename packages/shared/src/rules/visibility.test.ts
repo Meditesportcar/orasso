@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { notificationTypes } from "../enums";
-import { friendRequestByQrSchema, friendRequestCreateSchema } from "../schemas/social";
+import { followByInviteSchema, followByQrSchema } from "../schemas/social";
+import { followButtonKind, followStatusFor } from "./follows";
 import {
-  FRIEND_DECLINE_COOLDOWN_DAYS,
-  type FriendshipRowLike,
-  friendRequestOutcome,
-  friendshipState,
   hasPeopleSearchCriteria,
   inJournalWindow,
   journalWindowStart,
@@ -16,19 +13,20 @@ import {
 
 const NOW = new Date("2026-10-16T12:00:00Z");
 const DAY = 86_400_000;
-const base = { isSelf: false, isFriend: false, isOrganizer: false };
+const base = { isSelf: false, isFollower: false, isOrganizer: false };
 
 describe("audience d'un profil", () => {
-  it("public : profil complet ; privé : réduit ; ami : tout quel que soit le réglage", () => {
+  it("public : profil complet ; privé : réduit ; abonné accepté : tout quel que soit le réglage", () => {
     expect(profileAudience({ ...base, visibility: "public" })).toBe("public_full");
     expect(profileAudience({ ...base, visibility: "private" })).toBe("public_limited");
-    expect(profileAudience({ ...base, isFriend: true, visibility: "private" })).toBe("friend");
+    expect(profileAudience({ ...base, isFollower: true, visibility: "private" })).toBe("follower");
+    expect(profileAudience({ ...base, isFollower: true, visibility: "public" })).toBe("follower");
     expect(profileAudience({ ...base, isSelf: true, visibility: "private" })).toBe("self");
   });
 
-  it("l'équipe organisatrice voit tout et seul voit les coordonnées (même s'il est ami)", () => {
-    expect(profileAudience({ ...base, isOrganizer: true, isFriend: true, visibility: "private" })).toBe("organizer");
-    for (const audience of ["self", "friend", "public_full", "public_limited"] as const) {
+  it("l'équipe organisatrice voit tout et seule voit les coordonnées (même abonnée)", () => {
+    expect(profileAudience({ ...base, isOrganizer: true, isFollower: true, visibility: "private" })).toBe("organizer");
+    for (const audience of ["self", "follower", "public_full", "public_limited"] as const) {
       expect(profileFields(audience).contact).toBe(false);
     }
     expect(profileFields("organizer").contact).toBe(true);
@@ -37,7 +35,7 @@ describe("audience d'un profil", () => {
   it("champs : un profil privé étranger ne montre ni bio, ni secteur, ni événements, ni crews, ni fiche complète", () => {
     const limited = profileFields("public_limited");
     expect(Object.values({ ...limited, contact: false }).some(Boolean)).toBe(false);
-    for (const audience of ["self", "friend", "public_full", "organizer"] as const) {
+    for (const audience of ["self", "follower", "public_full", "organizer"] as const) {
       const f = profileFields(audience);
       expect(f.bio && f.departments && f.vehicleDetails && f.upcomingEvents && f.pastEvents && f.crews).toBe(true);
       // Lot R5b : les réseaux suivent le profil complet.
@@ -46,60 +44,28 @@ describe("audience d'un profil", () => {
   });
 });
 
-describe("demande d'ami", () => {
-  const row = (r: Partial<FriendshipRowLike>): FriendshipRowLike => ({
-    requesterId: "a",
-    addresseeId: "b",
-    status: "pending",
-    respondedAt: null,
-    ...r,
+describe("suivre (lot R6b, D37)", () => {
+  it("le bouton unique selon mon abonnement, le sien et son réglage", () => {
+    const base2 = { canFollow: true, followsMe: false } as const;
+    expect(followButtonKind({ ...base2, mine: "none", visibility: "public" })).toBe("follow");
+    expect(followButtonKind({ ...base2, mine: "none", visibility: "private" })).toBe("request");
+    expect(followButtonKind({ ...base2, mine: "none", followsMe: true, visibility: "public" })).toBe("follow_back");
+    expect(followButtonKind({ ...base2, mine: "none", followsMe: true, visibility: "private" })).toBe("follow_back");
+    expect(followButtonKind({ ...base2, mine: "accepted", visibility: "private" })).toBe("following");
+    expect(followButtonKind({ ...base2, mine: "pending", visibility: "private" })).toBe("requested");
+    expect(followButtonKind({ canFollow: false, followsMe: false, mine: "none", visibility: "public" })).toBeNull();
   });
 
-  it("état de la relation vu de chaque côté", () => {
-    expect(friendshipState(null, "a")).toBe("none");
-    expect(friendshipState(row({}), "a")).toBe("pending_out");
-    expect(friendshipState(row({}), "b")).toBe("pending_in");
-    expect(friendshipState(row({ status: "accepted" }), "b")).toBe("friends");
-    expect(friendshipState(row({ status: "declined" }), "a")).toBe("none");
-    // Refus récent : silencieux, la demande reste « envoyée » pour le demandeur seulement.
-    const recent = row({ status: "declined", respondedAt: new Date(NOW.getTime() - 3 * DAY) });
-    expect(friendshipState(recent, "a", NOW)).toBe("pending_out");
-    expect(friendshipState(recent, "b", NOW)).toBe("none");
-    expect(
-      friendshipState(row({ status: "declined", respondedAt: new Date(NOW.getTime() - 31 * DAY) }), "a", NOW),
-    ).toBe("none");
+  it("un compte public accepte tout de suite, un compte privé reçoit une demande", () => {
+    expect(followStatusFor("public")).toBe("accepted");
+    expect(followStatusFor("private")).toBe("pending");
   });
 
-  it("aucune relation : créer ; en attente (dans un sens ou l'autre) ou amis : refusé", () => {
-    expect(friendRequestOutcome(null, "a", NOW)).toEqual({ kind: "create" });
-    expect(friendRequestOutcome(row({}), "a", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
-    expect(friendRequestOutcome(row({}), "b", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
-    expect(friendRequestOutcome(row({ status: "accepted" }), "a", NOW)).toEqual({
-      kind: "error",
-      code: "already_friends",
-    });
-  });
-
-  it("refus : le demandeur attend 30 jours, puis la ligne repasse en attente ; le destinataire peut demander tout de suite", () => {
-    const declinedAt = new Date(NOW.getTime() - 3 * DAY);
-    const declined = row({ status: "declined", respondedAt: declinedAt });
-    expect(friendRequestOutcome(declined, "a", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
-    expect(friendRequestOutcome(declined, "b", NOW)).toEqual({ kind: "reopen", flip: true });
-    const old = row({ status: "declined", respondedAt: new Date(NOW.getTime() - FRIEND_DECLINE_COOLDOWN_DAYS * DAY) });
-    expect(friendRequestOutcome(old, "a", NOW)).toEqual({ kind: "reopen", flip: false });
-    const almost = row({
-      status: "declined",
-      respondedAt: new Date(NOW.getTime() - FRIEND_DECLINE_COOLDOWN_DAYS * DAY + 1000),
-    });
-    expect(friendRequestOutcome(almost, "a", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
-  });
-
-  it("schémas : pseudo valide, message borné à 200 caractères, charge utile du QR", () => {
-    expect(friendRequestCreateSchema.safeParse({ pseudo: "Kenji_66" }).success).toBe(true);
-    expect(friendRequestCreateSchema.safeParse({ pseudo: "x" }).success).toBe(false);
-    expect(friendRequestCreateSchema.safeParse({ pseudo: "Kenji_66", message: "a".repeat(201) }).success).toBe(false);
-    expect(friendRequestByQrSchema.safeParse({ payload: "OA1ABCDEFGHIJ" }).success).toBe(true);
-    expect(friendRequestByQrSchema.safeParse({ payload: "x" }).success).toBe(false);
+  it("schémas : charge utile du QR de compte et jeton du lien de profil", () => {
+    expect(followByQrSchema.safeParse({ payload: "OA1ABCDEFGHIJ" }).success).toBe(true);
+    expect(followByQrSchema.safeParse({ payload: "x" }).success).toBe(false);
+    expect(followByInviteSchema.safeParse({ token: "abcdefgh" }).success).toBe(true);
+    expect(followByInviteSchema.safeParse({ token: "x" }).success).toBe(false);
   });
 });
 
@@ -124,7 +90,15 @@ describe("Journal", () => {
   });
 
   it("types sociaux déclarés dans la famille social", () => {
-    for (const t of ["friend_request", "friend_accepted", "friend_going_event", "friend_new_vehicle"] as const) {
+    for (const t of [
+      "friend_request",
+      "friend_accepted",
+      "friend_going_event",
+      "friend_new_vehicle",
+      "user_followed",
+      "follow_request",
+      "follow_accepted",
+    ] as const) {
       expect(notificationTypes[t]).toBe("social");
     }
   });

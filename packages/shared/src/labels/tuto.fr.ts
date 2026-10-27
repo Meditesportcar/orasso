@@ -34,12 +34,12 @@ const social = {
   exhibitor: {
     day: "Entre deux sorties",
     title: "Tu retrouves ta bande",
-    text: "Explorer montre aussi les personnes et les crews du coin. Tu suis tes amis, tu rejoins un crew, vous vous écrivez et vous candidatez ensemble.",
+    text: "Explorer montre aussi les personnes et les crews du coin. Tu suis d'autres passionnés, tu rejoins un crew, vous vous écrivez et vous candidatez ensemble.",
   },
   visitor: {
     day: "Entre deux sorties",
     title: "Tu retrouves ta bande",
-    text: "Explorer montre aussi les personnes et les crews du coin. Tu suis tes amis et tes crews préférés, vous vous écrivez, et tu vois qui va où.",
+    text: "Explorer montre aussi les personnes et les crews du coin. Tu suis d'autres passionnés et tes crews préférés, vous vous écrivez, et tu vois qui va où.",
   },
 } as const;
 
@@ -279,7 +279,7 @@ export const tutoArt = {
     chatFrom: "Inès_34",
     chatA: "Tu viens à la Nocturne ? On monte ensemble depuis Perpignan ?",
     chatB: "Carrément, départ 18 h au rond-point de la Têt.",
-    friends: "3 amis vont à la Nocturne de Canet",
+    friends: "3 personnes que tu suis vont à la Nocturne de Canet",
   },
   visitor: {
     publicEntry: "Entrée public",

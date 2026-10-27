@@ -90,7 +90,8 @@ export const crewPageLabels = {
   inviteSomeone: "Inviter quelqu'un",
 
   // Vitrine (non-membre).
-  friendsIn: (n: number) => (n > 1 ? `${n} de tes amis en font partie` : "1 de tes amis en fait partie"),
+  friendsIn: (n: number) =>
+    n > 1 ? `${n} personnes que tu suis en font partie` : "1 personne que tu suis en fait partie",
   friendsNames: (names: readonly string[]) =>
     names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}`,
   membersOnly: "Le fil, les sorties du crew et la discussion sont réservés aux membres.",
