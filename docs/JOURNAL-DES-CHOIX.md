@@ -3327,3 +3327,8 @@ Source : `corrections-r6c.md` (relais). Vague R6 intégrée d'abord (R6a, R6b co
 ### À revoir avec Damien (lot R6-police)
 - La recherche de l'Explorer coupe son texte d'aide à la police agrandie (« Un événement, un organisateur, une… ») : c'est un champ d'une ligne, laissé tel quel.
 - Les autres heures écrites à la main dans les libellés communs (`${n} h` des notifications, du passeport, des affiches…) ne passent pas encore par `keepUnits` : à faire au fil des lots qui les touchent.
+
+## Décision de Damien : photos d'un véhicule déclaré sans plaque (27/10/2026)
+- Constat (dev, plateau du Cars & Coffee de la plage) : une photo montrait une plaque lisible ; ce n'était pas un défaut du floutage, mais la photo d'un véhicule déclaré **non immatriculé** (`vehicles.unregistered`), dont la règle `maskedPhoto` montre toutes les photos.
+- Question posée : demander quand même la décision de plaque (floutage ou « aucune plaque visible ») à chaque photo d'un véhicule déclaré sans plaque ?
+- **Réponse de Damien : non.** Un véhicule déclaré sans plaque montre ses photos telles quelles ; on laisse comme c'est. Fichiers : aucun changement (`packages/shared/src/rules/lineup.ts`, `maskedPhoto` / `maskedPhotos`).
