@@ -2,7 +2,18 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { type R5Account, type R5Crew, r5Crew, r5Outing } from "./lotr5c2-setup";
-import { acceptNina, comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
+import {
+  acceptNina,
+  cancelOuting,
+  comment,
+  cutSockets,
+  fire,
+  moveOuting,
+  postText,
+  removeMember,
+  removePost,
+  trackSockets,
+} from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Lot R6a (site) : la page du crew en direct, comme l'appli. La page de « Kenji » (le chef) est ouverte ; « Julie »
@@ -20,8 +31,16 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-async function open(browser: Browser, who: R5Account, theme: "beton" | "sable", width: number, path: string) {
+async function open(
+  browser: Browser,
+  who: R5Account,
+  theme: "beton" | "sable",
+  width: number,
+  path: string,
+  spy = false,
+) {
   const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
+  if (spy) await ctx.addInitScript(trackSockets);
   const page = await ctx.newPage();
   await setTheme(page, theme);
   await loginInBrowser(page, who.email, undefined, path);
@@ -147,5 +166,85 @@ test("site : la page du crew en direct, à deux", async ({ browser }) => {
       await j.context().close();
       await k.context().close();
     }
+  }
+});
+
+/** L'identifiant d'une publication par son texte, sur toutes les pages du fil (lu par l'API). */
+async function postIdOfAll(crew: R5Crew, who: R5Account, text: string): Promise<string> {
+  let cursor: string | null = null;
+  for (let i = 0; i < 10; i += 1) {
+    const feed: { data: { items: { post?: { id: string; text: string | null } }[]; nextCursor: string | null } } =
+      await apiCall(
+        who.cookie,
+        "GET",
+        `/crews/${crew.id}/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
+    const found = feed.data.items.find((x) => x.post?.text?.includes(text));
+    if (found?.post) return found.post.id;
+    cursor = feed.data.nextCursor;
+    if (!cursor) break;
+  }
+  throw new Error(`Publication introuvable : ${text}`);
+}
+
+test("site, tour 2 : ses publications, sorties plus bas, coupure et échec rattrapés", async ({ browser }) => {
+  test.setTimeout(600_000);
+  for (const [theme, width] of [
+    ["beton", 1280],
+    ["sable", 390],
+  ] as const) {
+    const tag = `${width}-${theme}`;
+    const crew = await liveCrew();
+    const kenji = crew.chef;
+    const julie = crew.lea;
+    // Une sortie de Julie, puis 20 publications : la sortie tombe en page 2.
+    const outingId = await r5Outing(crew, julie, "Sortie du bas du fil", 5);
+    for (let i = 1; i <= 20; i += 1) await postText(crew, i % 2 ? kenji : julie, `Remplissage n° ${i} (${tag})`);
+    const k = await open(browser, kenji, theme, width, `/c/${crew.slug}`, true);
+    const posts = k.getByTestId("crew-post");
+    await expect(posts).toHaveCount(20, { timeout: 30_000 });
+
+    // Sa propre publication depuis un autre appareil : elle arrive sans pastille (pas de doublon).
+    await k.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await k.waitForTimeout(500);
+    const own = `Depuis mon autre ordinateur (${tag})`;
+    await postText(crew, kenji, own);
+    await expect(posts.filter({ hasText: own })).toHaveCount(1, { timeout: 15_000 });
+    await expect(k.getByTestId("crew-feed-new")).toHaveCount(0);
+
+    // La sortie en page 2 : modifiée, sa carte se relit ; annulée, elle quitte le fil.
+    await k.getByTestId("crew-feed-more").click();
+    const outing = k.getByTestId("crew-auto-outing").filter({ hasText: "Sortie du bas du fil" });
+    await expect(outing).toBeVisible({ timeout: 15_000 });
+    await moveOuting(crew, julie, outingId, "Col de Jau, au départ de Mosset");
+    await expect(outing).toContainText("Col de Jau", { timeout: 15_000 });
+    await cancelOuting(crew, julie, outingId);
+    await expect(outing).toHaveCount(0, { timeout: 15_000 });
+
+    // Coupure : un retrait en page 2 pendant la coupure disparaît à la reconnexion (toutes les pages revalidées).
+    const gone = `Remplissage n° 2 (${tag})`;
+    const goneId = await postIdOfAll(crew, kenji, gone);
+    await expect(posts.filter({ hasText: gone })).toHaveCount(1);
+    await cutSockets(k);
+    await removePost(crew, julie, goneId);
+    await expect(posts.filter({ hasText: gone })).toHaveCount(0, { timeout: 40_000 });
+
+    // Échec d'une relecture : le besoin reste, une ligne discrète le dit, puis le nouvel essai rattrape.
+    await k.evaluate(() => window.scrollTo(0, 0));
+    await k.route("**/api/crews/*/feed*", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: '{"error":{"code":"internal","message":"x"}}',
+      }),
+    );
+    const late = `Arrivée pendant la panne (${tag})`;
+    await postText(crew, julie, late);
+    await expect(k.getByTestId("crew-feed-stale")).toBeVisible({ timeout: 15_000 });
+    await shot(k, `07-fil-pas-a-jour-${tag}`);
+    await k.unroute("**/api/crews/*/feed*");
+    await expect(posts.filter({ hasText: late })).toHaveCount(1, { timeout: 30_000 });
+    await expect(k.getByTestId("crew-feed-stale")).toHaveCount(0);
+    await k.context().close();
   }
 });

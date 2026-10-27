@@ -2,7 +2,18 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, unique } from "./helpers";
 import { type R5Account, type R5Crew, r5Crew, r5Outing } from "./lotr5c2-setup";
-import { acceptNina, comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
+import {
+  acceptNina,
+  cancelOuting,
+  comment,
+  cutSockets,
+  fire,
+  moveOuting,
+  postText,
+  removeMember,
+  removePost,
+  trackSockets,
+} from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Lot R6a (appli, version web compilée) : la page du crew en direct. Deux personnes, deux contextes : la page de
@@ -30,8 +41,9 @@ async function skipOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function appLogin(browser: Browser, who: R5Account, theme: string, width = 390): Promise<Page> {
+async function appLogin(browser: Browser, who: R5Account, theme: string, width = 390, spy = false): Promise<Page> {
   const ctx = await browser.newContext({ viewport: { width, height: 844 }, baseURL: APP });
+  if (spy) await ctx.addInitScript(trackSockets);
   const page = await ctx.newPage();
   await page.goto("/");
   await page.evaluate((t) => {
@@ -187,6 +199,112 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     errors.filter((e) => !/favicon|DevTools|Sentry|expo-notifications|push|maplibre|tiles|glyphs|WebSocket/i.test(e)),
   ).toEqual([]);
 });
+
+/** La pastille est centrée dans la largeur de l'écran (à 2 px près). */
+async function expectCentered(page: Page, testId: string) {
+  const box = await page.getByTestId(testId).boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect(box).not.toBeNull();
+  expect(Math.abs((box?.x ?? 0) + (box?.width ?? 0) / 2 - width / 2)).toBeLessThanOrEqual(2);
+}
+
+test("appli, tour 2 : pastille centrée, ses publications, sorties plus bas, coupure et échec rattrapés", async ({
+  browser,
+}) => {
+  test.setTimeout(900_000);
+  for (const theme of ["beton", "sable"] as const) {
+    const crew = await liveCrew();
+    const kenji = crew.chef;
+    const julie = crew.lea;
+    // Une sortie de Julie, puis 20 publications : la sortie tombe en page 2.
+    const outingId = await r5Outing(crew, julie, "Sortie du bas du fil", 5);
+    for (let i = 1; i <= 20; i += 1) await postText(crew, i % 2 ? kenji : julie, `Remplissage n° ${i} (${theme})`);
+    const k = await appLogin(browser, kenji, theme, 390, true);
+    await openCrew(k, crew.slug);
+    const posts = k.getByTestId("crew-post");
+    await expect(posts).toHaveCount(20, { timeout: 30_000 });
+
+    // La pastille, centrée à 390 et 384 px (Pixel de Damien).
+    await scrollPage(k, "bas");
+    const fresh = `Nouveauté du bas (${theme})`;
+    await postText(crew, julie, fresh);
+    const pill = k.getByTestId("crew-feed-new");
+    await expect(pill).toBeVisible({ timeout: 15_000 });
+    await expectCentered(k, "crew-feed-new");
+    await shot(k, `07-pastille-centree-390-${theme}`);
+    await k.setViewportSize({ width: 384, height: 844 });
+    await k.waitForTimeout(500);
+    await expectCentered(k, "crew-feed-new");
+    await shot(k, `07-pastille-centree-384-${theme}`);
+    await pill.click();
+    await expect(posts.filter({ hasText: fresh })).toHaveCount(1, { timeout: 15_000 });
+    await expect(pill).toHaveCount(0);
+
+    // Sa propre publication depuis un autre appareil : elle arrive sans pastille (pas de doublon).
+    await scrollPage(k, "bas");
+    const own = `Depuis mon autre téléphone (${theme})`;
+    await postText(crew, kenji, own);
+    await expect(posts.filter({ hasText: own })).toHaveCount(1, { timeout: 15_000 });
+    await expect(pill).toHaveCount(0);
+    if (theme === "sable") {
+      await k.context().close();
+      continue;
+    }
+
+    // La sortie en page 2 : modifiée, sa carte se relit ; annulée, elle quitte le fil.
+    await k.getByTestId("crew-feed-more").click();
+    const outing = k.getByTestId("crew-auto-outing").filter({ hasText: "Sortie du bas du fil" });
+    await expect(outing).toBeVisible({ timeout: 15_000 });
+    await moveOuting(crew, julie, outingId, "Col de Jau, au départ de Mosset");
+    await expect(outing).toContainText("Col de Jau", { timeout: 15_000 });
+    await cancelOuting(crew, julie, outingId);
+    await expect(outing).toHaveCount(0, { timeout: 15_000 });
+
+    // Coupure : un retrait en page 2 pendant la coupure disparaît à la reconnexion (toutes les pages revalidées).
+    const gone = "Remplissage n° 2 (beton)";
+    const goneId = await mineIdOfAll(crew, kenji, gone);
+    await expect(posts.filter({ hasText: gone })).toHaveCount(1);
+    await cutSockets(k);
+    await removePost(crew, julie, goneId);
+    await expect(posts.filter({ hasText: gone })).toHaveCount(0, { timeout: 40_000 });
+
+    // Échec d'une relecture : le besoin reste, une ligne discrète le dit, puis le nouvel essai rattrape.
+    await scrollPage(k, 0);
+    await k.route("**/api/crews/*/feed*", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: '{"error":{"code":"internal","message":"x"}}',
+      }),
+    );
+    const late = `Arrivée pendant la panne (${theme})`;
+    await postText(crew, julie, late);
+    await expect(k.getByTestId("crew-feed-stale")).toBeVisible({ timeout: 15_000 });
+    await shot(k, `08-fil-pas-a-jour-${theme}`);
+    await k.unroute("**/api/crews/*/feed*");
+    await expect(posts.filter({ hasText: late })).toHaveCount(1, { timeout: 30_000 });
+    await expect(k.getByTestId("crew-feed-stale")).toHaveCount(0);
+    await k.context().close();
+  }
+});
+
+/** L'identifiant d'une publication par son texte, sur toutes les pages du fil (lu par l'API). */
+async function mineIdOfAll(crew: R5Crew, who: R5Account, text: string): Promise<string> {
+  let cursor: string | null = null;
+  for (let i = 0; i < 10; i += 1) {
+    const feed: { data: { items: { post?: { id: string; text: string | null } }[]; nextCursor: string | null } } =
+      await apiCall(
+        who.cookie,
+        "GET",
+        `/crews/${crew.id}/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
+    const found = feed.data.items.find((x) => x.post?.text?.includes(text));
+    if (found?.post) return found.post.id;
+    cursor = feed.data.nextCursor;
+    if (!cursor) break;
+  }
+  throw new Error(`Publication introuvable : ${text}`);
+}
 
 /** L'identifiant d'une publication par son texte (fil lu par l'API). */
 async function mineIdOf(crew: R5Crew, who: R5Account, text: string): Promise<string> {

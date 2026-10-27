@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { apiCall } from "./helpers";
 import type { R5Account, R5Crew } from "./lotr5c2-setup";
 
@@ -33,4 +33,37 @@ export async function acceptNina(crew: R5Crew) {
 
 export async function removeMember(crew: R5Crew, who: R5Account) {
   expect((await apiCall(crew.chef.cookie, "DELETE", `/crews/${crew.id}/members/${who.id}`)).status).toBe(204);
+}
+
+/** Tour 2 : Julie modifie le lieu de sa sortie. */
+export async function moveOuting(crew: R5Crew, by: R5Account, outingId: string, place: string) {
+  expect((await apiCall(by.cookie, "PATCH", `/crews/${crew.id}/outings/${outingId}`, { place })).status).toBe(200);
+}
+
+/** Tour 2 : Julie annule sa sortie. */
+export async function cancelOuting(crew: R5Crew, by: R5Account, outingId: string) {
+  expect((await apiCall(by.cookie, "DELETE", `/crews/${crew.id}/outings/${outingId}`)).status).toBe(204);
+}
+
+/**
+ * Tour 2 : à poser par `addInitScript` avant d'ouvrir la page. Garde les WebSocket de la page, pour couper la connexion
+ * comme une coupure de réseau (`cutSockets`) : le client se reconnecte seul et relit tout.
+ */
+export function trackSockets() {
+  const Native = window.WebSocket;
+  const list: WebSocket[] = [];
+  (window as unknown as { __orassoSockets: WebSocket[] }).__orassoSockets = list;
+  class Tracked extends Native {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
+      list.push(this);
+    }
+  }
+  window.WebSocket = Tracked;
+}
+
+export async function cutSockets(page: Page) {
+  await page.evaluate(() => {
+    for (const s of (window as unknown as { __orassoSockets?: WebSocket[] }).__orassoSockets ?? []) s.close();
+  });
 }
