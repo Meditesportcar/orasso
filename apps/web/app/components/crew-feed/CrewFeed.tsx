@@ -1,7 +1,7 @@
 // Le fil du crew sur le site (lot R5c1, maquette R5.7 onglet Fil) : une colonne centrale, les mêmes composants et les
 // mêmes mots que l'appli. Lu dans le navigateur (`/api/crews/:id/feed`, cookie de session), 20 par page ; une erreur
 // n'est jamais montrée comme un fil vide. Composant autonome, monté par la page du crew (onglet Fil, lot R5c2).
-import { Button } from "@orasso/design-system/web";
+import { Button, Icon } from "@orasso/design-system/web";
 import {
   type CrewFeedItem,
   type CrewFeedOuting,
@@ -11,7 +11,9 @@ import {
   type CrewPostOptions,
   type CrewPostView,
   crewFeedLabels,
+  crewLivePillLabel,
   crewPageLabels,
+  mergeCrewFeedHead,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -19,10 +21,17 @@ import "../../styles/crew-feed.css";
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
 import { CommentsDialog } from "./CommentsDialog";
+import { useCrewLiveNeeds } from "./CrewLive";
 import { AutoCard, PostCard } from "./PostCard";
 import { PublishDialog } from "./PublishDialog";
 
 export type CrewFeedCrew = { id: string; slug: string; archived?: boolean };
+
+/** Une page suivante s'ajoute sans doublon (une entrée relue en direct peut déjà être là). */
+function appendByKey(current: readonly CrewFeedItem[], next: readonly CrewFeedItem[]): CrewFeedItem[] {
+  const seen = new Set(current.map((i) => i.key));
+  return [...current, ...next.filter((i) => !seen.has(i.key))];
+}
 
 export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [items, setItems] = useState<CrewFeedItem[] | null>(null);
@@ -39,6 +48,10 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   // Seule la dernière lecture compte.
   const seq = useRef(0);
 
+  // Lot R6a : la première page relue en direct dont les nouvelles entrées attendent (loin du haut du fil : la pastille).
+  const [held, setHeld] = useState<CrewFeedPage | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
   const load = useCallback(
     async (from?: string) => {
       const mine = from ? seq.current : ++seq.current;
@@ -52,12 +65,51 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         setLoadError(res.error.message);
         return;
       }
-      setItems((current) => (from ? [...(current ?? []), ...res.data.items] : res.data.items));
+      setItems((current) => (from ? appendByKey(current ?? [], res.data.items) : res.data.items));
       setCursor(res.data.nextCursor);
       setLoadError(null);
+      if (!from) setHeld(null);
     },
     [crew.id],
   );
+
+  /** Le haut du fil est à l'écran (ou plus bas) : une nouvelle entrée s'insère sans faire sauter la liste. */
+  const atTop = () => (listRef.current?.getBoundingClientRect().top ?? 0) >= -8;
+
+  /** Applique une première page relue : nombres à jour, retraits ; les nouvelles entrées en haut, ou à la pastille. */
+  const applyHead = (head: CrewFeedPage, insert: boolean) => {
+    setItems((current) =>
+      current ? mergeCrewFeedHead(current, head.items, { complete: head.nextCursor === null, insert }).items : current,
+    );
+    setHeld(insert ? null : head);
+  };
+  const known = new Set((items ?? []).map((i) => i.key));
+  const fresh = held ? held.items.filter((i) => !known.has(i.key)) : [];
+
+  useCrewLiveNeeds(async (needs) => {
+    for (const id of needs.removedPosts) put(null, id);
+    if (comments && needs.removedPosts.includes(comments.id)) setComments(null);
+    if (needs.head && items !== null) {
+      const mine = seq.current;
+      const res = await apiFetch<CrewFeedPage>(`/crews/${crew.id}/feed`);
+      if (res.ok && mine === seq.current) applyHead(res.data, atTop());
+    }
+    const shown = new Set((items ?? []).flatMap((i) => (i.type === "post" ? [i.post.id] : [])));
+    for (const id of needs.posts) {
+      if (needs.removedPosts.includes(id) || !shown.has(id)) continue;
+      const res = await apiFetch<CrewPostView>(`/crews/${crew.id}/posts/${id}`);
+      if (res.ok) put(res.data, id);
+      else if (res.status === 404) put(null, id);
+    }
+  }, !crew.archived);
+
+  /** La pastille : les nouvelles entrées s'affichent, la page remonte au haut du fil. */
+  const showFresh = () => {
+    if (held) applyHead(held, true);
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    listRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+  const pill = crewLivePillLabel(fresh);
 
   // Tour 2 : un échec des réglages du composeur se dit (message et « Réessayer »), le brouillon reste.
   const loadOptions = useCallback(async () => {
@@ -72,13 +124,19 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
     void loadOptions();
   }, [load, loadOptions]);
 
-  const put = (post: CrewPostView | null, id: string) =>
+  const put = (post: CrewPostView | null, id: string) => {
+    // Lot R6a : rien à changer tant que le fil n'est pas lu (un signal ne fait pas croire à un fil vide).
     setItems((list) =>
-      (list ?? []).flatMap((x) => {
-        if (x.type !== "post" || x.post.id !== id) return [x];
-        return post ? [{ ...x, post }] : [];
-      }),
+      list
+        ? list.flatMap((x) => {
+            if (x.type !== "post" || x.post.id !== id) return [x];
+            return post ? [{ ...x, post }] : [];
+          })
+        : list,
     );
+    // Une publication retirée n'est plus une nouveauté de la pastille.
+    if (!post) setHeld((h) => h && { ...h, items: h.items.filter((i) => i.type !== "post" || i.post.id !== id) });
+  };
 
   async function act(id: string, action: () => Promise<string | null>) {
     setBusy(id);
@@ -165,44 +223,60 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
           {ok}
         </p>
       )}
-      {loadError && !items?.length ? (
-        <div className="s-stack" data-testid="crew-feed-error">
-          <p className="s-error" role="alert">
-            {loadError || crewFeedLabels.loadError}
-          </p>
-          <Button variant="secondary" icon="undo" onClick={() => void load()}>
-            {crewFeedLabels.retry}
-          </Button>
+      {pill ? (
+        <div className="cf-new">
+          <button
+            type="button"
+            className="cf-new__pill o-t-button"
+            onClick={showFresh}
+            aria-label={crewFeedLabels.newA11y(pill)}
+            data-testid="crew-feed-new"
+          >
+            <Icon name="up" size={16} />
+            {pill}
+          </button>
         </div>
-      ) : items === null ? (
-        <p className="s-muted">…</p>
-      ) : items.length === 0 ? (
-        <p className="s-muted" data-testid="crew-feed-empty">
-          {crewFeedLabels.empty}
-        </p>
-      ) : (
-        items.map((item) =>
-          item.type === "post" ? (
-            <PostCard
-              key={item.key}
-              post={item.post}
-              busy={busy === item.post.id}
-              onFire={() => void fire(item.post)}
-              onComments={() => setComments(item.post)}
-              onVote={(optionId) => void vote(item.post, optionId)}
-              onRemove={() => remove(item.post)}
-              onClosePoll={() => void closePoll(item.post)}
-            />
-          ) : (
-            <AutoCard
-              key={item.key}
-              item={item}
-              busy={item.type === "crew_outing" && busy === item.outing.id}
-              onGoing={item.type === "crew_outing" && !crew.archived ? () => void going(item.outing) : undefined}
-            />
-          ),
-        )
-      )}
+      ) : null}
+      <div ref={listRef} className="cf-list">
+        {loadError && !items?.length ? (
+          <div className="s-stack" data-testid="crew-feed-error">
+            <p className="s-error" role="alert">
+              {loadError || crewFeedLabels.loadError}
+            </p>
+            <Button variant="secondary" icon="undo" onClick={() => void load()}>
+              {crewFeedLabels.retry}
+            </Button>
+          </div>
+        ) : items === null ? (
+          <p className="s-muted">…</p>
+        ) : items.length === 0 ? (
+          <p className="s-muted" data-testid="crew-feed-empty">
+            {crewFeedLabels.empty}
+          </p>
+        ) : (
+          items.map((item) =>
+            item.type === "post" ? (
+              <PostCard
+                key={item.key}
+                post={item.post}
+                busy={busy === item.post.id}
+                onFire={() => void fire(item.post)}
+                onComments={() => setComments(item.post)}
+                onVote={(optionId) => void vote(item.post, optionId)}
+                onRemove={() => remove(item.post)}
+                onClosePoll={() => void closePoll(item.post)}
+              />
+            ) : (
+              <AutoCard
+                key={item.key}
+                item={item}
+                busy={item.type === "crew_outing" && busy === item.outing.id}
+                onGoing={item.type === "crew_outing" && !crew.archived ? () => void going(item.outing) : undefined}
+              />
+            ),
+          )
+        )}
+      </div>
       {cursor && (
         <Button
           variant="secondary"

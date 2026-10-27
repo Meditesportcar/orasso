@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
+import { useCrewLiveNeeds } from "./CrewLive";
 import { whenOf } from "./PostCard";
 
 export function CommentsDialog({
@@ -76,6 +77,41 @@ export function CommentsDialog({
     if (!ref.current?.open) ref.current?.showModal();
     void load();
   }, [postId]);
+
+  // Lot R6a : fenêtre ouverte, les commentaires des autres arrivent (et partent) sans la rouvrir.
+  const byPostRef = useRef(byPost);
+  byPostRef.current = byPost;
+  useCrewLiveNeeds(async (needs) => {
+    const target = postId;
+    if (!target) return;
+    if (needs.removedComments.length) {
+      const gone = new Set(needs.removedComments);
+      setByPost((all) =>
+        Object.fromEntries(
+          Object.entries(all).map(([id, v]) => [id, { ...v, items: v.items.filter((x) => !gone.has(x.id)) }]),
+        ),
+      );
+    }
+    if (!needs.comments.includes(target) && !needs.full) return;
+    const mine = seq.current;
+    // Toute la liste était chargée : on la relit jusqu'au bout (au-delà de 50, les nouveaux sont à la fin).
+    const hadAll = (byPostRef.current[target]?.cursor ?? null) === null;
+    const path = `/crews/${crewId}/posts/${target}/comments`;
+    let res = await apiFetch<Page<CrewCommentView>>(path);
+    if (!res.ok) return;
+    const incoming = [...res.data.items];
+    for (let guard = 0; hadAll && res.ok && res.data.nextCursor && guard < 20; guard += 1) {
+      res = await apiFetch<Page<CrewCommentView>>(`${path}?cursor=${encodeURIComponent(res.data.nextCursor)}`);
+      if (res.ok) incoming.push(...res.data.items);
+    }
+    if (mine !== seq.current) return;
+    setByPost((all) => ({
+      ...all,
+      [target]: hadAll
+        ? { items: mergeCrewComments([], incoming), cursor: null }
+        : { items: mergeCrewComments(all[target]?.items ?? [], incoming), cursor: all[target]?.cursor ?? null },
+    }));
+  }, postId !== null);
 
   async function send() {
     const target = postId;

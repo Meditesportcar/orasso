@@ -120,10 +120,13 @@ export function CrewFeed({ crew, scroller }: { crew: CrewFeedCrew; scroller?: Cr
     if (!base || !head) return { items: base, pending: [] as CrewFeedItem[] };
     const known = new Set(base.map((i) => i.key));
     const merged = mergeCrewFeedHead(base, head.items, { complete: head.nextCursor === null, insert: true }).items;
-    const pending = head.items.filter((i) => !known.has(i.key) && !accepted.has(i.key));
+    // Une publication retirée entre-temps n'est plus une nouveauté de la pastille.
+    const pending = head.items.filter(
+      (i) => !known.has(i.key) && !accepted.has(i.key) && !(i.type === "post" && changed[i.post.id] === null),
+    );
     const hidden = new Set(pending.map((i) => i.key));
     return { items: merged.filter((i) => !hidden.has(i.key)), pending };
-  }, [paged.items, head, accepted]);
+  }, [paged.items, head, accepted, changed]);
   const items = view.items;
   const shownPosts = useRef(new Set<string>());
   shownPosts.current = new Set((items ?? []).flatMap((i) => (i.type === "post" ? [i.post.id] : [])));
