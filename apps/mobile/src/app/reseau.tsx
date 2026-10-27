@@ -234,6 +234,22 @@ export default function Reseau() {
             pages={followers as FollowersPage}
             onMore={() => void more("followers")}
             onChanged={onFollowChanged}
+            // Tour 2 : « Retirer cet abonné » ; la ligne disparaît, les nombres se relisent.
+            onRemove={(p) => {
+              setLists((l) =>
+                l.followers
+                  ? {
+                      ...l,
+                      followers: {
+                        ...l.followers,
+                        items: l.followers.items.filter((x) => x.userId !== p.userId),
+                        total: Math.max(0, l.followers.total - 1),
+                      },
+                    }
+                  : l,
+              );
+              void counts.reload();
+            }}
             testID="net-followers"
           />
         ) : (

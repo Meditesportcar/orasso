@@ -332,7 +332,7 @@ export function PublicProfile({
             <TagWin>{gradeLabels[p.grade]}</TagWin>
             {mode === "live" && p.follow.followsMe ? (
               <View style={[styles.followsYou, { backgroundColor: c.surfaceRaised }]} testID="follows-you">
-                <Text variant="label" color={c.inkMuted} style={styles.followsYouText}>
+                <Text variant="label" color={c.inkMuted}>
                   {N.followsYou.toUpperCase()}
                 </Text>
               </View>
@@ -550,8 +550,13 @@ const styles = StyleSheet.create({
   // Lot R6b (`.r6acts`) : un seul bouton pleine largeur ; son libellé passe à la ligne ou réduit son corps, jamais coupé.
   acts: { gap: space2 },
   // `.r6tag` : petite pastille majuscule, fond de surface secondaire, texte atténué.
-  followsYou: { height: 22, paddingHorizontal: 8, borderRadius: 7, justifyContent: "center" },
-  followsYouText: { fontSize: 11, lineHeight: 13, letterSpacing: 0.44 },
+  // Tour 2 (relecture Opus 9) : jetons seulement ; le style « label » (11/14) et 4 px dessus et dessous font 22 px.
+  followsYou: {
+    paddingVertical: space1,
+    paddingHorizontal: space2,
+    borderRadius: tokens.radius.radiusSm,
+    justifyContent: "center",
+  },
   inert: { opacity: 0.6 },
   hero: { borderRadius: 18, overflow: "hidden" },
   square: { width: "100%", aspectRatio: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },

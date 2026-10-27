@@ -33,6 +33,9 @@ export const networkApi = {
     request<FollowPerson>(`/api/me/follow-requests/${userId}/accept`, { method: "POST" }),
   /** Refuser : la personne n'est pas prévenue. */
   declineFollow: (userId: string) => request<unknown>(`/api/me/follow-requests/${userId}/decline`, { method: "POST" }),
+  /** Lot R6b, tour 2 : « Retirer cet abonné », sans le prévenir. */
+  removeFollower: (userId: string) =>
+    request<unknown>(`/api/me/followers/${encodeURIComponent(userId)}`, { method: "DELETE" }),
   /** QR de compte (`OA1…`) et lien de profil : suivre la personne (ou lui demander, si son compte est privé). */
   followByQr: (payload: string) =>
     request<FollowResult & { pseudo: string }>("/api/follows/by-qr", { method: "POST", body: { payload } }),

@@ -262,6 +262,7 @@ function PrivateCarSheet({
     { enabled: Boolean(car) && canAskFollow },
   );
   const [mine, setMine] = useState<FollowState | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une autre voiture repart de son propre lien
   useEffect(() => setMine(null), [car?.pseudo]);
   const state: FollowState = mine ?? relation.data?.follow.mine ?? "none";
   const [error, setError] = useState<string | null>(null);

@@ -58,6 +58,9 @@ export const networkLabels = {
   groupStructures: "Organisateurs",
   groupPros: "Pros",
   more: "Voir plus",
+  /** Site : page suivante d'une liste (30 par page), et retour à la première. */
+  next: "Suivants",
+  firstPage: "Retour aux plus récentes",
   write: (pseudo: string) => `Écrire à ${pseudo}`,
   privacyNoteStrong: "Toi seul vois ces listes.",
   privacyNote: "Les autres membres voient seulement les nombres.",

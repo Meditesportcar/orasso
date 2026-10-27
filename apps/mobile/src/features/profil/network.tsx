@@ -1,8 +1,9 @@
 // Lot R4c (maquettes R4.6, R4.6b), refait au lot R6b (D37, maquette R6.2) : le réseau d'un passionné. Onglet Profil : trois
 // compteurs (abonnés, abonnements, sorties), les deux premiers ouvrent leur liste ; « Mon profil public » et le crew
 // côte à côte. Écran des listes (mode fiche) : segment abonnés / abonnements / demandes, recherche, un bouton « Suivre »
-// par ligne, « Accepter » et ✕ pour les demandes, « Toi seul vois ces listes ».
-import { departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+// par ligne, « Accepter » et ✕ pour les demandes, « Toi seul vois ces listes ». Tour 2 : dans Abonnés, le menu ⋯ d'une
+// ligne propose « Retirer cet abonné », avec confirmation dans une feuille.
+import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type FollowedPage,
   type FollowPerson,
@@ -11,7 +12,7 @@ import {
   type NetworkCounts,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { fitWordSize } from "@/features/home/fit";
@@ -20,7 +21,10 @@ import { FollowButton } from "@/features/social/FollowButton";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { AppSheet } from "@/ui/AppSheet";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { Overlay } from "@/ui/Overlay";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -244,6 +248,89 @@ function personCaption(p: FollowPerson): string {
   return p.vehicle ?? gradeLabels[p.grade];
 }
 
+/**
+ * Lot R6b, tour 2 (relectures Opus 1, Codex 1) : le menu ⋯ d'un abonné. « Retirer cet abonné », puis la confirmation
+ * dans la même feuille ; la personne n'est pas prévenue.
+ */
+function FollowerMenuSheet({
+  person,
+  onClose,
+  onRemoved,
+}: {
+  person: FollowPerson | null;
+  onClose: () => void;
+  onRemoved: (p: FollowPerson) => void;
+}) {
+  const { t } = useTheme();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Une autre ligne : la feuille repart du menu.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relancé à chaque changement de personne, sans la lire
+  useEffect(() => {
+    setConfirming(false);
+    setError(null);
+  }, [person?.userId]);
+  const remove = async () => {
+    if (!person) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.removeFollower(person.userId);
+      onRemoved(person);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Overlay>
+      <AppSheet visible={person !== null} onClose={onClose} accessibilityLabel={person ? N.rowMenu(person.pseudo) : ""}>
+        {person ? (
+          <View style={styles.sheet} testID="net-follower-menu">
+            <Text variant="posterM" color={t.color.ink}>
+              {person.pseudo}
+            </Text>
+            {confirming ? (
+              <View style={styles.sheet} testID="net-remove-confirm">
+                <Text variant="bodyStrong" color={t.color.ink}>
+                  {N.removeFollowerConfirm(person.pseudo)}
+                </Text>
+                <Muted variant="caption">{N.removeFollowerHint}</Muted>
+                {error ? <Notice tone="error">{error}</Notice> : null}
+                <Button
+                  variant="alert"
+                  icon="close"
+                  loading={busy}
+                  onPress={() => void remove()}
+                  fullWidth
+                  testID="net-remove-yes"
+                >
+                  {N.remove}
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon="back"
+                  onPress={() => setConfirming(false)}
+                  fullWidth
+                  testID="net-remove-keep"
+                >
+                  {N.keep}
+                </Button>
+              </View>
+            ) : (
+              <SmButton kind="s" big wide icon="close" onPress={() => setConfirming(true)} testID="net-remove">
+                {N.removeFollower}
+              </SmButton>
+            )}
+          </View>
+        ) : null}
+      </AppSheet>
+    </Overlay>
+  );
+}
+
 /** Liste paginée de personnes (abonnés, ou personnes suivies). */
 export function PeopleList({
   pages,
@@ -251,17 +338,28 @@ export function PeopleList({
   testID,
   title,
   onChanged,
+  onRemove,
 }: {
   pages: { items: FollowPerson[]; total: number; nextCursor: string | null };
   onMore: () => void;
   /** Après suivre, demander, ne plus suivre (les nombres se relisent). */
   onChanged?: () => void;
+  /** Abonnés (tour 2) : le menu ⋯ de chaque ligne propose « Retirer cet abonné » ; appelé après le retrait. */
+  onRemove?: (p: FollowPerson) => void;
   testID: string;
   title?: string;
 }) {
   const router = useRouter();
+  const { t } = useTheme();
+  const [menuFor, setMenuFor] = useState<FollowPerson | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   return (
     <>
+      {info ? (
+        <View testID="net-remove-info">
+          <Notice>{info}</Notice>
+        </View>
+      ) : null}
       <Group title={title} count={title ? pages.total : undefined} testID={testID}>
         {pages.items.map((p) => (
           <Row
@@ -271,20 +369,45 @@ export function PeopleList({
             caption={personCaption(p)}
             onPress={() => router.push(`/u/${p.pseudo}`)}
             action={
-              <FollowButton
-                size="small"
-                pseudo={p.pseudo}
-                mine={p.mine}
-                followsMe={p.followsMe}
-                canFollow={p.canFollow}
-                visibility={p.visibility}
-                onChanged={() => onChanged?.()}
-              />
+              <View style={styles.actions}>
+                <FollowButton
+                  size="small"
+                  pseudo={p.pseudo}
+                  mine={p.mine}
+                  followsMe={p.followsMe}
+                  canFollow={p.canFollow}
+                  visibility={p.visibility}
+                  onChanged={() => onChanged?.()}
+                />
+                {onRemove ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={N.rowMenu(p.pseudo)}
+                    onPress={() => setMenuFor(p)}
+                    hitSlop={space2}
+                    style={({ pressed }) => [styles.dots, pressed && styles.pressed]}
+                    testID="net-person-more"
+                  >
+                    <Icon name="more" size={20} color={t.color.inkMuted} />
+                  </Pressable>
+                ) : null}
+              </View>
             }
             testID="net-person"
           />
         ))}
       </Group>
+      {onRemove ? (
+        <FollowerMenuSheet
+          person={menuFor}
+          onClose={() => setMenuFor(null)}
+          onRemoved={(p) => {
+            setMenuFor(null);
+            setInfo(N.removed(p.pseudo));
+            onRemove(p);
+          }}
+        />
+      ) : null}
       {pages.nextCursor ? (
         <SmButton kind="s" icon="down" wide onPress={onMore} testID={`${testID}-more`}>
           {`${N.more} (${pages.total - pages.items.length})`}
@@ -482,6 +605,15 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, minWidth: 0 },
   rowName: { fontSize: 14 },
   rowCaption: { fontSize: 12, lineHeight: 15 },
-  actions: { flexDirection: "row", gap: space1 },
+  actions: { flexDirection: "row", alignItems: "center", gap: space1 },
+  // `.r5dots` de la maquette : petite pastille sans fond ; `hitSlop` porte la cible à la taille tactile (48).
+  dots: {
+    width: tokens.spacing.space8,
+    height: tokens.spacing.space8,
+    borderRadius: tokens.radius.radiusChip,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheet: { gap: space3 },
   followedTag: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space1 },
 });
