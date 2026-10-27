@@ -70,6 +70,8 @@ export const crewFeedLabels = {
   retry: "Réessayer",
   // Lot R6a : la pastille des nouveautés du fil (texte : `crewLivePillLabel`), qui remonte en haut du fil.
   newA11y: (label: string) => `${label} : remonter en haut du fil`,
+  // Lot R6a, tour 2 : une relecture en direct a échoué ; elle est retentée seule (état discret, pas une erreur).
+  liveStale: "Le fil n'est pas à jour : nouvel essai dans un instant.",
   autoJoined: (pseudo: string) => `${pseudo} a rejoint le crew`,
   autoAccepted: (title: string) => `Le crew est retenu : ${title}`,
   autoAcceptedMembers: (names: string[]) =>

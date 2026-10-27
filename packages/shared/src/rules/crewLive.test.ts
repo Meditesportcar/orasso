@@ -5,6 +5,7 @@ import {
   addCrewSignal,
   applyCrewFeedRead,
   CREW_LIVE_MAX_PAGES,
+  type CrewFeedState,
   createCrewLiveBatcher,
   crewLivePillLabel,
   emptyCrewLiveNeeds,
@@ -220,7 +221,11 @@ describe("applyCrewFeedRead", () => {
   });
 
   it("tour 2 : ses propres publications ne vont jamais à la pastille", () => {
-    const read = { items: [post("moi", 56, { mine: true }), post("a", 50), post("b", 40)], nextCursor: "x", capped: false };
+    const read = {
+      items: [post("moi", 56, { mine: true }), post("a", 50), post("b", 40)],
+      nextCursor: "x",
+      capped: false,
+    };
     const next = applyCrewFeedRead(state, read, { insert: false, mine: (i) => Boolean(i.mine) });
     expect(next.pending).toEqual([]);
     expect(keys(next.items)[0]).toBe("post:moi");
@@ -255,7 +260,7 @@ describe("readCrewFeedTop (tour 2 : fusion sans perte)", () => {
 
   it("plus de 20 arrivées en direct : rien ne disparaît de ce qui est déjà intégré", async () => {
     const base = feed("old", 30, 100);
-    let s = { items: base.slice(0, 20), cursor: "20", pending: [] as Item[] };
+    let s: CrewFeedState<Item> = { items: base.slice(0, 20), cursor: "20", pending: [] };
     let srv = base;
     // 25 publications arrivent une à une, chacune relue en haut du fil.
     for (let i = 0; i < 25; i += 1) {

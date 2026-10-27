@@ -8,6 +8,7 @@ import {
   crewFeedLabels,
   mergeCrewComments,
   type Page,
+  readCrewComments,
 } from "@orasso/shared";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -93,24 +94,20 @@ export function CommentsDialog({
       );
     }
     if (!needs.comments.includes(target) && !needs.full) return;
+    const shown = byPostRef.current[target];
+    if (!shown) return; // Pas encore lue : sa première lecture suffit.
     const mine = seq.current;
-    // Toute la liste était chargée : on la relit jusqu'au bout (au-delà de 50, les nouveaux sont à la fin).
-    const hadAll = (byPostRef.current[target]?.cursor ?? null) === null;
+    // Tour 2 : relue jusqu'à couvrir l'affiché (toute la liste si elle était complète : les nouveaux sont à la fin). Une
+    // page en échec rejette tout : la liste et son curseur restent, la relecture est retentée. Au-delà de la limite de
+    // pages, le vrai curseur est gardé (« Voir la suite »).
     const path = `/crews/${crewId}/posts/${target}/comments`;
-    let res = await apiFetch<Page<CrewCommentView>>(path);
-    if (!res.ok) return;
-    const incoming = [...res.data.items];
-    for (let guard = 0; hadAll && res.ok && res.data.nextCursor && guard < 20; guard += 1) {
-      res = await apiFetch<Page<CrewCommentView>>(`${path}?cursor=${encodeURIComponent(res.data.nextCursor)}`);
-      if (res.ok) incoming.push(...res.data.items);
-    }
+    const next = await readCrewComments(async (from) => {
+      const res = await apiFetch<Page<CrewCommentView>>(from ? `${path}?cursor=${encodeURIComponent(from)}` : path);
+      if (!res.ok) throw new Error(res.error.message);
+      return res.data;
+    }, shown);
     if (mine !== seq.current) return;
-    setByPost((all) => ({
-      ...all,
-      [target]: hadAll
-        ? { items: mergeCrewComments([], incoming), cursor: null }
-        : { items: mergeCrewComments(all[target]?.items ?? [], incoming), cursor: all[target]?.cursor ?? null },
-    }));
+    setByPost((all) => ({ ...all, [target]: next }));
   }, postId !== null);
 
   async function send() {

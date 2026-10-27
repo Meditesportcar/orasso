@@ -3,6 +3,9 @@
 // et à la fenêtre des commentaires ; la page elle-même (onglets Sorties, Garage, Membres) se relit par son chargeur.
 // Une reconnexion relit tout ; sans WebSocket (proxy, réseau d'entreprise), relecture toutes les 20 s, onglet visible.
 // Le canal ne porte aucune donnée : chacun relit par les routes de l'API, qui appliquent ses droits.
+// Tour 2 : un bloc dont la relecture échoue la rejette ; le besoin reste et repart après un délai croissant, et
+// `useCrewLiveStale` le dit au fil (ligne discrète) jusqu'au succès. Après `revoked`, `useChannel` repasse à « non
+// connecté » (les relectures de secours reprennent) et rouvre le canal.
 import {
   CREW_LIVE_POLL_MS,
   type CrewLiveBatcher,
@@ -11,7 +14,7 @@ import {
   crewChannel,
   parseCrewSignal,
 } from "@orasso/shared";
-import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { useRevalidator } from "react-router";
 
 import { useChannel } from "../../lib/useChannel";
@@ -20,6 +23,7 @@ type Listener = (needs: CrewLiveNeeds) => Promise<void> | void;
 type Bus = { add: (fn: Listener) => () => void };
 
 const LiveContext = createContext<Bus | null>(null);
+const StaleContext = createContext(false);
 
 export function CrewLiveProvider({ crewId, children }: { crewId: string | null; children: ReactNode }) {
   const revalidator = useRevalidator();
@@ -33,14 +37,19 @@ export function CrewLiveProvider({ crewId, children }: { crewId: string | null; 
     },
   }).current;
   const batcher = useRef<CrewLiveBatcher | null>(null);
+  const [stale, setStale] = useState(false);
 
   useEffect(() => {
+    setStale(false);
     if (!crewId) return;
-    const b = createCrewLiveBatcher(async (needs) => {
-      const jobs: (Promise<void> | void)[] = [...listeners.current].map((fn) => fn(needs));
-      if (needs.page) jobs.push(revalidate.current());
-      await Promise.all(jobs);
-    });
+    const b = createCrewLiveBatcher(
+      async (needs) => {
+        const jobs: (Promise<void> | void)[] = [...listeners.current].map((fn) => fn(needs));
+        if (needs.page) jobs.push(revalidate.current());
+        await Promise.all(jobs);
+      },
+      { onStale: setStale },
+    );
     batcher.current = b;
     return () => {
       b.dispose();
@@ -60,7 +69,7 @@ export function CrewLiveProvider({ crewId, children }: { crewId: string | null; 
   });
 
   // Abonnement confirmé : le premier relit le fil seul (ce qui a pu arriver entre la lecture et l'abonnement), une
-  // reconnexion relit tout (des signaux ont pu se perdre pendant la coupure).
+  // reconnexion (ou un canal rouvert après `revoked`) relit tout (des signaux ont pu se perdre).
   const everConnected = useRef(false);
   useEffect(() => {
     if (!connected) return;
@@ -78,7 +87,11 @@ export function CrewLiveProvider({ crewId, children }: { crewId: string | null; 
     return () => clearInterval(timer);
   }, [crewId, connected]);
 
-  return <LiveContext.Provider value={bus}>{children}</LiveContext.Provider>;
+  return (
+    <LiveContext.Provider value={bus}>
+      <StaleContext.Provider value={stale}>{children}</StaleContext.Provider>
+    </LiveContext.Provider>
+  );
 }
 
 /** Un bloc de la page reçoit les relectures demandées par les signaux (rien hors d'une page de crew en direct). */
@@ -90,4 +103,9 @@ export function useCrewLiveNeeds(listener: Listener, enabled = true) {
     if (!bus || !enabled) return;
     return bus.add((needs) => ref.current(needs));
   }, [bus, enabled]);
+}
+
+/** Tour 2 : une relecture en direct a échoué et attend son nouvel essai. */
+export function useCrewLiveStale(): boolean {
+  return useContext(StaleContext);
 }

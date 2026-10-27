@@ -1,6 +1,8 @@
 // La page du crew en direct (lot R6a) : un écran s'abonne au canal `crew:<id>` tant qu'il est monté (connexion partagée
 // de `lib/realtime.ts`). Les signaux sont regroupés (une relecture par seconde au plus) ; la reconnexion (réseau, retour
 // de l'arrière-plan) relit tout ce qui est ouvert. Le canal ne porte aucune donnée : l'écran relit par les routes.
+// Tour 2 : une relecture en échec est retentée (délai croissant) et `stale` le dit à l'écran jusqu'au succès ; après
+// `revoked`, le canal se rouvre (`lib/realtime.ts`) tant que l'écran l'écoute.
 import {
   type CrewLiveBatcher,
   type CrewLiveNeeds,
@@ -8,7 +10,7 @@ import {
   crewChannel,
   parseCrewSignal,
 } from "@orasso/shared";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useChannel } from "@/lib/realtime";
 
@@ -21,17 +23,19 @@ export function useCrewLive(
     /** Relire aussi au premier abonnement (ce qui a pu changer entre la lecture de l'écran et l'abonnement). */
     refreshOnFirstSubscribe?: boolean;
   } = {},
-) {
+): { stale: boolean } {
   const runRef = useRef(run);
   runRef.current = run;
   const optsRef = useRef(opts);
   optsRef.current = opts;
   const batcher = useRef<CrewLiveBatcher | null>(null);
   const subscribedOnce = useRef(false);
+  const [stale, setStale] = useState(false);
   useEffect(() => {
+    setStale(false);
     if (!crewId) return;
     subscribedOnce.current = false;
-    const b = createCrewLiveBatcher((needs) => runRef.current(needs));
+    const b = createCrewLiveBatcher((needs) => runRef.current(needs), { onStale: setStale });
     batcher.current = b;
     return () => {
       b.dispose();
@@ -52,4 +56,5 @@ export function useCrewLive(
     },
     () => optsRef.current.onRevoked?.(),
   );
+  return { stale };
 }

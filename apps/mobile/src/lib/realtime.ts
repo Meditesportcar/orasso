@@ -164,6 +164,9 @@ class RealtimeClient {
       if (message.type === "revoked") {
         // Lot R6a : le serveur a retiré l'abonnement (droit perdu) ; l'écran relit ce qu'il montre.
         for (const fn of [...(this.revokedHandlers.get(message.channel) ?? [])]) fn();
+        // Tour 2 : le canal se rouvre tant qu'un écran l'écoute. Encore membre (réacceptée, revérification passagère) :
+        // `subscribed`, et les écrans relisent tout ; sinon `forbidden`, et rien ne repart.
+        if (this.handlers.has(message.channel)) this.sendSubscribe(message.channel);
         return;
       }
       if (message.type === "forbidden") return;

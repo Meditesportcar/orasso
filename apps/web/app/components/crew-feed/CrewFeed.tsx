@@ -1,11 +1,18 @@
 // Le fil du crew sur le site (lot R5c1, maquette R5.7 onglet Fil) : une colonne centrale, les mêmes composants et les
 // mêmes mots que l'appli. Lu dans le navigateur (`/api/crews/:id/feed`, cookie de session), 20 par page ; une erreur
 // n'est jamais montrée comme un fil vide. Composant autonome, monté par la page du crew (onglet Fil, lot R5c2).
+// Lot R6a, tour 2 : en direct, avec les règles communes de l'appli (`crewLive.ts`) : le fil affiché, son curseur et les
+// nouveautés de la pastille dans un seul état ; rien de ce qui est intégré ne disparaît, les pages intermédiaires
+// manquées sont lues, la reconnexion revalide toutes les pages chargées, une sortie se relit où qu'elle soit. Une
+// relecture en échec est rejetée (le besoin reste et repart), et une ligne discrète le dit.
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  acceptCrewFeedPending,
+  applyCrewFeedRead,
   type CrewFeedItem,
   type CrewFeedOuting,
   type CrewFeedPage,
+  type CrewFeedState,
   type CrewFireState,
   type CrewOutingView,
   type CrewPostOptions,
@@ -13,7 +20,7 @@ import {
   crewFeedLabels,
   crewLivePillLabel,
   crewPageLabels,
-  mergeCrewFeedHead,
+  readCrewFeedTop,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -21,7 +28,7 @@ import "../../styles/crew-feed.css";
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
 import { CommentsDialog } from "./CommentsDialog";
-import { useCrewLiveNeeds } from "./CrewLive";
+import { useCrewLiveNeeds, useCrewLiveStale } from "./CrewLive";
 import { AutoCard, PostCard } from "./PostCard";
 import { PublishDialog } from "./PublishDialog";
 
@@ -33,9 +40,21 @@ function appendByKey(current: readonly CrewFeedItem[], next: readonly CrewFeedIt
   return [...current, ...next.filter((i) => !seen.has(i.key))];
 }
 
+/** Ses propres publications ne vont jamais à la pastille (l'onglet du geste les montre déjà). */
+const isMine = (i: CrewFeedItem) => i.type === "post" && i.post.mine;
+
+type Mapper = (item: CrewFeedItem) => CrewFeedItem | null;
+const mapAll = (s: CrewFeedState<CrewFeedItem>, fn: Mapper): CrewFeedState<CrewFeedItem> => ({
+  ...s,
+  items: s.items.flatMap((i) => fn(i) ?? []),
+  pending: s.pending.flatMap((i) => fn(i) ?? []),
+});
+
+/** Une lecture en direct en échec : rejetée, pour que le besoin reste et reparte. */
+class LiveReadError extends Error {}
+
 export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
-  const [items, setItems] = useState<CrewFeedItem[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [feed, setFeed] = useState<CrewFeedState<CrewFeedItem> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [options, setOptions] = useState<CrewPostOptions | null>(null);
@@ -45,72 +64,135 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
   const [ok, setOk] = useState<string | null>(null);
   const [comments, setComments] = useState<CrewPostView | null>(null);
   const [publishing, setPublishing] = useState(false);
-  // Seule la dernière lecture compte.
+  // Seule la dernière lecture complète compte (une relecture en direct partie avant elle est jetée).
   const seq = useRef(0);
-
-  // Lot R6a : la première page relue en direct dont les nouvelles entrées attendent (loin du haut du fil : la pastille).
-  const [held, setHeld] = useState<CrewFeedPage | null>(null);
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
   const listRef = useRef<HTMLDivElement>(null);
+  const stale = useCrewLiveStale();
+  const items = feed?.items ?? null;
+  const cursor = feed?.cursor ?? null;
+  const pending = feed?.pending ?? [];
 
-  const load = useCallback(
-    async (from?: string) => {
-      const mine = from ? seq.current : ++seq.current;
-      if (from) setLoadingMore(true);
-      const res = await apiFetch<CrewFeedPage>(
-        `/crews/${crew.id}/feed${from ? `?cursor=${encodeURIComponent(from)}` : ""}`,
-      );
-      setLoadingMore(false);
-      if (mine !== seq.current) return;
-      if (!res.ok) {
-        setLoadError(res.error.message);
-        return;
-      }
-      setItems((current) => (from ? appendByKey(current ?? [], res.data.items) : res.data.items));
-      setCursor(res.data.nextCursor);
-      setLoadError(null);
-      if (!from) setHeld(null);
-    },
-    [crew.id],
-  );
+  const load = useCallback(async () => {
+    const mine = ++seq.current;
+    const res = await apiFetch<CrewFeedPage>(`/crews/${crew.id}/feed`);
+    if (mine !== seq.current) return;
+    if (!res.ok) {
+      setLoadError(res.error.message);
+      return;
+    }
+    setFeed({ items: res.data.items, cursor: res.data.nextCursor, pending: [] });
+    setLoadError(null);
+  }, [crew.id]);
+
+  const loadMore = async (from: string) => {
+    const mine = seq.current;
+    setLoadingMore(true);
+    const res = await apiFetch<CrewFeedPage>(`/crews/${crew.id}/feed?cursor=${encodeURIComponent(from)}`);
+    setLoadingMore(false);
+    if (mine !== seq.current) return;
+    if (!res.ok) {
+      setLoadError(res.error.message);
+      return;
+    }
+    // Une relecture en direct a pu changer le curseur entre-temps : la page lue ne vaut plus, on la jette.
+    setFeed((s) =>
+      s && s.cursor === from ? { ...s, items: appendByKey(s.items, res.data.items), cursor: res.data.nextCursor } : s,
+    );
+    setLoadError(null);
+  };
 
   /** Le haut du fil est à l'écran (ou plus bas) : une nouvelle entrée s'insère sans faire sauter la liste. */
   const atTop = () => (listRef.current?.getBoundingClientRect().top ?? 0) >= -8;
 
-  /** Applique une première page relue : nombres à jour, retraits ; les nouvelles entrées en haut, ou à la pastille. */
-  const applyHead = (head: CrewFeedPage, insert: boolean) => {
-    setItems((current) =>
-      current ? mergeCrewFeedHead(current, head.items, { complete: head.nextCursor === null, insert }).items : current,
+  /** Une publication relue ou changée sur place (`null` : retirée), partout où elle est (affichée, en attente). */
+  const put = (id: string, next: CrewPostView | null | ((p: CrewPostView) => CrewPostView)) =>
+    setFeed((s) =>
+      s
+        ? mapAll(s, (i) => {
+            if (i.type !== "post" || i.post.id !== id) return i;
+            if (next === null) return null;
+            return { ...i, post: typeof next === "function" ? next(i.post) : next };
+          })
+        : s,
     );
-    setHeld(insert ? null : head);
-  };
-  const known = new Set((items ?? []).map((i) => i.key));
-  const fresh = held ? held.items.filter((i) => !known.has(i.key)) : [];
+  /** Une sortie relue (`null` : annulée, sa carte quitte le fil). */
+  const putOuting = (id: string, next: ((o: CrewFeedOuting) => CrewFeedOuting) | null) =>
+    setFeed((s) =>
+      s
+        ? mapAll(s, (i) =>
+            i.type === "crew_outing" && i.outing.id === id ? (next ? { ...i, outing: next(i.outing) } : null) : i,
+          )
+        : s,
+    );
 
   useCrewLiveNeeds(async (needs) => {
-    for (const id of needs.removedPosts) put(null, id);
+    for (const id of needs.removedPosts) put(id, null);
+    for (const id of needs.removedOutings) putOuting(id, null);
     if (comments && needs.removedPosts.includes(comments.id)) setComments(null);
-    if (needs.head && items !== null) {
-      const mine = seq.current;
-      const res = await apiFetch<CrewFeedPage>(`/crews/${crew.id}/feed`);
-      if (res.ok && mine === seq.current) applyHead(res.data, atTop());
+    const shown = feedRef.current;
+    if (!shown) return; // Fil pas encore lu : sa première lecture suffit.
+    let read: CrewFeedItem[] = [];
+    if (needs.head || needs.full) {
+      const ticket = seq.current;
+      const result = await readCrewFeedTop(
+        async (from) => {
+          const res = await apiFetch<CrewFeedPage>(
+            `/crews/${crew.id}/feed${from ? `?cursor=${encodeURIComponent(from)}` : ""}`,
+          );
+          if (!res.ok) throw new LiveReadError(res.error.message);
+          return res.data;
+        },
+        shown.items,
+        needs.full ? "full" : "head",
+      );
+      if (ticket === seq.current) {
+        const insert = atTop();
+        setFeed((s) => (s ? applyCrewFeedRead(s, result, { insert, mine: isMine }) : s));
+        read = result.items;
+      }
     }
-    const shown = new Set((items ?? []).flatMap((i) => (i.type === "post" ? [i.post.id] : [])));
+    const everything = [...shown.items, ...shown.pending];
+    const shownPosts = new Set(everything.flatMap((i) => (i.type === "post" ? [i.post.id] : [])));
+    const shownOutings = new Set(everything.flatMap((i) => (i.type === "crew_outing" ? [i.outing.id] : [])));
+    const readPosts = new Set(read.flatMap((i) => (i.type === "post" ? [i.post.id] : [])));
+    const readOutings = new Set(read.flatMap((i) => (i.type === "crew_outing" ? [i.outing.id] : [])));
     for (const id of needs.posts) {
-      if (needs.removedPosts.includes(id) || !shown.has(id)) continue;
+      if (needs.removedPosts.includes(id) || readPosts.has(id) || !shownPosts.has(id)) continue;
       const res = await apiFetch<CrewPostView>(`/crews/${crew.id}/posts/${id}`);
-      if (res.ok) put(res.data, id);
-      else if (res.status === 404) put(null, id);
+      if (res.ok) put(id, res.data);
+      else if (res.status === 404) put(id, null);
+      else throw new LiveReadError(res.error.message);
+    }
+    // Tour 2 : la carte d'une sortie modifiée ou répondue se relit, où qu'elle soit dans le fil.
+    for (const id of needs.outings) {
+      if (needs.removedOutings.includes(id) || readOutings.has(id) || !shownOutings.has(id)) continue;
+      const res = await apiFetch<CrewOutingView>(`/crews/${crew.id}/outings/${id}`);
+      if (res.ok) {
+        const o = res.data;
+        putOuting(id, (cur) => ({
+          ...cur,
+          title: o.title,
+          startsAt: o.startsAt,
+          place: o.place,
+          yes: o.yes,
+          maybe: o.maybe,
+          mine: o.mine,
+          open: o.open,
+        }));
+      } else if (res.status === 404) putOuting(id, null);
+      else throw new LiveReadError(res.error.message);
     }
   }, !crew.archived);
 
   /** La pastille : les nouvelles entrées s'affichent, la page remonte au haut du fil. */
   const showFresh = () => {
-    if (held) applyHead(held, true);
+    setFeed((s) => (s?.pending.length ? { ...s, items: acceptCrewFeedPending(s.items, s.pending), pending: [] } : s));
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     listRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   };
-  const pill = crewLivePillLabel(fresh);
-
+  const pill = crewLivePillLabel(pending);
   // Tour 2 : un échec des réglages du composeur se dit (message et « Réessayer »), le brouillon reste.
   const loadOptions = useCallback(async () => {
     setOptionsError(null);
@@ -123,20 +205,6 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
     void load();
     void loadOptions();
   }, [load, loadOptions]);
-
-  const put = (post: CrewPostView | null, id: string) => {
-    // Lot R6a : rien à changer tant que le fil n'est pas lu (un signal ne fait pas croire à un fil vide).
-    setItems((list) =>
-      list
-        ? list.flatMap((x) => {
-            if (x.type !== "post" || x.post.id !== id) return [x];
-            return post ? [{ ...x, post }] : [];
-          })
-        : list,
-    );
-    // Une publication retirée n'est plus une nouveauté de la pastille.
-    if (!post) setHeld((h) => h && { ...h, items: h.items.filter((i) => i.type !== "post" || i.post.id !== id) });
-  };
 
   async function act(id: string, action: () => Promise<string | null>) {
     setBusy(id);
@@ -155,21 +223,19 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         json: { answer: "yes" },
       });
       if (!res.ok) return res.error.message;
-      const next = { ...o, yes: res.data.yes, maybe: res.data.maybe, mine: res.data.mine };
-      setItems((current) =>
-        (current ?? []).map((x) => (x.type === "crew_outing" && x.outing.id === o.id ? { ...x, outing: next } : x)),
-      );
+      putOuting(o.id, (cur) => ({ ...cur, yes: res.data.yes, maybe: res.data.maybe, mine: res.data.mine }));
       setOk(crewPageLabels.feedOutingYesToast(o.title));
       return null;
     });
   const fire = (p: CrewPostView) =>
     act(p.id, async () => {
       const on = !p.firedByMe;
-      put({ ...p, firedByMe: on, firesCount: p.firesCount + (on ? 1 : -1) }, p.id);
+      put(p.id, { ...p, firedByMe: on, firesCount: p.firesCount + (on ? 1 : -1) });
       const res = await apiFetch<CrewFireState>(`/crews/${crew.id}/posts/${p.id}/reaction`, {
         method: on ? "PUT" : "DELETE",
       });
-      put(res.ok ? { ...p, ...res.data } : p, p.id);
+      if (res.ok) put(p.id, (cur) => ({ ...cur, ...res.data }));
+      else put(p.id, p);
       return res.ok ? null : res.error.message;
     });
   const vote = (p: CrewPostView, optionId: string) =>
@@ -178,14 +244,14 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         method: "PUT",
         json: { optionId },
       });
-      if (res.ok) put(res.data, p.id);
+      if (res.ok) put(p.id, res.data);
       return res.ok ? null : res.error.message;
     });
   const closePoll = (p: CrewPostView) =>
     act(p.id, async () => {
       const res = await apiFetch<CrewPostView>(`/crews/${crew.id}/posts/${p.id}/close`, { method: "POST" });
       if (res.ok) {
-        put(res.data, p.id);
+        put(p.id, res.data);
         setOk(crewFeedLabels.pollClosedToast);
       }
       return res.ok ? null : res.error.message;
@@ -195,7 +261,7 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
     void act(p.id, async () => {
       const res = await apiFetch(`/crews/${crew.id}/posts/${p.id}`, { method: "DELETE" });
       if (res.ok) {
-        put(null, p.id);
+        put(p.id, null);
         setOk(crewFeedLabels.removed);
       }
       return res.ok ? null : res.error.message;
@@ -223,6 +289,11 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
           {ok}
         </p>
       )}
+      {stale ? (
+        <p className="o-t-caption s-muted" role="status" data-testid="crew-feed-stale">
+          {crewFeedLabels.liveStale}
+        </p>
+      ) : null}
       {pill ? (
         <div className="cf-new">
           <button
@@ -282,7 +353,7 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
           variant="secondary"
           icon="down"
           loading={loadingMore}
-          onClick={() => void load(cursor)}
+          onClick={() => void loadMore(cursor)}
           data-testid="crew-feed-more"
         >
           {crewFeedLabels.loadMore}
@@ -297,15 +368,7 @@ export function CrewFeed({ crew }: { crew: CrewFeedCrew }) {
         crewId={crew.id}
         post={comments}
         onClose={() => setComments(null)}
-        onCount={(id, delta) =>
-          setItems((list) =>
-            (list ?? []).map((x) =>
-              x.type === "post" && x.post.id === id
-                ? { ...x, post: { ...x.post, commentsCount: Math.max(0, x.post.commentsCount + delta) } }
-                : x,
-            ),
-          )
-        }
+        onCount={(id, delta) => put(id, (cur) => ({ ...cur, commentsCount: Math.max(0, cur.commentsCount + delta) }))}
       />
       <PublishDialog
         open={publishing}

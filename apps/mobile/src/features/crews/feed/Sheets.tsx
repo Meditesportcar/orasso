@@ -9,6 +9,7 @@ import {
   crewFeedLabels,
   mergeCrewComments,
   moderationLabels,
+  readCrewComments,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -112,22 +113,15 @@ export function CommentsSheet({
       );
     }
     if (!needs.comments.includes(target) && !needs.full) return;
+    const shown = byPostRef.current[target];
+    if (!shown) return; // Pas encore lue : sa première lecture suffit.
     const ticket = gate.follow();
-    // Toute la liste était chargée : on la relit jusqu'au bout (au-delà de 50, les nouveaux sont à la fin).
-    const hadAll = (byPostRef.current[target]?.cursor ?? null) === null;
-    let page = await api.crewPostComments(crewId, target);
-    const incoming = [...page.items];
-    for (let guard = 0; hadAll && page.nextCursor && guard < 20; guard += 1) {
-      page = await api.crewPostComments(crewId, target, page.nextCursor);
-      incoming.push(...page.items);
-    }
+    // Tour 2 : relue jusqu'à couvrir l'affiché (toute la liste si elle était complète : les nouveaux sont à la fin). Une
+    // page en échec rejette tout : la liste et son curseur restent, la relecture est retentée. Au-delà de la limite de
+    // pages, le vrai curseur est gardé (« Voir la suite »).
+    const next = await readCrewComments((cursor) => api.crewPostComments(crewId, target, cursor ?? undefined), shown);
     if (!ticket.current()) return;
-    setByPost((all) => ({
-      ...all,
-      [target]: hadAll
-        ? { items: mergeCrewComments([], incoming), cursor: null }
-        : { items: mergeCrewComments(all[target]?.items ?? [], incoming), cursor: all[target]?.cursor ?? null },
-    }));
+    setByPost((all) => ({ ...all, [target]: next }));
   });
 
   async function send() {
