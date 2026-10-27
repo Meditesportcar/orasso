@@ -19,6 +19,10 @@ export const crewFeedRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await crewFeedService.create(v, uuidParam(c, "id"), await body(c, crewPostCreateSchema)), 201);
   })
+  // Lot R6a : une publication relue à un signal du canal `crew:<id>`.
+  .get("/crews/:id/posts/:postId", async (c) =>
+    c.json(await crewFeedService.post(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "postId"))),
+  )
   .delete("/crews/:id/posts/:postId", async (c) => {
     await crewFeedService.remove(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "postId"));
     return c.body(null, 204);

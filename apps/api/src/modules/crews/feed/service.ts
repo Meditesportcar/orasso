@@ -51,6 +51,7 @@ import { canSeeEvent } from "../../invitations/access";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
 import { uploadsService } from "../../uploads/service";
 import { vehicleLabel } from "../../vehicles/serializers";
+import { signalCrew } from "../live";
 import {
   type FeedAccess,
   isUuid,
@@ -213,6 +214,17 @@ export const crewFeedService = {
     };
   },
 
+  /**
+   * `GET /crews/:id/posts/:postId` (lot R6a) : une publication, telle que le fil la montre à ce membre (mêmes champs,
+   * mêmes droits). La page du crew la relit à un signal (flamme, commentaire, voix, clôture) ; 404 si elle n'est plus
+   * visible.
+   */
+  async post(v: Viewer, crewId: string, postId: string): Promise<CrewPostView> {
+    const access = await requireCrewMember(db, v, crewId);
+    if (!isUuid(postId)) throw postGone();
+    return viewOf(access, postId);
+  },
+
   /** `GET /crews/:id/post-options` : de quoi remplir le composeur (mes véhicules actifs, mes événements proches). */
   async postOptions(v: Viewer, crewId: string): Promise<CrewPostOptions> {
     const access = await requireCrewMember(db, v, crewId);
@@ -361,6 +373,8 @@ export const crewFeedService = {
           );
           after(() => notificationsService.kick());
         }
+        // Lot R6a : les pages ouvertes du crew relisent leur fil (après la validation, jamais après une annulation).
+        signalCrew(after, crewId, "post.created", { postId: post.id }, v.user.id);
         return { id: post.id, access };
       });
     const { id, access } = await run().catch(async (error) => {
@@ -377,7 +391,7 @@ export const crewFeedService = {
    * retire aussi la publication d'un auteur suspendu ; un ancien membre retire encore **ses** publications.
    */
   async remove(v: Viewer, crewId: string, postId: string): Promise<void> {
-    const keys = await withTx(async (tx) => {
+    const keys = await withTx(async (tx, after) => {
       const access = await requireOwnContentAccess(tx, v, crewId);
       const post = await lockPost(tx, crewId, postId, true);
       const mine = post.authorId === v.user.id;
@@ -388,6 +402,7 @@ export const crewFeedService = {
       if (!canRemoveCrewContent(post.authorId, { userId: v.user.id, leader: access.leader })) {
         throw forbidden("Seuls son auteur et le chef du crew peuvent retirer cette publication.");
       }
+      signalCrew(after, crewId, "post.removed", { postId: post.id }, v.user.id);
       return softDeletePost(tx, post.id, v.user.id);
     });
     await removeFiles(keys);
@@ -396,9 +411,10 @@ export const crewFeedService = {
   /** `PUT` / `DELETE /crews/:id/posts/:postId/reaction` : la flamme (une par personne). */
   async fire(v: Viewer, crewId: string, postId: string, on: boolean): Promise<CrewFireState> {
     rateLimit("crewReact", v.user.id);
-    const access = await withTx(async (tx) => {
+    const access = await withTx(async (tx, after) => {
       const a = await requireCrewMember(tx, v, crewId, "write");
       const post = await lockPost(tx, crewId, postId);
+      signalCrew(after, crewId, "post.fire", { postId: post.id }, v.user.id);
       if (on) {
         await tx.insert(crewPostReactions).values({ postId: post.id, userId: v.user.id }).onConflictDoNothing();
       } else {
@@ -463,6 +479,7 @@ export const crewFeedService = {
       if (!created) throw new Error("Commentaire non enregistré");
       await notifyComment(tx, post, access, v.profile.pseudo);
       after(() => notificationsService.kick());
+      signalCrew(after, crewId, "comment.created", { postId: post.id, commentId: created.id }, v.user.id);
       return { created, leader: access.leader };
     }).catch(raceToConflict);
     return {
@@ -478,7 +495,7 @@ export const crewFeedService = {
   /** `DELETE /crews/:id/comments/:commentId` : son auteur ou le chef. */
   async removeComment(v: Viewer, crewId: string, commentId: string): Promise<void> {
     if (!isUuid(commentId)) throw commentGone();
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       // Tour 2 : un ancien membre retire encore ses commentaires ; personne d'autre hors du crew.
       const access = await requireOwnContentAccess(tx, v, crewId);
       const [row] = await tx
@@ -503,18 +520,20 @@ export const crewFeedService = {
         .update(crewPostComments)
         .set({ deletedAt: now(), deletedBy: v.user.id })
         .where(eq(crewPostComments.id, commentId));
+      signalCrew(after, crewId, "comment.removed", { postId: row.c.postId, commentId }, v.user.id);
     });
   },
 
   /** `PUT /crews/:id/posts/:postId/vote {optionId}` : une voix, modifiable tant que le sondage est ouvert. */
   async vote(v: Viewer, crewId: string, postId: string, optionId: string): Promise<CrewPostView> {
     rateLimit("crewReact", v.user.id);
-    const access = await withTx(async (tx) => {
+    const access = await withTx(async (tx, after) => {
       const a = await requireCrewMember(tx, v, crewId, "write");
       const post = await lockPost(tx, crewId, postId);
       const [poll] = await tx.select().from(crewPolls).where(eq(crewPolls.postId, post.id)).for("update");
       if (!poll) throw postGone();
       if (!crewPollOpen(poll, now())) throw validation("Ce sondage est clos.");
+      signalCrew(after, crewId, "poll.voted", { postId: post.id }, v.user.id);
       const [option] = await tx
         .select({ id: crewPollOptions.id })
         .from(crewPollOptions)
@@ -531,7 +550,7 @@ export const crewFeedService = {
 
   /** `POST /crews/:id/posts/:postId/close` : l'auteur ou le chef clôt le sondage. */
   async close(v: Viewer, crewId: string, postId: string): Promise<CrewPostView> {
-    const access = await withTx(async (tx) => {
+    const access = await withTx(async (tx, after) => {
       const a = await requireCrewMember(tx, v, crewId, "write");
       const post = await lockPost(tx, crewId, postId);
       const [poll] = await tx.select().from(crewPolls).where(eq(crewPolls.postId, post.id)).for("update");
@@ -541,6 +560,7 @@ export const crewFeedService = {
       }
       if (!poll.closedAt) {
         await tx.update(crewPolls).set({ closedAt: now(), closedBy: v.user.id }).where(eq(crewPolls.postId, post.id));
+        signalCrew(after, crewId, "poll.closed", { postId: post.id }, v.user.id);
       }
       return a;
     });
@@ -557,14 +577,17 @@ export const crewFeedService = {
       where c.deleted_at is null
         and not exists (select 1 from crew_members m
           where m.crew_id = c.id and m.user_id = ${v.user.id} and m.status = 'active'))`;
-    const { keys, posts, comments } = await withTx(async (tx) => {
+    const { keys, posts, comments } = await withTx(async (tx, after) => {
       const mine = await tx
-        .select({ id: crewPosts.id })
+        .select({ id: crewPosts.id, crewId: crewPosts.crewId })
         .from(crewPosts)
         .where(and(eq(crewPosts.authorId, v.user.id), isNull(crewPosts.deletedAt), sql`${crewPosts.crewId} in ${left}`))
         .for("update");
       const keys: string[] = [];
-      for (const p of mine) keys.push(...(await softDeletePost(tx, p.id, v.user.id)));
+      for (const p of mine) {
+        keys.push(...(await softDeletePost(tx, p.id, v.user.id)));
+        signalCrew(after, p.crewId, "post.removed", { postId: p.id });
+      }
       const removed = await tx
         .update(crewPostComments)
         .set({ deletedAt: now(), deletedBy: v.user.id })
@@ -575,7 +598,23 @@ export const crewFeedService = {
             sql`${crewPostComments.postId} in (select p.id from crew_posts p where p.crew_id in ${left})`,
           ),
         )
-        .returning({ id: crewPostComments.id });
+        .returning({ id: crewPostComments.id, postId: crewPostComments.postId });
+      // Lot R6a : les pages ouvertes de ces crews retirent les commentaires et relisent leurs nombres.
+      const postIds = [...new Set(removed.map((c) => c.postId))];
+      const crewOf = new Map(
+        postIds.length
+          ? (
+              await tx
+                .select({ id: crewPosts.id, crewId: crewPosts.crewId })
+                .from(crewPosts)
+                .where(inArray(crewPosts.id, postIds))
+            ).map((p) => [p.id, p.crewId])
+          : [],
+      );
+      for (const c of removed) {
+        const crewId = crewOf.get(c.postId);
+        if (crewId) signalCrew(after, crewId, "comment.removed", { postId: c.postId, commentId: c.id });
+      }
       return { keys, posts: mine.length, comments: removed.length };
     });
     await removeFiles(keys);

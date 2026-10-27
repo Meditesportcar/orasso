@@ -33,7 +33,11 @@ async function open(browser: Browser, who: R5Account, theme: "beton" | "sable", 
 async function liveCrew(): Promise<R5Crew> {
   const crew = await r5Crew(unique());
   for (let i = 1; i <= 4; i += 1) {
-    await postText(crew, i % 2 ? crew.chef : crew.lea, `Publication de départ n° ${i} : rendez-vous au parking de Thuir.`);
+    await postText(
+      crew,
+      i % 2 ? crew.chef : crew.lea,
+      `Publication de départ n° ${i} : rendez-vous au parking de Thuir.`,
+    );
   }
   return crew;
 }

@@ -65,7 +65,11 @@ async function scrollBy(page: Page, px: number) {
 async function liveCrew(): Promise<R5Crew> {
   const crew = await r5Crew(unique());
   for (let i = 1; i <= 4; i += 1) {
-    await postText(crew, i % 2 ? crew.chef : crew.lea, `Publication de départ n° ${i} : rendez-vous au parking de Thuir.`);
+    await postText(
+      crew,
+      i % 2 ? crew.chef : crew.lea,
+      `Publication de départ n° ${i} : rendez-vous au parking de Thuir.`,
+    );
   }
   return crew;
 }
@@ -122,7 +126,11 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     });
     await shot(k, `03-commentaire-en-direct-${theme}`);
     await k.keyboard.press("Escape");
-    await k.getByRole("button", { name: /Fermer/ }).first().click().catch(() => undefined);
+    await k
+      .getByRole("button", { name: /Fermer/ })
+      .first()
+      .click()
+      .catch(() => undefined);
     await expect(mine.getByTestId("crew-post-comments")).toContainText("1", { timeout: 15_000 });
 
     // Julie propose une sortie : elle entre dans le fil, et l'onglet Sorties la compte.
