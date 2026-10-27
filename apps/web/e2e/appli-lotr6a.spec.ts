@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, unique } from "./helpers";
 import { type R5Account, type R5Crew, r5Crew, r5Outing } from "./lotr5c2-setup";
-import { comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
+import { acceptNina, comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Lot R6a (appli, version web compilée) : la page du crew en direct. Deux personnes, deux contextes : la page de
@@ -58,6 +58,15 @@ async function scrollBy(page: Page, px: number) {
   const { width, height } = page.viewportSize() ?? { width: 390, height: 844 };
   await page.mouse.move(width / 2, height / 2);
   await page.mouse.wheel(0, px);
+  await page.waitForTimeout(500);
+}
+
+/** Place la page du crew à une position (zone qui défile de React Native Web) : 0 en haut, `"bas"` tout en bas. */
+async function scrollPage(page: Page, to: number | "bas") {
+  await page.evaluate((y) => {
+    const el = document.querySelector('[data-testid="crew-page"]') as HTMLElement | null;
+    if (el) el.scrollTop = y === "bas" ? el.scrollHeight : y;
+  }, to);
   await page.waitForTimeout(500);
 }
 
@@ -119,21 +128,19 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     await expect(mine.getByTestId("crew-post-fire")).toContainText("1", { timeout: 15_000 });
     // La feuille des commentaires ouverte : le commentaire de Julie y arrive.
     await mine.getByTestId("crew-post-comments").click();
-    await expect(k.getByTestId("crew-comments").or(k.getByText("Aucun commentaire"))).toBeVisible();
+    await expect(k.getByText("Aucun commentaire pour l'instant.")).toBeVisible();
     await comment(crew, julie, mineId, "Je serai là à 9 h pile.");
     await expect(k.getByTestId("crew-comment").filter({ hasText: "Je serai là à 9 h pile." })).toBeVisible({
       timeout: 15_000,
     });
     await shot(k, `03-commentaire-en-direct-${theme}`);
-    await k.keyboard.press("Escape");
-    await k
-      .getByRole("button", { name: /Fermer/ })
-      .first()
-      .click()
-      .catch(() => undefined);
+    // Fermer la feuille : toucher le voile, au-dessus d'elle.
+    await k.mouse.click(195, 80);
+    await expect(k.getByText("Je serai là à 9 h pile.")).toHaveCount(0, { timeout: 10_000 });
     await expect(mine.getByTestId("crew-post-comments")).toContainText("1", { timeout: 15_000 });
 
-    // Julie propose une sortie : elle entre dans le fil, et l'onglet Sorties la compte.
+    // Julie propose une sortie : elle entre dans le fil (Kenji revenu en haut), et l'onglet Sorties la compte.
+    await scrollPage(k, 0);
     await r5Outing(crew, julie, "Balade des Aspres", 5);
     await expect(k.getByTestId("crew-auto-outing").filter({ hasText: "Balade des Aspres" })).toBeVisible({
       timeout: 15_000,
@@ -141,7 +148,8 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     await expect(k.getByTestId("crew-tab-outings")).toContainText("1", { timeout: 15_000 });
 
     // Loin du haut du fil : une pastille, la liste ne saute pas ; au toucher, on remonte et la publication est là.
-    await scrollBy(k, 1400);
+    await expect(k.locator('[data-testid^="announce-"]')).toHaveCount(0, { timeout: 10_000 });
+    await scrollPage(k, "bas");
     const second = `Photo du Col de Jau (${theme})`;
     await postText(crew, julie, second);
     const pill = k.getByTestId("crew-feed-new");
@@ -164,7 +172,10 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     await expect(j.getByTestId("crew-feed")).toBeVisible();
     await removeMember(crew, julie);
     await expect(j.getByTestId("crew-vitrine")).toBeVisible({ timeout: 15_000 });
-    await postText(crew, kenji, `Après le départ de Julie (${theme})`);
+    // Nina entre dans le crew et publie : la page de Kenji la montre, celle de Julie non.
+    await acceptNina(crew);
+    await scrollPage(k, 0);
+    await postText(crew, crew.nina, `Après le départ de Julie (${theme})`);
     await expect(k.getByText(`Après le départ de Julie (${theme})`)).toBeVisible({ timeout: 15_000 });
     await j.waitForTimeout(2_000);
     await expect(j.getByText(`Après le départ de Julie (${theme})`)).toHaveCount(0);

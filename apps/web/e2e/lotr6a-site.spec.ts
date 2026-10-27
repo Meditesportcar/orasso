@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, loginInBrowser, setTheme, unique } from "./helpers";
 import { type R5Account, type R5Crew, r5Crew, r5Outing } from "./lotr5c2-setup";
-import { comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
+import { acceptNina, comment, fire, postText, removeMember, removePost } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Lot R6a (site) : la page du crew en direct, comme l'appli. La page de « Kenji » (le chef) est ouverte ; « Julie »
@@ -101,14 +101,17 @@ test("site : la page du crew en direct, à deux", async ({ browser }) => {
       await k.keyboard.press("Escape");
       await expect(mine.getByTestId("crew-post-comments")).toContainText("1", { timeout: 15_000 });
 
-      // Julie propose une sortie : elle entre dans le fil et dans la colonne (ou l'onglet) des sorties.
+      // Julie propose une sortie : elle entre dans le fil (Kenji revenu en haut) et dans les sorties.
+      await k.evaluate(() => window.scrollTo(0, 0));
       await r5Outing(crew, julie, "Balade des Aspres", 5);
       await expect(k.getByTestId("crew-auto-outing").filter({ hasText: "Balade des Aspres" })).toBeVisible({
         timeout: 15_000,
       });
       await expect(k.getByTestId("crew-tab-sorties")).toContainText("1", { timeout: 15_000 });
 
-      // Loin du haut du fil : une pastille, la liste ne saute pas ; au clic, on remonte et la publication est là.
+      // Loin du haut du fil : une pastille, la liste ne saute pas ; au clic, on remonte et la publication est là. (Le
+      // bandeau de la notification du commentaire part d'abord : il se pose au même endroit, 4 s.)
+      await expect(k.locator('[data-testid^="announce-"]')).toHaveCount(0, { timeout: 10_000 });
       await k.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await k.waitForTimeout(500);
       const second = `Photo du Col de Jau (${tag})`;
@@ -132,8 +135,11 @@ test("site : la page du crew en direct, à deux", async ({ browser }) => {
       await expect(j.getByTestId("crew-feed")).toBeVisible();
       await removeMember(crew, julie);
       await expect(j.getByTestId("crew-vitrine")).toBeVisible({ timeout: 15_000 });
+      // Nina entre dans le crew et publie : la page de Kenji la montre, celle de Julie non.
+      await acceptNina(crew);
+      await k.evaluate(() => window.scrollTo(0, 0));
       const after = `Après le départ de Julie (${tag})`;
-      await postText(crew, kenji, after);
+      await postText(crew, crew.nina, after);
       await expect(k.getByText(after)).toBeVisible({ timeout: 15_000 });
       await j.waitForTimeout(2_000);
       await expect(j.getByText(after)).toHaveCount(0);

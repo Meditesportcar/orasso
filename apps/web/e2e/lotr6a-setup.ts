@@ -24,6 +24,13 @@ export async function removePost(crew: R5Crew, by: R5Account, postId: string) {
   expect((await apiCall(by.cookie, "DELETE", `/crews/${crew.id}/posts/${postId}`)).status).toBe(204);
 }
 
+/** Nina (demande déjà envoyée par `r5Crew`) est acceptée par le chef. */
+export async function acceptNina(crew: R5Crew) {
+  expect((await apiCall(crew.chef.cookie, "POST", `/crews/${crew.id}/requests/${crew.nina.id}/accept`)).status).toBe(
+    204,
+  );
+}
+
 export async function removeMember(crew: R5Crew, who: R5Account) {
   expect((await apiCall(crew.chef.cookie, "DELETE", `/crews/${crew.id}/members/${who.id}`)).status).toBe(204);
 }
