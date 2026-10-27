@@ -18,7 +18,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import { useIsFocused } from "expo-router";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type RefObject, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -41,6 +41,8 @@ export function PosterFlow({
   liftHero = false,
   band,
   heroFloat,
+  scrollRef,
+  onScrollY,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
   hero: ReactNode;
@@ -56,6 +58,9 @@ export function PosterFlow({
   band?: ReactNode;
   /** Lot M4 : ce qui se pose en haut de l'affiche quand la bande est fixée (le pavé J-x). */
   heroFloat?: ReactNode;
+  /** Lot R6a : la zone qui défile (la pastille du fil du crew y remonte) et sa position. */
+  scrollRef?: RefObject<ScrollView | null>;
+  onScrollY?: (y: number) => void;
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
@@ -80,6 +85,9 @@ export function PosterFlow({
           ) : null}
           <KeyboardSafe style={styles.fill}>
             <ScrollView
+              ref={scrollRef}
+              onScroll={onScrollY ? (e) => onScrollY(e.nativeEvent.contentOffset.y) : undefined}
+              scrollEventThrottle={onScrollY ? 64 : undefined}
               style={styles.fill}
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"

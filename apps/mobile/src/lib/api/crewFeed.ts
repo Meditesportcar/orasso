@@ -14,6 +14,8 @@ import { qs } from "./qs";
 
 export const crewFeedApi = {
   crewFeed: (crewId: string, cursor?: string) => request<CrewFeedPage>(`/api/crews/${crewId}/feed${qs({ cursor })}`),
+  /** Lot R6a : une publication relue à un signal du canal `crew:<id>`. */
+  crewPost: (crewId: string, postId: string) => request<CrewPostView>(`/api/crews/${crewId}/posts/${postId}`),
   crewPostOptions: (crewId: string) => request<CrewPostOptions>(`/api/crews/${crewId}/post-options`),
   createCrewPost: (crewId: string, body: CrewPostCreate) =>
     request<CrewPostView>(`/api/crews/${crewId}/posts`, { method: "POST", body, timeout: 30_000 }),

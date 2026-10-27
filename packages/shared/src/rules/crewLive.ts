@@ -70,6 +70,8 @@ export type CrewLiveNeeds = {
   removedComments: string[];
   /** La page elle-même : en-tête, onglets Sorties, Garage et Membres. */
   page: boolean;
+  /** Reconnexion ou relecture de secours : des signaux ont pu se perdre, tout ce qui est ouvert se relit. */
+  full: boolean;
 };
 
 export const emptyCrewLiveNeeds = (): CrewLiveNeeds => ({
@@ -79,10 +81,11 @@ export const emptyCrewLiveNeeds = (): CrewLiveNeeds => ({
   comments: [],
   removedComments: [],
   page: false,
+  full: false,
 });
 
 /** Reconnexion, retour de l'arrière-plan, relecture de secours : la première page du fil et la page. */
-export const fullCrewLiveNeeds = (): CrewLiveNeeds => ({ ...emptyCrewLiveNeeds(), head: true, page: true });
+export const fullCrewLiveNeeds = (): CrewLiveNeeds => ({ ...emptyCrewLiveNeeds(), head: true, page: true, full: true });
 
 function add(list: string[], id: string | undefined) {
   if (id && !list.includes(id)) list.push(id);
@@ -127,7 +130,7 @@ export function addCrewSignal(needs: CrewLiveNeeds, s: CrewSignal): CrewLiveNeed
 }
 
 function mergeNeeds(a: CrewLiveNeeds, b: CrewLiveNeeds): CrewLiveNeeds {
-  const out = { ...a, head: a.head || b.head, page: a.page || b.page };
+  const out = { ...a, head: a.head || b.head, page: a.page || b.page, full: a.full || b.full };
   for (const k of ["posts", "removedPosts", "comments", "removedComments"] as const) {
     out[k] = [...a[k]];
     for (const id of b[k]) add(out[k], id);

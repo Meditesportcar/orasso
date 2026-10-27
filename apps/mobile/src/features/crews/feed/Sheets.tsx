@@ -28,6 +28,7 @@ import { Overlay } from "@/ui/Overlay";
 
 import { confirmRemove } from "./confirm";
 import { whenOf } from "./PostCard";
+import { useCrewLive } from "./useCrewLive";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -95,6 +96,39 @@ export function CommentsSheet({
     setLoadError(null);
     if (postId) void load();
   }, [postId, load]);
+
+  // Lot R6a : feuille ouverte, les commentaires des autres arrivent (et partent) sans la rouvrir.
+  const byPostRef = useRef(byPost);
+  byPostRef.current = byPost;
+  useCrewLive(postId ? crewId : null, async (needs) => {
+    const target = postId;
+    if (!target) return;
+    if (needs.removedComments.length) {
+      const gone = new Set(needs.removedComments);
+      setByPost((all) =>
+        Object.fromEntries(
+          Object.entries(all).map(([id, v]) => [id, { ...v, items: v.items.filter((x) => !gone.has(x.id)) }]),
+        ),
+      );
+    }
+    if (!needs.comments.includes(target) && !needs.full) return;
+    const ticket = gate.follow();
+    // Toute la liste était chargée : on la relit jusqu'au bout (au-delà de 50, les nouveaux sont à la fin).
+    const hadAll = (byPostRef.current[target]?.cursor ?? null) === null;
+    let page = await api.crewPostComments(crewId, target);
+    const incoming = [...page.items];
+    for (let guard = 0; hadAll && page.nextCursor && guard < 20; guard += 1) {
+      page = await api.crewPostComments(crewId, target, page.nextCursor);
+      incoming.push(...page.items);
+    }
+    if (!ticket.current()) return;
+    setByPost((all) => ({
+      ...all,
+      [target]: hadAll
+        ? { items: mergeCrewComments([], incoming), cursor: null }
+        : { items: mergeCrewComments(all[target]?.items ?? [], incoming), cursor: all[target]?.cursor ?? null },
+    }));
+  });
 
   async function send() {
     const target = postId;
