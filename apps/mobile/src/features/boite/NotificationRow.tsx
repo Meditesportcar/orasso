@@ -108,7 +108,7 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
         }
         title={n.title}
         // Lot R6c : une invitation montre sa date et son lieu ; son mot, en entier, passe en citation sous la ligne.
-        lines={[invitation ? (n.body.split("\n")[0] ?? n.body) : n.body, formatDayHour(n.createdAt)]}
+        lines={[invitation && n.body ? (n.body.split("\n")[0] ?? n.body) : n.body, formatDayHour(n.createdAt)]}
         trailing={!n.readAt ? <Count n={1} /> : null}
         onPress={open}
       />
