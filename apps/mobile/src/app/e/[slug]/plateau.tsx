@@ -7,16 +7,19 @@
 // ni toucher. La règle est rappelée en bas : tout le monde y apparaît dès son acceptation, plaques masquées.
 import { Button, Chip, ChipRow, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type FollowState,
   type Grade,
   isMemberCar,
   lineupLabels as L,
   LINEUP_PAGE_SIZE,
   type LineupCar,
   type LineupCarMember,
+  networkLabels as N,
   type OtherVehicle,
+  type UserProfileView,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { CarTile, ProRow, useLineup } from "@/features/event/Lineup";
@@ -251,7 +254,16 @@ function PrivateCarSheet({
     { enabled: Boolean(car) },
   );
   const v = vehicle.data;
-  const [sent, setSent] = useState<string | null>(null);
+  // Lot R6b, tour 2 (relecture Opus 8) : le bouton suit mon lien avec la personne (« Abonné » si déjà acceptée,
+  // « Demandé » si en attente), lu sur son profil (la vue réduite d'un compte privé le donne aussi).
+  const relation = useApi<UserProfileView | null>(
+    () => (car && canAskFollow ? api.userProfile(car.pseudo) : Promise.resolve(null)),
+    [car?.pseudo, canAskFollow],
+    { enabled: Boolean(car) && canAskFollow },
+  );
+  const [mine, setMine] = useState<FollowState | null>(null);
+  useEffect(() => setMine(null), [car?.pseudo]);
+  const state: FollowState = mine ?? relation.data?.follow.mine ?? "none";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function ask() {
@@ -259,8 +271,7 @@ function PrivateCarSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.follow(car.pseudo);
-      setSent(car.pseudo);
+      setMine((await api.follow(car.pseudo)).mine);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -308,14 +319,14 @@ function PrivateCarSheet({
           {canAskFollow ? (
             <Button
               variant="secondary"
-              icon={sent === car.pseudo ? "check" : "profile"}
+              icon={state === "accepted" ? "check" : state === "pending" ? "wait" : "profile"}
               fullWidth
-              loading={busy}
-              disabled={sent === car.pseudo}
+              loading={busy || relation.loading}
+              disabled={state !== "none"}
               onPress={() => void ask()}
-              testID="lineup-ask-friend"
+              testID="lineup-ask-follow"
             >
-              {sent === car.pseudo ? L.friendSent : L.askFriend}
+              {state === "accepted" ? N.followed : state === "pending" ? N.requested : L.askFollow}
             </Button>
           ) : null}
         </View>

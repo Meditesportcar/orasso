@@ -643,7 +643,7 @@ export const pointsService = {
       await recompute(tx, sponsorId);
       await notificationsService.notify(tx, sponsorId, "referral_confirmed", {
         title: `+${cfg.referral} points · parrainage`,
-        body: `${referee?.pseudo ?? "Ton ami"} a rejoint Orasso grâce à toi.`,
+        body: `${referee?.pseudo ?? "Ton filleul"} a rejoint Orasso grâce à toi.`,
         link: pointsLink,
       });
       after(() => notificationsService.kick());

@@ -47,6 +47,13 @@ export const networkLabels = {
   decline: (pseudo: string) => `Refuser la demande de ${pseudo}`,
   accepted: (pseudo: string) => `${pseudo} te suit maintenant.`,
   declined: "Demande refusée. La personne n'est pas prévenue.",
+  // Lot R6b, tour 2 : « Retirer cet abonné » (menu de la ligne dans Abonnés, confirmation).
+  rowMenu: (pseudo: string) => `Plus : ${pseudo}`,
+  removeFollower: "Retirer cet abonné",
+  removeFollowerConfirm: (pseudo: string) => `Retirer ${pseudo} de tes abonnés ?`,
+  removeFollowerHint: "Cette personne n'est pas prévenue. Elle ne voit plus ce qui est réservé à tes abonnés.",
+  remove: "Retirer",
+  removed: (pseudo: string) => `${pseudo} ne fait plus partie de tes abonnés.`,
   groupPeople: "Personnes",
   groupStructures: "Organisateurs",
   groupPros: "Pros",

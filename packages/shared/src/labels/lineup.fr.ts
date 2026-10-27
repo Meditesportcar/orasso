@@ -48,8 +48,8 @@ export const lineupLabels = {
   privateSheetNote: (pseudo: string) =>
     `${pseudo} a un compte privé : son profil, son garage et ses sorties sont réservés à ses abonnés. Sa voiture et son pseudo restent visibles sur le plateau.`,
   plateMasked: "plaque masquée",
-  askFriend: "Demander à suivre",
-  friendSent: "Demandé",
+  /** Lot R6b, tour 2 : le bouton de la feuille suit mon lien (« Abonné », « Demandé » : `networkLabels`). */
+  askFollow: "Demander à suivre",
   /** Site sans compte (validé par Damien) : photos et modèles sans pseudo. */
   visitorTitle: "Qui vient ?",
   visitorText: "Les pseudos et les profils sont réservés aux membres.",

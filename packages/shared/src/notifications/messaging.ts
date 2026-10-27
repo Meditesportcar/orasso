@@ -1,9 +1,9 @@
 import type { NotificationFamily } from "../enums";
 
 /**
- * Messagerie (lot 18) : famille `social` (« Amis et messages »). `message_received` part en push seulement (hors
+ * Messagerie (lot 18) : famille `social` (« Abonnements et messages »). `message_received` part en push seulement (hors
  * Journal, jamais par e-mail : la Boîte et sa pastille suffisent, et un e-mail par message serait du bruit) ;
- * `contact_request` arrive au Journal comme une demande d'ami.
+ * `contact_request` arrive au Journal comme une demande d'abonnement.
  */
 export const messagingNotificationTypes = {
   message_received: "social",

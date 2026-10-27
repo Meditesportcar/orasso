@@ -26,7 +26,7 @@ import { weatherNotificationLabels } from "../notifications/weather";
 export const notificationFamilyLabels: Record<NotificationFamily, string> = {
   application: "Candidatures",
   event: "Événements",
-  social: "Amis et messages",
+  social: "Abonnements et messages",
   grade: "Points et grade",
   staff: "Staff",
   account: "Sécurité du compte",

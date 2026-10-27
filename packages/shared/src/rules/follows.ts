@@ -66,10 +66,18 @@ export function networkCountsVisible(input: { connected: boolean }): boolean {
 }
 
 /**
- * Une notification « … te suit » ou « … demande à te suivre » par paire au plus par 24 h (suivre, ne plus suivre,
- * suivre : pas de nouvelle alerte).
+ * Une alerte « … te suit » ou « … demande à te suivre » par paire au plus par 24 h (suivre, ne plus suivre, suivre ;
+ * demander, annuler, demander : pas de nouvelle alerte). Lot R6b, tour 2 : comptée sur une trace de la paire
+ * (`follow_traces`) que l'annulation n'efface pas, à l'horloge de l'appli.
  */
 export const FOLLOW_NOTIFY_WINDOW_MS = 24 * 3_600_000;
+
+/**
+ * Lot R6b, tour 2 (choix du coordinateur) : une personne refusée (ou retirée de ses abonnés) peut redemander, et rien ne
+ * lui dit qu'elle a été refusée ; mais pendant 30 jours sa nouvelle demande n'envoie aucune alerte : elle apparaît
+ * seulement dans Demandes.
+ */
+export const FOLLOW_DECLINED_QUIET_MS = 30 * 24 * 3_600_000;
 
 /** Texte de la notification regroupée : « Kenji_66 te suit », « Kenji_66 et Lea_11 te suivent », « … et 3 autres ». */
 export function followNotificationBody(pseudos: readonly string[], total: number): string {
