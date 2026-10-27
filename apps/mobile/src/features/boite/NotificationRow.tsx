@@ -107,12 +107,19 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
           )
         }
         title={n.title}
-        lines={[n.body, formatDayHour(n.createdAt)]}
+        // Lot R6c : une invitation montre sa date et son lieu ; son mot, en entier, passe en citation sous la ligne.
+        lines={[invitation ? (n.body.split("
+")[0] ?? n.body) : n.body, formatDayHour(n.createdAt)]}
         trailing={!n.readAt ? <Count n={1} /> : null}
         onPress={open}
       />
       {invitation ? (
         <View style={styles.inviteRow}>
+          {typeof n.data?.note === "string" && n.data.note ? (
+            <Text variant="caption" color={c.ink} style={styles.quote} testID="notif-invite-note">
+              « {n.data.note} »
+            </Text>
+          ) : null}
           {open ? (
             <SmButton icon="next" onPress={open} testID="notif-invite-open">
               {eventInviteLabels.seeEvent}
@@ -143,5 +150,6 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
 const styles = StyleSheet.create({
   icon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   action: { paddingTop: 8, gap: 6 },
-  inviteRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 8, paddingLeft: 56 },
+  inviteRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, paddingTop: 8, paddingLeft: 56 },
+  quote: { width: "100%", fontStyle: "italic" },
 });

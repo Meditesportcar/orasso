@@ -69,7 +69,7 @@ export function AfterInviteCard({ eventId, onInvite }: { eventId: string; onInvi
         {faces.map((p) => (
           <View key={p.userId} style={styles.faceCol}>
             <Avatar url={p.avatarUrl} pseudo={p.pseudo} size={40} />
-            <Text variant="meta" color={c.inkMuted} numberOfLines={1}>
+            <Text variant="caption" color={c.inkMuted} numberOfLines={1}>
               {p.pseudo}
             </Text>
           </View>
@@ -89,5 +89,5 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0, gap: 2 },
   x: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   faces: { flexDirection: "row", gap: 18, paddingLeft: space1 },
-  faceCol: { alignItems: "center", gap: space1 / 2, maxWidth: 72 },
+  faceCol: { alignItems: "center", gap: space1 / 2, maxWidth: 84 },
 });

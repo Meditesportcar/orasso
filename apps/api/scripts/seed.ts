@@ -23,6 +23,7 @@ import { seedCrewPage } from "./seed/crew-page";
 import { seedCrews } from "./seed/crews";
 import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
+import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
@@ -122,6 +123,8 @@ async function main() {
   await seedCrews();
   // Lot R5c2 : bannière, Instagram et une sortie du crew « Roussillon Drift » (page à onglets).
   await seedCrewPage();
+  // Lot R6c : Julie et Théo invitent Kenji au Rassemblement de Narbonne.
+  await seedEventInvites();
   // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
   await seedExplorer(hash);
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
