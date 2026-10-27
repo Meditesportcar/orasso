@@ -1,3 +1,5 @@
+// Lot R6-police : police système agrandie simulée en recette web (sans effet ailleurs). En premier, avant tout rendu.
+import "@/lib/fontScaleSim";
 import {
   OpeningBattle,
   parseThemePreference,
