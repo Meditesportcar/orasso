@@ -25,6 +25,26 @@ const actorOf = (n: NotificationItem): Actor | null => {
   return actor && typeof actor === "object" ? (actor as Actor) : null;
 };
 
+/** Lot R6c, tour 2 : les auteurs d'une invitation (`data.actors`, la plus récente d'abord ; sinon l'auteur seul). */
+function invitationAuthors(n: NotificationItem, actor: Actor | null): { userId: string; pseudo: string }[] {
+  const raw = n.data?.actors;
+  const list = Array.isArray(raw)
+    ? raw.filter(
+        (a): a is { userId: string; pseudo: string } =>
+          Boolean(a) && typeof a.userId === "string" && typeof a.pseudo === "string",
+      )
+    : [];
+  if (list.length) return list;
+  return actor?.userId ? [{ userId: actor.userId, pseudo: actor.pseudo ?? "" }] : [];
+}
+
+/** Les mots d'une invitation, déjà attribués par l'API (« Kenji_66 : « Viens ! » ») ; ancien format : `data.note`. */
+function invitationNotes(n: NotificationItem): string[] {
+  const raw = n.data?.notes;
+  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === "string" && x.length > 0);
+  return typeof n.data?.note === "string" && n.data.note ? [`« ${n.data.note} »`] : [];
+}
+
 function UncertainAction({ eventId }: { eventId: string }) {
   const { t } = useTheme();
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
@@ -83,6 +103,9 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
   const admin = adminLinkOf(n.data?.link);
   // Lot R6c (R6.6) : une invitation à un événement : « Voir la fiche » et « ⋯ » (couper, réglages, signaler).
   const invitation = n.type === "event_invited" && typeof actor?.userId === "string";
+  // Tour 2 : tous les auteurs d'une invitation regroupée (le menu propose de couper chacun), et leurs mots attribués.
+  const authors = invitation ? invitationAuthors(n, actor) : [];
+  const notes = invitation ? invitationNotes(n) : [];
   const [menu, setMenu] = useState(false);
   const asksUncertain = n.data?.action === SET_OUTLOOK_UNCERTAIN_ACTION && typeof n.data.eventId === "string";
   const open =
@@ -114,11 +137,11 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
       />
       {invitation ? (
         <View style={styles.inviteRow}>
-          {typeof n.data?.note === "string" && n.data.note ? (
-            <Text variant="caption" color={c.ink} style={styles.quote} testID="notif-invite-note">
-              « {n.data.note} »
+          {notes.map((line) => (
+            <Text key={line} variant="caption" color={c.ink} style={styles.quote} testID="notif-invite-note">
+              {line}
             </Text>
-          ) : null}
+          ))}
           {open ? (
             <SmButton icon="next" onPress={open} testID="notif-invite-open">
               {eventInviteLabels.seeEvent}
@@ -131,10 +154,7 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
             accessibilityLabel={eventInviteLabels.moreA11y}
             testID="notif-invite-more"
           />
-          <InvitationMenu
-            from={menu && actor?.userId ? { userId: actor.userId, pseudo: actor.pseudo ?? "" } : null}
-            onClose={() => setMenu(false)}
-          />
+          <InvitationMenu from={menu && authors.length ? authors : null} onClose={() => setMenu(false)} />
         </View>
       ) : null}
       {asksUncertain ? (

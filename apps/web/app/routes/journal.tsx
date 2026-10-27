@@ -35,7 +35,13 @@ type JournalItem = {
   family: NotificationFamily;
   title: string;
   body: string;
-  data: { link?: string; screen?: string; actor?: { userId: string; pseudo: string; avatarUrl: string | null } };
+  data: {
+    link?: string;
+    screen?: string;
+    actor?: { userId: string; pseudo: string; avatarUrl: string | null };
+    /** Lot R6c, tour 2 : les auteurs d'une invitation regroupée (la plus récente d'abord). */
+    actors?: { userId: string; pseudo: string }[];
+  };
   createdAt: string;
   readAt: string | null;
 };
@@ -94,7 +100,10 @@ function JournalRow({ item }: { item: JournalItem }) {
       )}
       <div className="s-journal__main">
         <strong className="s-journal__title">{item.title}</strong>
-        {item.body && <span className="s-journal__body">{item.body}</span>}
+        {item.body && (
+          // Une invitation : la date et le lieu, puis chaque mot sur sa ligne (« Kenji_66 : « … » »).
+          <span className={`s-journal__body${item.type === "event_invited" ? " s-prewrap" : ""}`}>{item.body}</span>
+        )}
         <span className="o-t-caption s-muted">
           {formatDay(item.createdAt)} · {formatTime(item.createdAt)} · {notificationFamilyLabels[item.family]}
         </span>
@@ -114,7 +123,9 @@ function JournalRow({ item }: { item: JournalItem }) {
               {eventInviteLabels.seeEvent}
             </Button>
           )}
-          {actor && <InviteMenu inviter={actor} testId="notif-invite-more" />}
+          {actor && (
+            <InviteMenu inviters={item.data.actors?.length ? item.data.actors : [actor]} testId="notif-invite-more" />
+          )}
         </div>
       </li>
     );

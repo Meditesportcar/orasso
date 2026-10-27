@@ -24,9 +24,11 @@ type Props = {
   targetId: string;
   /** `link` : petit lien sous un avis, une annonce ou un message ; `button` (défaut) : bouton secondaire. */
   look?: "button" | "link";
+  /** Texte du lien à la place de « Signaler » (lot R6c, tour 2 : « Signaler Kenji_66 » quand plusieurs personnes invitent). */
+  label?: string;
 };
 
-export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
+export function ReportDialog({ targetType, targetId, look = "button", label }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [reason, setReason] = useState<ReportReason | "">("");
@@ -90,7 +92,7 @@ export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
           data-target={targetType}
         >
           <Icon name="flag" size={16} />
-          {moderationLabels.report}
+          {label ?? moderationLabels.report}
         </button>
       ) : (
         <Button

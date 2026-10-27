@@ -192,7 +192,7 @@ export default function EventPage() {
   const applications = useApplications();
   // Lot R6c (R6.3, R6.4, R6.6) : « Qui y va », la feuille « Inviter du monde », le bandeau et le menu d'une invitation.
   const [inviting, setInviting] = useState(false);
-  const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string } | null>(null);
+  const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string }[] | null>(null);
   const shareable = Boolean(
     event.data &&
       status === "in" &&
@@ -547,8 +547,9 @@ export default function EventPage() {
         <InviteBanner
           invitation={invited.data}
           onMore={() => {
-            const first = invited.data?.inviters[0];
-            if (first) setMenuFrom({ userId: first.userId, pseudo: first.pseudo });
+            // Tour 2 (relecture Opus 5) : le menu propose de couper chacun des auteurs.
+            const all = invited.data?.inviters ?? [];
+            if (all.length) setMenuFrom(all.map((i) => ({ userId: i.userId, pseudo: i.pseudo })));
           }}
         />
       ) : null}

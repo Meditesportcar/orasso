@@ -4,6 +4,7 @@ import {
   type CrewInviteCandidatesPage,
   type CrewView,
   crewLabels,
+  eventInviteLabels,
   crewInviteLabels as L,
 } from "@orasso/shared";
 import { useState } from "react";
@@ -41,26 +42,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData = { sentTo: string; error?: undefined } | { error: string; sentTo?: undefined };
+type ActionData =
+  | { sentTo: string; status: "invited" | "active"; stamp: number; error?: undefined }
+  | { error: string; sentTo?: undefined };
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const crewId = encodeURIComponent(String(form.get("crewId") ?? ""));
   const pseudo = String(form.get("pseudo") ?? "").trim();
   if (!pseudo) return data<ActionData>({ error: crewLabels.invitePseudo }, { status: 400 });
-  const res = await api(request, `/crews/${crewId}/invitations`, { method: "POST", json: { pseudo } });
+  const res = await api<{ pseudo: string; status: "invited" | "active" }>(request, `/crews/${crewId}/invitations`, {
+    method: "POST",
+    json: { pseudo },
+  });
   if (!res.ok) return data<ActionData>({ error: res.error.message }, { status: res.status });
-  return data<ActionData>({ sentTo: pseudo });
+  return data<ActionData>({ sentTo: res.data.pseudo, status: res.data.status, stamp: Date.now() });
 }
 
-const stateCaption = (p: CrewInviteCandidate) =>
-  p.state === "invited"
-    ? L.alreadyInvited
-    : p.state === "requested"
-      ? L.alreadyRequested
-      : p.state === "member"
-        ? L.member
-        : p.caption;
+/**
+ * Tour 2 (relecture Codex 7) : la personne qu'on vient d'inviter change d'état aussi dans les pages « Voir plus » déjà
+ * affichées (la première page, elle, est relue par le loader) ; entrée tout de suite (invitation du chef qui vaut
+ * acceptation de sa demande), elle quitte la liste comme les autres membres.
+ */
+function afterInvite(people: CrewInviteCandidate[], sent: { sentTo: string; status: "invited" | "active" }) {
+  const same = (p: CrewInviteCandidate) => p.pseudo.toLowerCase() === sent.sentTo.toLowerCase();
+  if (sent.status === "active") return people.filter((p) => !same(p));
+  return people.map((p) =>
+    same(p) ? { ...p, state: "invited" as const, caption: eventInviteLabels.invitedByYou } : p,
+  );
+}
 
 /** Remonté à chaque recherche : les pages « Voir plus » chargées repartent de zéro. */
 export default function CrewInviter(props: Route.ComponentProps) {
@@ -75,6 +85,11 @@ function CrewInviterBody({ loaderData, actionData }: Route.ComponentProps) {
   const [cursor, setCursor] = useState<string | null>(page?.nextCursor ?? null);
   const [loading, setLoading] = useState(false);
   const [moreError, setMoreError] = useState(false);
+  const [applied, setApplied] = useState(0);
+  if (result?.sentTo && result.stamp !== applied) {
+    setApplied(result.stamp);
+    setMore((cur) => afterInvite(cur, result));
+  }
   const leaderName = crew.leaderPseudo ?? L.leaderFallback;
   const people = page ? [...page.people, ...more.filter((m) => !page.people.some((p) => p.userId === m.userId))] : [];
   const loadMore = async () => {
@@ -145,7 +160,7 @@ function CrewInviterBody({ loaderData, actionData }: Route.ComponentProps) {
                       <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={40} />
                       <span>
                         <b>{p.pseudo}</b>
-                        <small className="o-never-truncate">{stateCaption(p)}</small>
+                        <small className="o-never-truncate">{p.caption}</small>
                       </span>
                       {available ? (
                         <Form method="post" preventScrollReset>

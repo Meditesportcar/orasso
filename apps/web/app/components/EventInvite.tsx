@@ -4,6 +4,8 @@ import {
   type FollowingGoing,
   followingGoingText,
   GOING_FACES,
+  inviteNoteLines,
+  inviterNames,
   eventInviteLabels as L,
   type ReceivedEventInvitation,
 } from "@orasso/shared";
@@ -19,35 +21,45 @@ import "../styles/event-invite.css";
 /** Les réglages de notifications du site (« Invitations, oui ou non »). */
 export const INVITE_SETTINGS_HREF = "/app/moi#notifications";
 
-/** Menu « ⋯ » d'une invitation : couper les invitations de cette personne, réglages, signaler. */
+/**
+ * Menu « ⋯ » d'une invitation : couper les invitations de cette personne, réglages, signaler. Tour 2 (relecture
+ * Opus 5) : une invitation regroupée propose de couper, et de signaler, chacun de ses auteurs.
+ */
 export function InviteMenu({
-  inviter,
+  inviters,
   testId,
 }: {
-  inviter: { userId: string; pseudo: string };
+  inviters: { userId: string; pseudo: string }[];
   /** Identifiant de test du bouton « ⋯ ». */
   testId: string;
 }) {
   const busy = useNavigation().state !== "idle";
+  if (inviters.length === 0) return null;
+  const names = inviterNames(
+    inviters.map((p) => p.pseudo),
+    inviters.length,
+  );
   return (
     <details className="ri-menu">
       <summary className="ri-menu__dots" aria-label={L.moreA11y} data-testid={testId}>
         <Icon name="more" size={20} />
       </summary>
       <div className="ri-menu__sheet" data-testid="invite-menu">
-        <strong className="ri-menu__title">{L.menuTitle(inviter.pseudo)}</strong>
-        <Form method="post" preventScrollReset>
-          <input type="hidden" name="intent" value="invite_mute" />
-          <input type="hidden" name="userId" value={inviter.userId} />
-          <input type="hidden" name="pseudo" value={inviter.pseudo} />
-          <button type="submit" className="ri-menu__row" disabled={busy} data-testid="invite-mute">
-            <Icon name="bell" size={18} />
-            <span>
-              <strong>{L.mute(inviter.pseudo)}</strong>
-              <small>{L.muteHint}</small>
-            </span>
-          </button>
-        </Form>
+        <strong className="ri-menu__title">{L.menuTitle(names)}</strong>
+        {inviters.map((inviter) => (
+          <Form key={inviter.userId} method="post" preventScrollReset>
+            <input type="hidden" name="intent" value="invite_mute" />
+            <input type="hidden" name="userId" value={inviter.userId} />
+            <input type="hidden" name="pseudo" value={inviter.pseudo} />
+            <button type="submit" className="ri-menu__row" disabled={busy} data-testid="invite-mute">
+              <Icon name="bell" size={18} />
+              <span>
+                <strong>{L.mute(inviter.pseudo)}</strong>
+                <small>{L.muteHint}</small>
+              </span>
+            </button>
+          </Form>
+        ))}
         <a className="ri-menu__row" href={INVITE_SETTINGS_HREF} data-testid="invite-settings">
           <Icon name="gear" size={18} />
           <span>
@@ -55,17 +67,24 @@ export function InviteMenu({
             <small>{L.settingsHint}</small>
           </span>
         </a>
-        <div className="ri-menu__report">
-          <ReportDialog look="link" targetType="profile" targetId={inviter.userId} />
-        </div>
+        {inviters.map((inviter) => (
+          <div key={`report-${inviter.userId}`} className="ri-menu__report">
+            <ReportDialog
+              look="link"
+              targetType="profile"
+              targetId={inviter.userId}
+              label={inviters.length > 1 ? L.reportWho(inviter.pseudo) : undefined}
+            />
+          </div>
+        ))}
       </div>
     </details>
   );
 }
 
-/** Bandeau en haut de la fiche d'un événement : « Kenji_66 t'invite » et son mot. */
+/** Bandeau en haut de la fiche d'un événement : « Kenji_66 t'invite » et son mot (chacun attribué s'ils sont plusieurs). */
 export function InviteBanner({ invitation }: { invitation: ReceivedEventInvitation }) {
-  const { inviters, note } = invitation;
+  const { inviters } = invitation;
   const first = inviters[0];
   if (!first) return null;
   return (
@@ -82,9 +101,11 @@ export function InviteBanner({ invitation }: { invitation: ReceivedEventInvitati
             inviters.length,
           )}
         </b>
-        {note && <small>« {note} »</small>}
+        {inviteNoteLines(inviters).map((line) => (
+          <small key={line}>{line}</small>
+        ))}
       </div>
-      <InviteMenu inviter={first} testId="invite-banner-more" />
+      <InviteMenu inviters={inviters} testId="invite-banner-more" />
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
   inviteSendLabel,
   eventInviteLabels as L,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { PersonAvatar } from "../components/People";
@@ -48,15 +48,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData = { ok: true; text: string; stamp: number } | { ok: false; error: string; stamp: number };
+/** Tour 2 (relecture Codex 6) : après une erreur, la saisie revient telle quelle (cases et mot), même sans JavaScript. */
+type Draft = { userIds: string[]; note: string };
+type ActionData = { ok: true; text: string; stamp: number } | { ok: false; error: string; stamp: number; draft: Draft };
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const eventId = String(form.get("eventId") ?? "");
   const userIds = [...new Set(form.getAll("userId").map((v) => String(v)))].filter(Boolean);
-  const note = String(form.get("note") ?? "").trim();
+  const note = String(form.get("note") ?? "")
+    .trim()
+    .slice(0, EVENT_INVITE_NOTE_MAX);
+  const draft: Draft = { userIds, note };
+  // Sans JavaScript, le bouton n'est pas grisé : c'est l'action qui dit qu'il manque quelqu'un.
   if (!eventId || userIds.length === 0) {
-    return data<ActionData>({ ok: false, error: L.chooseHint, stamp: Date.now() }, { status: 400 });
+    return data<ActionData>({ ok: false, error: L.chooseHint, stamp: Date.now(), draft }, { status: 400 });
   }
   const res = await api<EventInviteResult>(request, `/events/${encodeURIComponent(eventId)}/peer-invitations`, {
     method: "POST",
@@ -65,7 +71,7 @@ export async function action({ request }: Route.ActionArgs) {
   // 429 : le message de l'API dit combien il en reste.
   if (!res.ok) {
     return data<ActionData>(
-      { ok: false, error: res.error.message || L.loadError, stamp: Date.now() },
+      { ok: false, error: res.error.message || L.loadError, stamp: Date.now(), draft },
       { status: res.status },
     );
   }
@@ -114,7 +120,10 @@ function PersonRow({ p, on, toggle }: { p: InviteCandidate; on: boolean; toggle:
   );
 }
 
-/** Le formulaire d'invitation : la sélection vit ici (remonté par `key` après un envoi ou une recherche). */
+/**
+ * Le formulaire d'invitation : la sélection vit ici. Remonté par `key` après un envoi réussi ou une recherche, jamais
+ * après une erreur (tour 2) : les cases, le mot et les pages chargées restent pour réessayer.
+ */
 function InviteForm({
   event,
   page,
@@ -127,7 +136,12 @@ function InviteForm({
   result: ActionData | undefined;
 }) {
   const busy = useNavigation().state !== "idle";
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  // Sans JavaScript, la page revient du serveur après une erreur : la saisie renvoyée par l'action la reprend.
+  const draft = result && !result.ok ? result.draft : null;
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(draft?.userIds ?? []));
+  // Sans JavaScript, le bouton n'est jamais grisé par la sélection (elle ne se compte qu'avec JavaScript).
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [more, setMore] = useState<InviteCandidate[]>([]);
   const [cursor, setCursor] = useState<string | null>(page.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -252,6 +266,7 @@ function InviteForm({
         name="note"
         maxLength={EVENT_INVITE_NOTE_MAX}
         placeholder={L.notePlaceholder}
+        defaultValue={draft?.note ?? ""}
         autoComplete="off"
         data-testid="invite-note"
       />
@@ -266,7 +281,14 @@ function InviteForm({
             {result.error}
           </p>
         ))}
-      <Button type="submit" icon="send" fullWidth loading={busy} disabled={why !== null} data-testid="invite-send">
+      <Button
+        type="submit"
+        icon="send"
+        fullWidth
+        loading={busy}
+        disabled={remaining <= 0 || (hydrated && why !== null)}
+        data-testid="invite-send"
+      >
         {inviteSendLabel(n)}
       </Button>
       {why ? (
@@ -287,6 +309,9 @@ function InviteForm({
 export default function EventInviter({ loaderData, actionData }: Route.ComponentProps) {
   const { event, q, closed, page, loadError } = loaderData;
   const result = actionData as ActionData | undefined;
+  // Le formulaire repart à neuf après un envoi réussi seulement (la date du dernier succès fait la clé).
+  const [okStamp, setOkStamp] = useState(0);
+  if (result?.ok && result.stamp !== okStamp) setOkStamp(result.stamp);
   return (
     <div className="s-narrow s-stack" data-testid="inviter">
       <div className="s-stack s-stack--tight">
@@ -325,7 +350,7 @@ export default function EventInviter({ loaderData, actionData }: Route.Component
               Chercher
             </Button>
           </Form>
-          <InviteForm key={`${q}|${result?.stamp ?? 0}`} event={event} page={page} q={q} result={result} />
+          <InviteForm key={`${q}|${okStamp}`} event={event} page={page} q={q} result={result} />
         </>
       )}
     </div>

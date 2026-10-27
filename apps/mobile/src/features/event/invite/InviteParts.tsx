@@ -7,6 +7,8 @@ import {
   eventInvitedBanner,
   type FollowingGoing,
   followingGoingText,
+  inviteNoteLines,
+  inviterNames,
   eventInviteLabels as L,
   type ReceivedEventInvitation,
 } from "@orasso/shared";
@@ -108,11 +110,12 @@ export function InviteBanner({ invitation, onMore }: { invitation: ReceivedEvent
             invitation.inviters.length,
           )}
         </Text>
-        {invitation.note ? (
-          <Text variant="caption" color={c.ink} style={styles.quote}>
-            « {invitation.note} »
+        {/* Tour 2 (relecture Opus 7) : chaque mot est attribué à son auteur quand plusieurs personnes invitent. */}
+        {inviteNoteLines(invitation.inviters).map((line) => (
+          <Text key={line} variant="caption" color={c.ink} style={styles.quote}>
+            {line}
           </Text>
-        ) : null}
+        ))}
       </View>
       <Pressable
         accessibilityRole="button"
@@ -131,36 +134,40 @@ export function InviteBanner({ invitation, onMore }: { invitation: ReceivedEvent
 /**
  * Menu d'une invitation (R6.6) : « Ne plus recevoir d'invitations de Kenji_66 » (ou les recevoir de nouveau),
  * « Réglages des invitations » (Réglages › Notifications), « Signaler ». La personne coupée n'en sait rien.
+ * Tour 2 (relecture Opus 5) : une invitation regroupée propose de couper, et de signaler, chacun de ses auteurs.
  */
 export function InvitationMenu({
   from,
   onClose,
   onChanged,
 }: {
-  from: { userId: string; pseudo: string } | null;
+  from: { userId: string; pseudo: string }[] | null;
   onClose: () => void;
   onChanged?: (muted: boolean) => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const mutes = useApi(() => api.invitationMutes(), [from?.userId], { enabled: Boolean(from) });
-  const muted = Boolean(from && mutes.data?.some((m) => m.userId === from.userId));
+  const authors = from ?? [];
+  const open = authors.length > 0;
+  const key = authors.map((a) => a.userId).join(",");
+  const mutes = useApi(() => api.invitationMutes(), [key], { enabled: open });
+  const isMuted = (userId: string) => Boolean(mutes.data?.some((m) => m.userId === userId));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const close = () => {
     setMessage(null);
     onClose();
   };
-  async function toggle() {
-    if (!from) return;
+  async function toggle(who: { userId: string; pseudo: string }) {
+    const muted = isMuted(who.userId);
     setBusy(true);
     setMessage(null);
     try {
-      if (muted) await api.unmuteInvitations(from.userId);
-      else await api.muteInvitations(from.userId);
+      if (muted) await api.unmuteInvitations(who.userId);
+      else await api.muteInvitations(who.userId);
       await mutes.reload();
-      setMessage(muted ? L.unmuted(from.pseudo) : L.muted(from.pseudo));
+      setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
       onChanged?.(!muted);
     } catch (e) {
       setMessage(errorMessage(e));
@@ -168,6 +175,10 @@ export function InvitationMenu({
       setBusy(false);
     }
   }
+  const names = inviterNames(
+    authors.map((a) => a.pseudo),
+    authors.length,
+  );
   const row = (icon: "bell" | "gear" | "flag", title: string, hint: string | null, onPress: () => void, id: string) => (
     <Pressable
       accessibilityRole="button"
@@ -190,19 +201,23 @@ export function InvitationMenu({
     </Pressable>
   );
   return (
-    <AppSheet visible={Boolean(from)} onClose={close} accessibilityLabel={from ? L.menuTitle(from.pseudo) : ""}>
-      {from ? (
+    <AppSheet visible={open} onClose={close} accessibilityLabel={open ? L.menuTitle(names) : ""}>
+      {open ? (
         <View style={styles.col} testID="invite-menu">
           <Text variant="posterM" color={c.ink}>
-            {L.menuTitle(from.pseudo)}
+            {L.menuTitle(names)}
           </Text>
-          {row(
-            "bell",
-            muted ? L.unmute(from.pseudo) : L.mute(from.pseudo),
-            L.muteHint,
-            () => void toggle(),
-            "invite-mute",
-          )}
+          {authors.map((a) => (
+            <View key={a.userId}>
+              {row(
+                "bell",
+                isMuted(a.userId) ? L.unmute(a.pseudo) : L.mute(a.pseudo),
+                L.muteHint,
+                () => void toggle(a),
+                "invite-mute",
+              )}
+            </View>
+          ))}
           {row(
             "gear",
             L.settings,
@@ -213,16 +228,20 @@ export function InvitationMenu({
             },
             "invite-settings",
           )}
-          {row(
-            "flag",
-            L.report,
-            null,
-            () => {
-              close();
-              openReport({ type: "profile", id: from.userId });
-            },
-            "invite-report",
-          )}
+          {authors.map((a) => (
+            <View key={`report-${a.userId}`}>
+              {row(
+                "flag",
+                authors.length > 1 ? L.reportWho(a.pseudo) : L.report,
+                null,
+                () => {
+                  close();
+                  openReport({ type: "profile", id: a.userId });
+                },
+                "invite-report",
+              )}
+            </View>
+          ))}
           {message ? (
             <Text variant="caption" color={c.inkMuted} accessibilityRole="alert" testID="invite-menu-message">
               {message}
