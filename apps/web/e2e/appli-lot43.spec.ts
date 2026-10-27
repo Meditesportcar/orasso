@@ -121,7 +121,7 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
     await expect(page.getByText("Retenue", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("ticket-qr").first()).toContainText("Mon QR");
     await expect(page.getByText(/^En attente de la réponse de /).first()).toBeVisible();
-    await expect(page.getByText(/Si une place se libère, tu as 24 h pour l'accepter/).first()).toBeVisible();
+    await expect(page.getByText(/Si une place se libère, tu as 24\sh pour l'accepter/).first()).toBeVisible();
     await expect(page.getByText("J'accepte la place", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Retirer", exact: true }).first()).toBeVisible();
     // La souche : le jour de la semaine, le quantième et le mois.

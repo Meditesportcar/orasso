@@ -4,6 +4,7 @@ import pg from "pg";
 import { apiCall, login, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
+// R6-police : « 4,8 km » porte une espace insécable (`\s` dans l'attente).
 // Lot R5d (maquette R5.11), fiche de l'événement : distance « à 23 km de toi » (calculée sur le téléphone, jamais sans
 // que la personne l'ait accordée ou demandée), « Voir la distance » sans permission (une seule fois), « Y aller »
 // (Maps, Waze) à J-10, rien sans adresse ni coordonnées. Béton et Sable, 390 et 384 px, puis 320 px (stress qui tient lieu
@@ -131,7 +132,7 @@ test("Lot R5d : distance et « Y aller » dans la fiche", async ({ browser }) =>
         await goto(page, `/e/${far.slug}`);
         await expect(page.getByTestId("event-where")).toBeVisible({ timeout: 30_000 });
         if (AFTER) {
-          await expect(page.getByTestId("event-distance")).toHaveText(/^à \d+(,\d)? km de toi$/, { timeout: 15_000 });
+          await expect(page.getByTestId("event-distance")).toHaveText(/^à \d+(,\d)?\skm de toi$/, { timeout: 15_000 });
           await expect(page.getByTestId("event-distance-ask")).toHaveCount(0);
           await expect(page.getByTestId("event-go-maps")).toBeVisible();
           await expect(page.getByTestId("event-go-waze")).toBeVisible();
