@@ -20,7 +20,8 @@ import { RELAIS } from "./relais";
 // Lot R6c (maquettes R6.3 à R6.7), côté site, à deux personnes : Kenji invite, Julie reçoit. « Qui y va » et
 // « Inviter du monde » sur la fiche, la page « Inviter à … », l'invitation dans le Journal et le bandeau de la fiche,
 // couper les invitations, la carte « Invite du monde à venir » après la candidature, et le crew (Julie invite Marc,
-// Kenji voit « Invité(e) par Julie… »). API et site seedés.
+// Kenji voit « Invité(e) par Julie… »). Tour 2 : « Tout <crew> », la recherche, l'invitation regroupée (Nina invite
+// aussi : mots attribués, couper chacun), et la page « Inviter à … » sans JavaScript. API et site seedés.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r6c-captures/apres/recette-site`;
 test.use({ actionTimeout: 30_000, viewport: MOBILE });
 
@@ -60,6 +61,7 @@ for (const theme of ["beton", "sable"] as const) {
     await follow(kenji, nina);
     await follow(julie, kenji);
     await follow(marc, julie);
+    await follow(nina, julie);
     await applyApi(nina.cookie, event.id, await addVehicleApi(nina.cookie, randomPlate()));
     const crewRes = await apiCall<{ id: string; slug: string }>(kenji.cookie, "POST", "/crews", {
       name: `R6s ${unique()}`.slice(0, 30),
@@ -79,29 +81,78 @@ for (const theme of ["beton", "sable"] as const) {
     await k.getByTestId("invite-open").click();
     await expect(k.getByTestId("invite-form")).toBeVisible();
     await expect(k.getByTestId(`invite-person-${nina.pseudo}`)).toContainText("y va déjà");
-    await k.getByTestId(`invite-person-${julie.pseudo}`).click();
+    // Tour 2 : « Tout <crew> » coche les membres du crew qu'on peut inviter (Julie).
+    await k.getByTestId(`invite-crew-${crew.id}`).click();
+    await expect(k.getByTestId(`invite-person-${julie.pseudo}`).locator("input")).toBeChecked();
+    await expect(k.getByTestId("invite-send")).toContainText("Inviter 1 personne");
     await k.getByTestId("invite-note").fill("On y va avec le crew, viens !");
     await shot(k, `02-inviter-coche-${theme}`);
     await k.getByTestId("invite-send").click();
     await expect(k.getByTestId("invite-result")).toContainText("1 invitation envoyée");
     await shot(k, `03-inviter-envoye-${theme}`);
+    // La recherche (début de pseudo) : seulement Nina.
+    await k.getByTestId("invite-search").fill(nina.pseudo.slice(0, 6));
+    await k.getByRole("button", { name: "Chercher" }).click();
+    await expect(k.locator('[data-testid^="invite-person-"]')).toHaveCount(1);
+    await expect(k.getByTestId(`invite-person-${nina.pseudo}`)).toBeVisible();
+    await shot(k, `03b-inviter-recherche-${theme}`);
+    // Nina invite aussi Julie, avec son mot : une seule notification, regroupée.
+    const byNina = await apiCall(nina.cookie, "POST", `/events/${event.id}/peer-invitations`, {
+      userIds: [julie.id],
+      note: "Viens aussi !",
+    });
+    expect(byNina.status).toBe(200);
+
+    // Sans JavaScript (une fois) : le bouton n'est pas grisé ; sans personne cochée, la page le dit ; une case suffit.
+    if (theme === "beton") {
+      const other = await createEvent(orga, { title: `Rasso sans JS ${unique()}`.slice(0, 40) });
+      const nojs = await browser.newContext({
+        viewport: MOBILE,
+        javaScriptEnabled: false,
+        storageState: await kCtx.storageState(),
+      });
+      const p = await nojs.newPage();
+      await p.goto(`/e/${other.slug}/inviter`);
+      await expect(p.getByTestId("invite-send")).toBeEnabled();
+      await p.getByTestId("invite-send").click();
+      await expect(p.getByTestId("invite-result")).toContainText("Coche au moins une personne");
+      await shot(p, `03c-sans-js-erreur-${theme}`);
+      await p.getByTestId(`invite-person-${julie.pseudo}`).locator("input").check();
+      await p.getByTestId("invite-note").fill("Sans JavaScript");
+      await p.getByTestId("invite-send").click();
+      await expect(p.getByTestId("invite-result")).toContainText("1 invitation envoyée");
+      await shot(p, `03d-sans-js-envoye-${theme}`);
+      await nojs.close();
+    }
 
     // 2. Julie : le Journal, le bandeau, couper.
     const jCtx = await browser.newContext({ viewport: MOBILE });
     const j = await jCtx.newPage();
     await setTheme(j, theme);
     await loginInBrowser(j, julie.email, SEED_PASSWORD, "/app/journal");
-    const item = j.getByTestId("journal-item").filter({ hasText: `${kenji.pseudo} t'invite à ${event.title}` });
+    const item = j
+      .getByTestId("journal-item")
+      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent à ${event.title}` });
     await expect(item).toBeVisible({ timeout: 20_000 });
+    // Tour 2 : chaque mot attribué à son auteur ; le « ⋯ » propose de couper chacun.
+    await expect(item).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
+    await expect(item).toContainText(`${nina.pseudo} : « Viens aussi ! »`);
+    await item.getByTestId("notif-invite-more").click();
+    await expect(item.getByTestId("invite-mute")).toHaveCount(2);
     await shot(j, `04-journal-invitation-${theme}`);
     await j.goto(`/e/${event.slug}`);
-    await expect(j.getByTestId("invite-banner")).toContainText(`${kenji.pseudo} t'invite`);
+    const banner = j.getByTestId("invite-banner");
+    await expect(banner).toContainText(`${nina.pseudo} et ${kenji.pseudo} t'invitent`);
+    await expect(banner).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
     await shot(j, `05-fiche-bandeau-${theme}`);
     await j.getByTestId("invite-banner-more").click();
     await expect(j.getByTestId("invite-menu")).toBeVisible();
     await shot(j, `06-fiche-menu-${theme}`);
-    await j.getByTestId("invite-mute").click();
+    await j.getByTestId("invite-mute").filter({ hasText: kenji.pseudo }).click();
     await expect(j.getByTestId("invite-muted")).toContainText(`Les invitations de ${kenji.pseudo}`);
+    // Kenji sort du bandeau ; Nina reste.
+    await expect(banner).toContainText(`${nina.pseudo} t'invite`);
+    await expect(banner).not.toContainText(kenji.pseudo);
     const mutes = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
     expect(mutes.data.map((m) => m.userId)).toEqual([kenji.id]);
     await apiCall(julie.cookie, "DELETE", `/me/invitation-mutes/${kenji.id}`);

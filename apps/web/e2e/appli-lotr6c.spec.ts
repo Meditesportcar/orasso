@@ -17,8 +17,10 @@ import { RELAIS } from "./relais";
 
 // Lot R6c (maquettes R6.3 à R6.7), côté appli (version web compilée), à deux personnes : Kenji invite, Julie reçoit.
 //   - fiche : « Qui y va » (une personne suivie qui y va), « Inviter du monde » ;
-//   - feuille d'invitation : crew en tête, réseau, mot, « Inviter 1 personne », puis « déjà invité(e) par toi » ;
-//   - Julie : l'invitation dans la Boîte (« ⋯ » : couper, réglages, signaler), le bandeau sur la fiche, couper Kenji ;
+//   - feuille d'invitation : crew en tête, « Tout <crew> » coche ses membres, réseau, mot, « Inviter 1 personne », puis
+//     « déjà invité(e) par toi », et la recherche ;
+//   - Julie : invitée aussi par Nina, l'invitation regroupée dans la Boîte (mots attribués ; « ⋯ » : couper chacun,
+//     réglages, signaler), le bandeau sur la fiche, couper Kenji (Nina reste) ;
 //   - après sa candidature : la carte « Invite du monde à venir », fermée pour de bon ;
 //   - crew : Julie (membre) invite Marc, qui accepte ; Kenji (chef) voit « Invité(e) par Julie… » dans les demandes.
 // Béton et Sable, 390 px, captures des états. Lancer avec APP_URL (appli compilée), API et site seedés.
@@ -96,6 +98,7 @@ for (const theme of ["beton", "sable"] as const) {
     await follow(kenji, nina);
     await follow(julie, kenji);
     await follow(marc, julie);
+    await follow(nina, julie);
     // Nina y va : Kenji la suit, elle apparaît dans « Qui y va ».
     const ninaCar = await addVehicleApi(nina.cookie, randomPlate());
     await applyApi(nina.cookie, event.id, ninaCar);
@@ -122,7 +125,8 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(k.page.getByTestId(`invite-person-${nina.pseudo}`)).toContainText("y va déjà");
     await expect(k.page.getByTestId("invite-why")).toContainText("Coche au moins une personne");
     await shot(k.page, `02-feuille-inviter-${theme}`);
-    await k.page.getByTestId(`invite-person-${julie.pseudo}`).click();
+    // Tour 2 : « Tout <crew> » coche les membres du crew qu'on peut inviter (Julie).
+    await k.page.getByTestId(`invite-crew-${crew.id}`).click();
     await expect(k.page.getByTestId("invite-send")).toContainText("Inviter 1 personne");
     await k.page.getByTestId("invite-note").fill("On y va avec le crew, viens !");
     await shot(k.page, `03-feuille-cochee-${theme}`);
@@ -130,26 +134,49 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(k.page.getByTestId("invite-result")).toContainText("1 invitation envoyée");
     await expect(k.page.getByTestId(`invite-person-${julie.pseudo}`)).toContainText("déjà invité(e) par toi");
     await shot(k.page, `04-feuille-envoyee-${theme}`);
+    // La recherche (début de pseudo) : seulement Nina.
+    await k.page.getByTestId("invite-search").fill(nina.pseudo.slice(0, 6));
+    await expect(k.page.locator('[data-testid^="invite-person-"]')).toHaveCount(1);
+    await expect(k.page.getByTestId(`invite-person-${nina.pseudo}`)).toBeVisible();
+    await shot(k.page, `04b-feuille-recherche-${theme}`);
+    // Nina invite aussi Julie, avec son mot : une seule notification, regroupée.
+    const byNina = await apiCall(nina.cookie, "POST", `/events/${event.id}/peer-invitations`, {
+      userIds: [julie.id],
+      note: "Viens aussi !",
+    });
+    expect(byNina.status).toBe(200);
 
     // 2. Julie : l'invitation dans la Boîte, puis le bandeau sur la fiche ; elle coupe les invitations de Kenji.
     const j = await open(browser, theme);
     await signIn(j.page, julie.email);
     await goto(j.page, "/boite");
-    const notif = j.page.getByTestId("journal-item").filter({ hasText: `${kenji.pseudo} t'invite à ${event.title}` });
+    const notif = j.page
+      .getByTestId("journal-item")
+      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent à ${event.title}` });
     await expect(notif).toBeVisible({ timeout: 20_000 });
-    await expect(notif).toContainText("« On y va avec le crew, viens ! »");
+    // Tour 2 : chaque mot attribué à son auteur.
+    await expect(notif).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
+    await expect(notif).toContainText(`${nina.pseudo} : « Viens aussi ! »`);
     await shot(j.page, `05-boite-invitation-${theme}`);
     await notif.getByTestId("notif-invite-more").click();
-    await expect(j.page.getByTestId("invite-menu").first()).toBeVisible();
+    const boxMenu = j.page.getByTestId("invite-menu").first();
+    await expect(boxMenu).toBeVisible();
+    // Le « ⋯ » propose de couper chacun des auteurs.
+    await expect(boxMenu.getByTestId("invite-mute")).toHaveCount(2);
     await shot(j.page, `06-boite-menu-${theme}`);
     await goto(j.page, `/e/${event.slug}`);
-    await expect(j.page.getByTestId("invite-banner")).toContainText(`${kenji.pseudo} t'invite`);
-    await expect(j.page.getByTestId("invite-banner")).toContainText("On y va avec le crew, viens !");
+    const banner = j.page.getByTestId("invite-banner");
+    await expect(banner).toContainText(`${nina.pseudo} et ${kenji.pseudo} t'invitent`);
+    await expect(banner).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
     await shot(j.page, `07-fiche-bandeau-${theme}`);
     await j.page.getByTestId("invite-banner-more").click();
-    await j.page.getByTestId("invite-mute").click();
+    await j.page.getByTestId("invite-mute").filter({ hasText: kenji.pseudo }).click();
     await expect(j.page.getByTestId("invite-menu-message")).toContainText(`Les invitations de ${kenji.pseudo}`);
     await shot(j.page, `08-coupee-${theme}`);
+    // Kenji sort du bandeau ; Nina reste.
+    await goto(j.page, `/e/${event.slug}`);
+    await expect(banner).toContainText(`${nina.pseudo} t'invite`);
+    await expect(banner).not.toContainText(kenji.pseudo);
     const mutes = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
     expect(mutes.data.map((m) => m.userId)).toEqual([kenji.id]);
     // Rétablie pour la suite (l'API du lot est testée à part).
