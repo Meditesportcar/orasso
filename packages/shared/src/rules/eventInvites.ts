@@ -275,5 +275,7 @@ export const crewInviteLabels = {
   /** Côté invité, après avoir accepté : le chef doit confirmer. */
   waitingLeader: "Le chef confirme ton arrivée : tu seras prévenu(e).",
   leaderFallback: "le chef",
+  /** Invitation reçue d'un membre (Boîte > Demandes). */
+  leaderConfirmsShort: "si tu acceptes, le chef confirme ton arrivée",
   memberFallback: "un membre",
 } as const;

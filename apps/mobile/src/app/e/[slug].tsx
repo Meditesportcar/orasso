@@ -42,6 +42,8 @@ import { Info, Reviews } from "@/features/event/EventExtras";
 import { AdmissionTags, EventRows, EventTitle } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
+import { InvitationMenu, InviteBanner, WhoGoes } from "@/features/event/invite/InviteParts";
+import { InviteSheet } from "@/features/event/invite/InviteSheet";
 import { LineupBlock } from "@/features/event/Lineup";
 import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
@@ -188,6 +190,22 @@ export default function EventPage() {
   // Tour 2 : la place choisie quand il y en a plusieurs (jours, véhicules) ; sinon la plus utile maintenant.
   const [placeId, setPlaceId] = useState<string | null>(null);
   const applications = useApplications();
+  // Lot R6c (R6.3, R6.4, R6.6) : « Qui y va », la feuille « Inviter du monde », le bandeau et le menu d'une invitation.
+  const [inviting, setInviting] = useState(false);
+  const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string } | null>(null);
+  const shareable = Boolean(
+    event.data &&
+      status === "in" &&
+      event.data.status === "published" &&
+      event.data.admission !== "invite_only" &&
+      new Date(event.data.endsAt).getTime() > nowMs(),
+  );
+  const going = useApi(() => api.followingGoing(event.data?.id ?? ""), [event.data?.id, status], {
+    enabled: shareable,
+  });
+  const invited = useApi(() => api.invitationsReceived(event.data?.id ?? ""), [event.data?.id, status], {
+    enabled: shareable,
+  });
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
   // Lot M4 : la bande de l'organisateur, en-tête fixe de la fiche (aussi pendant l'aperçu, sans les abonnés).
@@ -487,7 +505,12 @@ export default function EventPage() {
               void event.reload();
               void crewRegs.reload();
             }}
+            onInvite={shareable ? () => setInviting(true) : undefined}
           />
+          {shareable ? (
+            <InviteSheet event={{ id: e.id, title: e.title }} visible={inviting} onClose={() => setInviting(false)} />
+          ) : null}
+          <InvitationMenu from={menuFrom} onClose={() => setMenuFrom(null)} onChanged={() => void invited.reload()} />
           <ApplySheet
             eventTitle={applying ? e.title : null}
             onClose={() => setApplying(false)}
@@ -519,6 +542,15 @@ export default function EventPage() {
         <Notice tone="error" testID="draft-preview">
           {wizardEndLabels.previewBanner}
         </Notice>
+      ) : null}
+      {shareable && invited.data ? (
+        <InviteBanner
+          invitation={invited.data}
+          onMore={() => {
+            const first = invited.data?.inviters[0];
+            if (first) setMenuFrom({ userId: first.userId, pseudo: first.pseudo });
+          }}
+        />
       ) : null}
       <EventTitle event={e} />
       {cancelled ? (
@@ -553,6 +585,8 @@ export default function EventPage() {
       <EventRows event={e} />
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
       <LineupBlock eventId={e.id} slug={e.slug} />
+      {/* Lot R6c (R6.3) : qui y va parmi ceux que je suis, et « Inviter du monde » (tout membre connecté, inscrit ou non). */}
+      {shareable ? <WhoGoes going={going.data} onInvite={() => setInviting(true)} /> : null}
       <AdmissionTags event={e} />
       {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}

@@ -3,11 +3,11 @@
 // le titre, le corps, la date. Le lien ouvre l'écran (demande d'équipe → Équipe de la structure, alerte → Administration).
 // La suggestion météo garde son bouton « Passer en Incertain » (lot 28).
 import { Button, Icon, Text, useTheme } from "@orasso/design-system/native";
-import { SET_OUTLOOK_UNCERTAIN_ACTION, weatherTexts } from "@orasso/shared";
+import { eventInviteLabels, SET_OUTLOOK_UNCERTAIN_ACTION, weatherTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { InvitationMenu } from "@/features/event/invite/InviteParts";
 import { adminLinkOf } from "@/lib/adminModel";
 import { api, type NotificationItem } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
@@ -15,10 +15,11 @@ import { ApiRequestError } from "@/lib/http";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { usePersona } from "@/lib/persona";
 import { Avatar } from "@/ui/Avatar";
+import { SmButton } from "@/ui/Kit";
 
 import { CapRow, Count } from "./CapRow";
 
-type Actor = { pseudo?: string; avatarUrl?: string | null };
+type Actor = { userId?: string; pseudo?: string; avatarUrl?: string | null };
 const actorOf = (n: NotificationItem): Actor | null => {
   const actor = n.data?.actor;
   return actor && typeof actor === "object" ? (actor as Actor) : null;
@@ -80,6 +81,9 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
   const team = teamRequestTarget(n.data);
   // Lot 35d : alerte de modération, demande d'aide d'une structure → écran de la casquette Administration.
   const admin = adminLinkOf(n.data?.link);
+  // Lot R6c (R6.6) : une invitation à un événement : « Voir la fiche » et « ⋯ » (couper, réglages, signaler).
+  const invitation = n.type === "event_invited" && typeof actor?.userId === "string";
+  const [menu, setMenu] = useState(false);
   const asksUncertain = n.data?.action === SET_OUTLOOK_UNCERTAIN_ACTION && typeof n.data.eventId === "string";
   const open =
     link || team || admin
@@ -107,6 +111,26 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
         trailing={!n.readAt ? <Count n={1} /> : null}
         onPress={open}
       />
+      {invitation ? (
+        <View style={styles.inviteRow}>
+          {open ? (
+            <SmButton icon="next" onPress={open} testID="notif-invite-open">
+              {eventInviteLabels.seeEvent}
+            </SmButton>
+          ) : null}
+          <SmButton
+            kind="g"
+            icon="more"
+            onPress={() => setMenu(true)}
+            accessibilityLabel={eventInviteLabels.moreA11y}
+            testID="notif-invite-more"
+          />
+          <InvitationMenu
+            from={menu && actor?.userId ? { userId: actor.userId, pseudo: actor.pseudo ?? "" } : null}
+            onClose={() => setMenu(false)}
+          />
+        </View>
+      ) : null}
       {asksUncertain ? (
         <View style={styles.action}>
           <UncertainAction eventId={String(n.data?.eventId)} />
@@ -119,4 +143,5 @@ export function NotificationRow({ n, onLeave }: { n: NotificationItem; onLeave: 
 const styles = StyleSheet.create({
   icon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   action: { paddingTop: 8, gap: 6 },
+  inviteRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 8, paddingLeft: 56 },
 });
