@@ -79,7 +79,13 @@ describe("migration des amitiés en abonnements (lot R6b)", () => {
       { requesterId: nina.id, addresseeId: damien.id, status: "pending", createdAt: at },
       // Refusées : rien, sinon une trace de refus si elle a moins de 30 jours (tour 2).
       { requesterId: paul.id, addresseeId: sarah.id, status: "declined", createdAt: at, respondedAt: daysAgo(40) },
-      { requesterId: lou.id, addresseeId: sarah.id, status: "declined", createdAt: daysAgo(5), respondedAt: daysAgo(3) },
+      {
+        requesterId: lou.id,
+        addresseeId: sarah.id,
+        status: "declined",
+        createdAt: daysAgo(5),
+        respondedAt: daysAgo(3),
+      },
     ]);
     // Abonnements existants (lot R4c) : Kenji → Léa (recouvre l'amitié), Paul → Marc (compte devenu privé depuis, sans
     // amitié), Julie → Marc (compte devenu privé, amitié acceptée), Théo → Damien (public).

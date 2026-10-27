@@ -228,7 +228,8 @@ export const accountService = {
       .set({ invitedByUserId: sponsor.userId })
       .where(and(eq(profiles.userId, v.user.id), isNull(profiles.invitedByUserId)))
       .returning({ userId: profiles.userId });
-    if (!row) throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
+    if (!row)
+      throw conflict("referral_not_applicable", "Ce lien de parrainage ne peut plus être utilisé pour ce compte");
     if (v.user.emailVerified) await pointsService.awardReferral(sponsor.userId, v.user.id);
     return { sponsor: sponsor.pseudo };
   },

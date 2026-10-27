@@ -10,7 +10,7 @@ import {
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
-import { FollowAction, PersonAvatar } from "../components/People";
+import { FollowAction, FollowerMenu, PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import type { Route } from "./+types/reseau";
@@ -20,6 +20,7 @@ import "../styles/network.css";
 // « N abonnés », « N abonnements » et, pour un compte privé (ou s'il y en a), « N demandes » ; `?liste=` choisit la liste.
 // Recherche dans la liste (côté serveur), 30 par page (« Suivants »). Abonnés : « Suivre en retour » / « Abonné » /
 // « Demandé ». Demandes : « Accepter » et ✕. Toi seul vois ces listes : la page ne lit que les routes `/me/...`.
+// Tour 2 : dans Abonnés, le menu ⋯ d'une ligne propose « Retirer cet abonné », avec confirmation.
 export function meta() {
   return [{ title: "Ton réseau · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -110,21 +111,24 @@ function PersonLine({ p }: { p: FollowPerson }) {
   );
 }
 
-function PersonRows({ items, busy }: { items: FollowPerson[]; busy: boolean }) {
+function PersonRows({ items, busy, removable = false }: { items: FollowPerson[]; busy: boolean; removable?: boolean }) {
   return (
     <ul className="r6list">
       {items.map((p) => (
         <li key={p.userId} className="r6row" data-testid="net-person">
           <PersonLine p={p} />
-          <FollowAction
-            pseudo={p.pseudo}
-            mine={p.mine}
-            followsMe={p.followsMe}
-            canFollow={p.canFollow}
-            visibility={p.visibility}
-            size="small"
-            busy={busy}
-          />
+          <div className="r6row__acts">
+            <FollowAction
+              pseudo={p.pseudo}
+              mine={p.mine}
+              followsMe={p.followsMe}
+              canFollow={p.canFollow}
+              visibility={p.visibility}
+              size="small"
+              busy={busy}
+            />
+            {removable && <FollowerMenu userId={p.userId} pseudo={p.pseudo} busy={busy} />}
+          </div>
         </li>
       ))}
     </ul>
@@ -189,7 +193,7 @@ export default function Reseau({ loaderData, actionData: raw }: Route.ComponentP
         href={`/app/reseau?${new URLSearchParams({ liste: tab, ...(q ? { q } : {}), [param]: cursor }).toString()}`}
         data-testid={param === "apres" ? "net-next" : `net-next-${param === "apres_org" ? "structures" : "pros"}`}
       >
-        Suivants
+        {N.next}
       </Button>
     ) : null;
   const empty = (text: string) => (
@@ -245,7 +249,7 @@ export default function Reseau({ loaderData, actionData: raw }: Route.ComponentP
       {followers &&
         (followers.items.length ? (
           <div className="n-group" data-testid="net-followers">
-            <PersonRows items={followers.items} busy={busy} />
+            <PersonRows items={followers.items} busy={busy} removable />
             {next(followers.nextCursor)}
           </div>
         ) : (

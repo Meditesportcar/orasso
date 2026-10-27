@@ -545,7 +545,7 @@ describe("suivre, demandes d'abonnement (lot R6b, D37)", () => {
     expect((await call(pub, "DELETE", `/me/followers/${k.id}`)).status).toBe(204);
     const [left] = await followed();
     expect(left?.body).toBe("Lea_L te suit.");
-    expect((left?.data as { actorIds: string[] }).actorIds).toEqual([l.id]);
+    expect((left?.data as { actorIds?: string[] } | undefined)?.actorIds).toEqual([l.id]);
     expect(JSON.stringify(left?.data)).not.toContain(k.id);
     expect((await call(pub, "DELETE", `/me/followers/${l.id}`)).status).toBe(204);
     expect(await followed()).toHaveLength(0);

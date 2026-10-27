@@ -159,6 +159,61 @@ export function FollowAction({
   );
 }
 
+/** Referme le menu et sa confirmation (tous les `<details>` englobants). */
+function closeAll(e: MouseEvent<HTMLElement>) {
+  let d = e.currentTarget.closest("details");
+  while (d) {
+    d.open = false;
+    d = d.parentElement?.closest("details") ?? null;
+  }
+}
+
+/**
+ * Lot R6b, tour 2 (relectures Opus 1, Codex 1) : le menu ⋯ d'une ligne de mes abonnés. « Retirer cet abonné » ouvre la
+ * confirmation en place ; « Retirer » envoie `follower_remove` (la personne n'est pas prévenue). Deux `<details>` : ça
+ * marche sans JavaScript.
+ */
+export function FollowerMenu({ userId, pseudo, busy = false }: { userId: string; pseudo: string; busy?: boolean }) {
+  return (
+    <details className="fl-conf fl-conf--sm">
+      <summary className="o-button o-button--close fl-x" aria-label={N.rowMenu(pseudo)} data-testid="net-person-more">
+        <Icon name="more" size={16} />
+      </summary>
+      <div className="fl-confirm" data-testid="net-follower-menu">
+        <details className="fl-step">
+          <summary className="o-button o-t-button o-button--secondary o-button--full" data-testid="net-remove">
+            <Icon name="close" size={18} />
+            <span className="o-button__label">{N.removeFollower}</span>
+          </summary>
+          <div className="fl-step__body" data-testid="net-remove-confirm">
+            <p className="fl-confirm__q">{N.removeFollowerConfirm(pseudo)}</p>
+            <p className="o-t-caption s-muted">{N.removeFollowerHint}</p>
+            <Form method="post" className="fl-form">
+              <input type="hidden" name="userId" value={userId} />
+              <input type="hidden" name="pseudo" value={pseudo} />
+              <Button
+                type="submit"
+                name="intent"
+                value="follower_remove"
+                variant="alert"
+                icon="close"
+                fullWidth
+                loading={busy}
+                data-testid="net-remove-yes"
+              >
+                {N.remove}
+              </Button>
+            </Form>
+            <Button variant="secondary" icon="back" fullWidth onClick={closeAll} data-testid="net-remove-keep">
+              {N.keep}
+            </Button>
+          </div>
+        </details>
+      </div>
+    </details>
+  );
+}
+
 /**
  * Une carte de personne (recherche, propriétaires près de chez moi) ne dit pas si le compte est privé : ses départements
  * sont absents d'un compte privé dont on n'est pas abonné accepté. Sert seulement à choisir « Suivre » ou « Demander à
