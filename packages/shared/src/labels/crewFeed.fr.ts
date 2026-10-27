@@ -68,6 +68,8 @@ export const crewFeedLabels = {
   loadMore: "Voir la suite",
   loadError: "Le fil n'a pas pu se charger.",
   retry: "Réessayer",
+  // Lot R6a : la pastille des nouveautés du fil (texte : `crewLivePillLabel`), qui remonte en haut du fil.
+  newA11y: (label: string) => `${label} : remonter en haut du fil`,
   autoJoined: (pseudo: string) => `${pseudo} a rejoint le crew`,
   autoAccepted: (title: string) => `Le crew est retenu : ${title}`,
   autoAcceptedMembers: (names: string[]) =>
