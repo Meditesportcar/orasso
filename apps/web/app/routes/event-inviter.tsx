@@ -291,7 +291,8 @@ function InviteForm({
       >
         {inviteSendLabel(n)}
       </Button>
-      {why ? (
+      {/* L'erreur de l'envoi dit déjà ce qui manque (sans JavaScript) : la ligne ne la répète pas. */}
+      {why && !(result && !result.ok && result.error === why) ? (
         <p className="o-t-caption s-muted" data-testid="invite-why">
           {why}
         </p>

@@ -257,4 +257,9 @@ label.ri-row {
   gap: var(--space-2);
   padding: 0 var(--space-3) var(--space-3);
   flex-wrap: wrap;
+  /* Tour 2 : le menu « ⋯ » s'ouvre sous la ligne, calé sur son bord droit (le bouton est à gauche : sinon il sortait de l'écran). */
+  position: relative;
+}
+.ri-notif-acts .ri-menu {
+  position: static;
 }

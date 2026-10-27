@@ -81,7 +81,8 @@ for (const theme of ["beton", "sable"] as const) {
     await k.getByTestId("invite-open").click();
     await expect(k.getByTestId("invite-form")).toBeVisible();
     await expect(k.getByTestId(`invite-person-${nina.pseudo}`)).toContainText("y va déjà");
-    // Tour 2 : « Tout <crew> » coche les membres du crew qu'on peut inviter (Julie).
+    // Tour 2 : « Tout <crew> » coche les membres du crew qu'on peut inviter (Julie). Il demande JavaScript : page hydratée.
+    await k.waitForLoadState("networkidle");
     await k.getByTestId(`invite-crew-${crew.id}`).click();
     await expect(k.getByTestId(`invite-person-${julie.pseudo}`).locator("input")).toBeChecked();
     await expect(k.getByTestId("invite-send")).toContainText("Inviter 1 personne");
@@ -169,6 +170,8 @@ for (const theme of ["beton", "sable"] as const) {
     // 4. Crew : Julie invite Marc ; Marc accepte ; Kenji voit « Invité(e) par Julie ».
     await j.goto(`/c/${crew.slug}?onglet=membres`);
     await j.getByTestId("crew-invite-someone").click();
+    // Page hydratée avant le clic (un clic pendant l'hydratation peut se perdre).
+    await j.waitForLoadState("networkidle");
     await j.getByTestId(`crew-invite-${marc.pseudo}`).click();
     await expect(j.getByTestId("crew-invite-sent")).toContainText(`Invitation envoyée à ${marc.pseudo}`);
     await shot(j, `08-crew-invitation-envoyee-${theme}`);
