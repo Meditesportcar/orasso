@@ -9,6 +9,7 @@ import {
   type CrewOutingView,
   type CrewPendingView,
   type CrewVitrineMember,
+  crewInviteLabels,
   crewLabels,
   gradeLabels,
   crewPageLabels as L,

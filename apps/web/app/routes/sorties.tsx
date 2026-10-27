@@ -15,6 +15,7 @@ import {
   type EventPublic,
   type EventWeather,
   eventFormatLabels,
+  eventInviteLabels,
   gradeLabels,
   invitationLabels,
   type MyApplication,
@@ -44,19 +45,22 @@ import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { LineupLine } from "../components/Lineup";
+import { PersonAvatar } from "../components/People";
 import { Qr } from "../components/Qr";
 import { RotatingQr } from "../components/RotatingQr";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, getMe, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
+import { afterInviteCard, closeInviteCardCookie } from "../lib/eventInvite.server";
 import { formatDateTime, formatWhen } from "../lib/format";
 import { invitationAction, isInvitationIntent, myActiveVehicles } from "../lib/invitations.server";
 import { badgeFor } from "../lib/status";
 import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/sorties";
 import "../styles/after-event.css";
+import "../styles/event-invite.css";
 
 export function meta() {
   return [{ title: "Sorties · Orasso" }, { name: "robots", content: "noindex" }];
@@ -147,7 +151,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const staff = staffRes.ok ? staffRes.data : [];
   const slugOf = new Map(me.memberships.map((m) => [m.structureId, m.structureSlug]));
   const allTickets = tickets.ok ? tickets.data : [];
+  // Lot R6c (R6.5) : après la candidature, la carte « Invite du monde à venir » (jamais bloquante).
+  const sent = url.searchParams.get("candidature") === "envoyee";
+  const sentSlug = (url.searchParams.get("e") ?? "").slice(0, 200);
+  const afterInvite = sent && sentSlug && !past ? await afterInviteCard(request, me.user.id, sentSlug) : null;
   return {
+    afterInvite,
     view: (url.searchParams.get("vue") === "staff" && !avis ? "staff" : past ? "past" : "upcoming") as
       | "upcoming"
       | "staff"
@@ -172,7 +181,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     points,
     userId: me.user.id,
     ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
-    sent: url.searchParams.get("candidature") === "envoyee",
+    sent,
   };
 }
 
@@ -188,6 +197,13 @@ export async function action({ request }: Route.ActionArgs) {
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
     return data({ error: res.data.crewError, ok: res.data.crewOk ?? null }, { status: res.init?.status ?? 200 });
+  }
+  // Lot R6c : fermer pour de bon la carte « Invite du monde à venir » de cet événement (un cookie par compte).
+  if (intent === "after_invite_close") {
+    const me = await getMe(request);
+    const eventId = String(form.get("eventId") ?? "");
+    if (!me || !eventId) return data({ error: null }, { status: 400 });
+    return data({ error: null }, { headers: { "set-cookie": closeInviteCardCookie(request, me.user.id, eventId) } });
   }
   // Lot 57 : « Je serai là » d'une mission staff (segment Staff, comme l'appli).
   if (intent === "presence") {
@@ -573,6 +589,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     notes,
     points,
     sent,
+    afterInvite,
     userId,
     ticketCount,
     invitations,
@@ -680,6 +697,44 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
       )}
 
       {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
+      {/* Lot R6c (R6.5) : inviter du monde juste après avoir candidaté. */}
+      {sent && afterInvite && (
+        <section className="ri-after" aria-labelledby="after-invite-title" data-testid="after-invite-card">
+          <div className="ri-after__head">
+            <div>
+              <b id="after-invite-title">{eventInviteLabels.afterTitle}</b>
+              <small>{eventInviteLabels.afterText}</small>
+            </div>
+            <Form method="post" preventScrollReset>
+              <input type="hidden" name="intent" value="after_invite_close" />
+              <input type="hidden" name="eventId" value={afterInvite.eventId} />
+              <Button
+                type="submit"
+                variant="close"
+                label={eventInviteLabels.afterClose}
+                data-testid="after-invite-close"
+              />
+            </Form>
+          </div>
+          <div className="ri-after__faces">
+            {afterInvite.faces.map((f) => (
+              <span key={f.userId}>
+                <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={40} />
+                <small>{f.pseudo}</small>
+              </span>
+            ))}
+          </div>
+          <Button
+            variant="secondary"
+            icon="send"
+            href={`/e/${afterInvite.slug}/inviter`}
+            fullWidth
+            data-testid="after-invite-open"
+          >
+            {eventInviteLabels.afterButton}
+          </Button>
+        </section>
+      )}
       {avis && !avis.found && (
         <p className="s-notice s-notice--alert" role="alert" data-testid="avis-invalid">
           {afterEventLabels.reviewLinkInvalid}

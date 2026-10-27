@@ -1,0 +1,260 @@
+/* Lot R6c (maquettes R6.3 à R6.7) : « Qui y va », le bandeau d'invitation, « Inviter du monde », la carte d'après la
+   candidature, le menu « ⋯ » de l'invité, inviter dans un crew. Jetons du système de design seulement. */
+
+/* Bandeau « Kenji_66 t'invite » en haut de la fiche. */
+.ri-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+}
+.ri-banner b {
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+}
+.ri-banner small {
+  display: block;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.ri-faces {
+  display: flex;
+}
+.ri-faces > * + * {
+  margin-left: calc(var(--space-2) * -1);
+}
+.ri-faces .s-avatar {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Menu « ⋯ » (invitation reçue). */
+.ri-menu {
+  position: relative;
+}
+.ri-menu__dots {
+  list-style: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ri-menu__dots::-webkit-details-marker {
+  display: none;
+}
+.ri-menu__sheet {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 5;
+  width: min(340px, calc(100vw - 32px));
+  display: grid;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-poster);
+  overflow: hidden;
+}
+.ri-menu__title {
+  padding: var(--space-3);
+  font-weight: 800;
+}
+.ri-menu__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ri-menu__row span {
+  display: grid;
+  gap: 2px;
+}
+.ri-menu__row small {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.ri-menu__report {
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+/* « Qui y va ». */
+.ri-who {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.ri-who__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ri-who__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 13.5px;
+}
+
+/* Page « Inviter du monde ». */
+.ri-search {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+.ri-search .o-field {
+  flex: 1;
+  min-width: 0;
+}
+.ri-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ri-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+button.ri-row,
+label.ri-row {
+  cursor: pointer;
+}
+.ri-row b {
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+}
+.ri-row small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.ri-row.is-on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.ri-row.is-off {
+  opacity: 0.55;
+}
+.ri-row input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+.ri-crewlogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 14px;
+}
+.ri-tick {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: transparent;
+}
+.is-on > .ri-tick {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+.ri-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  font-size: 13px;
+}
+
+/* Carte d'après la candidature (R6.5). */
+.ri-after {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.ri-after__head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+.ri-after__head b {
+  display: block;
+  font-weight: 800;
+  font-size: 15px;
+}
+.ri-after__head small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+.ri-after__faces {
+  display: flex;
+  gap: var(--space-4);
+}
+.ri-after__faces > span {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+}
+.ri-after__faces small {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+/* Boîte : « Voir la fiche » et « ⋯ » sous la notification. */
+.ri-notif-acts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  flex-wrap: wrap;
+}

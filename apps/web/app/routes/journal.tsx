@@ -3,6 +3,7 @@ import {
   type ContactRequestView,
   type ConversationPage,
   type ConversationSummary,
+  eventInviteLabels,
   type FollowRequestsPage,
   type InboxSummary,
   messagingLabels,
@@ -13,9 +14,11 @@ import {
 import type { ReactNode } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { InviteMenu } from "../components/EventInvite";
 import { ConversationRow, InboxSegments } from "../components/Messaging";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow } from "../lib/api.server";
+import { muteInviterAction } from "../lib/eventInvite.server";
 import { formatDay, formatTime } from "../lib/format";
 import { byRecent, inboxSources } from "../lib/inbox-feed";
 import type { Route } from "./+types/journal";
@@ -62,6 +65,14 @@ export async function action({ request }: Route.ActionArgs) {
     if (!res.ok) return data({ error: res.error.message }, { status: res.status });
     return redirect("/app/journal");
   }
+  // Lot R6c : couper les invitations d'une personne (« ⋯ » d'une notification d'invitation).
+  if (intent === "invite_mute") {
+    const res = await muteInviterAction(request, form);
+    return data(
+      { error: res.data.inviteError ?? null, notice: res.data.inviteNotice ?? null },
+      { status: res.init?.status ?? 200 },
+    );
+  }
   return data({ error: "Action inconnue." }, { status: 400 });
 }
 
@@ -91,6 +102,23 @@ function JournalRow({ item }: { item: JournalItem }) {
       {!item.readAt && <Chip>Nouveau</Chip>}
     </>
   );
+  // Lot R6c (R6.6) : une invitation à un événement garde son titre et son corps ; « Voir la fiche » et « ⋯ » dessous
+  // (un lien ne peut pas contenir le menu).
+  if (item.type === "event_invited") {
+    return (
+      <li className="s-journal__item" data-testid="journal-item" data-type={item.type} data-read={Boolean(item.readAt)}>
+        <div className="s-journal__link">{content}</div>
+        <div className="ri-notif-acts">
+          {path && (
+            <Button variant="secondary" icon="next" href={path} data-testid="notif-invite-open">
+              {eventInviteLabels.seeEvent}
+            </Button>
+          )}
+          {actor && <InviteMenu inviter={actor} testId="notif-invite-more" />}
+        </div>
+      </li>
+    );
+  }
   return (
     <li className="s-journal__item" data-testid="journal-item" data-type={item.type} data-read={Boolean(item.readAt)}>
       {path ? (
@@ -151,6 +179,11 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
       {actionData?.error && (
         <p className="s-error" role="alert">
           {actionData.error}
+        </p>
+      )}
+      {actionData && "notice" in actionData && actionData.notice && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="journal-notice">
+          {actionData.notice}
         </p>
       )}
       {(unavailable.messages || unavailable.requests) && (

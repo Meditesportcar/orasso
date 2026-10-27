@@ -203,7 +203,8 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     };
     const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
     if (res.ok) {
-      navigate("/app/sorties?candidature=envoyee");
+      // Lot R6c (R6.5) : l'événement suit, pour la carte « Invite du monde à venir ».
+      navigate(`/app/sorties?candidature=envoyee&e=${encodeURIComponent(event.slug)}`);
       return;
     }
     setBusy(false);

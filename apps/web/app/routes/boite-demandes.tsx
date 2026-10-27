@@ -4,6 +4,7 @@ import {
   type ContactRequestView,
   type CrewConfirmationRequest,
   type CrewInboxRequest,
+  crewInviteLabels,
   crewLabels,
   type FollowPerson,
   type FollowRequestsPage,
@@ -31,6 +32,9 @@ import type { Route } from "./+types/boite-demandes";
 
 // Boîte > Demandes (lot 18) : rangées à part — demandes d'abonnement (lot R6b, elles remplacent les demandes d'ami) et demandes de contact (le message est
 // affiché, on accepte ou on refuse ; le refus est silencieux). Les lots 19 et suivants ajoutent leurs sortes ici.
+/** Lot R6c : libellé court local (pas dans `crewInviteLabels`) d'une invitation reçue d'un membre. */
+const LEADER_CONFIRMS = "Si tu acceptes, le chef confirme ton arrivée.";
+
 export function meta() {
   return [{ title: "Demandes · Boîte · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -330,6 +334,17 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
                   </a>
                   {r.kind === "invitation" && (
                     <span className="o-t-caption s-muted">{crewLabels.leaderOf(r.person.pseudo)}</span>
+                  )}
+                  {/* Lot R6c (R6.7) : demande née de l'invitation d'un membre ; invitation d'un membre (le chef confirme). */}
+                  {r.kind === "request" && r.invitedBy && (
+                    <span className="o-t-caption s-muted" data-testid="request-invited-by">
+                      {crewInviteLabels.invitedBy(r.invitedBy)}
+                    </span>
+                  )}
+                  {r.kind === "invitation" && r.leaderConfirms && (
+                    <span className="o-t-caption s-muted" data-testid="request-leader-confirms">
+                      {LEADER_CONFIRMS}
+                    </span>
                   )}
                   {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
                 </div>

@@ -22,6 +22,8 @@ export default [
     route("e/:slug/candidater", "routes/candidater.tsx"),
     // Lot R4b : le plateau en pleine page (non référencé).
     route("e/:slug/plateau", "routes/event-plateau.tsx"),
+    // Lot R6c : « Inviter du monde » à un événement (connecté).
+    route("e/:slug/inviter", "routes/event-inviter.tsx"),
     // Inscription en crew par le chef (lot 19).
     route("e/:slug/crew", "routes/crew-inscription.tsx"),
     route("o/:slug", "routes/structure.tsx"),
