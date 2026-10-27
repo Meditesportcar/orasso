@@ -59,7 +59,12 @@ export function PosterFace({
   return (
     <span className="w-card__minimal" data-testid="poster-minimal">
       <span className="o-t-label w-card__minimal-format">{eventFormatLabels[event.format]}</span>
-      <span className="o-t-poster-s w-card__minimal-title">{event.title}</span>
+      <span
+        className="o-t-poster-s w-card__minimal-title"
+        style={{ "--em": widestWordEm(event.title) } as CSSProperties}
+      >
+        {event.title}
+      </span>
       <span className="o-t-credit w-card__minimal-credit">Orasso</span>
     </span>
   );

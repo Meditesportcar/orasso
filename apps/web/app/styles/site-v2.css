@@ -1551,3 +1551,11 @@
   font-size: min(var(--type-poster-s-size), calc(100cqi / var(--em, 10)));
   line-height: calc(1em + var(--type-poster-s-line) - var(--type-poster-s-size));
 }
+/* Même règle pour le titre du gabarit « Minimal » : il suivait la largeur de l'affiche, mais un mot plus large que
+   l'affiche débordait (coupé par le bord). Le corps ne dépasse plus la largeur utile divisée par `--em`. */
+.w-card__minimal .w-card__minimal-title {
+  font-size: min(
+    clamp(var(--type-label-size), 7.5cqw, var(--type-poster-l-size)),
+    calc((100cqi - 2 * var(--space-3)) / var(--em, 10))
+  );
+}
