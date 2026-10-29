@@ -1,6 +1,12 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 27/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 29/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+
+## 29/10/2026 : VPS mis à jour, correctif de l'API (pas encore déployé)
+
+- **VPS** : Docker 29.9.2 (Compose 5.6.1), tzdata, puis redémarrage sur le noyau 6.12.113 (retour en 34 s). Tout repart seul : conteneurs Orasso et monitoring, nginx, crndrift, rsf, pare-feu. Rasso 2.0 (`medite-backend`, PM2 root) est arrêté depuis le 18/10, sans changement. Les correctifs de sécurité Debian s'installent seuls chaque nuit.
+- **Correctif API** (`35769843`, dans `main`, **pas encore sur dev.orasso.fr**, qui reste en `3489febe`) : à l'arrêt de Docker, la base a coupé ses connexions et l'API a planté (« Emitted 'error' event on BoundPool »). Chaque connexion du pool a maintenant son écouteur d'erreur (`apps/api/src/db/client.ts`), test `src/db/client.test.ts` (rouge sans, vert avec), relu.
+- **Non traité** : une connexion « à moitié ouverte » (réseau coupé sans fermeture) bloquerait les requêtes au lieu d'échouer ; il faudrait `keepAlive` et un délai de connexion sur le pool. Risque faible tant que la base est sur la même machine.
 
 ## État au 27/10/2026 : R6 en ligne (crew en direct, « Suivre » comme sur Instagram, inviter entre passionnés)
 
