@@ -90,6 +90,15 @@ export async function putRealPhoto(key: string, pool: Pool, index: number) {
   };
 }
 
+/**
+ * 08/11 (seed en direct) : la `index`-ième photo de voiture relue « aucune plaque lisible » (`NO_PLATE_REVIEWED`), en
+ * WebP, pour la donner au vrai service d'ajout de photo avec `noPlate: true`.
+ */
+export async function reviewedNoPlateCar(index: number): Promise<{ name: string; data: Buffer } | null> {
+  const reviewed = (await realPool("car")).filter((p) => NO_PLATE_REVIEWED.has(p.name));
+  return reviewed[index % Math.max(reviewed.length, 1)] ?? null;
+}
+
 /** Les photos d'événement disponibles, en WebP (2000 px au plus), dans un ordre stable. */
 export async function demoEventPhotos(): Promise<{ name: string; data: Buffer }[]> {
   const own = process.env.PHOTOS_SEED_DIR || join(repoRoot, "photos-seed");

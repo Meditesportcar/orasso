@@ -34,8 +34,9 @@ import type { EventRow } from "../../src/modules/events/repo";
 import { eventsService } from "../../src/modules/events/service";
 import { messagingService } from "../../src/modules/messaging/service";
 import { pointsService } from "../../src/modules/points/service";
+import { vehiclesService } from "../../src/modules/vehicles/service";
 import { createEvent, DAY, parisAt } from "./helpers";
-import { demoEventPhotos } from "./photos";
+import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
 
 const SLUG = "rassemblement-du-lydia";
 const TITLE = "Rassemblement du Lydia";
@@ -117,6 +118,44 @@ async function showableCar(userId: string) {
   return car?.id ?? null;
 }
 
+let photoNo = 0;
+/**
+ * Voiture montrable, sinon (anciennes données de dev, photos sans décision de plaque) une photo relue « aucune plaque
+ * lisible » ajoutée par le vrai service à sa première voiture active non certifiée (une photo ajoutée ferait perdre la
+ * certification). Les photos existantes ne sont jamais touchées. `null` : aucune voiture active, la personne est ignorée.
+ */
+async function carFor(v: Viewer) {
+  const ready = await showableCar(v.user.id);
+  if (ready) return ready;
+  const [car] = await db
+    .select({ id: t.vehicles.id })
+    .from(t.vehicles)
+    .where(
+      and(
+        eq(t.vehicles.ownerId, v.user.id),
+        eq(t.vehicles.status, "active"),
+        eq(t.vehicles.vehicleType, "car"),
+        sql`${t.vehicles.pendingTransferId} is null and ${t.vehicles.certifiedAt} is null`,
+      ),
+    )
+    .orderBy(asc(t.vehicles.createdAt))
+    .limit(1);
+  const photo = car ? await reviewedNoPlateCar(photoNo++) : null;
+  if (!car || !photo) return null;
+  try {
+    const file = new File([new Uint8Array(photo.data)], photo.name.replace(/\.\w+$/, ".webp"), { type: "image/webp" });
+    await vehiclesService.addPhoto(v, car.id, file, undefined, true);
+    console.log(`En direct : photo sans plaque ajoutée à la voiture de ${v.profile.pseudo}.`);
+    return car.id;
+  } catch (error) {
+    console.log(`En direct : photo non ajoutée pour ${v.profile.pseudo} (${(error as Error).message}).`);
+    return null;
+  }
+}
+
+/** Moins de retenus que cela sur un événement en cours : il a été créé à moitié (photos absentes), il est refait. */
+const MIN_ACCEPTED = 8;
+
 /** L'horloge des services à cet instant (le temps du seed remonte jusqu'à maintenant). */
 const at = (d: Date) => {
   deps.clock = { now: () => d };
@@ -129,7 +168,14 @@ export async function seedLiveEvent() {
     // Gardé s'il reste au moins un jour : un déploiement le dernier jour le recrée, pour qu'il soit encore en cours le
     // lendemain (décision du coordinateur, 08/11).
     const keep = existing.endsAt.getTime() - real.getTime() > 24 * 3600 * 1000;
-    if (existing.status === "published" && existing.startsAt <= real && keep) {
+    // Créé à moitié (dev du 08/11 : 2 retenus faute de photos montrables) : supprimé et recréé, par le même chemin
+    // qu'un événement fini (plus sûr que de compléter un événement verrouillé et commencé).
+    const [accepted] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(t.applications)
+      .where(and(eq(t.applications.eventId, existing.id), eq(t.applications.status, "accepted")));
+    const complete = (accepted?.n ?? 0) >= MIN_ACCEPTED;
+    if (existing.status === "published" && existing.startsAt <= real && keep && complete) {
       console.log(`En direct : « ${TITLE} » en cours (jusqu'au ${existing.endsAt.toISOString().slice(0, 10)}).`);
       return;
     }
@@ -332,7 +378,7 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
   // --- Candidatures (J-11 à J-9), invitation de Kenji à Damien, tri (J-7) -----------------------------------
   const people = new Map<string, { v: Viewer; appId: string; plan: Plan | null }>();
   const applyAs = async (v: Viewer, plan: Plan | null, when: Date) => {
-    const car = await showableCar(v.user.id);
+    const car = await carFor(v);
     if (!car) return;
     at(when);
     try {
