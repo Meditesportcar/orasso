@@ -29,6 +29,7 @@ import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
 import { seedInvitations } from "./seed/invitations";
+import { seedLiveEvent } from "./seed/live-event";
 import { seedMedia } from "./seed/media";
 import { seedMessaging } from "./seed/messaging";
 import { seedMissions } from "./seed/missions";
@@ -161,6 +162,8 @@ async function main() {
   await seedOrgaV2(hash);
   // Lot C5 : tampons de visite de Paul (visiteur).
   await seedVisitorStamps();
+  // 08/11 : « Rassemblement du Lydia » en direct (4 jours, commencé la veille) ; recréé quand il est fini.
+  await seedLiveEvent();
 }
 
 try {
