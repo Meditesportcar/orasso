@@ -126,7 +126,10 @@ export async function seedLiveEvent() {
   const real = new Date();
   const existing = await db.query.events.findFirst({ where: eq(t.events.slug, SLUG) });
   if (existing) {
-    if (existing.status === "published" && existing.startsAt <= real && real < existing.endsAt) {
+    // Gardé s'il reste au moins un jour : un déploiement le dernier jour le recrée, pour qu'il soit encore en cours le
+    // lendemain (décision du coordinateur, 08/11).
+    const keep = existing.endsAt.getTime() - real.getTime() > 24 * 3600 * 1000;
+    if (existing.status === "published" && existing.startsAt <= real && keep) {
       console.log(`En direct : « ${TITLE} » en cours (jusqu'au ${existing.endsAt.toISOString().slice(0, 10)}).`);
       return;
     }
