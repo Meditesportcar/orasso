@@ -104,7 +104,7 @@ test("tour 2 : Inviter dans la rangée Discussion, signaler, crew d'un lien qui 
   await lp.getByTestId("report-open").click();
   await expect(lp.getByTestId("report-dialog")).toBeVisible();
   // Tour 3 : « Quitter le crew » mène à « Pas encore de crew » (son seul crew), jamais à la vitrine du crew quitté.
-  await lp.goto(`/app/crew?crew=${crew.slug}`);
+  await lp.goto(`/app/crew?crew=${crew.slug}&onglet=membres`);
   lp.once("dialog", (d) => void d.accept());
   await lp.getByTestId("crew-leave").click();
   await lp.waitForURL(/\/app\/crew$/);
