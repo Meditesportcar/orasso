@@ -829,11 +829,10 @@ describe("lire, retirer, flamme", () => {
     const ids: string[] = [];
     for (let i = 0; i < 25; i++) {
       const id = await dbPost(u);
-      await pool.query(`update feed_posts set created_at = $2::timestamptz + ($3 || ' microseconds')::interval where id = $1`, [
-        id,
-        "2026-05-01T10:00:00.000Z",
-        String(i * 30),
-      ]);
+      await pool.query(
+        `update feed_posts set created_at = $2::timestamptz + ($3 || ' microseconds')::interval where id = $1`,
+        [id, "2026-05-01T10:00:00.000Z", String(i * 30)],
+      );
       ids.push(id);
     }
     const first = await call(u, "GET", "/me/feed-posts");

@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 
 import { app } from "../src/app";
 import { db } from "../src/db/client";
-import { env } from "../src/env";
 import {
   categories,
   events,
@@ -21,6 +20,7 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../src/db/schema";
+import { env } from "../src/env";
 import { deps, MemoryJobQueue } from "../src/lib/deps";
 import { resetRateLimits } from "../src/lib/rateLimit";
 import type { Viewer } from "../src/lib/session";
