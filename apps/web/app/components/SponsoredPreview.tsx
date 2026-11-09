@@ -12,13 +12,27 @@ export type SponsoredPreviewProps = {
   disclosure: string | null;
   /** Domaine du lien, affiché pour un annonceur externe. */
   domain: string | null;
+  /** Emplacement pas encore créé : l'image s'envoie après la création (sinon : « Pas encore d'image »). */
+  isNew?: boolean;
 };
 
-export function SponsoredPreview({ advertiserName, title, body, imageUrl, disclosure, domain }: SponsoredPreviewProps) {
+export function SponsoredPreview({
+  advertiserName,
+  title,
+  body,
+  imageUrl,
+  disclosure,
+  domain,
+  isNew = false,
+}: SponsoredPreviewProps) {
   return (
     <figure className="adm-ad" aria-label={L.sponsoredPreview} data-testid="placement-preview">
       <div className="adm-ad__media">
-        {imageUrl ? <img src={imageUrl} alt="" /> : <span className="o-t-caption">{L.sponsoredPreviewNoImage}</span>}
+        {imageUrl ? (
+          <img src={imageUrl} alt="" />
+        ) : (
+          <span className="o-t-caption">{isNew ? L.sponsoredPreviewNoImage : L.sponsoredPreviewNoImageYet}</span>
+        )}
       </div>
       <div className="adm-ad__body">
         <div className="adm-ad__tags">

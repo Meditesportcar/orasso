@@ -258,6 +258,12 @@ export const adminAppLabels = {
   sponsoredPreviewBadge: "Sponsorisé",
   sponsoredPreviewMore: "En savoir plus",
   sponsoredPreviewNoImage: "Image à envoyer après la création",
+  sponsoredPreviewNoImageYet: "Pas encore d'image",
+  sponsoredEdit: "Modifier",
+  sponsoredSave: "Enregistrer",
+  sponsoredCancel: "Annuler",
+  sponsoredEditTitle: "Modifier l'emplacement",
+  sponsoredProNameFixed: "Le nom d'un pro est celui de sa fiche.",
   sponsoredSurfaceStats: (surface: string, impressions: number, clicks: number) =>
     `${surface} : ${impressions} affichages · ${clicks} clics`,
   sponsoredNew: "Nouvel emplacement",

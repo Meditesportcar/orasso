@@ -71,8 +71,80 @@ async function sponsoredOn(): Promise<boolean> {
   return Boolean(await settingsStore.get("sponsored.enabled"));
 }
 
+/**
+ * Affichages du jour de chaque emplacement, **toutes surfaces confondues** : le plafond du jour est global à
+ * l'emplacement (les statistiques, elles, restent par surface).
+ */
+async function impressionsToday(ids: string[], day: string): Promise<Map<string, number>> {
+  if (!ids.length) return new Map();
+  const rows = await db
+    .select({
+      id: sponsoredDailyStats.placementId,
+      n: sql<number>`coalesce(sum(${sponsoredDailyStats.impressions}), 0)::int`,
+    })
+    .from(sponsoredDailyStats)
+    .where(and(eq(sponsoredDailyStats.day, day), inArray(sponsoredDailyStats.placementId, ids)))
+    .groupBy(sponsoredDailyStats.placementId);
+  return new Map(rows.map((r) => [r.id, r.n]));
+}
+
+/**
+ * Parmi ces emplacements, ceux déjà montrés à cette personne aujourd'hui sur cette surface. L'empreinte de la personne
+ * se calcule par emplacement (c'est une empreinte par emplacement et par jour) et le filtre se fait **en SQL** sur les
+ * couples (emplacement, empreinte) : on ne charge jamais les lignes des autres personnes.
+ */
+async function seenByPerson(
+  userId: string,
+  ids: string[],
+  day: string,
+  surface: SponsoredSurface,
+): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const pairs = sql.join(
+    ids.map((id) => sql`(${id}::uuid, ${userHash(userId, id, day)})`),
+    sql`, `,
+  );
+  const rows = await db
+    .select({ id: sponsoredDailySeen.placementId })
+    .from(sponsoredDailySeen)
+    .where(
+      and(
+        eq(sponsoredDailySeen.day, day),
+        eq(sponsoredDailySeen.surface, surface),
+        sql`(${sponsoredDailySeen.placementId}, ${sponsoredDailySeen.userHash}) in (${pairs})`,
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Annonceur externe (sans fiche), ou pro dont la fiche est publiée et dont le titulaire est en règle. */
+const advertiserDiffusable = (t: Date) =>
+  or(
+    and(eq(sponsoredPlacements.advertiserKind, "external"), isNull(sponsoredPlacements.proProfileId)),
+    and(
+      eq(sponsoredPlacements.advertiserKind, "pro"),
+      isNull(proProfiles.deletedAt),
+      sql`${proProfiles.publishedAt} is not null`,
+      proOwnerActive(t),
+    ),
+  );
+
+/**
+ * Le nom affiché d'un annonceur : pour un pro, **celui de sa fiche, lu à chaque fois** (un renommage se voit tout de
+ * suite ; la copie de l'emplacement n'est qu'un souvenir de la création) ; pour un annonceur externe, celui saisi.
+ */
+function advertiserNameOf(r: Row, proName: string | null): string {
+  return r.advertiserKind === "pro" ? (proName ?? r.advertiserName) : r.advertiserName;
+}
+
 /** Un emplacement montrable dans le Fil : son poids (1 + départements touchés) et le contenu de la carte. */
-export type FeedSponsoredCandidate = { id: string; weight: number; payload: FeedPayloads["sponsored"] };
+export type FeedSponsoredCandidate = {
+  id: string;
+  weight: number;
+  /** L'emplacement vise des départements (la raison dit alors « choisi d'après ton département »). */
+  targeted: boolean;
+  payload: FeedPayloads["sponsored"];
+};
 
 export const sponsoredService = {
   /**
@@ -122,29 +194,9 @@ export const sponsoredService = {
       );
     if (!rows.length) return null;
     const ids = rows.map((r) => r.placement.id);
-    const stats = await db
-      .select({ id: sponsoredDailyStats.placementId, n: sponsoredDailyStats.impressions })
-      .from(sponsoredDailyStats)
-      .where(
-        and(
-          eq(sponsoredDailyStats.day, today),
-          eq(sponsoredDailyStats.surface, "home"),
-          inArray(sponsoredDailyStats.placementId, ids),
-        ),
-      );
-    const shownToday = new Map(stats.map((s) => [s.id, s.n]));
+    const shownToday = await impressionsToday(ids, today);
     // Emplacements déjà montrés à cette personne aujourd'hui : on lui rend le même, sans le recompter.
-    const seen = await db
-      .select({ id: sponsoredDailySeen.placementId, hash: sponsoredDailySeen.userHash })
-      .from(sponsoredDailySeen)
-      .where(
-        and(
-          eq(sponsoredDailySeen.day, today),
-          eq(sponsoredDailySeen.surface, "home"),
-          inArray(sponsoredDailySeen.placementId, ids),
-        ),
-      );
-    const seenIds = new Set(seen.filter((s) => s.hash === userHash(v.user.id, s.id, today)).map((s) => s.id));
+    const seenIds = await seenByPerson(v.user.id, ids, today, "home");
     const candidates = rows.flatMap((r) => {
       if (opts.targetedOnly && r.placement.categoryIds.length === 0) return [];
       const m = placementMatch(target(r.placement), {
@@ -181,8 +233,9 @@ export const sponsoredService = {
 
   /**
    * Compte l'affichage de cet emplacement pour cette personne aujourd'hui sur cet endroit, une seule fois, sous le plafond
-   * du jour (de cet endroit). Le plafond se vérifie dans l'instruction elle-même (incrément conditionnel) : deux
-   * chargements simultanés ne le dépassent pas. Renvoie faux si le plafond est atteint.
+   * du jour **de l'emplacement, toutes surfaces confondues** (les statistiques restent par endroit). La ligne de
+   * l'emplacement est verrouillée le temps du comptage : deux chargements simultanés ne dépassent pas le plafond. Renvoie
+   * faux si le plafond est atteint.
    */
   async claimImpression(
     id: string,
@@ -192,22 +245,37 @@ export const sponsoredService = {
     surface: SponsoredSurface = "home",
   ): Promise<boolean> {
     return db.transaction(async (tx) => {
+      // Le plafond est global à l'emplacement (toutes surfaces) : le verrou de la ligne de l'emplacement sérialise les
+      // comptages concurrents, la somme du jour se lit donc sans que personne ne la dépasse entre-temps.
+      await tx
+        .select({ id: sponsoredPlacements.id })
+        .from(sponsoredPlacements)
+        .where(eq(sponsoredPlacements.id, id))
+        .for("update");
       const [claimed] = await tx
         .insert(sponsoredDailySeen)
         .values({ placementId: id, userHash: userHash(userId, id, day), day, surface })
         .onConflictDoNothing()
         .returning({ id: sponsoredDailySeen.placementId });
       if (!claimed) return true; // déjà compté (chargement simultané du même compte)
-      const [daily] = await tx
-        .insert(sponsoredDailyStats)
-        .values({ placementId: id, day, surface, impressions: 1 })
-        .onConflictDoUpdate({
-          target: [sponsoredDailyStats.placementId, sponsoredDailyStats.day, sponsoredDailyStats.surface],
-          set: { impressions: sql`${sponsoredDailyStats.impressions} + 1` },
-          ...(cap === null ? {} : { setWhere: sql`${sponsoredDailyStats.impressions} < ${cap}` }),
-        })
-        .returning({ n: sponsoredDailyStats.impressions });
-      if (!daily) {
+      let full = false;
+      if (cap !== null) {
+        const [total] = await tx
+          .select({ n: sql<number>`coalesce(sum(${sponsoredDailyStats.impressions}), 0)::int` })
+          .from(sponsoredDailyStats)
+          .where(and(eq(sponsoredDailyStats.placementId, id), eq(sponsoredDailyStats.day, day)));
+        full = (total?.n ?? 0) >= cap;
+      }
+      if (!full) {
+        await tx
+          .insert(sponsoredDailyStats)
+          .values({ placementId: id, day, surface, impressions: 1 })
+          .onConflictDoUpdate({
+            target: [sponsoredDailyStats.placementId, sponsoredDailyStats.day, sponsoredDailyStats.surface],
+            set: { impressions: sql`${sponsoredDailyStats.impressions} + 1` },
+          });
+      }
+      if (full) {
         // Plafond atteint : l'affichage n'est pas compté, la personne n'en garde pas trace.
         await tx
           .delete(sponsoredDailySeen)
@@ -230,18 +298,32 @@ export const sponsoredService = {
   },
 
   /**
-   * Un emplacement encore diffusé sur cet endroit, ou 404 : actif, dans sa période, prévu pour cet endroit, avec le
-   * réglage général allumé et, pour un annonceur externe, `sponsored.external_enabled` aussi (lot R7k1 : rien ne se
-   * compte pour une publicité que l'administration a coupée).
+   * Un emplacement qui peut encore être montré **à cette personne** sur cet endroit, ou 404 (et rien ne s'écrit) : actif,
+   * dans sa période, prévu pour cet endroit, avec le réglage général allumé ; pour un annonceur externe,
+   * `sponsored.external_enabled` aussi ; pour un pro, une fiche publiée dont le titulaire est en règle ; et la personne
+   * est dans la cible (un département de l'emplacement, s'il en vise). Lot R7k1 : rien ne se compte pour une publicité
+   * coupée, retirée, ou qui ne lui aurait pas été montrée.
    */
-  async diffused(id: string, surface: SponsoredSurface): Promise<Row> {
-    const today = parisDay(now());
-    const p = await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, id) });
+  async diffused(v: Viewer, id: string, surface: SponsoredSurface): Promise<Row> {
+    const t = now();
+    const today = parisDay(t);
+    const [found] = await db
+      .select({ placement: sponsoredPlacements })
+      .from(sponsoredPlacements)
+      .leftJoin(proProfiles, eq(proProfiles.id, sponsoredPlacements.proProfileId))
+      .where(and(eq(sponsoredPlacements.id, id), advertiserDiffusable(t)));
+    const p = found?.placement;
     if (p?.status !== "active" || today < p.startsOn || today > p.endsOn || !p.surfaces.includes(surface)) {
       throw notFound("Emplacement introuvable");
     }
     if (!(await sponsoredOn())) throw notFound("Emplacement introuvable");
     if (p.advertiserKind === "external" && !(await settingsStore.get("sponsored.external_enabled"))) {
+      throw notFound("Emplacement introuvable");
+    }
+    if (p.advertiserKind === "pro" && proVisibility(null, null, t).hidden.promotion) {
+      throw notFound("Emplacement introuvable");
+    }
+    if (p.departments.length && !p.departments.some((d) => v.profile.departments.includes(d))) {
       throw notFound("Emplacement introuvable");
     }
     return p;
@@ -253,8 +335,8 @@ export const sponsoredService = {
    * plafond du jour ; plafond atteint : 409, l'écran le retire. Seulement pour un emplacement encore diffusé.
    */
   async impression(v: Viewer, id: string, surface: SponsoredSurface = "home"): Promise<void> {
-    rateLimit("sponsoredClick", v.user.id);
-    const p = await this.diffused(id, surface);
+    rateLimit("sponsoredImpression", v.user.id);
+    const p = await this.diffused(v, id, surface);
     if (!(await this.claimImpression(id, v.user.id, parisDay(now()), p.dailyCap, surface))) {
       throw new AppError(409, "conflict", "Emplacement complet pour aujourd'hui");
     }
@@ -267,7 +349,7 @@ export const sponsoredService = {
   async click(v: Viewer, id: string, surface: SponsoredSurface = "home"): Promise<void> {
     rateLimit("sponsoredClick", v.user.id);
     const today = parisDay(now());
-    await this.diffused(id, surface);
+    await this.diffused(v, id, surface);
     const hash = userHash(v.user.id, id, today);
     const seen = await db.query.sponsoredDailySeen.findFirst({
       where: and(
@@ -334,41 +416,14 @@ export const sponsoredService = {
           lte(sponsoredPlacements.startsOn, today),
           gte(sponsoredPlacements.endsOn, today),
           inArray(sponsoredPlacements.advertiserKind, kinds),
-          or(
-            and(
-              eq(sponsoredPlacements.advertiserKind, "pro"),
-              isNull(proProfiles.deletedAt),
-              sql`${proProfiles.publishedAt} is not null`,
-              proOwnerActive(t),
-            ),
-            and(eq(sponsoredPlacements.advertiserKind, "external"), isNull(sponsoredPlacements.proProfileId)),
-          ),
+          advertiserDiffusable(t),
         ),
       );
     if (!rows.length) return [];
     const ids = rows.map((r) => r.placement.id);
-    const stats = await db
-      .select({ id: sponsoredDailyStats.placementId, n: sponsoredDailyStats.impressions })
-      .from(sponsoredDailyStats)
-      .where(
-        and(
-          eq(sponsoredDailyStats.day, today),
-          eq(sponsoredDailyStats.surface, "feed"),
-          inArray(sponsoredDailyStats.placementId, ids),
-        ),
-      );
-    const shownToday = new Map(stats.map((s) => [s.id, s.n]));
-    const seen = await db
-      .select({ id: sponsoredDailySeen.placementId, hash: sponsoredDailySeen.userHash })
-      .from(sponsoredDailySeen)
-      .where(
-        and(
-          eq(sponsoredDailySeen.day, today),
-          eq(sponsoredDailySeen.surface, "feed"),
-          inArray(sponsoredDailySeen.placementId, ids),
-        ),
-      );
-    const seenIds = new Set(seen.filter((s) => s.hash === userHash(v.user.id, s.id, today)).map((s) => s.id));
+    // Plafond du jour global à l'emplacement ; « déjà montré » filtré en SQL sur les couples (emplacement, empreinte).
+    const shownToday = await impressionsToday(ids, today);
+    const seenIds = await seenByPerson(v.user.id, ids, today, "feed");
     return rows.flatMap((r) => {
       const m = feedPlacementMatch(target(r.placement), {
         today,
@@ -380,7 +435,7 @@ export const sponsoredService = {
       const { placement, pro } = r;
       const payload: FeedPayloads["sponsored"] = {
         id: placement.id,
-        advertiserName: placement.advertiserName || pro?.name || "",
+        advertiserName: advertiserNameOf(placement, pro?.name ?? null),
         advertiserKind: placement.advertiserKind,
         title: placement.title,
         body: placement.body,
@@ -390,7 +445,7 @@ export const sponsoredService = {
         domain: placement.advertiserKind === "external" ? placement.externalUrlDomain : null,
         pro: pro ? { slug: pro.slug, name: pro.name, logoUrl: storage.url(pro.logoKey) } : null,
       };
-      return [{ id: placement.id, weight: m.weight, payload }];
+      return [{ id: placement.id, weight: m.weight, targeted: placement.departments.length > 0, payload }];
     });
   },
 
@@ -478,10 +533,13 @@ export const sponsoredService = {
       categoryIds: input.categoryIds ?? current.categoryIds,
     });
     if (problem) throw validation(problem);
+    // Le nom d'un pro est celui de sa fiche (jamais modifié ici) ; seul un annonceur externe a un nom propre.
+    const { advertiserName: nameInput, ...fields } = input;
     const [row] = await db
       .update(sponsoredPlacements)
       .set({
-        ...input,
+        ...fields,
+        ...(current.advertiserKind === "external" && nameInput ? { advertiserName: nameInput } : {}),
         surfaces,
         // Le domaine affiché suit toujours le lien (jamais saisi à la main).
         ...(input.linkUrl && current.advertiserKind === "external"
@@ -596,7 +654,7 @@ function adminView(r: Row, proName: string | null, bySurface: SurfaceStats | und
   return {
     id: r.id,
     advertiserKind: r.advertiserKind,
-    advertiserName: r.advertiserName || proName || "",
+    advertiserName: advertiserNameOf(r, proName),
     proProfileId: r.proProfileId,
     proName,
     disclosure: r.disclosure,

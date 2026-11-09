@@ -71,6 +71,14 @@ function SponsoredBody() {
     status: "draft",
   });
   const [issue, setIssue] = useState<string | null>(null);
+  // Modification d'un emplacement existant : un seul à la fois.
+  const [edit, setEdit] = useState<{
+    id: string;
+    advertiserName: string;
+    disclosure: string;
+    departments: string;
+    surfaces: SponsoredSurface[];
+  } | null>(null);
   const published = (pros.data ?? []).filter((p) => p.published);
   const external = form.kind === "external";
   const draftName = external ? form.advertiserName : (published.find((p) => p.id === form.proProfileId)?.name ?? "");
@@ -118,6 +126,23 @@ function SponsoredBody() {
     if (!ok) return;
     setNotice(L.sponsoredDone);
     setForm((f) => ({ ...f, title: "", body: "", linkUrl: "", departments: "", dailyCap: "" }));
+    await placements.reload();
+  }
+
+  async function saveEdit(row: SponsoredPlacementAdmin) {
+    if (!edit) return;
+    setNotice(null);
+    const ok = await gesture.run(() =>
+      api.updatePlacement(row.id, {
+        ...(row.advertiserKind === "external" ? { advertiserName: edit.advertiserName.trim() } : {}),
+        disclosure: edit.disclosure.trim() || null,
+        surfaces: row.advertiserKind === "external" ? ["feed"] : edit.surfaces,
+        departments: departmentsOf(edit.departments),
+      }),
+    );
+    if (!ok) return;
+    setEdit(null);
+    setNotice(L.sponsoredDone);
     await placements.reload();
   }
 
@@ -242,14 +267,108 @@ function SponsoredBody() {
               </Text>
             ))}
           <SponsoredPreview
-            advertiserName={p.advertiserName}
+            advertiserName={
+              edit?.id === p.id && p.advertiserKind === "external" ? edit.advertiserName : p.advertiserName
+            }
             title={p.title}
             body={p.body}
             imageUrl={p.imageUrl}
-            disclosure={p.disclosure}
+            disclosure={edit?.id === p.id ? edit.disclosure.trim() || null : p.disclosure}
             domain={p.advertiserKind === "external" ? p.externalUrlDomain : null}
           />
+          {edit?.id === p.id ? (
+            <View style={styles.stack} testID="placement-edit">
+              <Text variant="label" color={t.color.plateInk}>
+                {L.sponsoredEditTitle}
+              </Text>
+              {p.advertiserKind === "external" ? (
+                <TextField
+                  label={L.sponsoredAdvertiserName}
+                  value={edit.advertiserName}
+                  onChangeText={(v) => setEdit((e) => (e ? { ...e, advertiserName: v } : e))}
+                  maxLength={80}
+                  testID="placement-edit-advertiser"
+                />
+              ) : (
+                <Muted variant="caption">{L.sponsoredProNameFixed}</Muted>
+              )}
+              <Text variant="label" color={t.color.plateMuted}>
+                {L.sponsoredSurfacesField}
+              </Text>
+              {sponsoredSurfaces.map((x) => (
+                <CheckboxField
+                  key={x}
+                  label={placementSurfaceLabels[x]}
+                  checked={edit.surfaces.includes(x)}
+                  disabled={p.advertiserKind === "external"}
+                  onChange={(on) =>
+                    setEdit((e) =>
+                      e ? { ...e, surfaces: on ? [...e.surfaces, x] : e.surfaces.filter((y) => y !== x) } : e,
+                    )
+                  }
+                />
+              ))}
+              <TextField
+                label={L.sponsoredDisclosureField}
+                value={edit.disclosure}
+                onChangeText={(v) => setEdit((e) => (e ? { ...e, disclosure: v } : e))}
+                maxLength={40}
+                placeholder="Publicité"
+                testID="placement-edit-disclosure"
+              />
+              <TextField
+                label={L.sponsoredDepartments}
+                value={edit.departments}
+                onChangeText={(v) => setEdit((e) => (e ? { ...e, departments: v } : e))}
+                placeholder="66, 11"
+              />
+              {gesture.error ? <Notice tone="error">{gesture.error}</Notice> : null}
+              <Button
+                variant="plate"
+                icon="check"
+                loading={gesture.busy}
+                onPress={() => void saveEdit(p)}
+                fullWidth
+                testID="placement-edit-save"
+              >
+                {L.sponsoredSave}
+              </Button>
+              <Button
+                variant="plate"
+                icon="close"
+                onPress={() => {
+                  gesture.setError(null);
+                  setEdit(null);
+                }}
+                fullWidth
+                testID="placement-edit-cancel"
+              >
+                {L.sponsoredCancel}
+              </Button>
+            </View>
+          ) : null}
           <View style={styles.stack}>
+            {edit?.id !== p.id ? (
+              <Button
+                variant="plate"
+                icon="edit"
+                onPress={() => {
+                  gesture.setError(null);
+                  setNotice(null);
+                  setEdit({
+                    id: p.id,
+                    advertiserName: p.advertiserName,
+                    disclosure: p.disclosure ?? "",
+                    departments: p.departments.join(", "),
+                    surfaces: p.surfaces,
+                  });
+                }}
+                fullWidth
+                testID="placement-edit-open"
+              >
+                {L.sponsoredEdit}
+              </Button>
+            ) : null}
             {p.status !== "active" && p.status !== "ended" ? (
               <Button
                 variant="plate"
@@ -444,6 +563,7 @@ function SponsoredBody() {
           imageUrl={null}
           disclosure={form.disclosure.trim() || null}
           domain={external ? displayDomain(form.linkUrl) : null}
+          isNew
         />
         <Button
           variant="plate"

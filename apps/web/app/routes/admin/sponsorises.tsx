@@ -83,6 +83,19 @@ export async function action({ request }: Route.ActionArgs) {
     });
     return res.ok ? redirect("/admin/sponsorises?fait=1") : fail(res);
   }
+  if (intent === "update") {
+    const external = text("advertiserKind") === "external";
+    const res = await api(request, `/admin/sponsored-placements/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      json: {
+        ...(external ? { advertiserName: text("advertiserName") } : {}),
+        disclosure: text("disclosure") || null,
+        surfaces: external ? ["feed"] : form.getAll("surfaces").map(String),
+        departments: departmentsOf(text("departments")),
+      },
+    });
+    return res.ok ? redirect("/admin/sponsorises?fait=1") : fail(res);
+  }
   if (intent === "status") {
     const res = await api(request, `/admin/sponsored-placements/${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -108,9 +121,95 @@ export async function action({ request }: Route.ActionArgs) {
   return data({ id, error: "Action inconnue." }, { status: 400 });
 }
 
+/** Modification d'un emplacement existant : annonceur (nom d'un annonceur externe), endroits, mention, départements. */
+function EditPanel({ p, busy, onClose }: { p: SponsoredPlacementAdmin; busy: boolean; onClose: () => void }) {
+  const [edit, setEdit] = useState({
+    advertiserName: p.advertiserName,
+    disclosure: p.disclosure ?? "",
+    departments: p.departments.join(", "),
+    surfaces: p.surfaces as SponsoredSurface[],
+  });
+  const set = (patch: Partial<typeof edit>) => setEdit((e) => ({ ...e, ...patch }));
+  const external = p.advertiserKind === "external";
+  return (
+    <Form method="post" className="s-stack" data-testid="placement-edit" aria-label={L.sponsoredEditTitle}>
+      <input type="hidden" name="intent" value="update" />
+      <input type="hidden" name="id" value={p.id} />
+      <input type="hidden" name="advertiserKind" value={p.advertiserKind} />
+      <h3 className="s-h2">{L.sponsoredEditTitle}</h3>
+      <div className="adm-form-split">
+        <div className="s-stack">
+          {external ? (
+            <TextField
+              label={L.sponsoredAdvertiserName}
+              name="advertiserName"
+              maxLength={80}
+              required
+              value={edit.advertiserName}
+              onChange={(e) => set({ advertiserName: e.target.value })}
+            />
+          ) : (
+            <p className="s-muted">
+              {p.advertiserName} · {L.sponsoredProNameFixed}
+            </p>
+          )}
+          <fieldset className="s-stack s-stack--tight adm-fieldset">
+            <legend className="o-t-label">{L.sponsoredSurfacesField}</legend>
+            {sponsoredSurfaces.map((x) => (
+              <CheckboxField
+                key={x}
+                name="surfaces"
+                value={x}
+                label={placementSurfaceLabels[x]}
+                checked={edit.surfaces.includes(x)}
+                disabled={external}
+                onChange={(e) =>
+                  set({ surfaces: e.target.checked ? [...edit.surfaces, x] : edit.surfaces.filter((y) => y !== x) })
+                }
+              />
+            ))}
+          </fieldset>
+          <TextField
+            label={L.sponsoredDisclosureField}
+            name="disclosure"
+            maxLength={40}
+            placeholder="Publicité"
+            value={edit.disclosure}
+            onChange={(e) => set({ disclosure: e.target.value })}
+          />
+          <TextField
+            label={L.sponsoredDepartments}
+            name="departments"
+            placeholder="66, 11"
+            value={edit.departments}
+            onChange={(e) => set({ departments: e.target.value })}
+          />
+        </div>
+        <SponsoredPreview
+          advertiserName={external ? edit.advertiserName : p.advertiserName}
+          title={p.title}
+          body={p.body}
+          imageUrl={p.imageUrl}
+          disclosure={edit.disclosure.trim() || null}
+          domain={external ? p.externalUrlDomain : null}
+        />
+      </div>
+      <div className="s-row">
+        <Button type="submit" variant="secondary" icon="check" loading={busy}>
+          {L.sponsoredSave}
+        </Button>
+        <Button type="button" variant="secondary" icon="close" onClick={onClose}>
+          {L.sponsoredCancel}
+        </Button>
+      </div>
+    </Form>
+  );
+}
+
 export default function AdminSponsored({ loaderData, actionData }: Route.ComponentProps) {
   const { placements, pros, externalEnabled, done } = loaderData;
   const busy = useNavigation().state !== "idle";
+  const [editing, setEditing] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const [draft, setDraft] = useState({
     kind: "pro",
@@ -196,7 +295,19 @@ export default function AdminSponsored({ loaderData, actionData }: Route.Compone
                 />
               </div>
             </div>
+            {editing === p.id && <EditPanel p={p} busy={busy} onClose={() => setEditing(null)} />}
             <div className="s-row">
+              {editing !== p.id && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon="edit"
+                  onClick={() => setEditing(p.id)}
+                  data-testid="placement-edit-open"
+                >
+                  {L.sponsoredEdit}
+                </Button>
+              )}
               <Form method="post" className="s-row">
                 <input type="hidden" name="intent" value="status" />
                 <input type="hidden" name="id" value={p.id} />
@@ -345,6 +456,7 @@ export default function AdminSponsored({ loaderData, actionData }: Route.Compone
             imageUrl={null}
             disclosure={draft.disclosure.trim() || null}
             domain={external ? displayDomain(draft.linkUrl) : null}
+            isNew
           />
         </div>
         {actionData && !actionData.id && (

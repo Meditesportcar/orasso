@@ -3,7 +3,13 @@ import { z } from "zod";
 
 import { departmentSchema } from "../enums";
 import { HOME_RADIUS, homeWidgetIds } from "../home";
-import { type AdvertiserKind, advertiserKinds, type SponsoredSurface, sponsoredSurfaces } from "../rules/sponsored";
+import {
+  type AdvertiserKind,
+  advertiserKinds,
+  distinctDepartments,
+  type SponsoredSurface,
+  sponsoredSurfaces,
+} from "../rules/sponsored";
 import { personaKinds } from "./profile";
 
 const widgetId = z.enum(homeWidgetIds);
@@ -77,7 +83,7 @@ export const sponsoredPlacementCreateSchema = z
     title: z.string().trim().min(1).max(60),
     body: z.string().trim().min(1).max(160),
     linkUrl: httpUrl,
-    departments: z.array(departmentSchema).max(20).default([]),
+    departments: z.array(departmentSchema).max(20).default([]).transform(distinctDepartments),
     categoryIds: z.array(z.uuid()).max(30).default([]),
     startsOn: isoDay,
     endsOn: isoDay,
@@ -105,7 +111,7 @@ export const sponsoredPlacementUpdateSchema = z
     title: z.string().trim().min(1).max(60),
     body: z.string().trim().min(1).max(160),
     linkUrl: httpUrl,
-    departments: z.array(departmentSchema).max(20),
+    departments: z.array(departmentSchema).max(20).transform(distinctDepartments),
     categoryIds: z.array(z.uuid()).max(30),
     startsOn: isoDay,
     endsOn: isoDay,

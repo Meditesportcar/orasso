@@ -12,10 +12,22 @@ export const advertiserKinds = ["pro", "external"] as const;
 export type AdvertiserKind = (typeof advertiserKinds)[number];
 
 /**
- * « Pourquoi je vois ça » d'une carte Sponsorisé du Fil : toujours la même phrase (D38 : non personnalisé, le seul critère
- * est le département).
+ * « Pourquoi je vois ça » d'une carte Sponsorisé du Fil (D38 : non personnalisé, le seul critère est le département) :
+ * la phrase du département ne se dit que pour un emplacement **ciblé** par département ; un emplacement ouvert à toute la
+ * France dit seulement « Sponsorisé » (rien n'a été choisi d'après la personne).
  */
 export const FEED_SPONSORED_REASON = "Sponsorisé · choisi d'après ton département";
+export const FEED_SPONSORED_OPEN_REASON = "Sponsorisé";
+
+/** Le libellé de la raison selon que l'emplacement vise des départements (`targeted`) ou toute la France. */
+export function feedSponsoredReason(targeted: boolean): string {
+  return targeted ? FEED_SPONSORED_REASON : FEED_SPONSORED_OPEN_REASON;
+}
+
+/** Les départements d'un emplacement sans doublon (l'ordre de saisie est gardé). */
+export function distinctDepartments(departments: readonly string[]): string[] {
+  return [...new Set(departments)];
+}
 
 /** Domaine affiché sous une carte d'annonceur externe : le nom d'hôte du lien, sans `www.` (jamais saisi à la main). */
 export function displayDomain(url: string): string | null {
@@ -114,6 +126,6 @@ export function feedPlacementMatch(
   if (ctx.today < p.startsOn || ctx.today > p.endsOn) return no;
   if (p.dailyCap !== null && ctx.impressionsToday >= p.dailyCap) return no;
   if (!p.departments.length) return { eligible: true, weight: 1 };
-  const touched = p.departments.filter((d) => ctx.sector.includes(d)).length;
+  const touched = distinctDepartments(p.departments).filter((d) => ctx.sector.includes(d)).length;
   return touched ? { eligible: true, weight: 1 + touched } : no;
 }

@@ -314,7 +314,11 @@ export function insertSponsored<T>(
   if (!picker) return [...cards];
   const out = [...cards];
   // Positions absolues (1-based) tombant dans cette page, en tenant compte des cartes insérées plus tôt dans la page.
-  for (let position = SPONSORED_FIRST_POSITION; position <= offset + out.length + 1; position += SPONSORED_EVERY) {
+  // Première position à partir de `offset + 1`, calculée sans boucle sur l'offset (un curseur forgé ne bloque rien).
+  const first =
+    SPONSORED_FIRST_POSITION +
+    SPONSORED_EVERY * Math.ceil(Math.max(0, offset + 1 - SPONSORED_FIRST_POSITION) / SPONSORED_EVERY);
+  for (let position = first; position <= offset + out.length + 1; position += SPONSORED_EVERY) {
     const index = position - 1 - offset;
     if (index < 0 || index > out.length) continue;
     const card = picker(position);

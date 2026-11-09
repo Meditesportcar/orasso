@@ -16,9 +16,19 @@ export type SponsoredPreviewProps = {
   disclosure: string | null;
   /** Domaine du lien, affiché pour un annonceur externe. */
   domain: string | null;
+  /** Emplacement pas encore créé : l'image s'envoie après la création (sinon : « Pas encore d'image »). */
+  isNew?: boolean;
 };
 
-export function SponsoredPreview({ advertiserName, title, body, imageUrl, disclosure, domain }: SponsoredPreviewProps) {
+export function SponsoredPreview({
+  advertiserName,
+  title,
+  body,
+  imageUrl,
+  disclosure,
+  domain,
+  isNew = false,
+}: SponsoredPreviewProps) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -27,12 +37,12 @@ export function SponsoredPreview({ advertiserName, title, body, imageUrl, disclo
       style={[styles.card, { backgroundColor: c.surface }]}
       testID="placement-preview"
     >
-      <View style={[styles.media, { backgroundColor: c.surfaceSunken }]}>
+      <View style={[styles.media, { backgroundColor: c.surfaceRaised }]}>
         {imageUrl ? (
           <Photo source={mediaSource(imageUrl)} style={StyleSheet.absoluteFill} />
         ) : (
           <Text variant="caption" color={c.inkMuted} style={styles.noImage}>
-            {L.sponsoredPreviewNoImage}
+            {isNew ? L.sponsoredPreviewNoImage : L.sponsoredPreviewNoImageYet}
           </Text>
         )}
       </View>

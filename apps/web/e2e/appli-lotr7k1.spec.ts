@@ -18,7 +18,7 @@ type Theme = "beton" | "sable";
 async function siteContext(browser: Browser, cookie: string, width: number, theme: Theme) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const url = new URL(WEB);
-  const cookies = [{ name: "orasso-theme", value: theme, url: WEB }];
+  const cookies: { name: string; value: string; url: string }[] = [{ name: "orasso-theme", value: theme, url: WEB }];
   for (const pair of cookie.split("; ").filter(Boolean)) {
     const i = pair.indexOf("=");
     cookies.push({ name: pair.slice(0, i), value: pair.slice(i + 1), url: `${url.protocol}//${url.host}` });
@@ -27,8 +27,8 @@ async function siteContext(browser: Browser, cookie: string, width: number, them
   return ctx;
 }
 
-async function openApp(browser: Browser, theme: Theme) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });
+async function openApp(browser: Browser, theme: Theme, width = 390) {
+  const ctx = await browser.newContext({ viewport: { width, height: 844 }, baseURL: APP });
   const page = await ctx.newPage();
   await page.goto("/");
   await page.evaluate((th) => {
@@ -92,7 +92,31 @@ test("site : emplacements sponsorisés, Béton et Sable, 390 et 1280 px", async 
         await page.getByLabel("Lien (https://…)").fill("https://www.assurance-soleil.fr/devis");
         await expect(page.getByTestId("external-warning")).toBeVisible();
         await page.getByTestId("placement-form").scrollIntoViewIfNeeded();
-        await page.getByTestId("placement-form").screenshot({ path: `${DIR}/site-formulaire-externe-${theme}-${width}.png` });
+        await page
+          .getByTestId("placement-form")
+          .screenshot({ path: `${DIR}/site-formulaire-externe-${theme}-${width}.png` });
+        // Tour 2 : modifier un emplacement existant (annonceur externe : nom, mention, départements), avant puis après.
+        const row = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
+        await row.scrollIntoViewIfNeeded();
+        await row.screenshot({ path: `${DIR}/site-modifier-avant-${theme}-${width}.png` });
+        await row.getByTestId("placement-edit-open").click();
+        await expect(row.getByTestId("placement-edit")).toBeVisible();
+        await row.getByLabel("Mention (ex. Publicité)").fill("Annonce");
+        await row.getByLabel("Départements (vide = partout)").fill("66, 11");
+        await row.screenshot({ path: `${DIR}/site-modifier-ouvert-${theme}-${width}.png` });
+        await row.getByRole("button", { name: "Enregistrer" }).click();
+        await page.waitForURL(/fait=1/, { timeout: 30_000 });
+        await page.waitForTimeout(800);
+        const saved = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
+        await expect(saved.getByTestId("placement-preview")).toContainText("Annonce");
+        await saved.screenshot({ path: `${DIR}/site-modifier-apres-${theme}-${width}.png` });
+        // Remise de la mention d'origine pour les passages suivants.
+        const api = await apiCall<{ id: string; title: string }[]>(damien, "GET", "/admin/sponsored-placements");
+        const mine = api.data.find((p) => p.title === "Assure ta sportive");
+        await apiCall(damien, "PATCH", `/admin/sponsored-placements/${mine?.id}`, {
+          disclosure: "Publicité",
+          departments: ["66"],
+        });
       }
       await ctx.close();
     }
@@ -113,6 +137,41 @@ test("appli : emplacements sponsorisés, Béton et Sable, 390 px", async ({ brow
     await page.getByTestId("placement-form").scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${DIR}/appli-sponsorises-formulaire-${theme}-390.png` });
+    await ctx.close();
+  }
+});
+
+// Tour 2 : le Pixel de Damien (384 dp), l'aperçu en Sable (fond de la zone d'image) et la modification d'un emplacement.
+test("appli : aperçu et modification d'un emplacement, 384 px, Béton et Sable", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  test.setTimeout(600_000);
+  mkdirSync(DIR, { recursive: true });
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await openApp(browser, theme, 384);
+    await chooseAdmin(page);
+    await page.goto("/sponsorises");
+    await page.waitForTimeout(3500);
+    await expect(page.getByTestId("placement-form")).toBeVisible({ timeout: 30_000 });
+    const row = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${DIR}/appli-apercu-${theme}-384.png` });
+    await row.getByTestId("placement-edit-open").click();
+    await expect(row.getByTestId("placement-edit")).toBeVisible();
+    await row.getByTestId("placement-edit-disclosure").fill("Annonce");
+    await row.getByTestId("placement-edit").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${DIR}/appli-modifier-ouvert-${theme}-384.png` });
+    await row.getByTestId("placement-edit-save").click();
+    await expect(row.getByTestId("placement-preview")).toContainText("Annonce", { timeout: 30_000 });
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${DIR}/appli-modifier-apres-${theme}-384.png` });
+    // Mention d'origine remise, pour le passage suivant.
+    const damien = await login("damien@orasso.local");
+    const all = await apiCall<{ id: string; title: string }[]>(damien, "GET", "/admin/sponsored-placements");
+    const mine = all.data.find((p) => p.title === "Assure ta sportive");
+    await apiCall(damien, "PATCH", `/admin/sponsored-placements/${mine?.id}`, { disclosure: "Publicité" });
     await ctx.close();
   }
 });

@@ -13,4 +13,5 @@ ALTER TABLE "sponsored_daily_seen" DROP CONSTRAINT "sponsored_daily_seen_pkey";
 ALTER TABLE "sponsored_daily_seen" ADD CONSTRAINT "sponsored_daily_seen_pkey" PRIMARY KEY("placement_id","user_hash","day","surface");--> statement-breakpoint
 ALTER TABLE "sponsored_daily_stats" DROP CONSTRAINT "sponsored_daily_stats_pkey";
 --> statement-breakpoint
-ALTER TABLE "sponsored_daily_stats" ADD CONSTRAINT "sponsored_daily_stats_pkey" PRIMARY KEY("placement_id","day","surface");
+ALTER TABLE "sponsored_daily_stats" ADD CONSTRAINT "sponsored_daily_stats_pkey" PRIMARY KEY("placement_id","day","surface");--> statement-breakpoint
+ALTER TABLE "sponsored_placements" ADD CONSTRAINT "sponsored_placements_advertiser_check" CHECK (("sponsored_placements"."advertiser_kind" = 'external' and "sponsored_placements"."pro_profile_id" is null) or ("sponsored_placements"."advertiser_kind" = 'pro' and "sponsored_placements"."pro_profile_id" is not null));

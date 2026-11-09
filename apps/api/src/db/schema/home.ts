@@ -2,7 +2,19 @@
 // sponsorisés. L'API n'appelle jamais une source externe pour répondre à un utilisateur sans passer par ce cache.
 import { advertiserKinds, placementStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { timestamps, tstz } from "./common";
 import { proProfiles } from "./pros";
@@ -52,7 +64,14 @@ export const sponsoredPlacements = pgTable(
     clicks: integer("clicks").notNull().default(0),
     ...timestamps,
   },
-  (t) => [index("sponsored_placements_status_idx").on(t.status, t.startsOn, t.endsOn)],
+  (t) => [
+    index("sponsored_placements_status_idx").on(t.status, t.startsOn, t.endsOn),
+    // Cohérence (lot R7k1) : un annonceur externe n'a pas de fiche pro, un pro en a une.
+    check(
+      "sponsored_placements_advertiser_check",
+      sql`(${t.advertiserKind} = 'external' and ${t.proProfileId} is null) or (${t.advertiserKind} = 'pro' and ${t.proProfileId} is not null)`,
+    ),
+  ],
 );
 
 /** Affichages et clics par jour de Paris et par endroit (plafond quotidien) : aucun lien avec une personne. */

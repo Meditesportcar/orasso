@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { placementAdvertiserProblem } from "../schemas/home";
-import { displayDomain, feedPlacementMatch } from "./sponsored";
+import {
+  placementAdvertiserProblem,
+  sponsoredPlacementCreateSchema,
+  sponsoredPlacementUpdateSchema,
+} from "../schemas/home";
+import { displayDomain, distinctDepartments, feedPlacementMatch, feedSponsoredReason } from "./sponsored";
 
 const base = {
   id: "p",
@@ -61,5 +65,37 @@ describe("placementAdvertiserProblem", () => {
     expect(placementAdvertiserProblem("external", { ...ok, proProfileId: "x" })).not.toBeNull();
     expect(placementAdvertiserProblem("external", { ...ok, surfaces: ["home"] })).not.toBeNull();
     expect(placementAdvertiserProblem("external", { ...ok, categoryIds: ["c"] })).not.toBeNull();
+  });
+});
+
+describe("départements répétés", () => {
+  it("le poids se calcule sur les départements distincts", () => {
+    expect(feedPlacementMatch({ ...base, departments: ["66", "66", "66"] }, ctx)).toEqual({
+      eligible: true,
+      weight: 2,
+    });
+  });
+  it("le schéma d'un emplacement les dédoublonne avant stockage (création et modification)", () => {
+    const create = sponsoredPlacementCreateSchema.parse({
+      advertiserKind: "external",
+      advertiserName: "Assurance",
+      surfaces: ["feed"],
+      title: "T",
+      body: "B",
+      linkUrl: "https://exemple.fr",
+      departments: ["66", "11", "66", "11", "66"],
+      startsOn: "2026-11-01",
+      endsOn: "2026-11-30",
+    });
+    expect(create.departments).toEqual(["66", "11"]);
+    expect(sponsoredPlacementUpdateSchema.parse({ departments: ["34", "34"] }).departments).toEqual(["34"]);
+    expect(distinctDepartments(["66", "11", "66"])).toEqual(["66", "11"]);
+  });
+});
+
+describe("raison d'une carte du Fil", () => {
+  it("le département n'est dit que pour un emplacement ciblé ; ouvert à tous : « Sponsorisé »", () => {
+    expect(feedSponsoredReason(true)).toBe("Sponsorisé · choisi d'après ton département");
+    expect(feedSponsoredReason(false)).toBe("Sponsorisé");
   });
 });

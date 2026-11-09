@@ -4,7 +4,7 @@
 // abonnements). Le choix est déterministe (personne, jour, position) : recharger une page rend les mêmes cartes, et un
 // parcours n'en change pas en route. Rien n'est compté ici : l'affichage se compte quand la carte apparaît à l'écran
 // (`POST /sponsored/:id/impression` avec `{ surface: "feed" }`).
-import { type FeedCard, feedReasonLabel, pickWeighted } from "@orasso/shared";
+import { type FeedCard, feedSponsoredReason, pickWeighted } from "@orasso/shared";
 
 import { now } from "../../../lib/deps";
 import type { Viewer } from "../../../lib/session";
@@ -34,7 +34,8 @@ export async function sponsoredPicker(v: Viewer): Promise<SponsoredPicker | null
       // Un identifiant par apparition (clé de liste côté écran) ; l'emplacement est dans `payload.id`.
       id: `sponsored:${picked.id}:${position}`,
       kind: "sponsored",
-      reason: { code: "sponsored", label: feedReasonLabel("sponsored") },
+      // « Choisi d'après ton département » seulement pour un emplacement qui vise des départements.
+      reason: { code: "sponsored", label: feedSponsoredReason(picked.targeted) },
       at,
       payload: picked.payload,
     };

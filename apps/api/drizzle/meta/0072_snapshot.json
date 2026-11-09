@@ -1,5 +1,5 @@
 {
-  "id": "999c5ef3-c5ce-40f0-b06e-84a7ee1a8a8e",
+  "id": "1c6627c6-da5a-47c5-aaf5-1695f23b7298",
   "prevId": "705cb517-f563-4be3-96e5-f0fee374861f",
   "version": "7",
   "dialect": "postgresql",
@@ -7443,7 +7443,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "sponsored_placements_advertiser_check": {
+          "name": "sponsored_placements_advertiser_check",
+          "value": "(\"sponsored_placements\".\"advertiser_kind\" = 'external' and \"sponsored_placements\".\"pro_profile_id\" is null) or (\"sponsored_placements\".\"advertiser_kind\" = 'pro' and \"sponsored_placements\".\"pro_profile_id\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.event_invitations": {

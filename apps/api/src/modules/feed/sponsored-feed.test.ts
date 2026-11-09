@@ -3,8 +3,8 @@
 // derrière `sponsored.external_enabled` (coupé par défaut : avis juridique), affichages et clics par surface, administration
 // réservée au super administrateur.
 import { randomBytes, randomUUID } from "node:crypto";
-import { FEED_SPONSORED_REASON, type FeedCard } from "@orasso/shared";
-import { eq } from "drizzle-orm";
+import { FEED_SPONSORED_OPEN_REASON, FEED_SPONSORED_REASON, type FeedCard } from "@orasso/shared";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { call, createPro, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
@@ -14,12 +14,15 @@ import {
   feedPosts,
   profileInterests,
   profiles,
+  proProfiles,
   sponsoredDailySeen,
   sponsoredDailyStats,
   sponsoredPlacements,
+  userFollows,
 } from "../../db/schema";
-import { resetRateLimits } from "../../lib/rateLimit";
+import { rateLimit, rateRules, resetRateLimits } from "../../lib/rateLimit";
 import { parisDay } from "../pros/service";
+import { type Cursor, decodeCursor, encodeCursor, MAX_OFFSET } from "./cursor";
 import { feedPhotoKey } from "./posts";
 
 afterAll(async () => {
@@ -166,7 +169,7 @@ describe("positions dans le Fil", () => {
     const card = sponsoredOf(items)[0];
     expect(card).toBeDefined();
     expect(items.indexOf(card as FeedCard)).toBe(3);
-    expect(card?.reason).toEqual({ code: "sponsored", label: FEED_SPONSORED_REASON });
+    expect(card?.reason).toEqual({ code: "sponsored", label: FEED_SPONSORED_OPEN_REASON });
     expect(card?.payload).toEqual({
       id: p.id,
       advertiserName: "Assurance Soleil",
@@ -540,5 +543,332 @@ describe("Accueil et Garage : inchangés", () => {
     await proPlacement({ surfaces: ["home"], title: "Accueil" });
     const home = await call(viewer, "GET", "/me/home?persona=fan&blocks=v2");
     expect(home.json.sponsored?.title).toBe("Accueil");
+  });
+});
+
+// --- Tour 2 (corrections après relecture Opus et Codex) -------------------------------------------------------------
+
+describe("raison de la carte : le département n'est dit que pour un emplacement ciblé", () => {
+  it("ciblé par département : « choisi d'après ton département » ; ouvert à toute la France : « Sponsorisé » seul", async () => {
+    const viewer = await person("Viewer_Raison");
+    await posts(await person("Auteur_Raison"), 30);
+    const root = await admin();
+    await setting(root, "sponsored.external_enabled", true);
+    const targeted = await placement({ departments: ["66"], title: "Ciblée" });
+    expect(sponsoredOf((await fil(viewer)).items)[0]?.reason).toEqual({
+      code: "sponsored",
+      label: FEED_SPONSORED_REASON,
+    });
+    await db.update(sponsoredPlacements).set({ departments: [] }).where(eq(sponsoredPlacements.id, targeted.id));
+    expect(sponsoredOf((await fil(viewer)).items)[0]?.reason).toEqual({
+      code: "sponsored",
+      label: FEED_SPONSORED_OPEN_REASON,
+    });
+    expect(FEED_SPONSORED_OPEN_REASON).toBe("Sponsorisé");
+  });
+});
+
+describe("curseur forgé et réinitialisation du parcours", () => {
+  it("un décalage énorme ou au-delà de 100 000 : 400 « Curseur invalide » tout de suite, sans bloquer l'API", async () => {
+    const viewer = await person("Viewer_Forge");
+    await posts(await person("Auteur_Forge"), 45);
+    await proPlacement();
+    const first = await fil(viewer);
+    expect(first.next).not.toBeNull();
+    const real = decodeCursor(first.next as string);
+    expect(real).not.toBeNull();
+    const forged = (offset: number) => encodeCursor({ ...(real as Cursor), offset });
+    for (const offset of [4_294_967_295, 100_001]) {
+      const t0 = Date.now();
+      const res = await fil(viewer, `?cursor=${forged(offset)}`);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.json)).toMatch(/Curseur invalide/);
+      expect(Date.now() - t0).toBeLessThan(1500);
+    }
+    // La limite elle-même reste acceptée, et vite.
+    const t1 = Date.now();
+    expect((await fil(viewer, `?cursor=${forged(MAX_OFFSET)}`)).status).toBe(200);
+    expect(Date.now() - t1).toBeLessThan(1500);
+    // Un parcours normal n'est pas touché.
+    expect((await fil(viewer, `?cursor=${first.next}`)).status).toBe(200);
+  });
+
+  it("`reset` en plein parcours : ni doublon, ni trou, et aucune carte Sponsorisé dans les trois premières après le reset", async () => {
+    const viewer = await person("Viewer_ResetSp");
+    const author = await person("Auteur_ResetSp");
+    const other = await person("Autre_ResetSp");
+    await posts(author, 40);
+    await posts(other, 6);
+    for (let i = 0; i < 4; i++) await proPlacement({ title: `Pro ${i}` });
+    const first = await fil(viewer);
+    const second = await fil(viewer, `?cursor=${first.next}`);
+    expect(second.status).toBe(200);
+    expect(second.json.reset).toBeUndefined();
+    expect(sponsoredOf([...first.items, ...second.items]).length).toBeGreaterThan(2);
+    // Le contexte change en plein parcours : un nouvel abonnement.
+    await db
+      .insert(userFollows)
+      .values({ followerId: viewer.id, followedId: other.id, status: "accepted", acceptedAt: new Date() });
+    const third = await fil(viewer, `?cursor=${second.next}`);
+    expect(third.status).toBe(200);
+    expect(third.json.reset).toBe(true);
+    // Après le reset : la liste repart à zéro, rien de Sponsorisé dans les trois premières, puis 4, 10, 16…
+    const all: FeedCard[] = [...third.items];
+    let cursor = third.next;
+    for (let i = 0; i < 12 && cursor; i++) {
+      const res = await fil(viewer, `?cursor=${cursor}`);
+      expect(res.status).toBe(200);
+      expect(res.json.reset).toBeUndefined();
+      all.push(...res.items);
+      cursor = res.next;
+    }
+    expect(all.slice(0, 3).every((c) => c.kind !== "sponsored")).toBe(true);
+    const at = all.flatMap((c, i) => (c.kind === "sponsored" ? [i + 1] : []));
+    expect(at.length).toBeGreaterThanOrEqual(3);
+    expect(at).toEqual(at.map((_, k) => 4 + 6 * k));
+    // Ni doublon ni trou : toutes les publications sont là, une fois chacune.
+    expect(new Set(all.map((c) => c.id)).size).toBe(all.length);
+    expect(all.filter((c) => c.kind === "feed_post")).toHaveLength(46);
+  });
+});
+
+describe("un pro retiré, ou hors cible, ne compte plus rien", () => {
+  const rows = async () => ({
+    stats: await db.select().from(sponsoredDailyStats),
+    seen: await db.select().from(sponsoredDailySeen),
+  });
+
+  it("fiche non publiée, supprimée ou titulaire suspendu : 404, rien d'écrit, plus de carte", async () => {
+    const viewer = await person("Viewer_ProRetire");
+    await posts(await person("Auteur_ProRetire"), 12);
+    const p = await proPlacement({ surfaces: ["home", "feed"] });
+    // Affiché une fois tant que la fiche est en règle.
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/impression`, { surface: "feed" })).status).toBe(204);
+    expect(sponsoredOf((await fil(viewer)).items)).toHaveLength(1);
+    const before = await rows();
+
+    const proId = p.proProfileId as string;
+    const [pro] = await db.select().from(proProfiles).where(eq(proProfiles.id, proId));
+    const retire = async (label: string, apply: () => Promise<unknown>, restore: () => Promise<unknown>) => {
+      await apply();
+      for (const path of ["impression", "click"]) {
+        for (const surface of ["feed", "home"]) {
+          const res = await call(viewer, "POST", `/sponsored/${p.id}/${path}`, { surface });
+          expect(res.status, `${label} ${path} ${surface}`).toBe(404);
+        }
+      }
+      expect(sponsoredOf((await fil(viewer)).items), label).toHaveLength(0);
+      expect(await rows(), label).toEqual(before);
+      await restore();
+    };
+    await retire(
+      "non publiée",
+      () => db.update(proProfiles).set({ publishedAt: null }).where(eq(proProfiles.id, proId)),
+      () =>
+        db
+          .update(proProfiles)
+          .set({ publishedAt: pro?.publishedAt ?? new Date() })
+          .where(eq(proProfiles.id, proId)),
+    );
+    await retire(
+      "supprimée",
+      () => db.update(proProfiles).set({ deletedAt: new Date() }).where(eq(proProfiles.id, proId)),
+      () => db.update(proProfiles).set({ deletedAt: null }).where(eq(proProfiles.id, proId)),
+    );
+    await retire(
+      "titulaire suspendu",
+      () =>
+        db
+          .update(profiles)
+          .set({ suspendedUntil: new Date(clock.now.getTime() + 7 * 24 * HOUR) })
+          .where(eq(profiles.userId, pro?.ownerUserId ?? "")),
+      () =>
+        db
+          .update(profiles)
+          .set({ suspendedUntil: null })
+          .where(eq(profiles.userId, pro?.ownerUserId ?? "")),
+    );
+    // Rétablie : l'affichage et le clic repassent.
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/click`, { surface: "feed" })).status).toBe(204);
+  });
+
+  it("une personne hors de la cible (département) : 404, rien d'écrit ; dans la cible : compté", async () => {
+    const away = await person("Viewer_Ailleurs", ["34"]);
+    const local = await person("Viewer_Local", ["66"]);
+    const root = await admin();
+    await setting(root, "sponsored.external_enabled", true);
+    const ext = await placement({ departments: ["66"] });
+    const pro = await proPlacement({ departments: ["66"], surfaces: ["home", "feed"] });
+    for (const [id, surface] of [
+      [ext.id, "feed"],
+      [pro.id, "feed"],
+      [pro.id, "home"],
+    ] as const) {
+      expect((await call(away, "POST", `/sponsored/${id}/impression`, { surface })).status).toBe(404);
+      expect((await call(away, "POST", `/sponsored/${id}/click`, { surface })).status).toBe(404);
+    }
+    expect(await rows()).toEqual({ stats: [], seen: [] });
+    expect((await call(local, "POST", `/sponsored/${ext.id}/impression`, { surface: "feed" })).status).toBe(204);
+    expect((await call(local, "POST", `/sponsored/${pro.id}/impression`, { surface: "home" })).status).toBe(204);
+    expect((await rows()).stats).toHaveLength(2);
+  });
+});
+
+describe("le nom d'un pro est lu sur sa fiche", () => {
+  it("renommer la fiche change la carte du Fil et la liste d'administration ; un annonceur externe garde son nom", async () => {
+    const viewer = await person("Viewer_Renom");
+    await posts(await person("Auteur_Renom"), 12);
+    const p = await proPlacement({ advertiserName: "Ancien nom" });
+    await db
+      .update(proProfiles)
+      .set({ name: "Pneus Roussillon" })
+      .where(eq(proProfiles.id, p.proProfileId as string));
+    const card = sponsoredOf((await fil(viewer)).items)[0];
+    expect(card?.payload).toMatchObject({ advertiserKind: "pro", advertiserName: "Pneus Roussillon" });
+    const root = await admin();
+    const list = await call(root, "GET", "/admin/sponsored-placements");
+    expect(list.json[0]).toMatchObject({ advertiserName: "Pneus Roussillon", proName: "Pneus Roussillon" });
+    // Un nom envoyé à la modification d'un pro est ignoré (la fiche fait foi).
+    const patched = await call(root, "PATCH", `/admin/sponsored-placements/${p.id}`, { advertiserName: "Autre" });
+    expect(patched.status).toBe(200);
+    expect(patched.json.advertiserName).toBe("Pneus Roussillon");
+    await setting(root, "sponsored.external_enabled", true);
+    const ext = await placement({ advertiserName: "Assurance Soleil" });
+    const renamed = await call(root, "PATCH", `/admin/sponsored-placements/${ext.id}`, {
+      advertiserName: "Assurance Soleil Sud",
+    });
+    expect(renamed.json.advertiserName).toBe("Assurance Soleil Sud");
+  });
+});
+
+describe("limites de requêtes : affichages et clics séparés", () => {
+  it("une longue lecture (20 pages) n'épuise pas la limite des clics ; les affichages ont la leur", async () => {
+    const viewer = await person("Viewer_Longue");
+    const spots = [] as { id: string }[];
+    for (let i = 0; i < 5; i++) spots.push(await proPlacement({ surfaces: ["feed"], title: `Longue ${i}` }));
+    // 20 pages × 5 cartes : 100 affichages (le même emplacement revient, l'appli dédoublonnera, voir R7k2).
+    for (let page = 0; page < 20; page++) {
+      for (const s of spots) {
+        expect((await call(viewer, "POST", `/sponsored/${s.id}/impression`, { surface: "feed" })).status).toBe(204);
+      }
+    }
+    // Après 100 affichages (plus que l'ancienne limite de 60 pour tout), un clic passe.
+    const clicked = await call(viewer, "POST", `/sponsored/${spots[0]?.id}/click`, { surface: "feed" });
+    expect(clicked.status).toBe(204);
+    expect(rateRules.sponsoredImpression.max).toBeGreaterThanOrEqual(600);
+    expect(rateRules.sponsoredClick.max).toBeLessThan(rateRules.sponsoredImpression.max);
+  }, 120_000);
+
+  it("la limite des affichages s'applique : au-delà de 600 par heure, 429 ; un clic passe encore", async () => {
+    const viewer = await person("Viewer_Rafale");
+    const p = await proPlacement({ surfaces: ["feed"] });
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/impression`, { surface: "feed" })).status).toBe(204);
+    for (let i = 0; i < 599; i++) rateLimit("sponsoredImpression", viewer.id);
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/impression`, { surface: "feed" })).status).toBe(429);
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/click`, { surface: "feed" })).status).toBe(204);
+  });
+});
+
+describe("plafond du jour : global à l'emplacement, toutes surfaces confondues", () => {
+  it("Accueil et Fil cochés, plafond 5 : 5 au total, les statistiques restent par surface", async () => {
+    const p = await proPlacement({ surfaces: ["home", "feed"], dailyCap: 5 });
+    const users = await Promise.all(Array.from({ length: 8 }, (_, i) => person(`Plaf_${i}`)));
+    const results: number[] = [];
+    for (const [i, u] of users.entries()) {
+      const surface = i % 2 === 0 ? "home" : "feed";
+      results.push((await call(u, "POST", `/sponsored/${p.id}/impression`, { surface })).status);
+    }
+    expect(results.filter((s) => s === 204)).toHaveLength(5);
+    expect(results.filter((s) => s === 409)).toHaveLength(3);
+    const stats = await db.select().from(sponsoredDailyStats).where(eq(sponsoredDailyStats.placementId, p.id));
+    expect(stats.reduce((n, s) => n + s.impressions, 0)).toBe(5);
+    expect(Object.fromEntries(stats.map((s) => [s.surface, s.impressions]))).toEqual({ home: 3, feed: 2 });
+    const [row] = await db.select().from(sponsoredPlacements).where(eq(sponsoredPlacements.id, p.id));
+    expect(row?.impressions).toBe(5);
+    // Une personne qui n'a rien vu n'est plus servie dans le Fil.
+    const late = await person("Plaf_Tard");
+    await posts(await person("Auteur_Plaf"), 10);
+    expect(sponsoredOf((await fil(late)).items)).toHaveLength(0);
+  });
+
+  it("en parallèle sur les deux surfaces : jamais plus que le plafond", async () => {
+    const p = await proPlacement({ surfaces: ["home", "feed"], dailyCap: 4 });
+    const users = await Promise.all(Array.from({ length: 12 }, (_, i) => person(`ParaG_${i}`)));
+    resetRateLimits();
+    const res = await Promise.all(
+      users.map((u, i) => call(u, "POST", `/sponsored/${p.id}/impression`, { surface: i % 2 === 0 ? "home" : "feed" })),
+    );
+    expect(res.filter((r) => r.status === 204)).toHaveLength(4);
+    expect(res.filter((r) => r.status === 409)).toHaveLength(8);
+    const stats = await db.select().from(sponsoredDailyStats).where(eq(sponsoredDailyStats.placementId, p.id));
+    expect(stats.reduce((n, s) => n + s.impressions, 0)).toBe(4);
+  });
+});
+
+describe("coût d'une page : « déjà montré » filtré en base", () => {
+  it("50 000 lignes du jour : la carte reste servie à qui l'a déjà vue (plafond atteint), pas aux autres, et la page reste rapide", async () => {
+    const viewer = await person("Viewer_Volume");
+    const stranger = await person("Etranger_Volume");
+    await posts(await person("Auteur_Volume"), 12);
+    const p = await proPlacement({ surfaces: ["feed"], dailyCap: 1 });
+    expect((await call(viewer, "POST", `/sponsored/${p.id}/impression`, { surface: "feed" })).status).toBe(204);
+    // 50 000 empreintes d'autres personnes pour ce jour, cet emplacement et ce Fil.
+    await db.execute(sql`
+      insert into sponsored_daily_seen (placement_id, user_hash, day, surface)
+      select ${p.id}::uuid, md5(g::text), ${today()}::date, 'feed' from generate_series(1, 50000) g
+    `);
+    const count = await db.execute(sql`select count(*)::int as n from sponsored_daily_seen`);
+    expect((count.rows[0] as { n: number }).n).toBeGreaterThanOrEqual(50_000);
+    const t0 = Date.now();
+    const mine = await fil(viewer);
+    const elapsed = Date.now() - t0;
+    expect(mine.status).toBe(200);
+    expect(sponsoredOf(mine.items)).toHaveLength(1);
+    expect(sponsoredOf((await fil(stranger)).items)).toHaveLength(0);
+    expect(elapsed).toBeLessThan(3000);
+  }, 120_000);
+});
+
+describe("administration : modifier un emplacement existant", () => {
+  it("surfaces, mention, annonceur et départements (dédoublonnés) par le PATCH existant", async () => {
+    const root = await admin();
+    const created = await call(root, "POST", "/admin/sponsored-placements", {
+      advertiserKind: "external",
+      advertiserName: "Assurance Soleil",
+      surfaces: ["feed"],
+      title: "Assure ta sportive",
+      body: "Un devis en deux minutes.",
+      linkUrl: "https://www.assurance-soleil.fr/devis",
+      departments: ["66", "66", "11", "66"],
+      startsOn: "2026-11-01",
+      endsOn: "2026-11-30",
+      status: "draft",
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.departments).toEqual(["66", "11"]);
+    const id = created.json.id as string;
+    const patched = await call(root, "PATCH", `/admin/sponsored-placements/${id}`, {
+      advertiserName: "Assurance Soleil Sud",
+      disclosure: "Publicité",
+      surfaces: ["feed"],
+      departments: ["34", "34"],
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.json).toMatchObject({
+      advertiserName: "Assurance Soleil Sud",
+      disclosure: "Publicité",
+      departments: ["34"],
+      externalUrlDomain: "assurance-soleil.fr",
+    });
+    // Un annonceur externe ne peut toujours pas passer à l'Accueil.
+    const refused = await call(root, "PATCH", `/admin/sponsored-placements/${id}`, { surfaces: ["home", "feed"] });
+    expect(refused.status).toBe(400);
+    // Un pro : les surfaces se modifient.
+    const pro = await proPlacement({ surfaces: ["home"] });
+    const both = await call(root, "PATCH", `/admin/sponsored-placements/${pro.id}`, {
+      surfaces: ["home", "feed"],
+      disclosure: "Partenaire",
+    });
+    expect(both.json).toMatchObject({ surfaces: ["home", "feed"], disclosure: "Partenaire" });
   });
 });
