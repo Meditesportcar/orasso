@@ -26,11 +26,14 @@ import type { CSSProperties } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
+import { InviteMenu } from "../components/EventInvite";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
+import { type InviteNoticeData, muteInviterAction } from "../lib/eventInvite.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import { formatDateTime } from "../lib/format";
+import "../styles/event-invite.css";
 import "../styles/partnerships.css";
 import type { Route } from "./+types/app-activite-demandes";
 
@@ -70,6 +73,8 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   if (isFollowIntent(intent)) return followAction(request, form);
+  // Lot R7-fix-invite : « Couper les invitations de … » depuis le « ⋯ » de la carte d'une invitation de passionné (lot R6c).
+  if (intent === "invite_mute") return muteInviterAction(request, form);
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
     return data({ formError: res.data.crewError }, { status: res.init?.status ?? 200 });
@@ -352,9 +357,14 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
   const event = obj(r.payload, "event");
   const slug = str(event, "slug");
   const peer = r.payload.source === "peer";
-  const inviters = list(r.payload, "inviters")
-    .map((x) => str(x, "pseudo"))
-    .filter((x): x is string => Boolean(x));
+  const inviterRows = list(r.payload, "inviters");
+  const inviters = inviterRows.map((x) => str(x, "pseudo")).filter((x): x is string => Boolean(x));
+  // Le « ⋯ » coupe chacun des inviteurs montrés (au plus trois, comme la carte) ; il faut leur identifiant.
+  const mutable = inviterRows.flatMap((x) => {
+    const userId = str(x, "userId");
+    const pseudo = str(x, "pseudo");
+    return userId && pseudo ? [{ userId, pseudo }] : [];
+  });
   const total = typeof r.payload.invitersCount === "number" ? r.payload.invitersCount : inviters.length;
   const who = inviters.length ? inviters : [name];
   const more = Math.max(0, total - who.length);
@@ -367,7 +377,10 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
   const startsAt = str(event, "startsAt");
   const city = str(event, "city");
   return (
-    <li className="s-person" data-testid={peer ? "request-event-invitation-peer" : "request-event-invitation"}>
+    <li
+      className={peer && mutable.length > 0 ? "s-person ri-req-card" : "s-person"}
+      data-testid={peer ? "request-event-invitation-peer" : "request-event-invitation"}
+    >
       {r.from.type === "person" ? (
         <PersonAvatar url={imageUrl} pseudo={name} size={44} />
       ) : (
@@ -406,6 +419,7 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
             {peer ? eventInviteLabels.seeEvent : invitationLabels.openEvent}
           </Button>
         )}
+        {peer && <InviteMenu inviters={mutable} testId="request-invite-more" />}
       </div>
     </li>
   );
@@ -517,7 +531,11 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
-  const message = { error: done?.formError ?? done?.followError ?? null, notice: done?.followNotice ?? null };
+  const invite = actionData as InviteNoticeData | undefined;
+  const message = {
+    error: done?.formError ?? done?.followError ?? invite?.inviteError ?? null,
+    notice: done?.followNotice ?? null,
+  };
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.requests}</h1>
@@ -536,6 +554,11 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
       {message.error && (
         <p className="s-error" role="alert">
           {message.error}
+        </p>
+      )}
+      {invite?.inviteNotice && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="invite-muted">
+          {invite.inviteNotice}
         </p>
       )}
       {message.notice && (
