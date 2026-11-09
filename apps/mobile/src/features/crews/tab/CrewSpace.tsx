@@ -179,7 +179,7 @@ export function CrewSpace({
   );
 
   return (
-    <View style={styles.col} testID="crew-space" accessibilityLabel={`${crewLabels.crew} ${v.name}`}>
+    <View style={styles.col} testID="crew" accessibilityLabel={`${crewLabels.crew} ${v.name}`}>
       {/* Tour 2 (R5c2) : la bannière est lue par une adresse protégée (session), en mémoire seulement. */}
       {v.bannerUrl ? (
         <View style={[styles.cover, { backgroundColor: c.night }]} testID="crew-cover">

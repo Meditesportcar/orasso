@@ -49,15 +49,15 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   const organizer = await login("damien@orasso.local");
   const event = await createEvent(organizer, { title: `Crew E2E ${s}` });
 
-  // Kenji crée son crew depuis « Mes crews ».
+  // Kenji crée son crew depuis « Créer un crew » (lot R7b2 : `/app/crews` est devenu l'onglet Crew).
   const ctxK = await context(browser, kCookie);
   const pageK = await ctxK.newPage();
-  await pageK.goto("/app/crews");
+  await pageK.goto("/app/crews/nouveau");
   const crewName = `Drift ${s}`;
   await pageK.getByLabel("Nom du crew").fill(crewName);
   await pageK.getByLabel("Description").fill("Glisse et japonaises.");
   await pageK.getByTestId("crew-create").click();
-  await pageK.waitForURL(/\/c\/[a-z0-9-]+$/);
+  await pageK.waitForURL(/\/app\/crew\?crew=[a-z0-9-]+$/);
   const crewPath = new URL(pageK.url()).pathname;
   await expect(pageK.getByTestId("crew")).toHaveAttribute("data-state", "leader");
 
@@ -141,7 +141,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   const shots: { name: string; cookie: string; path: string }[] = [
     { name: "01-crew-chef", cookie: kCookie, path: crewPath },
     { name: "02-crew-visiteur", cookie: outsider, path: crewPath },
-    { name: "03-mes-crews", cookie: kCookie, path: "/app/crews" },
+    { name: "03-creer-crew", cookie: kCookie, path: "/app/crews/nouveau" },
     { name: "04-inscription-crew", cookie: kCookie, path: `/e/${event.slug}/crew` },
     { name: "05-acces-confirmer", cookie: nCookie, path: "/app/acces" },
     { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes` },

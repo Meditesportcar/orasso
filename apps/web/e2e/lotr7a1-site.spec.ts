@@ -121,14 +121,14 @@ test("Le Fil (coquille) rend le Journal sous son titre ; la cloche mène toujour
   await page.waitForURL((url) => url.pathname === "/app/boite");
 });
 
-test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {
+test("Crew : avec un crew (onglet du lot R7b2), sans crew", async ({ browser }) => {
   const k = await browser.newContext({ viewport: MOBILE });
   const kp = await k.newPage();
   await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app/crew");
   await kp.goto("/app/crew");
-  await expect(kp.getByRole("heading", { name: "Crew", exact: true })).toBeVisible();
-  await expect(kp.getByTestId("crew-tab-mine")).toBeVisible();
-  await expect(kp.getByTestId("crew-tab-open")).toHaveAttribute("href", "/c/roussillon-drift");
+  // Lot R7b2 : l'onglet montre le crew (nom, onglets Fil · Sorties · Membres · Spots), plus la coquille.
+  await expect(kp.getByTestId("crew-selector-single")).toContainText("Roussillon Drift");
+  await expect(kp.getByTestId("crew-tabs")).toBeVisible();
   await expect(kp.getByTestId("crew-tab-none")).toHaveCount(0);
   await shot(kp, "crew-kenji-390");
   await k.close();
@@ -138,8 +138,7 @@ test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {
   await loginInBrowser(sp, "sarah@orasso.local", undefined, "/app/crew");
   await sp.goto("/app/crew");
   await expect(sp.getByTestId("crew-tab-none")).toBeVisible();
-  await expect(sp.getByTestId("crew-tab-join")).toHaveAttribute("href", "/app/crews/rejoindre");
-  await expect(sp.getByTestId("crew-tab-join")).toContainText("Rejoindre un crew");
+    await expect(sp.getByTestId("crew-tab-join")).toContainText("Rejoindre un crew");
   await expect(sp.getByTestId("crew-tab-create")).toContainText("Créer un crew");
   await shot(sp, "crew-sarah-390");
   await s.close();
