@@ -37,7 +37,7 @@ export function sponsoredNotBeforeFourth(items: readonly FeedCard[]): FeedCard[]
   if (!items.some((c, i) => i < SPONSORED_MIN_INDEX && c.kind === "sponsored")) return [...items];
   // Les trois premières places reviennent aux trois premières cartes non sponsorisées ; tout le reste suit dans son ordre
   // (une 2e carte « Sponsorisé » qui remonterait à son tour ne passe donc jamais devant non plus).
-  const head = items.filter((c) => c.kind !== "sponsored").slice(0, SPONSORED_MIN_INDEX);
+  const head: FeedCard[] = items.filter((c) => c.kind !== "sponsored").slice(0, SPONSORED_MIN_INDEX);
   if (head.length < SPONSORED_MIN_INDEX) return head;
   return [...head, ...items.filter((c) => !head.includes(c))];
 }
