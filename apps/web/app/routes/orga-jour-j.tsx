@@ -8,6 +8,7 @@ import type {
   LiveCounters,
   MalusContestView,
   MyStaffEvent,
+  PresenceSummary,
   StaffAlertView,
 } from "@orasso/shared";
 import {
@@ -18,6 +19,7 @@ import {
   localDate,
   orgaDriveLabels,
   orgaLabels,
+  presenceLabels,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { now as clockNow } from "../lib/clock";
@@ -92,7 +94,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Terrain (lot 24) : alertes du staff avec leur position (tant qu'elles sont ouvertes) et main courante avec photo.
   const alerts = organizer ? await api<StaffAlertView[]>(request, `/events/${eventId}/alerts`) : null;
   const incidents = organizer ? await api<IncidentView[]>(request, `/events/${eventId}/incidents`) : null;
+  // Lot R7d2 : les présents (des nombres, jamais une liste). Le staff affecté n'a que la ligne totale ; une réponse refusée
+  // (hors de ses heures) ne dit rien : jamais un zéro à la place d'une erreur.
+  const presents = await api<PresenceSummary>(request, `/events/${eventId}/presences/summary`);
   return {
+    presents: presents.ok ? presents.data : null,
     alerts: alerts?.ok ? alerts.data : [],
     incidents: incidents?.ok ? incidents.data : [],
     event,
@@ -115,6 +121,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   const [live, setLive] = useState<LiveCounters | null>(loaderData.live);
   const [alerts, setAlerts] = useState<StaffAlertView[]>(loaderData.alerts);
   const [incidents, setIncidents] = useState<IncidentView[]>(loaderData.incidents);
+  const [presents, setPresents] = useState<PresenceSummary | null>(loaderData.presents);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -128,6 +135,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   useEffect(() => setLive(loaderData.live), [loaderData.live]);
   useEffect(() => setAlerts(loaderData.alerts), [loaderData.alerts]);
   useEffect(() => setIncidents(loaderData.incidents), [loaderData.incidents]);
+  useEffect(() => setPresents(loaderData.presents), [loaderData.presents]);
 
   const refetch = useCallback(async () => {
     const res = await apiFetch<CheckinListItem[]>(`/events/${event.id}/checkins${dayQs}`);
@@ -149,6 +157,12 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
     if (i.ok) setIncidents(i.data);
   }, [event.id]);
 
+  // Lot R7d2 : une présence validée (GPS, billet, entrée) : les présents se relisent.
+  const refetchPresents = useCallback(async () => {
+    const res = await apiFetch<PresenceSummary>(`/events/${event.id}/presences/summary`);
+    if (res.ok) setPresents(res.data);
+  }, [event.id]);
+
   // Direct : les compteurs arrivent par WebSocket, la liste se rafraîchit juste après (autres appareils du staff).
   useChannel(organizer ? `event:${event.id}:live` : null, (m) => {
     if (m.type === "live") {
@@ -156,6 +170,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
       else setLive(m.payload as LiveCounters);
     }
     if (m.type === "alert" || m.type === "alert.resolved" || m.type === "incident") void refetchField();
+    if (m.type === "presence.changed") void refetchPresents();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void refetch(), 400);
   });
@@ -302,6 +317,37 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Lot R7d2 : les présents sur Orasso, en nombres (jamais une liste ni un nom, aucune position gardée). */}
+      {presents && organizer && (
+        <section
+          className="orga__panel s-stack s-stack--tight"
+          aria-label={presenceLabels.summaryTitle}
+          data-testid="presents"
+        >
+          <h2 className="s-h2">{presenceLabels.summaryTitle}</h2>
+          <p data-testid="presents-total">
+            <strong className="o-t-number">{presenceLabels.summaryTotal(presents.total)}</strong>
+          </p>
+          <ul className="s-stack s-stack--tight">
+            <li data-testid="presents-exhibitors">
+              {presenceLabels.summaryLine(presenceLabels.summaryExhibitors, presents.exhibitorsCheckedIn)}
+            </li>
+            <li data-testid="presents-ticket">
+              {presenceLabels.summaryLine(presenceLabels.summaryVisitorsTicket, presents.visitorsWithTicketGps)}
+            </li>
+            <li data-testid="presents-noticket">
+              {presenceLabels.summaryLine(presenceLabels.summaryVisitorsNoTicket, presents.visitorsNoTicketGps)}
+            </li>
+          </ul>
+          <p className="o-t-caption s-muted">{presenceLabels.summaryPrivacy}</p>
+        </section>
+      )}
+      {presents && !organizer && (
+        <p className="o-t-caption" data-testid="presents-total">
+          {presenceLabels.summaryTotal(presents.total)}
+        </p>
       )}
 
       {organizer && live && live.byCategory.length > 0 && (
