@@ -1,7 +1,7 @@
 import { wideWordEm } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { fitWideTitleSize, fitWordSize, NARROW_EM, WIDE_EM } from "./fit";
+import { fitTitle, fitWideTitleSize, fitWordSize, NARROW_EM, TITLE_FLOOR, WIDE_EM } from "./fit";
 
 describe("fitWordSize (lot M5, retour 01 : un mot ne se coupe jamais)", () => {
   it("le mot le plus long tient sur la largeur, quitte à baisser le corps", () => {
@@ -45,5 +45,50 @@ describe("fitWideTitleSize (lot R7-0, tour 2 : « RASSEMBLEMEN / T DU LYDIA »)"
       fitWideTitleSize("Rassemblement du Lydia", info, 1, 19, 8),
     );
     expect(fitWideTitleSize("Anticonstitutionnellement", 100, 1.3, 19, 8)).toBe(8);
+  });
+});
+
+describe("fitTitle (lot R7-0, tour 3 : plancher 11, puis toute la largeur de la carte)", () => {
+  const column = 162; // colonne de la carte « Ta prochaine sortie » à 384 px
+  const full = 310; // toute la largeur de la carte
+  const widest = (title: string) => Math.max(...title.split(/\s+/).map((w) => wideWordEm(w, 1.1)));
+
+  it("jamais sous 11, quel que soit le titre, la colonne ou la police du système", () => {
+    for (const title of ["AUTOMOBILE-CLUB", "RASSEMBLEMENT", "Rassemblement du Lydia", "Expo JDM"]) {
+      for (const fontScale of [1, 1.15, 1.3]) {
+        for (const col of [120, 162, 222]) {
+          const r = fitTitle(title, col, full, fontScale, 19);
+          expect(r.size).toBeGreaterThanOrEqual(TITLE_FLOOR);
+          expect(r.size).toBeLessThanOrEqual(19);
+        }
+      }
+    }
+  });
+
+  it("« AUTOMOBILE-CLUB » et « RASSEMBLEMENT » : en colonne s'ils tiennent à 11, sinon toute la largeur, mot jamais coupé", () => {
+    for (const title of ["AUTOMOBILE-CLUB", "RASSEMBLEMENT"]) {
+      for (const fontScale of [1, 1.15, 1.3]) {
+        const r = fitTitle(title, column, full, fontScale, 19);
+        const room = (r.full ? full : column) / fontScale;
+        expect(widest(title) * r.size).toBeLessThanOrEqual(room);
+        // Passe en pleine largeur seulement si le mot ne tenait pas dans la colonne à 11.
+        expect(r.full).toBe(widest(title) * TITLE_FLOOR * fontScale > column);
+      }
+    }
+  });
+
+  it("le plus large des deux : « AUTOMOBILE-CLUB » à 1,3 passe sur toute la largeur", () => {
+    const r = fitTitle("AUTOMOBILE-CLUB", column, full, 1.3, 19);
+    expect(r.full).toBe(true);
+    expect(r.size).toBeGreaterThanOrEqual(TITLE_FLOOR);
+  });
+
+  it("un titre court reste en colonne au corps maximal ; largeur inconnue : le maximum, en colonne", () => {
+    expect(fitTitle("Expo JDM", column, full, 1, 19)).toEqual({ size: 19, full: false });
+    expect(fitTitle("RASSEMBLEMENT", 0, 0, 1, 19)).toEqual({ size: 19, full: false });
+  });
+
+  it("pleine largeur inconnue : le plancher, en colonne (pas de saut de mise en page à la mesure)", () => {
+    expect(fitTitle("AUTOMOBILE-CLUB", 100, 0, 1.3, 19)).toEqual({ size: TITLE_FLOOR, full: false });
   });
 });

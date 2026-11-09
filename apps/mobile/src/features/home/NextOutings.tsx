@@ -20,7 +20,7 @@ import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDim
 
 import { SmButton } from "@/features/passionne/kit";
 import { mediaSource } from "@/lib/media";
-import { fitWideTitleSize, fitWordSize, NARROW_EM } from "./fit";
+import { fitTitle, fitWordSize, NARROW_EM } from "./fit";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -102,10 +102,23 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
   const onInfo = (e: LayoutChangeEvent) => setInfoW(e.nativeEvent.layout.width);
   const { fontScale } = useWindowDimensions();
   // Le titre ne se coupe qu'entre deux mots : son mot le plus large tient dans la colonne, police du système comprise.
-  const titleSize = fitWideTitleSize(outing.title, infoW, fontScale, 19, 8);
+  // Lot R7-0, tour 3 : jamais sous 11 ; si le mot le plus long ne tient pas à 11 dans la colonne, le titre passe sur toute
+  // la largeur de la carte, sous l'affiche.
+  const { size: titleSize, full: titleFull } = fitTitle(outing.title, infoW, width - 2 * space3, fontScale, 19);
   const cdSize = fitWordSize(outing.countdown, infoW * 0.62, 48, 24, NARROW_EM);
   const source = mediaSource(outing.posterUrl);
   const a = outing.action;
+  const titleText = (
+    <Text
+      variant="posterM"
+      color={c.posterInk}
+      accessibilityRole="header"
+      style={{ fontSize: titleSize, lineHeight: Math.round(titleSize * 1.02) }}
+      testID="home-outing-title"
+    >
+      {outing.title}
+    </Text>
+  );
   return (
     <View
       style={[styles.nx, { width, backgroundColor: c.poster, boxShadow: t.shadow.shadowPoster }]}
@@ -140,15 +153,7 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
               {outing.countdownDetail ?? dayLabel(outing.startsAt)}
             </Text>
           </View>
-          <Text
-            variant="posterM"
-            color={c.posterInk}
-            accessibilityRole="header"
-            style={{ fontSize: titleSize, lineHeight: Math.round(titleSize * 1.02) }}
-            testID="home-outing-title"
-          >
-            {outing.title}
-          </Text>
+          {titleFull ? null : titleText}
           {outing.lines.map((l) => (
             <View key={`${l.icon}-${l.text}`} style={styles.line}>
               <Icon name={l.icon} size={14} color={c.posterMuted} />
@@ -165,6 +170,16 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
           </View>
         </View>
       </Pressable>
+      {titleFull ? (
+        <Pressable
+          onPress={outing.onOpen}
+          accessibilityRole="link"
+          accessibilityLabel={`${outing.title} : voir la fiche`}
+          testID="home-outing-title-wide"
+        >
+          {titleText}
+        </Pressable>
+      ) : null}
       {a || outing.onMap ? (
         <View style={styles.actions}>
           {a && a.kind === "access" && primary ? (
