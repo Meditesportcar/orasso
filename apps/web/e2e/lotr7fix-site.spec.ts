@@ -94,7 +94,10 @@ for (const theme of ["beton", "sable"] as const) {
       if (size === "390") {
         // Couper Kenji : il sort de la carte, Nina reste, le message de confirmation s'affiche.
         await card.getByTestId("invite-mute").filter({ hasText: kenji.pseudo }).click();
-        await expect(page.getByTestId("invite-muted")).toContainText(`Les invitations de ${kenji.pseudo}`);
+        // Tour 2 : le menu se referme, la confirmation s'affiche dans la carte, en vue.
+        await expect(card.getByTestId("invite-muted")).toContainText(`Les invitations de ${kenji.pseudo}`);
+        await expect(card.getByTestId("invite-muted")).toBeInViewport();
+        await expect(card.getByTestId("invite-menu")).toBeHidden();
         await expect(card).toContainText(`${nina.pseudo} t'invite`);
         await expect(card).not.toContainText(kenji.pseudo);
         const mutes = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
@@ -105,6 +108,9 @@ for (const theme of ["beton", "sable"] as const) {
         if (!(await card.getByTestId("invite-menu").isVisible())) await card.getByTestId("request-invite-more").click();
         await card.getByTestId("invite-mute").click();
         await expect(card).toHaveCount(0);
+        // La carte a disparu : la confirmation reste visible à sa place, en tête de liste.
+        await expect(page.getByTestId("invite-muted")).toContainText(`Les invitations de ${nina.pseudo}`);
+        await expect(page.getByTestId("invite-muted")).toBeInViewport();
         await apiCall(julie.cookie, "DELETE", `/me/invitation-mutes/${kenji.id}`);
         await apiCall(julie.cookie, "DELETE", `/me/invitation-mutes/${nina.id}`);
       }
@@ -112,3 +118,52 @@ for (const theme of ["beton", "sable"] as const) {
     }
   });
 }
+
+// Tour 2 (relecture Opus 6) : la coupure échoue (identifiant refusé par l'API) : l'erreur se lit dans le menu, qui reste
+// ouvert, la ligne reste cliquable ; un nouvel essai (identifiant rétabli) réussit.
+test("R7-fix-invite site : une coupure qui échoue affiche l'erreur dans le menu, un nouvel essai réussit", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const orga = await login("damien@orasso.local");
+  const event = await createEvent(orga, { title: `Nocturne R7fix ${unique()}`.slice(0, 40) });
+  const kenji = await person("R7eKen");
+  const julie = await person("R7eJul");
+  await follow(kenji, julie);
+  await follow(julie, kenji);
+  const sent = await apiCall(kenji.cookie, "POST", `/events/${event.id}/peer-invitations`, {
+    userIds: [julie.id],
+    note: "Viens !",
+  });
+  expect(sent.status).toBe(200);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await setTheme(page, "beton");
+  await loginInBrowser(page, julie.email, SEED_PASSWORD, "/app/activite/demandes");
+  const card = page.getByTestId("request-event-invitation-peer").filter({ hasText: event.title });
+  await expect(card).toBeVisible();
+  await card.getByTestId("request-invite-more").click();
+  const row = card.getByTestId("invite-mute");
+  // Identifiant invalide : l'API refuse.
+  await card.locator('input[name="userId"]').evaluate((el) => {
+    (el as HTMLInputElement).value = "00000000-0000-0000-0000-000000000000";
+  });
+  await row.click();
+  await expect(card.getByTestId("invite-menu-error")).toBeVisible();
+  await expect(card.getByTestId("invite-menu")).toBeVisible();
+  await expect(row).toBeEnabled();
+  await shot(page, "demandes-invitation-erreur-beton-390");
+  const none = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
+  expect(none.data).toEqual([]);
+  // Nouvel essai avec le bon identifiant : ça marche et l'erreur disparaît.
+  await card.locator('input[name="userId"]').evaluate((el, id) => {
+    (el as HTMLInputElement).value = id;
+  }, kenji.id);
+  await row.click();
+  await expect(page.getByTestId("invite-muted")).toContainText(`Les invitations de ${kenji.pseudo}`);
+  await expect(card).toHaveCount(0);
+  const mutes = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
+  expect(mutes.data.map((m) => m.userId)).toEqual([kenji.id]);
+  await apiCall(julie.cookie, "DELETE", `/me/invitation-mutes/${kenji.id}`);
+  await ctx.close();
+});
