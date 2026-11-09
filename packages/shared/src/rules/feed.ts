@@ -208,6 +208,7 @@ export const feedReasonCodes = [
   "pro_near",
   "from_orasso",
   "new_here",
+  "sponsored",
 ] as const;
 export type FeedReasonCode = (typeof feedReasonCodes)[number];
 

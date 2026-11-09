@@ -43,7 +43,8 @@ export const adminOverviewTiles: { key: keyof AdminOverview; label: string; href
 
 export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "signup.enabled": "Inscriptions ouvertes",
-  "sponsored.enabled": "Emplacements sponsorisés sur l'Accueil",
+  "sponsored.enabled": "Emplacements sponsorisés (Accueil et Fil)",
+  "sponsored.external_enabled": "Annonceurs externes dans le Fil (avis juridique attendu)",
   "providers.enabled": "Candidatures des prestataires",
   "points.participation": "Présent à un événement",
   "points.staff": "Staff présent",

@@ -14,6 +14,8 @@ import { DAY } from "./time";
 export const adminSettingKeys = [
   "signup.enabled",
   "sponsored.enabled",
+  // Lot R7k1 : annonceurs hors Orasso dans le Fil, coupés tant que le juriste n'a pas relu consentement et mentions.
+  "sponsored.external_enabled",
   "providers.enabled",
   "points.participation",
   "points.staff",
@@ -32,6 +34,7 @@ export type AdminSettingKey = (typeof adminSettingKeys)[number];
 export type AdminSettingValues = {
   "signup.enabled": boolean;
   "sponsored.enabled": boolean;
+  "sponsored.external_enabled": boolean;
   "providers.enabled": boolean;
   "points.participation": number;
   "points.staff": number;
@@ -48,6 +51,7 @@ export type AdminSettingValues = {
 export const adminSettingDefaults: AdminSettingValues = {
   "signup.enabled": true,
   "sponsored.enabled": true,
+  "sponsored.external_enabled": false,
   "providers.enabled": true,
   "points.participation": POINTS.participation,
   "points.staff": POINTS.staff,
@@ -63,7 +67,7 @@ export const adminSettingDefaults: AdminSettingValues = {
 
 /** Groupes de la page des réglages (ordre d'affichage). */
 export const adminSettingGroups: Record<"switches" | "points" | "lists", readonly AdminSettingKey[]> = {
-  switches: ["signup.enabled", "sponsored.enabled", "providers.enabled"],
+  switches: ["signup.enabled", "sponsored.enabled", "sponsored.external_enabled", "providers.enabled"],
   points: [
     "points.participation",
     "points.staff",

@@ -1,3 +1,4 @@
+import { FEED_SPONSORED_REASON } from "../rules/sponsored";
 import type { FeedAspect, FeedCardKind, FeedFilter, FeedReasonCode } from "../rules/feed";
 
 // Le Fil (lot R7e1, D38) : libellés des raisons, des filtres, des genres de carte et du menu ⋯.
@@ -29,6 +30,8 @@ export function feedReasonLabel(code: FeedReasonCode, who?: string | null): stri
       return "Proposé par Orasso";
     case "new_here":
       return "Nouveau sur Orasso";
+    case "sponsored":
+      return FEED_SPONSORED_REASON;
   }
 }
 

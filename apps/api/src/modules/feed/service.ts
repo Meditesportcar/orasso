@@ -53,6 +53,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { type Cursor, decodeCursor, encodeCursor } from "./cursor";
 import { rankedSources } from "./sources";
+import { sponsoredPicker } from "./sources/sponsored";
 import type { FeedSource, Key, LoadedCard, SourceInput } from "./sources/types";
 
 /** Plafond de sécurité par source pour la fenêtre classée (phase 1) ; ce qui dépasse passe en phase 2. */
@@ -164,9 +165,6 @@ function toCard(c: LoadedCard, ctx: FeedViewerContext): FeedCard {
     payload: c.payload,
   } as FeedCard;
 }
-
-/** Point d'insertion du Sponsorisé (positions 4, 10, 16…) : le lot R7k1 branche ici son choix ; `null` = rien. */
-const sponsoredPicker: ((position: number) => FeedCard | null) | null = null;
 
 /** Tours de lecture au plus pour remplir une page de la phase 2 (garde-fou : chaque tour avance strictement). */
 const MAX_ROUNDS = 50;
@@ -315,8 +313,14 @@ export const feedService = {
       if (need > 0 ? from !== null : page.length > 0) next = { ...head(), phase: 2, anchor: key };
     }
 
+    // Sponsorisé (lot R7k1) : pas dans « Mes abonnements » (la liste ne contient que ce que la personne suit) ni si elle a
+    // choisi « Moins de ce genre ». `offset` compte les cartes **servies** (Sponsorisé compris) : les positions restent
+    // celles du Fil entier, d'une page à l'autre.
+    const wantsSponsored = q.filter !== "following" && !less.has("sponsored");
+    const out = insertSponsored(items, wantsSponsored ? await sponsoredPicker(v) : null, offset);
+    if (next) next = { ...next, offset: offset + out.length };
     return {
-      items: insertSponsored(items, sponsoredPicker, offset),
+      items: out,
       nextCursor: next ? encodeCursor(next) : null,
       filter: q.filter,
       ...(reset ? { reset: true as const } : {}),
