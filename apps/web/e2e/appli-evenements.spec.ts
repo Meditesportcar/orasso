@@ -196,6 +196,8 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   await stepIs(page, "Règlement");
   await v(page, "wizard-instructions").fill("Entrée par le parking nord.");
   await next(page);
+  await stepIs(page, "Votes");
+  await next(page);
   await stepIs(page, "Affiche");
   const chooser = page.waitForEvent("filechooser");
   await v(page, "wizard-poster-pick").click();

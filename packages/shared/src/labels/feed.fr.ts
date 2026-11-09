@@ -28,6 +28,8 @@ export function feedReasonLabel(code: FeedReasonCode, who?: string | null): stri
       return "Pro près de chez toi";
     case "from_orasso":
       return "Proposé par Orasso";
+    case "your_memory":
+      return "Un souvenir pour toi";
     case "new_here":
       return "Nouveau sur Orasso";
     case "sponsored":

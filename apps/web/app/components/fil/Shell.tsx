@@ -1,11 +1,16 @@
 // La coque d'une carte du Fil sur le site (maquette R7.6 `.r7c`) : en-tête (rond, titre, raison, « ⋯ »), contenu, actions.
 import { Icon } from "@orasso/design-system/web";
 import { type FeedCard, type FeedCardKind, feedAgo, feedScreenLabels as L } from "@orasso/shared";
+import { Link } from "react-router";
 
 export type CardProps<K extends FeedCardKind = FeedCardKind> = {
   card: FeedCard<K>;
   onMenu: (card: FeedCard) => void;
   faded: boolean;
+  /** Une carte que l'API refuse d'afficher (publicité arrêtée, plafond atteint) sort de la liste. */
+  onRemoved?: (card: FeedCard) => void;
+  /** Le compte affiché : le comptage d'une publicité est par compte (lot R7k2, tour 2). */
+  userId?: string;
 };
 
 export const reasonLine = (card: FeedCard) => `${card.reason.label} · ${feedAgo(card.at, new Date())}`;
@@ -29,6 +34,9 @@ export function Shell({
   head,
   title,
   href,
+  onTitle,
+  clientNav,
+  tag,
   onMenu,
   faded,
   children,
@@ -38,6 +46,12 @@ export function Shell({
   head: React.ReactNode;
   title: string;
   href?: string;
+  /** Appelé au clic sur le titre (la carte « Sponsorisé » compte le clic vers la fiche du pro). */
+  onTitle?: () => void;
+  /** Le titre s'ouvre par une navigation côté client (la page n'est pas rechargée : un envoi différé aboutit). */
+  clientNav?: boolean;
+  /** Une étiquette en contour à la place de la ligne de raison (carte « Sponsorisé » : toujours visible). */
+  tag?: string;
   onMenu: (card: FeedCard) => void;
   faded: boolean;
   children?: React.ReactNode;
@@ -48,16 +62,28 @@ export function Shell({
       <header className="fil-card__head">
         {head}
         <div className="fil-card__titles">
-          {href ? (
-            <a className="fil-card__title o-t-strong" href={href}>
+          {href && clientNav ? (
+            <Link className="fil-card__title o-t-strong" to={href} onClick={onTitle}>
+              {title}
+            </Link>
+          ) : href ? (
+            <a className="fil-card__title o-t-strong" href={href} onClick={onTitle}>
               {title}
             </a>
           ) : (
             <span className="fil-card__title o-t-strong">{title}</span>
           )}
-          <span className="o-t-caption fil-card__reason" data-testid="feed-card-reason">
-            {reasonLine(card)}
-          </span>
+          {tag ? (
+            <span className="fil-card__reason" data-testid="feed-card-reason">
+              <span className="fil-tag" data-testid="feed-sponsored-tag">
+                <span>{tag}</span>
+              </span>
+            </span>
+          ) : (
+            <span className="o-t-caption fil-card__reason" data-testid="feed-card-reason">
+              {reasonLine(card)}
+            </span>
+          )}
         </div>
         <button
           type="button"

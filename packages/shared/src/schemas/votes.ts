@@ -192,12 +192,18 @@ export type VoteManageItem = {
   handCandidates: (VoteCandidate & { entered: boolean; source: VoteCandidateSource })[] | null;
   settled: boolean;
 };
+/** Réponse d'un ajout de candidat : le vote, la voiture ajoutée, et `added: false` si elle était déjà candidate. */
+export type VoteCandidateAdded = VoteManageItem & { addedApplicationId: string; added: boolean };
 export type VoteManage = {
   items: VoteManageItem[];
   /** Faux pour le staff (lecture seule). */
   canWrite: boolean;
   /** Véhicules entrés, pour « Prêt à lancer ». */
   vehiclesEntered: number;
+  /** Les candidatures dont le véhicule est entré : la recherche d'un candidat dit « pas encore entrée » pour les autres. */
+  enteredApplicationIds: string[];
+  /** Points du podium (1er, 2e, 3e), lus du réglage de l'administration. */
+  podium: [number, number, number];
 };
 
 /** `GET /events/:id/votes/templates` : les 9 modèles de titre. */

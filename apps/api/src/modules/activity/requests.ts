@@ -18,6 +18,7 @@ import { eventInvitesService } from "../event-invites/service";
 import { invitationsService } from "../invitations/service";
 import { contactsService } from "../messaging/contacts";
 import { inboxService, registerInboxExtras } from "../messaging/inbox";
+import { partnershipsService } from "../partnerships/service";
 import { mainVehicleLabels } from "../social/follows";
 import { staffRequestsService } from "../staff/requests";
 import { plateTransferService } from "../vehicles/plate-transfer";
@@ -209,7 +210,11 @@ async function eventInvitationItems(v: Viewer): Promise<Keyed[]> {
           startsAt: i.event.startsAt.toISOString(),
           city: i.event.city,
         },
-        inviters: i.inviters.slice(0, 3).map((x) => ({ pseudo: x.pseudo, avatarUrl: x.avatarUrl })),
+        // Lot R7-fix-invite : `userId` pour que le « ⋯ » de la carte coupe les invitations de chacun (`POST /me/invitation-mutes`).
+        inviters: i.inviters.slice(0, 3).map((x) => ({ userId: x.userId, pseudo: x.pseudo, avatarUrl: x.avatarUrl })),
+        // Tour 2 : le résumé de la carte garde ses trois noms, mais le « ⋯ » propose tous les inviteurs (20 au plus, comme
+        // la fiche) : un quatrième auteur qui laisse un mot doit pouvoir être coupé ou signalé depuis cette carte.
+        menuInviters: i.inviters.slice(0, 20).map((x) => ({ userId: x.userId, pseudo: x.pseudo })),
         invitersCount: i.inviters.length,
         notes: i.inviters.flatMap((x) => (x.note ? [{ pseudo: x.pseudo, note: x.note }] : [])).slice(0, 3),
       },
@@ -262,6 +267,24 @@ async function plateTransferItems(v: Viewer): Promise<Keyed[]> {
       }),
     ];
   });
+}
+
+/** Propositions de partenariat reçues (lot R7m1) : l'actions sont `/me/partnerships/:id/accept` et `/decline`. */
+async function partnershipItems(v: Viewer): Promise<Keyed[]> {
+  const rows = await partnershipsService.requestRows(v.user.id);
+  return rows.map((r) =>
+    keyed({
+      kind: "partnership",
+      id: r.id,
+      from: { type: "structure", name: r.pro.name, logoUrl: r.pro.logoUrl },
+      at: r.at.toISOString(),
+      payload: {
+        message: r.message,
+        vehicle: r.vehicle,
+        pro: { slug: r.pro.slug, city: r.pro.city, activities: r.pro.activities },
+      },
+    }),
+  );
 }
 
 /** Demandes de message reçues (« Demandes de message ») : action `/contact-requests/:id/accept`. */
@@ -327,8 +350,8 @@ function decodeRequestCursor(cursor: string): Position {
 export const requestsService = {
   /**
    * `GET /me/requests?cursor=` : `{ total, items, nextCursor }`, la plus récente d'abord, 50 par page. `total` est le
-   * nombre de toutes les demandes en attente, pas la longueur de la page ni de ce qui a été lu. `partnership` est prévu,
-   * vide jusqu'au lot R7m1. Le curseur s'applique dans chaque source avant sa limite (les 51 suivantes au plus), puis
+   * nombre de toutes les demandes en attente, pas la longueur de la page ni de ce qui a été lu. `partnership` : les
+   * propositions de pros (lot R7m1). Le curseur s'applique dans chaque source avant sa limite (les 51 suivantes au plus), puis
    * les sources sont fusionnées : aucune demande n'est cachée par un plafond, quelle que soit la page.
    */
   async list(v: Viewer, cursor?: string): Promise<RequestsPage> {
@@ -346,6 +369,7 @@ export const requestsService = {
       staffItems(v),
       plateTransferItems(v),
       contactItems(v),
+      partnershipItems(v),
     ]);
     const rest = [...follows, ...others.flatMap(window)].sort((a, b) => compare(positionOf(a), positionOf(b)));
     const items = rest.slice(0, REQUESTS_PAGE_SIZE);
@@ -362,10 +386,14 @@ export const requestsService = {
 // Pastille « Demandes · 3 » de la Boîte : les compteurs déjà déclarés par chaque domaine, plus les deux sortes qui n'en
 // avaient pas (transferts de plaque, invitations entre passionnés). L'activité non vue vient du service de la cloche.
 registerInboxExtras(async (userId, requests: InboxRequestCounts, ex) => {
-  const [plate, peers] = await Promise.all([
+  const [plate, peers, partners] = await Promise.all([
     pendingPlateTransfers(userId, ex),
     eventInvitesService.receivedAll(userId, ex, { all: true }).then((x) => x.length),
+    partnershipsService.pendingCount(userId, ex),
   ]);
   const sum = Object.values(requests).reduce((a, b) => a + b, 0);
-  return { unseenActivity: await activityService.unseenCount(userId, ex), pendingRequests: sum + plate + peers };
+  return {
+    unseenActivity: await activityService.unseenCount(userId, ex),
+    pendingRequests: sum + plate + peers + partners,
+  };
 });

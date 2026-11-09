@@ -291,7 +291,9 @@ export function SponsoredBlock({ sponsored }: { sponsored: HomeSponsored }) {
           href={sponsored.linkUrl}
           target="_blank"
           rel="noopener noreferrer sponsored"
-          onClick={() => void apiFetch(`/sponsored/${sponsored.id}/click`, { method: "POST" })}
+          onClick={() =>
+            void apiFetch(`/sponsored/${sponsored.id}/click`, { method: "POST", json: { surface: "home" } })
+          }
           data-testid="sponsored-open"
         >
           {homeLabels.moreInfo}

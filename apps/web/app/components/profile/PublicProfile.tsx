@@ -73,6 +73,8 @@ type Props = {
   notices?: ReactNode;
   /** Sous « Vu à » : coordonnées de l'organisateur, hub de mon profil. */
   after?: ReactNode;
+  /** Lot R7m1 : sous « Suivre » et « Message », « Proposer un partenariat » (pro vérifié qui regarde). */
+  offer?: ReactNode;
 };
 
 function Photo({ v, big }: { v: ProfileVehicle; big?: boolean }) {
@@ -85,7 +87,7 @@ function Photo({ v, big }: { v: ProfileVehicle; big?: boolean }) {
   );
 }
 
-export function PublicProfile({ profile: p, mode, previewAs = "member", notices, after }: Props) {
+export function PublicProfile({ profile: p, mode, previewAs = "member", notices, after, offer }: Props) {
   const busy = useNavigation().state !== "idle";
   const preview = mode === "preview";
   const live = mode === "live";
@@ -211,7 +213,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
           </p>
         )}
 
-        <PartnersLine pseudo={p.pseudo} mine={mode === "self"} />
+        <PartnersLine partners={p.partners} />
 
         {mode === "self" && (
           <Button variant="secondary" icon="edit" href="/app/profil/modifier">
@@ -248,6 +250,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 </Button>
               </Form>
             </div>
+            {offer}
             <div className="pr5-write">
               {/* Signaler : lot 32. */}
               <ReportDialog targetType="profile" targetId={p.userId} />

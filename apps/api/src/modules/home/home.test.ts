@@ -239,7 +239,7 @@ describe("GET /me/home : agrégation", () => {
       const u = await user("Neuf_Home", []);
       const r = await req(u, "GET", "/me/home", undefined, mode);
       expect(r.status).toBe(200);
-      expect(r.headers.get("cache-control")).toBe("private, no-cache");
+      expect(r.headers.get("cache-control")).toBe("private, no-store");
       expect(r.json).toMatchObject({
         nextAccess: null,
         pendingStatuses: [],

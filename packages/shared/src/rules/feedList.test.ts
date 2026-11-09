@@ -24,7 +24,9 @@ import {
   publishedCard,
   publishIssue,
   slidesToLoad,
+  sponsoredNotBeforeFourth,
   withMyPublished,
+  withoutPlacement,
 } from "./feedList";
 import { DEFAULT_PLATE_FRAME, movePlateFrame, nextPlateFrame } from "./plateFrame";
 
@@ -80,7 +82,7 @@ describe("genres de carte", () => {
     for (const kind of feedCardKinds) {
       expect(FEED_KINDS_DRAWN.includes(kind) || isFeedKindReserved(kind)).toBe(true);
     }
-    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual(["memory", "sponsored", "spot_meetup"]);
+    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual([]);
   });
 });
 
@@ -324,5 +326,49 @@ describe("mémoire des photos : slidesToLoad, isNearViewport", () => {
     expect(isNearViewport(1700, 400, 800)).toBe(false);
     expect(isNearViewport(-1300, 400, 800)).toBe(false); // passée loin au-dessus
     expect(isNearViewport(-900, 400, 800)).toBe(true);
+  });
+});
+
+describe("la carte Sponsorisé jamais avant la 4e place (lot R7k2, tour 2)", () => {
+  const post = (id: string) => ({ id, kind: "feed_post", payload: {} }) as unknown as FeedCard;
+  const ad = (id: string, placement = "pl1") =>
+    ({ id, kind: "sponsored", payload: { id: placement } }) as unknown as FeedCard;
+  const ids = (l: readonly FeedCard[]) => l.map((c) => c.id);
+
+  it("laisse la liste telle quelle quand la carte est à la 4e place ou plus bas", () => {
+    const l = [post("a"), post("b"), post("c"), ad("s"), post("d")];
+    expect(ids(sponsoredNotBeforeFourth(l))).toEqual(["a", "b", "c", "s", "d"]);
+  });
+  it("redescend la carte à la 4e place quand une des trois premières est sortie", () => {
+    const l = [post("a"), post("b"), ad("s"), post("d"), post("e"), post("f")];
+    expect(ids(sponsoredNotBeforeFourth(l))).toEqual(["a", "b", "d", "s", "e", "f"]);
+  });
+  it("deux cartes remontées ensemble ne passent jamais devant (relecture du tour 2)", () => {
+    const l = [post("a"), ad("s1"), post("b"), ad("s2", "pl2"), post("c"), post("d")];
+    expect(ids(sponsoredNotBeforeFourth(l))).toEqual(["a", "b", "c", "s1", "s2", "d"]);
+  });
+  it("la fait disparaître quand il reste moins de trois autres cartes", () => {
+    expect(ids(sponsoredNotBeforeFourth([post("a"), ad("s"), post("b")]))).toEqual(["a", "b"]);
+    expect(ids(sponsoredNotBeforeFourth([ad("s")]))).toEqual([]);
+  });
+  it("ne touche pas aux reprises plus bas (10e, 16e place)", () => {
+    const l = [
+      post("a"),
+      post("b"),
+      post("c"),
+      ad("s1"),
+      post("d"),
+      post("e"),
+      post("f"),
+      post("g"),
+      post("h"),
+      post("i"),
+      ad("s2"),
+    ];
+    expect(ids(sponsoredNotBeforeFourth(l))).toEqual(ids(l));
+  });
+  it("retire toutes les cartes d'un emplacement refusé, pas les autres", () => {
+    const l = [post("a"), ad("s1", "pl1"), post("b"), ad("s2", "pl1"), ad("s3", "pl2")];
+    expect(ids(withoutPlacement(l, "pl1"))).toEqual(["a", "b", "s3"]);
   });
 });

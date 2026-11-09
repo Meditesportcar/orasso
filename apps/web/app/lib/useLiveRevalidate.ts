@@ -7,13 +7,15 @@ import { type ChannelMessage, useChannel } from "./useChannel";
  * Recharge les données de la page quand un message utile arrive sur un canal temps réel (relecture du lot 57) :
  * au plus une fois toutes les `intervalMs` (10 s par défaut), et aussi après une reconnexion du canal (les messages
  * envoyés pendant la coupure sont perdus). `onMessage` voit tous les messages du canal (compteur en direct, etc.).
+ * `jitterMs` (0 par défaut) : gigue aléatoire de 0 à `jitterMs` ajoutée au départ, pour que des centaines de navigateurs sur
+ * le même canal ne relisent pas à la même milliseconde (page du vote, lot R7l3 tour 3).
  */
 export function useLiveRevalidate(
   channel: string | null,
   wanted: (message: ChannelMessage) => boolean,
-  options: { intervalMs?: number; onMessage?: (message: ChannelMessage) => void } = {},
+  options: { intervalMs?: number; jitterMs?: number; onMessage?: (message: ChannelMessage) => void } = {},
 ): { connected: boolean } {
-  const { intervalMs = 10_000, onMessage } = options;
+  const { intervalMs = 10_000, jitterMs = 0, onMessage } = options;
   const revalidator = useRevalidator();
   const last = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -24,7 +26,7 @@ export function useLiveRevalidate(
   const refreshSoon = useRef(() => {});
   refreshSoon.current = () => {
     if (timer.current) return;
-    const wait = Math.max(0, last.current + intervalMs - Date.now());
+    const wait = Math.max(0, last.current + intervalMs - Date.now()) + Math.random() * jitterMs;
     timer.current = setTimeout(() => {
       timer.current = null;
       last.current = Date.now();

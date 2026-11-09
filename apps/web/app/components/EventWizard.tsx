@@ -45,6 +45,7 @@ import {
   storedStepIndex,
   type VehicleMake,
   vendorTypeLabels,
+  voteOrgaLabels,
   wizardV2Labels as W,
   type WizardMemo,
   withArrivalsInHours,
@@ -71,6 +72,7 @@ import { PreviewStep } from "./wizard/PreviewStep";
 import { ReadyStep } from "./wizard/ReadyStep";
 import { RulesStep } from "./wizard/RulesStep";
 import { TypeStep } from "./wizard/TypeStep";
+import { VotesStep } from "./wizard/VotesStep";
 
 type Props = {
   structureId: string;
@@ -94,6 +96,7 @@ const HEADS: Record<EventWizardStep, [string, string]> = {
   criteres: [W.criteriaTitle, W.criteriaIntro],
   "avant-premiere": [W.previewTitle, W.previewIntro],
   reglement: [W.rulesTitle, W.rulesIntro],
+  votes: [voteOrgaLabels.stepTitle, voteOrgaLabels.stepIntro],
   affiche: [W.posterTitle, posterTexts.intro],
   publier: [W.readyTitle, W.readyIntro],
 };
@@ -549,6 +552,15 @@ export function EventWizard(props: Props) {
     body = <PreviewStep {...stepProps} followers={followers} structureName={structureName} />;
   else if (step === "reglement")
     body = <RulesStep {...stepProps} structureId={structureId} eventId={saved?.id ?? null} />;
+  else if (step === "votes")
+    body = (
+      <VotesStep
+        eventId={saved?.id ?? null}
+        eventEndsAt={saved?.endsAt ?? null}
+        zones={saved?.zones ?? []}
+        makes={makes}
+      />
+    );
   else if (step === "affiche")
     body = (
       <PosterStep

@@ -20,6 +20,7 @@ import {
   orgaDriveLabels,
   orgaLabels,
   presenceLabels,
+  voteOrgaLabels,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { now as clockNow } from "../lib/clock";
@@ -115,7 +116,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 type Filter = "all" | "arrived" | "expected";
 
-export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
+export default function OrgaJourJ({ loaderData, params }: Route.ComponentProps) {
   const { event, organizer, listError, dayId } = loaderData;
   const dayQs = dayId ? `?dayId=${dayId}` : "";
   const [items, setItems] = useState<CheckinListItem[]>(loaderData.items);
@@ -258,6 +259,17 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
           <h1 className="s-title">Pointage</h1>
           <div className="o-t-meta s-label">{formatWhen(event.startsAt, event.endsAt)}</div>
         </div>
+      </div>
+      {/* Lot R7l2 : les votes du public (état ; Lancer et Clore pour l'organisateur). */}
+      <div className="s-row">
+        <Button
+          variant="secondary"
+          icon="trophy"
+          href={`/orga/${params.structure}/e/${event.id}/votes`}
+          data-testid="jourj-votes-link"
+        >
+          {voteOrgaLabels.linkVotes}
+        </Button>
       </div>
 
       {event.days.length > 1 && (

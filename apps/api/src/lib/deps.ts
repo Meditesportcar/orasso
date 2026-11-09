@@ -66,7 +66,11 @@ export type JobName =
   // Lot R7l1 : ouverture d'un vote à l'heure fixée, clôture d'un vote, balayage de secours (chaque minute).
   | "votes.open"
   | "votes.close"
-  | "votes.sweep";
+  | "votes.sweep"
+  // Lot R7j : souvenirs du jour (« il y a un an »), notification à 10 h.
+  | "memories.daily"
+  // Lot R7i : lieu et liste des rendez-vous au spot finis effacés (toutes les 5 minutes).
+  | "spot.purge";
 
 /** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
 export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };

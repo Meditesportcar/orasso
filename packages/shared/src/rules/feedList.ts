@@ -25,6 +25,27 @@ export type FeedListState = {
 
 export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null });
 
+/** La première place d'une carte « Sponsorisé » dans la liste affichée (0 = première) : la 4e, jamais avant (D38). */
+export const SPONSORED_MIN_INDEX = 3;
+
+/**
+ * Garde « jamais avant la 4e place » sur la liste **affichée** (lot R7k2, tour 2) : si des cartes sortent de la liste
+ * (« Supprimer »), une carte « Sponsorisé » ne remonte pas parmi les trois premières ; elle descend à la 4e place, ou
+ * disparaît quand il y a moins de trois autres cartes. Les autres cartes gardent leur ordre.
+ */
+export function sponsoredNotBeforeFourth(items: readonly FeedCard[]): FeedCard[] {
+  if (!items.some((c, i) => i < SPONSORED_MIN_INDEX && c.kind === "sponsored")) return [...items];
+  // Les trois premières places reviennent aux trois premières cartes non sponsorisées ; tout le reste suit dans son ordre
+  // (une 2e carte « Sponsorisé » qui remonterait à son tour ne passe donc jamais devant non plus).
+  const head: FeedCard[] = items.filter((c) => c.kind !== "sponsored").slice(0, SPONSORED_MIN_INDEX);
+  if (head.length < SPONSORED_MIN_INDEX) return head;
+  return [...head, ...items.filter((c) => !head.includes(c))];
+}
+
+/** Retire de la liste toutes les cartes « Sponsorisé » d'un emplacement (l'API l'a refusé : une carte, ou toutes ses reprises). */
+export const withoutPlacement = (items: readonly FeedCard[], placementId: string): FeedCard[] =>
+  items.filter((c) => !(c.kind === "sponsored" && c.payload.id === placementId));
+
 /** Ajoute des cartes sans doublon (l'identifiant d'une carte est stable d'une page à l'autre). */
 export function appendCards(current: readonly FeedCard[], next: readonly FeedCard[]): FeedCard[] {
   const seen = new Set(current.map((c) => c.id));
@@ -55,7 +76,7 @@ export function applyFeedPage(
   };
 }
 
-/** Genres que l'écran du lot R7e2 dessine lui-même ; les autres (`spot_meetup`, `memory`, `sponsored`) sont réservés. */
+/** Genres que le Fil dessine (lot R7e2, puis `spot_meetup` du lot R7i, `sponsored` du lot R7k2 et `memory` du lot R7j) : plus aucun n'est réservé. */
 export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "event_recommended",
   "vehicle_public",
@@ -64,6 +85,10 @@ export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "announcement",
   "pro",
   "feed_post",
+  "spot_meetup",
+  "sponsored",
+  // Lot R7j : la carte « Souvenir » est dessinée (appli et site).
+  "memory",
 ];
 
 /** Une carte d'un genre réservé à un autre lot : rendue par `UnknownCard` tant que ce lot n'est pas fusionné. */

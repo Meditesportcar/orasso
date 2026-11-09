@@ -546,3 +546,196 @@ button.story-view__pill {
     animation-duration: 120ms;
   }
 }
+
+/* Publier une story sur le site (lot R7f3, maquettes R7.8 et R7.22) : le canevas 9:16, ses autocollants, les choix. Jetons seulement. */
+
+.story-canvas {
+  position: relative;
+  width: min(100%, 320px);
+  aspect-ratio: 9 / 16;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--night);
+  container-type: inline-size;
+  user-select: none;
+}
+.story-canvas--live {
+  cursor: grab;
+  touch-action: none;
+}
+.story-canvas--live:active {
+  cursor: grabbing;
+}
+/* Le fond : la même image en couverture, floutée (un rayon élargi pour ne pas laisser de bord clair) et assombrie. */
+.story-canvas__back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(28px);
+  transform: scale(1.12);
+  pointer-events: none;
+}
+.story-canvas__dim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--night) 20%, transparent);
+  pointer-events: none;
+}
+.story-canvas__front {
+  position: absolute;
+  object-fit: cover;
+  pointer-events: none;
+}
+.story-canvas__plate {
+  position: absolute;
+  background: var(--night);
+  pointer-events: none;
+}
+.story-canvas__badge {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.story-stickers {
+  position: absolute;
+  left: 4cqw;
+  right: 4cqw;
+  top: 4cqw;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2cqw;
+  pointer-events: none;
+}
+.story-sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.4cqw;
+  max-width: 100%;
+  padding: 1.6cqw 3cqw;
+  border-radius: var(--radius-pill);
+  background: var(--poster);
+  color: var(--poster-ink);
+  font-size: max(11px, 3.6cqw);
+  font-weight: 800;
+  line-height: 1.2;
+}
+.story-caption {
+  position: absolute;
+  left: 4cqw;
+  right: 4cqw;
+  bottom: 7cqw;
+  padding: 2.4cqw 3cqw;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--night) 62%, transparent);
+  color: var(--night-ink);
+  font-size: max(12px, 4cqw);
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.story-form h2 {
+  margin: 0;
+}
+.story-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.story-fit {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+}
+.story-fit__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+.story-group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.story-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.story-option[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+.story-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.story-option:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.story-option span {
+  display: grid;
+  gap: 2px;
+}
+.story-option small {
+  color: var(--ink-muted);
+}
+.story-people {
+  display: grid;
+  gap: var(--space-2);
+}
+.story-person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+.story-preview {
+  display: grid;
+  gap: var(--space-2);
+}
+.story-done {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+@media (min-width: 900px) {
+  .story-canvas {
+    width: min(100%, 360px);
+  }
+}

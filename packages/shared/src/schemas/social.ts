@@ -2,11 +2,13 @@ import { z } from "zod";
 
 import { departmentSchema, type VehicleType } from "../enums";
 import { gradeSchema } from "../grades";
+import { storyAudiences, storyPersonas } from "../rules/audience";
 import type { FollowState } from "../rules/follows";
 import type { ProfileSocials } from "../rules/socials";
 import type { ProfileAudience } from "../rules/visibility";
 import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";
+import type { PartnerLogo, PartnershipOffer, VehiclePartner } from "./partnerships";
 import type { PassportStamp } from "./passport";
 import type { PublicProfile } from "./profile";
 import type { StoriesSummary } from "./stories";
@@ -33,6 +35,14 @@ export const peopleSearchQuery = pageQuery.extend({
   modelId: z.uuid().optional(),
   generationId: z.uuid().optional(),
   grade: gradeSchema.optional(),
+  /**
+   * Lot R7f3 (@identification d'une story) : ne rend que les personnes qui pourraient **voir** la story que je prépare
+   * (`canTag`, ARCHITECTURE-R7 § 2.1) : `crew` (+ `crewId`) = membres actifs de ce crew ; `followers` / `public` = tout
+   * membre si mon compte (ou la casquette organisateur / pro) est public, mes abonnés acceptés si mon compte est privé.
+   */
+  taggableFor: z.enum(storyAudiences).optional(),
+  crewId: z.uuid().optional(),
+  persona: z.enum(storyPersonas).optional(),
 });
 export type PeopleSearchQuery = z.infer<typeof peopleSearchQuery>;
 
@@ -55,6 +65,8 @@ export type PersonCard = {
 
 /** Fiche d'un véhicule d'un autre (`GET /vehicles/:id`) : complète ou réduite, avec son propriétaire. */
 export type OtherVehicle = (VehiclePublic | VehiclePrivate) & {
+  /** Lot R7m1 : « Partenaire : … », seulement quand la fiche complète est visible. */
+  partner?: VehiclePartner | null;
   /** Vrai si la fiche complète est consultable (compte public ou abonné accepté). */
   detailed: boolean;
   owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
@@ -95,6 +107,8 @@ export type ProfileVehicle = {
   /** Lot R5b (« Sa voiture ») : l'année et les catégories, seulement quand la fiche complète est consultable. */
   year: number | null;
   categories: string[];
+  /** Lot R7m1 : « Partenaire : … » de la voiture (un pro à partenariat actif), seulement quand la fiche complète est visible. */
+  partner?: VehiclePartner | null;
 };
 
 export type ProfileEvent = {
@@ -152,6 +166,13 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   seenAt: { events: number; stamps: PassportStamp[] } | null;
   /** Lot R7f1 : ses stories visibles pour le regard ; `{ count: 0, hasUnseen: false, ring: null }` sans rien révéler. */
   stories: StoriesSummary;
+  /**
+   * Lot R7m1 : ses partenaires (pros à partenariat actif), vide pour un compte privé que je ne suis pas ; `partnershipOffer`
+   * pour un pro vérifié qui regarde : le bouton « Proposer un partenariat », ou la proposition déjà envoyée. Absents des
+   * aperçus de son propre profil.
+   */
+  partners?: PartnerLogo[];
+  partnershipOffer?: PartnershipOffer | null;
 };
 
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */

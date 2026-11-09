@@ -1,6 +1,7 @@
 // Liens des éléments du Journal et des notifications (lot 17) : seulement des écrans de l'appli connus (événement,
 // profil, véhicule d'un autre). Jamais un chemin du site (`/app/acces`…) ni une adresse externe.
-const APP_LINK = /^\/(e|u|v)\/[^/?#\s]+$/;
+// Lot R7m1 : `p` (fiche d'un pro) : « Ton partenariat est terminé » mène à la fiche du pro.
+const APP_LINK = /^\/(e|u|v|p)\/[^/?#\s]+$/;
 /**
  * Activité et Messages (lot R7c2, la Boîte a disparu) : `/app/activite[/demandes]` et `/app/messages[/demandes|/<id>]` du
  * site → `/activite…` et `/messages…`. Les anciennes adresses de la Boîte (`/app/boite[/demandes|/<id>]`, `/app/journal`),
@@ -28,23 +29,42 @@ export function inboxPathOf(pathname: string): string | null {
  */
 const REVIEW_LINK = /^\/app\/acces\?avis=([0-9a-f-]{36})$/;
 
+/**
+ * Votes (lot R7l3, notifications `vote_opened` et `vote_won`) : la liste d'un événement (`/app/votes/<adresse>` du site →
+ * `/votes/<adresse>`) et un vote, avec son résultat (`/app/vote/<adresse>?vote=<id>` → `/vote/<adresse>?vote=<id>`).
+ */
+const VOTES_LINK = /^\/app\/votes\/([a-z0-9-]{1,80})$/;
+const VOTE_LINK = /^\/app\/vote\/([a-z0-9-]{1,80})\?vote=([0-9a-f-]{36})$/;
+
 /** Récap (lot 50, notifications `event_recap_ready` et `audience_prize_won`) et passeport (`stamp_received`). */
 const RECAP_LINK = /^\/app\/recap\/([0-9a-f-]{36})$/;
 const PASSPORT_LINK = "/app/passeport";
+/** Lot R7j : la notification « Un souvenir pour toi » (`/app/souvenir/<événement>` du site) → la page du souvenir. */
+const MEMORY_LINK = /^\/app\/souvenir\/([0-9a-f-]{36})$/;
 /** Lot R4c : « … et 2 autres personnes te suivent » mène aux abonnés (`/app/reseau` du site → `/reseau`). */
 const NETWORK_LINK = "/app/reseau";
 /**
  * Lot R5c2 : la page d'un crew (`/c/<adresse>` du site, `?onglet=sorties` pour une sortie du crew) → `/crew/<adresse>`.
  */
+/** Lot R7i : un rendez-vous au spot (`/app/spot/<id>` du site, notification `spot_meetup_new` et `spot_meetup_reply`) → `/spot/<id>`. */
+const SPOT_LINK = /^\/app\/spot\/([0-9a-f-]{36})$/;
 const CREW_LINK = /^\/c\/([a-z0-9-]{1,80})(\?onglet=sorties)?$/;
 
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (APP_LINK.test(value)) return value;
+  const votes = VOTES_LINK.exec(value);
+  if (votes) return `/votes/${votes[1]}`;
+  const vote = VOTE_LINK.exec(value);
+  if (vote) return `/vote/${vote[1]}?vote=${vote[2]}`;
   const recap = RECAP_LINK.exec(value);
   if (recap) return `/recap/${recap[1]}`;
+  const memory = MEMORY_LINK.exec(value);
+  if (memory) return `/souvenir/${memory[1]}`;
   if (value === PASSPORT_LINK) return "/mon-passeport";
   if (value === NETWORK_LINK) return "/reseau";
+  const spot = SPOT_LINK.exec(value);
+  if (spot) return `/spot/${spot[1]}`;
   const crew = CREW_LINK.exec(value);
   if (crew) return `/crew/${crew[1]}${crew[2] ?? ""}`;
   const review = REVIEW_LINK.exec(value);

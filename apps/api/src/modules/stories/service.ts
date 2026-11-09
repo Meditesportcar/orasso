@@ -3,7 +3,7 @@
 // Invariants : la plaque est décidée pour toute photo, quel que soit le public (crew compris) ; une story de crew ne
 // s'identifie ni ne se lie hors du crew ; un compte privé ne publie pas en public et n'identifie ni structure, ni pro,
 // ni événement ; l'original n'est jamais gardé.
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   type AudienceStory,
   canSeeStory,
@@ -11,11 +11,13 @@ import {
   directKey,
   type Frame,
   STORY_LIVE_MAX,
+  STORY_TAGS_MAX,
   STORY_VIEWERS_MAX,
   type StoryCreate,
   type StoryCreated,
   type StoryDenial,
   type StoryReplyResult,
+  type StoryTagInput,
   type StoryTagKind,
   storyAuthorKeyOf,
   storyDenial,
@@ -324,9 +326,37 @@ async function notifyPublished(
   });
 }
 
+/**
+ * Identifiant de publication, stable et lié à la personne et au fichier envoyé (`uploadKey`, tirée au hasard à chaque
+ * envoi et à usage unique) : un fichier ne donne jamais qu'une story, quels que soient les réglages. Une reprise après
+ * une réponse perdue retrouve la story au lieu d'en publier une seconde, même si la légende a changé entre-temps.
+ * UUID de version 5 (hachage SHA-256), sans colonne ni migration.
+ */
+export function storyIdFor(userId: string, uploadKey: string): string {
+  const h = createHash("sha256").update(`story:${userId}:${uploadKey}`).digest();
+  h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
+  h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
+  const hex = h.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export const storiesService = {
   async create(v: Viewer, input: StoryCreate): Promise<StoryCreated> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
+    // Reprise : cette publication existe déjà (la réponse s'est perdue) → la même story, sans doublon ni erreur.
+    const id = storyIdFor(v.user.id, input.uploadKey);
+    const replay = async (): Promise<StoryCreated | null> => {
+      const [done] = await db
+        .select({ status: stories.status, expiresAt: stories.expiresAt })
+        .from(stories)
+        .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id)));
+      // `skipped` n'est pas relu : il dépendait des réglages du premier envoi, que rien ne garde (écart accepté, journal).
+      return done
+        ? { id, status: done.status, expiresAt: done.expiresAt.toISOString(), skipped: [], replayed: true }
+        : null;
+    };
+    const again = await replay();
+    if (again) return again;
     rateLimit("storyPublish", v.user.id);
     const rects = input.plateRects ?? [];
     // Photo : la décision de plaque est obligatoire quel que soit le public, crew compris (D38, « règle des plaques partout »).
@@ -358,6 +388,9 @@ export const storiesService = {
     }
 
     // Autocollant d'événement et contenu lié (événement ou voiture seulement dans ce lot).
+    // Lot R7f3 : l'organisateur d'un événement collé en autocollant est prévenu (identification de sa structure, avec les
+    // règles ordinaires : jamais depuis un compte privé ni sur une story de crew). `stickerStructure` la mémorise.
+    let stickerStructure: string | null = null;
     const eventOk = async (id: string, kind: "event" | "linked"): Promise<string | null> => {
       const [e] = await db
         .select({
@@ -371,12 +404,14 @@ export const storiesService = {
       const refusal = canTag(author, storyShape, {
         kind: "event",
         canSee: true,
-        available: Boolean(e && e.status !== "draft" && (await canSeeEvent(e, v))),
+        // Un brouillon, un événement annulé ou sur invitation ne se colle pas en autocollant (comme un brouillon : écarté).
+        available: Boolean(e && e.status === "published" && e.admission !== "invite_only" && (await canSeeEvent(e, v))),
       });
       if (refusal) {
         skipped.push({ kind: kind === "event" ? "event" : "event", id, reason: storyLabels.skipped[refusal] });
         return null;
       }
+      if (kind === "event") stickerStructure = e?.structureId ?? null;
       return id;
     };
     const eventId = input.eventId ? await eventOk(input.eventId, "event") : null;
@@ -394,7 +429,12 @@ export const storiesService = {
     // Identifications : on n'identifie que quelqu'un qui peut voir la story ; compte privé : ni structure, ni pro.
     const tags: { kind: StoryTagKind; id: string }[] = [];
     const seen = new Set<string>();
-    for (const t of input.tags) {
+    // La structure de l'autocollant d'événement passe en premier : elle prend une place des `STORY_TAGS_MAX` (les
+    // identifications de la personne suivent, la dernière écartée si le plafond est atteint).
+    const wanted: StoryTagInput[] = [...input.tags];
+    if (stickerStructure && stickerStructure !== ctx.structureId)
+      wanted.unshift({ kind: "structure", id: stickerStructure });
+    for (const t of wanted) {
       const key = `${t.kind}:${t.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -421,6 +461,8 @@ export const storiesService = {
       }
       const refusal = canTag(author, storyShape, { kind: t.kind, canSee, available });
       if (refusal) skipped.push({ kind: t.kind, id: t.id, reason: storyLabels.skipped[refusal] });
+      else if (tags.length >= STORY_TAGS_MAX)
+        skipped.push({ kind: t.kind, id: t.id, reason: storyLabels.skipped.tags_full });
       else tags.push(t);
     }
 
@@ -436,13 +478,22 @@ export const storiesService = {
           isNull(uploads.consumedAt),
         ),
       );
-    if (!pending) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+    // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
+    // on retrouve alors sa story avant de refuser.
+    if (!pending) {
+      const won = await replay();
+      if (won) return won;
+      throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+    }
     const source = await storage.get(pending.key);
-    if (!source) throw validation("Image introuvable : envoie-la à nouveau.");
+    if (!source) {
+      const won = await replay();
+      if (won) return won;
+      throw validation("Image introuvable : envoie-la à nouveau.");
+    }
     const frame: Frame | undefined = input.frame;
     const composed = await composeStoryPhoto(source, { frame, rects });
 
-    const id = randomUUID();
     const key = `private/stories/${id}/${randomBytes(8).toString("hex")}.webp`;
     await storage.put(key, composed.data);
     const at = now();
@@ -575,6 +626,9 @@ export const storiesService = {
       });
     } catch (error) {
       await removeOrRetry(key);
+      // Deux envois identiques en même temps : le perdant retrouve la story du gagnant.
+      const won = await replay().catch(() => null);
+      if (won) return won;
       throw error;
     }
     // Le fichier d'origine n'est jamais gardé : si sa suppression échoue, elle est reprise par la tâche `storage.remove`.

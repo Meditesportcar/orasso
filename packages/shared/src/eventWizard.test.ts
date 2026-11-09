@@ -81,7 +81,7 @@ describe("brouillon neuf", () => {
   });
 });
 
-describe("huit temps (lot 53)", () => {
+describe("neuf temps (lot 53, lot R7l2)", () => {
   it("dans l'ordre du prototype, chacun nommé", () => {
     expect(eventWizardSteps).toEqual([
       "type",
@@ -90,6 +90,7 @@ describe("huit temps (lot 53)", () => {
       "criteres",
       "avant-premiere",
       "reglement",
+      "votes",
       "affiche",
       "publier",
     ]);

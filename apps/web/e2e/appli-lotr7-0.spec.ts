@@ -94,7 +94,21 @@ test("Accueil, Sorties, fiche, passeport et vote de Damien pendant le Lydia", as
       timeout: 30_000,
     });
 
-    // Vote : « jusqu'au <jour> », classement caché avant le vote.
+    // Vote : « jusqu'au <jour> ». Le classement caché avant la voix se vérifie sur un compte sans rôle (test suivant) :
+    // Damien est super admin en assistance sur la structure du Lydia (seed), donc équipe, et l'API le lui sert (R7l3, tour 2).
+    await page.goto(`/vote/${place.event.id}`);
+    await afterOpening(page);
+    await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible({ timeout: 30_000 });
+    await ctx.close();
+  }
+});
+
+// Compte sans rôle, entré au Lydia, qui n'a pas voté (Pilote_006 : jamais d'autre voix dans les recettes).
+test("Pilote_006 (sans rôle, entré, pas encore voté) : le classement est caché avant sa voix", async ({ browser }) => {
+  const place = await myPlace("pilote6@orasso.local");
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await open(browser, theme);
+    await signIn(page, "pilote6@orasso.local");
     await page.goto(`/vote/${place.event.id}`);
     await afterOpening(page);
     await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible({ timeout: 30_000 });
@@ -154,24 +168,21 @@ test("Nina_34, entrée la veille : sur la fiche, le bouton principal ne redevien
   await ctx.close();
 });
 
-test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessayer », puis le classement (tour 2)", async ({
+test("Vote réussi puis relecture qui échoue : la voix et le classement reçus restent, la raison et « Réessayer » (R7l3)", async ({
   browser,
 }) => {
   const place = await myPlace("nina@orasso.local");
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, "nina@orasso.local");
-  // Avant le vote, l'API ne sert pas le classement (rankingHidden) : on le simule sur la lecture d'ouverture (Nina a déjà
-  // voté si la recette est relancée), puis la relecture qui suit le vote échoue (500) tant que la route est posée.
-  const board = /\/events\/[^/]+\/audience-prize$/;
+  // Lot R7l3 : la réponse à la voix porte déjà le classement que Nina a le droit de voir ; la relecture qui suit (détail du vote)
+  // échoue (500) tant que la route est posée : la voix et le classement restent affichés, avec la raison et « Réessayer ».
+  const detail = /\/events\/[^/]+\/votes\/[^/]+$/;
   let failing = false;
-  const hideOrFail = async (route: import("@playwright/test").Route) => {
-    if (route.request().method() !== "GET") return route.fallback();
-    if (failing) return route.fulfill({ status: 500, body: "{}" });
-    const res = await route.fetch();
-    const json = await res.json();
-    return route.fulfill({ response: res, json: { ...json, rankingHidden: true, entries: [], winner: null } });
+  const failWhenAsked = async (route: import("@playwright/test").Route) => {
+    if (route.request().method() === "GET" && failing) return route.fulfill({ status: 500, body: "{}" });
+    return route.fallback();
   };
-  await page.route(board, hideOrFail);
+  await page.route(detail, failWhenAsked);
   await page.goto(`/vote/${place.event.id}`);
   await afterOpening(page);
   // Déjà voté (relance de la recette) : on rouvre la grille pour changer de voiture.
@@ -185,30 +196,34 @@ test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessa
   await page.getByTestId("vote-cta").click();
   await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("vote-ranking-failed")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("vote-board")).toHaveCount(0);
-  await page.unroute(board, hideOrFail);
+  await expect(page.getByTestId("vote-board")).toBeVisible();
+  failing = false;
+  await page.unroute(detail, failWhenAsked);
   await page.getByTestId("vote-ranking-retry").click();
-  await expect(page.getByTestId("vote-board")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0);
+  await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("vote-board")).toBeVisible();
   await ctx.close();
 });
 
-test("Classement qui ne se charge pas, quel que soit l'état du vote : l'écran le dit avec « Réessayer » (tour 3)", async ({
+test("Vote qui ne se charge pas, quel que soit son état : l'écran le dit avec « Réessayer » (R7l3)", async ({
   browser,
 }) => {
   const place = await myPlace("damien@orasso.local");
-  const board = /\/events\/[^/]+\/audience-prize$/;
+  const detail = /\/events\/[^/]+\/votes\/[^/]+$/;
   for (const state of ["ouvert", "clos"] as const) {
     const { ctx, page } = await open(browser, "beton");
     await signIn(page, "damien@orasso.local");
     let failing = true;
-    await page.route(board, async (route) => {
+    await page.route(detail, async (route) => {
       if (route.request().method() !== "GET") return route.fallback();
       if (failing) return route.fulfill({ status: 500, body: "{}" });
       const res = await route.fetch();
       const json = await res.json();
       // « clos » : la lecture qui revient dit que le vote est fini et le classement servi à tout le monde.
-      return route.fulfill({ response: res, json: state === "clos" ? { ...json, open: false } : json });
+      return route.fulfill({
+        response: res,
+        json: state === "clos" ? { ...json, state: "closed", ranking: json.ranking ?? [] } : json,
+      });
     });
     await page.goto(`/vote/${place.event.id}`);
     await afterOpening(page);

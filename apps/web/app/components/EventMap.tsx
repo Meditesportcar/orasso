@@ -2,6 +2,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { pinDateLabel, placePins } from "@orasso/design-system/web";
 import { useEffect, useRef } from "react";
 import { now } from "../lib/clock";
+import { quietAttribution } from "../lib/quietAttribution";
 import { useOrassoMap } from "./useOrassoMap";
 
 /** Centre par défaut de l'épingle quand aucune adresse n'est encore placée (Perpignan). */
@@ -21,6 +22,8 @@ export function EventMap({
   startsAt,
   draggablePin,
   onPinMove,
+  pinHidden,
+  zoom,
 }: {
   lat: number | null;
   lng: number | null;
@@ -28,6 +31,10 @@ export function EventMap({
   startsAt?: string;
   draggablePin?: boolean;
   onPinMove?: PinMove;
+  /** Épingle déplaçable non montrée (rendez-vous au spot : la carte vient d'être recentrée, aucun point n'est choisi). */
+  pinHidden?: boolean;
+  /** Zoom de la carte quand elle montre un lieu (15 par défaut) : un zoom de rue pour le lieu d'un rendez-vous. */
+  zoom?: number;
 }) {
   const container = useRef<HTMLElement>(null);
   const marker = useRef<import("maplibre-gl").Marker | null>(null);
@@ -37,9 +44,11 @@ export function EventMap({
   const center = { lat: lat ?? DEFAULT_CENTER.lat, lng: lng ?? DEFAULT_CENTER.lng };
   const failed = useOrassoMap(
     container,
-    { center: [center.lng, center.lat], zoom: lat === null ? 9 : 15 },
+    { center: [center.lng, center.lat], zoom: lat === null ? 9 : (zoom ?? 15) },
     (maplibre, { map }) => {
       if (!draggablePin) {
+        // Carte du lieu d'un rendez-vous (zoom de rue) : l'attribution se replie dans le coin.
+        if (zoom && container.current) quietAttribution(map, container.current);
         const pins = placePins(maplibre, map, [
           {
             id: "event",
@@ -78,6 +87,12 @@ export function EventMap({
     },
     draggablePin ? "draggable" : `${lat}|${lng}|${label}|${startsAt ?? ""}`,
   );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le marqueur est créé plus tard, la position le déplace : on réapplique.
+  useEffect(() => {
+    const el = marker.current?.getElement();
+    if (el) el.style.display = pinHidden ? "none" : "";
+  }, [pinHidden, lat, lng]);
 
   // Épingle déplaçable : une position venue d'ailleurs (adresse trouvée) déplace l'épingle et la vue.
   useEffect(() => {

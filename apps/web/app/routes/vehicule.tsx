@@ -4,6 +4,7 @@ import { useNavigation } from "react-router";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { cardVisibility, FollowAction, PersonAvatar, PersonRow } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
+import { VehicleTrophies } from "../components/VehicleTrophies";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import { followAction } from "../lib/follow.server";
 import { withRetour } from "../lib/retour";
@@ -131,6 +132,7 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
             )}
           </dl>
         )}
+        {full && <VehicleTrophies vehicle={full} />}
         {full?.description && <p className="s-prewrap">{full.description}</p>}
         {full?.preparation && (
           <>

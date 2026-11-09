@@ -36,6 +36,7 @@ import {
   passportStamps,
   platformSettings,
   pointEntries,
+  profiles,
   scanEvents,
   vehicleGenerations,
   vehicleMakes,
@@ -292,6 +293,118 @@ describe("création et droits", () => {
     expect(again.filter((r) => r.kind === "all_categories")).toHaveLength(1);
   });
 
+  it("« Toutes catégories » retiré se remet (lot R7l2) : en tête, avec son tampon rare, réservé à l'organisateur", async () => {
+    const id = await allCategoriesId();
+    const second = await createTheme();
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    expect((await api(orga, "GET", "/manage")).json.items.map((i: { id: string }) => i.id)).toEqual([second]);
+    // Le staff, un participant et un visiteur ne le remettent pas.
+    expect((await api(staff, "POST", "/all-categories")).status).toBe(403);
+    expect((await api(p.kenji.u, "POST", "/all-categories")).status).toBe(403);
+    expect((await api(outsider, "POST", "/all-categories")).status).toBe(403);
+    const back = await api(coOrga, "POST", "/all-categories");
+    expect(back.status).toBe(201);
+    expect(back.json).toMatchObject({ id, title: "Toutes catégories", kind: "all_categories", rareStamp: true });
+    const items = (await api(orga, "GET", "/manage")).json.items as { id: string }[];
+    expect(items.map((i) => i.id)).toEqual([id, second]);
+    // Déjà là : sans effet (pas de doublon, pas d'erreur).
+    expect((await api(orga, "POST", "/all-categories")).status).toBe(201);
+    const rows = await db.query.eventVotes.findMany({ where: eq(eventVotes.eventId, eventId) });
+    expect(rows.filter((r) => r.kind === "all_categories" && !r.deletedAt)).toHaveLength(1);
+    // Un événement terminé ne change plus : retiré puis après la fin, il ne revient pas.
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    clock.set(paris(10, 17, 23));
+    const over = await api(orga, "POST", "/all-categories");
+    expect(over.status).toBe(409);
+    expect(over.json.error.code).toBe("event_over");
+  });
+
+  it("« Toutes catégories » remis (tour 2) : un vote clos sans voix revient remis à zéro ; avec des voix, il ne revient pas", async () => {
+    await enterAll();
+    const id = await allCategoriesId();
+    // Ouvert de lui-même (premiers pointages) puis clos à la main : clos, sans voix, il peut être retiré.
+    expect((await api(orga, "POST", `/${id}/close`)).status).toBe(200);
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    // Une ouverture ancienne qui traînerait sur la ligne retirée : elle ne doit pas survivre au retour du vote.
+    const stale = paris(10, 17, 18, 30);
+    await db.update(eventVotes).set({ openedAt: stale }).where(eq(eventVotes.id, id));
+    const back = await api(orga, "POST", "/all-categories");
+    expect(back.status).toBe(201);
+    // Plus clos, et pas de candidats figés d'avant : un vote neuf, que les premiers pointages ouvrent de nouveau (state `open`).
+    expect(back.json).toMatchObject({ id, state: "open", closedAt: null });
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    expect(row).toMatchObject({ deletedAt: null, closedAt: null });
+    // L'ouverture est reposée par le cycle de vie à la première entrée (19 h 02), pas l'ancienne valeur gardée sur la ligne.
+    expect(row?.openedAt).toEqual(paris(10, 17, 19, 2));
+    expect(row?.openedAt).not.toEqual(stale);
+    expect(await db.query.eventVoteCandidates.findMany({ where: eq(eventVoteCandidates.voteId, id) })).toHaveLength(0);
+    // Retiré à nouveau, puis des voix existent malgré tout : il ne revient pas, avec un libellé clair.
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    await db.insert(audienceVotes).values({
+      eventId,
+      voteId: id,
+      voterUserId: p.nina.u.id,
+      applicationId: p.kenji.applicationId,
+    });
+    const refused = await api(orga, "POST", "/all-categories");
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("restore_has_voices");
+    expect(refused.json.error.message).toMatch(/déjà reçu des voix/);
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.deletedAt).not.toBeNull();
+  });
+
+  it("« Toutes catégories » remis (tour 3) : un brouillon le voit revenir « prévu », sans ouverture ni clôture", async () => {
+    const draft = await createEvent(structureId, {
+      status: "draft",
+      startsAt: paris(11, 7, 19),
+      endsAt: paris(11, 7, 23),
+    });
+    const id = await allCategoriesIdOf(draft.id);
+    expect((await api(orga, "DELETE", `/${id}`, undefined, draft.id)).status).toBe(200);
+    // Une ouverture et une clôture anciennes sur la ligne retirée : le brouillon n'en garde rien.
+    await db
+      .update(eventVotes)
+      .set({ openedAt: paris(10, 1, 10), closedAt: paris(10, 1, 11) })
+      .where(eq(eventVotes.id, id));
+    const back = await api(orga, "POST", "/all-categories", undefined, draft.id);
+    expect(back.status).toBe(201);
+    expect(back.json).toMatchObject({ id, state: "upcoming", closedAt: null });
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    expect(row).toMatchObject({ deletedAt: null, openedAt: null, closedAt: null });
+  });
+
+  it("« Toutes catégories » remis (tour 2) : le plafond de votes par événement vaut aussi pour lui", async () => {
+    const id = await allCategoriesId();
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    await db.insert(eventVotes).values(
+      Array.from({ length: 50 }, (_, i) => ({
+        eventId,
+        title: `Vote ${i}`,
+        kind: "theme" as const,
+        candidateMode: "all" as const,
+        openMode: "manual" as const,
+        position: 20 + i,
+      })),
+    );
+    const over = await api(orga, "POST", "/all-categories");
+    expect(over.status).toBe(409);
+    expect(over.json.error.code).toBe("too_many_votes");
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.deletedAt).not.toBeNull();
+  });
+
+  it("la console sert les points du podium du réglage de l'administration (15 / 10 / 5 par défaut), au staff aussi", async () => {
+    expect((await api(orga, "GET", "/manage")).json.podium).toEqual([15, 10, 5]);
+    await db.insert(platformSettings).values([
+      { key: "points.vote_first", value: 40 },
+      { key: "points.vote_second", value: 0 },
+      { key: "points.vote_third", value: 3 },
+    ]);
+    settingsStore.invalidate();
+    expect((await api(orga, "GET", "/manage")).json.podium).toEqual([40, 0, 3]);
+    expect((await api(staff, "GET", "/manage")).json.podium).toEqual([40, 0, 3]);
+    settingsStore.invalidate();
+  });
+
   it("autant de votes qu'on veut (au-delà de 9), plafond technique à 50", async () => {
     for (let i = 0; i < 12; i++) await createTheme({ ...japanese, title: `Concours ${i + 1}` });
     expect((await api(orga, "GET", "/manage")).json.items).toHaveLength(13);
@@ -505,6 +618,34 @@ describe("candidats", () => {
     expect(wrong.status).toBe(409);
     expect(wrong.json.error.code).toBe("other_event");
   });
+
+  it("par QR (tour 2) : la réponse nomme la voiture ajoutée, et dit si elle l'était déjà", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 5));
+    const id = await createTheme({ title: "Concours de rupteur", candidateMode: "hand", openMode: "manual" });
+    const passOf = async (x: Person) =>
+      (await call(x.u, "GET", `/applications/${x.applicationId}/pass`)).json.payload as string;
+    const first = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.kenji) });
+    expect(first.json).toMatchObject({ addedApplicationId: p.kenji.applicationId, added: true });
+    // Deuxième scan : la voiture annoncée est la sienne, pas la précédente.
+    const second = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.lea) });
+    expect(second.json).toMatchObject({ addedApplicationId: p.lea.applicationId, added: true });
+    expect(second.json.handCandidates).toHaveLength(2);
+    // Un doublon : aucune ligne de plus, `added: false`, la voiture nommée est celle du QR.
+    const again = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.kenji) });
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ addedApplicationId: p.kenji.applicationId, added: false });
+    expect(again.json.handCandidates).toHaveLength(2);
+    // Même contrat par candidature.
+    const byApp = await api(orga, "POST", `/${id}/candidates`, { applicationId: p.lea.applicationId });
+    expect(byApp.json).toMatchObject({ addedApplicationId: p.lea.applicationId, added: false });
+  });
+
+  it("la console liste les candidatures entrées (la recherche dit « pas encore entrée » pour les autres)", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    const manage = await api(orga, "GET", "/manage");
+    expect(manage.json.enteredApplicationIds).toEqual([p.kenji.applicationId]);
+  });
 });
 
 describe("ouverture et clôture", () => {
@@ -539,6 +680,49 @@ describe("ouverture et clôture", () => {
     expect(notificationTypes.vote_opened).toBe("event");
     expect(shouldDeliver(null, [], "vote_opened")).toBe(true);
     expect(shouldDeliver(null, ["vote_opened"], "vote_opened")).toBe(false);
+  });
+
+  it("l'ouverture d'un vote à thème prévient les présents quel que soit son mode (premières entrées, heure fixée, lancé à la main) ; « Toutes catégories » jamais", async () => {
+    const all = await allCategoriesId();
+    const first = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "Dès l'entrée",
+      openMode: "first_entry",
+    });
+    const timed = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "À 21 h",
+      openMode: "at",
+      opensAt: paris(10, 17, 21).toISOString(),
+    });
+    const manual = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "Lancé",
+      openMode: "manual",
+    });
+    // L'horloge du test est simulée, pas celle de la base : les votes sont créés « avant » les premiers pointages.
+    await db
+      .update(eventVotes)
+      .set({ createdAt: paris(10, 17, 10) })
+      .where(eq(eventVotes.eventId, eventId));
+    await enterAll();
+    expect((await api(orga, "POST", `/${manual}/open`)).status).toBe(200);
+    clock.set(paris(10, 17, 21));
+    await votesLifecycle.sweep();
+    await votesLifecycle.sweep();
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    const forVote = (voteId: string) =>
+      sent.filter((n) => (n.data as { voteId?: string } | null)?.voteId === voteId).length;
+    expect(forVote(first)).toBeGreaterThan(0);
+    expect(forVote(timed)).toBeGreaterThan(0);
+    expect(forVote(manual)).toBeGreaterThan(0);
+    expect(forVote(all)).toBe(0);
   });
 
   it("le présent par GPS et le billet contrôlé sont prévenus aussi", async () => {
@@ -744,6 +928,34 @@ describe("voter", () => {
     expect((await api(admin, "GET", `/${id}`)).json.ranking).not.toBeNull();
     const audit = await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.actorUserId, admin.id) });
     expect(audit.some((a) => a.action === "structure.view_as" && a.reason === "audience_prize.ranking")).toBe(true);
+  });
+
+  it("la consultation d'un super admin en assistance n'est tracée qu'une fois par heure et par structure", async () => {
+    await enterAll();
+    const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });
+    await api(orga, "POST", `/${id}/open`);
+    const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
+    const traces = async () =>
+      (await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.actorUserId, admin.id) })).filter(
+        (a) => a.action === "structure.view_as" && a.structureId === structureId,
+      );
+    // Dix relectures du classement et de la liste : une seule trace.
+    for (let i = 0; i < 5; i++) {
+      expect((await api(admin, "GET", `/${id}`)).json.ranking).not.toBeNull();
+      expect((await api(admin, "GET")).status).toBe(200);
+    }
+    expect(await traces()).toHaveLength(1);
+    // La console (lecture) : une trace de plus pour son motif, pas une par relecture.
+    for (let i = 0; i < 3; i++) expect((await api(admin, "GET", "/manage")).status).toBe(200);
+    expect(await traces()).toHaveLength(2);
+    // Plus d'une heure après, la consultation est tracée de nouveau.
+    await db
+      .update(adminAuditLog)
+      .set({ createdAt: new Date(Date.now() - 61 * 60_000) })
+      .where(eq(adminAuditLog.actorUserId, admin.id));
+    expect((await api(admin, "GET", `/${id}`)).json.ranking).not.toBeNull();
+    expect(await traces()).toHaveLength(3);
   });
 
   it("le canal ne porte jamais de classement : « Toutes catégories » garde `votes.changed`, un vote à thème émet `theme_votes.changed`", async () => {
@@ -1347,7 +1559,10 @@ describe("tour 3 : dernière retouche", () => {
     expect(res.status).toBe(201);
     const patched = await api(orga, "PATCH", `/${res.json.id}`, { title: "Renommé" }, draft.id);
     expect(patched.status).toBe(200);
-    expect(patched.json).toMatchObject({ title: "Renommé", state: "closed" });
+    expect(patched.json).toMatchObject({ title: "Renommé", state: "upcoming" });
+    // Côté passionné, la règle ne change pas : un brouillon n'ouvre jamais, et la console le montre « prévu ».
+    const manage = await api(orga, "GET", "/manage", undefined, draft.id);
+    expect(manage.json.items.find((x: { id: string }) => x.id === res.json.id)).toMatchObject({ state: "upcoming" });
     const open = await api(orga, "POST", `/${res.json.id}/open`, undefined, draft.id);
     expect(open.status).toBe(409);
     expect(open.json.error.code).toBe("event_not_published");
@@ -1423,5 +1638,86 @@ describe("tour 3 : dernière retouche", () => {
     const refused = await api(orga, "POST", `/${id}/candidates`, { qr: await codeOf(p.marc) });
     expect(refused.status).toBe(409);
     expect(refused.json.error.code).toBe("not_checked_in");
+  });
+});
+
+describe("lot R7l3 : cibles des notifications et trophées sur la carte du véhicule", () => {
+  /** Un vote japonais joué (trois voix, deux candidats) puis réglé : Kenji 1er, Lea 2e. */
+  async function playedJapanese() {
+    await enterAll();
+    const jp = await createTheme();
+    await api(orga, "POST", `/${jp}/open`);
+    for (const [voter, target] of [
+      [p.nina.u, p.kenji],
+      [p.marc.u, p.kenji],
+      [staff, p.lea],
+    ] as const) {
+      expect((await voteFor(voter, jp, target.applicationId)).status).toBe(200);
+    }
+    return jp;
+  }
+  const slugOf = async () => (await db.query.events.findFirst({ where: eq(events.id, eventId) }))!.slug;
+
+  it("« vote lancé » ouvre la liste des votes de l'événement ; « tu gagnes » ouvre le résultat de ce vote", async () => {
+    const jp = await playedJapanese();
+    const slug = await slugOf();
+    const opened = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    expect(opened.length).toBeGreaterThan(0);
+    for (const n of opened) {
+      expect((n.data as { link?: string }).link).toBe(`/app/votes/${slug}`);
+      expect((n.data as { voteId?: string }).voteId).toBe(jp);
+    }
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    const won = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_won") });
+    const kenji = won.find((n) => n.userId === p.kenji.u.id);
+    expect(kenji).toBeTruthy();
+    const data = kenji!.data as { link?: string; voteId?: string; screen?: string };
+    expect(data.link).toBe(`/app/vote/${slug}?vote=${jp}`);
+    expect(data.voteId).toBe(jp);
+    expect(data.screen).toBe("vote_result");
+  });
+
+  it("le podium est servi sur la carte du véhicule (liste blanche de champs), au propriétaire et à un autre membre", async () => {
+    const jp = await playedJapanese();
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    const mine = await call(p.kenji.u, "GET", "/me/vehicles");
+    expect(mine.status).toBe(200);
+    const row = (mine.json as { id: string; trophies: Record<string, unknown>[] }[]).find(
+      (v) => v.id === p.kenji.vehicleId,
+    )!;
+    expect(row.trophies).toHaveLength(1);
+    expect(Object.keys(row.trophies[0]!).sort()).toEqual(["awardedAt", "eventTitle", "id", "rank", "voteTitle"]);
+    expect(row.trophies[0]).toMatchObject({ rank: 1, voteTitle: "Plus belle japonaise", eventTitle: "Béziers Night" });
+    expect(jp).toBeTruthy();
+    // Lea 2e : son trophée de rang 2 ; Marc n'est pas sur le podium japonais : aucun trophée.
+    const lea = (await call(p.lea.u, "GET", "/me/vehicles")).json as { id: string; trophies: { rank: number }[] }[];
+    expect(lea.find((v) => v.id === p.lea.vehicleId)?.trophies.map((t) => t.rank)).toEqual([2]);
+    const marc = (await call(p.marc.u, "GET", "/me/vehicles")).json as { id: string; trophies: unknown[] }[];
+    expect(marc.find((v) => v.id === p.marc.vehicleId)?.trophies).toEqual([]);
+    // Un autre membre (compte public) voit le podium sur la fiche du véhicule.
+    const other = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(other.status).toBe(200);
+    expect((other.json.trophies as { voteTitle: string }[]).map((t) => t.voteTitle)).toEqual(["Plus belle japonaise"]);
+  });
+
+  it("le titre d'un événement sur invitation ne sort pas de chez le propriétaire ; un compte privé ne montre pas ses trophées", async () => {
+    await playedJapanese();
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, eventId));
+    // Le propriétaire garde son podium ; un autre membre (même s'il pouvait voir la voiture) ne le voit pas.
+    const mine = (await call(p.kenji.u, "GET", "/me/vehicles")).json as { id: string; trophies: unknown[] }[];
+    expect(mine.find((v) => v.id === p.kenji.vehicleId)?.trophies).toHaveLength(1);
+    const other = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(other.status).toBe(200);
+    expect(other.json.trophies).toEqual([]);
+    // Un compte privé n'est vu que par la fiche réduite : aucun champ de trophée.
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, p.kenji.u.id));
+    const reduced = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(reduced.status).toBe(200);
+    expect(reduced.json.detailed).toBe(false);
+    expect(reduced.json).not.toHaveProperty("trophies");
   });
 });

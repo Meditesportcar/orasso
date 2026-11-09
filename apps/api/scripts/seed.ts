@@ -33,11 +33,13 @@ import { seedHomeProfiles } from "./seed/home-profiles";
 import { seedInvitations } from "./seed/invitations";
 import { seedLiveEvent } from "./seed/live-event";
 import { seedMedia } from "./seed/media";
+import { seedMemories } from "./seed/memories";
 import { seedMessaging } from "./seed/messaging";
 import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
 import { seedOrgaV2 } from "./seed/orga-v2";
+import { seedPartnerships } from "./seed/partnerships";
 import { seedPassport } from "./seed/passport";
 import { seedPosters } from "./seed/posters";
 import { seedPros } from "./seed/pros";
@@ -177,6 +179,11 @@ async function main() {
 
   // Lot R7c1 : 12 notifications (cloche) et 3 demandes de Damien_66.
   await seedActivity();
+
+  // Lot R7j : un souvenir « il y a un an, jour pour jour » pour Damien_66 (tampon, candidature, affiche).
+  await seedMemories();
+  // Lot R7m1 : « Ses partenaires » d'un pro, « Partenaires » d'un profil, une proposition dans les Demandes de Damien_66.
+  await seedPartnerships();
 }
 
 try {

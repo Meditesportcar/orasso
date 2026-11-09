@@ -23,6 +23,8 @@ import {
   WeatherBlock,
 } from "../components/HomeWidgets";
 import { FriendsNewsBlock, LiveBlock, LiveLine, MyCrewBlock, MyOutingsBlock } from "../components/home/DashboardBlocks";
+import { MemoriesBlock } from "../components/home/Memories";
+import { SpotMeetupBlock } from "../components/home/SpotMeetup";
 import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
@@ -42,6 +44,13 @@ const num = (v: string | null): number | undefined => {
   if (v === null || v === "") return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+};
+
+// Lot R7i, tour 2 : l'Accueil porte le bloc « Au spot » (lieu exact d'un rendez-vous) : ni le navigateur ni un relais ne le gardent.
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -105,9 +114,11 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
         my_outings: home.myOutings ? <MyOutingsBlock data={home.myOutings} /> : null,
         my_crew: home.myCrew ? <MyCrewBlock data={home.myCrew} /> : null,
         friends_news: home.friendsNews ? <FriendsNewsBlock data={home.friendsNews} /> : null,
+        spot_meetup: home.spotMeetup ? <SpotMeetupBlock data={home.spotMeetup} /> : null,
         pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
         weather: <WeatherBlock weather={home.weather} />,
+        memories: home.memories ? <MemoriesBlock data={home.memories} /> : null,
         agenda: home.agenda.length ? <AgendaBlock items={home.agenda} /> : null,
         favorite_garage: home.favoriteGarage ? <GarageBlock garage={home.favoriteGarage} /> : null,
         wash: <PlacesBlock kind="wash" places={home.wash} />,
