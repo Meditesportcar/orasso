@@ -834,10 +834,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       {clip ? (
         <section className="story-preview" data-testid="story-preview">
           <h2 className="o-t-label">3 · {L.previewTitle}</h2>
-          <div
-            className="story-canvas"
-            data-testid="story-preview-canvas"
-          >
+          <div className="story-canvas" data-testid="story-preview-canvas">
             <div className="story-video" data-layout={storyVideoLayout(clip.width, clip.height)}>
               {storyVideoLayout(clip.width, clip.height) === "blurred" ? (
                 <img className="story-video__back" src={clip.posterUrl} alt="" draggable={false} />

@@ -56,7 +56,7 @@ import { ProgressBars } from "./ProgressBars";
 import { SharedByLine } from "./SharedByLine";
 import { Stickers } from "./Stickers";
 import { useStoryClock } from "./useStoryClock";
-import { VideoBar } from "./VideoBar";
+import { VideoSound, VideoTime } from "./VideoBar";
 import { Viewer } from "./Viewer";
 import { ViewersSheet } from "./ViewersSheet";
 
@@ -505,13 +505,14 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             onProfile={authorKey.startsWith("u:") && !mine ? () => openProfile(authorName) : undefined}
             onMore={() => setMenuOpen(true)}
             onClose={close}
+            sound={isVideo && !failed && !processing ? <VideoSound /> : undefined}
           />
           <SharedByLine story={story} authorName={authorName} />
           <CommercialBadge story={story} />
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 22 }]} pointerEvents="box-none">
           {isVideo && !failed && !processing ? (
-            <VideoBar seconds={videoSeconds} durationMs={story.durationMs ?? 0} />
+            <VideoTime seconds={videoSeconds} durationMs={story.durationMs ?? 0} />
           ) : null}
           <LinkedCard story={story} />
           <Stickers

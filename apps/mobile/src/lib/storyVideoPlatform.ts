@@ -7,6 +7,9 @@ import { File } from "expo-file-system";
 import { getThumbnailAsync } from "expo-video-thumbnails";
 import { Video } from "react-native-compressor";
 
+/** Le téléphone compresse (le navigateur de recette ne le fait pas). */
+export const canCompress = true;
+
 /** Taille du fichier en octets, `null` s'il n'est pas lisible. */
 export function fileSize(uri: string): Promise<number | null> {
   try {

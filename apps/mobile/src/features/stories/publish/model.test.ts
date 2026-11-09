@@ -10,6 +10,7 @@ import {
   resetDraft,
   stepAfterMedia,
   stepBefore,
+  videoStepBefore,
   withFrame,
 } from "./model";
 
@@ -79,5 +80,15 @@ describe("copie d'affichage", () => {
     expect(d.plate.photo).toBe(land);
     // Même cadrage qu'avec l'original : seul le rapport largeur/hauteur compte.
     expect(d.frame).toEqual(newStoryDraft("k", land).frame);
+  });
+});
+
+describe("une vidéo (lot R7g)", () => {
+  it("saute « Ajuster » et la plaque : détails, aperçu, et jamais plus loin en arrière que le choix du média", () => {
+    expect(videoStepBefore("preview")).toBe("details");
+    expect(videoStepBefore("details")).toBe("media");
+    expect(videoStepBefore("media")).toBeNull();
+    // Une photo, elle, repasse par la plaque.
+    expect(stepBefore("details", tall)).toBe("plate");
   });
 });

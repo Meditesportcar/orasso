@@ -3,6 +3,8 @@
 // en H.264 ou trop lourde est refusée avec « envoie-la depuis l'appli » (`storyVideo.ts`).
 import { type Mp4Info, mp4BlobSource, readMp4 } from "@orasso/shared";
 
+export const canCompress = false;
+
 async function blobOf(uri: string): Promise<Blob> {
   return (await fetch(uri)).blob();
 }

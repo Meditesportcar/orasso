@@ -3,6 +3,7 @@
 // profil d'une personne. Toujours sur fond sombre : texte `nightInk`, quel que soit le thème.
 import { Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedAgo, storyViewerLabels as L, type StoryView } from "@orasso/shared";
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { now } from "@/lib/clock";
@@ -18,6 +19,7 @@ export function Header({
   onProfile,
   onMore,
   onClose,
+  sound,
 }: {
   story: StoryView;
   name: string;
@@ -27,6 +29,8 @@ export function Header({
   onProfile?: () => void;
   onMore: () => void;
   onClose: () => void;
+  /** Lot R7g : le bouton du son d'une vidéo, posé avant « ⋯ » (maquette R7.7 `sk_video`). */
+  sound?: ReactNode;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -82,6 +86,7 @@ export function Header({
       ) : (
         <View style={styles.who}>{who}</View>
       )}
+      {sound}
       <Pressable
         onPress={onMore}
         accessibilityRole="button"

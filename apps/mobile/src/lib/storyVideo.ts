@@ -11,7 +11,7 @@ import {
 } from "@orasso/shared";
 import * as ImagePicker from "expo-image-picker";
 
-import { compressVideo, fileSize, posterOf, probeVideo } from "./storyVideoPlatform";
+import { canCompress, compressVideo, fileSize, posterOf, probeVideo } from "./storyVideoPlatform";
 import { discardTempPhotos, rememberTempPhotos } from "./tempPhotos";
 
 export type PickedVideo = {
@@ -58,6 +58,8 @@ export async function prepareStoryVideo(
     let finalUri = uri;
     let compressed = false;
     if (storyVideoNeedsCompression({ sizeBytes: sizeBefore, h264: first ? first.h264 : null })) {
+      // Pas de compression (navigateur de recette) : on dit ce qui ne va pas, comme le site.
+      if (!canCompress) throw new VideoRefused(!first ? L.unreadable : !first.h264 ? L.codec : L.tooBigApp);
       onStage("compressing", 0);
       try {
         finalUri = await compressVideo(uri, (ratio) => alive() && onStage("compressing", ratio));

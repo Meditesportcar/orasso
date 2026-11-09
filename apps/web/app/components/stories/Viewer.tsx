@@ -694,6 +694,18 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
             ) : (
               <div className="story-view__who">{who}</div>
             )}
+            {isVideo && !failed && storyPlayable(story) ? (
+              <button
+                type="button"
+                className="story-view__btn"
+                onClick={() => setVideoMuted((m) => !m)}
+                aria-label={videoMuted ? V.soundOn : V.soundOff}
+                aria-pressed={!videoMuted}
+                data-testid="story-video-sound"
+              >
+                <Icon name={videoMuted ? "soundOff" : "sound"} size={20} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="story-view__btn"
@@ -726,16 +738,6 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                   {clock(videoSeconds * 1000)} / {clock(story.durationMs ?? 0)}
                 </span>
               </span>
-              <button
-                type="button"
-                className="story-view__btn"
-                onClick={() => setVideoMuted((m) => !m)}
-                aria-label={videoMuted ? V.soundOn : V.soundOff}
-                aria-pressed={!videoMuted}
-                data-testid="story-video-sound"
-              >
-                <Icon name={videoMuted ? "soundOff" : "sound"} size={20} />
-              </button>
             </div>
           ) : null}
           <LinkedCard story={story} />
