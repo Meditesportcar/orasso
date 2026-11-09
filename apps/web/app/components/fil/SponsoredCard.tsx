@@ -74,6 +74,9 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved, userId }: CardPr
     const target: HTMLDivElement = el;
     let io: IntersectionObserver | undefined;
     let frame = 0;
+    // Faux entre « vue » et le nouvel essai programmé : un redimensionnement (barre d'adresse du téléphone) ne relance pas
+    // l'observation, sinon il court-circuiterait la temporisation de 30 s / 60 s et le plafond de trois essais.
+    let watching = true;
     const relay = createScrollRelay({
       measure: () => {
         const r = target.getBoundingClientRect();
@@ -101,9 +104,13 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved, userId }: CardPr
       key: sessionKey,
       send: sendImpression,
       onRefused: () => removed.current?.(card),
-      rearm: () => observe(),
+      rearm: () => {
+        watching = true;
+        observe();
+      },
     });
     function found() {
+      watching = false;
       io?.disconnect();
       relay.stop();
       watcher.onSeen();
@@ -124,6 +131,7 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved, userId }: CardPr
       io.observe(target);
     }
     const onResize = () => {
+      if (!watching) return;
       relay.stop();
       observe();
     };
