@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
+import { useApplications } from "@/lib/applications";
 import { serverNow } from "@/lib/clock";
 import { useChannel } from "@/lib/realtime";
 import { useApi } from "@/lib/useApi";
@@ -138,13 +139,16 @@ export function useEventRef(ref: string | undefined): {
   slug: string | null;
   error: boolean;
 } {
+  const { upcoming, past } = useApplications();
   const isId = Boolean(ref && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref));
   const resolved = useApi(() => api.eventBySlug(ref as string), [ref], { enabled: Boolean(ref) && !isId });
   const [stable, setStable] = useState<{ id: string; title: string; slug: string } | null>(null);
   useEffect(() => {
     if (resolved.data) setStable({ id: resolved.data.id, title: resolved.data.title, slug: resolved.data.slug });
   }, [resolved.data]);
-  if (isId) return { eventId: ref as string, title: null, slug: null, error: false };
+  // Un identifiant sans titre dans l'adresse : le titre vient des candidatures déjà lues (comme l'ancien écran du vote).
+  const known = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.event.id === ref)?.event;
+  if (isId) return { eventId: ref as string, title: known?.title ?? null, slug: known?.slug ?? null, error: false };
   return {
     eventId: stable?.id ?? null,
     title: stable?.title ?? null,

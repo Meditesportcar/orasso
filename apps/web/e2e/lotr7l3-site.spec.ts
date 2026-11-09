@@ -27,11 +27,11 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
   page,
 }) => {
   const v = await openedHandVote(`Recette R7l3 site concours ${STAMP}`);
-  const before = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+  const before = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
   expect(before.ranking).toBeNull();
   try {
     await setTheme(page, THEME);
-    await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
 
     // La liste des votes.
     await page.goto(`/app/votes/${v.slug}`);
@@ -43,8 +43,8 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
     // Le vote : la grille, sa voiture grisée, aucune voiture pas encore entrée touchable, pas de classement.
     await page.getByTestId(`votes-row-${v.voteId}`).getByRole("link").click();
     await expect(page.getByTestId("vote-grid")).toBeVisible();
-    await expect(page.getByTestId("vote-candidate-own")).toHaveCount(1);
-    await expect(page.getByTestId("vote-candidate-own")).toBeDisabled();
+    await expect(page.locator('[data-own="true"]')).toHaveCount(1);
+    await expect(page.locator('[data-own="true"]')).toBeDisabled();
     if (v.waiting) {
       await expect(page.getByTestId("vote-candidate-waiting")).toHaveCount(1);
       await expect(page.getByTestId("vote-candidate-waiting")).toBeDisabled();
@@ -54,19 +54,19 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
     await shot(page, "vote-avant");
 
     // Toucher une voiture = voter : la voix est enregistrée et le classement apparaît.
-    await page.getByTestId("vote-candidate").first().click();
+    await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("vote-ranking")).toBeVisible();
     await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
     expect(await page.getByTestId("vote-ranking").innerText()).not.toMatch(PLATE);
-    const after = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+    const after = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
     expect(after.ranking).not.toBeNull();
     await shot(page, "vote-apres");
 
     // Une voix modifiable : une autre voiture.
-    await page.getByTestId("vote-candidate").last().click();
+    await page.locator('[data-testid="vote-candidate"]:not([disabled])').last().click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
-    const changed = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+    const changed = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
     expect(changed.myVote).not.toBe(after.myVote);
   } finally {
     await closeVote(v.eventId, v.voteId).catch(() => undefined);
@@ -83,7 +83,7 @@ test("grille à 4 colonnes à 1280 px, 2 colonnes à 390 px", async ({ browser }
       const ctx = await browser.newContext({ viewport: { width, height: 900 }, locale: "fr-FR" });
       const page = await ctx.newPage();
       await setTheme(page, "beton");
-      await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+      await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
       await page.goto(`/app/vote/${v.slug}?vote=${v.voteId}`);
       await expect(page.getByTestId("vote-grid")).toBeVisible();
       const count = await page
@@ -120,7 +120,7 @@ test("qui n'est pas entré ne peut pas voter ; à la clôture, le classement est
   await expect(page.getByTestId("vote-ranking")).toHaveCount(0);
   await shot(page, "vote-visiteur");
   for (const voter of ["damien@orasso.local", "kenji@orasso.local", "lea@orasso.local"]) {
-    const target = v.entered.find((c) => !c.own && c.pseudo.toLowerCase() !== voter.split("@")[0]);
+    const target = v.entered.find((c) => !c.own && !c.pseudo.toLowerCase().startsWith(voter.split("@")[0] ?? ""));
     if (target) await castBy(voter, v.eventId, v.voteId, target.applicationId);
   }
   await closeVote(v.eventId, v.voteId);

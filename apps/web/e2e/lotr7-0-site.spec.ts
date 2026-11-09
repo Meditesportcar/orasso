@@ -44,7 +44,7 @@ for (const theme of ["beton", "sable"] as const) {
     await page.goto(`/app/vote/${SLUG}`);
     await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible();
     await expect(page.getByTestId("vote-ranking-hidden")).toContainText("Le classement s'affiche après ton vote");
-    await expect(page.locator(".vote-rank li")).toHaveCount(0);
+    await expect(page.getByTestId("vote-board-row")).toHaveCount(0);
   });
 }
 
@@ -68,5 +68,5 @@ test("Nina_34 : le classement apparaît après son vote ; si sa relecture échou
   await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
   await expect(page.getByTestId("vote-saved")).toBeVisible();
   await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
-  await expect(page.locator(".vote-rank li").first()).toBeVisible();
+  await expect(page.getByTestId("vote-board-row").first()).toBeVisible();
 });

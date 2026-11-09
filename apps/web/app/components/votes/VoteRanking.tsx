@@ -1,8 +1,9 @@
-// Le classement d'un vote, côté passionné (lot R7l3, maquette `vs_post` et `vr_res`) : rang, voiture, barre, voix ; le premier
-// sur l'aplat crème ; ma voiture cerclée. Servi par l'API seulement (voix donnée, clôture, équipe) : jamais reconstruit ici.
-import { myRankIn, rankingBarPercent, votePassTexts as T, type VoteRankingEntry, type VoteView } from "@orasso/shared";
+// Le classement d'un vote, côté passionné (lots 57 et R7l3) : rang, voiture, barre, voix (la mise en page du prix du public du
+// lot 57). Servi par l'API seulement (voix donnée, clôture, équipe) : jamais reconstruit ici.
+import { Chip } from "@orasso/design-system/web";
+import { myRankIn, votePassTexts as T, type VoteRankingEntry, type VoteView } from "@orasso/shared";
 
-import "../../styles/votes-pass.css";
+import "../../styles/passport.css";
 
 export function VoteRanking({
   vote,
@@ -21,36 +22,30 @@ export function VoteRanking({
         <h2 id="vote-ranking" className="s-h2">
           {closed ? "Résultats" : T.ranking}
         </h2>
-        {closed ? null : (
-          <span className="o-t-caption" data-testid="vote-live">{`${T.live} · ${T.votes(vote.total)}`}</span>
+        {!closed && (
+          <span data-testid="vote-live">
+            <Chip>{T.live}</Chip>
+          </span>
         )}
       </div>
-      {me ? (
-        <p className="o-t-caption" data-testid="vote-my-rank">
-          {T.rank(me.rank, me.of)}
-        </p>
-      ) : null}
-      <ol className="vp-rank">
-        {entries.slice(0, 10).map((e, i) => {
+      <p className="o-t-caption s-muted" data-testid="vote-total">
+        {T.votes(vote.total)}
+        {me ? ` · ${T.rank(me.rank, me.of)}` : ""}
+      </p>
+      <ol className="vote-rank">
+        {entries.slice(0, 10).map((e) => {
           const own = vote.ownApplicationIds.includes(e.applicationId);
-          const mine = vote.myVote === e.applicationId;
-          const first = i === 0 && e.votes > 0;
           return (
-            <li
-              key={e.applicationId}
-              className={`vp-rank__row${first ? " is-first" : ""}${own || mine ? " is-mine" : ""}`}
-              data-testid="vote-board-row"
-            >
+            <li key={e.applicationId} data-testid="vote-board-row">
               <span className="o-t-number-narrow">{e.rank}</span>
-              <span>
-                <b className="o-never-truncate">{e.vehicleLabel}</b>
-                <br />
-                <small>{own ? `${e.pseudo} · ${T.you}` : mine ? `${e.pseudo} · ${T.yourVote}` : e.pseudo}</small>
-                <span className="vp-rank__bar">
-                  <span style={{ width: `${rankingBarPercent(e.votes, top)}%` }} />
-                </span>
+              <span className="o-never-truncate">
+                {e.vehicleLabel} <span className="s-muted">· {own ? `${e.pseudo} · ${T.you}` : e.pseudo}</span>
+                <span
+                  className="vote-bar"
+                  style={{ width: `${top && e.votes ? Math.max(4, (e.votes / top) * 100) : 0}%` }}
+                />
               </span>
-              <span className="o-t-number">{e.votes}</span>
+              <span className="o-t-caption">{T.votes(e.votes)}</span>
             </li>
           );
         })}

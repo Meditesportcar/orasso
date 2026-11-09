@@ -125,105 +125,15 @@
   color: var(--accent);
 }
 
-/* Un vote : la grille (2 colonnes sur téléphone, 4 à 1280 px), le candidat grisé, le gagnant. */
-.vp-grid {
-  display: grid;
+/* Un vote : la grille garde la mise en page du lot 57 (`.vote-grid`, `.vote-card` de passport.css) ; 4 colonnes dès 900 px. */
+.vote-grid.vote-grid--four {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 
 @media (min-width: 900px) {
-  .vp-grid {
+  .vote-grid.vote-grid--four {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-}
-
-.vp-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 100%;
-  padding: 0 0 var(--space-3);
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: var(--shadow-card);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.vp-card[aria-pressed="true"] {
-  box-shadow:
-    0 0 0 3px var(--accent),
-    var(--shadow-card);
-}
-
-.vp-card:disabled {
-  cursor: default;
-}
-
-.vp-card.is-waiting {
-  opacity: 0.75;
-}
-
-.vp-card__photo {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  background: var(--surface-sunken);
-}
-
-.vp-card__tag {
-  position: absolute;
-  top: var(--space-2);
-  left: var(--space-2);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--ink);
-  color: var(--surface);
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.vp-card.is-waiting .vp-card__tag,
-.vp-card.is-own .vp-card__tag {
-  background: var(--night);
-  color: var(--poster-ink);
-}
-
-.vp-card__body {
-  display: grid;
-  gap: 2px;
-  padding: 0 var(--space-3);
-  min-width: 0;
-}
-
-.vp-card__body small {
-  color: var(--ink-muted);
-}
-
-.vp-poster {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--poster);
-  color: var(--poster-ink);
-  box-shadow: var(--shadow-poster);
-}
-
-.vp-poster small,
-.vp-poster p {
-  color: var(--poster-muted);
-  margin: 0;
 }
 
 .vp-winner {
@@ -239,54 +149,6 @@
   border-radius: var(--radius-md);
   object-fit: cover;
   background: var(--surface-sunken);
-}
-
-.vp-rank {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.vp-rank__row {
-  display: grid;
-  grid-template-columns: 3.2ch minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: center;
-  padding: var(--space-3);
-  border: 1px solid var(--card-line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.vp-rank__row.is-first {
-  background: var(--poster);
-  color: var(--poster-ink);
-}
-
-.vp-rank__row.is-mine {
-  border: 2px solid var(--accent);
-}
-
-.vp-rank__bar {
-  display: block;
-  height: 6px;
-  margin-top: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--line);
-  overflow: hidden;
-}
-
-.vp-rank__bar > span {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--ink);
-}
-
-.vp-rank__row.is-first .vp-rank__bar > span {
-  background: var(--accent);
 }
 
 /* Trophées de la carte d'un véhicule (garage et fiche publique). */

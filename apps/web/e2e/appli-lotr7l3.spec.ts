@@ -67,7 +67,7 @@ async function shot(page: Page, name: string) {
 test("la liste, le vote dans le concours, le classement absent avant la voix et présent après", async ({ browser }) => {
   const v = await openedHandVote(`Recette R7l3 concours ${STAMP}`);
   // Avant la voix, l'API ne sert aucun classement à Damien (entré, pas encore voté).
-  const before = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+  const before = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
   expect(before.state).toBe("open");
   expect(before.canVote).toBe(true);
   expect(before.ranking).toBeNull();
@@ -76,7 +76,7 @@ test("la liste, le vote dans le concours, le classement absent avant la voix et 
   const other = v.entered.find((c) => !c.own);
   expect(other).toBeTruthy();
 
-  const { ctx, page } = await open(browser, "damien@orasso.local");
+  const { ctx, page } = await open(browser, "kenji@orasso.local");
   try {
     // La liste : les votes du Lydia, le concours de la recette à voter.
     await go(page, `/votes/${v.eventId}`, "votes-list");
@@ -106,7 +106,7 @@ test("la liste, le vote dans le concours, le classement absent avant la voix et 
     expect(await page.getByTestId("vote-board-row").count()).toBeGreaterThan(0);
     await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
     expect(await page.getByTestId("vote-board").innerText()).not.toMatch(PLATE);
-    const after = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+    const after = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
     expect(after.myVote).toBeTruthy();
     expect(after.ranking).not.toBeNull();
     await shot(page, "vote-apres");
@@ -120,7 +120,7 @@ test("la liste, le vote dans le concours, le classement absent avant la voix et 
     await page.getByTestId("vote-card").last().click();
     await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
-    const changed = await voteSeenBy("damien@orasso.local", v.eventId, v.voteId);
+    const changed = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
     expect(changed.myVote).toBeTruthy();
     expect(changed.myVote).not.toBe(first);
 
@@ -159,7 +159,7 @@ test("qui n'est pas entré ne peut pas voter ; à la clôture, le classement est
     await shot(page, "vote-visiteur");
     // Des voix, puis la clôture : le classement est servi à tous, même à qui n'a pas voté.
     for (const voter of ["damien@orasso.local", "kenji@orasso.local", "lea@orasso.local"]) {
-      const target = v.entered.find((c) => !c.own && c.pseudo.toLowerCase() !== voter.split("@")[0]);
+      const target = v.entered.find((c) => !c.own && !c.pseudo.toLowerCase().startsWith(voter.split("@")[0] ?? ""));
       if (target) await castBy(voter, v.eventId, v.voteId, target.applicationId);
     }
     await closeVote(v.eventId, v.voteId);

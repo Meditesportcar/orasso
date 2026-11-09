@@ -311,10 +311,22 @@ function Grid({
               />
               {own || waiting ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `${c.night}8c` }]} /> : null}
               <View style={styles.tag}>
-                {/* Le badge « Toi » est posé sur le voile sombre de la photo : encre d'affiche (crème), pas l'encre du thème (sombre en Sable). */}
-                <Tag tone={own || waiting ? "line" : "ink"} on={own || waiting ? "poster" : "card"}>
-                  {own ? T.youTag : waiting ? T.notYetEntered : T.number(i + 1)}
-                </Tag>
+                {/* « Toi » et « Pas encore entrée » sont posés sur le voile sombre de la photo : un fond nuit et l'encre crème de la nuit,
+                    les mêmes dans les deux thèmes (l'encre du thème est sombre en Sable, celle de l'affiche l'est en Béton : invisibles). */}
+                {own || waiting ? (
+                  <View
+                    style={[styles.veilBadge, { backgroundColor: c.night, borderColor: c.nightInk }]}
+                    testID="vote-card-badge"
+                  >
+                    <Text variant="label" color={c.nightInk} style={styles.veilBadgeText}>
+                      {own ? T.youTag : T.notYetEntered}
+                    </Text>
+                  </View>
+                ) : (
+                  <Tag tone="ink" on="card">
+                    {T.number(i + 1)}
+                  </Tag>
+                )}
               </View>
               {chosen ? (
                 <View style={[styles.check, { backgroundColor: c.accent }]}>
@@ -454,7 +466,9 @@ const styles = StyleSheet.create({
   cardOn: { transform: [{ translateY: -3 }] },
   waiting: { opacity: 0.75 },
   photo: { height: 96, overflow: "hidden" },
-  tag: { position: "absolute", top: 6, left: 6 },
+  tag: { position: "absolute", top: 6, left: 6, right: 6, alignItems: "flex-start" },
+  veilBadge: { borderWidth: 1.5, borderRadius: 6, paddingHorizontal: space2, paddingVertical: 3, maxWidth: "100%" },
+  veilBadgeText: { fontSize: 10.5, letterSpacing: 0.6, textTransform: "uppercase" },
   check: {
     position: "absolute",
     top: space1,

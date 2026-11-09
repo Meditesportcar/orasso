@@ -289,18 +289,22 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     await shot(page, `passeport-prix-du-public-${theme}`);
     await checkRules(page, theme, `passeport avec le vote ${theme}`);
     await link.click();
-    await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
+    await expect(page).toHaveURL(/votes?\//, { timeout: 30_000 });
     // Entrée par le jour J de Kenji (le bouton du prix du public), puis l'écran.
     await goto(page, `/jour-j/${kenji.applicationId}`);
     await expect(page.getByTestId("jourj-vote")).toBeVisible({ timeout: 60_000 });
+    // Lot R7l3 : le bouton mène à la liste des votes ; « Toutes catégories » (le prix du public) s'ouvre depuis sa ligne.
     await page.getByTestId("jourj-vote").click();
-    await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: "Prix du public", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page).toHaveURL(/votes\//, { timeout: 30_000 });
+    await page.locator('[data-testid^="votes-open-"]').first().click();
+    await expect(page.getByRole("heading", { name: "Toutes catégories", exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
     // Lot C2b : déjà voté (deuxième thème), l'écran montre le classement ; « Changer mon vote » rouvre la grille.
     if (round > 0) await page.getByTestId("vote-change").click({ timeout: 30_000 });
     await expect(page.getByText("Une voix, une seule", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Pointage à \d+ h/)).toBeVisible();
-    await expect(page.getByText("Pas pour toi-même. Le gagnant reçoit le badge et 50 points.")).toBeVisible();
+    await expect(page.getByText("Une voix, pas pour toi-même, modifiable jusqu'à la clôture.")).toBeVisible();
     // Quatre voitures : la mienne grisée « C'est toi », trois à choisir.
     await expect(page.getByTestId("vote-card")).toHaveCount(3, { timeout: 30_000 });
     await expect(page.getByTestId("vote-card-own")).toContainText("C'est toi");
@@ -336,9 +340,12 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
       const { ctx: c2, page: p } = await open(browser, "beton");
       await signIn(p, `dehors_${s}@e2e.orasso.test`);
       await goto(p, `/vote/${event.id}?titre=${encodeURIComponent(event.title)}`);
-      await expect(p.getByText("Votent les personnes pointées, les billets scannés et le staff présent.")).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(p.getByTestId("vote-blocked")).toContainText(
+        /Valide ta présence pour voter|Entre sur l'événement pour voter/,
+        {
+          timeout: 30_000,
+        },
+      );
       await expect(p.getByTestId("vote-card")).toHaveCount(0);
       await shot(p, "vote-pas-pointe-beton");
       await c2.close();
@@ -356,7 +363,7 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
     await goto(page, `/vote/${event.id}?titre=${encodeURIComponent(event.title)}`);
-    await expect(page.getByText("Le vote est clos : le résultat arrive deux jours après l'événement.")).toBeVisible({
+    await expect(page.getByText("Ce vote est clos.")).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByTestId("vote-card")).toHaveCount(0);

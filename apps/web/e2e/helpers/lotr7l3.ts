@@ -12,6 +12,7 @@ type Candidates = { applicationId: string; pseudo: string; vehicleLabel: string 
 export async function openedHandVote(
   title: string,
   durationMinutes = 10,
+  voterPseudo = "Kenji_66",
 ): Promise<{ eventId: string; slug: string; voteId: string; entered: Candidates[]; waiting: Candidates | null }> {
   const ly = await lydia();
   const sarah = await login("sarah@orasso.local");
@@ -25,8 +26,9 @@ export async function openedHandVote(
   const voteId = created.data.id;
   const { entered, outside } = await cars(ly.id);
   if (entered.length < 3) throw new Error("Le seed du Lydia doit avoir au moins trois voitures entrées.");
-  // Damien_66 (entré) d'abord : sa propre voiture est grisée « C'est toi » dans sa grille.
-  const damien = entered.find((e) => e.pseudo === "Damien_66");
+  // Le votant (entré) d'abord : sa propre voiture est grisée « C'est toi » dans sa grille. Pas Damien : il est super administrateur
+  // en assistance dans le seed, donc de l'équipe, qui voit le classement avant sa voix (règle de l'API).
+  const damien = entered.find((e) => e.pseudo === voterPseudo);
   const chosen = [...(damien ? [damien] : []), ...entered.filter((e) => e !== damien)].slice(0, 4);
   const out: Candidates[] = [];
   for (const c of chosen) {
