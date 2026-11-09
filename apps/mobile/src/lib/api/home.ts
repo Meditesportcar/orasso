@@ -12,13 +12,15 @@ export type HomeQuery = {
   lng?: number;
   persona?: PersonaKind;
   light?: "1";
-  blocks?: "v2" | "places";
+  blocks?: "v2" | "places" | "app";
 };
 
 export const homeApi = {
   homeData: (query: HomeQuery = {}) => request<HomeData>(`/api/me/home${qs(query)}`),
   setHomeWidgets: (config: HomeWidgetsConfig) =>
     request<HomeWidgetsConfig>("/api/me/home/widgets", { method: "PUT", body: config }),
+  /** Tour 3 : efface le réglage ; rend les défauts du compte. */
+  resetHomeWidgets: () => request<HomeWidgetsConfig>("/api/me/home/widgets", { method: "DELETE" }),
   setFavoritePro: (proId: string) => request<unknown>(`/api/pros/${proId}/favorite`, { method: "POST" }),
   unsetFavoritePro: (proId: string) => request<unknown>(`/api/pros/${proId}/favorite`, { method: "DELETE" }),
   /** Lot 43 : mon rang au prix du public d'un événement fini (via le récap, calculé à la demande ; `null` avant J+1 10 h). */

@@ -215,7 +215,8 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await afterOpening(page);
     await expect(page).toHaveURL(/\/profil/, { timeout: 30_000 });
     await checkTab(page, null);
-    for (const id of ["profil-head", "profil-season", "profil-passport", "profil-crew", "casquette-fan"]) {
+    // Lot R7b1 : la saison et le passeport sont dans l'onglet Sorties, le crew a son onglet ; le Profil a ses deux onglets.
+    for (const id of ["profil-head", "profil-tabs", "profil-count-sorties", "casquette-fan"]) {
       await expect(page.getByTestId(id).first()).toBeVisible();
     }
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
@@ -254,18 +255,18 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await expect(page.getByText("Automatique", { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Réduire les animations", { exact: true })).toBeVisible();
     await shot(page, `reglages-preferences-${theme}`);
-    // La Boîte, en haut à droite : hors de la barre, notifications dedans, ✕ pour revenir.
+    // La cloche, en haut à droite : l'Activité, hors de la barre, ✕ pour revenir.
     await page.goto("/accueil");
     await afterOpening(page);
     await page
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await page.waitForURL(/\/boite$/, { timeout: 30_000 });
-    await expect(page.getByTestId("inbox-all")).toBeVisible();
-    // Pas de barre d'onglets ici : seuls les trois segments de la feuille Boîte (Tout, Messages, Demandes, lot C2a).
-    await expect(page.getByTestId("inbox-segments").getByRole("tab")).toHaveCount(3);
-    await shot(page, `boite-${theme}`);
+    await page.waitForURL(/\/activite$/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible();
+    // Pas de barre d'onglets ici (lot R7c2 : plus de segments, la Boîte a disparu).
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await shot(page, `activite-${theme}`);
     // L'ancien onglet Accès mène à Sorties.
     await page.goto("/acces");
     await expect(page).toHaveURL(/\/sorties/, { timeout: 30_000 });
@@ -312,14 +313,15 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
   await expect(page.getByTestId("casquette-visitor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("casquette-quick-vehicle")).toBeVisible();
-  await expect(page.getByTestId("profil-garage")).toHaveCount(0);
+  // Lot R7b1 : le Garage du visiteur est l'onglet par défaut du Profil, vide : il propose d'ajouter un véhicule.
+  await expect(page.getByTestId("garage-empty-add")).toBeVisible({ timeout: 30_000 });
   await shot(page, "visiteur-profil-sable");
 
   await addVehicleApi(cookie, randomPlate());
   // Retour sur un onglet : `GET /me` relu, la casquette de base devient l'exposant (la ligne « Mon garage » du Profil).
   await page.getByRole("tab", { name: "Explorer", exact: true }).click();
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
-  await expect(page.getByTestId("profil-garage")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("tab", { name: "Crew", exact: true })).toBeVisible();
   await shot(page, "visiteur-devenu-exposant-sable");
   await ctx.close();

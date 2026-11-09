@@ -1,7 +1,7 @@
 ﻿import { Button, Icon } from "@orasso/design-system/web";
 import { publicProfileLabels as L, publicPreviewLabels as P, type PreviewAs, type PublicPreview } from "@orasso/shared";
 
-import { PublicProfile } from "../components/PublicProfile";
+import { PublicProfile } from "../components/profile/PublicProfile";
 import { apiOrThrow } from "../lib/api.server";
 import type { Route } from "./+types/profil-public";
 import "../styles/network.css";

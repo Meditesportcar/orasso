@@ -2,10 +2,12 @@ import { isIP } from "node:net";
 import {
   homeQuerySchema,
   homeWidgetsPutSchema,
+  type SponsoredEventInput,
+  sponsoredEventSchema,
   sponsoredPlacementCreateSchema,
   sponsoredPlacementUpdateSchema,
 } from "@orasso/shared";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -18,6 +20,13 @@ import { sponsoredService } from "./sponsored";
 function clientIp(header: string | undefined): string | null {
   const ip = header?.split(",")[0]?.trim() ?? "";
   return isIP(ip) ? ip : null;
+}
+
+/** Corps facultatif de `POST /sponsored/:id/impression|click` : absent ou vide = l'Accueil ; mal formé = 400. */
+async function eventBody(c: Context): Promise<SponsoredEventInput> {
+  const raw = await c.req.text();
+  if (!raw.trim()) return sponsoredEventSchema.parse({});
+  return body(c, sponsoredEventSchema);
 }
 
 // Accueil complet (lot 30). Réponses privées : elles dépendent de la personne (profil, candidatures, position).
@@ -36,6 +45,12 @@ export const homeRoutes = new Hono<AppEnv>()
     c.header("cache-control", "no-store");
     return c.json(await homeService.setWidgets(v, await body(c, homeWidgetsPutSchema)));
   })
+  // Lot R7a2, tour 3 : « Réinitialiser » = revenir aux défauts DU COMPTE (réglage effacé ; le défaut se recalcule).
+  .delete("/me/home/widgets", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await homeService.resetWidgets(v));
+  })
   .post("/pros/:id/favorite", async (c) => {
     await homeService.setFavorite(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
@@ -45,12 +60,15 @@ export const homeRoutes = new Hono<AppEnv>()
     return c.body(null, 204);
   })
   // Lot M5, tour 2 : l'emplacement du Garage est compté à sa première apparition à l'écran.
+  // Lot R7k1 : `{ surface }` dit où la carte est apparue (`home` par défaut, `feed`) ; un corps absent vaut l'Accueil.
   .post("/sponsored/:id/impression", async (c) => {
-    await sponsoredService.impression(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    await sponsoredService.impression(v, uuidParam(c, "id"), (await eventBody(c)).surface);
     return c.body(null, 204);
   })
   .post("/sponsored/:id/click", async (c) => {
-    await sponsoredService.click(await requireUser(c), uuidParam(c, "id"));
+    const v = await requireUser(c);
+    await sponsoredService.click(v, uuidParam(c, "id"), (await eventBody(c)).surface);
     return c.body(null, 204);
   })
   // Administration : routes posées ici, page au lot 33 (`/admin/sponsorises`).

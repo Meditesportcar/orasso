@@ -28,6 +28,8 @@ export const pointKinds = [
   "admin_adjustment",
   // Lot 49 : prix du public, au gagnant, au règlement de J+2.
   "audience_prize",
+  // Lot R7l1 (D38) : podium d'un vote (15 / 10 / 5), une ligne par voiture : son meilleur rang de l'événement.
+  "vote_podium",
 ] as const;
 export type PointKind = (typeof pointKinds)[number];
 

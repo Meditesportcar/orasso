@@ -1,4 +1,5 @@
 import type { AdminSettingKey } from "../rules/admin";
+import type { SponsoredSurface } from "../rules/sponsored";
 import type { AdminOverview, AssistanceCloseReason, AssistanceStatus, NewsletterStatus } from "../schemas/admin";
 
 // Administration (lot 33) : accueil et files, registres, mode assistance, réglages, newsletter, désinscription.
@@ -43,13 +44,16 @@ export const adminOverviewTiles: { key: keyof AdminOverview; label: string; href
 
 export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "signup.enabled": "Inscriptions ouvertes",
-  "sponsored.enabled": "Emplacements sponsorisés sur l'Accueil",
+  "sponsored.enabled": "Emplacements sponsorisés (Accueil et Fil)",
+  "sponsored.external_enabled": "Annonceurs externes dans le Fil (avis juridique attendu)",
   "providers.enabled": "Candidatures des prestataires",
   "points.participation": "Présent à un événement",
   "points.staff": "Staff présent",
   "points.referral": "Parrainage confirmé",
   "points.malus": "Absent sans désistement (malus)",
-  "points.audience_prize": "Prix du public (gagnant)",
+  "points.vote_first": "Points · 1er d'un vote",
+  "points.vote_second": "Points · 2e d'un vote",
+  "points.vote_third": "Points · 3e d'un vote",
   "grades.thresholds": "Seuils des grades",
   "lists.refusal_reasons": "Motifs de refus proposés au tri",
   "lists.vendor_types": "Types de prestataires proposés",
@@ -117,6 +121,12 @@ export const placementStatusLabels: Record<"draft" | "active" | "paused" | "ende
   active: "Actif",
   paused: "En pause",
   ended: "Terminé",
+};
+
+/** Où s'affiche un emplacement (lot R7k1). */
+export const placementSurfaceLabels: Record<SponsoredSurface, string> = {
+  home: "Accueil",
+  feed: "Le Fil",
 };
 
 /** Contrôle automatique du SIRET d'une fiche pro (lot 14). */

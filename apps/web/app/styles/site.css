@@ -2694,6 +2694,16 @@
   line-height: calc(1em + var(--type-poster-l-line) - var(--type-poster-l-size));
 }
 
+/* Lot R7c2, tour 3 : le titre d'événement d'une carte de Demandes ne se coupe qu'entre deux mots (même motif que
+   `.s-title--fit`). Le parent `.s-person__main` porte `.s-fit` (sa largeur ne dépend pas du texte : base de 200 px), le lien
+   `--em` (`widestWordEm`) : le corps descend sous celui du jeton seulement quand le mot le plus large ne tient pas. */
+.s-fit .s-req-title {
+  font-size: min(var(--type-title-size), calc(100cqi / var(--em, 10)));
+  line-height: calc(1em + var(--type-title-line) - var(--type-title-size));
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 /* Bandeau « où sont passées les choses » (lot R7a1, tour 2) : le texte à gauche, le ✕ à droite (maquette R7.1). */
 .s-whatsnew {
   align-items: flex-start;

@@ -119,6 +119,9 @@ export const r7NotificationTable = {
     body: "Le vote « {name} » est ouvert : tu peux voter.",
     push: true,
     email: false,
+    // Tour 2 : part tout de suite tant que le vote est ouvert, la nuit et un 2e jour d'événement compris (un vote ne
+    // s'ouvre que pendant l'événement : la fenêtre est « déjà commencé »).
+    quiet: { within: 7 * 24 * HOUR },
   },
   vote_won: {
     family: "event",

@@ -731,7 +731,7 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
       await page.getByTestId("vehicle-delete").click();
       await expect(page.getByText("Supprimer ce véhicule ?")).toBeVisible();
       await page.getByTestId("orga-confirm").click();
-      await page.waitForURL(/\/garage/, { timeout: 20_000 });
+      await page.waitForURL(/\/profil\?onglet=garage/, { timeout: 20_000 });
       const left = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
       expect(left.data.map((v) => v.id)).not.toContain(toDelete);
     } else {

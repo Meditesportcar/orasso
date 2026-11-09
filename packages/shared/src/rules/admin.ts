@@ -4,23 +4,28 @@
 import { type EventFormat, eventFormats, type RefusalReason, refusalReasons } from "../enums";
 import { type Grade, grades } from "../grades";
 import { type VendorTypeCode, vendorTypeCodes } from "../provider";
-import { AUDIENCE_PRIZE_POINTS_DEFAULT } from "./audiencePrize";
 import { GRADE_THRESHOLDS } from "./misc";
 import { POINTS } from "./points";
 import { type ProActivity, proActivities } from "./pro";
 import { DAY } from "./time";
+import { VOTE_PODIUM_POINTS_DEFAULT } from "./votes";
 
 /** Réglages de la plateforme gérés par `/admin/reglages` (table `platform_settings`, clé → valeur JSON). */
 export const adminSettingKeys = [
   "signup.enabled",
   "sponsored.enabled",
+  // Lot R7k1 : annonceurs hors Orasso dans le Fil, coupés tant que le juriste n'a pas relu consentement et mentions.
+  "sponsored.external_enabled",
   "providers.enabled",
   "points.participation",
   "points.staff",
   "points.referral",
   "points.malus",
-  // Lot 49 : prix du public (H6, valeur « en discussion » dans docs/01).
-  "points.audience_prize",
+  // Lot R7l1 (D38) : podium de chaque vote, 15 / 10 / 5 (provisoires). Remplace `points.audience_prize` (50) : la clé
+  // éventuelle en base est ignorée.
+  "points.vote_first",
+  "points.vote_second",
+  "points.vote_third",
   "grades.thresholds",
   "lists.refusal_reasons",
   "lists.vendor_types",
@@ -32,12 +37,15 @@ export type AdminSettingKey = (typeof adminSettingKeys)[number];
 export type AdminSettingValues = {
   "signup.enabled": boolean;
   "sponsored.enabled": boolean;
+  "sponsored.external_enabled": boolean;
   "providers.enabled": boolean;
   "points.participation": number;
   "points.staff": number;
   "points.referral": number;
   "points.malus": number;
-  "points.audience_prize": number;
+  "points.vote_first": number;
+  "points.vote_second": number;
+  "points.vote_third": number;
   "grades.thresholds": Record<Grade, number>;
   "lists.refusal_reasons": RefusalReason[];
   "lists.vendor_types": VendorTypeCode[];
@@ -48,12 +56,15 @@ export type AdminSettingValues = {
 export const adminSettingDefaults: AdminSettingValues = {
   "signup.enabled": true,
   "sponsored.enabled": true,
+  "sponsored.external_enabled": false,
   "providers.enabled": true,
   "points.participation": POINTS.participation,
   "points.staff": POINTS.staff,
   "points.referral": POINTS.referral,
   "points.malus": POINTS.malus,
-  "points.audience_prize": AUDIENCE_PRIZE_POINTS_DEFAULT,
+  "points.vote_first": VOTE_PODIUM_POINTS_DEFAULT.first,
+  "points.vote_second": VOTE_PODIUM_POINTS_DEFAULT.second,
+  "points.vote_third": VOTE_PODIUM_POINTS_DEFAULT.third,
   "grades.thresholds": { ...GRADE_THRESHOLDS },
   "lists.refusal_reasons": [...refusalReasons],
   "lists.vendor_types": [...vendorTypeCodes],
@@ -63,13 +74,15 @@ export const adminSettingDefaults: AdminSettingValues = {
 
 /** Groupes de la page des réglages (ordre d'affichage). */
 export const adminSettingGroups: Record<"switches" | "points" | "lists", readonly AdminSettingKey[]> = {
-  switches: ["signup.enabled", "sponsored.enabled", "providers.enabled"],
+  switches: ["signup.enabled", "sponsored.enabled", "sponsored.external_enabled", "providers.enabled"],
   points: [
     "points.participation",
     "points.staff",
     "points.referral",
     "points.malus",
-    "points.audience_prize",
+    "points.vote_first",
+    "points.vote_second",
+    "points.vote_third",
     "grades.thresholds",
   ],
   lists: ["lists.refusal_reasons", "lists.vendor_types", "lists.pro_activities", "lists.event_formats"],

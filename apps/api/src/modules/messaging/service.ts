@@ -679,9 +679,9 @@ async function pushTo(tx: Tx, access: Access, row: MessageRow, v: Viewer, recipi
       data: {
         conversationId: row.conversationId,
         actor: { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
-        link: `/app/boite/${row.conversationId}`,
+        link: `/app/messages/${row.conversationId}`,
       },
-      link: { label: "Ouvrir la conversation", path: `/app/boite/${row.conversationId}` },
+      link: { label: "Ouvrir la conversation", path: `/app/messages/${row.conversationId}` },
     });
   }
 }

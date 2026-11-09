@@ -129,22 +129,20 @@ test("la barre du haut : loupe, cloche « Activité », bulle « Messages », pl
     expect(text === "" || /^[1-9]\d*\+?$/.test(text), `pastille ${name} : « ${text} »`).toBe(true);
   }
   await page.getByRole("tab", { name: "Accueil", exact: true }).click();
-  // La bulle ouvre la Boîte sur Messages, la cloche sur Tout.
+  // Lot R7c2 : la bulle ouvre Messages, la cloche l'Activité (la Boîte a disparu).
   await page
     .getByRole("button", { name: /^Messages/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite\?onglet=messages/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(
-    /^Messages/,
-  );
+  await page.waitForURL(/\/messages$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Messages", exact: true }).first()).toBeVisible();
   await go(page, "/accueil");
   await page
     .getByRole("button", { name: /^Activité/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite$/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(/^Tout/);
+  await page.waitForURL(/\/activite$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible();
   await ctx.close();
 });
 
@@ -189,18 +187,9 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await expect(page.getByTestId("appbar-close").first()).toBeVisible();
   await shot(page, "sorties-page");
 
+  // Lot R7b1 : le Garage est l'onglet interne du Profil ; `/garage` y mène (le bandeau « où sont passées les choses » marche).
   await go(page, "/garage");
-  await expect(page.getByRole("heading", { name: "Mon garage", exact: true }).first()).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByTestId("persona-tabbar")).toHaveCount(0);
-  await expect(page.getByTestId("appbar-close").first()).toBeVisible();
-
-  // Depuis le Profil : la ligne « Mon garage » ouvre la page, le ✕ ramène au Profil.
-  await go(page, "/profil");
-  await page.getByTestId("profil-garage").click();
-  await page.waitForURL(/\/garage/, { timeout: 15_000 });
-  await page.getByTestId("appbar-close").first().click();
+  await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
   await page.waitForURL(/\/profil/, { timeout: 15_000 });
 
   // Depuis l'Accueil : « Tu es staff » ouvre Sorties, le ✕ ramène à l'Accueil.
@@ -216,7 +205,8 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await go(page, "/acces");
   await page.waitForURL(/\/sorties/, { timeout: 30_000 });
   await go(page, "/passeport");
-  await page.waitForURL(/\/mon-passeport/, { timeout: 30_000 });
+  await page.waitForURL(/\/profil/, { timeout: 30_000 });
+  await expect(page.getByTestId("profil-tab-sorties")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
   await ctx.close();
 });
 
@@ -232,9 +222,10 @@ test("Sorties → événement → « Ma candidature » → Sorties : pas d'empil
   const { ctx, page } = await open(browser);
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
   await afterOpening(page);
-  // Origine : le Profil, par le nombre « sorties ».
+  // Origine : le Profil, onglet Sorties (le nombre « sorties »), puis « Voir mes places » (R7b1).
   await go(page, "/profil");
   await page.getByTestId("profil-count-sorties").click();
+  await page.getByTestId("profil-places").click();
   await page.waitForURL(/\/sorties/, { timeout: 15_000 });
   // Sorties → l'événement (le titre du ticket) → « Ma candidature » → retour à Sorties, une seule fois dans la pile.
   await page.getByTestId("ticket-application").first().getByText(event.title).first().click();
@@ -348,7 +339,7 @@ test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans s
   await ctx.close();
 });
 
-test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+test("les pastilles (lot R7c2) : une demande de message seule fait monter la bulle, pas la cloche ; une conversation non lue s'y ajoute", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -356,17 +347,17 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
   const { ctx, page } = await open(browser);
   await signIn(page, compte.email);
   await afterOpening(page);
-  // Demande seule : la bulle n'a pas de pastille (son nom n'annonce rien), la cloche annonce la demande.
-  await expect(page.getByRole("button", { name: /^Activité, \d+ non lues?$/ }).first()).toBeVisible({
+  // Demande de message seule : la bulle annonce 1, la cloche rien (une demande ne compte qu'une fois).
+  await expect(page.getByRole("button", { name: "Messages, 1 non lu", exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole("button", { name: "Messages", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Activité", exact: true }).first()).toBeVisible();
   await shot(page, "pastilles-demande-seule");
-  // Une conversation non lue : la bulle annonce 1.
+  // Une conversation non lue de plus : la bulle annonce 2.
   await compte.ajouterConversationNonLue();
   await page.reload();
   await afterOpening(page);
-  await expect(page.getByRole("button", { name: "Messages, 1 non lu", exact: true }).first()).toBeVisible({
+  await expect(page.getByRole("button", { name: "Messages, 2 non lus", exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
   await shot(page, "pastilles-conversation");

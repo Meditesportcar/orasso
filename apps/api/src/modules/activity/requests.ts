@@ -18,6 +18,7 @@ import { eventInvitesService } from "../event-invites/service";
 import { invitationsService } from "../invitations/service";
 import { contactsService } from "../messaging/contacts";
 import { inboxService, registerInboxExtras } from "../messaging/inbox";
+import { mainVehicleLabels } from "../social/follows";
 import { staffRequestsService } from "../staff/requests";
 import { plateTransferService } from "../vehicles/plate-transfer";
 import { activityService } from "./service";
@@ -69,15 +70,18 @@ async function followItems(me: string, after: Position | null, limit: number): P
     .where(and(pendingFollows(me), past))
     .orderBy(sql`${followAt} desc`, sql`${followKey} desc`)
     .limit(limit);
-  return rows.map(({ p, at }) =>
-    keyed({
+  // Le véhicule principal du demandeur (marque et modèle, jamais la plaque ni l'année), comme l'ancienne page (tour 3).
+  const labels = await mainVehicleLabels(rows.map((r) => r.p));
+  return rows.map(({ p, at }) => {
+    const vehicle = labels.get(p.userId);
+    return keyed({
       kind: "follow",
       id: p.userId,
       from: person(p.pseudo, p.avatarKey),
       at: at.toISOString(),
-      payload: { grade: p.grade },
-    }),
-  );
+      payload: vehicle ? { grade: p.grade, vehicle } : { grade: p.grade },
+    });
+  });
 }
 
 /** Nombre de demandes d'abonnement en attente (indépendant de la page et de sa limite). */
@@ -223,7 +227,7 @@ async function staffItems(v: Viewer): Promise<Keyed[]> {
       id: i.structureId,
       from: { type: "structure", name: i.structureName, logoUrl: i.logoUrl },
       at: i.invitedAt,
-      payload: { role: i.role, structureSlug: i.structureSlug, invitedBy: i.invitedBy },
+      payload: { role: i.role, staffRoles: i.staffRoles, structureSlug: i.structureSlug, invitedBy: i.invitedBy },
     }),
   );
 }

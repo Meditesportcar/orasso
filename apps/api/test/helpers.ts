@@ -26,6 +26,7 @@ import type { Viewer } from "../src/lib/session";
 import { settingsStore } from "../src/lib/settings";
 import { notificationsService } from "../src/modules/notifications/service";
 import { profilesRepo } from "../src/modules/profiles/repo";
+import { votesService } from "../src/modules/votes/service";
 
 const TABLES = [
   "user",
@@ -311,4 +312,11 @@ export async function suspendByModeration(
   if (report.status !== 201) throw new Error(`Signalement ${report.status} : ${report.text}`);
   const sanction = await call(admin, "POST", `/admin/reports/${report.json.id}/sanction`, { kind });
   if (sanction.status !== 200) throw new Error(`Sanction ${sanction.status} : ${sanction.text}`);
+}
+
+/** Lot R7l1 : le vote « Toutes catégories » d'un événement (créé s'il manque), pour les tests qui insèrent voix ou résultats à la main. */
+export async function allCategoriesId(eventId: string): Promise<string> {
+  const vote = await votesService.allCategoriesOf(eventId);
+  if (!vote) throw new Error("Pas de vote « Toutes catégories »");
+  return vote.id;
 }

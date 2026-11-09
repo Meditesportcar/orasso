@@ -24,6 +24,7 @@ import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
 import { appReturn } from "@/lib/closeTo";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
 import {
   cropSquare,
   type PickedPhoto,
@@ -94,6 +95,7 @@ let photoSeq = 0;
 export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const { t } = useTheme();
   const router = useRouter();
+  const { openProfile } = usePersona();
   const { retour } = useLocalSearchParams<{ retour?: string }>();
   const { refreshMe, me } = useSession();
   const editing = Boolean(vehicle);
@@ -217,7 +219,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     pendingLeave.current = null;
     if (action) return action();
     // Lot M7 : le ✕ revient à l'écran d'origine (la pile), sinon au `?retour=` sûr, sinon au Garage.
-    return router.canGoBack() ? router.back() : router.replace((appReturn(retour) ?? "/garage") as never);
+    if (router.canGoBack()) return router.back();
+    const back = appReturn(retour);
+    return back ? router.replace(back as never) : openProfile("garage");
   };
   const close = () => (guarded ? setQuitting(true) : leave());
   // ✕, retour Android ou geste : même confirmation tant que le brouillon n'est pas vide ou que l'envoi tourne.
@@ -516,7 +520,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         title={title}
         facts={V.done}
         header={bar(100)}
-        onClose={() => router.replace(memo.pending ? `/vehicule/${saved.id}` : "/garage")}
+        onClose={() => (memo.pending ? router.replace(`/vehicule/${saved.id}`) : openProfile("garage"))}
         footer={
           <>
             {seeVehicle ? (
@@ -543,7 +547,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               <Button
                 variant="primary"
                 icon="vehicle"
-                onPress={() => router.replace("/garage")}
+                onPress={() => openProfile("garage")}
                 fullWidth
                 testID="vehicle-done-garage"
               >

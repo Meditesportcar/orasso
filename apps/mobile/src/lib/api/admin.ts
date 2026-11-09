@@ -38,6 +38,7 @@ import type {
   ReportStatus,
   SanctionKind,
   SponsoredPlacementAdmin,
+  SponsoredSurface,
   StructureVerification,
   TemplateKind,
   TemplateView,
@@ -77,7 +78,12 @@ export type AdminAuditQuery = {
 export type NewsletterDraft = { subject: string; bodyMd: string };
 
 export type PlacementCreate = {
-  proProfileId: string;
+  /** Lot R7k1 : un pro d'Orasso (`proProfileId`) ou un annonceur externe (`advertiserName`, Fil seulement). */
+  advertiserKind: "pro" | "external";
+  proProfileId?: string;
+  advertiserName?: string;
+  disclosure: string | null;
+  surfaces: ("home" | "feed")[];
   title: string;
   body: string;
   linkUrl: string;
@@ -249,6 +255,11 @@ export const adminApi = {
   sponsoredPlacements: () => request<SponsoredPlacementAdmin[]>("/api/admin/sponsored-placements"),
   createPlacement: (body: PlacementCreate) =>
     request<SponsoredPlacementAdmin>("/api/admin/sponsored-placements", { method: "POST", body }),
+  /** Modification d'un emplacement existant (annonceur externe : nom ; endroits, mention, départements). */
+  updatePlacement: (
+    id: string,
+    body: { advertiserName?: string; disclosure: string | null; surfaces: SponsoredSurface[]; departments: string[] },
+  ) => request<SponsoredPlacementAdmin>(`/api/admin/sponsored-placements/${id}`, { method: "PATCH", body }),
   setPlacementStatus: (id: string, status: "draft" | "active" | "paused" | "ended") =>
     request<SponsoredPlacementAdmin>(`/api/admin/sponsored-placements/${id}`, { method: "PATCH", body: { status } }),
   deletePlacement: (id: string) => request<unknown>(`/api/admin/sponsored-placements/${id}`, { method: "DELETE" }),

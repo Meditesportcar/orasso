@@ -7,7 +7,7 @@ import { RELAIS } from "./relais";
 // Messagerie et Boîte (lot 18) sur le site, critère de fin : A écrit à B, qui le suit, B voit le message arriver sans
 // recharger, A voit « Lu par B » ; image visible des deux, adresse privée refusée sans session ; C (qui ne le suit pas) envoie
 // une demande de contact, la seconde est refusée, A accepte → conversation ; une personne contacte MéditeSportCar et
-// Damien répond depuis /app/boite. Avec CAPTURES=1 : Boîte, Demandes, conversation dans les deux thèmes, au bureau et
+// Damien répond depuis /app/messages. Avec CAPTURES=1 : Boîte, Demandes, conversation dans les deux thèmes, au bureau et
 // à 390 px, avec le contrôle automatique du système de design.
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true comme le reste de la recette) sur la base locale avec le seed.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-18-captures/site`;
@@ -76,7 +76,7 @@ test("messagerie : abonnés en direct, lu par, image privée, demande de contact
   const pageA = await ctxA.newPage();
   await pageA.goto(`/u/${b}`);
   await pageA.getByTestId("message-open").click();
-  await pageA.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageA.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   const conversationUrl = new URL(pageA.url()).pathname;
   await expect(pageA.getByRole("heading", { name: b })).toBeVisible();
 
@@ -125,21 +125,21 @@ test("messagerie : abonnés en direct, lu par, image privée, demande de contact
   await expect(pageC.getByRole("alert")).toContainText("Une seule demande de contact est possible");
 
   // A : Boîte > Demandes, accepte → conversation avec le message de C.
-  await pageA.goto("/app/boite/demandes");
+  await pageA.goto("/app/messages/demandes");
   const request = pageA.getByTestId("request-contact").filter({ hasText: c });
   await expect(request).toContainText("ta voiture est-elle à vendre");
   await request.getByRole("button", { name: "Accepter" }).click();
-  await pageA.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageA.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await expect(pageA.getByTestId("messages")).toContainText("Bonjour Alma, ta voiture est-elle à vendre ?");
   await send(pageA, "Non, désolée !");
   await expect(pageA.getByTestId("messages")).toContainText("Non, désolée !");
 
-  // U contacte MéditeSportCar ; Damien (organisateur) répond depuis /app/boite.
+  // U contacte MéditeSportCar ; Damien (organisateur) répond depuis /app/messages.
   const ctxU = await context(browser, uCookie);
   const pageU = await ctxU.newPage();
   await pageU.goto("/o/meditesportcar");
   await pageU.getByTestId("contact-organizer").click();
-  await pageU.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageU.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await expect(pageU.getByRole("heading", { name: "MéditeSportCar" })).toBeVisible();
   await send(pageU, "Bonjour, il reste de la place pour la Nocturne ?");
   await expect(pageU.getByTestId("messages")).toContainText("il reste de la place");
@@ -147,12 +147,12 @@ test("messagerie : abonnés en direct, lu par, image privée, demande de contact
   const damien = await login("damien@orasso.local");
   const ctxD = await context(browser, damien);
   const pageD = await ctxD.newPage();
-  await pageD.goto("/app/boite");
+  await pageD.goto("/app/messages");
   const row = pageD.getByTestId("conversation-row").filter({ hasText: u });
   await expect(row).toBeVisible();
   await expect(row).toContainText("MéditeSportCar");
   await row.click();
-  await pageD.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageD.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await send(pageD, "Bonjour Ugo, oui : candidate vite !");
   await expect(pageU.getByTestId("messages")).toContainText("Bonjour Ugo, oui : candidate vite !", { timeout: 15_000 });
   await expect(pageU.getByTestId("messages")).toContainText("MéditeSportCar · par Damien_66");
@@ -178,8 +178,8 @@ test("messagerie : abonnés en direct, lu par, image privée, demande de contact
       const ctx = await context(browser, aCookie, { theme, width: view.width, height: view.height });
       const page = await ctx.newPage();
       for (const [shotName, path] of [
-        ["01-boite", "/app/boite"],
-        ["02-demandes", "/app/boite/demandes"],
+        ["01-messages", "/app/messages"],
+        ["02-demandes", "/app/messages/demandes"],
         ["03-conversation", conversationUrl],
       ] as const) {
         await page.goto(path);

@@ -118,7 +118,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     expect(audit.horizontalScroll).toBe(false);
     await shot(page, "01-ajout-cadre", theme);
     await page.getByRole("button", { name: "Envoyer", exact: true }).click();
-    await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
+    // Lot R7b1 : `/app/garage` répond 301 vers l'onglet Garage du Profil.
+    await page.waitForURL(/\/app\/moi\?onglet=garage/, { timeout: 30_000 });
     const added = await firstPhoto(cookie);
     expect(added.photo?.plateBlurred).toBe(true);
     await expectBlurred(added.photo?.url ?? "", rect);

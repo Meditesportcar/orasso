@@ -46,6 +46,7 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { usePersona } from "@/lib/persona";
 import { CROP_VEHICLE, MAX_PHOTOS, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
@@ -64,6 +65,7 @@ export default function VehiculeFiche() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
+  const { openProfile } = usePersona();
   const { id } = useLocalSearchParams<{ id: string }>();
   const vehicle = useApi(() => api.vehicle(id), [id]);
   const history = useApi(() => api.vehicleHistory(id), [id]);
@@ -83,7 +85,7 @@ export default function VehiculeFiche() {
   const [blurring, setBlurring] = useState<BlurTarget>(null);
   const v = vehicle.data;
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
+  const close = () => (router.canGoBack() ? router.back() : openProfile("garage"));
 
   async function run(label: string, work: () => Promise<unknown>) {
     setBusy(label);
@@ -263,7 +265,7 @@ export default function VehiculeFiche() {
           setDeleteError(null);
           api
             .deleteVehicle(v.id)
-            .then(() => router.replace("/garage"))
+            .then(() => openProfile("garage"))
             .catch((e) => setDeleteError(errorMessage(e)))
             .finally(() => setDeleting(false));
         }}

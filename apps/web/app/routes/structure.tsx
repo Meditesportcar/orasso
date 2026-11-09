@@ -182,7 +182,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
               ) : staffState === "requested" ? (
                 <Chip>{staffRequestLabels.sent}</Chip>
               ) : staffState === "invited" ? (
-                <Button variant="secondary" icon="staff" href="/app/boite/demandes" fullWidth>
+                <Button variant="secondary" icon="staff" href="/app/activite/demandes" fullWidth>
                   {staffRequestLabels.invited}
                 </Button>
               ) : connected ? (

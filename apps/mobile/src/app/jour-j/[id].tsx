@@ -24,6 +24,8 @@ import {
   eventLastDayInstant,
   eventPageLabels,
   formatDayDate,
+  liveAt,
+  presenceLabels,
   voteScreenTexts,
   wholeEventEntered,
   wholeEventEntryHolds,
@@ -44,6 +46,7 @@ import { formatDayHour } from "@/lib/format";
 import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
+import { useReloadOnForeground, useServerClock } from "@/lib/useAfter";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AppSheet } from "@/ui/AppSheet";
@@ -106,6 +109,17 @@ function JourJScreen() {
     enabled: Boolean(slug) && online,
     cacheKey: slug ? `feed.${slug}` : undefined,
   });
+  // Lot R7d2 : « Sur place · N » sous l'état d'entrée. Seulement avec du réseau, seulement ce que l'API renvoie pendant
+  // l'événement (après la fin, rien : règle des absents) ; rien n'est gardé sur le téléphone pour le hors ligne.
+  const liveNow = useApi(async () => (await api.eventBySlug(slug)).live, [slug, online], {
+    enabled: Boolean(slug) && online,
+  });
+  // Tour 2 : garde d'heure. Resté ouvert au-delà de la fin, l'écran n'affiche plus « Sur place · N » (re-rendu à `endsAt`).
+  const endsAtIso = app?.event.endsAt ?? kit?.event.endsAt;
+  const liveClock = useServerClock(endsAtIso ? { endsAt: endsAtIso } : null, () => void liveNow.reload());
+  useReloadOnForeground(online && Boolean(slug), () => void liveNow.reload());
+  const liveGuarded = endsAtIso ? liveAt(liveNow.data, { endsAt: endsAtIso }, liveClock) : (liveNow.data ?? null);
+  const onSiteNow = liveGuarded?.phase === "running" ? (liveGuarded.onSiteCount ?? null) : null;
   const lastAnnouncement =
     [...(feed.data?.items ?? [])]
       .filter((i) => i.kind === "announcement")
@@ -253,6 +267,11 @@ function JourJScreen() {
               tz,
             )}
           </Text>
+          {onSiteNow !== null ? (
+            <Text variant="bodyStrong" color={c.plateInk} testID="jourj-onsite">
+              {presenceLabels.dayOnSite(onSiteNow)}
+            </Text>
+          ) : null}
         </Plate>
       ) : null}
 

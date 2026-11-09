@@ -5,6 +5,7 @@
 // Lot 35d : l'Administration est une casquette ajoutée par l'appli pour les rôles `moderator` et `super_admin`, et le
 // mode assistance (« Survoler l'espace ») ouvre la casquette Organisateur d'une structure qui n'est pas la sienne, sans
 // la mémoriser : au lancement suivant on retrouve la casquette d'avant.
+import type { ProfileTab } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
@@ -23,6 +24,7 @@ import {
   otherBadges,
   type Persona,
   parsePersona,
+  profileHref,
   resolvePersona,
   serializePersona,
   tabHref,
@@ -54,6 +56,12 @@ type PersonaValue = {
    * sinon celui de la casquette de base (on y bascule), sinon l'Accueil de la casquette active.
    */
   goTab: (route: string) => void;
+  /**
+   * Lot R7b1, tour 2 : ouvre le Profil de la casquette de base sur son onglet interne (`garage` ou `sorties`), quelle que
+   * soit la casquette active : on y bascule d’abord (organisateur, pro…), puis un seul `navigate` vers l’onglet, sans
+   * seconde barre d’onglets empilée.
+   */
+  openProfile: (onglet: ProfileTab) => void;
   /** Lot 35d : ouvre l'espace organisateur d'une structure en mode assistance (super admin, lecture seule). */
   survey: (structure: AssistedStructure) => void;
   /** Lot 35d : quitte le survol et revient à l'Administration. */
@@ -121,8 +129,28 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     [router],
   );
 
+  const openProfile = useCallback(
+    (onglet: ProfileTab) => {
+      const href = profileHref(base.kind, onglet);
+      // Tour 3 : on ferme d'abord les écrans posés par-dessus la barre (assistant d'ajout, fiche véhicule) : `dismissTo`
+      // revient à l'onglet Profil déjà dans la pile, au lieu d'en empiler une seconde barre ; hors pile, `navigate`.
+      // Autre casquette active : tout est fermé (`dismissAll`) avant que `choose` remplace la racine, sinon l'ancienne
+      // barre reste sous la nouvelle.
+      if (persona.kind === base.kind) {
+        if (router.canDismiss()) router.dismissTo(href as never);
+        else router.navigate(href as never);
+      } else {
+        if (router.canDismiss()) router.dismissAll();
+        choose(base, href);
+      }
+    },
+    [persona, base, router, choose],
+  );
+
   const goTab = useCallback(
     (route: string) => {
+      // Lot R7b1 : le Garage et le Passeport vivent dans le Profil.
+      if (route === "garage" || route === "passeport") return openProfile(route === "garage" ? "garage" : "sorties");
       const own = destinationHref(persona.kind, route);
       if (own) {
         // Lot R7a1 : une page qui n'est plus un onglet (Sorties, Garage) s'ouvre par-dessus la barre, avec son retour.
@@ -136,7 +164,7 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
       if (fallback) choose(base, fallback);
       else router.navigate(homeOf(persona) as never);
     },
-    [persona, base, router, choose],
+    [persona, base, router, choose, openProfile],
   );
 
   const survey = useCallback(
@@ -163,10 +191,11 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
       choose,
       backToBase: () => choose(base),
       goTab,
+      openProfile,
       survey,
       leaveSurvey,
     }),
-    [stored, persona, base, entries, choose, goTab, survey, leaveSurvey],
+    [stored, persona, base, entries, choose, goTab, openProfile, survey, leaveSurvey],
   );
 
   return <PersonaContext.Provider value={value}>{children}</PersonaContext.Provider>;

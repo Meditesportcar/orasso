@@ -547,8 +547,8 @@ async function recordInvitation(
   await notificationsService.notify(tx, target.userId, "crew_invitation", {
     title: "Invitation à un crew",
     body,
-    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes", ...extra },
-    link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
+    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/activite/demandes", ...extra },
+    link: { label: "Voir l'invitation", path: "/app/activite/demandes" },
     silent,
   });
   if (!silent) publishInbox(after, target.userId);
@@ -594,8 +594,8 @@ async function acceptMemberInvitation(tx: Tx, after: After, crew: CrewRow, v: Vi
   await notificationsService.notify(tx, crew.createdBy, "crew_request", {
     title: crewInviteLabels.confirmTitle,
     body: crewInviteLabels.confirmBody(v.profile.pseudo, inviterName, crew.name),
-    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes" },
-    link: { label: "Voir la demande", path: "/app/boite/demandes" },
+    data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/activite/demandes" },
+    link: { label: "Voir la demande", path: "/app/activite/demandes" },
   });
   publishInbox(after, v.user.id, crew.createdBy);
 }
@@ -1156,8 +1156,8 @@ export const crewsService = {
       await notificationsService.notify(tx, crew.createdBy, "crew_request", {
         title: "Demande pour rejoindre ton crew",
         body: `${v.profile.pseudo} veut rejoindre « ${crew.name} ».${message ? `\n${message}` : ""}`,
-        data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/boite/demandes" },
-        link: { label: "Voir la demande", path: "/app/boite/demandes" },
+        data: { crewId: crew.id, actor: actorOf(v.profile), link: "/app/activite/demandes" },
+        link: { label: "Voir la demande", path: "/app/activite/demandes" },
       });
       publishInbox(after, crew.createdBy);
     });

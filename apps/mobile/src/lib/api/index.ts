@@ -2,6 +2,7 @@
 // anti-conflits) : un lot ajoute son fichier et une ligne dans `api` ci-dessous. Aucune règle métier ici : elles sont
 // toutes dans l'API (CLAUDE.md).
 import { accountApi } from "./account";
+import { activityApi } from "./activity";
 import { adminApi } from "./admin";
 import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
@@ -25,6 +26,7 @@ import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
 import { passportApi } from "./passport";
+import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
 import { securityApi } from "./security";
@@ -50,6 +52,7 @@ export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
 
 export const api = {
   ...accountApi,
+  ...activityApi,
   ...listsApi,
   ...prosApi,
   ...providersApi,
@@ -74,6 +77,7 @@ export const api = {
   ...invitationsApi,
   ...afterEventApi,
   ...passportApi,
+  ...presenceApi,
   ...adminApi,
 
   ...orgaApi,

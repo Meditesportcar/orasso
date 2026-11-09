@@ -65,6 +65,8 @@ function Shell() {
   const { persona, backToBase, choose, entries, goTab } = usePersona();
   const router = useRouter();
   const segments = useSegments();
+  // Lot R7b1 : la redirection « mauvais groupe » garde la recherche de l'adresse (`/profil?onglet=sorties`).
+  const search = useGlobalSearchParams<Record<string, string | string[]>>();
   const navigation = useRootNavigationState();
   const [opening, setOpening] = useState(true);
 
@@ -114,8 +116,12 @@ function Shell() {
   useEffect(() => {
     if (status !== "in" || !navigation?.key) return;
     const target = misplacedTarget(persona, segments as string[]);
-    if (target) router.replace(target as never);
-  }, [status, persona, segments, router, navigation?.key]);
+    if (!target) return;
+    const query = new URLSearchParams(
+      Object.entries(search).filter((e): e is [string, string] => typeof e[1] === "string"),
+    ).toString();
+    router.replace((query && !target.includes("?") ? `${target}?${query}` : target) as never);
+  }, [status, persona, segments, search, router, navigation?.key]);
 
   // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
   const suspendedShown = useRef(false);
@@ -215,17 +221,7 @@ function Shell() {
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       <NavigationThemeProvider value={navigationTheme}>
         {status === "loading" || onboarded === null ? null : (
-          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }}>
-            {/* Lot C2a : la Boîte est une feuille (`sh-inbox`) par-dessus l'écran d'où l'on vient. */}
-            <Stack.Screen
-              name="boite/index"
-              options={{
-                presentation: "transparentModal",
-                animation: "fade",
-                contentStyle: { backgroundColor: "transparent" },
-              }}
-            />
-          </Stack>
+          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }} />
         )}
       </NavigationThemeProvider>
       {/* Lot M6 : les annonces arrivent par un seul bandeau en haut (voir ui/Announce.tsx). */}

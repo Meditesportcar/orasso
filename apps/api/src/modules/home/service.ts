@@ -54,6 +54,14 @@ import { proOwnerActive } from "../pros/explore";
 import { weatherService } from "../weather/service";
 import { enrichNextAccess, mediaBlock, nextTicketOf, proBlock, providerBlock, stampsThisSeason } from "./profiles";
 import { sponsoredService } from "./sponsored";
+import { friendsNewsWidget } from "./widgets/friends_news";
+import { memoriesWidget } from "./widgets/memories";
+import { myCrewWidget } from "./widgets/my_crew";
+import { myOutingsWidget } from "./widgets/my_outings";
+import { spotMeetupWidget } from "./widgets/spot_meetup";
+
+/** Un bloc réglable qui échoue ne fait pas tomber l'Accueil : il est absent (lot R7a2). */
+const safe = <T>(p: Promise<T | null>): Promise<T | null> => p.catch(() => null);
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -80,6 +88,18 @@ export function nearestPlaces<T extends CachedPlace>(places: T[], from: LatLng, 
     .slice(0, limit);
 }
 
+/** Le compte a-t-il marqué un garage favori ? (seulement quand il n'a encore aucun réglage de l'Accueil : un défaut à décider) */
+export async function hasFavoriteGarage(v: Viewer): Promise<boolean> {
+  const saved = v.profile.homeWidgets as { hidden?: unknown } | null;
+  if (saved && Array.isArray(saved.hidden)) return false;
+  const [row] = await db
+    .select({ id: proFollows.proId })
+    .from(proFollows)
+    .where(and(eq(proFollows.userId, v.user.id), eq(proFollows.favorite, true)))
+    .limit(1);
+  return !!row;
+}
+
 export const homeService = {
   async get(v: Viewer, q: HomeQuery): Promise<HomeData> {
     rateLimit("homeRead", v.user.id);
@@ -90,7 +110,7 @@ export const homeService = {
     let radiusKm: number | null = q.radiusKm ?? v.profile.radiusKm;
     if (radiusKm !== null) radiusKm = Math.min(HOME_RADIUS.max, Math.max(HOME_RADIUS.min, radiusKm));
 
-    const widgets = normalizeHomeWidgets(v.profile.homeWidgets);
+    const widgets = normalizeHomeWidgets(v.profile.homeWidgets, { favoriteGarage: await hasFavoriteGarage(v) });
     const shown = new Set<HomeWidgetId>(visibleHomeWidgets(widgets));
     // Lot R7d1 : « En cours » suit le réglage de la personne (masqué = non calculé), même dans l'Accueil v2 de l'appli.
     const liveShown = shown.has("live");
@@ -127,7 +147,25 @@ export const homeService = {
       .from(profileInterests)
       .where(eq(profileInterests.userId, v.user.id));
 
-    const [upcoming, interests, nearby, weatherMine, favoriteGarage, wash, fuel, nudge] = await Promise.all([
+    // Lot R7a2 : les blocs réglables de l'Accueil ne sont calculés que s'ils sont affichés (un bloc masqué n'est pas
+    // calculé), et seulement pour l'Accueil complet (ni `light`, ni `blocks=v2`, ni `blocks=places`).
+    const dashboard = full && (!q.blocks || q.blocks === "app");
+    const want = (id: HomeWidgetId) => dashboard && shown.has(id);
+    const [
+      upcoming,
+      interests,
+      nearby,
+      weatherMine,
+      favoriteGarage,
+      wash,
+      fuel,
+      nudge,
+      myOutings,
+      myCrew,
+      friendsNews,
+      spotMeetup,
+      memories,
+    ] = await Promise.all([
       upcomingPromise,
       interestsPromise,
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
@@ -141,15 +179,22 @@ export const homeService = {
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
       extras ? this.nudge(v) : Promise.resolve(null),
+      want("my_outings") ? safe(upcomingPromise.then((u) => myOutingsWidget(v, u))) : Promise.resolve(null),
+      want("my_crew") ? safe(myCrewWidget(v)) : Promise.resolve(null),
+      want("friends_news") ? safe(friendsNewsWidget(v)) : Promise.resolve(null),
+      want("spot_meetup") ? spotMeetupWidget(v) : Promise.resolve(null),
+      want("memories") ? memoriesWidget(v) : Promise.resolve(null),
     ]);
     const live = wantLive ? await presenceService.homeLive(v) : null;
-    // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
-    const sponsored = extras
-      ? await sponsoredService.select(
-          v,
-          interests.map((i) => i.id),
-        )
-      : null;
+    // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé : dans l'appli (`blocks=app`) il est
+    // montré dans « Autour de moi », donc pas rendu (ni compté) quand ce bloc est masqué.
+    const sponsored =
+      extras && (q.blocks !== "app" || shown.has("nearby"))
+        ? await sponsoredService.select(
+            v,
+            interests.map((i) => i.id),
+          )
+        : null;
 
     const [nextAccess, nextTicket, pro, provider, media, stamps] = await Promise.all([
       profile === "exhibitor" ? enrichNextAccess(pickNextAccess(upcoming)) : Promise.resolve(null),
@@ -192,6 +237,11 @@ export const homeService = {
       sponsored,
       widgets,
       live,
+      myOutings,
+      myCrew,
+      friendsNews,
+      spotMeetup,
+      memories,
     };
   },
 
@@ -302,6 +352,18 @@ export const homeService = {
     const config = normalizeHomeWidgets(input);
     await db.update(profiles).set({ homeWidgets: config }).where(eq(profiles.userId, v.user.id));
     return config;
+  },
+
+  /**
+   * `DELETE /me/home/widgets` (tour 3) : efface le réglage (`null` en base) et rend les défauts du compte, qui se recalculent :
+   * garage favori affiché s'il existe, Agenda et « En attente » masqués.
+   */
+  async resetWidgets(v: Viewer): Promise<HomeWidgetsConfig> {
+    rateLimit("homeWrite", v.user.id);
+    await db.update(profiles).set({ homeWidgets: null }).where(eq(profiles.userId, v.user.id));
+    // Le profil lu avant l'effacement porte encore l'ancien réglage : le défaut se juge comme sans réglage.
+    const cleared = { ...v, profile: { ...v.profile, homeWidgets: null } };
+    return normalizeHomeWidgets(null, { favoriteGarage: await hasFavoriteGarage(cleared) });
   },
 
   /**

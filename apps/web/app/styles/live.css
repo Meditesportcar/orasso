@@ -1,0 +1,21 @@
+/* Lot R7d2 : la fiche d'un événement pendant qu'il a lieu (« En cours · jour N sur M », « N sur place, sur M
+   retenues »), même carte que la ligne de statut de la fiche. Jetons seulement. */
+.ev__live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.ev__live p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ev__live-app {
+  align-items: flex-start;
+}

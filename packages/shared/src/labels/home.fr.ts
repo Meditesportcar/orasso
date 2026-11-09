@@ -6,6 +6,11 @@ import { keepUnits } from "./units.fr";
 export const homeWidgetTitles: Record<HomeWidgetId, string> = {
   next_access: "Prochain accès",
   live: "En cours",
+  my_outings: "Mes sorties",
+  my_crew: "Mon crew",
+  friends_news: "Du nouveau chez tes potes",
+  spot_meetup: "Au spot",
+  memories: "Souvenirs",
   pending: "En attente",
   nearby: "Autour de moi",
   weather: "Météo",
@@ -197,4 +202,85 @@ export const homeProfileLabels = {
   views: (n: number) => `${n.toLocaleString("fr-FR")} vue${n > 1 ? "s" : ""} depuis les pages d'événements`,
   noReport: "Pas de reportage à venir",
   noReportBody: "Demande une accréditation sur un événement : ton badge presse et les consignes apparaîtront ici.",
+} as const;
+
+// --- Lot R7a2 : blocs de l'Accueil et écran « Personnaliser » (maquette R7.4 et R7.5, textes de la maquette) -------------
+
+export const homeBlockLabels = {
+  seeAll: "Tout voir",
+  /** Mes sorties. */
+  outingsTitle: "Mes sorties",
+  /** Mon crew : raccourci vers l'onglet Crew. */
+  crewTitle: "Mon crew",
+  crewLink: "Onglet Crew",
+  crewMembers: (n: number) => (n > 1 ? `${n} membres` : "1 membre"),
+  crewUnread: (n: number) => (n > 1 ? `${n} messages non lus` : "1 message non lu"),
+  crewPhoto: "Photo",
+  crewReplies: (n: number) => (n > 1 ? `${n} réponses` : n === 1 ? "1 réponse" : "pas encore de réponse"),
+  crewNextOuting: "Prochaine sortie du crew",
+  crewGoing: (n: number) => (n > 1 ? `${n} viennent` : n === 1 ? "1 vient" : "personne pour l'instant"),
+  crewDiscussion: "Discussion",
+  /** Du nouveau chez tes potes. */
+  friendsTitle: "Du nouveau chez tes potes",
+  friendsLink: "Le Fil",
+  /** Au spot, Souvenirs (réservés : R7i, R7j). */
+  spotTitle: "Au spot",
+  memoriesTitle: "Souvenirs",
+  /** En cours (pendant un événement). */
+  liveEyebrow: (day: number, count: number) => (count > 1 ? `En cours · jour ${day} sur ${count}` : "En cours"),
+  liveTitle: "En cours",
+  liveOnSite: (n: number) => (n > 0 ? "sur place maintenant" : "Personne encore sur place"),
+  liveVotes: (n: number) => (n > 1 ? `Votes · ${n} ouverts` : "Vote ouvert"),
+  liveVote: "Voter",
+  /** Les chiffres affichés viennent du téléphone (réseau coupé). */
+  liveOffline: "Données hors ligne",
+  liveProgram: "Programme du jour",
+  liveSheet: "La fiche",
+  liveStoryEmpty: "Pas encore de story de l'organisateur",
+  /** Bas de l'Accueil. */
+  personalize: "Personnaliser l'accueil",
+  personalizeShort: "Personnaliser",
+} as const;
+
+export const homePersonalizeLabels = {
+  title: "Personnaliser",
+  subtitle: "Ton Accueil, à ton goût",
+  hint: "Monte ou descends un bloc pour changer l'ordre.",
+  hintEye: "L'œil masque un bloc ; tu le retrouves plus bas.",
+  fixedHint: "Toujours en tête",
+  hiddenTitle: "Blocs masqués et à ajouter",
+  hiddenEmpty: "Tous les blocs sont affichés.",
+  add: "Ajouter",
+  hide: "Masquer",
+  moveUp: "Monter",
+  moveDown: "Descendre",
+  reset: "Remettre par défaut",
+  save: "Enregistrer",
+  saving: "Enregistrement…",
+  saved: "Accueil enregistré.",
+  saveFailed: "Réglage non enregistré : réessaie.",
+  loading: "On récupère ton réglage…",
+  loadFailed: "On n'a pas pu récupérer ton réglage : rien n'est modifiable pour ne pas l'écraser.",
+  retry: "Réessayer",
+  soon: "Bientôt",
+  soonTitle: "Défis de la saison",
+  soonHint: "Arrive avec la version 2",
+  close: "Fermer",
+  /** Titre et phrase de chaque bloc. */
+  widgets: {
+    next_access: { title: "Prochaine sortie", hint: "Toujours en tête" },
+    live: { title: "En cours", hint: "Seulement pendant un événement où tu as ta place" },
+    my_outings: { title: "Mes sorties", hint: "Ton agenda : retenues, en attente, billets" },
+    my_crew: { title: "Mon crew", hint: "Raccourci vers l'onglet Crew" },
+    friends_news: { title: "Du nouveau chez tes potes", hint: "3 nouveautés au plus de ceux que tu suis" },
+    spot_meetup: { title: "Au spot", hint: "Seulement quand quelqu'un lance un rendez-vous" },
+    memories: { title: "Souvenirs", hint: "Seulement les jours où il y en a un" },
+    nearby: { title: "Autour de moi", hint: "Les événements près de toi ce mois-ci" },
+    weather: { title: "Météo", hint: "Sur place le jour J, sinon chez toi" },
+    agenda: { title: "Agenda", hint: "Tes prochaines dates" },
+    favorite_garage: { title: "Garage favori", hint: "Ton pro favori et son avantage" },
+    pending: { title: "Candidatures en attente", hint: "Celles qui attendent une réponse" },
+    wash: { title: "Lavage le plus proche", hint: "Les stations près de toi" },
+    fuel: { title: "Carburant le plus proche", hint: "Les prix près de toi" },
+  } satisfies Record<HomeWidgetId, { title: string; hint: string }>,
 } as const;

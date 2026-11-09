@@ -32,6 +32,7 @@ import { activeMembership, requireOrganizer, requireOrganizerWrite, staffAccess 
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
+import { captureError } from "../../lib/sentry";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import {
@@ -649,6 +650,15 @@ export const ticketsService = {
     // Lot 49 : tampon de visite au titulaire du billet, à son écran.
     const visit = await passportService.stampVisit(db, updated.id);
     if (visit) passportService.publish(visit.userId, visit.stamp);
+    // Tour 3 : un billet contrôlé change « sur place » : l'organisation (présents, compteurs) se relit.
+    // Le billet est déjà contrôlé : une panne du signal ne doit pas faire échouer le contrôle (le staff réessaierait sur un
+    // billet « déjà utilisé »). Erreur envoyée à Sentry, les écrans se relisent à leur prochaine lecture.
+    try {
+      const { publishLive } = await import("../staff/shop");
+      await publishLive(row.t.eventId);
+    } catch (error) {
+      captureError(error);
+    }
     return { result: "ok", pseudo, ticketName: row.type.name, usedAt: updated.usedAt?.toISOString() ?? "" };
   },
 

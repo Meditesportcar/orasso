@@ -28,15 +28,19 @@ import {
   draftStart,
   eventFormatLabels,
   eventKindOf,
+  eventPresenceRadiusProblem,
   eventEditorLabels as L,
   type NeedDraft,
   POSTER_DEFAULT_STYLE,
   POSTER_TITLE_MAX,
   type PosterFormat,
   type PosterSettings,
+  PRESENCE_DEFAULT_RADIUS_M,
   posterStyleLabels,
   posterStyles,
   posterTexts,
+  presenceLabels,
+  presenceRadiusInput,
   previewHourOptions,
   previewTimeline,
   providerPowerLabels,
@@ -345,6 +349,25 @@ export function LieuTemps(ctx: StepContext) {
         maxLength={160}
         testID="wizard-entrance"
       />
+      {/* Lot R7d2 : la zone où « Je suis sur place » est acceptée autour de l'épingle (vide = 300 m, de 50 à 2000 m). */}
+      <TextField
+        label={presenceLabels.radiusLabel}
+        value={d.presenceRadiusM ?? ""}
+        placeholder={String(PRESENCE_DEFAULT_RADIUS_M)}
+        onChangeText={(v) => set("presenceRadiusM", presenceRadiusInput(v))}
+        keyboardType="number-pad"
+        maxLength={4}
+        testID="wizard-presence-radius"
+      />
+      {eventPresenceRadiusProblem(d) ? (
+        <Notice tone="error" testID="wizard-presence-radius-problem">
+          {eventPresenceRadiusProblem(d)}
+        </Notice>
+      ) : (
+        <Muted variant="caption" testID="wizard-presence-radius-help">
+          {presenceLabels.radiusHelp}
+        </Muted>
+      )}
       <Panel icon="place" title={W.onSitePanel} hint={W.onSitePanelHint} testID="wizard-panel-onsite">
         <ZonesStep {...ctx} />
         <VendorsStep {...ctx} />

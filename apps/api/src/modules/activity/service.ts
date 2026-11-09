@@ -8,6 +8,7 @@ import {
   activityItemOf,
   feedOnlyNotificationTypes,
   groupActivity,
+  requestNotificationTypes,
 } from "@orasso/shared";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 
@@ -42,7 +43,8 @@ const sanitize = (data: Record<string, unknown>): Record<string, unknown> =>
 
 const windowStart = () => new Date(now().getTime() - ACTIVITY_WINDOW_DAYS * DAY);
 
-const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes]);
+// Ni les nouvelles du Fil, ni les annonces de demandes (la ligne « Demandes » de l'écran les porte : lot R7c2).
+const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes, ...requestNotificationTypes]);
 
 /**
  * Notifications en lignes d'activité : les personnes citées sont relues (pseudo et avatar d'aujourd'hui) et seules les

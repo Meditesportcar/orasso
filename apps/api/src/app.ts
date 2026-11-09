@@ -65,6 +65,7 @@ import { ticketsRoutes } from "./modules/tickets/routes";
 import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
+import { votesRoutes } from "./modules/votes/routes";
 import { weatherRoutes } from "./modules/weather/routes";
 import { ws } from "./ws";
 
@@ -246,6 +247,8 @@ app.route("/", devMailRoutes);
 // Lot 49 : passeport, prix du public, récap.
 app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);
+// Lot R7l1 : votes à thème (le prix du public devient « Toutes catégories »).
+app.route("/", votesRoutes);
 app.route("/", presenceRoutes);
 app.route("/", recapRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).

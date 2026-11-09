@@ -22,6 +22,7 @@ import {
   personaOfEntry,
   personaTabSets,
   personaTabs,
+  profileHref,
   resolvePersona,
   serializePersona,
   tabHref,
@@ -136,9 +137,12 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(tabHref("visitor", "sorties")).toBeNull();
     expect(tabHref("fan", "garage")).toBeNull();
     expect(destinationHref("fan", "sorties")).toBe("/sorties");
-    expect(destinationHref("fan", "garage")).toBe("/garage");
+    expect(destinationHref("fan", "garage")).toBeNull();
+    // Lot R7b1 : le Garage et le Passeport vivent dans le Profil de la casquette de base.
+    expect(profileHref("fan", "garage")).toBe("/(tabs)/profil?onglet=garage");
+    expect(profileHref("visitor", "sorties")).toBe("/(visitor)/profil?onglet=sorties");
     expect(destinationHref("visitor", "sorties")).toBe("/sorties");
-    expect(destinationHref("visitor", "passeport")).toBe("/mon-passeport");
+    expect(destinationHref("visitor", "passeport")).toBeNull();
     expect(destinationHref("visitor", "garage")).toBeNull();
     expect(destinationHref("fan", "profil")).toBe("/(tabs)/profil");
     expect(destinationHref("pro", "sorties")).toBeNull();
