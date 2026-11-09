@@ -20,7 +20,7 @@ export type StoryStatus = (typeof storyStatuses)[number];
 export const storyPlateStates = ["blurred", "none_confirmed", "not_required"] as const;
 export type StoryPlateState = (typeof storyPlateStates)[number];
 
-/** Contenu lié à une story (carte touchable). R7f1 ne résout que `event` et `vehicle` ; le reste vient avec R7f4. */
+/** Contenu lié à une story (carte touchable) : événement, voiture, publication du Fil, souvenir, résultat de vote (R7f4). */
 export const storyLinkTypes = ["event", "vehicle", "feed_post", "memory", "vote_result"] as const;
 export type StoryLinkType = (typeof storyLinkTypes)[number];
 
@@ -53,7 +53,10 @@ export type StoryTagInput = z.infer<typeof storyTagInputSchema>;
  */
 export const storyCreateSchema = z
   .object({
-    uploadKey: z.string().min(1).max(200),
+    /** Absent pour une carte liée (R7f4) : le serveur rend lui-même le 9:16 (voir `linked` et `clientId`). */
+    uploadKey: z.string().min(1).max(200).optional(),
+    /** Carte liée sans média (R7f4) : identifiant tiré par l'appareil, une reprise rend la même story. */
+    clientId: z.uuid().optional(),
     frame: storyFrameSchema.optional(),
     plateRects: z.array(plateRectSchema).max(MAX_PLATE_RECTS).nullish(),
     noPlateConfirmed: z.boolean().optional(),
@@ -72,6 +75,14 @@ export const storyCreateSchema = z
   .refine((v) => !(v.plateRects?.length && v.noPlateConfirmed), {
     message: "Choisis : plaque floutée ou aucune plaque visible, pas les deux",
     path: ["noPlateConfirmed"],
+  })
+  .refine((v) => Boolean(v.uploadKey) || Boolean(v.linked), {
+    message: "Une photo ou un contenu à partager est attendu",
+    path: ["uploadKey"],
+  })
+  .refine((v) => Boolean(v.uploadKey) || Boolean(v.clientId), {
+    message: "Un identifiant d'envoi est attendu pour un contenu partagé",
+    path: ["clientId"],
   });
 export type StoryCreate = z.infer<typeof storyCreateSchema>;
 
@@ -122,6 +133,17 @@ export type StoryTagView = {
   avatarUrl: string | null;
 };
 
+/** Le contenu lié d'une story : de quoi ouvrir sa page (`slug` de l'événement, `eventId` d'un vote ou d'un souvenir). */
+export type StoryLinkedView = {
+  type: StoryLinkType;
+  id: string;
+  /** « Voir l'événement », « Voir la voiture »… */
+  label: string;
+  slug: string | null;
+  eventId: string | null;
+  title: string | null;
+};
+
 export type StoryView = {
   id: string;
   mediaKind: StoryMediaKind;
@@ -135,7 +157,8 @@ export type StoryView = {
   vehicle: { id: string; label: string; photoUrl: string | null } | null;
   event: { id: string; slug: string; title: string; startsAt: string } | null;
   tags: StoryTagView[];
-  linked: { type: StoryLinkType; id: string } | null;
+  /** Carte touchable (R7f4) : refiltrée à chaque lecture ; `null` quand le contenu n'est plus visible (carte inerte). */
+  linked: StoryLinkedView | null;
   /** Posé par R7m2 ; `null` dans R7f1. */
   commercialPartner: { id: string; name: string; slug: string } | null;
   audience: StoryAudience;

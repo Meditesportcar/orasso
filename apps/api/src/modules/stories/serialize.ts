@@ -22,6 +22,7 @@ import { canSeeEvent } from "../invitations/access";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 import { accountActive, type StoryRow } from "./common";
+import { linkedViewsOf } from "./linked";
 
 export const fileNameOf = (key: string) => key.slice(key.lastIndexOf("/") + 1);
 
@@ -156,21 +157,19 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     for (const c of credits) creditBy.set(c.id, c.pseudo);
   }
 
+  // Contenu lié (R7f4) : refiltré pour chaque lecteur avec les droits actuels (événement devenu privé ou brouillon, voiture
+  // retirée ou changée de main, publication ou vote plus visible, souvenir d'un autre) ; ce qui n'est pas visible n'est
+  // pas renvoyé, pas même son identifiant.
+  const linkedBy = await linkedViewsOf(v, rows, {
+    event: eventBy,
+    vehicleOwner: new Map([...vehicleBy].map(([id, x]) => [id, x.ownerId])),
+  });
+
   return rows.map((r) => {
     const s = r.story;
     const mine = s.authorId === v.user.id;
     const vehicle = s.vehicleId ? vehicleBy.get(s.vehicleId) : undefined;
     const photo = vehicle ? maskedPhoto(vehicle.photos, vehicle.unregistered) : null;
-    // Contenu lié : refiltré pour chaque lecteur avec les droits actuels (événement devenu privé ou brouillon, voiture
-    // retirée ou changée de main) ; ce qui n'est pas visible n'est pas renvoyé, pas même son identifiant.
-    const linkedVisible =
-      s.linkedType && s.linkedId
-        ? s.linkedType === "event"
-          ? eventBy.has(s.linkedId)
-          : s.linkedType === "vehicle"
-            ? vehicleBy.get(s.linkedId)?.ownerId === s.authorId
-            : false
-        : false;
     return {
       id: s.id,
       mediaKind: s.mediaKind,
@@ -185,7 +184,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         : null,
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
-      linked: linkedVisible && s.linkedType && s.linkedId ? { type: s.linkedType, id: s.linkedId } : null,
+      linked: linkedBy.get(s.id) ?? null,
       commercialPartner: null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
