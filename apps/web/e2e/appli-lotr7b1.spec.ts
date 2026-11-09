@@ -255,3 +255,29 @@ test("casquette organisateur active : /garage, /mon-passeport et le retour d'un 
   await expect(bars()).toHaveCount(1);
   await ctx.close();
 });
+
+test("le profil d'un inconnu : « Message » ouvre la feuille à l'écran (jamais rognée) et la demande part", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const stranger = `Inconnu_${unique()}`;
+  await signUpApi(stranger);
+  for (const fontScale of [1, 1.3]) {
+    const { ctx, page } = await open(browser, fontScale);
+    await signIn(page, "kenji@orasso.local");
+    await go(page, `/u/${stranger}`);
+    await expect(page.getByTestId("profile-actions")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("message-open").click();
+    // La feuille entière est à l'écran : titre, champ, bouton d'envoi.
+    const title = page.getByText("Demande de contact", { exact: true }).first();
+    await expect(title).toBeInViewport({ ratio: 1, timeout: 20_000 });
+    await expect(page.getByText("Une seule demande est possible")).toBeInViewport({ ratio: 1 });
+    await shot(page, `05-demande-contact-police-${fontScale}`);
+    if (fontScale === 1) {
+      await page.getByLabel("Message", { exact: true }).fill("Bonjour, belle voiture !");
+      await page.getByRole("button", { name: /Envoyer/ }).click();
+      await expect(page.getByTestId("contact-sent")).toBeInViewport({ ratio: 1, timeout: 20_000 });
+    }
+    await ctx.close();
+  }
+});

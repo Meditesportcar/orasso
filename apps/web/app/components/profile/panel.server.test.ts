@@ -10,7 +10,7 @@ const ok = <T>(data: T): ApiResult<T> => ({ ok: true, status: 200, data, headers
 const fail = (status: number): ApiResult<never> => ({
   ok: false,
   status,
-  error: { code: "x", message: "boum" },
+  error: { code: "closed", message: "boum" },
   headers: new Headers(),
 });
 
