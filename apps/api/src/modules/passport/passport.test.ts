@@ -706,7 +706,11 @@ describe("prix du public", () => {
     clock.set(paris(11, 9, 23));
     await pointsService.settleEvent(other.id);
     const prize = await db.query.pointEntries.findFirst({
-      where: and(eq(pointEntries.eventId, other.id), eq(pointEntries.kind, "vote_podium"), eq(pointEntries.userId, p.kenji.u.id)),
+      where: and(
+        eq(pointEntries.eventId, other.id),
+        eq(pointEntries.kind, "vote_podium"),
+        eq(pointEntries.userId, p.kenji.u.id),
+      ),
     });
     expect(prize).toMatchObject({ userId: p.kenji.u.id, points: 80 });
   });
@@ -943,10 +947,7 @@ describe("scénario avec l'horloge simulée", () => {
     const settled = (await call(p.lea.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(settled.points.status).toBe("settled");
     expect(settled.points.total).toBe(35);
-    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual([
-      "participation",
-      "vote_podium",
-    ]);
+    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual(["participation", "vote_podium"]);
     expect(settled.nextGradeIn).toEqual({ grade: "route", points: 65 });
     expect(settled.stamp).toMatchObject({ rare: true });
     const kenji = (await call(p.kenji.u, "GET", `/me/recaps/${eventId}`)).json;

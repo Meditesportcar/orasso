@@ -36,8 +36,6 @@ export const VOTES_PER_EVENT_MAX = 50;
 /** Durée d'un vote : de 1 minute à 7 jours. */
 export const VOTE_DURATION_MIN = 1;
 export const VOTE_DURATION_MAX = 7 * 24 * 60;
-/** Voix par minute et par personne (limite de débit de `PUT …/vote`). */
-export const VOTE_RATE_PER_MINUTE = 20;
 /** Titre du vote créé d'office à chaque événement. */
 export const ALL_CATEGORIES_TITLE = "Toutes catégories";
 /** Lignes du classement servies à la fois (le podium et les suivants). */

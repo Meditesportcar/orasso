@@ -513,7 +513,9 @@ describe("consignes aux retenus", () => {
     expect(sent.status).toBe(200);
     const [entry] = await db.select().from(eventAnnouncements).where(eq(eventAnnouncements.eventId, e.id));
     // Lot R6-police : « 18 h 30 » ne se coupe jamais (espace insécable, `keepUnits`).
-    expect(entry?.body).toBe(keepUnits("Arrivée 18 h 30 – 19 h 15 (strict) · Entrée côté capitainerie.\n\nGilet jaune."));
+    expect(entry?.body).toBe(
+      keepUnits("Arrivée 18 h 30 – 19 h 15 (strict) · Entrée côté capitainerie.\n\nGilet jaune."),
+    );
     const [notif] = await db.select().from(notifications).where(eq(notifications.userId, kenji.id));
     // La notification est un extrait aux espaces normalisés : l'espace insécable n'y reste pas.
     expect(notif?.body.startsWith("Arrivée 18 h 30 – 19 h 15 (strict)")).toBe(true);
