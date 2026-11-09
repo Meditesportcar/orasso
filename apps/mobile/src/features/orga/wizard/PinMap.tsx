@@ -12,7 +12,7 @@ import { mapGlyphsOrigin, mapTilesUrl } from "@/features/explorer/mapPins";
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { DEFAULT_PIN, type PinMapProps, pinFromRegion, type RegionChange } from "./pinMapTypes";
 
-export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
+export function PinMap({ lat, lng, onMove, label, hidePin }: PinMapProps) {
   const { theme, t } = useTheme();
   useTabSwipeDisabled();
   const camera = useRef<CameraRef>(null);
@@ -60,7 +60,7 @@ export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
           }}
         />
       </MapView>
-      <View pointerEvents="none" style={styles.pin}>
+      <View pointerEvents="none" style={[styles.pin, hidePin ? styles.hidden : null]} testID="wizard-pin-native">
         <Svg width={46} height={58} viewBox="0 0 46 58">
           <Path
             d="M23 56S3 38 3 22a20 20 0 0 1 40 0c0 16-20 34-20 34z"
@@ -78,5 +78,6 @@ export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
 const styles = StyleSheet.create({
   map: { height: 300, borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
   // La pointe de l'épingle sur le centre de la carte.
+  hidden: { display: "none" },
   pin: { position: "absolute", left: "50%", top: "50%", marginLeft: -23, marginTop: -58 },
 });

@@ -12,7 +12,7 @@ import { DEFAULT_PIN, type PinMapProps } from "./pinMapTypes";
 
 type MapLibre = typeof import("maplibre-gl");
 
-export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
+export function PinMap({ lat, lng, onMove, label, hidePin }: PinMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
   const handle = useRef<OrassoMap | null>(null);
@@ -68,6 +68,13 @@ export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
       handle.current = null;
     };
   }, [t.color.accent, t.color.accentInk]);
+
+  // Épingle masquée (lot R7i) : la carte vient d'être recentrée, aucun point n'est choisi.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le marqueur est créé plus tard, la position le déplace : on réapplique.
+  useEffect(() => {
+    const el = marker.current?.getElement();
+    if (el) el.style.display = hidePin ? "none" : "";
+  }, [hidePin, lat, lng]);
 
   // Une position venue d'ailleurs (adresse trouvée) déplace l'épingle et la vue.
   useEffect(() => {

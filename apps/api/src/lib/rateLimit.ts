@@ -114,6 +114,10 @@ export const rateRules = {
   homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
+  /** Rendez-vous au spot (lot R7i) : lancements (chacun prévient des dizaines de personnes), lectures, réponses. */
+  spotLaunch: { max: 6, windowMs: 3_600_000, message: "Trop de rendez-vous lancés : réessaie plus tard." },
+  spotRead: { max: 120, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
+  spotReply: { max: 60, windowMs: 3_600_000, message: "Trop de réponses : réessaie plus tard." },
   /**
    * Lot R7k1, tour 2 : affichages d'un emplacement (Accueil, Garage, Fil), une limite à part des clics : une longue lecture du
    * Fil en envoie beaucoup (l'appli dédoublonne, voir R7k2), un clic reste un geste rare.
