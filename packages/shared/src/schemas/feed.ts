@@ -16,6 +16,7 @@ import {
   feedCardKinds,
   feedFilters,
 } from "../rules/feed";
+import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
 import { plateRectsSchema } from "./vehicle";
 
@@ -145,7 +146,23 @@ export type FeedPayloads = {
   feed_post: { post: FeedPostView };
   spot_meetup: Record<string, unknown>;
   memory: Record<string, unknown>;
-  sponsored: Record<string, unknown>;
+  /**
+   * Carte « Sponsorisé » (lot R7k1). `id` = l'emplacement (à envoyer à `POST /sponsored/:id/impression|click` avec
+   * `{ surface: "feed" }`). `domain` : le domaine du lien, affiché pour un annonceur externe. `disclosure` : la mention
+   * choisie par l'administration (« Publicité »), en plus du libellé « Sponsorisé » de la carte.
+   */
+  sponsored: {
+    id: string;
+    advertiserName: string;
+    advertiserKind: AdvertiserKind;
+    title: string;
+    body: string;
+    imageUrl: string | null;
+    linkUrl: string;
+    disclosure: string | null;
+    domain: string | null;
+    pro: { slug: string; name: string; logoUrl: string | null } | null;
+  };
 };
 
 export type FeedCard<K extends FeedCardKind = FeedCardKind> = {

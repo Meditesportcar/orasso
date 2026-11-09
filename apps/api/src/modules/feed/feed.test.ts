@@ -1388,7 +1388,7 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       ref: clock.now,
       fp: "ffffffffffff",
       less: new Set(feedCardKinds),
-      offset: 4_000_000_000,
+      offset: 100_000,
       x: Array.from({ length: 16 }, (_, n) => key(n)),
       phase: 1 as const,
       score: Number.MAX_VALUE,

@@ -248,8 +248,10 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   await signIn(k.page, "kenji@orasso.local");
   await afterOpening(k.page);
   await k.page.getByRole("tab", { name: "Le Fil", exact: true }).click();
-  await expect(k.page.getByRole("heading", { name: "Le Fil", exact: true }).first()).toBeVisible({ timeout: 30_000 });
-  await expect(k.page.getByText("arrive bientôt")).toBeVisible();
+  // Lot R7e2 : Le Fil n'est plus le Journal : publier, trois filtres, cartes.
+  await expect(k.page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await expect(k.page.getByTestId("fil-filters")).toBeVisible();
+  await expect(k.page.getByTestId("journal-item")).toHaveCount(0);
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
   // Lot R7b2 : l'onglet montre le crew lui-même (nom, onglets internes), plus la coquille « Ouvrir mon crew ».
@@ -375,13 +377,13 @@ test("Le Fil ne marque rien comme lu, et se met à jour à la notification reçu
   const before = await unread();
   expect(before).toBeGreaterThan(0);
   await page.getByRole("tab", { name: "Le Fil", exact: true }).click();
-  await expect(page.getByTestId("journal-item").first()).toBeVisible({ timeout: 30_000 });
-  const rows = await page.getByTestId("journal-item").count();
+  // Lot R7e2 : le Journal n'est plus dans Le Fil (ses notifications sont dans la cloche) ; l'onglet ne marque rien comme lu.
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("journal-item")).toHaveCount(0);
   await page.waitForTimeout(3_000);
   expect(await unread()).toBe(before);
-  // Une notification arrive pendant que Le Fil est ouvert : la liste se relit, et rien n'est marqué non plus.
+  // Une notification arrive pendant que Le Fil est ouvert : rien n'est marqué comme lu non plus.
   await compte.ajouterNotificationNonLue();
-  await expect(page.getByTestId("journal-item")).toHaveCount(rows + 1, { timeout: 30_000 });
   await page.waitForTimeout(2_000);
   expect(await unread()).toBe(before + 1);
   await ctx.close();

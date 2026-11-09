@@ -14,6 +14,7 @@ import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
+import { feedApi } from "./feed";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -38,6 +39,7 @@ import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
 import { ticketsApi } from "./tickets";
 import { triageApi } from "./triage";
+import { votesApi } from "./votes";
 import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
@@ -84,10 +86,12 @@ export const api = {
   ...orgaApi,
   ...structureApi,
   ...triageApi,
+  ...votesApi,
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
+  ...feedApi,
 };

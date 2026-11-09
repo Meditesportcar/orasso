@@ -1,0 +1,441 @@
+/* Le Fil (lot R7e2, maquettes R7.6 et R7.24) : une colonne de 600 px, des cartes par genre. Jetons seulement. */
+
+.fil {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto;
+}
+.fil-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* « Publier » : le bouton principal de l'écran (moutarde, icône). */
+.fil-publish {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 50px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: var(--shadow-card);
+}
+/* Le lien générique du contenu (« .s-main a », couleur d'accent) l'emportait sur l'encre du bouton : moutarde sur moutarde. */
+.s-main a.fil-publish,
+.app__body a.fil-publish {
+  color: var(--accent-ink);
+}
+.fil-publish:focus-visible,
+.fil-link:focus-visible,
+.fil-chip:focus-visible,
+.fil-card__more:focus-visible,
+.fil-filters button:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* Les trois filtres et les trois formats : segments en bloc, le segment actif à l'encre. */
+.fil-filters {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.fil-filters button {
+  min-height: 40px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--ink-muted);
+  font-weight: 800;
+  cursor: pointer;
+}
+.fil-filters button.is-on {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.fil-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.fil-end {
+  text-align: center;
+}
+.fil-less {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.fil-empty,
+.fil-error {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Une carte (`.r7c`). */
+.fil-card {
+  display: grid;
+  gap: calc(var(--space-2) + 2px);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.fil-card.is-faded {
+  opacity: 0.45;
+}
+.fil-card__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: calc(var(--space-2) + 2px);
+  align-items: center;
+}
+.fil-card__titles {
+  display: grid;
+  min-width: 0;
+}
+.fil-card__title {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.fil-card__reason {
+  color: var(--ink-muted);
+}
+.fil-card__more {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.fil-card__body {
+  display: grid;
+  gap: var(--space-2);
+}
+.fil-card__body p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fil-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.fil-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--night);
+  color: var(--night-ink);
+  font-weight: 800;
+  font-size: 12px;
+}
+.fil-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-logo--trophy {
+  background: var(--surface-raised);
+  color: var(--accent-text);
+}
+.fil-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+.fil-media {
+  display: block;
+  height: 190px;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.fil-media--tall {
+  height: 260px;
+}
+.fil-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.fil-grid img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: var(--night);
+}
+.fil-podium {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.fil-podium__rank {
+  color: var(--accent-text);
+  font-size: 24px;
+}
+.fil-podium__name strong {
+  display: block;
+  font-size: 14px;
+}
+.fil-podium__name small {
+  color: var(--ink-muted);
+}
+
+/* Photos d'une publication : au format de la publication, défilement avec « 1 / 3 ». */
+.fil-photos {
+  position: relative;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.fil-photos__track {
+  display: flex;
+  height: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.fil-photos__slide {
+  flex: 0 0 100%;
+  height: 100%;
+  scroll-snap-align: start;
+}
+.fil-photos__slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.fil-photos__count {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--night) 70%, transparent);
+  color: var(--night-ink);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.fil-fire {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+.fil-fire.is-on {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.fil-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fil-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+/* Menu « ⋯ » (feuille) : trois lignes. */
+.fil-menu__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.fil-menu__row small {
+  display: block;
+  color: var(--ink-muted);
+}
+.fil-menu__report {
+  padding: var(--space-1) var(--space-3);
+}
+
+/* Publier au Fil. */
+.fil-form textarea {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.fil-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+.fil-thumb {
+  position: relative;
+  aspect-ratio: 0.8;
+  border: 2px solid transparent;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.fil-thumb.is-on {
+  border-color: var(--accent);
+}
+.fil-thumb__pick {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.fil-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-thumb__badge {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--night) 85%, transparent);
+  color: var(--night-ink);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.fil-thumb__x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--night) 78%, transparent);
+  color: var(--night-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.fil-preview {
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--night);
+}
+.fil-confirm {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.fil-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fil-chip {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+.fil-chip.is-on {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+@media (min-width: 900px) {
+  .fil-media {
+    height: 240px;
+  }
+  .fil-media--tall {
+    height: 320px;
+  }
+}

@@ -76,6 +76,7 @@ export const errorCodes = [
   "invalid_qr",
   "other_event",
   "too_many_votes",
+  "restore_has_voices",
   // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
   "plate_decision_required",
   // Lot R7e1 (tour 2) : pseudo réservé au compte officiel d'Orasso.

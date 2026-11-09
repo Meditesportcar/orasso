@@ -43,6 +43,7 @@ const thresholdsSchema = z
 export const adminSettingSchemas: { [K in AdminSettingKey]: z.ZodType<AdminSettingValues[K]> } = {
   "signup.enabled": z.boolean(),
   "sponsored.enabled": z.boolean(),
+  "sponsored.external_enabled": z.boolean(),
   "providers.enabled": z.boolean(),
   "points.participation": points(0, 500),
   "points.staff": points(0, 500),

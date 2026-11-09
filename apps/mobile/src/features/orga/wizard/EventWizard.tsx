@@ -1,6 +1,6 @@
-// Assistant de création et de modification d'un événement dans l'appli (lot 35b, D20 ; lot 53 : les huit temps de
-// `s-create`, comme le site) : type, lieu avec épingle, arrivées, critères, avant-première, règlement, affiche, « Tout
-// est prêt » (Publier / Brouillon / Aperçu). Barre de progression, « Continuer » en bouton principal collant.
+// Assistant de création et de modification d'un événement dans l'appli (lot 35b, D20 ; lot 53 : les temps de
+// `s-create`, comme le site ; lot R7l2 : neuf avec « Votes du public ») : type, lieu avec épingle, arrivées, critères,
+// avant-première, règlement, votes, affiche, « Tout est prêt » (Publier / Brouillon / Aperçu). Barre de progression, « Continuer » en bouton principal collant.
 // Un brouillon est enregistré à chaque temps dès que l'adresse est connue (l'API l'exige) ; un événement publié
 // s'enregistre à la fin. Après chaque enregistrement, la saisie est réconciliée avec l'état relu du serveur, champ par
 // champ (`reconcileDraft`) : rien n'est marqué enregistré qui ne l'est pas. Dès que le brouillon existe, l'écran devient
@@ -37,6 +37,7 @@ import {
   serverDraft,
   type VehicleMake,
   vendorTypeLabels,
+  voteOrgaLabels,
   wizardV2Labels as W,
   type WizardMemo,
   withArrivalsInHours,
@@ -80,6 +81,7 @@ import {
   TypeTemps,
 } from "./Temps";
 import type { StepContext } from "./types";
+import { VotesTemps } from "./VotesTemps";
 
 const { space1, space2 } = tokens.spacing;
 
@@ -90,6 +92,7 @@ const SCREENS: Record<EventWizardStep, (ctx: StepContext) => ReactNode> = {
   criteres: CriteresTemps,
   "avant-premiere": AvantTemps,
   reglement: ReglementTemps,
+  votes: VotesTemps,
   affiche: AfficheTemps,
   publier: PretTemps,
 };
@@ -101,6 +104,7 @@ const HEADS: Record<EventWizardStep, [string, string]> = {
   criteres: [W.criteriaTitle, W.criteriaIntro],
   "avant-premiere": [W.previewTitle, W.previewIntro],
   reglement: [W.rulesTitle, W.rulesIntro],
+  votes: [voteOrgaLabels.stepTitle, voteOrgaLabels.stepIntro],
   affiche: [W.posterTitle, posterTexts.intro],
   publier: [W.readyTitle, W.readyIntro],
 };

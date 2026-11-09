@@ -199,7 +199,7 @@ describe("temps où rouvrir un brouillon", () => {
     const left = filled();
     expect(eventResumeStep(left, true, null, eventWizardSteps.indexOf("arrivees"))).toBe("arrivees");
     expect(eventResumeStep(left, true)).toBe("affiche");
-    expect(eventResumeStep({ ...left, poster: POSTER }, true, null, 7)).toBe("publier");
+    expect(eventResumeStep({ ...left, poster: POSTER }, true, null, 8)).toBe("publier");
     expect(eventResumeStep({ ...left, addressLine: "" }, true, null, 6)).toBe("lieu");
     expect(eventResumeStep(left, true, "reglement", 2)).toBe("reglement");
     expect(eventPublishProblem(left)).toEqual({ step: "affiche", problem: "Choisis ton affiche avant de publier." });
@@ -209,10 +209,17 @@ describe("temps où rouvrir un brouillon", () => {
     expect(withDefaultPoster({ ...left, poster: { ...POSTER, style: "jdm" } }).poster?.style).toBe("jdm");
   });
 
-  it("un index gardé sur l'ancien découpage (douze étapes) est ignoré", () => {
-    expect(storedStepIndex(8, 3)).toBe(3);
+  it("un index gardé sur l'ancien découpage (douze ou huit étapes) est ignoré", () => {
+    expect(storedStepIndex(9, 3)).toBe(3);
+    expect(storedStepIndex(9, 99)).toBe(8);
     expect(storedStepIndex(undefined, 9)).toBeNull();
     expect(storedStepIndex(12, 3)).toBeNull();
+    // Lot R7l2 : un brouillon mémorisé à huit étapes (avant « Votes du public ») reste ouvrable : son index n'est pas lu
+    // (il pointerait la mauvaise étape), l'assistant rouvre au temps calculé, la saisie et la récurrence restent.
+    expect(storedStepIndex(8, 3)).toBeNull();
+    expect(storedStepIndex(8, 7)).toBeNull();
+    const old = parseWizardMemo('{"v":1,"steps":8,"reached":6,"recurrence":{"nth":1,"weekday":0,"count":6}}');
+    expect(old).toEqual({ reached: -1, recurrence: { nth: 1, weekday: 0, count: 6 } });
     const memo = parseWizardMemo(serializeWizardMemo({ reached: 2, recurrence: { nth: 1, weekday: 0, count: 6 } }));
     expect(memo).toEqual({ reached: 2, recurrence: { nth: 1, weekday: 0, count: 6 } });
     expect(parseWizardMemo('{"v":1,"reached":9}')).toEqual({ reached: -1, recurrence: null });
