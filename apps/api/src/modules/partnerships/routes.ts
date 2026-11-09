@@ -8,7 +8,7 @@ import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { partnershipsService } from "./service";
 
-const endQuery = z.object({ expect: z.enum(["pending", "active"]).optional() });
+const endQuery = z.object({ expect: z.enum(["pending", "active"]) });
 
 export const partnershipsRoutes = new Hono<AppEnv>()
   .post("/pros/:id/partnerships", async (c) => {
@@ -22,7 +22,7 @@ export const partnershipsRoutes = new Hono<AppEnv>()
     c.header("cache-control", "no-store");
     return c.json(await partnershipsService.ofPro(await requireUser(c), uuidParam(c, "id")));
   })
-  // `?expect=pending` : « retirer la proposition » ; `?expect=active` : « mettre fin ». Si la ligne a changé entre-temps
+  // `?expect=pending` : « retirer la proposition » ; `?expect=active` : « mettre fin » ; obligatoire (400 sans). Si la ligne a changé entre-temps
   // (la personne vient d'accepter), 409 : un retrait ne termine jamais un partenariat devenu actif.
   .post("/pros/:id/partnerships/:pid/end", async (c) => {
     const v = await requireUser(c);

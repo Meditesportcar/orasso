@@ -3940,3 +3940,13 @@ Choix pris seul :
 À revoir avec Damien :
 - **« Ses partenaires » montre le pseudo d'un compte privé à tout membre connecté** (sans voiture, sauf abonné accepté), alors que son profil cache ses partenaires. C'est conforme à ARCHITECTURE § 2.10 (comme les nombres d'abonnés, visibles de tout membre), mais un compte privé n'a peut-être pas conscience que ce lien existe côté fiche du pro. Il est aussi compté dans le total. À trancher : le laisser, ou ne montrer que le nombre.
 - **« Voir tout » est une liste de personnes sans recherche** (règle « pas d'annuaire ») : elle reste bornée à un pro, connecté seulement, et ne liste que ses partenaires actifs ; pas de recherche par texte ajoutée.
+
+### Tour 3 (09/11/2026) : dernière retouche après les re-relectures du tour 2
+
+Choix pris seul :
+
+- **Intention obligatoire** : `POST /pros/:id/partnerships/:pid/end` exige `?expect=pending` (retirer) ou `?expect=active` (mettre fin) ; sans, 400. Plus d'ancien comportement « tout état ouvert » (il remplace ce que dit le tour 2) : un ancien client sans paramètre ne peut plus terminer un partenariat devenu actif. Test de concurrence acceptation / fin sans paramètre : 400, le partenariat reste actif.
+- **Erreur avec une copie locale** (profil, appli) : l'erreur et « Réessayer » s'affichent même avec une copie, vide ou non. Copie non vide : les lignes restent sous l'erreur avec « Données d'il y a N min » (N compté depuis la dernière lecture réussie vue par l'écran ; « Données enregistrées sur cet appareil » si l'écran n'en a vu aucune, l'API ne datant pas la copie).
+- **« Réessayer » de « Voir tout »** : la lecture en échec est mémorisée (curseur, ou absence de curseur = actualisation de la première page) dans un état pur `apps/mobile/src/lib/pagedList.ts`, testé (3 cas).
+- **Bouton « Proposer »** : `offerFor` applique aussi la limite de 3 propositions sur 30 jours (`recentProposals`) : pas de bouton pour une proposition qui serait refusée.
+- **Curseur de « Voir tout »** : ne contient que l'identifiant du dernier partenariat (base64url) ; sa date d'acceptation est relue en base. Un curseur qui n'est pas un identifiant est ignoré (première page).

@@ -27,7 +27,6 @@ import { db } from "../../db/client";
 import { partnerships, profiles, proProfiles, vehicles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, invalidTransition, notFound, validation } from "../../lib/errors";
-import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
@@ -296,7 +295,7 @@ export const partnershipsService = {
     v: Viewer,
     proId: string,
     id: string,
-    expectedStatus?: "pending" | "active",
+    expectedStatus: "pending" | "active",
   ): Promise<PartnershipResult> {
     rateLimit("partnershipWrite", v.user.id);
     const pro = await ownedPro(v, proId);
@@ -308,8 +307,8 @@ export const partnershipsService = {
         .for("update");
       if (!row) throw notFound(L.errors.gone);
       // Le retrait d'une proposition ne termine jamais un partenariat que la personne vient d'accepter (et inversement) :
-      // l'écran dit ce qu'il croit défaire, la ligne verrouillée dit ce qui est vrai.
-      if (expectedStatus && row.status !== expectedStatus) throw invalidTransition(row.status, "ended");
+      // l'écran dit ce qu'il croit défaire (intention obligatoire), la ligne verrouillée dit ce qui est vrai.
+      if (row.status !== expectedStatus) throw invalidTransition(row.status, "ended");
       const ended = await endRow(tx, row, v.user.id);
       const user = await tx.query.profiles.findFirst({
         where: eq(profiles.userId, row.userId),
@@ -480,7 +479,8 @@ export const partnershipsService = {
       .from(partnerships)
       .innerJoin(profiles, eq(profiles.userId, partnerships.userId))
       .where(base);
-    const cursor = decodeCursor(page.cursor);
+    // Curseur opaque : l'identifiant du dernier partenariat seulement, jamais sa date d'acceptation (relue en base).
+    const cursorId = decodePartnerCursor(page.cursor);
     const rows = await db
       .select({
         p: partnerships,
@@ -492,12 +492,19 @@ export const partnershipsService = {
       })
       .from(partnerships)
       .innerJoin(profiles, eq(profiles.userId, partnerships.userId))
-      .where(and(base, cursor ? sql`(${since}, ${partnerships.id}) < (${cursor.createdAt}, ${cursor.id})` : undefined))
+      .where(
+        and(
+          base,
+          cursorId
+            ? sql`(${since}, ${partnerships.id}) < (select coalesce(c.responded_at, c.proposed_at), c.id from partnerships c where c.id = ${cursorId})`
+            : undefined,
+        ),
+      )
       .orderBy(desc(since), desc(partnerships.id))
       .limit(page.limit + 1);
     const pageRows = rows.slice(0, page.limit);
     const last = pageRows.at(-1);
-    const nextCursor = rows.length > page.limit && last ? encodeCursor(new Date(last.since), last.p.id) : null;
+    const nextCursor = rows.length > page.limit && last ? encodePartnerCursor(last.p.id) : null;
     if (!pageRows.length) return { items: [], nextCursor, total };
     const rel = await followsService.relationsWith(viewer.user.id, [...new Set(pageRows.map((r) => r.p.userId))]);
     const withView = pageRows.map((r) => ({
@@ -636,9 +643,21 @@ export const partnershipsService = {
     if (open?.status === "active") return null;
     if (open) return { proId: pro.id, proName: pro.name, state: "pending" };
     if (await inCooldown(pro.id, targetId, at)) return null;
+    // Même limite que l'envoi : pas de bouton « Proposer » pour une proposition qui serait refusée.
+    if ((await recentProposals(pro.id, targetId, at)) >= PARTNERSHIP_MAX_PER_PERIOD) return null;
     return { proId: pro.id, proName: pro.name, state: "available" };
   },
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function encodePartnerCursor(id: string): string {
+  return Buffer.from(id).toString("base64url");
+}
+function decodePartnerCursor(cursor: string | undefined): string | null {
+  if (!cursor) return null;
+  const id = Buffer.from(cursor, "base64url").toString();
+  return UUID.test(id) ? id : null;
+}
 
 /** Fin d'un partenariat en attente ou actif (une proposition retirée comme un partenariat fini). */
 async function endRow(tx: Tx, row: PartnershipRow, by: string): Promise<PartnershipRow> {

@@ -9,6 +9,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { emptyPagedList, type PagedList, pageFailed, pageLoaded, retryCursor } from "@/lib/pagedList";
 import { useSession } from "@/lib/session";
 import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
@@ -23,9 +24,8 @@ export default function Partenaires() {
   const router = useRouter();
   const { me } = useSession();
   const { pro } = useLocalSearchParams<{ pro?: string }>();
-  const [items, setItems] = useState<PartnerOfPro[]>([]);
-  const [total, setTotal] = useState(0);
-  const [next, setNext] = useState<string | null>(null);
+  const [list, setList] = useState<PagedList<PartnerOfPro>>(emptyPagedList);
+  const { items, total, next } = list;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Une réponse arrivée après un autre chargement ou un changement de compte est jetée.
@@ -41,11 +41,10 @@ export default function Partenaires() {
       try {
         const page = await api.proPartnersPage(pro, cursor);
         if (mine !== ticket.current) return;
-        setItems((cur) => (cursor ? [...cur, ...page.items] : page.items));
-        setTotal(page.total);
-        setNext(page.nextCursor);
+        setList((cur) => pageLoaded(cur, cursor, page));
       } catch (e) {
         if (mine !== ticket.current) return;
+        setList((cur) => pageFailed(cur, cursor));
         setError(errorMessage(e));
       } finally {
         if (mine === ticket.current) setLoading(false);
@@ -56,8 +55,7 @@ export default function Partenaires() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `account` relance la lecture au changement de compte.
   useEffect(() => {
-    setItems([]);
-    setNext(null);
+    setList(emptyPagedList());
     void load();
   }, [load, account]);
 
@@ -89,9 +87,7 @@ export default function Partenaires() {
           <Icon name="next" size={16} color={c.inkMuted} />
         </Pressable>
       ))}
-      {error ? (
-        <LoadError message={error} onRetry={() => void load(items.length ? (next ?? undefined) : undefined)} />
-      ) : null}
+      {error ? <LoadError message={error} onRetry={() => void load(retryCursor(list))} /> : null}
       {!error && loading ? <Muted variant="body">Chargement…</Muted> : null}
       {!error && !loading && !items.length ? <Muted variant="body">{L.partnersEmpty}</Muted> : null}
       {!error && !loading && next ? (

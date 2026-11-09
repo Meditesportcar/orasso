@@ -143,6 +143,41 @@ for (const theme of ["beton", "sable"] as const) {
             .click();
           await expect(page.getByTestId("partners-line")).toBeVisible({ timeout: 20_000 });
           await expect(page.getByTestId("partners-error")).toHaveCount(0);
+          // Tour 3, copie locale remplie : la panne se dit aussi, les lignes restent, datées, avec « Réessayer ».
+          down = true;
+          await go(page, "/profil");
+          await expect(page.getByTestId("partners-error")).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByTestId("partners-error")).toContainText("Réessayer");
+          await expect(page.getByTestId("partners-line")).toBeVisible();
+          await expect(page.getByTestId("partners-stale")).toContainText("Données");
+          await shot(page, `ligne-en-panne-copie-${tag}`);
+          await ctx.close();
+        }
+
+        // 2 bis. Tour 3, copie locale vide ({ items: [] }) : sans partenaire, une panne ne disparaît pas en silence.
+        {
+          const lone = await newMember();
+          const { ctx, page } = await openApp(browser, theme, scale);
+          let down = false;
+          await page.route("**/api/me/partnerships", async (route) => {
+            if (down)
+              await route.fulfill({
+                status: 500,
+                contentType: "application/json",
+                body: JSON.stringify({ error: { code: "internal", message: "Panne simulée" } }),
+              });
+            else await route.continue();
+          });
+          await signIn(page, lone.email);
+          await go(page, "/profil");
+          await expect(page.getByTestId("partners-line")).toHaveCount(0);
+          await expect(page.getByTestId("partners-error")).toHaveCount(0);
+          down = true;
+          await go(page, "/profil");
+          await expect(page.getByTestId("partners-error")).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByTestId("partners-error")).toContainText("Réessayer");
+          await expect(page.getByTestId("partners-line")).toHaveCount(0);
+          await expect(page.getByTestId("partners-stale")).toHaveCount(0);
           await ctx.close();
         }
       }

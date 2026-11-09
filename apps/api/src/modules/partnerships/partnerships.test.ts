@@ -241,9 +241,9 @@ describe("répondre et mettre fin : chacun de son côté seulement", () => {
     // Côté pro : un autre pro ne touche pas aux partenariats de celui-ci.
     const other = await signUp("Autre_Pro");
     const otherPro = await createPro(other.id, { verifiedAt: new Date(0) });
-    expect((await call(other, "POST", `/pros/${otherPro.id}/partnerships/${id}/end`)).status).toBe(404);
-    expect((await call(other, "POST", `/pros/${pro.id}/partnerships/${id}/end`)).status).toBe(403);
-    expect((await call(kenji, "POST", `/pros/${pro.id}/partnerships/${id}/end`)).status).toBe(403);
+    expect((await call(other, "POST", `/pros/${otherPro.id}/partnerships/${id}/end?expect=active`)).status).toBe(404);
+    expect((await call(other, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=active`)).status).toBe(403);
+    expect((await call(kenji, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=active`)).status).toBe(403);
     expect((await call(null, "POST", `/me/partnerships/${id}/accept`)).status).toBe(401);
   });
 
@@ -257,24 +257,26 @@ describe("répondre et mettre fin : chacun de son côté seulement", () => {
 
     const lea = await person("Lea_11");
     const second = await partner(lea);
-    const byPro = await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${second}/end`);
+    const byPro = await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${second}/end?expect=active`);
     expect(byPro.status).toBe(200);
     expect((await notifsOf(lea, "partnership_ended"))[0]?.body).toBe("Ton partenariat avec Wrap 66 est terminé.");
-    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${second}/end`)).status).toBe(409);
+    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${second}/end?expect=active`)).status).toBe(409);
     const [row] = await db.select().from(partnerships).where(eq(partnerships.id, second));
     expect(row?.endedBy).toBe(proOwner.id);
   });
 
   it("le pro retire une proposition avant réponse : plus de demande, personne n'est prévenu de plus", async () => {
     const res = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Salut" });
-    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end`)).status).toBe(200);
+    expect(
+      (await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end?expect=pending`)).status,
+    ).toBe(200);
     expect((await call(kenji, "GET", "/me/requests")).json.items).toEqual([]);
     expect(await notifsOf(kenji, "partnership_ended")).toEqual([]);
   });
 
   it("proposer, retirer, proposer… en boucle est refusé : un retrait ouvre le même délai de 30 jours qu'un refus", async () => {
     const res = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Salut" });
-    await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end`);
+    await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end?expect=pending`);
     const again = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Encore" });
     expect(again.status).toBe(409);
     expect(again.json.error.code).toBe("partnership_cooldown");
@@ -288,7 +290,7 @@ describe("répondre et mettre fin : chacun de son côté seulement", () => {
   it("au plus 3 propositions par 30 jours au même passionné, toutes causes confondues", async () => {
     for (let i = 0; i < 3; i++) {
       const id = await partner(kenji);
-      expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end`)).status).toBe(200);
+      expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=active`)).status).toBe(200);
     }
     const fourth = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Quatrième" });
     expect(fourth.status).toBe(409);
@@ -313,7 +315,7 @@ describe("répondre et mettre fin : chacun de son côté seulement", () => {
     expect((await propose(proOwner, { userPseudo: kenji.pseudo, message: "Reviens" })).status).toBe(409);
     const lea = await person("Lea_11");
     const other = await partner(lea);
-    await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${other}/end`);
+    await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${other}/end?expect=active`);
     expect((await propose(proOwner, { userPseudo: lea.pseudo, message: "De nouveau" })).status).toBe(201);
   });
 });
@@ -699,6 +701,18 @@ describe("tour 2 : liste du passionné, filtres alignés, voitures, simultanéit
     expect(page1.json.total).toBe(8);
     expect(page1.json.items).toHaveLength(5);
     expect(page1.json.nextCursor).toBeTruthy();
+    // Curseur opaque : l'identifiant seulement, aucune date.
+    const decoded = Buffer.from(page1.json.nextCursor, "base64url").toString();
+    expect(decoded).toMatch(/^[0-9a-f-]{36}$/);
+    expect(decoded).not.toMatch(/\d{4}-\d{2}-\d{2}T|\|/);
+    // Un curseur falsifié est ignoré (première page), jamais une erreur SQL.
+    const forged = await call(
+      viewer,
+      "GET",
+      `/pros/by-slug/wrap-66/partners?limit=5&cursor=${Buffer.from("x' or 1=1").toString("base64url")}`,
+    );
+    expect(forged.status).toBe(200);
+    expect(forged.json.items).toHaveLength(5);
     const page2 = await call(
       viewer,
       "GET",
@@ -760,6 +774,37 @@ describe("tour 2 : liste du passionné, filtres alignés, voitures, simultanéit
       );
       expect(toUser).toEqual([]);
     }
+  });
+
+  it("sans intention (?expect) : 400, rien ne change ; la course acceptation/retrait sans paramètre ne termine jamais un actif", async () => {
+    const id = await partner(kenji);
+    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end`)).status).toBe(400);
+    const [row] = await db.select().from(partnerships).where(eq(partnerships.id, id));
+    expect(row?.status).toBe("active");
+    for (let i = 0; i < 3; i++) {
+      const target = await person(`Old_${i}`);
+      const res = await propose(proOwner, { userPseudo: target.pseudo, message: "Course" });
+      const pid = res.json.id as string;
+      const [accepted, ended] = await Promise.all([
+        call(target, "POST", `/me/partnerships/${pid}/accept`),
+        call(proOwner, "POST", `/pros/${pro.id}/partnerships/${pid}/end`),
+      ]);
+      expect(accepted.status).toBe(200);
+      expect(ended.status).toBe(400);
+      const [after] = await db.select().from(partnerships).where(eq(partnerships.id, pid));
+      expect(after?.status).toBe("active");
+    }
+  });
+
+  it("le bouton « Proposer » disparaît après trois propositions sur 30 jours (comme l'envoi), et revient après", async () => {
+    for (let i = 0; i < 3; i++) {
+      const id = await partner(kenji);
+      expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=active`)).status).toBe(200);
+    }
+    const offer = async () => (await call(proOwner, "GET", `/users/${kenji.pseudo}`)).json.partnershipOffer;
+    expect(await offer()).toBeNull();
+    clock.set(new Date(clock.now.getTime() + 31 * 86_400_000));
+    expect(await offer()).toMatchObject({ state: "available" });
   });
 
   it("« mettre fin » demandé comme retrait (expect=pending) sur un partenariat actif : 409, il reste actif", async () => {

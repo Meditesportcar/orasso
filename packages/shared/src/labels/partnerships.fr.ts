@@ -40,6 +40,10 @@ export const partnershipLabels = {
   unavailablePro: "Pro indisponible",
   retry: "Réessayer",
   partnersLoadError: "Tes partenaires ne se chargent pas.",
+  /** Lignes gardées sous l'erreur quand une copie locale existe. */
+  partnersStale: (minutes: number) =>
+    minutes < 60 ? `Données d'il y a ${Math.max(1, minutes)} min` : `Données d'il y a ${Math.floor(minutes / 60)} h`,
+  partnersStaleUnknown: "Données enregistrées sur cet appareil",
   proPartnershipsLoadError: "Tes propositions et tes partenaires ne se chargent pas.",
   partnersLine: (n: number) => `Partenaires · ${n}`,
   partnersLineOpen: (names: string) => `Partenaires : ${names}`,

@@ -23,8 +23,8 @@ export const partnershipsApi = {
   proposePartnership: (proId: string, body: PartnershipPropose) =>
     request<PartnershipResult>(`/api/pros/${proId}/partnerships`, { method: "POST", body }),
   /** `expect` : « pending » pour retirer une proposition, « active » pour mettre fin (409 si la ligne a changé entre-temps). */
-  endPartnershipAsPro: (proId: string, id: string, expect?: "pending" | "active") =>
-    request<PartnershipResult>(`/api/pros/${proId}/partnerships/${id}/end${expect ? `?expect=${expect}` : ""}`, {
+  endPartnershipAsPro: (proId: string, id: string, expect: "pending" | "active") =>
+    request<PartnershipResult>(`/api/pros/${proId}/partnerships/${id}/end?expect=${expect}`, {
       method: "POST",
     }),
   /** « Voir tout » de « Ses partenaires » : une page à la fois (connecté seulement). */

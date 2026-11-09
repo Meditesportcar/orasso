@@ -8,7 +8,7 @@
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { partnershipLabels as L, type PartnerLogo } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { EndSheet } from "@/features/partnerships/EndSheet";
@@ -48,6 +48,11 @@ export function PartnersLine({
   const my = useApi(() => api.myPartnerships(), [reloadKey], { cacheKey: "my-partnerships", enabled: mine });
   const [open, setOpen] = useState(false);
   const [ending, setEnding] = useState<Row | null>(null);
+  // Dernière lecture réussie vue par cet écran (l'API ne dit pas l'âge d'une copie locale) : sert à « Données d'il y a N min ».
+  const freshAt = useRef<Date | null>(null);
+  useEffect(() => {
+    if (my.data && !my.error && !my.offline) freshAt.current = new Date();
+  }, [my.data, my.error, my.offline]);
 
   const rows: Row[] = mine
     ? (my.data?.items ?? []).map((i) => ({
@@ -70,15 +75,22 @@ export function PartnersLine({
         detail: null,
         available: true,
       }));
-  // Panne sans rien à montrer : jamais confondue avec « aucun partenaire ».
-  if (mine && !my.data && my.error) {
-    return (
-      <View testID="partners-error">
+  // Panne : jamais confondue avec « aucun partenaire », avec ou sans copie locale. Avec une copie non vide, les lignes
+  // restent sous l'erreur, datées.
+  const failure =
+    mine && my.error ? (
+      <View testID="partners-error" style={styles.failure}>
         <LoadError message={L.partnersLoadError} onRetry={() => void my.reload()} />
+        {rows.length ? (
+          <Text variant="caption" color={c.inkMuted} testID="partners-stale">
+            {freshAt.current
+              ? L.partnersStale(Math.floor((Date.now() - freshAt.current.getTime()) / 60_000))
+              : L.partnersStaleUnknown}
+          </Text>
+        ) : null}
       </View>
-    );
-  }
-  if (!rows.length) return null;
+    ) : null;
+  if (!rows.length) return failure;
 
   const first = rows[0];
   const press = () => {
@@ -88,6 +100,7 @@ export function PartnersLine({
 
   return (
     <>
+      {failure}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${L.partnersLine(rows.length)}, ${rows.map((r) => r.name).join(", ")}`}
@@ -189,6 +202,7 @@ export function PartnersLine({
 }
 
 const styles = StyleSheet.create({
+  failure: { gap: space2 },
   line: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: 14 },
   logos: { flexDirection: "row", alignItems: "center" },
   logo: { borderRadius: 999, borderWidth: 2 },
