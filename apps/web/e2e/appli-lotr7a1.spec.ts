@@ -129,22 +129,20 @@ test("la barre du haut : loupe, cloche « Activité », bulle « Messages », pl
     expect(text === "" || /^[1-9]\d*\+?$/.test(text), `pastille ${name} : « ${text} »`).toBe(true);
   }
   await page.getByRole("tab", { name: "Accueil", exact: true }).click();
-  // La bulle ouvre la Boîte sur Messages, la cloche sur Tout.
+  // Lot R7c2 : la bulle ouvre Messages, la cloche l'Activité (la Boîte a disparu).
   await page
     .getByRole("button", { name: /^Messages/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite\?onglet=messages/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(
-    /^Messages/,
-  );
+  await page.waitForURL(/\/messages$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Messages", exact: true }).first()).toBeVisible();
   await go(page, "/accueil");
   await page
     .getByRole("button", { name: /^Activité/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite$/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(/^Tout/);
+  await page.waitForURL(/\/activite$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible();
   await ctx.close();
 });
 

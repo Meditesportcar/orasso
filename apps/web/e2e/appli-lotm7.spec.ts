@@ -189,7 +189,7 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["bannis", "/bannis"],
         ["modeles", "/modeles"],
         ["notes", "/notes"],
-        ["boite-structure", "/boite/orga"],
+        ["boite-structure", "/messages/orga"],
         // L'exposant et le visiteur cherchent dans l'Explorer (mode A) ; les autres casquettes ont l'écran de recherche.
         ["recherche", "/recherche"],
         ["mode-staff", `/staff/${id.salon}`],
@@ -382,13 +382,13 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await page.waitForURL(/\/boite$/, { timeout: 30_000 });
-    await expect(page.getByTestId("inbox-all")).toBeVisible({ timeout: 30_000 });
+    await page.waitForURL(/\/activite$/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(600);
     let top = await onTop(page, CHROME);
     expect.soft(top["topbar-logo"], "Boîte : la bande est sous la feuille").toBe(0);
     expect.soft(top["persona-tabbar"], "Boîte : la barre est sous la feuille").toBe(0);
-    await shot(page, `feuille-boite-${theme}`);
+    await shot(page, `feuille-activite-${theme}`);
     // Une feuille d'un onglet : Mon QR de compte, depuis Mon profil.
     await page.goto("/moi");
     await afterOpening(page);

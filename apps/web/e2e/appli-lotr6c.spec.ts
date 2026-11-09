@@ -149,21 +149,17 @@ for (const theme of ["beton", "sable"] as const) {
     // 2. Julie : l'invitation dans la Boîte, puis le bandeau sur la fiche ; elle coupe les invitations de Kenji.
     const j = await open(browser, theme);
     await signIn(j.page, julie.email);
-    await goto(j.page, "/boite");
+    await goto(j.page, "/activite/demandes");
     const notif = j.page
-      .getByTestId("journal-item")
-      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent à ${event.title}` });
+      .getByTestId("request-event-invitation-peer")
+      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent` })
+      .filter({ hasText: event.title });
     await expect(notif).toBeVisible({ timeout: 20_000 });
     // Tour 2 : chaque mot attribué à son auteur.
     await expect(notif).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
     await expect(notif).toContainText(`${nina.pseudo} : « Viens aussi ! »`);
-    await shot(j.page, `05-boite-invitation-${theme}`);
-    await notif.getByTestId("notif-invite-more").click();
-    const boxMenu = j.page.getByTestId("invite-menu").first();
-    await expect(boxMenu).toBeVisible();
-    // Le « ⋯ » propose de couper chacun des auteurs.
-    await expect(boxMenu.getByTestId("invite-mute")).toHaveCount(2);
-    await shot(j.page, `06-boite-menu-${theme}`);
+    await shot(j.page, `05-demandes-invitation-${theme}`);
+    // Le « ⋯ » qui coupe chaque auteur est sur le bandeau de la fiche (ci-dessous) : la demande ne porte pas d'identifiant de personne.
     await goto(j.page, `/e/${event.slug}`);
     const banner = j.page.getByTestId("invite-banner");
     await expect(banner).toContainText(`${nina.pseudo} et ${kenji.pseudo} t'invitent`);

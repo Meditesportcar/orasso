@@ -254,18 +254,18 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await expect(page.getByText("Automatique", { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Réduire les animations", { exact: true })).toBeVisible();
     await shot(page, `reglages-preferences-${theme}`);
-    // La Boîte, en haut à droite : hors de la barre, notifications dedans, ✕ pour revenir.
+    // La cloche, en haut à droite : l'Activité, hors de la barre, ✕ pour revenir.
     await page.goto("/accueil");
     await afterOpening(page);
     await page
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await page.waitForURL(/\/boite$/, { timeout: 30_000 });
-    await expect(page.getByTestId("inbox-all")).toBeVisible();
-    // Pas de barre d'onglets ici : seuls les trois segments de la feuille Boîte (Tout, Messages, Demandes, lot C2a).
-    await expect(page.getByTestId("inbox-segments").getByRole("tab")).toHaveCount(3);
-    await shot(page, `boite-${theme}`);
+    await page.waitForURL(/\/activite$/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible();
+    // Pas de barre d'onglets ici (lot R7c2 : plus de segments, la Boîte a disparu).
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await shot(page, `activite-${theme}`);
     // L'ancien onglet Accès mène à Sorties.
     await page.goto("/acces");
     await expect(page).toHaveURL(/\/sorties/, { timeout: 30_000 });

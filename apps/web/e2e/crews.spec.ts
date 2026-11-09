@@ -77,7 +77,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await expect(pageL.getByTestId("crew-request-sent")).toBeVisible();
 
   // Kenji accepte depuis Boîte > Demandes.
-  await pageK.goto("/app/boite/demandes");
+  await pageK.goto("/app/activite/demandes");
   const request = pageK.getByTestId("request-crew-request");
   await expect(request).toContainText(lea);
   // Page hydratée avant le clic (lot 34) : un clic trop tôt partait en envoi classique et la carte restait affichée.
@@ -97,7 +97,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await pageL.goto(`${crewPath}?onglet=membres`);
   await expect(pageL.getByTestId("crew-members")).toBeVisible();
   await pageL.getByTestId("crew-discussion").click();
-  await pageL.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageL.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await expect(pageL.getByTestId("message-system").first()).toBeVisible();
   await pageL.getByLabel("Écrire un message…").fill("On s'inscrit ensemble ?");
   await pageL.getByRole("button", { name: "Envoyer", exact: true }).click();
@@ -150,7 +150,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   ];
   // Une demande en attente pour la capture des Demandes.
   await apiCall(outsider, "POST", `/crews/${crew.data.id}/requests`, { message: "Salut, je roule en S13." });
-  shots.push({ name: "09-demandes", cookie: kCookie, path: "/app/boite/demandes" });
+  shots.push({ name: "09-demandes", cookie: kCookie, path: "/app/activite/demandes" });
   for (const theme of THEMES) {
     for (const view of VIEWS) {
       for (const shot of shots) {

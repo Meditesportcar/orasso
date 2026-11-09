@@ -40,23 +40,27 @@ test("la barre : cinq onglets dans l'ordre, la loupe, la cloche et la bulle, plu
 
     const header = page.locator("header.o-appbar--tab");
     await expect(header.getByRole("link", { name: "Rechercher" })).toBeVisible();
-    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/journal");
-    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/boite");
+    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/activite");
+    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/messages");
     await expect(header.getByRole("link", { name: "Boîte" })).toHaveCount(0);
 
     // Tour 2 : la cloche compte les notifications non lues et les demandes en attente, la bulle les conversations non lues
     // seulement. (La lecture passe par la session du navigateur : une nouvelle connexion ajouterait elle-même une notification.)
-    const me = (await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } };
+    // Lot R7c2 : cloche = nouveautés depuis la dernière ouverture + demandes hors demandes de message ; bulle = conversations
+    // non lues + demandes de message (une demande ne compte qu'une fois).
     const summary = (await (await page.request.get("/api/me/inbox/summary")).json()) as {
       unreadMessages: number;
-      requests: Record<string, number>;
+      unseenActivity: number;
+      pendingRequests: number;
+      requests: { contact: number };
     };
-    const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
+    const contact = summary.requests.contact;
     const bell = (await header.getByRole("link", { name: "Activité" }).innerText()).trim();
     const bubble = (await header.getByRole("link", { name: "Messages" }).innerText()).trim();
-    const wantBell = me.counts.unreadNotifications + requests;
+    const wantBell = summary.unseenActivity + Math.max(0, summary.pendingRequests - contact);
+    const wantBubble = summary.unreadMessages + contact;
     expect(bell).toBe(wantBell ? String(wantBell) : "");
-    expect(bubble).toBe(summary.unreadMessages ? String(summary.unreadMessages) : "");
+    expect(bubble).toBe(wantBubble ? String(wantBubble) : "");
     // Les noms accessibles annoncent le nombre.
     if (wantBell) {
       await expect(
@@ -139,10 +143,10 @@ test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la c
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Activité" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/journal");
-  await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/app/activite");
+  await expect(page.getByRole("heading", { name: "Activité", exact: true })).toBeVisible();
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Messages" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/boite");
+  await page.waitForURL((url) => url.pathname === "/app/messages");
 });
 
 test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {

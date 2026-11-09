@@ -135,8 +135,8 @@ test("R6b site (beton, 390) : Boîte, 31 demandes d'abonnement, « Suivants » m
   const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
   const page = await ctx.newPage();
   await setTheme(page, "beton");
-  await loginInBrowser(page, target.email, SEED_PASSWORD, "/app/boite/demandes");
-  await page.goto("/app/boite/demandes");
+  await loginInBrowser(page, target.email, SEED_PASSWORD, "/app/activite/demandes");
+  await page.goto("/app/activite/demandes");
   await expect(page.getByTestId("request-follow")).toHaveCount(30);
   await expect(page.getByText(target.askers[0] as string)).toHaveCount(0);
   await shot(page, "10-boite-31-demandes-beton-390");
