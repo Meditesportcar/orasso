@@ -110,6 +110,16 @@ test("site : emplacements sponsorisés, Béton et Sable, 390 et 1280 px", async 
         const saved = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
         await expect(saved.getByTestId("placement-preview").first()).toContainText("Annonce");
         await expect(saved.getByTestId("placement-edit")).toHaveCount(0);
+        // Valeur relue après un rechargement (l'enregistrement est bien en base).
+        await page.reload();
+        await expect(
+          page
+            .getByTestId("placement-row")
+            .filter({ hasText: "Assure ta sportive" })
+            .first()
+            .getByTestId("placement-preview")
+            .first(),
+        ).toContainText("Annonce");
         await saved.screenshot({ path: `${DIR}/site-modifier-apres-${theme}-${width}.png` });
         // Remise de la mention d'origine pour les passages suivants.
         const api = await apiCall<{ id: string; title: string }[]>(damien, "GET", "/admin/sponsored-placements");
@@ -164,7 +174,18 @@ test("appli : aperçu et modification d'un emplacement, 384 px, Béton et Sable"
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${DIR}/appli-modifier-ouvert-${theme}-384.png` });
     await row.getByTestId("placement-edit-save").click();
-    await expect(row.getByTestId("placement-preview")).toContainText("Annonce", { timeout: 30_000 });
+    // L'enregistrement est prouvé : le panneau se referme, puis la valeur est relue après un rechargement de l'écran.
+    await expect(row.getByTestId("placement-edit")).toHaveCount(0, { timeout: 30_000 });
+    await page.reload();
+    await page.waitForTimeout(3500);
+    const reread = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
+    await expect(reread.getByTestId("placement-preview")).toContainText("Annonce", { timeout: 30_000 });
+    const stored = await apiCall<{ title: string; disclosure: string | null }[]>(
+      await login("damien@orasso.local"),
+      "GET",
+      "/admin/sponsored-placements",
+    );
+    expect(stored.data.find((p) => p.title === "Assure ta sportive")?.disclosure).toBe("Annonce");
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${DIR}/appli-modifier-apres-${theme}-384.png` });
@@ -175,4 +196,77 @@ test("appli : aperçu et modification d'un emplacement, 384 px, Béton et Sable"
     await apiCall(damien, "PATCH", `/admin/sponsored-placements/${mine?.id}`, { disclosure: "Publicité" });
     await ctx.close();
   }
+});
+
+// Tour 3 : un échec réseau garde le brouillon ouvert ; une réponse tardive n'affecte que le panneau envoyé, et « Modifier »
+// des autres emplacements reste inactif pendant l'enregistrement.
+test("appli : échec réseau et réponse tardive à l'enregistrement d'un emplacement", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  test.setTimeout(600_000);
+  const { ctx, page } = await openApp(browser, "beton", 384);
+  await chooseAdmin(page);
+  await page.goto("/sponsorises");
+  await page.waitForTimeout(3500);
+  await expect(page.getByTestId("placement-form")).toBeVisible({ timeout: 30_000 });
+  const rows = page.getByTestId("placement-row");
+  expect(await rows.count()).toBeGreaterThan(1);
+  const row = rows.filter({ hasText: "Assure ta sportive" }).first();
+  const other = rows.filter({ hasNotText: "Assure ta sportive" }).first();
+  const patch = "**/admin/sponsored-placements/*";
+  // 1. Échec réseau : le brouillon reste ouvert, avec ce qui a été saisi.
+  await page.route(patch, (route) => (route.request().method() === "PATCH" ? route.abort("failed") : route.fallback()));
+  await row.getByTestId("placement-edit-open").click();
+  await row.getByTestId("placement-edit-disclosure").fill("Brouillon gardé");
+  await row.getByTestId("placement-edit-save").click();
+  await expect(row.getByTestId("placement-edit")).toBeVisible();
+  await expect(row.getByTestId("placement-edit-disclosure")).toHaveValue("Brouillon gardé");
+  await page.unroute(patch);
+  // 2. Réponse tardive : pendant l'attente, « Modifier » de l'autre emplacement est inactif.
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(patch, async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    await gate;
+    return route.fallback();
+  });
+  await row.getByTestId("placement-edit-disclosure").fill("Publicité");
+  await row.getByTestId("placement-edit-save").click();
+  await expect(other.getByTestId("placement-edit-open")).toBeDisabled();
+  release();
+  await expect(row.getByTestId("placement-edit")).toHaveCount(0, { timeout: 30_000 });
+  await expect(other.getByTestId("placement-edit")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("site : réponse tardive à l'enregistrement d'un emplacement", async ({ browser }) => {
+  test.setTimeout(600_000);
+  const damien = await login("damien@orasso.local");
+  const ctx = await siteContext(browser, damien, 1280, "beton");
+  const page = await ctx.newPage();
+  await page.goto(`${WEB}/admin/sponsorises`);
+  await expect(page.getByTestId("placement-form")).toBeVisible();
+  const rows = page.getByTestId("placement-row");
+  expect(await rows.count()).toBeGreaterThan(1);
+  const row = rows.filter({ hasText: "Assure ta sportive" }).first();
+  const other = rows.filter({ hasNotText: "Assure ta sportive" }).first();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/admin/sponsorises*", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await gate;
+    return route.fallback();
+  });
+  await row.getByTestId("placement-edit-open").click();
+  await row.getByLabel("Mention (ex. Publicité)").fill("Publicité");
+  await row.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(other.getByTestId("placement-edit-open")).toBeDisabled();
+  release();
+  await page.waitForURL(/fait=1/, { timeout: 30_000 });
+  await expect(row.getByTestId("placement-edit")).toHaveCount(0);
+  await expect(other.getByTestId("placement-edit")).toHaveCount(0);
+  await ctx.close();
 });

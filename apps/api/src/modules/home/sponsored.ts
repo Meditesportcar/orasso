@@ -247,11 +247,15 @@ export const sponsoredService = {
     return db.transaction(async (tx) => {
       // Le plafond est global à l'emplacement (toutes surfaces) : le verrou de la ligne de l'emplacement sérialise les
       // comptages concurrents, la somme du jour se lit donc sans que personne ne la dépasse entre-temps.
-      await tx
-        .select({ id: sponsoredPlacements.id })
-        .from(sponsoredPlacements)
-        .where(eq(sponsoredPlacements.id, id))
-        .for("update");
+      // « no key update » : n'attend pas les contrôles de clé étrangère des insertions concurrentes. Sans plafond, il n'y
+      // a rien à sérialiser : pas de verrou.
+      if (cap !== null) {
+        await tx
+          .select({ id: sponsoredPlacements.id })
+          .from(sponsoredPlacements)
+          .where(eq(sponsoredPlacements.id, id))
+          .for("no key update");
+      }
       const [claimed] = await tx
         .insert(sponsoredDailySeen)
         .values({ placementId: id, userHash: userHash(userId, id, day), day, surface })

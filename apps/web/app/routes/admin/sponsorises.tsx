@@ -16,6 +16,7 @@ import {
   type SponsoredPlacementAdmin,
   type SponsoredSurface,
   sponsoredSurfaces,
+  statsSurfaces,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
@@ -208,12 +209,21 @@ function EditPanel({ p, busy, onClose }: { p: SponsoredPlacementAdmin; busy: boo
 
 export default function AdminSponsored({ loaderData, actionData }: Route.ComponentProps) {
   const { placements, pros, externalEnabled, done } = loaderData;
-  const busy = useNavigation().state !== "idle";
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
   const [editing, setEditing] = useState<string | null>(null);
-  // Le panneau de modification se referme quand l'enregistrement a réussi (en cas d'erreur, il reste ouvert).
+  // Le panneau de modification se referme quand l'enregistrement a réussi (en cas d'erreur, il reste ouvert), et
+  // seulement celui de l'emplacement **envoyé** : une réponse tardive ne ferme pas un autre panneau.
   const wasBusy = useRef(false);
+  const savingId = useRef<string | null>(null);
+  const sending = navigation.formData?.get("intent") === "update" ? String(navigation.formData.get("id") ?? "") : null;
+  if (sending) savingId.current = sending;
   useEffect(() => {
-    if (wasBusy.current && !busy && !actionData) setEditing(null);
+    if (wasBusy.current && !busy) {
+      const sent = savingId.current;
+      savingId.current = null;
+      if (!actionData && sent) setEditing((cur) => (cur === sent ? null : cur));
+    }
     wasBusy.current = busy;
   }, [busy, actionData]);
   const today = new Date().toISOString().slice(0, 10);
@@ -278,17 +288,15 @@ export default function AdminSponsored({ loaderData, actionData }: Route.Compone
                 <p className="o-t-caption">
                   {p.impressions} affichages · {p.clicks} clics
                 </p>
-                {sponsoredSurfaces
-                  .filter((x) => p.surfaces.includes(x))
-                  .map((x) => (
-                    <p key={x} className="o-t-caption" data-testid={`placement-stats-${x}`}>
-                      {L.sponsoredSurfaceStats(
-                        placementSurfaceLabels[x],
-                        p.bySurface[x].impressions,
-                        p.bySurface[x].clicks,
-                      )}
-                    </p>
-                  ))}
+                {statsSurfaces(p).map((x) => (
+                  <p key={x} className="o-t-caption" data-testid={`placement-stats-${x}`}>
+                    {L.sponsoredSurfaceStats(
+                      placementSurfaceLabels[x],
+                      p.bySurface[x].impressions,
+                      p.bySurface[x].clicks,
+                    )}
+                  </p>
+                ))}
               </div>
               <div className="adm-sponso__preview">
                 <SponsoredPreview
@@ -309,6 +317,7 @@ export default function AdminSponsored({ loaderData, actionData }: Route.Compone
                   variant="secondary"
                   icon="edit"
                   onClick={() => setEditing(p.id)}
+                  disabled={busy}
                   data-testid="placement-edit-open"
                 >
                   {L.sponsoredEdit}

@@ -25,8 +25,9 @@ import {
   type SponsoredPlacementAdmin,
   type SponsoredSurface,
   sponsoredSurfaces,
+  statsSurfaces,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { dayToFr, departmentsOf, parseDayFr } from "@/lib/adminModel";
@@ -72,13 +73,16 @@ function SponsoredBody() {
   });
   const [issue, setIssue] = useState<string | null>(null);
   // Modification d'un emplacement existant : un seul à la fois.
+  // `version` change à chaque ouverture : une réponse tardive ne ferme que le panneau qu'elle a enregistré.
   const [edit, setEdit] = useState<{
     id: string;
+    version: number;
     advertiserName: string;
     disclosure: string;
     departments: string;
     surfaces: SponsoredSurface[];
   } | null>(null);
+  const editVersion = useRef(0);
   const published = (pros.data ?? []).filter((p) => p.published);
   const external = form.kind === "external";
   const draftName = external ? form.advertiserName : (published.find((p) => p.id === form.proProfileId)?.name ?? "");
@@ -131,6 +135,7 @@ function SponsoredBody() {
 
   async function saveEdit(row: SponsoredPlacementAdmin) {
     if (!edit) return;
+    const sent = { id: row.id, version: edit.version };
     setNotice(null);
     const ok = await gesture.run(() =>
       api.updatePlacement(row.id, {
@@ -141,7 +146,7 @@ function SponsoredBody() {
       }),
     );
     if (!ok) return;
-    setEdit(null);
+    setEdit((cur) => (cur && cur.id === sent.id && cur.version === sent.version ? null : cur));
     setNotice(L.sponsoredDone);
     await placements.reload();
   }
@@ -259,13 +264,11 @@ function SponsoredBody() {
           <Text variant="caption" color={t.color.plateMuted}>
             {L.sponsoredStats(p.impressions, p.clicks)}
           </Text>
-          {sponsoredSurfaces
-            .filter((x) => p.surfaces.includes(x))
-            .map((x) => (
-              <Text key={x} variant="caption" color={t.color.plateMuted} testID={`placement-stats-${x}`}>
-                {L.sponsoredSurfaceStats(placementSurfaceLabels[x], p.bySurface[x].impressions, p.bySurface[x].clicks)}
-              </Text>
-            ))}
+          {statsSurfaces(p).map((x) => (
+            <Text key={x} variant="caption" color={t.color.plateMuted} testID={`placement-stats-${x}`}>
+              {L.sponsoredSurfaceStats(placementSurfaceLabels[x], p.bySurface[x].impressions, p.bySurface[x].clicks)}
+            </Text>
+          ))}
           <SponsoredPreview
             advertiserName={
               edit?.id === p.id && p.advertiserKind === "external" ? edit.advertiserName : p.advertiserName
@@ -352,11 +355,13 @@ function SponsoredBody() {
               <Button
                 variant="plate"
                 icon="edit"
+                disabled={gesture.busy}
                 onPress={() => {
                   gesture.setError(null);
                   setNotice(null);
                   setEdit({
                     id: p.id,
+                    version: ++editVersion.current,
                     advertiserName: p.advertiserName,
                     disclosure: p.disclosure ?? "",
                     departments: p.departments.join(", "),

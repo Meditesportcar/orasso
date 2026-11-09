@@ -180,3 +180,13 @@ export type SponsoredPlacementAdmin = {
   /** Affichages et clics par endroit (Accueil, Fil). */
   bySurface: Record<SponsoredSurface, { impressions: number; clicks: number }>;
 };
+
+/**
+ * Endroits dont l'administration montre les statistiques d'un emplacement : ceux où il est diffusé, et aussi ceux qui ont
+ * des statistiques passées (même décochés depuis), pour que la somme affichée reste lisible endroit par endroit.
+ */
+export function statsSurfaces(p: Pick<SponsoredPlacementAdmin, "surfaces" | "bySurface">): SponsoredSurface[] {
+  return sponsoredSurfaces.filter(
+    (x) => p.surfaces.includes(x) || p.bySurface[x].impressions + p.bySurface[x].clicks > 0,
+  );
+}

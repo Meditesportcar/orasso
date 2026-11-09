@@ -587,8 +587,16 @@ describe("curseur forgé et réinitialisation du parcours", () => {
     }
     // La limite elle-même reste acceptée, et vite.
     const t1 = Date.now();
-    expect((await fil(viewer, `?cursor=${forged(MAX_OFFSET)}`)).status).toBe(200);
+    const atLimit = await fil(viewer, `?cursor=${forged(MAX_OFFSET)}`);
+    expect(atLimit.status).toBe(200);
     expect(Date.now() - t1).toBeLessThan(1500);
+    // Le curseur suivant dépasserait la borne : la liste se termine au lieu de produire un curseur que l'API refuserait.
+    expect(atLimit.items.length).toBeGreaterThan(0);
+    expect(atLimit.next).toBeNull();
+    // Juste en dessous de la borne, un curseur suivant valide est encore produit tant qu'il reste dans la limite.
+    const below = await fil(viewer, `?cursor=${forged(MAX_OFFSET - 50)}`);
+    expect(below.status).toBe(200);
+    if (below.next) expect((await fil(viewer, `?cursor=${below.next}`)).status).toBe(200);
     // Un parcours normal n'est pas touché.
     expect((await fil(viewer, `?cursor=${first.next}`)).status).toBe(200);
   });

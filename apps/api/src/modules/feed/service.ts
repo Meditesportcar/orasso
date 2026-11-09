@@ -51,7 +51,7 @@ import {
 import { now } from "../../lib/deps";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
-import { type Cursor, decodeCursor, encodeCursor } from "./cursor";
+import { type Cursor, decodeCursor, encodeCursor, MAX_OFFSET } from "./cursor";
 import { rankedSources } from "./sources";
 import { sponsoredPicker } from "./sources/sponsored";
 import type { FeedSource, Key, LoadedCard, SourceInput } from "./sources/types";
@@ -318,7 +318,8 @@ export const feedService = {
     // celles du Fil entier, d'une page à l'autre.
     const wantsSponsored = q.filter !== "following" && !less.has("sponsored");
     const out = insertSponsored(items, wantsSponsored ? await sponsoredPicker(v) : null, offset);
-    if (next) next = { ...next, offset: offset + out.length };
+    // Au-delà de la borne, `decodeCursor` refuserait le curseur suivant : la liste se termine plutôt que de le fabriquer.
+    if (next) next = offset + out.length > MAX_OFFSET ? null : { ...next, offset: offset + out.length };
     return {
       items: out,
       nextCursor: next ? encodeCursor(next) : null,
