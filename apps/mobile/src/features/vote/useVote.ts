@@ -137,9 +137,13 @@ export function useVote(eventId: string | null, voteId: string | null) {
     return voteIsOver(fresh);
   };
   // Le canal relit le détail (classement compris) ; la grille seulement quand les candidats changent (ouverture, clôture…).
+  // Tour 5 : la grille est relue si le message la change **ou** si elle est restée « à relire » (lecture en échec, même
+  // croisée avec une autre) ; tant qu'aucune lecture partie après n'a réussi, l'erreur garde la grille à relire.
   useVoteChannel(eventId, voteId, async (withGrid) => {
-    await Promise.all([view.reload(), withGrid ? grid.reload() : null]);
-    if (withGrid && gridRead.failed()) throw new Error("grid_reload_failed"); // la grille reste à relire
+    if (withGrid) gridRead.invalidate();
+    const withGridNow = gridRead.failed();
+    await Promise.all([view.reload(), withGridNow ? grid.reload() : null]);
+    if (withGridNow && gridRead.failed()) throw new Error("grid_reload_failed"); // la grille reste à relire
   });
   // Le geste de l'utilisateur (« Réessayer ») relit tout, tout de suite.
   const reload = () => reloadAll.current();
