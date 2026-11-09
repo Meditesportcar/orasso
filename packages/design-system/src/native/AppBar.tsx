@@ -3,6 +3,7 @@
 // `--bar-line`, logotype 118 px, boutons `.abtn` 38 px rayon 12, pastille `.capchip` « Organisateur ») ; plus de
 // métal brossé. Écran de flux = `.flowbar` (pas de barre : titre italique et ✕ carré `.closex` posés sur le fond).
 
+import { navLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
 import type { IconName } from "../icons";
@@ -69,7 +70,7 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
       {count ? (
         <View style={[styles.count, { backgroundColor: c.accent, boxShadow: `0 0 0 2px ${c.bar}` }]}>
           <Text variant="credit" color={c.accentInk} style={styles.countText}>
-            {count}
+            {count > 99 ? "99+" : count}
           </Text>
         </View>
       ) : null}
@@ -174,6 +175,16 @@ export type AppBarProps = {
   onInbox?: () => void;
   inboxOn?: boolean;
   inboxCount?: number;
+  /**
+   * Barre `tab` du passionné (lot R7a1, D38) : la cloche « Activité » et la bulle « Messages » prennent la place de la
+   * Boîte, chacune avec sa pastille ; elles perdent leur compteur quand on y est. Les autres casquettes gardent la Boîte.
+   */
+  onActivity?: () => void;
+  activityOn?: boolean;
+  activityCount?: number;
+  onMessages?: () => void;
+  messagesOn?: boolean;
+  messagesCount?: number;
   /** Écran de flux (lot R5b) : boutons posés avant le ✕ (`AppBarFlowAction`, ou un petit bouton « Modifier »). */
   actions?: ReactNode;
   /** ✕ Fermer (obligatoire en flux ; facultatif en barre `tab`). */
@@ -271,6 +282,12 @@ export function AppBar({
   onInbox,
   inboxOn,
   inboxCount,
+  onActivity,
+  activityOn,
+  activityCount,
+  onMessages,
+  messagesOn,
+  messagesCount,
   actions,
   onClose,
   closeLabel = "Fermer",
@@ -388,14 +405,33 @@ export function AppBar({
           </>
         ) : (
           <>
-            <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
-            <AppBarAction
-              icon="inbox"
-              label="Boîte"
-              onPress={onInbox}
-              on={inboxOn}
-              count={inboxOn ? undefined : inboxCount}
-            />
+            <AppBarAction icon="search" label={navLabels.top.search} onPress={onSearch} on={searchOn} />
+            {onActivity || onMessages ? (
+              <>
+                <AppBarAction
+                  icon="bell"
+                  label={navLabels.topCounted.activity(activityOn ? 0 : (activityCount ?? 0))}
+                  onPress={onActivity}
+                  on={activityOn}
+                  count={activityOn ? undefined : activityCount}
+                />
+                <AppBarAction
+                  icon="bubble"
+                  label={navLabels.topCounted.messages(messagesOn ? 0 : (messagesCount ?? 0))}
+                  onPress={onMessages}
+                  on={messagesOn}
+                  count={messagesOn ? undefined : messagesCount}
+                />
+              </>
+            ) : (
+              <AppBarAction
+                icon="inbox"
+                label="Boîte"
+                onPress={onInbox}
+                on={inboxOn}
+                count={inboxOn ? undefined : inboxCount}
+              />
+            )}
           </>
         )}
         {onClose ? <CloseX label={closeLabel} onPress={onClose} onBar /> : null}

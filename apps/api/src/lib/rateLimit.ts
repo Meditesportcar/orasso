@@ -2,6 +2,8 @@
 // de compte, recherche du staff. L'authentification (connexion, inscription, 2FA) est limitée par Better Auth.
 // Compteurs en mémoire, par utilisateur connecté et par fenêtre fixe : une seule instance de l'API (dev.orasso.fr).
 // Plusieurs instances demanderaient un stockage partagé (PostgreSQL ou Redis).
+import { PRESENCE_ATTEMPTS } from "@orasso/shared";
+
 import { AppError } from "./errors";
 
 export type RateRule = { max: number; windowMs: number; message: string };
@@ -128,6 +130,11 @@ export const rateRules = {
   mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Vues d'un contenu média : par visiteur et par contenu, comme le compteur de la fiche pro. */
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
+  /** Lot R7d1 : « Je suis sur place » (présence par GPS) : 5 essais en 10 minutes par compte, refus compris. */
+  presence: {
+    ...PRESENCE_ATTEMPTS,
+    message: "Trop d'essais de présence : réessaie dans quelques minutes.",
+  },
   /** Prix du public (lot 49) : une voix modifiable, pas un bouton qu'on martèle. */
   audienceVote: { max: 20, windowMs: 60_000, message: "Trop de votes : réessaie dans une minute." },
   /**

@@ -68,6 +68,7 @@ import { ApiRequestError, errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
+import { openStandalone } from "@/lib/standalone";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
@@ -397,7 +398,7 @@ export default function EventPage() {
           : action === "myApplication"
             ? place?.status === "accepted" && !usedNow(place, placeNow, multiDay)
               ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
-              : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.navigate("/sorties") }
+              : { label: L.myApplication, icon: "ticket" as const, onPress: () => openStandalone(router, "/sorties") }
             : action === "myProviderApplication"
               ? {
                   label: L.myApplication,

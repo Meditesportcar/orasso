@@ -2693,3 +2693,28 @@
   font-size: min(var(--type-poster-l-size), calc(100cqi / var(--em, 10)));
   line-height: calc(1em + var(--type-poster-l-line) - var(--type-poster-l-size));
 }
+
+/* Bandeau « où sont passées les choses » (lot R7a1, tour 2) : le texte à gauche, le ✕ à droite (maquette R7.1). */
+.s-whatsnew {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+.s-whatsnew__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.s-whatsnew__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: calc(var(--space-2) * -1) calc(var(--space-2) * -1) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}

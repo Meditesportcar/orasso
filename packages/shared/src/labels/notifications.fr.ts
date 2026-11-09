@@ -16,9 +16,9 @@ import { moderationNotificationLabels } from "../notifications/moderation";
 import { passportNotificationLabels } from "../notifications/passport";
 import { pointsNotificationLabels } from "../notifications/points";
 import { providersV2NotificationLabels } from "../notifications/providers-v2";
+import { r7NotificationLabels } from "../notifications/r7";
 import { socialNotificationLabels } from "../notifications/social";
 import { staffNotificationLabels } from "../notifications/staff";
-import { storyNotificationLabels } from "../notifications/stories";
 import { weatherNotificationLabels } from "../notifications/weather";
 
 // Notifications (lot 15) : familles et types, pour les réglages du compte. Les libellés des types sont déclarés à
@@ -54,5 +54,5 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   ...providersV2NotificationLabels,
   ...crewOutingNotificationLabels,
   ...passportNotificationLabels,
-  ...storyNotificationLabels,
+  ...r7NotificationLabels,
 };

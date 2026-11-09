@@ -89,9 +89,15 @@ export type ConversationWriteBlock =
   | "two_factor"
   | "structure_suspended";
 
+/**
+ * Lot R7c1 : sorte d'une conversation dans la liste. `story_reply` (réponse à une story : message privé) est déclarée ici
+ * et jamais servie tant que `messages.story_id` n'existe pas (lot R7f1).
+ */
+export type ConversationListKind = ConversationKind | "story_reply";
+
 export type ConversationSummary = {
   id: string;
-  kind: ConversationKind;
+  kind: ConversationListKind;
   /** `structure` : je réponds au nom d'une de mes structures. */
   side: "member" | "structure";
   title: string;
@@ -102,6 +108,8 @@ export type ConversationSummary = {
   lastMessage: { preview: string; at: string; mine: boolean } | null;
   unreadCount: number;
   closedAt: string | null;
+  /** Lot R7c1 : vignette de la story à laquelle répond le dernier message, `null` (toujours, avant le lot R7f1). */
+  storyThumbUrl: string | null;
 };
 
 export type ConversationView = ConversationSummary & {
@@ -143,7 +151,15 @@ export type InboxRequestCounts = {
   eventInvitation: number;
 };
 
-/** Pastille de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte. */
-export type InboxSummary = { unreadMessages: number; requests: InboxRequestCounts };
+/**
+ * Pastilles de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte (anciens champs, lus par
+ * l'APK en ligne). Lot R7c1 : `unseenActivity` (pastille de la cloche) et `pendingRequests` (ligne « Demandes · 3 »).
+ */
+export type InboxSummary = {
+  unreadMessages: number;
+  requests: InboxRequestCounts;
+  unseenActivity: number;
+  pendingRequests: number;
+};
 
 export type UploadResult = { id: string; key: string; width: number; height: number };

@@ -14,6 +14,7 @@ import {
   type AppPersonaEntry,
   type BasePersona,
   baseOf,
+  destinationHref,
   entryOfPersona,
   FAN_ENTRY,
   homeOf,
@@ -27,6 +28,7 @@ import {
   tabHref,
 } from "./personaModel";
 import { useSession } from "./session";
+import { openStandalone } from "./standalone";
 
 const KEY = "persona";
 
@@ -121,12 +123,16 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
 
   const goTab = useCallback(
     (route: string) => {
-      const own = tabHref(persona.kind, route);
+      const own = destinationHref(persona.kind, route);
       if (own) {
-        router.navigate(own as never);
+        // Lot R7a1 : une page qui n'est plus un onglet (Sorties, Garage) s'ouvre par-dessus la barre, avec son retour.
+        // Tour 2 : si elle est déjà dans la pile (Sorties → événement → « Ma candidature » → Sorties), on y revient
+        // au lieu d'en empiler une seconde (`openStandalone`).
+        if (tabHref(persona.kind, route)) router.navigate(own as never);
+        else openStandalone(router, own);
         return;
       }
-      const fallback = tabHref(base.kind, route);
+      const fallback = destinationHref(base.kind, route);
       if (fallback) choose(base, fallback);
       else router.navigate(homeOf(persona) as never);
     },

@@ -38,7 +38,7 @@ const TEXTS: Partial<
     pseudo: "C'est lui qu'on voit sur ton profil, au tri et au scan.",
     privacy:
       "Les équipes organisatrices des événements où tu t'inscris et des structures que tu suis peuvent les voir, pour la sécurité.",
-    bar: ["Explorer", "Sorties", "Accueil", "Garage", "Profil"],
+    bar: ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"],
   },
   pro: {
     why: "On s'en sert pour montrer ta fiche aux passionnés du coin et te signaler les événements proches, même sans GPS.",
@@ -257,8 +257,8 @@ test("les six profils ont leur tuile, leur barre et leurs textes ; « J'ai déj�
 }) => {
   const { ctx, page } = await fresh(browser, "beton");
   const bars: Record<Profile, string[]> = {
-    exhibitor: ["Explorer", "Sorties", "Accueil", "Garage", "Profil"],
-    visitor: ["Explorer", "Sorties", "Accueil", "Passeport", "Profil"],
+    exhibitor: ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"],
+    visitor: ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"],
     pro: ["Scanner", "Ma fiche", "Accueil", "Stats", "Profil"],
     organizer: ["Événements", "Tri", "Direct", "Équipe", "Structure"],
     provider: ["Missions", "Candidatures", "Accueil", "Vitrine", "Profil"],

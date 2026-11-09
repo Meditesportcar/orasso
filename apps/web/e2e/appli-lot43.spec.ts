@@ -64,6 +64,12 @@ async function signIn(page: Page, email: string, password = SEED_PASSWORD) {
 }
 
 /** Passe à une casquette depuis Mon profil. */
+/** Lot R7a1 : Sorties n'est plus un onglet, la page garde son adresse (en-tête de fiche, sans barre). */
+async function toSorties(page: Page) {
+  await page.goto("/sorties");
+  await afterOpening(page);
+}
+
 async function choose(page: Page, kind: "pro" | "provider" | "media") {
   await page.goto("/moi");
   await afterOpening(page);
@@ -103,7 +109,7 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
   for (const theme of THEMES) {
     const { ctx, page, errors } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
-    await page.getByRole("tab", { name: "Sorties", exact: true }).click();
+    await toSorties(page);
     await expect(page).toHaveURL(/\/sorties/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Mes sorties", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/^Saison \d{4}$/)).toBeVisible();
@@ -163,7 +169,7 @@ test("Sorties : un billet gratuit (visiteur) se montre et se rend ; vide = le O 
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "paul.photo@orasso.local");
-    await page.getByRole("tab", { name: "Sorties", exact: true }).click();
+    await toSorties(page);
     await expect(page).toHaveURL(/\/sorties/, { timeout: 30_000 });
     const ticket = page.getByTestId("ticket-public").first();
     await expect(ticket).toBeVisible({ timeout: 30_000 });
@@ -185,7 +191,7 @@ test("Sorties : un billet gratuit (visiteur) se montre et se rend ; vide = le O 
   expect(cookie).toBeTruthy();
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, `${(await apiCall<{ user: { email: string } }>(cookie, "GET", "/me")).data.user.email}`);
-  await page.getByRole("tab", { name: "Sorties", exact: true }).click();
+  await toSorties(page);
   await expect(page.getByText("Rien de prévu", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Explorer les événements" })).toBeVisible();
   await shot(page, "sorties-vide-beton");
@@ -314,8 +320,15 @@ test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; 
     await expect(page.getByTestId("list-map-toggle")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     await shot(page, `acces-flottant-explorer-${theme}`);
-    for (const tab of ["Accueil", "Garage", "Profil", "Sorties"]) {
+    for (const tab of ["Accueil", "Le Fil", "Crew", "Profil"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      await page.waitForLoadState("networkidle").catch(() => undefined);
+      await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
+    }
+    // Lot R7a1 : Sorties et Garage sont des pages hors barre (en-tête de fiche), sans accès flottant non plus.
+    for (const path of ["/garage", "/sorties"]) {
+      await page.goto(path);
+      await afterOpening(page);
       await page.waitForLoadState("networkidle").catch(() => undefined);
       await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     }
@@ -329,7 +342,11 @@ test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; 
   await signIn(page, far.email);
   const proof = { Garage: "Mon garage", Sorties: "Mes sorties" } as const;
   for (const tab of ["Explorer", "Garage", "Sorties"] as const) {
-    await page.getByRole("tab", { name: tab, exact: true }).click();
+    if (tab === "Explorer") await page.getByRole("tab", { name: tab, exact: true }).click();
+    else {
+      await page.goto(tab === "Garage" ? "/garage" : "/sorties");
+      await afterOpening(page);
+    }
     // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre. Lot C1 : Explorer n'a plus de
     // grand titre (artefact), son en-tête de recherche en tient lieu.
     if (tab === "Explorer") await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 60_000 });

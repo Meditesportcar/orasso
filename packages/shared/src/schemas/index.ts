@@ -1,5 +1,6 @@
 export * from "./access";
 export * from "./account";
+export * from "./activity";
 export * from "./admin";
 export * from "./afterEvent";
 export * from "./application";
@@ -18,6 +19,7 @@ export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./passport";
+export * from "./presence";
 export * from "./pro";
 export * from "./profile";
 export * from "./provider";

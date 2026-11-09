@@ -33,18 +33,19 @@ const ACCOUNTS: Record<Kind, string> = {
 
 /** Onglets de chaque barre (libellé → route). */
 const TABS: Record<Kind, [string, string][]> = {
+  // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur.
   fan: [
     ["Explorer", "explorer"],
-    ["Sorties", "sorties"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Garage", "garage"],
+    ["Crew", "crew"],
     ["Profil", "profil"],
   ],
   visitor: [
     ["Explorer", "explorer"],
-    ["Sorties", "sorties"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Passeport", "passeport"],
+    ["Crew", "crew"],
     ["Profil", "profil"],
   ],
   organizer: [
@@ -85,8 +86,8 @@ const TABS: Record<Kind, [string, string][]> = {
 
 /** Onglet capturé (mode A) et page hors onglets capturée (mode B), par casquette. */
 const SHOTS: Record<Kind, { tab: string; page: string }> = {
-  fan: { tab: "garage", page: "fiche-vehicule" },
-  visitor: { tab: "passeport", page: "fiche-evenement" },
+  fan: { tab: "crew", page: "fiche-vehicule" },
+  visitor: { tab: "crew", page: "fiche-evenement" },
   organizer: { tab: "tri", page: "bannis" },
   pro: { tab: "stats", page: "publier" },
   provider: { tab: "missions", page: "vitrine-publique" },
@@ -168,6 +169,9 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["billets", "/billets"],
         ["passeport", "/mon-passeport"],
         ["archives", "/vehicules-archives"],
+        // Lot R7a1 : Sorties et Garage ne sont plus des onglets, mais des pages (en-tête de fiche, sans barre).
+        ["sorties", "/sorties"],
+        ["garage", "/garage"],
         ["creer-fiche-pro", "/pro-nouvelle"],
         ["creer-structure", "/structure/nouvelle"],
         ...(id.pass ? ([["jour-j", `/jour-j/${id.pass}`]] as [string, string][]) : []),
@@ -374,7 +378,10 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
     const { ctx, page } = await open(browser, theme);
     await signIn(page, ACCOUNTS.fan);
     // La Boîte, ouverte par la bande : une feuille par-dessus l'écran.
-    await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+    await page
+      .getByRole("button", { name: /^Activité/ })
+      .first()
+      .click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
     await expect(page.getByTestId("inbox-all")).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(600);
@@ -403,9 +410,10 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
  */
 const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Promise<void>; page: RegExp }> = {
   fan: {
-    tab: ["Garage", "garage"],
-    open: (page) => page.getByTestId("garage-card").first().click(),
-    page: /\/vehicule\//,
+    // Lot R7a1 : le Garage n'est plus un onglet ; l'écran B de l'exposant s'ouvre depuis le Profil, comme pour le visiteur.
+    tab: ["Profil", "profil"],
+    open: (page) => page.getByTestId("profil-gear").first().click(),
+    page: /\/reglages(\?|$)/,
   },
   visitor: {
     tab: ["Profil", "profil"],

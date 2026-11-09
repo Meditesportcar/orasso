@@ -3,9 +3,9 @@ import { preloadOrder } from "./swipe";
 
 describe("préchargement des onglets (lot M3)", () => {
   it("précharge les voisins de l'onglet ouvert d'abord, sans lui", () => {
-    expect(preloadOrder(["explorer", "sorties", "accueil", "garage", "profil"], "accueil")).toEqual([
-      "sorties",
-      "garage",
+    expect(preloadOrder(["explorer", "fil", "accueil", "crew", "profil"], "accueil")).toEqual([
+      "fil",
+      "crew",
       "explorer",
       "profil",
     ]);

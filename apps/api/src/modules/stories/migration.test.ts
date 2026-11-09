@@ -31,11 +31,11 @@ describe("migration 0068 sur une base avec données", () => {
 
       // Les migrations jusqu'à 0067 seulement.
       cpSync(full, folder, { recursive: true });
-      rmSync(join(folder, "0068_stories.sql"));
+      rmSync(join(folder, "0070_stories.sql"));
       const journalPath = join(folder, "meta", "_journal.json");
       const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
-      expect(journal.entries.at(-1)?.tag).toBe("0068_stories");
-      journal.entries = journal.entries.filter((e) => e.tag !== "0068_stories");
+      expect(journal.entries.at(-1)?.tag).toBe("0070_stories");
+      journal.entries = journal.entries.filter((e) => e.tag !== "0070_stories");
       writeFileSync(journalPath, JSON.stringify(journal));
 
       pool = new pg.Pool({ connectionString: urlOfDatabase(name), max: 2 });

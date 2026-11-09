@@ -60,6 +60,7 @@ import {
   writeBlockOf,
 } from "./core";
 import { inboxService } from "./inbox";
+import { storyThumbFor } from "./story-thumb";
 
 const isUniqueViolation = (error: unknown) => {
   const e = error as { code?: string; cause?: { code?: string } };
@@ -118,6 +119,7 @@ async function summaryOf(access: Access, actor: Actor): Promise<ConversationSumm
       : null,
     unreadCount: await unreadCountOf(db, conversation.id, { ...reader, userId: actor.userId }),
     closedAt: conversation.closedAt?.toISOString() ?? null,
+    storyThumbUrl: storyThumbFor(last),
   };
 }
 

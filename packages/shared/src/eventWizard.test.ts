@@ -29,6 +29,7 @@ import {
 } from "./eventWizard";
 import { eventStepLabels } from "./labels/event-editor.fr";
 import { defaultEventRules } from "./labels/events.fr";
+import { presenceLabels } from "./labels/presence.fr";
 import type { EventOrganizer } from "./schemas/event";
 import { eventCreateSchema, eventDaysPutSchema, eventUpdateSchema, recurrenceRuleSchema } from "./schemas/event";
 import { eventNeedSchema, eventNeedUpdateSchema } from "./schemas/provider";
@@ -428,5 +429,33 @@ describe("corps envoyés à l'API", () => {
       zones: [{ id: "z1", code: "A", name: "Alpha", capacity: "" }],
       entranceNote: "Barrière levée à 18 h",
     });
+  });
+});
+
+describe("zone de présence (lot R7d1)", () => {
+  it("vide = 300 m (null envoyé) ; un nombre de 50 à 2000 passe les schémas de l'API", () => {
+    expect(eventPayload(filled())).toMatchObject({ presenceRadiusM: null });
+    const sent = eventPayload(filled({ presenceRadiusM: " 450 " }));
+    expect(sent).toMatchObject({ presenceRadiusM: 450 });
+    expect(eventCreateSchema.safeParse(sent).success).toBe(true);
+    expect(eventUpdateSchema.safeParse(sent).success).toBe(true);
+    expect(eventUpdateSchema.safeParse({ presenceRadiusM: 49 }).success).toBe(false);
+    expect(eventUpdateSchema.safeParse({ presenceRadiusM: 2001 }).success).toBe(false);
+    expect(eventUpdateSchema.safeParse({ presenceRadiusM: null }).success).toBe(true);
+  });
+
+  it("un brouillon d'avant ne l'envoie pas : l'API garde la valeur enregistrée", () => {
+    const old = filled();
+    delete old.presenceRadiusM;
+    expect("presenceRadiusM" in eventPayload(old)).toBe(false);
+  });
+
+  it("le temps « Lieu » refuse un rayon hors bornes ou non entier, accepte vide", () => {
+    for (const bad of ["49", "2001", "abc", "300,5", "-5", "1e3"]) {
+      expect(eventStepProblem("lieu", filled({ presenceRadiusM: bad }))).toBe(presenceLabels.radiusProblem);
+    }
+    for (const good of ["", " ", "50", "300", "2000"]) {
+      expect(eventStepProblem("lieu", filled({ presenceRadiusM: good }))).toBeNull();
+    }
   });
 });

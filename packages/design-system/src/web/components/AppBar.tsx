@@ -1,3 +1,4 @@
+import { navLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
 import type { IconName } from "../../icons";
 import { initialsOf } from "../../initials";
@@ -27,7 +28,7 @@ export function AppBarAction({ icon, label, onClick, href, on = false, count, ch
   const content = (
     <>
       {children ?? <Icon name={icon} size={18} />}
-      {count ? <span className="o-appbar__count o-t-credit">{count}</span> : null}
+      {count ? <span className="o-appbar__count o-t-credit">{count > 99 ? "99+" : count}</span> : null}
     </>
   );
   if (href) {
@@ -91,6 +92,18 @@ export type AppBarProps = {
   inboxHref?: string;
   inboxOn?: boolean;
   inboxCount?: number;
+  /**
+   * Barre `tab` du passionné (lot R7a1, D38) : la cloche « Activité » et la bulle « Messages » prennent la place de la
+   * Boîte, chacune avec sa pastille ; elles perdent leur compteur quand on y est.
+   */
+  onActivity?: () => void;
+  activityHref?: string;
+  activityOn?: boolean;
+  activityCount?: number;
+  onMessages?: () => void;
+  messagesHref?: string;
+  messagesOn?: boolean;
+  messagesCount?: number;
   /** Écran de flux : ✕ Fermer (et, en barre `tab`, une fermeture facultative). */
   onClose?: () => void;
   closeHref?: string;
@@ -127,6 +140,14 @@ export function AppBar({
   inboxHref,
   inboxOn,
   inboxCount,
+  onActivity,
+  activityHref,
+  activityOn,
+  activityCount,
+  onMessages,
+  messagesHref,
+  messagesOn,
+  messagesCount,
   onClose,
   closeHref,
   closeLabel = "Fermer",
@@ -154,15 +175,36 @@ export function AppBar({
           </span>
         )}
         <span className="o-appbar__spacer" />
-        <AppBarAction icon="search" label="Rechercher" onClick={onSearch} href={searchHref} on={searchOn} />
-        <AppBarAction
-          icon="inbox"
-          label="Boîte"
-          onClick={onInbox}
-          href={inboxHref}
-          on={inboxOn}
-          count={inboxOn ? undefined : inboxCount}
-        />
+        <AppBarAction icon="search" label={navLabels.top.search} onClick={onSearch} href={searchHref} on={searchOn} />
+        {onActivity || activityHref || onMessages || messagesHref ? (
+          <>
+            <AppBarAction
+              icon="bell"
+              label={navLabels.topCounted.activity(activityOn ? 0 : (activityCount ?? 0))}
+              onClick={onActivity}
+              href={activityHref}
+              on={activityOn}
+              count={activityOn ? undefined : activityCount}
+            />
+            <AppBarAction
+              icon="bubble"
+              label={navLabels.topCounted.messages(messagesOn ? 0 : (messagesCount ?? 0))}
+              onClick={onMessages}
+              href={messagesHref}
+              on={messagesOn}
+              count={messagesOn ? undefined : messagesCount}
+            />
+          </>
+        ) : (
+          <AppBarAction
+            icon="inbox"
+            label="Boîte"
+            onClick={onInbox}
+            href={inboxHref}
+            on={inboxOn}
+            count={inboxOn ? undefined : inboxCount}
+          />
+        )}
         {hasClose && (
           <Button variant="close" label={closeLabel} onClick={onClose} href={closeHref} className="o-appbar__close" />
         )}

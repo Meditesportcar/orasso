@@ -63,8 +63,10 @@ export const personaTabSets: Record<Exclude<AppPersonaKind, "admin">, Exclude<Ta
  * d'onglet de `tabSets`. Le troisième est l'onglet central (le O) : Accueil, ou Direct pour l'organisateur.
  */
 export const personaTabs = {
-  fan: { explorer: "explore", sorties: "outings", accueil: "home", garage: "garage", profil: "profile" },
-  visitor: { explorer: "explore", sorties: "outings", accueil: "home", passeport: "passport", profil: "profile" },
+  // Lot R7a1 (D38) : Explorer · Le Fil · Accueil · Crew · Profil, la même barre pour l'exposant et le visiteur. Sorties
+  // (dans l'Accueil), Garage et Passeport (dans le Profil) ne sont plus des onglets : voir `standalonePages`.
+  fan: { explorer: "explore", fil: "feed", accueil: "home", crew: "crew", profil: "profile" },
+  visitor: { explorer: "explore", fil: "feed", accueil: "home", crew: "crew", profil: "profile" },
   pro: { scanner: "scanner", fiche: "card", accueil: "home", stats: "stats", profil: "profile" },
   provider: {
     missions: "missions",
@@ -104,6 +106,28 @@ export function landingOf(persona: Persona): string {
 export function tabHref(kind: AppPersonaKind, route: string): string | null {
   if (kind === "admin") return null;
   return route in personaTabs[kind] ? `/${personaGroups[kind]}/${route}` : null;
+}
+
+/**
+ * Lot R7a1 : pages qui ont quitté la barre mais gardent leur adresse (en-tête de fiche avec retour, sans barre
+ * d'onglets) : Sorties (ouverte depuis l'Accueil), Garage et Passeport (depuis le Profil). Par casquette de base :
+ * le visiteur n'a pas de Garage.
+ */
+export const standalonePages = {
+  fan: { sorties: "/sorties", garage: "/garage", passeport: "/mon-passeport" },
+  visitor: { sorties: "/sorties", passeport: "/mon-passeport" },
+} as const;
+
+/**
+ * Où mène « cet onglet » pour cette casquette : son onglet s'il existe, sinon la page autonome qui a pris sa place
+ * (`sorties`, `garage`, `passeport`), sinon `null`.
+ */
+export function destinationHref(kind: AppPersonaKind, route: string): string | null {
+  const tab = tabHref(kind, route);
+  if (tab) return tab;
+  if (kind !== "fan" && kind !== "visitor") return null;
+  const pages: Record<string, string> = standalonePages[kind];
+  return pages[route] ?? null;
 }
 
 /** Est-ce une casquette de base (exposant ou visiteur) ? */

@@ -115,7 +115,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     // La simulation tient : `fontScale` vaut 1,3 et les textes grossissent.
     await goto(page, "/profil");
     const tabs = await lines(page, TAB_LABELS);
-    expect(tabs.map((t) => t.text.toUpperCase())).toEqual(["EXPLORER", "SORTIES", "ACCUEIL", "GARAGE", "PROFIL"]);
+    expect(tabs.map((t) => t.text.toUpperCase())).toEqual(["EXPLORER", "LE FIL", "ACCUEIL", "CREW", "PROFIL"]);
     for (const t of tabs) expect(t.lines, `onglet « ${t.text} » sur une ligne`).toBe(1);
     expect(new Set(tabs.map((t) => t.size)).size, "un seul corps pour la barre").toBe(1);
     expect(await brokenWords(page, '[role="tablist"]')).toEqual([]);
