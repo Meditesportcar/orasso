@@ -193,6 +193,11 @@ test("recadrer au doigt : un glissement déplace le cadre, Valider rend l'image 
   await page.getByTestId("fil-publish-crop").click();
   const frame = page.getByTestId("site-crop-frame");
   await expect(frame).toBeVisible();
+  await shot(page, "publier-recadrage-1280");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, "publier-recadrage-390");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(frame).toBeVisible();
   const imgBox = async () => (await frame.locator("img").boundingBox()) as { x: number; y: number };
   const start = await imgBox();
   const at = (await frame.boundingBox()) as { x: number; y: number; width: number; height: number };

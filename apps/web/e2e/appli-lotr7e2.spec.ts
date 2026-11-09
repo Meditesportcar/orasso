@@ -391,6 +391,16 @@ test("captures Béton et Sable, 384 px, police 1 et 1,3 : Fil, menu, publier, pl
 }) => {
   test.setTimeout(420_000);
   for (const theme of ["beton", "sable"]) {
+    // Le Fil d'un compte qui ne suit personne et vient d'arriver : « peu de monde » (maquette fd_few).
+    const few = await open(browser, "paul.photo@orasso.local", theme, { width: 384, scale: 1 });
+    await go(few.page, "/fil");
+    await few.page.getByTestId("fil-filters-for_you").click();
+    await loaded(few.page);
+    await shot(few.page, `fil-peu-${theme}-384-f1`);
+    await few.page.getByTestId("fil-filters-following").click();
+    await loaded(few.page);
+    await shot(few.page, `fil-abonnements-vide-${theme}-384-f1`);
+    await few.ctx.close();
     for (const [width, scale] of [
       [384, 1],
       [384, 1.3],
