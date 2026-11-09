@@ -24,6 +24,7 @@ import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
 import { recapService } from "./modules/recap/service";
 import { securityService } from "./modules/security/service";
+import { spotMeetupsPurge } from "./modules/spot-meetups/purge";
 import { staffService } from "./modules/staff/service";
 import { storiesExpire } from "./modules/stories/expire";
 import { uploadsService } from "./modules/uploads/service";
@@ -99,6 +100,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "votes.open": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
   "votes.close": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
   "votes.sweep": () => votesLifecycle.sweep(),
+  // Lot R7i : à la fin d un rendez-vous au spot, lieu et liste effacés (les lignes restent 30 jours, sans lieu).
+  "spot.purge": () => spotMeetupsPurge.run(),
 };
 
 /**
@@ -155,6 +158,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("newsletter.send", "* * * * *", null, { tz: "Europe/Paris" });
     // Lot R7l1 : votes à l'heure fixée ou à clore, rattrapés chaque minute.
     await boss.schedule("votes.sweep", "* * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("spot.purge", "*/5 * * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {

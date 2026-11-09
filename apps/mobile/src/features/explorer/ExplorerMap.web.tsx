@@ -12,6 +12,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { type ExplorerMapProps, type MapPin, mapGlyphsOrigin, mapHeight, mapTilesUrl, viewFor } from "./mapPins";
+import { quietAttribution } from "./quietAttribution";
 
 const { space3 } = tokens.spacing;
 type MapLibre = typeof import("maplibre-gl");
@@ -28,6 +29,7 @@ export function ExplorerMap({
   children,
   reveal = true,
   fill = false,
+  zoom,
 }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
@@ -40,8 +42,8 @@ export function ExplorerMap({
   const onGroupRef = useRef(onSelectGroup);
   onGroupRef.current = onSelectGroup;
   const byId = useRef(new Map<string, MapPin>());
-  const latest = useRef({ pins, me });
-  latest.current = { pins, me };
+  const latest = useRef({ pins, me, zoom });
+  latest.current = { pins, me, zoom };
   const { height: screenHeight } = useWindowDimensions();
   const below = useRef<View>(null);
   const assist = useScrollAssist();
@@ -67,13 +69,14 @@ export function ExplorerMap({
         maplibre.setWorkerUrl(
           `https://cdn.jsdelivr.net/npm/maplibre-gl@${maplibre.getVersion()}/dist/maplibre-gl-worker.mjs`,
         );
-      const view = viewFor(latest.current.pins);
+      const view = viewFor(latest.current.pins, latest.current.zoom);
       const created = createOrassoMap(maplibre, box.current, {
         theme: themeRef.current,
         glyphsOrigin: mapGlyphsOrigin(),
         tilesUrl: mapTilesUrl(),
         ...("center" in view ? { center: view.center, zoom: view.zoom } : {}),
       });
+      if (latest.current.zoom) quietAttribution(created.map, box.current);
       if ("bounds" in view) created.map.fitBounds(view.bounds, { padding: 48, maxZoom: 11, duration: 0 });
       handle.current = created;
       placed.current = placePins(maplibre, created.map, webPins(latest.current.pins), {

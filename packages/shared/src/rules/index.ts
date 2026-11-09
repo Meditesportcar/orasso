@@ -61,6 +61,8 @@ export * from "./socials";
 export * from "./solar";
 export * from "./sorties";
 export * from "./sponsored";
+export * from "./spotGuard";
+export * from "./spotMeetup";
 export * from "./squareCrop";
 export * from "./stampArt";
 export * from "./stamps";

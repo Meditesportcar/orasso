@@ -101,6 +101,8 @@ export const errorCodes = [
   "gps_imprecise",
   "out_of_zone",
   "no_zone",
+  // Lot R7i : un seul rendez-vous au spot actif par personne.
+  "meetup_active",
 
   // Lot R7m1 : partenariats pro ↔ passionné.
   "not_verified",

@@ -19,6 +19,8 @@ export const feedRoutes = new Hono<AppEnv>()
   // `GET /fil?filter=for_you|nearby|following&cursor=` → `{ items: Card[], nextCursor, filter }`
   .get("/fil", async (c) => {
     const v = await requireUser(c);
+    // Lot R7i, tour 3 : le fil porte des cartes de rendez-vous au spot (lieu) : jamais gardé.
+    c.header("cache-control", "private, no-store");
     return c.json(await feedService.feed(v, query(c, feedQuery)));
   })
   .get("/me/fil/less", async (c) => c.json(feedService.lessKinds(await requireUser(c))))

@@ -36,3 +36,31 @@ describe("retour sur l'écran (useApi)", () => {
     vi.unstubAllGlobals();
   });
 });
+
+// Lot R7i, tour 4 : le lieu d'un rendez-vous au spot (Accueil) passe par les mêmes contrôles que la valeur de l'écran.
+describe("réponses dans l'ordre inverse (useApi, onFresh)", () => {
+  it("la réponse ancienne, arrivée après la récente qui confirme l'annulation, ne réaffiche aucun lieu", async () => {
+    const { createRequestGate } = await import("./requestGate");
+    const { acceptRead } = await import("./useApi");
+    const { splitSponsored } = await import("../features/home/rail");
+    const gate = createRequestGate(() => "compte-1");
+    let spot: unknown = null;
+    const apply = (ticket: { latest: () => boolean; current: () => boolean }, fresh: { spotMeetup: unknown }) => {
+      if (!acceptRead(true, ticket.current(), ticket.latest())) return;
+      spot = splitSponsored(fresh as never).spotMeetup;
+    };
+    const old = gate.start(); // lecture ancienne : le lieu y est encore
+    const recent = gate.start(); // lecture récente : annulé, plus de lieu
+    apply(recent, { spotMeetup: null });
+    expect(spot).toBeNull();
+    apply(old, { spotMeetup: { id: "x", place: { label: "Parking" } } }); // arrive en retard
+    expect(spot).toBeNull();
+  });
+
+  it("une réponse d'un ancien compte ou d'un écran démonté est jetée", async () => {
+    const { acceptRead } = await import("./useApi");
+    expect(acceptRead(true, false, true)).toBe(false);
+    expect(acceptRead(false, true, true)).toBe(false);
+    expect(acceptRead(true, true, true)).toBe(true);
+  });
+});
