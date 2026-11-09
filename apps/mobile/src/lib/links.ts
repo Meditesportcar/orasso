@@ -31,6 +31,8 @@ const REVIEW_LINK = /^\/app\/acces\?avis=([0-9a-f-]{36})$/;
 /** Récap (lot 50, notifications `event_recap_ready` et `audience_prize_won`) et passeport (`stamp_received`). */
 const RECAP_LINK = /^\/app\/recap\/([0-9a-f-]{36})$/;
 const PASSPORT_LINK = "/app/passeport";
+/** Lot R7j : la notification « Un souvenir pour toi » (`/app/souvenir/<événement>` du site) → la page du souvenir. */
+const MEMORY_LINK = /^\/app\/souvenir\/([0-9a-f-]{36})$/;
 /** Lot R4c : « … et 2 autres personnes te suivent » mène aux abonnés (`/app/reseau` du site → `/reseau`). */
 const NETWORK_LINK = "/app/reseau";
 /**
@@ -43,6 +45,8 @@ export function appLinkOf(value: unknown): string | null {
   if (APP_LINK.test(value)) return value;
   const recap = RECAP_LINK.exec(value);
   if (recap) return `/recap/${recap[1]}`;
+  const memory = MEMORY_LINK.exec(value);
+  if (memory) return `/souvenir/${memory[1]}`;
   if (value === PASSPORT_LINK) return "/mon-passeport";
   if (value === NETWORK_LINK) return "/reseau";
   const crew = CREW_LINK.exec(value);

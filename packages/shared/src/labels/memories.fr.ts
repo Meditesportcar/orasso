@@ -13,6 +13,8 @@ export const memoryLabels = {
   seeRecap: "Voir le récap",
   seeEvent: "La fiche de l'événement",
   yourStamp: "Ton tampon",
+  /** « Posé le samedi 8 novembre 2025 ». */
+  stampedOn: (day: string) => `Posé le ${day}`,
   yourCar: (label: string) => `Avec ${label}`,
   pageTitle: "Souvenir",
   dateLine: (date: string, city: string | null) => (city ? `${date} · ${city}` : date),
