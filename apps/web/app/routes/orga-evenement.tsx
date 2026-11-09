@@ -95,8 +95,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : [null, null];
   return {
     event,
-    storyMentions: mentions?.ok ? mentions.data : null,
-    storyMine: mine?.ok ? mine.data : null,
+    // Aucune adresse de média dans les données de la page (les aperçus se lisent par `/thumb`, dans le navigateur).
+    storyMentions: mentions?.ok
+      ? { ...mentions.data, items: mentions.data.items.map((m) => ({ ...m, mediaUrl: "" })) }
+      : null,
+    storyMine: mine?.ok
+      ? { ...mine.data, stories: mine.data.stories.map((x) => ({ ...x, mediaUrl: "", posterUrl: null })) }
+      : null,
     storyFailed: Boolean(mentions && !mentions.ok),
     storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,

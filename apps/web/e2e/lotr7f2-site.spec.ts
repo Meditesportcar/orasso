@@ -191,7 +191,8 @@ test("la barre du Fil, la visionneuse, l'anneau du profil : un parcours complet 
 
   // Kenji : deux stories ; → passe à celle du crew (bandeau brique), ← revient ; appui long = pause.
   await page.getByLabel(/Voir les stories de Kenji_66/).click();
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   await playing(page);
   // Les deux stories de Kenji ont la même date dans le seed : l'ordre n'est pas écrit, l'une des deux porte le bandeau.
   const badge = page.getByTestId("story-crew-badge");
@@ -386,7 +387,8 @@ test("tour 2 : réponse perdue puis texte modifié = autre identifiant ; envoi t
   test.setTimeout(240_000);
   await resetViews();
   await openFrom(page, /Voir les stories de Kenji_66/);
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   const ids: string[] = [];
   let mode: "lost" | "pass" | "slow" = "lost";
   await page.route("**/api/stories/*/reply", async (route) => {
@@ -758,7 +760,8 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
     "delete from contact_requests where from_user_id = (select user_id from profiles where pseudo = 'Damien_66') and to_user_id = (select user_id from profiles where pseudo = 'Kenji_66')",
   );
   await openFrom(page, /Voir les stories de Kenji_66/);
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   const sent: { story: string; clientId: string }[] = [];
   let release: () => void = () => undefined;
   const gate = new Promise<void>((r) => {

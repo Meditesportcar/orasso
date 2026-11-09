@@ -3,16 +3,21 @@ import { storyShareLabels as L, type StoriesByAuthor, type StoryMentions } from 
 import { useEffect, useState } from "react";
 import { Form, useNavigation } from "react-router";
 
+import "../../styles/stories.css";
+
 // Les stories de l'organisateur (lot R7h, maquette R7.14 `og_men`, `og_add`, `og_mine`) sur la page de l'événement : « Mentions
 // · N » (les stories qui identifient la structure ou un de ses événements) avec « Ajouter à ma story », puis « Ma story »
 // (celles de la structure, avec le crédit de l'auteur d'origine et « Retirer »). Tout vient de l'API, qui juge ce qui est
 // visible ; les aperçus sont lus dans le navigateur seulement (jamais d'adresse de média dans le HTML rendu par le serveur,
 // comme la visionneuse).
 
-/** Aperçu 9:16 réduit, posé après le chargement de la page (route protégée, cookie de session). */
-function Thumb({ url, alt }: { url: string; alt: string }) {
+/**
+ * Aperçu 9:16 réduit, posé après le chargement de la page (route protégée `/api/stories/:id/thumb`, cookie de session) :
+ * ni les données du chargeur ni le HTML rendu par le serveur ne portent d'adresse de média, seulement l'identifiant.
+ */
+function Thumb({ storyId, alt }: { storyId: string; alt: string }) {
   const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => setSrc(url), [url]);
+  useEffect(() => setSrc(`/api/stories/${storyId}/thumb`), [storyId]);
   return (
     <span className="ostory__thumb" aria-hidden={src ? undefined : true}>
       {src ? <img src={src} alt={alt} loading="lazy" /> : null}
@@ -62,7 +67,7 @@ export function OrgaStory({
       <ul className="ostory" data-testid="orga-mentions">
         {(mentions?.items ?? []).map((m) => (
           <li key={m.storyId} className="ostory__row" data-testid="orga-mention">
-            <Thumb url={m.mediaUrl} alt={`Story de ${m.authorName}`} />
+            <Thumb storyId={m.storyId} alt={`Story de ${m.authorName}`} />
             <span className="ostory__text">
               <strong>{m.authorName}</strong>
               <span className="o-t-caption s-muted">{when(m.createdAt)}</span>
@@ -97,7 +102,7 @@ export function OrgaStory({
       <ul className="ostory" data-testid="orga-mystory">
         {stories.map((s) => (
           <li key={s.id} className="ostory__row" data-testid="orga-mystory-row">
-            <Thumb url={s.mediaUrl} alt="Story de la structure" />
+            <Thumb storyId={s.id} alt="Story de la structure" />
             <span className="ostory__text">
               <span className="o-t-caption s-muted">{when(s.createdAt)}</span>
               {s.sharedFrom ? (

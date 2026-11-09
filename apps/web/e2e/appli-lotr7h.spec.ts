@@ -60,7 +60,8 @@ async function setup() {
   await sql("update story_tags set removed_at = null");
   await sql("delete from story_views");
   const kenji = await login("kenji@orasso.local");
-  const structure = (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
+  const structure =
+    (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
   const id = await publishStory(kenji, {
     audience: "public",
     caption: "Recette R7h",
@@ -101,6 +102,7 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
 
     // Damien (retenu, entré) : l'anneau « EN COURS » dans sa barre, la visionneuse avec le crédit, l'Accueil.
     for (const theme of ["beton", "sable"] as const) {
+      await sql("delete from story_views");
       const damien = await open(browser, "damien@orasso.local", theme);
       await damien.page.goto("/fil");
       await afterOpening(damien.page);
@@ -138,7 +140,7 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
     });
     await shot(sarah2.page, "ma-story-sable", true);
     sarah2.page.once("dialog", (d) => void d.accept());
-    await sarah2.page.getByTestId("mystory-remove").first().click();
+    await sarah2.page.getByTestId("mystory-row").filter({ hasText: "Story de Kenji_66" }).getByTestId("mystory-remove").click();
     await expect
       .poll(
         async () =>
@@ -166,6 +168,15 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
 test("Activité de Damien : « Repartager » et « Retirer » sur une identification reçue", async ({ browser }) => {
   await sql("delete from stories where shared_from_story_id is not null");
   await sql("update story_tags set removed_at = null");
+  // Une identification neuve (la notification porte `data.target`) : Kenji identifie Damien dans une story publique.
+  const kenji = await login("kenji@orasso.local");
+  const damienId = (await sql<{ user_id: string }>("select user_id from profiles where pseudo = 'Damien_66'"))[0]
+    ?.user_id;
+  const fresh = await publishStory(kenji, {
+    audience: "public",
+    caption: "Recette identifié",
+    tags: [{ kind: "user", id: damienId }],
+  });
   const damien = await open(browser, "damien@orasso.local", "beton");
   await damien.page.goto("/activite");
   await afterOpening(damien.page);
@@ -183,4 +194,5 @@ test("Activité de Damien : « Repartager » et « Retirer » sur une identifica
   await shot(damien.page, "activite-repartagee-beton");
   await damien.ctx.close();
   await sql("delete from stories where shared_from_story_id is not null");
+  await dropStory(kenji, fresh);
 });

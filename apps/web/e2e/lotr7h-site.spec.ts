@@ -28,8 +28,11 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
 }) => {
   await reset();
   const kenji = await login("kenji@orasso.local");
-  const structure = (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
-  const event = (await sql<{ id: string; slug: string }>("select id, slug from events where slug = 'rassemblement-du-lydia'"))[0];
+  const structure =
+    (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
+  const event = (
+    await sql<{ id: string; slug: string }>("select id, slug from events where slug = 'rassemblement-du-lydia'")
+  )[0];
   const id = await publishStory(kenji, {
     audience: "public",
     caption: "Recette site R7h",
@@ -67,9 +70,12 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
       await loginInBrowser(damien, "damien@orasso.local", SEED_PASSWORD, "/app");
       await setTheme(damien, theme);
       await damien.goto(`/app/story/${encodeURIComponent(`s:${structure}`)}`);
-      await expect(damien.getByTestId("story-shared-by")).toContainText("Story de Kenji_66, ajoutée par Roues Libres 66", {
-        timeout: 30_000,
-      });
+      await expect(damien.getByTestId("story-shared-by")).toContainText(
+        "Story de Kenji_66, ajoutée par Roues Libres 66",
+        {
+          timeout: 30_000,
+        },
+      );
       await expect(damien.getByTestId("story-shared-by-author")).toHaveAttribute("href", "/u/Kenji_66");
       await shot(damien, `visionneuse-credit-${theme}-${width}`);
       await damien.goto("/app");
@@ -85,7 +91,7 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
       // « Retirer » : la copie seule.
       await page.goto(`/orga/roues-libres-66/e/${event?.id}`);
       await page.waitForLoadState("networkidle");
-      await page.getByTestId("orga-mystory-remove").first().click();
+      await page.getByTestId("orga-mystory-row").filter({ hasText: "Story de Kenji_66" }).getByTestId("orga-mystory-remove").click();
       await expect(page.getByTestId("orga-story-notice")).toContainText("Retirée de ta story");
       expect(
         (await sql("select 1 from stories where shared_from_story_id = $1 and deleted_at is null", [id])).length,
@@ -102,6 +108,15 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
 test("Activité de Damien : « Repartager » (copie pour ses abonnés) ; vie privée par l'API", async ({ browser }) => {
   await reset();
   const damienCookie = await login("damien@orasso.local");
+  // Une identification neuve (la notification porte `data.target`) : Kenji identifie Damien dans une story publique.
+  const kenji = await login("kenji@orasso.local");
+  const damienId = (await sql<{ user_id: string }>("select user_id from profiles where pseudo = 'Damien_66'"))[0]
+    ?.user_id;
+  const fresh = await publishStory(kenji, {
+    audience: "public",
+    caption: "Recette identifié",
+    tags: [{ kind: "user", id: damienId }],
+  });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage();
   await loginInBrowser(page, "damien@orasso.local", SEED_PASSWORD, "/app");
@@ -118,16 +133,20 @@ test("Activité de Damien : « Repartager » (copie pour ses abonnés) ; vie pri
   expect(copies[0]).toMatchObject({ persona: "fan", audience: "followers" });
   await ctx.close();
   await reset();
+  await dropStory(kenji, fresh);
 
   // Sans session : rien. Une story de crew ne se reprend pas, même identifié à la main.
-  expect((await apiCall(null, "POST", "/stories/00000000-0000-4000-8000-000000000000/share-to-mine", {})).status).toBe(401);
+  expect((await apiCall(null, "POST", "/stories/00000000-0000-4000-8000-000000000000/share-to-mine", {})).status).toBe(
+    401,
+  );
   const crewStory = (await sql<{ id: string }>("select id from stories where audience = 'crew' limit 1"))[0]?.id;
   if (crewStory) {
-    const damien = (await sql<{ user_id: string }>("select user_id from profiles where pseudo = 'Damien_66'"))[0]?.user_id;
-    await sql("insert into story_tags (story_id, target_kind, target_id) values ($1, 'user', $2) on conflict do nothing", [
-      crewStory,
-      damien,
-    ]);
+    const damien = (await sql<{ user_id: string }>("select user_id from profiles where pseudo = 'Damien_66'"))[0]
+      ?.user_id;
+    await sql(
+      "insert into story_tags (story_id, target_kind, target_id) values ($1, 'user', $2) on conflict do nothing",
+      [crewStory, damien],
+    );
     const res = await apiCall(damienCookie, "POST", `/stories/${crewStory}/share-to-mine`, {});
     expect([403, 404]).toContain(res.status);
     await sql("delete from story_tags where story_id = $1 and target_id = $2", [crewStory, damien]);
