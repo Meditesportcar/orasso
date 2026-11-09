@@ -676,8 +676,11 @@ describe("heures calmes : horaire modifié et notifications R7", () => {
     const damien = await signUp("Damien_66");
     clock.set(night());
     const tomorrow = new Date(fromWallTime({ year: 2026, month: 11, day: 10, hour: 14, minute: 0 }));
-    const row = await send(damien.id, "vote_opened", { eventStartsAt: tomorrow });
+    const row = await send(damien.id, "vote_won", { eventStartsAt: tomorrow });
     expect(row.deliverAfter).toEqual(morning);
+    // « Vote lancé » (R7l1, tour 2) part tout de suite tant que le vote est ouvert.
+    const opened = await send(damien.id, "vote_opened", { eventStartsAt: tomorrow });
+    expect(opened.deliverAfter).toEqual(night());
   });
 
   it("rendez-vous au spot dans moins de 2 heures : part la nuit ; plus loin : attend", async () => {

@@ -149,6 +149,8 @@ async function recordEntry(
         zoneId: input.zoneId,
         sourceScanId: input.scanId ?? null,
         note: input.note ?? null,
+        // Heure de la synchro : un pointage hors ligne devient « disponible » pour les votes à cet instant (R7l1, tour 3).
+        createdAt: now(),
       })
       .returning();
     if (!row) throw new Error("Entrée non enregistrée");
@@ -359,7 +361,7 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   if (!applicationIds.length) return;
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
-    announceCandidatesChanged(eventId);
+    await announceCandidatesChanged(eventId);
     // Lot R4b, tour 2 : un pointage change le plateau d'un événement terminé (rattrapage, envoi différé).
     lineupService.changed(eventId);
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));

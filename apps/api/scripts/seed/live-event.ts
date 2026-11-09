@@ -37,6 +37,8 @@ import { pointsService } from "../../src/modules/points/service";
 import { presenceService } from "../../src/modules/presence/service";
 import { issueTickets } from "../../src/modules/tickets/service";
 import { vehiclesService } from "../../src/modules/vehicles/service";
+import { ensureAllCategories } from "../../src/modules/votes/context";
+import { votesLifecycle } from "../../src/modules/votes/lifecycle";
 import { createEvent, DAY, parisAt } from "./helpers";
 import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
 
@@ -158,10 +160,111 @@ async function carFor(v: Viewer) {
 /** Moins de retenus que cela sur un événement en cours : il a été créé à moitié (photos absentes), il est refait. */
 const MIN_ACCEPTED = 8;
 
+const eventRow = async (id: string) => {
+  const row = await db.query.events.findFirst({ where: eq(t.events.id, id) });
+  if (!row) throw new Error("Événement introuvable");
+  return row;
+};
+
 /** L'horloge des services à cet instant (le temps du seed remonte jusqu'à maintenant). */
 const at = (d: Date) => {
   deps.clock = { now: () => d };
 };
+
+/**
+ * Lot R7l1 : les votes à thème du rassemblement. « Toutes catégories » est ouvert d'office ; « Plus belle japonaise »
+ * (origines JP) est lancé et reçoit quelques voix ; « Concours de rupteur » (5 candidats choisis à la main) attend d'être
+ * lancé par l'organisateur ; « Plus belle allemande » s'ouvre à l'heure fixée, dans 2 h.
+ */
+async function themedVotes(
+  event: EventRow,
+  people: Map<string, { v: Viewer; appId: string }>,
+  openedAt: Date,
+  real: Date,
+) {
+  await ensureAllCategories(db, event);
+  const has = await db.query.eventVotes.findFirst({
+    where: and(eq(t.eventVotes.eventId, event.id), eq(t.eventVotes.kind, "theme")),
+  });
+  if (has) return 0;
+  const [japanese, rupteur] = await db
+    .insert(t.eventVotes)
+    .values([
+      {
+        eventId: event.id,
+        title: "Plus belle japonaise",
+        kind: "theme" as const,
+        candidateMode: "origins" as const,
+        candidateFilter: { countries: ["JP"] },
+        openMode: "manual" as const,
+        openedAt,
+        position: 1,
+      },
+      {
+        eventId: event.id,
+        title: "Concours de rupteur",
+        kind: "theme" as const,
+        candidateMode: "hand" as const,
+        openMode: "manual" as const,
+        durationMinutes: 10,
+        position: 2,
+      },
+    ])
+    .returning();
+  const germanOpens = new Date(real.getTime() + 2 * 3_600_000);
+  await db.insert(t.eventVotes).values({
+    eventId: event.id,
+    title: "Plus belle allemande",
+    kind: "theme",
+    candidateMode: "origins",
+    candidateFilter: { countries: ["DE"] },
+    openMode: "at",
+    opensAt: germanOpens,
+    durationMinutes: 60,
+    position: 3,
+  });
+  let n = 0;
+  const jp: [string, string][] = [
+    ["Julie_66", "Kenji_66"],
+    ["Theo_66", "Kenji_66"],
+    ["Marc_66", "Lea_11"],
+    ["Pilote_001", "Kenji_66"],
+  ];
+  for (const [i, [voter, target]] of jp.entries()) {
+    const v = people.get(voter);
+    const to = people.get(target);
+    if (!japanese || !v || !to) continue;
+    const when = new Date(Math.min(openedAt.getTime() + (i + 1) * 5 * 60_000, real.getTime() - MINUTE));
+    await db
+      .insert(t.audienceVotes)
+      .values({
+        eventId: event.id,
+        voteId: japanese.id,
+        voterUserId: v.v.user.id,
+        applicationId: to.appId,
+        createdAt: when,
+        updatedAt: when,
+      })
+      .onConflictDoNothing();
+    n++;
+  }
+  if (rupteur) {
+    const picked = ["Kenji_66", "Lea_11", "Nina_34", "Julie_66", "Theo_66"].flatMap((p) => {
+      const x = people.get(p);
+      return x
+        ? [
+            {
+              voteId: rupteur.id,
+              applicationId: x.appId,
+              source: p === "Julie_66" ? ("scan" as const) : ("hand" as const),
+            },
+          ]
+        : [];
+    });
+    if (picked.length) await db.insert(t.eventVoteCandidates).values(picked).onConflictDoNothing();
+  }
+  return n;
+}
 
 export async function seedLiveEvent() {
   const real = new Date();
@@ -623,6 +726,9 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
     }
   }
 
+  // --- Lot R7l1 : les votes à thème ----------------------------------------------------------------------------
+  const themed = await themedVotes(await eventRow(eventId), people, todayAt(0.35), real);
+
   // --- Le crew en parle : messages dans sa discussion, photo de groupe demain ------------------------------
   if (crew && kenji) {
     const lea = people.get("Lea_11")?.v;
@@ -690,6 +796,8 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
   }
   // Lot R7d1 : zone de présence et deux présences par GPS (heure réelle).
   await presenceDemo(eventId);
+  // Lot R7l1 : « Toutes catégories » constaté ouvert (premier pointage), tâches des votes à l'heure fixée planifiées.
+  await votesLifecycle.syncEvent(eventId);
 
   const counts = await db
     .select({ status: t.applications.status, n: sql<number>`count(*)::int` })
@@ -703,6 +811,8 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
   console.log(
     `En direct : « ${TITLE} » (${days[0]} → ${days[3]}, Roues Libres 66) : ${counts
       .map((c) => `${c.n} ${c.status}`)
-      .join(", ")}, ${entered?.n ?? 0} entrés (Damien_66 aujourd'hui), ${votes} votes, ${posts.length} annonces.`,
+      .join(
+        ", ",
+      )}, ${entered?.n ?? 0} entrés (Damien_66 aujourd'hui), ${votes} votes (+ ${themed} sur « Plus belle japonaise »), ${posts.length} annonces.`,
   );
 }

@@ -9,6 +9,7 @@ import { timestamps, tstz } from "./common";
 import { events } from "./events";
 import { seasons } from "./points";
 import { tickets } from "./ticketing";
+import { eventVotes } from "./votes";
 
 export const stampKindEnum = pgEnum("stamp_kind", stampKinds);
 export const stampShapeEnum = pgEnum("stamp_shape", stampShapes);
@@ -53,7 +54,7 @@ export const passportStamps = pgTable(
   ],
 );
 
-/** Une voix par personne et par événement, modifiable jusqu'à la clôture (fin de l'événement). */
+/** Une voix par personne et par vote (lot R7l1), modifiable jusqu'à la clôture du vote. `event_id` est gardé pour les lectures par événement. */
 export const audienceVotes = pgTable(
   "audience_votes",
   {
@@ -61,6 +62,10 @@ export const audienceVotes = pgTable(
     eventId: uuid("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
+    /** Le vote (lot R7l1) ; les voix d'avant sont rattachées à « Toutes catégories » par la migration. */
+    voteId: uuid("vote_id")
+      .notNull()
+      .references(() => eventVotes.id, { onDelete: "cascade" }),
     voterUserId: text("voter_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -71,8 +76,9 @@ export const audienceVotes = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique("audience_votes_event_voter_key").on(t.eventId, t.voterUserId),
+    unique("audience_votes_vote_voter_key").on(t.voteId, t.voterUserId),
     index("audience_votes_event_application_idx").on(t.eventId, t.applicationId),
+    index("audience_votes_vote_application_idx").on(t.voteId, t.applicationId),
   ],
 );
 
@@ -84,6 +90,10 @@ export const audiencePrizeResults = pgTable(
     eventId: uuid("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
+    /** Le vote (lot R7l1) ; les résultats d'avant sont ceux de « Toutes catégories ». */
+    voteId: uuid("vote_id")
+      .notNull()
+      .references(() => eventVotes.id, { onDelete: "cascade" }),
     applicationId: uuid("application_id")
       .notNull()
       .references(() => applications.id, { onDelete: "cascade" }),
@@ -94,7 +104,8 @@ export const audiencePrizeResults = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique("audience_prize_results_event_rank_key").on(t.eventId, t.rank),
-    unique("audience_prize_results_event_application_key").on(t.eventId, t.applicationId),
+    unique("audience_prize_results_vote_rank_key").on(t.voteId, t.rank),
+    unique("audience_prize_results_vote_application_key").on(t.voteId, t.applicationId),
+    index("audience_prize_results_event_idx").on(t.eventId),
   ],
 );

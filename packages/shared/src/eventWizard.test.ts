@@ -15,6 +15,7 @@ import {
   initialEventDraft,
   needChanges,
   needsFromSaved,
+  presenceRadiusInput,
   previewTimeline,
   recurrenceDates,
   recurrenceRuleOf,
@@ -457,5 +458,12 @@ describe("zone de présence (lot R7d1)", () => {
     for (const good of ["", " ", "50", "300", "2000"]) {
       expect(eventStepProblem("lieu", filled({ presenceRadiusM: good }))).toBeNull();
     }
+  });
+
+  it("le champ « Zone de présence » ne garde que les chiffres (et pas la lettre D)", () => {
+    expect(presenceRadiusInput("4a5,0 m")).toBe("450");
+    expect(presenceRadiusInput("D300D")).toBe("300");
+    expect(presenceRadiusInput("-5.5")).toBe("55");
+    expect(presenceRadiusInput("abc")).toBe("");
   });
 });

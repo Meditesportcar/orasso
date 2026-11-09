@@ -61,6 +61,8 @@ export default [
     route("v/:id", "routes/vehicule.tsx"),
     // Crews (lot 19) : mes crews et création, fiche d'un crew (connectés seulement).
     route("app/crews", "routes/crews.tsx"),
+    // Lot R7b2 : créer un crew (l'ancien « Mes crews » est l'onglet Crew).
+    route("app/crews/nouveau", "routes/crews-nouveau.tsx"),
     // Lot R3b : « Rejoins ou crée un crew » du profil propose d'abord de rejoindre.
     route("app/crews/rejoindre", "routes/crews-rejoindre.tsx"),
     route("c/:slug", "routes/crew.tsx"),

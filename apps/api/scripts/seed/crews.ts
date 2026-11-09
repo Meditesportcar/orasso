@@ -32,7 +32,7 @@ async function firstCar(userId: string) {
   return v?.id ?? null;
 }
 
-export async function seedCrews() {
+async function seedRoussillon() {
   if (await db.query.crews.findFirst({ where: eq(t.crews.slug, "roussillon-drift") })) {
     console.log("Crews : « Roussillon Drift » déjà présent.");
     return;
@@ -105,6 +105,38 @@ export async function seedCrews() {
   console.log(
     "Crews : « Roussillon Drift » (Kenji chef, Léa, Nina, Théo, Julie ; invitation de Marc et demande de Pilote_001 en attente), inscrit à l'Expo Rivesaltes (Léa confirmée, Nina à confirmer).",
   );
+}
+
+/**
+ * Lot R7b2 : un second crew pour essayer le sélecteur de l'onglet Crew. « Côte Vermeille Classic » : chef Julie, membres
+ * Théo et Nina (qui est déjà dans « Roussillon Drift ») ; Théo et Julie ont donc deux crews. Idempotent.
+ */
+async function seedCoteVermeille() {
+  if (await db.query.crews.findFirst({ where: eq(t.crews.slug, "cote-vermeille-classic") })) return;
+  const [julie, theo, nina] = await Promise.all(["Julie_66", "Theo_66", "Nina_34"].map(viewer));
+  if (!julie || !theo || !nina) return;
+  const crew = await crewsService.create(julie, {
+    name: "Côte Vermeille Classic",
+    description: "Youngtimers et sorties du dimanche sur la côte, de Collioure à Cerbère.",
+    department: "66",
+  });
+  for (const p of [theo, nina]) {
+    await crewsService.invite(julie, crew.id, p.profile.pseudo);
+    await crewsService.acceptInvitation(p, crew.id);
+  }
+  const view = await crewsService.viewById(julie, crew.id);
+  if (view.conversationId) {
+    await messagingService.send(julie, view.conversationId, {
+      clientId: randomUUID(),
+      body: "Bienvenue ! Première balade dimanche, on se retrouve au port de Collioure.",
+    });
+  }
+  console.log("Crews : « Côte Vermeille Classic » (Julie chef, Théo et Nina).");
+}
+
+export async function seedCrews() {
+  await seedRoussillon();
+  await seedCoteVermeille();
 }
 
 async function registerOnExpo(eventId: string, crewId: string, people: Viewer[], cars: string[]) {

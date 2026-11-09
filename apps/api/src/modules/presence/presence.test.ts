@@ -41,6 +41,7 @@ import { audiencePrizeService } from "../audience-prize/service";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
 import { pointsService } from "../points/service";
+import { presenceService } from "./service";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -334,6 +335,8 @@ describe("présence par GPS : refus", () => {
     const res = await present(visitor, { ...DEVICE, accuracyM: 5 }, e.id);
     expect(res.status).toBe(409);
     expect(res.json.error.code).toBe("no_zone");
+    // Tour 3 : le bouton n'est pas proposé non plus (même règle, `presenceGate`).
+    expect((await call(visitor, "GET", `/events/by-slug/${e.slug}`)).json.live.canValidatePresence).toBe(false);
   });
 
   it("événement sur invitation : seuls les ayants droit", async () => {
@@ -485,6 +488,7 @@ describe("le direct : compteurs de la fiche, par phase (règle des absents)", ()
       onSiteCount: 4,
       acceptedCount: 4,
       myPresence: null,
+      canValidatePresence: false,
       votesOpen: 1,
       organizerStoryAvailable: false,
     });
@@ -980,6 +984,188 @@ describe("décision de Damien (09/11) : billet payant scanné, GPS pour la gratu
     await type(e.id, 1000);
     await exhibitor(visitor, {}, e.id);
     expect((await here(visitor, e.id)).json.error.code).toBe("use_qr");
+  });
+});
+
+describe("tour 2 de R7d2 : canValidatePresence, la règle unique du bouton « Je suis sur place »", () => {
+  const liveOf = async (u: TestUser | null, slug: string) =>
+    (await call(u, "GET", `/events/by-slug/${slug}`)).json.live.canValidatePresence;
+  const type = (eid: string, priceCents: number) =>
+    db.insert(ticketTypes).values({ eventId: eid, name: "Entrée", priceCents }).returning();
+
+  it("vrai : entrée gratuite, billet gratuit ; faux : anonyme, déjà présent, exposant", async () => {
+    expect(await liveOf(visitor, event.slug)).toBe(true);
+    expect(await liveOf(null, event.slug)).toBe(false);
+    const free = await makeEvent({ publicAccess: "paid_orasso", ticketsEnabled: true, title: "Gratuit avec billet" });
+    await type(free.id, 0);
+    await ticket(other, {}, free.id);
+    expect(await liveOf(other, free.slug)).toBe(true);
+    await here(visitor);
+    expect(await liveOf(visitor, event.slug)).toBe(false);
+    const pilot = await signUp("Pilote_btn");
+    await exhibitor(pilot);
+    expect(await liveOf(pilot, event.slug)).toBe(false);
+  });
+
+  it("faux : fermé au public, paid_external, paid_orasso payant sans billet, billet payant", async () => {
+    const closed = await makeEvent({ publicAccess: "closed", title: "Fermé btn" });
+    expect(await liveOf(visitor, closed.slug)).toBe(false);
+    const ext = await makeEvent({ publicAccess: "paid_external", title: "Externe btn" });
+    expect(await liveOf(visitor, ext.slug)).toBe(false);
+    const paid = await makeEvent({ publicAccess: "paid_orasso", ticketsEnabled: true, title: "Payant btn" });
+    await type(paid.id, 1000);
+    expect(await liveOf(visitor, paid.slug)).toBe(false);
+    await ticket(other, { cents: 1000 }, paid.id);
+    expect(await liveOf(other, paid.slug)).toBe(false);
+  });
+
+  it("faux la nuit entre deux jours, vrai pendant un jour ; faux hors de l'événement", async () => {
+    await db.insert(eventDays).values(
+      [0, 1].map((n) => ({
+        eventId: event.id,
+        dayDate: `2026-11-${String(7 + n).padStart(2, "0")}`,
+        startsAt: paris(11, 7 + n, 9),
+        endsAt: paris(11, 7 + n, 18),
+      })),
+    );
+    await db
+      .update(events)
+      .set({ endsAt: paris(11, 8, 18) })
+      .where(eq(events.id, event.id));
+    clock.set(paris(11, 7, 12));
+    expect(await liveOf(visitor, event.slug)).toBe(true);
+    clock.set(paris(11, 7, 23));
+    expect(await liveOf(visitor, event.slug)).toBe(false);
+    clock.set(paris(11, 8, 12));
+    expect(await liveOf(visitor, event.slug)).toBe(true);
+    clock.set(paris(11, 8, 19));
+    expect(await liveOf(visitor, event.slug)).toBe(false);
+  });
+});
+
+describe("tour 2 de R7d2 : sur place et retenues de la fiche, jour par jour (Codex)", () => {
+  it("deux jours : accès à la journée comptés le jour même, accès « tout l'événement » toute la durée, un véhicule une fois", async () => {
+    const [d1, d2] = await db
+      .insert(eventDays)
+      .values(
+        [0, 1].map((n) => ({
+          eventId: event.id,
+          dayDate: `2026-11-${String(7 + n).padStart(2, "0")}`,
+          startsAt: paris(11, 7 + n, 9),
+          endsAt: paris(11, 7 + n, 18),
+        })),
+      )
+      .returning();
+    await db
+      .update(events)
+      .set({ endsAt: paris(11, 8, 18) })
+      .where(eq(events.id, event.id));
+    const add = async (
+      u: TestUser,
+      day: { id: string } | null,
+      at: Date | null,
+      vehicleId?: string,
+    ): Promise<string> => {
+      const vid = vehicleId ?? (await createVehicle(u.id, ref)).id;
+      const [a] = await db
+        .insert(applications)
+        .values({
+          eventId: event.id,
+          userId: u.id,
+          vehicleId: vid,
+          eventDayId: day?.id ?? null,
+          status: "accepted",
+          rulesAcceptedAt: clock.now,
+          followStructure: false,
+        })
+        .returning();
+      if (at)
+        await db.insert(checkins).values({ applicationId: a!.id, eventId: event.id, method: "scan", checkedInAt: at });
+      return vid;
+    };
+    // Tout l'événement, entré le jour 1 ; une voiture du jour 1 seulement ; une du jour 2 seulement ; une autre,
+    // inscrite aux deux jours (deux candidatures, un même véhicule) et entrée chaque jour ; une du jour 1 sans entrée.
+    await add(await signUp("Pilote_tout"), null, paris(11, 7, 10));
+    await add(await signUp("Pilote_j1"), d1!, paris(11, 7, 10));
+    await add(await signUp("Pilote_j2"), d2!, paris(11, 8, 10));
+    const both = await signUp("Pilote_deux");
+    const shared = await add(both, d1!, paris(11, 7, 11));
+    await add(both, d2!, paris(11, 8, 11), shared);
+    await add(await signUp("Pilote_absent"), d1!, null);
+    const counts = async () => {
+      const live = (await fiche()).json.live;
+      return [live.dayIndex, live.onSiteCount, live.acceptedCount];
+    };
+    clock.set(paris(11, 7, 12));
+    // Jour 1 : tout l'événement, jour 1, le véhicule des deux jours (1), l'absent retenu mais pas sur place.
+    expect(await counts()).toEqual([1, 3, 4]);
+    clock.set(paris(11, 8, 12));
+    // Jour 2 : tout l'événement (entré la veille, toujours là), jour 2, le véhicule des deux jours une seule fois.
+    expect(await counts()).toEqual([2, 3, 3]);
+  });
+});
+
+describe("tour 3 de R7d2 : GPS par jour, signal et notification", () => {
+  it("GPS puis véhicule du jour 1, jour 2 : une personne n'est comptée qu'une fois par jour, et le signal suit le jour", async () => {
+    const [d1, d2] = await db
+      .insert(eventDays)
+      .values(
+        [0, 1].map((n) => ({
+          eventId: event.id,
+          dayDate: `2026-11-${String(7 + n).padStart(2, "0")}`,
+          startsAt: paris(11, 7 + n, 9),
+          endsAt: paris(11, 7 + n, 18),
+        })),
+      )
+      .returning();
+    await db
+      .update(events)
+      .set({ endsAt: paris(11, 8, 18) })
+      .where(eq(events.id, event.id));
+    // Marie : présence GPS, puis véhicule du jour 1 pointé. Jour 1 : une seule fois ; jour 2 : son GPS compte (sans
+    // pointage ce jour-là).
+    clock.set(paris(11, 7, 10));
+    const marie = await signUp("Pilote_marie");
+    await here(marie);
+    const v = await createVehicle(marie.id, ref);
+    const [a] = await db
+      .insert(applications)
+      .values({
+        eventId: event.id,
+        userId: marie.id,
+        vehicleId: v.id,
+        eventDayId: d1!.id,
+        status: "accepted",
+        rulesAcceptedAt: clock.now,
+        followStructure: false,
+      })
+      .returning();
+    await db
+      .insert(checkins)
+      .values({ applicationId: a!.id, eventId: event.id, method: "scan", checkedInAt: paris(11, 7, 11) });
+    const counts = async () => (await fiche()).json.live.onSiteCount;
+    expect(await counts()).toBe(1);
+    clock.set(paris(11, 8, 10));
+    expect(d2).toBeTruthy();
+    expect(await counts()).toBe(1);
+    // Le signal diffusé porte le même total que la fiche.
+    const messages: { type: string; payload: { onSiteCount: number } }[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`event:${event.id}:live`, socket);
+    await presenceService.announce(event.id);
+    expect(messages[0]?.payload.onSiteCount).toBe(1);
+    realtime.unsubscribeAll(socket);
+  });
+
+  it("notification : « tu peux voter » seulement si le droit existe", async () => {
+    await here(visitor);
+    await notificationsService.flush();
+    const notes = await db.query.notifications.findMany({ where: eq(notifications.userId, visitor.id) });
+    const row = notes.find((n) => n.type === "presence_validated");
+    expect(row).toBeTruthy();
+    // Un seul véhicule pointé ou aucun : le vote n'est pas ouvert, la phrase ne le promet pas.
+    expect(row?.body).not.toContain("voter");
+    expect(row?.body).toContain("ton tampon est posé.");
   });
 });
 

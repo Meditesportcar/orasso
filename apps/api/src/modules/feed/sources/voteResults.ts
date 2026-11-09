@@ -28,11 +28,14 @@ import {
 /** L'événement a fini il y a 16 jours au plus (le prix du public se règle dans les 14 jours qui suivent, avec une marge). */
 const ENDED_WITHIN_DAYS = 16;
 
+/** Lot R7l1 : la carte ne parle que du prix du public (« Toutes catégories ») ; celles des votes à thème viendront à part. */
+const allCategoriesVotes = sql.raw("select id from event_votes where kind = 'all_categories'");
+
 export const source: FeedSource<"vote_result"> = {
   kind: "vote_result",
   async load(input: SourceInput): Promise<SourceResult<"vote_result">> {
     const winnerAt = atMs(
-      sql`(select min(r.created_at) from audience_prize_results r where r.event_id = ${events.id})`,
+      sql`(select min(r.created_at) from audience_prize_results r where r.event_id = ${events.id} and r.vote_id in (${allCategoriesVotes}))`,
     );
     const filters: (SQL | undefined)[] = [
       eq(events.status, "published"),
@@ -41,7 +44,7 @@ export const source: FeedSource<"vote_result"> = {
       sql`${events.endsAt} <= ${tsParam(input.ref)}`,
       // Le prix se règle peu après la fin : borner la fin de l'événement évite de calculer le règlement de tous les événements passés.
       sql`${events.endsAt} >= ${tsParam(input.ref)} - interval '${sql.raw(String(ENDED_WITHIN_DAYS))} days'`,
-      sql`exists (select 1 from audience_prize_results r where r.event_id = ${events.id} and r.winner)`,
+      sql`exists (select 1 from audience_prize_results r where r.event_id = ${events.id} and r.winner and r.vote_id in (${allCategoriesVotes}))`,
       sql`${winnerAt} <= ${tsParam(input.ref)}`,
       sql`${winnerAt} >= ${tsParam(input.ref)} - interval '14 days'`,
       ...atBounds(winnerAt, sql`${events.id}`, "vote_result", input),
@@ -85,6 +88,7 @@ export const source: FeedSource<"vote_result"> = {
             rows.map((r) => r.e.id),
           ),
           sql`${audiencePrizeResults.rank} <= 3`,
+          sql`${audiencePrizeResults.voteId} in (${allCategoriesVotes})`,
           profileOkSql("profiles", input.ref),
         ),
       )

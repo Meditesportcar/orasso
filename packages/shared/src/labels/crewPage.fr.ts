@@ -193,3 +193,44 @@ export const crewOutingErrors = {
   cancelled: "Cette sortie est annulée.",
   over: "Cette sortie est passée.",
 } as const;
+
+// Onglet Crew (lot R7b2, D38, maquette R7.11) : sélecteur, onglets Fil · Sorties · Membres · Spots, fiche d'un membre
+// (ses voitures), écran sans crew. Mêmes mots dans l'appli et sur le site.
+export const crewTabLabels = {
+  // Sélecteur de crew.
+  selectorTitle: "Mes crews",
+  selectorA11y: (name: string) => `Crew affiché : ${name}. Changer de crew`,
+  otherCrews: (n: number) => `${n} ${plural(n, "autre crew", "autres crews")}`,
+  youMember: "tu es membre",
+  youLeader: "tu es le chef",
+  unreadMessages: (n: number) => `${n} ${plural(n, "message non lu", "messages non lus")}`,
+  joinOrCreate: "Rejoindre ou créer un crew",
+  closeA11y: "Fermer",
+
+  // Spots (le contenu vient du lot R7i ; ici l'état vide).
+  tabSpots: "Spots",
+  spotsEmptyTitle: "Pas de rendez-vous",
+  spotsEmptyHint: "Les rendez-vous au spot lancés pour le crew apparaîtront ici.",
+  spotsLaunch: "Lancer un rendez-vous pour le crew",
+  spotsSoon: "Disponible à la prochaine mise à jour",
+
+  // Fiche d'un membre : ses voitures (l'ancien « Garage du crew »).
+  memberCars: "Voitures",
+  memberCarsCount: (n: number) => `${n} ${plural(n, "voiture", "voitures")}`,
+  memberCarsEmpty: "Aucune voiture à montrer pour l'instant.",
+  memberProfile: "Voir son profil",
+  memberA11y: (pseudo: string) => `${pseudo}, voir sa fiche de membre`,
+
+  // Écran sans crew.
+  noCrewTitle: "Pas encore de crew",
+  noCrewBody: "Un crew, c'est ta bande : un fil privé, vos sorties, une discussion, vos rendez-vous au spot.",
+  searchLabel: "Chercher un crew",
+  searchPlaceholder: "Le nom d'un crew, 2 lettres au moins",
+  join: "Rejoindre un crew",
+  create: "Créer un crew",
+  noDirectory: "Pas d'annuaire des crews : une recherche par nom, ou l'invitation d'un chef.",
+  invitationsTitle: "Invitations reçues",
+  invitationFrom: (crew: string, by: string | null) => (by ? `${by} t'invite chez ${crew}` : `Invitation chez ${crew}`),
+  invitationHint: "Ouvre le crew pour accepter ou refuser.",
+  loadError: "Impossible de charger tes crews.",
+} as const;
