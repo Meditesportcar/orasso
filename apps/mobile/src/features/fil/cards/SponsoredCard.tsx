@@ -2,14 +2,21 @@
 // « Sponsorisé » (contour, toujours visible, à la place de la ligne de raison), pas par la couleur. L'annonceur, l'image
 // 4:5 (ou un bloc de texte sans image), le titre, le corps, la mention (« Publicité ») et le domaine d'un annonceur
 // externe. Un seul bouton secondaire « Voir » : la fiche du pro dans l'appli, sinon le lien dans le navigateur (hors
-// de l'appli). Jamais le bouton principal de l'écran, jamais de néon. L'affichage est compté à l'apparition (au moins la
-// moitié de la carte dans la fenêtre), une fois par emplacement et par session ; le clic est compté au toucher ; un refus
+// de l'appli). Jamais le bouton principal de l'écran, jamais de néon. L'affichage est compté quand 50 % de la carte (30 %
+// d'une carte plus haute que la zone utile) est à la vue, une fois par emplacement et par session ; le clic est compté au toucher ; un refus
 // de l'API (plafond atteint, emplacement arrêté) retire la carte.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { feedScreenLabels as L, sponsoredSessionKey } from "@orasso/shared";
+import {
+  createDayWatcher,
+  createImpressionWatcher,
+  feedScreenLabels as L,
+  parisDayOf,
+  type SendOutcome,
+  sponsoredSessionKeyForDay,
+} from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { cacheScope } from "@/lib/kv";
@@ -18,14 +25,7 @@ import { SmButton } from "@/ui/Kit";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { CardShell } from "./CardShell";
 import { OrgLogo } from "./parts";
-import {
-  claimImpression,
-  countsAsSeen,
-  isImpressionRefused,
-  isRefusalStatus,
-  refuseImpression,
-  releaseImpression,
-} from "./sponsoredSession";
+import { countsAsSeen, impressionSession, isImpressionRefused } from "./sponsoredSession";
 import type { CardProps } from "./types";
 
 const { space2, space3 } = tokens.spacing;
@@ -41,19 +41,49 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
   const assist = useScrollAssist();
   const removed = useRef(onRemoved);
   removed.current = onRemoved;
+  // Le jour de Paris, réactif (tour 3) : réévalué à minuit et au retour au premier plan ; la clé du comptage en dépend.
+  const [day, setDay] = useState(() => parisDayOf(new Date()));
+  useEffect(() => {
+    const watcher = createDayWatcher({ onChange: setDay });
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") watcher.refresh();
+    });
+    return () => {
+      sub.remove();
+      watcher.stop();
+    };
+  }, []);
+  const sessionKey = sponsoredSessionKeyForDay(cacheScope(), p.id, day);
   // Un emplacement déjà refusé dans cette session (plafond atteint, arrêté) ne se réaffiche pas : ni cette carte ni ses reprises.
-  const refused = isImpressionRefused(sponsoredSessionKey(cacheScope(), p.id));
+  const refused = isImpressionRefused(sessionKey);
   useEffect(() => {
     if (refused) removed.current?.(card);
   }, [refused, card]);
+  const sendImpression = useCallback(
+    (_keepalive?: boolean): Promise<SendOutcome> =>
+      api.sponsoredImpression(p.id, "feed").then(
+        (): SendOutcome => ({ ok: true }),
+        (e: { status?: number }): SendOutcome => ({ ok: false, status: e?.status }),
+      ),
+    [p.id],
+  );
 
-  // L'affichage : compté quand la moitié de la carte est dans la fenêtre, écran au premier plan, une fois par session.
-  // Tour 2 : la carte n'est comptée que si sa partie visible n'est pas cachée sous la bande ORASSO ou la barre d'onglets
-  // (`visibleArea`) ; la session est celle du compte et du jour de Paris.
+  // L'affichage : compté quand 50 % de la carte (30 % d'une carte plus haute que la zone utile) est à la vue, écran au
+  // premier plan, une fois par session. La carte n'est comptée que pour sa partie visible, pas cachée sous la bande
+  // ORASSO ou la barre d'onglets (`visibleArea`) ; la session est celle du compte et du jour de Paris. Après une panne
+  // temporaire, la mesure repart (30 s, puis 60 s, trois essais) ; au changement de jour, elle repart avec la nouvelle clé.
   useEffect(() => {
     if (!focused || refused) return;
     let stopped = false;
+    let disposed = false;
     let timer: ReturnType<typeof setInterval> | undefined;
+    const watcher = createImpressionWatcher({
+      session: impressionSession,
+      key: sessionKey,
+      send: sendImpression,
+      onRefused: () => removed.current?.(card),
+      rearm: () => start(),
+    });
     const check = () => {
       // Affichage compté (ou écran quitté) : plus aucune mesure.
       if (stopped) {
@@ -65,29 +95,40 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
         const count = (top: number, bottom: number) => {
           if (stopped || !countsAsSeen(y, h, top, bottom)) return;
           stopped = true;
-          const key = sponsoredSessionKey(cacheScope(), p.id);
-          if (!claimImpression(key)) return;
-          api.sponsoredImpression(p.id, "feed").catch((e: { status?: number }) => {
-            if (isRefusalStatus(e.status)) {
-              refuseImpression(key);
-              removed.current?.(card);
-            } else releaseImpression(key);
-          });
+          if (timer) clearInterval(timer);
+          watcher.onSeen();
         };
         if (assist) assist.visibleArea(count);
         else count(0, height);
       });
     };
-    check();
-    timer = setInterval(check, 700);
+    function start() {
+      if (disposed) return;
+      stopped = false;
+      if (timer) clearInterval(timer);
+      check();
+      timer = setInterval(check, 700);
+    }
+    start();
     return () => {
+      disposed = true;
       stopped = true;
+      watcher.dispose();
       clearInterval(timer);
     };
-  }, [p.id, focused, refused, height, card, assist]);
+  }, [sessionKey, focused, refused, height, card, assist, sendImpression]);
 
   function open() {
-    void api.sponsoredClick(p.id, "feed").catch(() => undefined);
+    // Tour 3 : le clic n'est accepté par l'API qu'après l'affichage. Enregistré : le clic part tout de suite ; sinon,
+    // l'affichage part d'abord (ou on attend celui qui est en cours, 3 s au plus), puis le clic. La navigation, elle,
+    // n'attend rien.
+    const key = sessionKey;
+    const click = () => void api.sponsoredClick(p.id, "feed").catch(() => undefined);
+    if (impressionSession.isRecorded(key)) click();
+    else
+      void impressionSession.beforeClick(key, sendImpression).then((r) => {
+        if (r !== "refused") click();
+      });
     if (p.pro) router.push(`/p/${p.pro.slug}`);
     else if (/^https?:\/\//i.test(p.linkUrl)) void Linking.openURL(p.linkUrl).catch(() => undefined);
   }

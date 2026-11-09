@@ -52,11 +52,14 @@ describe("affichages d'une carte Sponsorisé dans la session", () => {
   });
 
   it("ne compte que la partie visible, pas ce qui est caché sous la bande ou la barre d'onglets", () => {
-    // Zone visible : de 100 (sous la bande) à 700 (au-dessus de la barre d'onglets).
+    // Zone visible : de 100 (sous la bande) à 700 (au-dessus de la barre d'onglets) ; carte de 200 px : 100 px visibles au moins.
     expect(countsAsSeen(300, 200, 100, 700)).toBe(true);
-    expect(countsAsSeen(650, 200, 100, 700)).toBe(false); // centre à 750 : sous la barre
-    expect(countsAsSeen(560, 200, 100, 700)).toBe(true); // centre à 660
-    expect(countsAsSeen(-50, 200, 100, 700)).toBe(false); // centre à 50 : sous la bande
+    expect(countsAsSeen(650, 200, 100, 700)).toBe(false); // 50 px visibles sur 200 : le reste sous la barre
+    expect(countsAsSeen(600, 200, 100, 700)).toBe(true); // 100 px sur 200 : pile 50 %
+    expect(countsAsSeen(-50, 200, 100, 700)).toBe(false); // 50 px visibles : le reste sous la bande
+    // Une carte de 1 800 px dans 600 px (33 % visibles au mieux) compte à partir de 540 px, pas avant.
+    expect(countsAsSeen(160, 1800, 100, 700)).toBe(true);
+    expect(countsAsSeen(161, 1800, 100, 700)).toBe(false);
     expect(countsAsSeen(0, 0, 100, 700)).toBe(false);
     expect(countsAsSeen(300, 200, 700, 100)).toBe(false);
   });

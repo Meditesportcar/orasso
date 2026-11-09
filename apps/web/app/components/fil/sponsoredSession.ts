@@ -1,33 +1,27 @@
 // Les affichages d'une carte « Sponsorisé » sur le site (lot R7k2) : un emplacement est compté une seule fois par page
-// ouverte (mêmes règles que l'appli : `features/fil/cards/sponsoredSession.ts`). `sent` : déjà envoyé ou en cours ;
-// `refused` : l'API a répondu 409 (plafond atteint) ou 404 (emplacement arrêté), la carte ne s'affiche plus. La clé est
+// ouverte (mêmes règles que l'appli : `features/fil/cards/sponsoredSession.ts`). La clé est
 // `sponsoredSessionKey(compte, emplacement)` : compte, jour de Paris et emplacement (tour 2).
-const sent = new Set<string>();
-const refused = new Set<string>();
+// Tour 3 : la session, la règle de visibilité, les reprises après une panne et l'attente d'un clic derrière l'affichage
+// sont communes à l'appli et au site (`@orasso/shared`, `rules/sponsoredImpressions`) ; ce module en garde l'instance.
+import { countsAsSeen, createImpressionSession, isSponsoredRefusal } from "@orasso/shared";
+
+export const impressionSession = createImpressionSession();
 
 /** Réserve l'envoi de l'affichage ; faux si l'emplacement a déjà été envoyé ou refusé sur cette page. */
-export function claimImpression(placementId: string): boolean {
-  if (sent.has(placementId) || refused.has(placementId)) return false;
-  sent.add(placementId);
-  return true;
-}
+export const claimImpression = impressionSession.claim;
 
 /** L'envoi a échoué sans réponse de l'API (réseau) : un autre essai est permis. */
-export function releaseImpression(placementId: string): void {
-  sent.delete(placementId);
-}
+export const releaseImpression = impressionSession.release;
 
-export function refuseImpression(placementId: string): void {
-  refused.add(placementId);
-}
+export const refuseImpression = impressionSession.refuse;
 
-export const isImpressionRefused = (placementId: string): boolean => refused.has(placementId);
+export const isImpressionRefused = impressionSession.isRefused;
 
 /** Pour les tests. */
-export function resetSponsoredSession(): void {
-  sent.clear();
-  refused.clear();
-}
+export const resetSponsoredSession = impressionSession.reset;
+
+/** Une carte compte comme vue à 50 % de sa hauteur dans la zone utile (30 % pour une carte plus haute que la zone). */
+export { countsAsSeen };
 
 /** Un refus de l'API qui retire la carte : plafond atteint (409) ou emplacement arrêté (404). */
-export const isRefusalStatus = (status: number): boolean => status === 409 || status === 404;
+export const isRefusalStatus = isSponsoredRefusal;

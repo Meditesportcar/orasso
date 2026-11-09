@@ -39,13 +39,22 @@ export const FEED_SPONSORED_OPEN_WHY = "Cette publicité n'est pas ciblée : ell
  * l'emplacement. Un autre compte, ou le lendemain, recompte ; le même jour pour le même compte, une seule fois.
  */
 export function sponsoredSessionKey(account: string | null, placementId: string, now: Date = new Date()): string {
-  const day = new Intl.DateTimeFormat("en-CA", {
+  return sponsoredSessionKeyForDay(account, placementId, parisDayOf(now));
+}
+
+/** La même clé pour un jour de Paris déjà connu (AAAA-MM-JJ) : celle d'une carte qui suit le changement de jour. */
+export function sponsoredSessionKeyForDay(account: string | null, placementId: string, day: string): string {
+  return `${account ?? "-"}|${day}|${placementId}`;
+}
+
+/** Le jour de Paris (AAAA-MM-JJ) d'un instant : celui qui sert de clé au comptage d'un affichage. */
+export function parisDayOf(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TIMEZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-  return `${account ?? "-"}|${day}|${placementId}`;
 }
 
 /** Les départements d'un emplacement sans doublon (l'ordre de saisie est gardé). */
