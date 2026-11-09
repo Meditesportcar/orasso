@@ -26,9 +26,10 @@ import {
   storyStartIndex,
   tapTarget,
   viewersListPartial,
-  viewersTotal,
+  viewersTotalFor,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate } from "react-router";
 
 import "../../styles/stories.css";
@@ -39,7 +40,11 @@ import { CommercialBadge } from "./CommercialBadge";
 import { LinkedCard } from "./LinkedCard";
 import { SharedByLine } from "./SharedByLine";
 
-type Viewers = { viewers: { userId: string; pseudo: string; avatarUrl: string | null; viewedAt: string }[] };
+type Viewers = {
+  /** Compteur relu à cet appel : le titre « Vues · N » et la mention « liste partielle » partent de lui. */
+  total: number;
+  viewers: { userId: string; pseudo: string; avatarUrl: string | null; viewedAt: string }[];
+};
 type Load = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: StoriesByAuthor };
 
 const TICK_MS = 50;
@@ -102,14 +107,20 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [retries, setRetries] = useState(0);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [held, setHeld] = useState(false);
   const [menu, setMenu] = useState(false);
   const [viewers, setViewers] = useState<{ story: StoryView; data: Viewers | null; error: string | null } | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const [text, setText] = useState("");
-  // Envoi en cours : l'identifiant de la story concernée (on peut répondre à la suivante pendant qu'une réponse part).
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  // Envois en cours, par story : on peut répondre à la suivante pendant qu'une réponse part, et le bouton d'une story reste
+  // inactif tant que son propre envoi n'est pas résolu. Les identifiants d'idempotence suivent chaque soumission.
+  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [visible, setVisible] = useState(true);
+  // Compte : `checking` masque tout (photo, métadonnées, listes) pendant qu'on revérifie la session au retour au premier plan ;
+  // `unverified` = la vérification a échoué (réseau) : rien n'est montré sans elle.
+  const [check, setCheck] = useState<"ok" | "checking" | "unverified">("ok");
+  const checkSeq = useRef(0);
   const [replay, setReplay] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -119,6 +130,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const viewed = useRef(new Set<string>());
   const viewersSeq = useRef(0);
   const replyKeys = useRef(createReplyKeys(() => crypto.randomUUID())).current;
+  const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
   const closing = useRef(false);
   const muteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -189,12 +201,48 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const elapsed = useRef(0);
   const onDone = useRef(goNext);
   onDone.current = goNext;
+  // Session changée dans un autre onglet (A se déconnecte, B se connecte) : au retour au premier plan, et avant toute reprise,
+  // la visionneuse masque ses données, relit le compte courant (`/me`) et, s'il n'est plus le même (ou plus de session), purge
+  // tout : l'état est vidé et la page rechargée (le chargeur de la route renvoie à la connexion ou monte une visionneuse neuve
+  // pour le compte courant). Le menu et la liste des vues sont fermés : ils sont recréés par l'utilisateur, jamais conservés.
+  const verifySession = useCallback(async () => {
+    const mineCheck = ++checkSeq.current;
+    setCheck("checking");
+    setMenu(false);
+    viewersSeq.current++;
+    setViewers(null);
+    const res = await apiFetch<{ user: { id: string } }>("/me");
+    if (mineCheck !== checkSeq.current) return;
+    if (res.ok && res.data.user.id === userId) return setCheck("ok");
+    if (res.ok || res.status === 401) {
+      seq.current++;
+      setLoad({ status: "loading" });
+      setRemoved(new Set());
+      setFlames({});
+      setText("");
+      setImageError(null);
+      window.location.reload();
+      return;
+    }
+    setCheck("unverified");
+  }, [userId]);
   useEffect(() => {
-    const sync = () => setVisible(document.visibilityState !== "hidden");
+    let hiddenBefore = document.visibilityState === "hidden";
+    const sync = () => {
+      const hidden = document.visibilityState === "hidden";
+      setVisible(!hidden);
+      if (hidden) hiddenBefore = true;
+      else if (hiddenBefore) {
+        hiddenBefore = false;
+        // Masqué tout de suite (avant la prochaine image affichée), puis le compte est relu.
+        flushSync(() => setCheck("checking"));
+        void verifySession();
+      }
+    };
     sync();
     document.addEventListener("visibilitychange", sync);
     return () => document.removeEventListener("visibilitychange", sync);
-  }, []);
+  }, [verifySession]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: une autre story (ou la première rejouée) repart de zéro.
   useEffect(() => {
     elapsed.current = 0;
@@ -335,18 +383,20 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
     const body = text.trim();
-    if (!story || !body || sendingId === story.id) return;
+    if (!story || !body) return;
     const sent = { storyId: story.id, text: body };
-    setSendingId(sent.storyId);
-    // Identifiant lié à la soumission (story + texte) : une réponse perdue renvoyée à l'identique n'est pas doublée ; un
-    // texte modifié est une autre soumission, donc un autre identifiant.
+    // Identifiant lié à la soumission (story + texte), gardé jusqu'à sa résolution : une réponse perdue renvoyée à
+    // l'identique n'est pas doublée, même après un envoi sur une autre story ; un texte modifié est un autre identifiant.
+    const clientId = replyKeys.begin(sent.storyId, body);
+    if (!clientId) return;
+    syncSending();
     const res = await apiFetch<StoryReplyResult>(`/stories/${sent.storyId}/reply`, {
       method: "POST",
-      json: { text: body, clientId: replyKeys.idFor(sent.storyId, body) },
+      json: { text: body, clientId },
     });
-    setSendingId((cur) => (cur === sent.storyId ? null : cur));
+    replyKeys.end(sent.storyId, body, res.ok);
+    syncSending();
     if (!res.ok) return setNotice(res.error.message || L.actionError);
-    replyKeys.done(sent.storyId, body);
     // La fin de l'envoi ne touche au champ que si cette soumission est encore celle qui s'affiche.
     if (replyStillShown(sent, shownDraft.current)) {
       setText("");
@@ -389,7 +439,6 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     setViewers({ story: s, data: res.ok ? res.data : null, error: res.ok ? null : res.error.message || L.viewsError });
   };
   // L'image n'a pas pu être lue : 403 / 404 = la story n'est plus disponible ; sinon une panne, « Réessayer ».
-  const [imageError, setImageError] = useState<string | null>(null);
   const onImageError = async (s: StoryView) => {
     const res = await fetch(s.mediaUrl, { credentials: "same-origin" }).catch(() => null);
     if (res && (res.status === 403 || res.status === 404)) setGone((g) => new Set(g).add(s.id));
@@ -407,6 +456,24 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
       </div>
     </div>
   );
+  if (check !== "ok") {
+    return check === "checking"
+      ? shell(<p className="o-t-caption">{L.loading}</p>, "story-checking")
+      : shell(
+          <>
+            <p className="o-t-body">{L.loadError}</p>
+            <div className="story-view__actions">
+              <Button variant="secondary" icon="undo" onClick={() => void verifySession()} data-testid="story-retry">
+                {L.retry}
+              </Button>
+              <Button variant="plate" icon="close" onClick={close} data-testid="story-close">
+                {L.close}
+              </Button>
+            </div>
+          </>,
+          "story-unverified",
+        );
+  }
   if (load.status === "loading") return shell(<p className="o-t-caption">{L.loading}</p>, "story-loading");
   if (load.status === "error") {
     return shell(
@@ -483,16 +550,6 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         ) : imageError === story.id ? (
           <div className="story-view__gone">
             <p className="o-t-body">{L.loadError}</p>
-            <Button
-              variant="secondary"
-              icon="undo"
-              onClick={() => {
-                setImageError(null);
-                setRetries((n) => n + 1);
-              }}
-            >
-              {L.retry}
-            </Button>
           </div>
         ) : (
           <img
@@ -510,13 +567,29 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
 
         {/* Les zones de geste : tout le cadre ; l'en-tête, les autocollants et le bas sont au-dessus. */}
         <div
-          className={imageError === story.id ? "story-view__surface is-off" : "story-view__surface"}
+          className="story-view__surface"
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onCancel}
           data-testid="story-surface"
         />
+        {/* Photo en panne : « Réessayer » est posé AU-DESSUS de la surface ; les zones gauche / droite restent actives. */}
+        {imageError === story.id && !failed && storyPlayable(story) && story.mediaKind !== "video" ? (
+          <div className="story-view__retry">
+            <Button
+              variant="secondary"
+              icon="undo"
+              onClick={() => {
+                setImageError(null);
+                setRetries((n) => n + 1);
+              }}
+              data-testid="story-photo-retry"
+            >
+              {L.retry}
+            </Button>
+          </div>
+        ) : null}
         <button type="button" className="story-view__sr" onClick={goPrev} aria-label={L.prev} data-testid="story-prev">
           {L.prev}
         </button>
@@ -670,8 +743,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                     <button
                       type="submit"
                       className="story-view__send"
-                      disabled={sendingId === story.id}
-                      aria-label={sendingId === story.id ? L.replySending : L.replySend}
+                      disabled={sending.has(story.id)}
+                      aria-label={sending.has(story.id) ? L.replySending : L.replySend}
                       data-testid="story-reply-send"
                     >
                       <Icon name="send" size={20} />
@@ -785,8 +858,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
       >
         {viewers ? (
           <div className="s-stack">
-            <h2 className="s-h2">{L.views(viewersTotal(viewers.story.viewsCount, viewers.data?.viewers.length))}</h2>
-            {viewersListPartial(viewersTotal(viewers.story.viewsCount, viewers.data?.viewers.length)) ? (
+            <h2 className="s-h2">{L.views(viewersTotalFor(viewers.story.viewsCount, viewers.data))}</h2>
+            {viewersListPartial(viewersTotalFor(viewers.story.viewsCount, viewers.data)) ? (
               <p className="o-t-caption" data-testid="story-viewers-partial">
                 {L.viewsPartial(STORY_VIEWERS_MAX)}
               </p>

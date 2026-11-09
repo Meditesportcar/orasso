@@ -20,6 +20,7 @@ import {
   tapTarget,
   viewersListPartial,
   viewersTotal,
+  viewersTotalFor,
 } from "./storyViewer";
 
 describe("anneaux de la barre", () => {
@@ -137,8 +138,8 @@ describe("réponse à une story : identifiant d'idempotence lié à la soumissio
     const lost = k.idFor("s1", "Belle auto");
     const edited = k.idFor("s1", "Belle auto !");
     expect(edited).not.toBe(lost);
-    // Revenir au premier texte ne ressuscite pas l'ancien identifiant : une soumission = un identifiant.
-    expect(k.idFor("s1", "Belle auto")).not.toBe(lost);
+    // Revenir au premier texte reprend l'identifiant de cette soumission (jamais résolue) : pas de second message.
+    expect(k.idFor("s1", "Belle auto")).toBe(lost);
   });
 
   it("une autre story = un nouvel identifiant ; un succès oublie l'identifiant", () => {
@@ -155,6 +156,76 @@ describe("réponse à une story : identifiant d'idempotence lié à la soumissio
     const a = k.idFor("s1", "Salut");
     k.done("s1", "Autre");
     expect(k.idFor("s1", "Salut")).toBe(a);
+  });
+});
+
+describe("réponses en parallèle : un envoi et un identifiant par soumission", () => {
+  const keys = () => {
+    let n = 0;
+    return createReplyKeys(() => `id-${++n}`);
+  };
+
+  it("deux envois simultanés sur deux stories : chacun garde son identifiant, dans les deux ordres de réponse", () => {
+    for (const order of [
+      ["s1", "s2"],
+      ["s2", "s1"],
+    ] as const) {
+      const k = keys();
+      const a = k.begin("s1", "Belle auto");
+      const b = k.begin("s2", "Superbe");
+      expect(a).not.toBeNull();
+      expect(b).not.toBeNull();
+      expect(a).not.toBe(b);
+      expect(k.sendingStories().sort()).toEqual(["s1", "s2"]);
+      const text = { s1: "Belle auto", s2: "Superbe" };
+      // La première réponse reçue ne libère que sa story.
+      k.end(order[0], text[order[0]], true);
+      expect(k.isSending(order[0])).toBe(false);
+      expect(k.isSending(order[1])).toBe(true);
+      k.end(order[1], text[order[1]], true);
+      expect(k.sendingStories()).toEqual([]);
+    }
+  });
+
+  it("une story ne part qu'une fois à la fois, même avec un autre texte ; une autre story reste libre", () => {
+    const k = keys();
+    expect(k.begin("s1", "Belle auto")).not.toBeNull();
+    expect(k.begin("s1", "Belle auto !")).toBeNull();
+    expect(k.begin("s2", "Superbe")).not.toBeNull();
+    k.end("s1", "Belle auto", false);
+    expect(k.begin("s1", "Belle auto !")).not.toBeNull();
+  });
+
+  it("reprise après une réponse perdue, malgré un envoi intermédiaire sur une autre story : un seul message", () => {
+    const k = keys();
+    const first = k.begin("s1", "Belle auto");
+    // La réponse de s1 est perdue (erreur côté écran) : l'identifiant est gardé.
+    k.end("s1", "Belle auto", false);
+    // On passe à s2 et on y répond (envoi réussi).
+    const other = k.begin("s2", "Superbe");
+    k.end("s2", "Superbe", true);
+    expect(other).not.toBe(first);
+    // Retour sur s1, même texte : même identifiant, le serveur n'enregistre pas un second message.
+    expect(k.begin("s1", "Belle auto")).toBe(first);
+    k.end("s1", "Belle auto", true);
+    // Résolue : une nouvelle réponse identique est un nouvel envoi.
+    expect(k.begin("s1", "Belle auto")).not.toBe(first);
+  });
+
+  it("réponse perdue de s1 pendant que s2 est en cours : l'identifiant de s1 survit à la fin de s2", () => {
+    const k = keys();
+    const first = k.begin("s1", "Belle auto");
+    k.begin("s2", "Superbe");
+    k.end("s2", "Superbe", true);
+    k.end("s1", "Belle auto", false);
+    expect(k.idFor("s1", "Belle auto")).toBe(first);
+  });
+
+  it("la mémoire est bornée mais n'oublie jamais un envoi en cours", () => {
+    const k = keys();
+    const pending = k.begin("s0", "en cours");
+    for (let i = 1; i < 120; i++) k.idFor(`s${i}`, "texte");
+    expect(k.idFor("s0", "en cours")).toBe(pending);
   });
 });
 
@@ -184,5 +255,18 @@ describe("liste des vues", () => {
     expect(viewersTotal(null, 3)).toBe(3);
     expect(viewersTotal(undefined, undefined)).toBe(0);
     expect(viewersListPartial(viewersTotal(150, 201))).toBe(true);
+  });
+
+  it("le total frais de l'API remplace celui de l'ouverture : des vues arrivées entre les deux lectures", () => {
+    const person = { userId: "u", pseudo: "p", avatarUrl: null, viewedAt: "2026-11-10T10:00:00.000Z" };
+    // Ouverte à zéro vue, puis trois personnes ont vu la story : la liste et son total disent trois.
+    expect(viewersTotalFor(0, null)).toBe(0);
+    expect(viewersTotalFor(0, { total: 3, viewers: [person, person, person] })).toBe(3);
+    // Le total frais prime sur le compteur reçu à l'ouverture (quand la liste est plus courte que le total).
+    expect(viewersTotalFor(2, { total: 250, viewers: Array(200).fill(person) })).toBe(250);
+    // Franchir 200 vues entre les deux lectures déclenche l'avertissement de liste partielle.
+    expect(viewersListPartial(viewersTotalFor(150, { total: 201, viewers: Array(200).fill(person) }))).toBe(true);
+    // Réponse sans total (ancien serveur) : le compteur d'ouverture et la liste.
+    expect(viewersTotalFor(5, { viewers: [person] })).toBe(5);
   });
 });

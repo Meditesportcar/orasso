@@ -7,7 +7,7 @@ import {
   STORY_VIEWERS_MAX,
   type StoryView,
   viewersListPartial,
-  viewersTotal,
+  viewersTotalFor,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -37,7 +37,8 @@ export function ViewersSheet({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const id = story?.id ?? null;
-  const total = viewersTotal(story?.viewsCount, data?.viewers.length);
+  // Le total vient de la liste relue à l'ouverture (`total` de l'API) ; en attendant, du compteur de la visionneuse.
+  const total = viewersTotalFor(story?.viewsCount, data);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer).
   useEffect(() => {
     if (!id) return;

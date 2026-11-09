@@ -51,6 +51,7 @@ export function Viewer({
       onLoaded={onLoaded}
       onFailed={onFailed}
       onLoading={onLoading}
+      retryOutside
     />
   );
 }

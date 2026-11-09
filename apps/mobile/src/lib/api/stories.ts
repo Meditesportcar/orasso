@@ -6,6 +6,8 @@ import type { StoriesByAuthor, StoryBar, StoryReplyResult, StoryTagKind } from "
 import { request } from "../http";
 
 export type StoryViewers = {
+  /** Compteur relu à cet appel (le titre « Vues · N » part de lui, pas du compteur reçu à l'ouverture). */
+  total: number;
   viewers: { userId: string; pseudo: string; avatarUrl: string | null; viewedAt: string }[];
 };
 

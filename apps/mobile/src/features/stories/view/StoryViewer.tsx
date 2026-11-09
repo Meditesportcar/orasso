@@ -115,8 +115,10 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
 
   // --- Pauses -------------------------------------------------------------------------------------------------------
   const [loadedId, setLoadedId] = useState<string | null>(null);
-  // Média en panne (réseau) : la surface de gestes est désactivée, sinon elle couvre le « Réessayer » de la photo.
+  // Média en panne (réseau) : « Réessayer » est posé au-dessus de la surface de gestes, dont les zones gauche / droite
+  // restent actives (une photo en panne ne bloque pas le passage aux stories suivantes).
   const [mediaFailedId, setMediaFailedId] = useState<string | null>(null);
+  const [mediaRetries, setMediaRetries] = useState(0);
   const [held, setHeld] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewersFor, setViewersFor] = useState<StoryView | null>(null);
@@ -282,9 +284,11 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   };
 
   const [text, setText] = useState("");
-  // Envoi en cours : l'identifiant de la story concernée (on peut répondre à la suivante pendant qu'une réponse part).
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  // Envois en cours, par story : on peut répondre à la suivante pendant qu'une réponse part, et le bouton d'une story reste
+  // inactif tant que son propre envoi n'est pas résolu. Les identifiants d'idempotence suivent chaque soumission.
   const replyKeys = useRef(createReplyKeys(randomUUID)).current;
+  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
+  const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
   const shownDraft = useRef({ storyId: storyId as string | null, text });
   shownDraft.current = { storyId, text };
   // Un autre story : le brouillon d'une réponse ne passe pas à la suivante.
@@ -294,14 +298,17 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   }, [storyId]);
   const send = async () => {
     const body = text.trim();
-    if (!story || !body || sendingId === story.id) return;
+    if (!story || !body) return;
     const sent = { storyId: story.id, text: body };
-    setSendingId(sent.storyId);
+    // Identifiant lié à la soumission (story + texte), gardé jusqu'à sa résolution : une réponse perdue renvoyée à
+    // l'identique n'est pas doublée, même après un envoi sur une autre story ; un texte modifié est un autre identifiant.
+    const clientId = replyKeys.begin(sent.storyId, body);
+    if (!clientId) return;
+    syncSending();
+    let ok = false;
     try {
-      // Identifiant lié à la soumission (story + texte) : une réponse perdue renvoyée à l'identique n'est pas doublée ;
-      // un texte modifié est une autre soumission, donc un autre identifiant.
-      const r = await api.storyReply(sent.storyId, body, replyKeys.idFor(sent.storyId, body));
-      replyKeys.done(sent.storyId, body);
+      const r = await api.storyReply(sent.storyId, body, clientId);
+      ok = true;
       // La fin de l'envoi ne touche au champ que si cette soumission est encore celle qui s'affiche.
       if (replyStillShown(sent, shownDraft.current)) {
         setText("");
@@ -312,7 +319,8 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {
-      setSendingId((cur) => (cur === sent.storyId ? null : cur));
+      replyKeys.end(sent.storyId, body, ok);
+      syncSending();
     }
   };
 
@@ -428,7 +436,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             </View>
           ) : (
             <Viewer
-              key={story.id}
+              key={`${story.id}:${mediaRetries}`}
               story={story}
               authorName={authorName}
               width={width}
@@ -448,11 +456,25 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         {/* Les zones de geste : tout l'écran ; l'en-tête, les autocollants et le bas sont au-dessus. */}
         <View
           style={StyleSheet.absoluteFill}
-          pointerEvents={mediaFailedId === story.id ? "none" : "auto"}
           {...pan.panHandlers}
           accessibilityLabel={L.viewer}
           testID="story-surface"
         />
+        {mediaFailedId === story.id && !failed && !processing ? (
+          <View style={styles.retryBox} pointerEvents="box-none">
+            <SmButton
+              kind="s"
+              icon="undo"
+              onPress={() => {
+                setMediaFailedId(null);
+                setMediaRetries((n) => n + 1);
+              }}
+              testID="photo-retry"
+            >
+              {L.retry}
+            </SmButton>
+          </View>
+        ) : null}
         <View style={[styles.top, { paddingTop: insets.top + space2 }]} pointerEvents="box-none">
           <ProgressBars count={list.length} index={at} progress={progress} />
           <Header
@@ -493,7 +515,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             canReply={canReply}
             text={text}
             onText={setText}
-            sending={sendingId === story.id}
+            sending={sending.has(story.id)}
             onSend={() => void send()}
             onFocusChange={setReplyFocused}
             onFlame={() => void flame()}
@@ -537,6 +559,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Sous le message « Photo indisponible » (centré dans le cadre), au-dessus de la surface de gestes.
+  retryBox: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", paddingTop: 76 },
   top: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: 12, gap: 10 },
   bottom: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 14, gap: 14 },
   notice: { alignSelf: "center", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, maxWidth: "100%" },

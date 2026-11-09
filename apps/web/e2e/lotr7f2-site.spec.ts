@@ -528,3 +528,231 @@ test("tour 2 : le total des vues reste vrai au-delà de 200 ; l'aperçu du profi
   await expect(page.getByTestId("public-head").locator("a.o-avring")).toHaveCount(1, { timeout: 30_000 });
   await dropMyStories(damien);
 });
+
+// --- Tour 4 (re-relecture Codex du tour 2) ---------------------------------------------------------------------------------
+
+/** L'état « onglet masqué » survit aux rechargements ; `setHiddenTo` rend, sans attendre, ce que la page montre. */
+async function installHiddenSwitch(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __hidden: boolean };
+    w.__hidden = sessionStorage.getItem("recette.masque") === "1";
+    Object.defineProperty(document, "visibilityState", {
+      get: () => (w.__hidden ? "hidden" : "visible"),
+      configurable: true,
+    });
+  });
+}
+const setHiddenTo = (page: Page, hidden: boolean) =>
+  page.evaluate((h) => {
+    (window as unknown as { __hidden: boolean }).__hidden = h;
+    sessionStorage.setItem("recette.masque", h ? "1" : "0");
+    document.dispatchEvent(new Event("visibilitychange"));
+    // Ce que la page montre aussitôt après l'événement (avant toute réponse du réseau).
+    return {
+      text: document.body.innerText,
+      openDialogs: document.querySelectorAll("dialog[open]").length,
+      media: document.querySelectorAll('img[data-testid="story-media"]').length,
+      crewBadge: document.querySelectorAll('[data-testid="story-crew-badge"]').length,
+    };
+  }, hidden);
+
+/** Dans un autre onglet du même navigateur : A se déconnecte, B se connecte. */
+async function switchAccountElsewhere(page: Page, email: string) {
+  const other = await page.context().newPage();
+  await other.goto("/");
+  await other.evaluate(() =>
+    fetch("/deconnexion", { method: "POST", body: new URLSearchParams(), credentials: "same-origin" }),
+  );
+  await loginInBrowser(other, email, undefined, "/app");
+  await other.close();
+}
+
+test("tour 4 : session changée dans un autre onglet : au retour, rien de ma story privée ni de la liste des vues", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  await dropMyStories(damien);
+  const id = await publishStory(damien, { caption: "Légende privée de Damien" });
+  for (const n of ["Lea_11", "Theo_66"])
+    await sql("insert into story_views (story_id, viewer_id) values ($1, $2) on conflict do nothing", [
+      id,
+      await userIdOf(n),
+    ]);
+  await sql("update stories set views_count = 2 where id = $1", [id]);
+  const me = await userIdOf("Damien_66");
+  await installHiddenSwitch(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+  await page.goto(`/app/story/${encodeURIComponent(`u:${me}`)}`);
+  await expect(page.getByTestId("story-views")).toContainText("Vues · 2", { timeout: 30_000 });
+  await page.getByTestId("story-views").click();
+  await expect(page.getByTestId("story-viewer-Lea_11")).toBeVisible({ timeout: 15_000 });
+  // L'onglet passe en arrière-plan avec la liste ouverte ; ailleurs, B remplace A.
+  await setHiddenTo(page, true);
+  await switchAccountElsewhere(page, "pilote100@orasso.local");
+  // Retour au premier plan : tout est masqué dans l'instant, avant la moindre réponse du réseau.
+  const back = await setHiddenTo(page, false);
+  expect(back.text).not.toContain("Légende privée de Damien");
+  expect(back.text).not.toContain("Lea_11");
+  expect(back.text).not.toContain("Theo_66");
+  expect(back.text).not.toContain("Vues ·");
+  expect(back.openDialogs).toBe(0);
+  expect(back.media).toBe(0);
+  // La page repart sur le compte B : rien de la liste de A, ni de ses métadonnées.
+  await expect(page.getByTestId("story-checking")).toHaveCount(0, { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("story-views")).toHaveCount(0);
+  const text = await page.locator("body").innerText();
+  expect(text).not.toContain("Lea_11");
+  expect(text).not.toContain("Theo_66");
+  expect(text).not.toContain("Légende privée de Damien");
+  await shot(page, "tour4-changement-de-compte-onglet");
+  await dropMyStories(damien);
+});
+
+test("tour 4 : session changée dans un autre onglet : la photo d'une story de crew disparaît au retour", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  await installHiddenSwitch(page);
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  // Se place sur la story du crew (bandeau brique).
+  for (let i = 0; i < 3 && (await page.getByTestId("story-crew-badge").count()) === 0; i++) {
+    await page.getByTestId("story-next").dispatchEvent("click");
+    await page.waitForTimeout(300);
+  }
+  await expect(page.getByTestId("story-crew-badge")).toBeVisible();
+  await expect(page.getByTestId("story-media")).toBeVisible();
+  await setHiddenTo(page, true);
+  await switchAccountElsewhere(page, "pilote100@orasso.local");
+  const back = await setHiddenTo(page, false);
+  expect(back.crewBadge).toBe(0);
+  expect(back.media).toBe(0);
+  expect(back.text).not.toContain("Mon crew");
+  // Rechargée pour B : B n'est pas du crew, la story de crew n'est jamais servie.
+  await expect(page.getByTestId("story-checking")).toHaveCount(0, { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("story-crew-badge")).toHaveCount(0);
+  expect(await page.locator("body").innerText()).not.toContain("Mon crew");
+});
+
+test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bouton inactif pendant l'envoi, reprise sans doublon", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  const sent: { story: string; clientId: string }[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route("**/api/stories/*/reply", async (route) => {
+    const story = /stories\/([^/]+)\/reply/.exec(route.request().url())?.[1] ?? "";
+    sent.push({ story, clientId: (route.request().postDataJSON() as { clientId: string }).clientId });
+    if (sent.length === 1) {
+      // Le premier envoi est tenu, puis sa réponse est perdue (le serveur l'a reçu).
+      await gate;
+      await route.fetch();
+      await route.abort();
+    } else await route.continue();
+  });
+  while ((await page.getByTestId("story-bar-done").count()) > 0) {
+    await page.getByTestId("story-prev").dispatchEvent("click");
+    await page.waitForTimeout(200);
+  }
+  const input = page.getByTestId("story-reply-input");
+  const send = page.getByTestId("story-reply-send");
+  await input.fill("Un");
+  await send.click();
+  await expect.poll(() => sent.length).toBe(1);
+  // Sur la story suivante, un autre envoi part et aboutit pendant que le premier est encore en cours.
+  await page.getByTestId("story-next").dispatchEvent("click");
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
+  await input.fill("Deux");
+  await send.click();
+  await expect.poll(() => sent.length).toBe(2);
+  await expect(page.getByTestId("story-notice")).toContainText("Message envoyé", { timeout: 20_000 });
+  expect(sent[1]?.story).not.toBe(sent[0]?.story);
+  // Retour sur la première : son envoi est toujours en cours, le bouton reste inactif.
+  await page.getByTestId("story-prev").dispatchEvent("click");
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(0);
+  await input.fill("Un");
+  await expect(send).toBeDisabled();
+  // Sa réponse est perdue : le bouton redevient actif, et le renvoi reprend le même identifiant (pas de doublon).
+  release();
+  await expect(send).toBeEnabled({ timeout: 20_000 });
+  await send.click();
+  await expect.poll(() => sent.length, { timeout: 20_000 }).toBe(3);
+  expect(sent[2]?.story).toBe(sent[0]?.story);
+  expect(sent[2]?.clientId).toBe(sent[0]?.clientId);
+  expect(sent[1]?.clientId).not.toBe(sent[0]?.clientId);
+});
+
+test("tour 4 : une photo en panne ne bloque pas le passage à la suivante ; « Réessayer » reste touchable", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  const kenji = await userIdOf("Kenji_66");
+  const list = await apiCall<{ stories: { id: string }[] }>(damien, "GET", `/stories/by-author/u:${kenji}`);
+  const first = list.data.stories[0]?.id ?? "";
+  expect(first).toBeTruthy();
+  await page.route(`**/api/stories/${first}/media/**`, (route) => route.abort());
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  const retry = page.getByTestId("story-photo-retry");
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  const surface = (await page.getByTestId("story-surface").boundingBox()) ?? { x: 0, y: 0, width: 390, height: 844 };
+  // Le toucher à droite passe à la story suivante, malgré la photo en panne.
+  await page.mouse.click(surface.x + surface.width * 0.85, surface.y + surface.height * 0.5);
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
+  await expect(page.getByTestId("story-media")).toBeVisible({ timeout: 30_000 });
+  await playing(page);
+  // Le toucher à gauche revient à la photo en panne : « Réessayer » la relit.
+  await page.unroute(`**/api/stories/${first}/media/**`);
+  await page.mouse.click(surface.x + surface.width * 0.1, surface.y + surface.height * 0.5);
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(0);
+  await expect(retry).toBeVisible({ timeout: 15_000 });
+  await retry.click();
+  await expect(page.getByTestId("story-media")).toBeVisible({ timeout: 30_000 });
+  await playing(page);
+});
+
+test("tour 4 : le total des vues vient de la liste relue : des vues arrivées entre l'ouverture et la liste", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  await dropMyStories(damien);
+  const id = await publishStory(damien, { caption: "Vues fraîches" });
+  const me = await userIdOf("Damien_66");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+  await page.goto(`/app/story/${encodeURIComponent(`u:${me}`)}`);
+  // Ouverte à zéro vue.
+  await expect(page.getByTestId("story-views")).toContainText("Vues · 0", { timeout: 30_000 });
+  for (const n of ["Lea_11", "Theo_66", "Kenji_66"])
+    await sql("insert into story_views (story_id, viewer_id) values ($1, $2) on conflict do nothing", [
+      id,
+      await userIdOf(n),
+    ]);
+  await sql("update stories set views_count = 3 where id = $1", [id]);
+  await page.getByTestId("story-views").click();
+  const dialog = page.getByTestId("story-viewers-dialog");
+  await expect(dialog.getByRole("heading")).toHaveText("Vues · 3", { timeout: 15_000 });
+  await expect(page.getByTestId("story-viewers").locator("li")).toHaveCount(3);
+  await expect(page.getByTestId("story-viewers-partial")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  // Au-delà de 200 entre deux lectures : le total frais déclenche la mention de liste partielle.
+  await sql("update stories set views_count = 201 where id = $1", [id]);
+  await page.getByTestId("story-views").click();
+  await expect(dialog.getByRole("heading")).toHaveText("Vues · 201", { timeout: 15_000 });
+  await expect(page.getByTestId("story-viewers-partial")).toContainText("200");
+  await dropMyStories(damien);
+});

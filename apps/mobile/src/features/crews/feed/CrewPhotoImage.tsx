@@ -24,7 +24,17 @@ function asDataUrl(blob: Blob): Promise<string> {
  * Lot R7e2, tour 4 : une photo qui n'arrive pas ne laisse pas un emplacement vide. « Photo indisponible » et « Réessayer »,
  * et la lecture repart toute seule au retour du réseau (rien n'est écrit sur le disque).
  */
-function PhotoFailed({ style, label, onRetry }: { style: StyleProp<ImageStyle>; label?: string; onRetry: () => void }) {
+function PhotoFailed({
+  style,
+  label,
+  onRetry,
+  retryOutside,
+}: {
+  style: StyleProp<ImageStyle>;
+  label?: string;
+  onRetry: () => void;
+  retryOutside?: boolean;
+}) {
   const { t } = useTheme();
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -42,9 +52,11 @@ function PhotoFailed({ style, label, onRetry }: { style: StyleProp<ImageStyle>; 
       <Text variant="caption" color={t.color.ink}>
         {L.photoFailed}
       </Text>
-      <SmButton kind="s" icon="undo" onPress={onRetry} testID="photo-retry">
-        {L.retry}
-      </SmButton>
+      {retryOutside ? null : (
+        <SmButton kind="s" icon="undo" onPress={onRetry} testID="photo-retry">
+          {L.retry}
+        </SmButton>
+      )}
     </View>
   );
 }
@@ -57,6 +69,7 @@ export function CrewPhotoImage({
   onLoaded,
   onFailed,
   onLoading,
+  retryOutside,
 }: {
   url: string;
   style: StyleProp<ImageStyle>;
@@ -69,6 +82,8 @@ export function CrewPhotoImage({
   onFailed?: (status: number) => void;
   /** Lot R7f2 : une lecture (re)part (« Réessayer » compris) : l'écran lève l'état « en panne ». */
   onLoading?: () => void;
+  /** Lot R7f2, tour 4 : l'écran pose lui-même « Réessayer » au-dessus de ses zones de geste (le bouton n'est pas dessiné ici). */
+  retryOutside?: boolean;
 }) {
   const token = getSessionToken();
   const [uri, setUri] = useState<string | null>(null);
@@ -120,7 +135,8 @@ export function CrewPhotoImage({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [url, token, attempt]);
-  if (!uri && failed) return <PhotoFailed style={style} label={accessibilityLabel} onRetry={retry} />;
+  if (!uri && failed)
+    return <PhotoFailed style={style} label={accessibilityLabel} onRetry={retry} retryOutside={retryOutside} />;
   if (!uri) return <View style={style} accessibilityLabel={accessibilityLabel} />;
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} accessibilityLabel={accessibilityLabel} />;
 }

@@ -577,3 +577,126 @@ test("tour 3 : changement de compte : le retour arrière ne montre ni le média 
   await shot(page, "changement-de-compte");
   await ctx.close();
 });
+
+// --- Tour 4 (re-relecture Codex du tour 2) ---------------------------------------------------------------------------------
+
+test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bouton inactif pendant l'envoi, reprise sans doublon", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  const sent: { story: string; clientId: string }[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route("**/api/stories/*/reply", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fallback();
+    const story = /stories\/([^/]+)\/reply/.exec(route.request().url())?.[1] ?? "";
+    sent.push({ story, clientId: (route.request().postDataJSON() as { clientId: string }).clientId });
+    if (sent.length === 1) {
+      // Le premier envoi est tenu, puis sa réponse est perdue (le serveur l'a reçu).
+      await gate;
+      await route.fetch();
+      await route.abort();
+    } else await route.continue();
+  });
+  while ((await page.getByTestId("story-bar-done").count()) > 0) {
+    await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
+    await page.waitForTimeout(300);
+  }
+  const input = page.getByTestId("story-reply-input");
+  const send = page.getByTestId("story-reply-send");
+  await input.fill("Un");
+  await send.click();
+  await expect.poll(() => sent.length).toBe(1);
+  // Sur la story suivante, un autre envoi part et aboutit pendant que le premier est encore en cours.
+  await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
+  await input.fill("Deux");
+  await send.click();
+  await expect.poll(() => sent.length).toBe(2);
+  await expect(page.getByTestId("story-notice")).toContainText("Message envoyé", { timeout: 20_000 });
+  expect(sent[1]?.story).not.toBe(sent[0]?.story);
+  // Retour sur la première : son envoi est toujours en cours, le bouton reste inactif.
+  await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(0);
+  await input.fill("Un");
+  await expect(send).toBeDisabled();
+  // Sa réponse est perdue : le bouton redevient actif, et le renvoi reprend le même identifiant (pas de doublon).
+  release();
+  await expect(send).toBeEnabled({ timeout: 20_000 });
+  await send.click();
+  await expect.poll(() => sent.length, { timeout: 20_000 }).toBe(3);
+  expect(sent[2]?.story).toBe(sent[0]?.story);
+  expect(sent[2]?.clientId).toBe(sent[0]?.clientId);
+  expect(sent[1]?.clientId).not.toBe(sent[0]?.clientId);
+  await ctx.close();
+});
+
+test("tour 4 : une photo en panne ne bloque pas le passage à la suivante ; « Réessayer » reste touchable", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  const kenji = await userIdOf("Kenji_66");
+  const list = await apiCall<{ stories: { id: string }[] }>(damien, "GET", `/stories/by-author/u:${kenji}`);
+  const first = list.data.stories[0]?.id ?? "";
+  expect(first).toBeTruthy();
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await page.route(`**/api/stories/${first}/media/**`, (route) => route.abort());
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  const retry = page.getByTestId("photo-retry");
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  await shot(page, "tour4-photo-en-panne");
+  // Le toucher à droite passe à la story suivante, malgré la photo en panne.
+  await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
+  await playing(page);
+  // Le toucher à gauche revient à la photo en panne : « Réessayer » la relit.
+  await page.unroute(`**/api/stories/${first}/media/**`);
+  await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(0);
+  await retry.click();
+  await playing(page);
+  await ctx.close();
+});
+
+test("tour 4 : le total des vues vient de la liste relue : des vues arrivées entre l'ouverture et la liste", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  await dropMyStories(damien);
+  const id = await publishStory(damien, { caption: "Vues fraîches" });
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await go(page, "/fil");
+  await expect(page.getByTestId("stories-mine-ring")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("stories-mine-ring").click();
+  await expect(page.getByTestId("story-viewer")).toBeVisible({ timeout: 30_000 });
+  // Ouverte à zéro vue.
+  await expect(page.getByTestId("story-views")).toContainText("Vues · 0", { timeout: 30_000 });
+  for (const n of ["Lea_11", "Theo_66", "Kenji_66"])
+    await sql("insert into story_views (story_id, viewer_id) values ($1, $2) on conflict do nothing", [
+      id,
+      await userIdOf(n),
+    ]);
+  await sql("update stories set views_count = 3 where id = $1", [id]);
+  await page.getByTestId("story-views").click();
+  await expect(page.getByRole("heading", { name: "Vues · 3" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("story-viewer-Lea_11")).toBeVisible();
+  await expect(page.getByTestId("story-viewers-partial")).toHaveCount(0);
+  await page.getByTestId("story-viewers-close").click();
+  // Au-delà de 200 entre deux lectures : le total frais déclenche la mention de liste partielle.
+  await sql("update stories set views_count = 201 where id = $1", [id]);
+  await page.getByTestId("story-views").click();
+  await expect(page.getByRole("heading", { name: "Vues · 201" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("story-viewers-partial")).toContainText("200");
+  await dropMyStories(damien);
+  await ctx.close();
+});

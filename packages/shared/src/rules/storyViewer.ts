@@ -113,6 +113,17 @@ export function viewersTotal(viewsCount: number | null | undefined, listLength: 
   return Math.max(viewsCount ?? 0, listLength ?? 0);
 }
 
+/**
+ * Le total du titre à partir de la réponse de la liste (`total` frais de `GET /me/stories/:id/viewers`) : tant qu'elle n'est
+ * pas arrivée, le compteur reçu à l'ouverture de la visionneuse ; ensuite le total de l'API, jamais moins que la liste.
+ */
+export function viewersTotalFor(
+  opening: number | null | undefined,
+  fresh: { total?: number | null; viewers: readonly unknown[] } | null | undefined,
+): number {
+  return viewersTotal(fresh ? (fresh.total ?? opening) : opening, fresh?.viewers.length);
+}
+
 /** Le titre « Vues · N » garde le total ; la liste, elle, est partielle au-delà de `STORY_VIEWERS_MAX`. */
 export function viewersListPartial(total: number | null | undefined): boolean {
   return (total ?? 0) > STORY_VIEWERS_MAX;
@@ -122,17 +133,50 @@ export function viewersListPartial(total: number | null | undefined): boolean {
  * Identifiant d'idempotence d'une réponse (`POST /stories/:id/reply`, `clientId`) lié à une soumission immuable : la même
  * story et le même texte reprennent le même identifiant (une réponse perdue, renvoyée, n'est pas envoyée deux fois) ; un
  * texte modifié ou une autre story = un nouvel identifiant (sinon le serveur rejouerait l'ancienne réponse sans envoyer
- * le nouveau texte). `done` oublie l'identifiant d'une soumission réussie.
+ * le nouveau texte).
+ *
+ * Plusieurs envois peuvent partir en parallèle, sur des stories différentes : chaque soumission (story + texte) garde son
+ * identifiant **jusqu'à sa résolution** (`end` avec succès), et chaque story garde son propre envoi en cours. Un envoi sur
+ * une autre story n'efface donc ni l'identifiant ni le verrou de celle-ci ; une seule réponse à la fois par story.
  */
 export function createReplyKeys(newId: () => string) {
-  let last: { storyId: string; text: string; id: string } | null = null;
+  const MAX_KEYS = 50;
+  const keys = new Map<string, string>();
+  const sending = new Map<string, string>();
+  const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
+  const idFor = (storyId: string, text: string): string => {
+    const k = keyOf(storyId, text);
+    let id = keys.get(k);
+    if (!id) {
+      id = newId();
+      keys.set(k, id);
+      // Mémoire bornée : on oublie d'abord les plus anciennes soumissions qui ne sont pas en cours d'envoi.
+      const live = new Set([...sending].map(([s, t]) => keyOf(s, t)));
+      for (const old of [...keys.keys()]) {
+        if (keys.size <= MAX_KEYS) break;
+        if (old !== k && !live.has(old)) keys.delete(old);
+      }
+    }
+    return id;
+  };
   return {
-    idFor(storyId: string, text: string): string {
-      if (!last || last.storyId !== storyId || last.text !== text) last = { storyId, text, id: newId() };
-      return last.id;
+    idFor,
+    /** Marque l'envoi de cette soumission en cours et rend son identifiant ; `null` si cette story a déjà un envoi en cours. */
+    begin(storyId: string, text: string): string | null {
+      if (sending.has(storyId)) return null;
+      sending.set(storyId, text);
+      return idFor(storyId, text);
     },
+    /** Fin de l'envoi : l'identifiant n'est oublié que si la réponse est arrivée (`ok`) ; sinon un renvoi le reprend. */
+    end(storyId: string, text: string, ok: boolean) {
+      if (sending.get(storyId) === text) sending.delete(storyId);
+      if (ok) keys.delete(keyOf(storyId, text));
+    },
+    isSending: (storyId: string) => sending.has(storyId),
+    /** Les stories dont un envoi est en cours (pour l'affichage des boutons). */
+    sendingStories: (): string[] => [...sending.keys()],
     done(storyId: string, text: string) {
-      if (last && last.storyId === storyId && last.text === text) last = null;
+      keys.delete(keyOf(storyId, text));
     },
   };
 }

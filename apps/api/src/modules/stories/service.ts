@@ -613,7 +613,10 @@ export const storiesService = {
     });
   },
 
-  /** Liste de ceux qui ont vu ma story : pour moi seul. */
+  /**
+   * Liste de ceux qui ont vu ma story : pour moi seul. `total` est le compteur relu à cet appel (jamais celui de l'ouverture
+   * de la visionneuse) : le titre « Vues · N » et la mention « liste partielle » partent de lui.
+   */
   async viewers(v: Viewer, id: string) {
     const [mine] = await db
       .select({ id: stories.id })
@@ -635,8 +638,11 @@ export const storiesService = {
       .where(eq(storyViews.storyId, id))
       .orderBy(sql`${storyViews.viewedAt} desc`)
       .limit(STORY_VIEWERS_MAX);
+    // Le compteur est relu après la liste : une vue arrivée entre les deux lectures ne le laisse jamais derrière la liste.
+    const [counted] = await db.select({ n: stories.viewsCount }).from(stories).where(eq(stories.id, id));
     const at = now();
     return {
+      total: Math.max(counted?.n ?? 0, rows.length),
       viewers: rows
         .filter((r) => !r.d && !r.b && !(r.s && r.s > at))
         .map((r) => ({

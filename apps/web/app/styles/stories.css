@@ -201,9 +201,20 @@
   inset: 0;
   cursor: pointer;
 }
-/* Média en panne : la surface de gestes ne couvre plus le bouton « Réessayer » (posé dessous, dans le cadre). */
-.story-view__surface.is-off {
+/* Média en panne : « Réessayer » est posé au-dessus de la surface de gestes, sous le message « Photo indisponible » ; seul le
+   bouton prend les clics, les zones gauche / droite de la surface restent actives (passer aux stories suivantes). */
+.story-view__retry {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding-top: 84px;
   pointer-events: none;
+}
+.story-view__retry > * {
+  pointer-events: auto;
 }
 .story-view__sr {
   position: absolute;

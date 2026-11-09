@@ -3,7 +3,7 @@
 // du bruit coloré.
 
 import { randomUUID } from "node:crypto";
-import { fitDefault, fromWallTime, HOUR, mapRect, STORY_H, STORY_W } from "@orasso/shared";
+import { fitDefault, fromWallTime, HOUR, mapRect, STORY_H, STORY_VIEWERS_MAX, STORY_W } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -600,6 +600,26 @@ describe("vues, flammes, suppression", () => {
     const viewers = (await req(kenji, "GET", `/me/stories/${s.id}/viewers`)).json.viewers;
     expect(viewers.map((x: { pseudo: string }) => x.pseudo).sort()).toEqual(["Nina", "Paul"]);
     expect((await req(nina, "GET", `/me/stories/${s.id}/viewers`)).status).toBe(404);
+  });
+
+  it("la liste des vues renvoie le total relu à chaque appel : des vues arrivées entre deux lectures", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    const s = await ok(kenji, {});
+    // Ouverte à zéro vue : la liste dit zéro.
+    expect((await req(kenji, "GET", `/me/stories/${s.id}/viewers`)).json).toMatchObject({ total: 0, viewers: [] });
+    expect((await byAuthor(kenji, keyOf(kenji))).json.stories[0].viewsCount).toBe(0);
+    await req(nina, "POST", `/stories/${s.id}/view`);
+    await req(paul, "POST", `/stories/${s.id}/view`);
+    const second = (await req(kenji, "GET", `/me/stories/${s.id}/viewers`)).json;
+    expect(second.total).toBe(2);
+    expect(second.viewers).toHaveLength(2);
+    // Au-delà de la liste : le total suit le compteur de la story, pas la longueur plafonnée.
+    await db.update(stories).set({ viewsCount: 250 }).where(eq(stories.id, s.id));
+    const third = (await req(kenji, "GET", `/me/stories/${s.id}/viewers`)).json;
+    expect(third.total).toBe(250);
+    expect(third.viewers.length).toBeLessThanOrEqual(STORY_VIEWERS_MAX);
   });
 
   it("la flamme est idempotente, regroupée en une notification par story, et se retire", async () => {
