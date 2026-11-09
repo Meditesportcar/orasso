@@ -23,7 +23,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { PrivateImage } from "@/features/boite/PrivateImage";
+import { PrivateImage } from "@/features/messages/PrivateImage";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { useApi } from "@/lib/useApi";

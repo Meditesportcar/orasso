@@ -138,10 +138,9 @@ test("appli : personnes, profil, véhicule, suivre, QR de compte, Ton réseau, J
     await expect(page.getByTestId("profil-count-abonnements")).toBeVisible({ timeout: 30_000 });
     // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
     deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
-    // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-    await page.goto("/boite");
-    await page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
-    await expect(page.getByTestId("journal-item").filter({ hasText: "a accepté" }).first()).toBeVisible({
+    // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
+    await page.goto("/activite");
+    await expect(page.getByTestId("activity-row").filter({ hasText: "a accepté" }).first()).toBeVisible({
       timeout: 30_000,
     });
     await shot(page, `09-journal-${theme}`);

@@ -4,7 +4,11 @@
 import { Button, CheckboxField, Icon, SelectField, TextField } from "@orasso/design-system/web";
 import {
   eventEditorLabels as E,
+  eventPresenceRadiusProblem,
   type NeedDraft,
+  PRESENCE_DEFAULT_RADIUS_M,
+  PRESENCE_RADIUS_BOUNDS,
+  presenceLabels,
   providerPowerLabels,
   providerPowers,
   providerSelectableTypes,
@@ -127,6 +131,21 @@ export function PlaceStep({ d, set, setD, vendorSuggestions }: StepProps & { ven
         value={d.entranceNote ?? ""}
         placeholder={W.entrancePlaceholder}
         onChange={(e) => set("entranceNote", e.currentTarget.value)}
+      />
+      {/* Lot R7d2 : la zone où « Je suis sur place » est acceptée autour de l'épingle (vide = 300 m, de 50 à 2000 m). */}
+      <TextField
+        label={presenceLabels.radiusLabel}
+        name="presenceRadiusM"
+        type="number"
+        inputMode="numeric"
+        min={PRESENCE_RADIUS_BOUNDS[0]}
+        max={PRESENCE_RADIUS_BOUNDS[1]}
+        value={d.presenceRadiusM ?? ""}
+        placeholder={String(PRESENCE_DEFAULT_RADIUS_M)}
+        onChange={(e) => set("presenceRadiusM", e.currentTarget.value)}
+        help={presenceLabels.radiusHelp}
+        error={eventPresenceRadiusProblem(d) ?? undefined}
+        data-testid="wizard-presence-radius"
       />
 
       <details className="wz-panel" data-testid="wizard-panel-onsite">

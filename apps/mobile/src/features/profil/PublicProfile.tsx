@@ -44,7 +44,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { MessageButton } from "@/features/boite/MessageButton";
+import { MessageButton } from "@/features/messages/MessageButton";
 import { daysUntil } from "@/features/media/model";
 import { Stamp } from "@/features/passport/Stamp";
 import { FollowButton } from "@/features/social/FollowButton";

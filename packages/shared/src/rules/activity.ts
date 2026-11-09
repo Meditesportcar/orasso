@@ -12,6 +12,24 @@ export const feedOnlyNotificationTypes: readonly string[] = [
   "story_published",
 ];
 
+/**
+ * Lot R7c2 : les notifications qui annoncent une demande en attente (une ligne de `GET /me/requests`). La ligne « Demandes »
+ * les montre déjà, avec leurs boutons : elles ne sont ni dans la liste de l'Activité ni dans sa pastille « non vus » (sinon
+ * une demande compterait deux fois à la cloche, une fois ici, une fois comme demande en attente). `contact_request` y est
+ * aussi : les demandes de message se traitent dans Messages (la bulle), pas dans la cloche.
+ */
+export const requestNotificationTypes: readonly string[] = [
+  "follow_request",
+  "contact_request",
+  "crew_request",
+  "crew_invitation",
+  "crew_registration_to_confirm",
+  "staff_invitation",
+  "event_invitation_received",
+  "event_invited",
+  "plate_transfer_request",
+];
+
 /** Personnes montrées dans une ligne regroupée. */
 export const ACTIVITY_MAX_ACTORS = 3;
 

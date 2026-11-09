@@ -681,8 +681,8 @@ async function pushGroupMessage(
         author && !author.deletedAt
           ? { userId: author.userId, pseudo: author.pseudo, avatarUrl: storage.url(author.avatarKey) }
           : undefined,
-      link: `/app/boite/${conversationId}`,
+      link: `/app/messages/${conversationId}`,
     },
-    link: { label: "Ouvrir la conversation", path: `/app/boite/${conversationId}` },
+    link: { label: "Ouvrir la conversation", path: `/app/messages/${conversationId}` },
   });
 }

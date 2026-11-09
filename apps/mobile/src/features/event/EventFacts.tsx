@@ -121,7 +121,7 @@ export function OrganizerRow({
 }
 
 /** Lot M4 : la ligne d'une fiche compacte (`.frow` de la maquette 4.1) : pastille d'icône, texte, à droite un aperçu. */
-function Row({
+export function Row({
   icon,
   title,
   sub,

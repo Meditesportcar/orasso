@@ -139,7 +139,7 @@ describe("présence par GPS : refus, dans l'ordre", () => {
     expect(presenceRefusal({ ...ok, point: north(330), accuracyM: 40 })).toBeNull();
   });
 
-  it("l'ordre : fermé avant exposant avant déjà présent avant imprécis avant zone", () => {
+  it("l'ordre : fermé avant exposant avant déjà présent avant lieu sans zone avant imprécis avant zone", () => {
     const worst: PresenceContext = {
       ...ok,
       now: new Date("2026-11-09T10:00:00Z"),
@@ -155,10 +155,11 @@ describe("présence par GPS : refus, dans l'ordre", () => {
     const notExhibitor = { ...open, holdsVehicleSlot: false };
     expect(presenceRefusal(notExhibitor)).toBe("already_present");
     const notYet = { ...notExhibitor, alreadyPresent: false };
-    expect(presenceRefusal(notYet)).toBe("gps_imprecise");
-    const precise = { ...notYet, accuracyM: 10 };
-    expect(presenceRefusal(precise)).toBe("no_zone");
-    expect(presenceRefusal({ ...precise, event: ok.event })).toBe("out_of_zone");
+    // Un lieu sans coordonnées : `no_zone` avant toute mesure (le bouton n'est pas proposé, `presenceGate`).
+    expect(presenceRefusal(notYet)).toBe("no_zone");
+    const located = { ...notYet, event: ok.event };
+    expect(presenceRefusal(located)).toBe("gps_imprecise");
+    expect(presenceRefusal({ ...located, accuracyM: 10 })).toBe("out_of_zone");
   });
 
   it("chaque refus a son libellé", () => {

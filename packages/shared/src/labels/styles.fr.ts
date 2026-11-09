@@ -37,11 +37,11 @@ export const styleLabels = {
   nameField: "Nom du style",
   forType: "Pour",
   familyByTeam: "· famille au choix de l'équipe",
-  /** « S'il est retenu, il est ajouté à ta Yamaha et tu es prévenu dans la Boîte. » */
+  /** « S'il est retenu, il est ajouté à ta Yamaha et tu es prévenu dans ton Activité. » */
   sheetNote: (vehicle: string | null, type: VehicleType) =>
     vehicle
-      ? `L'équipe Orasso le regarde. S'il est retenu, il est ajouté à ${type === "truck" ? "ton" : "ta"} ${vehicle} et tu es prévenu dans la Boîte.`
-      : "L'équipe Orasso le regarde. S'il est retenu, tu es prévenu dans la Boîte.",
+      ? `L'équipe Orasso le regarde. S'il est retenu, il est ajouté à ${type === "truck" ? "ton" : "ta"} ${vehicle} et tu es prévenu dans ton Activité.`
+      : "L'équipe Orasso le regarde. S'il est retenu, tu es prévenu dans ton Activité.",
   send: "Proposer",
   nameIssue: "Le nom du style fait 2 à 24 caractères.",
   toast: (label: string) => `Merci : « ${label} » est proposé à l'équipe Orasso.`,
@@ -96,7 +96,7 @@ export const styleLabels = {
   queueWithVehicle: (n: number) =>
     n > 0
       ? `Ajouté ou rattaché : le style est posé sur ${n > 1 ? `les ${n} véhicules` : "le véhicule"} du proposant si les règles l'acceptent, et chaque proposant est prévenu.`
-      : "Chaque proposant est prévenu dans sa Boîte.",
+      : "Chaque proposant est prévenu dans son Activité.",
   queueExisting: (label: string) => `Existe déjà : ${label}`,
   familyAndIcon: "Famille et icône",
   accept: "Ajouter au catalogue",
@@ -105,7 +105,7 @@ export const styleLabels = {
   mergeConfirm: "Rattacher",
   decline: "Refuser",
   declineTitle: "Refuser cette proposition ?",
-  declineBody: "Chaque proposant est prévenu dans sa Boîte.",
+  declineBody: "Chaque proposant est prévenu dans son Activité.",
   open: "Ouvrir",
   done: "C'est fait. L'action est écrite au journal d'administration.",
   sinceDays: (days: number) => (days <= 0 ? "depuis aujourd'hui" : days === 1 ? "depuis hier" : `depuis ${days} j`),

@@ -422,6 +422,11 @@ export function eventTicketLinkProblem(
     : null;
 }
 
+/** Ce que le champ « Zone de présence » garde de la frappe : les chiffres seulement (tout le reste est retiré). */
+export function presenceRadiusInput(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
 /** Zone de présence (R7d1) : vide (300 m), ou un nombre entier de mètres entre 50 et 2000. */
 export function eventPresenceRadiusProblem(d: Pick<EventDraft, "presenceRadiusM">): string | null {
   const raw = d.presenceRadiusM?.trim() ?? "";

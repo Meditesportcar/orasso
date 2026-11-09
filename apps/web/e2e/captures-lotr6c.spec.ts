@@ -125,10 +125,10 @@ test("R6c captures : site", async ({ browser }) => {
   const pages: [string, string, string][] = [
     ["kenji@orasso.local", "/e/nocturne-de-canet-2026", "fiche-nocturne-kenji"],
     ["kenji@orasso.local", "/e/rassemblement-narbonne", "fiche-narbonne-kenji"],
-    ["kenji@orasso.local", "/app/boite", "boite-kenji"],
+    ["kenji@orasso.local", "/app/messages", "boite-kenji"],
     // Ajoutée après coup (les notifications du site sont dans le Journal) : pas de photo « avant ».
-    ["kenji@orasso.local", "/app/journal", "journal-kenji"],
-    ["kenji@orasso.local", "/app/boite/demandes", "boite-demandes-kenji"],
+    ["kenji@orasso.local", "/app/fil", "journal-kenji"],
+    ["kenji@orasso.local", "/app/activite/demandes", "boite-demandes-kenji"],
     ["kenji@orasso.local", "/c/roussillon-drift", "crew-kenji-chef"],
     ["kenji@orasso.local", "/app/sorties?candidature=envoyee", "confirmation-candidature-kenji"],
     ["julie@orasso.local", "/c/roussillon-drift", "crew-julie"],

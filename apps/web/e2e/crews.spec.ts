@@ -49,16 +49,17 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   const organizer = await login("damien@orasso.local");
   const event = await createEvent(organizer, { title: `Crew E2E ${s}` });
 
-  // Kenji crée son crew depuis « Mes crews ».
+  // Kenji crée son crew depuis « Créer un crew » (lot R7b2 : `/app/crews` est devenu l'onglet Crew).
   const ctxK = await context(browser, kCookie);
   const pageK = await ctxK.newPage();
-  await pageK.goto("/app/crews");
+  await pageK.goto("/app/crews/nouveau");
   const crewName = `Drift ${s}`;
   await pageK.getByLabel("Nom du crew").fill(crewName);
   await pageK.getByLabel("Description").fill("Glisse et japonaises.");
   await pageK.getByTestId("crew-create").click();
-  await pageK.waitForURL(/\/c\/[a-z0-9-]+$/);
-  const crewPath = new URL(pageK.url()).pathname;
+  await pageK.waitForURL(/\/app\/crew\?crew=[a-z0-9-]+$/);
+  // Lot R7b2 : le crew du chef vit dans l'onglet (`/app/crew?crew=<adresse>`) ; l'adresse publique reste `/c/<adresse>`.
+  const crewPath = `/c/${new URL(pageK.url()).searchParams.get("crew")}`;
   await expect(pageK.getByTestId("crew")).toHaveAttribute("data-state", "leader");
 
   // Léa trouve la fiche (sans la liste des membres) et demande à rejoindre.
@@ -77,7 +78,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await expect(pageL.getByTestId("crew-request-sent")).toBeVisible();
 
   // Kenji accepte depuis Boîte > Demandes.
-  await pageK.goto("/app/boite/demandes");
+  await pageK.goto("/app/activite/demandes");
   const request = pageK.getByTestId("request-crew-request");
   await expect(request).toContainText(lea);
   // Page hydratée avant le clic (lot 34) : un clic trop tôt partait en envoi classique et la carte restait affichée.
@@ -97,7 +98,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await pageL.goto(`${crewPath}?onglet=membres`);
   await expect(pageL.getByTestId("crew-members")).toBeVisible();
   await pageL.getByTestId("crew-discussion").click();
-  await pageL.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+  await pageL.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
   await expect(pageL.getByTestId("message-system").first()).toBeVisible();
   await pageL.getByLabel("Écrire un message…").fill("On s'inscrit ensemble ?");
   await pageL.getByRole("button", { name: "Envoyer", exact: true }).click();
@@ -141,7 +142,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   const shots: { name: string; cookie: string; path: string }[] = [
     { name: "01-crew-chef", cookie: kCookie, path: crewPath },
     { name: "02-crew-visiteur", cookie: outsider, path: crewPath },
-    { name: "03-mes-crews", cookie: kCookie, path: "/app/crews" },
+    { name: "03-creer-crew", cookie: kCookie, path: "/app/crews/nouveau" },
     { name: "04-inscription-crew", cookie: kCookie, path: `/e/${event.slug}/crew` },
     { name: "05-acces-confirmer", cookie: nCookie, path: "/app/acces" },
     { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes` },
@@ -150,7 +151,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   ];
   // Une demande en attente pour la capture des Demandes.
   await apiCall(outsider, "POST", `/crews/${crew.data.id}/requests`, { message: "Salut, je roule en S13." });
-  shots.push({ name: "09-demandes", cookie: kCookie, path: "/app/boite/demandes" });
+  shots.push({ name: "09-demandes", cookie: kCookie, path: "/app/activite/demandes" });
   for (const theme of THEMES) {
     for (const view of VIEWS) {
       for (const shot of shots) {

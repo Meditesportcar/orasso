@@ -153,7 +153,8 @@ test("site : la page du crew en direct, à deux", async ({ browser }) => {
       const j = await open(browser, julie, theme, width, `/c/${crew.slug}`);
       await expect(j.getByTestId("crew-feed")).toBeVisible();
       await removeMember(crew, julie);
-      await expect(j.getByTestId("crew-vitrine")).toBeVisible({ timeout: 15_000 });
+      // Lot R7b2 : sans autre crew, l'onglet Crew devient l'écran « sans crew ».
+      await expect(j.getByTestId("crew-tab-none")).toBeVisible({ timeout: 15_000 });
       // Nina entre dans le crew et publie : la page de Kenji la montre, celle de Julie non.
       await acceptNina(crew);
       await k.evaluate(() => window.scrollTo(0, 0));

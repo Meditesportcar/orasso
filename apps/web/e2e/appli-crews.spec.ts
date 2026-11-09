@@ -96,7 +96,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await k.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
+    await k.page.getByTestId("activity-requests-row").click(); // Lot R7c2 : la ligne « Demandes · N » de l'Activité.
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
 
@@ -129,7 +129,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await l.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
+    await l.page.getByTestId("activity-requests-row").click(); // Lot R7c2 : la ligne « Demandes · N » de l'Activité.
     await expect(l.page.getByTestId("request-crew-confirmation")).toBeVisible({ timeout: 20_000 });
     await shot(l.page, `07-demandes-venue-${theme}`);
     await l.page.goto("/acces");

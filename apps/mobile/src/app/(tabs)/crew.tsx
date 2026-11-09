@@ -1,6 +1,7 @@
-// Onglet Crew (lot R7a1, D38) : coquille, ton crew ou « Rejoindre / Créer » en attendant le lot R7b2 (`features/crews/`).
-import { CrewTabScreen } from "@/features/crews/CrewTabScreen";
+// Onglet Crew (lot R7b2, D38) : le sélecteur de crew, Fil · Sorties · Membres · Spots, la Discussion ; sans crew, rejoindre
+// ou créer (`features/crews/tab/`).
+import { CrewTab } from "@/features/crews/tab/CrewTab";
 
-export default function CrewTab() {
-  return <CrewTabScreen />;
+export default function CrewTabRoute() {
+  return <CrewTab />;
 }

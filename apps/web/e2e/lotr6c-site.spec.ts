@@ -130,7 +130,7 @@ for (const theme of ["beton", "sable"] as const) {
     const jCtx = await browser.newContext({ viewport: MOBILE });
     const j = await jCtx.newPage();
     await setTheme(j, theme);
-    await loginInBrowser(j, julie.email, SEED_PASSWORD, "/app/journal");
+    await loginInBrowser(j, julie.email, SEED_PASSWORD, "/app/fil");
     const item = j
       .getByTestId("journal-item")
       .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent à ${event.title}` });

@@ -11,7 +11,8 @@ import { RELAIS } from "./relais";
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test accueil`.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/site`;
 // Lot R1 (décision de Damien du 24/10) : lavage et carburant retirés pour l'instant (`NEARBY_STATIONS_ENABLED`).
-const TITLES = ["pending", "nearby", "weather", "agenda", "favorite_garage"] as const;
+// Lot R7a2 : ordre par défaut des blocs d'origine (réglage tout affiché) : Autour de moi, Météo, Agenda, Garage favori, En attente.
+const TITLES = ["nearby", "weather", "agenda", "favorite_garage", "pending"] as const;
 
 type Home = {
   nearby: { radiusKm: number; events: { title: string }[] };
@@ -30,8 +31,9 @@ async function shownOrder(page: Page): Promise<string[]> {
       (el.getAttribute("data-testid") ?? "").replace("widget-", ""),
     ),
   );
-  // L'emplacement sponsorisé n'est pas un bloc réglable.
-  return all.filter((id) => id !== "sponsored");
+  // L'emplacement sponsorisé n'est pas un bloc réglable ; lot R7a2 : les nouveaux blocs (En cours, Mes sorties, Mon crew, Du
+  // nouveau chez tes potes) ont leur recette dans `lotr7a2-site`, ici seulement les blocs d'origine.
+  return all.filter((id) => (TITLES as readonly string[]).includes(id));
 }
 
 test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisation persistée", async ({ page }) => {
@@ -43,10 +45,10 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
   await expect(page).toHaveURL(/\/app$/);
 
-  // Prochain accès (Salon Argelès, retenu) : le seul bouton principal.
-  const next = page.getByTestId("next-access");
-  await expect(next).toContainText("Salon Argelès");
-  await expect(next.getByRole("link", { name: /Voir mon accès/ })).toBeVisible();
+  // Prochain accès, ou la ligne « En cours » pendant un événement (lot R7a2) : l'accès à un clic.
+  const next = page.getByTestId("next-access").or(page.getByTestId("home-live-line")).first();
+  await expect(next).toBeVisible();
+  await expect(next.getByRole("link", { name: /(Voir mon accès|Mon accès)/ })).toBeVisible();
 
   // Blocs dans l'ordre par défaut.
   expect(await shownOrder(page)).toEqual([...TITLES]);
@@ -86,22 +88,20 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   const home = await apiCall<Home>(cookie, "GET", "/me/home");
   expect(home.data.nearby.radiusKm).toBe(150);
 
-  // Réorganiser : « Garage favori » remonte avant « Agenda », « Agenda » est masqué ; tout persiste après rechargement.
-  // Lot R1 : les stations ne se règlent plus.
-  await page.goto("/app");
-  await page.getByTestId("reorder").locator("summary").click();
-  await expect(page.getByTestId("reorder-wash")).toHaveCount(0);
-  await expect(page.getByTestId("down-favorite_garage")).toBeDisabled();
+  // Personnaliser (lot R7a2) : « Garage favori » remonte avant « Agenda », « Agenda » est masqué ; tout persiste après
+  // rechargement. Lot R1 : les stations ne se règlent plus.
+  await page.goto("/app/accueil/personnaliser");
+  await expect(page.getByTestId("personalize-row-wash")).toHaveCount(0);
   await page.getByTestId("up-favorite_garage").click();
   await expect
     .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("favorite_garage"))
-    .toBe(4);
-  await page.getByTestId("toggle-agenda").click();
+    .toBe(9);
+  await page.getByTestId("hide-agenda").click();
   await expect
     .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden)
     .toEqual(["agenda"]);
-  await page.reload();
-  expect(await shownOrder(page)).toEqual(["pending", "nearby", "weather", "favorite_garage"]);
+  await page.goto("/app");
+  expect(await shownOrder(page)).toEqual(["nearby", "weather", "favorite_garage", "pending"]);
   await expect(page.getByTestId("widget-agenda")).toHaveCount(0);
   // Réglage remis à l'état d'origine pour la suite.
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });

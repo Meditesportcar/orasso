@@ -11,9 +11,20 @@ export const presenceLabels = {
     "Ta position est vérifiée une fois, puis oubliée : elle n'est ni suivie ni gardée. Une validation par compte.",
   /** Réponse de l'API et phrase de confirmation. */
   validated: "Présence validée : tu es sur place, tu peux voter.",
+  /** Même confirmation quand le droit de vote n'est pas encore ouvert (`canVote` faux). */
+  validatedNoVote: "Présence validée : tu es sur place.",
   /** Notification `presence_validated` (Journal). */
   notificationTitle: "Présence validée",
-  notificationBody: (title: string) => `Tu es sur place à « ${title} » : ton tampon est posé et tu peux voter.`,
+  notificationBody: (title: string, done: { canVote: boolean; stamped: boolean } = { canVote: true, stamped: true }) =>
+    `Tu es sur place à « ${title} »${
+      done.stamped && done.canVote
+        ? " : ton tampon est posé et tu peux voter."
+        : done.stamped
+          ? " : ton tampon est posé."
+          : done.canVote
+            ? " : tu peux voter."
+            : " : ta présence est validée."
+    }`,
   /** Zone de présence de l'éditeur (étape « Lieu », écran en R7d2). */
   radiusLabel: "Zone de présence (m)",
   radiusHelp: `${PRESENCE_DEFAULT_RADIUS_M} m si vide`,
@@ -26,8 +37,42 @@ export const presenceLabels = {
   summaryTotal: (n: number) => `${n} ${pluralFr(n, "utilisateur d'Orasso présent", "utilisateurs d'Orasso présents")}`,
   /** Même refus `ticket_required`, quand il ne reste plus de billet. */
   ticketRequiredFull: "C'est complet : l'entrée se fait avec un billet scanné.",
+  // --- Lot R7d2 : la fiche pendant l'événement, la feuille « Je suis sur place », les présents de l'organisateur ---
+  /** Bouton principal de la fiche une fois entré (`live.myPresence` non nul, au moins un vote ouvert). */
+  votesOpen: (n: number) => `Votes · ${n} ${pluralFr(n, "ouvert", "ouverts")}`,
+  /** Feuille « Je suis sur place » (appli seulement : la position vient du téléphone). */
+  sheetTitle: "Je suis sur place",
+  sheetAction: "Valider ma présence",
+  sheetLocating: "Position en cours…",
+  sheetRetry: "Réessayer",
+  sheetClose: "Fermer",
+  /** Permission de position refusée : l'appli renvoie vers les réglages du téléphone. */
+  permissionDenied: "Orasso n'a pas accès à ta position : autorise-la dans les réglages du téléphone, puis réessaie.",
+  openSettings: "Ouvrir les réglages",
+  /** Position « approximative » autorisée seulement : trop floue pour prouver quoi que ce soit, rien n'est mesuré. */
+  permissionApproximate:
+    "Autorise la position exacte : une position approximative ne suffit pas pour prouver que tu es sur place. Réglages du téléphone, puis réessaie.",
+  /** La position ne vient pas (délai dépassé, capteur éteint). */
+  locationFailed:
+    "Ta position n'est pas arrivée : active la localisation du téléphone, sors à l'air libre et réessaie.",
+  /** Réponse inattendue ou réseau coupé (aucun code de refus). */
+  genericFailure: "La présence n'a pas pu être validée. Réessaie dans un instant.",
+  stampPlaced: "Ton tampon est dans ton passeport.",
+  /** Site : la présence par GPS se valide dans l'appli seulement. */
+  appOnly: "Depuis l'appli, valide ta présence sur place",
+  /** Jour J : une ligne sous l'état d'entrée. */
+  dayOnSite: (n: number) => `Sur place · ${n}`,
+  /** Présents de l'organisateur (statistique : des nombres, jamais une liste ni un nom). */
+  summaryExhibitors: "Exposants scannés",
+  summaryVisitorsTicket: "Visiteurs avec place (GPS)",
+  summaryVisitorsNoTicket: "Avec l'appli, sans place (GPS)",
+  summaryLine: (label: string, n: number) => `${label} · ${n}`,
+  summaryLive: "En direct · mis à jour à chaque entrée",
+  summaryPrivacy: "Un nombre seulement, jamais de noms. Aucune position n'est gardée.",
+  summaryError: "Les présents n'ont pas pu être chargés.",
   errors: {
-    closed: "La présence se valide pendant l'événement, à partir de 30 minutes avant son début.",
+    closed:
+      "La présence se valide pendant l'événement, à partir de 30 minutes avant son début (ou de chaque jour). Tu pourras réessayer à l'ouverture.",
     use_qr: "Tu as une place avec ton véhicule : l'accueil te scanne à l'entrée, pas besoin de position.",
     scan_ticket: "Ton billet se fait scanner à l'entrée : pas besoin de position.",
     ticket_required: "L'entrée est payante : prends ton billet.",

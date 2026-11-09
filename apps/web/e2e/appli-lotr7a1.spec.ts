@@ -129,22 +129,20 @@ test("la barre du haut : loupe, cloche « Activité », bulle « Messages », pl
     expect(text === "" || /^[1-9]\d*\+?$/.test(text), `pastille ${name} : « ${text} »`).toBe(true);
   }
   await page.getByRole("tab", { name: "Accueil", exact: true }).click();
-  // La bulle ouvre la Boîte sur Messages, la cloche sur Tout.
+  // Lot R7c2 : la bulle ouvre Messages, la cloche l'Activité (la Boîte a disparu).
   await page
     .getByRole("button", { name: /^Messages/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite\?onglet=messages/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(
-    /^Messages/,
-  );
+  await page.waitForURL(/\/messages$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Messages", exact: true }).first()).toBeVisible();
   await go(page, "/accueil");
   await page
     .getByRole("button", { name: /^Activité/ })
     .first()
     .click();
-  await page.waitForURL(/\/boite$/, { timeout: 15_000 });
-  await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(/^Tout/);
+  await page.waitForURL(/\/activite$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible();
   await ctx.close();
 });
 
@@ -254,11 +252,10 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   await expect(k.page.getByText("arrive bientôt")).toBeVisible();
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
-  await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
+  // Lot R7b2 : l'onglet montre le crew lui-même (nom, onglets internes), plus la coquille « Ouvrir mon crew ».
+  await expect(k.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
   await expect(k.page.getByTestId("crew-tab-none")).toHaveCount(0);
   await shot(k.page, "crew-kenji");
-  await k.page.getByTestId("crew-tab-open").click();
-  await k.page.waitForURL(/\/crew\/roussillon-drift/, { timeout: 15_000 });
   await k.ctx.close();
 
   // Sarah (sans crew) : « Rejoindre un crew » et « Créer un crew », un seul bouton principal.
@@ -340,7 +337,7 @@ test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans s
   await ctx.close();
 });
 
-test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+test("les pastilles (lot R7c2) : une demande de message seule fait monter la bulle, pas la cloche ; une conversation non lue s'y ajoute", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -348,17 +345,17 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
   const { ctx, page } = await open(browser);
   await signIn(page, compte.email);
   await afterOpening(page);
-  // Demande seule : la bulle n'a pas de pastille (son nom n'annonce rien), la cloche annonce la demande.
-  await expect(page.getByRole("button", { name: /^Activité, \d+ non lues?$/ }).first()).toBeVisible({
+  // Demande de message seule : la bulle annonce 1, la cloche rien (une demande ne compte qu'une fois).
+  await expect(page.getByRole("button", { name: "Messages, 1 non lu", exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole("button", { name: "Messages", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Activité", exact: true }).first()).toBeVisible();
   await shot(page, "pastilles-demande-seule");
-  // Une conversation non lue : la bulle annonce 1.
+  // Une conversation non lue de plus : la bulle annonce 2.
   await compte.ajouterConversationNonLue();
   await page.reload();
   await afterOpening(page);
-  await expect(page.getByRole("button", { name: "Messages, 1 non lu", exact: true }).first()).toBeVisible({
+  await expect(page.getByRole("button", { name: "Messages, 2 non lus", exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
   await shot(page, "pastilles-conversation");

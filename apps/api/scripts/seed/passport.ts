@@ -5,12 +5,8 @@
 // Les points de participation de ces pointages ajoutés après coup ne sont pas réécrits (le barème du seed reste celui
 // des lots précédents). Idempotent : rien n'est refait si « Rasso de printemps » (sortie la plus ancienne) existe.
 import {
-  AUDIENCE_PRIZE_POINTS_DEFAULT,
-  AUDIENCE_PRIZE_RESULTS_KEPT,
-  audienceWinner,
   isRare,
   POINTS,
-  rankResults,
   type StampKind,
   seasonDates,
   seasonYear,
@@ -24,6 +20,8 @@ import * as t from "../../src/db/schema";
 import { withTx } from "../../src/lib/tx";
 import type { EventRow } from "../../src/modules/events/repo";
 import { pointsService } from "../../src/modules/points/service";
+import { ensureAllCategories } from "../../src/modules/votes/context";
+import { votesSettle } from "../../src/modules/votes/settle";
 import { createEvent, DAY, HOUR, now, parisAt } from "./helpers";
 
 const byPseudo = (pseudo: string) =>
@@ -91,6 +89,80 @@ async function enterWith(event: EventRow, vehicle: { id: string; ownerId: string
     .onConflictDoNothing();
   const entry = await db.query.checkins.findFirst({ where: eq(t.checkins.applicationId, app.id) });
   return { applicationId: app.id, checkedInAt: entry?.checkedInAt ?? at };
+}
+
+/**
+ * « Plus belle japonaise » à Béziers Night : vote à thème clos (origine JP, ouvert à 22 h pour 90 minutes), 12 voix données
+ * par des exposants d'autres origines, la Supra de Kenji devant. Le règlement (résultats, trophées, points) se fait avec
+ * celui de « Toutes catégories », par le vrai service.
+ */
+async function seedJapaneseVote(
+  event: EventRow,
+  entered: { applicationId: string; checkedInAt: Date; ownerId: string; vehicleId: string }[],
+  kenjiApplicationId: string,
+) {
+  const country = await db
+    .select({ vehicleId: t.vehicles.id, country: t.vehicleMakes.country })
+    .from(t.vehicles)
+    .innerJoin(t.vehicleMakes, eq(t.vehicleMakes.id, t.vehicles.makeId))
+    .where(
+      inArray(
+        t.vehicles.id,
+        entered.map((e) => e.vehicleId),
+      ),
+    );
+  const isJp = new Set(country.filter((c) => c.country === "JP").map((c) => c.vehicleId));
+  const jp = entered.filter((e) => isJp.has(e.vehicleId));
+  const others = entered.filter((e) => !isJp.has(e.vehicleId));
+  const kenji = jp.find((e) => e.applicationId === kenjiApplicationId);
+  const rest = jp.filter((e) => e.applicationId !== kenjiApplicationId);
+  if (!kenji || rest.length < 3 || others.length < 12) {
+    console.log("Passeport : pas assez de japonaises pour le vote à thème (ignoré).");
+    return null;
+  }
+  const opensAt = new Date(event.startsAt.getTime() + 2 * HOUR);
+  const closesAt = new Date(Math.min(opensAt.getTime() + 90 * 60_000, event.endsAt.getTime()));
+  const [vote] = await db
+    .insert(t.eventVotes)
+    .values({
+      eventId: event.id,
+      title: "Plus belle japonaise",
+      kind: "theme",
+      candidateMode: "origins",
+      candidateFilter: { countries: ["JP"] },
+      openMode: "at",
+      opensAt,
+      durationMinutes: 90,
+      openedAt: opensAt,
+      closesAt,
+      closedAt: closesAt,
+      rareStamp: false,
+      position: 1,
+    })
+    .returning();
+  if (!vote) return null;
+  // Cible de chacune des 12 voix : la Supra de Kenji 5, puis 3, 2, 1, 1.
+  const targets = [
+    ...Array(5).fill(kenji),
+    ...Array(3).fill(rest[0]),
+    ...Array(2).fill(rest[1]),
+    rest[2],
+    rest[3] ?? rest[0],
+  ] as typeof entered;
+  await db.insert(t.audienceVotes).values(
+    others.slice(0, 12).map((voter, i) => {
+      const at = new Date(opensAt.getTime() + (i + 1) * 4 * 60_000);
+      return {
+        eventId: event.id,
+        voteId: vote.id,
+        voterUserId: voter.ownerId,
+        applicationId: (targets[i] as (typeof entered)[number]).applicationId,
+        createdAt: at,
+        updatedAt: at,
+      };
+    }),
+  );
+  return vote;
 }
 
 export async function seedPassport() {
@@ -168,11 +240,22 @@ export async function seedPassport() {
     [targets[i], targets[swap]] = [targets[swap] as string, targets[i] as string];
   }
   const voteAt = (i: number) => new Date(beziers.startsAt.getTime() + 2 * HOUR + i * 60_000);
+  // Lot R7l1 : le prix du public est le vote « Toutes catégories » (ouvert au premier pointage, clos à la fin).
+  await ensureAllCategories(db, beziers);
+  const allCategories = await db.query.eventVotes.findFirst({
+    where: and(eq(t.eventVotes.eventId, beziers.id), eq(t.eventVotes.kind, "all_categories")),
+  });
+  if (!allCategories) throw new Error("Vote « Toutes catégories » absent");
+  await db
+    .update(t.eventVotes)
+    .set({ openedAt: entered[0]?.checkedInAt ?? beziers.startsAt, closedAt: beziers.endsAt })
+    .where(eq(t.eventVotes.id, allCategories.id));
   await db
     .insert(t.audienceVotes)
     .values(
       voters.map((voterUserId, i) => ({
         eventId: beziers.id,
+        voteId: allCategories.id,
         voterUserId,
         applicationId: targets[i] as string,
         createdAt: voteAt(i),
@@ -181,29 +264,11 @@ export async function seedPassport() {
     )
     .onConflictDoNothing();
 
-  const votes = await db
-    .select({ applicationId: t.audienceVotes.applicationId })
-    .from(t.audienceVotes)
-    .where(eq(t.audienceVotes.eventId, beziers.id));
-  const ranked = rankResults(votes, entered);
-  const winner = audienceWinner(ranked, votes.length);
-  await db
-    .insert(t.audiencePrizeResults)
-    .values(
-      ranked
-        .filter((r) => r.votes > 0)
-        .slice(0, AUDIENCE_PRIZE_RESULTS_KEPT)
-        .map((r) => ({
-          eventId: beziers.id,
-          applicationId: r.applicationId,
-          rank: r.rank,
-          votes: r.votes,
-          winner: winner?.applicationId === r.applicationId,
-        })),
-    )
-    .onConflictDoNothing();
-  for (const e of entered) await stamp(e.ownerId, beziers, "participation", e.checkedInAt, e.applicationId);
+  // Un vote à thème clos : « Plus belle japonaise » (origine JP), 12 voix, la Supra de Kenji gagne.
+  await seedJapaneseVote(beziers, entered, kenjiApp.applicationId);
+
   // Règlement du jour : chaque pointé a ses points de participation (le récap acquis ne dit pas « +0 point »).
+  for (const e of entered) await stamp(e.ownerId, beziers, "participation", e.checkedInAt, e.applicationId);
   await withTx(async (tx) => {
     const season = await pointsService.seasonFor(tx, beziers.settledAt ?? now);
     for (const e of entered) {
@@ -221,28 +286,20 @@ export async function seedPassport() {
         .onConflictDoNothing();
       await pointsService.recompute(tx, e.ownerId);
     }
-  });
-  const won = winner ? entered.find((e) => e.applicationId === winner.applicationId) : undefined;
-  if (won) {
-    await db.update(t.vehicles).set({ audiencePrizes: 1 }).where(eq(t.vehicles.id, won.vehicleId));
-    await stamp(won.ownerId, beziers, "audience_prize", beziers.settledAt ?? now, won.applicationId);
-    await withTx(async (tx) => {
-      const season = await pointsService.seasonFor(tx, beziers.settledAt ?? now);
-      await tx
+    // Le vrai règlement des votes : résultats (top 10), trophées, podium 15 / 10 / 5 (meilleur rang par voiture), compteur du
+    // véhicule gagnant de « Toutes catégories ». Les notifications partent comme en vrai (le Journal des gagnants).
+    const { awardedUserIds, winner } = await votesSettle.settleEvent(tx, beziers, async (entry) => {
+      const [row] = await tx
         .insert(t.pointEntries)
-        .values({
-          userId: won.ownerId,
-          seasonId: season.id,
-          kind: "audience_prize",
-          points: AUDIENCE_PRIZE_POINTS_DEFAULT,
-          eventId: beziers.id,
-          applicationId: won.applicationId,
-          createdAt: beziers.settledAt ?? now,
-        })
-        .onConflictDoNothing();
-      await pointsService.recompute(tx, won.ownerId);
+        .values({ ...entry, seasonId: season.id, createdAt: beziers.settledAt ?? now })
+        .onConflictDoNothing()
+        .returning();
+      return row ?? null;
     });
-  }
+    for (const userId of awardedUserIds) await pointsService.recompute(tx, userId);
+    const won = winner ? entered.find((e) => e.applicationId === winner.applicationId) : undefined;
+    if (won) await stamp(won.ownerId, beziers, "audience_prize", beziers.settledAt ?? now, won.applicationId);
+  });
 
   // --- Les autres sorties de Kenji sur la saison ------------------------------------------------------------
   const archive = async (
@@ -351,8 +408,11 @@ export async function seedPassport() {
     .select({ n: sql<number>`count(*)::int` })
     .from(t.passportStamps)
     .where(eq(t.passportStamps.userId, kenji.userId));
-  const rank = ranked.find((r) => r.applicationId === kenjiApp.applicationId)?.rank;
+  const [voices] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(t.audienceVotes)
+    .where(eq(t.audienceVotes.eventId, beziers.id));
   console.log(
-    `Passeport : ${total[0]?.n ?? 0} tampons pour Kenji (1 rare) ; Béziers Night : ${entered.length} véhicules pointés, ${votes.length} votants, Kenji ${rank}e, prix du public décerné.`,
+    `Passeport : ${total[0]?.n ?? 0} tampons pour Kenji (1 rare) ; Béziers Night : ${entered.length} véhicules pointés, ${voices?.n ?? 0} voix sur deux votes (« Toutes catégories », « Plus belle japonaise »), podiums réglés, trophée sur la Supra de Kenji.`,
   );
 }

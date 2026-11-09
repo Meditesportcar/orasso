@@ -8,7 +8,6 @@ import { StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -18,14 +17,13 @@ const { space3 } = tokens.spacing;
 
 export default function NewCrew() {
   const router = useRouter();
-  const { openProfile } = usePersona();
   const { me } = useSession();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [department, setDepartment] = useState(me?.profile.departments[0] ?? "66");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const close = () => (router.canGoBack() ? router.back() : openProfile("garage"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/crew"));
   return (
     <FlowScreen title={crewLabels.createCrew} onClose={close}>
       <Muted variant="body">{crewLabels.createCrewHint}</Muted>
@@ -63,7 +61,7 @@ export default function NewCrew() {
               description: description.trim() || null,
               department,
             });
-            router.replace(`/crew/${crew.slug}`);
+            router.replace({ pathname: "/crew", params: { crew: crew.slug } });
           } catch (e) {
             setError(errorMessage(e));
           } finally {

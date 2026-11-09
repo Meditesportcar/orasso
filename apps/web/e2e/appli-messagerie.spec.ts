@@ -92,13 +92,13 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     // Profil de B → Message → conversation.
     await page.goto(`/u/${b}`);
     await page.getByTestId("message-open").click();
-    await page.waitForURL(/\/boite\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    await page.waitForURL(/\/messages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     const id = new URL(page.url()).pathname.split("/").pop() ?? "";
 
     // B ouvre la conversation sur le site.
     const siteCtx = await siteContext(browser, bCookie);
     const site = await siteCtx.newPage();
-    await site.goto(`${WEB}/app/boite/${id}`);
+    await site.goto(`${WEB}/app/messages/${id}`);
     await expect(site.getByRole("heading", { name: a })).toBeVisible();
     await site.waitForTimeout(1500);
 
@@ -120,24 +120,22 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     await shot(page, `04-appui-long-${theme}`);
     await page.keyboard.press("Escape");
 
-    // C (qui ne le suit pas) demande le contact de A ; A l'accepte dans Boîte > Demandes.
+    // C (qui ne le suit pas) demande le contact de A ; A l'accepte dans Messages > Demandes de message (lot R7c2).
     await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, ta voiture est superbe !" });
-    // L'onglet Boîte (l'adresse `/boite` existe aussi dans les casquettes Organisateur et Prestataire).
+    // La bulle ouvre Messages : la conversation, et en tête la ligne « Demandes de message · 1 ».
     await page.goto("/accueil");
     await page
-      .getByRole("button", { name: /^Activité/ })
+      .getByRole("button", { name: /^Messages/ })
       .first()
       .click();
-    // Lot C2a : la feuille Boîte s'ouvre sur « Tout » (non lus) ; la conversation lue est dans « Messages ».
-    await page.getByTestId("inbox-messages").click();
     await expect(page.getByTestId("conversation-row").filter({ hasText: b })).toBeVisible({ timeout: 30_000 });
-    await shot(page, `01-boite-messages-${theme}`);
-    await page.getByTestId("inbox-requests").click();
+    await shot(page, `01-messages-${theme}`);
+    await page.getByTestId("messages-requests-row").click();
     const card = page.getByTestId("request-contact").filter({ hasText: c });
     await expect(card).toContainText("ta voiture est superbe", { timeout: 30_000 });
-    await shot(page, `02-boite-demandes-${theme}`);
+    await shot(page, `02-messages-demandes-${theme}`);
     await card.getByText("Accepter").click();
-    await page.waitForURL(/\/boite\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    await page.waitForURL(/\/messages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await expect(page.getByTestId("messages")).toContainText("Bonjour, ta voiture est superbe !");
 
     // Profil d'une personne qui ne me suit pas : Message ouvre la feuille « Demande de contact ».
