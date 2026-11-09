@@ -249,9 +249,10 @@ describe("GET /me/home : agrégation", () => {
         wash: [],
         fuel: [],
         agenda: [],
+        live: null,
         sponsored: null,
         widgets: {
-          order: ["next_access", "pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"],
+          order: ["next_access", "live", "pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"],
           hidden: [],
         },
       });
@@ -470,8 +471,10 @@ describe("widgets réglables", () => {
     const put = await req(u, "PUT", "/me/home/widgets", { order: ["fuel", "weather"], hidden: ["wash"] }, mode);
     expect(put.status).toBe(200);
     expect(put.json.order[0]).toBe("next_access");
-    expect(put.json.order.slice(1, 3)).toEqual(["fuel", "weather"]);
-    expect(put.json.order).toHaveLength(8);
+    // Lot R7d1 : « En cours » manque au réglage envoyé : il se place juste après « Prochain accès ».
+    expect(put.json.order[1]).toBe("live");
+    expect(put.json.order.slice(2, 4)).toEqual(["fuel", "weather"]);
+    expect(put.json.order).toHaveLength(9);
     expect(put.json.hidden).toEqual(["wash"]);
     const home = await req(u, "GET", "/me/home", undefined, mode);
     expect(home.json.widgets).toEqual(put.json);
@@ -532,7 +535,7 @@ describe("widgets réglables", () => {
       .update(profiles)
       .set({ homeWidgets: [{ id: "meteo", visible: false }] })
       .where(eq(profiles.userId, u.id));
-    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(8);
+    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(9);
   });
 
   it("compte suspendu : lecture seule, écriture refusée", async () => {
@@ -985,7 +988,7 @@ describe("corrections de la relecture", () => {
       .where(eq(profiles.userId, u.id));
     const r = await req(u, "GET", "/me/settings");
     expect(r.json.homeWidgets.order[0]).toBe("next_access");
-    expect(r.json.homeWidgets.order).toHaveLength(8);
+    expect(r.json.homeWidgets.order).toHaveLength(9);
     resetRateLimits();
     let last = 204;
     for (let i = 0; i < 61; i++)

@@ -1,5 +1,5 @@
 {
-  "id": "009b8500-9b44-46ef-9433-50b352647ab9",
+  "id": "f2357968-585f-473f-94ff-19e1de7e43b1",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -5681,6 +5681,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "presence_radius_m": {
+          "name": "presence_radius_m",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "admitted_vehicle_types": {
           "name": "admitted_vehicle_types",
           "type": "text[]",
@@ -6195,6 +6201,10 @@
         "events_dates_check": {
           "name": "events_dates_check",
           "value": "\"events\".\"ends_at\" > \"events\".\"starts_at\""
+        },
+        "events_presence_radius_check": {
+          "name": "events_presence_radius_check",
+          "value": "\"events\".\"presence_radius_m\" is null or \"events\".\"presence_radius_m\" between 50 and 2000"
         },
         "events_capacity_check": {
           "name": "events_capacity_check",
@@ -9220,12 +9230,6 @@
           "notNull": true,
           "default": true
         },
-        "group_key": {
-          "name": "group_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -9289,43 +9293,6 @@
           "isUnique": false,
           "concurrently": false,
           "method": "btree",
-          "with": {}
-        },
-        "notifications_user_group_idx": {
-          "name": "notifications_user_group_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "group_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "notifications_actor_ids_idx": {
-          "name": "notifications_actor_ids_idx",
-          "columns": [
-            {
-              "expression": "(\"data\" -> '_actorIds')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"notifications\".\"group_key\" is not null",
-          "concurrently": false,
-          "method": "gin",
           "with": {}
         },
         "notifications_undelivered_idx": {
@@ -10389,6 +10356,127 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.event_presences": {
+      "name": "event_presences",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "presence_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'gps'"
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validated_at": {
+          "name": "validated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "event_presences_event_id_events_id_fk": {
+          "name": "event_presences_event_id_events_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_presences_user_id_user_id_fk": {
+          "name": "event_presences_user_id_user_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_presences_ticket_id_tickets_id_fk": {
+          "name": "event_presences_ticket_id_tickets_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_presences_event_user_key": {
+          "name": "event_presences_event_user_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "event_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.account_qr_uses": {
       "name": "account_qr_uses",
       "schema": "",
@@ -10985,12 +11073,6 @@
         "home_widgets": {
           "name": "home_widgets",
           "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "activity_seen_at": {
-          "name": "activity_seen_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -17951,6 +18033,13 @@
         "season_carryover",
         "admin_adjustment",
         "audience_prize"
+      ]
+    },
+    "public.presence_kind": {
+      "name": "presence_kind",
+      "schema": "public",
+      "values": [
+        "gps"
       ]
     },
     "public.category_family": {

@@ -35,6 +35,7 @@ export * from "./plateFrame";
 export * from "./plateNumber";
 export * from "./points";
 export * from "./poster";
+export * from "./presence";
 export * from "./pro";
 export * from "./proposedVehicle";
 export * from "./pushRecipient";

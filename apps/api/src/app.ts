@@ -46,6 +46,7 @@ import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
+import { presenceRoutes } from "./modules/presence/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
@@ -233,6 +234,7 @@ app.route("/", devMailRoutes);
 // Lot 49 : passeport, prix du public, récap.
 app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);
+app.route("/", presenceRoutes);
 app.route("/", recapRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);

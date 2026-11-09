@@ -61,6 +61,17 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
+  // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
+  "closed",
+  "use_qr",
+  "scan_ticket",
+  "ticket_required",
+  "pay_at_entry",
+  "closed_to_public",
+  "already_present",
+  "gps_imprecise",
+  "out_of_zone",
+  "no_zone",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */
