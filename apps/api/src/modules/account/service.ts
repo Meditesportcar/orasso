@@ -64,6 +64,7 @@ import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
 import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
+import { hasFavoriteGarage } from "../home/service";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
@@ -263,7 +264,12 @@ export const accountService = {
       departments: p.departments,
       radiusKm: p.radiusKm,
       interests: await profilesRepo.interests(v.user.id),
-      homeWidgets: p.homeWidgets ? normalizeHomeWidgets(p.homeWidgets) : null,
+      // Sans réglage, `null` (les défauts) ; sauf un garage favori, qui reste affiché par défaut (tour 2).
+      homeWidgets: p.homeWidgets
+        ? normalizeHomeWidgets(p.homeWidgets)
+        : (await hasFavoriteGarage(v))
+          ? normalizeHomeWidgets(null, { favoriteGarage: true })
+          : null,
     };
   },
 

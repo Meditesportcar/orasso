@@ -175,10 +175,9 @@ describe("Mes sorties", () => {
     const items = r.json.myOutings.items as { title: string; status: string; vehicles: string[] }[];
     expect(items.map((i) => i.title)).toEqual(["Deux voitures", "Autre sortie"]);
     expect(r.json.myOutings.total).toBe(2);
-    // La place qui donne l'accès représente l'événement ; les deux véhicules restent lisibles.
+    // La place qui donne l'accès représente l'événement ; les deux véhicules restent listés (même modèle, deux voitures).
     expect(items[0]?.status).toBe("accepted");
     expect(items[0]?.vehicles).toHaveLength(2);
-    expect(new Set(items[0]?.vehicles).size).toBe(2);
   });
 
   it("tour 2 : inscriptions à des journées d'un même événement : datées, triées et « en cours » selon la journée", async () => {
@@ -237,10 +236,8 @@ describe("Mes sorties", () => {
       startsAt: at(0, -1),
       endsAt: at(0, 6),
     });
-    expect((await call(orga, "PUT", "/events/" + e.id + "/ticketing", { enabled: true, capacity: 5 })).status).toBe(
-      200,
-    );
-    expect((await call(u, "POST", "/events/" + e.id + "/tickets/reserve", { quantity: 1 })).status).toBe(201);
+    expect((await call(orga, "PUT", `/events/${e.id}/ticketing`, { enabled: true, capacity: 5 })).status).toBe(200);
+    expect((await call(u, "POST", `/events/${e.id}/tickets/reserve`, { quantity: 1 })).status).toBe(201);
     expect((await home(u)).json.myOutings.items[0]).toMatchObject({ kind: "ticket", checkedIn: false, ongoing: true });
     await db.update(tickets).set({ status: "used", usedAt: NOW });
     const scanned = await home(u);
@@ -698,7 +695,7 @@ describe("Du nouveau chez tes potes", () => {
     const { s, me, kenji } = await world();
     const veh = await createVehicle(kenji.id, ref);
     for (let i = 0; i < 3; i++) {
-      const e = await createEvent(s.id, { title: "Sortie " + i, startsAt: new Date(NOW.getTime() + (3 + i) * DAY) });
+      const e = await createEvent(s.id, { title: `Sortie ${i}`, startsAt: new Date(NOW.getTime() + (3 + i) * DAY) });
       await going(me, kenji, e.id, "Une sortie");
     }
     await newVehicle(me, kenji, veh.id, "une Supra");

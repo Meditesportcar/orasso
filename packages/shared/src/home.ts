@@ -73,14 +73,18 @@ const isWidgetId = (v: unknown): v is HomeWidgetId =>
 /**
  * Réglage valable à partir de n'importe quelle valeur enregistrée : identifiants inconnus ou en double retirés, widgets
  * manquants ajoutés à la fin (un widget ajouté plus tard apparaît sans réglage), « Prochain accès » en tête et jamais
- * masqué. Valeur illisible (ancien format, `null`) : l'ordre par défaut.
+ * masqué. Valeur illisible (ancien format, `null`) : l'ordre par défaut (`favoriteGarage` : le compte a un garage favori,
+ * qui reste alors affiché par défaut).
  */
-export function normalizeHomeWidgets(raw: unknown): HomeWidgetsConfig {
+export function normalizeHomeWidgets(raw: unknown, opts: { favoriteGarage?: boolean } = {}): HomeWidgetsConfig {
   const obj = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const rawOrder = Array.isArray(obj.order) ? obj.order : [];
   // Pas de liste de blocs masqués (aucun réglage, ancien format) : les blocs masqués par défaut. Une liste enregistrée,
   // même vide, est respectée telle quelle.
-  const rawHidden = Array.isArray(obj.hidden) ? obj.hidden : defaultHiddenHomeWidgets;
+  // Lot R7a2, tour 2 : un compte qui a un garage favori (donnée qu'il a choisie) le garde affiché par défaut.
+  const rawHidden = Array.isArray(obj.hidden)
+    ? obj.hidden
+    : defaultHiddenHomeWidgets.filter((id) => !(opts.favoriteGarage && id === "favorite_garage"));
   const order: HomeWidgetId[] = [HOME_FIXED_WIDGET];
   for (const id of rawOrder) if (isWidgetId(id) && !order.includes(id)) order.push(id);
   // Un bloc qui manque au réglage enregistré (ajouté depuis) prend sa place de l'ordre par défaut : juste après le dernier
@@ -416,7 +420,7 @@ const OUTING_DAY = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "nu
 
 /** La ligne de détail d'une sortie : ses véhicules, puis ses journées (« jeu 12 · ven 13 ») ; vide s'il n'y a ni l'un ni l'autre. */
 export function outingDetail(o: Pick<HomeOuting, "vehicles" | "days">): string {
-  const days = (o.days ?? []).map((d) => OUTING_DAY.format(new Date(d.startsAt)).replace(/./g, ""));
+  const days = (o.days ?? []).map((d) => OUTING_DAY.format(new Date(d.startsAt)).replace(/\./g, ""));
   return [...(o.vehicles ?? []), ...(days.length ? [days.join(" · ")] : [])].join(" · ");
 }
 

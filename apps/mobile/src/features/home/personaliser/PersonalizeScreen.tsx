@@ -20,11 +20,10 @@ import {
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
+import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
-import { SmallButton } from "@/features/sorties/bits";
 import { SmButton } from "@/ui/Kit";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";

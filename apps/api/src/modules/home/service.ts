@@ -88,6 +88,18 @@ export function nearestPlaces<T extends CachedPlace>(places: T[], from: LatLng, 
     .slice(0, limit);
 }
 
+/** Le compte a-t-il marqué un garage favori ? (seulement quand il n'a encore aucun réglage de l'Accueil : un défaut à décider) */
+export async function hasFavoriteGarage(v: Viewer): Promise<boolean> {
+  const saved = v.profile.homeWidgets as { hidden?: unknown } | null;
+  if (saved && Array.isArray(saved.hidden)) return false;
+  const [row] = await db
+    .select({ id: proFollows.proId })
+    .from(proFollows)
+    .where(and(eq(proFollows.userId, v.user.id), eq(proFollows.favorite, true)))
+    .limit(1);
+  return !!row;
+}
+
 export const homeService = {
   async get(v: Viewer, q: HomeQuery): Promise<HomeData> {
     rateLimit("homeRead", v.user.id);
@@ -98,7 +110,7 @@ export const homeService = {
     let radiusKm: number | null = q.radiusKm ?? v.profile.radiusKm;
     if (radiusKm !== null) radiusKm = Math.min(HOME_RADIUS.max, Math.max(HOME_RADIUS.min, radiusKm));
 
-    const widgets = normalizeHomeWidgets(v.profile.homeWidgets);
+    const widgets = normalizeHomeWidgets(v.profile.homeWidgets, { favoriteGarage: await hasFavoriteGarage(v) });
     const shown = new Set<HomeWidgetId>(visibleHomeWidgets(widgets));
     // Lot R7d1 : « En cours » suit le réglage de la personne (masqué = non calculé), même dans l'Accueil v2 de l'appli.
     const liveShown = shown.has("live");

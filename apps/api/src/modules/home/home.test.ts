@@ -621,6 +621,19 @@ describe("garage favori", () => {
     expect(owner.id).toBeTruthy();
   });
 
+  it("tour 2 : sans réglage enregistré, un garage favori reste affiché par défaut (Agenda et En attente masqués) ; sinon masqué", async () => {
+    const { pro, u } = await setup();
+    await db.update(profiles).set({ homeWidgets: null }).where(eq(profiles.userId, u.id));
+    const none = await req(u, "GET", "/me/home");
+    expect(none.json.widgets.hidden).toContain("favorite_garage");
+    expect((await req(u, "GET", "/me/settings")).json.homeWidgets).toBeNull();
+    expect((await req(u, "POST", `/pros/${pro.id}/favorite`)).status).toBe(204);
+    const home = await req(u, "GET", "/me/home");
+    expect(home.json.widgets.hidden).toEqual(["agenda", "pending"]);
+    expect(home.json.favoriteGarage).toMatchObject({ slug: pro.slug });
+    expect((await req(u, "GET", "/me/settings")).json.homeWidgets.hidden).toEqual(["agenda", "pending"]);
+  });
+
   it("réservé aux pros visibles : publié, titulaire en règle, pas le sien, fiche complète", async () => {
     const { owner, pro, u } = await setup();
     // Brouillon et fiche supprimée : introuvables.

@@ -10,6 +10,7 @@ import {
   moveHomeWidget,
   moveVisibleHomeWidget,
   normalizeHomeWidgets,
+  outingDetail,
   toggleHomeWidget,
   visibleHomeWidgets,
 } from "./home";
@@ -21,6 +22,16 @@ describe("réglage des widgets de l'accueil", () => {
     expect(normalizeHomeWidgets(null)).toEqual(defaultHomeWidgets);
     expect(normalizeHomeWidgets([{ id: "meteo", visible: true }])).toEqual(defaultHomeWidgets);
     expect(normalizeHomeWidgets("n'importe quoi")).toEqual(defaultHomeWidgets);
+  });
+
+  it("tour 2 : un garage favori reste affiché par défaut ; Agenda et Candidatures en attente restent masqués", () => {
+    const withGarage = normalizeHomeWidgets(null, { favoriteGarage: true });
+    expect(withGarage.hidden).toEqual(["agenda", "pending"]);
+    expect(normalizeHomeWidgets(null).hidden).toContain("favorite_garage");
+    // Un réglage enregistré prime : le garage masqué à la main le reste.
+    expect(normalizeHomeWidgets({ order: [], hidden: ["favorite_garage"] }, { favoriteGarage: true }).hidden).toEqual([
+      "favorite_garage",
+    ]);
   });
 
   it("retire les inconnus et les doublons, complète les manquants, garde « Prochain accès » en tête", () => {
@@ -317,5 +328,18 @@ describe("emplacement sponsorisé", () => {
     expect(counts.b / counts.a).toBeLessThan(4.5);
     expect(pickWeighted([], "s")).toBeNull();
     expect(pickWeighted([{ id: "z", weight: 0 }], "s")).toBeNull();
+  });
+});
+
+describe("Mes sorties : ligne de détail", () => {
+  it("véhicules puis journées ; vide sans l'un ni l'autre", () => {
+    expect(outingDetail({ vehicles: [], days: [] })).toBe("");
+    expect(outingDetail({ vehicles: ["Golf GTI 1995", "Clio V6 2001"], days: [] })).toBe(
+      "Golf GTI 1995 · Clio V6 2001",
+    );
+    const day = (d: string) => ({ date: d, startsAt: `${d}T10:00:00Z`, endsAt: `${d}T18:00:00Z` });
+    expect(outingDetail({ vehicles: ["Golf GTI 1995"], days: [day("2026-11-12"), day("2026-11-13")] })).toBe(
+      "Golf GTI 1995 · jeu 12 · ven 13",
+    );
   });
 });

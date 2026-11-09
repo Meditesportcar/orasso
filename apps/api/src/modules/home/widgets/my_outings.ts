@@ -31,7 +31,7 @@ const RANK: Partial<Record<HomeOuting["status"], number>> = {
 };
 const rankOf = (o: HomeOuting) => RANK[o.status] ?? 9;
 
-type Candidate = { outing: HomeOuting; vehicle: string | null };
+type Candidate = { outing: HomeOuting; vehicle: { id: string; label: string } | null };
 
 export async function myOutingsWidget(v: Viewer, upcoming: MyApplication[]): Promise<HomeMyOutings | null> {
   const t = now();
@@ -52,7 +52,7 @@ export async function myOutingsWidget(v: Viewer, upcoming: MyApplication[]): Pro
       const startsAt = a.day?.startsAt ?? a.event.startsAt;
       const endsAt = a.day?.endsAt ?? a.event.endsAt;
       return {
-        vehicle: a.vehicle?.label ?? null,
+        vehicle: a.vehicle ? { id: a.vehicle.id, label: a.vehicle.label } : null,
         outing: {
           key: `app-${a.id}`,
           kind: "application",
@@ -101,16 +101,18 @@ export async function myOutingsWidget(v: Viewer, upcoming: MyApplication[]): Pro
   const outings: HomeOuting[] = [...bySlug.values()].map((group) => {
     // La place qui représente l'événement : la plus « ouverte » (retenue, billet, …), puis la plus proche dans le temps.
     const sorted = [...group].sort((a, b) => rankOf(a.outing) - rankOf(b.outing) || byStart(a.outing, b.outing));
-    const main = sorted[0]!.outing;
+    const main = (sorted[0] as Candidate).outing;
     const days = group
       .flatMap((c) => c.outing.days)
       .sort((a, b) => a.date.localeCompare(b.date))
       .filter((d, i, all) => all.findIndex((x) => x.date === d.date) === i);
-    const vehicles = [...new Set(group.flatMap((c) => (c.vehicle ? [c.vehicle] : [])))];
+    // Dédoublonné par véhicule (deux voitures de même modèle gardent chacune leur ligne).
+    const own = group.flatMap((c) => (c.vehicle ? [c.vehicle] : []));
+    const vehicles = own.filter((v, i) => own.findIndex((x) => x.id === v.id) === i).map((v) => v.label);
     return {
       ...main,
       // Plusieurs journées : l'événement est daté de la première journée à venir, « en cours » si l'une l'est.
-      startsAt: [...group].map((c) => c.outing).sort(byStart)[0]!.startsAt,
+      startsAt: [...group].map((c) => c.outing).sort(byStart)[0]?.startsAt ?? main.startsAt,
       ongoing: group.some((c) => c.outing.ongoing),
       vehicles,
       days,
