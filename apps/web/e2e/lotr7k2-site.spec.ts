@@ -200,3 +200,74 @@ test("aucun emplacement : aucune carte ; un refus de l'API (plafond) retire la c
     if (mine) await deletePlacement(admin, mine.id).catch(() => undefined);
   }
 });
+
+// Tour 4 : la zone utile (sous la barre du haut, au-dessus des onglets) et le clic différé sur la fiche d'un pro.
+test("zone utile : une carte à moitié sous les onglets n'est pas comptée ; elle l'est une fois remontée", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await setTheme(page, "sable");
+  const admin = await adminCookie();
+  const mine = await createFeedPlacement(admin, { image: true, departments: ["66"] });
+  const restore = await pauseOthers(admin, mine.id);
+  try {
+    const user = await freshUser();
+    const calls = trackSponsored(page);
+    await openFil(page, user.email);
+    const card = page.getByTestId("feed-card-sponsored");
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    // Ces mesures donnent la zone utile ; la carte est placée avec 45 % de sa hauteur dans la zone et au moins 55 % dans la fenêtre.
+    const place = (share: number) =>
+      card.evaluate((el, s) => {
+        const bar = document.querySelector(".app__bar")?.getBoundingClientRect().bottom ?? 0;
+        const tabs = document.querySelector(".app__tabs")?.getBoundingClientRect().top ?? window.innerHeight;
+        const r = el.getBoundingClientRect();
+        window.scrollBy(0, r.top - (tabs - s * r.height));
+        return { bar, tabs, height: r.height, window: window.innerHeight };
+      }, share);
+    const m = await place(0.45);
+    expect(m.tabs).toBeLessThan(m.window - 40); // les onglets prennent bien de la place en bas
+    expect((0.45 * m.height + (m.window - m.tabs)) / m.height).toBeGreaterThan(0.5); // la fenêtre entière l'aurait comptée
+    await page.waitForTimeout(2500);
+    expect(calls.filter((c) => c.kind === "impression")).toHaveLength(0);
+    await place(0.6);
+    await expect.poll(() => calls.filter((c) => c.kind === "impression").length, { timeout: 15_000 }).toBe(1);
+  } finally {
+    await restore();
+    await deletePlacement(admin, mine.id).catch(() => undefined);
+  }
+});
+
+test("clic sur le titre d'un pro pendant que l'affichage est en route : affichage puis clic, un de chaque", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const admin = await adminCookie();
+  const mine = await createFeedPlacement(admin, { image: true, departments: ["66"] });
+  const restore = await pauseOthers(admin, mine.id);
+  try {
+    const user = await freshUser();
+    const calls = trackSponsored(page);
+    // L'affichage met 2 s à répondre : le clic arrive pendant l'envoi, la page change tout de suite.
+    await page.route("**/api/sponsored/*/impression", async (route) => {
+      await new Promise((r) => setTimeout(r, 2000));
+      await route.continue();
+    });
+    await openFil(page, user.email);
+    const card = page.getByTestId("feed-card-sponsored");
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.scrollIntoViewIfNeeded();
+    await expect.poll(() => calls.filter((c) => c.kind === "impression").length, { timeout: 15_000 }).toBe(1);
+    await card.locator("a.fil-card__title").click();
+    await expect(page).toHaveURL(/\/p\//);
+    await expect.poll(() => calls.filter((c) => c.kind === "click").length, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await placementById(admin, mine.id)).bySurface.feed?.clicks).toBe(1);
+    expect((await placementById(admin, mine.id)).bySurface.feed?.impressions).toBe(1);
+    expect(calls.filter((c) => c.kind === "impression")).toHaveLength(1);
+  } finally {
+    await restore();
+    await deletePlacement(admin, mine.id).catch(() => undefined);
+  }
+});
