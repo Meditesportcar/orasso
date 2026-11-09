@@ -1,0 +1,3 @@
+// Source réservée au lot R7k1 (sponsorisé) : ce fichier est remplacé par ce lot ; rien ici avant. Les cartes
+// « Sponsorisé » ne passent pas par le classement : `insertSponsored` (packages/shared) les place aux positions 4, 10, 16…
+export const source = null;

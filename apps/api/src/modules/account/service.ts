@@ -63,6 +63,7 @@ import { anonymizeCommunicationForDeletedAccount } from "../communication/anonym
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
+import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
@@ -463,6 +464,8 @@ export const accountService = {
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
+      // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
+      photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
