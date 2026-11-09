@@ -162,4 +162,11 @@ export type InboxSummary = {
   pendingRequests: number;
 };
 
-export type UploadResult = { id: string; key: string; width: number; height: number };
+export type UploadResult = {
+  id: string;
+  key: string;
+  width: number;
+  height: number;
+  /** Lot R7g : durée lue dans le conteneur d'une vidéo envoyée (`story_video`), en millisecondes. */
+  durationMs?: number;
+};

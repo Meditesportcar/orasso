@@ -41,10 +41,11 @@ export const uploadPurposes = [
   // Lot R7e1 : photo d'une publication du Fil (privée jusqu'à la publication, puis copiée sous une clé publique).
   "feed_post",
 
-  // Lot R7f1 : photo d'une story (privée, composée en 9:16 par le serveur) ; la vidéo (`story_video`) est déclarée,
-  // refusée (501) tant que le lot R7g1 n'est pas là.
+  // Lot R7f1 : photo d'une story (privée, composée en 9:16 par le serveur). Lot R7g : la vidéo (`story_video`, 60 Mo,
+  // MP4/MOV H.264 de 31 s au plus, vérifiée sans ffmpeg) et sa vignette (`story_poster`, première image, WebP).
   "story",
   "story_video",
+  "story_poster",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -65,6 +66,7 @@ export const privateUploadPurposes: readonly UploadPurpose[] = [
   // Lot R7f1 : la photo d'une story attend, privée, d'être composée.
   "story",
   "story_video",
+  "story_poster",
 ];
 
 /**
@@ -91,9 +93,10 @@ export const acceptedUploadPurposes = [
   // Lot R7e1 : photo d'une publication du Fil (`POST /me/feed-posts`).
   "feed_post",
 
-  // Lot R7f1 : photo d'une story (`POST /me/stories`) ; la vidéo répond 501 « Vidéo bientôt » (lot R7g1).
+  // Lot R7f1 : photo d'une story (`POST /me/stories`) ; lot R7g : sa vidéo et la vignette de celle-ci.
   "story",
   "story_video",
+  "story_poster",
 ] as const satisfies readonly UploadPurpose[];
 
 /**

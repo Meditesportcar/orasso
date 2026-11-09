@@ -66,14 +66,30 @@ export const storiesAccess = {
     return { stories: await serializeStories(v, rows) };
   },
 
-  /** Fichier d'une story (photo ou vignette de vidéo) après contrôle de l'audience. */
-  async file(v: Viewer, id: string, name: string, kind: "media" | "poster"): Promise<{ data: Buffer; type: string }> {
+  /**
+   * Fichier d'une story (photo, vidéo ou vignette) après contrôle de l'audience : sa clé, sa taille et son type, sans le
+   * lire (lot R7g : une vidéo se sert par morceaux, `Range`, elle n'est jamais chargée en mémoire).
+   */
+  async fileRef(
+    v: Viewer,
+    id: string,
+    name: string,
+    kind: "media" | "poster",
+  ): Promise<{ key: string; size: number; type: string }> {
     const row = await requireVisibleStory(v, id);
     const key = kind === "media" ? row.story.storageKey : row.story.posterKey;
     if (!key || name !== fileNameOf(key)) throw notFound("Fichier introuvable");
-    const data = await storage.get(key);
+    const size = await storage.size(key);
+    if (size === null) throw notFound("Fichier introuvable");
+    return { key, size, type: key.endsWith(".mp4") ? "video/mp4" : "image/webp" };
+  },
+
+  /** Fichier image d'une story (photo ou vignette de vidéo) après contrôle de l'audience. */
+  async file(v: Viewer, id: string, name: string, kind: "media" | "poster"): Promise<{ data: Buffer; type: string }> {
+    const ref = await storiesAccess.fileRef(v, id, name, kind);
+    const data = await storage.get(ref.key);
     if (!data) throw notFound("Fichier introuvable");
-    return { data, type: key.endsWith(".mp4") ? "video/mp4" : "image/webp" };
+    return { data, type: ref.type };
   },
 
   /** `GET /stories/:id/thumb` : la vignette (affiche d'une vidéo, sinon la photo) pour la ligne d'une réponse. */

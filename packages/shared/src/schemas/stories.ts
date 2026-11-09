@@ -47,13 +47,18 @@ export const storyTagInputSchema = z.discriminatedUnion("kind", [
 export type StoryTagInput = z.infer<typeof storyTagInputSchema>;
 
 /**
- * `POST /me/stories` (photo). `plateRects` : rectangles dans la photo d'origine (fractions 0–1), comme pour les
+ * `POST /me/stories` (photo, ou vidéo avec `posterKey`). `plateRects` : rectangles dans la photo d'origine (fractions 0–1), comme pour les
  * photos de véhicule ; sans rectangle, `noPlateConfirmed` doit être vrai (sinon 400 `plate_decision_required`,
  * quel que soit le public). L'un ou l'autre, pas les deux.
  */
 export const storyCreateSchema = z
   .object({
     uploadKey: z.string().min(1).max(200),
+    /**
+     * Lot R7g : vignette (envoi `story_poster`) d'une story **vidéo** (`uploadKey` est alors l'envoi `story_video`). Une
+     * vidéo est publiée telle quelle : `frame`, `plateRects` et `noPlateConfirmed` ne servent à rien et sont ignorés.
+     */
+    posterKey: z.string().min(1).max(200).optional(),
     frame: storyFrameSchema.optional(),
     plateRects: z.array(plateRectSchema).max(MAX_PLATE_RECTS).nullish(),
     noPlateConfirmed: z.boolean().optional(),

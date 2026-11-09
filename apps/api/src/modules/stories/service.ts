@@ -82,6 +82,7 @@ import {
 import { composeStoryPhoto } from "./compose";
 import { purgeStoryFiles } from "./expire";
 import { softDeleteWithCopies } from "./purge";
+import { type Prepared, prepareVideo } from "./video";
 
 export { softDeleteWithCopies };
 
@@ -359,8 +360,10 @@ export const storiesService = {
     if (again) return again;
     rateLimit("storyPublish", v.user.id);
     const rects = input.plateRects ?? [];
+    // Lot R7g : avec une vignette, c'est une vidéo, publiée telle quelle (décision de Damien du 09/11) : aucune plaque.
+    const video = Boolean(input.posterKey);
     // Photo : la décision de plaque est obligatoire quel que soit le public, crew compris (D38, « règle des plaques partout »).
-    if (!rects.length && !input.noPlateConfirmed) {
+    if (!video && !rects.length && !input.noPlateConfirmed) {
       throw new AppError(400, "plate_decision_required", storyLabels.plateDecisionRequired);
     }
     await checkPersona(v, input);
@@ -466,36 +469,54 @@ export const storiesService = {
       else tags.push(t);
     }
 
-    // Le fichier envoyé : à moi, pour une story, pas encore rattaché.
-    const [pending] = await db
-      .select()
-      .from(uploads)
-      .where(
-        and(
-          eq(uploads.key, input.uploadKey),
-          eq(uploads.userId, v.user.id),
-          eq(uploads.purpose, "story" satisfies UploadPurpose),
-          isNull(uploads.consumedAt),
-        ),
-      );
-    // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
-    // on retrouve alors sa story avant de refuser.
-    if (!pending) {
-      const won = await replay();
-      if (won) return won;
-      throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
-    }
-    const source = await storage.get(pending.key);
-    if (!source) {
-      const won = await replay();
-      if (won) return won;
-      throw validation("Image introuvable : envoie-la à nouveau.");
-    }
-    const frame: Frame | undefined = input.frame;
-    const composed = await composeStoryPhoto(source, { frame, rects });
+    // Le média : la vidéo (lot R7g) a sa préparation à part (`video.ts`) ; la photo est composée ici.
+    const preparePhoto = async (): Promise<Prepared | { replayed: StoryCreated }> => {
+      // Le fichier envoyé : à moi, pour une story, pas encore rattaché.
+      const [pending] = await db
+        .select()
+        .from(uploads)
+        .where(
+          and(
+            eq(uploads.key, input.uploadKey),
+            eq(uploads.userId, v.user.id),
+            eq(uploads.purpose, "story" satisfies UploadPurpose),
+            isNull(uploads.consumedAt),
+          ),
+        );
+      // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
+      // on retrouve alors sa story avant de refuser.
+      if (!pending) {
+        const won = await replay();
+        if (won) return { replayed: won };
+        throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+      }
+      const source = await storage.get(pending.key);
+      if (!source) {
+        const won = await replay();
+        if (won) return { replayed: won };
+        throw validation("Image introuvable : envoie-la à nouveau.");
+      }
+      const frame: Frame | undefined = input.frame;
+      const composed = await composeStoryPhoto(source, { frame, rects });
 
-    const key = `private/stories/${id}/${randomBytes(8).toString("hex")}.webp`;
-    await storage.put(key, composed.data);
+      const photoKey = `private/stories/${id}/${randomBytes(8).toString("hex")}.webp`;
+      await storage.put(photoKey, composed.data);
+      return {
+        mediaKind: "photo",
+        key: photoKey,
+        posterKey: null,
+        width: composed.info.width,
+        height: composed.info.height,
+        durationMs: null,
+        plateState: rects.length ? "blurred" : "none_confirmed",
+        sent: [{ key: pending.key, purpose: "story" }],
+      };
+    };
+    const prepared = video
+      ? await prepareVideo(v, { uploadKey: input.uploadKey, posterKey: input.posterKey ?? "" }, id, replay)
+      : await preparePhoto();
+    if ("replayed" in prepared) return prepared.replayed;
+    const key = prepared.key;
     const at = now();
     try {
       await withTx(async (tx, after) => {
@@ -519,8 +540,10 @@ export const storiesService = {
         if ((live?.n ?? 0) >= STORY_LIVE_MAX) {
           throw new AppError(409, "too_many_stories", storyLabels.tooManyStories);
         }
-        const upload = await uploadsService.consume(tx, v.user.id, input.uploadKey, "story");
-        if (!upload) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+        for (const sent of prepared.sent) {
+          const upload = await uploadsService.consume(tx, v.user.id, sent.key, sent.purpose);
+          if (!upload) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+        }
         const [row] = await tx
           .insert(stories)
           .values({
@@ -531,12 +554,14 @@ export const storiesService = {
             proId: ctx.proId,
             audience: input.audience,
             crewId: storyShape.crewId,
-            mediaKind: "photo",
+            mediaKind: prepared.mediaKind,
             storageKey: key,
-            width: composed.info.width,
-            height: composed.info.height,
+            posterKey: prepared.posterKey,
+            width: prepared.width,
+            height: prepared.height,
+            durationMs: prepared.durationMs,
             status: "ready",
-            plateState: rects.length ? "blurred" : "none_confirmed",
+            plateState: prepared.plateState,
             caption: input.caption || null,
             placeLabel: input.placeLabel || null,
             vehicleId,
@@ -626,13 +651,14 @@ export const storiesService = {
       });
     } catch (error) {
       await removeOrRetry(key);
+      if (prepared.posterKey) await removeOrRetry(prepared.posterKey);
       // Deux envois identiques en même temps : le perdant retrouve la story du gagnant.
       const won = await replay().catch(() => null);
       if (won) return won;
       throw error;
     }
     // Le fichier d'origine n'est jamais gardé : si sa suppression échoue, elle est reprise par la tâche `storage.remove`.
-    await removeOrRetry(pending.key);
+    for (const sent of prepared.sent) await removeOrRetry(sent.key);
     return { id, status: "ready", expiresAt: storyExpiresAt(at).toISOString(), skipped };
   },
 

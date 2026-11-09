@@ -170,6 +170,11 @@ export const iconShapes = {
   moto: [c(5.5, 16, 3.5), c(18.5, 16, 3.5), p("M5.5 16l4-7h5l4 7M9.5 9H7M14 6h3l1.5 3")], // type moto (`s-vadd`)
   crop: [p("M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14")], // recadrer, `#i-crop`
   minus: [p("M5 12h14")], // dézoomer (le pendant de `add`)
+  // Lot R7g (stories vidéo) : le bouton « Vidéo » et la durée d'une vidéo (`#i-video` de la maquette R7), lecture, son.
+  video: [r(3, 6.5, 12.5, 11, 2.5), p("M15.5 10.5l5-3v9l-5-3")], // vidéo
+  play: [p("M8 5.5v13l10.5-6.5z")], // lecture (vidéo en pause)
+  sound: [p("M4 9.5h3.5L12 6v12l-4.5-3.5H4z"), p("M15.5 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11")], // son activé
+  soundOff: [p("M4 9.5h3.5L12 6v12l-4.5-3.5H4z"), p("M16 9.5l5 5M21 9.5l-5 5")], // son coupé
   trash: [p("M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13")], // supprimer une photo, `#i-trash`
   // Puissance (`#i-bolt`) : motorisation, style Sportive et préparation Moteur ; l'éclair « express » reste réservé.
   power: [p("M13 2L4 14h7l-1 8 9-12h-7z")],
