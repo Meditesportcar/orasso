@@ -31,6 +31,7 @@ import {
   siteLabels as L,
   LINEUP_BLOCK_SIZE,
   lineupLabels,
+  liveAt,
   liveOnSiteLine,
   liveRunning,
   liveVotesLabel,
@@ -55,7 +56,7 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import type { CSSProperties } from "react";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation, useRevalidator } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { InviteBanner, WhoGoes } from "../components/EventInvite";
@@ -75,6 +76,7 @@ import { type InviteNoticeData, isShareable, muteInviterAction } from "../lib/ev
 import { formatDateTime, formatDateTimeYear, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
+import { useNowUntil, useReloadOnReturn } from "../lib/useNowUntil";
 import "../styles/invitations.css";
 import "../styles/live.css";
 import "../styles/providers.css";
@@ -150,6 +152,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ended: new Date(event.endsAt).getTime() <= nowMs(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
+    // Lot R7d2, tour 2 : la ligne « Depuis l'appli, valide ta présence » ne s'adresse qu'aux profils de l'appli qui ont le
+    // bouton (visiteur, exposant) : pas à qui a une casquette pro, prestataire, média ou organisateur.
+    gpsProfile: Boolean(me?.personas.every((p) => p.kind === "fan" || p.kind === "visitor")),
     origin: originOf(request),
     state: registrationState(event, nowMs()),
     block: registrationBlock(event, nowMs()),
@@ -417,6 +422,7 @@ function EventPage({
     structure,
     categories,
     connected,
+    gpsProfile,
     origin,
     state,
     block,
@@ -474,13 +480,17 @@ function EventPage({
   // Lot R7d2 (maquette R7.13) : pendant l'événement, l'état du direct vient du bloc `live` de l'API (jamais calculé ici,
   // rien après la fin) ; une fois entré, « Votes · N ouverts » devient le bouton principal de la fiche. La présence par
   // GPS est réservée à l'appli (la position du téléphone) : le site le dit.
-  const live = event.live ?? null;
+  const revalidator = useRevalidator();
+  const reloadPage = () => void revalidator.revalidate();
+  const liveClock = useNowUntil(event.endsAt, reloadPage);
+  useReloadOnReturn(Boolean(event.live), reloadPage);
+  const live = liveAt(event.live ?? null, event.endsAt, liveClock);
   const running = liveRunning(live);
   const onSiteLine = liveOnSiteLine(live);
   const votesLabel = liveVotesLabel(live);
   const offerPresence = canOfferPresence(live, {
     signedIn: connected,
-    eligibleProfile: true,
+    eligibleProfile: gpsProfile,
     holdsVehicleSlot: mine.some((a) => a.status === "accepted"),
   });
   const mainVariant = votesLabel ? "secondary" : "primary";

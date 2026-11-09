@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
-import { lydia, northOf, resetPresences, SLUG, VISITORS } from "./helpers/lotr7d2";
+import { lydia, northOf, resetPresences, SLUG, VISITORS, withAccess } from "./helpers/lotr7d2";
 import { RELAIS } from "./relais";
 
 // Lot R7d2 (le direct sur place, appli) sur l'événement en cours « Rassemblement du Lydia » du seed : la fiche pendant
@@ -260,6 +260,34 @@ test.describe("« Je suis sur place » (position simulée par le navigateur)", (
     await expect(page.getByTestId("presence-error")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("presence-settings")).toBeVisible();
     await ctx.close();
+  });
+});
+
+test.describe("le bouton suit l'accès (tour 2 : l'API ne refuserait pas avant la mesure)", () => {
+  test("fermé au public, billetterie externe, entrée payante sans billet : ni bouton ni mesure ; entrée libre : le bouton", async ({
+    browser,
+  }) => {
+    await running(VISITORS.vague);
+    await resetPresences([VISITORS.vague]);
+    for (const access of ["closed", "paid_external", "paid_orasso"]) {
+      await withAccess(access, async () => {
+        const ev = await lydia(VISITORS.vague);
+        expect(ev.live.canValidatePresence, access).toBe(false);
+        const { ctx, page } = await open(browser, VISITORS.vague, "beton", undefined, 1500);
+        await goEvent(page);
+        await expect(page.getByTestId("event-presence-open"), access).toHaveCount(0);
+        if (access === "closed") await shot(page, "fiche-ferme-au-public");
+        await ctx.close();
+      });
+    }
+    await withAccess("free", async () => {
+      const ev = await lydia(VISITORS.vague);
+      expect(ev.live.canValidatePresence).toBe(true);
+      const { ctx, page } = await open(browser, VISITORS.vague, "beton", undefined, 1500);
+      await goEvent(page);
+      await expect(page.getByTestId("event-presence-open")).toBeVisible();
+      await ctx.close();
+    });
   });
 });
 

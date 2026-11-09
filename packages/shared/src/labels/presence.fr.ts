@@ -11,6 +11,8 @@ export const presenceLabels = {
     "Ta position est vérifiée une fois, puis oubliée : elle n'est ni suivie ni gardée. Une validation par compte.",
   /** Réponse de l'API et phrase de confirmation. */
   validated: "Présence validée : tu es sur place, tu peux voter.",
+  /** Même confirmation quand le droit de vote n'est pas encore ouvert (`canVote` faux). */
+  validatedNoVote: "Présence validée : tu es sur place.",
   /** Notification `presence_validated` (Journal). */
   notificationTitle: "Présence validée",
   notificationBody: (title: string) => `Tu es sur place à « ${title} » : ton tampon est posé et tu peux voter.`,
@@ -38,6 +40,9 @@ export const presenceLabels = {
   /** Permission de position refusée : l'appli renvoie vers les réglages du téléphone. */
   permissionDenied: "Orasso n'a pas accès à ta position : autorise-la dans les réglages du téléphone, puis réessaie.",
   openSettings: "Ouvrir les réglages",
+  /** Position « approximative » autorisée seulement : trop floue pour prouver quoi que ce soit, rien n'est mesuré. */
+  permissionApproximate:
+    "Autorise la position exacte : une position approximative ne suffit pas pour prouver que tu es sur place. Réglages du téléphone, puis réessaie.",
   /** La position ne vient pas (délai dépassé, capteur éteint). */
   locationFailed:
     "Ta position n'est pas arrivée : active la localisation du téléphone, sors à l'air libre et réessaie.",
@@ -57,7 +62,8 @@ export const presenceLabels = {
   summaryPrivacy: "Un nombre seulement, jamais de noms. Aucune position n'est gardée.",
   summaryError: "Les présents n'ont pas pu être chargés.",
   errors: {
-    closed: "La présence se valide pendant l'événement, à partir de 30 minutes avant son début.",
+    closed:
+      "La présence se valide pendant l'événement, à partir de 30 minutes avant son début (ou de chaque jour). Tu pourras réessayer à l'ouverture.",
     use_qr: "Tu as une place avec ton véhicule : l'accueil te scanne à l'entrée, pas besoin de position.",
     scan_ticket: "Ton billet se fait scanner à l'entrée : pas besoin de position.",
     ticket_required: "L'entrée est payante : prends ton billet.",

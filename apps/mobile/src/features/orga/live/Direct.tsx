@@ -117,26 +117,36 @@ function DirectEvent({
   );
 
   // Canal en direct, seulement tant que l'onglet est affiché : le changement de casquette ou d'onglet désabonne.
-  useChannel(focused ? `event:${eventId}:live` : null, (event) => {
-    if (event.type === "live") {
-      // Un jour choisi : la diffusion compte tous les jours, on relit le jour affiché.
-      if (shownDay) void live.reload();
-      else live.setData(event.payload as LiveCounters);
-      // Un compteur bouge : le rapport des scans suit (au plus une fois toutes les 5 s).
-      if (field && !scanTimer.current) {
-        scanTimer.current = setTimeout(() => {
-          scanTimer.current = null;
-          void scans.reload();
-        }, 5_000);
+  useChannel(
+    focused ? `event:${eventId}:live` : null,
+    (event) => {
+      if (event.type === "live") {
+        // Un jour choisi : la diffusion compte tous les jours, on relit le jour affiché.
+        if (shownDay) void live.reload();
+        else live.setData(event.payload as LiveCounters);
+        // Un compteur bouge : le rapport des scans suit (au plus une fois toutes les 5 s).
+        if (field && !scanTimer.current) {
+          scanTimer.current = setTimeout(() => {
+            scanTimer.current = null;
+            void scans.reload();
+            // Tour 2 (Codex) : un scan de véhicule ou de billet émet `live` (pas `presence.changed`) : les présents suivent
+            // dans la même relecture groupée.
+            void presents.reload();
+          }, 5_000);
+        }
+      } else if (event.type === "presence.changed") {
+        void presents.reload();
+      } else if (event.type === "alert" || event.type === "alert.resolved") {
+        alerts.setData(applyAlertEvent(alerts.data ?? [], event.type, event.payload, clockNow()));
+      } else if (event.type === "incident") {
+        void incidents.reload();
       }
-    } else if (event.type === "presence.changed") {
-      void presents.reload();
-    } else if (event.type === "alert" || event.type === "alert.resolved") {
-      alerts.setData(applyAlertEvent(alerts.data ?? [], event.type, event.payload, clockNow()));
-    } else if (event.type === "incident") {
-      void incidents.reload();
-    }
-  });
+    },
+    // Reconnexion du canal : les messages envoyés pendant la coupure sont perdus, les présents se relisent.
+    () => {
+      if (field) void presents.reload();
+    },
+  );
 
   const reloadAll = async () => {
     await Promise.all([

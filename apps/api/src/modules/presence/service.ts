@@ -17,6 +17,7 @@ import {
   type PresenceRefusal,
   type PresenceResult,
   type PresenceSummary,
+  presenceGate,
   presenceLabels,
   presenceRefusal,
   staffRoles,
@@ -102,6 +103,15 @@ async function canVoteSafely(ex: Executor, event: EventRow, userId: string): Pro
     console.error("Droit de vote non calculé après une présence validée :", error);
     return false;
   }
+}
+
+/** Le jour en cours d'un événement de plusieurs jours (le dernier commencé), `null` pour un événement d'un jour. */
+function currentDay<D extends { startsAt: Date }>(days: readonly D[], t: Date): D | null {
+  if (days.length < 2) return null;
+  const sorted = [...days].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  let found = sorted[0] ?? null;
+  for (const d of sorted) if (d.startsAt <= t) found = d;
+  return found;
 }
 
 export const presenceService = {
@@ -213,19 +223,40 @@ export const presenceService = {
     const days = await daysRepo.list(e.id, ex);
     const { dayIndex, dayCount } = liveDay({ days }, t);
     const running = phase === "running" && e.status === "published";
+    // Plusieurs jours : « jour N » et ses nombres vont ensemble (retenues et sur place de ce jour, comme le direct de
+    // l'organisateur) ; un jour sans date de jour (`dayDate`) ne peut pas arriver, la base la rend obligatoire.
+    const day = currentDay(days, t);
+    const dayFilter = day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null;
     const [onSite, accepted, entered, proofs] = await Promise.all([
-      running ? onSiteCount(ex, e.id) : Promise.resolve(0),
-      running ? eventsRepo.statusCounts(e.id, ex).then((c) => c.accepted) : Promise.resolve(0),
+      running ? onSiteCount(ex, e.id, dayFilter) : Promise.resolve(0),
+      running ? eventsRepo.statusCounts(e.id, ex, day?.id).then((c) => c.accepted) : Promise.resolve(0),
       running ? vehiclesEntered(ex, e.id) : Promise.resolve(null),
       viewerId ? myProofs(ex, e.id, viewerId) : Promise.resolve(null),
     ]);
     const counts = liveCountsVisible(phase, e.status, { onSiteCount: onSite, acceptedCount: accepted });
+    const myPresence = proofs ? myPresenceOf(proofs) : null;
+    // Le bouton « Je suis sur place » : la même règle que la validation, avant la mesure (accès, billet, heures, place
+    // de véhicule). Calculé seulement pour une personne connectée, pendant l'événement, pas encore présente.
+    let canValidatePresence = false;
+    if (running && viewerId && proofs && myPresence === null) {
+      const entry = await entryOf(ex, e, viewerId, t);
+      canValidatePresence =
+        presenceGate({
+          event: { ...e, days },
+          now: t,
+          holdsVehicleSlot: await holdsVehicleSlot(ex, e.id, viewerId),
+          access: entry.access,
+          ticket: entry.ticket,
+          alreadyPresent: proofs.gps,
+        }) === null;
+    }
     return {
       phase,
       dayIndex,
       dayCount,
       ...counts,
-      myPresence: proofs ? myPresenceOf(proofs) : null,
+      myPresence,
+      canValidatePresence,
       votesOpen: entered ? votesOpenNow(e, entered, t) : 0,
       organizerStoryAvailable: false,
     };
@@ -262,10 +293,11 @@ export const presenceService = {
       }
     }
     if (!hit || !e) return null;
-    const [structure, days, onSite, entered, voted] = await Promise.all([
+    const days = await daysRepo.list(e.id);
+    const day = currentDay(days, t);
+    const [structure, onSite, entered, voted] = await Promise.all([
       structureById(e.structureId),
-      daysRepo.list(e.id),
-      onSiteCount(db, e.id),
+      onSiteCount(db, e.id, day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null),
       vehiclesEntered(db, e.id),
       db.execute<{ n: number }>(
         sql`select count(*)::int as n from audience_votes where event_id = ${e.id} and voter_user_id = ${v.user.id}`,

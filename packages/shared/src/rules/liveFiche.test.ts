@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { presenceLabels } from "../labels/presence.fr";
 import type { EventLive } from "../schemas/presence";
-import { canOfferPresence, liveOnSiteLine, liveRunning, liveVotesLabel } from "./liveFiche";
+import { canOfferPresence, liveAt, liveOnSiteLine, liveRunning, liveVotesLabel } from "./liveFiche";
 
 const running: EventLive = {
   phase: "running",
@@ -11,6 +11,7 @@ const running: EventLive = {
   onSiteCount: 11,
   acceptedCount: 14,
   myPresence: null,
+  canValidatePresence: true,
   votesOpen: 3,
   organizerStoryAvailable: false,
 };
@@ -42,18 +43,33 @@ describe("la fiche pendant l'événement (lot R7d2)", () => {
     expect(liveVotesLabel(null)).toBeNull();
   });
 
+  const ok = { signedIn: true, eligibleProfile: true, holdsVehicleSlot: false };
   it("« Je suis sur place » : pendant, pas encore présent, sans place de véhicule, connecté", () => {
-    const ok = { signedIn: true, eligibleProfile: true, holdsVehicleSlot: false };
     expect(canOfferPresence(running, ok)).toBe(true);
     expect(canOfferPresence({ ...running, myPresence: "gps" }, ok)).toBe(false);
     expect(canOfferPresence({ ...running, myPresence: "checked_in" }, ok)).toBe(false);
     expect(canOfferPresence(running, { ...ok, holdsVehicleSlot: true })).toBe(false);
     expect(canOfferPresence(running, { ...ok, signedIn: false })).toBe(false);
     expect(canOfferPresence(running, { ...ok, eligibleProfile: false })).toBe(false);
+    // L'API ne l'accepterait pas (fermé au public, billetterie externe, entrée payante, billet payant, nuit) : pas de bouton.
+    expect(canOfferPresence({ ...running, canValidatePresence: false }, ok)).toBe(false);
     expect(canOfferPresence(before, ok)).toBe(false);
     expect(canOfferPresence(after, ok)).toBe(false);
     expect(liveRunning(running)).toBe(true);
     expect(liveRunning(after)).toBe(false);
     expect(liveRunning(null)).toBe(false);
+  });
+
+  it("garde d'heure : passé la fin, un écran resté ouvert perd compteurs, votes et bouton GPS", () => {
+    const end = new Date("2026-11-07T18:00:00Z");
+    const mine = { ...running, myPresence: "gps" as const };
+    expect(liveAt(mine, end, end.getTime() - 1)).toBe(mine);
+    const late = liveAt(mine, end, end.getTime());
+    expect(late).toMatchObject({ phase: "after", onSiteCount: null, acceptedCount: null, votesOpen: 0 });
+    expect(liveOnSiteLine(late)).toBeNull();
+    expect(liveVotesLabel(late)).toBeNull();
+    expect(canOfferPresence(liveAt(running, end, end.getTime() + 5_000), ok)).toBe(false);
+    expect(liveAt(before, end, end.getTime() + 1)).toBe(before);
+    expect(liveAt(null, end, 0)).toBeNull();
   });
 });

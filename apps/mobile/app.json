@@ -85,7 +85,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Orasso utilise ta position seulement quand tu le demandes (« Utiliser ma position ») pour montrer les événements et les pros autour de toi et, si tu fais partie du staff, situer une alerte ou un incident. Elle n’est jamais enregistrée.",
+          "locationWhenInUsePermission": "Orasso utilise ta position seulement quand tu le demandes (« Utiliser ma position ») pour montrer les événements et les pros autour de toi, valider ta présence sur place à un événement et, si tu fais partie du staff, situer une alerte ou un incident. Elle n’est jamais enregistrée, sauf celle d’une alerte du staff, gardée tant que l’alerte est ouverte.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false,

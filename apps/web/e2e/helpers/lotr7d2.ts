@@ -12,6 +12,7 @@ export type LiveBlock = {
   onSiteCount: number | null;
   acceptedCount: number | null;
   myPresence: "checked_in" | "gps" | "ticket" | null;
+  canValidatePresence: boolean;
   votesOpen: number;
 };
 export type LydiaEvent = {
@@ -50,3 +51,18 @@ export async function resetPresences(emails: readonly string[]): Promise<void> {
 
 /** Mètres vers le nord, en degrés de latitude. */
 export const northOf = (lat: number, meters: number) => lat + meters / 111_195;
+
+/** L'accès du Lydia (`free`, `closed`, `paid_external`, `paid_orasso`) pendant `run`, puis remis comme il était (recettes du tour 2). */
+export async function withAccess<T>(access: string, run: () => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  const before = (await client.query("select public_access from events where slug = $1", [SLUG])).rows[0]
+    ?.public_access as string;
+  try {
+    await client.query("update events set public_access = $1 where slug = $2", [access, SLUG]);
+    return await run();
+  } finally {
+    await client.query("update events set public_access = $1 where slug = $2", [before, SLUG]);
+    await client.end();
+  }
+}

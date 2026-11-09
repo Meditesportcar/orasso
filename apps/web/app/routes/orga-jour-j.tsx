@@ -23,6 +23,7 @@ import {
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { now as clockNow } from "../lib/clock";
+import { useNowUntil } from "../lib/useNowUntil";
 import "../styles/staff.css";
 
 import { AfterEvent } from "../components/AfterEvent";
@@ -122,6 +123,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   const [alerts, setAlerts] = useState<StaffAlertView[]>(loaderData.alerts);
   const [incidents, setIncidents] = useState<IncidentView[]>(loaderData.incidents);
   const [presents, setPresents] = useState<PresenceSummary | null>(loaderData.presents);
+  const liveClock = useNowUntil(event.endsAt);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -164,8 +166,16 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   }, [event.id]);
 
   // Direct : les compteurs arrivent par WebSocket, la liste se rafraîchit juste après (autres appareils du staff).
-  useChannel(organizer ? `event:${event.id}:live` : null, (m) => {
+  const presentsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { connected: liveConnected } = useChannel(organizer ? `event:${event.id}:live` : null, (m) => {
     if (m.type === "live") {
+      // Tour 2 (Codex) : un scan de véhicule ou de billet émet `live` (pas `presence.changed`) : les présents suivent,
+      // en une relecture groupée (au plus une toutes les 3 s).
+      if (!presentsTimer.current)
+        presentsTimer.current = setTimeout(() => {
+          presentsTimer.current = undefined;
+          void refetchPresents();
+        }, 3_000);
       if (dayId) void refetchLive();
       else setLive(m.payload as LiveCounters);
     }
@@ -174,6 +184,21 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void refetch(), 400);
   });
+  // Reconnexion du canal : les messages envoyés pendant la coupure sont perdus, les présents se relisent.
+  const wasConnected = useRef(false);
+  useEffect(() => {
+    if (liveConnected && wasConnected.current) void refetchPresents();
+    if (liveConnected) wasConnected.current = true;
+  }, [liveConnected, refetchPresents]);
+  useEffect(() => () => clearTimeout(presentsTimer.current), []);
+  // Tour 2 : le staff n'est pas abonné au canal du direct (réservé à l'organisation) ; comme l'appli, il relit le total des
+  // présents chaque minute (le refus d'après la fin ne remplace jamais le dernier total par un zéro : `refetchPresents`
+  // ne change rien sur une erreur).
+  useEffect(() => {
+    if (organizer) return;
+    const id = setInterval(() => void refetchPresents(), 60_000);
+    return () => clearInterval(id);
+  }, [organizer, refetchPresents]);
   useChannel(!organizer ? `event:${event.id}:access` : null, () => {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void refetch(), 400);
@@ -344,7 +369,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
           <p className="o-t-caption s-muted">{presenceLabels.summaryPrivacy}</p>
         </section>
       )}
-      {presents && !organizer && (
+      {presents && !organizer && liveClock < new Date(event.endsAt).getTime() && (
         <p className="o-t-caption" data-testid="presents-total">
           {presenceLabels.summaryTotal(presents.total)}
         </p>

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, setTheme } from "./helpers";
-import { lydia, SLUG, VISITORS } from "./helpers/lotr7d2";
+import { lydia, SLUG, VISITORS, withAccess } from "./helpers/lotr7d2";
 
 // Lot R7d2, site : la fiche pendant l'événement (compteurs, « Votes · N ouverts », présence réservée à l'appli, rien
 // après la fin), les présents de l'organisateur au Jour J (nombres seulement) et la zone de présence de l'éditeur.
@@ -49,6 +49,34 @@ for (const theme of ["beton", "sable"] as const) {
     }
   });
 }
+
+test("fiche : la ligne GPS suit l'accès (fermé au public, billetterie externe : aucune ligne)", async ({ page }) => {
+  const ev = await lydia(VISITORS.far);
+  test.skip(ev.live.phase !== "running" || ev.live.myPresence !== null, "Lydia hors des heures ou déjà présent.");
+  await loginInBrowser(page, VISITORS.far, undefined, `/e/${SLUG}`);
+  for (const access of ["closed", "paid_external"]) {
+    await withAccess(access, async () => {
+      await page.goto(`/e/${SLUG}`);
+      await expect(page.getByTestId("event-live")).toBeVisible();
+      await expect(page.getByTestId("presence-app-only"), access).toHaveCount(0);
+    });
+  }
+  await page.goto(`/e/${SLUG}`);
+  await expect(page.getByTestId("presence-app-only")).toBeVisible();
+});
+
+test("fiche : passage à la fin sur le même écran, compteurs et lignes du direct retirés", async ({ page }) => {
+  const ev = await lydia(null);
+  test.skip(ev.live.phase !== "running", "Le Lydia n'est pas en cours (horloge simulée).");
+  const endsAt = await apiCall<{ endsAt: string }>(null, "GET", `/events/by-slug/${SLUG}`).then((r) => r.data.endsAt);
+  // L'horloge de la page est posée 3 s avant la fin avant le chargement : les minuteurs de l'écran sont les siens.
+  await page.clock.install({ time: new Date(new Date(endsAt).getTime() - 3_000) });
+  await page.goto(`/e/${SLUG}`);
+  await expect(page.getByTestId("event-live")).toBeVisible();
+  await page.clock.fastForward(10_000);
+  await expect(page.getByTestId("event-live")).toHaveCount(0);
+  await expect(page.getByText(/sur place, sur \d+ retenue/)).toHaveCount(0);
+});
 
 test("fiche d'un événement fini : ni compteurs ni présence", async ({ page }) => {
   const cookie = await login("damien@orasso.local");

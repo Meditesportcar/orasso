@@ -4,6 +4,24 @@
 import { presenceLabels } from "../labels/presence.fr";
 import type { EventLive } from "../schemas/presence";
 
+/**
+ * Garde d'heure à l'écran : un écran resté ouvert au-delà de la fin garde le bloc `live` lu avant. À l'heure de fin
+ * (fin exclue) ou après, il passe en phase « after » sans retenues, présents, votes ni bouton GPS (règle des absents),
+ * sans attendre une relecture. Les autres phases ne changent pas ; ne sert qu'à retirer, jamais à ouvrir.
+ */
+export function liveAt(live: EventLive | null | undefined, endsAt: string | Date, nowMs: number): EventLive | null {
+  if (!live) return null;
+  if (live.phase !== "running" || nowMs < new Date(endsAt).getTime()) return live;
+  return {
+    ...live,
+    phase: "after",
+    onSiteCount: null,
+    acceptedCount: null,
+    canValidatePresence: false,
+    votesOpen: 0,
+  };
+}
+
 /** La fiche d'un événement en cours (`phase = running`) : les lignes du direct existent seulement alors. */
 export function liveRunning(live: Pick<EventLive, "phase"> | null | undefined): boolean {
   return live?.phase === "running";
@@ -33,14 +51,15 @@ export function liveVotesLabel(
 }
 
 /**
- * « Je suis sur place » est proposé pendant l'événement à qui n'est pas encore présent et n'a pas de place de véhicule
- * retenue (un exposant se fait scanner : l'API répond `use_qr`). Les autres refus (billet payant, entrée fermée, hors
- * zone, hors heures) sont dits par l'API après la mesure : l'écran n'a pas à les deviner.
+ * « Je suis sur place » est proposé pendant l'événement à qui n'est pas encore présent, quand l'API l'accepterait avant
+ * même de mesurer (`live.canValidatePresence` : ouvert à cette heure, pas de place de véhicule retenue, accès et billet
+ * compatibles : une seule règle, côté API, `presenceGate`). Le profil reste du ressort de l'écran (exposant et visiteur
+ * connectés). Les refus qui dépendent de la mesure (hors zone, position imprécise) sont dits par l'API.
  */
 export function canOfferPresence(
-  live: Pick<EventLive, "phase" | "myPresence"> | null | undefined,
+  live: Pick<EventLive, "phase" | "myPresence" | "canValidatePresence"> | null | undefined,
   who: { signedIn: boolean; eligibleProfile: boolean; holdsVehicleSlot: boolean },
 ): boolean {
-  if (!live || live.phase !== "running" || live.myPresence !== null) return false;
+  if (!live || live.phase !== "running" || live.myPresence !== null || !live.canValidatePresence) return false;
   return who.signedIn && who.eligibleProfile && !who.holdsVehicleSlot;
 }

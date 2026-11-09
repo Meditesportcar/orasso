@@ -40,6 +40,7 @@ import {
   posterStyles,
   posterTexts,
   presenceLabels,
+  presenceRadiusInput,
   previewHourOptions,
   previewTimeline,
   providerPowerLabels,
@@ -353,7 +354,7 @@ export function LieuTemps(ctx: StepContext) {
         label={presenceLabels.radiusLabel}
         value={d.presenceRadiusM ?? ""}
         placeholder={String(PRESENCE_DEFAULT_RADIUS_M)}
-        onChangeText={(v) => set("presenceRadiusM", v.replace(/D/g, ""))}
+        onChangeText={(v) => set("presenceRadiusM", presenceRadiusInput(v))}
         keyboardType="number-pad"
         maxLength={4}
         testID="wizard-presence-radius"

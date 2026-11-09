@@ -26,6 +26,7 @@ import {
   homeProfileLabels,
   invitationLabels,
   eventPageLabels as L,
+  liveAt,
   liveRunning,
   liveVotesLabel,
   mediaAppLabels as M,
@@ -75,6 +76,7 @@ import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { openStandalone } from "@/lib/standalone";
+import { useNowUntil, useReloadOnForeground } from "@/lib/useAfter";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
@@ -199,6 +201,9 @@ export default function EventPage() {
   const [placeId, setPlaceId] = useState<string | null>(null);
   // Lot R7d2 : la feuille « Je suis sur place » (présence par la position du téléphone, pendant l'événement).
   const [presenceOpen, setPresenceOpen] = useState(false);
+  // Tour 2 : garde d'heure. La fiche restée ouverte au-delà de la fin se re-rend à `endsAt` et retire le direct.
+  const liveClock = useNowUntil(event.data?.endsAt, () => void event.reload());
+  useReloadOnForeground(Boolean(event.data?.live), () => void event.reload());
   const applications = useApplications();
   // Lot R6c (R6.3, R6.4, R6.6) : « Qui y va », la feuille « Inviter du monde », le bandeau et le menu d'une invitation.
   const [inviting, setInviting] = useState(false);
@@ -394,9 +399,10 @@ export default function EventPage() {
 
   // Lot R7d2 (B2 de Damien : « sur la fiche de l'événement en cours, le vote n'apparaît pas ») : une fois entré (`myPresence`
   // non nul) et au moins un vote ouvert, « Votes · N ouverts » est le bouton principal de la fiche pendant l'événement.
-  const votesLabel = action === "triage" ? null : liveVotesLabel(e.live);
+  const live = liveAt(e.live, e.endsAt, liveClock);
+  const votesLabel = action === "triage" ? null : liveVotesLabel(live);
   const heldVehicleSlot = (e.myApplications ?? []).some((a) => a.status === "accepted");
-  const offerPresence = canOfferPresence(e.live, {
+  const offerPresence = canOfferPresence(live, {
     signedIn: status === "in",
     eligibleProfile: kind === "fan" || kind === "visitor",
     holdsVehicleSlot: heldVehicleSlot,
@@ -416,7 +422,7 @@ export default function EventPage() {
           : action === "myApplication"
             ? place?.status === "accepted" && !usedNow(place, placeNow)
               ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
-              : place?.status === "accepted" && liveRunning(e.live)
+              : place?.status === "accepted" && liveRunning(live)
                 ? {
                     // Lot R7d2 : pendant l'événement, une fois entré, l'accès se rouvre depuis la fiche (« Mon accès »).
                     label: homeProfileLabels.myAccess,
@@ -461,21 +467,24 @@ export default function EventPage() {
     ? { label: votesLabel, icon: "trophy" as const, onPress: () => router.push(`/vote/${e.id}`) }
     : basePrimary;
 
-  const footer = gate ? (
-    <EventGatePlate
-      gate={gate}
-      event={e}
-      block={block}
-      following={isFollowing}
-      busy={following && !structure.data?.isFollowing}
-      onWaitlist={apply}
-      onFollow={() => void toggleFollow()}
-    />
-  ) : primary ? (
-    <Button variant="primary" icon={primary.icon} next onPress={primary.onPress} fullWidth testID="event-primary">
-      {primary.label}
-    </Button>
-  ) : null;
+  // Tour 2 (Codex) : le vote disponible passe avant le blocage des candidatures (un passionné présent par GPS, sans
+  // candidature, voit « Votes » même quand les inscriptions sont closes).
+  const footer =
+    gate && !votesLabel ? (
+      <EventGatePlate
+        gate={gate}
+        event={e}
+        block={block}
+        following={isFollowing}
+        busy={following && !structure.data?.isFollowing}
+        onWaitlist={apply}
+        onFollow={() => void toggleFollow()}
+      />
+    ) : primary ? (
+      <Button variant="primary" icon={primary.icon} next onPress={primary.onPress} fullWidth testID="event-primary">
+        {primary.label}
+      </Button>
+    ) : null;
 
   return (
     <PosterFlow
@@ -623,9 +632,9 @@ export default function EventPage() {
       ) : null}
       {/* Lot R7d2 : pendant l'événement, l'état du direct (« En cours · jour N sur M », « N sur place, sur M retenues ») et
           « Je suis sur place ». Tout vient de `e.live` : rien n'est calculé ici, rien ne reste après la fin. */}
-      {e.live ? (
+      {live ? (
         <LiveBlock
-          live={e.live}
+          live={live}
           event={e}
           showPhase={!place}
           offerPresence={offerPresence}
