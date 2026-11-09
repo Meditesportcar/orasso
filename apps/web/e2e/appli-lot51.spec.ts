@@ -222,7 +222,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(page.getByText("3.0 L6 turbo · 2021 · blanc").first()).toBeVisible();
     // Lot M5 : vocabulaire de Damien (« carte » = le plan) ; la mini-fiche dit « Partager ».
     await expect(page.getByTestId("garage-share")).toBeVisible();
-    await expect(page.getByText("Marque, photos, plaque floutée : deux minutes.").first()).toBeVisible();
+    // Lot R7b1 : « Ajouter un véhicule » est le bouton principal du panneau Garage (plus la carte en pointillés et sa phrase).
+    await expect(page.getByTestId("garage-add")).toBeVisible();
     await checkDesign(page);
     await shot(page, "07-garage", theme);
 

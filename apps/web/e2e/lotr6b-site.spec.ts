@@ -61,7 +61,7 @@ for (const theme of ["beton", "sable"] as const) {
       // 2. Compte privé : « Demander à suivre » → « Demandé », la ligne réservée aux abonnés.
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Demander à suivre/i);
-      await expect(page.getByTestId("profile-private-note")).toContainText("sont pour ses abonnés.");
+      await expect(page.getByTestId("profile-private-note")).toContainText("sont visibles de ses abonnés.");
       await page.getByTestId("follow-button").click();
       await expect(page.getByTestId("follow-button")).toHaveText(/Demandé/i);
       await expect(page.getByTestId("profile-private-note")).toContainText("Ta demande attend sa réponse.");

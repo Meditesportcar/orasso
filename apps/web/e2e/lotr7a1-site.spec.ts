@@ -82,10 +82,7 @@ test("la barre à 1 280 px : même ordre", async ({ browser }) => {
 
 test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans barre d'onglets", async ({ page }) => {
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
-  for (const [path, title] of [
-    ["/app/sorties", "Mes sorties"],
-    ["/app/garage", "Garage"],
-  ] as const) {
+  for (const [path, title] of [["/app/sorties", "Mes sorties"]] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Mon compte" })).toHaveCount(0);
@@ -97,10 +94,9 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await page.locator("header.fiche-bar").getByRole("link", { name: "Fermer" }).click();
   await page.waitForURL((url) => url.pathname === "/app");
   await page.goto("/app/garage");
-  await page.locator("header.fiche-bar").getByRole("link", { name: "Fermer" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/moi");
-  // Le Profil garde son lien vers le Garage.
-  await expect(page.getByTestId("garage-link")).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/app/moi" && url.searchParams.get("onglet") === "garage");
+  // Lot R7b1 : le Garage est l'onglet interne du Profil (`/app/garage` répond 301 vers lui).
+  await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
   // Les anciennes adresses d'onglet (`/app/acces`, `/app/passeport`) restent valables.
   const res = await page.request.get("/app/acces", { maxRedirects: 0 }).catch(() => null);
   expect(res === null || [200, 301, 302, 303, 307, 308].includes(res.status())).toBe(true);

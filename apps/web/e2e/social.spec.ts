@@ -70,7 +70,7 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await expect(page.getByText("secret-de-bravo")).toHaveCount(0);
   // Lot R5b (maquette R5.6) : la ligne « Ses photos, … sont pour ses abonnés » ; ses véhicules en marque et modèle.
   await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
   );
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
   await expect(page.getByTestId("profile-vehicles-private")).toContainText(/\S/);

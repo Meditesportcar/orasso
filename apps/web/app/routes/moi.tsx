@@ -464,7 +464,8 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             {err("settings")}
           </p>
         )}
-        <Button type="submit" icon="check" loading={busy}>
+        {/* Lot R7b1 : le bouton principal de la page est « Ajouter un véhicule » (onglet Garage) ; l'enregistrement des réglages est secondaire. */}
+        <Button type="submit" variant="secondary" icon="check" loading={busy}>
           Enregistrer les réglages
         </Button>
       </Form>

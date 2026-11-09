@@ -51,7 +51,7 @@ export function GarageTab({ data, actionData }: { data: GarageData; actionData: 
             <CrewLogo url={c.logoUrl} name={c.name} size={36} />
           </a>
         ))}
-        <a href="/app/crews" className="o-t-caption">
+        <a href={crews.length ? "/app/crews" : "/app/crews/nouveau"} className="o-t-caption">
           {crews.length ? crewLabels.myCrews : crewLabels.createCrew}
         </a>
       </div>

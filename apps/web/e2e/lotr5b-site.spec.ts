@@ -140,22 +140,26 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
         "https://www.instagram.com/julie.e30/",
       );
       await expect(pb.getByTestId("profile-car")).toContainText(aMain.label);
-      await expect(pb.getByTestId("profile-next")).toContainText(`R5b Site ${tag}`);
-      await expect(pb.getByTestId("profile-together")).toContainText("Toi aussi : vous y serez tous les deux");
+      // Lot R7b1 : Garage par défaut (« Sa voiture », « Son garage »), « Prochaine sortie » dans l'onglet Sorties.
       await expect(pb.getByTestId("profile-garage")).toBeVisible();
       await expect(pb.getByTestId("message-open")).toBeVisible();
       if (width === 1280) {
         // Deux colonnes : « Sa voiture » et « Prochaine sortie » côte à côte, à droite de la carte de la personne.
         const car = await pb.getByTestId("profile-car").boundingBox();
-        const next = await pb.getByTestId("profile-next").boundingBox();
-        expect((next?.x ?? 0) > (car?.x ?? 0) + (car?.width ?? 0) - 1).toBe(true);
+        // Deux colonnes : la carte de la personne à gauche, « Sa voiture » à droite.
+        const card = await pb.getByTestId("public-head").boundingBox();
+        expect((car?.x ?? 0) > (card?.x ?? 0) + (card?.width ?? 0) - 1).toBe(true);
       }
       await audit(pb);
       await pb.screenshot({ path: `${DIR}/membre-${name}.png`, fullPage: true });
+      await pb.getByTestId("profil-tab-sorties").click();
+      await pb.waitForURL(/onglet=sorties/);
+      await expect(pb.getByTestId("profile-next")).toContainText(`R5b Site ${tag}`);
+      await expect(pb.getByTestId("profile-together")).toContainText("Toi aussi : vous y serez tous les deux");
       // Compte privé.
       await pb.goto(`/u/${cPseudo}`);
       await expect(pb.getByTestId("profile-private-note")).toContainText(
-        "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+        "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
       );
       // Lot R6b : un compte privé se suit sur demande.
       await expect(pb.getByTestId("follow-button")).toContainText("Demander à suivre");
@@ -243,7 +247,7 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   const page = await ctx.newPage();
   await setTheme(page, "beton");
   await loginInBrowser(page, `${ePseudo.toLowerCase()}@e2e.orasso.test`, SEED_PASSWORD, "/app/moi");
-  await page.goto(`/u/${dPseudo}`);
+  await page.goto(`/u/${dPseudo}?onglet=sorties`);
   await expect(page.getByTestId("profile-next")).toContainText(titles[0] ?? "");
   const outings = page.getByTestId("profile-outings").locator("li");
   await expect(outings).toHaveCount(7);
@@ -265,7 +269,7 @@ test("R5b site, tour 2 : toutes les sorties à venir ; « Suivi » gardé quand 
   await page.getByTestId("follow-confirm-yes").click();
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
   await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
   );
   await ctx.close();
 });

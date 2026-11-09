@@ -107,7 +107,7 @@ for (const theme of ["beton", "sable"] as const) {
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Demander à suivre/i);
     await expect(mine.page.getByTestId("profile-private-note")).toContainText(
-      "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
     );
     await shot(mine.page, `04-prive-demander-${theme}`);
     await followButton(mine.page).click();

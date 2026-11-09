@@ -27,10 +27,10 @@ test("les anciennes adresses répondent 301 vers le Profil, la recherche gardée
 });
 
 test("Mon compte : Garage par défaut, onglet Sorties, aucune plaque lisible dans les pages", async ({ page }) => {
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    await setTheme(page, "beton");
-    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
     await page.goto("/app/moi");
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("link", { name: "Ajouter un véhicule" }).first()).toBeVisible();

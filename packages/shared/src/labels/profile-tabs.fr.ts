@@ -16,7 +16,7 @@ export const profileTabsLabels = {
   /** Compte privé vu par quelqu'un qui n'est pas abonné accepté : les nombres, le reste est réservé. */
   privateTitle: "Réservé à ses abonnés",
   privateBody: "Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
-  privateBodyWaiting: "Ta demande est en attente : ses véhicules et ses sorties s'ouvriront quand elle sera acceptée.",
+  privateBodyWaiting: "Ta demande attend sa réponse. Ses véhicules et ses sorties s'ouvriront si elle est acceptée.",
   /** Onglet vide d'un autre profil. */
   noVehicle: "Pas encore de véhicule.",
   noOuting: "Aucune sortie à montrer pour l'instant.",
