@@ -210,7 +210,8 @@ async function eventInvitationItems(v: Viewer): Promise<Keyed[]> {
           startsAt: i.event.startsAt.toISOString(),
           city: i.event.city,
         },
-        inviters: i.inviters.slice(0, 3).map((x) => ({ pseudo: x.pseudo, avatarUrl: x.avatarUrl })),
+        // Lot R7-fix-invite : `userId` pour que le « ⋯ » de la carte coupe les invitations de chacun (`POST /me/invitation-mutes`).
+        inviters: i.inviters.slice(0, 3).map((x) => ({ userId: x.userId, pseudo: x.pseudo, avatarUrl: x.avatarUrl })),
         invitersCount: i.inviters.length,
         notes: i.inviters.flatMap((x) => (x.note ? [{ pseudo: x.pseudo, note: x.note }] : [])).slice(0, 3),
       },

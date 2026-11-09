@@ -594,7 +594,7 @@ export const eventInvitesService = {
   async receivedAll(viewerId: string, ex: Executor = db, opts: { all?: boolean } = {}) {
     const at = now();
     const result = await ex.execute(sql`
-      select i.event_id, p.pseudo, p.avatar_key, i.note, i.created_at
+      select i.event_id, i.inviter_id, p.pseudo, p.avatar_key, i.note, i.created_at
       from event_peer_invitations i
       join profiles p on p.user_id = i.inviter_id
       join events e on e.id = i.event_id
@@ -615,6 +615,7 @@ export const eventInvitesService = {
       ${opts.all ? sql`` : sql`limit 400`}`);
     const rows = result.rows as {
       event_id: string;
+      inviter_id: string;
       pseudo: string;
       avatar_key: string | null;
       note: string | null;
@@ -628,7 +629,7 @@ export const eventInvitesService = {
     const out: {
       event: EventRow;
       at: Date;
-      inviters: { pseudo: string; avatarUrl: string | null; note: string | null }[];
+      inviters: { userId: string; pseudo: string; avatarUrl: string | null; note: string | null }[];
     }[] = [];
     for (const id of eventIds) {
       const e = evRows.find((x) => x.id === id);
@@ -638,7 +639,12 @@ export const eventInvitesService = {
       out.push({
         event: e,
         at: new Date(first.created_at),
-        inviters: list.map((r) => ({ pseudo: r.pseudo, avatarUrl: storage.url(r.avatar_key), note: r.note })),
+        inviters: list.map((r) => ({
+          userId: r.inviter_id,
+          pseudo: r.pseudo,
+          avatarUrl: storage.url(r.avatar_key),
+          note: r.note,
+        })),
       });
     }
     return out;

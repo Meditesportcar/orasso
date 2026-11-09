@@ -459,7 +459,7 @@ describe("GET /me/requests", () => {
   }
 
   it("chaque sorte, trie par date, liste blanche, total = pastille", async () => {
-    const { damien, holder } = await everyKind();
+    const { damien, holder, k } = await everyKind();
     const res = await call(damien, "GET", "/me/requests");
     expect(res.status).toBe(200);
     expect(Object.keys(res.json).sort()).toEqual(["items", "nextCursor", "total"]);
@@ -493,7 +493,7 @@ describe("GET /me/requests", () => {
     expect(orgs.from.type).toBe("structure");
     expect(orgs.payload.event.title).toBe("Nocturne de Canet");
     const peer = by("event_invitation").find((i: { payload: { source: string } }) => i.payload.source === "peer");
-    expect(peer.payload.inviters).toEqual([{ pseudo: "Marc_66", avatarUrl: null }]);
+    expect(peer.payload.inviters).toEqual([{ userId: k("Marc_66").id, pseudo: "Marc_66", avatarUrl: null }]);
     expect(peer.payload.notes).toEqual([{ pseudo: "Marc_66", note: "Viens !" }]);
     expect(by("staff")[0].from.type).toBe("structure");
     expect(by("plate_transfer")[0].from).toMatchObject({ pseudo: "Nina_66" });
