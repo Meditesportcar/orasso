@@ -57,7 +57,7 @@ export const feedScreenLabels = {
   lessFaded: "Moins de ce genre",
   publish: "Publier",
   publishTitle: "Publier au Fil",
-  publishSubtitle: "Visible des personnes qui te suivent et dans le Fil",
+  publishSubtitle: "Pour tes abonnés",
   retry: "Réessayer",
   loadMore: "Voir la suite",
   loadingMore: "Chargement…",
