@@ -32,7 +32,7 @@ import {
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { seenText } from "@/features/event/CandSheet";
 import { CaptureBanner, GpsRow, OfflineLine, useBlockCapture, useMaxBrightness } from "@/features/jour-j/QrExtras";
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
@@ -46,6 +46,7 @@ import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
@@ -95,6 +96,8 @@ function JourJScreen() {
   // `undefined` : lecture du kit en cours ; `null` : pas de kit sur ce téléphone.
   const [kit, setKit] = useState<AccessKit | null | undefined>(undefined);
   const [secret, setSecret] = useState<string | null>(null);
+  // Lot R7-0, tour 3 : entré pour tout l'événement, le QR n'est plus en tête : il s'ouvre à la demande, « pour un contrôle ».
+  const [qrOpen, setQrOpen] = useState(false);
   const app = [...(upcoming ?? []), ...(past ?? []), ...press].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
   // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
@@ -155,7 +158,7 @@ function JourJScreen() {
   const reentry = kit ? wholeEventEntryHolds(kit, kit.event, now, tz) : false;
   const state = kit && span ? (reentry ? "open" : jourJState(span, now, entered, tz)) : null;
   // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
-  const showing = state !== null && state !== "closed";
+  const showing = state !== null && state !== "closed" && (!reentry || qrOpen);
   useBlockCapture(showing);
   // Lot M4 : luminosité au maximum tant que le QR est à l'écran (rien à dire : elle se règle toute seule).
   useMaxBrightness(showing);
@@ -192,6 +195,25 @@ function JourJScreen() {
   // Kit d'avant le lot 48 pas encore rafraîchi (pas de secret) : l'ancien QR statique, toujours accepté par le staff
   // jusqu'au lot 58, plutôt que rien à présenter à l'entrée.
   const qrValue = rotating.code ?? kit.pass.payload;
+
+  const qrPoster = (
+    <QrPoster
+      holder={holderOf(kit, kit.pseudo || pseudo)}
+      value={qrValue}
+      rotating={rotating.code ? { secondsLeft: rotating.secondsLeft, number: rotating.number } : undefined}
+      size={qrSize}
+      label="QR d'accès à présenter à l'entrée"
+      say={reentry ? "Seulement si on te le demande" : "Présente le QR code"}
+      // Tour 2 (décision du coordinateur) : pas de O au centre pour l'instant. À taille d'écran égale, le QR avec logo
+      // ne se relit plus au moindre flou (`lib/qr.test.ts`) ; à réessayer sur le scanner staff du Pixel et du Xiaomi.
+      logo={false}
+    />
+  );
+  const legacyNotice = (
+    <Notice testID="jourj-legacy">
+      Ancien QR : ouvre l'appli une fois avec du réseau pour recevoir ton code qui change toutes les 20 secondes.
+    </Notice>
+  );
 
   return (
     <FlowScreen
@@ -245,30 +267,10 @@ function JourJScreen() {
               : "L'événement est terminé : le QR n'est plus utile. Tes points arrivent deux jours après."}
           </Text>
         </Plate>
-      ) : (
+      ) : reentry ? null : (
         <>
-          <QrPoster
-            holder={holderOf(kit, kit.pseudo || pseudo)}
-            value={qrValue}
-            rotating={rotating.code ? { secondsLeft: rotating.secondsLeft, number: rotating.number } : undefined}
-            size={qrSize}
-            label="QR d'accès à présenter à l'entrée"
-            say={reentry ? "Seulement si on te le demande" : "Présente le QR code"}
-            // Tour 2 (décision du coordinateur) : pas de O au centre pour l'instant. À taille d'écran égale, le QR avec logo
-            // ne se relit plus au moindre flou (`lib/qr.test.ts`) ; à réessayer sur le scanner staff du Pixel et du Xiaomi.
-            logo={false}
-          />
-          {reentry ? (
-            <Muted variant="body" testID="jourj-reentry">
-              {wholeEventReentry}
-            </Muted>
-          ) : null}
-          {rotating.code ? null : (
-            <Notice testID="jourj-legacy">
-              Ancien QR : ouvre l'appli une fois avec du réseau pour recevoir ton code qui change toutes les 20
-              secondes.
-            </Notice>
-          )}
+          {qrPoster}
+          {rotating.code ? null : legacyNotice}
         </>
       )}
 
@@ -332,6 +334,24 @@ function JourJScreen() {
             {lastAnnouncement.body}
           </Text>
         </Plate>
+      ) : null}
+
+      {/* Lot R7-0, tour 3 : le QR d'une personne déjà entrée passe en bas, derrière un bouton secondaire. */}
+      {reentry ? (
+        <>
+          <Button variant="secondary" icon="qr" fullWidth testID="jourj-qr-open" onPress={() => setQrOpen(true)}>
+            {eventPageLabels.myQrForCheck}
+          </Button>
+          <AppSheet visible={qrOpen} onClose={() => setQrOpen(false)} accessibilityLabel={eventPageLabels.myQrForCheck}>
+            <View testID="jourj-qr-sheet">
+              {qrPoster}
+              <Muted variant="body" testID="jourj-reentry">
+                {wholeEventReentry}
+              </Muted>
+              {rotating.code ? null : legacyNotice}
+            </View>
+          </AppSheet>
+        </>
       ) : null}
     </FlowScreen>
   );

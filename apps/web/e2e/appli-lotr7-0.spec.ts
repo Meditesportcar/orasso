@@ -117,16 +117,23 @@ test("Mon accès suit le thème, la carte du QR reste crème ; entré la veille,
     await signIn(page, "nina@orasso.local");
     await page.goto(`/jour-j/${nina.id}`);
     await afterOpening(page);
-    const poster = page.getByTestId("qr-poster");
-    await expect(poster).toBeVisible({ timeout: 45_000 });
-    expect(await poster.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(243, 235, 221)");
-    // L'écran suit le thème : le fond n'est pas le même en Béton et en Sable.
-    bg[theme] = await edge(page);
-    // Entrée de la veille : « Entrée enregistrée », « Entrée … · accès jusqu'au … », et le QR en second.
-    await expect(page.getByTestId("jourj-entered")).toContainText("Entrée enregistrée");
+    // Entrée de la veille : « Entrée enregistrée », « Entrée … · accès jusqu'au … », le QR en bas derrière un bouton.
+    await expect(page.getByTestId("jourj-entered")).toContainText("Entrée enregistrée", { timeout: 45_000 });
     await expect(page.getByTestId("jourj-entered")).toContainText(
       /Entrée \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/,
     );
+    // L'écran suit le thème : le fond n'est pas le même en Béton et en Sable.
+    bg[theme] = await edge(page);
+    await expect(page.getByTestId("qr-poster")).toHaveCount(0);
+    const open = page.getByTestId("jourj-qr-open");
+    await expect(open).toContainText("Mon QR, pour un contrôle");
+    // Le QR est sous « Prix du public » (et le bouton après les consignes).
+    const yOf = async (id: string) => (await page.getByTestId(id).boundingBox())?.y ?? Number.NaN;
+    expect(await yOf("jourj-vote")).toBeLessThan(await yOf("jourj-qr-open"));
+    await open.click();
+    const poster = page.getByTestId("qr-poster");
+    await expect(poster).toBeVisible({ timeout: 45_000 });
+    expect(await poster.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(243, 235, 221)");
     await expect(page.getByTestId("jourj-reentry")).toContainText("pour un contrôle");
     await expect(page.getByTestId("qr-say")).toContainText("Seulement si on te le demande");
     await ctx.close();
