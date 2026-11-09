@@ -2,7 +2,11 @@
 // `/app/profil-public`. Même contenu et même ordre que l'appli : la personne (photo, nom, réseaux, nombres, boutons),
 // sa voiture en carré, sa prochaine sortie en ticket, son garage, ses sorties, « Vu à ». Une colonne sur téléphone, deux
 // en bureau (la carte de la personne reste visible en défilant). Compte privé : tête, nombres, véhicules en lignes.
-import { Button, Chip, Icon, type IconName } from "@orasso/design-system/web";
+// Lot R7b1 (D38, maquette R7.12) : la photo dans son anneau, « Partenaires » (lot R7m1), « Suivre » et « Message » côte à
+// côte, puis deux onglets internes lus dans `?onglet=` : Garage (par défaut : « Sa voiture » et « Son garage ») et Sorties
+// (« Prochaine sortie », « Ses sorties », « Vu à »). Compte privé que je ne suis pas : les nombres, « Réservé à ses abonnés »
+// et le bouton, ni Garage ni Sorties. Le composant a quitté `components/` pour `components/profile/`.
+import { AvatarRing, type AvatarRingState, Button, Chip, Icon, type IconName } from "@orasso/design-system/web";
 import {
   filledSocials,
   gradeLabels,
@@ -10,24 +14,30 @@ import {
   networkLabels,
   type PreviewAs,
   type ProfileEvent,
+  type ProfileTab,
   type ProfileVehicle,
+  profileTabsLabels as PT,
   publicPreviewLabels as PV,
+  profileTabFromParam,
   socialsLabels,
   socialUrl,
   type UserProfileView,
   wideWordEm,
 } from "@orasso/shared";
 import type { CSSProperties, ReactNode } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigation, useSearchParams } from "react-router";
 
-import { now } from "../lib/clock";
-import { formatDay, formatTime } from "../lib/format";
-import { withRetour } from "../lib/retour";
-import { PassportStamp } from "./PassportStamp";
-import { FollowAction } from "./People";
-import { ReportDialog } from "./ReportDialog";
-import "../styles/passport.css";
-import "../styles/profile-r5.css";
+import { now } from "../../lib/clock";
+import { formatDay, formatTime } from "../../lib/format";
+import { withRetour } from "../../lib/retour";
+import { PassportStamp } from "../PassportStamp";
+import { FollowAction } from "../People";
+import { ReportDialog } from "../ReportDialog";
+import "../../styles/passport.css";
+import "../../styles/profile-r5.css";
+import "../../styles/profile.css";
+import { PartnersLine } from "./PartnersLine";
+import { ProfileTabs } from "./ProfileTabs";
 
 const TZ = "Europe/Paris";
 const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
@@ -43,6 +53,12 @@ function daysUntil(iso: string): number {
 
 const typeIcon = (v: ProfileVehicle): IconName =>
   v.vehicleType === "moto" ? "moto" : v.vehicleType === "truck" ? "truck" : "vehicle";
+
+/** L'anneau des stories de la personne ; `null` sans story ou tant que l'API ne le sert pas. */
+function storyRingOf(p: UserProfileView): AvatarRingState {
+  const ring = (p as UserProfileView & { stories?: { ring?: AvatarRingState } }).stories?.ring;
+  return ring ?? null;
+}
 
 export type PublicProfileMode = "live" | "self" | "preview";
 
@@ -82,6 +98,14 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
     [p.outingsCount, networkLabels.outings],
   ].filter((c): c is [number, (n: number) => string] => c[0] !== null);
   const Title = preview ? "h2" : "h1";
+  // Lot R7b1 : l'onglet interne (Garage par défaut) ; l'adresse garde le reste de la recherche (`retour`).
+  const [search] = useSearchParams();
+  const tab: ProfileTab = profileTabFromParam(search.get(PT.param));
+  const tabHref = (t: ProfileTab) => {
+    const next = new URLSearchParams(search);
+    next.set(PT.param, t);
+    return `?${next.toString()}`;
+  };
 
   const car = p.vehicles.find((v) => v.main) ?? p.vehicles[0] ?? null;
   const others = p.vehicles.filter((v) => v !== car);
@@ -100,13 +124,12 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
     );
 
   return (
-    <div className={limited ? "pr5 pr5--limited" : "pr5"}>
+    <div className={limited ? "pr5 pr5--limited" : "pr5 pr5--tabs"}>
       <aside className="pr5-card" data-testid="public-head">
         <div className="pr5-hd">
-          {/* Retour 6 de Damien : la même tête que l'appli (la photo, sinon l'initiale sur le rouge du grade). */}
-          <span className="pr5-face" aria-hidden="true">
-            {p.avatarUrl ? <img src={p.avatarUrl} alt="" /> : p.pseudo.charAt(0).toUpperCase()}
-          </span>
+          {/* Retour 6 de Damien : la même tête que l'appli (la photo, sinon l'initiale sur le rouge du grade), dans l'anneau
+              de ses stories (lot R7f1 : `stories.ring`, absent tant qu'il n'est pas fusionné ; le lot R7f2 l'ouvrira). */}
+          <AvatarRing ring={storyRingOf(p)} size="xl" src={p.avatarUrl} name={p.pseudo} />
           <div className="pr5-hd__id">
             <Title style={{ "--em": wideWordEm(p.pseudo) } as CSSProperties}>{p.pseudo}</Title>
             <div className="pr5-tags">
@@ -179,6 +202,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
           </p>
         )}
 
+        <PartnersLine pseudo={p.pseudo} mine={mode === "self"} />
+
         {mode === "self" && (
           <Button variant="secondary" icon="edit" href="/app/profil/modifier">
             Modifier mon profil
@@ -187,9 +212,9 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
 
         {live && (
           <>
-            <div className="pr5-acts r6acts">
-              {/* Lot R6b (D37, maquette R6.1) : UN seul bouton, selon le lien : Suivre, Suivre en retour, Demander à suivre,
-                  Abonné, Demandé. */}
+            <div className="pr5-acts r6acts pt-acts">
+              {/* Lot R6b (D37, maquette R6.1) : UN bouton de suivi, selon le lien : Suivre, Suivre en retour, Demander à suivre,
+                  Abonné, Demandé. Lot R7b1 (maquette R7.12) : « Message » à côté (sous lui si la place manque). */}
               <FollowAction
                 pseudo={p.pseudo}
                 mine={p.follow.mine}
@@ -198,16 +223,24 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 visibility={p.visibility}
                 busy={busy}
               />
-            </div>
-            <div className="pr5-write">
-              {/* Messagerie (lot 18) : conversation existante → conversation ; sinon demande de contact. Signaler : lot 32. */}
+              {/* Messagerie (lot 18) : conversation existante → conversation ; sinon demande de contact. */}
               <Form method="post">
                 <input type="hidden" name="intent" value="message_open" />
                 <input type="hidden" name="userId" value={p.userId} />
-                <Button type="submit" variant="secondary" icon="chat" loading={busy} data-testid="message-open">
-                  {L.writeTo(p.pseudo)}
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  icon="chat"
+                  loading={busy}
+                  aria-label={L.writeTo(p.pseudo)}
+                  data-testid="message-open"
+                >
+                  {PT.message}
                 </Button>
               </Form>
+            </div>
+            <div className="pr5-write">
+              {/* Signaler : lot 32. */}
               <ReportDialog targetType="profile" targetId={p.userId} />
             </div>
           </>
@@ -227,8 +260,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 inert
               />
               {!limited && (
-                <Button variant="secondary" icon="chat" tabIndex={-1}>
-                  {L.writeTo(p.pseudo)}
+                <Button variant="secondary" icon="chat" tabIndex={-1} aria-label={L.writeTo(p.pseudo)}>
+                  {PT.message}
                 </Button>
               )}
             </div>
@@ -264,8 +297,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                 </>
               ) : (
                 <>
-                  <strong>{networkLabels.privateLineStrong}</strong>{" "}
-                  {p.follow.mine === "pending" ? networkLabels.privateLineWaiting : networkLabels.privateLineAsk}
+                  <strong>{PT.privateTitle}.</strong>{" "}
+                  {p.follow.mine === "pending" ? PT.privateBodyWaiting : PT.privateBody}
                 </>
               )}
             </span>
@@ -273,168 +306,178 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
         </section>
       ) : (
         <>
-          <section
-            className="pr5-block pr5-car"
-            aria-labelledby="pr5-car-t"
-            data-testid={preview ? "preview-vehicles" : "profile-car"}
-          >
-            <div className="pr5-sh">
-              <h2 id="pr5-car-t" className="s-h2">
-                {L.car}
-              </h2>
-              <small>{L.carHint}</small>
-            </div>
-            {car ? (
-              link(
-                car,
-                "pr5-hero",
-                <>
-                  <Photo v={car} big />
-                  <span className="pr5-hero__fav">
-                    <Icon name="star" size={13} /> {L.mainTag}
-                  </span>
-                  <span className="pr5-hero__cap">
-                    {/* Texte posé sur la photo : le contour couleur du fond (écart 1 de la DA v2). */}
-                    <b className="o-never-truncate o-onphoto">{car.label}</b>
-                    {car.year && <small className="o-onphoto">{car.year}</small>}
-                    {car.categories.length > 0 && (
-                      <span className="pr5-cats">
-                        {car.categories.map((c) => (
-                          <span key={c}>{c}</span>
-                        ))}
+          {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties, lus dans `?onglet=`. */}
+          <div className="pr5-tabs">
+            <ProfileTabs value={tab} hrefOf={tabHref} />
+          </div>
+          {tab === "garage" ? (
+            <div className="pr5-panel pr5-panel--garage" data-testid="profil-panel">
+              <section
+                className="pr5-block pr5-car"
+                aria-labelledby="pr5-car-t"
+                data-testid={preview ? "preview-vehicles" : "profile-car"}
+              >
+                <div className="pr5-sh">
+                  <h2 id="pr5-car-t" className="s-h2">
+                    {L.car}
+                  </h2>
+                  <small>{L.carHint}</small>
+                </div>
+                {car ? (
+                  link(
+                    car,
+                    "pr5-hero",
+                    <>
+                      <Photo v={car} big />
+                      <span className="pr5-hero__fav">
+                        <Icon name="star" size={13} /> {L.mainTag}
                       </span>
-                    )}
-                  </span>
-                </>,
-              )
-            ) : (
-              <p className="s-muted">{L.noVehicle}</p>
-            )}
-          </section>
+                      <span className="pr5-hero__cap">
+                        {/* Texte posé sur la photo : le contour couleur du fond (écart 1 de la DA v2). */}
+                        <b className="o-never-truncate o-onphoto">{car.label}</b>
+                        {car.year && <small className="o-onphoto">{car.year}</small>}
+                        {car.categories.length > 0 && (
+                          <span className="pr5-cats">
+                            {car.categories.map((c) => (
+                              <span key={c}>{c}</span>
+                            ))}
+                          </span>
+                        )}
+                      </span>
+                    </>,
+                  )
+                ) : (
+                  <p className="s-muted">{L.noVehicle}</p>
+                )}
+              </section>
 
-          {next && (
-            <section
-              className="pr5-block pr5-next"
-              aria-labelledby="pr5-next-t"
-              data-testid={preview ? "preview-upcoming" : "profile-next"}
-            >
-              <div className="pr5-sh">
-                <h2 id="pr5-next-t" className="s-h2">
-                  {L.next}
-                </h2>
-                <small>{L.nextIn(nextDays)}</small>
-              </div>
-              <a className="pr5-nx" href={`/e/${next.event.slug}`}>
-                <span className="pr5-nx__stub" aria-hidden="true">
-                  <small>{stubWeekday.format(new Date(next.event.startsAt))}</small>
-                  <b>{stubDay.format(new Date(next.event.startsAt))}</b>
-                  <small>{stubMonth.format(new Date(next.event.startsAt))}</small>
-                </span>
-                <span className="pr5-nx__main">
-                  <span className="pr5-nx__tag">{nextDays <= 0 ? "Jour J" : `J-${nextDays}`}</span>
-                  <h3>{next.event.title}</h3>
-                  <small>
-                    {[formatTime(next.event.startsAt), next.event.city, next.event.structureName]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </small>
-                  {next.together && (
-                    <span className="pr5-both" data-testid="profile-together">
-                      <Icon name="check" size={15} />
-                      {L.together}
-                    </span>
-                  )}
-                </span>
-              </a>
-            </section>
-          )}
-          {/* Ses sorties sont visibles mais aucune n'est à venir : on le dit, comme l'appli. */}
-          {!next && p.upcomingEvents && (
-            <section
-              className="pr5-block pr5-next"
-              aria-labelledby="pr5-next-t"
-              data-testid={preview ? "preview-upcoming" : "profile-next-none"}
-            >
-              <div className="pr5-sh">
-                <h2 id="pr5-next-t" className="s-h2">
-                  {L.next}
-                </h2>
-              </div>
-              <p className="s-muted">{L.noOuting}</p>
-            </section>
-          )}
-
-          {outings.length > 0 && (
-            <section
-              className="pr5-block pr5-outings"
-              aria-labelledby="pr5-out-t"
-              data-testid={preview && !next ? "preview-upcoming" : "profile-outings"}
-            >
-              <div className="pr5-sh">
-                <h2 id="pr5-out-t" className="s-h2">
-                  {L.outings}
-                </h2>
-                <small>{L.outingsHint(outings.length)}</small>
-              </div>
-              <ul className="pr5-ups">
-                {/* Tour 2 (relecture Codex 4) : toutes les sorties à venir reçues, comme l'appli (plus de coupure à cinq). */}
-                {outings.map((e) => (
-                  <li key={e.slug}>
-                    <a className="pr5-up" href={`/e/${e.slug}`}>
-                      <Icon name="calendar" size={17} />
-                      <b>{e.title}</b>
-                      <small>{formatDay(e.startsAt)}</small>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {others.length > 0 && (
-            <section className="pr5-block pr5-garage" aria-labelledby="pr5-gar-t" data-testid="profile-garage">
-              <div className="pr5-sh">
-                <h2 id="pr5-gar-t" className="s-h2">
-                  {L.garage}
-                </h2>
-                <small>{L.garageOthers(others.length)}</small>
-              </div>
-              <div className="pr5-grid">
-                {others.map((v) => (
-                  <div key={v.id}>
-                    {link(
-                      v,
-                      "pr5-sq",
-                      <>
-                        <span className="pr5-sq__p">
-                          <Photo v={v} />
-                        </span>
-                        <b className="o-never-truncate">{v.label}</b>
-                        {v.year && <small>{v.year}</small>}
-                      </>,
-                    )}
+              {others.length > 0 && (
+                <section className="pr5-block pr5-garage" aria-labelledby="pr5-gar-t" data-testid="profile-garage">
+                  <div className="pr5-sh">
+                    <h2 id="pr5-gar-t" className="s-h2">
+                      {L.garage}
+                    </h2>
+                    <small>{L.garageOthers(others.length)}</small>
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {p.seenAt && stamps.length > 0 && (
-            <section className="pr5-block pr5-seenat" aria-labelledby="pr5-seen-t" data-testid="profile-seen">
-              <div className="pr5-sh">
-                <h2 id="pr5-seen-t" className="s-h2">
-                  {L.seenAt}
-                </h2>
-                <small>{L.seenAtHint(p.seenAt.events)}</small>
-              </div>
-              <div className="pr5-seen">
-                {stamps.map((s) => (
-                  <a key={s.id} href={`/e/${s.event.slug}`}>
-                    <PassportStamp stamp={s} size={120} />
+                  <div className="pr5-grid">
+                    {others.map((v) => (
+                      <div key={v.id}>
+                        {link(
+                          v,
+                          "pr5-sq",
+                          <>
+                            <span className="pr5-sq__p">
+                              <Photo v={v} />
+                            </span>
+                            <b className="o-never-truncate">{v.label}</b>
+                            {v.year && <small>{v.year}</small>}
+                          </>,
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          ) : (
+            <div className="pr5-panel pr5-panel--sorties" data-testid="profil-panel">
+              {next && (
+                <section
+                  className="pr5-block pr5-next"
+                  aria-labelledby="pr5-next-t"
+                  data-testid={preview ? "preview-upcoming" : "profile-next"}
+                >
+                  <div className="pr5-sh">
+                    <h2 id="pr5-next-t" className="s-h2">
+                      {L.next}
+                    </h2>
+                    <small>{L.nextIn(nextDays)}</small>
+                  </div>
+                  <a className="pr5-nx" href={`/e/${next.event.slug}`}>
+                    <span className="pr5-nx__stub" aria-hidden="true">
+                      <small>{stubWeekday.format(new Date(next.event.startsAt))}</small>
+                      <b>{stubDay.format(new Date(next.event.startsAt))}</b>
+                      <small>{stubMonth.format(new Date(next.event.startsAt))}</small>
+                    </span>
+                    <span className="pr5-nx__main">
+                      <span className="pr5-nx__tag">{nextDays <= 0 ? "Jour J" : `J-${nextDays}`}</span>
+                      <h3>{next.event.title}</h3>
+                      <small>
+                        {[formatTime(next.event.startsAt), next.event.city, next.event.structureName]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </small>
+                      {next.together && (
+                        <span className="pr5-both" data-testid="profile-together">
+                          <Icon name="check" size={15} />
+                          {L.together}
+                        </span>
+                      )}
+                    </span>
                   </a>
-                ))}
-              </div>
-            </section>
+                </section>
+              )}
+              {/* Ses sorties sont visibles mais aucune n'est à venir : on le dit, comme l'appli. */}
+              {!next && p.upcomingEvents && (
+                <section
+                  className="pr5-block pr5-next"
+                  aria-labelledby="pr5-next-t"
+                  data-testid={preview ? "preview-upcoming" : "profile-next-none"}
+                >
+                  <div className="pr5-sh">
+                    <h2 id="pr5-next-t" className="s-h2">
+                      {L.next}
+                    </h2>
+                  </div>
+                  <p className="s-muted">{L.noOuting}</p>
+                </section>
+              )}
+
+              {outings.length > 0 && (
+                <section
+                  className="pr5-block pr5-outings"
+                  aria-labelledby="pr5-out-t"
+                  data-testid={preview && !next ? "preview-upcoming" : "profile-outings"}
+                >
+                  <div className="pr5-sh">
+                    <h2 id="pr5-out-t" className="s-h2">
+                      {L.outings}
+                    </h2>
+                    <small>{L.outingsHint(outings.length)}</small>
+                  </div>
+                  <ul className="pr5-ups">
+                    {/* Tour 2 (relecture Codex 4) : toutes les sorties à venir reçues, comme l'appli (plus de coupure à cinq). */}
+                    {outings.map((e) => (
+                      <li key={e.slug}>
+                        <a className="pr5-up" href={`/e/${e.slug}`}>
+                          <Icon name="calendar" size={17} />
+                          <b>{e.title}</b>
+                          <small>{formatDay(e.startsAt)}</small>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {p.seenAt && stamps.length > 0 && (
+                <section className="pr5-block pr5-seenat" aria-labelledby="pr5-seen-t" data-testid="profile-seen">
+                  <div className="pr5-sh">
+                    <h2 id="pr5-seen-t" className="s-h2">
+                      {L.seenAt}
+                    </h2>
+                    <small>{L.seenAtHint(p.seenAt.events)}</small>
+                  </div>
+                  <div className="pr5-seen">
+                    {stamps.map((s) => (
+                      <a key={s.id} href={`/e/${s.event.slug}`}>
+                        <PassportStamp stamp={s} size={120} />
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
           )}
         </>
       )}
