@@ -1,10 +1,10 @@
 // Invitations à un événement (lot 25 ; cartes sur `GET /me/requests`, lot R7c2) : celle d'un organisateur (`source
 // organizer` : la réponse, véhicule et règlement, se fait dans Accès comme la confirmation d'une venue en crew) et celle de
 // passionnés (`source peer` : « Kenji_66 et Julie_66 t'invitent », on répond sur la fiche de l'événement).
-import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { eventInviteLabels, invitationLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { formatDayHour } from "@/lib/format";
 import { Avatar } from "@/ui/Avatar";
@@ -18,7 +18,7 @@ const listOf = (item: RequestCardProps["item"], key: string): Record<string, unk
   return Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object") : [];
 };
 
-export function EventInvitationRequest({ item }: RequestCardProps) {
+export function EventInvitationRequest({ item, onInviteMenu }: RequestCardProps) {
   const router = useRouter();
   const { t } = useTheme();
   const { name, imageUrl } = fromOf(item);
@@ -39,6 +39,12 @@ export function EventInvitationRequest({ item }: RequestCardProps) {
   const message = payloadString(item, "message");
   const lockAt = payloadString(item, "lockAt");
   const notes = listOf(item, "notes");
+  // Lot R7-fix-invite : le « ⋯ » coupe les invitations de chacun des inviteurs (`InvitationMenu`, posée en surcouche par l'écran des Demandes : une feuille se pose sur l'écran, pas dans une carte).
+  const mutable = listOf(item, "inviters").flatMap((x) => {
+    const userId = textOf(x, "userId");
+    const pseudo = textOf(x, "pseudo");
+    return userId && pseudo ? [{ userId, pseudo }] : [];
+  });
   return (
     <Plate style={styles.card} testID={peer ? "request-event-invitation-peer" : "received-invitation"}>
       <View style={styles.head}>
@@ -87,6 +93,18 @@ export function EventInvitationRequest({ item }: RequestCardProps) {
             {peer ? eventInviteLabels.seeEvent : L.openEvent}
           </Button>
         ) : null}
+        {peer && mutable.length > 0 && onInviteMenu ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={eventInviteLabels.moreA11y}
+            onPress={() => onInviteMenu(mutable)}
+            hitSlop={8}
+            style={styles.more}
+            testID="request-invite-more"
+          >
+            <Icon name="more" size={22} color={t.color.plateInk} />
+          </Pressable>
+        ) : null}
       </View>
     </Plate>
   );
@@ -96,5 +114,6 @@ const styles = StyleSheet.create({
   card: { gap: space3, padding: space3 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   text: { flex: 1, gap: 2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
+  more: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
 });

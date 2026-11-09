@@ -43,11 +43,14 @@ export function RequestList({
   list,
   empty,
   onChanged,
+  onInviteMenu,
 }: {
   list: ReturnType<typeof useRequestList>;
   empty: string;
   /** Après une décision : l'écran relit ses compteurs et sa liste. */
   onChanged: () => void;
+  /** Lot R7-fix-invite : le « ⋯ » d'une invitation de passionnés (l'écran porte la feuille). */
+  onInviteMenu?: (from: { userId: string; pseudo: string }[]) => void;
 }) {
   const { first, items, nextCursor, more, loadingMore, moreError } = list;
   if (first.error && !first.data) {
@@ -63,6 +66,7 @@ export function RequestList({
           <Card
             key={`${item.kind}:${item.id}:${item.kind === "crew" ? String(item.payload.requesterId ?? "") : ""}`}
             item={item}
+            onInviteMenu={onInviteMenu}
             onDone={() => {
               void first.reload();
               onChanged();

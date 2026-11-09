@@ -5,9 +5,10 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { messagingLabels, requestCountSpoken, requestCountText, requestRowCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { InvitationMenu } from "@/features/event/invite/InviteParts";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -23,6 +24,8 @@ export function RequestsScreen() {
   const c = t.color;
   const router = useRouter();
   const { me, refreshMe } = useSession();
+  const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string }[] | null>(null);
+  const changed = useRef(false);
   const list = useRequestList((r) => r.kind !== "contact");
   const summary = useApi(() => api.inboxSummary(), []);
   const reloadAll = useCallback(async () => {
@@ -44,6 +47,23 @@ export function RequestsScreen() {
       onClose={close}
       closeLabel="Retour à l'Activité"
       onRefresh={reloadAll}
+      overlays={
+        // Lot R7-fix-invite : « ⋯ » d'une invitation de passionnés. La liste se relit à la fermeture du menu (la carte
+        // peut disparaître : plus aucune invitation).
+        <InvitationMenu
+          from={menuFrom}
+          onClose={() => {
+            setMenuFrom(null);
+            if (changed.current) {
+              changed.current = false;
+              void reloadAll();
+            }
+          }}
+          onChanged={() => {
+            changed.current = true;
+          }}
+        />
+      }
     >
       {messageRequests ? (
         <Pressable
@@ -62,7 +82,12 @@ export function RequestsScreen() {
           <Icon name="next" size={20} color={c.ink} />
         </Pressable>
       ) : null}
-      <RequestList list={list} empty={messagingLabels.noRequests} onChanged={() => void reloadAll()} />
+      <RequestList
+        list={list}
+        empty={messagingLabels.noRequests}
+        onChanged={() => void reloadAll()}
+        onInviteMenu={setMenuFrom}
+      />
     </FlowScreen>
   );
 }
