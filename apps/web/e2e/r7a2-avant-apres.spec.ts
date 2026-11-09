@@ -19,9 +19,12 @@ test.use({ actionTimeout: 30_000 });
 const DEMOS: readonly (readonly [string, string])[] = [
   ["normal", "kenji@orasso.local"],
   ["live", "damien@orasso.local"],
-  // Après seulement : un compte hors événement (le « jour normal » de la maquette), Paul_Photo.
-  ...(AFTER ? ([["horsevent", "paul.photo@orasso.local"]] as const) : []),
+  // Un compte hors événement (le « jour normal » de la maquette), Paul_Photo : après ; et avant avec `HORSEVENT=1`
+  // (depuis le worktree temporaire de la base, tour 2) pour la paire de non-régression.
+  ...(AFTER || process.env.HORSEVENT === "1" ? ([["horsevent", "paul.photo@orasso.local"]] as const) : []),
 ];
+// `ONLY=horsevent` : seulement ce compte (l'« avant » du jour normal).
+const ONLY = process.env.ONLY;
 
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
@@ -84,6 +87,7 @@ test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ bro
             [390, 1],
           ] as const)) {
         for (const [demo, email] of DEMOS) {
+          if (ONLY && demo !== ONLY) continue;
           const tag = `${demo}-${width}-x${scale}-${theme}`;
           for (const [kind, height] of [
             ["top", 844],
@@ -93,7 +97,7 @@ test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ bro
             await go(page, "/accueil");
             if (await page.getByTestId("whatsnew-dismiss").count()) await page.getByTestId("whatsnew-dismiss").click();
             await shot(page, `appli-accueil-${kind}-${tag}`);
-            if (AFTER && kind === "top" && width === 384 && scale === 1 && demo === "normal") {
+            if (AFTER && kind === "top" && demo === "normal") {
               await go(page, "/accueil-personnaliser");
               await shot(page, `appli-personnaliser-${tag}`);
             }
@@ -107,6 +111,7 @@ test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ bro
   for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
     for (const width of QUICK ? [390] : [390, 1280]) {
       for (const [demo, email] of DEMOS) {
+        if (ONLY && demo !== ONLY) continue;
         const tag = `${demo}-${width}-${theme}`;
         const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
         const page = await ctx.newPage();
