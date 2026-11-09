@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { nearestDepartment } from "./geo";
 import {
+  addHomeWidget,
   defaultHomeWidgets,
   HOME_FIXED_WIDGET,
   homeWidgetIds,
   homeWidgetOffered,
   moveHomeWidget,
+  moveVisibleHomeWidget,
   normalizeHomeWidgets,
   toggleHomeWidget,
   visibleHomeWidgets,
@@ -190,6 +192,37 @@ describe("réglage des widgets de l'accueil", () => {
     expect(normalizeHomeWidgets({ order: ["weather"] }).hidden).toEqual(["agenda", "favorite_garage", "pending"]);
     // Normaliser deux fois ne change rien.
     expect(normalizeHomeWidgets(before)).toEqual(before);
+  });
+
+  it("lot R7a2 : « Personnaliser » monte et descend parmi les blocs affichés, jamais avec un bloc masqué", () => {
+    // Par défaut, Agenda, Garage favori et Candidatures en attente sont masqués : « Météo » descend jusqu'à la fin, pas plus.
+    const c = defaultHomeWidgets;
+    expect(moveVisibleHomeWidget(c, "weather", 1)).toBe(c);
+    const up = moveVisibleHomeWidget(c, "weather", -1);
+    const shown = (cfg: typeof c) => visibleHomeWidgets(cfg).filter((id) => homeWidgetOffered(id));
+    expect(shown(up).slice(-2)).toEqual(["weather", "nearby"]);
+    const down = moveVisibleHomeWidget(up, "weather", 1);
+    expect(down.order).toEqual(c.order);
+    // Le premier bloc affiché sous « Prochaine sortie » ne monte pas ; « Prochaine sortie » ne bouge pas.
+    expect(moveVisibleHomeWidget(c, "live", -1)).toBe(c);
+    expect(moveVisibleHomeWidget(c, "next_access", 1)).toBe(c);
+    // Un bloc masqué ne se déplace pas ; un identifiant inconnu non plus.
+    expect(moveVisibleHomeWidget(c, "agenda", -1)).toBe(c);
+    // Les blocs masqués gardent leur place dans l'ordre enregistré.
+    expect(up.hidden).toEqual(c.hidden);
+  });
+
+  it("lot R7a2 : « Ajouter » affiche un bloc masqué à la fin des blocs affichés ; ne fait rien s'il est déjà affiché", () => {
+    const added = addHomeWidget(defaultHomeWidgets, "favorite_garage");
+    expect(added.hidden).toEqual(["agenda", "pending"]);
+    expect(
+      visibleHomeWidgets(added)
+        .filter((id) => homeWidgetOffered(id))
+        .at(-1),
+    ).toBe("favorite_garage");
+    expect([...added.order].sort()).toEqual([...homeWidgetIds].sort());
+    expect(addHomeWidget(added, "favorite_garage")).toBe(added);
+    expect(addHomeWidget(defaultHomeWidgets, "next_access")).toBe(defaultHomeWidgets);
   });
 
   it("valide strictement ce qui s'enregistre", () => {

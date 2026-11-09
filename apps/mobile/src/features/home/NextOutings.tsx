@@ -62,7 +62,7 @@ const GAP = 10;
 const POSTER_W = 128;
 
 /** Bouton au trait posé sur l'affiche (`.gps` de l'artefact : filet d'encre de l'affiche à 35 % (59 en hexadécimal), capitales 12 px). */
-function PosterButton({
+export function PosterButton({
   icon,
   label,
   onPress,

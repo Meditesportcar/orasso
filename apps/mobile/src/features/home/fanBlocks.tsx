@@ -5,6 +5,7 @@ import { Icon, type IconName, Photo, Text, tokens, useTheme, weatherIcons } from
 import {
   type EventCard,
   type HomeSponsored,
+  homeBlockLabels,
   homeLabels,
   homeProfileLabels,
   type MyWeather,
@@ -24,7 +25,16 @@ const { space2, space3, space4 } = tokens.spacing;
  * `.greet` : étiquette du jour, « Salut Kenji » en affiche 32 px. Lot M5 (maquette 6.1, retour 28) : plus de petites
  * flèches ‹ › à droite (on les prenait pour le passage d'une sortie à l'autre, qui se fait maintenant au doigt).
  */
-export function Greet({ line, name }: { line: string; name: string }) {
+export function Greet({
+  line,
+  name,
+  onPersonalize,
+}: {
+  line: string;
+  name: string;
+  /** Lot R7a2 (maquette R7.4) : « Personnaliser l'accueil », une icône à droite de la salutation. */
+  onPersonalize?: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -37,6 +47,22 @@ export function Greet({ line, name }: { line: string; name: string }) {
           {homeProfileLabels.greeting(name)}
         </Text>
       </View>
+      {onPersonalize ? (
+        <Pressable
+          onPress={onPersonalize}
+          accessibilityRole="button"
+          accessibilityLabel={homeBlockLabels.personalize}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.persoBtn,
+            { backgroundColor: c.surface, borderColor: c.barControlEdge },
+            pressed && styles.persoPressed,
+          ]}
+          testID="home-personalize"
+        >
+          <Icon name="edit" size={20} color={c.ink} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -366,6 +392,8 @@ const styles = StyleSheet.create({
   card: { borderRadius: 18, padding: space4 },
   greet: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingTop: space2 },
   greetTitle: { fontSize: 32, lineHeight: 31, marginTop: 2 },
+  persoBtn: { width: 48, height: 48, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  persoPressed: { opacity: 0.8 },
   // Lot R5b (titres « SON ») : le titre prend la place restante (jamais un mot perdu), la mention passe dessous au besoin.
   secH: {
     flexDirection: "row",

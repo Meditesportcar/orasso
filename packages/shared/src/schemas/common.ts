@@ -67,7 +67,7 @@ export const errorCodes = [
   "pseudo_reserved",
 
   // Lot R7f1 : stories (plaque non décidée, story réservée au crew).
-  
+
   "crew_only",
   "not_implemented",
   // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.

@@ -11,19 +11,27 @@
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  defaultHomeWidgets,
   type HomeData,
+  type HomeFriendNews,
   type HomeNudgeKind,
+  type HomeOuting,
   type HomeSponsored,
+  type HomeWidgetId,
+  homeBlockLabels,
   homeLabels,
   homeProfileLabels,
+  homeWidgetOffered,
   type MyApplication,
+  normalizeHomeWidgets,
+  visibleHomeWidgets,
   withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
-import { NudgeCard } from "@/features/home/HomeWidgets";
+import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/features/home/HomeWidgets";
 import { Stamp } from "@/features/passport/Stamp";
 import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
 import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sorties/model";
@@ -36,6 +44,7 @@ import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { SmButton } from "@/ui/Kit";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
@@ -44,6 +53,12 @@ import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, splitSponsored } from "./rail";
 import { todayLine } from "./today";
 import { WhatsNewBanner } from "./WhatsNewBanner";
+import { FriendsNews } from "./widgets/FriendsNews";
+import { LiveBlock, LiveLine } from "./widgets/Live";
+import { Memories } from "./widgets/Memories";
+import { MyCrew } from "./widgets/MyCrew";
+import { MyOutings } from "./widgets/MyOutings";
+import { SpotMeetup } from "./widgets/SpotMeetup";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
@@ -82,8 +97,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         lat: position.position?.lat,
         lng: position.position?.lng,
         persona: exhibitor ? "fan" : "visitor",
-        // Lot C2a : l'Accueil v2 (météo et rail toujours ; ni lavage ni carburant ; le sponsorisé dans le rail).
-        blocks: "v2",
+        // Lot R7a2 : l'Accueil selon le réglage de la personne (blocs choisis, ordonnés, masqués ; un bloc masqué n'est pas
+        // calculé par l'API ; le sponsorisé reste dans « Autour de moi »).
+        blocks: "app",
       });
       const parts = splitSponsored(fresh);
       setSponsored(parts.sponsored);
@@ -263,6 +279,113 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const weatherWhen = weather?.kind === "event" ? weatherDay(weather.event.startsAt) : null;
   const weatherPlace = weather?.kind === "event" ? (heroEvent?.city ?? null) : department ? `Dép. ${department}` : null;
 
+  // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
+  const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
+  const order = visibleHomeWidgets(widgets).filter((id) => id !== "next_access" && homeWidgetOffered(id));
+  const liveNow = data?.live ?? null;
+  const openPersonalize = () => router.push("/accueil-personnaliser" as never);
+
+  // « Mon accès » de l'événement en cours : ma place retenue (QR), sinon mon billet ; rien si je ne suis là que par présence.
+  const liveAccess = (() => {
+    if (!liveNow) return null;
+    const place = live.find((a) => a.status === "accepted" && a.event.slug === liveNow.event.slug);
+    if (place) return `/jour-j/${place.id}`;
+    const pass = (myTickets.data ?? []).find((x) => x.status === "valid" && x.event.slug === liveNow.event.slug);
+    return pass ? `/billet/${pass.id}` : null;
+  })();
+  const openOuting = (o: HomeOuting) => openEvent(o.slug);
+  const openNews = (n: HomeFriendNews) => {
+    if (n.target?.type === "event") openEvent(n.target.slug);
+    else if (n.target?.type === "vehicle") router.push(`/v/${n.target.id}` as never);
+    else goTab("fil");
+  };
+
+  /** « Prochaine sortie » : les tickets, ou la ligne « En cours » pendant l'événement, ou l'invitation à en trouver une. */
+  const nextBlock: ReactNode =
+    liveNow && order.includes("live") ? (
+      <LiveLine
+        live={liveNow}
+        onAccess={liveAccess ? () => router.push(liveAccess as never) : null}
+        onSheet={() => openEvent(liveNow.event.slug)}
+      />
+    ) : shown.length > 0 ? (
+      <NextOutings
+        outings={shown}
+        header={(page, count) => (
+          <SecH
+            title={homeProfileLabels.nextOuting}
+            meta={count > 1 ? homeProfileLabels.outingOf(page + 1, count) : undefined}
+            testID="home-next-head"
+          />
+        )}
+      />
+    ) : exhibitor && nudge === "add_vehicle" ? (
+      <NudgeCard kind={nudge} primary onAction={() => nudgeAction(nudge)} />
+    ) : (
+      <Plate style={styles.lead} testID="home-lead">
+        <Text variant="posterM" color={t.color.plateInk}>
+          Trouve ton prochain événement
+        </Text>
+        <Text variant="body" color={t.color.plateMuted}>
+          {exhibitor
+            ? "Rassemblements, expositions, cars & coffee : candidate avec l'un de tes véhicules."
+            : "Réserve ton entrée gratuite à un événement : ton billet apparaîtra ici."}
+        </Text>
+        <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
+          {homeLabels.explore}
+        </Button>
+      </Plate>
+    );
+
+  const widgetBlocks: Partial<Record<HomeWidgetId, ReactNode>> = {
+    live: liveNow ? (
+      <LiveBlock
+        live={liveNow}
+        onVote={() =>
+          router.push(`/vote/${liveNow.event.id}?titre=${encodeURIComponent(liveNow.event.title)}` as never)
+        }
+      />
+    ) : null,
+    my_outings: data?.myOutings ? (
+      <MyOutings data={data.myOutings} onOpen={openOuting} onAll={() => router.push("/sorties" as never)} />
+    ) : null,
+    my_crew: data?.myCrew ? (
+      <MyCrew
+        data={data.myCrew}
+        now={now}
+        onOpenTab={() => goTab("crew")}
+        onDiscussion={(id) => router.push(`/boite/${id}` as never)}
+      />
+    ) : null,
+    friends_news: data?.friendsNews ? (
+      <FriendsNews data={data.friendsNews} now={now} onOpen={openNews} onFeed={() => goTab("fil")} />
+    ) : null,
+    spot_meetup: data?.spotMeetup ? <SpotMeetup data={data.spotMeetup} /> : null,
+    memories: data?.memories ? <Memories data={data.memories} /> : null,
+    nearby: rail.visible ? (
+      <>
+        <SecH
+          title={department ? homeProfileLabels.aroundThisMonth(department) : homeProfileLabels.aroundThisMonthNoPlace}
+          link={homeProfileLabels.exploreLink}
+          onLink={() => goTab("explorer")}
+        />
+        <PosterRail
+          events={rail.events}
+          onOpen={openEvent}
+          sponsored={rail.sponsored}
+          onSponsored={(s) => {
+            void api.sponsoredClick(s.id).catch(() => undefined);
+            if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
+          }}
+        />
+      </>
+    ) : null,
+    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} when={weatherWhen} /> : null,
+    agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
+    favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
+    pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,
+  };
+
   return (
     <TabScreen
       onRefresh={async () => {
@@ -271,43 +394,18 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     >
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
 
-      <Greet line={todayLine(now, department ? `Dép. ${department}` : null)} name={name} />
+      <Greet
+        line={todayLine(now, department ? `Dép. ${department}` : null)}
+        name={name}
+        onPersonalize={openPersonalize}
+      />
 
       {/* Lot R7a1 : « où sont passées les choses », une seule fois après la mise à jour, sous le bonjour (maquette R7.1). */}
       <WhatsNewBanner variant={variant} />
 
-      {shown.length > 0 ? (
-        <NextOutings
-          outings={shown}
-          header={(page, count) => (
-            <SecH
-              title={homeProfileLabels.nextOuting}
-              meta={count > 1 ? homeProfileLabels.outingOf(page + 1, count) : undefined}
-              testID="home-next-head"
-            />
-          )}
-        />
-      ) : exhibitor && nudge === "add_vehicle" ? (
-        <NudgeCard kind={nudge} primary onAction={() => nudgeAction(nudge)} />
-      ) : (
-        <Plate style={styles.lead} testID="home-lead">
-          <Text variant="posterM" color={t.color.plateInk}>
-            Trouve ton prochain événement
-          </Text>
-          <Text variant="body" color={t.color.plateMuted}>
-            {exhibitor
-              ? "Rassemblements, expositions, cars & coffee : candidate avec l'un de tes véhicules."
-              : "Réserve ton entrée gratuite à un événement : ton billet apparaîtra ici."}
-          </Text>
-          <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
-            {homeLabels.explore}
-          </Button>
-        </Plate>
-      )}
+      {nextBlock}
 
       {home.error && !data ? <Notice>{homeLabels.loadFailed}</Notice> : null}
-
-      {weather ? <WeatherCard weather={weather} place={weatherPlace} when={weatherWhen} /> : null}
 
       {exhibitor && staffNext ? (
         <Nudge
@@ -320,26 +418,11 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       ) : null}
 
-      {rail.visible ? (
-        <>
-          <SecH
-            title={
-              department ? homeProfileLabels.aroundThisMonth(department) : homeProfileLabels.aroundThisMonthNoPlace
-            }
-            link={homeProfileLabels.exploreLink}
-            onLink={() => goTab("explorer")}
-          />
-          <PosterRail
-            events={rail.events}
-            onOpen={openEvent}
-            sponsored={rail.sponsored}
-            onSponsored={(s) => {
-              void api.sponsoredClick(s.id).catch(() => undefined);
-              if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
-            }}
-          />
-        </>
-      ) : null}
+      {order.map((id) => {
+        const block = widgetBlocks[id];
+        // Les blocs sont des enfants directs de l'écran : l'écart entre sections est celui de l'écran (comme avant).
+        return block ? <Fragment key={id}>{block}</Fragment> : null;
+      })}
 
       {data?.stampsThisSeason !== null && data?.stampsThisSeason !== undefined ? (
         <Nudge
@@ -361,6 +444,11 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           onPress={() => (exhibitor ? router.push("/mon-passeport") : goTab("passeport"))}
         />
       ) : null}
+
+      {/* « Personnaliser » aussi en bas (maquette R7.4) : un bouton au trait, jamais le bouton principal. */}
+      <SmButton kind="s" icon="edit" wide onPress={openPersonalize} testID="home-personalize-bottom">
+        {homeBlockLabels.personalize}
+      </SmButton>
     </TabScreen>
   );
 }

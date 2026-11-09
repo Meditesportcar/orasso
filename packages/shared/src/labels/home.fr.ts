@@ -229,8 +229,7 @@ export const homeBlockLabels = {
   /** En cours (pendant un événement). */
   liveEyebrow: (day: number, count: number) => (count > 1 ? `En cours · jour ${day} sur ${count}` : "En cours"),
   liveTitle: "En cours",
-  liveOnSite: (n: number) =>
-    n > 1 ? `${n} sur place maintenant` : n === 1 ? "1 sur place maintenant" : "Personne encore sur place",
+  liveOnSite: (n: number) => (n > 0 ? "sur place maintenant" : "Personne encore sur place"),
   liveVotes: (n: number) => (n > 1 ? `Votes · ${n} ouverts` : "Vote ouvert"),
   liveVote: "Voter",
   liveProgram: "Programme du jour",

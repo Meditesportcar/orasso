@@ -134,7 +134,7 @@ export const homeService = {
 
     // Lot R7a2 : les blocs réglables de l'Accueil ne sont calculés que s'ils sont affichés (un bloc masqué n'est pas
     // calculé), et seulement pour l'Accueil complet (ni `light`, ni `blocks=v2`, ni `blocks=places`).
-    const dashboard = full && !q.blocks;
+    const dashboard = full && (!q.blocks || q.blocks === "app");
     const want = (id: HomeWidgetId) => dashboard && shown.has(id);
     const [
       upcoming,
@@ -171,13 +171,15 @@ export const homeService = {
       want("memories") ? memoriesWidget(v) : Promise.resolve(null),
     ]);
     const live = wantLive ? await presenceService.homeLive(v) : null;
-    // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
-    const sponsored = extras
-      ? await sponsoredService.select(
-          v,
-          interests.map((i) => i.id),
-        )
-      : null;
+    // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé : dans l'appli (`blocks=app`) il est
+    // montré dans « Autour de moi », donc pas rendu (ni compté) quand ce bloc est masqué.
+    const sponsored =
+      extras && (q.blocks !== "app" || shown.has("nearby"))
+        ? await sponsoredService.select(
+            v,
+            interests.map((i) => i.id),
+          )
+        : null;
 
     const [nextAccess, nextTicket, pro, provider, media, stamps] = await Promise.all([
       profile === "exhibitor" ? enrichNextAccess(pickNextAccess(upcoming)) : Promise.resolve(null),

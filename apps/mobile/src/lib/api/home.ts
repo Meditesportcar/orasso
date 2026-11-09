@@ -12,7 +12,7 @@ export type HomeQuery = {
   lng?: number;
   persona?: PersonaKind;
   light?: "1";
-  blocks?: "v2" | "places";
+  blocks?: "v2" | "places" | "app";
 };
 
 export const homeApi = {

@@ -121,6 +121,42 @@ export function moveHomeWidget(
   return { order, hidden: config.hidden };
 }
 
+/**
+ * Lot R7a2 (écran « Personnaliser ») : monte (`-1`) ou descend (`+1`) un widget AFFICHÉ, d'un cran parmi les widgets affichés
+ * (jamais en échangeant avec un widget masqué ou retiré, ce qui ne se verrait pas). « Prochaine sortie » reste en tête.
+ */
+export function moveVisibleHomeWidget(
+  config: HomeWidgetsConfig,
+  id: HomeWidgetId,
+  delta: -1 | 1,
+  offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
+): HomeWidgetsConfig {
+  if (id === HOME_FIXED_WIDGET) return config;
+  const visible = config.order.filter((w) => !config.hidden.includes(w) && offered(w));
+  const from = visible.indexOf(id);
+  const to = from + delta;
+  if (from < 0 || to < 1 || to >= visible.length) return config;
+  const order = [...config.order];
+  const a = order.indexOf(id);
+  const b = order.indexOf(visible[to] as HomeWidgetId);
+  [order[a], order[b]] = [order[b] as HomeWidgetId, order[a] as HomeWidgetId];
+  return { order, hidden: config.hidden };
+}
+
+/** Lot R7a2 (« Ajouter ») : affiche un widget masqué, à la fin des widgets affichés (il ne surgit pas au milieu de l'écran). */
+export function addHomeWidget(
+  config: HomeWidgetsConfig,
+  id: HomeWidgetId,
+  offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
+): HomeWidgetsConfig {
+  if (id === HOME_FIXED_WIDGET || !config.hidden.includes(id)) return config;
+  const hidden = config.hidden.filter((h) => h !== id);
+  const rest = config.order.filter((w) => w !== id);
+  const lastVisible = [...rest].reverse().find((w) => !hidden.includes(w) && offered(w));
+  rest.splice(lastVisible ? rest.indexOf(lastVisible) + 1 : rest.length, 0, id);
+  return { order: rest, hidden };
+}
+
 /** Masque ou affiche un widget. */
 export function toggleHomeWidget(config: HomeWidgetsConfig, id: HomeWidgetId): HomeWidgetsConfig {
   if (id === HOME_FIXED_WIDGET) return config;
