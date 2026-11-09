@@ -12,7 +12,7 @@ export const exportKindOf = (mediaKind: ExportMediaKind = "photo"): ExportKind =
 
 /** Le nom du fichier avec la bonne extension (`orasso-story.jpg` devient `orasso-story.mp4` pour une vidéo). */
 export const exportFileName = (fileName: string, kind: ExportKind): string =>
-  fileName.replace(/\.(jpg|mp4)$/i, "") + `.${kind.ext}`;
+  `${fileName.replace(/\.(jpg|mp4)$/i, "")}.${kind.ext}`;
 
 /** Nom du fichier dans le cache de l'appareil : stable pour un même contenu, à la bonne extension. */
 export const exportCacheName = (key: string, kind: ExportKind): string =>

@@ -103,3 +103,28 @@ test.afterAll(async () => {
     .stories;
   for (const s of mine) if (s.linked) await apiCall(cookie, "DELETE", `/me/stories/${s.id}`);
 });
+
+test("site tour 2 : En message liste les conversations (ou dit « Aucune conversation » une fois tout lu)", async ({
+  browser,
+}) => {
+  const cookie = await login("damien@orasso.local");
+  const events = (
+    await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+  ).data;
+  const lydia = events.items.find((e) => e.title.includes("Lydia"));
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+  const page = await ctx.newPage();
+  await setTheme(page, "sable");
+  await loginInBrowser(page, "damien@orasso.local");
+  await page.goto(`/e/${lydia?.slug}`);
+  await page.getByTestId("event-share").click();
+  await page.getByTestId("share-dest-message").click();
+  await expect(page.getByTestId("share-message")).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page
+      .locator('[data-testid^="share-conv-"]:not([data-testid="share-conv-more"]), :text("Aucune conversation")')
+      .first(),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Chargement…")).toHaveCount(0);
+  await ctx.close();
+});

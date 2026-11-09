@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
+import { dropMyStories, publishStory } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
 
 // Lot R7f4 : captures « avant » / « après » des écrans que le lot touche (appli compilée 390 px, site 390 et 1280 px), Béton et
@@ -22,6 +23,9 @@ type Ctx = {
   eventId: string;
   authorKey: string | null;
   memoryEventId: string | null;
+  memorySlug: string | null;
+  /** Ma propre story (publiée pour la capture « ma story », retirée à la fin). */
+  myKey: string;
 };
 
 async function afterOpening(page: Page) {
@@ -41,7 +45,14 @@ async function gather(): Promise<Ctx> {
   const lydia = events.items?.find((e) => e.title.includes("Lydia"));
   const bar = (await apiCall<{ authors: { key: string }[] }>(cookie, "GET", "/stories/bar")).data;
   const memories = (await apiCall<{ eventId: string }[]>(cookie, "GET", "/me/memories/today")).data;
+  const memoryId = memories?.[0]?.eventId ?? null;
+  const memorySlug = memoryId
+    ? ((await apiCall<{ slug: string }>(cookie, "GET", `/events/${memoryId}`)).data?.slug ?? null)
+    : null;
+  const me = (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data;
   return {
+    memorySlug,
+    myKey: `u:${me.user.id}`,
     cookie,
     vehicleId: (list[0] as { id: string }).id,
     eventSlug: lydia?.slug ?? "",
@@ -87,12 +98,23 @@ for (const theme of ["beton", "sable"] as const) {
       await page.waitForTimeout(wait);
       await shot(page, `appli-${name}-${theme}`);
     };
-    await go(`/vehicule/${c.vehicleId}/partager`, "vehicule-partager", 4000);
+    // Avant le lot, cette adresse n'existe pas : la feuille de partage du véhicule n'est capturée qu'après.
+    if (PHASE !== "avant") await go(`/vehicule/${c.vehicleId}/partager`, "vehicule-partager", 4000);
+    await go(`/vehicule/${c.vehicleId}`, "vehicule", 4000);
     await go(`/e/${c.eventSlug}`, "fiche-evenement");
     await go("/fil", "fil", 4000);
     if (c.memoryEventId) await go(`/souvenir/${c.memoryEventId}`, "souvenir");
     if (c.authorKey) await go(`/story/${encodeURIComponent(c.authorKey)}`, "visionneuse", 4000);
     await go(`/vote/${c.eventId}`, "vote", 3500);
+    if (c.memoryEventId) await go(`/vote/${c.memoryEventId}`, "vote-clos", 3500);
+    // Ma story : la visionneuse et son menu « ⋯ » (l'entrée « Vers l'extérieur » y est ajoutée par le lot).
+    await dropMyStories(c.cookie);
+    await publishStory(c.cookie, { audience: "public" });
+    await go(`/story/${encodeURIComponent(c.myKey)}`, "ma-story", 4500);
+    await page.getByTestId("story-more").click();
+    await page.waitForTimeout(900);
+    await shot(page, `appli-ma-story-menu-${theme}`);
+    await dropMyStories(c.cookie);
     await ctx.close();
   });
 }
@@ -123,6 +145,11 @@ for (const [label, width] of [
       if (c.memoryEventId) await go(`/app/souvenir/${c.memoryEventId}`, "souvenir");
       if (c.authorKey) await go(`/app/story/${encodeURIComponent(c.authorKey)}`, "visionneuse", 3500);
       await go(`/app/vote/${c.eventSlug}`, "vote", 3000);
+      if (c.memorySlug) await go(`/app/vote/${c.memorySlug}`, "vote-clos", 3000);
+      await dropMyStories(c.cookie);
+      await publishStory(c.cookie, { audience: "public" });
+      await go(`/app/story/${encodeURIComponent(c.myKey)}`, "ma-story", 3500);
+      await dropMyStories(c.cookie);
       await ctx.close();
     });
   }

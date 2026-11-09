@@ -348,6 +348,16 @@ function ToMessage({
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: première page à l'ouverture seulement.
   useEffect(() => read(), []);
+  // Aucune conversation admissible sur les pages lues et d'autres à lire : on poursuit (dix pages au plus), sans attendre un
+  // appui sur « Voir plus » devant une liste vide.
+  const autoPages = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `read` change à chaque rendu, seul l'état lu compte.
+  useEffect(() => {
+    if (targets.loaded && !targets.items.length && targets.next && !reading && !readError && autoPages.current < 10) {
+      autoPages.current += 1;
+      read(targets.next);
+    }
+  }, [targets, reading, readError]);
   const items = targets.items;
   const send = (conv: ConversationSummary) => {
     setSending(conv.id);

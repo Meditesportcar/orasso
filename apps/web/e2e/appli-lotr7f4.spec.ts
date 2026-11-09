@@ -148,6 +148,16 @@ test("un événement : compte public = organisateur identifié ; compte privé =
     await expect(page.getByTestId("share-story-organizer")).toContainText(
       notified ? "sera prévenu" : "ne sera pas prévenu : compte privé",
     );
+    // L'aperçu (carte et fond rendus par l'API) est chargé avant la capture : jamais un cadre vide.
+    await page.waitForFunction(
+      () => {
+        const imgs = [...document.querySelectorAll("img")].filter((i) => i.getBoundingClientRect().width > 100);
+        return imgs.length >= 1 && imgs.every((i) => i.complete && i.naturalWidth > 0);
+      },
+      null,
+      { timeout: 60_000 },
+    );
+    await page.waitForTimeout(1200);
     await page.screenshot({ path: `${DIR}/appli-composeur-evenement-${THEME}-${notified ? "public" : "prive"}.png` });
     // Pas de bouton principal grisé sans explication : l'audience est choisie d'office.
     await page.getByTestId("share-story-publish").click();
@@ -183,4 +193,29 @@ test.afterAll(async () => {
       if (s.linked) await apiCall(cookie, "DELETE", `/me/stories/${s.id}`);
     }
   }
+});
+
+// Tour 2 : « En message » lit les conversations par pages ; rien n'est envoyé ici (la liste, ou « Aucune conversation » si tout est lu et vide).
+test("tour 2 : En message liste les conversations (ou dit « Aucune conversation » une fois tout lu)", async ({
+  browser,
+}) => {
+  const cookie = await login("damien@orasso.local");
+  const events = (
+    await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+  ).data;
+  const lydia = events.items.find((e) => e.title.includes("Lydia"));
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await page.goto(`/e/${lydia?.slug}`);
+  await afterOpening(page);
+  await page.getByTestId("event-share").click();
+  await expect(page.getByTestId("share-sheet")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("share-dest-message").click();
+  await expect(page.getByTestId("share-message")).toBeVisible();
+  await expect(
+    page
+      .locator('[data-testid^="share-conv-"]:not([data-testid="share-conv-more"]), :text("Aucune conversation")')
+      .first(),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Chargement…")).toHaveCount(0);
+  await ctx.close();
 });
