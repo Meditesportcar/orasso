@@ -148,7 +148,10 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
   const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
   const expire = () => {
     const t = now();
-    for (const [k, v] of keys) if (v.uncertainAt !== null && t - v.uncertainAt >= UNCERTAIN_MS) keys.delete(k);
+    // Une soumission en cours d'envoi n'expire jamais (son échec la ferait perdre : le renvoi changerait d'identifiant).
+    const live = new Set([...sending].map(([s, x]) => keyOf(s, x)));
+    for (const [k, v] of keys)
+      if (v.uncertainAt !== null && t - v.uncertainAt >= UNCERTAIN_MS && !live.has(k)) keys.delete(k);
   };
   /** Identifiants à ne jamais oublier : envoi en cours ou issue incertaine non expirée. */
   const protectedKeys = () => {

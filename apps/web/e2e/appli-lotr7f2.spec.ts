@@ -529,7 +529,7 @@ test("tour 3 : changement de compte : le retour arrière ne montre ni le média 
 }) => {
   test.setTimeout(300_000);
   await resetViews();
-  const damien = await login("damien@orasso.local");
+  await login("damien@orasso.local");
   const kenji = await userIdOf("Kenji_66");
   const crewStory = (await sql<{ id: string }>("select id from stories where audience = 'crew' limit 1"))[0]?.id ?? "";
   expect(crewStory).toBeTruthy();

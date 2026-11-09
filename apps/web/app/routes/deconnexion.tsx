@@ -26,7 +26,16 @@ export function loader() {
 // avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
 export async function clientAction({ serverAction }: Route.ClientActionArgs) {
   purgePublished();
-  // Les autres fenêtres savent tout de suite qu'il n'y a plus de compte (une visionneuse ouverte se masque).
+  let result: Awaited<ReturnType<typeof serverAction>>;
+  try {
+    result = await serverAction();
+  } catch (thrown) {
+    // L'action répond par une redirection (`redirect(...)`) : `serverAction()` la lève ; la session est révoquée, on annonce.
+    if (thrown instanceof Response && thrown.status >= 300 && thrown.status < 400) announceSession(null);
+    throw thrown;
+  }
+  // Tour 6 : les autres fenêtres ne l'apprennent qu'APRÈS la révocation de la session (annoncé avant, une visionneuse pouvait
+  // relire `/me`, encore valide, et réafficher les données du compte). Elle se masque, relit le compte (401 → rechargement).
   announceSession(null);
-  return serverAction();
+  return result;
 }

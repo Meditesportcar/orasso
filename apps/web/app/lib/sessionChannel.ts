@@ -26,6 +26,8 @@ export function announceSession(userId: string | null): void {
   try {
     // Repli : l'événement `storage` ne part que si la valeur change, d'où le nombre aléatoire (il ne porte aucune donnée).
     localStorage.setItem(NAME, JSON.stringify({ userId, n: Math.random() }));
+    // L'événement part quand même chez les autres fenêtres : rien ne reste stocké (tour 6).
+    localStorage.removeItem(NAME);
   } catch {
     // Stockage indisponible : les autres contrôles (retour du focus, de l'onglet) restent.
   }

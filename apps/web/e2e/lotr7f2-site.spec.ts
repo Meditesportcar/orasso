@@ -877,3 +877,93 @@ test("tour 4 : le total des vues vient de la liste relue : des vues arrivées en
   await expect(page.getByTestId("story-viewers-partial")).toContainText("200");
   await dropMyStories(damien);
 });
+
+// --- Tour 6 (re-relectures du tour 5) ---------------------------------------------------------------------------------------
+
+test("tour 6 : déconnexion par le vrai bouton : l'autre page ne l'apprend qu'après la révocation, et ne réaffiche jamais rien de A", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const { damien } = await openOwnStory(page, "Légende privée de Damien");
+  const caption = "Légende privée de Damien";
+  const second = await page.context().newPage();
+  await second.setViewportSize({ width: 390, height: 844 });
+  let releaseLogout = () => {};
+  const logoutGate = new Promise<void>((r) => {
+    releaseLogout = r;
+  });
+  let releaseLoads = () => {};
+  const loadsGate = new Promise<void>((r) => {
+    releaseLoads = r;
+  });
+  let blockLoads = false;
+  let logoutSeen = false;
+  await second.route(/\.data(\?|$)|\/deconnexion/, async (route) => {
+    const req = route.request();
+    if (req.method() === "POST" && req.url().includes("/deconnexion")) {
+      logoutSeen = true;
+      await logoutGate;
+      const res = await route.fetch();
+      // La session est révoquée ; tout chargement qui suit (destination de la déconnexion) est suspendu.
+      blockLoads = true;
+      await route.fulfill({ response: res });
+      return;
+    }
+    if (blockLoads) await loadsGate;
+    await route.continue();
+  });
+  await second.goto("/app/moi");
+  const out = second.getByTestId("reglage-deconnexion");
+  await expect(out).toBeVisible({ timeout: 30_000 });
+  await out.click();
+  await expect.poll(() => logoutSeen, { timeout: 15_000 }).toBe(true);
+  // Déconnexion en cours, session encore valide : rien n'est annoncé, la visionneuse de la première page ne bouge pas.
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("story-checking")).toHaveCount(0);
+  await expect(page.getByTestId("story-media")).toBeVisible();
+  const meCheck = page.waitForRequest((r) => /\/api\/me$/.test(new URL(r.url()).pathname), { timeout: 30_000 });
+  releaseLogout();
+  // Annonce après la révocation : la première page se masque, relit le compte (401) et part vers la connexion.
+  // La seconde page, elle, n'a pas fini de charger sa destination (suspendue) : la première ne dépend pas d'elle.
+  await meCheck;
+  for (let i = 0; i < 8; i++) {
+    expect(await page.locator("body").innerText()).not.toContain(caption);
+    expect(await page.locator('img[data-testid="story-media"]').count()).toBe(0);
+    await page.waitForTimeout(500);
+  }
+  releaseLoads();
+  await second.close();
+  await dropMyStories(damien);
+});
+
+test("tour 6 : photo réaffichée seulement quand elle est chargée : média retardé après le retour du focus", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const { damien, id, url } = await openOwnStory(page, "Une seule story");
+  const path = new URL(url).pathname;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
+  let release = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  let mediaRequests = 0;
+  await page.route(`**/api/stories/${id}/media/**`, async (route) => {
+    mediaRequests++;
+    await gate;
+    await route.continue();
+  });
+  // Quelques secondes de lecture, puis le focus revient : le média est relu, et sa réponse est retardée.
+  await page.waitForTimeout(3000);
+  await focusBack(page);
+  await expect.poll(() => mediaRequests, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(page.getByTestId("story-checking")).toHaveCount(0, { timeout: 30_000 });
+  // Plus longtemps que le temps restant d'une photo : la story ne passe pas et la visionneuse ne se ferme pas.
+  await page.waitForTimeout(6500);
+  expect(new URL(page.url()).pathname).toBe(path);
+  release();
+  await expect(page.getByTestId("story-media")).toBeVisible({ timeout: 15_000 });
+  expect(new URL(page.url()).pathname).toBe(path);
+  await dropMyStories(damien);
+});

@@ -244,12 +244,37 @@ describe("réponses en parallèle : un envoi et un identifiant par soumission", 
   it("une soumission incertaine expire après 30 minutes", () => {
     let t = 0;
     let n = 0;
-    const k = createReplyKeys(() => `id-${++n}`, () => t);
+    const k = createReplyKeys(
+      () => `id-${++n}`,
+      () => t,
+    );
     const first = k.begin("s0", "texte");
     k.end("s0", "texte", false);
     t = 29 * 60 * 1000;
     expect(k.idFor("s0", "texte")).toBe(first);
     t = 31 * 60 * 1000;
+    expect(k.idFor("s0", "texte")).not.toBe(first);
+  });
+
+  it("l'échéance de 30 minutes franchie pendant un renvoi n'oublie pas la soumission", () => {
+    let t = 0;
+    let n = 0;
+    const k = createReplyKeys(
+      () => `id-${++n}`,
+      () => t,
+    );
+    const first = k.begin("s0", "texte");
+    k.end("s0", "texte", false);
+    t = 29 * 60 * 1000;
+    expect(k.begin("s0", "texte")).toBe(first);
+    // Une autre soumission, après l'échéance, pendant que le renvoi est encore en cours.
+    t = 31 * 60 * 1000;
+    expect(k.begin("s1", "autre")).not.toBeNull();
+    // Le renvoi échoue à son tour : même identifiant au renvoi suivant, pas de doublon.
+    k.end("s0", "texte", false);
+    expect(k.begin("s0", "texte")).toBe(first);
+    // Un succès l'oublie.
+    k.end("s0", "texte", true);
     expect(k.idFor("s0", "texte")).not.toBe(first);
   });
 

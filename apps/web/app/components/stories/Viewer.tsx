@@ -210,6 +210,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const verifySession = useCallback(async () => {
     const mineCheck = ++checkSeq.current;
     setCheck("checking");
+    // Tour 6 : le média est démonté pendant la vérification ; la minuterie (temps écoulé gardé) ne reprend qu'au nouvel `onLoad`.
+    setLoadedId(null);
     setMenu(false);
     viewersSeq.current++;
     setViewers(null);
@@ -230,12 +232,15 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   }, [userId]);
   useEffect(() => {
     let hiddenBefore = document.visibilityState === "hidden";
+    let blurred = false;
     const sync = () => {
       const hidden = document.visibilityState === "hidden";
       setVisible(!hidden);
       if (hidden) hiddenBefore = true;
       else if (hiddenBefore) {
         hiddenBefore = false;
+        // Tour 6 : un seul `/me` au retour d'onglet (le focus qui suit ne relance pas de seconde vérification).
+        blurred = false;
         // Masqué tout de suite (avant la prochaine image affichée), puis le compte est relu.
         flushSync(() => setCheck("checking"));
         void verifySession();
@@ -244,7 +249,6 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     // Deux fenêtres côte à côte : la visionneuse reste visible quand l'autre fenêtre change de compte ; le retour du focus
     // dans cette fenêtre (après l'avoir quittée) et le retour par l'historique (`pageshow` d'une page gardée) revérifient
     // aussi le compte, masqué d'abord.
-    let blurred = false;
     const onBlur = () => {
       blurred = true;
     };
