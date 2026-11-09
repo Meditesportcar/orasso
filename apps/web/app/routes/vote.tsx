@@ -4,10 +4,11 @@
 import { Button, Chip, Plate } from "@orasso/design-system/web";
 import {
   audiencePrizeTexts,
-  runAtDeadline,
+  type ClosingWatch,
+  watchClosing,
   voteScreenTexts,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { nowMs } from "../lib/clock";
@@ -42,21 +43,41 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   const revalidator = useRevalidator();
   const [liveTotal, setLiveTotal] = useState(board?.total ?? 0);
   useEffect(() => setLiveTotal(board?.total ?? 0), [board?.total]);
-  // Clôture du vote (lot R7-0, tour 2) : à l'échéance, le classement et le droit de voter changent ; la page se relit sans
-  // attendre un message du serveur.
-  // Lot R7-0, tour 3 : la voix qui vient de réussir (réponse de l'API) sert tant que la relecture n'est pas revenue.
+  // Clôture du vote (lot R7-0, tours 2 et 3) : à l'échéance **du serveur** (écart calculé à partir de sa réponse, jamais
+  // l'horloge brute du navigateur), la page se relit, puis se relit encore (délais croissants, bornés) jusqu'à ce que
+  // l'API confirme la clôture. Lot R7-0, tour 3 : la voix qui vient de réussir (réponse de l'API) sert tant que la
+  // relecture n'est pas revenue.
   const justVoted = actionData?.ok ? actionData.mine : null;
   const closesAt = board?.closesAt ?? mine?.closesAt ?? justVoted?.closesAt ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `revalidate` change d'identité à chaque rendu ; seule l'échéance relance la minuterie
-  useEffect(
-    () =>
-      runAtDeadline(
-        closesAt ? new Date(closesAt) : null,
-        () => void revalidator.revalidate(),
-        () => new Date(nowMs()),
-      ),
-    [closesAt],
-  );
+  const stillOpen = board ? board.open && !board.settled : true;
+  const skew = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'écart se recalcule à chaque lecture de la page (`serverAt`)
+  useMemo(() => {
+    skew.current = loaderData.serverAt - nowMs();
+  }, [loaderData.serverAt]);
+  const latest = useRef({ board, revalidate: revalidator.revalidate });
+  latest.current = { board, revalidate: revalidator.revalidate };
+  const closing = useRef<ClosingWatch | null>(null);
+  useEffect(() => {
+    if (!closesAt || !stillOpen) return undefined;
+    const watch = watchClosing({
+      deadline: new Date(closesAt),
+      now: () => new Date(nowMs() + skew.current),
+      reload: async () => {
+        await latest.current.revalidate();
+        await new Promise((resolve) => setTimeout(resolve, 0)); // laisse la page prendre les données relues
+        const fresh = latest.current.board;
+        return fresh !== null && (!fresh.open || fresh.settled);
+      },
+    });
+    closing.current = watch;
+    return () => {
+      watch.stop();
+      if (closing.current === watch) closing.current = null;
+    };
+  }, [closesAt, stillOpen]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque lecture de la page est l'occasion de revoir l'heure du serveur
+  useEffect(() => closing.current?.check(), [loaderData.serverAt]);
   // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
   // qui revient après une coupure la recharge aussi (relecture du lot 57).
   const { connected } = useLiveRevalidate(

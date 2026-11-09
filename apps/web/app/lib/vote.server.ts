@@ -12,6 +12,7 @@ import type {
 import { data, redirect } from "react-router";
 
 import { type ApiResult, api, loginUrl, safeReturn } from "./api.server";
+import { nowMs } from "./clock";
 
 export type VotePage = {
   back: string;
@@ -21,6 +22,8 @@ export type VotePage = {
   board: AudiencePrizeBoard | null;
   mine: AudiencePrizeMine | null;
   candidates: AudienceCandidate[];
+  /** Heure d'Orasso du serveur quand la page a été lue : le navigateur en déduit son écart (clôture du vote). */
+  serverAt: number;
 };
 
 /** Une panne de l'API ou du réseau : à réessayer, pas une décision. */
@@ -39,7 +42,7 @@ function settle<T>(request: Request, res: ApiResult<T>): res is Extract<ApiResul
 export async function loadVote(request: Request, slug: string): Promise<VotePage> {
   // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
   const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app/sorties");
-  const unavailable: VotePage = { back, slug, event: null, board: null, mine: null, candidates: [] };
+  const unavailable: VotePage = { back, slug, event: null, board: null, mine: null, candidates: [], serverAt: nowMs() };
   const me = await api(request, "/me");
   if (!settle(request, me)) return unavailable;
   const eventRes = await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
@@ -65,7 +68,7 @@ export async function loadVote(request: Request, slug: string): Promise<VotePage
     cursor = res.data.next;
   }
   candidates.sort((a, b) => a.applicationId.localeCompare(b.applicationId));
-  return { back, slug, event, board, mine, candidates };
+  return { back, slug, event, board, mine, candidates, serverAt: nowMs() };
 }
 
 /** La voix : la réponse de l'API (`mine`) revient à la page, qui s'en sert si la relecture qui suit échoue. */

@@ -14,7 +14,8 @@ import {
   type AudienceVotesChanged,
   audiencePrizeTexts,
   rankingZoneState,
-  runAtDeadline,
+  type ClosingWatch,
+  watchClosing,
   voteScreenTexts,
 } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
@@ -25,7 +26,7 @@ import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Num, PosterSurface, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { now as orassoNow } from "@/lib/clock";
+import { now as orassoNow, serverNow } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useChannel } from "@/lib/realtime";
@@ -167,20 +168,34 @@ export function VoteScreen() {
     });
     return () => sub.remove();
   }, [scheduleReload, scheduleListReload]);
-  // Clôture du vote (lot R7-0, tour 2) : à l'échéance, le classement et mon droit de voter changent ; on les relit sans
-  // attendre un message du serveur (personne n'a peut-être voté à ce moment-là).
+  // Clôture du vote (lot R7-0, tours 2 et 3) : à l'échéance **du serveur** (pas l'horloge brute du téléphone), le
+  // classement et mon droit de voter changent ; on les relit sans attendre un message, et on réessaie (délais croissants,
+  // bornés) jusqu'à ce que l'API confirme la clôture. Une réponse reçue après l'échéance relance la relecture.
   const deadline = board.data?.closesAt ?? mine.data?.closesAt ?? null;
-  useEffect(
-    () =>
-      runAtDeadline(
-        deadline ? new Date(deadline) : null,
-        () => {
-          void Promise.all([reloaders.current.board(), reloaders.current.mine(), reloaders.current.candidates()]);
-        },
-        orassoNow,
-      ),
-    [deadline],
-  );
+  const stillOpen = board.data ? board.data.open && !board.data.settled : true;
+  const closing = useRef<ClosingWatch | null>(null);
+  useEffect(() => {
+    if (!deadline || !stillOpen) return undefined;
+    const watch = watchClosing({
+      deadline: new Date(deadline),
+      now: serverNow,
+      reload: async () => {
+        const [fresh] = await Promise.all([
+          reloaders.current.board(),
+          reloaders.current.mine(),
+          reloaders.current.candidates(),
+        ]);
+        return fresh !== null && (!fresh.open || fresh.settled);
+      },
+    });
+    closing.current = watch;
+    return () => {
+      watch.stop();
+      if (closing.current === watch) closing.current = null;
+    };
+  }, [deadline, stillOpen]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse reçue (classement, droit de voter) est l'occasion de revoir l'heure du serveur
+  useEffect(() => closing.current?.check(), [board.data, mine.data]);
   useEffect(
     () => () => {
       gates.current?.board.dispose();
@@ -196,10 +211,14 @@ export function VoteScreen() {
     : null;
 
   const view = voteView(board.data, mine.data);
+  // Lot R7-0, tour 3 : l'état du classement (chargement, échec + « Réessayer ») se dit quel que soit l'état du vote
+  // (ouvert, voté, clos), y compris quand le classement ne s'est jamais chargé.
+  const voted = Boolean(mine.data?.votedFor);
   const zone = rankingZoneState({
-    voted: Boolean(mine.data?.votedFor),
-    rankingHidden: Boolean(board.data?.rankingHidden),
+    voted,
+    rankingHidden: board.data ? board.data.rankingHidden : true,
     loadFailed: Boolean(board.error),
+    closed: board.data ? !board.data.open || board.data.settled : false,
   });
   const closesAt = mine.data ? new Date(mine.data.closesAt) : null;
   // Lot R7-0 : avec la date, « vote ouvert jusqu'au mercredi 11 novembre, 23 h » ne tient plus sur la ligne de faits de
@@ -232,7 +251,7 @@ export function VoteScreen() {
   );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
-  const failed = (board.error || mine.error) && !board.data;
+  const failed = (board.error || mine.error) && !board.data && zone !== "failed";
 
   return (
     <FlowScreen
@@ -259,7 +278,7 @@ export function VoteScreen() {
       }}
     >
       {failed ? <Notice tone="error">{voteScreenTexts.loadFailed}</Notice> : null}
-      {!board.data && !failed ? <Muted variant="body">Chargement…</Muted> : null}
+      {!board.data && !failed && zone !== "failed" ? <Muted variant="body">Chargement…</Muted> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       {view === "not_open" ? <EmptyState title={audiencePrizeTexts.title} text={audiencePrizeTexts.notOpen} /> : null}
@@ -267,7 +286,7 @@ export function VoteScreen() {
         <EmptyState title={audiencePrizeTexts.title} text={audiencePrizeTexts.errors.not_checked_in} />
       ) : null}
       {/* Qui ne peut pas voter (ou vote pas ouvert) : le classement se montre à la clôture. */}
-      {(view === "not_open" || view === "not_checked_in") && board.data?.rankingHidden ? (
+      {(view === "not_open" || view === "not_checked_in") && board.data?.rankingHidden && zone === "hidden" ? (
         <Muted variant="body" testID="vote-ranking-hidden">
           {voteScreenTexts.rankingHidden(false)}
         </Muted>
@@ -314,7 +333,7 @@ export function VoteScreen() {
             busy={busy}
             onPick={setPick}
           />
-          {board.data.rankingHidden ? (
+          {board.data.rankingHidden && zone === "hidden" ? (
             <Muted variant="body" testID="vote-ranking-hidden">
               {voteScreenTexts.rankingHidden(mine.data.canVote)}
             </Muted>
@@ -329,26 +348,32 @@ export function VoteScreen() {
           <SmButton kind="s" icon="undo" onPress={() => setChanging(true)} testID="vote-change">
             Changer mon vote
           </SmButton>
-          {/* Vote réussi, classement pas (encore) relu : jamais un écran sans explication. */}
-          {zone === "loading" ? (
-            <Muted variant="body" testID="vote-ranking-loading">
-              {voteScreenTexts.rankingLoading}
-            </Muted>
-          ) : null}
-          {zone === "failed" ? (
-            <>
-              <Notice tone="error" testID="vote-ranking-failed">
-                {voteScreenTexts.rankingFailed}
-              </Notice>
-              <SmButton kind="s" icon="undo" onPress={() => void board.reload()} testID="vote-ranking-retry">
-                {voteScreenTexts.retry}
-              </SmButton>
-            </>
-          ) : null}
         </>
       ) : null}
 
       {view === "closed" ? <Notice>{voteScreenTexts.closedNote}</Notice> : null}
+
+      {/* Classement pas (encore) relu : jamais un écran sans explication, ni sans « Réessayer » en cas d'échec. */}
+      {zone === "loading" && board.data && (voted || view === "closed" || view === "settled") ? (
+        <Muted variant="body" testID="vote-ranking-loading">
+          {voteScreenTexts.rankingLoading}
+        </Muted>
+      ) : null}
+      {zone === "failed" ? (
+        <>
+          <Notice tone="error" testID="vote-ranking-failed">
+            {voted ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
+          </Notice>
+          <SmButton
+            kind="s"
+            icon="undo"
+            onPress={() => void Promise.all([board.reload(), mine.reload(), candidates.reload()])}
+            testID="vote-ranking-retry"
+          >
+            {voteScreenTexts.retry}
+          </SmButton>
+        </>
+      ) : null}
 
       {shown &&
       !shown.rankingHidden &&
