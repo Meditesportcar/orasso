@@ -26,7 +26,9 @@ export function EventInvitationRequest({ item }: RequestCardProps) {
   const slug = textOf(event, "slug");
   const startsAt = textOf(event, "startsAt");
   const peer = item.payload.source === "peer";
-  const inviters = listOf(item, "inviters").map((x) => textOf(x, "pseudo")).filter(Boolean) as string[];
+  const inviters = listOf(item, "inviters")
+    .map((x) => textOf(x, "pseudo"))
+    .filter(Boolean) as string[];
   const total = typeof item.payload.invitersCount === "number" ? item.payload.invitersCount : inviters.length;
   const who = inviters.length ? inviters : [name];
   const more = Math.max(0, total - who.length);

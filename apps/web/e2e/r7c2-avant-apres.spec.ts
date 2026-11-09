@@ -53,7 +53,9 @@ async function go(page: Page, path: string) {
   await page.waitForTimeout(1_400);
 }
 
-test("R7c2 : captures avant / après (Boîte, Activité, Demandes, Messages, conversation, Journal)", async ({ browser }) => {
+test("R7c2 : captures avant / après (Boîte, Activité, Demandes, Messages, conversation, Journal)", async ({
+  browser,
+}) => {
   test.setTimeout(2_400_000);
   mkdirSync(DIR, { recursive: true });
 

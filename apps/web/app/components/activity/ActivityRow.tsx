@@ -71,7 +71,9 @@ export function ActivityRow({ item, day, onOpen }: { item: ActivityItem; day: Ac
           {when}
         </span>
       </span>
-      {item.read ? null : <span className="act-row__dot" data-testid="activity-unread" role="img" aria-label="Non lu" />}
+      {item.read ? null : (
+        <span className="act-row__dot" data-testid="activity-unread" role="img" aria-label="Non lu" />
+      )}
     </>
   );
   return (

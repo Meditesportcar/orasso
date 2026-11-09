@@ -19,7 +19,10 @@ export function StaffInvitation({ item, onDone }: RequestCardProps) {
       avatarUrl={imageUrl}
       pseudo={name}
       title={`${staffRequestLabels.invited} · ${name}`}
-      detail={[item.payload.role === "co_organizer" ? "Co-organisateur" : "Staff", invitedBy ? `proposé par ${invitedBy}` : null]
+      detail={[
+        item.payload.role === "co_organizer" ? "Co-organisateur" : "Staff",
+        invitedBy ? `proposé par ${invitedBy}` : null,
+      ]
         .filter(Boolean)
         .join(" · ")}
       onOpenProfile={slug ? () => router.push(`/o/${slug}`) : undefined}

@@ -2,7 +2,7 @@
 // compris une réponse à ta story (règle de contact de R6). Ils ne savent pas que tu as lu tant que tu n'acceptes pas ;
 // accepter ouvre la conversation, refuser l'efface sans prévenir. Mêmes cartes que les Demandes de l'Activité.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type RequestItem, messagingLabels } from "@orasso/shared";
+import { messagingLabels, type RequestItem } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
@@ -53,8 +53,8 @@ export function ContactRequestsScreen() {
       <View style={styles.note}>
         <Icon name="lock" size={16} color={c.inkMuted} />
         <Text variant="caption" color={c.inkMuted} style={styles.noteText}>
-          Ils ne savent pas que tu as lu tant que tu n'acceptes pas. Accepter ouvre la conversation ; refuser l'efface, sans
-          prévenir.
+          Ils ne savent pas que tu as lu tant que tu n'acceptes pas. Accepter ouvre la conversation ; refuser l'efface,
+          sans prévenir.
         </Text>
       </View>
       {contacts.error && !contacts.data ? (

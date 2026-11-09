@@ -138,7 +138,10 @@ export const staffRequestsService = {
       });
       if (existing?.status === "active") throw conflict("conflict", staffRequestLabels.alreadyMember);
       if (existing?.status === "invited") {
-        throw conflict("conflict", "Cette structure t'a déjà invité : accepte l'invitation depuis ton Activité (Demandes).");
+        throw conflict(
+          "conflict",
+          "Cette structure t'a déjà invité : accepte l'invitation depuis ton Activité (Demandes).",
+        );
       }
       if (existing?.status === "requested") return;
       if (existing && recentlyDeclined(existing)) throw conflict("conflict", staffRequestLabels.cooldown);

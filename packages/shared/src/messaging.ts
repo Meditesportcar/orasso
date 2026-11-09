@@ -110,7 +110,10 @@ export type InboxCountsInput = {
   requests: { contact: number };
 };
 
-export function inboxRowCounts(summary: InboxCountsInput | null): { activityRequests: number; messageRequests: number } {
+export function inboxRowCounts(summary: InboxCountsInput | null): {
+  activityRequests: number;
+  messageRequests: number;
+} {
   const contact = summary?.requests.contact ?? 0;
   return { activityRequests: Math.max(0, (summary?.pendingRequests ?? 0) - contact), messageRequests: contact };
 }

@@ -108,7 +108,11 @@ export function ActivityLine({
           </Text>
         </View>
         {item.read ? null : (
-          <View style={[styles.dot, { backgroundColor: c.accent }]} testID="activity-unread" accessibilityElementsHidden />
+          <View
+            style={[styles.dot, { backgroundColor: c.accent }]}
+            testID="activity-unread"
+            accessibilityElementsHidden
+          />
         )}
       </Pressable>
       {actions}

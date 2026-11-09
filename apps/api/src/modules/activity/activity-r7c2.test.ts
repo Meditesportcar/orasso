@@ -56,8 +56,8 @@ describe("annonces de demandes (lot R7c2)", () => {
 
     await send(damien.id, "event_updated");
     expect((await call(damien, "GET", "/me/activity/count")).json).toEqual({ unseen: 1 });
-    const types = (await call(damien, "GET", "/me/activity")).json.groups.flatMap(
-      (g: { items: { type: string }[] }) => g.items.map((i) => i.type),
+    const types = (await call(damien, "GET", "/me/activity")).json.groups.flatMap((g: { items: { type: string }[] }) =>
+      g.items.map((i) => i.type),
     );
     expect(types).toEqual(["event_updated"]);
   });

@@ -14,8 +14,8 @@ import { useLocation, useRevalidator } from "react-router";
 
 import { ActivityRow, pathOfItem } from "../components/activity/ActivityRow";
 import { PersonAvatar } from "../components/People";
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { apiFetch } from "../lib/api.client";
+import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/app-activite";
 

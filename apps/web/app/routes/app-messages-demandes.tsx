@@ -1,13 +1,12 @@
-import { Button } from "@orasso/design-system/web";
+import { Button, Chip } from "@orasso/design-system/web";
 import {
   type ContactAcceptResult,
   type ContactRequestView,
   gradeLabels,
-  inboxRowCounts,
   type InboxSummary,
+  inboxRowCounts,
   messagingLabels,
 } from "@orasso/shared";
-import { Chip } from "@orasso/design-system/web";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { PersonAvatar } from "../components/People";
@@ -79,8 +78,8 @@ export default function MessageRequests({ loaderData, actionData }: Route.Compon
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.messageRequests}</h1>
       <p className="o-t-caption s-muted">
-        {messageRequests > 0 ? `${messageRequests} en attente · ` : ""}Ils ne savent pas que tu as lu tant que tu n'acceptes
-        pas. Accepter ouvre la conversation ; refuser l'efface, sans prévenir.
+        {messageRequests > 0 ? `${messageRequests} en attente · ` : ""}Ils ne savent pas que tu as lu tant que tu
+        n'acceptes pas. Accepter ouvre la conversation ; refuser l'efface, sans prévenir.
       </p>
       <div>
         <Button variant="secondary" icon="back" href="/app/messages" data-testid="requests-back">

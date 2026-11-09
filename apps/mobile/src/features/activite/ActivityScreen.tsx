@@ -154,13 +154,7 @@ export function ActivityScreen() {
   const empty = page && groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
 
   return (
-    <FlowScreen
-      title="Activité"
-      facts="Ce qui te concerne"
-      onClose={close}
-      onRefresh={reloadAll}
-      closeLabel="Retour"
-    >
+    <FlowScreen title="Activité" facts="Ce qui te concerne" onClose={close} onRefresh={reloadAll} closeLabel="Retour">
       {activity.error && !page ? (
         <LoadError message={activity.error.message} onRetry={() => void activity.reload()} />
       ) : null}
@@ -181,7 +175,10 @@ export function ActivityScreen() {
                   ? { name: r.from.pseudo, url: r.from.avatarUrl }
                   : { name: r.from.name, url: r.from.logoUrl };
               return (
-                <View key={`${r.kind}:${r.id}`} style={[styles.avatarOver, { marginLeft: i === 0 ? 0 : -12, borderColor: c.surface }]}>
+                <View
+                  key={`${r.kind}:${r.id}`}
+                  style={[styles.avatarOver, { marginLeft: i === 0 ? 0 : -12, borderColor: c.surface }]}
+                >
                   <Avatar url={from.url} pseudo={from.name} size={32} />
                 </View>
               );
@@ -280,7 +277,9 @@ export function ActivityScreen() {
 /** « Côte Vermeille Classic t'invite, et 2 autres » : la demande la plus récente, puis le reste. */
 function requestSummary(first: RequestItem, total: number): string {
   const who = first.from.type === "person" ? first.from.pseudo : first.from.name;
-  return total > 1 ? `${who} et ${total - 1} autre${total - 1 > 1 ? "s" : ""} attendent ta réponse` : `${who} attend ta réponse`;
+  return total > 1
+    ? `${who} et ${total - 1} autre${total - 1 > 1 ? "s" : ""} attendent ta réponse`
+    : `${who} attend ta réponse`;
 }
 
 const styles = StyleSheet.create({

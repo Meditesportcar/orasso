@@ -72,11 +72,7 @@ function ConversationRow({ c, onPress }: { c: ConversationSummary; onPress: () =
         ) : null}
         {unread ? <Count n={c.unreadCount} /> : null}
         {c.storyThumbUrl ? (
-          <PrivateImage
-            url={c.storyThumbUrl}
-            style={styles.thumb}
-            accessibilityLabel={messagingLabels.tagStoryReply}
-          />
+          <PrivateImage url={c.storyThumbUrl} style={styles.thumb} accessibilityLabel={messagingLabels.tagStoryReply} />
         ) : null}
       </View>
     </Pressable>
@@ -136,13 +132,7 @@ export function MessagesScreen() {
   }
 
   return (
-    <FlowScreen
-      title="Messages"
-      facts="Tes conversations"
-      onClose={close}
-      closeLabel="Retour"
-      onRefresh={reloadAll}
-    >
+    <FlowScreen title="Messages" facts="Tes conversations" onClose={close} closeLabel="Retour" onRefresh={reloadAll}>
       {conversations.error && !page ? (
         <LoadError message={conversations.error.message} onRetry={() => void conversations.reload()} />
       ) : null}

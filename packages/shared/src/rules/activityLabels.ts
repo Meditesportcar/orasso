@@ -68,6 +68,9 @@ export function groupedTitle(
   const rest = title.slice(first.length);
   if (total <= 1) return { names: first, rest };
   // Le verbe suit le pseudo : « a aimé » → « ont aimé », « t'a identifié » → « t'ont identifié ».
-  const plural = rest.replace(/^( t')a /, "$1ont ").replace(/^ a /, " ont ").replace(/^ est /, " sont ");
+  const plural = rest
+    .replace(/^( t')a /, "$1ont ")
+    .replace(/^ a /, " ont ")
+    .replace(/^ est /, " sont ");
   return { names: actorsLabel(actors, count), rest: plural };
 }
