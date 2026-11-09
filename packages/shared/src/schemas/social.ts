@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { departmentSchema, type VehicleType } from "../enums";
 import { gradeSchema } from "../grades";
+import { storyAudiences, storyPersonas } from "../rules/audience";
 import type { FollowState } from "../rules/follows";
 import type { ProfileSocials } from "../rules/socials";
 import type { ProfileAudience } from "../rules/visibility";
@@ -33,6 +34,14 @@ export const peopleSearchQuery = pageQuery.extend({
   modelId: z.uuid().optional(),
   generationId: z.uuid().optional(),
   grade: gradeSchema.optional(),
+  /**
+   * Lot R7f3 (@identification d'une story) : ne rend que les personnes qui pourraient **voir** la story que je prépare
+   * (`canTag`, ARCHITECTURE-R7 § 2.1) : `crew` (+ `crewId`) = membres actifs de ce crew ; `followers` / `public` = tout
+   * membre si mon compte (ou la casquette organisateur / pro) est public, mes abonnés acceptés si mon compte est privé.
+   */
+  taggableFor: z.enum(storyAudiences).optional(),
+  crewId: z.uuid().optional(),
+  persona: z.enum(storyPersonas).optional(),
 });
 export type PeopleSearchQuery = z.infer<typeof peopleSearchQuery>;
 

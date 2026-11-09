@@ -15,6 +15,7 @@ import {
   type StoryCreated,
   type StoryDenial,
   type StoryReplyResult,
+  type StoryTagInput,
   type StoryTagKind,
   storyAuthorKeyOf,
   storyDenial,
@@ -357,6 +358,9 @@ export const storiesService = {
     }
 
     // Autocollant d'événement et contenu lié (événement ou voiture seulement dans ce lot).
+    // Lot R7f3 : l'organisateur d'un événement collé en autocollant est prévenu (identification de sa structure, avec les
+    // règles ordinaires : jamais depuis un compte privé ni sur une story de crew). `stickerStructure` la mémorise.
+    let stickerStructure: string | null = null;
     const eventOk = async (id: string, kind: "event" | "linked"): Promise<string | null> => {
       const [e] = await db
         .select({
@@ -376,6 +380,7 @@ export const storiesService = {
         skipped.push({ kind: kind === "event" ? "event" : "event", id, reason: storyLabels.skipped[refusal] });
         return null;
       }
+      if (kind === "event") stickerStructure = e?.structureId ?? null;
       return id;
     };
     const eventId = input.eventId ? await eventOk(input.eventId, "event") : null;
@@ -393,7 +398,9 @@ export const storiesService = {
     // Identifications : on n'identifie que quelqu'un qui peut voir la story ; compte privé : ni structure, ni pro.
     const tags: { kind: StoryTagKind; id: string }[] = [];
     const seen = new Set<string>();
-    for (const t of input.tags) {
+    const wanted: StoryTagInput[] = [...input.tags];
+    if (stickerStructure && stickerStructure !== ctx.structureId) wanted.push({ kind: "structure", id: stickerStructure });
+    for (const t of wanted) {
       const key = `${t.kind}:${t.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
