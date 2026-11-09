@@ -40,6 +40,7 @@ import {
   shareExportPath,
   storyExportPath,
 } from "@/lib/share";
+import { exportWhileOpen } from "@/lib/shareFile";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -453,20 +454,29 @@ function External({
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const kept = useRef<PreparedShare[]>([]);
-  useEffect(
-    () => () => {
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      // Fermée : les fichiers gardés partent, et un téléchargement encore en route se libère à son arrivée (`exportWhileOpen`).
+      open.current = false;
       for (const p of kept.current) releasePrepared(p);
-    },
-    [],
-  );
+      kept.current = [];
+    };
+  }, []);
   const send = async (key: string, path: string, fileName: string) => {
     setBusy(key);
     setError(null);
     setNote(null);
     try {
-      const file = await prepareExport(path, fileName, key, story?.mediaKind ?? "photo");
-      kept.current.push(file);
-      const outcome = await sendShareImage(file, "share", file.mime);
+      const outcome = await exportWhileOpen(
+        () => open.current,
+        () => prepareExport(path, fileName, key, story?.mediaKind ?? "photo"),
+        (file) => kept.current.push(file),
+        releasePrepared,
+        (file) => sendShareImage(file, "share", file.mime),
+      );
+      if (outcome === null || !open.current) return;
       setNote(
         outcome === "saved"
           ? L.externalSaved
@@ -475,9 +485,9 @@ function External({
             : null,
       );
     } catch (e) {
-      setError(errorMessage(e) || L.externalFailed);
+      if (open.current) setError(errorMessage(e) || L.externalFailed);
     } finally {
-      setBusy(null);
+      if (open.current) setBusy(null);
     }
   };
   const options: { key: string; label: string; file: string; path: string }[] = story

@@ -73,7 +73,7 @@ async function photoLayer(photo: Buffer | null): Promise<Buffer> {
     CARD_W,
     CARD_PHOTO_H,
     `<rect width="${CARD_W}" height="${CARD_PHOTO_H}" fill="${PLACEHOLDER}"/>` +
-      `<g transform="translate(${(CARD_W - w) / 2 - 7.7 * s} ${(CARD_PHOTO_H - h) / 2 + 1.74 * s}) scale(${s})"><path d="${P_O}" fill="${MOUTARDE}" fill-opacity=".85"/></g>`,
+      `<g transform="translate(${(CARD_W - w) / 2 - 7.7 * s} ${(CARD_PHOTO_H - h) / 2 + 1.74 * s}) scale(${s})"><path d="${P_O}" fill="${MOUTARDE}" fill-opacity=".85" fill-rule="evenodd"/></g>`,
   );
 }
 

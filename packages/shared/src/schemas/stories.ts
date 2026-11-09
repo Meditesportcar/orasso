@@ -142,6 +142,8 @@ export type StoryLinkedView = {
   slug: string | null;
   eventId: string | null;
   title: string | null;
+  /** Le fichier de la story peut sortir : faux pour la publication d'un autre (l'export ne sort que de la main de son auteur). */
+  exportable: boolean;
 };
 
 export type StoryView = {
@@ -164,6 +166,11 @@ export type StoryView = {
   audience: StoryAudience;
   crewName: string | null;
   sharedFrom: { authorPseudo: string } | null;
+  /**
+   * « Vers l'extérieur » du menu de la story (l'auteur seul) : la même règle que `GET /stories/:id/export` (ni crew, ni copie,
+   * ni story en traitement, ni contenu lié disparu ou d'un autre). Faux pour tout autre lecteur.
+   */
+  exportable: boolean;
   viewed: boolean;
   reacted: boolean;
   /** L'auteur seul. */

@@ -835,7 +835,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                   <strong>{L.views(story.viewsCount ?? 0)}</strong>
                 </span>
               </button>
-              {story.audience !== "crew" && story.status === "ready" && !story.sharedFrom ? (
+              {story.exportable ? (
                 <a
                   className="story-menu__row"
                   href={`/api/stories/${story.id}/export?download=1`}

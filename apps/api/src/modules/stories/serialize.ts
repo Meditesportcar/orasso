@@ -189,6 +189,13 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
       sharedFrom: s.sharedFromStoryId ? { authorPseudo: creditBy.get(s.sharedFromStoryId) ?? "" } : null,
+      // Même règle que `exportService.story` : auteur seul, ni crew, ni copie, prête, et un contenu lié encore sortable.
+      exportable:
+        mine &&
+        s.audience !== "crew" &&
+        s.status === "ready" &&
+        !s.sharedFromStoryId &&
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)),
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),
       viewsCount: mine ? s.viewsCount : null,

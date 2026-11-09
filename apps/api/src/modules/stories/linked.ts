@@ -70,7 +70,14 @@ export type LinkedContent = {
   authorPublic: boolean;
 };
 
-export type LinkedRefusal = { status: 403 | 404 | 409; code: ErrorCode; message: string; reason: string };
+export type LinkedRefusal = {
+  status: 403 | 404 | 409;
+  code: ErrorCode;
+  message: string;
+  reason: string;
+  /** Le nom du contenu quand il est connu et que le regard a le droit de le lire (voiture à soi sans photo montrable). */
+  title?: string;
+};
 type Found = { ok: true; content: LinkedContent } | { ok: false; refusal: LinkedRefusal };
 
 const origin = () => new URL(env.PUBLIC_URL).origin;
@@ -168,7 +175,9 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
     }
     const photo = maskedPhoto(veh.photos, veh.unregistered);
     if (!photo) {
-      return refuse(409, "no_masked_photo", shareLabels.errors.noPhoto, shareLabels.reasons.vehicleNoPhoto);
+      const refused = refuse(409, "no_masked_photo", shareLabels.errors.noPhoto, shareLabels.reasons.vehicleNoPhoto);
+      if (!refused.ok) refused.refusal.title = storyName(veh);
+      return refused;
     }
     const category = veh.categories
       .map((c) => c.category)
@@ -374,7 +383,8 @@ export async function shareInfo(v: Viewer, type: StoryLinkType, id: string): Pro
     return {
       type,
       id,
-      title: "",
+      // Le nom de la voiture (à soi) reste : « En message » et l'en-tête de la feuille ne partent jamais sans.
+      title: poster ? (found.refusal.title ?? "") : "",
       subtitle: "",
       imageUrl: null,
       linkLabel: link,
@@ -438,20 +448,56 @@ export async function linkedViewsOf(
     const label = shareLabels.link[s.linkedType];
     if (s.linkedType === "event") {
       const e = known.event.get(s.linkedId);
-      if (e) out.set(s.id, { type: "event", id: s.linkedId, label, slug: e.slug, eventId: e.id, title: e.title });
+      if (e)
+        out.set(s.id, {
+          type: "event",
+          id: s.linkedId,
+          label,
+          slug: e.slug,
+          eventId: e.id,
+          title: e.title,
+          exportable: true,
+        });
     } else if (s.linkedType === "vehicle") {
       if (known.vehicleOwner.get(s.linkedId) === s.authorId) {
-        out.set(s.id, { type: "vehicle", id: s.linkedId, label, slug: null, eventId: null, title: null });
+        out.set(s.id, {
+          type: "vehicle",
+          id: s.linkedId,
+          label,
+          slug: null,
+          eventId: null,
+          title: null,
+          exportable: true,
+        });
       }
     } else if (s.linkedType === "feed_post") {
       // Une publication du Fil : visible pour ce lecteur (compte privé non suivi : non), jamais pour un auteur devenu privé
       // sans que le lecteur le suive : `loadPostViews` applique la règle du Fil.
       const [post] = await loadPostViews(db, [s.linkedId], v.user.id, at);
-      if (post) out.set(s.id, { type: "feed_post", id: s.linkedId, label, slug: null, eventId: null, title: null });
+      // L'export d'une publication ne sort que de la main de son auteur (comme `exportService.story`).
+      if (post) {
+        out.set(s.id, {
+          type: "feed_post",
+          id: s.linkedId,
+          label,
+          slug: null,
+          eventId: null,
+          title: null,
+          exportable: post.author.pseudo === v.profile.pseudo,
+        });
+      }
     } else if (s.linkedType === "memory") {
       // Un souvenir est personnel : seul son auteur (celui du tampon) l'ouvre.
       if (s.authorId === v.user.id && (await memoriesService.detail(v.user.id, s.linkedId).catch(() => null))) {
-        out.set(s.id, { type: "memory", id: s.linkedId, label, slug: null, eventId: s.linkedId, title: null });
+        out.set(s.id, {
+          type: "memory",
+          id: s.linkedId,
+          label,
+          slug: null,
+          eventId: s.linkedId,
+          title: null,
+          exportable: true,
+        });
       }
     } else {
       const [vote] = await db
@@ -468,6 +514,7 @@ export async function linkedViewsOf(
           slug: e.slug,
           eventId: vote.eventId,
           title: vote.title,
+          exportable: true,
         });
       }
     }

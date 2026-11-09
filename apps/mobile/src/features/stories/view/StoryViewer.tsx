@@ -549,7 +549,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         }}
         onDelete={() => void remove()}
         onExternal={
-          mine && story.audience !== "crew" && story.status === "ready" && !story.sharedFrom
+          story.exportable
             ? () => {
                 setMenuOpen(false);
                 setExternalTarget({ story: story.id, mediaKind: story.mediaKind });

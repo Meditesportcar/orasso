@@ -39,3 +39,25 @@ export function releaseAction(
   if (platform === "web") return prepared.uri.startsWith("blob:") ? "revoke" : "none";
   return prepared.temp ? "delete" : "none";
 }
+
+/**
+ * Prépare un export puis l'envoie, sauf si la feuille a été fermée entre-temps : un téléchargement qui finit après la
+ * fermeture libère son fichier tout de suite et n'ouvre jamais le partage du système. `isOpen` est relu après chaque attente.
+ * Renvoie `null` quand la feuille s'est fermée (rien n'a été envoyé).
+ */
+export async function exportWhileOpen<P, O>(
+  isOpen: () => boolean,
+  prepare: () => Promise<P>,
+  keep: (file: P) => void,
+  release: (file: P) => void,
+  send: (file: P) => Promise<O>,
+): Promise<O | null> {
+  const file = await prepare();
+  if (!isOpen()) {
+    release(file);
+    return null;
+  }
+  keep(file);
+  const outcome = await send(file);
+  return outcome;
+}

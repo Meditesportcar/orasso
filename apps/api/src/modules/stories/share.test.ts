@@ -4,7 +4,7 @@
 // Aucune plaque lisible : les photos d'essai sont du bruit coloré.
 
 import { randomUUID } from "node:crypto";
-import { fromWallTime, STORY_H, STORY_W } from "@orasso/shared";
+import { fromWallTime, STORY_H, STORY_W, shareLabels } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -340,6 +340,10 @@ describe("autres contenus liés", () => {
     expect(row).toMatchObject({ linkedType: "feed_post", plateState: "none_confirmed" });
     // L'auteur passe en privé : Léa ne le suit pas, la publication n'est plus visible pour elle, la carte devient inerte.
     expect((await byAuthor(lea, kenji)).json.stories[0].linked).not.toBeNull();
+    // « Vers l'extérieur » : pas proposé pour la publication d'un autre (l'export la refuserait), ni à un autre lecteur.
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(false);
+    expect((await req(kenji, "GET", `/stories/${ok.json.id}/export`)).status).toBe(403);
+    expect((await byAuthor(lea, kenji)).json.stories[0].exportable).toBe(false);
     await makePrivate(nina);
     const view = (await byAuthor(lea, kenji)).json.stories[0];
     expect(view.linked).toBeNull();
@@ -350,7 +354,9 @@ describe("autres contenus liés", () => {
     expect(refused.status).toBe(403);
     expect(refused.json.error.code).toBe("private_author");
     // L'auteur partage sa propre publication, même privée.
-    expect((await share(nina, { type: "feed_post", id: posted.json.id }, { audience: "followers" })).status).toBe(201);
+    const own = await share(nina, { type: "feed_post", id: posted.json.id }, { audience: "followers" });
+    expect(own.status).toBe(201);
+    expect((await byAuthor(nina, nina)).json.stories[0].exportable).toBe(true);
   });
 });
 
@@ -375,6 +381,10 @@ describe("la feuille « Partager »", () => {
     // Sans photo montrable, « En message » porte tout de même la page publique de la voiture (jamais l'accueil).
     expect(car.destinations.message).toBe(true);
     expect(car.url).toContain(`/v/${v.id}`);
+    // Le nom de la voiture reste (en-tête de la feuille) et le message final le porte : jamais « Partager : https://… ».
+    expect(car.title).toBeTruthy();
+    expect(shareLabels.messageBody(car.title || shareLabels.title, car.url)).toBe(`${car.title} : ${car.url}`);
+    expect(shareLabels.messageBody(car.title || shareLabels.title, car.url)).not.toMatch(/^Partager/);
     await blurPlatesOf(kenji.id);
     const ready = (await req(kenji, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).json;
     expect(ready.destinations).toEqual({ story: true, feed: true, message: true, external: true });
