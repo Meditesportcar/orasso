@@ -442,10 +442,13 @@
 
 /* « Publier » demande où (lot R7f3) : le bouton principal ouvre deux lignes, en story ou dans le Fil. `summary` sans marqueur. */
 .fil-choose {
-  display: grid;
-  gap: var(--space-2);
+  display: block;
+}
+.fil-choose[open] > summary {
+  margin-bottom: var(--space-2);
 }
 .fil-choose > summary {
+  display: flex;
   list-style: none;
   cursor: pointer;
 }
