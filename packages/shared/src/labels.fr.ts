@@ -57,6 +57,7 @@ export * from "./labels/social.fr";
 export * from "./labels/spot.fr";
 export * from "./labels/staff.fr";
 export * from "./labels/stories.fr";
+export * from "./labels/storyPublish.fr";
 export * from "./labels/structures.fr";
 export * from "./labels/styles.fr";
 export * from "./labels/tickets-app.fr";

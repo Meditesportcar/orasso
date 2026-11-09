@@ -20,6 +20,7 @@ import {
   isFeedSponsoredTargeted,
   feedScreenLabels as L,
   pinnedPublished,
+  storyPublishLabels as S,
   sponsoredNotBeforeFourth,
   withMyPublished,
   withoutPlacement,
@@ -183,9 +184,28 @@ export function Fil({ userId }: { userId: string }) {
   return (
     <div className="fil" data-testid="fil" ref={topRef}>
       {/* Emplacement de la barre de stories : RÉSERVÉ au lot R7f2. */}
-      <a className="fil-publish" href="/app/fil/publier" data-testid="fil-publish-open">
-        <Icon name="camera" size={20} /> {L.publish}
-      </a>
+      {/* Lot R7f3 : « Publier » demande où (en story, dans le Fil) ; sans JavaScript aussi (`details`). */}
+      <details className="fil-choose">
+        <summary className="fil-publish" data-testid="fil-publish-open">
+          <Icon name="camera" size={20} /> {L.publish}
+        </summary>
+        <div className="fil-choose__list">
+          <a className="fil-choose__option" href="/app/story/publier" data-testid="fil-publish-choose-story">
+            <Icon name="camera" size={20} />
+            <span>
+              <strong>{S.chooseStory}</strong>
+              <small>{S.chooseStoryHint}</small>
+            </span>
+          </a>
+          <a className="fil-choose__option" href="/app/fil/publier" data-testid="fil-publish-choose-post">
+            <Icon name="feed" size={20} />
+            <span>
+              <strong>{S.choosePost}</strong>
+              <small>{S.choosePostHint}</small>
+            </span>
+          </a>
+        </div>
+      </details>
       <div className="fil-filters" role="tablist" aria-label="Filtres du Fil" data-testid="fil-filters">
         {feedScreenFilters.map((o) => (
           <button

@@ -69,6 +69,7 @@ export * from "./squareCrop";
 export * from "./stampArt";
 export * from "./stamps";
 export * from "./storyFrame";
+export * from "./storyPublish";
 export * from "./styles";
 export * from "./templates";
 export * from "./ticketing";
