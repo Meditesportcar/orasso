@@ -26,7 +26,8 @@ describe("réglage des widgets de l'accueil", () => {
       hidden: ["fuel", "nope"],
     });
     expect(c.order[0]).toBe(HOME_FIXED_WIDGET);
-    expect(c.order.slice(1, 3)).toEqual(["fuel", "weather"]);
+    // « En cours » (lot R7d1) manque au réglage enregistré : il se place juste après « Prochain accès ».
+    expect(c.order.slice(1, 4)).toEqual(["live", "fuel", "weather"]);
     expect([...c.order].sort()).toEqual([...homeWidgetIds].sort());
     expect(c.hidden).toEqual(["fuel"]);
   });
@@ -36,7 +37,7 @@ describe("réglage des widgets de l'accueil", () => {
     expect(c.hidden).toEqual(["wash"]);
     expect(toggleHomeWidget(c, "next_access")).toBe(c);
     expect(moveHomeWidget(c, "next_access", 1)).toBe(c);
-    expect(moveHomeWidget(c, "pending", -1)).toBe(c);
+    expect(moveHomeWidget(c, "live", -1)).toBe(c);
   });
 
   it("monte, descend et masque", () => {
@@ -57,12 +58,13 @@ describe("réglage des widgets de l'accueil", () => {
   it("lot R1, tour 2 : stations retirées, on ne déplace qu'entre widgets proposés ; les stations gardent leur place", () => {
     // Un ancien ordre personnalisé : une station entre deux widgets proposés.
     const old = normalizeHomeWidgets({
-      order: ["next_access", "pending", "wash", "agenda", "fuel", "nearby", "weather", "favorite_garage"],
+      order: ["next_access", "live", "pending", "wash", "agenda", "fuel", "nearby", "weather", "favorite_garage"],
       hidden: [],
     });
     const down = moveHomeWidget(old, "pending", 1);
     expect(down.order).toEqual([
       "next_access",
+      "live",
       "agenda",
       "wash",
       "pending",
@@ -74,6 +76,7 @@ describe("réglage des widgets de l'accueil", () => {
     const up = moveHomeWidget(down, "nearby", -1);
     expect(up.order).toEqual([
       "next_access",
+      "live",
       "agenda",
       "wash",
       "nearby",
@@ -84,7 +87,7 @@ describe("réglage des widgets de l'accueil", () => {
     ]);
     // Une station ne se déplace pas ; le premier proposé ne monte pas au-dessus de « Prochain accès ».
     expect(moveHomeWidget(old, "wash", 1)).toBe(old);
-    expect(moveHomeWidget(down, "agenda", -1)).toBe(down);
+    expect(moveHomeWidget(down, "live", -1)).toBe(down);
     // Le dernier proposé ne descend pas (les stations derrière lui ne comptent pas).
     expect(defaultHomeWidgets.order.slice(-3)).toEqual(["favorite_garage", "wash", "fuel"]);
     expect(moveHomeWidget(defaultHomeWidgets, "favorite_garage", 1)).toBe(defaultHomeWidgets);

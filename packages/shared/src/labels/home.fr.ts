@@ -5,6 +5,7 @@ import { keepUnits } from "./units.fr";
 
 export const homeWidgetTitles: Record<HomeWidgetId, string> = {
   next_access: "Prochain accès",
+  live: "En cours",
   pending: "En attente",
   nearby: "Autour de moi",
   weather: "Météo",
