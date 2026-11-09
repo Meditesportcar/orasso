@@ -2,6 +2,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { pinDateLabel, placePins } from "@orasso/design-system/web";
 import { useEffect, useRef } from "react";
 import { now } from "../lib/clock";
+import { quietAttribution } from "../lib/quietAttribution";
 import { useOrassoMap } from "./useOrassoMap";
 
 /** Centre par défaut de l'épingle quand aucune adresse n'est encore placée (Perpignan). */
@@ -46,6 +47,8 @@ export function EventMap({
     { center: [center.lng, center.lat], zoom: lat === null ? 9 : (zoom ?? 15) },
     (maplibre, { map }) => {
       if (!draggablePin) {
+        // Carte du lieu d'un rendez-vous (zoom de rue) : l'attribution se replie dans le coin.
+        if (zoom && container.current) quietAttribution(map, container.current);
         const pins = placePins(maplibre, map, [
           {
             id: "event",

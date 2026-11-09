@@ -12,6 +12,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { type ExplorerMapProps, type MapPin, mapGlyphsOrigin, mapHeight, mapTilesUrl, viewFor } from "./mapPins";
+import { quietAttribution } from "./quietAttribution";
 
 const { space3 } = tokens.spacing;
 type MapLibre = typeof import("maplibre-gl");
@@ -75,6 +76,7 @@ export function ExplorerMap({
         tilesUrl: mapTilesUrl(),
         ...("center" in view ? { center: view.center, zoom: view.zoom } : {}),
       });
+      if (latest.current.zoom) quietAttribution(created.map, box.current);
       if ("bounds" in view) created.map.fitBounds(view.bounds, { padding: 48, maxZoom: 11, duration: 0 });
       handle.current = created;
       placed.current = placePins(maplibre, created.map, webPins(latest.current.pins), {
