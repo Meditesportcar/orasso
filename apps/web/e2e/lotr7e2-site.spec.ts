@@ -152,6 +152,65 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   await expect(posts).toHaveCount(total - 1);
 });
 
+test("recadrer au doigt : un glissement déplace le cadre, Valider rend l'image 4:5 recentrée et remet la plaque à zéro", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/fil/publier");
+  await page.getByTestId("fil-publish-file").setInputFiles([photo("car-golf-gti.jpg")]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+  // Un cadre posé et placé = décision prise : un nouveau cadrage doit la remettre à zéro.
+  await page
+    .getByTestId("fil-publish-plate")
+    .getByRole("button", { name: /Poser un cadre/ })
+    .click();
+  const plate = (await page.getByTestId("site-plate-frame").first().boundingBox()) as {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  await page.mouse.move(plate.x + plate.width / 2, plate.y + plate.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(plate.x + plate.width / 2 + 20, plate.y + plate.height / 2 - 12, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
+  const thumb = page.getByTestId("fil-publish-photo").first().locator("img");
+  /** Le JPEG de la vignette : proportions et empreinte grossière (huit lignes de luminance moyenne). */
+  const digest = () =>
+    thumb.evaluate(async (img: HTMLImageElement) => {
+      const bitmap = await createImageBitmap(await (await fetch(img.src)).blob());
+      const c = new OffscreenCanvas(1, 8);
+      const g = c.getContext("2d") as OffscreenCanvasRenderingContext2D;
+      g.drawImage(bitmap, 0, 0, 1, 8);
+      const px = g.getImageData(0, 0, 1, 8).data;
+      return { ratio: bitmap.width / bitmap.height, cols: Array.from({ length: 8 }, (_, i) => px[i * 4] ?? 0) };
+    });
+  const before = await digest();
+  expect(before.ratio).toBeCloseTo(0.8, 2);
+
+  await page.getByTestId("fil-publish-crop").click();
+  const frame = page.getByTestId("site-crop-frame");
+  await expect(frame).toBeVisible();
+  const imgBox = async () => (await frame.locator("img").boundingBox()) as { x: number; y: number };
+  const start = await imgBox();
+  const at = (await frame.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2 - 70, { steps: 8 });
+  await page.mouse.up();
+  const moved = await imgBox();
+  // Les photos du seed sont en portrait : dans un cadre 4:5 elles ne glissent qu'en hauteur.
+  expect(start.y - moved.y).toBeGreaterThan(20);
+  await page.getByTestId("site-crop-validate").click();
+  await expect(page.getByTestId("site-crop")).toBeHidden({ timeout: 30_000 });
+  // La plaque de cette photo repart de zéro et l'image est recadrée sur un autre centre.
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1", { timeout: 30_000 });
+  await expect.poll(async () => JSON.stringify((await digest()).cols)).not.toBe(JSON.stringify(before.cols));
+  expect((await digest()).ratio).toBeCloseTo(0.8, 2);
+});
+
 test("un compte qui ne suit personne : état vide d'Abonnements, sans annuaire", async ({ page }) => {
   test.setTimeout(120_000);
   await setTheme(page, "beton");
