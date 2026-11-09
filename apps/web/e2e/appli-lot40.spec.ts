@@ -215,7 +215,8 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await afterOpening(page);
     await expect(page).toHaveURL(/\/profil/, { timeout: 30_000 });
     await checkTab(page, null);
-    for (const id of ["profil-head", "profil-season", "profil-passport", "profil-crew", "casquette-fan"]) {
+    // Lot R7b1 : la saison et le passeport sont dans l'onglet Sorties, le crew a son onglet ; le Profil a ses deux onglets.
+    for (const id of ["profil-head", "profil-tabs", "profil-count-sorties", "casquette-fan"]) {
       await expect(page.getByTestId(id).first()).toBeVisible();
     }
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
@@ -309,14 +310,15 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
   await expect(page.getByTestId("casquette-visitor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("casquette-quick-vehicle")).toBeVisible();
-  await expect(page.getByTestId("profil-garage")).toHaveCount(0);
+  // Lot R7b1 : le Garage du visiteur est l'onglet par défaut du Profil, vide : il propose d'ajouter un véhicule.
+  await expect(page.getByTestId("garage-empty-add")).toBeVisible({ timeout: 30_000 });
   await shot(page, "visiteur-profil-sable");
 
   await addVehicleApi(cookie, randomPlate());
   // Retour sur un onglet : `GET /me` relu, la casquette de base devient l'exposant (la ligne « Mon garage » du Profil).
   await page.getByRole("tab", { name: "Explorer", exact: true }).click();
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
-  await expect(page.getByTestId("profil-garage")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("tab", { name: "Crew", exact: true })).toBeVisible();
   await shot(page, "visiteur-devenu-exposant-sable");
   await ctx.close();

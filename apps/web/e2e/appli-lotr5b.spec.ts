@@ -308,20 +308,24 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await expect(page.getByTestId("friend-add")).toHaveCount(0);
     await expect(page.getByTestId("profile-car")).toContainText(aMain.label);
     await expect(page.getByTestId("profile-car")).toContainText("Principale");
-    await expect(page.getByTestId("profile-next")).toContainText(`R5b Balade ${tag}`);
-    await expect(page.getByTestId("profile-together")).toHaveText("Toi aussi : vous y serez tous les deux");
+    // Lot R7b1 : Garage par défaut (« Sa voiture », « Son garage »), « Prochaine sortie » dans l'onglet Sorties.
     await expect(page.getByTestId("profile-garage-vehicle")).toHaveCount(1);
     await audit(page);
-    await titlesKeepTheirWords(page, ["Sa voiture", "Prochaine sortie", "Son garage"]);
-    // Police normale : l'aide reste à droite du titre (comme l'artefact).
-    for (const title of ["Sa voiture", "Prochaine sortie", "Son garage"]) await hintRight(page, title);
+    await titlesKeepTheirWords(page, ["Sa voiture", "Son garage"]);
+    for (const title of ["Sa voiture", "Son garage"]) await hintRight(page, title);
+    await page.getByTestId("profil-tab-sorties").click();
+    await expect(page.getByTestId("profile-next")).toContainText(`R5b Balade ${tag}`);
+    await expect(page.getByTestId("profile-together")).toHaveText("Toi aussi : vous y serez tous les deux");
+    await titlesKeepTheirWords(page, ["Prochaine sortie"]);
+    await hintRight(page, "Prochaine sortie");
+    await page.getByTestId("profil-tab-garage").click();
     await labelWhole(page, "follow-button", /^Suivre$/i);
     await shot(page, `membre-${theme}-390`);
 
     // Compte privé : la tête, les nombres, « Demander à suivre », ses véhicules en marque et modèle, la ligne.
     await goto(page, `/u/${cPseudo}`);
     await expect(page.getByTestId("profile-private-note")).toContainText(
-      "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
       { timeout: 30_000 },
     );
     await expect(page.getByTestId("profile-vehicles-private")).toBeVisible();
@@ -347,7 +351,9 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       const broken = ab.brokenWords.filter((word) => !aPseudo.includes(word));
       expect(broken, JSON.stringify(broken)).toEqual([]);
       expect(ab.horizontalScroll).toBe(false);
-      await titlesKeepTheirWords(big.page, ["Sa voiture", "Prochaine sortie", "Son garage"]);
+      await titlesKeepTheirWords(big.page, ["Sa voiture", "Son garage"]);
+      await big.page.getByTestId("profil-tab-sorties").click();
+      await titlesKeepTheirWords(big.page, ["Prochaine sortie"]);
       // « Toi aussi » reste dans le ticket (la phrase passe à la ligne).
       const ticket = await big.page.getByTestId("profile-next").boundingBox();
       const both = await big.page.getByTestId("profile-together").boundingBox();
@@ -430,7 +436,10 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await expect(p.getByTestId("profile-car")).toContainText(aMain.label);
     await expect(p.getByTestId("preview-actions")).toBeVisible();
     await audit(p);
-    await titlesKeepTheirWords(p, ["Sa voiture", "Prochaine sortie", "Son garage"]);
+    await titlesKeepTheirWords(p, ["Sa voiture", "Son garage"]);
+    await p.getByTestId("profil-tab-sorties").click();
+    await titlesKeepTheirWords(p, ["Prochaine sortie"]);
+    await p.getByTestId("profil-tab-garage").click();
     await shot(p, `apercu-${theme}-390`);
     await p.getByTestId("preview-edit").click();
     await expect(p.getByTestId("social-instagram")).toBeVisible({ timeout: 30_000 });
