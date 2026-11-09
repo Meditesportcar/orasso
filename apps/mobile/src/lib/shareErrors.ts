@@ -1,4 +1,4 @@
-// Erreurs de l'affiche à partager (lot 50) : pures, testées sans le téléphone (`shareVehicle.ts` en fait des `ApiRequestError`).
+// Erreurs de l'affiche à partager (lot 50) : pures, testées sans le téléphone (`share.ts` en fait des `ApiRequestError`).
 
 export const SHARE_LIMIT_MESSAGE = "Trop d'affiches générées : réessaie plus tard.";
 export const SHARE_NETWORK_MESSAGE = "Pas de connexion : réessaie quand le réseau revient.";

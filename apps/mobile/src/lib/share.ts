@@ -1,4 +1,5 @@
-// Affiche à partager d'un véhicule (lots 31 et 50 ; lot M6) : l'API rend le PNG (story 9:16 ou post 4:5, trois styles,
+// Partager (lot R7f4 : généralisé à tout contenu d'Orasso ; lots 31, 50 et M6 pour l'affiche d'un véhicule) :
+// l'affiche d'un véhicule : l'API rend le PNG (story 9:16 ou post 4:5, trois styles,
 // plaque floutée par le serveur) ; l'appli le télécharge avec le jeton de session dans le cache de l'appareil, l'affiche
 // en aperçu, puis ouvre la feuille de partage du système (`expo-sharing`) pour Instagram, Messages, Enregistrer… Sur le
 // web (recette), l'aperçu est une adresse d'objet et le fichier est enregistré par le navigateur.
@@ -83,7 +84,11 @@ export function releasePrepared(prepared: PreparedShare): void {
  * Ouvre la feuille de partage du système (téléphone) ou enregistre le fichier (navigateur). `save` : la même feuille,
  * titrée pour enregistrer l'image (Instagram, galerie, fichiers…).
  */
-export async function sendShareImage(prepared: PreparedShare, kind: "share" | "save" = "share"): Promise<ShareOutcome> {
+export async function sendShareImage(
+  prepared: PreparedShare,
+  kind: "share" | "save" = "share",
+  mime: "image/png" | "image/jpeg" | "video/mp4" = "image/png",
+): Promise<ShareOutcome> {
   if (Platform.OS === "web") {
     const link = document.createElement("a");
     link.href = prepared.uri;
@@ -93,9 +98,51 @@ export async function sendShareImage(prepared: PreparedShare, kind: "share" | "s
   }
   if (!(await Sharing.isAvailableAsync())) return "unavailable";
   await Sharing.shareAsync(prepared.uri, {
-    mimeType: "image/png",
-    UTI: "public.png",
+    mimeType: mime,
+    UTI: mime === "image/png" ? "public.png" : mime === "video/mp4" ? "public.mpeg-4" : "public.jpeg",
     dialogTitle: kind === "save" ? "Enregistrer l'image" : "Partager sur Instagram",
   });
   return "shared";
+}
+
+// --- Fichiers qui sortent d'Orasso (lot R7f4) ---------------------------------------------------------------------------
+// Le fichier part du rendu serveur (plaques floutées, signature « orasso.fr », 9:16 ou 4:5) : l'appli le télécharge avec le
+// jeton dans le cache de l'appareil (jamais dans la galerie) puis ouvre la feuille de partage du système. Sur le web, le
+// navigateur l'enregistre.
+
+/** Adresse du fichier d'un contenu pas encore partagé (événement, voiture, souvenir, résultat de vote). */
+export const shareExportPath = (type: string, id: string, format: "story" | "post") =>
+  `/api/me/share/export?type=${type}&id=${id}&format=${format}`;
+/** Adresse du fichier de ma story (auteur seul). */
+export const storyExportPath = (id: string) => `/api/stories/${id}/export`;
+/** Adresse du fichier de ma publication du Fil (auteur seul). */
+export const postExportPath = (id: string) => `/api/feed-posts/${id}/export`;
+
+export type ExportKind = { mime: "image/jpeg" | "video/mp4"; ext: "jpg" | "mp4" };
+
+/** Télécharge un fichier sortant. `key` : nom stable dans le cache (le même contenu ne se retélécharge pas deux fois de suite). */
+export async function prepareExport(path: string, fileName: string, key: string): Promise<PreparedShare & ExportKind> {
+  const url = apiUrl(path);
+  if (Platform.OS === "web") {
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: authHeaders() });
+    } catch {
+      throw shareError(0);
+    }
+    if (!res.ok) throw shareError(res.status);
+    const type = res.headers.get("content-type") ?? "image/jpeg";
+    const blob = await res.blob();
+    const video = type.startsWith("video/");
+    return { uri: URL.createObjectURL(blob), fileName: video ? fileName.replace(/.jpg$/, ".mp4") : fileName, mime: video ? "video/mp4" : "image/jpeg", ext: video ? "mp4" : "jpg" };
+  }
+  try {
+    const file = await File.downloadFileAsync(url, new File(Paths.cache, `orasso-export-${key}.bin`), {
+      headers: authHeaders(),
+      idempotent: true,
+    });
+    return { uri: file.uri, fileName, mime: "image/jpeg", ext: "jpg" };
+  } catch (e) {
+    throw shareError(null, e instanceof Error ? e.message : String(e));
+  }
 }

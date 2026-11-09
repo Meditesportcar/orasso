@@ -15,6 +15,7 @@ import { eventInvitesApi } from "./eventInvites";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { feedApi } from "./feed";
+import { shareApi } from "./share";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -100,6 +101,7 @@ export const api = {
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,
 };
