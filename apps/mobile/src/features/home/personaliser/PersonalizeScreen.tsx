@@ -24,9 +24,11 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
+import { SmallButton } from "@/features/sorties/bits";
 import { SmButton } from "@/ui/Kit";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { personalizeReadiness } from "./ready";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -52,13 +54,18 @@ export function PersonalizeScreen() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const settings = useApi(() => api.settings(), [], { cacheKey: "account-settings-home" });
+  // Aucun cache ici : l'édition part du réglage frais du compte, jamais d'une copie ni des valeurs par défaut (tour 2).
+  const settings = useApi(() => api.settings(), []);
+  const readiness = personalizeReadiness(settings);
+  const ready = readiness === "ready";
   const [draft, setDraft] = useState<HomeWidgetsConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Le réglage enregistré sur le compte ; tant qu'on n'a rien touché, il suit la dernière réponse de l'API.
   const config: HomeWidgetsConfig = draft ?? normalizeHomeWidgets(settings.data?.homeWidgets ?? defaultHomeWidgets);
+  // Gestes éteints tant que le réglage n'est pas arrivé.
+  const locked = !ready;
   const shown = visibleHomeWidgets(config).filter((id) => homeWidgetOffered(id));
   const hidden = config.hidden.filter((id) => homeWidgetOffered(id));
   const change = (next: HomeWidgetsConfig) => {
@@ -67,6 +74,7 @@ export function PersonalizeScreen() {
   };
 
   async function save() {
+    if (!ready) return;
     setBusy(true);
     setError(null);
     try {
@@ -85,7 +93,15 @@ export function PersonalizeScreen() {
       onClose={() => router.back()}
       closeLabel={L.close}
       footer={
-        <SmButton kind="p" big wide icon="check" disabled={busy} onPress={() => void save()} testID="personalize-save">
+        <SmButton
+          kind="p"
+          big
+          wide
+          icon="check"
+          disabled={busy || locked}
+          onPress={() => void save()}
+          testID="personalize-save"
+        >
           {busy ? L.saving : L.save}
         </SmButton>
       }
@@ -94,80 +110,107 @@ export function PersonalizeScreen() {
         {`${L.hint} ${L.hintEye}`}
       </Text>
       {error ? <Notice>{error}</Notice> : null}
-      {settings.error && !settings.data ? (
-        <Notice>{L.saveFailed.replace("non enregistré", "non chargé")}</Notice>
+      {readiness === "loading" ? (
+        <Text variant="caption" color={c.inkMuted} testID="personalize-loading">
+          {L.loading}
+        </Text>
+      ) : null}
+      {readiness === "failed" ? (
+        <>
+          <Notice tone="error" testID="personalize-load-failed">
+            {L.loadFailed}
+          </Notice>
+          <SmallButton icon="undo" onPress={() => void settings.reload()} testID="personalize-retry">
+            {L.retry}
+          </SmallButton>
+        </>
       ) : null}
 
-      <View style={styles.list} testID="personalize-list">
-        {shown.map((id, i) => {
-          const fixed = id === HOME_FIXED_WIDGET;
-          // Premier et dernier blocs affichés : « Monter » et « Descendre » s'éteignent (« Prochaine sortie » ne bouge pas).
-          const first = i <= 1;
-          const last = i === shown.length - 1;
-          return (
-            <Row
-              key={id}
-              id={id}
-              fixed={fixed}
-              canUp={!fixed && !first}
-              canDown={!fixed && !last}
-              onUp={() => change(moveVisibleHomeWidget(config, id, -1))}
-              onDown={() => change(moveVisibleHomeWidget(config, id, 1))}
-              onHide={() => change(toggleHomeWidget(config, id))}
-            />
-          );
-        })}
-      </View>
+      {/* La liste n'apparaît qu'avec le réglage frais : jamais l'ordre par défaut présenté comme le sien. */}
+      {ready ? (
+        <>
+          <View style={styles.list} testID="personalize-list">
+            {shown.map((id, i) => {
+              const fixed = id === HOME_FIXED_WIDGET;
+              // Premier et dernier blocs affichés : « Monter » et « Descendre » s'éteignent (« Prochaine sortie » ne bouge pas).
+              const first = i <= 1;
+              const last = i === shown.length - 1;
+              return (
+                <Row
+                  key={id}
+                  id={id}
+                  fixed={fixed}
+                  canUp={!locked && !fixed && !first}
+                  canDown={!locked && !fixed && !last}
+                  onUp={() => change(moveVisibleHomeWidget(config, id, -1))}
+                  onDown={() => change(moveVisibleHomeWidget(config, id, 1))}
+                  onHide={() => change(toggleHomeWidget(config, id))}
+                  locked={locked}
+                />
+              );
+            })}
+          </View>
 
-      <Text variant="label" color={c.inkMuted} style={styles.section}>
-        {L.hiddenTitle.toUpperCase()}
-      </Text>
-      <View style={styles.list} testID="personalize-hidden">
-        {hidden.length === 0 ? (
-          <Text variant="caption" color={c.inkMuted}>
-            {L.hiddenEmpty}
+          <Text variant="label" color={c.inkMuted} style={styles.section}>
+            {L.hiddenTitle.toUpperCase()}
           </Text>
-        ) : null}
-        {hidden.map((id) => (
-          <Row key={id} id={id} fixed={false} hiddenRow onAdd={() => change(addHomeWidget(config, id))} />
-        ))}
-        {/* « Défis de la saison » arrive avec la version 2 (D38) : grisé, sans action. */}
-        <View
-          style={[styles.soon, { borderColor: c.line }]}
-          testID="personalize-soon"
-          accessibilityState={{ disabled: true }}
-        >
-          <View style={[styles.tile, { backgroundColor: c.surfaceRaised }]}>
-            <Icon name="trophy" size={20} color={c.inkFaint} />
+          <View style={styles.list} testID="personalize-hidden">
+            {hidden.length === 0 ? (
+              <Text variant="caption" color={c.inkMuted}>
+                {L.hiddenEmpty}
+              </Text>
+            ) : null}
+            {hidden.map((id) => (
+              <Row
+                key={id}
+                id={id}
+                fixed={false}
+                hiddenRow
+                locked={locked}
+                onAdd={() => change(addHomeWidget(config, id))}
+              />
+            ))}
+            {/* « Défis de la saison » arrive avec la version 2 (D38) : grisé, sans action. */}
+            <View
+              style={[styles.soon, { borderColor: c.line }]}
+              testID="personalize-soon"
+              accessibilityState={{ disabled: true }}
+            >
+              <View style={[styles.tile, { backgroundColor: c.surfaceRaised }]}>
+                <Icon name="trophy" size={20} color={c.inkFaint} />
+              </View>
+              <View style={styles.text}>
+                <Text variant="bodyStrong" color={c.inkFaint} style={styles.title}>
+                  {L.soonTitle}
+                </Text>
+                <Text variant="caption" color={c.inkFaint}>
+                  {L.soonHint}
+                </Text>
+              </View>
+              <View style={[styles.soonTag, { borderColor: c.inkFaint }]}>
+                <Text variant="label" color={c.inkMuted} style={styles.soonTagText}>
+                  {L.soon.toUpperCase()}
+                </Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.text}>
-            <Text variant="bodyStrong" color={c.inkFaint} style={styles.title}>
-              {L.soonTitle}
-            </Text>
-            <Text variant="caption" color={c.inkFaint}>
-              {L.soonHint}
-            </Text>
-          </View>
-          <View style={[styles.soonTag, { borderColor: c.inkFaint }]}>
-            <Text variant="label" color={c.inkMuted} style={styles.soonTagText}>
-              {L.soon.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-      </View>
 
-      <Pressable
-        onPress={() => change(defaultHomeWidgets)}
-        accessibilityRole="button"
-        accessibilityLabel={L.reset}
-        style={({ pressed }) => [styles.reset, pressed && styles.pressed]}
-        testID="personalize-reset"
-      >
-        <Icon name="undo" size={16} color={c.accentText} />
-        <Text variant="button" color={c.accentText}>
-          {L.reset.toUpperCase()}
-        </Text>
-      </Pressable>
+          <Pressable
+            onPress={() => change(defaultHomeWidgets)}
+            disabled={locked}
+            accessibilityState={{ disabled: locked }}
+            accessibilityRole="button"
+            accessibilityLabel={L.reset}
+            style={({ pressed }) => [styles.reset, pressed && styles.pressed, locked && styles.locked]}
+            testID="personalize-reset"
+          >
+            <Icon name="undo" size={16} color={c.accentText} />
+            <Text variant="button" color={c.accentText}>
+              {L.reset.toUpperCase()}
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
     </FlowScreen>
   );
 }
@@ -182,8 +225,10 @@ function Row({
   onDown,
   onHide,
   onAdd,
+  locked,
 }: {
   id: HomeWidgetId;
+  locked: boolean;
   fixed: boolean;
   hiddenRow?: boolean;
   canUp?: boolean;
@@ -226,6 +271,7 @@ function Row({
         <SmButton
           kind="s"
           icon="add"
+          disabled={locked}
           onPress={onAdd}
           testID={`personalize-add-${id}`}
           accessibilityLabel={`${L.add} ${w.title}`}
@@ -235,9 +281,16 @@ function Row({
       ) : !fixed ? (
         <Pressable
           onPress={onHide}
+          disabled={locked}
+          accessibilityState={{ disabled: locked }}
           accessibilityRole="button"
           accessibilityLabel={`${L.hide} ${w.title}`}
-          style={({ pressed }) => [styles.eye, { borderColor: c.barControlEdge }, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.eye,
+            { borderColor: c.barControlEdge },
+            pressed && styles.pressed,
+            locked && styles.locked,
+          ]}
           testID={`personalize-hide-${id}`}
         >
           <Icon name="eye" size={20} color={c.ink} />
@@ -265,7 +318,6 @@ function Arrow({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
@@ -280,10 +332,19 @@ function Arrow({
 const styles = StyleSheet.create({
   list: { gap: space2 },
   section: { marginTop: space2 },
-  row: { flexDirection: "row", alignItems: "center", gap: space3, padding: 10, borderRadius: 16 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
   fixed: { opacity: 0.8 },
-  handle: { width: 28, alignItems: "center", justifyContent: "center", gap: 2 },
-  arrow: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  // Monter / Descendre : une zone de toucher de 44 sur 44 chacune (tour 2), l'une sous l'autre.
+  handle: { width: 44, alignItems: "center", justifyContent: "center" },
+  arrow: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  locked: { opacity: 0.4 },
   arrowOff: { opacity: 0.3 },
   tile: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   // Un titre ne se coupe jamais au milieu d'un mot : il passe à la ligne, la phrase dessous suit.

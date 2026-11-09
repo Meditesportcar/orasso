@@ -232,6 +232,8 @@ export const homeBlockLabels = {
   liveOnSite: (n: number) => (n > 0 ? "sur place maintenant" : "Personne encore sur place"),
   liveVotes: (n: number) => (n > 1 ? `Votes · ${n} ouverts` : "Vote ouvert"),
   liveVote: "Voter",
+  /** Les chiffres affichés viennent du téléphone (réseau coupé). */
+  liveOffline: "Données hors ligne",
   liveProgram: "Programme du jour",
   liveSheet: "La fiche",
   liveStoryEmpty: "Pas encore de story de l'organisateur",
@@ -257,6 +259,9 @@ export const homePersonalizeLabels = {
   saving: "Enregistrement…",
   saved: "Accueil enregistré.",
   saveFailed: "Réglage non enregistré : réessaie.",
+  loading: "On récupère ton réglage…",
+  loadFailed: "On n'a pas pu récupérer ton réglage : rien n'est modifiable pour ne pas l'écraser.",
+  retry: "Réessayer",
   soon: "Bientôt",
   soonTitle: "Défis de la saison",
   soonHint: "Arrive avec la version 2",

@@ -7,8 +7,10 @@
 //    suis pas, ou plus, n'apparaît pas) et si son compte est actif (ni supprimé, ni banni, ni suspendu) ;
 //  - « va à » : l'événement est publié, ouvert (jamais sur invitation) et pas fini ;
 //  - « a ajouté » : le véhicule est toujours actif (jamais de photo ici : une plaque pourrait y figurer) ;
-//  - une story : elle existe encore (24 h), je peux toujours la voir (même règle que la barre), son auteur n'est pas en
-//    « ne plus voir ses stories ». Jamais une story de crew.
+//  - une story : elle existe encore (24 h), je peux toujours la voir (même règle que la barre), je suis toujours abonné à
+//    son auteur (un compte public se voit sans abonnement, mais l'ancienne nouveauté d'un compte quitté n'a plus sa place
+//    ici), son auteur n'est pas en « ne plus voir ses stories ». Jamais une story de crew.
+// Les lectures sont groupées (événements, véhicules, stories, abonnements) : jamais une lecture par ligne.
 // Une seule ligne par personne et par sorte de nouveauté.
 import {
   HOME_FRIENDS_NEWS_LIMIT,
@@ -89,6 +91,34 @@ export async function friendsNewsWidget(v: Viewer): Promise<HomeFriendsNews | nu
   const mutes = await db.select().from(storyMutes).where(eq(storyMutes.userId, v.user.id));
   const muted = new Set(mutes.map((m) => `${m.authorKind}:${m.authorId}`));
 
+  // Lectures groupées de ce que les lignes désignent.
+  const dataOf = (r: (typeof rows)[number]) => (r.data ?? {}) as Data;
+  const eventIds = [...new Set(rows.flatMap((r) => (r.type === "friend_going_event" && r.eventId ? [r.eventId] : [])))];
+  const eventById = new Map(
+    (eventIds.length ? await db.select().from(events).where(inArray(events.id, eventIds)) : []).map((e) => [e.id, e]),
+  );
+  const vehicleIdOf = (r: (typeof rows)[number]) => dataOf(r).vehicleId ?? dataOf(r).subjectId;
+  const vehicleIds = [
+    ...new Set(
+      rows.flatMap((r) => {
+        const id = r.type === "friend_new_vehicle" ? vehicleIdOf(r) : undefined;
+        return id ? [id] : [];
+      }),
+    ),
+  ];
+  const vehicleById = new Map((await vehiclesRepo.findFullByIds(vehicleIds)).map((x) => [x.id, x]));
+  const storyIds = [
+    ...new Set(
+      rows.flatMap((r) => {
+        const id = r.type === "story_published" ? dataOf(r).storyId : undefined;
+        return id ? [id] : [];
+      }),
+    ),
+  ];
+  const storyRows = storyIds.length ? await selectStories(inArray(stories.id, storyIds)) : [];
+  const storyById = new Map(storyRows.map((s) => [s.story.id, s]));
+  const sets = await setsFor(v.user.id, storyRows);
+
   const items: HomeFriendNews[] = [];
   const seen = new Set<string>();
   for (const n of rows) {
@@ -98,10 +128,11 @@ export async function friendsNewsWidget(v: Viewer): Promise<HomeFriendsNews | nu
 
     if (n.type === "story_published") {
       if (!d.storyId) continue;
-      const [row] = await selectStories(eq(stories.id, d.storyId));
+      const row = storyById.get(d.storyId);
       if (!row || !rowLive(row, t) || row.story.audience === "crew") continue;
-      const sets = await setsFor(v.user.id, [row]);
-      if (storyDenial(viewerOf(v), audienceStoryOf(row, t), relationOf(sets, row))) continue;
+      const relation = relationOf(sets, row);
+      if (!relation.followAccepted) continue;
+      if (storyDenial(viewerOf(v), audienceStoryOf(row, t), relation)) continue;
       const author = authorKeyOf(row);
       if (!author || muted.has(`${author.kind}:${author.id}`)) continue;
       const dedupe = `story:${author.key}`;
@@ -126,7 +157,7 @@ export async function friendsNewsWidget(v: Viewer): Promise<HomeFriendsNews | nu
 
     if (n.type === "friend_going_event") {
       if (!n.eventId) continue;
-      const event = await db.query.events.findFirst({ where: eq(events.id, n.eventId) });
+      const event = eventById.get(n.eventId);
       if (event?.status !== "published" || event.admission === "invite_only" || event.endsAt <= t) continue;
       const dedupe = `going:${person.userId}:${event.id}`;
       if (seen.has(dedupe)) continue;
@@ -141,9 +172,9 @@ export async function friendsNewsWidget(v: Viewer): Promise<HomeFriendsNews | nu
         target: { type: "event", slug: event.slug },
       });
     } else {
-      const vehicleId = d.vehicleId ?? d.subjectId;
+      const vehicleId = vehicleIdOf(n);
       if (!vehicleId) continue;
-      const vehicle = await vehiclesRepo.findFullById(vehicleId);
+      const vehicle = vehicleById.get(vehicleId);
       if (vehicle?.status !== "active") continue;
       const dedupe = `vehicle:${vehicleId}`;
       if (seen.has(dedupe)) continue;

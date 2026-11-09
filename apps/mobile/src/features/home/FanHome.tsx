@@ -28,8 +28,8 @@ import {
   withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Fragment, type ReactNode, useCallback, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/features/home/HomeWidgets";
 import { Stamp } from "@/features/passport/Stamp";
@@ -57,7 +57,7 @@ import { FriendsNews } from "./widgets/FriendsNews";
 import { LiveBlock, LiveLine } from "./widgets/Live";
 import { Memories } from "./widgets/Memories";
 import { MyCrew } from "./widgets/MyCrew";
-import { MyOutings } from "./widgets/MyOutings";
+import { MyOutings, outingsAt } from "./widgets/MyOutings";
 import { SpotMeetup } from "./widgets/SpotMeetup";
 
 const { space2, space3 } = tokens.spacing;
@@ -74,6 +74,8 @@ const weatherDay = (iso: string) => {
   const at = new Date(iso);
   return `${withYear(DAY_FMT.format(at), at)} à ${HOUR_FMT.format(at).replace(/\s*h$/, "")} h`;
 };
+/** Pendant un événement, l'Accueil relit ses chiffres (sur place, votes) à ce rythme, et au retour au premier plan. */
+const LIVE_REFRESH_MS = 180_000;
 /** Tickets dans le glissement, au plus. */
 const MAX_OUTINGS = 6;
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
@@ -282,7 +284,24 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
   const order = visibleHomeWidgets(widgets).filter((id) => id !== "next_access" && homeWidgetOffered(id));
-  const liveNow = data?.live ?? null;
+  // Tour 2 : « En cours » s'arrête à la fin de l'événement sur l'horloge de l'appareil, même si la dernière réponse (ou le cache
+  // du téléphone) l'annonce encore ; et il se rafraîchit tant qu'il est affiché.
+  const liveNow = data?.live && new Date(data.live.event.endsAt) > now ? data.live : null;
+  const myOutings = data?.myOutings ? outingsAt(data.myOutings, now) : null;
+  const reloadHome = useRef(home.reload);
+  reloadHome.current = home.reload;
+  const liveShown = liveNow !== null;
+  useEffect(() => {
+    if (!liveShown) return undefined;
+    const timer = setInterval(() => void reloadHome.current(), LIVE_REFRESH_MS);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void reloadHome.current();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [liveShown]);
   const openPersonalize = () => router.push("/accueil-personnaliser" as never);
 
   // « Mon accès » de l'événement en cours : ma place retenue (QR), sinon mon billet ; rien si je ne suis là que par présence.
@@ -341,13 +360,14 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     live: liveNow ? (
       <LiveBlock
         live={liveNow}
+        offline={home.offline}
         onVote={() =>
           router.push(`/vote/${liveNow.event.id}?titre=${encodeURIComponent(liveNow.event.title)}` as never)
         }
       />
     ) : null,
-    my_outings: data?.myOutings ? (
-      <MyOutings data={data.myOutings} onOpen={openOuting} onAll={() => router.push("/sorties" as never)} />
+    my_outings: myOutings ? (
+      <MyOutings data={myOutings} onOpen={openOuting} onAll={() => router.push("/sorties" as never)} />
     ) : null,
     my_crew: data?.myCrew ? (
       <MyCrew

@@ -133,7 +133,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {live ? (
-        <LiveLine live={live} accessHref="/app/sorties" />
+        <LiveLine live={live} accessHref={live.hasPlace ? "/app/sorties" : null} />
       ) : next ? (
         <PosterCard
           label={`${homeLabels.nextAccess} · ${formatDay(next.event.startsAt)}`}

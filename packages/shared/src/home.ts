@@ -1,5 +1,6 @@
 // Accueil complet (lot 30, ARCHITECTURE-SUITE § 13.3) : widgets réglables, suggestions autour de moi, lavage et carburant
 // les plus proches, garage favori, emplacement sponsorisé. Types et réglages partagés entre l'API, le site et l'appli.
+import { BUSINESS_TIMEZONE } from "./enums";
 import type { ArrivalSlot } from "./rules/arrival";
 import type { MyApplication } from "./schemas/application";
 import type { EventCard } from "./schemas/event";
@@ -404,9 +405,21 @@ export type HomeOuting = {
   waitlistRank: number | null;
   /** Entré sur place (candidature pointée, billet utilisé). */
   checkedIn: boolean;
-  /** L'événement a commencé et n'est pas fini. */
+  /** La place (ou la journée) a commencé et n'est pas finie. */
   ongoing: boolean;
+  /** Véhicules des candidatures à cet événement (une ligne par événement, tour 2). */
+  vehicles: string[];
+  /** Journées auxquelles la personne est inscrite (événement sur plusieurs jours) ; vide sinon. Date locale `AAAA-MM-JJ`. */
+  days: { date: string; startsAt: string; endsAt: string }[];
 };
+const OUTING_DAY = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", timeZone: BUSINESS_TIMEZONE });
+
+/** La ligne de détail d'une sortie : ses véhicules, puis ses journées (« jeu 12 · ven 13 ») ; vide s'il n'y a ni l'un ni l'autre. */
+export function outingDetail(o: Pick<HomeOuting, "vehicles" | "days">): string {
+  const days = (o.days ?? []).map((d) => OUTING_DAY.format(new Date(d.startsAt)).replace(/./g, ""));
+  return [...(o.vehicles ?? []), ...(days.length ? [days.join(" · ")] : [])].join(" · ");
+}
+
 /** « Mes sorties » : les 3 prochaines places, et leur nombre total pour « Tout voir ». */
 export type HomeMyOutings = { items: HomeOuting[]; total: number };
 

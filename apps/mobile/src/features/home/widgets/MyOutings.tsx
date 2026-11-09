@@ -2,7 +2,7 @@
 // date à gauche, le titre, le statut en étiquette inclinée ; « Tout voir » mène à Sorties. Toucher une ligne ouvre la fiche
 // de l'événement. Aucun bouton principal ici (celui de l'écran est « Mon accès » ou « Voter »).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE, type HomeMyOutings, type HomeOuting, homeBlockLabels } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, type HomeMyOutings, type HomeOuting, homeBlockLabels, outingDetail } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { applicationTag, SkewTag } from "@/features/sorties/bits";
@@ -21,6 +21,19 @@ export function stubOf(iso: string): { weekday: string; day: string; month: stri
   const parts = PARTS.formatToParts(new Date(iso));
   const get = (type: string) => (parts.find((p) => p.type === type)?.value ?? "").replace(/\./g, "").toUpperCase();
   return { weekday: get("weekday"), day: get("day"), month: get("month") };
+}
+
+/**
+ * Le bloc tel qu'il est MAINTENANT (heure de l'appareil) : une place dont l'événement ou la journée est fini disparaît (une
+ * réponse gardée ne montre pas une sortie terminée), et « En cours » se recalcule. `null` s'il ne reste rien.
+ */
+export function outingsAt(data: HomeMyOutings, now: Date): HomeMyOutings | null {
+  const t = now.getTime();
+  const items = data.items
+    .filter((o) => new Date(o.endsAt).getTime() > t)
+    .map((o) => ({ ...o, ongoing: new Date(o.startsAt).getTime() <= t }));
+  if (!items.length) return null;
+  return { items, total: Math.max(items.length, data.total - (data.items.length - items.length)) };
 }
 
 /** Le statut de la place : retenue, en attente, liste d'attente (« Attente · 3e »), billet, ou « En cours ». */
@@ -50,12 +63,13 @@ export function MyOutings({
       {data.items.map((o) => {
         const stub = stubOf(o.startsAt);
         const tag = outingTag(o);
+        const detail = outingDetail(o);
         return (
           <Pressable
             key={o.key}
             onPress={() => onOpen(o)}
             accessibilityRole="link"
-            accessibilityLabel={`${o.title}, ${stub.weekday} ${stub.day} ${stub.month}, ${tag.label}`}
+            accessibilityLabel={`${o.title}${detail ? `, ${detail}` : ""}, ${stub.weekday} ${stub.day} ${stub.month}, ${tag.label}`}
             style={({ pressed }) => [
               styles.row,
               { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard },
@@ -74,9 +88,16 @@ export function MyOutings({
                 {stub.month}
               </Text>
             </View>
-            <Text variant="bodyStrong" color={c.ink} style={styles.title}>
-              {o.title}
-            </Text>
+            <View style={styles.titleBox}>
+              <Text variant="bodyStrong" color={c.ink} style={styles.title}>
+                {o.title}
+              </Text>
+              {detail ? (
+                <Text variant="caption" color={c.inkMuted} style={styles.detail} testID="home-my-outing-detail">
+                  {detail}
+                </Text>
+              ) : null}
+            </View>
             <SkewTag tone={tag.tone}>{tag.label}</SkewTag>
           </Pressable>
         );
@@ -93,5 +114,7 @@ const styles = StyleSheet.create({
   stubWeek: { fontSize: 9.5, lineHeight: 12 },
   stubDay: { fontSize: 22, lineHeight: 22 },
   // Un nom d'événement ne se tronque jamais : le titre passe à la ligne, l'étiquette reste à droite.
-  title: { flex: 1, minWidth: 0, fontSize: 14.5, lineHeight: 18 },
+  titleBox: { flex: 1, minWidth: 0, gap: 2 },
+  title: { fontSize: 14.5, lineHeight: 18 },
+  detail: { fontSize: 12, lineHeight: 16 },
 });

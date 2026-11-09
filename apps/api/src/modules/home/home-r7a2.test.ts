@@ -29,10 +29,12 @@ import {
   crewPostPhotos,
   crewPosts,
   crews,
+  eventDays,
   events,
   messages,
   profiles,
   storyMutes,
+  tickets,
   userFollows,
   vehicles,
 } from "../../db/schema";
@@ -157,6 +159,99 @@ describe("Mes sorties", () => {
       ["Billet et place", "application", "accepted"],
     ]);
     expect(r.json.myOutings.total).toBe(3);
+  });
+
+  it("tour 2 : deux candidatures au même événement = une ligne, avec les deux véhicules ; le total compte les événements", async () => {
+    const { s, u, base, at } = await world();
+    const second = await createVehicle(u.id, ref);
+    const twice = await createEvent(s.id, { title: "Deux voitures", startsAt: at(3) });
+    const other = await createEvent(s.id, { title: "Autre sortie", startsAt: at(8) });
+    await db.insert(applications).values([
+      { ...base, eventId: twice.id, status: "pending" },
+      { ...base, vehicleId: second.id, eventId: twice.id, status: "accepted" },
+      { ...base, eventId: other.id, status: "pending" },
+    ]);
+    const r = await home(u);
+    const items = r.json.myOutings.items as { title: string; status: string; vehicles: string[] }[];
+    expect(items.map((i) => i.title)).toEqual(["Deux voitures", "Autre sortie"]);
+    expect(r.json.myOutings.total).toBe(2);
+    // La place qui donne l'accès représente l'événement ; les deux véhicules restent lisibles.
+    expect(items[0]?.status).toBe("accepted");
+    expect(items[0]?.vehicles).toHaveLength(2);
+    expect(new Set(items[0]?.vehicles).size).toBe(2);
+  });
+
+  it("tour 2 : inscriptions à des journées d'un même événement : datées, triées et « en cours » selon la journée", async () => {
+    const { s, u, base, at } = await world();
+    const second = await createVehicle(u.id, ref);
+    // Événement de trois jours, lundi 9 au mercredi 11 novembre ; on est mardi 10 à 10 h (UTC).
+    const fest = await createEvent(s.id, { title: "Festival trois jours", startsAt: at(-1, -2), endsAt: at(1, 7) });
+    const day = (date: string, d: number) => ({
+      eventId: fest.id,
+      dayDate: date,
+      startsAt: at(d, -2),
+      endsAt: at(d, 7),
+    });
+    const [past, today, future] = await db
+      .insert(eventDays)
+      .values([day("2026-11-09", -1), day("2026-11-10", 0), day("2026-11-11", 1)])
+      .returning();
+    await db.insert(applications).values([
+      { ...base, eventId: fest.id, eventDayId: past?.id, status: "accepted" },
+      { ...base, vehicleId: second.id, eventId: fest.id, eventDayId: today?.id, status: "accepted" },
+      { ...base, eventId: fest.id, eventDayId: future?.id, status: "accepted" },
+    ]);
+    const r = await home(u);
+    const outing = r.json.myOutings.items[0] as {
+      startsAt: string;
+      endsAt: string;
+      ongoing: boolean;
+      days: { date: string }[];
+    };
+    expect(r.json.myOutings.items).toHaveLength(1);
+    // La journée passée ne compte plus ; la journée courante donne la date et « en cours » ; la future reste lisible.
+    expect(outing.days.map((d) => d.date)).toEqual(["2026-11-10", "2026-11-11"]);
+    expect(outing.startsAt).toBe(today?.startsAt.toISOString());
+    expect(outing.ongoing).toBe(true);
+
+    // Inscrit à la seule journée de demain : l'événement a commencé, mais pas pour lui.
+    await db.delete(applications).where(eq(applications.userId, u.id));
+    await db.insert(applications).values({ ...base, eventId: fest.id, eventDayId: future?.id, status: "accepted" });
+    const tomorrow = (await home(u)).json.myOutings.items[0];
+    expect(tomorrow.ongoing).toBe(false);
+    expect(tomorrow.startsAt).toBe(future?.startsAt.toISOString());
+
+    // Inscrit à la seule journée passée : plus une sortie à venir.
+    await db.delete(applications).where(eq(applications.userId, u.id));
+    await db.insert(applications).values({ ...base, eventId: fest.id, eventDayId: past?.id, status: "accepted" });
+    expect((await home(u)).json.myOutings).toBeNull();
+  });
+
+  it("tour 2 : un billet contrôlé reste dans le bloc jusqu'à la fin de l'événement, entré ; un billet annulé jamais", async () => {
+    const { u, at } = await world();
+    const orga = await signUp("Orga_Billets_Scan", { twoFactor: true });
+    const s2 = await createStructure(orga.id);
+    const e = await createEvent(s2.id, {
+      title: "Billet scanné",
+      publicAccess: "free_reservation",
+      startsAt: at(0, -1),
+      endsAt: at(0, 6),
+    });
+    expect((await call(orga, "PUT", "/events/" + e.id + "/ticketing", { enabled: true, capacity: 5 })).status).toBe(
+      200,
+    );
+    expect((await call(u, "POST", "/events/" + e.id + "/tickets/reserve", { quantity: 1 })).status).toBe(201);
+    expect((await home(u)).json.myOutings.items[0]).toMatchObject({ kind: "ticket", checkedIn: false, ongoing: true });
+    await db.update(tickets).set({ status: "used", usedAt: NOW });
+    const scanned = await home(u);
+    expect(scanned.json.myOutings.total).toBe(1);
+    expect(scanned.json.myOutings.items[0]).toMatchObject({ kind: "ticket", checkedIn: true, ongoing: true });
+    // Fin de l'événement : le billet quitte le bloc.
+    clock.set(new Date(NOW.getTime() + 7 * HOUR));
+    expect((await home(u)).json.myOutings).toBeNull();
+    clock.set(NOW);
+    await db.update(tickets).set({ status: "cancelled", cancelledAt: NOW });
+    expect((await home(u)).json.myOutings).toBeNull();
   });
 
   it("masqué : le bloc n'est pas calculé (aucune lecture des billets) ; réaffiché : il revient", async () => {
@@ -337,6 +432,65 @@ describe("Mon crew", () => {
     expect(await myCrewWidget(await viewerOf(lea))).toBeNull();
   });
 
+  it("tour 2 : lecteur suspendu ou supprimé : rien (mêmes contrôles que le fil du crew)", async () => {
+    const kenji = await user("Kenji_Lecteur");
+    const lea = await user("Lea_Lectrice");
+    const crew = await newCrew(kenji);
+    await join(crew.id, lea);
+    await post(crew.id, kenji);
+    expect(await myCrewWidget(await viewerOf(lea))).not.toBeNull();
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(NOW.getTime() + DAY) })
+      .where(eq(profiles.userId, lea.id));
+    expect(await myCrewWidget(await viewerOf(lea))).toBeNull();
+    // La suspension prend fin : le bloc revient.
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(NOW.getTime() - 1000) })
+      .where(eq(profiles.userId, lea.id));
+    expect(await myCrewWidget(await viewerOf(lea))).not.toBeNull();
+    await db.update(profiles).set({ deletedAt: NOW }).where(eq(profiles.userId, lea.id));
+    expect(await myCrewWidget(await viewerOf(lea))).toBeNull();
+  });
+
+  it("tour 2 : auteur suspendu : ses publications, ses réponses et sa venue ne sont ni montrées ni comptées", async () => {
+    const kenji = await user("Kenji_Auteur");
+    const lea = await user("Lea_Reponse");
+    const crew = await newCrew(kenji);
+    await join(crew.id, lea);
+    const mine = await post(crew.id, lea, { text: "Message de Léa" }, new Date(NOW.getTime() - 5 * HOUR));
+    await post(crew.id, kenji, { text: "Message de Kenji" }, new Date(NOW.getTime() - HOUR));
+    await db.insert(crewPostComments).values([
+      { postId: mine.id, authorId: kenji.id, text: "Réponse de Kenji" },
+      { postId: mine.id, authorId: lea.id, text: "Réponse de Léa" },
+    ]);
+    const [outing] = await db
+      .insert(crewOutings)
+      .values({ crewId: crew.id, title: "Balade", startsAt: new Date(NOW.getTime() + DAY), place: "Thuir" })
+      .returning();
+    await db.insert(crewOutingReplies).values([
+      { outingId: outing?.id ?? "", userId: kenji.id, answer: "yes" },
+      { outingId: outing?.id ?? "", userId: lea.id, answer: "yes" },
+    ]);
+    const before = (await home(lea)).json.myCrew;
+    expect(before.lastPost).toMatchObject({ text: "Message de Kenji", replies: 0 });
+    expect(before.nextOuting.going).toBe(2);
+
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(NOW.getTime() + DAY) })
+      .where(eq(profiles.userId, kenji.id));
+    const after = (await home(lea)).json.myCrew;
+    // Sa publication la plus récente est masquée : la dernière visible est celle de Léa, sans la réponse de Kenji.
+    expect(after.lastPost).toMatchObject({ text: "Message de Léa", replies: 1 });
+    expect(after.nextOuting.going).toBe(1);
+
+    // Plus aucune publication visible : le bloc reste (le crew existe), sans publication.
+    await db.delete(crewPosts).where(eq(crewPosts.id, mine.id));
+    expect((await home(lea)).json.myCrew.lastPost).toBeNull();
+  });
+
   it("masqué : le bloc n'est pas calculé", async () => {
     const kenji = await user("Kenji_Masque");
     const crew = await newCrew(kenji);
@@ -511,6 +665,51 @@ describe("Du nouveau chez tes potes", () => {
     // La story expire : plus de ligne (24 h plus tard).
     clock.set(new Date(NOW.getTime() + 25 * HOUR));
     expect((await home(me)).json.friendsNews).toBeNull();
+  });
+
+  it("tour 2 : une story d'un compte public que je ne suis plus ne reste pas dans « chez tes potes »", async () => {
+    const { me, kenji } = await world();
+    const jpg = await sharp({ create: { width: 900, height: 1600, channels: 3, background: { r: 10, g: 60, b: 90 } } })
+      .jpeg()
+      .toBuffer();
+    const form = new FormData();
+    form.append("purpose", "story");
+    form.append("file", new File([new Uint8Array(jpg)], "p.jpg", { type: "image/jpeg" }));
+    const up = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: kenji.cookie },
+      body: form,
+    });
+    const { key } = (await up.json()) as { key: string };
+    // Une story PUBLIQUE d'un compte public se voit sans abonnement, mais n'est une nouveauté « de mes potes » que tant que je le suis.
+    const made = await call(kenji, "POST", "/me/stories", {
+      uploadKey: key,
+      noPlateConfirmed: true,
+      audience: "public",
+    });
+    expect(made.status).toBe(201);
+    await notificationsService.deliverDue();
+    expect((await home(me)).json.friendsNews.items).toHaveLength(1);
+    await db.delete(userFollows).where(and(eq(userFollows.followerId, me.id), eq(userFollows.followedId, kenji.id)));
+    expect((await home(me)).json.friendsNews).toBeNull();
+  });
+
+  it("tour 2 : les lectures sont groupées (une lecture des véhicules, jamais une par ligne)", async () => {
+    const { s, me, kenji } = await world();
+    const veh = await createVehicle(kenji.id, ref);
+    for (let i = 0; i < 3; i++) {
+      const e = await createEvent(s.id, { title: "Sortie " + i, startsAt: new Date(NOW.getTime() + (3 + i) * DAY) });
+      await going(me, kenji, e.id, "Une sortie");
+    }
+    await newVehicle(me, kenji, veh.id, "une Supra");
+    const { vehiclesRepo } = await import("../vehicles/repo");
+    const single = vi.spyOn(vehiclesRepo, "findFullById");
+    const many = vi.spyOn(vehiclesRepo, "findFullByIds");
+    await friendsNewsWidget(await viewerOf(me));
+    expect(single).not.toHaveBeenCalled();
+    expect(many).toHaveBeenCalledTimes(1);
+    single.mockRestore();
+    many.mockRestore();
   });
 
   it("masqué : le bloc n'est pas calculé (aucune lecture du Journal)", async () => {

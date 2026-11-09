@@ -12,6 +12,7 @@ import {
   type HomeMyOutings,
   type HomeOuting,
   homeBlockLabels,
+  outingDetail,
 } from "@orasso/shared";
 
 import { formatDayShort, formatTime } from "../../lib/format";
@@ -24,11 +25,12 @@ const untilFmt = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Europe/Paris",
 });
 
-export const hasOpenVote = (live: HomeLive) => live.votes.open > 0;
+/** Un vote est ouvert ET la personne peut voter (droit calculé par l'API, jamais déduit de `votes.open`). */
+export const canVoteNow = (live: HomeLive) => live.votes.open > 0 && live.votes.canVote === true;
 
 /** « En cours · jour 2 sur 4 » : prend la place de « Prochaine sortie » pendant l'événement. */
 export function LiveLine({ live, accessHref }: { live: HomeLive; accessHref: string | null }) {
-  const voting = hasOpenVote(live);
+  const voting = canVoteNow(live);
   return (
     <section className="hm-block hm-live" data-testid="home-live-line" aria-labelledby="hm-live-title">
       <span className="o-t-label hm-live__tag">{homeBlockLabels.liveEyebrow(live.dayIndex, live.dayCount)}</span>
@@ -63,14 +65,16 @@ export function LiveBlock({ live }: { live: HomeLive }) {
           {homeBlockLabels.liveOnSite(live.onSiteCount)}
         </p>
       )}
-      {hasOpenVote(live) && (
+      {live.votes.open > 0 && (
         <div className="hm-actions" data-testid="home-live-votes">
           <span>
             <Icon name="trophy" size={18} /> {homeBlockLabels.liveVotes(live.votes.open)}
           </span>
-          <Button variant="primary" icon="trophy" href={`/app/vote/${live.event.slug}`} data-testid="home-live-vote">
-            {homeBlockLabels.liveVote}
-          </Button>
+          {canVoteNow(live) && (
+            <Button variant="primary" icon="trophy" href={`/app/vote/${live.event.slug}`} data-testid="home-live-vote">
+              {homeBlockLabels.liveVote}
+            </Button>
+          )}
         </div>
       )}
       {day && (
@@ -104,6 +108,7 @@ export function MyOutingsBlock({ data }: { data: HomeMyOutings }) {
           <span className="o-t-meta hm-line__date">{formatDayShort(o.startsAt)}</span>
           <span className="hm-line__body">
             <strong>{o.title}</strong>
+            {outingDetail(o) && <span className="o-t-caption hm-block__muted">{outingDetail(o)}</span>}
             <span className="o-t-caption hm-block__muted">{outingStatus(o)}</span>
           </span>
         </a>

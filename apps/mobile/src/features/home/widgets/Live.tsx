@@ -1,8 +1,9 @@
 // L'Accueil pendant un événement (lot R7a2, maquette R7.4 « Pendant un événement » et R7.13) : la ligne « En cours · jour 2
 // sur 4 » prend la place de « Prochaine sortie » (l'événement où j'ai ma place, qui a commencé), puis le bloc « En cours ».
 //  - La story de l'organisateur est un EMPLACEMENT VIDE jusqu'au lot R7h (`organizerStory: null` : aucune vignette).
-//  - Le bouton principal de l'écran est « Voter » quand un vote est ouvert ; sinon « Mon accès » (de la ligne). Un seul
-//    néon : la ligne passe son « Mon accès » en bouton au trait dès qu'un vote est ouvert.
+//  - Le bouton principal de l'écran est « Voter » quand un vote est ouvert ET que la personne peut voter (droit personnel
+//    calculé par l'API : `votes.canVote`, jamais déduit de `votes.open`) ; sinon « Mon accès » (de la ligne). Un seul
+//    néon : la ligne passe son « Mon accès » en bouton au trait dès que « Voter » est le bouton principal.
 //  - Rien ici n'invente de donnée : « N sur place » n'est servi que pendant l'événement, le programme est celui du jour.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, type HomeLive, homeBlockLabels } from "@orasso/shared";
@@ -27,8 +28,8 @@ const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 /** « Jusqu'au mardi 10 novembre » : la fin de l'événement (dernier jour inclus). */
 export const untilLine = (endsAt: string) => `Jusqu'au ${UNTIL.format(new Date(endsAt))}`;
 
-/** Un vote est-il ouvert ? Alors « Voter » est le bouton principal de l'Accueil. */
-export const hasOpenVote = (live: HomeLive) => live.votes.open > 0;
+/** Un vote est-il ouvert et puis-je voter ? Alors « Voter » est le bouton principal de l'Accueil. */
+export const canVoteNow = (live: HomeLive) => live.votes.open > 0 && live.votes.canVote === true;
 
 export function LiveLine({
   live,
@@ -46,7 +47,7 @@ export function LiveLine({
   // La police système agrandie élargit les lettres : le plus long mot doit tenir quand même (un nom ne se coupe jamais).
   const { fontScale } = useWindowDimensions();
   const size = Math.max(12, Math.floor(fitWordSize(live.event.title, width, 26, 15, WIDE_EM) / Math.max(1, fontScale)));
-  const primaryAccess = !hasOpenVote(live);
+  const primaryAccess = !canVoteNow(live);
   return (
     <View
       style={[styles.line, { backgroundColor: c.poster, boxShadow: t.shadow.shadowPoster }]}
@@ -103,7 +104,15 @@ export function LiveLine({
   );
 }
 
-export function LiveBlock({ live, onVote }: { live: HomeLive; onVote: () => void }) {
+export function LiveBlock({
+  live,
+  onVote,
+  offline = false,
+}: {
+  live: HomeLive;
+  onVote: () => void;
+  offline?: boolean;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const open = live.votes.open;
@@ -124,6 +133,13 @@ export function LiveBlock({ live, onVote }: { live: HomeLive; onVote: () => void
         </Text>
       </View>
 
+      {/* Données gardées sur le téléphone (réseau coupé) : pas de compteur présenté comme frais. */}
+      {offline ? (
+        <Text variant="caption" color={c.inkMuted} testID="home-live-offline">
+          {homeBlockLabels.liveOffline}
+        </Text>
+      ) : null}
+
       {/* La story de l'organisateur (lot R7h) : emplacement vide, aucune vignette tant que `organizerStory` est `null`. */}
 
       {live.onSiteCount !== null ? (
@@ -136,14 +152,15 @@ export function LiveBlock({ live, onVote }: { live: HomeLive; onVote: () => void
       ) : null}
 
       {open > 0 ? (
-        <View style={[styles.votes, { backgroundColor: c.surfaceSunken }]} testID="home-live-votes">
+        // Fond et encre du MÊME thème (`surfaceSunken` est sombre dans les deux thèmes : l'encre foncée du Sable y disparaît).
+        <View style={[styles.votes, { backgroundColor: c.surfaceRaised }]} testID="home-live-votes">
           <View style={[styles.voteIcon, { backgroundColor: c.accentSoft }]}>
             <Icon name="trophy" size={22} color={c.accentText} />
           </View>
           <Text variant="bodyStrong" color={c.ink} style={styles.voteText}>
             {homeBlockLabels.liveVotes(open)}
           </Text>
-          <SmKindVote onPress={onVote} />
+          {canVoteNow(live) ? <SmKindVote onPress={onVote} /> : null}
         </View>
       ) : null}
 
