@@ -33,18 +33,19 @@ const ACCOUNTS: Record<Kind, string> = {
 
 /** Onglets de chaque barre (libellé → route). */
 const TABS: Record<Kind, [string, string][]> = {
+  // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur.
   fan: [
     ["Explorer", "explorer"],
-    ["Sorties", "sorties"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Garage", "garage"],
+    ["Crew", "crew"],
     ["Profil", "profil"],
   ],
   visitor: [
     ["Explorer", "explorer"],
-    ["Sorties", "sorties"],
+    ["Le Fil", "fil"],
     ["Accueil", "accueil"],
-    ["Passeport", "passeport"],
+    ["Crew", "crew"],
     ["Profil", "profil"],
   ],
   organizer: [
