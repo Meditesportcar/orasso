@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { passportTexts } from "@orasso/shared";
+import { passportScreenTexts, passportTexts } from "@orasso/shared";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import {
   addVehicleApi,
@@ -93,12 +93,12 @@ async function checkRules(page: Page, theme: Theme, name: string) {
   expect(audit.unoutlinedOnPhoto, `${name} : texte sur photo en contour`).toEqual([]);
 }
 
-/** Ouvre le passeport de Kenji par la tuile de Mon profil (casquette exposant : l'écran, pas l'onglet). */
+/** Ouvre le passeport de Kenji : l'onglet « Sorties » de son Profil (lot R7b1 : le passeport n'a plus d'écran à lui). */
 async function openPassportFromProfile(page: Page) {
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
-  await expect(page.getByTestId("profil-passport")).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("profil-passport").click();
-  await expect(page).toHaveURL(/mon-passeport/, { timeout: 30_000 });
+  await expect(page.getByTestId("profil-tab-sorties")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("profil-tab-sorties").click();
+  await expect(page.getByTestId("passport-book")).toBeVisible({ timeout: 30_000 });
 }
 
 /** Un événement de recette avec des pilotes retenus (et pointés plus loin par l'organisateur). */
@@ -147,8 +147,10 @@ test("passeport de Kenji : ses tampons (9 au seed, dont 1 rare), ses pages, la l
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
     await openPassportFromProfile(page);
-    await expect(page.getByRole("heading", { name: "Passeport", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(passportTexts.summary(passport.total, passport.rare), { exact: true })).toBeVisible();
+    // Lot R7b1 : le total et les rares se lisent dans la carte « Ma saison » de l'onglet Sorties.
+    await expect(page.getByTestId("profil-season")).toContainText(
+      passportScreenTexts.tile(passport.total, passport.rare),
+    );
     await expect(page.getByTestId("passport-book")).toBeVisible();
     await expect(page.getByTestId("passport-page")).toHaveText(passportTexts.page(pages, pages));
     expect(await page.locator('[data-testid^="stamp-"]').count()).toBe(passport.total);
@@ -190,11 +192,12 @@ test("visiteur sans tampon : l'onglet Passeport et son état vide", async ({ bro
   });
   expect(cookie.status).toBe(200);
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
-  // Lot R7a1 : le Passeport du visiteur n'est plus un onglet ; l'ancienne adresse `/passeport` mène à sa page.
+  // Lots R7a1 et R7b1 : le Passeport du visiteur n'est plus un onglet ni un écran ; l'ancienne adresse `/passeport` mène à
+  // l'onglet « Sorties » de son Profil.
   await goto(page, "/passeport");
-  await expect(page).toHaveURL(/passeport/, { timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "Passeport", exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Ton premier tampon t'attend", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/profil/, { timeout: 30_000 });
+  // La carte « Ma saison » et l'état vide du passeport le disent tous les deux (lot R7b1) : on lit le premier.
+  await expect(page.getByText("Ton premier tampon t'attend", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Pas encore de tampon. Le premier tombe à ton premier pointage.")).toBeVisible();
   await shot(page, "passeport-vide-beton");
   await ctx.close();
