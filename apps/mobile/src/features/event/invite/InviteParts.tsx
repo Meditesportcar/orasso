@@ -169,9 +169,10 @@ export function InvitationMenu({
     try {
       if (muted) await api.unmuteInvitations(who.userId);
       else await api.muteInvitations(who.userId);
-      await mutes.reload();
-      if (live.current) setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
+      // Le geste a réussi : la liste se relit et la confirmation s'affiche, même si la relecture des coupures échoue ensuite.
       onChanged?.(!muted);
+      if (live.current) setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
+      await Promise.resolve(mutes.reload()).catch(() => undefined);
     } catch (e) {
       if (live.current) setMessage(errorMessage(e));
     } finally {

@@ -4121,3 +4121,9 @@ Même migration `0072_sponsored-feed`, régénérée (point 10) ; la reprise des
 - **Police 1,3** : captures `appli-demandes-invitation-menu-police13-{beton,sable}-384.png` (échelle simulée dans la page, contrôle web).
 - **Recette lotr7c2-site** : sur la base utilisée par les recettes du tour, elle échouait parce que les événements créés par les autres recettes ajoutaient des notifications à Damien_66 et poussaient le groupe « et 4 autres » du seed hors de la première page de l'Activité ; sur base recréée (migrations + seed) elle passe. Pas un défaut du code.
 - **Fins de ligne** : une édition en mode texte avait mis trois fichiers en CRLF ; ramenés en LF avant les commits.
+
+### Retouches du coordinateur (09/11/2026, re-relecture Opus du tour 2 : fusionnable)
+- **Erreur périmée (site)** : refermer le menu efface l'erreur (`onToggle` du `<details>`), elle ne revient pas à la réouverture (`EventInvite.tsx`).
+- **Coupure réussie, relecture des coupures en échec (appli)** : `onChanged` et la confirmation passent avant `mutes.reload()`, dont l'échec n'efface plus le succès (`InviteParts.tsx`).
+- **Sans JavaScript** : l'erreur d'une coupure ne s'affiche que dans le menu ouvert depuis la page ; sans JavaScript, le formulaire recharge la page sans message. Accepté : le site est utilisé avec JavaScript, la coupure reste possible et son effet visible (carte retirée).
+- **Dette** : `lotr7c2-site` dépend de l'ordre des recettes (le groupe « et 4 autres » de Damien_66 passe en page 2) ; à rendre robuste (compte neuf ou recherche à travers les pages).

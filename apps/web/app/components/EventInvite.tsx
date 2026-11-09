@@ -60,7 +60,14 @@ export function InviteMenu({
     inviters.length,
   );
   return (
-    <details className="ri-menu" ref={details}>
+    <details
+      className="ri-menu"
+      ref={details}
+      // Menu refermé : une ancienne erreur ne revient pas à la réouverture.
+      onToggle={() => {
+        if (!details.current?.open) setError(null);
+      }}
+    >
       <summary className="ri-menu__dots" aria-label={L.moreA11y} data-testid={testId}>
         <Icon name="more" size={20} />
       </summary>
