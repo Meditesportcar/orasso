@@ -270,15 +270,19 @@ test.describe("le bouton suit l'accès (tour 2 : l'API ne refuserait pas avant l
     await running(VISITORS.vague);
     await resetPresences([VISITORS.vague]);
     for (const access of ["closed", "paid_external", "paid_orasso"]) {
-      await withAccess(access, async () => {
-        const ev = await lydia(VISITORS.vague);
-        expect(ev.live.canValidatePresence, access).toBe(false);
-        const { ctx, page } = await open(browser, VISITORS.vague, "beton", undefined, 1500);
-        await goEvent(page);
-        await expect(page.getByTestId("event-presence-open"), access).toHaveCount(0);
-        if (access === "closed") await shot(page, "fiche-ferme-au-public");
-        await ctx.close();
-      });
+      await withAccess(
+        access,
+        async () => {
+          const ev = await lydia(VISITORS.vague);
+          expect(ev.live.canValidatePresence, access).toBe(false);
+          const { ctx, page } = await open(browser, VISITORS.vague, "beton", undefined, 1500);
+          await goEvent(page);
+          await expect(page.getByTestId("event-presence-open"), access).toHaveCount(0);
+          if (access === "closed") await shot(page, "fiche-ferme-au-public");
+          await ctx.close();
+        },
+        access === "paid_orasso" ? 1000 : undefined,
+      );
     }
     await withAccess("free", async () => {
       const ev = await lydia(VISITORS.vague);

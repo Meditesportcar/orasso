@@ -82,6 +82,7 @@ async function snap(page: Page, path: string, name: string, waitFor?: string) {
 
 const VARIANTS: [number, number][] = [
   [390, 1],
+  [384, 1],
   [384, 1.3],
 ];
 const tag = (w: number, s: number, theme: Theme) => `appli-${w}-x${String(s).replace(".", "")}-${theme}`;

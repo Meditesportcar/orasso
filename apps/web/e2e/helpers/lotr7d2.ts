@@ -53,15 +53,29 @@ export async function resetPresences(emails: readonly string[]): Promise<void> {
 export const northOf = (lat: number, meters: number) => lat + meters / 111_195;
 
 /** L'accès du Lydia (`free`, `closed`, `paid_external`, `paid_orasso`) pendant `run`, puis remis comme il était (recettes du tour 2). */
-export async function withAccess<T>(access: string, run: () => Promise<T>): Promise<T> {
+export async function withAccess<T>(access: string, run: () => Promise<T>, paidCents?: number): Promise<T> {
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   const before = (await client.query("select public_access from events where slug = $1", [SLUG])).rows[0]
     ?.public_access as string;
+  const prices = (
+    await client.query(
+      "select id, price_cents from ticket_types where event_id = (select id from events where slug = $1)",
+      [SLUG],
+    )
+  ).rows;
   try {
     await client.query("update events set public_access = $1 where slug = $2", [access, SLUG]);
+    // Entrée payante : le seed a un type de billet à 0 € ; il passe à `paidCents` le temps de la recette.
+    if (paidCents !== undefined)
+      await client.query(
+        "update ticket_types set price_cents = $1 where event_id = (select id from events where slug = $2)",
+        [paidCents, SLUG],
+      );
     return await run();
   } finally {
+    for (const t of prices)
+      await client.query("update ticket_types set price_cents = $1 where id = $2", [t.price_cents, t.id]);
     await client.query("update events set public_access = $1 where slug = $2", [before, SLUG]);
     await client.end();
   }
