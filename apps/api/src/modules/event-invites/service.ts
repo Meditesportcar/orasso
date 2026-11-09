@@ -577,6 +577,57 @@ export const eventInvitesService = {
     };
   },
 
+  /**
+   * Lot R7c1 (`GET /me/requests`) : mes invitations entre passionnés en attente, une par événement (« Kenji_66 et Julie_66
+   * t'invitent »). Mêmes règles que le bandeau de la fiche : auteurs en règle et non coupés, événement qui se partage
+   * encore, et je n'y vais pas déjà. 20 événements au plus, le plus récemment invité d'abord.
+   */
+  async receivedAll(viewerId: string, ex: Executor = db) {
+    const at = now();
+    const result = await ex.execute(sql`
+      select i.event_id, p.pseudo, p.avatar_key, i.note, i.created_at
+      from event_peer_invitations i
+      join profiles p on p.user_id = i.inviter_id
+      join events e on e.id = i.event_id
+      where i.invitee_id = ${viewerId} and ${reachableSql(at)}
+        and e.status = 'published' and e.admission <> 'invite_only' and e.ends_at > ${at}
+        and not exists (
+          select 1 from invitation_mutes m where m.user_id = ${viewerId} and m.muted_user_id = i.inviter_id
+        )
+      order by i.created_at desc, i.id
+      limit 400`);
+    const rows = result.rows as {
+      event_id: string;
+      pseudo: string;
+      avatar_key: string | null;
+      note: string | null;
+      created_at: Date | string;
+    }[];
+    const byEvent = new Map<string, typeof rows>();
+    for (const r of rows) byEvent.set(r.event_id, [...(byEvent.get(r.event_id) ?? []), r]);
+    const eventIds = [...byEvent.keys()].slice(0, 20);
+    if (!eventIds.length) return [];
+    const evRows = await ex.select().from(events).where(inArray(events.id, eventIds));
+    const out: {
+      event: EventRow;
+      at: Date;
+      inviters: { pseudo: string; avatarUrl: string | null; note: string | null }[];
+    }[] = [];
+    for (const id of eventIds) {
+      const e = evRows.find((x) => x.id === id);
+      const list = byEvent.get(id) ?? [];
+      const first = list[0];
+      if (!e || !first || !shareable(e, at)) continue;
+      if ((await goingInfo(ex, e.id, [viewerId])).size > 0) continue;
+      out.push({
+        event: e,
+        at: new Date(first.created_at),
+        inviters: list.map((r) => ({ pseudo: r.pseudo, avatarUrl: storage.url(r.avatar_key), note: r.note })),
+      });
+    }
+    return out;
+  },
+
   /** `GET /me/invitation-mutes` : les personnes dont j'ai coupé les invitations (moi seul). */
   async mutes(viewer: Viewer): Promise<InvitationMute[]> {
     const rows = await db
