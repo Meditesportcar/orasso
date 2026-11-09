@@ -7,14 +7,14 @@ import { Icon, Text, TextField, tokens, useTheme, withAlpha } from "@orasso/desi
 import {
   canvasPerView,
   type Frame,
+  shareLabels as L,
   moveFrame,
+  type ShareInfo,
   STORY_CAPTION_MAX,
   STORY_H,
   STORY_W,
   type StoryAudienceOption,
   type StoryLinkType,
-  type ShareInfo,
-  shareLabels as L,
   storyAudienceOptions,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
@@ -33,8 +33,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { SmButton } from "@/features/passionne/kit";
-import { markStoryPublished } from "@/features/stories/publish/publishSignal";
 import { Label, Option } from "@/features/stories/publish/parts";
+import { markStoryPublished } from "@/features/stories/publish/publishSignal";
 import { useStoryMotion } from "@/features/stories/publish/StoryCanvas";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -83,7 +83,10 @@ export function StoryComposer() {
   const clientId = useRef(randomUUID()).current;
 
   // Le plus grand canevas 9:16 qui laisse la place au formulaire dessous.
-  const viewWidth = Math.max(160, Math.min(win.width - space3 * 2, Math.floor((win.height * 0.52 * STORY_W) / STORY_H)));
+  const viewWidth = Math.max(
+    160,
+    Math.min(win.width - space3 * 2, Math.floor((win.height * 0.52 * STORY_W) / STORY_H)),
+  );
   const viewHeight = Math.round((viewWidth * STORY_H) / STORY_W);
   const k = viewWidth / STORY_W;
   const cpv = canvasPerView(viewWidth);
@@ -200,7 +203,10 @@ export function StoryComposer() {
           {L.close}
         </SmButton>
       </View>
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: space4 + insets.bottom }]} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[styles.body, { paddingBottom: space4 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+      >
         {unavailable ? (
           <Notice tone="error" testID="share-story-error">
             {errorMessage(info.error)}
@@ -248,7 +254,11 @@ export function StoryComposer() {
               </Animated.View>
               <View style={styles.touch} pointerEvents="none">
                 <View style={[styles.pill, { backgroundColor: c.nightInk }]} testID="share-story-link">
-                  <Icon name={type === "vehicle" ? "vehicle" : type === "vote_result" ? "trophy" : "ticket"} size={16} color={c.night} />
+                  <Icon
+                    name={type === "vehicle" ? "vehicle" : type === "vote_result" ? "trophy" : "ticket"}
+                    size={16}
+                    color={c.night}
+                  />
                   <Text variant="bodyStrong" color={c.night}>
                     {data.linkLabel}
                   </Text>
@@ -321,7 +331,14 @@ const styles = StyleSheet.create({
   body: { alignItems: "center", gap: space3, paddingHorizontal: space3 },
   canvas: { overflow: "hidden", borderRadius: tokens.radius.radiusLg },
   touch: { position: "absolute", left: 0, right: 0, bottom: 18, alignItems: "center" },
-  pill: { flexDirection: "row", alignItems: "center", gap: space2, paddingHorizontal: space3, paddingVertical: 10, borderRadius: 999 },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space2,
+    paddingHorizontal: space3,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
   hint: { flexDirection: "row", alignItems: "center", gap: space2 },
   form: { alignSelf: "stretch", gap: space2 },
 });

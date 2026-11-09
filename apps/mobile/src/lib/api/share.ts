@@ -19,6 +19,9 @@ export const shareApi = {
   shareInfo: (type: StoryLinkType, id: string) => request<ShareInfo>(`/api/me/share/info${qs({ type, id })}`),
   shareStory: (body: LinkedStoryBody) =>
     request<StoryCreated>("/api/me/stories", { method: "POST", body, timeout: 60_000 }),
-  shareToFeed: (body: { linked: { type: "event" | "vehicle"; id: string }; clientId: string; caption: string | null }) =>
-    request<FeedPostView>("/api/me/feed-posts", { method: "POST", body, timeout: 60_000 }),
+  shareToFeed: (body: {
+    linked: { type: "event" | "vehicle"; id: string };
+    clientId: string;
+    caption: string | null;
+  }) => request<FeedPostView>("/api/me/feed-posts", { method: "POST", body, timeout: 60_000 }),
 };

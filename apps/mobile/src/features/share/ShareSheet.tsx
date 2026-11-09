@@ -10,12 +10,12 @@
 import { Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type ConversationSummary,
+  shareLabels as L,
   type ShareDestination,
   type ShareFileFormat,
   type ShareInfo,
   STORY_CAPTION_MAX,
   type StoryLinkType,
-  shareLabels as L,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
@@ -203,7 +203,17 @@ export function ShareBody({
   );
 }
 
-function Header({ title, sheet, onClose, onBack }: { title: string; sheet?: boolean; onClose: () => void; onBack?: () => void }) {
+function Header({
+  title,
+  sheet,
+  onClose,
+  onBack,
+}: {
+  title: string;
+  sheet?: boolean;
+  onClose: () => void;
+  onBack?: () => void;
+}) {
   const { t } = useTheme();
   if (!sheet && !onBack) return null;
   return (
@@ -241,7 +251,17 @@ function Header({ title, sheet, onClose, onBack }: { title: string; sheet?: bool
 
 // --- Dans le Fil --------------------------------------------------------------------------------------------------------
 
-function ToFeed({ info, onBack, onClose, sheet }: { info: ShareInfo; onBack: () => void; onClose: () => void; sheet?: boolean }) {
+function ToFeed({
+  info,
+  onBack,
+  onClose,
+  sheet,
+}: {
+  info: ShareInfo;
+  onBack: () => void;
+  onClose: () => void;
+  sheet?: boolean;
+}) {
   const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +312,17 @@ function ToFeed({ info, onBack, onClose, sheet }: { info: ShareInfo; onBack: () 
 
 // --- En message ---------------------------------------------------------------------------------------------------------
 
-function ToMessage({ info, onBack, onClose, sheet }: { info: ShareInfo; onBack: () => void; onClose: () => void; sheet?: boolean }) {
+function ToMessage({
+  info,
+  onBack,
+  onClose,
+  sheet,
+}: {
+  info: ShareInfo;
+  onBack: () => void;
+  onClose: () => void;
+  sheet?: boolean;
+}) {
   const list = useApi(() => api.conversations(), []);
   const [sending, setSending] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
@@ -387,7 +417,13 @@ function External({
       const file = await prepareExport(path, fileName, key);
       kept.current.push(file);
       const outcome = await sendShareImage(file, "share", file.mime);
-      setNote(outcome === "saved" ? L.externalSaved : outcome === "unavailable" ? "Le partage n'est pas disponible sur cet appareil." : null);
+      setNote(
+        outcome === "saved"
+          ? L.externalSaved
+          : outcome === "unavailable"
+            ? "Le partage n'est pas disponible sur cet appareil."
+            : null,
+      );
     } catch (e) {
       setError(errorMessage(e) || L.externalFailed);
     } finally {
@@ -434,13 +470,19 @@ function External({
             disabled={busy !== null}
             role="button"
             testID={`share-file-${o.key.split("-").pop()}`}
-            onPress={() => void send(o.key, o.path, `orasso-${o.label === L.externalStory ? "story" : "publication"}.jpg`)}
+            onPress={() =>
+              void send(o.key, o.path, `orasso-${o.label === L.externalStory ? "story" : "publication"}.jpg`)
+            }
           />
         </View>
       ))}
       {busy ? <Muted variant="caption">Préparation du fichier…</Muted> : null}
       {note ? <Notice testID="share-external-note">{note}</Notice> : null}
-      {error ? <Notice tone="error" testID="share-external-error">{error}</Notice> : null}
+      {error ? (
+        <Notice tone="error" testID="share-external-error">
+          {error}
+        </Notice>
+      ) : null}
       <Muted variant="caption">{L.externalNote1}</Muted>
       <Muted variant="caption">{L.externalNote2}</Muted>
     </View>
@@ -452,7 +494,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: space2 },
   title: { flex: 1, fontSize: 20, lineHeight: 22 },
   closex: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  head: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: tokens.radius.radiusLg },
+  head: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    padding: space3,
+    borderRadius: tokens.radius.radiusLg,
+  },
   thumb: { width: 64, height: 64, borderRadius: 14 },
   thumbEmpty: { alignItems: "center", justifyContent: "center" },
   headText: { flex: 1, gap: space1 },

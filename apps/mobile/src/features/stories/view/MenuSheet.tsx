@@ -3,7 +3,7 @@
 // `story`) et, si je suis identifié dedans, « Me retirer de cette story » ; pour ma story, « Vues · 12 » (la liste, pour moi
 // seul) et « Supprimer ». Pendant qu'elle est ouverte, la story est en pause (`open` coupe la minuterie).
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { storyViewerLabels as L } from "@orasso/shared";
+import { storyViewerLabels as L, shareLabels } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { SetRow } from "@/features/profil/parts";
@@ -20,6 +20,7 @@ export function MenuSheet({
   onRemoveTag,
   onViews,
   onDelete,
+  onExternal,
 }: {
   open: boolean;
   mine: boolean;
@@ -32,6 +33,8 @@ export function MenuSheet({
   onRemoveTag: () => void;
   onViews: () => void;
   onDelete: () => void;
+  /** Ma story (hors crew) : l'envoyer vers l'extérieur (R7f4). Absent : pas de ligne. */
+  onExternal?: () => void;
 }) {
   const { t } = useTheme();
   return (
@@ -55,6 +58,14 @@ export function MenuSheet({
         {mine ? (
           <>
             <SetRow first icon="eye" title={L.views(views)} onPress={onViews} testID="story-menu-views" />
+            {onExternal ? (
+              <SetRow
+                icon="export"
+                title={shareLabels.menuExternal}
+                onPress={onExternal}
+                testID="story-menu-external"
+              />
+            ) : null}
             <SetRow
               icon="trash"
               title={L.delete}

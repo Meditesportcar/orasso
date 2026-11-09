@@ -2,11 +2,12 @@
 // profil), voiture et événement, flamme avec son compteur, « ⋯ ». Le bandeau « Collaboration commerciale » viendra du
 // lot R7m2 : le champ `commercialPartner` est lu, `CommercialBadge` (réservé) ne dessine rien d'ici là.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedPostView, feedScreenLabels as L } from "@orasso/shared";
+import { type FeedPostView, feedScreenLabels as L, shareLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { ShareSheet } from "@/features/share/ShareSheet";
 import { api } from "@/lib/api";
 import { Avatar } from "@/ui/Avatar";
 import { FeedPhotos } from "../FeedPhotos";
@@ -23,6 +24,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   // Flamme : la réponse de l'API fait foi ; en attendant, le compteur bouge tout de suite (annulé si l'envoi échoue).
   const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
   const [busy, setBusy] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -63,21 +65,33 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       faded={faded}
       testID="feed-card-feed_post"
       actions={
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: fire.on, disabled: busy }}
-          accessibilityLabel={L.fireLabel(fire.count, fire.on)}
-          onPress={toggle}
-          style={[styles.fire, { backgroundColor: fire.on ? c.accentSoft : c.ground }]}
-          testID="feed-post-fire"
-        >
-          <Icon name="fire" size={17} color={fire.on ? c.accentText : c.ink} />
-          <Text variant="bodyStrong" color={c.ink} style={styles.fireText} testID="feed-post-fire-count">
-            {String(fire.count)}
-          </Text>
-        </Pressable>
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: fire.on, disabled: busy }}
+            accessibilityLabel={L.fireLabel(fire.count, fire.on)}
+            onPress={toggle}
+            style={[styles.fire, { backgroundColor: fire.on ? c.accentSoft : c.ground }]}
+            testID="feed-post-fire"
+          >
+            <Icon name="fire" size={17} color={fire.on ? c.accentText : c.ink} />
+            <Text variant="bodyStrong" color={c.ink} style={styles.fireText} testID="feed-post-fire-count">
+              {String(fire.count)}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={shareLabels.title}
+            onPress={() => setSharing(true)}
+            style={[styles.fire, { backgroundColor: c.ground }]}
+            testID="feed-post-share"
+          >
+            <Icon name="share" size={17} color={c.ink} />
+          </Pressable>
+        </>
       }
     >
+      <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "feed_post", id: post.id }} />
       <CommercialBadge partner={commercialPartner} />
       <FeedPhotos post={post} />
       {post.caption ? (

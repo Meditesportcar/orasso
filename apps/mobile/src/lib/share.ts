@@ -134,7 +134,12 @@ export async function prepareExport(path: string, fileName: string, key: string)
     const type = res.headers.get("content-type") ?? "image/jpeg";
     const blob = await res.blob();
     const video = type.startsWith("video/");
-    return { uri: URL.createObjectURL(blob), fileName: video ? fileName.replace(/.jpg$/, ".mp4") : fileName, mime: video ? "video/mp4" : "image/jpeg", ext: video ? "mp4" : "jpg" };
+    return {
+      uri: URL.createObjectURL(blob),
+      fileName: video ? fileName.replace(/.jpg$/, ".mp4") : fileName,
+      mime: video ? "video/mp4" : "image/jpeg",
+      ext: video ? "mp4" : "jpg",
+    };
   }
   try {
     const file = await File.downloadFileAsync(url, new File(Paths.cache, `orasso-export-${key}.bin`), {

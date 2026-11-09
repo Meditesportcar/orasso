@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
+import { ShareDialog } from "../ShareSheet";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
 import { type CardProps, OrgLogo, Shell } from "./Shell";
@@ -270,18 +271,21 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onMenu={onMenu}
       faded={faded}
       actions={
-        <button
-          type="button"
-          className={fire.on ? "fil-fire is-on" : "fil-fire"}
-          aria-pressed={fire.on}
-          aria-label={L.fireLabel(fire.count, fire.on)}
-          disabled={busy}
-          onClick={() => void toggle()}
-          data-testid="feed-post-fire"
-        >
-          <Icon name="fire" size={17} />
-          <span data-testid="feed-post-fire-count">{fire.count}</span>
-        </button>
+        <>
+          <button
+            type="button"
+            className={fire.on ? "fil-fire is-on" : "fil-fire"}
+            aria-pressed={fire.on}
+            aria-label={L.fireLabel(fire.count, fire.on)}
+            disabled={busy}
+            onClick={() => void toggle()}
+            data-testid="feed-post-fire"
+          >
+            <Icon name="fire" size={17} />
+            <span data-testid="feed-post-fire-count">{fire.count}</span>
+          </button>
+          <ShareDialog target={{ type: "feed_post", id: post.id }} look="ghost" testId="feed-post-share" />
+        </>
       }
     >
       <CommercialBadge partner={commercialPartner} />

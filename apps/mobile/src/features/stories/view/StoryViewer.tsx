@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport, useReportOpen } from "@/features/ReportSheet";
+import { ShareSheet } from "@/features/share/ShareSheet";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
@@ -121,6 +122,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const [mediaRetries, setMediaRetries] = useState(0);
   const [held, setHeld] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const [viewersFor, setViewersFor] = useState<StoryView | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
@@ -541,6 +543,19 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
           setViewersFor(story);
         }}
         onDelete={() => void remove()}
+        onExternal={
+          mine && story.audience !== "crew" && story.status === "ready" && !story.sharedFrom
+            ? () => {
+                setMenuOpen(false);
+                setExternalOpen(true);
+              }
+            : undefined
+        }
+      />
+      <ShareSheet
+        visible={externalOpen}
+        onClose={() => setExternalOpen(false)}
+        target={{ story: story.id, mediaKind: story.mediaKind }}
       />
       <ViewersSheet story={viewersFor} onClose={() => setViewersFor(null)} onProfile={openProfile} />
     </KeyboardSafe>

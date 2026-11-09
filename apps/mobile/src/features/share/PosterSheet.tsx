@@ -23,19 +23,13 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Platform, Share, StyleSheet, View } from "react-native";
 import { siteUrl } from "@/api";
 import { Seg, SmButton } from "@/features/passionne/kit";
-import { api } from "@/lib/api";
-import { errorMessage } from "@/lib/http";
-import { detectSharePlates } from "@/lib/sharePlates";
-import {
-  type PreparedShare,
-  prepareShareImage,
-  releasePrepared,
-  type ShareOutcome,
-  sendShareImage,
-} from "@/lib/share";
-import { AppSheet } from "@/ui/AppSheet";
 import { PLATE_CHECK_TIMEOUT_MS, type PlateCheck, plateGate } from "@/features/vehicle/sharePlateGate";
 import { shareSheetKey } from "@/features/vehicle/shareSheetKey";
+import { api } from "@/lib/api";
+import { errorMessage } from "@/lib/http";
+import { type PreparedShare, prepareShareImage, releasePrepared, type ShareOutcome, sendShareImage } from "@/lib/share";
+import { detectSharePlates } from "@/lib/sharePlates";
+import { AppSheet } from "@/ui/AppSheet";
 
 const { space1, space2 } = tokens.spacing;
 

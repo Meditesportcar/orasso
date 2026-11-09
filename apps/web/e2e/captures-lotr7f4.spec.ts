@@ -15,7 +15,14 @@ test.use({ actionTimeout: 30_000, locale: "fr-FR", timezoneId: "Europe/Paris" })
 test.setTimeout(600_000);
 mkdirSync(DIR, { recursive: true });
 
-type Ctx = { cookie: string; vehicleId: string; eventSlug: string; eventId: string; authorKey: string | null; memoryEventId: string | null };
+type Ctx = {
+  cookie: string;
+  vehicleId: string;
+  eventSlug: string;
+  eventId: string;
+  authorKey: string | null;
+  memoryEventId: string | null;
+};
 
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
@@ -28,7 +35,9 @@ async function gather(): Promise<Ctx> {
   const cookie = await login("damien@orasso.local");
   const vehicles = (await apiCall<{ items?: { id: string }[] } | { id: string }[]>(cookie, "GET", "/me/vehicles")).data;
   const list = Array.isArray(vehicles) ? vehicles : (vehicles.items ?? []);
-  const events = (await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")).data;
+  const events = (
+    await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+  ).data;
   const lydia = events.items?.find((e) => e.title.includes("Lydia"));
   const bar = (await apiCall<{ authors: { key: string }[] }>(cookie, "GET", "/stories/bar")).data;
   const memories = (await apiCall<{ eventId: string }[]>(cookie, "GET", "/me/memories/today")).data;
@@ -95,7 +104,11 @@ for (const [label, width] of [
   for (const theme of ["beton", "sable"] as const) {
     test(`site ${PHASE} : écrans de partage, ${label}, ${theme}`, async ({ browser }) => {
       const c = await gather();
-      const ctx = await browser.newContext({ viewport: { width, height: 900 }, locale: "fr-FR", timezoneId: "Europe/Paris" });
+      const ctx = await browser.newContext({
+        viewport: { width, height: 900 },
+        locale: "fr-FR",
+        timezoneId: "Europe/Paris",
+      });
       const page = await ctx.newPage();
       await setTheme(page, theme);
       await loginInBrowser(page, "damien@orasso.local");
