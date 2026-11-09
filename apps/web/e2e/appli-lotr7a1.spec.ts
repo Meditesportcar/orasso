@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { creerComptePastilles } from "./r7a1-pastilles";
 import { RELAIS } from "./relais";
 
 // Lot R7a1 (D38), côté appli (version web compilée de recette) : la barre Explorer · Le Fil · Accueil · Crew · Profil
@@ -103,24 +104,35 @@ test("la barre du haut : loupe, cloche « Activité », bulle « Messages », pl
     await page.getByRole("tab", { name: tab, exact: true }).click();
     await page.waitForTimeout(500);
     await expect(page.getByRole("button", { name: "Rechercher", exact: true }).first(), tab).toBeVisible();
-    await expect(page.getByRole("button", { name: "Activité", exact: true }).first(), tab).toBeVisible();
-    await expect(page.getByRole("button", { name: "Messages", exact: true }).first(), tab).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Activité/ }).first(), tab).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Messages/ }).first(), tab).toBeVisible();
     await expect(page.getByRole("button", { name: "Boîte", exact: true }), tab).toHaveCount(0);
   }
   // Les pastilles sont des nombres entiers positifs, un par bouton (jamais « 0 »).
   for (const name of ["Activité", "Messages"]) {
-    const text = (await page.getByRole("button", { name, exact: true }).first().innerText()).trim();
+    const text = (
+      await page
+        .getByRole("button", { name: new RegExp(`^${name}`) })
+        .first()
+        .innerText()
+    ).trim();
     expect(text === "" || /^[1-9]\d*\+?$/.test(text), `pastille ${name} : « ${text} »`).toBe(true);
   }
   await page.getByRole("tab", { name: "Accueil", exact: true }).click();
   // La bulle ouvre la Boîte sur Messages, la cloche sur Tout.
-  await page.getByRole("button", { name: "Messages", exact: true }).first().click();
+  await page
+    .getByRole("button", { name: /^Messages/ })
+    .first()
+    .click();
   await page.waitForURL(/\/boite\?onglet=messages/, { timeout: 15_000 });
   await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(
     /^Messages/,
   );
   await go(page, "/accueil");
-  await page.getByRole("button", { name: "Activité", exact: true }).first().click();
+  await page
+    .getByRole("button", { name: /^Activité/ })
+    .first()
+    .click();
   await page.waitForURL(/\/boite$/, { timeout: 15_000 });
   await expect(page.getByTestId("inbox-segments").getByRole("tab", { selected: true })).toHaveAccessibleName(/^Tout/);
   await ctx.close();
@@ -135,7 +147,10 @@ test("trois icônes tiennent à 384 px, police 1,3 : la loupe se resserre, jamai
   await afterOpening(page);
   const boxes = await Promise.all(
     ["Rechercher", "Activité", "Messages"].map((name) =>
-      page.getByRole("button", { name, exact: true }).first().boundingBox(),
+      page
+        .getByRole("button", { name: new RegExp(`^${name}`) })
+        .first()
+        .boundingBox(),
     ),
   );
   for (const box of boxes) {
@@ -201,9 +216,18 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   const k = await open(browser);
   await signIn(k.page, "kenji@orasso.local");
   await afterOpening(k.page);
+  // Tour 2 : Le Fil ne marque rien comme lu (la cloche garde sa pastille), même après un glissement.
+  const kCookie = await login("kenji@orasso.local");
+  const unread = async () =>
+    (await apiCall<{ counts: { unreadNotifications: number } }>(kCookie, "GET", "/me")).data.counts.unreadNotifications;
+  const before = await unread();
+  expect(before).toBeGreaterThan(0);
   await k.page.getByRole("tab", { name: "Le Fil", exact: true }).click();
   await expect(k.page.getByRole("heading", { name: "Le Fil", exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await expect(k.page.getByText("arrive bientôt")).toBeVisible();
+  await expect(k.page.getByTestId("journal-item").first()).toBeVisible({ timeout: 30_000 });
+  await k.page.waitForTimeout(3_000);
+  expect(await unread()).toBe(before);
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
   await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
@@ -238,7 +262,14 @@ test("le bandeau « où sont passées les choses » : vu une fois par compte, ja
   await signIn(page, "kenji@orasso.local");
   await afterOpening(page);
   await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toContainText("Orasso se range autrement");
+  await expect(banner).toContainText("Mon garage");
   await expect(banner).toContainText("Rien n'est perdu");
+  // Sous le bonjour (maquette R7.1), ✕ nommé « Fermer l'explication ».
+  const hello = await page.getByTestId("home-greeting").boundingBox();
+  const box = await banner.boundingBox();
+  expect((box?.y ?? 0) - ((hello?.y ?? 0) + (hello?.height ?? 0))).toBeGreaterThanOrEqual(0);
+  await expect(page.getByTestId("whatsnew-dismiss")).toHaveAccessibleName("Fermer l'explication");
   await shot(page, "bandeau-kenji");
   await page.getByTestId("whatsnew-dismiss").click();
   await expect(banner).toHaveCount(0);
@@ -263,5 +294,47 @@ test("le bandeau « où sont passées les choses » : vu une fois par compte, ja
   await afterOpening(page);
   await page.waitForTimeout(1_500);
   await expect(banner).toHaveCount(0);
+  await ctx.close();
+});
+
+test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans son Profil", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const pseudo = `Visiteur_${unique()}`;
+  await signUpApi(pseudo);
+  const { ctx, page } = await open(browser);
+  await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await afterOpening(page);
+  const banner = page.getByTestId("whatsnew-banner");
+  await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toContainText("Orasso se range autrement");
+  await expect(banner).not.toContainText("garage");
+  await shot(page, "bandeau-visiteur");
+  await go(page, "/profil");
+  await expect(page.getByTestId("profil-garage")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const compte = await creerComptePastilles();
+  const { ctx, page } = await open(browser);
+  await signIn(page, compte.email);
+  await afterOpening(page);
+  // Demande seule : la bulle n'a pas de pastille (son nom n'annonce rien), la cloche annonce la demande.
+  await expect(page.getByRole("button", { name: /^Activité, \d+ non lues?$/ }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole("button", { name: "Messages", exact: true }).first()).toBeVisible();
+  await shot(page, "pastilles-demande-seule");
+  // Une conversation non lue : la bulle annonce 1.
+  await compte.ajouterConversationNonLue();
+  await page.reload();
+  await afterOpening(page);
+  await expect(page.getByRole("button", { name: "Messages, 1 non lu", exact: true }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await shot(page, "pastilles-conversation");
   await ctx.close();
 });
