@@ -38,6 +38,8 @@ export const uploadPurposes = [
   "event_poster_photo",
   // Lot R5c1 : photo du fil d'un crew (privée, jamais publique : D36).
   "crew_post",
+  // Lot R7e1 : photo d'une publication du Fil (privée jusqu'à la publication, puis copiée sous une clé publique).
+  "feed_post",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -52,6 +54,8 @@ export const privateUploadPurposes: readonly UploadPurpose[] = [
   "announcement",
   // Lot R5c1 (D36) : photo du fil d'un crew, servie seulement aux membres actifs du crew.
   "crew_post",
+  // Lot R7e1 : la photo envoyée attend, privée, d'être publiée (floutage de plaque à la publication).
+  "feed_post",
 ];
 
 /**
@@ -75,4 +79,6 @@ export const acceptedUploadPurposes = [
   "event_poster_photo",
   // Lot R5c1 : photo du fil d'un crew (`POST /crews/:id/posts`).
   "crew_post",
+  // Lot R7e1 : photo d'une publication du Fil (`POST /me/feed-posts`).
+  "feed_post",
 ] as const satisfies readonly UploadPurpose[];

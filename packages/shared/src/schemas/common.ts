@@ -61,6 +61,8 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
+  // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
+  "plate_decision_required",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

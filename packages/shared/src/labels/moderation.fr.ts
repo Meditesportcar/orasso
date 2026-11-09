@@ -122,6 +122,8 @@ export const reportSheetNotice: Record<ReportTarget, string> = {
   announcement: "L'équipe Orasso lit chaque signalement. L'organisateur ne sait pas qui l'a fait.",
   crew_post: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
   crew_comment: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
+  feed_post: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
+  story: "L'équipe Orasso lit chaque signalement. L'auteur ne sait pas qui l'a fait.",
 };
 
 export const reportTargetLabels: Record<ReportTarget, string> = {
@@ -137,6 +139,8 @@ export const reportTargetLabels: Record<ReportTarget, string> = {
   announcement: "Annonce",
   crew_post: "Publication de crew",
   crew_comment: "Commentaire de crew",
+  feed_post: "Publication du Fil",
+  story: "Story",
 };
 
 /** Ce qu'on signale, dans le titre de la feuille (« Signaler ce profil »). */
@@ -153,6 +157,8 @@ export const reportTargetThis: Record<ReportTarget, string> = {
   announcement: "cette annonce",
   crew_post: "cette publication",
   crew_comment: "ce commentaire",
+  feed_post: "cette publication",
+  story: "cette story",
 };
 
 export const reportStatusLabels: Record<ReportStatus, string> = {
