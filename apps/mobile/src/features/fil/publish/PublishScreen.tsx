@@ -275,7 +275,7 @@ export function PublishScreen() {
 
   if (done) {
     return (
-      <FlowScreen title={L.publishTitle} onClose={() => router.replace("/fil")}>
+      <FlowScreen title={L.publishTitle} onClose={close}>
         <View style={[styles.done, { backgroundColor: c.surface }]} testID="fil-publish-done">
           <Icon name="check" size={28} color={c.accentText} />
           <Text variant="posterM" color={c.ink}>
@@ -285,7 +285,7 @@ export function PublishScreen() {
             {L.publishedText}
           </Text>
         </View>
-        <SmButton kind="p" big wide icon="feed" onPress={() => router.replace("/fil")} testID="fil-publish-back">
+        <SmButton kind="p" big wide icon="feed" onPress={close} testID="fil-publish-back">
           {L.backToFeed}
         </SmButton>
         <SmButton kind="s" wide icon="gallery" onPress={() => router.replace("/fil/mes-publications")}>
