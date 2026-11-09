@@ -14,10 +14,12 @@ describe("accès flottant : règle J-7 à J+1", () => {
     expect(inNearWindow(start, end, at(10, 26, 0))).toBe(false);
   });
   it("compte à rebours et jour de la semaine", () => {
-    expect(nearCountdown(start, at(10, 18))).toBe("J-6");
-    expect(nearCountdown(start, at(10, 23))).toBe("Demain");
-    expect(nearCountdown(start, at(10, 24))).toBe("Aujourd'hui");
-    expect(nearCountdown(start, at(10, 25))).toBe("J+1");
+    const span = { startsAt: start, endsAt: end };
+    expect(nearCountdown(span, at(10, 18))).toBe("J-6");
+    expect(nearCountdown(span, at(10, 23))).toBe("Demain");
+    expect(nearCountdown(span, at(10, 24))).toBe("Aujourd'hui");
+    expect(nearCountdown(span, at(10, 24, 21))).toBe("En cours");
+    expect(nearCountdown(span, at(10, 25))).toBe("J+1");
     expect(nearWeekday(start)).toBe("sam.");
   });
   it("le plus proche d'abord, puis candidature avant billet", () => {

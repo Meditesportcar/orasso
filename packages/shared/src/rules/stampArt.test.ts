@@ -90,6 +90,12 @@ describe("texte et encre", () => {
     expect(text.ring).toBe("NOCTURNE DE CANET · 66 ·");
   });
 
+  it("la date est celle de l'entrée, pas celle du début de l'événement (lot R7-0)", () => {
+    const later = stamp({ stampedAt: "2026-10-25T08:12:00.000Z" });
+    expect(stampText(later).date).toBe("25.10");
+    expect(stampText(later).year).toBe("2026");
+  });
+
   it("un rare porte le nom de son genre, un titre long est coupé sur la ligne mais pas sur l'anneau", () => {
     expect(stampText(stamp({ kind: "first_outing", rare: true })).title).toBe("PREMIÈRE SORTIE");
     expect(stampText(stamp({ kind: "first_outing", rare: true })).year).toBe("RARE");

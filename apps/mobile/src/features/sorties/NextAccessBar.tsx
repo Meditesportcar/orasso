@@ -9,7 +9,7 @@
 // rechargés à chaque changement d'onglet, sans bruit si le réseau manque.
 
 import { archivoAt, Icon, Text, useTheme } from "@orasso/design-system/native";
-import { nextAccessBarLabels } from "@orasso/shared";
+import { eventCountdownParts, nextAccessBarLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -106,7 +106,10 @@ function Bar({ kind, routeKey }: { kind: string; routeKey?: string }) {
   );
   const next = nextAccessOf(items, now);
   if (!next) return null;
-  const countdown = dayCountdown(next.startsAt, now);
+  const countdown = dayCountdown(next, now);
+  // Pavé étroit : « J-6 » sur « sam. » ; en cours, « 2/4 » sur « jour » (lot R7-0, jamais « J+1 » pour un événement en cours).
+  const tight = eventCountdownParts(next, now).tight;
+  const bigText = tight.small ? tight.big : countdown;
   const [weekday] = barDay(next.startsAt).split(" ");
   const info = `${KIND_LABEL[next.kind]} · ${barDay(next.startsAt)} · ${formatHour(next.startsAt)}`;
   const line = nextAccessBarLabels.line(barDay(next.startsAt), next.title, countdown);
@@ -120,10 +123,10 @@ function Bar({ kind, routeKey }: { kind: string; routeKey?: string }) {
     >
       <View style={styles.nd}>
         <Text variant="body" color={c.posterInk} style={styles.ndBig}>
-          {countdown}
+          {bigText}
         </Text>
         <Text variant="body" color={c.posterInk} style={styles.ndSmall}>
-          {weekday}
+          {tight.small ?? weekday}
         </Text>
       </View>
       <View style={styles.nt}>

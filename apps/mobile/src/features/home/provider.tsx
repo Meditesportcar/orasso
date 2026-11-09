@@ -45,7 +45,7 @@ export function ProviderHome() {
           <HeroCard
             posterUrl={mission.posterUrl}
             startsAt={mission.event.startsAt}
-            countdown={dayCountdown(mission.event.startsAt, now)}
+            countdown={dayCountdown(mission.event, now)}
             hourLabel={homeProfileLabels.installAt(formatHour(mission.installAt ?? mission.event.startsAt))}
             title={mission.event.title}
             tags={

@@ -30,8 +30,10 @@ export type Outing = {
   key: string;
   title: string;
   startsAt: string;
-  /** « J-6 », « Demain », « Aujourd'hui ». */
+  /** « J-6 », « Demain », « Aujourd'hui », « En cours » (lot R7-0 : jamais « J+1 » pour un événement en cours). */
   countdown: string;
+  /** « Jour 2 sur 4 » sous « En cours » ; sans lui, le petit libellé est la date de début. */
+  countdownDetail?: string | null;
   posterUrl: string | null;
   /** Étiquettes de statut (Retenue, Zone JDM, Billet…). */
   tags: ReactNode;
@@ -110,7 +112,7 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
       <Pressable
         onPress={outing.onOpen}
         accessibilityRole="link"
-        accessibilityLabel={`${outing.title}, ${outing.countdown}. Voir la fiche`}
+        accessibilityLabel={`${outing.title}, ${outing.countdown}${outing.countdownDetail ? ` · ${outing.countdownDetail}` : ""}. Voir la fiche`}
         style={({ pressed }) => [styles.top, pressed && styles.pressed]}
         testID="home-outing-open"
       >
@@ -133,7 +135,7 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
               {outing.countdown}
             </Text>
             <Text variant="label" color={c.posterMuted} style={styles.cdSmall}>
-              {dayLabel(outing.startsAt)}
+              {outing.countdownDetail ?? dayLabel(outing.startsAt)}
             </Text>
           </View>
           <Text

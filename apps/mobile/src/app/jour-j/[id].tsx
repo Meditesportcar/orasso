@@ -5,7 +5,7 @@
 // veille, se ferme après le scan ou à J+1.
 // Lot 50 : une fois entré, le bouton « Prix du public » (secondaire : le QR reste l'élément principal) ; au scan, le
 // tampon tombe à l'écran (`passport.stamped`, `StampArrival` à la racine).
-// Lot C2a (artefact DA v2 `s-qr`) : écran sombre dans les deux thèmes (`#s-qr` sur `--bg-deep`, encre crème), en-tête
+// Lot R7-0 : l'écran suit le thème (la carte du QR reste crème) ; avant, lot C2a (artefact DA v2 `s-qr`) : écran sombre dans les deux thèmes (`#s-qr` sur `--bg-deep`, encre crème), en-tête
 // « Jour J · <événement> » et « Hors ligne : tout est déjà sur ton téléphone », la carte crème du QR, l'encart des
 // captures, « Comment ça marche sans réseau », Maps / Waze / Sur la carte. Plus de « Me désister » ici : on se retire
 // depuis le ticket de Sorties (audit § 5.2, une seule porte). Statut « Annulé » ou « Incertain » seulement s'il y a lieu.
@@ -15,16 +15,18 @@
 // restent sur la fiche) ; Maps et Waze discrets, et seulement à partir de la veille. Consignes et dernière annonce
 // restent : elles servent hors ligne, à l'entrée.
 
-import { Button, Plate, StatusBadge, Text, ThemeScope, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   arrivalLabel,
   communicationLabels,
   directionsOpen,
   eventDaysLabels,
+  eventLastDayInstant,
   eventPageLabels,
   formatDayDate,
-  localDate,
   voteScreenTexts,
+  wholeEventEntered,
+  wholeEventReentry,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -38,7 +40,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
-import { jourJState } from "@/lib/jourj";
+import { jourJClosesAt, jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -74,12 +76,8 @@ function holderOf(kit: AccessKit, pseudo: string): QrHolder {
 }
 
 export default function JourJ() {
-  // L'artefact garde cet écran sombre en Sable aussi : la carte crème du QR y ressort au soleil comme de nuit.
-  return (
-    <ThemeScope theme="beton">
-      <JourJScreen />
-    </ThemeScope>
-  );
+  // Lot R7-0 (B1) : l'écran suit le thème choisi (Béton ou Sable) ; la carte du QR reste crème dans les deux (`QrPoster`).
+  return <JourJScreen />;
 }
 
 function JourJScreen() {
@@ -148,10 +146,13 @@ function JourJScreen() {
   const rotating = useRotatingCode(secret, kit?.pass.eventNo, kit?.pass.passId ?? "");
   const tz = kit?.event.timezone;
   const span = kit ? (kit.day ?? kit.event) : null;
-  const entered = Boolean(
-    kit?.checkedInAt && (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
-  );
-  const state = kit && span ? jourJState(span, now, entered, tz) : null;
+  // Lot R7-0 (accès sur plusieurs jours) : une entrée enregistrée vaut ce qu'elle couvre. « Par jour » (le jour de la
+  // candidature) : ce jour-là ; « tout l'événement » : jusqu'à la fin, le QR ne revient pas chaque matin à faire scanner.
+  const entered = Boolean(kit?.checkedInAt);
+  const wholeEntered = Boolean(entered && kit?.multiDay && !kit.day);
+  // Entré pour tout l'événement et pas fini : l'écran dit « Entré … » et garde le QR, en second, pour un contrôle.
+  const reentry = wholeEntered && span ? now < jourJClosesAt(span, tz) : false;
+  const state = kit && span ? (reentry ? "open" : jourJState(span, now, entered, tz)) : null;
   // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
   const showing = state !== null && state !== "closed";
   useBlockCapture(showing);
@@ -217,6 +218,21 @@ function JourJScreen() {
         <StatusBadge status="uncertain" />
       ) : null}
 
+      {reentry && kit.checkedInAt ? (
+        <Plate kind="note" style={styles.block} testID="jourj-entered">
+          <Text variant="posterM" color={c.plateInk}>
+            Entrée enregistrée
+          </Text>
+          <Text variant="body" color={c.plateMuted}>
+            {wholeEventEntered(
+              new Date(kit.checkedInAt),
+              eventLastDayInstant(new Date(kit.event.startsAt), new Date(kit.event.endsAt), tz),
+              tz,
+            )}
+          </Text>
+        </Plate>
+      ) : null}
+
       {state === "closed" ? (
         <Plate kind="note" style={styles.block}>
           <Text variant="posterM" color={c.plateInk}>
@@ -236,11 +252,16 @@ function JourJScreen() {
             rotating={rotating.code ? { secondsLeft: rotating.secondsLeft, number: rotating.number } : undefined}
             size={qrSize}
             label="QR d'accès à présenter à l'entrée"
-            say="Présente le QR code"
+            say={reentry ? "Seulement si on te le demande" : "Présente le QR code"}
             // Tour 2 (décision du coordinateur) : pas de O au centre pour l'instant. À taille d'écran égale, le QR avec logo
             // ne se relit plus au moindre flou (`lib/qr.test.ts`) ; à réessayer sur le scanner staff du Pixel et du Xiaomi.
             logo={false}
           />
+          {reentry ? (
+            <Muted variant="body" testID="jourj-reentry">
+              {wholeEventReentry}
+            </Muted>
+          ) : null}
           {rotating.code ? null : (
             <Notice testID="jourj-legacy">
               Ancien QR : ouvre l'appli une fois avec du réseau pour recevoir ton code qui change toutes les 20

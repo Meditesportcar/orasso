@@ -201,10 +201,16 @@ export type StampText = {
   short: string;
 };
 
-/** Les mots d'un tampon : le titre de l'événement, la date et le département. */
-export function stampText(stamp: Pick<PassportStamp, "kind" | "rare" | "event">, timeZone?: string): StampText {
+/**
+ * Les mots d'un tampon : le titre de l'événement, la date et le département. Lot R7-0 (Damien, 08/11) : la date est celle
+ * de l'entrée (le pointage, `stampedAt`), pas celle du début de l'événement : entré le deuxième jour, le tampon dit ce jour-là.
+ */
+export function stampText(
+  stamp: Pick<PassportStamp, "kind" | "rare" | "event" | "stampedAt">,
+  timeZone?: string,
+): StampText {
   const title = upper(stamp.rare ? stampKindLabels[stamp.kind] : stamp.event.title);
-  const w = wallTime(new Date(stamp.event.startsAt), timeZone);
+  const w = wallTime(new Date(stamp.stampedAt), timeZone);
   const dd = String(w.day).padStart(2, "0");
   const mm = String(w.month).padStart(2, "0");
   const dept = stamp.event.department ?? "";

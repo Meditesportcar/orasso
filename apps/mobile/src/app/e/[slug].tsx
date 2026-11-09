@@ -98,7 +98,7 @@ function Countdown({ event }: { event: Pick<EventCard, "startsAt" | "endsAt"> })
     <View style={[styles.cd, { backgroundColor: t.color.accent }]} testID="event-countdown">
       <View style={styles.cdIn}>
         <Text variant="numberNarrow" color={t.color.accentInk} style={styles.cdBig}>
-          {live ? L.live : nearCountdown(event.startsAt, now)}
+          {live ? L.live : nearCountdown(event, now)}
         </Text>
         <Text variant="label" color={t.color.accentInk} style={styles.cdSmall}>
           {live ? `Jusqu'à ${formatHour(event.endsAt)}` : `${day} · ${formatHour(event.startsAt)}`}

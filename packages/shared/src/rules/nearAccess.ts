@@ -2,6 +2,7 @@
 // proche au-dessus de la barre d'onglets, de J-7 (dès 0 h, heure de Paris) au lendemain de la fin ; l'appli l'adoptera à
 // la fusion (`features/sorties/model.ts` porte aujourd'hui sa propre copie).
 import { BUSINESS_TIMEZONE } from "../enums";
+import { eventCountdown } from "./eventProgress";
 import { calendarDaysBetween, wallTime } from "./time";
 
 export const NEAR_BEFORE_DAYS = 7;
@@ -34,12 +35,13 @@ export function nearestAccess<T extends NearItem>(items: readonly T[], now: Date
   return live[0] ?? null;
 }
 
-/** « J-6 », « Demain », « Aujourd'hui », « J+1 ». */
-export function nearCountdown(startsAt: string | Date, now: Date, timeZone = BUSINESS_TIMEZONE): string {
-  const days = calendarDaysBetween(now, new Date(startsAt), timeZone);
-  if (days === 0) return "Aujourd'hui";
-  if (days === 1) return "Demain";
-  return days > 0 ? `J-${days}` : `J+${-days}`;
+/** « J-6 », « Demain », « Aujourd'hui », « En cours · jour 2 sur 4 », « J+1 » (lot R7-0 : `eventCountdown`). */
+export function nearCountdown(
+  span: { startsAt: string | Date; endsAt: string | Date },
+  now: Date,
+  timeZone = BUSINESS_TIMEZONE,
+): string {
+  return eventCountdown(span, now, timeZone);
 }
 
 const WEEKDAYS = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];

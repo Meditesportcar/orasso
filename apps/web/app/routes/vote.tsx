@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import "../styles/passport.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -110,7 +111,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         {board.settled
           ? voteScreenTexts.results
           : board.open
-            ? audiencePrizeTexts.openUntil(new Date(board.closesAt))
+            ? audiencePrizeTexts.openUntil(new Date(board.closesAt), new Date(nowMs()))
             : audiencePrizeTexts.closed}
         {mine.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(mine.checkedInAt))}` : ""}
       </p>
@@ -122,7 +123,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
       )}
       {mine.votedFor && !board.settled && (
         <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-          {voteScreenTexts.saved(new Date(board.closesAt))}
+          {voteScreenTexts.saved(new Date(board.closesAt), new Date(nowMs()))}
         </p>
       )}
       {reason && (
@@ -194,6 +195,11 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           </h2>
           {!board.settled && board.open && <Chip>{audiencePrizeTexts.live}</Chip>}
         </div>
+        {board.rankingHidden && (
+          <p className="s-notice" data-testid="vote-ranking-hidden">
+            {voteScreenTexts.rankingAfterVote}
+          </p>
+        )}
         <p className="o-t-caption s-muted" data-testid="vote-total">
           {audiencePrizeTexts.votes(liveTotal)}
           {myEntry ? ` · ${audiencePrizeTexts.rank(myEntry.rank, board.vehicles)}` : ""}

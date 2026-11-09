@@ -116,9 +116,9 @@ const vote = (u: TestUser, applicationId: string, eid = eventId) =>
   call(u, "PUT", `/events/${eid}/audience-prize/vote`, { applicationId });
 
 /** Une connexion WebSocket simulée, abonnée à un canal. */
-function listen(channel: string) {
+function listen(channel: string, userId?: string) {
   const messages: { type: string; payload: Record<string, unknown> }[] = [];
-  const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+  const socket = { send: (data: string) => messages.push(JSON.parse(data)), userId };
   realtime.subscribe(channel, socket);
   return { messages, stop: () => realtime.unsubscribeAll(socket) };
 }
@@ -397,15 +397,11 @@ describe("prix du public", () => {
     const ok = await vote(p.kenji.u, p.lea.applicationId);
     expect(ok.status).toBe(200);
     expect(ok.json).toMatchObject({ canVote: true, votedFor: p.lea.applicationId, open: true });
-    expect(ws.messages.at(-1)).toMatchObject({
+    // Lot R7-0 : le canal ne porte que le total, jamais de classement (ni top 3).
+    expect(ws.messages.at(-1)).toEqual({
+      channel: `event:${eventId}:votes`,
       type: "votes.changed",
-      payload: {
-        total: 1,
-        top3: [
-          { applicationId: p.lea.applicationId, votes: 1, rank: 1 },
-          { applicationId: p.kenji.applicationId, votes: 0, rank: 2 },
-        ],
-      },
+      payload: { total: 1 },
     });
     ws.stop();
     // Une voix, une seule : elle se déplace (Lea vote pour Kenji, puis Julie aussi).
@@ -423,7 +419,11 @@ describe("prix du public", () => {
       ownApplicationIds: [p.kenji.applicationId],
       closesAt: ENDS.toISOString(),
     });
-    const board = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    // Lot R7-0 (D38) : pendant le vote, le classement n'est servi qu'à qui a voté.
+    const hidden = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    expect(hidden).toMatchObject({ open: true, rankingHidden: true, entries: [], winner: null, total: 3, vehicles: 2 });
+    const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    expect(board.rankingHidden).toBe(false);
     expect(board).toMatchObject({ open: true, settled: false, total: 3, vehicles: 2, winnerPoints: 50, winner: null });
     expect(board.entries).toMatchObject([
       { applicationId: p.kenji.applicationId, votes: 2, rank: 1, vehicleLabel: "BMW Série 3 E36", pseudo: "Kenji_66" },
@@ -432,13 +432,18 @@ describe("prix du public", () => {
     // Vague R4, après fusion : une photo sans décision de plaque ne sort pas du garage ; floutée, oui.
     expect(board.entries[0].photoUrl).toBeNull();
     await blurPlatesOf(p.kenji.u.id);
-    expect((await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0].photoUrl).toContain(
+    expect((await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0].photoUrl).toContain(
       "test/",
     );
     expect((await call(null, "GET", `/events/${eventId}/audience-prize`)).status).toBe(401);
 
-    // Fin de l'événement : vote clos.
+    // Fin de l'événement : vote clos, et le classement est servi à tout le monde (même qui n'a pas voté ni pu voter).
     clock.set(ENDS);
+    for (const who of [p.marc.u, p.nina.u]) {
+      const after = (await call(who, "GET", `/events/${eventId}/audience-prize`)).json;
+      expect(after.rankingHidden).toBe(false);
+      expect(after.entries).toHaveLength(2);
+    }
     const closed = await vote(p.kenji.u, p.lea.applicationId);
     expect(closed.status).toBe(409);
     expect(closed.json.error.code).toBe("vote_closed");
@@ -476,7 +481,9 @@ describe("prix du public", () => {
     expect(ids.size).toBe(151);
     // Aucune voix dans la grille (pas de fuite du classement) ; le classement garde ses 100 lignes.
     expect(Object.keys(first.items[0]).sort()).toEqual(["applicationId", "photoUrl", "pseudo", "vehicleLabel"]);
-    const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    // Le classement n'est servi qu'après un vote (lot R7-0) : Lea (pointée) vote d'abord.
+    expect((await vote(p.lea.u, first.items[0].applicationId)).status).toBe(200);
+    const board = (await call(p.lea.u, "GET", `/events/${eventId}/audience-prize`)).json;
     expect(board.entries).toHaveLength(100);
     expect(board.vehicles).toBe(151);
     // Voter pour une voiture au-delà de la centième de la grille est possible (la 101e pointée).
@@ -492,7 +499,7 @@ describe("prix du public", () => {
     clock.set(paris(10, 17, 20));
     await vote(p.nina.u, p.lea.applicationId);
     await vote(p.lea.u, p.kenji.applicationId);
-    const board = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    const board = (await call(p.nina.u, "GET", `/events/${eventId}/audience-prize`)).json;
     expect(board.entries.map((e: { applicationId: string; rank: number }) => [e.applicationId, e.rank])).toEqual([
       [p.kenji.applicationId, 1],
       [p.lea.applicationId, 2],
@@ -766,7 +773,7 @@ describe("scénario avec l'horloge simulée", () => {
     await vote(p.kenji.u, p.lea.applicationId);
     await vote(p.nina.u, p.lea.applicationId);
     await vote(p.lea.u, p.nina.applicationId);
-    expect((await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0]).toMatchObject({
+    expect((await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0]).toMatchObject({
       applicationId: p.lea.applicationId,
       votes: 2,
       rank: 1,

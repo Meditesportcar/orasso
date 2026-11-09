@@ -13,6 +13,7 @@ export * from "./dateYear";
 export * from "./departmentSearch";
 export * from "./eventDays";
 export * from "./eventInvites";
+export * from "./eventProgress";
 export * from "./explore";
 export * from "./follows";
 export * from "./garage";

@@ -40,6 +40,7 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
+import { activeMembership } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -205,14 +206,26 @@ const refusal = {
   not_checked_in: () => new AppError(403, "not_checked_in", audiencePrizeTexts.errors.not_checked_in),
 };
 
-/** Classement réduit diffusé (`votes.changed`). */
+/** Total diffusé (`votes.changed`) : aucun classement sur le canal (lot R7-0), les clients relisent la route du classement. */
 async function publishNow(eventId: string) {
-  const { ranked, total } = await ranking(db, eventId);
-  const payload: AudienceVotesChanged = {
-    total,
-    top3: ranked.slice(0, 3).map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
-  };
+  const { total } = await ranking(db, eventId);
+  const payload: AudienceVotesChanged = { total };
   realtime.publish(`event:${eventId}:votes`, "votes.changed", payload);
+}
+
+/**
+ * Qui voit le classement (lot R7-0, D38 de Damien) : pendant le vote, seulement qui a voté (et l'équipe organisatrice,
+ * qui le suit dans sa console) ; à la clôture (fin de l'événement) ou au règlement, tout le monde, y compris qui n'a pas
+ * pu voter (pas entré).
+ */
+async function canSeeRanking(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
+  if (event.settledAt || now() >= event.endsAt) return true;
+  const vote = await ex.query.audienceVotes.findFirst({
+    where: and(eq(audienceVotes.eventId, event.id), eq(audienceVotes.voterUserId, v.user.id)),
+    columns: { applicationId: true },
+  });
+  if (vote) return true;
+  return Boolean(await activeMembership(v.user.id, event.structureId));
 }
 
 /** Diffusions regroupées : au plus une par seconde et par événement (la dernière part en fin de seconde). */
@@ -333,18 +346,21 @@ export const audiencePrizeService = {
   async board(v: Viewer, eventId: string): Promise<AudiencePrizeBoard> {
     const event = await visibleEvent(eventId, v);
     const { entered, ranked, total } = await ranking(db, eventId);
+    const visible = await canSeeRanking(db, event, v);
     const winnerPoints = pointsForWinner({ "points.audience_prize": await settingsStore.get("points.audience_prize") });
     const results = await db.query.audiencePrizeResults.findMany({
       where: eq(audiencePrizeResults.eventId, eventId),
       orderBy: [asc(audiencePrizeResults.rank)],
     });
     const settled = Boolean(event.settledAt) && results.length > 0;
-    const list = settled
-      ? await entries(
-          db,
-          results.map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
-        )
-      : await entries(db, ranked.slice(0, BOARD_LIMIT));
+    const list = !visible
+      ? []
+      : settled
+        ? await entries(
+            db,
+            results.map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
+          )
+        : await entries(db, ranked.slice(0, BOARD_LIMIT));
     const winnerRow = results.find((r) => r.winner);
     return {
       eventId,
@@ -354,6 +370,7 @@ export const audiencePrizeService = {
       total,
       vehicles: entered.length,
       winnerPoints,
+      rankingHidden: !visible,
       entries: list,
       winner: winnerRow ? (list.find((e) => e.applicationId === winnerRow.applicationId) ?? null) : null,
     };

@@ -23,6 +23,7 @@ import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Num, PosterSurface, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
+import { now as orassoNow } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useChannel } from "@/lib/realtime";
@@ -39,7 +40,7 @@ import {
   type LiveBoard,
   type LoadTracker,
 } from "./liveBoard";
-import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
 import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -170,20 +171,20 @@ export function VoteScreen() {
       gates.current?.list.dispose();
     },
     [],
-  ); // Le total et le top 3 du message, reportés sur le classement chargé.
+  ); // Le total du message, reporté sur le classement chargé (le classement lui-même vient de la route, lot R7-0).
   const shown: AudiencePrizeBoard | null = board.data
     ? {
         ...board.data,
         total: live ? Math.max(live.total, 0) : board.data.total,
-        entries: live ? applyTop3(board.data.entries, live.top3) : board.data.entries,
       }
     : null;
 
   const view = voteView(board.data, mine.data);
   const closesAt = mine.data ? new Date(mine.data.closesAt) : null;
-  const facts = [title, view === "vote" && closesAt ? audiencePrizeTexts.openUntil(closesAt) : null]
-    .filter(Boolean)
-    .join(" · ");
+  // Lot R7-0 : avec la date, « vote ouvert jusqu'au mercredi 11 novembre, 23 h » ne tient plus sur la ligne de faits de
+  // l'en-tête (une ligne, jamais coupée) : l'en-tête ne garde que le titre, la fin du vote passe dans l'affiche.
+  const facts = title;
+  const openUntilText = view === "vote" && closesAt ? audiencePrizeTexts.openUntil(closesAt, orassoNow()) : null;
 
   const vote = useCallback(
     async (entry: AudienceCandidate) => {
@@ -198,13 +199,15 @@ export function VoteScreen() {
         setChanging(false);
         if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
         scheduleReload();
+        // Lot R7-0 : le classement n'est servi qu'après le vote : on le relit tout de suite, sans attendre l'intervalle.
+        void board.reload();
       } catch (e) {
         setError(errorMessage(e));
       } finally {
         setBusy(null);
       }
     },
-    [id, mine.setData, mineOrder, scheduleReload],
+    [id, mine.setData, mineOrder, scheduleReload, board.reload],
   );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
@@ -271,6 +274,11 @@ export function VoteScreen() {
             <Text variant="caption" color={c.posterMuted}>
               {audiencePrizeTexts.rules(board.data.winnerPoints)}
             </Text>
+            {openUntilText ? (
+              <Text variant="caption" color={c.posterMuted} testID="vote-open-until">
+                {openUntilText}
+              </Text>
+            ) : null}
           </PosterSurface>
           <Grid
             entries={gridOrder(candidates.data ?? [])}
@@ -279,11 +287,18 @@ export function VoteScreen() {
             busy={busy}
             onPick={setPick}
           />
+          {board.data.rankingHidden ? (
+            <Muted variant="body" testID="vote-ranking-hidden">
+              {voteScreenTexts.rankingAfterVote}
+            </Muted>
+          ) : null}
         </>
       ) : null}
       {view === "vote" && mine.data?.votedFor && !changing ? (
         <>
-          {saved && closesAt ? <Notice testID="vote-saved">{voteScreenTexts.saved(closesAt)}</Notice> : null}
+          {saved && closesAt ? (
+            <Notice testID="vote-saved">{voteScreenTexts.saved(closesAt, orassoNow())}</Notice>
+          ) : null}
           <SmButton kind="s" icon="undo" onPress={() => setChanging(true)} testID="vote-change">
             Changer mon vote
           </SmButton>
@@ -292,7 +307,9 @@ export function VoteScreen() {
 
       {view === "closed" ? <Notice>{voteScreenTexts.closedNote}</Notice> : null}
 
-      {shown && ((view === "vote" && mine.data?.votedFor && !changing) || view === "closed" || view === "settled") ? (
+      {shown &&
+      !shown.rankingHidden &&
+      ((view === "vote" && mine.data?.votedFor && !changing) || view === "closed" || view === "settled") ? (
         <Ranking board={shown} mine={mine.data} settled={view === "settled"} />
       ) : null}
     </FlowScreen>

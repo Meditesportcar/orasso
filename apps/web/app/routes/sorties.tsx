@@ -14,8 +14,10 @@ import {
   crewLabels,
   type EventPublic,
   type EventWeather,
+  eventDayCount,
   eventFormatLabels,
   eventInviteLabels,
+  eventLastDayInstant,
   gradeLabels,
   invitationLabels,
   type MyApplication,
@@ -37,6 +39,8 @@ import {
   ticketIsUpcoming,
   type VehicleFull,
   voteScreenTexts,
+  wholeEventEntered,
+  wholeEventReentry,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
@@ -367,10 +371,21 @@ function ApplicationCard({
               <Qr payload={pass.payload} label={`QR d'inscription : ${app.event.title}`} />
             )}
           </div>
-          <p className="o-t-caption s-muted s-center">
-            Présente ce QR à l'entrée. {app.zone ? `Zone ${app.zone.code} · ${app.zone.name}.` : ""}
-            {app.checkedInAt ? ` Entrée enregistrée à ${formatDateTime(app.checkedInAt)}.` : ""}
-          </p>
+          {app.checkedInAt && !app.day && eventDayCount(app.event) > 1 ? (
+            // Lot R7-0 : accès « tout l'événement » déjà pointé : l'entrée vaut jusqu'à la fin, le QR reste pour un contrôle.
+            <p className="o-t-caption s-muted s-center" data-testid="pass-entered">
+              {wholeEventEntered(
+                new Date(app.checkedInAt),
+                eventLastDayInstant(new Date(app.event.startsAt), new Date(app.event.endsAt)),
+              )}
+              . {wholeEventReentry} {app.zone ? `Zone ${app.zone.code} · ${app.zone.name}.` : ""}
+            </p>
+          ) : (
+            <p className="o-t-caption s-muted s-center">
+              Présente ce QR à l'entrée. {app.zone ? `Zone ${app.zone.code} · ${app.zone.name}.` : ""}
+              {app.checkedInAt ? ` Entrée enregistrée à ${formatDateTime(app.checkedInAt)}.` : ""}
+            </p>
+          )}
         </>
       )}
 

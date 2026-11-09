@@ -52,7 +52,7 @@ export function MediaHome() {
           <HeroCard
             posterUrl={report.posterUrl}
             startsAt={report.event.startsAt}
-            countdown={dayCountdown(report.event.startsAt, now)}
+            countdown={dayCountdown(report.event, now)}
             hourLabel={homeProfileLabels.openingAt(formatHour(report.event.startsAt))}
             title={report.event.title}
             tags={

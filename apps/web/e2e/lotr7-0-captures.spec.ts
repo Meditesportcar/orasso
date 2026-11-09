@@ -21,6 +21,17 @@ async function eventId(): Promise<string> {
   return res.data.id;
 }
 
+/** L'écran « Mon accès » se rend par l'identifiant de la candidature, pas par celui de l'événement. */
+async function applicationId(email: string): Promise<string> {
+  const cookie = await login(email);
+  const res = await apiCall<{ id: string; event: { slug: string } }[]>(
+    cookie,
+    "GET",
+    "/me/applications?scope=upcoming",
+  );
+  return res.data.find((a) => a.event.slug === SLUG)?.id ?? "";
+}
+
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
   if (await skip.isVisible().catch(() => false))
@@ -65,6 +76,7 @@ async function snap(page: Page, path: string, name: string, full = false) {
 test("captures de l'appli", async ({ browser }) => {
   test.skip(!APP, "Appli : lancer avec APP_URL");
   const id = await eventId();
+  const appId = await applicationId("damien@orasso.local");
   const variants: [number, number][] = [
     [384, 1],
     [390, 1],
@@ -78,7 +90,7 @@ test("captures de l'appli", async ({ browser }) => {
         ["/accueil", "accueil"],
         ["/sorties", "sorties"],
         [`/e/${SLUG}`, "fiche"],
-        [`/jour-j/${id}`, "jour-j"],
+        [`/jour-j/${appId}`, "jour-j"],
         ["/mon-passeport", "passeport"],
         [`/vote/${id}`, "vote"],
       ] as const) {
