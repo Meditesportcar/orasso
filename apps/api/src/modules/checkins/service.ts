@@ -359,7 +359,7 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   if (!applicationIds.length) return;
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
-    announceCandidatesChanged(eventId);
+    await announceCandidatesChanged(eventId);
     // Lot R4b, tour 2 : un pointage change le plateau d'un événement terminé (rattrapage, envoi différé).
     lineupService.changed(eventId);
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));

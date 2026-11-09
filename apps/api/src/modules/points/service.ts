@@ -43,11 +43,12 @@ import type { Viewer } from "../../lib/session";
 import { getPointsConfig } from "../../lib/settings";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { reportService } from "../after-event/report";
-import { announceCandidatesChanged, audiencePrizeService } from "../audience-prize/service";
+import { announceCandidatesChanged } from "../audience-prize/service";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
 import { staffService } from "../staff/service";
+import { votesSettle } from "../votes/settle";
 
 type SeasonRow = typeof seasons.$inferSelect;
 type EntryRow = typeof pointEntries.$inferSelect;
@@ -309,8 +310,9 @@ export const pointsService = {
       }
       // Lot 49 : prix du public (résultats ; au gagnant : points, compteur du véhicule, notification), puis tampons du
       // passeport (rattrapage des tampons ordinaires, rares : première sortie, 10e événement, pleine lune, prix du public).
-      const winner = await audiencePrizeService.settle(tx, event, (entry) => award(tx, season, entry));
-      if (winner?.awarded) users.add(winner.userId);
+      // Lot R7l1 : le règlement porte sur chaque vote (podium 15 / 10 / 5, trophées) ; le tampon rare va au premier de « Toutes catégories ».
+      const { awardedUserIds, winner } = await votesSettle.settleEvent(tx, event, (entry) => award(tx, season, entry));
+      for (const id of awardedUserIds) users.add(id);
       // Point de reprise, comme le bilan : une erreur des tampons n'annule jamais les points.
       await passportService.safely(tx, "règlement", (sp) => passportService.onSettled(sp, event, winner));
       await tx.update(events).set({ settledAt: t }).where(eq(events.id, eventId));

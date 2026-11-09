@@ -39,6 +39,8 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { isVerifiedStaff } from "../passport/presence";
 import { passportService } from "../passport/service";
+import { votesService } from "../votes/service";
+import { projectedPodiumPoints } from "../votes/settle";
 
 /** Le lendemain de la fin, à 10 h (heure de l'événement). */
 export function recapReadyAt(event: Pick<EventRow, "endsAt" | "timezone">): Date {
@@ -100,10 +102,12 @@ export const recapService = {
       : null;
 
     const prize = await audiencePrizeService.rankOf(eventId, v.user.id);
-    const settledWinner = event.settledAt
+    // Le prix du public d'avant est le vote « Toutes catégories » ; les votes à thème ont leur trophée et leurs points.
+    const prizeVote = event.settledAt ? await votesService.allCategoriesOf(eventId) : null;
+    const settledWinner = prizeVote
       ? ((
           await db.query.audiencePrizeResults.findFirst({
-            where: and(eq(audiencePrizeResults.eventId, eventId), eq(audiencePrizeResults.winner, true)),
+            where: and(eq(audiencePrizeResults.voteId, prizeVote.id), eq(audiencePrizeResults.winner, true)),
           })
         )?.applicationId ?? null)
       : null;
@@ -133,9 +137,10 @@ export const recapService = {
         detail.push({ kind: "participation", points: cfg.participation, label: pointKindLabels.participation });
       }
       if (me.staffPresent && cfg.staff) detail.push({ kind: "staff", points: cfg.staff, label: pointKindLabels.staff });
-      const prizePoints = await settingsStore.get("points.audience_prize");
-      if (prize.projectedWinner && prizePoints > 0) {
-        detail.push({ kind: "audience_prize", points: prizePoints, label: pointKindLabels.audience_prize });
+      // Podium des votes (lot R7l1) : le meilleur rang de chacune de mes voitures, 15 / 10 / 5.
+      const podiumPoints = await projectedPodiumPoints(db, event, v.user.id);
+      if (podiumPoints > 0) {
+        detail.push({ kind: "vote_podium", points: podiumPoints, label: pointKindLabels.vote_podium });
       }
     }
     const total = detail.reduce((n, d) => n + d.points, 0);

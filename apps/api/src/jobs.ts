@@ -30,6 +30,7 @@ import { uploadsService } from "./modules/uploads/service";
 import { certificationService } from "./modules/vehicles/certification";
 import { retryRemove } from "./modules/vehicles/photos-blur";
 import { plateTransferService } from "./modules/vehicles/plate-transfer";
+import { votesLifecycle } from "./modules/votes/lifecycle";
 import { weatherService } from "./modules/weather/service";
 
 // Tâches planifiées dans PostgreSQL (schéma « pgboss », créé et mis à jour par pg-boss lui-même).
@@ -94,6 +95,10 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.poster-render": (d) => posterService.renderJob(d.eventId ?? ""),
   // Lot 49 : « Ton récap est arrivé » aux pointés et billets scannés (le service revérifie l'instant prévu).
   "event.recap": (d) => recapService.notifyReady({ eventId: d.eventId ?? "", at: d.at ?? "" }),
+  // Lot R7l1 : ouverture et clôture des votes (le service revérifie l'état en base) ; secours chaque minute.
+  "votes.open": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
+  "votes.close": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
+  "votes.sweep": () => votesLifecycle.sweep(),
 };
 
 /**
@@ -148,6 +153,8 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // Lot 33 : clôture des demandes d'aide (chaque heure), newsletter par lots de 200 (chaque minute).
     await boss.schedule("assistance.auto-close", "45 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("newsletter.send", "* * * * *", null, { tz: "Europe/Paris" });
+    // Lot R7l1 : votes à l'heure fixée ou à clore, rattrapés chaque minute.
+    await boss.schedule("votes.sweep", "* * * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {

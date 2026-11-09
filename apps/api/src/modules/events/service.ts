@@ -79,6 +79,7 @@ import { presenceService } from "../presence/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
 import { vehiclesRepo } from "../vehicles/repo";
+import { ensureAllCategories } from "../votes/context";
 import { arrivalColumns, arrivalsOf, assertArrivals } from "./arrivals";
 import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
@@ -470,6 +471,8 @@ export const eventsService = {
         })
         .returning();
       if (!row) throw new Error("Création de l'événement impossible");
+      // Lot R7l1 : le vote « Toutes catégories » est présent d'office (retirable ensuite par l'organisateur).
+      await ensureAllCategories(tx, row);
       return row;
     });
     // Lot 47 : affiche générée rendue après l'enregistrement (hors transaction : le rendu prend une seconde).
