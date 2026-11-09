@@ -135,7 +135,7 @@ async function checkTab(page: Page, title: string | null, oneLine = true) {
   await expect(
     page
       .getByRole("button", { name: "Boîte", exact: true })
-      .or(page.getByRole("button", { name: "Activité", exact: true }))
+      .or(page.getByRole("button", { name: /^Activité/ }))
       .first(),
   ).toBeVisible();
   if (title) {
@@ -257,7 +257,10 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     // La Boîte, en haut à droite : hors de la barre, notifications dedans, ✕ pour revenir.
     await page.goto("/accueil");
     await afterOpening(page);
-    await page.getByRole("button", { name: "Activité", exact: true }).first().click();
+    await page
+      .getByRole("button", { name: /^Activité/ })
+      .first()
+      .click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
     await expect(page.getByTestId("inbox-all")).toBeVisible();
     // Pas de barre d'onglets ici : seuls les trois segments de la feuille Boîte (Tout, Messages, Demandes, lot C2a).
