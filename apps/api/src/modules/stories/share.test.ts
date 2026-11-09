@@ -329,7 +329,7 @@ describe("« Ajouter à ma story »", () => {
     // Kenji n'est pas membre de la structure : refusé avant même de regarder la story (403).
     expect((await share(w.kenji, s.id, withBody)).status).toBe(403);
     // Une structure non identifiée.
-    const otherOwner = await signUp("Autre_66");
+    const otherOwner = await signUp("Autre_66", { twoFactor: true });
     const other = await createStructure(otherOwner.id);
     const res = await share(otherOwner, s.id, { asStructureId: other.id });
     expect(res.status).toBe(403);
