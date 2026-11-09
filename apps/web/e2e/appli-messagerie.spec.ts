@@ -124,7 +124,7 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, ta voiture est superbe !" });
     // L'onglet Boîte (l'adresse `/boite` existe aussi dans les casquettes Organisateur et Prestataire).
     await page.goto("/accueil");
-    await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+    await page.getByRole("button", { name: "Activité", exact: true }).first().click();
     // Lot C2a : la feuille Boîte s'ouvre sur « Tout » (non lus) ; la conversation lue est dans « Messages ».
     await page.getByTestId("inbox-messages").click();
     await expect(page.getByTestId("conversation-row").filter({ hasText: b })).toBeVisible({ timeout: 30_000 });
