@@ -163,7 +163,7 @@ test("affiche à partager : story et post, zones masquées en story, zones à fl
   const vehicle = vehicles.data.find((v) => v.status === "active");
   await open(page);
   await signIn(page, POSTER_EMAIL);
-  await go(page, `/vehicule/${vehicle?.id}/partager`);
+  await go(page, `/vehicule/${vehicle?.id}/affiche`);
   await expect(page.getByText("Affiche à partager", { exact: true })).toBeVisible({ timeout: 30_000 });
   const img = page.getByTestId("share-preview").locator("img");
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalHeight), { timeout: 60_000 }).toBe(1920);
@@ -297,7 +297,7 @@ test("tour 2 : une plaque détectée sur l'affiche se masque (rendu relancé), p
   });
   await open(page);
   await signIn(page, POSTER_EMAIL);
-  await go(page, `/vehicule/${vehicle?.id}/partager`);
+  await go(page, `/vehicule/${vehicle?.id}/affiche`);
   await expect(page.getByTestId("share-plate-check")).toContainText("Une plaque semble lisible", { timeout: 60_000 });
   // Le partage normal est retiré ; « La masquer » est le bouton principal, « Partager quand même » est secondaire.
   await expect(page.getByTestId("share-story")).toBeHidden();
@@ -364,7 +364,7 @@ test("tour 3 : vérification de plaque interrompue par un changement de style, r
   });
   await open(page);
   await signIn(page, POSTER_EMAIL);
-  await go(page, `/vehicule/${vehicle?.id}/partager`);
+  await go(page, `/vehicule/${vehicle?.id}/affiche`);
   await expect(page.getByTestId("share-plate-check")).toContainText("Vérification", { timeout: 60_000 });
   await expect(page.getByTestId("share-story")).toBeDisabled();
   // Changement de style pendant la vérification, puis retour sur Nuit avant la fin.
@@ -393,7 +393,7 @@ test("tour 4 : vérification de plaque trop longue (8 s), « Vérifier à nouvea
   mkdirSync(dir, { recursive: true });
   for (const theme of ["beton", "sable"] as const) {
     await page.evaluate((t) => localStorage.setItem("orasso.theme", t), theme);
-    await go(page, `/vehicule/${vehicle?.id}/partager`);
+    await go(page, `/vehicule/${vehicle?.id}/affiche`);
     await expect(page.getByTestId("share-plate-check")).toContainText("Vérification", { timeout: 60_000 });
     await expect(page.getByTestId("share-story")).toBeDisabled();
     await expect(page.getByTestId("share-plate-check")).toContainText("n'a pas pu être vérifiée", {

@@ -30,7 +30,9 @@ for (const [label, width] of [
 ] as const) {
   test(`site ${label} : événement → feuille → fichier 9:16 signé téléchargé`, async ({ browser }) => {
     const cookie = await login("damien@orasso.local");
-    const events = (await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")).data;
+    const events = (
+      await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+    ).data;
     const lydia = events.items.find((e) => e.title.includes("Lydia"));
     const ctx = await browser.newContext({ viewport: { width, height: 900 }, acceptDownloads: true });
     const page = await ctx.newPage();
@@ -39,7 +41,8 @@ for (const [label, width] of [
     await page.goto(`/e/${lydia?.slug}`);
     await page.getByTestId("event-share").click();
     await expect(page.getByTestId("share-sheet")).toBeVisible({ timeout: 30_000 });
-    for (const d of ["story", "feed", "message", "external"]) await expect(page.getByTestId(`share-dest-${d}`)).toBeVisible();
+    for (const d of ["story", "feed", "message", "external"])
+      await expect(page.getByTestId(`share-dest-${d}`)).toBeVisible();
     await page.screenshot({ path: `${DIR}/site-feuille-evenement-${label}.png` });
     await page.getByTestId("share-dest-external").click();
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("share-file-story").click()]);
@@ -52,7 +55,9 @@ for (const [label, width] of [
 
 test("site : composer une story de carte à la souris, publier, la carte est touchable", async ({ browser }) => {
   const cookie = await login("damien@orasso.local");
-  const events = (await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")).data;
+  const events = (
+    await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+  ).data;
   const lydia = events.items.find((e) => e.title.includes("Lydia"));
   const before = (await apiCall<{ stories: unknown[] }>(cookie, "GET", "/me/stories")).data.stories.length;
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -76,7 +81,9 @@ test("site : composer une story de carte à la souris, publier, la carte est tou
   await page.screenshot({ path: `${DIR}/site-composeur-evenement-1280.png` });
   await page.getByTestId("share-story-publish").click();
   await expect
-    .poll(async () => (await apiCall<{ stories: unknown[] }>(cookie, "GET", "/me/stories")).data.stories.length, { timeout: 60_000 })
+    .poll(async () => (await apiCall<{ stories: unknown[] }>(cookie, "GET", "/me/stories")).data.stories.length, {
+      timeout: 60_000,
+    })
     .toBe(before + 1);
   const me = (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data;
   await page.goto(`/app/story/${encodeURIComponent(`u:${me.user.id}`)}`);

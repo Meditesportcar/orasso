@@ -4,7 +4,7 @@ import { apiCall, login, SEED_PASSWORD } from "./helpers";
 
 // Lot R7j (D38), côté appli (version web compilée de recette, `APP_URL`) : les souvenirs « il y a un an… ». Le seed `memories`
 // pose, le jour où on le lance, un événement et un tampon d'il y a un an pour Damien_66. Vérifie : le bloc « Souvenirs » de
-// l'Accueil, la page du souvenir (affiche ou photo masquée, tampon, pas de « En story » : R7f4), la carte du Fil, un compte sans
+// l'Accueil, la page du souvenir (affiche ou photo masquée, tampon, « En story » (R7f4)), la carte du Fil, un compte sans
 // tampon (rien, et « pas disponible »), puis, avec l'horloge simulée (+1 jour), le bloc absent le lendemain.
 const APP = process.env.APP_URL;
 test.skip(!APP, "Appli : lancer avec APP_URL");
@@ -72,7 +72,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
       await expect(home).toBeVisible({ timeout: 30_000 });
       await expect(home).toContainText("Il y a un an, jour pour jour");
       await expect(home).toContainText(`Tu étais là : ${memory.title}`);
-      await expect(page.getByText("En story")).toHaveCount(0);
+      await expect(home.getByTestId("memory-share")).toBeVisible();
       // La carte suit la maquette : le tampon, « Le plateau » en secondaire, la ligne de ma voiture quand elle y était.
       await expect(home.getByTestId("memory-photo-stamp")).toBeVisible();
       await expect(home.getByTestId("home-memory-plateau")).toBeVisible();
@@ -99,7 +99,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
       await expect(page.getByTestId("memory-eyebrow")).toHaveText("Il y a un an, jour pour jour");
       expect(await cutWords(page, "memory-title"), `titre de la page à la police ${scale}`).toEqual([]);
       await insideViewport(page, "memory-event");
-      await expect(page.getByText("En story")).toHaveCount(0);
+      await expect(page.getByTestId("memory-share")).toBeVisible();
       if (scale === 1) {
         await page.goto("/fil");
         await afterOpening(page);

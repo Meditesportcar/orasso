@@ -167,7 +167,7 @@ for (const theme of THEMES) {
       (window as unknown as { __orassoFakePlates: unknown }).__orassoFakePlates = f;
     }, fakes);
     await signIn(page, "kenji@orasso.local");
-    await page.goto(`/vehicule/${vehicle?.id}/partager`);
+    await page.goto(`/vehicule/${vehicle?.id}/affiche`);
     await afterOpening(page);
     for (const style of ["Nuit", "Sable", "Néon"]) {
       await page.getByTestId("share-styles").getByText(style, { exact: true }).click();
@@ -187,7 +187,7 @@ for (const theme of THEMES) {
     });
     const p = second.page;
     await signIn(p, "kenji@orasso.local");
-    await p.goto(`/vehicule/${vehicle?.id}/partager`);
+    await p.goto(`/vehicule/${vehicle?.id}/affiche`);
     await afterOpening(p);
     for (const style of ["Nuit", "Sable", "Néon"]) {
       await p.getByTestId("share-styles").getByText(style, { exact: true }).click();

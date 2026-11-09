@@ -93,7 +93,11 @@ export const exportService = {
   ): Promise<{ data: Buffer; type: string }> {
     rateLimit("shareExport", v.user.id);
     const c = await loadLinked(v, type, id);
-    if (part === "card") return { data: await renderLinkedCard(c), type: "image/png" };
+    if (part === "card") {
+      // WebP à fond transparent : dix fois plus léger que le PNG pour un aperçu qui se charge à chaque ouverture.
+      const png = await renderLinkedCard(c);
+      return { data: await sharp(png).webp({ quality: 88, alphaQuality: 90 }).toBuffer(), type: "image/webp" };
+    }
     const ground = await renderLinkedGround(c, STORY_H);
     return { data: await sharp(ground).webp({ quality: 70 }).toBuffer(), type: "image/webp" };
   },

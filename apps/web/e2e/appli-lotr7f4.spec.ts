@@ -64,7 +64,9 @@ test("une voiture du garage : feuille, carte sur fond 9:16, publication, carte t
   // Une voiture à photo montrable : l'API le dit (`destinations.story`).
   let vehicleId = "";
   for (const v of list) {
-    const info = (await apiCall<{ destinations: { story: boolean } }>(cookie, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).data;
+    const info = (
+      await apiCall<{ destinations: { story: boolean } }>(cookie, "GET", `/me/share/info?type=vehicle&id=${v.id}`)
+    ).data;
     if (info.destinations.story) {
       vehicleId = v.id;
       break;
@@ -77,14 +79,22 @@ test("une voiture du garage : feuille, carte sur fond 9:16, publication, carte t
     await page.goto(`/vehicule/${vehicleId}/partager`);
     await afterOpening(page);
     await expect(page.getByTestId("share-sheet")).toBeVisible({ timeout: 30_000 });
-    for (const d of ["story", "feed", "message", "external"]) await expect(page.getByTestId(`share-dest-${d}`)).toBeVisible();
+    for (const d of ["story", "feed", "message", "external"])
+      await expect(page.getByTestId(`share-dest-${d}`)).toBeVisible();
     await page.screenshot({ path: `${DIR}/appli-feuille-voiture-${THEME}-${scale}.png` });
     if (scale === 1) {
       await page.getByTestId("share-dest-story").click();
       await expect(page.getByTestId("share-story-composer")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("share-story-card")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("share-story-link")).toContainText("Voir la voiture");
-      await page.waitForTimeout(1500);
+      await page.waitForFunction(
+        () => {
+          const img = document.querySelector<HTMLImageElement>('[data-testid="share-story-card"] img');
+          return Boolean(img?.complete && img.naturalWidth > 0);
+        },
+        null,
+        { timeout: 60_000 },
+      );
       await page.screenshot({ path: `${DIR}/appli-composeur-voiture-${THEME}.png` });
       await page.getByTestId("share-story-publish").click();
       await expect.poll(async () => (await myStories(cookie)).length, { timeout: 60_000 }).toBe(before + 1);
@@ -104,9 +114,12 @@ test("une voiture du garage : feuille, carte sur fond 9:16, publication, carte t
   await expect(page).toHaveURL(/vehicule\//, { timeout: 30_000 });
   await ctx.close();
   // Ma story hors crew sort en fichier signé (9:16).
-  const res = await fetch(`${process.env.API_URL ?? `http://localhost:${process.env.API_PORT ?? 4451}`}/api/stories/${mine?.id}/export`, {
-    headers: { cookie },
-  });
+  const res = await fetch(
+    `${process.env.API_URL ?? `http://localhost:${process.env.API_PORT ?? 4451}`}/api/stories/${mine?.id}/export`,
+    {
+      headers: { cookie },
+    },
+  );
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toBe("image/jpeg");
 });
@@ -115,7 +128,9 @@ test("un événement : compte public = organisateur identifié ; compte privé =
   browser,
 }) => {
   const cookie = await login("damien@orasso.local");
-  const events = (await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")).data;
+  const events = (
+    await apiCall<{ items: { id: string; slug: string; title: string }[] }>(cookie, "GET", "/events?q=Lydia")
+  ).data;
   const lydia = events.items.find((e) => e.title.includes("Lydia"));
   expect(lydia).toBeTruthy();
   for (const [email, notified] of [
@@ -137,7 +152,9 @@ test("un événement : compte public = organisateur identifié ; compte privé =
     // Pas de bouton principal grisé sans explication : l'audience est choisie d'office.
     await page.getByTestId("share-story-publish").click();
     const c = await login(email);
-    await expect.poll(async () => (await myStories(c)).some((s) => s.linked?.type === "event"), { timeout: 60_000 }).toBe(true);
+    await expect
+      .poll(async () => (await myStories(c)).some((s) => s.linked?.type === "event"), { timeout: 60_000 })
+      .toBe(true);
     await ctx.close();
   }
 });
