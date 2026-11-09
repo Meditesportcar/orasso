@@ -15,6 +15,11 @@ export type ScrollAssist = {
   top: () => void;
   /** Lot R7e2, tour 2 : prévient à chaque défilement de la page (le Fil libère les photos des cartes loin de l'écran). Rend la désinscription. */
   watchScroll: (listener: () => void) => () => void;
+  /**
+   * Lot R7k2, tour 2 : la zone de la page réellement visible, en positions à l'écran (haut = sous la bande ORASSO, bas =
+   * au-dessus de la barre d'onglets flottante). Sert à ne compter une publicité que si elle n'est pas cachée dessous.
+   */
+  visibleArea: (read: (top: number, bottom: number) => void) => void;
 };
 
 export const ScrollAssistContext = createContext<ScrollAssist | null>(null);

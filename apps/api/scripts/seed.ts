@@ -39,6 +39,7 @@ import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
 import { seedOrgaV2 } from "./seed/orga-v2";
+import { seedPartnerships } from "./seed/partnerships";
 import { seedPassport } from "./seed/passport";
 import { seedPosters } from "./seed/posters";
 import { seedPros } from "./seed/pros";
@@ -181,6 +182,8 @@ async function main() {
 
   // Lot R7j : un souvenir « il y a un an, jour pour jour » pour Damien_66 (tampon, candidature, affiche).
   await seedMemories();
+  // Lot R7m1 : « Ses partenaires » d'un pro, « Partenaires » d'un profil, une proposition dans les Demandes de Damien_66.
+  await seedPartnerships();
 }
 
 try {

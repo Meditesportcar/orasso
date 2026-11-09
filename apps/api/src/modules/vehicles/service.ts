@@ -234,7 +234,7 @@ async function ownVehicle(v: Viewer, id: string): Promise<VehicleRow> {
 async function full(id: string): Promise<VehicleFull> {
   const row = await vehiclesRepo.findFullById(id);
   if (!row) throw notFound("Véhicule introuvable");
-  return vehicleFull(row);
+  return vehicleFull(row, { owner: true });
 }
 
 export const vehiclesService = {
@@ -245,7 +245,9 @@ export const vehiclesService = {
   /** Lot R4c : le véhicule principal d'abord, puis l'ordre d'ajout. */
   async listMine(v: Viewer): Promise<VehicleFull[]> {
     const rows = await vehiclesRepo.findFull(eq(vehicles.ownerId, v.user.id));
-    return garageOrder(rows, effectiveMainVehicleId(rows, v.profile.mainVehicleId)).map(vehicleFull);
+    return garageOrder(rows, effectiveMainVehicleId(rows, v.profile.mainVehicleId)).map((row) =>
+      vehicleFull(row, { owner: true }),
+    );
   },
 
   /** Page du véhicule : fiche complète et état de la certification. */
@@ -253,7 +255,7 @@ export const vehiclesService = {
     await ownVehicle(v, id);
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
-    return { ...vehicleFull(row), certification: await certificationService.stateOf(v, row) };
+    return { ...vehicleFull(row, { owner: true }), certification: await certificationService.stateOf(v, row) };
   },
 
   /** Garage visible des autres (sans plaque). */

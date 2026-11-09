@@ -1,14 +1,15 @@
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
 // public ou abonné accepté, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
+
 import { Button, Chip, Photo, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
 import { gradeLabels, socialLabels, vehicleAddLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { ReportButton } from "@/features/ReportSheet";
 import { PersonRow } from "@/features/social/PersonRow";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
+import { VehicleTrophies } from "@/features/vehicle/VehicleTrophies";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
@@ -87,6 +88,7 @@ export default function OtherVehiclePage() {
           </Plate>
         </Pressable>
         <ReportButton type="vehicle" id={v.id} />
+        {full ? <VehicleTrophies vehicle={full} /> : null}
         {!v.detailed ? <Notice>{socialLabels.privateNotice}</Notice> : null}
         {full ? (
           <Plate style={styles.facts}>

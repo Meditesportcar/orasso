@@ -1,0 +1,212 @@
+/* Rendez-vous au spot (lot R7i) : carte, écran du rendez-vous, formulaire « Lancer ». Jetons seulement. */
+.spot-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  min-width: 0;
+}
+/* Dans un bloc de l'Accueil (plaque) ou une carte du Fil : pas de second cadre. */
+.spot-card--bare {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+.spot-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+.spot-card__who {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.spot-card__muted {
+  color: var(--ink-muted);
+}
+.spot-card--bare .spot-card__muted {
+  color: var(--plate-muted);
+}
+.spot-tag {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  transform: skewX(-8deg);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.spot-card__place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spot-card__place .o-icon {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+.spot-card__quote {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: inherit;
+}
+.spot-card__wholine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.spot-card__two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.spot-card__error {
+  color: var(--alert-text, var(--ink));
+}
+/* Écran d'un rendez-vous. */
+.spot-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 640px;
+  margin: 0 auto;
+}
+.spot-page .ev__map {
+  height: 240px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.spot-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.spot-people {
+  margin-bottom: var(--space-2);
+}
+.spot-people li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spot-people li span:first-of-type + span {
+  flex: 1 1 0;
+}
+.spot-ended {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.spot-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--ink);
+}
+.spot-note .o-icon {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+/* Formulaire « Lancer ». */
+.spot-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.spot-form .wz-map,
+.spot-form .ev__map {
+  height: 300px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.spot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.spot-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.spot-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.spot-opts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.spot-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.spot-opt[aria-pressed="true"] {
+  border-color: var(--accent-text);
+}
+.spot-opt__body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.spot-past {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+@media (min-width: 900px) {
+  .spot-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    align-items: start;
+  }
+}
+
+/* Dans une liste, jamais de bouton principal : la réponse choisie se marque d'un liseré d'accent (le seul bouton principal est
+   sur l'écran du rendez-vous). */
+.spot-answer--chosen {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Carte du lieu : l'attribution des tuiles reste, réduite dans le coin. */
+.spot-page .maplibregl-ctrl-attrib {
+  font-size: 9px;
+  line-height: 1.2;
+}

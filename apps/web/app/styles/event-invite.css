@@ -67,6 +67,10 @@
   padding: var(--space-3);
   font-weight: 800;
 }
+.ri-menu__error {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
 .ri-menu__row {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -250,16 +254,11 @@ label.ri-row {
   color: var(--ink-muted);
 }
 
-/* Boîte : « Voir la fiche » et « ⋯ » sous la notification. */
-.ri-notif-acts {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3) var(--space-3);
-  flex-wrap: wrap;
-  /* Tour 2 : le menu « ⋯ » s'ouvre sous la ligne, calé sur son bord droit (le bouton est à gauche : sinon il sortait de l'écran). */
+/* Demandes : la carte d'une invitation de passionné porte le « ⋯ » (couper ses invitations) ; la feuille se cale sur le bord
+   droit de la carte (le bouton est au milieu de la ligne : sinon elle sortait de l'écran). */
+.ri-req-card {
   position: relative;
 }
-.ri-notif-acts .ri-menu {
+.ri-req-card .ri-menu {
   position: static;
 }

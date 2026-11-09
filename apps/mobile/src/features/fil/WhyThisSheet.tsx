@@ -1,7 +1,8 @@
 // « Pourquoi je vois ça » (maquette R7.6) : la raison de la carte en clair, puis ce que le Fil regarde pour classer, et
-// rien d'autre. Le texte d'une carte « Sponsorisé » est fixe : il est posé par le lot R7k2 (même mot pour tous).
+// rien d'autre. Le texte d'une carte « Sponsorisé » est fixe (lot R7k2) : département seulement, ou toute la France ; la
+// ligne sur le classement du Fil ne s'y applique pas.
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedCard, feedWhyText, feedScreenLabels as L } from "@orasso/shared";
+import { type FeedCard, feedWhyText, isFeedSponsoredTargeted, feedScreenLabels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
@@ -35,14 +36,21 @@ export function WhyThisSheet({ card, onClose }: { card: FeedCard | null; onClose
             </Pressable>
           </View>
           <Text variant="bodyStrong" color={t.color.ink} style={styles.why} testID="feed-why-text">
-            {feedWhyText(card.reason.code, whoOf(card), card.kind === "feed_post" && card.payload.post.mine)}
+            {feedWhyText(
+              card.reason.code,
+              whoOf(card),
+              card.kind === "feed_post" && card.payload.post.mine,
+              isFeedSponsoredTargeted(card.reason.label),
+            )}
           </Text>
-          <View style={styles.note}>
-            <Icon name="info" size={16} color={t.color.accentText} />
-            <Text variant="caption" color={t.color.inkMuted} style={styles.noteText}>
-              {L.whyNote}
-            </Text>
-          </View>
+          {card.kind === "sponsored" ? null : (
+            <View style={styles.note}>
+              <Icon name="info" size={16} color={t.color.accentText} />
+              <Text variant="caption" color={t.color.inkMuted} style={styles.noteText}>
+                {L.whyNote}
+              </Text>
+            </View>
+          )}
           <Button variant="secondary" icon="check" fullWidth onPress={onClose} testID="feed-why-ok">
             {L.whyClose}
           </Button>

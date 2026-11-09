@@ -47,6 +47,7 @@ export const DEV_CLOCK_SWEEPS: JobName[] = [
   "structure.badge-sweep",
   "moderation.purge",
   "home.purge",
+  "spot.purge",
 ];
 
 /** Tâches planifiées qu'une avance ne libère jamais (réseau, ou périodiques déjà couvertes par les balayages). */

@@ -28,6 +28,8 @@ export const requestNotificationTypes: readonly string[] = [
   "event_invitation_received",
   "event_invited",
   "plate_transfer_request",
+  // Lot R7m1 : une proposition de partenariat est une demande en attente (carte « partnership »).
+  "partnership_proposed",
 ];
 
 /** Personnes montrées dans une ligne regroupée. */

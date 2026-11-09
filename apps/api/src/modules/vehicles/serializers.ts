@@ -10,6 +10,7 @@ import {
   type VehicleFull,
   type VehiclePrivate,
   type VehiclePublic,
+  type VehicleTrophy,
   vehicleName,
 } from "@orasso/shared";
 
@@ -76,10 +77,26 @@ export function nameParts(
  */
 export function vehiclePublic(v: VehicleWithAll, opts: { owner?: boolean } = {}): VehiclePublic {
   // Lot R4e (Damien) : le propriétaire qui regarde sa propre vitrine voit toutes ses photos, sans masque.
-  return vehicleView(v, opts.owner ? v.photos : maskedPhotos(v.photos, v.unregistered));
+  return vehicleView(v, opts.owner ? v.photos : maskedPhotos(v.photos, v.unregistered), Boolean(opts.owner));
 }
 
-function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): VehiclePublic {
+/**
+ * Lot R7l3 : les podiums de vote du véhicule. Un podium d'un événement sur invitation (ou dont l'événement n'existe plus) ne
+ * se montre qu'à son propriétaire : le titre d'un événement privé ne sort pas.
+ */
+function trophiesOf(v: VehicleWithAll, owner: boolean): VehicleTrophy[] {
+  return v.trophies
+    .filter((t) => owner || (t.event !== null && t.event.admission !== "invite_only"))
+    .map((t) => ({
+      id: t.id,
+      voteTitle: t.voteTitle,
+      eventTitle: t.eventTitle,
+      rank: t.rank,
+      awardedAt: t.awardedAt.toISOString(),
+    }));
+}
+
+function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"], owner = false): VehiclePublic {
   return {
     id: v.id,
     label: vehicleLabel(v),
@@ -111,13 +128,14 @@ function vehicleView(v: VehicleWithAll, photos: VehicleWithAll["photos"]): Vehic
     status: v.status,
     certified: Boolean(v.certifiedAt),
     audiencePrizes: v.audiencePrizes,
+    trophies: trophiesOf(v, owner),
   };
 }
 
 /** Propriétaire et organisateur. */
-export function vehicleFull(v: VehicleWithAll): VehicleFull {
+export function vehicleFull(v: VehicleWithAll, opts: { owner?: boolean } = {}): VehicleFull {
   return {
-    ...vehicleView(v, v.photos),
+    ...vehicleView(v, v.photos, Boolean(opts.owner)),
     // Lot M2 : toujours lisible (« AE-665-GH »), y compris pour une fiche saisie avant la normalisation.
     plate: v.plate ? formatPlate(v.plate) : null,
     unregistered: v.unregistered,

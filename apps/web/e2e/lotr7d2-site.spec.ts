@@ -34,7 +34,7 @@ for (const theme of ["beton", "sable"] as const) {
     if (ev.live.votesOpen > 0) {
       const votes = page.getByTestId("event-votes");
       await expect(votes).toContainText(`Votes · ${ev.live.votesOpen}`);
-      await expect(votes).toHaveAttribute("href", `/app/vote/${SLUG}`);
+      await expect(votes).toHaveAttribute("href", `/app/votes/${SLUG}`);
     }
     await expect(page.getByTestId("presence-app-only")).toHaveCount(0);
 

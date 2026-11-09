@@ -50,7 +50,8 @@ async function notifyOpened(tx: Executor, event: EventLike, vote: VoteRow) {
     eventId: event.id,
     eventStartsAt: event.startsAt,
     data: { eventId: event.id, voteId: vote.id, screen: "vote" },
-    link: { label: "Voter", path: `/e/${event.slug}` },
+    // Lot R7l3 : la notification ouvre la liste des votes de l'événement (appli : /votes/<adresse>, site : /app/votes/<adresse>).
+    link: { label: "Voter", path: `/app/votes/${event.slug}` },
   });
 }
 

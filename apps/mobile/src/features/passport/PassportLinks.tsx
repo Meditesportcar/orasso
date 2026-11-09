@@ -42,7 +42,7 @@ export function PassportLinks() {
             next
             fullWidth
             testID="passport-vote"
-            onPress={() => router.push(`/vote/${e.eventId}?titre=${encodeURIComponent(e.title)}`)}
+            onPress={() => router.push(`/votes/${e.eventId}?titre=${encodeURIComponent(e.title)}`)}
           >
             {`${passportScreenTexts.votesTitle} · ${e.title}`}
           </Button>

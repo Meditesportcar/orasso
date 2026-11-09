@@ -13,6 +13,9 @@ export default [
     route("app/fil/publier", "routes/app-fil-publier.tsx"),
     route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
+    // Lot R7i : rendez-vous au spot (lancer, recevoir, répondre).
+    route("app/spot/nouveau", "routes/app-spot-nouveau.tsx"),
+    route("app/spot/:id", "routes/app-spot.tsx"),
     // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
     route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
@@ -32,6 +35,8 @@ export default [
     route("app/sorties", "routes/sorties.tsx"),
     route("app/passeport", "routes/passeport.tsx"),
     route("app/vote/:slug", "routes/vote.tsx"),
+    // Lot R7l3 : la liste des votes d'un événement (un vote : `app/vote/:slug?vote=`).
+    route("app/votes/:slug", "routes/votes.tsx"),
     route("app/recap/:eventId", "routes/recap.tsx"),
     // Lot R7j : la page d'un souvenir (« il y a un an… »), cible de la notification `memory`.
     route("app/souvenir/:eventId", "routes/app-souvenir.tsx"),

@@ -178,6 +178,24 @@ async function dropScope(scope: string): Promise<void> {
   }
 }
 
+const HOME_SCRUBBED_KEY = "home-spot-scrubbed.v1.";
+/** Les copies d'Accueil gardées sur l'appareil (une par variante ; les autres Accueils n'ont jamais porté de lieu). */
+const HOME_CACHE_KEYS = ["home-visitor", "home-exhibitor", "home-media", "home-pro", "home-provider"];
+
+/**
+ * Lot R7i, tour 3 : une copie d'Accueil écrite avant le correctif peut porter le lieu d'un rendez-vous au spot. Une fois par
+ * compte et par appareil, au premier lancement qui suit, on réécrit chaque copie connue sans le bloc « Au spot ».
+ */
+async function scrubHomeCaches(scope: string): Promise<void> {
+  if ((await kvGet(HOME_SCRUBBED_KEY + scope)) === "1") return;
+  for (const key of HOME_CACHE_KEYS) {
+    const name = cacheKeyOf(scope, key);
+    const value = await kvGetJson<Record<string, unknown>>(name);
+    if (value && typeof value === "object" && value.spotMeetup) await kvSetJson(name, { ...value, spotMeetup: null });
+  }
+  await kvSet(HOME_SCRUBBED_KEY + scope, "1");
+}
+
 /**
  * Lie les caches au compte connecté. Si l'appareil gardait ceux d'un autre compte (déconnexion jamais allée au bout),
  * ils sont effacés d'abord.
@@ -190,6 +208,7 @@ export function bindCacheScope(accountId: string): Promise<void> {
     await purgeLegacyCaches();
     await kvSet(CACHE_SCOPE_KEY, accountId);
     cacheScopeId = accountId;
+    await scrubHomeCaches(accountId).catch(() => undefined);
   });
 }
 

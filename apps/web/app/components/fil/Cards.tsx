@@ -310,7 +310,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: chaque carte reçoit la carte de son genre, le registre les range ensemble.
-export const cardRegistry: { [K in FeedCardKind]: (props: CardProps<any>) => React.ReactElement } = {
+export const cardRegistry: { [K in FeedCardKind]: (props: CardProps<any>) => React.ReactElement | null } = {
   event_recommended: EventRecommendedCard,
   vehicle_public: VehiclePublicCard,
   lineup: LineupCard,
@@ -324,8 +324,8 @@ export const cardRegistry: { [K in FeedCardKind]: (props: CardProps<any>) => Rea
 };
 
 /** Le composant d'un genre ; `UnknownCard` pour un genre que ce registre ne connaît pas. */
-export function cardFor(kind: string): (props: CardProps) => React.ReactElement {
+export function cardFor(kind: string): (props: CardProps) => React.ReactElement | null {
   return (Object.hasOwn(cardRegistry, kind) ? cardRegistry[kind as FeedCardKind] : UnknownCard) as (
     props: CardProps,
-  ) => React.ReactElement;
+  ) => React.ReactElement | null;
 }

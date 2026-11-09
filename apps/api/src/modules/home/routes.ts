@@ -34,9 +34,9 @@ export const homeRoutes = new Hono<AppEnv>()
   .get("/me/home", async (c) => {
     const v = await requireUser(c);
     const data = await homeService.get(v, query(c, homeQuerySchema));
-    // Privé, jamais partagé ni servi sans revalidation : statuts, tirage de l'emplacement et réglages changent (les sources
+    // Privé, jamais gardé (lot R7i, tour 3 : l'Accueil porte le rendez-vous au spot, donc son lieu) ni servi sans revalidation : statuts, tirage de l'emplacement et réglages changent (les sources
     // externes sont mises en cache en base, pas ici).
-    c.header("cache-control", "private, no-cache");
+    c.header("cache-control", "private, no-store");
     c.header("vary", "authorization, cookie");
     return c.json(data);
   })

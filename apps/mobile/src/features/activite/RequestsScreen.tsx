@@ -5,9 +5,10 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { messagingLabels, requestCountSpoken, requestCountText, requestRowCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { InvitationMenu } from "@/features/event/invite/InviteParts";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -23,6 +24,10 @@ export function RequestsScreen() {
   const c = t.color;
   const router = useRouter();
   const { me, refreshMe } = useSession();
+  const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string }[] | null>(null);
+  const changed = useRef(false);
+  // La feuille est-elle encore ouverte ? (la coupure répond parfois après sa fermeture : alors on relit tout de suite)
+  const sheetOpen = useRef(false);
   const list = useRequestList((r) => r.kind !== "contact");
   const summary = useApi(() => api.inboxSummary(), []);
   const reloadAll = useCallback(async () => {
@@ -44,6 +49,26 @@ export function RequestsScreen() {
       onClose={close}
       closeLabel="Retour à l'Activité"
       onRefresh={reloadAll}
+      overlays={
+        // Lot R7-fix-invite : « ⋯ » d'une invitation de passionnés. La liste se relit à la fermeture du menu (la carte
+        // peut disparaître : plus aucune invitation) ; si la coupure n'aboutit qu'après la fermeture (tour 2), elle se
+        // relit dès le succès.
+        <InvitationMenu
+          from={menuFrom}
+          onClose={() => {
+            sheetOpen.current = false;
+            setMenuFrom(null);
+            if (changed.current) {
+              changed.current = false;
+              void reloadAll();
+            }
+          }}
+          onChanged={() => {
+            if (sheetOpen.current) changed.current = true;
+            else void reloadAll();
+          }}
+        />
+      }
     >
       {messageRequests ? (
         <Pressable
@@ -62,7 +87,15 @@ export function RequestsScreen() {
           <Icon name="next" size={20} color={c.ink} />
         </Pressable>
       ) : null}
-      <RequestList list={list} empty={messagingLabels.noRequests} onChanged={() => void reloadAll()} />
+      <RequestList
+        list={list}
+        empty={messagingLabels.noRequests}
+        onChanged={() => void reloadAll()}
+        onInviteMenu={(from) => {
+          sheetOpen.current = true;
+          setMenuFrom(from);
+        }}
+      />
     </FlowScreen>
   );
 }

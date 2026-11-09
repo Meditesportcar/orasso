@@ -1,14 +1,17 @@
 // Votes à thème côté organisateur et staff (lot R7l2) : les routes de R7l1 (`/events/:id/votes/*`). Aucune règle métier
 // ici : l'API tranche (droits, ouverture, candidats), l'appli affiche ce qu'elle répond. Le côté passionné (liste,
-// grille, voix) viendra au lot R7l3 dans ce même fichier, dans un bloc à part.
+// grille, voix : lot R7l3) est dans un bloc à part, en bas.
 import type {
   ApplicationForTriage,
   Page,
   VoteCandidateAdd,
   VoteCandidateAdded,
+  VoteCandidates,
+  VoteList,
   VoteManage,
   VoteManageItem,
   VoteTemplates,
+  VoteView,
   voteDraftBody,
 } from "@orasso/shared";
 
@@ -46,4 +49,11 @@ export const votesApi = {
     request<Page<ApplicationForTriage>>(
       `/api/events/${eventId}/applications${qs({ kind: "vehicle", status: "accepted", sort: "pseudo", q, limit: 12, cursor })}`,
     ),
+  // --- Passionné (lot R7l3) : la liste, un vote, sa grille, ma voix ---
+  voteList: (eventId: string) => request<VoteList>(`/api/events/${eventId}/votes`),
+  voteGet: (eventId: string, voteId: string) => request<VoteView>(`/api/events/${eventId}/votes/${voteId}`),
+  voteCandidates: (eventId: string, voteId: string, cursor = 0) =>
+    request<VoteCandidates>(`/api/events/${eventId}/votes/${voteId}/candidates${qs({ cursor: cursor || undefined })}`),
+  voteCast: (eventId: string, voteId: string, applicationId: string) =>
+    request<VoteView>(`/api/events/${eventId}/votes/${voteId}/vote`, { method: "PUT", body: { applicationId } }),
 };
