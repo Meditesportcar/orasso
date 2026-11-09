@@ -63,6 +63,8 @@ export const errorCodes = [
   "own_vehicle",
   // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
   "plate_decision_required",
+  // Lot R7e1 (tour 2) : pseudo réservé au compte officiel d'Orasso.
+  "pseudo_reserved",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

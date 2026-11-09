@@ -111,7 +111,8 @@ export type FeedPostView = {
 export type FeedPodiumEntry = {
   rank: number;
   vehicleLabel: string;
-  pseudo: string;
+  /** `null` pour un compte privé que la personne ne suit pas : la voiture seule. */
+  pseudo: string | null;
   photoUrl: string | null;
   votes: number;
 };

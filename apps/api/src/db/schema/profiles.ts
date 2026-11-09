@@ -90,6 +90,11 @@ export const profiles = pgTable(
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
     /** Lot R7e1 : « Moins de ce genre » du Fil, genres de carte (`FeedCardKind`) dont la personne veut voir moins. */
     feedLessKinds: text("feed_less_kinds").array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Lot R7e1 (tour 2) : compte officiel d'Orasso (contenu de départ du Fil). Donnée administrée : posée par le seed (puis
+     * l'administration), jamais par une route publique ni déduite du pseudo, qui se réserve à l'inscription.
+     */
+    official: boolean("official").notNull().default(false),
     /** Lot 17 : nombre d'amis acceptés. ARCHIVE depuis le lot R6b (plus lu ni écrit) ; retiré avec la table `friendships`. */
     friendsCount: integer("friends_count").notNull().default(0),
     /**

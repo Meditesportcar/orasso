@@ -1,5 +1,5 @@
 {
-  "id": "d343f0dd-b7b9-40b5-b436-57d79b297dbb",
+  "id": "ffd9be35-135b-4ecb-816a-d02a42c9cc05",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -6603,6 +6603,51 @@
           "method": "btree",
           "with": {}
         },
+        "feed_posts_vehicle_idx": {
+          "name": "feed_posts_vehicle_idx",
+          "columns": [
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feed_posts_event_idx": {
+          "name": "feed_posts_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feed_posts_deleted_by_idx": {
+          "name": "feed_posts_deleted_by_idx",
+          "columns": [
+            {
+              "expression": "deleted_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "feed_posts_client_key": {
           "name": "feed_posts_client_key",
           "columns": [
@@ -11432,6 +11477,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
+        },
+        "official": {
+          "name": "official",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "friends_count": {
           "name": "friends_count",
@@ -17626,6 +17678,21 @@
               "expression": "model_id",
               "isExpression": false,
               "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicles_created_at_idx": {
+          "name": "vehicles_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
               "nulls": "last"
             }
           ],

@@ -29,9 +29,22 @@ export type FeedCardKind = (typeof feedCardKinds)[number];
 export const feedFilters = ["for_you", "nearby", "following"] as const;
 export type FeedFilter = (typeof feedFilters)[number];
 
-/** Le compte officiel d'Orasso (contenu de départ, seed) : son pseudo, réservé à l'équipe. */
+/** Le pseudo du compte officiel d'Orasso (contenu de départ, seed). Le compte se reconnaît à `profiles.official`, jamais à son pseudo. */
 export const OFFICIAL_PSEUDO = "Orasso";
-export const isOfficialPseudo = (pseudo: string): boolean => pseudo === OFFICIAL_PSEUDO;
+
+/**
+ * Pseudo réservé : il contient « orasso » (ou « 0rasso »), sans tenir compte de la casse, des accents ni des séparateurs
+ * « _ » et « . ». Refusé à l'inscription et au changement de pseudo (`pseudo_reserved`) ; seul le compte officiel le porte.
+ */
+export function isReservedPseudo(pseudo: string): boolean {
+  const plain = pseudo
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[_.\s-]/g, "")
+    .replaceAll("0", "o");
+  return plain.includes("orasso");
+}
 
 /** Cartes par page. */
 export const FEED_PAGE = 20;
@@ -220,27 +233,35 @@ export type Scored<T> = T & { score: number };
  * 0,6 si elle a le même genre que la précédente ; une troisième carte du même genre de suite n'est choisie que s'il
  * ne reste rien d'autre. À égalité : score, puis date récente, puis identifiant (ordre stable).
  */
-export function diversify<T extends { id: string; kind: string; at: Date; score: number }>(cards: readonly T[]): T[] {
+export function diversify<T extends { id: string; kind: string; at: Date; score: number }>(
+  cards: readonly T[],
+  /** Genres des deux dernières cartes déjà servies (page précédente), de la plus ancienne à la plus récente. */
+  previous: readonly string[] = [],
+): T[] {
   const rest = [...cards].sort(compareCards);
   const out: T[] = [];
+  // Les genres servis, en commençant par ceux d'avant : ils comptent pour la répétition sans faire partie du résultat.
+  const kinds: string[] = [...previous];
   while (rest.length) {
-    const last = out.at(-1);
-    const beforeLast = out.at(-2);
-    const run = last && beforeLast && last.kind === beforeLast.kind ? last.kind : null;
+    const lastKind = kinds.at(-1);
+    const beforeLastKind = kinds.at(-2);
+    const run = lastKind !== undefined && lastKind === beforeLastKind ? lastKind : null;
     const onlyRun = run !== null && rest.every((c) => c.kind === run);
     let best = -1;
     let bestValue = Number.NEGATIVE_INFINITY;
     for (let i = 0; i < rest.length; i++) {
       const c = rest[i] as T;
       if (run !== null && c.kind === run && !onlyRun) continue;
-      const value = c.score * (last && c.kind === last.kind ? FEED_REPEAT_PENALTY : 1);
+      const value = c.score * (lastKind !== undefined && c.kind === lastKind ? FEED_REPEAT_PENALTY : 1);
       // `rest` est trié : en cas d'égalité stricte, la première (la mieux classée) reste.
       if (value > bestValue) {
         bestValue = value;
         best = i;
       }
     }
-    out.push(rest.splice(best, 1)[0] as T);
+    const picked = rest.splice(best, 1)[0] as T;
+    out.push(picked);
+    kinds.push(picked.kind);
   }
   return out;
 }
@@ -251,6 +272,11 @@ export function compareCards(
   b: { score: number; at: Date; id: string },
 ): number {
   return b.score - a.score || b.at.getTime() - a.at.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
+
+/** Ordre stable du parcours classé : score décroissant, puis identifiant décroissant (clé du curseur). */
+export function compareByScore(a: { score: number; id: string }, b: { score: number; id: string }): number {
+  return b.score - a.score || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }
 
 /** Ordre par date (au-delà de la fenêtre de 48 h) : récent d'abord, identifiant décroissant à égalité. */

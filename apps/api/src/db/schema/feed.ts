@@ -1,7 +1,7 @@
 // Le Fil (lot R7e1, décision D38, ARCHITECTURE-R7 § 1.4) : publications des membres (photos en 4:5 par défaut, 1:1 et
 // paysage acceptés), flamme. Une publication est visible de tout membre connecté (compte public) ou des abonnés acceptés
 // (compte privé) ; jamais d'un crew. Les photos portent une décision de plaque vraie (floutée, ou « aucune plaque
-// visible » confirmée) et sont stockées sous une clé publique `feed/<postId>/<hex>.webp`.
+// visible » confirmée) et sont stockées sous une clé privée `private/feed/<postId>/<hex>.webp` (servie par `GET /feed-posts/:id/photos/:nom`, jamais par `/api/files`).
 import { feedAspects } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
@@ -56,13 +56,17 @@ export const feedPosts = pgTable(
     index("feed_posts_created_idx").on(t.createdAt.desc()).where(sql`${t.deletedAt} is null`),
     index("feed_posts_author_idx").on(t.authorId, t.createdAt.desc()),
     index("feed_posts_department_idx").on(t.department, t.createdAt.desc()),
+    // Tour 2 : clés étrangères lues à la suppression d'un véhicule, d'un événement ou d'un compte (set null).
+    index("feed_posts_vehicle_idx").on(t.vehicleId),
+    index("feed_posts_event_idx").on(t.eventId),
+    index("feed_posts_deleted_by_idx").on(t.deletedBy),
     uniqueIndex("feed_posts_client_key").on(t.authorId, t.clientId).where(sql`${t.clientId} is not null`),
     check("feed_posts_caption_check", sql`${t.caption} is null or char_length(${t.caption}) <= 500`),
     check("feed_posts_reactions_check", sql`${t.reactionsCount} >= 0`),
   ],
 );
 
-/** Photos d'une publication : 1 à 6, dans l'ordre. Clé publique ; une décision de plaque vraie sur chacune. */
+/** Photos d'une publication : 1 à 6, dans l'ordre. Clé privée ; une décision de plaque vraie sur chacune. */
 export const feedPostPhotos = pgTable(
   "feed_post_photos",
   {

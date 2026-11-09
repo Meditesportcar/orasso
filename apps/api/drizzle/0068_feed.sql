@@ -46,6 +46,7 @@ CREATE TABLE "feed_posts" (
 );
 --> statement-breakpoint
 ALTER TABLE "profiles" ADD COLUMN "feed_less_kinds" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "profiles" ADD COLUMN "official" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "feed_post_photos" ADD CONSTRAINT "feed_post_photos_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feed_post_reactions" ADD CONSTRAINT "feed_post_reactions_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feed_post_reactions" ADD CONSTRAINT "feed_post_reactions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -59,4 +60,8 @@ CREATE INDEX "feed_post_reactions_user_idx" ON "feed_post_reactions" USING btree
 CREATE INDEX "feed_posts_created_idx" ON "feed_posts" USING btree ("created_at" DESC NULLS LAST) WHERE "feed_posts"."deleted_at" is null;--> statement-breakpoint
 CREATE INDEX "feed_posts_author_idx" ON "feed_posts" USING btree ("author_id","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "feed_posts_department_idx" ON "feed_posts" USING btree ("department","created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE UNIQUE INDEX "feed_posts_client_key" ON "feed_posts" USING btree ("author_id","client_id") WHERE "feed_posts"."client_id" is not null;
+CREATE INDEX "feed_posts_vehicle_idx" ON "feed_posts" USING btree ("vehicle_id");--> statement-breakpoint
+CREATE INDEX "feed_posts_event_idx" ON "feed_posts" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "feed_posts_deleted_by_idx" ON "feed_posts" USING btree ("deleted_by");--> statement-breakpoint
+CREATE UNIQUE INDEX "feed_posts_client_key" ON "feed_posts" USING btree ("author_id","client_id") WHERE "feed_posts"."client_id" is not null;--> statement-breakpoint
+CREATE INDEX "vehicles_created_at_idx" ON "vehicles" USING btree ("created_at" DESC NULLS LAST);

@@ -5,6 +5,7 @@ import { feedMineQuery, feedPostCreateSchema, feedQuery, feedReportSchema } from
 import { canSeeFeedPost } from "./audience";
 import {
   aspectMatches,
+  compareByScore,
   DEFAULT_FEED_ASPECT,
   diversify,
   emptyFeedViewerContext,
@@ -16,6 +17,7 @@ import {
   freshness,
   insertSponsored,
   isFollowedCard,
+  isReservedPseudo,
   nearbyDepartments,
   proximityFactor,
   reasonCode,
@@ -146,10 +148,50 @@ describe("diversité", () => {
     expect(a.map((c) => c.id)).toEqual(["c", "a", "b"]);
     expect(diversify([])).toEqual([]);
   });
+  it("les deux genres de la page précédente comptent : jamais trois de suite d'une page à l'autre", () => {
+    const list = [mk("p1", "feed_post", 1), mk("p2", "feed_post", 0.9), mk("e1", "event_recommended", 0.2)];
+    // la page d'avant finissait par deux publications : l'événement passe en premier malgré son score
+    expect(diversify(list, ["feed_post", "feed_post"]).map((c) => c.id)).toEqual(["e1", "p1", "p2"]);
+    // sans genre précédent identique, l'ordre ne change pas
+    expect(diversify(list, ["pro", "lineup"]).map((c) => c.id)).toEqual(["p1", "p2", "e1"]);
+    expect(diversify(list, []).map((c) => c.id)).toEqual(["p1", "p2", "e1"]);
+  });
+  it("clé du parcours classé : score décroissant, puis identifiant décroissant (total et stable)", () => {
+    const rows = [
+      { id: "a", score: 1 },
+      { id: "c", score: 1 },
+      { id: "b", score: 2 },
+    ];
+    expect([...rows].sort(compareByScore).map((r) => r.id)).toEqual(["b", "c", "a"]);
+    expect(compareByScore({ id: "a", score: 1 }, { id: "a", score: 1 })).toBe(0);
+  });
   it("garde toutes les cartes, sans doublon", () => {
     const list = Array.from({ length: 40 }, (_, i) => mk(`k${i}`, i % 3 === 0 ? "pro" : "feed_post", Math.random()));
     const out = diversify(list);
     expect(new Set(out.map((c) => c.id)).size).toBe(40);
+  });
+});
+
+describe("pseudos réservés", () => {
+  it("contenir « orasso » (ou « 0rasso »), sans tenir compte de la casse, des accents ni des séparateurs", () => {
+    for (const bad of [
+      "Orasso",
+      "ORASSO",
+      "orasso_66",
+      "Le.Orasso",
+      "0rasso",
+      "Mon_0RASSO",
+      "o.r.a.s.s.o",
+      "Équipe_Orasso",
+      "orassó",
+    ]) {
+      expect(isReservedPseudo(bad), bad).toBe(true);
+    }
+  });
+  it("un pseudo ordinaire passe", () => {
+    for (const ok of ["Kenji_66", "Damien_66", "Rasso_Fan", "Orage", "Oras", "Passion.Auto"]) {
+      expect(isReservedPseudo(ok), ok).toBe(false);
+    }
   });
 });
 

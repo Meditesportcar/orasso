@@ -71,5 +71,6 @@ export const feedLabels = {
   plateDecision: "Pour chaque photo : floute la plaque, ou confirme qu'aucune plaque n'est visible.",
   tooManyPhotos: "Six photos au plus.",
   officialPseudo: "Orasso",
+  pseudoReserved: "Ce pseudo est réservé : choisis-en un autre.",
   officialBio: "Le compte officiel d'Orasso : des photos pour bien démarrer.",
 } as const;
