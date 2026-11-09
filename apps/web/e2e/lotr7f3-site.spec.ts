@@ -219,3 +219,40 @@ for (const theme of ["beton", "sable"] as const) {
     });
   }
 }
+
+test("tour 2 : pendant l'envoi « Annuler » est inactif ; une réponse perdue puis une reprise ne publient qu'une story", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const author = await who("SiEnvoi");
+  const fan = await who("SiLecteur");
+  await follow(fan, author);
+  await openForm(page, author.email);
+  await choose(page);
+  await noPlate(page);
+  // Envoi retardé : la création part, la réponse n'arrive qu'après 4 s ; puis la première réponse est perdue.
+  let calls = 0;
+  await page.route("**/api/me/stories", async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      const response = await route.fetch();
+      await new Promise((r) => setTimeout(r, 4000));
+      void response;
+      return route.abort("failed");
+    }
+    return route.continue();
+  });
+  await page.getByTestId("story-publish-send").click();
+  await expect(page.getByTestId("story-progress")).toBeVisible();
+  // « Annuler » est inactif pendant l'envoi : le clic ne quitte pas la page.
+  await expect(page.getByTestId("story-cancel")).toHaveAttribute("aria-disabled", "true");
+  await page.getByTestId("story-cancel").click({ force: true });
+  await expect(page).toHaveURL(/story\/publier/);
+  // Réponse perdue : l'erreur « on ne sait pas » s'affiche, rien n'est cassé.
+  await expect(page.getByTestId("story-publish-send")).toBeEnabled({ timeout: 30_000 });
+  expect(await storiesOf(fan, author.id)).toHaveLength(1);
+  // Reprise : même requête, même story, pas de doublon.
+  await page.getByTestId("story-publish-send").click();
+  await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 60_000 });
+  expect(await storiesOf(fan, author.id)).toHaveLength(1);
+});

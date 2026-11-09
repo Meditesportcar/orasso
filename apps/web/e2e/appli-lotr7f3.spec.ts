@@ -354,3 +354,42 @@ test("captures de contrôle de l'écran à 384 px et 390 px police 1,3, Béton e
     }
   }
 });
+
+test("tour 2 : la croix est inactive pendant l'envoi ; réponse perdue puis reprise = une seule story", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const author = await who("StEnvoi");
+  const reader = await who("StLecteur");
+  await follow(reader, author);
+  const { ctx, page } = await open(browser, author.email);
+  await chooseLandscape(page);
+  await passPlate(page);
+  await page.getByTestId("story-to-preview").click();
+  await expect(page.getByTestId("story-preview")).toBeVisible();
+  let calls = 0;
+  await page.route("**/api/me/stories", async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      // La story est créée côté serveur, mais la réponse n'arrive jamais : la reprise doit retrouver la même.
+      await route.fetch();
+      await new Promise((r) => setTimeout(r, 4000));
+      return route.abort("failed");
+    }
+    return route.continue();
+  });
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-progress")).toBeVisible();
+  // Pendant l'envoi, la croix ne quitte pas l'écran.
+  await page.getByRole("button", { name: /Fermer/ }).first().click({ force: true });
+  await page.waitForTimeout(800);
+  await expect(page.getByTestId("story-publish")).toBeVisible();
+  await expect(page).toHaveURL(/story\/publier/);
+  // Réponse perdue : l'écran reste, le bouton revient ; la reprise ne crée pas de doublon.
+  await expect(page.getByTestId("story-publish")).toBeEnabled({ timeout: 40_000 });
+  expect(await storiesOf(reader, author.id)).toHaveLength(1);
+  await page.getByTestId("story-publish").click();
+  await expect(page.getByTestId("story-done")).toBeVisible({ timeout: 90_000 });
+  expect(await storiesOf(reader, author.id)).toHaveLength(1);
+  await ctx.close();
+});
