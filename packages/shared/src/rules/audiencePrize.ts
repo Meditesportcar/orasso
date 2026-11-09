@@ -52,8 +52,8 @@ export type AudienceVoteWindow = {
 
 export type AudienceVoteRefusal = "vote_closed" | "vote_not_open" | "not_checked_in";
 
-/** Le vote ferme à la fin de l'événement. */
-export function voteClosesAt(event: Pick<AudienceVoteWindow, "endsAt">): Date {
+/** Le prix du public (lot 49) ferme à la fin de l'événement ; les votes à thème : `voteClosesAt` (`votes.ts`). */
+export function prizeClosesAt(event: Pick<AudienceVoteWindow, "endsAt">): Date {
   return event.endsAt;
 }
 
@@ -61,7 +61,7 @@ export function voteClosesAt(event: Pick<AudienceVoteWindow, "endsAt">): Date {
 export function voteOpen(event: AudienceVoteWindow, now: Date): boolean {
   return (
     event.status === "published" &&
-    now < voteClosesAt(event) &&
+    now < prizeClosesAt(event) &&
     event.firstCheckinAt !== null &&
     now >= event.firstCheckinAt &&
     event.vehiclesCheckedIn >= AUDIENCE_PRIZE_MIN_VEHICLES
@@ -70,7 +70,7 @@ export function voteOpen(event: AudienceVoteWindow, now: Date): boolean {
 
 /** Peut voter maintenant ? `null` = oui ; sinon la raison, dans l'ordre où l'interface l'explique. */
 export function canVote(voter: AudienceVoter, event: AudienceVoteWindow, now: Date): AudienceVoteRefusal | null {
-  if (event.status !== "published" || now >= voteClosesAt(event)) return "vote_closed";
+  if (event.status !== "published" || now >= prizeClosesAt(event)) return "vote_closed";
   if (!voter.checkedInAt && !voter.ticketScannedAt && !voter.staffPresent && !voter.gpsPresentAt) {
     return "not_checked_in";
   }
