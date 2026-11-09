@@ -381,7 +381,10 @@ test("tour 2 : la croix est inactive pendant l'envoi ; réponse perdue puis repr
   await page.getByTestId("story-publish").click();
   await expect(page.getByTestId("story-progress")).toBeVisible();
   // Pendant l'envoi, la croix ne quitte pas l'écran.
-  await page.getByRole("button", { name: /Fermer/ }).first().click({ force: true });
+  await page
+    .getByRole("button", { name: /Fermer/ })
+    .first()
+    .click({ force: true });
   await page.waitForTimeout(800);
   await expect(page.getByTestId("story-publish")).toBeVisible();
   await expect(page).toHaveURL(/story\/publier/);
