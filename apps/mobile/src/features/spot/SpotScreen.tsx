@@ -5,7 +5,10 @@
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   agoLabel,
+  createListGeneration,
+  createSpotGuard,
   spotLabels as L,
+  type SpotGuard,
   type SpotMeetupView,
   type SpotReplies,
   spotEndLabel,
@@ -13,7 +16,7 @@ import {
   spotUntilLabel,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -38,14 +41,36 @@ export const isRefused = (e: { status?: number } | null | undefined) => e?.statu
 export function SpotScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const loaded = useApi(() => api.spot(id), [id], { refreshMs: 30_000 });
+  // Tour 4 : un refus définitif invalide toutes les opérations parties avant lui (lecture de la fiche, réponse, liste) : une
+  // ancienne réponse 200 n'appelle plus `setMeetup` et ne remet pas `refused` à faux.
+  const guard = useRef(createSpotGuard()).current;
+  const loaded = useApi(
+    async () => {
+      const op = guard.start();
+      return { view: await api.spot(id), op };
+    },
+    [id],
+    { refreshMs: 30_000 },
+  );
   const [meetup, setMeetup] = useState<SpotMeetupView | null>(null);
   // Refus appris ailleurs que dans la lecture de la fiche (liste de ceux qui viennent, réponse).
   const [refused, setRefused] = useState(false);
   useEffect(() => {
-    setMeetup(loaded.data);
+    if (!loaded.data) {
+      setMeetup(null);
+      return;
+    }
+    if (!guard.valid(loaded.data.op)) return;
+    setMeetup(loaded.data.view);
     setRefused(false);
-  }, [loaded.data]);
+  }, [loaded.data, guard]);
+  useEffect(() => {
+    if (isRefused(loaded.error)) guard.refuse();
+  }, [loaded.error, guard]);
+  const onRefused = useCallback(() => {
+    guard.refuse();
+    setRefused(true);
+  }, [guard]);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/accueil"));
   // Annulé ou retiré pendant que la fiche est ouverte : le rendez-vous et les réponses sont vidés, jamais l'ancienne donnée
   // devant l'erreur (le lieu ne reste pas à l'écran).
@@ -57,7 +82,7 @@ export function SpotScreen() {
   return (
     <FlowScreen title={L.title} facts={L.subtitle} onClose={close} closeLabel="Fermer">
       {meetup && !gone ? (
-        <Meetup meetup={meetup} onChange={setMeetup} onGone={close} onRefused={() => setRefused(true)} />
+        <Meetup meetup={meetup} guard={guard} onChange={setMeetup} onGone={close} onRefused={onRefused} />
       ) : gone ? (
         <View style={styles.gap} testID="spot-gone">
           <Notice>{L.unavailable}</Notice>
@@ -76,11 +101,13 @@ export function SpotScreen() {
 
 function Meetup({
   meetup,
+  guard,
   onChange,
   onGone,
   onRefused,
 }: {
   meetup: SpotMeetupView;
+  guard: SpotGuard;
   onChange: (v: SpotMeetupView) => void;
   onGone: () => void;
   onRefused: () => void;
@@ -88,7 +115,7 @@ function Meetup({
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const answer = useSpotAnswer(meetup, onChange, onRefused);
+  const answer = useSpotAnswer(meetup, onChange, onRefused, guard);
   // Fini pour l'heure d'Orasso, même sans réseau : lieu, liste et réponses disparaissent à `endsAt`.
   const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
@@ -108,20 +135,27 @@ function Meetup({
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const firstPageKey = useRef<string | null>(null);
+  // Tour 4 : chaque « Voir plus » porte la génération de la liste qui l'a lancé ; une première page remplacée entre-temps
+  // la fait avancer et la réponse en retard est jetée.
+  const generation = useRef(createListGeneration()).current;
   useEffect(() => {
     if (!replies.data) return;
     const key = JSON.stringify([meetup.yesCount, meetup.maybeCount, replies.data]);
     if (key === firstPageKey.current) return;
     firstPageKey.current = key;
+    generation.bump();
     setMore({ items: [], cursor: replies.data.nextCursor });
     setMoreError(null);
-  }, [replies.data, meetup.yesCount, meetup.maybeCount]);
+  }, [replies.data, meetup.yesCount, meetup.maybeCount, generation]);
   async function loadMore() {
     if (!more.cursor || moreBusy) return;
     setMoreBusy(true);
     setMoreError(null);
+    const gen = generation.current();
+    const op = guard.start();
     try {
       const page = await api.spotReplies(meetup.id, more.cursor);
+      if (!generation.accepts(gen) || !guard.valid(op)) return;
       setMore((m) => ({ items: [...m.items, ...page.items], cursor: page.nextCursor }));
     } catch (e) {
       if (isRefused(e instanceof ApiRequestError ? e : null)) onRefused();
