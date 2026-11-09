@@ -1,7 +1,6 @@
 // Partenariats pro ↔ passionné (lot R7m1, maquettes R7.19 et R7.20) : libellés de l'API, du site et de l'appli, mêmes mots
 // partout. « Collaboration commerciale » n'est pas ici : il est posé par le lot R7m2, seulement quand le partenaire est
 // mentionné. Aucune somme, aucune « rémunération » : Orasso ne touche à aucun paiement entre un pro et un passionné.
-import { PARTNERSHIP_MESSAGE_MAX } from "../rules/partnerships";
 
 export const partnershipLabels = {
   /** Bouton du profil d'un passionné, vu par un pro vérifié. */
