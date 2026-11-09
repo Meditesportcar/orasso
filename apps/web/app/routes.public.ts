@@ -31,6 +31,7 @@ export default [
     route("professionnels", "routes/professionnels.tsx"),
     route("pros", "routes/pros.tsx"),
     route("p/:slug", "routes/pro.tsx"),
+    route("p/:slug/partenaires", "routes/pro-partenaires.tsx"),
     route("invitation/:jeton", "routes/invitation.tsx"),
     // Invitation nominative à un événement, lien envoyé par e-mail (lot 25).
     route("invitation-evenement/:jeton", "routes/invitation-evenement.tsx"),

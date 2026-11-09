@@ -14,6 +14,7 @@ import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
+import { decorateOtherVehicle, decorateProfile } from "../partnerships/decorate";
 import { accountQrFollow } from "./account-qr";
 import { followsService } from "./follows";
 import { outingsCount, socialProfile } from "./profile";
@@ -37,13 +38,14 @@ export const socialRoutes = new Hono<AppEnv>()
   })
   .get("/users/:pseudo", async (c) => {
     const v = await requireUser(c);
-    return c.json(await socialProfile.view(v, c.req.param("pseudo")));
+    // Lot R7m1 : « Partenaires » et « Proposer un partenariat » (pro vérifié qui regarde).
+    return c.json(await decorateProfile(v, await socialProfile.view(v, c.req.param("pseudo"))));
   })
   // Fiche d'un véhicule d'un autre : complète (compte public ou abonné accepté) ou réduite (compte privé, lot R4b :
   // `privateVehicleFields`). Jamais la plaque.
   .get("/vehicles/:id", async (c) => {
     const v = await requireUser(c);
-    return c.json(await socialProfile.vehicleOf(v, uuidParam(c, "id")));
+    return c.json(await decorateOtherVehicle(await socialProfile.vehicleOf(v, uuidParam(c, "id"))));
   })
   .get("/vehicles/:id/owners-nearby", async (c) => {
     const v = await requireUser(c);

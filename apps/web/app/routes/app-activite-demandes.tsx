@@ -10,7 +10,9 @@ import {
   invitationLabels,
   messagingLabels,
   networkLabels,
+  partnershipLabels,
   plateTransferLabels,
+  proActivityLabels,
   type RequestItem,
   type RequestsPage,
   requestCountSpoken,
@@ -29,6 +31,7 @@ import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import { formatDateTime } from "../lib/format";
+import "../styles/partnerships.css";
 import type { Route } from "./+types/app-activite-demandes";
 
 // Activité > Demandes (lot 18, refait au lot R7c2, tour 2) : tout ce qui attend ta réponse, lu sur `GET /me/requests` comme
@@ -83,6 +86,13 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "transfer-accept" || intent === "transfer-decline") {
     const id = encodeURIComponent(String(form.get("transferId") ?? ""));
     const res = await api(request, `/plate-transfers/${id}/${intent.slice(9)}`, { method: "POST" });
+    if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
+    return data({ formError: null as string | null });
+  }
+  // Lot R7m1 : proposition de partenariat d'un pro : accepter ou refuser, seule la personne visée le peut.
+  if (intent === "partnership-accept" || intent === "partnership-decline") {
+    const id = encodeURIComponent(String(form.get("partnershipId") ?? ""));
+    const res = await api(request, `/me/partnerships/${id}/${intent.slice(12)}`, { method: "POST" });
     if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
     return data({ formError: null as string | null });
   }
@@ -430,6 +440,56 @@ function PlateTransferCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
+/** Lot R7m1 (maquette R7.20 `pq_dem`) : un pro propose un partenariat : son texte, la voiture concernée, Accepter / Refuser. */
+function PartnershipCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const { name, imageUrl } = fromOf(r);
+  const message = str(r.payload, "message");
+  const vehicle = str(obj(r.payload, "vehicle"), "label");
+  const pro = obj(r.payload, "pro");
+  const slug = str(pro, "slug");
+  const activities = Array.isArray(pro?.activities) ? (pro.activities as string[]) : [];
+  const detail = [
+    "Pro vérifié",
+    activities
+      .map((a) => (a in proActivityLabels ? proActivityLabels[a as keyof typeof proActivityLabels] : a))
+      .join(", "),
+    str(pro, "city"),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <li className="s-person ptn-request" data-testid="request-partnership">
+      <PersonAvatar url={imageUrl} pseudo={name} size={44} />
+      <div className="s-person__main">
+        {slug ? (
+          <a className="s-person__name o-t-title" href={`/p/${slug}`}>
+            {partnershipLabels.requestTitle(name)}
+          </a>
+        ) : (
+          <span className="s-label o-t-label">{partnershipLabels.requestTitle(name)}</span>
+        )}
+        <span className="o-t-caption s-muted">{detail}</span>
+        {message && <p className="ptn-quote">{`« ${message} »`}</p>}
+        {vehicle && (
+          <p className="ptn-car" data-testid="request-partnership-vehicle">
+            <b>{partnershipLabels.requestForVehicle(vehicle)}</b>
+            <small>{partnershipLabels.requestForVehicleHint(name)}</small>
+          </p>
+        )}
+        <p className="o-t-caption s-muted">{partnershipLabels.requestNote}</p>
+      </div>
+      <Decide
+        fields={{ partnershipId: r.id }}
+        accept="partnership-accept"
+        decline="partnership-decline"
+        acceptLabel={partnershipLabels.accept}
+        declineLabel={partnershipLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
 function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
   switch (r.kind) {
     case "follow":
@@ -444,6 +504,8 @@ function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
       return <EventInvitationCard r={r} />;
     case "plate_transfer":
       return <PlateTransferCard r={r} busy={busy} />;
+    case "partnership":
+      return <PartnershipCard r={r} busy={busy} />;
     default:
       // Une sorte sans carte sur le site (jamais d'écran cassé pour une sorte que cette version ne connaît pas).
       return null;

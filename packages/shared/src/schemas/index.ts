@@ -19,6 +19,7 @@ export * from "./lineup";
 export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
+export * from "./partnerships";
 export * from "./passport";
 export * from "./presence";
 export * from "./pro";

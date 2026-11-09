@@ -519,6 +519,13 @@
       "when": 1794225719750,
       "tag": "0073_sponsored-feed",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1794237121669,
+      "tag": "0074_partnerships",
+      "breakpoints": true
     }
   ]
 }
