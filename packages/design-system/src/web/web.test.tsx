@@ -292,7 +292,7 @@ describe("rendu serveur des composants", () => {
     // Lot C1 : la `.flowbar` de l'artefact (titre et ✕, sans monogramme ni brossage).
     expect(flow).toContain("o-appbar--flow");
     expect(flow).not.toContain("o-brush");
-    const tabs = html(<TabBar set="fan" active="garage" />);
+    const tabs = html(<TabBar set="fan" active="crew" />);
     expect(tabs).toContain('aria-current="page"');
     expect(tabs.match(/is-center/g)?.length).toBe(1);
     expect(html(<TabBar set="organizer" active="sort" />)).toContain("Tri");
@@ -318,6 +318,14 @@ describe("rendu serveur des composants", () => {
     expect(top).toContain('aria-label="Boîte"');
     expect(top).toContain('aria-label="MéditeSportCar"');
     expect(top).not.toContain("o-monogram");
+    // Lot R7a1 (D38) : la barre du passionné, et la cloche « Activité » et la bulle « Messages » à la place de la Boîte.
+    expect(tabSets.exhibitor.map((t) => t.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
+    expect(tabSets.visitor.map((t) => t.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
+    const passionate = html(<AppBar kind="tab" activityHref="/a" activityCount={2} messagesHref="/m" messagesCount={120} />);
+    expect(passionate).toContain('aria-label="Activité"');
+    expect(passionate).toContain('aria-label="Messages"');
+    expect(passionate).not.toContain('aria-label="Boîte"');
+    expect(passionate).toContain("99+");
     const title = html(<BigTitle title="Mon garage" label="3 véhicules" />);
     expect(title).toContain("o-bigtitle__title");
     expect(title).toContain("3 véhicules");
