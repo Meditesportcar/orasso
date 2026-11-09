@@ -117,10 +117,21 @@ export async function pickGalleryVideo(
   });
   const asset = result.canceled ? null : result.assets[0];
   if (!asset) return null;
-  return prepareStoryVideo(
-    asset.uri,
-    { durationMs: asset.duration ?? null, width: asset.width, height: asset.height },
-    onStage,
-    alive,
-  );
+  // La copie temporaire que le sélecteur écrit dans le cache de l'appli (jamais l'original de la photothèque) est notée dès sa
+  // réception : effacée à la publication, à l'abandon, à la déconnexion, et tout de suite si la préparation échoue.
+  rememberTempPhotos(asset.uri);
+  try {
+    const clip = await prepareStoryVideo(
+      asset.uri,
+      { durationMs: asset.duration ?? null, width: asset.width, height: asset.height },
+      onStage,
+      alive,
+    );
+    // Compressée : la copie du sélecteur ne sert plus (la vidéo à envoyer est une autre).
+    if (clip.uri !== asset.uri) discardTempPhotos([asset.uri]);
+    return clip;
+  } catch (e) {
+    discardTempPhotos([asset.uri]);
+    throw e;
+  }
 }

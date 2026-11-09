@@ -20,7 +20,7 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { PickedPhoto } from "@/lib/photos";
-import { noteRawShot } from "./shotFiles";
+import { cameraMessage, noteRawShot } from "./shotFiles";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -32,6 +32,7 @@ export function Capture({
   onGallery,
   onClose,
   busy,
+  error = null,
 }: {
   onShot: (photo: PickedPhoto) => void;
   /** Une vidéo vient d'être filmée (fichier brut, à compresser et vérifier par l'écran parent). */
@@ -40,6 +41,8 @@ export function Capture({
   onClose: () => void;
   /** Un média se prépare (recadrage, réduction, compression) : l'obturateur attend. */
   busy: boolean;
+  /** Le refus d'un média préparé par l'écran parent (vidéo trop longue, compression ratée…) : affiché ici, sur l'appareil. */
+  error?: string | null;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -171,10 +174,10 @@ export function Capture({
               testID="story-camera-flip"
             />
           </View>
-          {failed ? (
+          {cameraMessage(failed, error) ? (
             <View style={[styles.failed, { backgroundColor: withAlpha(c.night, 0.78) }]}>
               <Text variant="caption" color={c.nightInk} testID="story-camera-failed">
-                {failed}
+                {cameraMessage(failed, error)}
               </Text>
             </View>
           ) : null}

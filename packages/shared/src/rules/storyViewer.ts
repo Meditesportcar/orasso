@@ -221,3 +221,12 @@ export function replyStillShown(
 ): boolean {
   return shown.storyId === sent.storyId && shown.text.trim() === sent.text;
 }
+
+/**
+ * Clé du lecteur d'une story (appli et site). Une vidéo repart à zéro quand on recule sur la première story : `replay`
+ * change la clé, le lecteur est remonté, sa lecture reprend à 0. Une photo n'est pas rechargée pour autant (le rejeu ne
+ * touche que sa minuterie), et `retries` relance un média qui n'a pas chargé.
+ */
+export function storyPlayerKey(storyId: string, retries: number, replay: number, isVideo: boolean): string {
+  return `${storyId}:${retries}${isVideo ? `:${replay}` : ""}`;
+}

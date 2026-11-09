@@ -1,7 +1,6 @@
 // Routes des stories (lot R7f1, ARCHITECTURE-R7 § 2.5). Session requise partout : aucune story n'est servie sans
 // session (vie privée des identifiés). Les fichiers passent par une route qui contrôle l'audience à chaque lecture.
 
-import { Readable } from "node:stream";
 import {
   parseStoryAuthorKey,
   storyCreateSchema,
@@ -12,7 +11,7 @@ import {
 import { Hono } from "hono";
 
 import { notFound, validation } from "../../lib/errors";
-import { parseByteRange } from "../../lib/range";
+import { rangedFile } from "../../lib/ranged";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { body, parse, uuidParam } from "../../lib/validate";
@@ -57,16 +56,7 @@ export const storiesRoutes = new Hono<AppEnv>()
       return c.body(new Uint8Array(data), 200, fileHeaders(ref.type));
     }
     // Lot R7g : une vidéo se sert par morceaux (`Range`), avec les mêmes droits que la photo (déjà contrôlés ci-dessus).
-    const base = { ...fileHeaders(ref.type), "accept-ranges": "bytes" };
-    const range = parseByteRange(c.req.header("range"), ref.size);
-    if (range === "unsatisfiable") return c.body(null, 416, { ...base, "content-range": `bytes */${ref.size}` });
-    const { start, end } = range ?? { start: 0, end: ref.size - 1 };
-    const stream = Readable.toWeb(storage.stream(ref.key, start, end)) as unknown as ReadableStream<Uint8Array>;
-    return c.body(stream, range ? 206 : 200, {
-      ...base,
-      "content-length": String(end - start + 1),
-      ...(range ? { "content-range": `bytes ${start}-${end}/${ref.size}` } : {}),
-    });
+    return rangedFile(c, ref.key, ref.size, fileHeaders(ref.type));
   })
   .get("/stories/:id/poster/:name", async (c) => {
     const v = await requireUser(c);

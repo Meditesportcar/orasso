@@ -23,6 +23,7 @@ import {
   removeTag,
   STORY_CAPTION_MAX,
   STORY_PLACE_MAX,
+  STORY_VIDEO_UPLOAD_PATH,
   type StoryAudienceOption,
   type StoryCreated,
   type StoryTagPick,
@@ -79,19 +80,27 @@ async function upload(file: File): Promise<{ ok: true; key: string } | { ok: fal
   }
 }
 
-/** Envoi d'un fichier avec sa progression réelle (octets partis : `XMLHttpRequest`, `fetch` n'en donne pas). */
+/**
+ * Envoi d'un fichier avec sa progression réelle (octets partis : `XMLHttpRequest`, `fetch` n'en donne pas). Une vidéo part
+ * **brute** (`POST /api/me/uploads/story-video`, le fichier lui-même en corps, `Content-Length` posé par le navigateur) : le
+ * serveur l'écrit en flux, sans la garder en mémoire. La vignette est un envoi ordinaire.
+ */
 function uploadWithProgress(
   file: File,
   purpose: "story_video" | "story_poster",
   onProgress: (ratio: number) => void,
 ): Promise<{ ok: true; key: string } | { ok: false; message: string }> {
   return new Promise((resolve) => {
+    const raw = purpose === "story_video";
     const body = new FormData();
-    body.append("purpose", purpose);
-    body.append("file", file);
+    if (!raw) {
+      body.append("purpose", purpose);
+      body.append("file", file);
+    }
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/me/uploads");
+    xhr.open("POST", raw ? STORY_VIDEO_UPLOAD_PATH : "/api/me/uploads");
     xhr.withCredentials = true;
+    if (raw) xhr.setRequestHeader("content-type", file.type === "video/quicktime" ? file.type : "video/mp4");
     xhr.timeout = 10 * 60_000;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
@@ -103,7 +112,8 @@ function uploadWithProgress(
       } catch {
         json = null;
       }
-      if (xhr.status === 429) return resolve({ ok: false, message: L.tooManyRequests });
+      if (xhr.status === 429)
+        return resolve({ ok: false, message: (raw && json?.error?.message) || L.tooManyRequests });
       if (xhr.status < 200 || xhr.status >= 300 || !json?.key) {
         return resolve({ ok: false, message: json?.error?.message ?? "Envoi impossible. Réessaie." });
       }
@@ -113,7 +123,7 @@ function uploadWithProgress(
     xhr.onerror = offline;
     xhr.ontimeout = offline;
     xhr.onabort = offline;
-    xhr.send(body);
+    xhr.send(raw ? file : body);
   });
 }
 

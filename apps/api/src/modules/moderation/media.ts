@@ -12,7 +12,8 @@ import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { audit } from "../admin/audit";
 
-export type ReportMedia = { data: Buffer; contentType: string };
+/** Une image (en mémoire) ou une vidéo (fichier du disque, servi par morceaux : jamais chargé). */
+export type ReportMedia = { data: Buffer; contentType: string } | { key: string; size: number; contentType: string };
 /** Rend le média `name` du contenu visé par ce signalement, ou `null` (absent, ou pas un média de ce contenu). */
 export type ReportMediaReader = (report: { id: string; targetId: string }, name: string) => Promise<ReportMedia | null>;
 

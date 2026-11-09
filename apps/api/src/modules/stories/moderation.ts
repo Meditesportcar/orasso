@@ -20,8 +20,13 @@ registerReportMedia("story", async ({ targetId }, name) => {
   if (!s || s.filesRemovedAt) return null;
   const key = [s.storageKey, s.posterKey].find((k) => k && fileNameOf(k) === name);
   if (!key) return null;
+  // Lot R7g (tour 2) : la vidéo se lit par morceaux, droits du modérateur (contrôlés par la route), sans charger le fichier.
+  if (key.endsWith(".mp4")) {
+    const size = await storage.size(key);
+    return size ? { key, size, contentType: "video/mp4" } : null;
+  }
   const data = await storage.get(key);
-  return data ? { data, contentType: key.endsWith(".mp4") ? "video/mp4" : "image/webp" } : null;
+  return data ? { data, contentType: "image/webp" } : null;
 });
 
 export const storyTarget: TargetRules = {
@@ -40,6 +45,9 @@ export const storyTarget: TargetRules = {
       title: storyLabels.reportTitle(p?.pseudo ?? "Compte supprimé"),
       text: s.caption,
       imageUrl: s.filesRemovedAt ? null : reportMediaUrl(report.id, fileNameOf(s.posterKey ?? s.storageKey)),
+      // Une vidéo : le lecteur du dossier (le fichier lui-même, par morceaux) en plus de la vignette.
+      videoUrl:
+        s.filesRemovedAt || s.mediaKind !== "video" ? null : reportMediaUrl(report.id, fileNameOf(s.storageKey)),
       link: null,
       gone: Boolean(s.filesRemovedAt),
       removed: Boolean(s.deletedAt),

@@ -23,6 +23,7 @@ import {
   storyDurationMs,
   storyNext,
   storyPlayable,
+  storyPlayerKey,
   storyPrev,
   storyStartIndex,
   tapTarget,
@@ -596,7 +597,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           </div>
         ) : story.mediaKind === "video" ? (
           <VideoSlide
-            key={`${story.id}:${retries}`}
+            key={storyPlayerKey(story.id, retries, replay, true)}
             story={story}
             running={running}
             muted={videoMuted}

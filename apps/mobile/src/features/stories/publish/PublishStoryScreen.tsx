@@ -61,7 +61,7 @@ import { Plate } from "./Plate";
 import { Preview } from "./Preview";
 import type { OverlayData } from "./parts";
 import { markStoryPublished } from "./publishSignal";
-import { withRawShot } from "./shotFiles";
+import { settleRawTake, withRawShot } from "./shotFiles";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -305,6 +305,9 @@ export function PublishStoryScreen() {
     const gen = ++generation.current;
     const alive = aliveFor(gen);
     if (raw) rememberTempPhotos(raw);
+    // La prise brute de l'appareil n'est effacée que si une autre vidéo l'a remplacée (compression) ; sinon c'est elle qu'on
+    // publie, et elle vit jusqu'à la publication ou l'abandon (règle `tempPhotos`).
+    let kept: string | null = null;
     try {
       const got = await source(alive);
       if (!got) return;
@@ -318,11 +321,12 @@ export function PublishStoryScreen() {
       const poster = { uri: got.posterUri, width: got.width, height: got.height };
       setDraft(newStoryDraft(randomUUID(), poster, poster, poster));
       setVideo(got);
+      kept = got.uri;
       setStep("details");
     } catch (e) {
       if (alive()) setError(e instanceof VideoRefused ? e.message : V.unreadable);
     } finally {
-      if (raw) discardTempPhotos([raw]);
+      if (raw) settleRawTake(raw, kept);
       setStage(null);
       setWorking(false);
     }
@@ -385,10 +389,9 @@ export function PublishStoryScreen() {
         alive,
         async () => {
           if (!videoKeys.current.video) {
-            const form = new FormData();
-            form.append("purpose", "story_video");
-            await fileField(form, clip.uri, "story.mp4", "video/mp4");
-            videoKeys.current.video = (await api.uploadStoryVideo(form, (r) => alive() && setVideoRatio(r * 0.97))).key;
+            videoKeys.current.video = (
+              await api.uploadStoryVideo(clip.uri, (r) => alive() && setVideoRatio(r * 0.97))
+            ).key;
           }
           if (!videoKeys.current.poster) {
             const form = new FormData();
@@ -415,7 +418,7 @@ export function PublishStoryScreen() {
       setCreated(result.value);
       setStep("done");
     } catch (e) {
-      if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
+      if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
       else {
         // Un envoi refusé (format, durée, fichier inconnu) : au nouvel essai, tout repart.
@@ -504,6 +507,7 @@ export function PublishStoryScreen() {
       <View style={styles.root}>
         <Capture
           busy={working}
+          error={error}
           onShot={(shot) => void fromCamera(shot)}
           onVideo={(uri) => void videoFromCamera(uri)}
           onGallery={(mode) => void (mode === "video" ? videoFromGallery() : fromGallery())}

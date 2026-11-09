@@ -24,6 +24,7 @@ import {
   storyDurationMs,
   storyNext,
   storyPlayable,
+  storyPlayerKey,
   storyPrev,
   storyStartIndex,
   tapTarget,
@@ -450,7 +451,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             </View>
           ) : (
             <Viewer
-              key={`${story.id}:${mediaRetries}`}
+              key={storyPlayerKey(story.id, mediaRetries, replay, isVideo)}
               story={story}
               authorName={authorName}
               width={width}

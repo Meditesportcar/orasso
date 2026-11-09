@@ -14,7 +14,7 @@ import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../.
 import { withLocation } from "../../../test/mp4-builders";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { crewMembers, profiles, stories, uploads, userFollows } from "../../db/schema";
+import { crewMembers, profiles, reports, stories, uploads, userFollows } from "../../db/schema";
 import { readMp4Buffer } from "../../lib/mp4";
 import { storage, storageDir } from "../../lib/storage";
 import { storiesExpire } from "./expire";
@@ -698,5 +698,43 @@ describe("plafond d'octets de vidéos en attente", () => {
       .set({ createdAt: new Date(clock.now.getTime() - 25 * 3_600_000) })
       .where(eq(uploads.userId, kenji.id));
     expect((await upload(kenji, "story_video", data)).status).toBe(201);
+  });
+});
+
+describe("modération d'une story vidéo signalée", () => {
+  it("le dossier du signalement montre un lecteur : la vidéo est servie par morceaux, mêmes droits du modérateur", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const modo = await signUp("Modo", { twoFactor: true, role: "moderator" });
+    const story = await okVideo(kenji, {});
+    expect((await req(nina, "POST", `/stories/${story.id}/report`, { reason: "shocking" })).status).toBe(201);
+    const [report] = await db.select().from(reports);
+    const detail = await req(modo, "GET", `/admin/reports/${report?.id}`);
+    expect(detail.status, JSON.stringify(detail.json)).toBe(200);
+    const target = detail.json.target as { imageUrl: string | null; videoUrl: string | null };
+    expect(target.videoUrl).toMatch(new RegExp(`^/api/admin/reports/${report?.id}/media/[0-9a-f]{16}.mp4$`));
+    expect(target.imageUrl).toMatch(/\.webp$/);
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, story.id));
+    const data = (await storage.get(row?.storageKey ?? "")) as Buffer;
+    const url = strip(target.videoUrl ?? "");
+    const full = await req(modo, "GET", url);
+    expect([full.status, full.headers.get("content-type"), full.headers.get("accept-ranges")]).toEqual([
+      200,
+      "video/mp4",
+      "bytes",
+    ]);
+    expect(full.buf.equals(data)).toBe(true);
+    const part = await req(modo, "GET", url, undefined, { range: "bytes=100-199" });
+    expect(part.status).toBe(206);
+    expect(part.headers.get("content-range")).toBe(`bytes 100-199/${data.length}`);
+    expect(part.buf.equals(data.subarray(100, 200))).toBe(true);
+    expect((await req(modo, "GET", url, undefined, { range: `bytes=${data.length}-` })).status).toBe(416);
+    expect((await req(modo, "GET", strip(target.imageUrl ?? ""))).status).toBe(200);
+
+    // Mêmes droits que la modération seule : un membre, même l'auteur, ne passe pas par ici.
+    expect((await req(nina, "GET", url)).status).toBe(403);
+    expect((await req(kenji, "GET", url)).status).toBe(403);
+    expect((await req(null, "GET", url)).status).toBe(401);
   });
 });
