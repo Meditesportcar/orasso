@@ -4,11 +4,11 @@
 // droits, ouverture, candidats) sont dans l'API et dans `votes.ts`, jamais ici.
 import { fromWallInput, toWallInput } from "../eventWizard";
 import { criteriaOrigins } from "../labels/event-editor.fr";
-import { voteOrgaLabels as L } from "../labels/votes-orga.fr";
 import { keepUnits } from "../labels/units.fr";
-import type { VoteCreate } from "../schemas/votes";
-import type { VoteManageItem } from "../schemas/votes";
+import { voteOrgaLabels as L } from "../labels/votes-orga.fr";
+import type { VoteCreate, VoteManageItem } from "../schemas/votes";
 import { withYear } from "./dateYear";
+import { calendarDaysBetween, wallTime } from "./time";
 import {
   VOTE_DURATION_MAX,
   VOTE_DURATION_MIN,
@@ -17,7 +17,6 @@ import {
   type VoteCandidateMode,
   type VoteOpenMode,
 } from "./votes";
-import { calendarDaysBetween, wallTime } from "./time";
 
 const WEEKDAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
@@ -177,7 +176,10 @@ const DURATION_PRESETS: Record<string, number> = { "10": 10, "30": 30, "60": 60 
 
 /** Un vote existant → son brouillon (modification avant l'ouverture). */
 export function voteDraftOfItem(v: VoteManageItem): VoteDraft {
-  const known = v.durationMinutes === null ? "end" : Object.keys(DURATION_PRESETS).find((k) => DURATION_PRESETS[k] === v.durationMinutes);
+  const known =
+    v.durationMinutes === null
+      ? "end"
+      : Object.keys(DURATION_PRESETS).find((k) => DURATION_PRESETS[k] === v.durationMinutes);
   return {
     title: v.title,
     mode: v.candidateMode,

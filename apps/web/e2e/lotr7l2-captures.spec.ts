@@ -96,16 +96,26 @@ test("captures de l'appli : organisateur (Direct, fiche, étapes de l'éditeur)"
       await sarah.page.waitForTimeout(4000);
       await sarah.page.screenshot({ path: `${DIR}/${tag(width, scale, theme)}-direct.png` });
       await snap(sarah.page, `/evenement/${ev.id}`, `${tag(width, scale, theme)}-orga-fiche`);
-      await snap(sarah.page, `/evenement/${ev.id}/modifier?temps=reglement`, `${tag(width, scale, theme)}-etape-reglement`);
+      await snap(
+        sarah.page,
+        `/evenement/${ev.id}/modifier?temps=reglement`,
+        `${tag(width, scale, theme)}-etape-reglement`,
+      );
       await snap(sarah.page, `/evenement/${ev.id}/modifier?temps=affiche`, `${tag(width, scale, theme)}-etape-apercu`);
       if (EXTRA) {
-        await snap(sarah.page, `/evenement/${ev.id}/modifier?temps=votes`, `${tag(width, scale, theme)}-etape-votes`, "wizard-votes");
+        await snap(
+          sarah.page,
+          `/evenement/${ev.id}/modifier?temps=votes`,
+          `${tag(width, scale, theme)}-etape-votes`,
+          "wizard-votes",
+        );
         await snap(sarah.page, `/evenement/${ev.id}/votes`, `${tag(width, scale, theme)}-votes-direct`, "votes-screen");
       }
       await sarah.ctx.close();
       const damien = await appContext(browser, theme, width, scale, "damien@orasso.local", 1500);
       await snap(damien.page, `/staff/${ev.id}`, `${tag(width, scale, theme)}-staff`);
-      if (EXTRA) await snap(damien.page, `/staff/${ev.id}/votes`, `${tag(width, scale, theme)}-staff-votes`, "votes-screen");
+      if (EXTRA)
+        await snap(damien.page, `/staff/${ev.id}/votes`, `${tag(width, scale, theme)}-staff-votes`, "votes-screen");
       await damien.ctx.close();
     }
   }
