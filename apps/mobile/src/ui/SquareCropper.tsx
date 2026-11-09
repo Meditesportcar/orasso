@@ -18,12 +18,15 @@ import {
   clampView,
   cropFromView,
   displayScale,
+  focusFromView,
+  frameSize,
   MAX_ZOOM,
   MIN_ZOOM,
   pinchZoom,
   type SquareCrop,
   stepZoom,
   viewFromCrop,
+  viewFromFocus,
 } from "@/lib/squareCrop";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
@@ -40,18 +43,44 @@ export type SquareCropperProps = {
   /** « Photo 1 sur 2 · format carré ». */
   subtitle: string;
   onCancel: () => void;
-  onConfirm: (crop: SquareCrop) => void;
-  /** Découpe en cours (le bouton attend). */
+  /** Carré (`ratio` 1) : le carré choisi. */
+  onConfirm?: (crop: SquareCrop) => void;
   busy?: boolean;
+  /**
+   * Lot R7e2 : un autre format que le carré (publication du Fil : 4:5, paysage). `ratio` = largeur / hauteur du cadre.
+   * Le cadre est le plus grand de son format, sans zoom : on glisse la photo, `onConfirmFocus` reçoit le centre choisi
+   * (0 à 1). Sans `ratio`, le comportement est celui du carré, inchangé.
+   */
+  ratio?: number;
+  initialFocus?: { x: number; y: number };
+  onConfirmFocus?: (focus: { x: number; y: number }) => void;
+  /** Étiquette du cadre (« Cadre fixe · 4:5 ») et consigne, pour un format autre que le carré. */
+  badge?: string;
+  hint?: string;
 };
 
-export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, busy = false }: SquareCropperProps) {
+export function SquareCropper({
+  photo,
+  initial,
+  subtitle,
+  onCancel,
+  onConfirm,
+  busy = false,
+  ratio = 1,
+  initialFocus,
+  onConfirmFocus,
+  badge,
+  hint,
+}: SquareCropperProps) {
   const { t } = useTheme();
   const c = t.color;
   const insets = useSafeAreaInsets();
   const [stage, setStage] = useState(0);
   const frame = Math.round(stage * (1 - FRAME_MARGIN * 2));
   const { width: w, height: h } = photo;
+  const square = ratio === 1;
+  const squareRef = useRef(square);
+  squareRef.current = square;
 
   const zoom = useSharedValue(1);
   const tx = useSharedValue(0);
@@ -61,7 +90,7 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
   const view = useRef<CropView>({ zoom: 1, tx: 0, ty: 0 });
 
   const apply = (next: CropView) => {
-    const v = clampView(w, h, frame, next);
+    const v = clampView(w, h, frame, next, ratio);
     view.current = v;
     zoom.value = v.zoom;
     tx.value = v.tx;
@@ -76,7 +105,11 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
   useEffect(() => {
     if (!frame) return;
     fs.value = frame;
-    const v = apply(viewFromCrop(w, h, frame, initial ?? centerCrop(w, h)));
+    const v = apply(
+      square
+        ? viewFromCrop(w, h, frame, initial ?? centerCrop(w, h))
+        : viewFromFocus(w, h, frame, initialFocus ?? { x: 0.5, y: 0.5 }, ratio),
+    );
     setZoomShown(v.zoom);
   }, [frame, photo.uri]);
 
@@ -101,7 +134,7 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
         pinch = spread(e);
       },
       onPanResponderMove: (e, g) => {
-        const two = spread(e);
+        const two = squareRef.current ? spread(e) : null; // autre format : pas de zoom, on glisse seulement
         if (two) {
           // Deux doigts : on pince (zoom) et on glisse avec le milieu des doigts.
           if (!pinch) {
@@ -140,7 +173,8 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
     setZoomShown(apply({ zoom: z, tx: v.tx * (z / v.zoom), ty: v.ty * (z / v.zoom) }).zoom);
   };
 
-  const base = frame ? displayScale(w, h, frame, 1) : 0;
+  const base = frame ? displayScale(w, h, frame, 1, ratio) : 0;
+  const box = frameSize(frame, ratio);
   const imgW = w * base;
   const imgH = h * base;
   const track = useAnimatedStyle(() => {
@@ -175,10 +209,17 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
         {frame ? (
           <>
             <CropImage uri={photo.uri} width={imgW} height={imgH} zoom={zoom} tx={tx} ty={ty} />
-            <FrameMask stage={stage} frame={frame} ink={c.nightInk} accent={c.accent} dim={withAlpha(c.night, 0.7)} />
+            <FrameMask
+              stage={stage}
+              frameW={box.width}
+              frameH={box.height}
+              ink={c.nightInk}
+              accent={c.accent}
+              dim={withAlpha(c.night, 0.7)}
+            />
             <View style={styles.badge} pointerEvents="none">
               <View>
-                <Tag tone="acc">{V.cropBadge}</Tag>
+                <Tag tone="acc">{badge ?? V.cropBadge}</Tag>
               </View>
             </View>
           </>
@@ -188,53 +229,57 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
         <View style={styles.hint}>
           <Icon name="move" size={16} color={withAlpha(c.nightInk, 0.8)} />
           <Text variant="caption" color={withAlpha(c.nightInk, 0.8)}>
-            {V.cropHint}
+            {hint ?? V.cropHint}
           </Text>
         </View>
-        <View style={styles.zoom}>
-          <ZoomButton icon="minus" label={V.zoomOut} onPress={() => press(-1)} testID="crop-zoom-out" />
-          <View style={[styles.track, { backgroundColor: withAlpha(c.nightInk, 0.18) }]}>
-            <Animated.View style={[styles.trackFill, { backgroundColor: c.accent }, track]} />
-            <Animated.View style={[styles.knob, { backgroundColor: c.nightInk }, knob]} />
-          </View>
-          <ZoomButton icon="add" label={V.zoomIn} onPress={() => press(1)} testID="crop-zoom-in" />
-          <Text variant="numberNarrow" color={c.nightInk} style={styles.zoomValue} testID="crop-zoom-value">
-            {V.zoomValue(zoomShown)}
-          </Text>
-        </View>
-        <View style={styles.previews}>
-          <View style={styles.previewCol}>
-            <Text variant="label" color={withAlpha(c.nightInk, 0.7)}>
-              {V.previewThumb}
-            </Text>
-            <Preview
-              uri={photo.uri}
-              box={{ width: PREVIEW, height: PREVIEW }}
-              side={PREVIEW}
-              frame={fs}
-              base={{ width: imgW, height: imgH }}
-              view={{ zoom, tx, ty }}
-              line={withAlpha(c.nightInk, 0.2)}
-            />
-          </View>
-          <View style={styles.previewCol}>
-            <Text variant="label" color={withAlpha(c.nightInk, 0.7)}>
-              {V.previewCard}
-            </Text>
-            <Preview
-              uri={photo.uri}
-              box={{ width: PREVIEW_WIDE, height: PREVIEW }}
-              side={PREVIEW_WIDE}
-              frame={fs}
-              base={{ width: imgW, height: imgH }}
-              view={{ zoom, tx, ty }}
-              line={withAlpha(c.nightInk, 0.2)}
-            />
-          </View>
-          <Text variant="caption" color={withAlpha(c.nightInk, 0.7)} style={styles.grow}>
-            {V.previewText}
-          </Text>
-        </View>
+        {square ? (
+          <>
+            <View style={styles.zoom}>
+              <ZoomButton icon="minus" label={V.zoomOut} onPress={() => press(-1)} testID="crop-zoom-out" />
+              <View style={[styles.track, { backgroundColor: withAlpha(c.nightInk, 0.18) }]}>
+                <Animated.View style={[styles.trackFill, { backgroundColor: c.accent }, track]} />
+                <Animated.View style={[styles.knob, { backgroundColor: c.nightInk }, knob]} />
+              </View>
+              <ZoomButton icon="add" label={V.zoomIn} onPress={() => press(1)} testID="crop-zoom-in" />
+              <Text variant="numberNarrow" color={c.nightInk} style={styles.zoomValue} testID="crop-zoom-value">
+                {V.zoomValue(zoomShown)}
+              </Text>
+            </View>
+            <View style={styles.previews}>
+              <View style={styles.previewCol}>
+                <Text variant="label" color={withAlpha(c.nightInk, 0.7)}>
+                  {V.previewThumb}
+                </Text>
+                <Preview
+                  uri={photo.uri}
+                  box={{ width: PREVIEW, height: PREVIEW }}
+                  side={PREVIEW}
+                  frame={fs}
+                  base={{ width: imgW, height: imgH }}
+                  view={{ zoom, tx, ty }}
+                  line={withAlpha(c.nightInk, 0.2)}
+                />
+              </View>
+              <View style={styles.previewCol}>
+                <Text variant="label" color={withAlpha(c.nightInk, 0.7)}>
+                  {V.previewCard}
+                </Text>
+                <Preview
+                  uri={photo.uri}
+                  box={{ width: PREVIEW_WIDE, height: PREVIEW }}
+                  side={PREVIEW_WIDE}
+                  frame={fs}
+                  base={{ width: imgW, height: imgH }}
+                  view={{ zoom, tx, ty }}
+                  line={withAlpha(c.nightInk, 0.2)}
+                />
+              </View>
+              <Text variant="caption" color={withAlpha(c.nightInk, 0.7)} style={styles.grow}>
+                {V.previewText}
+              </Text>
+            </View>
+          </>
+        ) : null}
         <View style={styles.footer}>
           <ZoomButton icon="close" label={V.cropCancel} onPress={onCancel} size={52} />
           <View style={styles.grow}>
@@ -243,7 +288,11 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
               icon="check"
               fullWidth
               loading={busy}
-              onPress={() => onConfirm(cropFromView(w, h, frame, view.current))}
+              onPress={() =>
+                square
+                  ? onConfirm?.(cropFromView(w, h, frame, view.current))
+                  : onConfirmFocus?.(focusFromView(w, h, frame, view.current, ratio))
+              }
               testID="crop-validate"
             >
               {V.cropValidate}
@@ -326,33 +375,35 @@ function Preview({
 /** Voile autour du cadre, filet clair, coins moutarde et tiers (`.cr-frame` de la maquette). */
 function FrameMask({
   stage,
-  frame,
+  frameW,
+  frameH,
   ink,
   accent,
   dim,
 }: {
   stage: number;
-  frame: number;
+  frameW: number;
+  frameH: number;
   ink: string;
   accent: string;
   dim: string;
 }) {
   const height = stage * 1.04;
-  const left = (stage - frame) / 2;
-  const top = (height - frame) / 2;
+  const left = (stage - frameW) / 2;
+  const top = (height - frameH) / 2;
   const third = withAlpha(ink, 0.3);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View style={[styles.dim, { backgroundColor: dim, left: 0, right: 0, top: 0, height: top }]} />
-      <View style={[styles.dim, { backgroundColor: dim, left: 0, right: 0, top: top + frame, bottom: 0 }]} />
-      <View style={[styles.dim, { backgroundColor: dim, left: 0, width: left, top, height: frame }]} />
-      <View style={[styles.dim, { backgroundColor: dim, right: 0, width: left, top, height: frame }]} />
-      <View style={[styles.frame, { left, top, width: frame, height: frame, borderColor: ink }]}>
+      <View style={[styles.dim, { backgroundColor: dim, left: 0, right: 0, top: top + frameH, bottom: 0 }]} />
+      <View style={[styles.dim, { backgroundColor: dim, left: 0, width: left, top, height: frameH }]} />
+      <View style={[styles.dim, { backgroundColor: dim, right: 0, width: left, top, height: frameH }]} />
+      <View style={[styles.frame, { left, top, width: frameW, height: frameH, borderColor: ink }]}>
         {[1, 2].map((i) => (
-          <View key={`v${i}`} style={[styles.thirdV, { left: (frame * i) / 3, backgroundColor: third }]} />
+          <View key={`v${i}`} style={[styles.thirdV, { left: (frameW * i) / 3, backgroundColor: third }]} />
         ))}
         {[1, 2].map((i) => (
-          <View key={`h${i}`} style={[styles.thirdH, { top: (frame * i) / 3, backgroundColor: third }]} />
+          <View key={`h${i}`} style={[styles.thirdH, { top: (frameH * i) / 3, backgroundColor: third }]} />
         ))}
         <View style={[styles.corner, styles.tl, { borderColor: accent }]} />
         <View style={[styles.corner, styles.tr, { borderColor: accent }]} />

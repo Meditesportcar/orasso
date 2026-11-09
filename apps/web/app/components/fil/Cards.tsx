@@ -325,7 +325,7 @@ export const cardRegistry: { [K in FeedCardKind]: (props: CardProps<any>) => Rea
 
 /** Le composant d'un genre ; `UnknownCard` pour un genre que ce registre ne connaît pas. */
 export function cardFor(kind: string): (props: CardProps) => React.ReactElement {
-  return (kind in cardRegistry ? cardRegistry[kind as FeedCardKind] : UnknownCard) as (
+  return (Object.hasOwn(cardRegistry, kind) ? cardRegistry[kind as FeedCardKind] : UnknownCard) as (
     props: CardProps,
   ) => React.ReactElement;
 }

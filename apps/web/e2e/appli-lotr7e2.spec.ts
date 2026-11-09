@@ -256,6 +256,12 @@ test("publier au Fil en 4:5 : bouton grisé expliqué sans décision de plaque, 
   await page.getByTestId("fil-publish-send").click();
   await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
   await shot(page, "publie");
+  // Ma publication revient en tête du Fil, même dans « Abonnements » (l'API n'y met pas mes propres publications).
+  await page.getByTestId("fil-publish-back").click();
+  await page.getByTestId("fil-filters-following").click();
+  const mineCard = page.getByTestId("feed-card-feed_post").first();
+  await expect(mineCard).toContainText("Prêtes pour dimanche", { timeout: 30_000 });
+  await expect(mineCard).toContainText("Ta publication");
   // La publication est au Fil (4:5, 2 photos) et dans « Mes publications » ; Kenji la voit dans son Fil et la supprime.
   const cookie = await login("kenji@orasso.local");
   const mine = await apiCall<{ items: { id: string; aspect: string; photos: unknown[]; caption: string }[] }>(

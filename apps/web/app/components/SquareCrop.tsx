@@ -10,12 +10,15 @@ import {
   cropFromView,
   cropPixels,
   displayScale,
+  focusFromView,
+  frameSize,
   MAX_ZOOM,
   MIN_ZOOM,
   pinchZoom,
   previewPlacement,
   stepZoom,
   vehicleAddLabels as V,
+  viewFromFocus,
 } from "@orasso/shared";
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,12 +35,31 @@ export function SquareCrop({
   file,
   onDone,
   onCancel,
+  ratio = 1,
+  initialFocus,
+  onFocus,
+  subtitle,
+  badge,
+  hint,
 }: {
   file: File;
   /** Le JPEG carré, ou le fichier d'origine si la photo ne peut pas être lue (le serveur la refusera alors). */
-  onDone: (file: File) => void;
+  onDone?: (file: File) => void;
   onCancel: () => void;
+  /**
+   * Lot R7e2 : un autre format que le carré (publication du Fil : 4:5, paysage), largeur / hauteur du cadre. Le cadre est
+   * le plus grand de son format, sans zoom : on glisse la photo, `onFocus` reçoit le centre choisi (0 à 1). Sans `ratio`,
+   * le comportement est celui du carré, inchangé.
+   */
+  ratio?: number;
+  initialFocus?: { x: number; y: number };
+  onFocus?: (focus: { x: number; y: number }) => void;
+  subtitle?: string;
+  badge?: string;
+  hint?: string;
 }) {
+  const square = ratio === 1;
+  const box = frameSize(FRAME, ratio);
   const dialog = useRef<HTMLDialogElement>(null);
   const [src, setSrc] = useState<Loaded | null>(null);
   const [view, setView] = useState<CropView>({ zoom: MIN_ZOOM, tx: 0, ty: 0 });
@@ -59,7 +81,9 @@ export function SquareCrop({
       if (alive) setSrc({ url, width: image.naturalWidth, height: image.naturalHeight, image });
     };
     image.onerror = () => {
-      if (alive) onDone(file);
+      if (!alive) return;
+      if (onDone) onDone(file);
+      else onCancel();
     };
     image.src = url;
     return () => {
@@ -70,14 +94,20 @@ export function SquareCrop({
 
   const w = src?.width ?? 0;
   const h = src?.height ?? 0;
-  const fit = (next: CropView) => (w && h ? clampView(w, h, FRAME, next) : next);
+  const fit = (next: CropView) => (w && h ? clampView(w, h, FRAME, next, ratio) : next);
+
+  // Autre format : la vue part du centre choisi la dernière fois (ou du centre de la photo), une seule fois par photo.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une fois la photo chargée
+  useEffect(() => {
+    if (!square && w && h) setView(viewFromFocus(w, h, FRAME, initialFocus ?? { x: 0.5, y: 0.5 }, ratio));
+  }, [w, h]);
 
   // Molette : zoom (écouteur natif, pour pouvoir empêcher le défilement de la page).
   const wheelState = useRef({ fit, view });
   wheelState.current = { fit, view };
   useEffect(() => {
     const el = frame.current;
-    if (!el) return;
+    if (!el || !square) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const { fit: f, view: v } = wheelState.current;
@@ -85,7 +115,7 @@ export function SquareCrop({
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [square]);
 
   const distance = () => {
     const [a, b] = [...pointers.current.values()];
@@ -101,7 +131,7 @@ export function SquareCrop({
     const g = gesture.current;
     if (!g || !pointers.current.has(e.pointerId)) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size >= 2) {
+    if (square && pointers.current.size >= 2) {
       setView(fit({ ...g.view, zoom: pinchZoom(g.view.zoom, g.distance, distance()) }));
       return;
     }
@@ -116,10 +146,11 @@ export function SquareCrop({
 
   const crop = useMemo(() => (w && h ? cropFromView(w, h, FRAME, view) : centerCrop(1, 1)), [w, h, view]);
   const place = w && h ? previewPlacement(w, h, crop) : null;
-  const scale = w && h ? displayScale(w, h, FRAME, view.zoom) : 1;
+  const scale = w && h ? displayScale(w, h, FRAME, view.zoom, ratio) : 1;
 
   const validate = () => {
     if (!src) return;
+    if (!square) return onFocus?.(focusFromView(src.width, src.height, FRAME, view, ratio));
     setBusy(true);
     const px = cropPixels(src.width, src.height, crop);
     const side = Math.min(px.width, MAX_SIDE);
@@ -129,8 +160,8 @@ export function SquareCrop({
     canvas.getContext("2d")?.drawImage(src.image, px.originX, px.originY, px.width, px.height, 0, 0, side, side);
     canvas.toBlob(
       (blob) => {
-        if (!blob) return onDone(file);
-        onDone(new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "photo"}.jpg`, { type: "image/jpeg" }));
+        if (!blob) return onDone?.(file);
+        onDone?.(new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "photo"}.jpg`, { type: "image/jpeg" }));
       },
       "image/jpeg",
       0.9,
@@ -171,12 +202,12 @@ export function SquareCrop({
           <h2 id="crop-title" className="s-h2">
             {V.cropTitle}
           </h2>
-          <p className="o-t-caption">{V.cropOf(1, 1)}</p>
+          <p className="o-t-caption">{subtitle ?? V.cropOf(1, 1)}</p>
         </div>
         <div
           ref={frame}
           className="g-crop__frame"
-          style={{ width: FRAME, height: FRAME }}
+          style={{ width: box.width, height: box.height }}
           data-testid="site-crop-frame"
           data-zoom={view.zoom}
           onPointerDown={down}
@@ -192,56 +223,60 @@ export function SquareCrop({
               style={{
                 width: src.width * scale,
                 height: src.height * scale,
-                left: FRAME / 2 - (src.width * scale) / 2 + view.tx,
-                top: FRAME / 2 - (src.height * scale) / 2 + view.ty,
+                left: box.width / 2 - (src.width * scale) / 2 + view.tx,
+                top: box.height / 2 - (src.height * scale) / 2 + view.ty,
               }}
             />
           ) : (
             <span className="g-crop__busy o-t-caption">{V.cropBusy}</span>
           )}
-          <span className="g-crop__badge o-t-label">{V.cropBadge}</span>
+          <span className="g-crop__badge o-t-label">{badge ?? V.cropBadge}</span>
         </div>
-        <p className="o-t-caption">{CROP_HINT}</p>
-        <div className="g-crop__zoom">
-          <button
-            type="button"
-            className="g-crop__step"
-            aria-label={V.zoomOut}
-            data-testid="site-crop-out"
-            disabled={view.zoom <= MIN_ZOOM}
-            onClick={() => setView(fit({ ...view, zoom: stepZoom(view.zoom, -1) }))}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path d="M5 12h14" />
-            </svg>
-          </button>
-          <output className="o-t-number" data-testid="site-crop-zoom">
-            {V.zoomValue(view.zoom)}
-          </output>
-          <button
-            type="button"
-            className="g-crop__step"
-            aria-label={V.zoomIn}
-            data-testid="site-crop-in"
-            disabled={view.zoom >= MAX_ZOOM}
-            onClick={() => setView(fit({ ...view, zoom: stepZoom(view.zoom, 1) }))}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
-        </div>
-        <div className="g-crop__previews">
-          <figure className="g-crop__figure">
-            {preview(56, "site-crop-thumb")}
-            <figcaption className="o-t-label">{V.previewThumb}</figcaption>
-          </figure>
-          <figure className="g-crop__figure">
-            {preview(120, "site-crop-card")}
-            <figcaption className="o-t-label">{V.previewCard}</figcaption>
-          </figure>
-        </div>
-        <p className="o-t-caption">{V.previewText}</p>
+        <p className="o-t-caption">{hint ?? CROP_HINT}</p>
+        {square ? (
+          <>
+            <div className="g-crop__zoom">
+              <button
+                type="button"
+                className="g-crop__step"
+                aria-label={V.zoomOut}
+                data-testid="site-crop-out"
+                disabled={view.zoom <= MIN_ZOOM}
+                onClick={() => setView(fit({ ...view, zoom: stepZoom(view.zoom, -1) }))}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                  <path d="M5 12h14" />
+                </svg>
+              </button>
+              <output className="o-t-number" data-testid="site-crop-zoom">
+                {V.zoomValue(view.zoom)}
+              </output>
+              <button
+                type="button"
+                className="g-crop__step"
+                aria-label={V.zoomIn}
+                data-testid="site-crop-in"
+                disabled={view.zoom >= MAX_ZOOM}
+                onClick={() => setView(fit({ ...view, zoom: stepZoom(view.zoom, 1) }))}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </div>
+            <div className="g-crop__previews">
+              <figure className="g-crop__figure">
+                {preview(56, "site-crop-thumb")}
+                <figcaption className="o-t-label">{V.previewThumb}</figcaption>
+              </figure>
+              <figure className="g-crop__figure">
+                {preview(120, "site-crop-card")}
+                <figcaption className="o-t-label">{V.previewCard}</figcaption>
+              </figure>
+            </div>
+            <p className="o-t-caption">{V.previewText}</p>
+          </>
+        ) : null}
         <Button
           type="button"
           icon="check"

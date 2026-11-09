@@ -33,9 +33,10 @@ vi.mock("./kv", () => ({ onCacheScopeDropped: (h: () => Promise<void>) => void d
 import { discardTempPhotos, rememberTempPhotos, tempPhotoCount } from "./tempPhotos";
 
 beforeEach(() => {
-  device.files = new Set(["file:///cache/a.jpg", "file:///cache/b.jpg", "file:///cache/c.jpg"]);
+  // D'abord oublier ce que le test d'avant avait noté, ensuite remettre les fichiers.
   device.broken = new Set();
   discardTempPhotos();
+  device.files = new Set(["file:///cache/a.jpg", "file:///cache/b.jpg", "file:///cache/c.jpg"]);
 });
 
 describe("photos temporaires du Fil (JPEG non floutés)", () => {

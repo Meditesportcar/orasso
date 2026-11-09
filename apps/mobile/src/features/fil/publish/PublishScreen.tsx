@@ -8,6 +8,7 @@ import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@or
 import {
   DEFAULT_FEED_ASPECT,
   eventsWithPlace,
+  FEED_ASPECT_RATIOS,
   FEED_CAPTION_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
@@ -27,12 +28,14 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cropAspect, type PickedPhoto, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
+import { discardTempPhotos, rememberTempPhotos } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { SquareCropper } from "@/ui/SquareCropper";
 import { markFeedDirty } from "../feedSignal";
 import {
   addFrame,
@@ -41,6 +44,7 @@ import {
   type FeedDraftPhoto,
   newDraftPhoto,
   plateBadge,
+  plateControls,
   recropped,
   removeFrame,
   setFrames,
@@ -82,6 +86,9 @@ export function PublishScreen() {
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formatNote, setFormatNote] = useState(false);
+  // « Recadrer » : la clé de la photo qu'on recadre au doigt (plein écran), et l'attente de la découpe.
+  const [cropping, setCropping] = useState<string | null>(null);
+  const [cropBusy, setCropBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [clientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
@@ -108,7 +115,8 @@ export function PublishScreen() {
     }
     if (gen !== generation.current) return;
     const rects = found ? surePlates(found).map((f) => f.rect) : null;
-    setPhotos((list) => list.map((p) => (p.key === key ? withDetection(p, rects) : p)));
+    // Le résultat ne vaut que pour la photo recadrée qu'on a cherchée : une photo recadrée entre-temps repart de zéro.
+    setPhotos((list) => list.map((p) => (p.key === key && p.photo.uri === photo.uri ? withDetection(p, rects) : p)));
   }, []);
 
   async function add(from: "gallery" | "camera") {
@@ -122,6 +130,8 @@ export function PublishScreen() {
       const fresh: FeedDraftPhoto[] = [];
       for (const source of picked.slice(0, room)) {
         const cropped = await cropAspect(source, wanted);
+        // Ces JPEG ne sont pas floutés : effacés dès qu'ils ne servent plus (`tempPhotos`).
+        rememberTempPhotos(source.uri, cropped.uri);
         fresh.push(newDraftPhoto(randomUUID(), source, cropped));
       }
       if (gen !== generation.current) return;
@@ -141,8 +151,16 @@ export function PublishScreen() {
     setFormatNote(true);
     try {
       const again: FeedDraftPhoto[] = [];
-      for (const p of photos) again.push(recropped(p, await cropAspect(p.source, next)));
-      if (gen !== generation.current) return;
+      for (const p of photos) {
+        const cropped = await cropAspect(p.source, next);
+        rememberTempPhotos(cropped.uri);
+        again.push(recropped(p, cropped));
+      }
+      if (gen !== generation.current) {
+        discardTempPhotos(again.map((p) => p.photo.uri));
+        return;
+      }
+      discardTempPhotos(photos.map((p) => p.photo.uri));
       setPhotos(again);
       for (const p of again) void detect(p.key, p.photo, gen);
     } catch (e) {
@@ -159,6 +177,30 @@ export function PublishScreen() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
   useEffect(() => setConfirming(false), [index]);
 
+  // Départ de l'écran (publié, abandonné) : les JPEG non floutés du cache de l'appli sont effacés.
+  useEffect(() => () => discardTempPhotos(), []);
+
+  /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro, la détection est relancée. */
+  async function recropAt(key: string, focus: { x: number; y: number }) {
+    const target = photos.find((p) => p.key === key);
+    if (!target || cropBusy) return;
+    setCropBusy(true);
+    try {
+      const cropped = await cropAspect(target.source, aspect, focus);
+      rememberTempPhotos(cropped.uri);
+      discardTempPhotos([target.photo.uri]);
+      setPhotos((list) => list.map((p) => (p.key === key ? recropped(p, cropped, focus) : p)));
+      setCropping(null);
+      void detect(key, cropped, generation.current);
+    } catch (e) {
+      setError(errorMessage(e));
+      setCropping(null);
+    } finally {
+      setCropBusy(false);
+    }
+  }
+
+  const controls = photo ? plateControls(photo) : null;
   const preparing = photos.some((p) => p.detection === "pending");
   const issue = publishIssue({ photos, caption, preparing });
 
@@ -186,8 +228,10 @@ export function PublishScreen() {
         eventId,
         clientId,
       });
-      await api.createFeedPost(body);
-      markFeedDirty();
+      const post = await api.createFeedPost(body);
+      // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
+      markFeedDirty(post);
+      discardTempPhotos();
       setDone(true);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
@@ -204,6 +248,28 @@ export function PublishScreen() {
     } finally {
       setBusy(false);
       setSent(null);
+    }
+  }
+
+  if (cropping) {
+    const at = photos.findIndex((p) => p.key === cropping);
+    const target = photos[at];
+    if (target) {
+      const label = ASPECTS.find((a) => a.value === aspect)?.label ?? "";
+      return (
+        <SquareCropper
+          key={target.key}
+          photo={target.source}
+          ratio={FEED_ASPECT_RATIOS[aspect]}
+          initialFocus={target.focus}
+          subtitle={L.cropOf(at + 1, photos.length, label)}
+          badge={L.cropBadge(label)}
+          hint={L.cropHint}
+          busy={cropBusy}
+          onCancel={() => setCropping(null)}
+          onConfirmFocus={(focus) => void recropAt(target.key, focus)}
+        />
+      );
     }
   }
 
@@ -292,6 +358,7 @@ export function PublishScreen() {
                 accessibilityLabel={L.removePhoto}
                 disabled={busy}
                 onPress={() => {
+                  discardTempPhotos([p.source.uri, p.photo.uri]);
                   setPhotos((list) => list.filter((x) => x.key !== p.key));
                   setCurrent(0);
                 }}
@@ -374,8 +441,17 @@ export function PublishScreen() {
           <View style={styles.row}>
             <SmButton
               kind="s"
+              icon="crop"
+              disabled={busy || controls?.searching}
+              onPress={() => setCropping(photo.key)}
+              testID="fil-publish-crop"
+            >
+              {L.crop}
+            </SmButton>
+            <SmButton
+              kind="s"
               icon="add"
-              disabled={busy || photo.rects.length >= 4}
+              disabled={busy || !controls?.canAdd}
               onPress={() => patch(photo.key, addFrame)}
               testID="fil-publish-frame-add"
             >
@@ -433,7 +509,7 @@ export function PublishScreen() {
               kind="s"
               icon="eye"
               wide
-              disabled={busy}
+              disabled={busy || !controls?.canNone}
               onPress={() => setConfirming(true)}
               testID="fil-publish-none"
             >

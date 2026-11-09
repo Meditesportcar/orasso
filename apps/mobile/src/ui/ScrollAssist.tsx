@@ -13,6 +13,8 @@ export type ScrollAssist = {
   reveal: (view: View | null) => void;
   /** Lot R7e2 : remonte la page tout en haut (le Fil dont la liste repart de zéro). */
   top: () => void;
+  /** Lot R7e2, tour 2 : prévient à chaque défilement de la page (le Fil libère les photos des cartes loin de l'écran). Rend la désinscription. */
+  watchScroll: (listener: () => void) => () => void;
 };
 
 export const ScrollAssistContext = createContext<ScrollAssist | null>(null);

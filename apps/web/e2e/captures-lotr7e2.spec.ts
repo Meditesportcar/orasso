@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, setTheme, SEED_PASSWORD } from "./helpers";
+import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7e2 : captures « avant » / « après » du Fil (onglet, Explorer, composer du crew, site). PHASE=avant|apres.

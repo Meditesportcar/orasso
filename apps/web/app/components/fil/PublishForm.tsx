@@ -7,9 +7,11 @@ import { Button, Icon } from "@orasso/design-system/web";
 import {
   DEFAULT_FEED_ASPECT,
   eventsWithPlace,
+  FEED_ASPECT_RATIOS,
   FEED_CAPTION_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
+  type FeedPostView,
   feedAspectLabels,
   feedCropPlan,
   feedPostBody,
@@ -22,9 +24,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
+import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
+import { SquareCrop } from "../SquareCrop";
+import { rememberPublished } from "./mine";
 
 type Item = {
   key: string;
@@ -35,16 +40,18 @@ type Item = {
   url: string;
   rects: PlateRect[];
   noPlate: boolean;
+  /** Le centre choisi au doigt (« Glisse pour recadrer », 0 à 1) ; absent : le centre de la photo. */
+  focus?: { x: number; y: number };
 };
 
 const ASPECTS: FeedAspect[] = ["portrait_4_5", "square", "landscape"];
 const ASPECT_SHORT: Record<FeedAspect, string> = { portrait_4_5: "4:5", square: "1:1", landscape: "Paysage" };
 
 /** Recadre une photo au format (centré) et la rend en JPEG ; le fichier d'origine si elle ne se lit pas. */
-async function crop(file: File, aspect: FeedAspect): Promise<File> {
+async function crop(file: File, aspect: FeedAspect, focus?: { x: number; y: number }): Promise<File> {
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) return file;
-  const plan = feedCropPlan(bitmap.width, bitmap.height, aspect);
+  const plan = feedCropPlan(bitmap.width, bitmap.height, aspect, focus);
   const canvas = document.createElement("canvas");
   canvas.width = plan.outWidth;
   canvas.height = plan.outHeight;
@@ -91,6 +98,8 @@ export function PublishForm({
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formatNote, setFormatNote] = useState(false);
+  // « Recadrer » : la clé de la photo qu'on recadre au doigt.
+  const [cropping, setCropping] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [clientId] = useState(() => crypto.randomUUID());
@@ -154,6 +163,23 @@ export function PublishForm({
 
   const index = Math.min(current, Math.max(0, items.length - 1));
   const item = items[index];
+  // La confirmation « Aucune plaque visible » est celle de la photo affichée : elle ne suit pas la photo suivante.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
+  useEffect(() => setConfirming(false), [index, item?.key]);
+
+  /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro. */
+  async function recropAt(key: string, focus: { x: number; y: number }) {
+    const target = items.find((i) => i.key === key);
+    setCropping(null);
+    if (!target) return;
+    setPreparing(true);
+    const cropped = await crop(target.source, aspect, focus);
+    setPreparing(false);
+    const url = URL.createObjectURL(cropped);
+    URL.revokeObjectURL(target.url);
+    delete keys.current[target.key + target.url];
+    patch(key, (i) => ({ ...i, cropped, url, focus, rects: [], noPlate: false }));
+  }
   const issue = publishIssue({ photos: items, caption, preparing });
 
   async function publish() {
@@ -189,7 +215,11 @@ export function PublishForm({
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
     setProgress(null);
-    if (res.ok) return setDone(true);
+    if (res.ok) {
+      // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements »).
+      rememberPublished(res.data as FeedPostView);
+      return setDone(true);
+    }
     if (res.status === 429) return setError(L.tooManyRequests);
     if (res.error.code === "plate_decision_required") {
       const at = Number((res.error as { details?: { photoIndex?: number } }).details?.photoIndex);
@@ -218,6 +248,7 @@ export function PublishForm({
     );
   }
 
+  const cropTarget = cropping ? items.find((i) => i.key === cropping) : undefined;
   return (
     <form
       className="fil fil-form"
@@ -228,6 +259,19 @@ export function PublishForm({
       }}
     >
       <FicheBar title={L.publishTitle} facts={L.publishSubtitle} back="/app/fil" />
+      {cropTarget ? (
+        <SquareCrop
+          key={cropTarget.key}
+          file={cropTarget.source}
+          ratio={FEED_ASPECT_RATIOS[aspect]}
+          initialFocus={cropTarget.focus}
+          subtitle={L.cropOf(items.indexOf(cropTarget) + 1, items.length, ASPECT_SHORT[aspect])}
+          badge={L.cropBadge(ASPECT_SHORT[aspect])}
+          hint={L.cropHint}
+          onCancel={() => setCropping(null)}
+          onFocus={(focus) => void recropAt(cropTarget.key, focus)}
+        />
+      ) : null}
 
       <section className="s-stack s-stack--tight">
         <div className="o-t-label">
@@ -340,13 +384,23 @@ export function PublishForm({
                 src={item.url}
                 alt={L.plateFrameFor(index + 1)}
                 name={`plateRects${index}`}
-                initial={[]}
+                initial={item.rects}
                 testId="fil-publish-plate-editor"
                 onChange={(rects) => patch(item.key, (i) => (i.rects === rects ? i : { ...i, rects }))}
               />
               <p className="o-t-caption" data-testid="fil-publish-plate-state">
                 {item.rects.length ? L.plateFound(item.rects.length).replace("repérée", "posée") : L.plateNotFound}
               </p>
+              <Button
+                type="button"
+                variant="secondary"
+                icon="crop"
+                disabled={busy}
+                onClick={() => setCropping(item.key)}
+                data-testid="fil-publish-crop"
+              >
+                {L.crop}
+              </Button>
               {confirming ? (
                 <div className="fil-confirm" data-testid="fil-publish-none-confirm">
                   <strong>{V.noPlateConfirmTitle}</strong>

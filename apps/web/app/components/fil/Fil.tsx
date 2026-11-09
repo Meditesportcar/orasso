@@ -7,14 +7,17 @@ import {
   applyFeedPage,
   emptyFeedList,
   type FeedCard,
+  type FeedErrorSource,
   type FeedFilter,
   type FeedListState,
   type FeedPage,
   feedCardKindLabels,
   feedFilters,
+  feedRetryAction,
   feedScreenFilters,
   feedWhyText,
   feedScreenLabels as L,
+  withMyPublished,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -22,12 +25,18 @@ import "../../styles/fil.css";
 import { apiFetch } from "../../lib/api.client";
 import { ReportDialog } from "../ReportDialog";
 import { cardFor } from "./Cards";
+import { forgetPublished, readPublished } from "./mine";
 
 const asFilter = (v: string | null): FeedFilter =>
   (feedFilters as readonly string[]).includes(v ?? "") ? (v as FeedFilter) : "for_you";
 
-export function Fil() {
+export function Fil({ pseudo }: { pseudo: string }) {
   const [filter, setFilter] = useState<FeedFilter>("for_you");
+  // Le filtre de l'adresse est lu une seule fois, au premier affichage : aucune lecture ne part avant.
+  const [ready, setReady] = useState(false);
+  // Mes publications de cette session, gardées en tête de la liste affichée (`mine.ts`).
+  const [mineCards, setMineCards] = useState<FeedCard[]>([]);
+  const [errorSource, setErrorSource] = useState<FeedErrorSource | null>(null);
   const [list, setList] = useState<FeedListState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -49,27 +58,33 @@ export function Fil() {
     if (mine !== seq.current) return;
     if (!res.ok) {
       setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.loadError);
+      setErrorSource("reload");
       return;
     }
     const applied = applyFeedPage(emptyFeedList(f), res.data, null);
     if (applied) {
       setList(applied.state);
       setError(null);
+      setErrorSource(null);
     }
   }, []);
 
   // Le filtre vient de l'adresse au premier affichage (après l'hydratation : jamais de décalage serveur/navigateur).
   useEffect(() => {
     setFilter(asFilter(new URLSearchParams(window.location.search).get("filtre")));
-  }, []);
+    setMineCards(readPublished(pseudo));
+    setReady(true);
+  }, [pseudo]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: le filtre relance la lecture.
   useEffect(() => {
+    if (!ready) return;
     setList(null);
     setError(null);
+    setErrorSource(null);
     setFaded({});
     setLessNote(null);
     void load(filter);
-  }, [filter, load]);
+  }, [ready, filter, load]);
 
   const choose = (f: FeedFilter) => {
     if (f === filter) return;
@@ -91,7 +106,10 @@ export function Fil() {
     if (!res.ok) {
       // Curseur refusé (400) : la première page est relue.
       if (res.status === 400) void load(current.filter);
-      else setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.moreError);
+      else {
+        setError(res.status === 429 ? L.tooManyRequests : res.error.message || L.moreError);
+        setErrorSource("more");
+      }
       return;
     }
     const latest = listRef.current;
@@ -100,6 +118,7 @@ export function Fil() {
     if (!applied) return;
     setList(applied.state);
     setError(null);
+    setErrorSource(null);
     if (applied.scrollTop) topRef.current?.scrollIntoView();
   }
 
@@ -140,11 +159,16 @@ export function Fil() {
     if (!window.confirm(L.removeConfirm)) return;
     const res = await apiFetch(`/me/feed-posts/${card.payload.post.id}`, { method: "DELETE" });
     if (!res.ok) return setNotice(res.error.message);
+    forgetPublished(card.id);
+    setMineCards((m) => m.filter((c) => c.id !== card.id));
     setList((s) => (s ? { ...s, items: s.items.filter((c) => c.id !== card.id) } : s));
     setNotice(L.removeDone);
   }
 
-  const items = list && list.filter === filter ? list.items : null;
+  const shown = list && list.filter === filter ? list.items : null;
+  const items = shown ? withMyPublished(shown, mineCards) : null;
+  /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
+  const retry = () => (feedRetryAction(errorSource) === "loadMore" ? more() : load(filter));
   const empty = L.empty[filter];
   const menuTitle = menu ? feedCardKindLabels[menu.kind] : "";
   const mine = menu?.kind === "feed_post" && menu.payload.post.mine;
@@ -200,7 +224,7 @@ export function Fil() {
       {error && !items?.length ? (
         <div className="fil-error" role="alert" data-testid="load-error">
           <p className="o-t-body">{error}</p>
-          <Button variant="secondary" icon="undo" onClick={() => void load(filter)}>
+          <Button variant="secondary" icon="undo" onClick={() => void retry()}>
             {L.retry}
           </Button>
         </div>
@@ -238,7 +262,7 @@ export function Fil() {
       {error && items?.length ? (
         <div className="fil-error" role="alert" data-testid="load-error">
           <p className="o-t-body">{error}</p>
-          <Button variant="secondary" icon="undo" onClick={() => void more()}>
+          <Button variant="secondary" icon="undo" onClick={() => void retry()}>
             {L.retry}
           </Button>
         </div>
@@ -320,7 +344,9 @@ export function Fil() {
           <div className="s-stack">
             <h2 className="s-h2">{L.whyTitle}</h2>
             <p className="o-t-body" data-testid="feed-why-text">
-              <strong>{feedWhyText(why.reason.code, whoOf(why), why.kind === "feed_post" && why.payload.post.mine)}</strong>
+              <strong>
+                {feedWhyText(why.reason.code, whoOf(why), why.kind === "feed_post" && why.payload.post.mine)}
+              </strong>
             </p>
             <p className="o-t-caption">{L.whyNote}</p>
             <Button variant="secondary" icon="check" fullWidth onClick={() => setWhy(null)} data-testid="feed-why-ok">

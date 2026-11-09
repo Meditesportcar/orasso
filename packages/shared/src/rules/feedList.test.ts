@@ -16,10 +16,12 @@ import {
   firstUndecidedPhoto,
   framesPlaced,
   isFeedKindReserved,
+  isNearViewport,
   isUntouchedFrame,
   mergeDetectedFrames,
   publishedCard,
   publishIssue,
+  slidesToLoad,
   withMyPublished,
 } from "./feedList";
 import { DEFAULT_PLATE_FRAME, movePlateFrame, nextPlateFrame } from "./plateFrame";
@@ -281,5 +283,29 @@ describe("« Réessayer »", () => {
     expect(feedRetryAction("reload")).toBe("reload");
     expect(feedRetryAction(null)).toBe("reload");
     expect(feedRetryAction("more")).toBe("loadMore");
+  });
+});
+
+describe("mémoire des photos : slidesToLoad, isNearViewport", () => {
+  it("charge la diapositive visible et la suivante, pas plus", () => {
+    expect(slidesToLoad(0, 5, true)).toEqual([0, 1]);
+    expect(slidesToLoad(2, 5, true)).toEqual([2, 3]);
+    expect(slidesToLoad(4, 5, true)).toEqual([4]);
+    expect(slidesToLoad(0, 1, true)).toEqual([0]);
+  });
+  it("ne charge rien quand la carte est loin de l'écran, ni sans photo", () => {
+    expect(slidesToLoad(0, 5, false)).toEqual([]);
+    expect(slidesToLoad(0, 0, true)).toEqual([]);
+  });
+  it("borne l'index", () => {
+    expect(slidesToLoad(9, 3, true)).toEqual([2]);
+    expect(slidesToLoad(-1, 3, true)).toEqual([0, 1]);
+  });
+  it("une carte est proche à moins d'un écran de la fenêtre", () => {
+    expect(isNearViewport(100, 400, 800)).toBe(true);
+    expect(isNearViewport(1500, 400, 800)).toBe(true); // sous l'écran, à moins d'un écran
+    expect(isNearViewport(1700, 400, 800)).toBe(false);
+    expect(isNearViewport(-1300, 400, 800)).toBe(false); // passée loin au-dessus
+    expect(isNearViewport(-900, 400, 800)).toBe(true);
   });
 });

@@ -3,7 +3,6 @@
 import { feedScreenLabels as L } from "../labels/feedScreen.fr";
 import type { FeedCard, FeedPage, FeedPostView } from "../schemas/feed";
 import { MAX_PLATE_RECTS, type PlateRect } from "../schemas/vehicle";
-import { nextPlateFrame } from "./plateFrame";
 import {
   FEED_ASPECT_RATIOS,
   FEED_CAPTION_MAX,
@@ -13,6 +12,7 @@ import {
   type FeedCardKind,
   type FeedFilter,
 } from "./feed";
+import { nextPlateFrame } from "./plateFrame";
 
 // --- La liste -------------------------------------------------------------------------------------------------------
 
@@ -256,3 +256,19 @@ export type FeedErrorSource = "reload" | "more";
 /** Ce que « Réessayer » relance : l'actualisation qui a échoué se relit depuis la première page, jamais `loadMore`. */
 export const feedRetryAction = (source: FeedErrorSource | null): "reload" | "loadMore" =>
   source === "more" ? "loadMore" : "reload";
+
+// --- Mémoire des photos (lot R7e2, tour 2) ---------------------------------------------------------------------------
+
+/**
+ * Les diapositives d'une publication qu'on charge : la visible et la suivante seulement, et rien du tout quand la carte
+ * est loin de l'écran (ses photos en mémoire sont alors libérées : un long défilement ne les garde pas toutes).
+ */
+export function slidesToLoad(index: number, count: number, near: boolean): number[] {
+  if (!near || count <= 0) return [];
+  const first = Math.min(Math.max(0, index), count - 1);
+  return first + 1 < count ? [first, first + 1] : [first];
+}
+
+/** Une carte (position `top` et hauteur à l'écran) est « près de l'écran » à moins de `margin` px de la fenêtre (haut ou bas). */
+export const isNearViewport = (top: number, height: number, viewport: number, margin = viewport): boolean =>
+  top + height > -margin && top < viewport + margin;

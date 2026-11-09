@@ -2,7 +2,7 @@
 // bouton « Publier », les trois filtres (« Pour toi », « Autour de moi », « Abonnements », mémorisés par compte), puis le fil
 // mélangé : une carte par genre, chacune avec sa raison et son « ⋯ ». Mode A (bande ORASSO, barre d'onglets). Liste
 // paginée par le curseur de l'API (`useFeed`) ; une erreur n'est jamais une liste vide ; un état vide par filtre.
-import { Chip, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedCard, feedCardKindLabels, feedScreenFilters, feedScreenLabels as L } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
@@ -13,7 +13,7 @@ import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { SmButton } from "@/ui/Kit";
+import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Overlay } from "@/ui/Overlay";
 import { TabScreen } from "@/ui/Screens";
@@ -139,16 +139,14 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
       >
         {L.publish}
       </SmButton>
-      {/* Trois puces qui passent à la ligne (police agrandie) : un libellé ne se coupe jamais. */}
-      <View style={styles.filters} accessibilityRole="tablist" testID="fil-filters">
-        {feedScreenFilters.map((o) => (
-          <View key={o.value} testID={`fil-filters-${o.value}`}>
-            <Chip accessibilityRole="tab" selected={feed.filter === o.value} onPress={() => feed.setFilter(o.value)}>
-              {o.label}
-            </Chip>
-          </View>
-        ))}
-      </View>
+      {/* Le sélecteur segmenté de la maquette ; police agrandie : le segment grandit, le libellé passe sur deux lignes. */}
+      <Seg
+        wrap
+        value={feed.filter}
+        onChange={feed.setFilter}
+        options={feedScreenFilters.map((o) => ({ value: o.value, label: o.label }))}
+        testID="fil-filters"
+      />
       {notice ? (
         <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" testID="fil-notice">
           {notice}
@@ -168,7 +166,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
       ) : null}
       {items === null && !feed.error ? <Waiting blocks={FEED_BLOCKS} testID="fil-waiting" /> : null}
       {feed.error && !items?.length ? (
-        <LoadError message={feed.error || L.loadError} onRetry={() => void reload()} />
+        <LoadError message={feed.error || L.loadError} onRetry={() => void feed.retry()} />
       ) : null}
       {items && items.length === 0 && !feed.error ? (
         <View style={styles.empty} testID="fil-empty">
@@ -201,7 +199,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         </SmButton>
       ) : null}
       {feed.error && items?.length ? (
-        <LoadError message={feed.error || L.moreError} onRetry={() => void feed.loadMore()} />
+        <LoadError message={feed.error || L.moreError} onRetry={() => void feed.retry()} />
       ) : null}
       {items?.length && !feed.hasMore && !feed.error ? (
         <Text variant="caption" color={t.color.inkMuted} style={styles.end} testID="fil-end">
@@ -231,7 +229,6 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   list: { gap: space3 },
   less: {
     flexDirection: "row",

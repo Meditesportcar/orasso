@@ -10,9 +10,12 @@ import {
   applyFeedPage,
   emptyFeedList,
   type FeedCard,
+  type FeedErrorSource,
   type FeedFilter,
   type FeedListState,
   feedFilters,
+  feedRetryAction,
+  withMyPublished,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,7 +25,7 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { createRequestGate } from "@/lib/requestGate";
-import { takeFeedDirty } from "./feedSignal";
+import { forgetMyPublished, myPublishedCards, takeFeedDirty } from "./feedSignal";
 
 const FILTER_KEY = "fil-filter";
 
@@ -30,6 +33,10 @@ export function useFeed() {
   const [filter, setFilterState] = useState<FeedFilter>("for_you");
   const [list, setList] = useState<FeedListState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** D'où vient l'erreur affichée : « Réessayer » relance l'actualisation, ou « Voir plus », selon l'échec. */
+  const [errorSource, setErrorSource] = useState<FeedErrorSource | null>(null);
+  /** Mes publications de cette session, gardées en tête de la liste affichée. */
+  const [mine, setMine] = useState<FeedCard[]>(() => myPublishedCards());
   const [loadingMore, setLoadingMore] = useState(false);
   /** Un compteur : change à chaque `reset` de l'API (l'écran remonte en haut). */
   const [scrollTop, setScrollTop] = useState(0);
@@ -51,6 +58,9 @@ export function useFeed() {
     gate.invalidate();
     setList(null);
     setError(null);
+    setErrorSource(null);
+    forgetMyPublished();
+    setMine([]);
     setReady(false);
     let cancelled = false;
     void cacheGetJson<FeedFilter>(FILTER_KEY).then((saved) => {
@@ -77,8 +87,12 @@ export function useFeed() {
         lastOk.current = Date.now();
         setList(applied.state);
         setError(null);
+        setErrorSource(null);
       } catch (e) {
-        if (ticket.current()) setError(errorMessage(e));
+        if (ticket.current()) {
+          setError(errorMessage(e));
+          setErrorSource("reload");
+        }
       } finally {
         if (ticket.latest()) busy.current = false;
       }
@@ -104,11 +118,15 @@ export function useFeed() {
       setList(applied.state);
       if (applied.scrollTop) setScrollTop((n) => n + 1);
       setError(null);
+      setErrorSource(null);
     } catch (e) {
       if (!ticket.current()) return;
       // Curseur d'une autre version ou abîmé (400) : la première page est relue.
       if (e instanceof ApiRequestError && e.status === 400) void reload();
-      else setError(errorMessage(e));
+      else {
+        setError(errorMessage(e));
+        setErrorSource("more");
+      }
     } finally {
       setLoadingMore(false);
     }
@@ -120,6 +138,7 @@ export function useFeed() {
     if (!ready) return;
     setList(null);
     setError(null);
+    setErrorSource(null);
     void reload(filter);
   }, [ready, filter, account, reload]);
 
@@ -138,12 +157,19 @@ export function useFeed() {
       error: errorRef.current,
       lastOk: lastOk.current,
     };
-    // Une publication vient de partir : le Fil se relit tout de suite.
+    // Une publication vient de partir : elle passe en tête, et le Fil se relit tout de suite.
+    setMine(myPublishedCards());
     if (takeFeedDirty() || shouldRevalidate(s, Date.now())) void reload();
   }, [ready, reload]);
   useFocusEffect(revalidate);
 
-  const items: FeedCard[] | null = list && list.filter === filter ? list.items : null;
+  const shown: FeedCard[] | null = list && list.filter === filter ? list.items : null;
+  const items: FeedCard[] | null = shown ? withMyPublished(shown, mine) : null;
+  /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
+  const retry = useCallback(
+    () => (feedRetryAction(errorSource) === "loadMore" ? loadMore() : reload()),
+    [errorSource, loadMore, reload],
+  );
   return {
     filter,
     setFilter,
@@ -153,8 +179,14 @@ export function useFeed() {
     error,
     reload,
     loadMore,
+    retry,
+    errorSource,
     scrollTop,
     /** Une carte sort de la liste (publication supprimée). */
-    drop: (id: string) => setList((s) => (s ? { ...s, items: s.items.filter((c) => c.id !== id) } : s)),
+    drop: (id: string) => {
+      forgetMyPublished(id);
+      setMine((m) => m.filter((c) => c.id !== id));
+      setList((s) => (s ? { ...s, items: s.items.filter((c) => c.id !== id) } : s));
+    },
   };
 }

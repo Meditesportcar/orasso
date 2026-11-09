@@ -45,7 +45,13 @@ export function clampView(w: number, h: number, frame: number, view: CropView, r
  * Le centre (0 à 1 de la photo) du cadre pour cette vue : ce que le recadrage d'une publication du Fil reçoit
  * (`feedCropPlan`, `cropAspect`). Le zoom n'y est pas utilisé : le cadre est toujours le plus grand de son format.
  */
-export function focusFromView(w: number, h: number, frame: number, view: CropView, ratio = 1): { x: number; y: number } {
+export function focusFromView(
+  w: number,
+  h: number,
+  frame: number,
+  view: CropView,
+  ratio = 1,
+): { x: number; y: number } {
   const v = clampView(w, h, frame, view, ratio);
   const s = displayScale(w, h, frame, v.zoom, ratio);
   return { x: clamp((w / 2 - v.tx / s) / w, 0, 1), y: clamp((h / 2 - v.ty / s) / h, 0, 1) };

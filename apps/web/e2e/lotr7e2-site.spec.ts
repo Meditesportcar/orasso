@@ -89,11 +89,34 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1");
   await shot(page, "publier-plaque-a-regler");
   // Photo 1 : un cadre posé à la main = flouter ; photo 2 : « Aucune plaque visible » confirmé.
-  await page.getByTestId("fil-publish-plate").getByRole("button", { name: /Poser un cadre/ }).click();
+  await page
+    .getByTestId("fil-publish-plate")
+    .getByRole("button", { name: /Poser un cadre/ })
+    .click();
+  // Un cadre posé mais pas encore placé sur la plaque n'est pas une décision (tour 2) : la photo reste à régler.
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("place le cadre sur la plaque");
+  await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
+  // Déplacé, il compte.
+  const frame = page.getByTestId("site-plate-frame").first();
+  const at = (await frame.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at.x + at.width / 2 + 28, at.y + at.height / 2 - 22, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 2");
+  // Photo 2 : la confirmation « Aucune plaque visible » ne suit pas la photo suivante, et la photo 1 retrouve son cadre.
+  await page.getByTestId("fil-publish-photo").nth(1).click();
+  await page.getByTestId("fil-publish-none").click();
+  await expect(page.getByTestId("fil-publish-none-confirm")).toBeVisible();
+  await page.getByTestId("fil-publish-photo").nth(0).click();
+  await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
+  await expect(page.getByTestId("site-plate-frame")).toHaveCount(1);
   await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 2");
   await page.getByTestId("fil-publish-photo").nth(1).click();
   await page.getByTestId("fil-publish-none").click();
   await page.getByTestId("fil-publish-none-yes").click();
+  await page.getByTestId("fil-publish-photo").nth(0).click();
+  await expect(page.getByTestId("site-plate-frame")).toHaveCount(1);
   await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
   await expect(page.getByTestId("fil-publish-send")).toBeEnabled();
   // Le format change : la décision de plaque repart de zéro.
@@ -112,6 +135,12 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   await page.getByTestId("fil-publish-send").click();
   await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
   await shot(page, "publie");
+  // Ma publication revient en tête du Fil, même dans « Abonnements » (l'API n'y met pas mes propres publications).
+  await page.goto("/app/fil?filtre=following");
+  await loaded(page);
+  const first = page.getByTestId("feed-card-feed_post").first();
+  await expect(first).toContainText("Site : prêtes pour dimanche");
+  await expect(first).toContainText("Ta publication");
   await page.goto("/app/fil/mes-publications");
   const posts = page.getByTestId("fil-mine-post");
   await expect(posts.first()).toBeVisible({ timeout: 30_000 });

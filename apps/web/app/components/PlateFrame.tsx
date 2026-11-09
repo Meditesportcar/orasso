@@ -220,7 +220,16 @@ export function PlateFrame({
   const [rects, setRects] = useState<PlateRect[]>(initial);
   const changed = useRef(onChange);
   changed.current = onChange;
-  useEffect(() => changed.current?.(rects), [rects]);
+  // Pas d'`onChange` au premier affichage : le composant repart de `initial`, il n'y a rien à annoncer (sinon une photo
+  // retrouvée en revenant dessus perdrait ses cadres).
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!shown.current) {
+      shown.current = true;
+      return;
+    }
+    changed.current?.(rects);
+  }, [rects]);
   // Le cadre s'ouvre toujours en Déplacer (le composant est recréé à chaque photo choisie).
   const [mode, setMode] = useState<PlateFrameMode>(PLATE_FRAME_FIRST_MODE);
   const [held, setHeld] = useState<{ index: number; edges: PlateEdge[] } | null>(null);

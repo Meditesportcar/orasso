@@ -1,4 +1,4 @@
-import { MAX_PLATE_RECTS, movePlateFrame, publishIssue, feedScreenLabels as L } from "@orasso/shared";
+import { feedScreenLabels as L, MAX_PLATE_RECTS, movePlateFrame, publishIssue } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
 import {

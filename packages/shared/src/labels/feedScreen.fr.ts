@@ -149,6 +149,11 @@ export const feedScreenLabels = {
   missingPlate: (n: number) => `Photo ${n} : floute la plaque ou confirme qu'aucune plaque n'est visible.`,
   placeFrame: (n: number) => `Photo ${n} : place le cadre sur la plaque.`,
   publishedReason: "Ta publication",
+  // Recadrage au doigt (maquette « Glisse pour recadrer »).
+  crop: "Recadrer",
+  cropHint: "Glisse pour recadrer",
+  cropBadge: (aspect: string) => `Cadre fixe · ${aspect}`,
+  cropOf: (n: number, total: number, aspect: string) => `Photo ${n} sur ${total} · ${aspect}`,
   captionTooLong: "Un mot de 500 caractères au plus.",
   preparing: "Préparation des photos…",
   mineTitle: "Mes publications",

@@ -103,15 +103,18 @@ export function PillO({ children }: { children: string }) {
 }
 
 /** `.seg` : segments en bloc, fond `--card-2`, segment actif à l'encre. `cmode` : variante `.cmode` de la feuille de
- * candidature (fond carte, segment actif sur le fond de page avec ombre, 40 px). */
+ * candidature (fond carte, segment actif sur le fond de page avec ombre, 40 px). `wrap` (lot R7e2) : le segment grandit et le
+ * libellé passe sur deux lignes dans le segment au lieu de se couper (police système agrandie). */
 export function Seg<T extends string>({
   options,
   value,
   onChange,
   testID,
   cmode,
+  wrap,
 }: {
   cmode?: boolean;
+  wrap?: boolean;
   options: { value: T; label: string; lead?: ReactNode; icon?: IconName }[];
   value: T;
   onChange: (v: T) => void;
@@ -135,6 +138,7 @@ export function Seg<T extends string>({
             onPress={() => onChange(o.value)}
             style={[
               styles.segBtn,
+              wrap && styles.segBtnWrap,
               cmode && styles.cmodeBtn,
               on &&
                 (cmode
@@ -145,7 +149,12 @@ export function Seg<T extends string>({
           >
             {o.lead}
             {o.icon ? <Icon name={o.icon} size={16} color={color} /> : null}
-            <Text variant="bodyStrong" color={color} style={styles.segText} numberOfLines={1}>
+            <Text
+              variant="bodyStrong"
+              color={color}
+              style={wrap ? [styles.segText, styles.segTextWrap] : styles.segText}
+              numberOfLines={wrap ? undefined : 1}
+            >
               {o.label}
             </Text>
           </Pressable>
@@ -384,7 +393,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space1 + 2,
   },
+  segBtnWrap: { height: undefined, minHeight: 38, paddingVertical: 4 },
   segText: { fontSize: 13 },
+  segTextWrap: { flexShrink: 1, textAlign: "center" },
   cmode: { padding: 4, gap: 4 },
   cmodeBtn: { height: 40, borderRadius: 10 },
   sm: {
