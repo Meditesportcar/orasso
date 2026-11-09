@@ -25,6 +25,7 @@ import {
   type StoryAudienceOption,
   type StoryCreated,
   type StoryTagPick,
+  sendIfAlive,
   storyAudienceOptions,
   storyBody,
   storyEventSticker,
@@ -37,6 +38,7 @@ import {
   zoomPercent,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
+import { useBlocker } from "react-router";
 
 import "../../styles/fil.css";
 import "../../styles/garage.css";
@@ -102,10 +104,42 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
     visibility,
     crews.map((c) => ({ id: c.id, name: c.name, members: c.membersCount })),
   );
-  const chosen = options.find((o) => o.key === audienceKey) ?? options[0];
+  // Le public choisi n'existe plus (crew quitté ou supprimé) : il reste invalide, rien ne part avant un nouveau choix.
+  const chosen = options.find((o) => o.key === audienceKey);
+  const lost = !chosen;
   const audience = chosen?.audience ?? "followers";
   const sticker = storyEventSticker(visibility, audience);
   const author = { persona: "fan" as const };
+
+  // Pendant l'envoi, la page ne se quitte pas (✕, « Annuler », lien, retour du navigateur) : rien ne part après coup. Un
+  // changement de page dans l'appli est bloqué ; un lien classique est neutralisé ; fermer l'onglet est signalé.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
+  const blocker = useBlocker(busy);
+  useEffect(() => {
+    if (blocker.state === "blocked") blocker.reset();
+  }, [blocker]);
+  useEffect(() => {
+    if (!busy) return;
+    const stop = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest("a[href]")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    document.addEventListener("click", stop, true);
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      document.removeEventListener("click", stop, true);
+      window.removeEventListener("beforeunload", warn);
+    };
+  }, [busy]);
 
   // L'aperçu de la photo est libéré à la sortie de la page.
   const live = useRef<StoryPhoto | null>(null);
@@ -141,7 +175,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   }
 
   const plate = { rects, noPlate, detection: "unavailable" as const };
-  const issue = storyPublishIssue({ hasPhoto: Boolean(photo), preparing, plate, caption });
+  const issue = storyPublishIssue({ hasPhoto: Boolean(photo), preparing, plate, caption, audienceLost: lost });
   const needsFit = photo ? !isStoryRatio(photo.width, photo.height) : false;
   const event = events.find((e) => e.id === eventId) ?? null;
   const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
@@ -149,7 +183,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   function chooseAudience(key: string) {
     const next = options.find((o) => o.key === key);
     if (!next || locked) return;
-    const same = next.audience === audience && next.crewId === (chosen?.crewId ?? null);
+    const same = Boolean(chosen) && next.audience === audience && next.crewId === (chosen?.crewId ?? null);
     const nextTags = same ? tags : [];
     const nextEvent = next.audience === "crew" ? null : eventId;
     setDropped(nextTags.length !== tags.length || nextEvent !== eventId);
@@ -190,7 +224,14 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       eventId,
       tags,
     });
-    const res = await apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+    // La page peut avoir été quittée malgré tout : rien n'est créé après coup (`sendIfAlive`).
+    const sent = await sendIfAlive(
+      () => open.current,
+      async () => undefined,
+      () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body }),
+    );
+    if (!sent.sent) return;
+    const res = sent.value;
     setBusy(false);
     setProgress(null);
     if (res.ok) {
@@ -636,9 +677,15 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       <Button type="submit" icon="send" fullWidth disabled={busy || Boolean(issue)} data-testid="story-publish-send">
         {L.publish}
       </Button>
-      <a className="fil-link" href="/app/fil">
-        <Icon name="close" size={16} /> Annuler
-      </a>
+      {busy ? (
+        <span className="fil-link" aria-disabled="true" data-testid="story-cancel">
+          <Icon name="close" size={16} /> Annuler
+        </span>
+      ) : (
+        <a className="fil-link" href="/app/fil" data-testid="story-cancel">
+          <Icon name="close" size={16} /> Annuler
+        </a>
+      )}
     </form>
   );
 }

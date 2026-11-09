@@ -65,7 +65,19 @@ describe("brouillon d'une story", () => {
     const small = { uri: "file:///small.jpg", width: 2048, height: 1536 };
     const d = newStoryDraft("k", land, small);
     expect(d.upload).toBe(small);
+    expect(d.display).toBe(small);
     expect(d.plate.photo).toBe(land);
     expect(d.plate.detection).toBe("pending");
+  });
+});
+
+describe("copie d'affichage", () => {
+  it("l'original (détection) et la copie d'affichage (écrans) sont deux fichiers ; le cadrage et les cadres restent en fractions", () => {
+    const display = { uri: "file:///display.jpg", width: 1280, height: 960 };
+    const d = newStoryDraft("k", land, { uri: "file:///up.jpg", width: 2048, height: 1536 }, display);
+    expect(d.display).toBe(display);
+    expect(d.plate.photo).toBe(land);
+    // Même cadrage qu'avec l'original : seul le rapport largeur/hauteur compte.
+    expect(d.frame).toEqual(newStoryDraft("k", land).frame);
   });
 });

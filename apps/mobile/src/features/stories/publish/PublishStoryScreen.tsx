@@ -12,6 +12,7 @@ import {
   type StoryAudienceOption,
   type StoryAuthor,
   type StoryCreated,
+  sendIfAlive,
   storyAudienceOptions,
   storyBody,
   storyPublishIssue,
@@ -38,14 +39,23 @@ import { FlowScreen } from "@/ui/Screens";
 import { withDetection } from "../../fil/publish/model";
 import { Capture } from "./Capture";
 import { Details } from "./Details";
-import { audienceOption, chooseAudience, type DetailsState, initialDetails } from "./detailsModel";
+import { audienceLost, audienceOption, type DetailsState, initialDetails, settleAudience } from "./detailsModel";
 import { Fit } from "./Fit";
-import { newStoryDraft, plateOf, type StoryDraft, type StoryStep, stepAfterMedia, stepBefore } from "./model";
+import {
+  newStoryDraft,
+  plateOf,
+  STORY_DISPLAY_SIDE,
+  type StoryDraft,
+  type StoryStep,
+  stepAfterMedia,
+  stepBefore,
+} from "./model";
 import { Pick } from "./Pick";
 import { Plate } from "./Plate";
 import { Preview } from "./Preview";
 import type { OverlayData } from "./parts";
 import { markStoryPublished } from "./publishSignal";
+import { withRawShot } from "./shotFiles";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -113,6 +123,8 @@ export function PublishStoryScreen() {
     const epoch = tempPhotoEpoch();
     return () => gen === generation.current && epoch === tempPhotoEpoch();
   };
+  // L'écran est ouvert : faux dès son démontage (une photo qui arrive après n'est jamais gardée).
+  const mounted = useRef(true);
 
   const crews = useApi(() => (author.persona === "fan" ? api.myCrews() : Promise.resolve([])), [author.persona]);
   const vehicles = useApi(() => api.vehicles(), []);
@@ -129,10 +141,13 @@ export function PublishStoryScreen() {
     [author, visibility, crews.data],
   );
   const chosen = audienceOption(options, details.audienceKey);
-  // L'option choisie n'existe plus (crew quitté, casquette changée) : la première prend sa place, sans rien d'identifié.
+  // Rien n'est encore choisi : la première option du moment (« Mes abonnés » ou « Public ») s'applique.
   useEffect(() => {
-    if (chosen && chosen.key !== details.audienceKey) setDetails((d) => chooseAudience(d, options, chosen.key).state);
-  }, [chosen, details.audienceKey, options]);
+    setDetails((d) => settleAudience(d, options));
+  }, [options]);
+  // Le public choisi n'existe plus (crew quitté ou supprimé, casquette changée) : il reste affiché comme invalide et rien
+  // ne part avant un nouveau choix (jamais de bascule d'office vers « Mes abonnés »).
+  const lost = audienceLost(options, details.audienceKey);
 
   const access: "unknown" | "granted" | "denied" | "unavailable" =
     Platform.OS === "web"
@@ -151,18 +166,21 @@ export function PublishStoryScreen() {
   const dirty =
     draft !== null || details.caption.trim() !== "" || details.tags.length > 0 || details.place.trim() !== "";
   const leave = useCallback(async () => {
+    // Pendant l'envoi, la croix et le retour du téléphone sont inactifs : quitter ne doit pas laisser une story partir seule.
+    if (busy) return;
     if (step !== "done" && dirty && !(await confirmLeave())) return;
     close();
-  }, [close, dirty, step]);
+  }, [busy, close, dirty, step]);
 
   // Départ de l'écran : les opérations en cours sont invalidées et les JPEG non floutés du cache effacés.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       generation.current++;
       discardTempPhotos();
-    },
-    [],
-  );
+    };
+  }, []);
 
   const goBack = useCallback(() => {
     const before = stepBefore(step, draft?.plate.photo ?? null);
@@ -207,7 +225,7 @@ export function PublishStoryScreen() {
 
   /** Une photo choisie (galerie) ou prise (appareil) devient le brouillon : copie à 2048 px, détection sur l'original. */
   async function take(source: () => Promise<{ original: PickedPhoto; noted: string[] } | null>) {
-    if (working || busy) return;
+    if (working || busy || !mounted.current) return;
     setError(null);
     setWorking(true);
     const gen = ++generation.current;
@@ -225,11 +243,17 @@ export function PublishStoryScreen() {
         noted = [...noted, upload.uri];
         rememberTempPhotos(upload.uri);
       }
+      // La copie d'affichage (écrans Ajuster, Plaque, Détails, Aperçu) : l'original n'y sert plus qu'à la détection.
+      const display = await fitStory(upload, false, STORY_DISPLAY_SIDE);
+      if (display.uri !== upload.uri) {
+        noted = [...noted, display.uri];
+        rememberTempPhotos(display.uri);
+      }
       if (!alive()) return discardTempPhotos(noted);
       // Une photo remplace l'ancienne : celle d'avant est effacée.
-      if (draft) discardTempPhotos([draft.plate.photo.uri, draft.upload.uri]);
+      if (draft) discardTempPhotos([draft.plate.photo.uri, draft.upload.uri, draft.display.uri]);
       keys.current = {};
-      const next = newStoryDraft(randomUUID(), got.original, upload);
+      const next = newStoryDraft(randomUUID(), got.original, upload, display);
       setDraft(next);
       setStep(stepAfterMedia(got.original));
       void detect(next.plate.key, got.original, gen);
@@ -247,13 +271,16 @@ export function PublishStoryScreen() {
       return picked ? { original: picked, noted: [picked.uri] } : null;
     });
 
-  const fromCamera = (shot: PickedPhoto) =>
-    take(async () => {
-      // Le capteur rend du 3:4 ou du 16:9 : recadré au centre en 9:16 exact, sans réduire (la plaque est cherchée dessus).
-      const original = await fitStory(shot, true, 4096);
-      discardTempPhotos([shot.uri]);
-      return { original, noted: [original.uri] };
-    });
+  const fromCamera = async (shot: PickedPhoto) => {
+    // La photo brute de l'appareil (non recadrée, non floutée) ne reste jamais : recadrage fait, raté ou écran fermé.
+    await withRawShot(shot, () =>
+      take(async () => {
+        // Le capteur rend du 3:4 ou du 16:9 : recadré au centre en 9:16 exact, sans réduire (la plaque est cherchée dessus).
+        const original = await fitStory(shot, true, 4096);
+        return { original, noted: [original.uri] };
+      }),
+    );
+  };
 
   const issue = draft
     ? storyPublishIssue({
@@ -262,36 +289,45 @@ export function PublishStoryScreen() {
         plate: plateOf(draft),
         caption: details.caption,
         needsCrew: chosen?.audience === "crew" && !chosen.crewId,
+        audienceLost: lost,
       })
     : L.missingPhoto;
 
   async function publish() {
     if (!draft || busy || issue) return;
+    // L'écran peut être fermé malgré tout (appli tuée, route quittée) : rien ne part après son démontage.
+    const alive = aliveFor(generation.current);
     setBusy(true);
     setError(null);
     setSent(0);
     try {
-      let key = keys.current[draft.upload.uri];
-      if (!key) {
-        key = await uploadStoryPhoto(draft.upload);
-        keys.current[draft.upload.uri] = key;
-      }
-      setSent(1);
-      const body = storyBody({
-        uploadKey: key,
-        frame: draft.frame,
-        rects: draft.plate.rects,
-        noPlate: draft.plate.noPlate,
-        audience: chosen?.audience ?? "followers",
-        crewId: chosen?.crewId ?? null,
-        author,
-        caption: details.caption,
-        place: details.place,
-        vehicleId: details.vehicleId,
-        eventId: details.eventId,
-        tags: details.tags,
-      });
-      const story = await api.createStory(body);
+      const body = (uploadKey: string) =>
+        storyBody({
+          uploadKey,
+          frame: draft.frame,
+          rects: draft.plate.rects,
+          noPlate: draft.plate.noPlate,
+          audience: chosen?.audience ?? "followers",
+          crewId: chosen?.crewId ?? null,
+          author,
+          caption: details.caption,
+          place: details.place,
+          vehicleId: details.vehicleId,
+          eventId: details.eventId,
+          tags: details.tags,
+        });
+      // La photo est envoyée une seule fois (clé gardée) ; ensuite, vérification juste avant la création : un écran démonté
+      // (ou un compte purgé) ne publie rien. La création est idempotente côté API : le même envoi repris rend la même story.
+      const result = await sendIfAlive(
+        alive,
+        async () => {
+          if (!keys.current[draft.upload.uri]) keys.current[draft.upload.uri] = await uploadStoryPhoto(draft.upload);
+          setSent(1);
+        },
+        () => api.createStory(body(keys.current[draft.upload.uri] ?? "")),
+      );
+      if (!result.sent) return;
+      const story = result.value;
       // La story est partie : la barre la montre en tête, les JPEG non floutés s'effacent.
       keys.current = {};
       markStoryPublished(story);

@@ -13,19 +13,37 @@ export type DetailsState = {
   audienceKey: string;
 };
 
+/** `audienceKey` vide : rien n'est encore choisi, la première option du moment s'applique (`settleAudience`). */
 export const initialDetails = (options: readonly StoryAudienceOption[]): DetailsState => ({
   caption: "",
   place: "",
   vehicleId: null,
   eventId: null,
   tags: [],
-  audienceKey: options[0]?.key ?? "followers",
+  audienceKey: options[0]?.key ?? "",
 });
 
-/** L'option choisie ; la première si la clé n'existe plus (un crew quitté entre-temps, une casquette changée). */
+/** Au tout début (aucun choix fait), la première option disponible est prise ; ensuite jamais plus, d'office. */
+export const settleAudience = (state: DetailsState, options: readonly StoryAudienceOption[]): DetailsState =>
+  state.audienceKey === "" && options[0] ? { ...state, audienceKey: options[0].key } : state;
+
+/** L'option choisie, ou `undefined` si elle n'existe plus (crew quitté ou supprimé, casquette changée). */
 export function audienceOption(options: readonly StoryAudienceOption[], key: string): StoryAudienceOption | undefined {
-  return options.find((o) => o.key === key) ?? options[0];
+  return options.find((o) => o.key === key);
 }
+
+/**
+ * Le public choisi a disparu (crew quitté ou supprimé, casquette changée) : il reste affiché comme invalide et l'envoi est
+ * bloqué jusqu'à un nouveau choix. Jamais de bascule d'office vers « Mes abonnés » (la story serait plus large que voulu).
+ */
+export const audienceLost = (options: readonly StoryAudienceOption[], key: string): boolean =>
+  key !== "" && !options.some((o) => o.key === key);
+
+/** « Ma ville » arrive : seul le lieu change, sur l'état d'aujourd'hui (jamais sur celui d'avant la lecture). */
+export const withPlace =
+  (place: string) =>
+  (state: DetailsState): DetailsState =>
+    state.place === place ? state : { ...state, place };
 
 /** Choisit un public : les identifiés et l'événement qui n'y vaudraient plus sont retirés (`dropped` le dit). */
 export function chooseAudience(
@@ -35,12 +53,19 @@ export function chooseAudience(
 ): { state: DetailsState; dropped: boolean } {
   const before = audienceOption(options, state.audienceKey);
   const next = audienceOption(options, key);
-  if (!before || !next) return { state, dropped: false };
-  const pruned = pruneForAudience(
-    { audience: before.audience, crewId: before.crewId },
-    { audience: next.audience, crewId: next.crewId },
-    state,
-  );
+  if (!next) return { state, dropped: false };
+  // Un public disparu ne garantit plus que les identifiés puissent voir la story : ils sont retirés.
+  const pruned = before
+    ? pruneForAudience(
+        { audience: before.audience, crewId: before.crewId },
+        { audience: next.audience, crewId: next.crewId },
+        state,
+      )
+    : {
+        tags: [],
+        eventId: next.audience === "crew" ? null : state.eventId,
+        changed: state.tags.length > 0 || (next.audience === "crew" && state.eventId !== null),
+      };
   return {
     state: { ...state, audienceKey: next.key, tags: pruned.tags, eventId: pruned.eventId },
     dropped: pruned.changed,

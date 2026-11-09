@@ -5,11 +5,12 @@
 import { Icon, type IconName, Tag, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import { storyPublishLabels as L, STORY_H, STORY_W } from "@orasso/shared";
 import { CameraView, type FlashMode } from "expo-camera";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { PickedPhoto } from "@/lib/photos";
+import { noteRawShot } from "./shotFiles";
 import { VideoSlot } from "./VideoSlot";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -35,6 +36,14 @@ export function Capture({
   const [flash, setFlash] = useState<FlashMode>("off");
   const [taking, setTaking] = useState(false);
   const [failed, setFailed] = useState(false);
+  // L'écran est quitté pendant la prise : la photo brute qui arrive ensuite n'est jamais gardée.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Le plus grand 9:16 qui tient entre l'en-tête et le bas de l'écran.
   const maxH = win.height - insets.top - insets.bottom - 64;
@@ -47,6 +56,8 @@ export function Capture({
     setFailed(false);
     try {
       const picture = await camera.current.takePictureAsync({ quality: 1 });
+      // La photo brute de l'appareil (non recadrée, non floutée) est notée tout de suite : effacée au départ de l'écran.
+      if (!noteRawShot(picture.uri, () => mounted.current)) return;
       onShot({ uri: picture.uri, width: picture.width, height: picture.height });
     } catch {
       setFailed(true);

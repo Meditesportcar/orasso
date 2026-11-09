@@ -1,7 +1,15 @@
 import { storyAudienceOptions } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { audienceOption, chooseAudience, initialDetails } from "./detailsModel";
+import {
+  audienceLost,
+  audienceOption,
+  chooseAudience,
+  type DetailsState,
+  initialDetails,
+  settleAudience,
+  withPlace,
+} from "./detailsModel";
 
 const crews = [
   { id: "c1", name: "Roussillon Drift", members: 6 },
@@ -15,9 +23,50 @@ describe("détails d'une story", () => {
     expect(d).toEqual({ caption: "", place: "", vehicleId: null, eventId: null, tags: [], audienceKey: "followers" });
   });
 
-  it("une clé de public disparue retombe sur la première option", () => {
-    expect(audienceOption(options, "crew:absent")?.key).toBe("followers");
-    expect(audienceOption([], "followers")).toBeUndefined();
+  it("un public disparu (crew quitté ou supprimé) reste invalide : jamais de bascule d'office vers « Mes abonnés »", () => {
+    expect(audienceOption(options, "crew:absent")).toBeUndefined();
+    expect(audienceLost(options, "crew:absent")).toBe(true);
+    expect(audienceLost(options, "crew:c1")).toBe(false);
+    expect(audienceLost(options, "followers")).toBe(false);
+    // Le crew choisi disparaît des options : l'état garde la clé (donc reste invalide), rien n'est réécrit.
+    const withoutC1 = storyAudienceOptions({ persona: "fan" }, "public", [crews[1] as (typeof crews)[number]]);
+    const chosen = { ...initialDetails(options), audienceKey: "crew:c1", caption: "Belle sortie" };
+    expect(settleAudience(chosen, withoutC1)).toBe(chosen);
+    expect(audienceLost(withoutC1, chosen.audienceKey)).toBe(true);
+  });
+
+  it("au tout début, la première option du moment est prise (« Public » pour un organisateur) ; ensuite plus d'office", () => {
+    const start = initialDetails([]);
+    expect(start.audienceKey).toBe("");
+    expect(audienceLost([], start.audienceKey)).toBe(false);
+    const orga = storyAudienceOptions({ persona: "organizer", structureId: "s1" }, "public", []);
+    expect(settleAudience(start, orga).audienceKey).toBe("public");
+    expect(settleAudience({ ...start, audienceKey: "followers" }, orga).audienceKey).toBe("followers");
+  });
+
+  it("un nouveau choix après un public perdu retire les identifiés", () => {
+    const lost: DetailsState = {
+      ...initialDetails(options),
+      audienceKey: "crew:gone",
+      tags: [{ id: "u1", pseudo: "K" }],
+    };
+    const next = chooseAudience(lost, options, "followers");
+    expect(next.state).toMatchObject({ audienceKey: "followers", tags: [] });
+    expect(next.dropped).toBe(true);
+  });
+
+  it("« Ma ville » arrivée en retard ne change que le lieu : audience, légende et identifiés d'aujourd'hui restent", () => {
+    // Le résultat est une mise à jour fonctionnelle : elle s'applique à l'état du moment où il arrive.
+    const apply = withPlace("Perpignan");
+    const meanwhile: DetailsState = {
+      ...initialDetails(options),
+      audienceKey: "crew:c1",
+      caption: "Tapé pendant la lecture",
+      tags: [{ id: "u2", pseudo: "Nina_34" }],
+    };
+    expect(apply(meanwhile)).toEqual({ ...meanwhile, place: "Perpignan" });
+    // Le même lieu ne crée pas un nouvel état.
+    expect(withPlace("Perpignan")({ ...meanwhile, place: "Perpignan" })).toEqual({ ...meanwhile, place: "Perpignan" });
   });
 
   it("choisir un crew retire les identifiés et l'événement ; revenir à « Mes abonnés » retire les identifiés", () => {

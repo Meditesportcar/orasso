@@ -22,11 +22,30 @@ export type StoryDraft = {
   plate: FeedDraftPhoto;
   /** La copie envoyée (2048 px au plus) ; la même que l'origine si elle est déjà assez petite. */
   upload: PickedPhoto;
+  /**
+   * La copie d'affichage (`STORY_DISPLAY_SIDE` au plus) : elle sert à « Ajuster », à la plaque (cadre et loupe), aux détails
+   * et à l'aperçu. L'original (4096 px) ne sert qu'à la détection ML Kit ; la copie `upload`, à l'envoi. Les cadres sont des
+   * fractions de la photo : ils valent sur toutes les copies.
+   */
+  display: PickedPhoto;
   frame: Frame;
 };
 
-export function newStoryDraft(key: string, original: PickedPhoto, upload: PickedPhoto = original): StoryDraft {
-  return { plate: newDraftPhoto(key, original, original), upload, frame: fitDefault(original.width, original.height) };
+/** Plus grand côté de la copie d'affichage : assez pour régler un cadre de plaque au doigt, sans garder 4096 px en mémoire. */
+export const STORY_DISPLAY_SIDE = 1280;
+
+export function newStoryDraft(
+  key: string,
+  original: PickedPhoto,
+  upload: PickedPhoto = original,
+  display: PickedPhoto = upload,
+): StoryDraft {
+  return {
+    plate: newDraftPhoto(key, original, original),
+    upload,
+    display,
+    frame: fitDefault(original.width, original.height),
+  };
 }
 
 /** Une photo qui n'est pas en 9:16 passe par l'écran « Ajuster » ; l'appareil, déjà en 9:16, va droit à la plaque. */

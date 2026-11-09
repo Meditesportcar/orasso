@@ -61,9 +61,9 @@ export function Plate({
     <View style={styles.block} testID="story-plate">
       <PlateFrameEditor
         key={p.key + photo.uri}
-        source={{ uri: photo.uri }}
-        width={photo.width}
-        height={photo.height}
+        source={{ uri: draft.display.uri }}
+        width={draft.display.width}
+        height={draft.display.height}
         rects={p.rects}
         editable={p.rects.length > 0 && !locked}
         onChange={(rects) => onPlate(setFrames(p, rects))}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { storyCreateSchema } from "../schemas/stories";
 import { DEFAULT_PLATE_FRAME, nextPlateFrame } from "./plateFrame";
 import {
@@ -16,6 +16,7 @@ import {
   addTag,
   pruneForAudience,
   removeTag,
+  sendIfAlive,
   storyAudienceOptions,
   storyBody,
   storyEventSticker,
@@ -119,13 +120,35 @@ describe("à qui s'adresse la story", () => {
     expect(pub[2]?.hint).toBe("1 membre · rien ne sort du crew");
   });
 
-  it("organisateur, pro, prestataire, média : « Public » seul, jamais un crew", () => {
-    for (const persona of ["organizer", "pro", "provider", "media"] as const) {
-      const options = storyAudienceOptions({ persona, name: "Roues Libres 66" }, "private", crews);
-      expect(options).toHaveLength(1);
-      expect(options[0]).toMatchObject({ audience: "public", crewId: null });
-      expect(options[0]?.hint).toContain("Roues Libres 66");
+  it("organisateur, pro : « Public » seul (publics par nature), jamais un crew, quel que soit le compte", () => {
+    for (const persona of ["organizer", "pro"] as const) {
+      for (const visibility of ["public", "private"] as const) {
+        const options = storyAudienceOptions({ persona, name: "Roues Libres 66" }, visibility, crews);
+        expect(options).toHaveLength(1);
+        expect(options[0]).toMatchObject({ audience: "public", crewId: null });
+        expect(options[0]?.hint).toContain("Roues Libres 66");
+      }
     }
+  });
+
+  it("prestataire, média : « Public » si le compte est public, « Mes abonnés » seul s'il est privé (jamais annoncé public)", () => {
+    for (const persona of ["provider", "media"] as const) {
+      const open = storyAudienceOptions({ persona, name: "Garage Sud" }, "public", crews);
+      expect(open).toHaveLength(1);
+      expect(open[0]).toMatchObject({ audience: "public", crewId: null, label: "Public" });
+      const closed = storyAudienceOptions({ persona, name: "Garage Sud" }, "private", crews);
+      expect(closed).toHaveLength(1);
+      expect(closed[0]).toMatchObject({ audience: "followers", crewId: null, label: "Mes abonnés" });
+      expect(closed[0]?.hint).toContain("abonnés acceptés");
+    }
+  });
+
+  it("un public perdu bloque l'envoi avec la ligne qui dit de choisir à nouveau", () => {
+    const plate = { rects: [], noPlate: true, detection: "none" as const };
+    expect(storyPublishIssue({ hasPhoto: true, plate, caption: "", audienceLost: true })).toBe(
+      "Choisis à nouveau qui la voit.",
+    );
+    expect(storyPublishIssue({ hasPhoto: true, plate, caption: "" })).toBeNull();
   });
 
   it("l'autocollant d'événement est grisé, avec la raison, pour un compte privé et pour un crew", () => {
@@ -280,5 +303,42 @@ describe("le corps de POST /me/stories", () => {
     const withEvent = { ...base, eventId: "6f1c2a52-0f11-4c4c-8d4a-1d6a1e0b1a11" };
     expect(storyBody(withEvent).eventId).toBe(withEvent.eventId);
     expect(storyBody({ ...withEvent, audience: "crew", crewId: "c1" })).not.toHaveProperty("eventId");
+  });
+});
+
+describe("envoi d'une story", () => {
+  it("écran fermé pendant l'envoi de la photo : la story n'est jamais créée", async () => {
+    let open = true;
+    const create = vi.fn(async () => "story");
+    const out = await sendIfAlive(
+      () => open,
+      async () => {
+        open = false;
+      },
+      create,
+    );
+    expect(out).toEqual({ sent: false });
+    expect(create).not.toHaveBeenCalled();
+  });
+  it("écran ouvert : la story est créée", async () => {
+    const out = await sendIfAlive(
+      () => true,
+      async () => undefined,
+      async () => "story",
+    );
+    expect(out).toEqual({ sent: true, value: "story" });
+  });
+  it("l'envoi de la photo échoue : l'erreur remonte, rien n'est créé", async () => {
+    const create = vi.fn(async () => "story");
+    await expect(
+      sendIfAlive(
+        () => true,
+        async () => {
+          throw new Error("hors ligne");
+        },
+        create,
+      ),
+    ).rejects.toThrow("hors ligne");
+    expect(create).not.toHaveBeenCalled();
   });
 });

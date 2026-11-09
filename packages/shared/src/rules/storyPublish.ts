@@ -26,8 +26,10 @@ export type StoryAudienceOption = {
 
 /**
  * Qui peut voir la story, selon la casquette : passionné (ou visiteur) = « Mes abonnés » (le sous-titre dit ce que ça veut
- * dire selon mon compte) et un choix par crew dont je suis membre ; organisateur, pro, prestataire, média = « Public » seul,
- * publié au nom de la structure ou de la fiche (l'API refuse un crew hors casquette passionné).
+ * dire selon mon compte) et un choix par crew dont je suis membre ; organisateur, pro = « Public » seul, publié au nom de la
+ * structure ou de la fiche (publics par nature) ; prestataire, média = « Public » seul si le compte est public, sinon
+ * « Mes abonnés » seul (une story « publique » d'un compte privé se lit comme « abonnés » : on ne l'annonce pas « Public »).
+ * L'API refuse un crew hors casquette passionné.
  */
 export function storyAudienceOptions(
   author: StoryAuthor,
@@ -35,6 +37,18 @@ export function storyAudienceOptions(
   crews: readonly StoryCrewChoice[],
 ): StoryAudienceOption[] {
   if (author.persona !== "fan") {
+    const publicByNature = author.persona === "organizer" || author.persona === "pro";
+    if (!publicByNature && visibility === "private") {
+      return [
+        {
+          key: "followers",
+          audience: "followers",
+          crewId: null,
+          label: L.followers,
+          hint: author.name ? `${L.followersPrivate} ${L.publicAs(author.name)}` : L.followersPrivate,
+        },
+      ];
+    }
     return [
       {
         key: "public",
@@ -150,11 +164,14 @@ export function storyPublishIssue(draft: {
   plate: StoryPlateDraft;
   caption: string;
   needsCrew?: boolean;
+  /** Le public choisi n'existe plus (crew quitté ou supprimé, casquette changée) : rien ne part avant un nouveau choix. */
+  audienceLost?: boolean;
 }): string | null {
   if (draft.preparing) return L.preparing;
   if (!draft.hasPhoto) return L.missingPhoto;
   const plate = storyPlateIssue(draft.plate);
   if (plate) return plate;
+  if (draft.audienceLost) return L.audienceLost;
   if (draft.needsCrew) return L.missingCrew;
   if (draft.caption.trim().length > STORY_CAPTION_MAX) return L.captionTooLong;
   return null;
@@ -204,4 +221,18 @@ export function storyBody(draft: {
     ...(draft.eventId && draft.audience !== "crew" ? { eventId: draft.eventId } : {}),
     tags: draft.tags.map((t) => ({ kind: "user" as const, id: t.id })),
   };
+}
+
+/**
+ * Envoie la photo puis crée la story, sauf si l'écran a été fermé entre-temps (`alive` faux juste avant la création :
+ * rien n'est publié, la photo déjà envoyée reste sans story et sera balayée par le serveur).
+ */
+export async function sendIfAlive<T>(
+  alive: () => boolean,
+  upload: () => Promise<void>,
+  create: () => Promise<T>,
+): Promise<{ sent: false } | { sent: true; value: T }> {
+  await upload();
+  if (!alive()) return { sent: false };
+  return { sent: true, value: await create() };
 }

@@ -48,7 +48,8 @@ export function Fit({
   const c = t.color;
   const insets = useSafeAreaInsets();
   const win = useWindowDimensions();
-  const { width: w, height: h, uri } = draft.plate.photo;
+  const { width: w, height: h } = draft.plate.photo;
+  const uri = draft.display.uri;
   const motion = useStoryMotion(draft.frame);
   const live = useRef<Frame>(draft.frame);
   const [shown, setShown] = useState<Frame>(draft.frame);

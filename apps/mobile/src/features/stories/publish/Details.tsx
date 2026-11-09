@@ -13,14 +13,14 @@ import {
   storyEventSticker,
   taggableHint,
 } from "@orasso/shared";
-import { useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { CommercialLine } from "./CommercialLine";
-import { audienceOption, chooseAudience, type DetailsState } from "./detailsModel";
+import { audienceLost, audienceOption, chooseAudience, type DetailsState, withPlace } from "./detailsModel";
 import type { StoryDraft } from "./model";
 import { Label, Option, StoryOverlays } from "./parts";
 import { currentCity } from "./place";
@@ -44,7 +44,8 @@ export function Details({
 }: {
   draft: StoryDraft;
   details: DetailsState;
-  onDetails: (next: DetailsState) => void;
+  /** Mise à jour de l'état d'aujourd'hui (un résultat tardif ne réécrit jamais le brouillon entier). */
+  onDetails: Dispatch<SetStateAction<DetailsState>>;
   author: StoryAuthor;
   visibility: "public" | "private";
   options: readonly StoryAudienceOption[];
@@ -60,12 +61,21 @@ export function Details({
   const [city, setCity] = useState<"idle" | "busy" | "failed">("idle");
 
   const chosen = audienceOption(options, details.audienceKey);
+  const lost = audienceLost(options, details.audienceKey);
   const audience = chosen?.audience ?? "followers";
   const crewId = chosen?.crewId ?? null;
   const sticker = storyEventSticker(visibility, audience);
   const event = events.find((e) => e.id === details.eventId) ?? null;
   const vehicle = vehicles.find((v) => v.id === details.vehicleId) ?? null;
-  const patch = (next: Partial<DetailsState>) => onDetails({ ...details, ...next });
+  const patch = (next: Partial<DetailsState>) => onDetails((d) => ({ ...d, ...next }));
+  // « Ma ville » est lue en retard : si l'écran est quitté entre-temps, le résultat est jeté.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
   const toggle = (next: Exclude<Panel, null>) => setPanel(panel === next ? null : next);
 
   const previewWidth = Math.min(150, Math.round(win.width * 0.4));
@@ -74,8 +84,9 @@ export function Details({
   async function fillCity() {
     setCity("busy");
     const found = await currentCity();
+    if (!open.current) return;
     if (found) {
-      patch({ place: found });
+      onDetails(withPlace(found));
       setCity("idle");
     } else setCity("failed");
   }
@@ -95,7 +106,7 @@ export function Details({
     <View style={styles.block} testID="story-details">
       <View style={styles.previewRow}>
         <StoryCanvas
-          uri={photo.uri}
+          uri={draft.display.uri}
           width={photo.width}
           height={photo.height}
           frame={frame}
@@ -247,6 +258,7 @@ export function Details({
           />
         ))}
       </View>
+      {lost ? <Notice tone="error">{L.audienceLost}</Notice> : null}
       <Muted variant="caption">{L.audienceNote}</Muted>
     </View>
   );

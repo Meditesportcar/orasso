@@ -130,7 +130,7 @@ export const storyPublishLabels = {
   mine: "Ta story",
   mineHint: "Supprimable à tout moment",
   tooManyRequests: "Tu publies trop vite. Réessaie dans quelques minutes.",
-  offline: "Pas de réseau : ta story n'est pas partie. Réessaie quand tu es connecté.",
+  offline: "Pas de réseau : on ne sait pas si ta story est partie. Réessaie : elle ne sera pas publiée deux fois.",
   // Entrée depuis le Fil.
   chooseTitle: "Publier",
   chooseStory: "En story",
@@ -141,6 +141,7 @@ export const storyPublishLabels = {
   missingPhoto: "Choisis une photo.",
   preparing: "Préparation de la photo…",
   missingCrew: "Choisis le crew de ta story.",
+  audienceLost: "Choisis à nouveau qui la voit.",
   close: "Fermer",
   leaveTitle: "Quitter sans publier ?",
   leaveBody: "Ta photo et tes réglages ne sont pas gardés.",

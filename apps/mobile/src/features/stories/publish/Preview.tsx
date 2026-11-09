@@ -26,7 +26,7 @@ export function Preview({ draft, overlays }: { draft: StoryDraft; overlays: Over
       </Text>
       <View style={styles.center}>
         <StoryCanvas
-          uri={photo.uri}
+          uri={draft.display.uri}
           width={photo.width}
           height={photo.height}
           frame={draft.frame}
