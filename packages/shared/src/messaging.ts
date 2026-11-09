@@ -40,6 +40,11 @@ export const uploadPurposes = [
   "crew_post",
   // Lot R7e1 : photo d'une publication du Fil (privée jusqu'à la publication, puis copiée sous une clé publique).
   "feed_post",
+
+  // Lot R7f1 : photo d'une story (privée, composée en 9:16 par le serveur) ; la vidéo (`story_video`) est déclarée,
+  // refusée (501) tant que le lot R7g1 n'est pas là.
+  "story",
+  "story_video",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -56,6 +61,10 @@ export const privateUploadPurposes: readonly UploadPurpose[] = [
   "crew_post",
   // Lot R7e1 : la photo envoyée attend, privée, d'être publiée (floutage de plaque à la publication).
   "feed_post",
+
+  // Lot R7f1 : la photo d'une story attend, privée, d'être composée.
+  "story",
+  "story_video",
 ];
 
 /**
@@ -81,4 +90,21 @@ export const acceptedUploadPurposes = [
   "crew_post",
   // Lot R7e1 : photo d'une publication du Fil (`POST /me/feed-posts`).
   "feed_post",
+
+  // Lot R7f1 : photo d'une story (`POST /me/stories`) ; la vidéo répond 501 « Vidéo bientôt » (lot R7g1).
+  "story",
+  "story_video",
 ] as const satisfies readonly UploadPurpose[];
+
+/**
+ * Pastilles de la barre du haut du passionné (lot R7a1, tour 2) : la cloche « Activité » compte les notifications non lues
+ * et les demandes en attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu
+ * seulement. Une demande seule ne fait donc jamais monter la bulle. Appli et site s'en servent tous les deux.
+ */
+export function topBarCounts(
+  unreadNotifications: number,
+  summary: { unreadMessages: number; requests: Record<string, number> } | null,
+): { activity: number; messages: number } {
+  const requests = summary ? Object.values(summary.requests).reduce((a, b) => a + b, 0) : 0;
+  return { activity: unreadNotifications + requests, messages: summary?.unreadMessages ?? 0 };
+}

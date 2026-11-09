@@ -159,7 +159,7 @@ function payloadOf(t: Pick<TicketRow, "id" | "kid" | "signature">, eventNo: numb
 }
 
 /** Émet les billets d'une commande payée (idempotent : une commande n'en reçoit qu'une fois). */
-async function issueTickets(tx: Tx, order: typeof orders.$inferSelect, eventNo: number): Promise<number> {
+export async function issueTickets(tx: Tx, order: typeof orders.$inferSelect, eventNo: number): Promise<number> {
   const existing = await tx.select({ n: count() }).from(tickets).where(eq(tickets.orderId, order.id));
   if ((existing[0]?.n ?? 0) > 0) return 0;
   await signing.ensureSynced();

@@ -1,10 +1,12 @@
 import { AppBar, Ground, Icon, TabBar, type TabItem, tabSets, useTheme } from "@orasso/design-system/web";
 import {
+  type InboxSummary,
   type MyApplication,
   type MyStaffEvent,
   type MyTicket,
   moderationLabels,
   reportReasonLabels,
+  topBarCounts,
 } from "@orasso/shared";
 import { useEffect } from "react";
 import { Form, Outlet, useLocation, useMatches, useRevalidator } from "react-router";
@@ -20,10 +22,13 @@ import "../styles/moderation.css";
 import { AnnounceBanner, announcementOf, useAnnouncements } from "../components/AnnounceBanner";
 import type { Route } from "./+types/app";
 
-// Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base (exposant :
-// Explorer · Sorties · Accueil · Garage · Profil ; visiteur : Passeport à la place du Garage), la Boîte et la recherche
-// en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent dans
-// Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
+// Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base, la recherche et
+// la Boîte en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent
+// dans Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
+// Lot R7a1 (D38) : la barre est Explorer · Le Fil · Accueil · Crew · Profil, la même pour l'exposant et le visiteur ;
+// Sorties (dans l'Accueil) et Garage (dans le Profil) gardent leur adresse, en mode fiche. En haut à droite : la loupe,
+// la cloche « Activité » et la bulle « Messages », chacune avec sa pastille. Un bandeau, une seule fois, dit où sont
+// passées les choses.
 // Lot M7 (deux modes d'affichage, comme l'appli) : une page de navigation a la bande ORASSO et la barre d'onglets (mode
 // A) ; une fiche ou un parcours (route qui déclare `handle = ficheHandle`) n'a que son en-tête de fiche (`FicheBar` :
 // titre, ✕ qui revient), sans bande, sans barre ni accès flottant (mode B).
@@ -31,18 +36,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   // Accès flottant : l'accès le plus proche (J-7 à J+1) parmi mes places retenues (à venir et finies depuis moins d'un
   // jour), mes billets et mes missions staff, comme l'appli. Une lecture qui échoue ne bloque pas l'espace.
-  const [upcoming, past, tickets, staff] = await Promise.all([
+  const [upcoming, past, tickets, staff, summary] = await Promise.all([
     api<MyApplication[]>(request, "/me/applications?scope=upcoming"),
     api<MyApplication[]>(request, "/me/applications?scope=past"),
     api<MyTicket[]>(request, "/me/tickets"),
     api<MyStaffEvent[]>(request, "/me/staff-events"),
+    api<InboxSummary>(request, "/me/inbox/summary"),
   ]);
+  const counts = topBarCounts(me.counts.unreadNotifications, summary.ok ? summary.data : null);
   return {
     userId: me.user.id,
     // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
     base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
-    // Pastille de la Boîte (lots 18 et C5) : conversations avec du non lu, demandes en attente, notifications non lues.
-    unreadInbox: me.unreadInbox + me.counts.unreadNotifications,
+    // Pastilles (lots 18, C5 et R7a1) : la cloche « Activité » compte les notifications non lues et les demandes en
+    // attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu seulement (tour 2 :
+    // `unreadMessages` du résumé de la Boîte, `GET /me` n'en porte que le total avec les demandes).
+    unreadNotifications: counts.activity,
+    unreadMessages: counts.messages,
     near: nearAccessOf(
       {
         applications: [...(upcoming.ok ? upcoming.data : []), ...(past.ok ? past.data : [])],
@@ -62,9 +72,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 const HREFS: Record<string, string> = {
   home: "/app",
   explore: "/app/explorer",
-  outings: "/app/sorties",
-  garage: "/app/garage",
-  passport: "/app/passeport",
+  feed: "/app/fil",
+  crew: "/app/crew",
   profile: "/app/moi",
 };
 
@@ -72,11 +81,12 @@ const HREFS: Record<string, string> = {
 function activeTab(pathname: string): string {
   if (pathname.startsWith("/app/boite") || pathname.startsWith("/app/journal")) return "";
   if (pathname === "/app") return "home";
-  if (/^\/app\/(sorties|acces|billets|vote|recap)(\/|$)/.test(pathname)) return "outings";
+  // Lot R7a1 : Sorties (et ses suites : billets, vote, récap) est dans l'Accueil ; Garage et Passeport, dans le Profil.
+  if (/^\/app\/(sorties|acces|billets|vote|recap)(\/|$)/.test(pathname)) return "home";
   if (pathname.startsWith("/app/explorer")) return "explore";
-  if (pathname.startsWith("/app/garage")) return "garage";
-  if (pathname.startsWith("/app/passeport")) return "passport";
-  return /^\/app\/(moi|securite|sanctions|aide|reseau|profil-public|crews|media|prestataire|structure|pro)(\/|$)/.test(
+  if (pathname.startsWith("/app/fil")) return "feed";
+  if (pathname === "/app/crew") return "crew";
+  return /^\/app\/(moi|securite|sanctions|aide|reseau|profil-public|crews|garage|passeport|media|prestataire|structure|pro)(\/|$)/.test(
     pathname,
   )
     ? "profile"
@@ -105,13 +115,12 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     ...tab,
     href: HREFS[tab.id],
   }));
-  // Un onglet absent de la barre de la casquette (Passeport d'un exposant, Garage d'un visiteur) tombe sur Profil.
+  // Un onglet absent de la barre de la casquette tombe sur Profil.
   const raw = activeTab(pathname);
   const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
-  // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Garage ni au Profil ; lot M7 : ni sur une
-  // fiche ou un parcours (mode B).
-  const near =
-    loaderData.near && !fiche && !["home", "outings", "garage", "profile"].includes(tab) ? loaderData.near : null;
+  // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Profil ; lot R7a1 : ni sur Le Fil ni sur
+  // Crew ; lot M7 : ni sur une fiche ou un parcours (mode B).
+  const near = loaderData.near && !fiche && !["home", "feed", "crew", "profile"].includes(tab) ? loaderData.near : null;
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
@@ -121,14 +130,17 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             className="app__bar"
             searchHref="/app/explorer?segment=resultats"
             searchOn={pathname.startsWith("/app/explorer") && /[?&](q=|segment=resultats)/.test(search)}
-            inboxHref="/app/journal"
-            inboxOn={tab === ""}
-            inboxCount={loaderData.unreadInbox}
+            // Tant que le lot R7c2 n'existe pas : la cloche ouvre le Journal, la bulle la Boîte.
+            activityHref="/app/journal"
+            activityOn={pathname.startsWith("/app/journal")}
+            activityCount={loaderData.unreadNotifications}
+            messagesHref="/app/boite"
+            messagesOn={pathname.startsWith("/app/boite")}
+            messagesCount={loaderData.unreadMessages}
           />
         )}
         <AnnounceBanner item={announcements.current} onDone={announcements.drop} />
         <div className={fiche ? "app__body app__body--fiche" : near ? "app__body app__body--near" : "app__body"}>
-          {" "}
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
               <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>

@@ -2,7 +2,8 @@
 // - Staff présent « vérifiable » : pas marqué absent, et une trace du jour J, de 3 h avant le début à la fin
 //   (`staffPresenceWindow`) : « Je suis là » posé dans la fenêtre, ou une action enregistrée sur l'événement
 //   (pointage, lecture de QR, billet contrôlé en ligne ou hors ligne, incident, alerte).
-// - Participation : entrée d'une candidature de véhicule, billet contrôlé, ou staff présent vérifiable.
+// - Participation : entrée d'une candidature de véhicule, billet contrôlé, présence validée par GPS (lot R7d1), ou staff
+//   présent vérifiable.
 import { type SQL, sql } from "drizzle-orm";
 
 import type { Executor } from "../../lib/tx";
@@ -37,12 +38,13 @@ export async function isVerifiedStaff(ex: Executor, eventId: string, userId: str
   return rows.rows.length > 0;
 }
 
-/** Condition « la personne a participé à l'événement `e` » (entrée, billet, staff vérifiable). */
+/** Condition « la personne a participé à l'événement `e` » (entrée, billet, présence GPS, staff vérifiable). */
 function participated(userId: string): SQL {
   return sql`(
     exists (select 1 from checkins c join applications a on a.id = c.application_id
       where c.event_id = e.id and a.user_id = ${userId} and a.kind = 'vehicle')
     or exists (select 1 from tickets t where t.event_id = e.id and t.user_id = ${userId} and t.used_at is not null)
+    or exists (select 1 from event_presences g where g.event_id = e.id and g.user_id = ${userId})
     or exists (select 1 from event_staff s where s.event_id = e.id and s.user_id = ${userId} and ${verifiedStaffCondition})
   )`;
 }

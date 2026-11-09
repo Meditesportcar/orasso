@@ -73,22 +73,43 @@ function UncertainAction({ eventId }: { eventId: string }) {
 const asksUncertain = (n: NotificationItem) =>
   n.data?.action === SET_OUTLOOK_UNCERTAIN_ACTION && typeof n.data.eventId === "string";
 
-export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+/** Les notifications du Journal, lues tant que l'écran qui les porte est ouvert (`active`). */
+export function useJournalFeed(active: boolean) {
+  return useApi(() => api.notifications(), [active], { enabled: active });
+}
+
+/**
+ * Les lignes du Journal (notifications), sans cadre : la feuille du Journal et, depuis le lot R7a1, l'onglet Le Fil
+ * (coquille en attendant l'écran du lot R7e2) les affichent. `feed` : la lecture (`useJournalFeed`), tenue par l'écran
+ * pour qu'il puisse la recharger (glissement, notification reçue). `markRead` : ouvrir la liste, c'est lire, mais
+ * seulement les notifications affichées (jamais « tout ») ; l'onglet Le Fil ne marque rien (`false`), c'est la cloche
+ * qui s'en charge. `onNavigate` : appelé avant d'ouvrir la cible d'une ligne (la feuille se ferme).
+ */
+export function JournalList({
+  active,
+  feed: list,
+  markRead = true,
+  onNavigate,
+}: {
+  active: boolean;
+  feed: ReturnType<typeof useJournalFeed>;
+  markRead?: boolean;
+  onNavigate?: () => void;
+}) {
   const { t } = useTheme();
   const router = useRouter();
   const { choose } = usePersona();
-  const list = useApi(() => api.notifications(), [visible], { enabled: visible });
+  const onClose = onNavigate ?? (() => undefined);
 
-  // Ouvrir le Journal, c'est lire : les pastilles de la cloche retombent.
+  // Ouvrir le Journal, c'est lire : les pastilles de la cloche retombent (seulement pour ce qui est affiché).
   useEffect(() => {
-    if (visible && list.data?.items.some((n) => !n.readAt)) void api.markNotificationsRead().catch(() => undefined);
-  }, [visible, list.data]);
+    if (!markRead || !active) return;
+    const ids = list.data?.items.filter((n) => !n.readAt).map((n) => n.id) ?? [];
+    if (ids.length > 0) void api.markNotificationsReadIds(ids).catch(() => undefined);
+  }, [active, markRead, list.data]);
 
   return (
-    <AppSheet visible={visible} onClose={onClose} from="top" accessibilityLabel="Journal">
-      <Text variant="title" color={t.color.ink}>
-        {socialLabels.journal}
-      </Text>
+    <>
       {list.loading ? (
         <Text variant="body" color={t.color.inkMuted}>
           Chargement…
@@ -150,6 +171,19 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
           {list.error ? "Le Journal est hors ligne." : socialLabels.journalEmpty}
         </Text>
       )}
+    </>
+  );
+}
+
+export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTheme();
+  const feed = useJournalFeed(visible);
+  return (
+    <AppSheet visible={visible} onClose={onClose} from="top" accessibilityLabel="Journal">
+      <Text variant="title" color={t.color.ink}>
+        {socialLabels.journal}
+      </Text>
+      <JournalList active={visible} feed={feed} onNavigate={onClose} />
     </AppSheet>
   );
 }

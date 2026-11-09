@@ -37,6 +37,8 @@ export type AudienceVoter = {
   ticketScannedAt: Date | null;
   /** Membre du staff de l'événement, présence vérifiable (`staffPresenceWindow`). */
   staffPresent: boolean;
+  /** Lot R7d1 : présence validée par GPS (« Je suis sur place », visiteur sans voiture) ; heure de la validation. */
+  gpsPresentAt?: Date | null;
 };
 
 export type AudienceVoteWindow = {
@@ -69,7 +71,9 @@ export function voteOpen(event: AudienceVoteWindow, now: Date): boolean {
 /** Peut voter maintenant ? `null` = oui ; sinon la raison, dans l'ordre où l'interface l'explique. */
 export function canVote(voter: AudienceVoter, event: AudienceVoteWindow, now: Date): AudienceVoteRefusal | null {
   if (event.status !== "published" || now >= voteClosesAt(event)) return "vote_closed";
-  if (!voter.checkedInAt && !voter.ticketScannedAt && !voter.staffPresent) return "not_checked_in";
+  if (!voter.checkedInAt && !voter.ticketScannedAt && !voter.staffPresent && !voter.gpsPresentAt) {
+    return "not_checked_in";
+  }
   if (!voteOpen(event, now)) return "vote_not_open";
   return null;
 }

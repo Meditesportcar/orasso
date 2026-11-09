@@ -14,6 +14,7 @@ import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { syncVehicleReference } from "../src/modules/vehicles/reference-sync";
+import { seedActivity } from "./seed/activity";
 import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
 import { seedBase, seedMissingCategories } from "./seed/base";
@@ -44,6 +45,7 @@ import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedStaff } from "./seed/staff";
+import { seedStories } from "./seed/stories";
 import { seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
@@ -169,6 +171,12 @@ async function main() {
   await seedLiveEvent();
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
+
+  // Lot R7f1 : six stories de démonstration (photos relues sans plaque), 20 h de vie restantes.
+  await seedStories();
+
+  // Lot R7c1 : 12 notifications (cloche) et 3 demandes de Damien_66.
+  await seedActivity();
 }
 
 try {

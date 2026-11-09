@@ -111,7 +111,7 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
   await page.goto("/app/journal");
   await expect(page.getByTestId("journal-item").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Boîte" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Messages" }).first()).toBeVisible();
 
   // Se désabonner : le profil redevient réduit.
   await page.goto(`/u/${bravo}`);

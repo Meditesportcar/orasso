@@ -1,7 +1,6 @@
 CREATE TYPE "public"."feed_aspect" AS ENUM('portrait_4_5', 'square', 'landscape');--> statement-breakpoint
-ALTER TYPE "public"."upload_purpose" ADD VALUE 'feed_post';--> statement-breakpoint
-ALTER TYPE "public"."report_target" ADD VALUE 'feed_post';--> statement-breakpoint
-ALTER TYPE "public"."report_target" ADD VALUE 'story';--> statement-breakpoint
+ALTER TYPE "public"."upload_purpose" ADD VALUE 'feed_post' BEFORE 'story';--> statement-breakpoint
+ALTER TYPE "public"."report_target" ADD VALUE 'feed_post' BEFORE 'story';--> statement-breakpoint
 CREATE TABLE "feed_post_photos" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"post_id" uuid NOT NULL,

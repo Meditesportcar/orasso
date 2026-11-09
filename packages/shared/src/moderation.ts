@@ -18,6 +18,8 @@ export const reportTargets = [
   "crew_comment",
   // Lot R7e1 : publication du Fil (publique parmi les membres) et story (le lot R7f1 branche la cible ; l'enum est posée ici une fois).
   "feed_post",
+
+  // Lot R7f1 : story (R7e1 pose `feed_post` et `story` ensemble ; le coordinateur ne garde qu'une des deux migrations).
   "story",
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
@@ -89,6 +91,7 @@ export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]
   crew_post: ["shocking", "insult", "harassment", "plate_or_face", "spam", "other"],
   crew_comment: ["insult", "harassment", "spam", "other"],
   feed_post: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
+
   story: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
 };
 

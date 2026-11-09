@@ -131,6 +131,7 @@ export const profilesService = {
       );
     // Pastille de la cloche (lot 17) : éléments du Journal non lus, un push seul (message reçu) n'en fait pas partie.
     const unread = await notificationsService.unreadCount(v.user.id);
+    const inbox = await inboxService.summary(v.user.id, { includeStructure: twoFactorOk(v.session?.secondFactor) });
     const required = await twoFactorRequired(v);
     return {
       user: {
@@ -187,10 +188,14 @@ export const profilesService = {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,
         unreadNotifications: unread,
+        // Lot R7c1 : les trois pastilles (bulle, cloche, Demandes), en plus des anciens champs.
+        unreadMessages: inbox.unreadMessages,
+        unseenActivity: inbox.unseenActivity,
+        pendingRequests: inbox.pendingRequests,
       },
       personas: await personasOf(v),
       // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente.
-      unreadInbox: await inboxService.total(v.user.id, { includeStructure: twoFactorOk(v.session?.secondFactor) }),
+      unreadInbox: inbox.unreadMessages + Object.values(inbox.requests).reduce((a, b) => a + b, 0),
     };
   },
 

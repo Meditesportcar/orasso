@@ -62,7 +62,12 @@ export const contactsService = {
    * ouverte et permise : écrire directement), `409 contact_request_exists` (déjà demandé, dans un sens ou dans
    * l'autre) ; 10 demandes par jour comptées en base.
    */
-  async create(v: Viewer, input: ContactRequestCreate): Promise<ContactRequestResult> {
+  async create(
+    v: Viewer,
+    input: ContactRequestCreate,
+    /** Lot R7f1 : demande née d'une réponse à une story ; le contexte suit le premier message à l'acceptation. */
+    context: { storyId?: string; clientId?: string } = {},
+  ): Promise<ContactRequestResult> {
     if (actorOf(v).suspended) throw forbidden("Ton compte est suspendu : lecture seule.");
     const target = await profilesRepo.byPseudo(input.pseudo);
     if (!target || target.deletedAt || (target.suspendedUntil && target.suspendedUntil > now())) {
@@ -114,7 +119,14 @@ export const contactsService = {
       }
       const [created] = await tx
         .insert(contactRequests)
-        .values({ fromUserId: me, toUserId: target.userId, message: input.message, createdAt: now() })
+        .values({
+          fromUserId: me,
+          toUserId: target.userId,
+          message: input.message,
+          storyId: context.storyId ?? null,
+          clientId: context.clientId ?? null,
+          createdAt: now(),
+        })
         .returning({ id: contactRequests.id });
       if (!created) throw new Error("Demande de contact non enregistrée");
       await notificationsService.notify(tx, target.userId, "contact_request", {
@@ -209,6 +221,13 @@ export const contactsService = {
       await ensureParticipant(tx, conversation.id, me, "member");
       await ensureParticipant(tx, conversation.id, row.fromUserId, "member");
       const at = nextMessageAt(locked?.lastMessageAt ?? null);
+      // L'identifiant de l'appareil de la demande est repris dans le premier message (une reprise après l'acceptation le retrouve).
+      const [clash] = row.clientId
+        ? await tx
+            .select({ id: messages.id })
+            .from(messages)
+            .where(and(eq(messages.conversationId, conversation.id), eq(messages.clientId, row.clientId)))
+        : [];
       const [message] = await tx
         .insert(messages)
         .values({
@@ -216,6 +235,8 @@ export const contactsService = {
           senderId: row.fromUserId,
           kind: "text",
           body: row.message,
+          storyId: row.storyId,
+          clientId: clash ? null : row.clientId,
           createdAt: at,
         })
         .returning();

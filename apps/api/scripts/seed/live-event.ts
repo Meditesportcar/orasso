@@ -34,6 +34,8 @@ import type { EventRow } from "../../src/modules/events/repo";
 import { eventsService } from "../../src/modules/events/service";
 import { messagingService } from "../../src/modules/messaging/service";
 import { pointsService } from "../../src/modules/points/service";
+import { presenceService } from "../../src/modules/presence/service";
+import { issueTickets } from "../../src/modules/tickets/service";
 import { vehiclesService } from "../../src/modules/vehicles/service";
 import { createEvent, DAY, parisAt } from "./helpers";
 import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
@@ -177,6 +179,7 @@ export async function seedLiveEvent() {
     const complete = (accepted?.n ?? 0) >= MIN_ACCEPTED;
     if (existing.status === "published" && existing.startsAt <= real && keep && complete) {
       console.log(`En direct : « ${TITLE} » en cours (jusqu'au ${existing.endsAt.toISOString().slice(0, 10)}).`);
+      await presenceDemo(existing.id);
       return;
     }
     await teardown(existing);
@@ -208,6 +211,77 @@ export async function seedLiveEvent() {
     deps.clock = systemClock;
     await boss.stop({ graceful: true });
   }
+}
+
+/**
+ * Présence par GPS (lot R7d1) : la zone de présence du Lydia (400 m, si l'organisatrice n'en a pas réglé) et deux
+ * visiteurs sans voiture qui ont validé « Je suis sur place » : Pilote_004 avec un billet gratuit, Pilote_005 sans. Par les
+ * vrais services (billet, `presenceService.validate`), à l'heure réelle, depuis le pied du Lydia ; la position envoyée
+ * n'est gardée nulle part. Idempotent : une personne déjà présente est laissée telle quelle.
+ */
+async function presenceDemo(eventId: string) {
+  const event = await db.query.events.findFirst({ where: eq(t.events.id, eventId) });
+  if (!event || event.lat === null || event.lng === null) return;
+  if (event.presenceRadiusM === null) {
+    await db.update(t.events).set({ presenceRadiusM: 400 }).where(eq(t.events.id, eventId));
+  }
+  for (const [pseudo, withTicket] of [
+    ["Pilote_004", true],
+    ["Pilote_005", false],
+  ] as const) {
+    const v = await viewer(pseudo);
+    if (!v) continue;
+    const already = await db.query.eventPresences.findFirst({
+      where: and(eq(t.eventPresences.eventId, eventId), eq(t.eventPresences.userId, v.user.id)),
+      columns: { id: true },
+    });
+    if (already) continue;
+    try {
+      if (withTicket) await giveTicket(v, event);
+      await presenceService.validate(v, eventId, { lat: event.lat, lng: event.lng, accuracyM: 15 });
+      console.log(`En direct : ${pseudo} présent par GPS${withTicket ? " (avec billet)" : " (sans billet)"}.`);
+    } catch (error) {
+      console.log(`En direct : présence de ${pseudo} non posée (${(error as Error).message}).`);
+    }
+  }
+}
+
+/**
+ * Un billet gratuit au visiteur de la démonstration. Le Lydia est en entrée libre et le reste : le mode de l'événement
+ * n'est jamais touché (dev est partagé, Damien l'utilise), la commande et le billet sont écrits directement, avec la
+ * même émission signée que la billetterie. Un type de billet est exigé par la base (clé étrangère) : on prend celui qui
+ * existe, sinon on en crée un seul, inerte (la billetterie reste coupée), que les relances réutilisent.
+ */
+async function giveTicket(v: Viewer, event: EventRow) {
+  const has = await db.query.tickets.findFirst({
+    where: and(eq(t.tickets.eventId, event.id), eq(t.tickets.userId, v.user.id)),
+    columns: { id: true },
+  });
+  if (has) return;
+  const type =
+    (await db.query.ticketTypes.findFirst({ where: eq(t.ticketTypes.eventId, event.id) })) ??
+    (
+      await db
+        .insert(t.ticketTypes)
+        .values({ eventId: event.id, name: "Entrée visiteur", capacity: 200, priceCents: 0 })
+        .returning()
+    )[0];
+  if (!type) throw new Error("Type de billet non créé");
+  await withTx(async (tx) => {
+    const [order] = await tx
+      .insert(t.orders)
+      .values({
+        eventId: event.id,
+        userId: v.user.id,
+        ticketTypeId: type.id,
+        status: "paid",
+        quantity: 1,
+        paidAt: deps.clock.now(),
+      })
+      .returning();
+    if (!order) throw new Error("Commande non créée");
+    await issueTickets(tx, order, event.eventNo);
+  });
 }
 
 /** Suppression propre d'un « Rassemblement du Lydia » fini : ce qu'il a laissé hors de ses tables, puis lui. */
@@ -614,6 +688,8 @@ async function build(structureId: string, orga: Viewer, damien: Viewer, real: Da
     await posterService.regenerate(withPoster);
     await scheduleEventJobs(withPoster);
   }
+  // Lot R7d1 : zone de présence et deux présences par GPS (heure réelle).
+  await presenceDemo(eventId);
 
   const counts = await db
     .select({ status: t.applications.status, n: sql<number>`count(*)::int` })

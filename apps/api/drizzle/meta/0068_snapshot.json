@@ -1,5 +1,5 @@
 {
-  "id": "ffd9be35-135b-4ecb-816a-d02a42c9cc05",
+  "id": "f2357968-585f-473f-94ff-19e1de7e43b1",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -5681,6 +5681,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "presence_radius_m": {
+          "name": "presence_radius_m",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "admitted_vehicle_types": {
           "name": "admitted_vehicle_types",
           "type": "text[]",
@@ -6196,6 +6202,10 @@
           "name": "events_dates_check",
           "value": "\"events\".\"ends_at\" > \"events\".\"starts_at\""
         },
+        "events_presence_radius_check": {
+          "name": "events_presence_radius_check",
+          "value": "\"events\".\"presence_radius_m\" is null or \"events\".\"presence_radius_m\" between 50 and 2000"
+        },
         "events_capacity_check": {
           "name": "events_capacity_check",
           "value": "\"events\".\"capacity\" is null or \"events\".\"capacity\" > 0"
@@ -6223,532 +6233,6 @@
         "events_poster_style_check": {
           "name": "events_poster_style_check",
           "value": "\"events\".\"poster_style\" is null or \"events\".\"poster_style\" in ('neon', 'swiss', 'retro', 'jdm', 'ticket', 'mag', 'minimal', 'damier')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.feed_post_photos": {
-      "name": "feed_post_photos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "post_id": {
-          "name": "post_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "storage_key": {
-          "name": "storage_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "plate_blurred": {
-          "name": "plate_blurred",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "no_plate_confirmed": {
-          "name": "no_plate_confirmed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "feed_post_photos_position_key": {
-          "name": "feed_post_photos_position_key",
-          "columns": [
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "feed_post_photos_post_id_feed_posts_id_fk": {
-          "name": "feed_post_photos_post_id_feed_posts_id_fk",
-          "tableFrom": "feed_post_photos",
-          "tableTo": "feed_posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "feed_post_photos_storage_key_key": {
-          "name": "feed_post_photos_storage_key_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "storage_key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "feed_post_photos_position_check": {
-          "name": "feed_post_photos_position_check",
-          "value": "\"feed_post_photos\".\"position\" between 0 and 5"
-        },
-        "feed_post_photos_plate_check": {
-          "name": "feed_post_photos_plate_check",
-          "value": "\"feed_post_photos\".\"plate_blurred\" or \"feed_post_photos\".\"no_plate_confirmed\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.feed_post_reactions": {
-      "name": "feed_post_reactions",
-      "schema": "",
-      "columns": {
-        "post_id": {
-          "name": "post_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "feed_post_reactions_user_idx": {
-          "name": "feed_post_reactions_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "feed_post_reactions_post_id_feed_posts_id_fk": {
-          "name": "feed_post_reactions_post_id_feed_posts_id_fk",
-          "tableFrom": "feed_post_reactions",
-          "tableTo": "feed_posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "feed_post_reactions_user_id_user_id_fk": {
-          "name": "feed_post_reactions_user_id_user_id_fk",
-          "tableFrom": "feed_post_reactions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "feed_post_reactions_pkey": {
-          "name": "feed_post_reactions_pkey",
-          "columns": [
-            "post_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.feed_posts": {
-      "name": "feed_posts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "commercial_partner_id": {
-          "name": "commercial_partner_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "aspect": {
-          "name": "aspect",
-          "type": "feed_aspect",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'portrait_4_5'"
-        },
-        "department": {
-          "name": "department",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "reactions_count": {
-          "name": "reactions_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "client_id": {
-          "name": "client_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_by": {
-          "name": "deleted_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "feed_posts_created_idx": {
-          "name": "feed_posts_created_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"feed_posts\".\"deleted_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_author_idx": {
-          "name": "feed_posts_author_idx",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_department_idx": {
-          "name": "feed_posts_department_idx",
-          "columns": [
-            {
-              "expression": "department",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_vehicle_idx": {
-          "name": "feed_posts_vehicle_idx",
-          "columns": [
-            {
-              "expression": "vehicle_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_event_idx": {
-          "name": "feed_posts_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_deleted_by_idx": {
-          "name": "feed_posts_deleted_by_idx",
-          "columns": [
-            {
-              "expression": "deleted_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "feed_posts_client_key": {
-          "name": "feed_posts_client_key",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "client_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"feed_posts\".\"client_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "feed_posts_author_id_user_id_fk": {
-          "name": "feed_posts_author_id_user_id_fk",
-          "tableFrom": "feed_posts",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "feed_posts_vehicle_id_vehicles_id_fk": {
-          "name": "feed_posts_vehicle_id_vehicles_id_fk",
-          "tableFrom": "feed_posts",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "feed_posts_event_id_events_id_fk": {
-          "name": "feed_posts_event_id_events_id_fk",
-          "tableFrom": "feed_posts",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "feed_posts_commercial_partner_id_pro_profiles_id_fk": {
-          "name": "feed_posts_commercial_partner_id_pro_profiles_id_fk",
-          "tableFrom": "feed_posts",
-          "tableTo": "pro_profiles",
-          "columnsFrom": [
-            "commercial_partner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "feed_posts_deleted_by_user_id_fk": {
-          "name": "feed_posts_deleted_by_user_id_fk",
-          "tableFrom": "feed_posts",
-          "tableTo": "user",
-          "columnsFrom": [
-            "deleted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "feed_posts_caption_check": {
-          "name": "feed_posts_caption_check",
-          "value": "\"feed_posts\".\"caption\" is null or char_length(\"feed_posts\".\"caption\") <= 500"
-        },
-        "feed_posts_reactions_check": {
-          "name": "feed_posts_reactions_check",
-          "value": "\"feed_posts\".\"reactions_count\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -10872,6 +10356,127 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.event_presences": {
+      "name": "event_presences",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "presence_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'gps'"
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validated_at": {
+          "name": "validated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "event_presences_event_id_events_id_fk": {
+          "name": "event_presences_event_id_events_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_presences_user_id_user_id_fk": {
+          "name": "event_presences_user_id_user_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_presences_ticket_id_tickets_id_fk": {
+          "name": "event_presences_ticket_id_tickets_id_fk",
+          "tableFrom": "event_presences",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_presences_event_user_key": {
+          "name": "event_presences_event_user_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "event_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.account_qr_uses": {
       "name": "account_qr_uses",
       "schema": "",
@@ -11470,20 +11075,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
-        },
-        "feed_less_kinds": {
-          "name": "feed_less_kinds",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "official": {
-          "name": "official",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "friends_count": {
           "name": "friends_count",
@@ -17686,21 +17277,6 @@
           "method": "btree",
           "with": {}
         },
-        "vehicles_created_at_idx": {
-          "name": "vehicles_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "vehicles_active_plate_key": {
           "name": "vehicles_active_plate_key",
           "columns": [
@@ -18228,15 +17804,6 @@
         "cancelled"
       ]
     },
-    "public.feed_aspect": {
-      "name": "feed_aspect",
-      "schema": "public",
-      "values": [
-        "portrait_4_5",
-        "square",
-        "landscape"
-      ]
-    },
     "public.placement_status": {
       "name": "placement_status",
       "schema": "public",
@@ -18316,8 +17883,7 @@
         "media_logo",
         "media_content",
         "event_poster_photo",
-        "crew_post",
-        "feed_post"
+        "crew_post"
       ]
     },
     "public.contest_state": {
@@ -18379,9 +17945,7 @@
         "provider",
         "announcement",
         "crew_post",
-        "crew_comment",
-        "feed_post",
-        "story"
+        "crew_comment"
       ]
     },
     "public.sanction_kind": {
@@ -18469,6 +18033,13 @@
         "season_carryover",
         "admin_adjustment",
         "audience_prize"
+      ]
+    },
+    "public.presence_kind": {
+      "name": "presence_kind",
+      "schema": "public",
+      "values": [
+        "gps"
       ]
     },
     "public.category_family": {

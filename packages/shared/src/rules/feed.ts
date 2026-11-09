@@ -6,9 +6,9 @@
 // « Moins de ce genre » (0,3). Puis la diversité (`diversify`) : deux cartes de suite du même genre pèsent 0,6, et trois
 // de suite n'arrivent que s'il ne reste rien d'autre.
 import { departmentCentroids, distanceKm, regions } from "../geo";
-import { type AudienceRel, type AudienceViewer, canSeeFeedPost, type FeedPostFacts } from "./audience";
+import { type AudienceRel, canSeeFeedPost, type FeedPostFacts, type FeedViewer } from "./audience";
 
-export type { AudienceRel, AudienceViewer, FeedPostFacts };
+export type { AudienceRel, FeedPostFacts, FeedViewer };
 export { canSeeFeedPost };
 
 /** Les genres de carte du Fil (`Card.kind`). `spot_meetup` (R7i), `memory` (R7j) et `sponsored` (R7k1) arrivent après. */

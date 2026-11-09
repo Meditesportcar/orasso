@@ -95,6 +95,9 @@ export const profiles = pgTable(
      * l'administration), jamais par une route publique ni déduite du pseudo, qui se réserve à l'inscription.
      */
     official: boolean("official").notNull().default(false),
+
+    /** Lot R7c1 : dernière ouverture de la cloche (Activité) ; les « non vus » sont les notifications livrées après. */
+    activitySeenAt: tstz("activity_seen_at"),
     /** Lot 17 : nombre d'amis acceptés. ARCHIVE depuis le lot R6b (plus lu ni écrit) ; retiré avec la table `friendships`. */
     friendsCount: integer("friends_count").notNull().default(0),
     /**

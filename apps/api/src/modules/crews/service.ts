@@ -66,6 +66,7 @@ import { inboxService } from "../messaging/inbox";
 import { nextMessageAt } from "../messaging/service";
 import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
+import { retireStories } from "../stories/purge";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "../vehicles/photos-blur";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
@@ -485,6 +486,12 @@ async function pendingCount(userId: string, ex: Executor = db): Promise<number> 
           -- Lot R6c, tour 2 : sans les invitations d'une personne dont j'ai coupé les invitations.
           and not exists (
             select 1 from invitation_mutes im where im.user_id = ${userId} and im.muted_user_id = i.invited_by
+          )
+          -- Tour 2 : la liste ne montre pas l'invitation d'un chef supprimé, banni ou suspendu : la pastille non plus.
+          and exists (
+            select 1 from profiles lp
+            where lp.user_id = coalesce(i.invited_by, c.created_by) and lp.deleted_at is null and lp.banned_at is null
+              and (lp.suspended_until is null or lp.suspended_until <= ${at})
           )) as n`);
   return Number((result.rows[0] as { n?: number | string } | undefined)?.n ?? 0);
 }
@@ -845,6 +852,8 @@ export const crewsService = {
     // Lot R5c1, tour 2 : dissous par son chef, le fil part (publications et photos) ; retiré par la modération, il
     // reste pour elle (le fil répond 404 à tous dans les deux cas).
     const feedKeys = reason === "moderation" ? [] : await purgeCrewFeed(tx, crew.id);
+    // Lot R7f1, tour 2 : les stories du crew partent avec lui (fichiers effacés après la validation, sauf signalement ouvert).
+    await retireStories(tx, after, { crewId: crew.id });
     const members = (await activeCrewMembers(tx, crew.id)).filter((m) => m.role !== "leader");
     for (const m of members) {
       await notificationsService.notify(tx, m.userId, "crew_archived", {
@@ -1387,7 +1396,9 @@ export const crewsService = {
         ];
       }
       const leader = inviters.get(r.m.invitedBy ?? r.crew.createdBy);
-      if (!leader || leader.deletedAt) return [];
+      // Tour 2 : comme la vitrine du crew, pas d'invitation d'un chef supprimé, banni ou suspendu.
+      if (!leader || leader.deletedAt || leader.bannedAt || (leader.suspendedUntil && leader.suspendedUntil > at))
+        return [];
       return [
         {
           kind: "invitation",

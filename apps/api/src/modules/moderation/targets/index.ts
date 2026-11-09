@@ -1,10 +1,10 @@
 // Registre des cibles : une ligne par sorte de contenu signalable (ARCHITECTURE-SUITE § 15.3).
 import type { ReportTarget } from "@orasso/shared";
-
+import { storyTarget } from "../../stories/moderation";
 import { crewTarget, proTarget, providerTarget } from "./community";
 import { crewCommentTarget, crewPostTarget } from "./crewFeed";
 import { announcementTarget, eventTarget, reviewTarget } from "./event";
-import { feedPostTarget, storyTarget } from "./feedPost";
+import { feedPostTarget } from "./feedPost";
 import { messageTarget } from "./message";
 import { profileTarget } from "./profile";
 import type { TargetRules } from "./types";

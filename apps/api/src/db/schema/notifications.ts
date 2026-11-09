@@ -36,6 +36,12 @@ export const notifications = pgTable(
     readAt: tstz("read_at"),
     /** Lot 15 : faux pour un push qui n'encombre pas le Journal (ex. message reçu). */
     inJournal: boolean("in_journal").notNull().default(true),
+    /**
+     * Lot R7c1 : clé de regroupement (`story_like:<storyId>`, `vote_opened:<eventId>`…). Une notification non lue du même
+     * compte et de la même clé, de moins de 24 h, est complétée au lieu d'en créer une autre ; l'Activité regroupe aussi par
+     * clé et par jour à la lecture.
+     */
+    groupKey: text("group_key"),
     ...timestamps,
   },
   (t) => [
@@ -44,6 +50,11 @@ export const notifications = pgTable(
       .on(t.userId, t.type, t.eventId)
       .where(sql`${t.type} in ('event_nearby_interest')`),
     index("notifications_user_created_idx").on(t.userId, t.createdAt.desc()),
+    index("notifications_user_group_idx").on(t.userId, t.groupKey),
+    // Lot R7c1, tour 3 : retrouver les lignes regroupées qui citent un compte (anonymisation) sans lire toute la table.
+    index("notifications_actor_ids_idx")
+      .using("gin", sql`(${t.data} -> '_actorIds')`)
+      .where(sql`${t.groupKey} is not null`),
     index("notifications_undelivered_idx").on(t.deliverAfter).where(sql`${t.deliveredAt} is null`),
   ],
 );

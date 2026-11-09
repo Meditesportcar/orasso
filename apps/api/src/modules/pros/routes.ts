@@ -17,6 +17,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
 import { prosService } from "./service";
 
@@ -41,9 +42,12 @@ export const prosRoutes = new Hono<AppEnv>()
     if (q.q) limitSearch(c, viewer);
     return c.json(await proActivityCounts(q, viewer), 200, { "cache-control": "private, no-cache" });
   })
-  .get("/pros/by-slug/:slug", async (c) =>
-    c.json(await prosService.getPublic(c.req.param("slug"), await optionalUser(c))),
-  )
+  .get("/pros/by-slug/:slug", async (c) => {
+    const viewer = await optionalUser(c);
+    const view = await prosService.getPublic(c.req.param("slug"), viewer);
+    // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
+    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "pro", view.id) });
+  })
   .post("/pros/by-slug/:slug/track", async (c) => {
     const viewer = await optionalUser(c);
     const { kind } = await body(c, proTrackSchema);
