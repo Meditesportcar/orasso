@@ -488,7 +488,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             onMore={() => setMenuOpen(true)}
             onClose={close}
           />
-          <SharedByLine story={story} authorName={authorName} />
+          <SharedByLine story={story} authorName={authorName} onProfile={openProfile} />
           <CommercialBadge story={story} />
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 22 }]} pointerEvents="box-none">

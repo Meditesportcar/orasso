@@ -49,6 +49,7 @@ import {
   registrationBlockText,
   registrationFullText,
   type StructurePublic,
+  storyShareLabels,
   type TicketOffer,
   vehicleTypeLabels,
   weatherTexts,
@@ -636,6 +637,14 @@ function EventPage({
               <p className="ev__live-onsite" data-testid="event-live-onsite">
                 <Icon name="staff" size={18} />
                 <strong>{onSiteLine}</strong>
+              </p>
+            )}
+            {live?.organizerStoryAvailable && (
+              <p className="ev__live-onsite" data-testid="event-organizer-story">
+                <Icon name="live" size={18} />
+                <a href={`/app/story/${encodeURIComponent(`s:${event.structure.id}`)}`}>
+                  <strong>{storyShareLabels.organizerStory}</strong>
+                </a>
               </p>
             )}
             {offerPresence && (

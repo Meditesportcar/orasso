@@ -1,23 +1,40 @@
-// « Story de Kenji_66, ajoutée par Roues Libres 66 » (maquette R7.7 `.r7cred`) : le crédit d'une copie. Minimal dans le lot
-// R7f2 (une ligne de texte) ; RÉSERVÉ au lot R7h, qui le complète (avatar de l'auteur d'origine, partage de l'organisateur).
+// « Story de Kenji_66, ajoutée par Roues Libres 66 » (maquette R7.7 `.r7cred`) : le crédit d'une copie. Toucher le nom de
+// l'auteur d'origine ouvre son profil (lot R7h) ; la ligne reste lisible sans le geste (texte seul).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { storyViewerLabels as L, type StoryView } from "@orasso/shared";
-import { StyleSheet } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
-export function SharedByLine({ story, authorName }: { story: StoryView; authorName: string }) {
+export function SharedByLine({
+  story,
+  authorName,
+  onProfile,
+}: {
+  story: StoryView;
+  authorName: string;
+  onProfile?: (pseudo: string) => void;
+}) {
   const { t } = useTheme();
   if (!story.sharedFrom) return null;
+  const pseudo = story.sharedFrom.authorPseudo;
+  const text = L.sharedBy(pseudo, authorName);
   return (
-    <Text
-      variant="caption"
-      color={t.color.nightInk}
+    <Pressable
+      onPress={onProfile && pseudo ? () => onProfile(pseudo) : undefined}
+      disabled={!onProfile || !pseudo}
+      accessibilityRole={onProfile && pseudo ? "link" : "text"}
+      accessibilityLabel={text}
+      hitSlop={8}
       style={styles.line}
-      accessibilityLabel={L.sharedBy(story.sharedFrom.authorPseudo, authorName)}
       testID="story-shared-by"
     >
-      {L.sharedBy(story.sharedFrom.authorPseudo, authorName)}
-    </Text>
+      <Text variant="caption" color={t.color.nightInk} style={styles.text}>
+        {text}
+      </Text>
+    </Pressable>
   );
 }
 
-const styles = StyleSheet.create({ line: { paddingHorizontal: tokens.spacing.space1, opacity: 0.9 } });
+const styles = StyleSheet.create({
+  line: { paddingHorizontal: tokens.spacing.space1 },
+  text: { opacity: 0.9 },
+});

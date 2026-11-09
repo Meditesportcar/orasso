@@ -33,6 +33,10 @@ import {
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
   recurrenceOccurrences,
+  type StoriesByAuthor,
+  type StoryMentions,
+  storyAuthorKeyOf,
+  storyShareLabels,
   voteOrgaLabels,
   wallTime,
   weatherTexts,
@@ -41,6 +45,7 @@ import {
 import { useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
+import { OrgaStory } from "../components/stories/OrgaStory";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
@@ -77,8 +82,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     event.status === "published"
       ? await api<AudiencePrizeBoard>(request, `/events/${params.eventId}/audience-prize`)
       : null;
+  // Lot R7h : mentions de la structure et sa story (jamais bloquant : une panne s'affiche, la page reste).
+  const [mentions, mine] =
+    event.status === "published"
+      ? await Promise.all([
+          api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`),
+          api<StoriesByAuthor>(
+            request,
+            `/stories/by-author/${encodeURIComponent(storyAuthorKeyOf("structure", membership.structureId))}`,
+          ),
+        ])
+      : [null, null];
   return {
     event,
+    storyMentions: mentions?.ok ? mentions.data : null,
+    storyMine: mine?.ok ? mine.data : null,
+    storyFailed: Boolean(mentions && !mentions.ok),
+    storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,
     prize: prize?.ok ? prize.data : null,
     posterDone: url.searchParams.get("affiche") === "1",
@@ -91,7 +111,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Result = { error?: string; ok?: string; series?: { title: string; startsAt: string }[] };
 
 export async function action({ request, params }: Route.ActionArgs) {
-  await organizerOf(request, params.structure);
+  const membership = await organizerOf(request, params.structure);
   const form = await request.formData();
   const text = (name: string) => String(form.get(name) ?? "");
   const id = params.eventId;
@@ -114,6 +134,18 @@ export async function action({ request, params }: Route.ActionArgs) {
         },
       });
       return res.ok ? redirect(`${back}?affiche=1`) : fail(res);
+    }
+    // Lot R7h : « Ajouter à ma story » (copie liée, au nom de la structure) et « Retirer » (la copie ou une story à nous).
+    case "story-share": {
+      const res = await api(request, `/stories/${encodeURIComponent(text("storyId"))}/share-to-mine`, {
+        method: "POST",
+        json: { asStructureId: membership.structureId },
+      });
+      return res.ok ? redirect(`${back}?story=added`) : fail(res);
+    }
+    case "story-remove": {
+      const res = await api(request, `/me/stories/${encodeURIComponent(text("storyId"))}`, { method: "DELETE" });
+      return res.ok ? redirect(`${back}?story=removed`) : fail(res);
     }
     case "publish": {
       const res = await api(request, `/events/${id}/publish`, { method: "POST" });
@@ -445,7 +477,19 @@ function PrizePanel({ prize, slug }: { prize: AudiencePrizeBoard; slug: string }
 }
 
 export default function OrgaEvenement({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, weather, ticketing, verified, created, prize, posterDone } = loaderData;
+  const {
+    event,
+    weather,
+    ticketing,
+    verified,
+    created,
+    prize,
+    posterDone,
+    storyMentions,
+    storyMine,
+    storyFailed,
+    storyNotice,
+  } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -609,6 +653,21 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
             )}
           </div>
         </section>
+      )}
+
+      {published && (
+        <OrgaStory
+          mentions={storyMentions}
+          mine={storyMine}
+          failed={storyFailed}
+          notice={
+            storyNotice === "added"
+              ? storyShareLabels.added
+              : storyNotice === "removed"
+                ? storyShareLabels.removeDone
+                : null
+          }
+        />
       )}
 
       {published && (

@@ -13,6 +13,7 @@ import {
   orgaLabels,
   orgaV2Labels,
   presenceLabels,
+  storyShareLabels,
   voteOrgaLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
@@ -102,6 +103,9 @@ function DirectEvent({
   const prize = audience.error ? null : audience.data;
   // Lot R7d2 : les présents (des nombres, jamais une liste ni un nom), rafraîchis par `presence.changed` du canal en direct.
   const presents = useApi(() => api.presenceSummary(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
+  // Lot R7h : les stories qui nous identifient (le nombre de « Mentions »), relues avec le reste du direct.
+  const { structureId } = useOrga();
+  const mentions = useApi(() => api.storyMentions(structureId), [structureId], { enabled: field, refreshMs: 60_000 });
   const at = useNow(60_000);
   // Lot C4a, tour 2 : le mode staff s'ouvre dès J-1 (l'API l'ouvre dès J-1 0 h) pour synchroniser la liste la veille.
   const staffOpen = field || calendarDaysBetween(at, new Date(current.event.startsAt)) <= 1;
@@ -309,6 +313,32 @@ function DirectEvent({
 
       {field ? (
         <>
+          <SectionTitle>{storyShareLabels.mine}</SectionTitle>
+          <Plate style={styles.block} testID="orga-direct-story">
+            <Pressable
+              onPress={() => router.push("/story/mentions" as never)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions
+              }
+              style={styles.storyRow}
+              testID="orga-direct-mentions"
+            >
+              <Text variant="bodyStrong" color={c.plateInk}>
+                {mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push("/story/ma-story" as never)}
+              accessibilityRole="button"
+              style={styles.storyRow}
+              testID="orga-direct-mystory"
+            >
+              <Text variant="bodyStrong" color={c.plateInk}>
+                {storyShareLabels.mine}
+              </Text>
+            </Pressable>
+          </Plate>
           <SectionTitle>{presenceLabels.summaryTitle}</SectionTitle>
           {presents.data ? (
             <Plate style={styles.block} testID="orga-direct-presents">
@@ -491,6 +521,7 @@ function firstOf(...errors: (unknown | null)[]): unknown | null {
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
+  storyRow: { paddingVertical: space2 },
   line: { flexDirection: "row", alignItems: "baseline", gap: space2 },
   grow: { flex: 1 },
   counters: { gap: space2 },

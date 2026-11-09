@@ -739,3 +739,42 @@ button.story-view__pill {
     width: min(100%, 360px);
   }
 }
+
+/* Lot R7h : « Mentions » et « Ma story » de l'organisateur (page de l'événement), crédit cliquable de la visionneuse. */
+.ostory {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ostory__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.ostory__thumb {
+  flex: none;
+  width: 54px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+.ostory__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ostory__text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 140px;
+}
+.story-view__shared a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
