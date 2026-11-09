@@ -1,24 +1,50 @@
 // Lot R7m1 : côté pro, dans « Modifier ma fiche » : mes propositions en attente (« Retirer la proposition ») et mes partenaires
 // (« Mettre fin », feuille de confirmation : la personne est prévenue, les contenus déjà publiés gardent leur mention). Après
 // la date de l'abonnement, la ligne « Réservé à l'abonnement pro » dit pourquoi on ne propose plus. Proposer se fait depuis
-// le profil d'un passionné.
+// le profil d'un passionné. Tour 2 : retirer une proposition a le même retour que « Mettre fin » (occupé, erreur visible,
+// « Réessayer ») ; une panne de lecture ne ressemble pas à « aucun partenaire ».
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, partnershipLabels as L, type ProPartnershipRow, type ProPartnerships } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
+import { errorMessage } from "@/lib/http";
 import { Avatar } from "@/ui/Avatar";
 import { SecH } from "@/ui/KitTz";
+import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { EndSheet } from "./EndSheet";
 
 const { space2, space3 } = tokens.spacing;
 
-function Row({ row, label, onEnd }: { row: ProPartnershipRow; label: string; onEnd: () => void }) {
+function Row({
+  row,
+  label,
+  onEnd,
+}: {
+  row: ProPartnershipRow;
+  label: string;
+  /** Une promesse : le bouton est occupé tant qu'elle court, et son échec s'affiche dans la carte. */
+  onEnd: () => Promise<unknown>;
+}) {
   const { t } = useTheme();
   const c = t.color;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function press() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onEnd();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <View
       style={[styles.card, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
@@ -38,8 +64,21 @@ function Row({ row, label, onEnd }: { row: ProPartnershipRow; label: string; onE
       <Text variant="caption" color={c.inkMuted}>
         {`« ${row.message} »`}
       </Text>
-      <Button variant="secondary" icon="close" fullWidth onPress={onEnd} testID="partnership-end">
-        {label}
+      {error ? (
+        <Notice tone="error" testID="partnership-end-error">
+          {error}
+        </Notice>
+      ) : null}
+      <Button
+        variant="secondary"
+        icon={error ? "undo" : "close"}
+        fullWidth
+        loading={busy}
+        disabled={busy}
+        onPress={() => void press()}
+        testID="partnership-end"
+      >
+        {error ? L.retry : label}
       </Button>
     </View>
   );
@@ -48,14 +87,23 @@ function Row({ row, label, onEnd }: { row: ProPartnershipRow; label: string; onE
 export function PartnersManage({
   proId,
   data,
+  error,
   reload,
 }: {
   proId: string;
   data: ProPartnerships | null;
+  /** La lecture a échoué : on le dit (jamais confondu avec « aucun partenaire »). */
+  error?: boolean;
   reload: () => Promise<unknown>;
 }) {
   const [ending, setEnding] = useState<ProPartnershipRow | null>(null);
-  if (!data) return null;
+  if (!data) {
+    return error ? (
+      <View style={styles.section} testID="pro-partnerships-error">
+        <LoadError message={L.proPartnershipsLoadError} onRetry={() => void reload()} />
+      </View>
+    ) : null;
+  }
   const pending = data.items.filter((i) => i.status === "pending");
   const active = data.items.filter((i) => i.status === "active");
   return (
@@ -65,6 +113,7 @@ export function PartnersManage({
         <Notice testID="partnership-locked">{L.subscriptionOnly}</Notice>
       ) : null}
       {data.canPropose === "not_verified" ? <Notice>{L.notVerified}</Notice> : null}
+      {data.canPropose === "not_published" ? <Notice>{L.notPublished}</Notice> : null}
       {pending.length ? (
         <>
           <Muted variant="label">{L.pendingTitle.toUpperCase()}</Muted>
@@ -74,13 +123,22 @@ export function PartnersManage({
               key={r.id}
               row={r}
               label={L.withdraw}
-              onEnd={() => void api.endPartnershipAsPro(proId, r.id).then(() => reload())}
+              onEnd={async () => {
+                try {
+                  await api.endPartnershipAsPro(proId, r.id, "pending");
+                } catch (e) {
+                  // La personne vient peut-être d'accepter : la liste se relit pour dire la vérité.
+                  void reload();
+                  throw e;
+                }
+                await reload();
+              }}
             />
           ))}
         </>
       ) : null}
       {active.map((r) => (
-        <Row key={r.id} row={r} label={L.end} onEnd={() => setEnding(r)} />
+        <Row key={r.id} row={r} label={L.end} onEnd={async () => setEnding(r)} />
       ))}
       {!pending.length && !active.length ? <Muted variant="body">{L.partnersEmpty}</Muted> : null}
       <EndSheet
@@ -90,7 +148,7 @@ export function PartnersManage({
         onClose={() => setEnding(null)}
         onConfirm={async () => {
           if (!ending) return;
-          await api.endPartnershipAsPro(proId, ending.id);
+          await api.endPartnershipAsPro(proId, ending.id, "active");
           setEnding(null);
           await reload();
         }}

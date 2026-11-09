@@ -211,7 +211,7 @@ export default function ProPage() {
       </View>
 
       {/* Lot R7m1 : « Ses partenaires » (les passionnés à partenariat actif ; l'API ne sert rien sans compte connecté). */}
-      <PartnersSection items={p.memberPartners ?? []} onPlate />
+      <PartnersSection items={p.memberPartners ?? []} total={p.memberPartnersTotal} slug={p.slug} onPlate />
 
       {/* Lot 36 : les photos de réalisations, comme sur le site (elles n'étaient montrées qu'au pro). */}
       {p.photos.length > 0 ? (

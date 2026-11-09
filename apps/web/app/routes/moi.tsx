@@ -14,6 +14,7 @@ import {
   notificationTypeLabels,
   type PersonaKind,
   profileTabsLabels as PT,
+  partnershipLabels as PTN,
   personaKindLabels,
   preferencesLabels,
   profilePhotoLabels,
@@ -73,6 +74,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     settings,
     network: network.ok ? network.data : null,
     partnerships: partnerships.ok ? partnerships.data.items : null,
+    // Tour 2 : une panne de cette lecture ne ressemble jamais à « aucun partenaire » (message + « Réessayer »).
+    partnershipsDown: !partnerships.ok,
     onglet,
     // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
     retryHref: panelRetryHref(url.searchParams),
@@ -282,7 +285,11 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </a>
           ))}
         </nav>
-        <PartnersLine mine={loaderData.partnerships} busy={busy} />
+        {loaderData.partnershipsDown ? (
+          <PanelDown message={PTN.partnersLoadError} href={loaderData.retryHref} />
+        ) : (
+          <PartnersLine mine={loaderData.partnerships} busy={busy} />
+        )}
         {err("partnership") && (
           <p className="s-error" role="alert">
             {err("partnership")}

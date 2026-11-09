@@ -91,7 +91,8 @@ export function ProposeForm({
             {error}
           </p>
         )}
-        <Button type="submit" variant="primary" icon="send" loading={busy} data-testid="partnership-send">
+        {/* Secondaire : le seul bouton principal de la fiche d'un passionné reste « Suivre ». */}
+        <Button type="submit" variant="secondary" icon="send" loading={busy} data-testid="partnership-send">
           {L.send}
         </Button>
       </Form>

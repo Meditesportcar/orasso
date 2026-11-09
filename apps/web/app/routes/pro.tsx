@@ -241,7 +241,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* Lot R7m1 : « Ses partenaires » (passionnés à partenariat actif ; l'API ne sert rien sans compte connecté). */}
-      <PartnersOfPro items={pro.memberPartners ?? []} />
+      <PartnersOfPro items={pro.memberPartners ?? []} total={pro.memberPartnersTotal} slug={pro.slug} />
 
       {pro.photos.length > 0 && (
         <section className="s-stack" aria-labelledby="pro-photos">

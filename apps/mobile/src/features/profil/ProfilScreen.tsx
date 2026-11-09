@@ -225,7 +225,7 @@ export function ProfilScreen() {
               target === "sorties" ? setTab("sorties") : router.push({ pathname: "/reseau", params: { liste: target } })
             }
           />
-          <PartnersLine mine />
+          <PartnersLine mine reloadKey={round} />
           <Button
             variant="secondary"
             icon="eye"

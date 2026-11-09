@@ -1,7 +1,8 @@
 // Lot R7m1 (maquette R7.19 `pp_fiche`) : « Ses partenaires » sur la fiche d'un pro : les passionnés à partenariat actif
 // (pseudo, grade, voiture), chacun ouvre son profil. L'API décide ce qui s'y trouve : rien sans compte connecté, et pour un
-// compte privé que la personne qui regarde ne suit pas, le pseudo, la photo et le grade sans voiture.
-import { Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// compte privé que la personne qui regarde ne suit pas, le pseudo, la photo et le grade sans voiture. Tour 2 : six au plus,
+// le nombre total, et « Voir tout » (page paginée `/partenaires`) quand il y en a davantage.
+import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, partnershipLabels as L, type PartnerOfPro } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -11,7 +12,19 @@ import { SecH } from "@/ui/KitTz";
 
 const { space2, space3 } = tokens.spacing;
 
-export function PartnersSection({ items, onPlate = false }: { items: PartnerOfPro[]; onPlate?: boolean }) {
+export function PartnersSection({
+  items,
+  total,
+  slug,
+  onPlate = false,
+}: {
+  items: PartnerOfPro[];
+  /** Nombre de partenaires en tout (plus que `items` : « Voir tout »). */
+  total?: number;
+  /** Fiche dont « Voir tout » ouvre la liste complète ; absent : pas de « Voir tout » (liste déjà complète ailleurs). */
+  slug?: string;
+  onPlate?: boolean;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -20,7 +33,7 @@ export function PartnersSection({ items, onPlate = false }: { items: PartnerOfPr
   const muted = onPlate ? c.plateMuted : c.inkMuted;
   return (
     <View style={styles.section} testID="pro-partners">
-      <SecH title={L.partnersTitle} hint={L.partnersCount(items.length)} />
+      <SecH title={L.partnersTitle} hint={L.partnersCount(total ?? items.length)} />
       {items.map((p) => {
         const body = (
           <>
@@ -54,6 +67,17 @@ export function PartnersSection({ items, onPlate = false }: { items: PartnerOfPr
           </Pressable>
         );
       })}
+      {slug && (total ?? items.length) > items.length ? (
+        <Button
+          variant={onPlate ? "plate" : "secondary"}
+          icon="next"
+          fullWidth
+          onPress={() => router.push({ pathname: "/partenaires", params: { pro: slug } })}
+          testID="pro-partners-all"
+        >
+          {L.partnersSeeAll}
+        </Button>
+      ) : null}
     </View>
   );
 }

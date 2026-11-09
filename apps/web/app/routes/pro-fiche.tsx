@@ -9,6 +9,7 @@ import {
   PRO_MAX_PHOTOS,
   type ProOwner,
   type ProPartnerships,
+  partnershipLabels,
   type StructureCard,
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
@@ -16,6 +17,7 @@ import { data, Form, useNavigation } from "react-router";
 import { FileField } from "../components/Fields";
 import { ProFicheFields } from "../components/ProFicheFields";
 import { ManagePartnerships } from "../components/partnerships/ManagePartnerships";
+import { PanelDown } from "../components/profile/PanelDown";
 import { api, apiOrThrow, originOf } from "../lib/api.server";
 import { formatDay } from "../lib/format";
 import { proBodyFrom } from "../lib/proForm.server";
@@ -34,6 +36,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     pro,
     partnerships: partnerships.ok ? partnerships.data : null,
+    // Tour 2 : une panne n'est pas « aucun partenaire » (message + « Réessayer »).
+    partnershipsDown: !partnerships.ok,
     structures: structures.ok ? structures.data.items : [],
     origin: originOf(request),
     created: url.searchParams.get("creee") === "1",
@@ -135,9 +139,15 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Lot R7m1 : mettre fin à un partenariat, ou retirer une proposition sans réponse.
   if (intent === "partnership_end" || intent === "partnership_withdraw") {
-    const res = await api(request, `/pros/${pro.id}/partnerships/${encodeURIComponent(text("id"))}/end`, {
-      method: "POST",
-    });
+    // `expect` : un retrait ne termine jamais un partenariat que la personne vient d'accepter (409 sinon).
+    const expect = intent === "partnership_end" ? "active" : "pending";
+    const res = await api(
+      request,
+      `/pros/${pro.id}/partnerships/${encodeURIComponent(text("id"))}/end?expect=${expect}`,
+      {
+        method: "POST",
+      },
+    );
     if (!res.ok) return fail("member-partners", res.error.message, res.status);
     return ok(
       "member-partners",
@@ -405,7 +415,11 @@ export default function ProFiche({ loaderData, actionData }: Route.ComponentProp
         {message("partners")}
       </section>
 
-      <ManagePartnerships data={partnerships} busy={busy} />
+      {loaderData.partnershipsDown ? (
+        <PanelDown message={partnershipLabels.proPartnershipsLoadError} href={`/pro/${encodeURIComponent(pro.slug)}`} />
+      ) : (
+        <ManagePartnerships data={partnerships} busy={busy} />
+      )}
       {message("member-partners")}
 
       <Plate as="section" kind="note">

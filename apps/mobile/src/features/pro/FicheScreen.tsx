@@ -10,7 +10,7 @@
 //    dans l'annuaire, les organisateurs partenaires, l'abonnement et les emplacements sponsorisés en consultation.
 // L'abonnement se consulte seulement : aucun prix ni bouton de paiement dans l'appli, la souscription se fait sur le site.
 import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { proAppLabels as L, proActivityLabels, proV2Labels } from "@orasso/shared";
+import { proAppLabels as L, PARTNERS_ON_FICHE, proActivityLabels, proV2Labels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -80,7 +80,8 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   return (
     <TabScreen
       onRefresh={async () => {
-        await myPro.reload();
+        // Tour 2 : tirer pour actualiser relance aussi mes partenaires et mes propositions.
+        await Promise.all([myPro.reload(), partnerships.reload()]);
       }}
       overlays={
         pro ? (
@@ -183,8 +184,10 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
             )}
 
             <PartnersSection
+              total={(partnerships.data?.items ?? []).filter((i) => i.status === "active").length}
               items={(partnerships.data?.items ?? [])
                 .filter((i) => i.status === "active")
+                .slice(0, PARTNERS_ON_FICHE)
                 .map((i) => ({
                   pseudo: i.user.pseudo,
                   avatarUrl: i.user.avatarUrl,
@@ -257,7 +260,12 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
             />
             <DiscountsBlock pro={pro} reload={reload} />
             <MediaBlock pro={pro} reload={reload} />
-            <PartnersManage proId={pro.id} data={partnerships.data} reload={partnerships.reload} />
+            <PartnersManage
+              proId={pro.id}
+              data={partnerships.data}
+              error={Boolean(partnerships.error)}
+              reload={partnerships.reload}
+            />
           </View>
 
           <View style={[styles.stack, mode !== "posts" && styles.hidden]} testID="pro-posts">

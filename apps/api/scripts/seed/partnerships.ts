@@ -44,7 +44,7 @@ export async function seedPartnerships() {
       pro: garage,
       pseudo: "Lea_11",
       status: "active",
-      message: "Préparation moteur à prix d'ami : on te suit",
+      message: "Préparation moteur, on te suit sur la saison",
       car: false,
       ago: 48,
     },

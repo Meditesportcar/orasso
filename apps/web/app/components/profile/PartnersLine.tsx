@@ -17,6 +17,8 @@ type Row = {
   logoUrl: string | null;
   slug: string;
   detail: string | null;
+  /** Faux : la fiche du pro n'est plus visible (dépubliée, non vérifiée, titulaire suspendu) ; on peut encore y mettre fin. */
+  available: boolean;
 };
 
 const dayFr = (iso: string) =>
@@ -39,7 +41,10 @@ export function PartnersLine({
         name: i.pro.name,
         logoUrl: i.pro.logoUrl,
         slug: i.pro.slug,
-        detail: [`depuis le ${dayFr(i.since)}`, i.vehicle?.label].filter(Boolean).join(" · "),
+        detail: i.available
+          ? [`depuis le ${dayFr(i.since)}`, i.vehicle?.label].filter(Boolean).join(" · ")
+          : [L.unavailablePro, `depuis le ${dayFr(i.since)}`].join(" · "),
+        available: i.available,
       }))
     : (partners ?? []).map((p) => ({
         key: p.proId,
@@ -48,6 +53,7 @@ export function PartnersLine({
         logoUrl: p.logoUrl,
         slug: p.slug,
         detail: null,
+        available: true,
       }));
   if (!rows.length) return null;
   const head = (
@@ -80,13 +86,23 @@ export function PartnersLine({
       <ul className="ptn-line__list">
         {rows.map((r) => (
           <li className="ptn-row" key={r.key} data-testid="partner-row">
-            <a className="ptn-row__head" href={`/p/${r.slug}`}>
-              <PersonAvatar url={r.logoUrl} pseudo={r.name} size={40} />
-              <span>
-                <b>{r.name}</b>
-                {r.detail && <small>{r.detail}</small>}
+            {r.available ? (
+              <a className="ptn-row__head" href={`/p/${r.slug}`}>
+                <PersonAvatar url={r.logoUrl} pseudo={r.name} size={40} />
+                <span>
+                  <b>{r.name}</b>
+                  {r.detail && <small>{r.detail}</small>}
+                </span>
+              </a>
+            ) : (
+              <span className="ptn-row__head" data-testid="partner-unavailable">
+                <PersonAvatar url={r.logoUrl} pseudo={r.name} size={40} />
+                <span>
+                  <b>{r.name}</b>
+                  {r.detail && <small>{r.detail}</small>}
+                </span>
               </span>
-            </a>
+            )}
             {mine && r.id && <EndForm intent="partnership_end" id={r.id} name={r.name} busy={busy} />}
           </li>
         ))}

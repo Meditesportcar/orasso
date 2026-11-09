@@ -27,6 +27,7 @@ export const partnershipLabels = {
   /** Fiche d'un pro. */
   partnersTitle: "Ses partenaires",
   partnersSeeAll: "Voir tout",
+  backToFiche: "Retour à la fiche",
   partnersCount: (n: number) => `${n} passionné${n > 1 ? "s" : ""}`,
   partnersEmpty: "Aucun partenaire pour le moment.",
   subscriptionOnly: "Réservé à l'abonnement pro",
@@ -37,6 +38,9 @@ export const partnershipLabels = {
   withdraw: "Retirer la proposition",
   /** Profil d'un passionné : la ligne « Partenaires ». */
   unavailablePro: "Pro indisponible",
+  retry: "Réessayer",
+  partnersLoadError: "Tes partenaires ne se chargent pas.",
+  proPartnershipsLoadError: "Tes propositions et tes partenaires ne se chargent pas.",
   partnersLine: (n: number) => `Partenaires · ${n}`,
   partnersLineOpen: (names: string) => `Partenaires : ${names}`,
   /** Demande reçue (Activité › Demandes). */

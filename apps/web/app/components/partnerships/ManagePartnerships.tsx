@@ -27,6 +27,7 @@ export function ManagePartnerships({ data, busy }: { data: ProPartnerships | nul
         </p>
       )}
       {data.canPropose === "not_verified" && <p className="s-notice">{L.notVerified}</p>}
+      {data.canPropose === "not_published" && <p className="s-notice">{L.notPublished}</p>}
       {pending.length > 0 && <p className="o-t-label s-muted">{L.pendingTitle.toUpperCase()}</p>}
       <ul className="ptn-line__list">
         {[...pending, ...active].map((r) => (

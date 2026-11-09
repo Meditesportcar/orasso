@@ -2,7 +2,9 @@
 // pros partenaires. Elle n'existe que s'il y a un partenaire actif. Sur le profil d'un autre : un partenaire ouvre sa fiche,
 // plusieurs ouvrent la liste. Sur mon profil : la liste, avec « Mettre fin » (feuille de confirmation : le pro est prévenu,
 // les contenus déjà publiés gardent leur mention). Les partenaires d'un autre viennent de `GET /users/:pseudo` (vide pour un
-// compte privé que je ne suis pas) ; les miens de `GET /me/partnerships`.
+// compte privé que je ne suis pas) ; les miens de `GET /me/partnerships`. Tour 2 : une panne de cette lecture ne ressemble
+// jamais à « aucun partenaire » (message et « Réessayer ») ; un partenaire dont la fiche n'est plus visible reste dans la
+// liste (« Pro indisponible ») et on peut y mettre fin ; tirer pour actualiser relance cette lecture (`reloadKey`).
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { partnershipLabels as L, type PartnerLogo } from "@orasso/shared";
 import { useRouter } from "expo-router";
@@ -15,6 +17,7 @@ import { formatDay } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
+import { LoadError } from "@/ui/LoadError";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -25,13 +28,24 @@ type Row = {
   logoUrl: string | null;
   slug: string;
   detail: string | null;
+  /** Faux : la fiche du pro n'est plus visible (dépubliée, non vérifiée, titulaire suspendu). */
+  available: boolean;
 };
 
-export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | null; mine: boolean }) {
+export function PartnersLine({
+  partners,
+  mine,
+  reloadKey = 0,
+}: {
+  partners?: PartnerLogo[] | null;
+  mine: boolean;
+  /** Change à chaque « tirer pour actualiser » de l'écran : la lecture de mes partenaires repart. */
+  reloadKey?: number;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const my = useApi(() => api.myPartnerships(), [], { cacheKey: "my-partnerships", enabled: mine });
+  const my = useApi(() => api.myPartnerships(), [reloadKey], { cacheKey: "my-partnerships", enabled: mine });
   const [open, setOpen] = useState(false);
   const [ending, setEnding] = useState<Row | null>(null);
 
@@ -42,7 +56,10 @@ export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | nu
         name: i.pro.name,
         logoUrl: i.pro.logoUrl,
         slug: i.pro.slug,
-        detail: [`depuis le ${formatDay(i.since)}`, i.vehicle?.label].filter(Boolean).join(" · "),
+        detail: i.available
+          ? [`depuis le ${formatDay(i.since)}`, i.vehicle?.label].filter(Boolean).join(" · ")
+          : [L.unavailablePro, `depuis le ${formatDay(i.since)}`].join(" · "),
+        available: i.available,
       }))
     : (partners ?? []).map((p) => ({
         key: p.proId,
@@ -51,7 +68,16 @@ export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | nu
         logoUrl: p.logoUrl,
         slug: p.slug,
         detail: null,
+        available: true,
       }));
+  // Panne sans rien à montrer : jamais confondue avec « aucun partenaire ».
+  if (mine && !my.data && my.error) {
+    return (
+      <View testID="partners-error">
+        <LoadError message={L.partnersLoadError} onRetry={() => void my.reload()} />
+      </View>
+    );
+  }
   if (!rows.length) return null;
 
   const first = rows[0];
@@ -109,8 +135,9 @@ export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | nu
             testID="partner-row"
           >
             <Pressable
-              accessibilityRole="link"
+              accessibilityRole={r.available ? "link" : "text"}
               accessibilityLabel={r.name}
+              disabled={!r.available}
               onPress={() => {
                 setOpen(false);
                 router.push(`/p/${r.slug}`);
@@ -128,7 +155,7 @@ export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | nu
                   </Text>
                 ) : null}
               </View>
-              <Icon name="next" size={16} color={c.inkMuted} />
+              {r.available ? <Icon name="next" size={16} color={c.inkMuted} /> : null}
             </Pressable>
             {mine && r.id ? (
               <Button variant="secondary" icon="close" fullWidth onPress={() => setEnding(r)} testID="partner-end">
@@ -145,7 +172,13 @@ export function PartnersLine({ partners, mine }: { partners?: PartnerLogo[] | nu
         onClose={() => setEnding(null)}
         onConfirm={async () => {
           if (!ending?.id) return;
-          await api.endPartnership(ending.id);
+          try {
+            await api.endPartnership(ending.id);
+          } catch (e) {
+            // Déjà fini ailleurs (409/404) : la liste se relit pour dire la vérité, l'erreur reste dans la feuille.
+            void my.reload();
+            throw e;
+          }
           setEnding(null);
           setOpen(false);
           await my.reload();

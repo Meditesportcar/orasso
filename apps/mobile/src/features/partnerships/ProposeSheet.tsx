@@ -43,13 +43,16 @@ export function ProposeSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Une nouvelle ouverture repart d'une feuille vide (jamais le mot écrit pour quelqu'un d'autre).
+  // Une nouvelle ouverture, ou une autre personne, repart d'une feuille vide (jamais le mot écrit pour quelqu'un d'autre).
+  // La clé est le pseudo, pas l'objet `target` : le parent en refait un à chaque rendu (rechargement du profil, retour
+  // au premier plan) et cela effaçait le texte en cours de frappe.
+  const key = target?.pseudo ?? null;
   useEffect(() => {
-    if (!target) return;
+    if (key === null) return;
     setMessage("");
     setVehicleId(null);
     setError(null);
-  }, [target]);
+  }, [key]);
 
   async function send() {
     if (!target) return;
