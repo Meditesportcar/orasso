@@ -68,6 +68,7 @@ export * from "./vehicleName";
 export * from "./vehicleSearch";
 export * from "./visibility";
 export * from "./voteScreen";
+export * from "./votes";
 export * from "./waitlistDeadline";
 export * from "./weather";
 export * from "./wholeEventAccess";

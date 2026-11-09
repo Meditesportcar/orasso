@@ -225,6 +225,7 @@ export const expressService = {
         method: "express",
         checkedInAt: t,
         staffUserId: invite.createdBy,
+        createdAt: t,
       });
       await tx
         .update(expressInvites)

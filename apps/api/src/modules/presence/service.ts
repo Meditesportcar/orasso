@@ -21,7 +21,6 @@ import {
   presenceLabels,
   presenceRefusal,
   staffRoles,
-  voteOpen,
 } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -42,6 +41,7 @@ import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
 import { structureById } from "../structures/service";
+import { openVotesCount } from "../votes/service";
 import { entryOf, holdsVehicleSlot, myProofs, onSiteCount, summaryCounts, ticketOf, vehiclesEntered } from "./repo";
 
 /** Code HTTP de chaque refus : 409 pour l'état (fermé, exposant, déjà présent, lieu sans position), 422 pour la mesure. */
@@ -269,7 +269,7 @@ export const presenceService = {
       ...counts,
       myPresence,
       canValidatePresence,
-      votesOpen: entered ? votesOpenNow(e, entered, t) : 0,
+      votesOpen: entered ? await openVotesCount(ex, e) : 0,
       organizerStoryAvailable: false,
     };
   },
@@ -334,7 +334,7 @@ export const presenceService = {
       dayCount,
       // Publié et en cours (la requête l'impose) : le nombre sur place est visible.
       onSiteCount: onSite,
-      votes: { open: votesOpenNow(e, entered, t), voted: Number(voted.rows[0]?.n ?? 0) },
+      votes: { open: await openVotesCount(db, e), voted: Number(voted.rows[0]?.n ?? 0) },
       programToday: {
         dayDate: today?.dayDate ?? localDate(e.startsAt),
         startsAt: (today?.startsAt ?? e.startsAt).toISOString(),
@@ -345,15 +345,3 @@ export const presenceService = {
     };
   },
 };
-
-/**
- * Votes ouverts maintenant : 0 ou 1 aujourd'hui (le prix du public, `voteOpen` : événement publié, premier pointage,
- * deux véhicules au moins). R7l1 y branchera les votes à thème.
- */
-function votesOpenNow(
-  e: Pick<EventRow, "status" | "endsAt">,
-  entered: { vehiclesCheckedIn: number; firstCheckinAt: Date | null },
-  t: Date,
-): number {
-  return voteOpen({ status: e.status, endsAt: e.endsAt, ...entered }, t) ? 1 : 0;
-}

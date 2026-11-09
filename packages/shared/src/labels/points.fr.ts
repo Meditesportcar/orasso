@@ -12,6 +12,7 @@ export const pointKindLabels: Record<PointKind, string> = {
   season_carryover: "Report de la saison précédente",
   admin_adjustment: "Ajustement par l'équipe Orasso",
   audience_prize: "Prix du public",
+  vote_podium: "Podium d'un vote",
 };
 
 export const contestStatusLabels: Record<ContestStatus, string> = {
