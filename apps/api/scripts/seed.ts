@@ -25,6 +25,7 @@ import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
 import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
+import { seedFeed } from "./seed/feed";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -76,6 +77,7 @@ async function reset() {
     await db.execute(sql`delete from pgboss.job where name like 'event.%' or name like 'waitlist.%'`);
   }
   await rm(join(storageDir, "seed"), { recursive: true, force: true });
+  await rm(join(storageDir, "feed"), { recursive: true, force: true });
   console.log("Données vidées.");
 }
 
@@ -164,6 +166,8 @@ async function main() {
   await seedVisitorStamps();
   // 08/11 : « Rassemblement du Lydia » en direct (4 jours, commencé la veille) ; recréé quand il est fini.
   await seedLiveEvent();
+  // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
+  await seedFeed();
 }
 
 try {
