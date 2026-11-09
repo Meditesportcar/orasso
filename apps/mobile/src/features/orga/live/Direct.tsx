@@ -12,6 +12,7 @@ import {
   localDate,
   orgaLabels,
   orgaV2Labels,
+  presenceLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -98,6 +99,8 @@ function DirectEvent({
   const staff = useApi(() => api.eventStaff(eventId), [eventId], { enabled: !field });
   const audience = useApi(() => api.audienceBoard(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const prize = audience.error ? null : audience.data;
+  // Lot R7d2 : les présents (des nombres, jamais une liste ni un nom), rafraîchis par `presence.changed` du canal en direct.
+  const presents = useApi(() => api.presenceSummary(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const at = useNow(60_000);
   // Lot C4a, tour 2 : le mode staff s'ouvre dès J-1 (l'API l'ouvre dès J-1 0 h) pour synchroniser la liste la veille.
   const staffOpen = field || calendarDaysBetween(at, new Date(current.event.startsAt)) <= 1;
@@ -126,6 +129,8 @@ function DirectEvent({
           void scans.reload();
         }, 5_000);
       }
+    } else if (event.type === "presence.changed") {
+      void presents.reload();
     } else if (event.type === "alert" || event.type === "alert.resolved") {
       alerts.setData(applyAlertEvent(alerts.data ?? [], event.type, event.payload, clockNow()));
     } else if (event.type === "incident") {
@@ -134,7 +139,14 @@ function DirectEvent({
   });
 
   const reloadAll = async () => {
-    await Promise.all([reloadEvents(), live.reload(), alerts.reload(), incidents.reload(), scans.reload()]);
+    await Promise.all([
+      reloadEvents(),
+      live.reload(),
+      alerts.reload(),
+      incidents.reload(),
+      scans.reload(),
+      field ? presents.reload() : null,
+    ]);
   };
 
   async function resolve(alertId: string) {
@@ -286,6 +298,30 @@ function DirectEvent({
 
       {field ? (
         <>
+          <SectionTitle>{presenceLabels.summaryTitle}</SectionTitle>
+          {presents.data ? (
+            <Plate style={styles.block} testID="orga-direct-presents">
+              <Text variant="bodyStrong" color={c.plateInk} testID="orga-direct-presents-total">
+                {presenceLabels.summaryTotal(presents.data.total)}
+              </Text>
+              <Text variant="body" color={c.plateInk}>
+                {presenceLabels.summaryLine(presenceLabels.summaryExhibitors, presents.data.exhibitorsCheckedIn)}
+              </Text>
+              <Text variant="body" color={c.plateInk}>
+                {presenceLabels.summaryLine(presenceLabels.summaryVisitorsTicket, presents.data.visitorsWithTicketGps)}
+              </Text>
+              <Text variant="body" color={c.plateInk}>
+                {presenceLabels.summaryLine(presenceLabels.summaryVisitorsNoTicket, presents.data.visitorsNoTicketGps)}
+              </Text>
+              <Text variant="caption" color={c.plateMuted}>
+                {presenceLabels.summaryPrivacy}
+              </Text>
+            </Plate>
+          ) : presents.error ? (
+            <Muted variant="body">{presenceLabels.summaryError}</Muted>
+          ) : (
+            <Muted variant="body">{presents.loading ? "Chargement…" : null}</Muted>
+          )}
           {prize && prize.entries.length > 0 ? (
             <>
               <SectionTitle>{orgaV2Labels.directPrize}</SectionTitle>

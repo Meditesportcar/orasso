@@ -24,6 +24,7 @@ import {
   eventLastDayInstant,
   eventPageLabels,
   formatDayDate,
+  presenceLabels,
   voteScreenTexts,
   wholeEventEntered,
   wholeEventEntryHolds,
@@ -106,6 +107,12 @@ function JourJScreen() {
     enabled: Boolean(slug) && online,
     cacheKey: slug ? `feed.${slug}` : undefined,
   });
+  // Lot R7d2 : « Sur place · N » sous l'état d'entrée. Seulement avec du réseau, seulement ce que l'API renvoie pendant
+  // l'événement (après la fin, rien : règle des absents) ; rien n'est gardé sur le téléphone pour le hors ligne.
+  const liveNow = useApi(async () => (await api.eventBySlug(slug)).live, [slug, online], {
+    enabled: Boolean(slug) && online,
+  });
+  const onSiteNow = liveNow.data?.phase === "running" ? (liveNow.data.onSiteCount ?? null) : null;
   const lastAnnouncement =
     [...(feed.data?.items ?? [])]
       .filter((i) => i.kind === "announcement")
@@ -253,6 +260,11 @@ function JourJScreen() {
               tz,
             )}
           </Text>
+          {onSiteNow !== null ? (
+            <Text variant="bodyStrong" color={c.plateInk} testID="jourj-onsite">
+              {presenceLabels.dayOnSite(onSiteNow)}
+            </Text>
+          ) : null}
         </Plate>
       ) : null}
 
