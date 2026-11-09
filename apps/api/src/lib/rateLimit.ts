@@ -2,6 +2,8 @@
 // de compte, recherche du staff. L'authentification (connexion, inscription, 2FA) est limitée par Better Auth.
 // Compteurs en mémoire, par utilisateur connecté et par fenêtre fixe : une seule instance de l'API (dev.orasso.fr).
 // Plusieurs instances demanderaient un stockage partagé (PostgreSQL ou Redis).
+import { PRESENCE_ATTEMPTS } from "@orasso/shared";
+
 import { AppError } from "./errors";
 
 export type RateRule = { max: number; windowMs: number; message: string };
@@ -128,6 +130,11 @@ export const rateRules = {
   mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Vues d'un contenu média : par visiteur et par contenu, comme le compteur de la fiche pro. */
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
+  /** Lot R7d1 : « Je suis sur place » (présence par GPS) : 5 essais en 10 minutes par compte, refus compris. */
+  presence: {
+    ...PRESENCE_ATTEMPTS,
+    message: "Trop d'essais de présence : réessaie dans quelques minutes.",
+  },
   /** Prix du public (lot 49) : une voix modifiable, pas un bouton qu'on martèle. */
   audienceVote: { max: 20, windowMs: 60_000, message: "Trop de votes : réessaie dans une minute." },
   /**
@@ -137,6 +144,9 @@ export const rateRules = {
   pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
   /** Lot R5c1 : fil d'un crew. Photos envoyées (6 par publication), publications, commentaires, flammes et voix. */
   crewPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
+  /** Lot R7f1 : publication d'une story (composition d'image côté serveur) et petites écritures (vue, flamme, mute…). */
+  storyPublish: { max: 30, windowMs: 3_600_000, message: "Trop de stories publiées : réessaie plus tard." },
+  storyWrite: { max: 300, windowMs: 3_600_000, message: "Trop d'actions sur les stories : réessaie plus tard." },
   crewPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   crewComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
   crewReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
@@ -150,6 +160,12 @@ export const rateRules = {
   categoryAdmin: { max: 120, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   // Lot R5c2, tour 2 : vitrines de crew ouvertes par un non-membre (pas d'annuaire reconstruit par les vitrines).
   crewVitrine: { max: 120, windowMs: 3_600_000, message: "Trop de crews ouverts : réessaie plus tard." },
+  // Lot R7e1 : le Fil. Lecture (pages de 20), publications, photos envoyées (6 par publication), flammes, « Moins de ce genre ».
+  feedRead: { max: 120, windowMs: 60_000, message: "Trop de chargements du Fil : réessaie dans une minute." },
+  feedPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
+  feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
+  feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
+  feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

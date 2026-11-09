@@ -64,7 +64,7 @@ beforeEach(async () => {
   await resetDb();
   await resetClock();
   ref = await seedReference();
-  admin = await signUp("Equipe_Orasso", { twoFactor: true, role: "super_admin" });
+  admin = await signUp("Equipe_Plateforme", { twoFactor: true, role: "super_admin" });
 });
 
 afterEach(async () => {

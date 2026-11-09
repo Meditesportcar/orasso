@@ -25,6 +25,7 @@ import { pointsService } from "./modules/points/service";
 import { recapService } from "./modules/recap/service";
 import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
+import { storiesExpire } from "./modules/stories/expire";
 import { uploadsService } from "./modules/uploads/service";
 import { certificationService } from "./modules/vehicles/certification";
 import { retryRemove } from "./modules/vehicles/photos-blur";
@@ -63,6 +64,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "storage.remove": (d) => retryRemove(d.key ?? ""),
   // Lot 18 : fichiers de `POST /me/uploads` jamais rattachés depuis plus de 24 h (enregistrement et fichier).
   "uploads.purge": () => uploadsService.purgeExpired(),
+  // Lot R7f1 : stories de plus de 24 h marquées, fichiers et copies effacés (une story signalée garde son fichier).
+  "stories.expire": () => storiesExpire.run(),
   // Lot 19 : venue en crew non confirmée à l'échéance → retirée, chef prévenu ; secours toutes les 5 minutes.
   "crew.confirm-expire": (d) => crewRegistrationService.expire(d.applicationId ?? ""),
   "crew.confirm-sweep": () => crewRegistrationService.sweep(),
@@ -131,6 +134,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("plate-transfer.escalate", "15 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("certification.sweep", "30 5 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("uploads.purge", "40 4 * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("stories.expire", "*/5 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("crew.confirm-sweep", "*/5 * * * *", null, { tz: "Europe/Paris" });
     // Lot 20 : messages groupés arrêtés (chaque minute), discussions du staff à fermer ou purger (chaque heure).
     await boss.schedule("messaging.group-sweep", "* * * * *", null, { tz: "Europe/Paris" });

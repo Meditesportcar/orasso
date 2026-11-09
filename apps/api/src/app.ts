@@ -1,4 +1,4 @@
-import { CLOCK_OFFSET_HEADER, signUpRequiredSchema } from "@orasso/shared";
+import { CLOCK_OFFSET_HEADER, feedLabels, isReservedPseudo, signUpRequiredSchema } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -19,6 +19,7 @@ import { storage } from "./lib/storage";
 import { accessRoutes } from "./modules/access/routes";
 import { accountRoutes } from "./modules/account/routes";
 import { accountQrRoutes } from "./modules/account-qr/routes";
+import { activityRoutes } from "./modules/activity/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
@@ -36,6 +37,7 @@ import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
+import { feedRoutes } from "./modules/feed/routes";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -45,6 +47,7 @@ import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
+import { presenceRoutes } from "./modules/presence/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
@@ -56,6 +59,7 @@ import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
+import { storiesRoutes } from "./modules/stories/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
 import { uploadsRoutes } from "./modules/uploads/routes";
@@ -148,6 +152,12 @@ app.post("/auth/sign-up/email", async (c, next) => {
     for (const issue of result.error.issues) fields[issue.path.join(".") || "_"] ??= issue.message;
     throw new AppError(400, "validation_error", Object.values(fields)[0] ?? "Données invalides", { fields });
   }
+  // Lot R7e1 (tour 2) : le pseudo (champ `name`) ne contient pas « orasso » : réservé au compte officiel.
+  if (typeof raw?.name === "string" && isReservedPseudo(raw.name)) {
+    throw new AppError(400, "pseudo_reserved", feedLabels.pseudoReserved, {
+      fields: { pseudo: feedLabels.pseudoReserved },
+    });
+  }
   await next();
 });
 // Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
@@ -165,12 +175,13 @@ app.route("/ws", ws);
 // extension d'image servie) ; jamais `private/` (justificatifs des structures, photos du fil des crews, messages), ni
 // une autre graphie (`//private/…`, `%2F`, `\`, `./`, `..`) : 404. Les majuscules sont permises, car les identifiants
 // de compte de Better Auth en contiennent (`avatars/<id>/…`) ; `private/` est refusé quelle que soit sa casse (le disque
-// de Windows ne distingue pas `PRIVATE/` de `private/`).
+// de Windows ne distingue pas `PRIVATE/` de `private/`). Lot R7e1 (tour 3) : `feed/` aussi, l'ancienne clé publique des
+// photos du Fil (elles sont sous `private/feed/`, servies par une route qui revérifie l'accès).
 const PUBLIC_FILE = /^[A-Za-z0-9-]+(\/[A-Za-z0-9-]+)*\.(webp|png|jpg)$/;
 const FILE_TYPES: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 app.get("/files/*", async (c) => {
   const key = c.req.path.startsWith("/api/files/") ? c.req.path.slice("/api/files/".length) : "";
-  const data = PUBLIC_FILE.test(key) && !/^private\//i.test(key) ? await storage.get(key) : null;
+  const data = PUBLIC_FILE.test(key) && !/^(private|feed)\//i.test(key) ? await storage.get(key) : null;
   if (!data) throw notFound("Fichier introuvable");
   return c.body(new Uint8Array(data), 200, {
     "content-type": FILE_TYPES[key.slice(key.lastIndexOf(".") + 1)] ?? "application/octet-stream",
@@ -203,6 +214,7 @@ app.route("/", eventInvitesRoutes);
 app.route("/", posterRoutes);
 app.route("/", applicationsRoutes);
 app.route("/", notificationsRoutes);
+app.route("/", activityRoutes);
 app.route("/", staffRoutes);
 app.route("/", checkinsRoutes);
 app.route("/", fieldRoutes);
@@ -220,17 +232,21 @@ app.route("/", messagingRoutes);
 app.route("/", crewsRoutes);
 // Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
 app.route("/", crewFeedRoutes);
+app.route("/", storiesRoutes);
 app.route("/", invitationsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);
 app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
+// Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
+app.route("/", feedRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
 app.route("/", devMailRoutes);
 // Lot 49 : passeport, prix du public, récap.
 app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);
+app.route("/", presenceRoutes);
 app.route("/", recapRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);

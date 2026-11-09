@@ -44,6 +44,7 @@ import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
 import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, splitSponsored } from "./rail";
 import { todayLine } from "./today";
+import { WhatsNewBanner } from "./WhatsNewBanner";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
@@ -281,6 +282,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
 
       <Greet line={todayLine(now, department ? `Dép. ${department}` : null)} name={name} />
+
+      {/* Lot R7a1 : « où sont passées les choses », une seule fois après la mise à jour, sous le bonjour (maquette R7.1). */}
+      <WhatsNewBanner variant={variant} />
 
       {shown.length > 0 ? (
         <NextOutings

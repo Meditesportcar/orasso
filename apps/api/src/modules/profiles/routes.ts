@@ -1,4 +1,10 @@
-import { deviceRegisterSchema, deviceUnregisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
+import {
+  deviceRegisterSchema,
+  deviceUnregisterSchema,
+  isReservedPseudo,
+  profileUpdateSchema,
+  pseudoSchema,
+} from "@orasso/shared";
 import { Hono } from "hono";
 import sharp from "sharp";
 
@@ -16,6 +22,8 @@ export const profilesRoutes = new Hono<AppEnv>()
   .get("/pseudo-available", async (c) => {
     const pseudo = pseudoSchema.safeParse(c.req.query("pseudo") ?? "");
     if (!pseudo.success) return c.json({ valid: false, available: false });
+    // Pseudo réservé (« orasso ») : valide mais jamais libre ; `reserved` permet de dire pourquoi.
+    if (isReservedPseudo(pseudo.data)) return c.json({ valid: true, available: false, reserved: true });
     return c.json({ valid: true, available: !(await profilesRepo.pseudoTaken(pseudo.data)) });
   })
   .get("/me", async (c) => c.json(await profilesService.me(await requireUser(c))))

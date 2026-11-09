@@ -61,6 +61,30 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
+  // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
+  "plate_decision_required",
+  // Lot R7e1 (tour 2) : pseudo réservé au compte officiel d'Orasso.
+  "pseudo_reserved",
+
+  // Lot R7f1 : stories (plaque non décidée, story réservée au crew).
+  
+  "crew_only",
+  "not_implemented",
+  // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.
+  "too_many_stories",
+  "reply_unavailable",
+
+  // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
+  "closed",
+  "use_qr",
+  "scan_ticket",
+  "ticket_required",
+  "pay_at_entry",
+  "closed_to_public",
+  "already_present",
+  "gps_imprecise",
+  "out_of_zone",
+  "no_zone",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

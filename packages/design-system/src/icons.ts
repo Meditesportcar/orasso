@@ -59,6 +59,13 @@ export const iconShapes = {
   list: [p("M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01")], // liste
   incident: [p("M4 20l4-1 11-11-3-3L5 16z")], // incident
   chat: [p("M4 5h16v11H9l-5 4z")], // discussion
+  // Lot R7a1 (D38) : Le Fil (onglet du passionné) et la bulle « Messages » (barre du haut).
+  feed: [r(3, 4, 18, 7, 2), p("M3 15h18M3 19h11")], // Le Fil : une publication et deux lignes qui suivent
+  bubble: [
+    p(
+      "M12 4c4.6 0 8 2.9 8 6.5S16.6 17 12 17c-.9 0-1.7-.1-2.5-.3L5 19.5l1.3-3.6C4.9 14.8 4 12.8 4 10.5 4 6.9 7.4 4 12 4z",
+    ),
+  ], // messages
   alert: [p("M12 3l10 18H2z"), p("M12 10v5M12 18h.01")], // alerte (réservée : rouge, staff et annulation)
   back: [p("M15 5l-7 7 7 7")], // retour
   export: [p("M12 3v12M7 8l5-5 5 5M5 14v6h14v-6")], // exporter
@@ -224,6 +231,7 @@ export const iconFillParts: Partial<Record<IconName, readonly number[]>> = {
   calendar: [0],
   staff: [0],
   crew: [0],
+  feed: [0],
   home: [0],
   cards: [0],
   express: [0],

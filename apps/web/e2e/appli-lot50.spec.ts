@@ -190,7 +190,8 @@ test("visiteur sans tampon : l'onglet Passeport et son état vide", async ({ bro
   });
   expect(cookie.status).toBe(200);
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
-  await page.getByRole("tab", { name: "Passeport", exact: true }).click();
+  // Lot R7a1 : le Passeport du visiteur n'est plus un onglet ; l'ancienne adresse `/passeport` mène à sa page.
+  await goto(page, "/passeport");
   await expect(page).toHaveURL(/passeport/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Passeport", exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Ton premier tampon t'attend", { exact: true })).toBeVisible({ timeout: 30_000 });

@@ -9,10 +9,12 @@ export const passportNotificationTypes = {
   stamp_received: "grade",
   audience_prize_won: "grade",
   event_recap_ready: "event",
+  /** Lot R7d1 : « Présence validée » (GPS, visiteur sans voiture) ; au Journal seulement, le tampon tombe déjà à l'écran. */
+  presence_validated: "grade",
 } as const satisfies Record<string, NotificationFamily>;
 
 /** Ni push ni e-mail : le Journal. */
-export const passportJournalOnlyTypes: readonly string[] = ["stamp_received"];
+export const passportJournalOnlyTypes: readonly string[] = ["stamp_received", "presence_validated"];
 /** Push et Journal, pas d'e-mail de repli. */
 export const passportNoEmailTypes: readonly string[] = ["event_recap_ready"];
 
@@ -21,4 +23,5 @@ export const passportNotificationLabels: Record<keyof typeof passportNotificatio
   stamp_received: "Nouveau tampon dans le passeport",
   audience_prize_won: "Prix du public gagné",
   event_recap_ready: "Récap d'un événement",
+  presence_validated: "Présence validée sur place",
 };

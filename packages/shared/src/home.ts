@@ -3,12 +3,15 @@
 import type { ArrivalSlot } from "./rules/arrival";
 import type { MyApplication } from "./schemas/application";
 import type { EventCard } from "./schemas/event";
+import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
 import type { MyWeather } from "./weather";
 
 /** Widgets de l'accueil dans l'ordre par défaut (docs/02) ; « Prochain accès » reste toujours en tête. */
 export const homeWidgetIds = [
   "next_access",
+  // Lot R7d1 : le bloc « En cours » (événement en cours où j'ai une place), juste après « Prochain accès ».
+  "live",
   "pending",
   "nearby",
   "weather",
@@ -57,7 +60,12 @@ export function normalizeHomeWidgets(raw: unknown): HomeWidgetsConfig {
   const rawHidden = Array.isArray(obj.hidden) ? obj.hidden : [];
   const order: HomeWidgetId[] = [HOME_FIXED_WIDGET];
   for (const id of rawOrder) if (isWidgetId(id) && !order.includes(id)) order.push(id);
-  for (const id of homeWidgetIds) if (!order.includes(id)) order.push(id);
+  for (const id of homeWidgetIds) {
+    if (order.includes(id)) continue;
+    // Lot R7d1 : « En cours » manque aux réglages d'avant : juste après « Prochain accès », pas au bout de l'écran.
+    if (id === "live") order.splice(1, 0, id);
+    else order.push(id);
+  }
   const hidden = homeWidgetIds.filter((id) => id !== HOME_FIXED_WIDGET && rawHidden.includes(id));
   return { order, hidden };
 }
@@ -305,4 +313,6 @@ export type HomeData = {
   media: HomeMedia | null;
   /** Lot 49 : tampons de la saison dans le passeport. */
   stampsThisSeason: number | null;
+  /** Lot R7d1 : le bloc « En cours » ; `null` sans événement en cours à moi, ou bloc masqué (alors il n'est pas calculé). */
+  live: HomeLive | null;
 };

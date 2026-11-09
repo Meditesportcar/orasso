@@ -47,6 +47,7 @@ import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-ro
 import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { LineupLine } from "../components/Lineup";
 import { PersonAvatar } from "../components/People";
@@ -65,6 +66,10 @@ import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/sorties";
 import "../styles/after-event.css";
 import "../styles/event-invite.css";
+
+// Lot R7a1 (D38) : Sorties n'est plus un onglet (elle est dans l'Accueil) : la page garde son adresse, en mode fiche
+// (en-tête de fiche et ✕ qui revient à l'Accueil, ni bande ni barre d'onglets), comme dans l'appli.
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Sorties · Orasso" }, { name: "robots", content: "noindex" }];
@@ -629,233 +634,235 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     }
   });
   return (
-    // `data-live` : canal temps réel ouvert (les recettes attendent qu'il le soit avant une offre en direct, lot 34).
-    <div className="s-stack" data-testid="acces" data-live={live.connected ? "on" : "off"}>
-      <h1 className="s-title">Mes sorties</h1>
-      <div className="s-tabs" role="tablist">
-        <Chip selected={view === "upcoming"} onClick={() => navigate("/app/sorties")}>
-          À venir
-        </Chip>
-        <Chip
-          selected={view === "staff"}
-          onClick={() => navigate("/app/sorties?vue=staff")}
-          data-testid="sorties-staff-tab"
-        >
-          Staff · {staff.length}
-        </Chip>
-        <Chip selected={view === "past"} onClick={() => navigate("/app/sorties?vue=passes")}>
-          Passées · carnet de route
-        </Chip>
-      </div>
+    <>
+      <FicheBar title="Mes sorties" back="/app" />
+      {/* `data-live` : canal temps réel ouvert (les recettes attendent qu'il le soit avant une offre en direct, lot 34). */}
+      <div className="s-stack" data-testid="acces" data-live={live.connected ? "on" : "off"}>
+        <div className="s-tabs" role="tablist">
+          <Chip selected={view === "upcoming"} onClick={() => navigate("/app/sorties")}>
+            À venir
+          </Chip>
+          <Chip
+            selected={view === "staff"}
+            onClick={() => navigate("/app/sorties?vue=staff")}
+            data-testid="sorties-staff-tab"
+          >
+            Staff · {staff.length}
+          </Chip>
+          <Chip selected={view === "past"} onClick={() => navigate("/app/sorties?vue=passes")}>
+            Passées · carnet de route
+          </Chip>
+        </div>
 
-      {view === "staff" && (
-        <section className="s-stack" aria-label="Staff" data-testid="sorties-staff">
-          {staff.length === 0 ? (
-            <div className="s-notice">
-              <strong>{sortiesLabels.emptyStaffTitle}</strong> {sortiesLabels.emptyStaffText}
-            </div>
-          ) : (
-            staff.map((s) => (
-              <article key={s.event.id} className="s-card acc" data-testid="staff-ticket">
-                <div className="s-stack s-stack--tight">
-                  <div className="s-label o-t-label">{eventFormatLabels[s.event.format]}</div>
-                  <h2 className="s-h2">
-                    <a href={`/e/${s.event.slug}`}>{s.event.title}</a>
-                  </h2>
-                  <div className="o-t-meta s-muted">
-                    {formatWhen(s.event.startsAt, s.event.endsAt)}
-                    {s.event.city ? ` · ${s.event.city}` : ""}
+        {view === "staff" && (
+          <section className="s-stack" aria-label="Staff" data-testid="sorties-staff">
+            {staff.length === 0 ? (
+              <div className="s-notice">
+                <strong>{sortiesLabels.emptyStaffTitle}</strong> {sortiesLabels.emptyStaffText}
+              </div>
+            ) : (
+              staff.map((s) => (
+                <article key={s.event.id} className="s-card acc" data-testid="staff-ticket">
+                  <div className="s-stack s-stack--tight">
+                    <div className="s-label o-t-label">{eventFormatLabels[s.event.format]}</div>
+                    <h2 className="s-h2">
+                      <a href={`/e/${s.event.slug}`}>{s.event.title}</a>
+                    </h2>
+                    <div className="o-t-meta s-muted">
+                      {formatWhen(s.event.startsAt, s.event.endsAt)}
+                      {s.event.city ? ` · ${s.event.city}` : ""}
+                    </div>
+                    <p className="o-t-caption">
+                      {s.roles.map((r) => staffRoleLabels[r]).join(" · ")} ·{" "}
+                      {sortiesLabels.staffRoleGiven(s.structure.name)}
+                    </p>
                   </div>
-                  <p className="o-t-caption">
-                    {s.roles.map((r) => staffRoleLabels[r]).join(" · ")} ·{" "}
-                    {sortiesLabels.staffRoleGiven(s.structure.name)}
-                  </p>
-                </div>
-                <div className="s-row">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="presence" />
-                    <input type="hidden" name="eventId" value={s.event.id} />
-                    <input type="hidden" name="present" value={s.presence === "present" ? "false" : "true"} />
-                    {staffMissionActions(s, nowMs()).presence && (
+                  <div className="s-row">
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="presence" />
+                      <input type="hidden" name="eventId" value={s.event.id} />
+                      <input type="hidden" name="present" value={s.presence === "present" ? "false" : "true"} />
+                      {staffMissionActions(s, nowMs()).presence && (
+                        <Button
+                          type="submit"
+                          variant="secondary"
+                          icon={s.presence === "present" ? "close" : "check"}
+                          loading={busy}
+                          data-testid="staff-presence"
+                          data-presence={s.presence}
+                        >
+                          {s.presence === "present" ? staffHomeLabels.notHere : sortiesLabels.willBeThere}
+                        </Button>
+                      )}
+                    </Form>
+                    {s.structureSlug && staffMissionActions(s, nowMs()).staffMode && (
                       <Button
-                        type="submit"
                         variant="secondary"
-                        icon={s.presence === "present" ? "close" : "check"}
-                        loading={busy}
-                        data-testid="staff-presence"
-                        data-presence={s.presence}
+                        icon="staff"
+                        next
+                        href={`/orga/${s.structureSlug}/e/${s.event.id}/jour-j`}
                       >
-                        {s.presence === "present" ? staffHomeLabels.notHere : sortiesLabels.willBeThere}
+                        {staffHomeLabels.title}
                       </Button>
                     )}
-                  </Form>
-                  {s.structureSlug && staffMissionActions(s, nowMs()).staffMode && (
-                    <Button
-                      variant="secondary"
-                      icon="staff"
-                      next
-                      href={`/orga/${s.structureSlug}/e/${s.event.id}/jour-j`}
-                    >
-                      {staffHomeLabels.title}
-                    </Button>
-                  )}
-                  {s.presence === "present" && Date.parse(s.event.startsAt) - 3 * 3_600_000 <= nowMs() && (
-                    <Button variant="secondary" icon="badge" next href={`/app/vote/${s.event.slug}`}>
-                      {voteScreenTexts.open}
-                    </Button>
-                  )}
-                </div>
-              </article>
-            ))
-          )}
-        </section>
-      )}
+                    {s.presence === "present" && Date.parse(s.event.startsAt) - 3 * 3_600_000 <= nowMs() && (
+                      <Button variant="secondary" icon="badge" next href={`/app/vote/${s.event.slug}`}>
+                        {voteScreenTexts.open}
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        )}
 
-      {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
-      {/* Lot R6c (R6.5) : inviter du monde juste après avoir candidaté. */}
-      {sent && afterInvite && (
-        <section className="ri-after" aria-labelledby="after-invite-title" data-testid="after-invite-card">
-          <div className="ri-after__head">
-            <div>
-              <b id="after-invite-title">{eventInviteLabels.afterTitle}</b>
-              <small>{eventInviteLabels.afterText}</small>
-            </div>
-            <Form method="post" preventScrollReset>
-              <input type="hidden" name="intent" value="after_invite_close" />
-              <input type="hidden" name="eventId" value={afterInvite.eventId} />
-              <Button
-                type="submit"
-                variant="close"
-                label={eventInviteLabels.afterClose}
-                data-testid="after-invite-close"
-              />
-            </Form>
-          </div>
-          <div className="ri-after__faces">
-            {afterInvite.faces.map((f) => (
-              <span key={f.userId}>
-                <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={40} />
-                <small>{f.pseudo}</small>
-              </span>
-            ))}
-          </div>
-          <Button
-            variant="secondary"
-            icon="send"
-            href={`/e/${afterInvite.slug}/inviter`}
-            fullWidth
-            data-testid="after-invite-open"
-          >
-            {eventInviteLabels.afterButton}
-          </Button>
-        </section>
-      )}
-      {avis && !avis.found && (
-        <p className="s-notice s-notice--alert" role="alert" data-testid="avis-invalid">
-          {afterEventLabels.reviewLinkInvalid}
-        </p>
-      )}
-      {view === "upcoming" && ticketCount > 0 && (
-        <p className="s-notice" data-testid="tickets-link">
-          Tu as {ticketCount} billet{ticketCount > 1 ? "s" : ""} de visiteur.{" "}
-          <a href="/app/billets">Voir mes billets</a>
-        </p>
-      )}
-      {actionData?.error && (
-        <p className="s-error" role="alert">
-          {actionData.error}
-        </p>
-      )}
-      {okMessage && (
-        <p className="s-notice s-notice--ok" role="status" data-testid="acces-ok">
-          {okMessage}
-        </p>
-      )}
-
-      {view === "upcoming" && invitations.length > 0 && (
-        <section className="s-stack" aria-labelledby="invitations-title" data-testid="received-invitations">
-          <h2 id="invitations-title" className="s-h2">
-            {invitationLabels.received}
-          </h2>
-          <div className="inv-list">
-            {invitations.map((inv) => (
-              <ReceivedInvitationCard key={inv.id} inv={inv} vehicles={vehicles} busy={busy} primary={false} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {past && points && (
-        <Plate as="section" className="s-stack s-stack--tight" aria-label="Mes points">
-          <div className="s-label o-t-label">{points.season.name}</div>
-          <div className="o-t-number" data-testid="season-points">
-            {points.pointsSeason} pts
-          </div>
-          <div>
-            Grade <strong>{gradeLabels[points.grade]}</strong>
-            {points.next ? ` · prochain : ${gradeLabels[points.next.grade]} à ${points.next.threshold} pts` : ""}
-          </div>
-        </Plate>
-      )}
-
-      {view !== "staff" && applications.length === 0 && tickets.length === 0 ? (
-        <p className="s-notice">
-          {past
-            ? "Aucun événement passé pour l'instant."
-            : "Aucune candidature à venir. Trouve un événement et candidate avec un véhicule."}
-        </p>
-      ) : view !== "staff" ? (
-        applications.map((app) => (
-          <ApplicationCard
-            key={app.id}
-            app={app}
-            pass={passes[app.id]}
-            serverTime={serverTime}
-            weather={weather[app.id]}
-            rulesText={rules[app.id]}
-            arrivalSlot={arrivalSlots[app.id]}
-            notes={notes[app.id]}
-            past={past}
-            focused={avis?.id === app.id}
-            recapReady={recapReady.includes(app.event.id)}
-          />
-        ))
-      ) : null}
-
-      {/* Lot 57 : les billets du public sont des tickets de Sorties, comme dans l'appli (QR dans « Mes billets »). */}
-      {view !== "staff" &&
-        tickets.map((x) => (
-          <article key={x.id} className="s-card acc" data-testid="sorties-ticket" data-status={x.status}>
-            <div className="s-stack s-stack--tight">
-              <div className="s-label o-t-label">{sortiesLabels.myTicket}</div>
-              <h2 className="s-h2">
-                <a href={`/e/${x.event.slug}`}>{x.event.title}</a>
-              </h2>
-              <div className="o-t-meta s-muted">
-                {formatWhen(x.event.startsAt, x.event.endsAt)}
-                {x.event.city ? ` · ${x.event.city}` : ""}
+        {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
+        {/* Lot R6c (R6.5) : inviter du monde juste après avoir candidaté. */}
+        {sent && afterInvite && (
+          <section className="ri-after" aria-labelledby="after-invite-title" data-testid="after-invite-card">
+            <div className="ri-after__head">
+              <div>
+                <b id="after-invite-title">{eventInviteLabels.afterTitle}</b>
+                <small>{eventInviteLabels.afterText}</small>
               </div>
-              <p className="o-t-caption">{sortiesLabels.publicTicketLine(x.name)}</p>
+              <Form method="post" preventScrollReset>
+                <input type="hidden" name="intent" value="after_invite_close" />
+                <input type="hidden" name="eventId" value={afterInvite.eventId} />
+                <Button
+                  type="submit"
+                  variant="close"
+                  label={eventInviteLabels.afterClose}
+                  data-testid="after-invite-close"
+                />
+              </Form>
             </div>
-            <div className="s-row">
-              {!past && (
-                <Button variant="secondary" icon="ticket" next href="/app/billets">
-                  {sortiesLabels.myTicket}
-                </Button>
-              )}
-              {x.status === "used" && Date.parse(x.event.endsAt) > nowMs() && (
-                <Button variant="secondary" icon="badge" next href={`/app/vote/${x.event.slug}`}>
-                  {voteScreenTexts.open}
-                </Button>
-              )}
-              {past && x.status === "used" && recapReady.includes(x.event.id) && (
-                <Button variant="secondary" icon="list" next href={`/app/recap/${x.event.id}`}>
-                  {recapScreenTexts.seeRecap}
-                </Button>
-              )}
+            <div className="ri-after__faces">
+              {afterInvite.faces.map((f) => (
+                <span key={f.userId}>
+                  <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={40} />
+                  <small>{f.pseudo}</small>
+                </span>
+              ))}
             </div>
-          </article>
-        ))}
-    </div>
+            <Button
+              variant="secondary"
+              icon="send"
+              href={`/e/${afterInvite.slug}/inviter`}
+              fullWidth
+              data-testid="after-invite-open"
+            >
+              {eventInviteLabels.afterButton}
+            </Button>
+          </section>
+        )}
+        {avis && !avis.found && (
+          <p className="s-notice s-notice--alert" role="alert" data-testid="avis-invalid">
+            {afterEventLabels.reviewLinkInvalid}
+          </p>
+        )}
+        {view === "upcoming" && ticketCount > 0 && (
+          <p className="s-notice" data-testid="tickets-link">
+            Tu as {ticketCount} billet{ticketCount > 1 ? "s" : ""} de visiteur.{" "}
+            <a href="/app/billets">Voir mes billets</a>
+          </p>
+        )}
+        {actionData?.error && (
+          <p className="s-error" role="alert">
+            {actionData.error}
+          </p>
+        )}
+        {okMessage && (
+          <p className="s-notice s-notice--ok" role="status" data-testid="acces-ok">
+            {okMessage}
+          </p>
+        )}
+
+        {view === "upcoming" && invitations.length > 0 && (
+          <section className="s-stack" aria-labelledby="invitations-title" data-testid="received-invitations">
+            <h2 id="invitations-title" className="s-h2">
+              {invitationLabels.received}
+            </h2>
+            <div className="inv-list">
+              {invitations.map((inv) => (
+                <ReceivedInvitationCard key={inv.id} inv={inv} vehicles={vehicles} busy={busy} primary={false} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {past && points && (
+          <Plate as="section" className="s-stack s-stack--tight" aria-label="Mes points">
+            <div className="s-label o-t-label">{points.season.name}</div>
+            <div className="o-t-number" data-testid="season-points">
+              {points.pointsSeason} pts
+            </div>
+            <div>
+              Grade <strong>{gradeLabels[points.grade]}</strong>
+              {points.next ? ` · prochain : ${gradeLabels[points.next.grade]} à ${points.next.threshold} pts` : ""}
+            </div>
+          </Plate>
+        )}
+
+        {view !== "staff" && applications.length === 0 && tickets.length === 0 ? (
+          <p className="s-notice">
+            {past
+              ? "Aucun événement passé pour l'instant."
+              : "Aucune candidature à venir. Trouve un événement et candidate avec un véhicule."}
+          </p>
+        ) : view !== "staff" ? (
+          applications.map((app) => (
+            <ApplicationCard
+              key={app.id}
+              app={app}
+              pass={passes[app.id]}
+              serverTime={serverTime}
+              weather={weather[app.id]}
+              rulesText={rules[app.id]}
+              arrivalSlot={arrivalSlots[app.id]}
+              notes={notes[app.id]}
+              past={past}
+              focused={avis?.id === app.id}
+              recapReady={recapReady.includes(app.event.id)}
+            />
+          ))
+        ) : null}
+
+        {/* Lot 57 : les billets du public sont des tickets de Sorties, comme dans l'appli (QR dans « Mes billets »). */}
+        {view !== "staff" &&
+          tickets.map((x) => (
+            <article key={x.id} className="s-card acc" data-testid="sorties-ticket" data-status={x.status}>
+              <div className="s-stack s-stack--tight">
+                <div className="s-label o-t-label">{sortiesLabels.myTicket}</div>
+                <h2 className="s-h2">
+                  <a href={`/e/${x.event.slug}`}>{x.event.title}</a>
+                </h2>
+                <div className="o-t-meta s-muted">
+                  {formatWhen(x.event.startsAt, x.event.endsAt)}
+                  {x.event.city ? ` · ${x.event.city}` : ""}
+                </div>
+                <p className="o-t-caption">{sortiesLabels.publicTicketLine(x.name)}</p>
+              </div>
+              <div className="s-row">
+                {!past && (
+                  <Button variant="secondary" icon="ticket" next href="/app/billets">
+                    {sortiesLabels.myTicket}
+                  </Button>
+                )}
+                {x.status === "used" && Date.parse(x.event.endsAt) > nowMs() && (
+                  <Button variant="secondary" icon="badge" next href={`/app/vote/${x.event.slug}`}>
+                    {voteScreenTexts.open}
+                  </Button>
+                )}
+                {past && x.status === "used" && recapReady.includes(x.event.id) && (
+                  <Button variant="secondary" icon="list" next href={`/app/recap/${x.event.id}`}>
+                    {recapScreenTexts.seeRecap}
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))}
+      </div>
+    </>
   );
 }

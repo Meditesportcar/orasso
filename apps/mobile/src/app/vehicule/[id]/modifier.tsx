@@ -16,7 +16,7 @@ export default function ModifierVehicule() {
     return (
       <FlowScreen
         title="Modifier le véhicule"
-        onClose={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"))}
+        onClose={() => (router.canGoBack() ? router.back() : router.replace("/garage"))}
       >
         <Muted variant="body">{vehicle.error ? vehicle.error.message : "Chargement…"}</Muted>
       </FlowScreen>

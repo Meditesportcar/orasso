@@ -40,24 +40,21 @@ export const scanLabels: Record<ScanResultState, string> = {
 /**
  * Les six profils et leur barre d'onglets (DA v2, lot 38, ARCHITECTURE-DA-V2 § 2.1 ; prototype proto-v2-ecrans.md) :
  * cinq onglets, celui du milieu porte le O (`o`) : Accueil pour cinq profils, Direct pour l'organisateur.
+ * Lot R7a1 (D38) : la barre du passionné (exposant et visiteur) est Explorer · Le Fil · Accueil · Crew · Profil.
  */
 const exhibitorTabs = [
   { id: "explore", label: "Explorer", icon: "explore" },
-  { id: "outings", label: "Sorties", icon: "ticket" },
+  { id: "feed", label: "Le Fil", icon: "feed" },
   { id: "home", label: "Accueil", icon: "o", center: true, o: true },
-  { id: "garage", label: "Garage", icon: "vehicle" },
+  { id: "crew", label: "Crew", icon: "crew" },
   { id: "profile", label: "Profil", icon: "profile" },
 ] as const;
 
 export const tabSets = {
   exhibitor: exhibitorTabs,
-  visitor: [
-    { id: "explore", label: "Explorer", icon: "explore" },
-    { id: "outings", label: "Sorties", icon: "ticket" },
-    { id: "home", label: "Accueil", icon: "o", center: true, o: true },
-    { id: "passport", label: "Passeport", icon: "stamp" },
-    { id: "profile", label: "Profil", icon: "profile" },
-  ],
+  // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur (Sorties passe dans l'Accueil, le Garage et le
+  // Passeport dans le Profil, la place libérée devient Crew).
+  visitor: exhibitorTabs,
   pro: [
     { id: "scanner", label: "Scanner", icon: "qr" },
     { id: "card", label: "Ma fiche", icon: "plate" },

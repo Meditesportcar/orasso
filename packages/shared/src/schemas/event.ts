@@ -29,9 +29,11 @@ import {
   type PosterStyle,
   posterStyles,
 } from "../rules/poster";
+import { PRESENCE_RADIUS_BOUNDS } from "../rules/presence";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
 import type { EventAccreditationState } from "./media";
+import type { EventLive } from "./presence";
 
 const criteriaSchema = z.object({
   categoryIds: z.array(z.uuid()).max(30).default([]),
@@ -114,6 +116,11 @@ const eventFields = z.object({
   instructions: optionalText(2000),
   /** Lot 53 : « Précision pour l'entrée (facultatif) », publique comme l'adresse. */
   entranceNote: optionalText(160),
+  /**
+   * Lot R7d1 : zone de présence par GPS, en mètres autour du lieu (50 à 2000) ; `null` = la valeur par défaut (300 m).
+   * Le périmètre saisi par l'organisateur (« Zone de présence »).
+   */
+  presenceRadiusM: z.number().int().min(PRESENCE_RADIUS_BOUNDS[0]).max(PRESENCE_RADIUS_BOUNDS[1]).nullish(),
   /** Types de prestataires attendus (cases à cocher et « + »), sans candidature en V1. */
   vendorTypes: z.array(z.string().trim().min(1).max(40)).max(16),
   /** Rôle « boutique » du staff activé pour cet événement (lot 24). */
@@ -411,6 +418,11 @@ export type EventPublic = EventCard & {
   instructions: string | null;
   /** Lot 53 : précision pour l'entrée (« Entrée par le quai Nord »), publique comme l'adresse. */
   entranceNote: string | null;
+  /**
+   * Lot R7d1 : le direct (phase, jour, « N sur place, sur M retenues » pendant l'événement seulement, ma présence,
+   * votes ouverts). Après la fin, ni retenues ni présents : règle des absents.
+   */
+  live: EventLive;
   /** Lot R4b, tour 2 : `null` dans une réponse publique après la fin de l'événement (avec « N présentes », le nombre d'absents). */
   acceptedCount: number | null;
   /** Lot 26 : jours (vide = événement d'un jour) et mode d'accès (`whole` pour un événement d'un jour). */
@@ -430,6 +442,8 @@ export type EventOrganizer = EventPublic & {
   /** Duplication ou occurrence d'une série : l'événement d'origine. */
   parentEventId: string | null;
   recurrenceRule: RecurrenceRule | null;
+  /** Lot R7d1 : zone de présence saisie, en mètres ; `null` = 300 m. */
+  presenceRadiusM: number | null;
   /** Rôle « boutique » activé (lot 24). */
   shopEnabled: boolean;
   /** Lot 47 : réglages de l'affiche générée (assistant), `null` sans affiche générée. */

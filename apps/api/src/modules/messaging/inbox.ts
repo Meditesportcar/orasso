@@ -18,6 +18,21 @@ export function registerInboxCounter(key: keyof InboxRequestCounts, counter: Cou
   counters.set(key, counter);
 }
 
+type Extras = (
+  userId: string,
+  requests: InboxRequestCounts,
+  ex: Executor,
+) => Promise<{ unseenActivity: number; pendingRequests: number }>;
+let extras: Extras | null = null;
+
+/**
+ * Lot R7c1 : l'Activité (cloche) et les Demandes déclarent ici leurs deux pastilles (`unseenActivity`, `pendingRequests`) ;
+ * la messagerie ne les importe pas (les domaines de ces demandes importent déjà la messagerie).
+ */
+export function registerInboxExtras(fn: Extras) {
+  extras = fn;
+}
+
 /** Demandes de contact reçues en attente (expéditeurs supprimés ou suspendus exclus). */
 export async function pendingContactCount(userId: string, ex: Executor = db): Promise<number> {
   const [row] = await ex
@@ -77,16 +92,26 @@ export async function unreadConversationCount(
   return Number((result.rows[0] as { n?: number | string } | undefined)?.n ?? 0);
 }
 
+async function baseSummary(userId: string, opts: { includeStructure: boolean }, ex: Executor) {
+  const requests = { follow: 0, contact: 0 } as InboxRequestCounts;
+  for (const [key, counter] of counters) requests[key] = await counter(userId, ex);
+  return { unreadMessages: await unreadConversationCount(userId, opts, ex), requests };
+}
+
 export const inboxService = {
+  /**
+   * Les anciens champs (`unreadMessages`, `requests`, lus par l'APK en ligne) et, lot R7c1, les trois pastilles :
+   * `unreadMessages` (bulle), `unseenActivity` (cloche), `pendingRequests` (ligne « Demandes »).
+   */
   async summary(userId: string, opts: { includeStructure: boolean }, ex: Executor = db): Promise<InboxSummary> {
-    const requests = { follow: 0, contact: 0 } as InboxRequestCounts;
-    for (const [key, counter] of counters) requests[key] = await counter(userId, ex);
-    return { unreadMessages: await unreadConversationCount(userId, opts, ex), requests };
+    const base = await baseSummary(userId, opts, ex);
+    const more = extras ? await extras(userId, base.requests, ex) : { unseenActivity: 0, pendingRequests: 0 };
+    return { ...base, ...more };
   },
 
   /** Total de la pastille de l'onglet Boîte (`GET /me` → `unreadInbox`). */
   async total(userId: string, opts: { includeStructure: boolean }): Promise<number> {
-    const s = await this.summary(userId, opts);
+    const s = await baseSummary(userId, opts, db);
     return s.unreadMessages + Object.values(s.requests).reduce((a, b) => a + b, 0);
   },
 

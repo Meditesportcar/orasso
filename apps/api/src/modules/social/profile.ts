@@ -30,6 +30,7 @@ import { storage } from "../../lib/storage";
 import { crewsService } from "../crews/service";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
+import { storiesBar } from "../stories/bar";
 import { vehiclesRepo } from "../vehicles/repo";
 import {
   makeNameOf,
@@ -377,6 +378,8 @@ export const socialProfile = {
       socials: fields.socials ? (target.socials ?? {}) : null,
       nextOuting,
       seenAt: fields.pastEvents ? await seenAtOf(target.userId, at) : null,
+      // Lot R7f1 : ses stories selon le regard (zéro si rien n'est visible, sans rien révéler).
+      stories: await storiesBar.summary(viewer, "user", target.userId),
     };
   },
 

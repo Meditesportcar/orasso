@@ -45,6 +45,7 @@ import {
   imageNameOf,
   isMySide,
   lastMessageOf,
+  liveStoriesOf,
   type MessageRow,
   publishToConversation,
   refreshPreview,
@@ -59,6 +60,7 @@ import {
   writeBlockOf,
 } from "./core";
 import { inboxService } from "./inbox";
+import { storyThumbFor } from "./story-thumb";
 
 const isUniqueViolation = (error: unknown) => {
   const e = error as { code?: string; cause?: { code?: string } };
@@ -117,6 +119,7 @@ async function summaryOf(access: Access, actor: Actor): Promise<ConversationSumm
       : null,
     unreadCount: await unreadCountOf(db, conversation.id, { ...reader, userId: actor.userId }),
     closedAt: conversation.closedAt?.toISOString() ?? null,
+    storyThumbUrl: storyThumbFor(last),
   };
 }
 
@@ -299,6 +302,7 @@ export const messagingService = {
     const readBy = q.before ? null : await this.readByOf(access, page);
     // Tour 2 : « À propos de » filtré pour la personne qui lit (événement privé : ses ayants droit seulement).
     const abouts = await aboutsOf(db, page, v);
+    const liveStories = await liveStoriesOf(db, page);
     return {
       items: page.map((m) =>
         serializeMessage(
@@ -307,6 +311,7 @@ export const messagingService = {
           v.user.id,
           readBy?.get(m.id) ?? null,
           abouts,
+          liveStories,
         ),
       ),
       nextCursor: rows.length > q.limit ? (page.at(-1)?.id ?? null) : null,
@@ -355,13 +360,26 @@ export const messagingService = {
    * `POST /conversations/:id/messages` : envoi idempotent par `clientId` (même identifiant = même message, `200`).
    * 60 messages par minute et par personne, comptés en base ; une image n'est rattachée qu'une fois, par son auteur.
    */
-  async send(v: Viewer, id: string, input: MessageSend): Promise<{ message: MessageView; created: boolean }> {
+  async send(
+    v: Viewer,
+    id: string,
+    input: MessageSend,
+    /** Lot R7f1 : réponse à une story, enregistrée avec le message dans la même transaction. */
+    context: { storyId?: string } = {},
+  ): Promise<{ message: MessageView; created: boolean }> {
     const actor = actorOf(v);
     const access = await requireAccess(actor, id);
     const replay = async (row: MessageRow) => {
       if (row.senderId !== v.user.id) throw conflict("conflict", "Identifiant de message déjà utilisé");
       return {
-        message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row], v)),
+        message: serializeMessage(
+          row,
+          senderOf(v),
+          v.user.id,
+          null,
+          await aboutsOf(db, [row], v),
+          await liveStoriesOf(db, [row]),
+        ),
         created: false,
       };
     };
@@ -431,6 +449,7 @@ export const messagingService = {
           clientId: input.clientId,
           asStructure: reader.side === "structure",
           aboutEventId: input.aboutEventId ?? null,
+          storyId: context.storyId ?? null,
           createdAt: at,
         })
         .returning();

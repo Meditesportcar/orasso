@@ -217,7 +217,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     pendingLeave.current = null;
     if (action) return action();
     // Lot M7 : le ✕ revient à l'écran d'origine (la pile), sinon au `?retour=` sûr, sinon au Garage.
-    return router.canGoBack() ? router.back() : router.replace((appReturn(retour) ?? "/(tabs)/garage") as never);
+    return router.canGoBack() ? router.back() : router.replace((appReturn(retour) ?? "/garage") as never);
   };
   const close = () => (guarded ? setQuitting(true) : leave());
   // ✕, retour Android ou geste : même confirmation tant que le brouillon n'est pas vide ou que l'envoi tourne.
@@ -516,7 +516,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         title={title}
         facts={V.done}
         header={bar(100)}
-        onClose={() => router.replace(memo.pending ? `/vehicule/${saved.id}` : "/(tabs)/garage")}
+        onClose={() => router.replace(memo.pending ? `/vehicule/${saved.id}` : "/garage")}
         footer={
           <>
             {seeVehicle ? (
@@ -543,7 +543,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               <Button
                 variant="primary"
                 icon="vehicle"
-                onPress={() => router.replace("/(tabs)/garage")}
+                onPress={() => router.replace("/garage")}
                 fullWidth
                 testID="vehicle-done-garage"
               >

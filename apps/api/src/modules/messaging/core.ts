@@ -8,10 +8,10 @@ import {
   messagePreview,
   shorten,
 } from "@orasso/shared";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversationParticipants, conversations, events, messages, profiles, user } from "../../db/schema";
+import { conversationParticipants, conversations, events, messages, profiles, stories, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound } from "../../lib/errors";
@@ -22,6 +22,7 @@ import type { Executor, Tx } from "../../lib/tx";
 import { canSeeEvent, type SeeingUser } from "../invitations/access";
 import { isSecondFactor } from "../security/passkey";
 import { type ConversationRow, type KindRules, type Reader, rulesOf } from "./access";
+import { storyThumbFor } from "./story-thumb";
 
 export type MessageRow = typeof messages.$inferSelect;
 
@@ -163,12 +164,25 @@ export async function seeingUsersOf(ex: Executor, readers: Reader[]): Promise<Ma
   return new Map(rows.map((u) => [u.id, { user: u }]));
 }
 
+/** Parmi les stories citées par ces messages, celles qui existent encore (ni supprimées ni échues). */
+export async function liveStoriesOf(ex: Executor, rows: Pick<MessageRow, "storyId">[]): Promise<Set<string>> {
+  const ids = [...new Set(rows.map((m) => m.storyId).filter((x): x is string => Boolean(x)))];
+  if (!ids.length) return new Set();
+  const live = await ex
+    .select({ id: stories.id })
+    .from(stories)
+    .where(and(inArray(stories.id, ids), isNull(stories.deletedAt), gt(stories.expiresAt, now())));
+  return new Set(live.map((x) => x.id));
+}
+
 export function serializeMessage(
   m: MessageRow,
   sender: SenderProfile,
   viewerId: string | null,
   readBy: MessageView["readBy"] = null,
   abouts: Map<string, MessageAbout> | null = null,
+  /** Stories encore vivantes parmi celles des messages lus (`liveStoriesOf`) ; `null` = pas de vérification (message qui vient de partir). */
+  liveStories: Set<string> | null = null,
 ): MessageView {
   const deleted = Boolean(m.deletedAt || m.moderatedAt);
   const mine = viewerId !== null && m.senderId === viewerId;
@@ -199,6 +213,9 @@ export function serializeMessage(
     moderated: Boolean(m.moderatedAt),
     readBy,
     about: m.aboutEventId ? (abouts?.get(m.aboutEventId) ?? null) : null,
+    // Lot R7f1 : réponse à une story (vignette protégée, rien pour un message supprimé).
+    // Story supprimée ou échue : plus de vignette, même si son fichier est gardé comme preuve d'un signalement.
+    storyThumbUrl: deleted || (m.storyId && liveStories && !liveStories.has(m.storyId)) ? null : storyThumbFor(m),
   };
 }
 
