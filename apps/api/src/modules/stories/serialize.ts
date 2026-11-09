@@ -139,10 +139,13 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         .where(inArray(events.id, eventIds))
     : [];
   const eventBy = new Map<string, { id: string; slug: string; title: string; startsAt: string }>();
+  // Ce que l'export vérifie en plus (statut, admission) : pour `exportable` seulement, jamais renvoyé.
+  const eventShare = new Map<string, { id: string; slug: string; title: string; status: string; admission: string }>();
   for (const e of eventRows) {
     if (e.status === "draft") continue;
     if (!(await canSeeEvent(e, v))) continue;
     eventBy.set(e.id, { id: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString() });
+    eventShare.set(e.id, { id: e.id, slug: e.slug, title: e.title, status: e.status, admission: e.admission });
   }
 
   // Crédit d'une copie : le pseudo de l'auteur de l'originale.
@@ -161,8 +164,8 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
   // retirée ou changée de main, publication ou vote plus visible, souvenir d'un autre) ; ce qui n'est pas visible n'est
   // pas renvoyé, pas même son identifiant.
   const linkedBy = await linkedViewsOf(v, rows, {
-    event: eventBy,
-    vehicleOwner: new Map([...vehicleBy].map(([id, x]) => [id, x.ownerId])),
+    event: eventShare,
+    vehicle: vehicleBy,
   });
 
   return rows.map((r) => {

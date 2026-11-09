@@ -18,7 +18,9 @@ import {
   exportFileName,
   exportKindOf,
   nativeShareOptions,
+  nextExportNonce,
   releaseAction,
+  shareIfOpen,
 } from "./shareFile";
 
 const shareError = (status: number | null, detail?: string) => {
@@ -105,7 +107,8 @@ export async function sendShareImage(
   prepared: PreparedShare,
   kind: "share" | "save" = "share",
   mime: "image/png" | "image/jpeg" | "video/mp4" = "image/png",
-): Promise<ShareOutcome> {
+  isOpen: () => boolean = () => true,
+): Promise<ShareOutcome | null> {
   if (Platform.OS === "web") {
     const link = document.createElement("a");
     link.href = prepared.uri;
@@ -113,9 +116,14 @@ export async function sendShareImage(
     link.click();
     return "saved";
   }
-  if (!(await Sharing.isAvailableAsync())) return "unavailable";
-  await Sharing.shareAsync(prepared.uri, nativeShareOptions(mime, kind));
-  return "shared";
+  // Fermée pendant l'attente : rien ne s'ouvre (`null`).
+  return shareIfOpen<ShareOutcome>(
+    isOpen,
+    () => Sharing.isAvailableAsync(),
+    () => Sharing.shareAsync(prepared.uri, nativeShareOptions(mime, kind)),
+    "shared",
+    "unavailable",
+  );
 }
 
 // --- Fichiers qui sortent d'Orasso (lot R7f4) ---------------------------------------------------------------------------
@@ -164,10 +172,14 @@ export async function prepareExport(
   }
   try {
     const kind = exportKindOf(mediaKind);
-    const file = await File.downloadFileAsync(url, new File(Paths.cache, exportCacheName(key, kind)), {
-      headers: authHeaders(),
-      idempotent: true,
-    });
+    const file = await File.downloadFileAsync(
+      url,
+      new File(Paths.cache, exportCacheName(key, kind, nextExportNonce())),
+      {
+        headers: authHeaders(),
+        idempotent: true,
+      },
+    );
     return { uri: file.uri, fileName: exportFileName(fileName, kind), temp: true, ...kind };
   } catch (e) {
     throw shareError(null, e instanceof Error ? e.message : String(e));

@@ -33,7 +33,7 @@ import { storage } from "../../lib/storage";
 import { loadPostViews } from "../feed/posts";
 import { canSeeEvent } from "../invitations/access";
 import { memoriesService } from "../memories/service";
-import { vehiclesRepo } from "../vehicles/repo";
+import { type VehicleWithAll, vehiclesRepo } from "../vehicles/repo";
 import { storyLine, storyName, storyStats } from "../vehicles/share-image";
 import type { ShareStat } from "../vehicles/share-story";
 import { votesService } from "../votes/service";
@@ -128,6 +128,31 @@ async function loadEvent(id: string) {
 const shareable = (e: { status: string; admission: string }) =>
   e.status === "published" && e.admission !== "invite_only";
 
+/**
+ * Éligibilité à l'export, UNE fonction par contenu, partagée par `inspect` (l'export refuse) et par `linkedViewsOf`
+ * (`exportable`) : l'indicateur annonce exactement ce que l'export fera, sans charger d'image.
+ */
+const vehicleRefusal = (veh: VehicleWithAll | undefined, ownerId: string): Found | null => {
+  if (!veh || veh.ownerId !== ownerId || veh.status !== "active") {
+    return refuse(404, "not_found", shareLabels.errors.notFound);
+  }
+  if (!maskedPhoto(veh.photos, veh.unregistered)) {
+    const refused = refuse(409, "no_masked_photo", shareLabels.errors.noPhoto, shareLabels.reasons.vehicleNoPhoto);
+    if (!refused.ok) refused.refusal.title = storyName(veh);
+    return refused;
+  }
+  return null;
+};
+
+/** Un vote ne sort que clos, avec un classement et un gagnant. */
+const voteRefusal = (view: { state: string; ranking?: readonly unknown[] | null } | null): Found | null => {
+  if (!view) return refuse(404, "not_found", shareLabels.errors.notFound);
+  if (view.state !== "closed")
+    return refuse(409, "vote_open", shareLabels.errors.voteOpen, shareLabels.reasons.voteOpen);
+  if (!view.ranking?.[0]) return refuse(409, "no_ranking", shareLabels.errors.notFound, shareLabels.reasons.noRanking);
+  return null;
+};
+
 async function eventContent(e: NonNullable<EventRowShare>, type: StoryLinkType, extra: Partial<LinkedContent> = {}) {
   const at = now();
   const { subtitle, live } = eventDetail(e, at);
@@ -170,15 +195,11 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
   }
   if (type === "vehicle") {
     const veh = await vehiclesRepo.findFullById(id);
-    if (!veh || veh.ownerId !== v.user.id || veh.status !== "active") {
-      return refuse(404, "not_found", shareLabels.errors.notFound);
-    }
+    if (!veh) return refuse(404, "not_found", shareLabels.errors.notFound);
+    const blocked = vehicleRefusal(veh, v.user.id);
+    if (blocked) return blocked;
     const photo = maskedPhoto(veh.photos, veh.unregistered);
-    if (!photo) {
-      const refused = refuse(409, "no_masked_photo", shareLabels.errors.noPhoto, shareLabels.reasons.vehicleNoPhoto);
-      if (!refused.ok) refused.refusal.title = storyName(veh);
-      return refused;
-    }
+    if (!photo) return refuse(404, "not_found", shareLabels.errors.notFound);
     const category = veh.categories
       .map((c) => c.category)
       .filter((c) => c.active)
@@ -275,11 +296,10 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
   // (lire un résultat n'est pas le repartager).
   if (!e || !shareable(e) || !(await canSeeEvent(e, v))) return refuse(404, "not_found", shareLabels.errors.notFound);
   const view = await votesService.get(v, vote.eventId, id).catch(() => null);
-  if (!view) return refuse(404, "not_found", shareLabels.errors.notFound);
-  if (view.state !== "closed")
-    return refuse(409, "vote_open", shareLabels.errors.voteOpen, shareLabels.reasons.voteOpen);
-  const winner = view.ranking?.[0];
-  if (!winner) return refuse(409, "no_ranking", shareLabels.errors.notFound, shareLabels.reasons.noRanking);
+  const voteBlocked = voteRefusal(view);
+  if (voteBlocked) return voteBlocked;
+  const winner = view?.ranking?.[0];
+  if (!view || !winner) return refuse(404, "not_found", shareLabels.errors.notFound);
   const key = withoutPrefix(winner.photoUrl);
   const winnerData = key ? await storage.get(key) : null;
   // L'état de plaque réel de la photo du gagnant (floutée, ou confirmée sans plaque) ; sans photo, rien n'est montré.
@@ -437,8 +457,9 @@ export async function linkedViewsOf(
     story: { id: string; authorId: string; linkedType: StoryLinkType | null; linkedId: string | null };
   }[],
   known: {
-    event: Map<string, { id: string; slug: string; title: string }>;
-    vehicleOwner: Map<string, string>;
+    event: Map<string, { id: string; slug: string; title: string; status: string; admission: string }>;
+    /** Les voitures actives lues par `serializeStories` (propriétaire, photos, nom). */
+    vehicle: Map<string, VehicleWithAll>;
   },
 ): Promise<Map<string, StoryLinkedView>> {
   const out = new Map<string, StoryLinkedView>();
@@ -456,10 +477,12 @@ export async function linkedViewsOf(
           slug: e.slug,
           eventId: e.id,
           title: e.title,
-          exportable: true,
+          // Annulé, brouillon ou sur invitation : la carte reste lisible, mais l'export est refusé (même règle qu'`inspect`).
+          exportable: shareable(e),
         });
     } else if (s.linkedType === "vehicle") {
-      if (known.vehicleOwner.get(s.linkedId) === s.authorId) {
+      const veh = known.vehicle.get(s.linkedId);
+      if (veh && veh.ownerId === s.authorId) {
         out.set(s.id, {
           type: "vehicle",
           id: s.linkedId,
@@ -467,7 +490,7 @@ export async function linkedViewsOf(
           slug: null,
           eventId: null,
           title: null,
-          exportable: true,
+          exportable: vehicleRefusal(veh, s.authorId) === null,
         });
       }
     } else if (s.linkedType === "feed_post") {
@@ -507,6 +530,7 @@ export async function linkedViewsOf(
       const e = vote ? await loadEvent(vote.eventId) : null;
       // Même règle qu'au partage : un classement d'un événement sur invitation ou non publié n'est plus ouvrable.
       if (vote && e && shareable(e) && (await canSeeEvent(e, v))) {
+        const view = await votesService.get(v, vote.eventId, vote.id).catch(() => null);
         out.set(s.id, {
           type: "vote_result",
           id: vote.id,
@@ -514,7 +538,7 @@ export async function linkedViewsOf(
           slug: e.slug,
           eventId: vote.eventId,
           title: vote.title,
-          exportable: true,
+          exportable: voteRefusal(view) === null,
         });
       }
     }

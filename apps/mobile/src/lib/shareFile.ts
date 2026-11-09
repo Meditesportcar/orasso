@@ -14,9 +14,13 @@ export const exportKindOf = (mediaKind: ExportMediaKind = "photo"): ExportKind =
 export const exportFileName = (fileName: string, kind: ExportKind): string =>
   `${fileName.replace(/\.(jpg|mp4)$/i, "")}.${kind.ext}`;
 
-/** Nom du fichier dans le cache de l'appareil : stable pour un même contenu, à la bonne extension. */
-export const exportCacheName = (key: string, kind: ExportKind): string =>
-  `orasso-export-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}.${kind.ext}`;
+/** Nom du fichier dans le cache de l'appareil : le contenu, un suffixe unique par téléchargement, la bonne extension. */
+export const exportCacheName = (key: string, kind: ExportKind, unique = ""): string =>
+  `orasso-export-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}${unique ? `-${unique}` : ""}.${kind.ext}`;
+
+let exportCounter = 0;
+/** Suffixe unique par téléchargement : deux téléchargements du même contenu ne partagent jamais un chemin du cache. */
+export const nextExportNonce = (): string => `${Date.now().toString(36)}${(exportCounter++).toString(36)}`;
 
 /** Ce que la feuille de partage du système reçoit : type MIME, UTI iOS et titre. */
 export function nativeShareOptions(mime: "image/png" | "image/jpeg" | "video/mp4", kind: "share" | "save") {
@@ -41,6 +45,24 @@ export function releaseAction(
 }
 
 /**
+ * Ouvre le partage du système seulement si la feuille est encore ouverte après l'attente de `isAvailable` : sinon rien
+ * n'est ouvert et la fonction renvoie `null`.
+ */
+export async function shareIfOpen<O>(
+  isOpen: () => boolean,
+  isAvailable: () => Promise<boolean>,
+  share: () => Promise<void>,
+  done: O,
+  unavailable: O,
+): Promise<O | null> {
+  const available = await isAvailable();
+  if (!isOpen()) return null;
+  if (!available) return unavailable;
+  await share();
+  return done;
+}
+
+/**
  * Prépare un export puis l'envoie, sauf si la feuille a été fermée entre-temps : un téléchargement qui finit après la
  * fermeture libère son fichier tout de suite et n'ouvre jamais le partage du système. `isOpen` est relu après chaque attente.
  * Renvoie `null` quand la feuille s'est fermée (rien n'a été envoyé).
@@ -50,7 +72,7 @@ export async function exportWhileOpen<P, O>(
   prepare: () => Promise<P>,
   keep: (file: P) => void,
   release: (file: P) => void,
-  send: (file: P) => Promise<O>,
+  send: (file: P, isOpen: () => boolean) => Promise<O | null>,
 ): Promise<O | null> {
   const file = await prepare();
   if (!isOpen()) {
@@ -58,6 +80,10 @@ export async function exportWhileOpen<P, O>(
     return null;
   }
   keep(file);
-  const outcome = await send(file);
+  const outcome = await send(file, isOpen);
+  if (outcome === null || !isOpen()) {
+    release(file);
+    return null;
+  }
   return outcome;
 }

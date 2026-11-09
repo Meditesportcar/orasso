@@ -474,7 +474,7 @@ function External({
         () => prepareExport(path, fileName, key, story?.mediaKind ?? "photo"),
         (file) => kept.current.push(file),
         releasePrepared,
-        (file) => sendShareImage(file, "share", file.mime),
+        (file, isOpen) => sendShareImage(file, "share", file.mime, isOpen),
       );
       if (outcome === null || !open.current) return;
       setNote(

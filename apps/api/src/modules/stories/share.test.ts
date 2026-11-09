@@ -719,3 +719,59 @@ describe("tour 2 : l'affiche d'un événement ne sort jamais nette (pas de déci
     expect(await variance(photo.buf, photoCorner)).toBeLessThan(40);
   });
 });
+
+describe("tour 4 : `exportable` suit exactement l'export", () => {
+  const exportOf = (u: TestUser, storyId: string) => req(u, "GET", `/stories/${storyId}/export`);
+
+  it("événement annulé après la publication : la carte reste, exportable faux, export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const posted = await share(kenji, { type: "event", id: e.id });
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(true);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(200);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, e.id));
+    const view = (await byAuthor(kenji, kenji)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(404);
+  });
+
+  it("événement passé sur invitation : exportable faux et export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const posted = await share(kenji, { type: "event", id: e.id });
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, e.id));
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(404);
+  });
+
+  it("vote sans classement : exportable faux et export refusé (409), de façon cohérente", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { voteId } = await closedVote(orga, winner);
+    const posted = await share(guest, { type: "vote_result", id: voteId });
+    expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+    expect((await byAuthor(guest, guest)).json.stories[0].exportable).toBe(true);
+    expect((await exportOf(guest, posted.json.id)).status).toBe(200);
+    await db.delete(audiencePrizeResults).where(eq(audiencePrizeResults.voteId, voteId));
+    const view = (await byAuthor(guest, guest)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(guest, posted.json.id)).status).toBe(409);
+  });
+
+  it("voiture sans photo montrable après la publication : exportable faux et export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const car = await maskedVehicle(kenji);
+    const posted = await share(kenji, { type: "vehicle", id: car.id });
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(true);
+    await db
+      .update(vehiclePhotos)
+      .set({ plateBlurred: false, noPlateConfirmed: false })
+      .where(eq(vehiclePhotos.vehicleId, car.id));
+    const view = (await byAuthor(kenji, kenji)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(409);
+  });
+});
