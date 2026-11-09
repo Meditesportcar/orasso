@@ -51,6 +51,7 @@ import { type Tx, withTx } from "../../../lib/tx";
 import { canSeeEvent } from "../../invitations/access";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
 import { uploadsService } from "../../uploads/service";
+import { removeOrRetry } from "../../vehicles/photos-blur";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { signalCrew } from "../live";
 import {
@@ -179,8 +180,9 @@ export async function hasOpenCrewReport(tx: Tx, postId: string): Promise<boolean
   return Boolean(open);
 }
 
+/** Efface les fichiers après la validation ; un échec du stockage est repris par la tâche `storage.remove`. */
 async function removeFiles(keys: string[]) {
-  for (const k of keys) await storage.remove(k).catch(() => undefined);
+  for (const k of keys) await removeOrRetry(k);
 }
 
 /**

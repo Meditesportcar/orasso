@@ -223,6 +223,10 @@ export const moderationService = {
     return withTx(async (tx, after) => {
       const at = now();
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`report:${v.user.id}`}, 0))`);
+      // Ordre de verrouillage commun à tous les parcours de modération (tour 2 du lot R7-dettes) : le compte de l'auteur
+      // d'abord, puis le contenu. Une sanction prend le compte puis retire ou clôt le contenu : dans l'ordre inverse, un
+      // signalement et une sanction simultanés s'attendraient l'un l'autre (interblocage, une des deux requêtes échoue).
+      if (target.ownerId) await lockAccount(tx, target.ownerId);
       // Sérialisé avec le retrait par l'auteur : sous le verrou du contenu, on revérifie qu'il est toujours visible (404
       // s'il vient d'être retiré), et un retrait qui suit verra ce signalement.
       if (rules.lock) {

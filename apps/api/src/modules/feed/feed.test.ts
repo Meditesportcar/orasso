@@ -1850,6 +1850,14 @@ async function holdPostLock(postId: string) {
   return client;
 }
 
+/** Une connexion à part tient le verrou du compte (celui que prend une sanction avant de toucher au contenu). */
+async function holdAccountLock(userId: string) {
+  const client = await pool.connect();
+  await client.query("begin");
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [`moderation:${userId}`]);
+  return client;
+}
+
 /** Attend (3 s au plus) qu'une requête de la base soit en attente d'un verrou : la synchronisation explicite des tests. */
 async function waitForLockWait(): Promise<boolean> {
   const end = Date.now() + 3000;
@@ -1956,6 +1964,21 @@ describe("un seul verrou pour le retrait, la décision et le signalement (tour 3
     expect((await removing).status).toBe(204);
     expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, post.id))).toHaveLength(1);
     expect(await storage.get(key)).not.toBeNull();
+  });
+
+  it("signalement ∥ sanction : le compte de l'auteur est verrouillé avant la publication, aucune des deux requêtes n'échoue", async () => {
+    const { author, reporter, post } = await postWithReport(false);
+    // la sanction tient le compte de l'auteur ; le signalement doit l'attendre sans avoir pris la publication
+    const sanction = await holdAccountLock(author.id);
+    const reporting = call(reporter, "POST", `/feed-posts/${post.id}/report`, { reason: "spam" });
+    expect(await waitForLockWait()).toBe(true);
+    // la sanction retire ensuite la publication : son verrou est libre (sinon : interblocage, une requête échoue)
+    await sanction.query("set local lock_timeout = '5s'");
+    await sanction.query("select id from feed_posts where id = $1 for update", [post.id]);
+    await sanction.query("commit");
+    sanction.release();
+    expect((await reporting).status).toBe(201);
+    expect(await db.select().from(reports)).toHaveLength(1);
   });
 });
 
