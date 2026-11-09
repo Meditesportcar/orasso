@@ -10,6 +10,7 @@ export * from "./home";
 export * from "./labels.fr";
 export * from "./messaging";
 export * from "./moderation";
+export * from "./notifications/r7";
 export * from "./preferences";
 export * from "./privacy";
 export * from "./provider";
