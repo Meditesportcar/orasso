@@ -58,7 +58,8 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await pageK.getByLabel("Description").fill("Glisse et japonaises.");
   await pageK.getByTestId("crew-create").click();
   await pageK.waitForURL(/\/app\/crew\?crew=[a-z0-9-]+$/);
-  const crewPath = new URL(pageK.url()).pathname;
+  // Lot R7b2 : le crew du chef vit dans l'onglet (`/app/crew?crew=<adresse>`) ; l'adresse publique reste `/c/<adresse>`.
+  const crewPath = `/c/${new URL(pageK.url()).searchParams.get("crew")}`;
   await expect(pageK.getByTestId("crew")).toHaveAttribute("data-state", "leader");
 
   // Léa trouve la fiche (sans la liste des membres) et demande à rejoindre.
