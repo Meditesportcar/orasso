@@ -248,7 +248,12 @@ export function ProfilScreen() {
                   points={profile.pointsSeason}
                   grade={gradeLabels[profile.grade]}
                   data={points.data ?? null}
-                  stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
+                  // Sans tampon, l'état vide du passeport (dessous) le dit seul : « Ton premier tampon t'attend » une fois.
+                  stamps={
+                    passport.data && passport.data.total > 0
+                      ? passportScreenTexts.tile(passport.data.total, passport.data.rare)
+                      : null
+                  }
                   onHistory={() => router.push("/reglages/points")}
                 />
               ) : null}
