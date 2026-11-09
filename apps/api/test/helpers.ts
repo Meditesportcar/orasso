@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { app } from "../src/app";
 import { db } from "../src/db/client";
+import { env } from "../src/env";
 import {
   categories,
   events,
@@ -42,7 +43,19 @@ const TABLES = [
   "seasons",
 ];
 
+const QUIET_HOURS_AT_START = env.NOTIFY_QUIET_HOURS;
+
+/**
+ * Heures calmes (22 h - 8 h) allumées ou éteintes pour le test, quelle que soit la variable `NOTIFY_QUIET_HOURS` de la
+ * machine ; `resetDb` remet la valeur de départ. À poser dans `beforeEach` (après `resetDb`) par les fichiers dont les
+ * notifications ne doivent pas dépendre de l'heure réelle.
+ */
+export function quietHours(on: boolean) {
+  env.NOTIFY_QUIET_HOURS = on;
+}
+
 export async function resetDb() {
+  env.NOTIFY_QUIET_HOURS = QUIET_HOURS_AT_START;
   resetRateLimits();
   // Lot 33 : réglages administrables gardés 60 s en mémoire, relus après la remise à zéro.
   settingsStore.invalidate();
