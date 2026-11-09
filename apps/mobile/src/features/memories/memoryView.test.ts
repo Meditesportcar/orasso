@@ -11,7 +11,7 @@ vi.mock("expo-secure-store", () => ({
 }));
 
 import { bindCacheScope, cacheGetJson, cacheSetJson, purgeCaches } from "../../lib/kv";
-import { forgetMemory, isRefusal, memoryCacheKey, memoryView } from "./memoryView";
+import { forgetMemory, isRefusal, memoryCacheKey, memoryView, nextRefused } from "./memoryView";
 
 const copy = { eventId: "e1", title: "Rassemblement" };
 
@@ -37,6 +37,20 @@ describe("memoryView", () => {
   it("en ligne : la page sans mention ; au chargement : l'attente", () => {
     expect(memoryView({ data: copy, error: null, offline: false })).toEqual({ kind: "ready", offline: false });
     expect(memoryView({ data: null, error: null, offline: false })).toEqual({ kind: "loading" });
+  });
+});
+
+describe("refus retenu jusqu'à une lecture réussie (relecture du tour 3)", () => {
+  it("refus, puis copie relue et panne réseau : toujours indisponible ; une lecture réussie lève le refus", () => {
+    let refused = nextRefused(false, { data: null, error: { status: 404 }, offline: false });
+    expect(refused).toBe(true);
+    const offlineCopy = { data: copy, error: { status: 0 }, offline: true };
+    refused = nextRefused(refused, offlineCopy);
+    expect(memoryView(offlineCopy, refused)).toEqual({ kind: "unavailable" });
+    const fresh = { data: copy, error: null, offline: false };
+    refused = nextRefused(refused, fresh);
+    expect(refused).toBe(false);
+    expect(memoryView(fresh, refused)).toEqual({ kind: "ready", offline: false });
   });
 });
 

@@ -4,7 +4,7 @@
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { formatDayDate, localDate, type MemoryDetail, memoryLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Stamp } from "@/features/passport/Stamp";
 import { MemoryShareButton } from "@/features/share/MemoryShareButton";
@@ -15,7 +15,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { MemoryPhoto } from "./MemoryPhoto";
-import { forgetMemory, memoryCacheKey, memoryView } from "./memoryView";
+import { forgetMemory, memoryCacheKey, memoryView, nextRefused } from "./memoryView";
 import { useTitleFit } from "./useTitleFit";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -27,7 +27,10 @@ export function MemoryScreen() {
     enabled: Boolean(eventId),
     cacheKey: memoryCacheKey(eventId),
   });
-  const view = memoryView(memory);
+  // Un refus est retenu jusqu'à une lecture réussie : la copie relue ou servie hors ligne ensuite ne le contredit pas.
+  const refused = useRef(false);
+  refused.current = nextRefused(refused.current, memory);
+  const view = memoryView(memory, refused.current);
   const m = view.kind === "ready" ? memory.data : null;
   // Refus définitif (404/403) : on efface ce qui était affiché et la copie du téléphone (`useApi` les garderait).
   const { setData } = memory;

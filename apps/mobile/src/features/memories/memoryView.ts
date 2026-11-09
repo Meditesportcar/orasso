@@ -18,11 +18,20 @@ export type MemoryView =
   | { kind: "error" }
   | { kind: "ready"; offline: boolean };
 
-export function memoryView({ data, error, offline }: State): MemoryView {
+/**
+ * `refusedBefore` : l'API a refusé ce souvenir depuis l'ouverture et aucune lecture n'a réussi depuis. La copie du téléphone
+ * (relue après le refus, ou servie pendant une panne réseau ensuite) ne réaffiche alors jamais le souvenir refusé.
+ */
+export function memoryView({ data, error, offline }: State, refusedBefore = false): MemoryView {
   if (isRefusal(error)) return { kind: "unavailable" };
+  if (refusedBefore && (error !== null || offline)) return { kind: "unavailable" };
   if (data) return { kind: "ready", offline };
   return error ? { kind: "error" } : { kind: "loading" };
 }
 
 /** Efface la copie gardée sur le téléphone (le cache n'a pas de suppression : une valeur nulle ne se lit jamais). */
 export const forgetMemory = (eventId: string) => cacheSetJson(memoryCacheKey(eventId), null);
+
+/** Le refus est retenu jusqu'à une lecture réussie (sans erreur, en ligne, avec une réponse). */
+export const nextRefused = (refusedBefore: boolean, { data, error, offline }: State): boolean =>
+  isRefusal(error) ? true : refusedBefore && !(error === null && !offline && data);

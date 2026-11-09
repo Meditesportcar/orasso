@@ -158,8 +158,9 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("newsletter.send", "* * * * *", null, { tz: "Europe/Paris" });
     // Lot R7l1 : votes à l'heure fixée ou à clore, rattrapés chaque minute.
     await boss.schedule("votes.sweep", "* * * * *", null, { tz: "Europe/Paris" });
-    // Lot R7j : souvenirs du jour à 9 h (la notification part à 10 h).
-    await boss.schedule("memories.daily", "0 9 * * *", null, { tz: "Europe/Paris" });
+    // Lot R7j : souvenirs du jour à 9 h (la notification part à 10 h). Une panne passagère est reprise toutes les 10 min
+    // pendant une heure (le défaut de pg-boss reprend tout de suite, deux fois : inutile après une vraie panne).
+    await boss.schedule("memories.daily", "0 9 * * *", null, { tz: "Europe/Paris", retryLimit: 6, retryDelay: 600 });
   }
   const previous = deps.jobs;
   deps.jobs = {
