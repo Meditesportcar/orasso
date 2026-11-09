@@ -34,10 +34,12 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
     const page = await ctx.newPage();
     await setTheme(page, theme);
     await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
-    // Premier passage seulement : ouvrir la cloche vide les non vus (le deuxième thème repart de zéro).
+    // Premier passage seulement : ouvrir la cloche vide les non vus (le deuxième thème repart de zéro). Un nouvel abonné
+    // pose une notification « non vue » même si une recette précédente a déjà ouvert la cloche de Damien_66.
     if (theme === "beton") {
-      const before = await summaryOf(page);
-      expect(before.unseenActivity, "le seed pose des notifications non vues").toBeGreaterThan(0);
+      const fan = await signUpApi(`Sw7F${unique()}`);
+      await apiCall(fan, "POST", "/users/Damien_66/follow");
+      await expect.poll(async () => (await summaryOf(page)).unseenActivity, { timeout: 20_000 }).toBeGreaterThan(0);
     }
     await page
       .locator("header.o-appbar--tab")
@@ -122,6 +124,10 @@ test("la bulle : conversations seulement, « Demandes de message », étiquette 
   await up.goto("/o/meditesportcar");
   await up.getByTestId("contact-organizer").click();
   await up.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
+  // Une conversation vide n'est pas listée : U écrit son premier message.
+  await up.getByLabel("Écrire un message…").fill("Bonjour, il reste de la place ?");
+  await up.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(up.getByTestId("messages")).toContainText("il reste de la place");
   await up.goto("/app/messages");
   const conv = up.getByTestId("conversation-row").first();
   await expect(conv.getByTestId("conversation-tag")).toHaveText("Organisateur");

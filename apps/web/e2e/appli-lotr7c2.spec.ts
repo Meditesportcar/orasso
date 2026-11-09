@@ -53,8 +53,14 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
   for (const theme of ["beton", "sable"] as const) {
     const { ctx, page } = await appLogin(browser, "damien@orasso.local", theme);
     if (theme === "beton") {
-      const before = await apiCall<Summary>(damien, "GET", "/me/inbox/summary");
-      expect(before.data.unseenActivity, "le seed pose des notifications non vues").toBeGreaterThan(0);
+      // Un nouvel abonné pose une notification « non vue » même si une recette précédente a ouvert la cloche de Damien_66.
+      const fan = await signUpApi(`Aw7F${unique()}`);
+      await apiCall(fan, "POST", "/users/Damien_66/follow");
+      await expect
+        .poll(async () => (await apiCall<Summary>(damien, "GET", "/me/inbox/summary")).data.unseenActivity, {
+          timeout: 20_000,
+        })
+        .toBeGreaterThan(0);
     }
     await page
       .getByRole("button", { name: /^Activité/ })
@@ -129,8 +135,14 @@ test("la bulle : « Demandes de message », demande acceptée, étiquette « Org
   const uCookie = await login(`${u.toLowerCase()}@e2e.orasso.test`);
   const structures = await apiCall<{ id: string }>(uCookie, "GET", "/structures/by-slug/meditesportcar");
   expect(structures.status).toBe(200);
-  const sent = await apiCall(uCookie, "POST", `/structures/${structures.data.id}/conversation`, {});
+  const sent = await apiCall<{ id: string }>(uCookie, "POST", `/structures/${structures.data.id}/conversation`, {});
   expect(sent.status).toBeLessThan(300);
+  // Une conversation vide n'est pas listée : U écrit son premier message.
+  const first = await apiCall(uCookie, "POST", `/conversations/${sent.data.id}/messages`, {
+    body: "Bonjour, il reste de la place ?",
+    clientId: crypto.randomUUID(),
+  });
+  expect(first.status).toBeLessThan(300);
   const second = await appLogin(browser, `${u.toLowerCase()}@e2e.orasso.test`, "sable");
   await second.page.goto("/messages");
   await skipOpening(second.page);
