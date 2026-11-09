@@ -88,6 +88,8 @@ export const profiles = pgTable(
     mutedTypes: text("muted_types").array().notNull().default(sql`'{}'::text[]`),
     /** Widgets de l'accueil réglés par l'utilisateur (posée au lot 15, utilisée au lot 30) ; null = par défaut. */
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
+    /** Lot R7e1 : « Moins de ce genre » du Fil, genres de carte (`FeedCardKind`) dont la personne veut voir moins. */
+    feedLessKinds: text("feed_less_kinds").array().notNull().default(sql`'{}'::text[]`),
     /** Lot 17 : nombre d'amis acceptés. ARCHIVE depuis le lot R6b (plus lu ni écrit) ; retiré avec la table `friendships`. */
     friendsCount: integer("friends_count").notNull().default(0),
     /**
