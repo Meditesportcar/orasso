@@ -133,16 +133,16 @@ for (const v of [
   });
 }
 
-// Tour 2 : les Ã©crans Ã  comparer Ã  la maquette (`og_men`, `og_add`, `og_mine`, `sk_encours_si_1`), BÃ©ton et Sable, 384 police 1
-// et 1,3. Une story neuve de Kenji_66 qui identifie la structure : la liste, l'Ã©cran d'ajout (avant l'ajout), puis Â« Ma
-// story Â» et la visionneuse de Damien (aprÃ¨s l'ajout par l'API). CAPTURES_DIR = `â€¦/lot-r7h-captures/paires-reel`.
+// Tour 2 : les écrans à comparer à la maquette (`og_men`, `og_add`, `og_mine`, `sk_encours_si_1`), Béton et Sable, 384 police 1
+// et 1,3. Une story neuve de Kenji_66 qui identifie la structure : la liste, l'écran d'ajout (avant l'ajout), puis « Ma
+// story » et la visionneuse de Damien (après l'ajout par l'API). CAPTURES_DIR = `…/lot-r7h-captures/paires-reel`.
 for (const v of [
   { theme: "beton", scale: 1, tag: "384" },
   { theme: "sable", scale: 1, tag: "384" },
   { theme: "beton", scale: 1.3, tag: "384x13" },
   { theme: "sable", scale: 1.3, tag: "384x13" },
 ] as const) {
-  test(`paires maquette ${v.theme} ${v.tag} : Mentions, Ajouter, Ma story, visionneuse avec crÃ©dit`, async ({
+  test(`paires maquette ${v.theme} ${v.tag} : Mentions, Ajouter, Ma story, visionneuse avec crédit`, async ({
     browser,
   }) => {
     test.skip(!APP, "Appli : lancer avec APP_URL");
@@ -156,7 +156,7 @@ for (const v of [
     const kenji = await login("kenji@orasso.local");
     const id = await publishStory(kenji, {
       audience: "public",
-      caption: "Concours d'Ã©lÃ©gance Ã  15 h, on se place",
+      caption: "Concours d'élégance à 15 h, on se place",
       tags: [{ kind: "structure", id: structure }],
     });
     const name = (s: string) => `${s}-${v.theme}-${v.tag}`;
