@@ -4,7 +4,6 @@
 // reste affichée.
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useState } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
 
 import { PrivateImage } from "@/features/messages/PrivateImage";
@@ -17,7 +16,8 @@ export function ReportVideo({
 }: {
   url: string;
   posterUrl: string | null;
-  style: StyleProp<ViewStyle>;
+  /** Largeur et hauteur du cadre (le même pour la vidéo et pour sa vignette). */
+  style: { width: "100%"; height: number };
 }) {
   const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
   useEffect(() => {
