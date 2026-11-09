@@ -822,6 +822,27 @@ describe("lire, retirer, flamme", () => {
     expect(new Set(all.map((p) => p.id)).size).toBe(25);
     expect(all.every((p) => p.mine)).toBe(true);
   });
+
+  it("GET /me/feed-posts : des publications de la même milliseconde (microsecondes différentes) ne sont ni perdues ni répétées", async () => {
+    const u = await person("Mes_Pubs_Micro");
+    // 25 publications dans la même milliseconde, à la microseconde près (PostgreSQL garde 6 décimales).
+    const ids: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      const id = await dbPost(u);
+      await pool.query(`update feed_posts set created_at = $2::timestamptz + ($3 || ' microseconds')::interval where id = $1`, [
+        id,
+        "2026-05-01T10:00:00.000Z",
+        String(i * 30),
+      ]);
+      ids.push(id);
+    }
+    const first = await call(u, "GET", "/me/feed-posts");
+    const second = await call(u, "GET", `/me/feed-posts?cursor=${encodeURIComponent(first.json.nextCursor)}`);
+    const got = [...first.json.items, ...second.json.items].map((p: { id: string }) => p.id);
+    expect(got).toHaveLength(25);
+    expect([...got].sort()).toEqual([...ids].sort());
+    expect(second.json.nextCursor).toBeNull();
+  });
 });
 
 describe("signalement et modération", () => {
