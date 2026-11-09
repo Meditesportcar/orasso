@@ -417,6 +417,43 @@ export const votesService = {
     return { ok: true };
   },
 
+  /**
+   * `POST /events/:id/votes/all-categories` : remet « Toutes catégories » (lot R7l2) quand l'organisateur l'a retiré. La
+   * ligne retirée reste en base (l'index unique la compte) : on lui ôte `deleted_at`, elle revient en tête de la liste
+   * avec son tampon rare. Sans effet si le vote est déjà là ; créé s'il n'a jamais existé (événement ancien).
+   */
+  async restoreAllCategories(v: Viewer, eventId: string): Promise<VoteManageItem> {
+    const event = await eventsRepo.byId(eventId);
+    await teamAccess(v, event, true);
+    assertEditable(event);
+    const id = await withTx(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(eventVotes)
+        .where(and(eq(eventVotes.eventId, eventId), eq(eventVotes.kind, "all_categories")))
+        .for("update");
+      if (!row) {
+        await ensureAllCategories(tx, event);
+        const created = await tx.query.eventVotes.findFirst({
+          where: and(eq(eventVotes.eventId, eventId), eq(eventVotes.kind, "all_categories")),
+        });
+        if (!created) throw new Error("Vote « Toutes catégories » non créé");
+        return created.id;
+      }
+      if (row.deletedAt) {
+        const active = await activeVotes(tx, eventId);
+        const first = active.reduce((m, x) => Math.min(m, x.position), 1);
+        await tx
+          .update(eventVotes)
+          .set({ deletedAt: null, position: first - 1, updatedAt: now() })
+          .where(eq(eventVotes.id, row.id));
+      }
+      return row.id;
+    });
+    votesRealtime.candidatesChanged(eventId, id);
+    return this.afterWrite(eventId, id);
+  },
+
   /** `PUT /events/:id/votes/order` : l'ordre de l'organisateur ; tous les votes de l'événement, ni plus ni moins. */
   async order(v: Viewer, eventId: string, ids: string[]): Promise<VoteManage> {
     const event = await eventsRepo.byId(eventId);

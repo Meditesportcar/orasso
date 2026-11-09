@@ -61,4 +61,5 @@ export * from "./labels/units.fr";
 export * from "./labels/vehicle-add.fr";
 export * from "./labels/vehicles.fr";
 export * from "./labels/votes.fr";
+export * from "./labels/votes-orga.fr";
 export * from "./labels/weather.fr";

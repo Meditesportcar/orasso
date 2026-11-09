@@ -292,6 +292,32 @@ describe("création et droits", () => {
     expect(again.filter((r) => r.kind === "all_categories")).toHaveLength(1);
   });
 
+  it("« Toutes catégories » retiré se remet (lot R7l2) : en tête, avec son tampon rare, réservé à l'organisateur", async () => {
+    const id = await allCategoriesId();
+    const second = await createTheme();
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    expect((await api(orga, "GET", "/manage")).json.items.map((i: { id: string }) => i.id)).toEqual([second]);
+    // Le staff, un participant et un visiteur ne le remettent pas.
+    expect((await api(staff, "POST", "/all-categories")).status).toBe(403);
+    expect((await api(p.kenji.u, "POST", "/all-categories")).status).toBe(403);
+    expect((await api(outsider, "POST", "/all-categories")).status).toBe(403);
+    const back = await api(coOrga, "POST", "/all-categories");
+    expect(back.status).toBe(201);
+    expect(back.json).toMatchObject({ id, title: "Toutes catégories", kind: "all_categories", rareStamp: true });
+    const items = (await api(orga, "GET", "/manage")).json.items as { id: string }[];
+    expect(items.map((i) => i.id)).toEqual([id, second]);
+    // Déjà là : sans effet (pas de doublon, pas d'erreur).
+    expect((await api(orga, "POST", "/all-categories")).status).toBe(201);
+    const rows = await db.query.eventVotes.findMany({ where: eq(eventVotes.eventId, eventId) });
+    expect(rows.filter((r) => r.kind === "all_categories" && !r.deletedAt)).toHaveLength(1);
+    // Un événement terminé ne change plus : retiré puis après la fin, il ne revient pas.
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    clock.set(paris(10, 17, 23));
+    const over = await api(orga, "POST", "/all-categories");
+    expect(over.status).toBe(409);
+    expect(over.json.error.code).toBe("event_over");
+  });
+
   it("autant de votes qu'on veut (au-delà de 9), plafond technique à 50", async () => {
     for (let i = 0; i < 12; i++) await createTheme({ ...japanese, title: `Concours ${i + 1}` });
     expect((await api(orga, "GET", "/manage")).json.items).toHaveLength(13);

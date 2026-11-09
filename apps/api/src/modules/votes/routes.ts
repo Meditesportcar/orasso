@@ -31,6 +31,9 @@ export const votesRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await votesService.create(v, uuidParam(c, "id"), await body(c, voteCreateSchema)), 201);
   })
+  .post("/events/:id/votes/all-categories", async (c) =>
+    c.json(await votesService.restoreAllCategories(await requireUser(c), uuidParam(c, "id")), 201),
+  )
   .patch("/events/:id/votes/:voteId", async (c) => {
     const v = await requireUser(c);
     return c.json(

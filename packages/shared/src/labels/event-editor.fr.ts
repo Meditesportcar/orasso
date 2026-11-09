@@ -11,6 +11,7 @@ export const eventStepLabels: Record<EventWizardStep, string> = {
   criteres: "Critères",
   "avant-premiere": "Avant-première",
   reglement: "Règlement",
+  votes: "Votes",
   affiche: "Affiche",
   publier: "Tout est prêt",
 };
