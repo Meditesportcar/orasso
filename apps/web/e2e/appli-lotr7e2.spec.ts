@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, unique } from "./helpers";
 import { r5Crew } from "./lotr5c2-setup";
 import { postText } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
@@ -145,6 +145,7 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await expect(page.getByTestId("feed-menu-why")).toBeVisible();
   await expect(page.getByTestId("feed-menu-less")).toBeVisible();
   await expect(page.getByTestId("feed-menu-report")).toBeVisible();
+  await page.waitForTimeout(900);
   await shot(page, "menu-trois-lignes");
   await page.getByTestId("feed-menu-why").click();
   await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
@@ -319,7 +320,7 @@ test("vie privée : la publication d'un compte privé n'apparaît qu'à son abon
   expect((await apiCall(null, "GET", `/feed-posts/${marcPost}`)).status).toBe(401);
 
   // Jamais un contenu de crew : un crew neuf, une publication de crew, et le Fil de ses membres ne la contient pas.
-  const crew = await r5Crew("r7e2");
+  const crew = await r5Crew(unique().slice(-6));
   const marker = "SECRET-CREW-R7E2";
   await postText(crew, crew.chef, marker);
   for (const who of [crew.chef.cookie, kenji]) {
@@ -346,6 +347,7 @@ test("captures Béton et Sable, 384 et 390 px, police 1 et 1,3 : Fil, menu, publ
       await loaded(page);
       await shot(page, `fil-${tag}`);
       await page.getByTestId("feed-card-more").first().click();
+      await page.waitForTimeout(900);
       await shot(page, `fil-menu-${tag}`);
       await page.getByTestId("feed-menu-why").click();
       await shot(page, `fil-pourquoi-${tag}`);

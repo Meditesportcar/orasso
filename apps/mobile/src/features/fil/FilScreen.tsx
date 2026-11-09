@@ -2,7 +2,7 @@
 // bouton « Publier », les trois filtres (« Pour toi », « Autour de moi », « Abonnements », mémorisés par compte), puis le fil
 // mélangé : une carte par genre, chacune avec sa raison et son « ⋯ ». Mode A (bande ORASSO, barre d'onglets). Liste
 // paginée par le curseur de l'API (`useFeed`) ; une erreur n'est jamais une liste vide ; un état vide par filtre.
-import { EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedCard, feedCardKindLabels, feedScreenFilters, feedScreenLabels as L } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
@@ -13,8 +13,9 @@ import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { Seg, SmButton } from "@/ui/Kit";
+import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
+import { Overlay } from "@/ui/Overlay";
 import { TabScreen } from "@/ui/Screens";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 import { Waiting } from "@/ui/Waiting";
@@ -138,7 +139,16 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
       >
         {L.publish}
       </SmButton>
-      <Seg testID="fil-filters" options={feedScreenFilters} value={feed.filter} onChange={feed.setFilter} />
+      {/* Trois puces qui passent à la ligne (police agrandie) : un libellé ne se coupe jamais. */}
+      <View style={styles.filters} accessibilityRole="tablist" testID="fil-filters">
+        {feedScreenFilters.map((o) => (
+          <View key={o.value} testID={`fil-filters-${o.value}`}>
+            <Chip accessibilityRole="tab" selected={feed.filter === o.value} onPress={() => feed.setFilter(o.value)}>
+              {o.label}
+            </Chip>
+          </View>
+        ))}
+      </View>
       {notice ? (
         <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" testID="fil-notice">
           {notice}
@@ -198,26 +208,30 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           {L.end}
         </Text>
       ) : null}
-      <CardMenu
-        card={menu}
-        onClose={() => setMenu(null)}
-        onWhy={(card) => {
-          setMenu(null);
-          setWhy(card);
-        }}
-        onLess={(card) => void less(card)}
-        onReport={(card) => {
-          setMenu(null);
-          if (card.kind === "feed_post") openReport({ type: "feed_post", id: card.payload.post.id });
-        }}
-        onRemove={(card) => void remove(card)}
-      />
-      <WhyThisSheet card={why} onClose={() => setWhy(null)} />
+      {/* Les feuilles couvrent l'écran : posées dans la zone des feuilles, hors de la liste qui défile. */}
+      <Overlay>
+        <CardMenu
+          card={menu}
+          onClose={() => setMenu(null)}
+          onWhy={(card) => {
+            setMenu(null);
+            setWhy(card);
+          }}
+          onLess={(card) => void less(card)}
+          onReport={(card) => {
+            setMenu(null);
+            if (card.kind === "feed_post") openReport({ type: "feed_post", id: card.payload.post.id });
+          }}
+          onRemove={(card) => void remove(card)}
+        />
+        <WhyThisSheet card={why} onClose={() => setWhy(null)} />
+      </Overlay>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  filters: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   list: { gap: space3 },
   less: {
     flexDirection: "row",
