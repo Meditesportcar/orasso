@@ -5,7 +5,7 @@
 import { fromWallTime, HOUR } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createEvent,
@@ -23,6 +23,7 @@ import { applications, crewPostPhotos, crewPosts, crews, notifications, profiles
 import { storage } from "../../../lib/storage";
 import { withTx } from "../../../lib/tx";
 import { notificationsService } from "../../notifications/service";
+import { retryRemove } from "../../vehicles/photos-blur";
 import { crewsService } from "../service";
 
 afterAll(async () => {
@@ -101,6 +102,29 @@ async function photoPost(u: TestUser, crewId: string, n = 2) {
 }
 
 const path = (url: string) => url.replace(/^\/api/, "");
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Une connexion à part tient le verrou du compte (celui que prend une sanction avant de toucher au contenu). */
+async function holdAccountLock(userId: string) {
+  const client = await pool.connect();
+  await client.query("begin");
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [`moderation:${userId}`]);
+  return client;
+}
+
+/** Attend (3 s au plus) qu'une requête de la base soit en attente d'un verrou : la synchronisation explicite des tests. */
+async function waitForLockWait(): Promise<boolean> {
+  const end = Date.now() + 3000;
+  while (Date.now() < end) {
+    const r = await pool.query<{ n: number }>(
+      "select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+    );
+    if ((r.rows[0]?.n ?? 0) > 0) return true;
+    await sleep(40);
+  }
+  return false;
+}
 
 describe("événement privé (sur invitation)", () => {
   it("jamais révélé à un membre qui ne peut pas le voir : publication, crew retenu, composeur", async () => {
@@ -357,6 +381,149 @@ describe("modération, chef, idempotence, commentaires", () => {
     expect((await req(lea, "DELETE", `/crews/${crew.id}/posts/${post.id}`)).status).toBe(404);
     expect((await req(kenji, "DELETE", `/crews/${crew.id}/posts/${post.id}`)).status).toBe(204);
     expect(await db.select().from(crewPostPhotos)).toHaveLength(0);
+  });
+
+  it("preuve d'un signalement : retirée par son auteur, la publication garde ses photos jusqu'à la décision", async () => {
+    const { nina, lea, crew } = await crewOf3();
+    const moderator = await signUp("Modo_Preuve", { role: "moderator", twoFactor: true });
+    const decide = (id: string, status: string) =>
+      req(moderator, "POST", `/admin/reports/${id}/status`, { status, note: null });
+    const reportOn = async (postId: string) =>
+      (await req(lea, "POST", "/reports", { targetType: "crew_post", targetId: postId, reason: "shocking" })).json
+        .id as string;
+
+    // Sans signalement : photos effacées tout de suite (inchangé).
+    const plain = await photoPost(nina, crew.id, 1);
+    const [plainPhoto] = await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, plain.id));
+    expect((await req(nina, "DELETE", `/crews/${crew.id}/posts/${plain.id}`)).status).toBe(204);
+    expect(await storage.get(plainPhoto!.storageKey)).toBeNull();
+
+    // Avec un signalement ouvert : retirée du fil, mais fichiers et lignes gardés.
+    const post = await photoPost(nina, crew.id, 2);
+    const keys = (await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).map(
+      (r) => r.storageKey,
+    );
+    const reportId = await reportOn(post.id);
+    expect((await req(nina, "DELETE", `/crews/${crew.id}/posts/${post.id}`)).status).toBe(204);
+    expect((await req(lea, "GET", `/crews/${crew.id}/photos/${keys[0]!.split("/").pop()}`)).status).toBe(404);
+    for (const k of keys) expect(await storage.get(k)).not.toBeNull();
+    const detail = await req(moderator, "GET", `/admin/reports/${reportId}`);
+    expect(detail.json.target.removed).toBe(true);
+    expect((await req(moderator, "GET", path(detail.json.target.imageUrls[0]))).status).toBe(200);
+
+    // À la décision : tout part (lignes, envois, fichiers).
+    expect((await decide(reportId, "reviewing")).status).toBe(200);
+    for (const k of keys) expect(await storage.get(k)).not.toBeNull();
+    expect((await decide(reportId, "resolved_no_action")).status).toBe(200);
+    for (const k of keys) expect(await storage.get(k)).toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).toHaveLength(0);
+  });
+
+  it("tour 2 : le chef qui retire la publication signalée garde les photos jusqu'à la décision, qui les efface", async () => {
+    const { kenji, nina, lea, crew } = await crewOf3();
+    const moderator = await signUp("Modo_Chef", { role: "moderator", twoFactor: true });
+    const post = await photoPost(nina, crew.id, 2);
+    const keys = (await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).map(
+      (r) => r.storageKey,
+    );
+    const report = await req(lea, "POST", "/reports", {
+      targetType: "crew_post",
+      targetId: post.id,
+      reason: "shocking",
+    });
+    expect(report.status).toBe(201);
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}/posts/${post.id}`)).status).toBe(204);
+    // retirée du fil, mais fichiers et lignes gardés pour la modération
+    for (const k of keys) expect(await storage.get(k)).not.toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).toHaveLength(2);
+    const detail = await req(moderator, "GET", `/admin/reports/${report.json.id}`);
+    expect(detail.json.target.removed).toBe(true);
+    expect((await req(moderator, "GET", path(detail.json.target.imageUrls[0]))).status).toBe(200);
+    const decided = await req(moderator, "POST", `/admin/reports/${report.json.id}/status`, {
+      status: "resolved_no_action",
+      note: null,
+    });
+    expect(decided.status).toBe(200);
+    for (const k of keys) expect(await storage.get(k)).toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).toHaveLength(0);
+  });
+
+  it("tour 2 : « crews quittés » garde les photos d'une publication signalée jusqu'à la décision, efface les autres", async () => {
+    const { nina, lea, crew } = await crewOf3();
+    const moderator = await signUp("Modo_Quittes", { role: "moderator", twoFactor: true });
+    const reported = await photoPost(nina, crew.id, 1);
+    const plain = await photoPost(nina, crew.id, 1);
+    const keyOf = async (postId: string) =>
+      (await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, postId)))[0]!.storageKey;
+    const reportedKey = await keyOf(reported.id);
+    const plainKey = await keyOf(plain.id);
+    const report = await req(lea, "POST", "/reports", {
+      targetType: "crew_post",
+      targetId: reported.id,
+      reason: "shocking",
+    });
+    expect(report.status).toBe(201);
+    expect((await req(nina, "DELETE", `/crews/${crew.id}/members/${nina.id}`)).status).toBe(204);
+    expect((await req(nina, "DELETE", "/me/crew-content/left-crews")).json).toEqual({ posts: 2, comments: 0 });
+    expect(await storage.get(plainKey)).toBeNull();
+    expect(await storage.get(reportedKey)).not.toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, reported.id))).toHaveLength(1);
+    const decided = await req(moderator, "POST", `/admin/reports/${report.json.id}/status`, {
+      status: "resolved_no_action",
+      note: null,
+    });
+    expect(decided.status).toBe(200);
+    expect(await storage.get(reportedKey)).toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, reported.id))).toHaveLength(0);
+  });
+
+  it("tour 2 : la décision qui retire la publication, stockage en panne : la tâche de reprise efface la photo", async () => {
+    const { nina, lea, crew } = await crewOf3();
+    const admin = await signUp("Admin_Reprise", { role: "super_admin", twoFactor: true });
+    const post = await photoPost(nina, crew.id, 2);
+    const keys = (await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).map(
+      (r) => r.storageKey,
+    );
+    const report = await req(lea, "POST", "/reports", {
+      targetType: "crew_post",
+      targetId: post.id,
+      reason: "shocking",
+    });
+    expect(report.status).toBe(201);
+    // le stockage tombe pour la première photo seulement
+    const spy = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    const done = await req(admin, "POST", `/admin/reports/${report.json.id}/sanction`, { hideContent: true });
+    spy.mockRestore();
+    expect(done.status).toBe(200);
+    const left: string[] = [];
+    for (const k of keys) if (await storage.get(k)) left.push(k);
+    expect(left).toHaveLength(1);
+    const key = left[0]!;
+    // plus aucune ligne pour la retrouver : seule la tâche `storage.remove` peut encore l'effacer
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).toHaveLength(0);
+    expect(clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === key)).toBeTruthy();
+    await retryRemove(key);
+    expect(await storage.get(key)).toBeNull();
+    // un autre nom du même dossier n'est jamais effacé par la tâche
+    await storage.put("private/crew-posts/intrus.webp", Buffer.from("x"));
+    await retryRemove("private/crew-posts/intrus.webp");
+    expect(await storage.get("private/crew-posts/intrus.webp")).not.toBeNull();
+    await storage.remove("private/crew-posts/intrus.webp");
+  });
+
+  it("tour 2 : signalement ∥ sanction : le compte de l'auteur est verrouillé avant la publication, aucune des deux requêtes n'échoue", async () => {
+    const { nina, lea, crew } = await crewOf3();
+    const post = await photoPost(nina, crew.id, 1);
+    // la sanction tient le compte de l'auteur ; le signalement doit l'attendre sans avoir pris la publication
+    const sanction = await holdAccountLock(nina.id);
+    const reporting = req(lea, "POST", "/reports", { targetType: "crew_post", targetId: post.id, reason: "spam" });
+    expect(await waitForLockWait()).toBe(true);
+    // la sanction retire ensuite la publication : son verrou est libre (sinon : interblocage, une requête échoue)
+    await sanction.query("set local lock_timeout = '5s'");
+    await sanction.query("select id from crew_posts where id = $1 for update", [post.id]);
+    await sanction.query("commit");
+    sanction.release();
+    expect((await reporting).status).toBe(201);
   });
 
   it("création idempotente : même identifiant, même publication, ni doublon ni photo « déjà utilisée »", async () => {

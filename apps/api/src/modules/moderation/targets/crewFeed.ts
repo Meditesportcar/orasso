@@ -24,7 +24,7 @@ import { storage } from "../../../lib/storage";
 import { audit } from "../../admin/audit";
 import { requireCrewMember } from "../../crews/feed/access";
 import { CREW_POST_FOLDER } from "../../crews/feed/posts";
-import { softDeletePost } from "../../crews/feed/service";
+import { hasOpenCrewReport, purgePhotos, softDeletePost } from "../../crews/feed/service";
 import { signalCrew } from "../../crews/live";
 import { goneView, type TargetRules, UUID_RE } from "./types";
 
@@ -88,6 +88,12 @@ async function crewName(crewId: string) {
 
 export const crewPostTarget: TargetRules = {
   type: "crew_post",
+  // Même verrou que le retrait par l'auteur (`select … for update` sur la publication) : création d'un signalement,
+  // décision et retrait se suivent l'un après l'autre, et chacun relit l'état des autres sous ce verrou.
+  async lock(tx, targetId) {
+    if (!UUID_RE.test(targetId)) return;
+    await tx.select({ id: crewPosts.id }).from(crewPosts).where(eq(crewPosts.id, targetId)).for("update");
+  },
   async resolve(v, targetId) {
     const post = await postRow(targetId);
     if (!post || post.deletedAt) throw notFound("Publication introuvable");
@@ -125,10 +131,25 @@ export const crewPostTarget: TargetRules = {
   },
   async remove(tx, v, report, after) {
     const [post] = await tx.select().from(crewPosts).where(eq(crewPosts.id, report.targetId)).for("update");
-    if (!post || post.deletedAt) return [];
+    if (!post) return [];
+    // Déjà retirée par son auteur (photos gardées pour la preuve) : la décision les efface.
+    if (post.deletedAt) return purgePhotos(tx, post.id);
     // Lot R6a, tour 2 : la publication retirée par la modération quitte aussi les pages ouvertes du crew.
     signalCrew(after, post.crewId, "post.removed", { postId: post.id });
     return softDeletePost(tx, post.id, v.user.id);
+  },
+  // Retirée par son auteur pendant que le signalement attendait : les photos étaient gardées pour la preuve. Une fois
+  // la dernière décision prise sur ce contenu, elles partent.
+  async afterDecision(tx, report) {
+    if (!UUID_RE.test(report.targetId)) return [];
+    const [post] = await tx
+      .select({ deletedAt: crewPosts.deletedAt })
+      .from(crewPosts)
+      .where(eq(crewPosts.id, report.targetId))
+      .for("update");
+    if (!post?.deletedAt) return [];
+    if (await hasOpenCrewReport(tx, report.targetId)) return [];
+    return purgePhotos(tx, report.targetId);
   },
 };
 

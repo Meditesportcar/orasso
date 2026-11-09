@@ -316,10 +316,17 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
     await expect(page.getByTestId("vote-winner")).toBeVisible();
 
     // Carte à partager : trois styles, aperçu, téléchargement de la story.
-    await page.goto("/app/garage");
-    // Lot R4c : chaque véhicule a un menu « ⋯ » (fermé) dont les liens visent aussi /app/garage/… : la fiche s'ouvre
+    await page.goto("/app/moi?onglet=garage");
+    // Lot R7b1 : le garage est un onglet du Profil (`/app/garage` redirige en 302). Lot R4c : chaque véhicule a un menu
+    // « ⋯ » (fermé) dont les liens visent aussi /app/garage/… : la fiche s'ouvre
     // par le lien de la carte.
-    await page.locator("a.g-card-link").first().click();
+    // Un clic avant la fin du chargement de l'onglet est perdu (instabilité constatée) : on attend la carte, puis on
+    // retouche jusqu'à ce que la fiche du véhicule s'ouvre.
+    await expect(page.getByTestId("garage-main")).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      await page.locator("a.g-card-link").first().click({ timeout: 5_000 });
+      await expect(page).toHaveURL(/\/app\/garage\/[0-9a-f-]{36}/, { timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
     await expect(page.getByTestId("share-card")).toBeVisible();
     // Le choix du style est un état du navigateur : un clic avant l'hydratation est perdu, on retouche jusqu'à ce qu'il compte.
     await expect(async () => {

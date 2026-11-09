@@ -15,7 +15,7 @@ import {
   type PlateRect,
   type ReportReason,
 } from "@orasso/shared";
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
@@ -262,19 +262,20 @@ export const feedPostsService = {
   async mine(v: Viewer, cursor: string | undefined): Promise<{ items: FeedPostView[]; nextCursor: string | null }> {
     rateLimit("feedRead", v.user.id);
     const after = decode(cursor);
+    // Le curseur porte des millisecondes (JavaScript) : on compare et on trie à la milliseconde, pas à la microseconde de
+    // PostgreSQL, sinon des publications de la même milliseconde seraient sautées entre deux pages.
+    const at = sql<Date>`date_trunc('milliseconds', ${feedPosts.createdAt})`;
     const rows = await db
-      .select({ id: feedPosts.id, createdAt: feedPosts.createdAt })
+      .select({ id: feedPosts.id, createdAt: at.mapWith(feedPosts.createdAt) })
       .from(feedPosts)
       .where(
         and(
           eq(feedPosts.authorId, v.user.id),
           isNull(feedPosts.deletedAt),
-          after
-            ? or(lt(feedPosts.createdAt, after.at), and(eq(feedPosts.createdAt, after.at), lt(feedPosts.id, after.id)))
-            : undefined,
+          after ? or(sql`${at} < ${after.at}`, and(sql`${at} = ${after.at}`, lt(feedPosts.id, after.id))) : undefined,
         ),
       )
-      .orderBy(desc(feedPosts.createdAt), desc(feedPosts.id))
+      .orderBy(desc(at), desc(feedPosts.id))
       .limit(PAGE + 1);
     const page = rows.slice(0, PAGE);
     const last = page.at(-1);

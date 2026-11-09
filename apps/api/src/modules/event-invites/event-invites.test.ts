@@ -9,6 +9,7 @@ import {
   createEvent,
   createStructure,
   createVehicle,
+  quietHours,
   resetDb,
   seedReference,
   signUp,
@@ -39,6 +40,7 @@ let clock: ReturnType<typeof useClock>;
 beforeEach(async () => {
   await resetDb();
   clock = useClock(new Date());
+  quietHours(false); // les invitations ne dépendent pas de l'heure réelle
   ref = await seedReference();
 });
 
