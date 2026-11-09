@@ -774,7 +774,7 @@ button.story-view__pill {
   gap: 2px;
   min-width: 140px;
 }
-.story-view__shared a {
+.story-view__shared-link {
   color: inherit;
   text-underline-offset: 2px;
 }

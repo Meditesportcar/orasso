@@ -140,7 +140,11 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
     });
     await shot(sarah2.page, "ma-story-sable", true);
     sarah2.page.once("dialog", (d) => void d.accept());
-    await sarah2.page.getByTestId("mystory-row").filter({ hasText: "Story de Kenji_66" }).getByTestId("mystory-remove").click();
+    await sarah2.page
+      .getByTestId("mystory-row")
+      .filter({ hasText: "Story de Kenji_66" })
+      .getByTestId("mystory-remove")
+      .click();
     await expect
       .poll(
         async () =>

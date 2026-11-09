@@ -14,7 +14,11 @@ export function SharedByLine({ story, authorName }: { story: StoryView; authorNa
       ) : (
         <>
           {full.slice(0, at)}
-          <a href={`/u/${encodeURIComponent(pseudo)}`} data-testid="story-shared-by-author">
+          <a
+            className="story-view__shared-link"
+            href={`/u/${encodeURIComponent(pseudo)}`}
+            data-testid="story-shared-by-author"
+          >
             {pseudo}
           </a>
           {full.slice(at + pseudo.length)}

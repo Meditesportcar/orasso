@@ -91,7 +91,11 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
       // « Retirer » : la copie seule.
       await page.goto(`/orga/roues-libres-66/e/${event?.id}`);
       await page.waitForLoadState("networkidle");
-      await page.getByTestId("orga-mystory-row").filter({ hasText: "Story de Kenji_66" }).getByTestId("orga-mystory-remove").click();
+      await page
+        .getByTestId("orga-mystory-row")
+        .filter({ hasText: "Story de Kenji_66" })
+        .getByTestId("orga-mystory-remove")
+        .click();
       await expect(page.getByTestId("orga-story-notice")).toContainText("Retirée de ta story");
       expect(
         (await sql("select 1 from stories where shared_from_story_id = $1 and deleted_at is null", [id])).length,
