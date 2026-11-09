@@ -5,6 +5,7 @@ import {
   type AudienceRanked,
   canSeeRanking,
   canVoteIn,
+  decodeRotatingPayload,
   type EventVote,
   isOwnVehicle,
   rankingHiddenReason,
@@ -23,6 +24,7 @@ import {
   type VoteUpdate,
   type VoteView,
   verifyPassPayload,
+  verifyRotatingCode,
   voteClosesAt,
   voteCreateSchema,
   voteOpensAt,
@@ -64,6 +66,7 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { type Executor, withTx } from "../../lib/tx";
 import { parse } from "../../lib/validate";
+import { ensureOtpSecrets } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import {
@@ -75,6 +78,7 @@ import {
   ensureAllCategories,
   enteredVehicles,
   eventVoteRows,
+  freezeCandidates,
   handCandidates,
   type LoadedVotes,
   loadEventVotes,
@@ -219,6 +223,8 @@ export const votesService = {
     rateLimit("audienceVote", v.user.id);
     const event = await visibleEvent(eventId, v);
     await withTx(async (tx, after) => {
+      // Verrou de la ligne du vote : une voix concurrente à la clôture ou au retrait attend, puis relit l'état (tour 2).
+      await lockVote(tx, voteId);
       const l = await loadEventVotes(tx, event);
       const vote = l.votes.find((x) => x.id === voteId);
       if (!vote) throw notFound("Vote introuvable");
@@ -277,6 +283,19 @@ export const votesService = {
   /** `GET /events/:id/votes/manage` : la console. Propriétaire et co-organisateurs écrivent, le staff lit. */
   async manage(v: Viewer, eventId: string): Promise<VoteManage> {
     const event = await eventsRepo.byId(eventId);
+    // La console montre tous les classements en cours de vote : un super admin n'y entre que comme sur la route passionné
+    // (2FA, demande d'assistance ouverte, trace d'audit). Tour 2 (Codex).
+    if (
+      isSuperAdmin(v) &&
+      !(await activeMembership(v.user.id, event.structureId)) &&
+      !(await isEventTeam(db, event, v))
+    ) {
+      throw new AppError(
+        403,
+        "assistance_required",
+        "Mode assistance : la structure doit demander l'aide d'Orasso pour qu'on consulte ses votes.",
+      );
+    }
     const access = await teamAccess(v, event, false);
     const l = await loadEventVotes(db, event);
     return {
@@ -292,6 +311,7 @@ export const votesService = {
     await teamAccess(v, event, true);
     assertEditable(event);
     await assertZone(event.id, input);
+    assertOpensAt(event, input);
     const id = await withTx(async (tx) => {
       await ensureAllCategories(tx, event);
       const existing = await activeVotes(tx, eventId);
@@ -313,6 +333,8 @@ export const votesService = {
           rareStamp: false,
           position,
           createdBy: v.user.id,
+          createdAt: now(),
+          updatedAt: now(),
         })
         .returning();
       if (!row) throw new Error("Vote non créé");
@@ -327,7 +349,7 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.kind === "all_categories") throw conflict("vote_fixed", voteTexts.errors.vote_fixed);
-    assertUnlocked(event, vote);
+    assertUnlocked(event, vote, await unlockedState(event, vote));
     const mode = input.candidateMode ?? vote.candidateMode;
     const openMode = input.openMode ?? vote.openMode;
     const merged = parse(voteCreateSchema, {
@@ -350,6 +372,7 @@ export const votesService = {
       durationMinutes: input.durationMinutes !== undefined ? input.durationMinutes : vote.durationMinutes,
     });
     await assertZone(event.id, merged);
+    assertOpensAt(event, merged);
     await db
       .update(eventVotes)
       .set({
@@ -369,13 +392,16 @@ export const votesService = {
   async remove(v: Viewer, eventId: string, voteId: string): Promise<{ ok: true }> {
     const event = await eventsRepo.byId(eventId);
     await teamAccess(v, event, true);
-    const vote = await ownVote(event.id, voteId);
-    const [voices] = await db.select({ n: count() }).from(audienceVotes).where(eq(audienceVotes.voteId, voteId));
-    if (Number(voices?.n ?? 0) > 0) throw conflict("vote_has_voices", voteTexts.errors.vote_has_voices);
-    await db
-      .update(eventVotes)
-      .set({ deletedAt: now(), updatedAt: now() })
-      .where(and(eq(eventVotes.id, vote.id), isNull(eventVotes.deletedAt)));
+    await ownVote(event.id, voteId);
+    await withTx(async (tx) => {
+      await lockVote(tx, voteId);
+      const [voices] = await tx.select({ n: count() }).from(audienceVotes).where(eq(audienceVotes.voteId, voteId));
+      if (Number(voices?.n ?? 0) > 0) throw conflict("vote_has_voices", voteTexts.errors.vote_has_voices);
+      await tx
+        .update(eventVotes)
+        .set({ deletedAt: now(), updatedAt: now() })
+        .where(and(eq(eventVotes.id, voteId), isNull(eventVotes.deletedAt)));
+    });
     votesRealtime.candidatesChanged(eventId, voteId);
     return { ok: true };
   },
@@ -402,7 +428,7 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.openMode === "first_entry") throw conflict("vote_not_manual", voteTexts.errors.vote_not_manual);
-    assertUnlocked(event, vote);
+    assertUnlocked(event, vote, await unlockedState(event, vote));
     await withTx(async (tx) => {
       const l = await loadEventVotes(tx, event);
       const fresh = l.votes.find((x) => x.id === voteId);
@@ -421,17 +447,22 @@ export const votesService = {
   async close(v: Viewer, eventId: string, voteId: string): Promise<VoteManageItem> {
     const event = await eventsRepo.byId(eventId);
     await teamAccess(v, event, true);
-    const vote = await ownVote(event.id, voteId);
-    const l = await loadEventVotes(db, event);
-    const fresh = l.votes.find((x) => x.id === vote.id);
-    if (!fresh || ruleOfVote(l, fresh).state !== "open") throw conflict("vote_not_open", voteTexts.errors.not_open);
-    const t = now();
-    const closed = await db
-      .update(eventVotes)
-      .set({ closedAt: t, ...(fresh.openedAt ? {} : { openedAt: t }), updatedAt: t })
-      .where(and(eq(eventVotes.id, vote.id), isNull(eventVotes.closedAt)))
-      .returning({ id: eventVotes.id });
-    if (closed.length) {
+    await ownVote(event.id, voteId);
+    const closed = await withTx(async (tx) => {
+      await lockVote(tx, voteId);
+      const l = await loadEventVotes(tx, event);
+      const fresh = l.votes.find((x) => x.id === voteId);
+      if (!fresh || ruleOfVote(l, fresh).state !== "open") throw conflict("vote_not_open", voteTexts.errors.not_open);
+      const t = now();
+      const rows = await tx
+        .update(eventVotes)
+        .set({ closedAt: t, ...(fresh.openedAt ? {} : { openedAt: t }), updatedAt: t })
+        .where(and(eq(eventVotes.id, voteId), isNull(eventVotes.closedAt)))
+        .returning({ id: eventVotes.id });
+      await freezeCandidates(tx, fresh, ruleOfVote(l, fresh).candidates);
+      return rows.length > 0;
+    });
+    if (closed) {
       votesRealtime.closed(eventId, voteId);
       await publishVotes(eventId, voteId);
     }
@@ -444,15 +475,30 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
-    assertUnlocked(event, vote);
+    assertUnlocked(event, vote, await unlockedState(event, vote));
     let applicationId: string;
     let source: "hand" | "scan" = "hand";
     if ("qr" in input) {
-      // Même vérification de signature que les lectures du staff, sans écrire de `scan_event` : le QR ne sert qu'à nommer la voiture.
-      const check = verifyPassPayload(input.qr, await signing.trustedKeys(db), ed25519Verify);
-      if (!check.ok) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
-      const pass = await db.query.accessPasses.findFirst({ where: eq(accessPasses.id, check.pass.passId) });
-      if (!pass || pass.revokedAt) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+      // Sans écrire de `scan_event` : le QR ne sert qu'à nommer la voiture. Le code tournant OR2 (celui de l'appli) est
+      // vérifié avec le secret de son pass et l'heure du serveur ; OR1 (signé, imprimé) en repli.
+      const rotating = decodeRotatingPayload(input.qr);
+      let pass: typeof accessPasses.$inferSelect | undefined;
+      if (rotating) {
+        pass = await db.query.accessPasses.findFirst({ where: eq(accessPasses.id, rotating.passId) });
+        if (!pass || pass.revokedAt) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+        const secret = (await ensureOtpSecrets(db, [pass])).get(pass.id);
+        if (!secret) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+        const check = verifyRotatingCode(input.qr, secret, now());
+        if (!check.ok) {
+          if (check.reason === "expired") throw new AppError(400, "expired_qr", voteTexts.errors.expired_qr);
+          throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+        }
+      } else {
+        const check = verifyPassPayload(input.qr, await signing.trustedKeys(db), ed25519Verify);
+        if (!check.ok) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+        pass = await db.query.accessPasses.findFirst({ where: eq(accessPasses.id, check.pass.passId) });
+        if (!pass || pass.revokedAt) throw new AppError(400, "invalid_qr", voteTexts.errors.invalid_qr);
+      }
       if (pass.eventId !== eventId) throw conflict("other_event", voteTexts.errors.other_event);
       applicationId = pass.applicationId;
       source = "scan";
@@ -475,7 +521,7 @@ export const votesService = {
     }
     await db
       .insert(eventVoteCandidates)
-      .values({ voteId, applicationId: app.id, source, addedBy: v.user.id })
+      .values({ voteId, applicationId: app.id, source, addedBy: v.user.id, addedAt: now() })
       .onConflictDoNothing();
     votesRealtime.candidatesChanged(eventId, voteId);
     return this.afterWrite(eventId, voteId);
@@ -487,7 +533,7 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
-    assertUnlocked(event, vote);
+    assertUnlocked(event, vote, await unlockedState(event, vote));
     await db
       .delete(eventVoteCandidates)
       .where(and(eq(eventVoteCandidates.voteId, voteId), eq(eventVoteCandidates.applicationId, applicationId)));
@@ -501,7 +547,13 @@ export const votesService = {
     const l = await loadEventVotes(db, event);
     const vote = l.votes.find((x) => x.id === voteId);
     if (!vote) throw notFound("Vote introuvable");
-    await scheduleVoteJobs(event, vote, l.entered[0]?.checkedInAt ?? null);
+    // Effet après validation : l'écriture est faite ; une file indisponible se journalise, le balayage (`votes.sweep`) prend
+    // la main, sans erreur rendue au client ni doublon.
+    try {
+      await scheduleVoteJobs(event, vote, ruleOfVote(l, vote).ctx);
+    } catch (error) {
+      console.error("Tâches du vote non planifiées (rattrapées par le balayage) :", error);
+    }
     const [item] = await manageItems({ ...l, votes: [vote] });
     if (!item) throw notFound("Vote introuvable");
     return item;
@@ -565,9 +617,29 @@ function assertEditable(event: EventRow) {
 }
 
 /** Rien ne change plus une fois le vote ouvert ou clos : on clôt (ARCHITECTURE-R7 § 2.7). */
-function assertUnlocked(event: EventRow, vote: VoteRow) {
+function assertUnlocked(event: EventRow, vote: VoteRow, state?: VoteState) {
   assertEditable(event);
-  if (vote.openedAt || vote.closedAt) throw conflict("vote_locked", voteTexts.errors.vote_locked);
+  if (vote.openedAt || vote.closedAt || (state && state !== "upcoming")) {
+    throw conflict("vote_locked", voteTexts.errors.vote_locked);
+  }
+}
+
+/** Verrou par l'état déduit : un vote « à l'heure » dont l'heure est passée est ouvert même si la tâche n'a rien posé. */
+async function unlockedState(event: EventRow, vote: VoteRow): Promise<VoteState> {
+  return ruleOfVote(await loadEventVotes(db, event), vote).state;
+}
+
+/** Une heure d'ouverture doit être à venir et avant la fin de l'événement (409 `opens_at_invalid`). */
+function assertOpensAt(event: EventRow, input: { openMode: string; opensAt?: Date | null }) {
+  if (input.openMode !== "at" || !input.opensAt) return;
+  if (input.opensAt <= now() || input.opensAt >= event.endsAt) {
+    throw conflict("opens_at_invalid", voteTexts.errors.opens_at_past);
+  }
+}
+
+/** Verrouille la ligne d'un vote jusqu'à la fin de la transaction (voix, clôture et retrait ne se croisent pas). */
+async function lockVote(tx: Executor, voteId: string) {
+  await tx.select({ id: eventVotes.id }).from(eventVotes).where(eq(eventVotes.id, voteId)).for("update");
 }
 
 async function ownVote(eventId: string, voteId: string): Promise<VoteRow> {

@@ -65,6 +65,8 @@ export type EventVote = {
   openedAt: Date | null;
   /** Clôture à la main. */
   closedAt: Date | null;
+  /** Création du vote : un vote créé en cours d'événement ne s'ouvre pas avant (tour 2). */
+  createdAt: Date;
 };
 
 /** Ce qui vient de l'événement et des entrées. */
@@ -73,6 +75,11 @@ export type VoteContext = {
   endsAt: Date;
   /** Premier pointage de l'événement. */
   firstCheckinAt: Date | null;
+  /**
+   * Quand le 2e candidat de CE vote est devenu disponible (entré, et choisi pour un vote à la main) : l'instant où le vote
+   * a pu s'ouvrir « au premier pointage » (tour 2). `null` tant qu'il n'y en a pas deux.
+   */
+  candidatesReadyAt: Date | null;
   /** Candidats de CE vote déjà entrés. */
   candidatesEntered: number;
 };
@@ -81,15 +88,27 @@ export type VoteContext = {
 export const VOTE_MIN_CANDIDATES = AUDIENCE_PRIZE_MIN_VEHICLES;
 
 /** Début du vote, constaté ou prévu ; `null` pour un vote à lancer à la main qui ne l'est pas encore. */
-export function voteOpensAt(vote: EventVote, ctx: Pick<VoteContext, "firstCheckinAt">): Date | null {
+export function voteOpensAt(
+  vote: EventVote,
+  ctx: Pick<VoteContext, "firstCheckinAt" | "candidatesReadyAt">,
+): Date | null {
   if (vote.openedAt) return vote.openedAt;
   if (vote.openMode === "at") return vote.opensAt;
-  if (vote.openMode === "first_entry") return ctx.firstCheckinAt;
+  if (vote.openMode === "first_entry") {
+    // « Toutes catégories » : au premier pointage de l'événement. Un vote à thème : quand ses deux premiers candidats sont
+    // là, et jamais avant sa création (tour 2) ; sa durée court depuis.
+    if (vote.kind === "all_categories") return ctx.firstCheckinAt;
+    if (!ctx.candidatesReadyAt) return null;
+    return ctx.candidatesReadyAt > vote.createdAt ? ctx.candidatesReadyAt : vote.createdAt;
+  }
   return null;
 }
 
 /** Fin du vote : début + durée, au plus tard la fin de l'événement ; une clôture à la main l'avance. */
-export function voteClosesAt(vote: EventVote, ctx: Pick<VoteContext, "endsAt" | "firstCheckinAt">): Date {
+export function voteClosesAt(
+  vote: EventVote,
+  ctx: Pick<VoteContext, "endsAt" | "firstCheckinAt" | "candidatesReadyAt">,
+): Date {
   const start = voteOpensAt(vote, ctx);
   const byDuration = start && vote.durationMinutes ? new Date(start.getTime() + vote.durationMinutes * 60_000) : null;
   const natural = byDuration && byDuration < ctx.endsAt ? byDuration : ctx.endsAt;

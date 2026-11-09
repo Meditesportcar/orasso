@@ -39,6 +39,7 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { isVerifiedStaff } from "../passport/presence";
 import { passportService } from "../passport/service";
+import { enteredVehicles } from "../votes/context";
 import { votesService } from "../votes/service";
 import { projectedPodiumPoints } from "../votes/settle";
 
@@ -158,7 +159,8 @@ export const recapService = {
       });
       if (!done) reviewApplicationId = me.entry.applicationId;
     }
-    const vehiclesCount = prize.of;
+    // Fréquentation : les véhicules entrés, sans dépendre de l'existence du vote « Toutes catégories » (tour 2).
+    const vehiclesCount = (await enteredVehicles(db, eventId)).length;
     return {
       event: {
         id: event.id,

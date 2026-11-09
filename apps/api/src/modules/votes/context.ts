@@ -118,31 +118,65 @@ export const toRuleVote = (row: VoteRow): EventVote => ({
   durationMinutes: row.durationMinutes,
   openedAt: row.openedAt,
   closedAt: row.closedAt,
+  createdAt: row.createdAt,
 });
 
-/** Candidats choisis à la main, par vote. */
-export async function handCandidates(ex: Executor, voteIds: string[]): Promise<Map<string, Set<string>>> {
-  const out = new Map<string, Set<string>>();
+/** Candidats choisis à la main, par vote, avec l'heure du choix. */
+export async function handCandidates(ex: Executor, voteIds: string[]): Promise<Map<string, Map<string, Date>>> {
+  const out = new Map<string, Map<string, Date>>();
   if (!voteIds.length) return out;
   const rows = await ex
-    .select({ voteId: eventVoteCandidates.voteId, applicationId: eventVoteCandidates.applicationId })
+    .select({
+      voteId: eventVoteCandidates.voteId,
+      applicationId: eventVoteCandidates.applicationId,
+      addedAt: eventVoteCandidates.addedAt,
+    })
     .from(eventVoteCandidates)
     .where(inArray(eventVoteCandidates.voteId, voteIds));
   for (const r of rows) {
-    const set = out.get(r.voteId) ?? new Set<string>();
-    set.add(r.applicationId);
-    out.set(r.voteId, set);
+    const map = out.get(r.voteId) ?? new Map<string, Date>();
+    map.set(r.applicationId, r.addedAt);
+    out.set(r.voteId, map);
   }
   return out;
 }
 
+/**
+ * Fige l'ensemble des candidats d'un vote à sa clôture (modes `all`, `origins` et `zone`) dans `event_vote_candidates`
+ * (source `rule`) : le classement et le règlement ne lisent plus que lui, un changement de zone ou de marque après la
+ * clôture ne retire plus un candidat élu. Idempotent ; sans effet pour un vote à la main (déjà figé par ses choix).
+ */
+export async function freezeCandidates(
+  ex: Executor,
+  vote: Pick<VoteRow, "id" | "candidateMode">,
+  candidates: readonly EnteredVehicle[],
+) {
+  if (vote.candidateMode === "hand" || !candidates.length) return;
+  await ex
+    .insert(eventVoteCandidates)
+    .values(candidates.map((c) => ({ voteId: vote.id, applicationId: c.applicationId, source: "rule" as const })))
+    .onConflictDoNothing();
+}
+
+/** Fige les votes de l'événement clos par la durée ou la fin de l'événement que le balayage n'a pas encore constatés. */
+export async function freezeClosedVotes(ex: Executor, event: EventRow) {
+  const l = await loadEventVotes(ex, event);
+  for (const vote of l.votes) {
+    if (vote.candidateMode === "hand" || l.hand.get(vote.id)?.size) continue;
+    const { candidates, state } = ruleOfVote(l, vote);
+    if (state === "closed") await freezeCandidates(ex, vote, candidates);
+  }
+}
+
 /** Les véhicules entrés qui concourent à ce vote, selon son mode (du premier au dernier entré). */
 export function candidatesOf(
-  vote: Pick<VoteRow, "candidateMode" | "candidateFilter">,
+  vote: Pick<VoteRow, "candidateMode" | "candidateFilter" | "closedAt">,
   entered: readonly EnteredVehicle[],
-  hand: ReadonlySet<string> | undefined,
+  hand: ReadonlyMap<string, Date> | undefined,
 ): EnteredVehicle[] {
   if (vote.candidateMode === "hand") return entered.filter((e) => hand?.has(e.applicationId));
+  // Un vote clos dont les candidats ont été figés (tour 2) ne relit plus la zone ni la marque d'aujourd'hui.
+  if (vote.closedAt && hand?.size) return entered.filter((e) => hand.has(e.applicationId));
   const filter = (vote.candidateFilter ?? null) as VoteCandidateFilter | null;
   return entered.filter((e) => matchesCandidateRule(vote.candidateMode, filter, e));
 }
@@ -152,11 +186,20 @@ export function contextOf(
   event: Pick<EventRow, "status" | "endsAt">,
   entered: readonly EnteredVehicle[],
   candidates: readonly EnteredVehicle[],
+  hand?: ReadonlyMap<string, Date>,
 ): VoteContext {
+  // Quand un candidat est devenu disponible : son entrée, et pour un vote à la main, son choix s'il est venu après.
+  const ready = candidates
+    .map((c) => {
+      const added = hand?.get(c.applicationId);
+      return added && added > c.checkedInAt ? added : c.checkedInAt;
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
   return {
     status: event.status,
     endsAt: event.endsAt,
     firstCheckinAt: entered[0]?.checkedInAt ?? null,
+    candidatesReadyAt: ready[1] ?? null,
     candidatesEntered: candidates.length,
   };
 }
@@ -271,7 +314,7 @@ export type LoadedVotes = {
   event: EventRow;
   entered: EnteredVehicle[];
   votes: VoteRow[];
-  hand: Map<string, Set<string>>;
+  hand: Map<string, Map<string, Date>>;
 };
 
 export async function loadEventVotes(ex: Executor, event: EventRow): Promise<LoadedVotes> {
@@ -287,7 +330,7 @@ export async function loadEventVotes(ex: Executor, event: EventRow): Promise<Loa
 
 export function ruleOfVote(l: LoadedVotes, vote: VoteRow) {
   const candidates = candidatesOf(vote, l.entered, l.hand.get(vote.id));
-  const ctx = contextOf(l.event, l.entered, candidates);
+  const ctx = contextOf(l.event, l.entered, candidates, l.hand.get(vote.id));
   const rv: EventVote = toRuleVote(vote);
   return { candidates, ctx, rv, state: voteState(rv, ctx, now()) as VoteState };
 }

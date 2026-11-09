@@ -66,6 +66,8 @@ export const errorCodes = [
   "vote_fixed",
   "vote_has_voices",
   "vote_not_manual",
+  "expired_qr",
+  "opens_at_invalid",
   "not_hand",
   "not_enough_candidates",
   "event_over",

@@ -365,7 +365,7 @@ describe("passeport : contestation", () => {
     try {
       await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
       // Une entrée accordée après coup : la grille se recharge ; le vote d'un événement fini est constaté clos (lot R7l1).
-      expect(ws.messages.filter((m) => m.type === "votes.candidates.changed")).toEqual([
+      expect(ws.messages.filter((m) => m.type === "votes.candidates.changed" && !m.payload.voteId)).toEqual([
         { channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} },
       ]);
     } finally {

@@ -1,6 +1,6 @@
 // Lot R7l1 : votes à thème (création par rôle, modes de candidats, QR, ouverture, clôture, une voix par vote, classement
 // caché, notification, règlement du podium 15 / 10 / 5, façade du prix du public). Horloge simulée, base de test.
-import { type Decide, fromWallTime, notificationTypes, shouldDeliver } from "@orasso/shared";
+import { type Decide, fromWallTime, notificationTypes, rotatingCodeAt, shouldDeliver } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,7 @@ import {
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
+  accessPasses,
   adminAuditLog,
   applications,
   assistanceRequests,
@@ -744,17 +745,28 @@ describe("voter", () => {
     expect(audit.some((a) => a.action === "structure.view_as" && a.reason === "audience_prize.ranking")).toBe(true);
   });
 
-  it("le canal ne porte jamais de classement : { voteId, total, state, top3: [] }", async () => {
+  it("le canal ne porte jamais de classement : « Toutes catégories » garde `votes.changed`, un vote à thème émet `theme_votes.changed`", async () => {
     await enterAll();
     const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });
     await api(orga, "POST", `/${id}/open`);
     const ws = listen(`event:${eventId}:votes`);
     await voteFor(p.nina.u, id, p.kenji.applicationId);
+    await vi.waitFor(() => expect(ws.messages.some((m) => m.type === "theme_votes.changed")).toBe(true), {
+      timeout: 4000,
+    });
+    // Jamais `votes.changed` pour un vote à thème : l'APK en ligne l'afficherait comme le prix du public.
+    expect(ws.messages.some((m) => m.type === "votes.changed")).toBe(false);
+    for (const m of ws.messages.filter((x) => x.type === "theme_votes.changed")) {
+      expect(Object.keys(m.payload).sort()).toEqual(["state", "total", "voteId"]);
+      expect(m.payload).toMatchObject({ voteId: id, total: 1, state: "open" });
+    }
+    const all = await allCategoriesId();
+    await voteFor(p.nina.u, all, p.kenji.applicationId);
     await vi.waitFor(() => expect(ws.messages.some((m) => m.type === "votes.changed")).toBe(true), { timeout: 4000 });
     ws.stop();
     for (const m of ws.messages.filter((x) => x.type === "votes.changed")) {
       expect(Object.keys(m.payload).sort()).toEqual(["state", "top3", "total", "voteId"]);
-      expect(m.payload).toMatchObject({ voteId: id, total: 1, state: "open", top3: [] });
+      expect(m.payload).toMatchObject({ voteId: all, total: 1, state: "open", top3: [] });
     }
     expect(await realtime.canSubscribe(p.kenji.u.id, `event:${eventId}:votes`)).toBe(true);
   });
@@ -992,5 +1004,266 @@ describe("façade du prix du public (retrait en R8)", () => {
       next: null,
     });
     expect(await audiencePrizeService.mine(await viewerOf(p.nina.u), eventId)).toMatchObject({ canVote: false });
+  });
+});
+
+describe("tour 2 : relectures Opus et Codex", () => {
+  const firstEntry = (extra: Record<string, unknown> = {}) => ({
+    title: "Au premier pointage",
+    candidateMode: "origins",
+    candidateFilter: { countries: ["JP"] },
+    openMode: "first_entry",
+    durationMinutes: 60,
+    ...extra,
+  });
+
+  it("vote à thème au premier pointage : s'ouvre au 2e candidat (japonaises arrivées 2 h après), la durée court depuis, une notification", async () => {
+    await checkin(p.nina, paris(10, 17, 19, 2));
+    await checkin(p.marc, paris(10, 17, 19, 5));
+    clock.set(paris(10, 17, 19, 10));
+    const id = await createTheme(firstEntry());
+    clock.set(paris(10, 17, 20, 30));
+    await votesLifecycle.sweep();
+    // Ni ouvert ni clos : il n'a pas encore ses candidats (la durée ne court pas depuis le premier pointage de l'événement).
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("upcoming");
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.closedAt).toBeNull();
+    await checkin(p.kenji, paris(10, 17, 21));
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("upcoming");
+    await checkin(p.lea, paris(10, 17, 21, 5));
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    expect(row?.openedAt).toEqual(paris(10, 17, 21, 5));
+    expect((await api(p.nina.u, "GET", `/${id}`)).json).toMatchObject({
+      state: "open",
+      closesAt: paris(10, 17, 22, 5).toISOString(),
+    });
+    // Les présents sont prévenus, une fois (D38 : une notification quand un vote est lancé).
+    await votesLifecycle.sweep();
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    expect(sent.filter((n) => n.userId === p.kenji.u.id)).toHaveLength(1);
+    clock.set(paris(10, 17, 22, 6));
+    await votesLifecycle.sweep();
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("closed");
+  });
+
+  it("vote créé en cours d'événement (candidats déjà entrés) : s'ouvre à sa création, ne naît pas clos", async () => {
+    await enterAll();
+    clock.set(paris(10, 17, 21));
+    const id = await createTheme(firstEntry({ candidateMode: "all", candidateFilter: null, durationMinutes: 90 }));
+    const view = (await api(p.nina.u, "GET", `/${id}`)).json;
+    expect(view).toMatchObject({ state: "open", opensAt: paris(10, 17, 21).toISOString() });
+    // Au plus tard la fin de l'événement.
+    expect(view.closesAt).toBe(ENDS.toISOString());
+  });
+
+  it("« à la main » en première entrée : s'ouvre quand le 2e candidat est entré et choisi", async () => {
+    await enterAll();
+    clock.set(paris(10, 17, 20));
+    const id = await createTheme({
+      title: "Au choix",
+      candidateMode: "hand",
+      openMode: "first_entry",
+      durationMinutes: 30,
+    });
+    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.kenji.applicationId });
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("upcoming");
+    clock.set(paris(10, 17, 20, 10));
+    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.nina.applicationId });
+    const view = (await api(p.nina.u, "GET", `/${id}`)).json;
+    expect(view).toMatchObject({ state: "open", opensAt: paris(10, 17, 20, 10).toISOString() });
+    expect(view.closesAt).toBe(paris(10, 17, 20, 40).toISOString());
+  });
+
+  it("QR : le code tournant OR2 s'accepte (valide), pas expiré, pas d'un autre événement, pas d'un accès révoqué", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 3));
+    const id = await createTheme({ title: "Concours de rupteur", candidateMode: "hand", openMode: "manual" });
+    type Kit = { otpSecret: string; eventNo: number; passId: string };
+    const kitOf = async (x: Person, appId = x.applicationId) =>
+      (await call(x.u, "GET", `/applications/${appId}/pass`)).json as Kit;
+    const codeOf = (k: Kit, at: Date) => rotatingCodeAt(Buffer.from(k.otpSecret, "base64url"), k.eventNo, k.passId, at);
+    const kenjiKit = await kitOf(p.kenji);
+    const ok = await api(orga, "POST", `/${id}/candidates`, { qr: codeOf(kenjiKit, clock.now) });
+    expect(ok.status).toBe(200);
+    expect(ok.json.handCandidates).toMatchObject([{ applicationId: p.kenji.applicationId, source: "scan" }]);
+    // Expiré (plus de 60 s d'écart).
+    const old = await api(orga, "POST", `/${id}/candidates`, {
+      qr: codeOf(await kitOf(p.lea), new Date(clock.now.getTime() - 5 * 60_000)),
+    });
+    expect(old.status).toBe(400);
+    expect(old.json.error.code).toBe("expired_qr");
+    // D'un autre événement.
+    const other = await createEvent(structureId, { startsAt: paris(11, 7, 19), endsAt: paris(11, 7, 23) });
+    const foreign = await enroll(other.id, p.kenji.u, p.kenji.v);
+    const wrong = await api(orga, "POST", `/${id}/candidates`, {
+      qr: codeOf(await kitOf(p.kenji, foreign.applicationId), clock.now),
+    });
+    expect(wrong.status).toBe(409);
+    expect(wrong.json.error.code).toBe("other_event");
+    // Faux code (autre secret) et accès révoqué.
+    const leaKit = await kitOf(p.lea);
+    const forged = await api(orga, "POST", `/${id}/candidates`, {
+      qr: codeOf({ ...leaKit, otpSecret: kenjiKit.otpSecret }, clock.now),
+    });
+    expect(forged.json.error.code).toBe("invalid_qr");
+    await db
+      .update(accessPasses)
+      .set({ revokedAt: clock.now, revokedReason: "cancelled" })
+      .where(eq(accessPasses.id, leaKit.passId));
+    const revoked = await api(orga, "POST", `/${id}/candidates`, { qr: codeOf(leaKit, clock.now) });
+    expect(revoked.status).toBe(400);
+    expect(revoked.json.error.code).toBe("invalid_qr");
+  });
+
+  it("« vote lancé » part tout de suite la nuit (0 h 15), y compris un 2e jour d'événement", async () => {
+    const night = await createEvent(structureId, {
+      startsAt: paris(10, 17, 23),
+      endsAt: paris(10, 18, 3),
+      capacity: 20,
+    });
+    const a = await enroll(night.id, p.kenji.u, p.kenji.v, jpRef);
+    const b = await enroll(night.id, p.lea.u, p.lea.v, jpRef);
+    await checkin(a, paris(10, 17, 23, 30), night.id);
+    await checkin(b, paris(10, 17, 23, 40), night.id);
+    clock.set(paris(10, 18, 0, 15));
+    const res = await api(orga, "POST", "", { ...japanese, candidateMode: "all", candidateFilter: null }, night.id);
+    expect(res.status).toBe(201);
+    expect((await api(orga, "POST", `/${res.json.id}/open`, undefined, night.id)).status).toBe(200);
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    expect(sent.length).toBeGreaterThan(0);
+    for (const n of sent) expect(n.deliverAfter.getTime()).toBeLessThanOrEqual(paris(10, 18, 0, 15).getTime());
+  });
+
+  it("un vote déjà ouvert à l'heure (tâche pas encore passée) ne se modifie plus ; heure d'ouverture passée ou après la fin : 409", async () => {
+    await enterAll();
+    clock.set(paris(10, 17, 19, 30));
+    const id = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      openMode: "at",
+      opensAt: paris(10, 17, 20).toISOString(),
+    });
+    clock.set(paris(10, 17, 20, 5)); // l'heure est passée, aucun balayage n'a encore posé `opened_at`
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.openedAt).toBeNull();
+    const locked = await api(orga, "PATCH", `/${id}`, { title: "Trop tard" });
+    expect(locked.status).toBe(409);
+    expect(locked.json.error.code).toBe("vote_locked");
+    const past = await api(orga, "POST", "", { ...japanese, openMode: "at", opensAt: paris(10, 17, 19).toISOString() });
+    expect(past.status).toBe(409);
+    expect(past.json.error.code).toBe("opens_at_invalid");
+    const late = await api(orga, "POST", "", { ...japanese, openMode: "at", opensAt: paris(10, 17, 23).toISOString() });
+    expect(late.status).toBe(409);
+    expect(late.json.error.code).toBe("opens_at_invalid");
+  });
+
+  it("premier pointage : un vote créé après deux entrées est ouvert, ses critères ne se modifient plus", async () => {
+    await enterAll();
+    const id = await createTheme(firstEntry({ candidateMode: "all", candidateFilter: null }));
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("open");
+    expect((await voteFor(p.nina.u, id, p.kenji.applicationId)).status).toBe(200);
+    const edited = await api(orga, "PATCH", `/${id}`, { candidateMode: "zone", candidateFilter: { zoneId: zoneA } });
+    expect(edited.status).toBe(409);
+    expect(edited.json.error.code).toBe("vote_locked");
+  });
+
+  it("une voix concurrente à la suppression ou à la clôture : jamais une voix sur un vote retiré", async () => {
+    await enterAll();
+    const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });
+    await api(orga, "POST", `/${id}/open`);
+    const [voted, removed] = await Promise.all([
+      voteFor(p.nina.u, id, p.kenji.applicationId),
+      api(orga, "DELETE", `/${id}`),
+    ]);
+    const voices = await db.select().from(audienceVotes).where(eq(audienceVotes.voteId, id));
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    if (voices.length) {
+      expect(voted.status).toBe(200);
+      expect(removed.status).toBe(409);
+      expect(row?.deletedAt).toBeNull();
+    } else {
+      expect(removed.status).toBe(200);
+      expect(voted.status).toBe(404);
+    }
+    // Voix et clôture : le total servi est celui des voix enregistrées.
+    const id2 = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous 2" });
+    await api(orga, "POST", `/${id2}/open`);
+    const [v2, closed] = await Promise.all([
+      voteFor(p.nina.u, id2, p.kenji.applicationId),
+      api(orga, "POST", `/${id2}/close`),
+    ]);
+    expect(closed.status).toBe(200);
+    const stored = await db.select().from(audienceVotes).where(eq(audienceVotes.voteId, id2));
+    expect(stored.length).toBe(v2.status === 200 ? 1 : 0);
+    expect((await api(p.kenji.u, "GET", `/${id2}`)).json).toMatchObject({ state: "closed", total: stored.length });
+  });
+
+  it("la console refuse un super admin sans demande d'assistance ; avec, elle est tracée", async () => {
+    await enterAll();
+    const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });
+    await api(orga, "POST", `/${id}/open`);
+    const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    const refused = await api(admin, "GET", "/manage");
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.code).toBe("assistance_required");
+    await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
+    expect((await api(admin, "GET", "/manage")).status).toBe(200);
+    const audit = await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.actorUserId, admin.id) });
+    expect(audit.some((a) => a.action === "structure.view_as")).toBe(true);
+    // L'organisateur et le staff n'ont rien de plus à demander.
+    expect((await api(orga, "GET", "/manage")).status).toBe(200);
+    expect((await api(staff, "GET", "/manage")).status).toBe(200);
+  });
+
+  it("candidats figés à la clôture : changer la zone d'un candidat ensuite ne change ni le classement, ni le podium, ni les points", async () => {
+    await enterAll();
+    const id = await createTheme({
+      title: "Zone A",
+      candidateMode: "zone",
+      candidateFilter: { zoneId: zoneA },
+      openMode: "manual",
+    });
+    await api(orga, "POST", `/${id}/open`);
+    for (const voter of [p.kenji, p.lea, p.marc]) await voteFor(voter.u, id, p.nina.applicationId);
+    expect((await api(orga, "POST", `/${id}/close`)).status).toBe(200);
+    await db.update(applications).set({ zoneId: null }).where(eq(applications.id, p.nina.applicationId));
+    const view = (await api(p.kenji.u, "GET", `/${id}`)).json;
+    expect(view).toMatchObject({ state: "closed", total: 3, candidatesCount: 2 });
+    expect(view.ranking[0]).toMatchObject({ applicationId: p.nina.applicationId, votes: 3, rank: 1 });
+    clock.set(SETTLE);
+    expect(await pointsService.settleEvent(eventId)).toBe(true);
+    const podium = await db.query.pointEntries.findFirst({
+      where: and(eq(pointEntries.userId, p.nina.u.id), eq(pointEntries.kind, "vote_podium")),
+    });
+    expect(podium?.points).toBe(15);
+  });
+
+  it("clôture à la main : l'ancienne appli reçoit `votes.candidates.changed` (elle recharge /mine)", async () => {
+    await enterAll();
+    const all = await allCategoriesId();
+    const ws = listen(`event:${eventId}:votes`);
+    expect((await api(orga, "POST", `/${all}/close`)).status).toBe(200);
+    ws.stop();
+    expect(ws.messages.some((m) => m.type === "votes.closed")).toBe(true);
+    expect(ws.messages.some((m) => m.type === "votes.candidates.changed" && m.payload.voteId === all)).toBe(true);
+  });
+
+  it("file de tâches indisponible : l'écriture reste valable, aucune erreur rendue, pas de doublon", async () => {
+    await enterAll();
+    const spy = vi.spyOn(clock.jobs, "send").mockRejectedValue(new Error("file indisponible"));
+    const res = await api(orga, "POST", "", { ...japanese, openMode: "manual", title: "File HS" });
+    spy.mockRestore();
+    expect(res.status).toBe(201);
+    const rows = await db.query.eventVotes.findMany({ where: eq(eventVotes.title, "File HS") });
+    expect(rows).toHaveLength(1);
+    // Le balayage reprend la main.
+    await expect(votesLifecycle.sweep()).resolves.toBeGreaterThanOrEqual(0);
+  });
+
+  it("récap sans « Toutes catégories » : la fréquentation reste le nombre de véhicules entrés", async () => {
+    await enterAll();
+    await api(orga, "DELETE", `/${await allCategoriesId()}`);
+    clock.set(paris(10, 18, 12));
+    const recap = (await call(p.kenji.u, "GET", `/me/recaps/${eventId}`)).json;
+    expect(recap.vehiclesCount).toBe(4);
   });
 });

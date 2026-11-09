@@ -3656,6 +3656,20 @@ Lot sensible (voix, points, données existantes). Migration `0072_event-votes` (
 
 - **Vérifications de fin de lot (09/11).** Suite complète de l'API : 1566 / 1569 ; les 3 échecs (`event-invites`, livraison des notifications) viennent des heures calmes (la suite tournait avant 8 h) et passent avec `NOTIFY_QUIET_HOURS=off` (22 / 22). Recette `lot-r7l1-reglages.spec.ts` verte. Captures « avant » du site : celles du lot 33 (le code d'avant n'a pas été relancé) ; l'appli n'a que les captures « après » (384 px).
 
+### Tour 2 des relectures (Opus et Codex, 09/11)
+- **Ouverture d'un vote à thème « au premier pointage » (1).** Le vote s'ouvre au plus tard entre l'instant où son 2e candidat est disponible (entré ; pour un vote à la main, aussi choisi : `added_at`) et sa création (`created_at`, posé avec l'horloge de l'application) ; `opened_at` prend cette heure, la durée court depuis. « Toutes catégories » garde le premier pointage de l'événement. Notification « vote lancé » aux présents aussi dans ce mode pour un vote à thème, une fois (10).
+- **QR (2).** Un code tournant OR2 s'ajoute (MAC avec le `otp_secret` du pass, heure du serveur, secret créé au besoin) ; OR1 en repli. Refus : `invalid_qr`, `expired_qr` (nouveau), `other_event`, `not_checked_in`.
+- **Heures calmes (3).** `vote_opened` porte `quiet: { within: 7 jours }` : part tout de suite la nuit et un 2e jour (un vote ne s'ouvre que pendant l'événement).
+- **Courses et verrous (5, 6, 12).** `SELECT … FOR UPDATE` sur la ligne du vote dans `cast`, `close` et `remove` (recomptage des voix dans la transaction). Modifier, lancer, ajouter ou retirer un candidat est refusé dès que l'état **déduit** n'est plus « prévu » (409 `vote_locked`), pas seulement selon `opened_at`.
+- **Heure d'ouverture (7).** Passée ou après la fin de l'événement : 409 `opens_at_invalid`.
+- **Temps réel (8, 14).** `votes.changed` est réservé à « Toutes catégories » ; un vote à thème émet `theme_votes.changed { voteId, total, state }` (à écouter en R7l2 et R7l3). Toute clôture émet aussi `votes.candidates.changed { voteId }` pour que l'APK en ligne recharge `/mine`.
+- **`event_votes.closes_at` (9).** Jamais lue ni servie (l'heure de fin vient de `voteClosesAt`) ; gardée en base pour ne pas régénérer la migration 0072 : à retirer dans une migration future.
+- **Mise en ligne (4).** La migration 0072 n'a pas de retour arrière sans restauration : le coordinateur sauvegarde la base de dev avant le déploiement et arrête l'ancienne API avant de migrer.
+- **Console et super admin (11).** `GET /votes/manage` : un super admin non membre n'entre qu'avec 2FA et une demande d'assistance ouverte (403 `assistance_required` sinon), avec trace `structure.view_as`.
+- **Candidats figés (13).** À la clôture (à la main, par la durée ou la fin de l'événement, ou au règlement si le balayage n'est pas passé), les candidats des modes `all`, `origins` et `zone` s'écrivent dans `event_vote_candidates` (source `rule`) ; un vote clos ne lit plus que cet ensemble. Pas de nouvelle colonne.
+- **Planification (15).** Après l'écriture, un échec de `scheduleVoteJobs` est journalisé ; le balayage reprend la main, rien n'est rendu au client.
+- **Récap (16).** `vehiclesCount` = véhicules entrés, indépendamment du vote « Toutes catégories ».
+
 ### À revoir avec Damien (lot R7l1)
 - Un vote qui a reçu des voix ne se retire plus, il se clôt (pour ne pas faire disparaître un podium) : à confirmer à l'usage.
 - Une voiture garde son meilleur podium par événement (D38) : un 1er d'un vote à thème et un 3e de « Toutes catégories » donnent 15 points, pas 20 ; le trophée se gagne à chaque vote.

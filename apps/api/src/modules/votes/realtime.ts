@@ -1,6 +1,7 @@
 // Temps réel des votes (canal `event:{id}:votes`) : aucun classement ne circule, seulement « quelque chose a changé ».
 // `votes.changed { voteId, total, state, top3: [] }` (`top3` toujours vide : l'APK R6-police l'applique sans le tester, retrait
-// en R8), `votes.opened { voteId }`, `votes.closed { voteId }`, `votes.candidates.changed { voteId? }`.
+// en R8) **pour « Toutes catégories » seulement** (tour 2 : l'APK en ligne affiche ce total comme celui du prix du public) ;
+// les votes à thème émettent `theme_votes.changed { voteId, total, state }` (R7l2, R7l3) ; `votes.opened { voteId }`, `votes.closed { voteId }`, `votes.candidates.changed { voteId? }`.
 
 import { voteState } from "@orasso/shared";
 import { and, eq, isNull } from "drizzle-orm";
@@ -25,6 +26,8 @@ export const votesRealtime = {
   },
   closed(eventId: string, voteId: string) {
     realtime.publish(channel(eventId), "votes.closed", { voteId });
+    // L'APK en ligne ignore `votes.closed` : cette invalidation lui fait recharger `/mine` et cesser de proposer de voter.
+    realtime.publish(channel(eventId), "votes.candidates.changed", { voteId });
   },
   /** Diffuse l'état d'un vote : son total et son état, jamais son classement. */
   async changedNow(eventId: string, voteId: string) {
@@ -37,8 +40,12 @@ export const votesRealtime = {
     const hand = (await handCandidates(db, [row.id])).get(row.id);
     const candidates = candidatesOf(row, entered, hand);
     const { total } = rankVote(await audienceVotesOf(db, voteId), candidates);
-    const state = voteState(toRuleVote(row), contextOf(event, entered, candidates), now());
-    realtime.publish(channel(eventId), "votes.changed", { voteId, total, state, top3: [] });
+    const state = voteState(toRuleVote(row), contextOf(event, entered, candidates, hand), now());
+    if (row.kind === "all_categories") {
+      realtime.publish(channel(eventId), "votes.changed", { voteId, total, state, top3: [] });
+    } else {
+      realtime.publish(channel(eventId), "theme_votes.changed", { voteId, total, state });
+    }
   },
 };
 

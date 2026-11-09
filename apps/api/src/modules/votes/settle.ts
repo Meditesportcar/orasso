@@ -19,7 +19,7 @@ import { settingsStore } from "../../lib/settings";
 import type { Executor } from "../../lib/tx";
 import type { EventRow } from "../events/repo";
 import { notificationsService } from "../notifications/service";
-import { eventVoteRows, loadEventVotes, rankVote, ruleOfVote, type VoteRow } from "./context";
+import { eventVoteRows, freezeClosedVotes, loadEventVotes, rankVote, ruleOfVote, type VoteRow } from "./context";
 
 export type Award = (entry: {
   userId: string;
@@ -96,6 +96,7 @@ export const votesSettle = {
    * premier de « Toutes catégories » (tampon rare du passeport) : le nouveau, ou celui d'un règlement déjà fait.
    */
   async settleEvent(ex: Executor, event: EventRow, award: Award) {
+    await freezeClosedVotes(ex, event);
     const plan = await planEvent(ex, event);
     const settings = await podiumSettings();
     const awarded = new Set<string>();

@@ -65,10 +65,10 @@ describe("types de notification de la vague R7 (lot R7c1)", () => {
     }
   });
 
-  it("heures calmes levées pour l'horaire modifié et le rendez-vous proche seulement", () => {
+  it("heures calmes levées pour l'horaire modifié, le rendez-vous proche et le vote lancé (tour 2 de R7l1) seulement", () => {
     expect(r7QuietOverride("schedule_change")).toEqual({ days: 1 });
     expect(r7QuietOverride("spot_meetup_new")).toEqual({ within: 2 * 3_600_000 });
-    expect(r7QuietOverride("vote_opened")).toBeUndefined();
+    expect(r7QuietOverride("vote_opened")).toEqual({ within: 7 * 24 * 3_600_000 });
     expect(r7QuietOverride("event_updated")).toBeUndefined();
   });
 

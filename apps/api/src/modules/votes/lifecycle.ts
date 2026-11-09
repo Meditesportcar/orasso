@@ -1,7 +1,7 @@
 // Vie des votes (lot R7l1) : ouverture et clôture constatées, notification « vote lancé », tâches `votes.open`,
 // `votes.close` et `votes.sweep` (chaque minute). L'état d'un vote se déduit des règles (`voteState`) ; ici on constate
 // l'instant (`opened_at`, `closed_at`) une seule fois (comparaison-et-pose), ce qui rend la notification unique.
-import { type EventVote, voteClosesAt, voteOpensAt, voteState, voteTexts } from "@orasso/shared";
+import { type EventVote, type VoteContext, voteClosesAt, voteOpensAt, voteState, voteTexts } from "@orasso/shared";
 import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -17,6 +17,7 @@ import {
   contextOf,
   ensureAllCategories,
   enteredVehicles,
+  freezeCandidates,
   handCandidates,
   toRuleVote,
   type VoteRow,
@@ -55,8 +56,8 @@ async function notifyOpened(tx: Executor, event: EventLike, vote: VoteRow) {
 
 /**
  * Pose l'ouverture du vote une seule fois (comparaison-et-pose sur `opened_at IS NULL`). Renvoie vrai si c'est cet appel
- * qui l'a posée. Le lancement à la main ou à l'heure prévient les présents ; « Toutes catégories » au premier pointage,
- * non (l'onglet s'allume, comportement du lot 49).
+ * qui l'a posée. Le lancement à la main, à l'heure ou au premier pointage d'un vote à thème prévient les présents ;
+ * « Toutes catégories » au premier pointage, non (l'onglet s'allume, comportement du lot 49).
  */
 export async function markOpened(
   tx: Executor,
@@ -79,7 +80,7 @@ export async function markOpened(
 export async function scheduleVoteJobs(
   event: Pick<EventLike, "id" | "endsAt" | "status" | "startsAt">,
   vote: VoteRow,
-  firstCheckinAt: Date | null,
+  ctx: Pick<VoteContext, "firstCheckinAt" | "candidatesReadyAt">,
 ) {
   if (event.status !== "published") return;
   const t = now();
@@ -90,7 +91,7 @@ export async function scheduleVoteJobs(
       singletonKey: `vote-open:${vote.id}:${at}`,
     });
   }
-  const closes = voteClosesAt(rv, { endsAt: event.endsAt, firstCheckinAt });
+  const closes = voteClosesAt(rv, { endsAt: event.endsAt, ...ctx });
   if (!vote.closedAt && closes > t) {
     const at = closes.toISOString();
     await deps.jobs.send("votes.close", { eventId: event.id, voteId: vote.id, at }, closes, {
@@ -118,7 +119,7 @@ export const votesLifecycle = {
     for (const vote of votes) {
       if (vote.closedAt) continue;
       const candidates = candidatesOf(vote, entered, hand.get(vote.id));
-      const ctx = contextOf(event, entered, candidates);
+      const ctx = contextOf(event, entered, candidates, hand.get(vote.id));
       const rv = toRuleVote(vote);
       const state = voteState(rv, ctx, t);
       if (state === "closed") {
@@ -128,10 +129,11 @@ export const votesLifecycle = {
           .set({ closedAt: closesAt, updatedAt: t })
           .where(and(eq(eventVotes.id, vote.id), isNull(eventVotes.closedAt)))
           .returning({ id: eventVotes.id });
+        await freezeCandidates(db, vote, candidates);
         if (closed.length) votesRealtime.closed(eventId, vote.id);
       } else if (state === "open" && !vote.openedAt) {
         const at = voteOpensAt(rv, ctx) ?? t;
-        const opened = await withTx((tx) => markOpened(tx, event, vote, at, vote.openMode !== "first_entry"));
+        const opened = await withTx((tx) => markOpened(tx, event, vote, at, vote.kind !== "all_categories"));
         if (opened) votesRealtime.opened(eventId, vote.id);
       }
     }

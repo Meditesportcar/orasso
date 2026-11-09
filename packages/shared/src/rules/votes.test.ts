@@ -27,8 +27,15 @@ const base: EventVote = {
   durationMinutes: null,
   openedAt: null,
   closedAt: null,
+  createdAt: at(10),
 };
-const ctx: VoteContext = { status: "published", endsAt: at(22, 30), firstCheckinAt: at(19, 2), candidatesEntered: 3 };
+const ctx: VoteContext = {
+  status: "published",
+  endsAt: at(22, 30),
+  firstCheckinAt: at(19, 2),
+  candidatesReadyAt: at(19, 40),
+  candidatesEntered: 3,
+};
 const nobody = { checkedInAt: null, ticketScannedAt: null, staffPresent: false, gpsPresentAt: null };
 
 describe("état d'un vote", () => {
@@ -76,8 +83,37 @@ describe("état d'un vote", () => {
   it("ouverture annoncée : constatée, sinon l'heure prévue, sinon le premier pointage", () => {
     expect(voteOpensAt({ ...base, openedAt: at(20) }, ctx)).toEqual(at(20));
     expect(voteOpensAt({ ...base, openMode: "at", opensAt: at(21) }, ctx)).toEqual(at(21));
-    expect(voteOpensAt({ ...base, openMode: "first_entry" }, ctx)).toEqual(at(19, 2));
+    expect(voteOpensAt({ ...base, kind: "all_categories", openMode: "first_entry" }, ctx)).toEqual(at(19, 2));
     expect(voteOpensAt(base, ctx)).toBeNull();
+  });
+});
+
+describe("vote à thème au premier pointage (tour 2)", () => {
+  const themed: EventVote = { ...base, openMode: "first_entry", durationMinutes: 90 };
+  it("s'ouvre au 2e candidat, pas au premier pointage de l'événement ; la durée court depuis", () => {
+    expect(voteOpensAt(themed, ctx)).toEqual(at(19, 40));
+    expect(voteState(themed, ctx, at(19, 39))).toBe("upcoming");
+    expect(voteState(themed, ctx, at(19, 40))).toBe("open");
+    expect(voteClosesAt(themed, ctx)).toEqual(at(21, 10));
+  });
+
+  it("japonaises arrivées 2 h après la première voiture : jamais clos avant d'avoir eu ses candidats", () => {
+    const late = { ...ctx, firstCheckinAt: at(17), candidatesReadyAt: at(19) };
+    expect(voteState(themed, late, at(18, 45))).toBe("upcoming");
+    expect(voteState(themed, late, at(19))).toBe("open");
+    expect(voteState(themed, late, at(20, 29))).toBe("open");
+  });
+
+  it("créé en cours d'événement : s'ouvre à sa création, ne naît pas clos", () => {
+    const created = { ...themed, createdAt: at(20) };
+    const entered = { ...ctx, firstCheckinAt: at(17), candidatesReadyAt: at(18) };
+    expect(voteOpensAt(created, entered)).toEqual(at(20));
+    expect(voteState(created, entered, at(20, 5))).toBe("open");
+    expect(voteClosesAt(created, entered)).toEqual(at(21, 30));
+  });
+
+  it("sans deux candidats : pas d'ouverture annoncée", () => {
+    expect(voteOpensAt(themed, { ...ctx, candidatesReadyAt: null })).toBeNull();
   });
 });
 
