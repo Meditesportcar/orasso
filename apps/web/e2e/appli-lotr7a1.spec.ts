@@ -261,11 +261,10 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   await expect(k.page.getByText("arrive bientôt")).toBeVisible();
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
-  await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
+  // Lot R7b2 : l'onglet montre le crew lui-même (nom, onglets internes), plus la coquille « Ouvrir mon crew ».
+  await expect(k.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
   await expect(k.page.getByTestId("crew-tab-none")).toHaveCount(0);
   await shot(k.page, "crew-kenji");
-  await k.page.getByTestId("crew-tab-open").click();
-  await k.page.waitForURL(/\/crew\/roussillon-drift/, { timeout: 15_000 });
   await k.ctx.close();
 
   // Sarah (sans crew) : « Rejoindre un crew » et « Créer un crew », un seul bouton principal.

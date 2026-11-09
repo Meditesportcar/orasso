@@ -1,53 +1,18 @@
-// Page d'un crew. Lot 19 : fiche, membres, demandes, invitations. Lot C2b : écran à affiche (`s-crew`).
-// Lot R5c2 (maquettes R5.7 et R5.8, décisions de Damien du 26/10) :
-// - membre : bannière, logo, nom, « Crew · département · N membres · depuis », description, « Tu es le chef », Instagram ;
-//   Discussion (avec ses non-lus), Inviter et Réglages (chef) ; onglets Fil (le fil du lot R5c1), Sorties (sorties
-//   du crew, « Où va le crew »), Garage (carrés), Membres (demandes avec leur message pour le chef, membres, inviter) ;
-// - non-membre : la vitrine (image du crew, description, Instagram, amis membres, membres) et « Demander à rejoindre »,
-//   qui ouvre la feuille avec un mot pour le chef ; puis « Demande envoyée à … » et « Annuler la demande ».
-// Les réglages du chef (logo, bannière, Instagram, sorties, retirer, dissoudre) ont leur écran (`/crew/reglages`).
+// Page d'un crew vue de l'extérieur : la vitrine (lot R7b2, D38). Lot 19 : fiche, membres, demandes, invitations. Lot C2b :
+// écran à affiche (`s-crew`). Lot R5c2 (décisions de Damien du 26/10) : un non-membre voit l'image du crew, sa description,
+// l'Instagram, les amis membres et les membres, et « Demander à rejoindre » (la feuille avec un mot pour le chef), puis
+// « Demande envoyée à … » et « Annuler la demande ». Lot R7b2 : un membre actif n'est plus ici, son crew vit dans
+// l'onglet Crew (Fil, Sorties, Membres, Spots, Discussion) : la page l'y renvoie (`?onglet=` suivi, un lien de
+// notification ouvre le bon onglet). Rien d'autre que la vitrine : ni fil, ni sorties, ni garage, ni discussion.
 import { departmentChoices, Icon, initialsOf, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import {
-  crewInviteLabels as CL,
-  type CrewOutingRsvp,
-  type CrewOutingView,
-  type CrewView,
-  crewInstagramUrl,
-  crewLabels,
-  fitWideWordSize,
-  crewPageLabels as L,
-} from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  type ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { crewInstagramUrl, crewLabels, fitWideWordSize, crewPageLabels as L } from "@orasso/shared";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
+import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewRequestSheet } from "@/features/crews/CrewRequestSheet";
-import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
-import { useCrewLive } from "@/features/crews/feed/useCrewLive";
-import {
-  CrewEventRow,
-  CrewSecHead,
-  CrewTabs,
-  FriendsBox,
-  GarageTile,
-  InfoBox,
-  MemberRow,
-  memberCaption,
-  OutingCard,
-  RequestCard,
-  vitrineCaption,
-} from "@/features/crews/page/parts";
+import { CrewSecHead, FriendsBox, InfoBox, MemberRow, vitrineCaption } from "@/features/crews/page/parts";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
@@ -61,19 +26,6 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
-
-type Tab = "feed" | "outings" | "garage" | "members";
-
-/** Confirmation (navigateur : `window.confirm` ; téléphone : boîte de dialogue). */
-function ask(message: string): Promise<boolean> {
-  if (Platform.OS === "web") return Promise.resolve(window.confirm(message));
-  return new Promise((resolve) =>
-    Alert.alert(crewLabels.crew, message, [
-      { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
-      { text: "Confirmer", style: "destructive", onPress: () => resolve(true) },
-    ]),
-  );
-}
 
 /**
  * Lot R6-police (« ROUSSILLO / N DRIFT » avec la police du système agrandie) : le nom du crew ne se coupe qu'entre deux
@@ -105,43 +57,13 @@ export default function CrewScreen() {
   const crew = useApi(() => api.crewBySlug(slug), [slug]);
   const v = crew.data;
   const member = v?.viewerState === "member" || v?.viewerState === "leader";
-  const leader = v?.viewerState === "leader";
   const live = Boolean(v && !v.archived);
-  const members = useApi(() => api.crewMembers(v?.id ?? ""), [v?.id, member], {
-    enabled: Boolean(v && member && live),
-  });
-  const pending = useApi(() => api.crewPending(v?.id ?? ""), [v?.id, leader], {
-    enabled: Boolean(v && leader && live),
-  });
-  // Lot R6a : en direct. Un signal de sortie, d'arrivée, de départ ou de réglage relit la page (onglets Sorties, Garage,
-  // Membres) ; retiré du crew (`revoked`), la page se relit et montre la vitrine.
-  useCrewLive(
-    v && member && live ? v.id : null,
-    async (needs) => {
-      if (needs.page) await Promise.all([crew.reload(), members.reload(), pending.reload()]);
-    },
-    { onRevoked: () => void crew.reload() },
-  );
-  const scrollRef = useRef<ScrollView | null>(null);
-  const scrollY = useRef(0);
-  const scroller = useMemo<CrewFeedScroller>(
-    () => ({
-      scrollTo: (y, animated) => scrollRef.current?.scrollTo({ y, animated }),
-      y: () => scrollY.current,
-    }),
-    [],
-  );
-  const [tab, setTab] = useState<Tab>(onglet === "sorties" ? "outings" : "feed");
   const [asking, setAsking] = useState(false);
-  const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const reloadAll = async () => {
-    await Promise.all([crew.reload(), members.reload(), pending.reload()]);
-  };
   async function run(action: () => Promise<unknown>, done?: string) {
     setBusy(true);
     setError(null);
@@ -149,7 +71,7 @@ export default function CrewScreen() {
     try {
       await action();
       if (done) setOk(done);
-      await reloadAll();
+      await crew.reload();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -171,50 +93,13 @@ export default function CrewScreen() {
     );
   }
 
-  const space = v.space;
-  /** Une sortie mise à jour (réponse) remplace l'ancienne sans recharger la page. */
-  const patchOuting = (next: CrewOutingView) =>
-    crew.setData({
-      ...v,
-      space: space ? { ...space, outings: space.outings.map((o) => (o.id === next.id ? next : o)) } : null,
-    } satisfies CrewView);
-  const answer = (o: CrewOutingView, a: CrewOutingRsvp) =>
-    void (async () => {
-      setBusy(true);
-      setError(null);
-      try {
-        patchOuting(await api.answerCrewOuting(v.id, o.id, a));
-      } catch (e) {
-        setError(errorMessage(e));
-      } finally {
-        setBusy(false);
-      }
-    })();
-  const cancelOuting = async (o: CrewOutingView) => {
-    if (!(await ask(L.cancelOutingConfirm(o.title)))) return;
-    void run(() => api.cancelCrewOuting(v.id, o.id), L.outingCancelled);
-  };
+  // Lot R7b2 : un membre actif d'un crew non dissous a son crew dans l'onglet Crew.
+  if (member && live) {
+    return <Redirect href={{ pathname: "/crew", params: { crew: v.slug, ...(onglet ? { onglet } : {}) } }} />;
+  }
+
   const since = new Date(v.createdAt).getFullYear();
   const friends = v.members.filter((m) => m.friend);
-  const requests = pending.data?.requests ?? [];
-
-  // Lot R6c (R6.7) : tout membre actif invite une personne de son réseau ; le chef confirme son arrivée. Le chef garde
-  // l'invitation par pseudo dans la même feuille.
-  const inviteSheet = (
-    <CrewInviteSheet
-      crew={inviting ? { id: v.id, name: v.name, leaderPseudo: v.leader?.pseudo ?? null } : null}
-      leader={leader}
-      onClose={() => setInviting(false)}
-      onSent={(pseudo) => {
-        setInviting(false);
-        setError(null);
-        setOk(
-          `${CL.sentTitle(pseudo)}. ${leader ? CL.sentByLeader : CL.sentByMember(v.leader?.pseudo ?? CL.leaderFallback)}`,
-        );
-        void reloadAll();
-      }}
-    />
-  );
   const requestSheet = (
     <CrewRequestSheet
       crew={asking ? { id: v.id, name: v.name, leaderPseudo: v.leader?.pseudo ?? null } : null}
@@ -251,17 +136,8 @@ export default function CrewScreen() {
   return (
     <PosterFlow
       onClose={close}
-      onRefresh={reloadAll}
-      scrollRef={scrollRef}
-      onScrollY={(y) => {
-        scrollY.current = y;
-      }}
-      overlays={
-        <>
-          {member && live ? inviteSheet : null}
-          {requestSheet}
-        </>
-      }
+      onRefresh={() => crew.reload()}
+      overlays={requestSheet}
       footer={footer}
       testID="crew-page"
       hero={
@@ -311,9 +187,9 @@ export default function CrewScreen() {
           {v.description}
         </Text>
       ) : null}
-      {leader || v.instagram ? (
+      {v.instagram || member ? (
         <View style={styles.chips}>
-          {leader ? <Tag tone="acc">{L.youLead}</Tag> : null}
+          {member && v.viewerState === "leader" ? <Tag tone="acc">{L.youLead}</Tag> : null}
           {v.instagram ? (
             <Pressable
               onPress={() => v.instagram && void Linking.openURL(crewInstagramUrl(v.instagram)).catch(() => undefined)}
@@ -335,274 +211,80 @@ export default function CrewScreen() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ok ? <Notice>{ok}</Notice> : null}
 
-      {/* `.r5cact` : Discussion (avec ses non-lus), Inviter et Réglages pour le chef. */}
+      {/* Crew dissous : la discussion reste lisible pour ses anciens membres. */}
       {member && v.conversationId ? (
-        <View style={styles.actions}>
-          <View style={styles.grow}>
-            <SmButton
-              kind="s"
-              big
-              wide
-              icon="chat"
-              onPress={() => router.push(`/boite/${v.conversationId}`)}
-              accessibilityLabel={L.discussionA11y(space?.unreadCount ?? 0)}
-              testID="crew-discussion"
-            >
-              {L.discussion}
-            </SmButton>
-            {space && space.unreadCount > 0 ? (
-              <View style={[styles.dot, { backgroundColor: c.accent }]} pointerEvents="none" testID="crew-unread">
-                <Text variant="meta" color={c.accentInk} style={styles.dotText}>
-                  {space.unreadCount > 99 ? "99+" : String(space.unreadCount)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          {leader && live ? (
-            <>
-              <SmButton
-                kind="s"
-                big
-                icon="share"
-                onPress={() => setInviting(true)}
-                accessibilityLabel={L.inviteA11y}
-                testID="crew-invite"
-              />
-              <SmButton
-                kind="s"
-                big
-                icon="gear"
-                onPress={() => router.push({ pathname: "/crew/reglages", params: { crew: v.slug } })}
-                accessibilityLabel={L.settingsA11y}
-                testID="crew-settings"
-              />
-            </>
-          ) : null}
-        </View>
-      ) : null}
-
-      {space ? (
-        <>
-          <CrewTabs<Tab>
-            items={[
-              { id: "feed", label: L.tabFeed, testID: "crew-tab-feed" },
-              { id: "outings", label: L.tabCount(L.tabOutings, space.outings.length), testID: "crew-tab-outings" },
-              { id: "garage", label: L.tabGarage, testID: "crew-tab-garage" },
-              {
-                id: "members",
-                label: L.tabCount(L.tabMembers, leader ? requests.length : 0),
-                testID: "crew-tab-members",
-              },
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
-
-          {tab === "feed" ? (
-            <CrewFeed crew={{ id: v.id, slug: v.slug, archived: v.archived }} scroller={scroller} />
-          ) : null}
-
-          {tab === "outings" ? (
-            <View style={styles.col} testID="crew-outings">
-              {space.canProposeOuting ? (
-                <SmButton
-                  kind="p"
-                  big
-                  wide
-                  icon="add"
-                  onPress={() => router.push({ pathname: "/crew/sortie", params: { crew: v.slug } })}
-                  testID="crew-propose-outing"
-                >
-                  {L.proposeOuting}
-                </SmButton>
-              ) : (
-                <Muted variant="caption" testID="crew-propose-reserved">
-                  {L.proposeReserved}
-                </Muted>
-              )}
-              <CrewSecHead title={L.outingsTitle} hint={L.outingsHint} icon="lock" />
-              {space.outings.length === 0 ? <Muted variant="body">{L.outingsEmpty}</Muted> : null}
-              {space.outings.map((o) => (
-                <OutingCard
-                  key={o.id}
-                  outing={o}
-                  busy={busy}
-                  onAnswer={(a) => answer(o, a)}
-                  onEdit={() => router.push({ pathname: "/crew/sortie", params: { crew: v.slug, sortie: o.id } })}
-                  onCancel={() => void cancelOuting(o)}
-                />
-              ))}
-              <CrewSecHead title={L.crewEventsTitle} hint={L.crewEventsHint} />
-              {space.events.length === 0 ? <Muted variant="body">{L.crewEventsEmpty}</Muted> : null}
-              {space.events.map((e) => (
-                <CrewEventRow
-                  key={e.slug}
-                  event={e}
-                  onPress={() =>
-                    leader && e.registered > 0
-                      ? router.push({ pathname: "/crew/inscription", params: { event: e.slug } })
-                      : router.push(`/e/${e.slug}`)
-                  }
-                />
-              ))}
-              {leader ? (
-                <SmButton
-                  kind="s"
-                  big
-                  wide
-                  icon="ticket"
-                  onPress={() => router.navigate("/explorer")}
-                  testID="crew-register"
-                >
-                  {L.registerCrew}
-                </SmButton>
-              ) : null}
-            </View>
-          ) : null}
-
-          {tab === "garage" ? (
-            <View style={styles.col} testID="crew-garage">
-              <CrewSecHead title={L.garageTitle} hint={L.garageCount(space.garage.length)} />
-              {space.garage.length === 0 ? <Muted variant="body">{L.garageEmpty}</Muted> : null}
-              {pairs(space.garage).map((row) => (
-                <View key={row.map((g) => g.id).join("-")} style={styles.grid}>
-                  {row.map((g) => (
-                    <GarageTile key={g.id} vehicle={g} onPress={() => router.push(`/v/${g.id}`)} />
-                  ))}
-                  {row.length === 1 ? <View style={styles.grow} /> : null}
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {tab === "members" ? (
-            <View style={styles.col} testID="crew-members">
-              {leader && requests.length > 0 ? (
-                <>
-                  <CrewSecHead title={L.requestsTitle} hint={L.requestsHint} />
-                  {requests.map((r) => (
-                    <RequestCard
-                      key={r.person.userId}
-                      request={r}
-                      busy={busy}
-                      onOpen={() => router.push(`/u/${encodeURIComponent(r.person.pseudo)}`)}
-                      onAccept={() => void run(() => api.acceptCrewRequest(v.id, r.person.userId))}
-                      onDecline={() => void run(() => api.declineCrewRequest(v.id, r.person.userId))}
-                    />
-                  ))}
-                </>
-              ) : null}
-              <CrewSecHead title={L.membersTitle} hint={String(members.data?.length ?? v.membersCount)} />
-              {(members.data ?? []).map((m) => (
-                <MemberRow
-                  key={m.userId}
-                  pseudo={m.pseudo}
-                  avatarUrl={m.avatarUrl}
-                  caption={memberCaption(m)}
-                  leader={m.role === "leader"}
-                  onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}
-                />
-              ))}
-              {/* Lot R6c (R6.7) : « Inviter quelqu'un » pour tout membre (chef compris). */}
-              {live ? (
-                <SmButton
-                  kind={leader ? "s" : "p"}
-                  big
-                  wide
-                  icon="add"
-                  onPress={() => setInviting(true)}
-                  testID="crew-invite-someone"
-                >
-                  {L.inviteSomeone}
-                </SmButton>
-              ) : null}
-              {v.viewerState === "member" ? (
-                <SmButton
-                  kind="g"
-                  icon="undo"
-                  disabled={busy}
-                  onPress={async () => {
-                    if (!me || !(await ask(crewLabels.leaveConfirm))) return;
-                    void run(() => api.removeCrewMember(v.id, me.user.id));
-                  }}
-                  testID="crew-leave"
-                >
-                  {crewLabels.leave}
-                </SmButton>
-              ) : null}
-            </View>
-          ) : null}
-        </>
+        <SmButton
+          kind="s"
+          big
+          wide
+          icon="chat"
+          onPress={() => router.push(`/boite/${v.conversationId}`)}
+          accessibilityLabel={L.discussionA11y(0)}
+          testID="crew-discussion"
+        >
+          {L.discussion}
+        </SmButton>
       ) : null}
 
       {/* Vitrine (R5.8, sans le garage : décision de Damien) : amis membres, membres, ce qui est réservé, la demande. */}
-      {!member ? (
-        <View style={styles.col} testID="crew-vitrine">
-          <FriendsBox friends={friends} />
-          <CrewSecHead title={L.membersTitle} hint={String(v.membersCount)} />
-          {v.members.map((m) => (
-            <MemberRow
-              key={m.pseudo}
-              pseudo={m.pseudo}
-              avatarUrl={m.avatarUrl}
-              caption={vitrineCaption(m)}
-              leader={m.role === "leader"}
-              onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}
-            />
-          ))}
-          <InfoBox
-            icon="lock"
-            title={L.membersOnly}
-            caption={L.leaderAccepts(v.leader?.pseudo ?? null)}
-            testID="crew-members-only"
+      <View style={styles.col} testID="crew-vitrine">
+        <FriendsBox friends={friends} />
+        <CrewSecHead title={L.membersTitle} hint={String(v.membersCount)} />
+        {v.members.map((m) => (
+          <MemberRow
+            key={m.pseudo}
+            pseudo={m.pseudo}
+            avatarUrl={m.avatarUrl}
+            caption={vitrineCaption(m)}
+            leader={m.role === "leader"}
+            onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}
           />
-          {v.viewerState === "requested" ? (
-            <InfoBox
+        ))}
+        <InfoBox
+          icon="lock"
+          title={L.membersOnly}
+          caption={L.leaderAccepts(v.leader?.pseudo ?? null)}
+          testID="crew-members-only"
+        />
+        {v.viewerState === "requested" ? (
+          <InfoBox
+            icon="check"
+            tone="accent"
+            title={L.requestSentTo(v.leader?.pseudo ?? null)}
+            caption={L.requestSentHint}
+            testID="crew-request-sent"
+          />
+        ) : null}
+        {v.viewerState === "invited" && live ? (
+          <View style={styles.actions}>
+            <SmButton
+              kind="s"
+              big
               icon="check"
-              tone="accent"
-              title={L.requestSentTo(v.leader?.pseudo ?? null)}
-              caption={L.requestSentHint}
-              testID="crew-request-sent"
-            />
-          ) : null}
-          {v.viewerState === "invited" && live ? (
-            <View style={styles.actions}>
-              <SmButton
-                kind="s"
-                big
-                icon="check"
-                style={styles.grow}
-                disabled={busy}
-                onPress={() => void run(() => api.acceptCrewInvitation(v.id))}
-                testID="crew-invitation-accept"
-              >
-                {crewLabels.acceptInvitation}
-              </SmButton>
-              <SmButton
-                kind="g"
-                big
-                icon="close"
-                disabled={busy}
-                onPress={() => void run(() => api.declineCrewInvitation(v.id))}
-              >
-                {crewLabels.declineInvitation}
-              </SmButton>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
+              style={styles.grow}
+              disabled={busy}
+              onPress={() => void run(() => api.acceptCrewInvitation(v.id))}
+              testID="crew-invitation-accept"
+            >
+              {crewLabels.acceptInvitation}
+            </SmButton>
+            <SmButton
+              kind="g"
+              big
+              icon="close"
+              disabled={busy}
+              onPress={() => void run(() => api.declineCrewInvitation(v.id))}
+            >
+              {crewLabels.declineInvitation}
+            </SmButton>
+          </View>
+        ) : null}
+      </View>
 
       {/* Signaler (lot 32) : un crew dont on n'est pas le chef. */}
-      {!leader && live ? <ReportButton look="link" type="crew" id={v.id} /> : null}
+      {v.viewerState !== "leader" && live ? <ReportButton look="link" type="crew" id={v.id} /> : null}
     </PosterFlow>
   );
-}
-
-/** Le garage en deux colonnes. */
-function pairs<T>(items: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += 2) out.push(items.slice(i, i + 2));
-  return out;
 }
 
 /** « Crew · Pyrénées-Orientales · … » (maquette R5.7) : le nom du département, son numéro s'il est inconnu. */
@@ -640,18 +322,5 @@ const styles = StyleSheet.create({
   scText: { fontSize: 12.5 },
   actions: { flexDirection: "row", alignItems: "stretch", gap: space2 },
   grow: { flex: 1, minWidth: 0 },
-  dot: {
-    position: "absolute",
-    top: 6,
-    right: 8,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dotText: { fontSize: 11, lineHeight: 13 },
   col: { gap: space3 },
-  grid: { flexDirection: "row", gap: 10 },
 });
