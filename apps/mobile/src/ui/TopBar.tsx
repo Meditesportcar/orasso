@@ -4,6 +4,8 @@
 // est dans Mon profil. Appui long sur le logotype : retour à la casquette de base (exposant ou visiteur) ; appui sur la
 // pastille : Mon profil de la casquette de base. La Boîte réunit messages, demandes et notifications : sa pastille compte
 // les deux ; pour l'organisateur, les non-lus de la Boîte de la structure.
+// Lot R7a1 (D38) : pour le passionné (exposant ou visiteur), la Boîte se sépare en la cloche « Activité » et la bulle
+// « Messages », chacune avec sa pastille (les autres casquettes gardent la Boîte, jusqu'au lot R7c2).
 // Lot C1 (artefact DA v2, `.capchip`) : la pastille « Organisateur » (logo de la structure) seulement pour
 // l'organisateur (et l'Administration, sans onglet Profil : la pastille est son seul retour).
 // Lot M7 (deux modes d'affichage) : le layout d'un groupe d'onglets (`PersonaTabs`) pose la bande une fois
@@ -19,13 +21,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
 import { mutationCount } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
-import { homeOf, personaKindLabels, tabHref } from "@/lib/personaModel";
+import { homeOf, isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 
 type Band = Pick<
   AppBarProps,
-  "persona" | "onPersona" | "onLogo" | "onLogoLongPress" | "logoHint" | "onSearch" | "onInbox" | "inboxCount"
+  | "persona"
+  | "onPersona"
+  | "onLogo"
+  | "onLogoLongPress"
+  | "logoHint"
+  | "onSearch"
+  | "onInbox"
+  | "inboxCount"
+  | "onActivity"
+  | "activityCount"
+  | "onMessages"
+  | "messagesCount"
 >;
 
 type BandValue = { band: Band; refresh: () => void };
@@ -60,6 +73,10 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     ? orgInbox.data.participantMessages + orgInbox.data.staffDiscussions + orgInbox.data.staffRequests
     : 0;
   const inboxCount = structureId ? orgCount : (me?.unreadInbox ?? 0) + (me?.counts.unreadNotifications ?? 0);
+  // Lot R7a1 (D38) : le passionné (exposant ou visiteur) a la loupe, la cloche « Activité » et la bulle « Messages »,
+  // chacune avec sa pastille ; les autres casquettes gardent la Boîte. Les deux compteurs sont déjà séparés dans
+  // `GET /me` : `unreadNotifications` (la cloche) et `unreadInbox` (conversations non lues et demandes : la bulle).
+  const passionate = isBaseKind(persona.kind);
   const baseLabel = personaKindLabels[base.kind];
 
   const band = useMemo<Band>(
@@ -79,8 +96,31 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
       onSearch: () => router.push("/recherche"),
       onInbox: () => router.push(persona.kind === "organizer" ? "/boite/orga" : "/boite"),
       inboxCount,
+      // Tant que le lot R7c2 n'existe pas : la cloche ouvre la Boîte (onglet Tout), la bulle son onglet Messages.
+      ...(passionate
+        ? {
+            onActivity: () => router.push("/boite"),
+            activityCount: me?.counts.unreadNotifications ?? 0,
+            onMessages: () => router.push({ pathname: "/boite", params: { onglet: "messages" } }),
+            messagesCount: me?.unreadInbox ?? 0,
+          }
+        : null),
     }),
-    [showPersona, active.logoUrl, active.label, persona, base, baseLabel, choose, backToBase, router, inboxCount],
+    [
+      showPersona,
+      active.logoUrl,
+      active.label,
+      persona,
+      base,
+      baseLabel,
+      choose,
+      backToBase,
+      router,
+      inboxCount,
+      passionate,
+      me?.counts.unreadNotifications,
+      me?.unreadInbox,
+    ],
   );
 
   const value = useMemo(() => ({ band, refresh }), [band, refresh]);

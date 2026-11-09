@@ -14,6 +14,7 @@ import {
   type AppPersonaEntry,
   type BasePersona,
   baseOf,
+  destinationHref,
   entryOfPersona,
   FAN_ENTRY,
   homeOf,
@@ -121,12 +122,14 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
 
   const goTab = useCallback(
     (route: string) => {
-      const own = tabHref(persona.kind, route);
+      const own = destinationHref(persona.kind, route);
       if (own) {
-        router.navigate(own as never);
+        // Lot R7a1 : une page qui n'est plus un onglet (Sorties, Garage) s'ouvre par-dessus la barre, avec son retour.
+        if (tabHref(persona.kind, route)) router.navigate(own as never);
+        else router.push(own as never);
         return;
       }
-      const fallback = tabHref(base.kind, route);
+      const fallback = destinationHref(base.kind, route);
       if (fallback) choose(base, fallback);
       else router.navigate(homeOf(persona) as never);
     },

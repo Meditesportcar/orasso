@@ -18,7 +18,7 @@ import { CrewDot, Num } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
-import { type AppPersonaEntry, isActive, personaOfEntry, tabHref } from "@/lib/personaModel";
+import { type AppPersonaEntry, destinationHref, isActive, personaOfEntry, tabHref } from "@/lib/personaModel";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -249,7 +249,7 @@ export function CapRows({ staffEvents }: { staffEvents: MyStaffEvent[] }) {
           onPress={() => {
             const first = staffEvents[0];
             if (staffEvents.length === 1 && first) router.push(`/staff/${first.event.id}`);
-            else choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
+            else choose(base, destinationHref(base.kind, "sorties") ?? "/");
           }}
           testID="casquette-staff"
         />

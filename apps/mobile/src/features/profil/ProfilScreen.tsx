@@ -15,6 +15,7 @@ import {
   capLabels,
   fitWideWordSize,
   gradeLabels,
+  navLabels,
   passportScreenTexts,
   profilePhotoLabels,
   settingsHubLabels,
@@ -215,6 +216,17 @@ export function ProfilScreen() {
           stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
           onPassport={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
           onHistory={() => router.push("/reglages/points")}
+        />
+      ) : null}
+
+      {/* Lot R7a1 : le Garage n'est plus un onglet ; une ligne l'ouvre, en attendant l'onglet interne du lot R7b1. */}
+      {base && persona.kind === "fan" ? (
+        <HubRow
+          lead={<RowIcon name="vehicle" />}
+          title={navLabels.garageRow.title}
+          caption={navLabels.garageRow.caption}
+          onPress={() => router.push("/garage")}
+          testID="profil-garage"
         />
       ) : null}
 

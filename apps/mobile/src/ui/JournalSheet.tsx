@@ -73,22 +73,26 @@ function UncertainAction({ eventId }: { eventId: string }) {
 const asksUncertain = (n: NotificationItem) =>
   n.data?.action === SET_OUTLOOK_UNCERTAIN_ACTION && typeof n.data.eventId === "string";
 
-export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+/**
+ * Les lignes du Journal (notifications), sans cadre : la feuille du Journal et, depuis le lot R7a1, l'onglet Le Fil
+ * (coquille en attendant l'écran du lot R7e2) les affichent. `active` : la liste n'est lue que tant que l'écran qui la
+ * porte est ouvert ; l'ouvrir, c'est lire (les pastilles de la cloche retombent). `onNavigate` : appelé avant d'ouvrir
+ * la cible d'une ligne (la feuille se ferme).
+ */
+export function JournalList({ active, onNavigate }: { active: boolean; onNavigate?: () => void }) {
   const { t } = useTheme();
   const router = useRouter();
   const { choose } = usePersona();
-  const list = useApi(() => api.notifications(), [visible], { enabled: visible });
+  const onClose = onNavigate ?? (() => undefined);
+  const list = useApi(() => api.notifications(), [active], { enabled: active });
 
   // Ouvrir le Journal, c'est lire : les pastilles de la cloche retombent.
   useEffect(() => {
-    if (visible && list.data?.items.some((n) => !n.readAt)) void api.markNotificationsRead().catch(() => undefined);
-  }, [visible, list.data]);
+    if (active && list.data?.items.some((n) => !n.readAt)) void api.markNotificationsRead().catch(() => undefined);
+  }, [active, list.data]);
 
   return (
-    <AppSheet visible={visible} onClose={onClose} from="top" accessibilityLabel="Journal">
-      <Text variant="title" color={t.color.ink}>
-        {socialLabels.journal}
-      </Text>
+    <>
       {list.loading ? (
         <Text variant="body" color={t.color.inkMuted}>
           Chargement…
@@ -150,6 +154,18 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
           {list.error ? "Le Journal est hors ligne." : socialLabels.journalEmpty}
         </Text>
       )}
+    </>
+  );
+}
+
+export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTheme();
+  return (
+    <AppSheet visible={visible} onClose={onClose} from="top" accessibilityLabel="Journal">
+      <Text variant="title" color={t.color.ink}>
+        {socialLabels.journal}
+      </Text>
+      <JournalList active={visible} onNavigate={onClose} />
     </AppSheet>
   );
 }

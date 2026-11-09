@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 
 import { usePersona } from "@/lib/persona";
-import { tabHref } from "@/lib/personaModel";
+import { destinationHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 
 export function TabRedirect({ route }: { route: string }) {
@@ -23,9 +23,9 @@ export function TabRedirect({ route }: { route: string }) {
       Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
     ).toString();
     const suffix = query ? `?${query}` : "";
-    const own = tabHref(persona.kind, route);
+    const own = destinationHref(persona.kind, route);
     if (own) router.replace(`${own}${suffix}` as never);
-    else choose(base, `${tabHref(base.kind, route) ?? "/"}${suffix}`);
+    else choose(base, `${destinationHref(base.kind, route) ?? "/"}${suffix}`);
   }, [ready, status, persona, base, route, params, router, choose]);
 
   return null;

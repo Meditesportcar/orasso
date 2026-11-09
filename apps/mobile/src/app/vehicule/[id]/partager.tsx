@@ -15,7 +15,7 @@ export default function PartagerVehicule() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const vehicle = useApi(() => api.vehicle(id), [id]);
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
   const model = vehicle.data?.modelName;
   return (
     <FlowScreen title={L.title} facts={model ? L.subtitleOf(model) : L.subtitle} onClose={close}>
