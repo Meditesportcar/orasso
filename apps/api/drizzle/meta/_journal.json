@@ -484,6 +484,13 @@
       "when": 1794183543573,
       "tag": "0068_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1794196938930,
+      "tag": "0069_activity",
+      "breakpoints": true
     }
   ]
 }

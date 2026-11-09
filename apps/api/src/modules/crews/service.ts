@@ -485,6 +485,12 @@ async function pendingCount(userId: string, ex: Executor = db): Promise<number> 
           -- Lot R6c, tour 2 : sans les invitations d'une personne dont j'ai coupé les invitations.
           and not exists (
             select 1 from invitation_mutes im where im.user_id = ${userId} and im.muted_user_id = i.invited_by
+          )
+          -- Tour 2 : la liste ne montre pas l'invitation d'un chef supprimé, banni ou suspendu : la pastille non plus.
+          and exists (
+            select 1 from profiles lp
+            where lp.user_id = coalesce(i.invited_by, c.created_by) and lp.deleted_at is null and lp.banned_at is null
+              and (lp.suspended_until is null or lp.suspended_until <= ${at})
           )) as n`);
   return Number((result.rows[0] as { n?: number | string } | undefined)?.n ?? 0);
 }
@@ -1387,7 +1393,9 @@ export const crewsService = {
         ];
       }
       const leader = inviters.get(r.m.invitedBy ?? r.crew.createdBy);
-      if (!leader || leader.deletedAt) return [];
+      // Tour 2 : comme la vitrine du crew, pas d'invitation d'un chef supprimé, banni ou suspendu.
+      if (!leader || leader.deletedAt || leader.bannedAt || (leader.suspendedUntil && leader.suspendedUntil > at))
+        return [];
       return [
         {
           kind: "invitation",

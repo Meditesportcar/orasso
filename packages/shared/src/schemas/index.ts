@@ -1,5 +1,6 @@
 export * from "./access";
 export * from "./account";
+export * from "./activity";
 export * from "./admin";
 export * from "./afterEvent";
 export * from "./application";
