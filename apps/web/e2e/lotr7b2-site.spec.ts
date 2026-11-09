@@ -37,7 +37,7 @@ test("un crew : onglets, Discussion, voitures du membre, Spots", async ({ page }
   await expect(page.getByTestId("crew-tab-garage")).toHaveCount(0);
   await expect(page.getByTestId("crew-feed")).toBeVisible();
   await expect(page.getByTestId("crew-outings")).toBeVisible();
-  await expect(page.getByTestId("crew-discussion")).toHaveAttribute("href", /\/app\/boite\//);
+  await expect(page.getByTestId("crew-discussion")).toHaveAttribute("href", /\/app\/messages\//);
   await page.getByTestId("crew-tab-membres").click();
   await expect(page.getByTestId("crew-members")).toBeVisible();
   await page.getByTestId("crew-member-open").first().click();

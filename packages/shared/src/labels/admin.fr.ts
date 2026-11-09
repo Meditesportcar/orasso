@@ -1,4 +1,5 @@
 import type { AdminSettingKey } from "../rules/admin";
+import type { SponsoredSurface } from "../rules/sponsored";
 import type { AdminOverview, AssistanceCloseReason, AssistanceStatus, NewsletterStatus } from "../schemas/admin";
 
 // Administration (lot 33) : accueil et files, registres, mode assistance, réglages, newsletter, désinscription.
@@ -43,7 +44,8 @@ export const adminOverviewTiles: { key: keyof AdminOverview; label: string; href
 
 export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "signup.enabled": "Inscriptions ouvertes",
-  "sponsored.enabled": "Emplacements sponsorisés sur l'Accueil",
+  "sponsored.enabled": "Emplacements sponsorisés (Accueil et Fil)",
+  "sponsored.external_enabled": "Annonceurs externes dans le Fil (avis juridique attendu)",
   "providers.enabled": "Candidatures des prestataires",
   "points.participation": "Présent à un événement",
   "points.staff": "Staff présent",
@@ -119,6 +121,12 @@ export const placementStatusLabels: Record<"draft" | "active" | "paused" | "ende
   active: "Actif",
   paused: "En pause",
   ended: "Terminé",
+};
+
+/** Où s'affiche un emplacement (lot R7k1). */
+export const placementSurfaceLabels: Record<SponsoredSurface, string> = {
+  home: "Accueil",
+  feed: "Le Fil",
 };
 
 /** Contrôle automatique du SIRET d'une fiche pro (lot 14). */

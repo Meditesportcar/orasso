@@ -218,6 +218,31 @@ describe("Sponsorisé (point d'insertion)", () => {
     expect(out.indexOf("S22")).toBe(1);
     expect(out.indexOf("S28")).toBe(7);
   });
+  it("un décalage énorme (curseur forgé) ne boucle pas et rend le même résultat que la boucle simple", () => {
+    const t0 = Date.now();
+    const calls: number[] = [];
+    insertSponsored(
+      ["x", "y"],
+      (p) => {
+        calls.push(p);
+        return `S${p}`;
+      },
+      4_294_967_295,
+    );
+    expect(Date.now() - t0).toBeLessThan(50);
+    expect(calls.every((p) => p > 4_294_967_295)).toBe(true);
+    // Équivalence avec le calcul « position par position » pour des décalages ordinaires.
+    for (const offset of [0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23]) {
+      const page = Array.from({ length: 20 }, (_, i) => `d${i + 1}`);
+      const expected = [...page];
+      for (let position = 4; position <= offset + expected.length + 1; position += 6) {
+        const index = position - 1 - offset;
+        if (index < 0 || index > expected.length) continue;
+        expected.splice(index, 0, `S${position}`);
+      }
+      expect(insertSponsored(page, (p) => `S${p}`, offset)).toEqual(expected);
+    }
+  });
 });
 
 describe("visibilité d'une publication", () => {

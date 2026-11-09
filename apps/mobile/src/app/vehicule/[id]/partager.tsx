@@ -7,15 +7,17 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ShareBody } from "@/features/vehicle/ShareSheet";
 import { shareSheetKey } from "@/features/vehicle/shareSheetKey";
 import { api } from "@/lib/api";
+import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 
 export default function PartagerVehicule() {
   const router = useRouter();
+  const { openProfile } = usePersona();
   const { id } = useLocalSearchParams<{ id: string }>();
   const vehicle = useApi(() => api.vehicle(id), [id]);
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
+  const close = () => (router.canGoBack() ? router.back() : openProfile("garage"));
   const model = vehicle.data?.modelName;
   return (
     <FlowScreen title={L.title} facts={model ? L.subtitleOf(model) : L.subtitle} onClose={close}>

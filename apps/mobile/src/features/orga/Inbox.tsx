@@ -241,7 +241,7 @@ export function InboxScreen() {
           <Muted variant="body">{conversations.loading ? "Chargement…" : orgaLabels.participantsEmpty}</Muted>
         ) : (
           (conversations.data?.items ?? []).map((c) => (
-            <ParticipantRow key={c.id} c={c} onPress={() => router.push(`/boite/${c.id}`)} />
+            <ParticipantRow key={c.id} c={c} onPress={() => router.push(`/messages/${c.id}`)} />
           ))
         )
       ) : null}
@@ -265,7 +265,7 @@ export function InboxScreen() {
             variant="plate"
             icon="chat"
             next
-            onPress={() => router.push(withReturn("/modeles", "/boite/orga") as never)}
+            onPress={() => router.push(withReturn("/modeles", "/messages/orga") as never)}
             fullWidth
             testID="orga-templates-open"
           >
@@ -286,7 +286,7 @@ export function InboxScreen() {
           {permanent.data ? (
             <StaffChatRow
               chat={permanent.data}
-              onOpen={() => router.push(`/boite/${permanent.data?.conversationId}`)}
+              onOpen={() => router.push(`/messages/${permanent.data?.conversationId}`)}
             />
           ) : (
             <Muted variant="body">{permanent.loading ? "Chargement…" : null}</Muted>
@@ -299,7 +299,7 @@ export function InboxScreen() {
               <StaffChatRow
                 key={chat.conversationId}
                 chat={chat}
-                onOpen={() => router.push(`/boite/${chat.conversationId}`)}
+                onOpen={() => router.push(`/messages/${chat.conversationId}`)}
               />
             ))
           )}

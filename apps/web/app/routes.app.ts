@@ -9,12 +9,23 @@ export default [
     // Lot R7a1 (D38) : Le Fil et Crew, deux onglets en coquille (les écrans viennent des lots R7e2 et R7b2) ; « Compris » du
     // bandeau « où sont passées les choses » (action seulement).
     route("app/fil", "routes/app-fil.tsx"),
+    // Lot R7e2 : publier au Fil et « Mes publications ».
+    route("app/fil/publier", "routes/app-fil-publier.tsx"),
+    route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
+    // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
+    route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
-    // Boîte (lot 18) : conversations, demandes, conversation en temps réel.
-    route("app/boite", "routes/boite.tsx"),
-    route("app/boite/demandes", "routes/boite-demandes.tsx"),
-    route("app/boite/:id", "routes/boite-conversation.tsx"),
+    // Lot R7c2 (D38) : la Boîte disparaît. Activité (la cloche) et ses Demandes, Messages (la bulle), ses Demandes de message
+    // et la conversation en temps réel ; les anciennes adresses `/app/boite*` et `/app/journal` redirigent (302).
+    route("app/activite", "routes/app-activite.tsx"),
+    route("app/activite/demandes", "routes/app-activite-demandes.tsx"),
+    route("app/messages", "routes/app-messages.tsx"),
+    route("app/messages/demandes", "routes/app-messages-demandes.tsx"),
+    route("app/messages/:id", "routes/app-messages-conversation.tsx"),
+    route("app/boite", "routes/app-boite-redirect.ts", { id: "boite-index" }),
+    route("app/boite/demandes", "routes/app-boite-redirect.ts", { id: "boite-demandes" }),
+    route("app/boite/:id", "routes/app-boite-redirect.ts", { id: "boite-conversation" }),
     route("app/acces", "routes/acces.tsx"),
     // Lot 57 (DA v2) : l'onglet Accès devient Sorties (`/app/acces` redirige) ; passeport, prix du public, récap, média,
     // fiche d'un média et vitrine d'un prestataire (connectés seulement), comme l'appli.
@@ -50,7 +61,7 @@ export default [
     route("app/profil-public", "routes/profil-public.tsx"),
     // Lot R5b : « Modifier mon profil » (photo, pseudo, description, réseaux).
     route("app/profil/modifier", "routes/profil-modifier.tsx"),
-    route("app/journal", "routes/journal.tsx"),
+    route("app/journal", "routes/app-boite-redirect.ts", { id: "journal-redirect" }),
     route("u/:pseudo", "routes/profil.tsx"),
     route("v/:id", "routes/vehicule.tsx"),
     // Crews (lot 19) : mes crews et création, fiche d'un crew (connectés seulement).

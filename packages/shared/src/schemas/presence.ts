@@ -73,8 +73,11 @@ export type HomeLive = {
   };
   dayIndex: number;
   dayCount: number;
+  /** Une place retenue ou un billet pour cet événement : sans elle (présence seule), pas de « Mon accès ». */
+  hasPlace: boolean;
   onSiteCount: number | null;
-  votes: { open: number; voted: number };
+  /** `canVote` : le droit personnel de voter maintenant (calculé par la règle des votes, jamais déduit de `open`). */
+  votes: { open: number; voted: number; canVote: boolean };
   /** Horaires du jour et consignes (aux retenus seulement) ; ce qui existe, rien d'inventé. */
   programToday: { dayDate: string; startsAt: string; endsAt: string; instructions: string | null } | null;
   /** Story de l'organisateur (R7h) : `null` tant qu'elle n'existe pas. */

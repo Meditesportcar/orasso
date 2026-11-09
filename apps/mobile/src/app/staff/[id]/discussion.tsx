@@ -5,7 +5,7 @@ import { communicationLabels, type StaffConversationState } from "@orasso/shared
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ConversationScreen } from "@/app/boite/[id]";
+import { ConversationScreen } from "@/app/messages/[id]";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { Muted } from "@/ui/Muted";

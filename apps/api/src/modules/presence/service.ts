@@ -280,9 +280,11 @@ export const presenceService = {
    */
   async homeLive(v: Viewer): Promise<HomeLive | null> {
     const t = now();
-    const rows = await db.execute<{ id: string; retained: boolean }>(sql`select e.id,
+    const rows = await db.execute<{ id: string; retained: boolean; ticketed: boolean }>(sql`select e.id,
         exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${v.user.id}
-          and a.kind = 'vehicle' and a.status = 'accepted') as retained
+          and a.kind = 'vehicle' and a.status = 'accepted') as retained,
+        exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${v.user.id}
+          and k.status in ('valid', 'used')) as ticketed
       from events e
       where e.status = 'published' and e.starts_at <= ${t} and e.ends_at > ${t}
         and (exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${v.user.id}
@@ -294,7 +296,7 @@ export const presenceService = {
     // Droits ACTUELS : un événement privé dont l'invitation de la personne a été révoquée n'apparaît plus, même si elle
     // y a un billet ou une présence ; on prend le premier de la liste que la personne a encore le droit de voir (le filtre des droits passe avant toute limite :
     // la liste n'est pas tronquée, elle ne compte que les événements en cours où la personne a une place).
-    let hit: { id: string; retained: boolean } | undefined;
+    let hit: { id: string; retained: boolean; ticketed: boolean } | undefined;
     let e: EventRow | undefined;
     for (const candidate of rows.rows) {
       const row = await db.query.events.findFirst({ where: eq(events.id, candidate.id) });
@@ -307,15 +309,18 @@ export const presenceService = {
     if (!hit || !e) return null;
     const days = await daysRepo.list(e.id);
     const day = currentDay(days, t);
-    const [structure, onSite, entered, voted] = await Promise.all([
+    const [structure, onSite, voted] = await Promise.all([
       structureById(e.structureId),
       onSiteCount(db, e.id, day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null),
-      vehiclesEntered(db, e.id),
       db.execute<{ n: number }>(
         sql`select count(*)::int as n from audience_votes where event_id = ${e.id} and voter_user_id = ${v.user.id}`,
       ),
     ]);
     const { dayIndex, dayCount } = liveDay({ days }, t);
+    // Le droit PERSONNEL de voter (même règle que l'écran de vote : preuve de présence, fenêtre, deux véhicules pointés) :
+    // « Voter » n'est le bouton principal de l'Accueil que pour qui peut voter.
+    const votesOpen = await openVotesCount(db, e);
+    const canVote = votesOpen > 0 && (await canVoteNow(db, e, v.user.id));
     // Le programme du jour : les horaires du jour en cours (ou de l'événement s'il tient en un jour), et les consignes aux
     // retenus seulement ; rien d'inventé.
     const today = days.length >= 2 ? (days[dayIndex - 1] ?? null) : null;
@@ -332,9 +337,11 @@ export const presenceService = {
       },
       dayIndex,
       dayCount,
+      // Une place à montrer (retenue ou billet) : sans elle, pas de « Mon accès » (présence seule, GPS).
+      hasPlace: hit.retained || hit.ticketed,
       // Publié et en cours (la requête l'impose) : le nombre sur place est visible.
       onSiteCount: onSite,
-      votes: { open: await openVotesCount(db, e), voted: Number(voted.rows[0]?.n ?? 0) },
+      votes: { open: votesOpen, voted: Number(voted.rows[0]?.n ?? 0), canVote },
       programToday: {
         dayDate: today?.dayDate ?? localDate(e.startsAt),
         startsAt: (today?.startsAt ?? e.startsAt).toISOString(),

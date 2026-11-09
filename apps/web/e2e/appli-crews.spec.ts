@@ -84,16 +84,19 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await k.page.getByTestId("people-q").fill(`Roussillon ${s}`);
     await expect(k.page.getByTestId("crew-row").first()).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `02-explorer-crews-${theme}`);
-    // Lot C2b : le crew vit dans Mon profil (« Mon crew »), plus dans le Garage.
+    // Lot C2b : le crew vit dans Mon profil (« Mon crew »), plus dans le Garage. Lot R7b1 : il a quitté le Profil,
+    // l'onglet Crew (R7a1) le montre.
     await k.page.goto("/profil");
-    await expect(k.page.getByTestId("profil-crew")).toBeVisible({ timeout: 30_000 });
+    await expect(k.page.getByTestId("profil-crew")).toHaveCount(0);
+    await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
+    await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
     await shot(k.page, `03-profil-crew-${theme}`);
     await k.page.goto("/accueil");
     await k.page
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await k.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
+    await k.page.getByTestId("activity-requests-row").click(); // Lot R7c2 : la ligne « Demandes · N » de l'Activité.
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
 
@@ -126,7 +129,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       .getByRole("button", { name: /^Activité/ })
       .first()
       .click();
-    await l.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
+    await l.page.getByTestId("activity-requests-row").click(); // Lot R7c2 : la ligne « Demandes · N » de l'Activité.
     await expect(l.page.getByTestId("request-crew-confirmation")).toBeVisible({ timeout: 20_000 });
     await shot(l.page, `07-demandes-venue-${theme}`);
     await l.page.goto("/acces");

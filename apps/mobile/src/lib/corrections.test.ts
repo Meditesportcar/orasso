@@ -38,10 +38,17 @@ describe("liens du site ouverts dans l'appli", () => {
   it("lot 40 : anciens chemins d'Accès, de la Boîte et de Moi vers leur nouvelle place", () => {
     expect(redirectSystemPath({ path: "https://orasso.fr/app/acces?avis=abc", initial: true })).toBe("/acces?avis=abc");
     expect(redirectSystemPath({ path: "/app/sorties", initial: false })).toBe("/acces");
-    expect(redirectSystemPath({ path: "/app/boite", initial: true })).toBe("/boite");
-    expect(redirectSystemPath({ path: "/app/boite/demandes", initial: true })).toBe("/boite?segment=demandes");
+    // Lot R7c2 : la Boîte a disparu, ses anciennes adresses mènent à l'Activité et aux Messages.
+    expect(redirectSystemPath({ path: "/app/boite", initial: true })).toBe("/messages");
+    expect(redirectSystemPath({ path: "/app/boite/demandes", initial: true })).toBe("/activite/demandes");
+    expect(redirectSystemPath({ path: "/app/journal", initial: true })).toBe("/activite");
+    expect(redirectSystemPath({ path: "/app/activite", initial: true })).toBe("/activite");
+    expect(redirectSystemPath({ path: "/app/activite/demandes", initial: true })).toBe("/activite/demandes");
+    expect(redirectSystemPath({ path: "/app/messages", initial: true })).toBe("/messages");
+    expect(redirectSystemPath({ path: "/app/messages/demandes", initial: true })).toBe("/messages/demandes");
     const id = "0b9f6c1e-2c3d-4e5f-8a9b-0c1d2e3f4a5b";
-    expect(redirectSystemPath({ path: `/app/boite/${id}`, initial: true })).toBe(`/boite/${id}`);
+    expect(redirectSystemPath({ path: `/app/boite/${id}`, initial: true })).toBe(`/messages/${id}`);
+    expect(redirectSystemPath({ path: `/app/messages/${id}`, initial: true })).toBe(`/messages/${id}`);
     expect(redirectSystemPath({ path: "/app/moi", initial: true })).toBe("/moi");
     expect(redirectSystemPath({ path: "/acces", initial: true })).toBe("/acces");
   });

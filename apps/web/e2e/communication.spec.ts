@@ -103,7 +103,7 @@ test("communication : annonce publique, consignes, message groupé, discussions 
       { timeout: 30_000 },
     )
     .toBe(1);
-  await pageP.goto("/app/boite");
+  await pageP.goto("/app/messages");
   await pageP.getByTestId("conversation-row").first().click();
   await expect(pageP.getByTestId("messages")).toContainText(`Bonjour ${pseudo}, accueil à 18 h 30 ${s}`);
   await page.goto(`${base}?onglet=messages`);

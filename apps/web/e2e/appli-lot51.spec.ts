@@ -215,13 +215,15 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await page.waitForURL(/preferences/, { timeout: 30_000 });
     await page.goto("/garage");
     await afterOpening(page);
-    await expect(page.getByRole("heading", { name: "Mon garage" }).first()).toBeVisible({ timeout: 30_000 });
+    // Lot R7b1 : le Garage est l'onglet interne du Profil (plus de grand titre « Mon garage »).
+    await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
     await expect(page.getByText("1 véhicule").first()).toBeVisible();
     await expect(page.getByTestId("garage-card-name")).toHaveText("Toyota Supra Mk5");
     await expect(page.getByText("3.0 L6 turbo · 2021 · blanc").first()).toBeVisible();
     // Lot M5 : vocabulaire de Damien (« carte » = le plan) ; la mini-fiche dit « Partager ».
     await expect(page.getByTestId("garage-share")).toBeVisible();
-    await expect(page.getByText("Marque, photos, plaque floutée : deux minutes.").first()).toBeVisible();
+    // Lot R7b1 : « Ajouter un véhicule » est le bouton principal du panneau Garage (plus la carte en pointillés et sa phrase).
+    await expect(page.getByTestId("garage-add")).toBeVisible();
     await checkDesign(page);
     await shot(page, "07-garage", theme);
 

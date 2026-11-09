@@ -61,7 +61,7 @@ for (const theme of ["beton", "sable"] as const) {
       // 2. Compte privé : « Demander à suivre » → « Demandé », la ligne réservée aux abonnés.
       await page.goto(`/u/${priv.pseudo}`);
       await expect(page.getByTestId("follow-button")).toHaveText(/Demander à suivre/i);
-      await expect(page.getByTestId("profile-private-note")).toContainText("sont pour ses abonnés.");
+      await expect(page.getByTestId("profile-private-note")).toContainText("sont visibles de ses abonnés.");
       await page.getByTestId("follow-button").click();
       await expect(page.getByTestId("follow-button")).toHaveText(/Demandé/i);
       await expect(page.getByTestId("profile-private-note")).toContainText("Ta demande attend sa réponse.");
@@ -126,23 +126,23 @@ for (const theme of ["beton", "sable"] as const) {
   }
 }
 
-test("R6b site (beton, 390) : Boîte, 31 demandes d'abonnement, « Suivants » montre la plus ancienne", async ({
+test("R6b site (beton, 390) : Demandes, 51 demandes d'abonnement (50 par page), « Suivants » montre la plus ancienne", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
-  const target = await privateWithRequests("R6sBoite", 31);
+  const target = await privateWithRequests("R6sBoite", 51);
   const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
   const page = await ctx.newPage();
   await setTheme(page, "beton");
-  await loginInBrowser(page, target.email, SEED_PASSWORD, "/app/boite/demandes");
-  await page.goto("/app/boite/demandes");
-  await expect(page.getByTestId("request-follow")).toHaveCount(30);
+  await loginInBrowser(page, target.email, SEED_PASSWORD, "/app/activite/demandes");
+  await page.goto("/app/activite/demandes");
+  await expect(page.getByTestId("request-follow")).toHaveCount(50);
   await expect(page.getByText(target.askers[0] as string)).toHaveCount(0);
-  await shot(page, "10-boite-31-demandes-beton-390");
-  await page.getByTestId("request-follow-more").click();
+  await shot(page, "10-boite-51-demandes-beton-390");
+  await page.getByTestId("request-more").click();
   await expect(page.getByTestId("request-follow")).toHaveCount(1);
   await expect(page.getByText(target.askers[0] as string)).toBeVisible();
-  await expect(page.getByTestId("request-follow-more")).toHaveCount(0);
+  await expect(page.getByTestId("request-more")).toHaveCount(0);
   await ctx.close();
 });

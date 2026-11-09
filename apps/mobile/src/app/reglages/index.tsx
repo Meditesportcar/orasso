@@ -3,7 +3,7 @@
 // profil (photo, pseudo, description, réseaux), Compte, Notifications, Confidentialité, Tes préférences, Apparence,
 // Aide, Se déconnecter. Chaque ligne ouvre l'écran qu'elle ouvrait déjà ; plus de doublon dans l'onglet.
 import { useTheme } from "@orasso/design-system/native";
-import { settingsHubLabels as L, preferencesLabels } from "@orasso/shared";
+import { feedScreenLabels, settingsHubLabels as L, preferencesLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -32,6 +32,13 @@ export default function ReglagesHub() {
           caption={L.editProfileCaption}
           onPress={() => router.push("/reglages/profil")}
           testID="reglage-profil"
+        />
+        <SetRow
+          icon="gallery"
+          title={feedScreenLabels.mineTitle}
+          caption={feedScreenLabels.mineSettingCaption}
+          onPress={() => router.push("/fil/mes-publications")}
+          testID="reglage-mes-publications"
         />
         <SetRow
           icon="profile"

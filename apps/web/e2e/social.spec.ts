@@ -68,12 +68,13 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await page.goto(`/u/${bravo}`);
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
   await expect(page.getByText("secret-de-bravo")).toHaveCount(0);
-  // Lot R5b (maquette R5.6) : la ligne « Ses photos, … sont pour ses abonnés » ; ses véhicules en marque et modèle.
+  // Lot R5b (maquette R5.6) : la ligne « Ses photos, … sont pour ses abonnés » ; R7b1, tour 2 : plus de liste de véhicules.
   await expect(page.getByTestId("profile-private-note")).toContainText(
-    "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+    "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
   );
   await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
-  await expect(page.getByTestId("profile-vehicles-private")).toContainText(/\S/);
+  await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);
+  await expect(page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
 
   // Fiche du véhicule d'un compte public : complète, avec « Autres propriétaires près de chez moi ».
   await page.goto(`/u/${alpha}`);
@@ -109,7 +110,7 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
   deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
-  await page.goto("/app/journal");
+  await page.goto("/app/fil");
   await expect(page.getByTestId("journal-item").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
   await expect(page.getByRole("link", { name: "Messages" }).first()).toBeVisible();
 
@@ -121,7 +122,7 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
 
   // Journal de Léa : l'actualité de Kenji, qu'elle suit (retenues du seed), jamais plus de sept jours en arrière sauf non lues.
   const lea = await browser.newPage();
-  await loginInBrowser(lea, "lea@orasso.local", undefined, "/app/journal");
+  await loginInBrowser(lea, "lea@orasso.local", undefined, "/app/fil");
   // Les specs précédentes ajoutent des entrées au Journal de Léa : on cherche l'entrée attendue à travers la pagination
   // (« Plus ancien ») au lieu de supposer qu'elle est sur la première page.
   const kenjiEntry = lea.getByTestId("journal-item").filter({ hasText: "Kenji_66 va à" });
@@ -174,7 +175,7 @@ test("captures du social", async ({ browser }) => {
       const d = await (await context(browser, theme, view, damien)).newPage();
       await d.goto("/app/reseau?liste=abonnes");
       await shot(d, theme, view.id, "06-reseau-abonnes");
-      await d.goto("/app/journal");
+      await d.goto("/app/fil");
       await shot(d, theme, view.id, "07-journal");
       await d.context().close();
 
@@ -186,7 +187,7 @@ test("captures du social", async ({ browser }) => {
 
       // Léa : l'actualité de Kenji, qu'elle suit, dans le Journal.
       const l = await (await context(browser, theme, view, lea)).newPage();
-      await l.goto("/app/journal");
+      await l.goto("/app/fil");
       await shot(l, theme, view.id, "09-journal-actualite-abonnements");
       await l.context().close();
     }

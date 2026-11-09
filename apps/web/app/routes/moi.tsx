@@ -1,22 +1,23 @@
-import { Button, CheckboxField, Chip, Icon, type IconName, TextField } from "@orasso/design-system/web";
+import { AvatarRing, Button, CheckboxField, Chip, Icon, type IconName, TextField } from "@orasso/design-system/web";
 import {
   type AccountSettings,
   accountAppLabels,
+  feedScreenLabels,
   gradeLabels,
-  type MyCrew,
   moderationLabels,
   mutableTypesByFamily,
   networkLabels as N,
   type NetworkCounts,
   type NotificationFamily,
-  navLabels,
   notificationFamilies,
   notificationFamilyLabels,
   notificationTypeLabels,
   type PersonaKind,
+  profileTabsLabels as PT,
   personaKindLabels,
   preferencesLabels,
   profilePhotoLabels,
+  profileTabFromParam,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
@@ -27,38 +28,64 @@ import {
 import type { CSSProperties } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
-import { PersonAvatar } from "../components/People";
+import { GarageTab } from "../components/profile/GarageTab";
+import { type GarageActionData, garageAction, loadGarage } from "../components/profile/garage.server";
+import { PanelDown } from "../components/profile/PanelDown";
+import { PartnersLine } from "../components/profile/PartnersLine";
+import { ProfileTabs } from "../components/profile/ProfileTabs";
+import { isPanelFailure, panelRetryHref } from "../components/profile/panel";
+import { loadSorties } from "../components/profile/passport.server";
+import { SortiesTab } from "../components/profile/SortiesTab";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
 import "../styles/network.css";
 import "../styles/profile-r5.css";
+import "../styles/profile.css";
 
 // Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : notifications par type, compte public ou privé,
 // apparence (thème ; le coin, la distance et les centres d'intérêt sont dans « Tes préférences », `/app/preferences`),
 // sécurité, suppression du compte. Lot R5b (maquette R5.4) : la carte du profil en tête avec sa roue dentée, puis la
 // liste « Réglages » comme l'appli ; le pseudo, la description, la photo et les réseaux sont dans « Modifier mon profil ».
+// Lot R7b1 (D38, maquette R7.12) : le Profil porte le Garage. En-tête (photo dans son anneau, nombres, « Partenaires »), puis
+// deux onglets internes, Garage (par défaut) et Sorties (le passeport), lus dans `?onglet=` ; les casquettes et les réglages
+// suivent. `/app/garage` et `/app/passeport` redirigent ici.
 export function meta() {
   return [{ title: "Mon compte · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  const [settings, network, crews] = await Promise.all([
-    apiOrThrow<AccountSettings>(request, "/me/settings"),
-    // Lot R4c : abonnés, abonnements, sorties (R6b) ; le crew à côté de « Mon profil public ».
-    api<NetworkCounts>(request, "/me/network"),
-    api<MyCrew[]>(request, "/me/crews"),
-  ]);
   const url = new URL(request.url);
+  // Lot R7b1 : l'onglet interne ; seule sa lecture est faite (le Garage par défaut, partout).
+  const onglet = profileTabFromParam(url.searchParams.get("onglet"));
+  const [settings, network, garage, sorties] = await Promise.all([
+    apiOrThrow<AccountSettings>(request, "/me/settings"),
+    // Lot R4c : abonnés, abonnements, sorties (R6b).
+    api<NetworkCounts>(request, "/me/network"),
+    onglet === "garage" ? loadGarage(request) : Promise.resolve(null),
+    onglet === "sorties" ? loadSorties(request) : Promise.resolve(null),
+  ]);
   return {
     me,
     settings,
     network: network.ok ? network.data : null,
-    crew: crews.ok ? (crews.data[0] ?? null) : null,
+    onglet,
+    // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
+    retryHref: panelRetryHref(url.searchParams),
+    garage,
+    sorties,
     saved: url.searchParams.get("fait"),
   };
 }
+
+// La page porte le secret du QR de compte (onglet Garage) : ni le navigateur ni un relais ne la gardent. On part des
+// en-têtes du parent (`root.tsx` : X-Frame-Options, frame-ancestors, Referrer-Policy du lot 12).
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
 
 const MUTABLE = mutableTypesByFamily();
 const FAMILIES = notificationFamilies.filter((f) => MUTABLE[f]?.length) as NotificationFamily[];
@@ -66,6 +93,10 @@ const FAMILIES = notificationFamilies.filter((f) => MUTABLE[f]?.length) as Notif
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  // Lot R7b1 : les actions de l'onglet Garage (mettre en avant, transferts de plaque).
+  if (intent === "feature" || intent === "transfer-accept" || intent === "transfer-decline") {
+    return garageAction(request, form, intent);
+  }
   if (intent === "settings") {
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
@@ -125,8 +156,6 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
-  // Lot R7a1, tour 3 : l'exposant a la ligne « Mon garage », le visiteur un lien vers ses archives et son QR de compte.
-  const isVisitor = me.personas.some((p) => p.kind === "visitor");
   const hats = [
     ...me.memberships
       .filter((m) => m.status === "active")
@@ -154,6 +183,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
       title: S.editProfile,
       caption: S.editProfileCaption,
       testId: "reglage-profil",
+    },
+    {
+      key: "mes-publications",
+      href: "/app/fil/mes-publications",
+      icon: "gallery",
+      title: feedScreenLabels.mineTitle,
+      caption: feedScreenLabels.mineSettingCaption,
+      testId: "reglage-mes-publications",
     },
     { key: "compte", href: "#compte", icon: "profile", title: S.account, caption: S.accountCaption },
     {
@@ -189,14 +226,15 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           {gradeLabels[me.profile.grade]} · {me.profile.pointsSeason} pts
         </Chip>
       </div>
-      {/* Lot R5b (maquette R5.4) : la carte du profil (photo, nom, grade, secteur, description, roue dentée), puis, comme
-          au lot R4c, trois compteurs (chacun ouvre sa liste), « Mon profil public » et le crew. */}
-      <div className="n-me" data-testid="profil-card">
-        <div className="pr5-me">
-          <div className="pr5-me__av">
-            <PersonAvatar url={me.profile.avatarUrl} pseudo={me.profile.pseudo} size={76} />
+      {/* Lot R7b1 (maquette R7.12) : la photo dans son anneau (sans story pour l'instant : `ring = null`, le lot R7f2 l'ouvrira),
+          le pseudo, le grade, le secteur et la roue dentée ; les trois nombres (chacun ouvre sa liste), « Partenaires »
+          (réservé au lot R7m1) et « Profil public ». */}
+      <section className="s-stack" data-testid="profil-card" aria-label="Mon profil">
+        <div className="pt-head">
+          <div className="pt-head__av">
+            <AvatarRing ring={null} size="xl" src={me.profile.avatarUrl} name={me.profile.pseudo} />
             <a
-              className="pr5-me__cam"
+              className="pt-head__cam"
               href="/app/profil/modifier"
               aria-label={profilePhotoLabels.change}
               data-testid="profil-photo"
@@ -204,29 +242,34 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
               <Icon name="camera" size={14} />
             </a>
           </div>
-          <div className="pr5-me__id">
-            <p className="pr5-me__name" style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}>
+          <div className="pt-head__id">
+            <p
+              className="pt-head__name o-t-poster-l"
+              style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}
+            >
               {me.profile.pseudo}
             </p>
-            <div className="pr5-me__tags">
+            <div className="pt-head__tags">
               <Chip variant="accent">{gradeLabels[me.profile.grade]}</Chip>
               {me.profile.departments.length > 0 && (
                 <span className="o-t-caption s-muted">{me.profile.departments.join(", ")}</span>
               )}
             </div>
           </div>
-          <a className="pr5-me__gear" href="#reglages" aria-label={S.open} data-testid="profil-settings">
-            <Icon name="gear" size={22} />
-          </a>
-          {me.profile.bio && <p className="pr5-bio pr5-me__bio">{me.profile.bio}</p>}
+          <div className="pt-head__btns">
+            <a className="pt-head__btn" href="#reglages" aria-label={S.open} data-testid="profil-settings">
+              <Icon name="gear" size={22} />
+            </a>
+          </div>
         </div>
-        <nav className="n-counts" aria-label={N.countsGroup} data-testid="profil-counters">
+        {me.profile.bio && <p className="pr5-bio">{me.profile.bio}</p>}
+        <nav className="pt-counts" aria-label={N.countsGroup} data-testid="profil-counters">
           {(
             [
               ["abonnes", loaderData.network?.followers, N.followers, "/app/reseau?liste=abonnes"],
               ["abonnements", loaderData.network?.following, N.following, "/app/reseau?liste=abonnements"],
-              // Lot R6b (D37) : plus d'amis ; le troisième nombre est celui de mes sorties (page des sorties).
-              ["sorties", loaderData.network?.outings, N.outings, "/app/sorties"],
+              // Lot R6b (D37) : plus d'amis ; le troisième nombre est celui de mes sorties (l'onglet Sorties du Profil).
+              ["sorties", loaderData.network?.outings, N.outings, "/app/moi?onglet=sorties"],
             ] as const
           ).map(([tab, n, label, href]) => (
             <a key={tab} href={href} data-testid={`profil-count-${tab}`}>
@@ -235,35 +278,47 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </a>
           ))}
         </nav>
-        <div className="n-links">
-          <a href="/app/profil-public" data-testid="profil-public">
-            <span className="n-ico">
-              <Icon name="eye" size={18} />
-            </span>
-            <span>
-              <b>Mon profil public</b>
-              <small>Comme te voient les autres</small>
-            </span>
-          </a>
-          <a href={loaderData.crew ? `/c/${loaderData.crew.slug}` : "/app/crews/rejoindre"} data-testid="profil-crew">
-            <span className="n-ico n-ico--crew">
-              {loaderData.crew ? loaderData.crew.name.slice(0, 2).toUpperCase() : "+"}
-            </span>
-            <span>
-              <b>{loaderData.crew ? loaderData.crew.name : "Un crew ?"}</b>
-              <small>{loaderData.crew ? "Ton crew" : "Rejoins ou crée un crew"}</small>
-            </span>
-          </a>
-        </div>
-      </div>
+        <PartnersLine pseudo={me.profile.pseudo} mine />
+        <Button variant="secondary" icon="eye" href="/app/profil-public" data-testid="profil-public">
+          {PT.publicProfile}
+        </Button>
+      </section>
       {saved && SAVED[saved] && (
         <p className="s-notice s-notice--ok" role="status">
           {SAVED[saved]}
         </p>
       )}
 
+      {/* Lot R7b1 : les deux onglets internes, Garage par défaut ; chaque onglet n'est lu que quand il est ouvert. */}
+      <ProfileTabs value={loaderData.onglet} hrefOf={(tab) => `/app/moi?${PT.param}=${tab}`} />
+      <div className="pt-panel" data-testid="profil-panel">
+        {/* Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (message + « Réessayer »). */}
+        {loaderData.onglet === "garage" && loaderData.garage ? (
+          isPanelFailure(loaderData.garage) ? (
+            <PanelDown message={PT.garageDown} href={loaderData.retryHref} />
+          ) : (
+            <GarageTab
+              data={loaderData.garage}
+              actionData={(actionData?.scope === "garage" ? actionData : undefined) as GarageActionData | undefined}
+            />
+          )
+        ) : null}
+        {loaderData.onglet === "sorties" && loaderData.sorties ? (
+          isPanelFailure(loaderData.sorties) ? (
+            <PanelDown message={PT.outingsDown} href={loaderData.retryHref} />
+          ) : (
+            <>
+              <SortiesTab data={loaderData.sorties} />
+              <Button variant="secondary" icon="ticket" href="/app/sorties" data-testid="profil-places">
+                {PT.seePlaces}
+              </Button>
+            </>
+          )
+        ) : null}
+      </div>
+
       {hats.length > 0 && (
-        <section className="s-section s-section--first" aria-labelledby="casquettes-titre" data-testid="hats">
+        <section className="s-section" aria-labelledby="casquettes-titre" data-testid="hats">
           <h2 id="casquettes-titre" className="s-h2">
             Mes casquettes
           </h2>
@@ -276,33 +331,6 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           </div>
         </section>
       )}
-
-      {/* Lot R7a1 : le Garage n'est plus un onglet ; en attendant l'onglet interne du lot R7b1, l'exposant l'ouvre par la ligne
-          « Mon garage » ; le visiteur (sans véhicule actif) garde ses archives et son QR de compte par un lien (tour 3). */}
-      <section
-        className={hats.length ? "s-section" : "s-section s-section--first"}
-        aria-labelledby="garage-titre"
-        data-testid="garage-link"
-      >
-        <h2 id="garage-titre" className="s-h2">
-          {navLabels.garageRow.title}
-        </h2>
-        {isVisitor ? (
-          <>
-            <p className="s-muted">Tes véhicules archivés et ton QR de compte.</p>
-            <Button href="/app/garage" variant="secondary" icon="vehicle" data-testid="garage-archives-link">
-              Mes véhicules archivés et mon QR de compte
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="s-muted">{navLabels.garageRow.caption}</p>
-            <Button href="/app/garage" variant="secondary" icon="vehicle">
-              Ouvrir mon garage
-            </Button>
-          </>
-        )}
-      </section>
 
       {/* Lot R5b (maquette R5.4) : « Réglages », une liste de lignes comme l'appli ; les sections détaillées suivent. */}
       <section className="s-section" id="reglages" aria-labelledby="reglages-titre" data-testid="settings-hub">
@@ -461,7 +489,8 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             {err("settings")}
           </p>
         )}
-        <Button type="submit" icon="check" loading={busy}>
+        {/* Lot R7b1 : le bouton principal de la page est « Ajouter un véhicule » (onglet Garage) ; l'enregistrement des réglages est secondaire. */}
+        <Button type="submit" variant="secondary" icon="check" loading={busy}>
           Enregistrer les réglages
         </Button>
       </Form>

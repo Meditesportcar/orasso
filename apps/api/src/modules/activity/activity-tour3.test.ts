@@ -4,9 +4,27 @@ import { fromWallTime, notificationTypes } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { signUp as baseSignUp, call, resetDb, seedReference, type TestUser, useClock } from "../../../test/helpers";
+import {
+  signUp as baseSignUp,
+  call,
+  createStructure,
+  createVehicle,
+  resetDb,
+  seedReference,
+  type TestUser,
+  useClock,
+} from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { contactRequests, crewMembers, crews, notifications, profiles, userFollows } from "../../db/schema";
+import {
+  contactRequests,
+  crewMembers,
+  crews,
+  notifications,
+  profiles,
+  structureMembers,
+  userFollows,
+  vehicles,
+} from "../../db/schema";
 import { realtime } from "../../lib/realtime";
 import { withTx } from "../../lib/tx";
 import { accountService } from "../account/service";
@@ -17,12 +35,13 @@ afterAll(async () => {
 });
 
 let clock: ReturnType<typeof useClock>;
+let ref: Awaited<ReturnType<typeof seedReference>>;
 const HOUR = 3_600_000;
 
 beforeEach(async () => {
   await resetDb();
   clock = useClock(fromWallTime({ year: 2026, month: 11, day: 9, hour: 15, minute: 0 }));
-  await seedReference();
+  ref = await seedReference();
 });
 
 /** Un compte neuf, sans la notification de connexion qu'on lui envoie à l'inscription. */
@@ -380,5 +399,55 @@ describe("anonymisation : l'index partiel", () => {
         if (!(error instanceof Rollback)) throw error;
       });
     expect(plan).toContain("notifications_actor_ids_idx");
+  });
+});
+
+describe("Demandes : ce que l'ancienne page montrait (tour 3 du lot R7c2)", () => {
+  it("demande d'abonnement : le véhicule principal du demandeur (marque et modèle), jamais la plaque ni l'année", async () => {
+    const damien = await signUp("Damien_66");
+    const kenji = await signUp("Kenji_66");
+    const lea = await signUp("Lea_66");
+    const vehicle = await createVehicle(kenji.id, ref);
+    await db.insert(userFollows).values([
+      {
+        followerId: kenji.id,
+        followedId: damien.id,
+        status: "pending",
+        createdAt: new Date(clock.now.getTime() - 2 * HOUR),
+      },
+      { followerId: lea.id, followedId: damien.id, status: "pending", createdAt: new Date(clock.now.getTime() - HOUR) },
+    ]);
+    const { items } = (await call(damien, "GET", "/me/requests")).json;
+    const byPseudo = (p: string) => items.find((i: { from: { pseudo: string } }) => i.from.pseudo === p);
+    const label = byPseudo("Kenji_66").payload.vehicle as string;
+    expect(label).toBeTruthy();
+    expect(label).not.toContain(vehicle.plate);
+    expect(label).not.toContain("1995");
+    expect(JSON.stringify(byPseudo("Kenji_66"))).not.toContain(vehicle.plateNormalized);
+    // Sans véhicule actif : le champ est absent (pas de texte vide).
+    expect(byPseudo("Lea_66").payload).not.toHaveProperty("vehicle");
+    // Un véhicule vendu n'est plus montré.
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, vehicle.id));
+    const after = (await call(damien, "GET", "/me/requests")).json.items;
+    expect(after.find((i: { from: { pseudo: string } }) => i.from.pseudo === "Kenji_66").payload).not.toHaveProperty(
+      "vehicle",
+    );
+  });
+
+  it("invitation de staff : le rôle (staff ou co-organisateur) et les fonctions de l'invitation", async () => {
+    const damien = await signUp("Damien_66");
+    const kenji = await signUp("Kenji_66");
+    const other = await createStructure(kenji.id);
+    await db.insert(structureMembers).values({
+      structureId: other.id,
+      userId: damien.id,
+      role: "staff",
+      status: "invited",
+      invitedBy: kenji.id,
+      staffRoles: ["scan", "placement"],
+    });
+    const { items } = (await call(damien, "GET", "/me/requests")).json;
+    expect(items).toHaveLength(1);
+    expect(items[0].payload).toMatchObject({ role: "staff", staffRoles: ["scan", "placement"], invitedBy: "Kenji_66" });
   });
 });

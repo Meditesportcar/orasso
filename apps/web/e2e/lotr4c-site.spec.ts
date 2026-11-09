@@ -227,6 +227,8 @@ test("R4c site : véhicule principal, réseau, aperçu public, suivre", async ({
       await expect(page.getByTestId("public-head")).toContainText(mePseudo);
       // Lot R5b (maquette R5.6) : « Sa voiture » porte la pastille « Principale ».
       await expect(page.getByTestId("preview-vehicles")).toContainText("Principale");
+      // Lot R7b1 : le Garage s'ouvre par défaut, « Prochaine sortie » vit dans l'onglet Sorties.
+      await page.getByTestId("profil-tab-sorties").click();
       await expect(page.getByTestId("preview-upcoming")).toBeVisible();
       await audit(page);
       await shot("08-apercu-membre");

@@ -1,12 +1,13 @@
-import { Button, Chip } from "@orasso/design-system/web";
-import { type ConversationSummary, messagingLabels } from "@orasso/shared";
+import { Button } from "@orasso/design-system/web";
+import { type ConversationSummary, conversationTag, messagingLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
 
 import { formatDay, formatTime } from "../lib/format";
 import { PersonAvatar } from "./People";
 
-// Messagerie du site (lot 18) : bouton « Contacter l'organisateur », ligne de conversation, segments de la Boîte.
+// Messagerie du site (lot 18) : bouton « Contacter l'organisateur » et ligne de conversation (lot R7c2 : plus de segments de
+// la Boîte, elle a disparu : les Messages ne sont que des conversations).
 
 /** « Contacter l'organisateur » : toujours possible (docs/01) ; déconnecté, renvoie à la connexion puis ici. */
 export function ContactOrganizer({
@@ -99,61 +100,38 @@ export function ContactOrganizer({
   );
 }
 
-/**
- * Segments de la Boîte (artefact DA v2, `sh-inbox`) : Tout (le fil du Journal : notifications et activité des personnes suivies),
- * Messages, Demandes, avec leur compteur. La cloche du Journal n'existe plus : le Journal est le segment « Tout ».
- */
-export function InboxSegments({
-  active,
-  messages,
-  requests,
-}: {
-  active: "all" | "messages" | "requests";
-  messages: number;
-  requests: number;
-}) {
-  return (
-    <nav className="s-tabs" aria-label={messagingLabels.inbox}>
-      <a href="/app/journal" className="s-chip-link" aria-current={active === "all" ? "page" : undefined}>
-        <Chip selected={active === "all"} data-testid="segment-all">
-          {messagingLabels.all}
-        </Chip>
-      </a>
-      <a href="/app/boite" className="s-chip-link" aria-current={active === "messages" ? "page" : undefined}>
-        <Chip selected={active === "messages"}>
-          {messagingLabels.messages}
-          {messages > 0 ? ` · ${messages}` : ""}
-        </Chip>
-      </a>
-      <a href="/app/boite/demandes" className="s-chip-link" aria-current={active === "requests" ? "page" : undefined}>
-        <Chip selected={active === "requests"} data-testid="segment-requests">
-          {messagingLabels.requests}
-          {requests > 0 ? ` · ${requests}` : ""}
-        </Chip>
-      </a>
-    </nav>
-  );
-}
-
 const whenOf = (iso: string) => {
   const d = new Date(iso);
   return d.toDateString() === new Date().toDateString() ? formatTime(iso) : formatDay(iso);
 };
 
-/** Une conversation de la liste : avatar, titre, heure, aperçu, pastille de non lu (moutarde à plat, sans néon). */
+/**
+ * Une conversation de la liste : avatar, titre et son étiquette (« Organisateur », « Crew », « Réponse à ta story »), heure,
+ * aperçu, pastille de non lu (moutarde à plat, sans néon). La vignette d'une réponse à une story n'est montrée que si l'API
+ * la sert (la story existe encore) ; elle passe par la route protégée, comme l'image d'un message.
+ */
 export function ConversationRow({ c, href }: { c: ConversationSummary; href?: string }) {
+  const tag = conversationTag(c);
   return (
     <li>
       <a
-        href={href ?? `/app/boite/${c.id}`}
+        href={href ?? `/app/messages/${c.id}`}
         className="s-convo"
         data-testid="conversation-row"
         data-unread={c.unreadCount}
+        data-kind={c.kind}
       >
         <PersonAvatar url={c.avatarUrl} pseudo={c.title} size={44} />
         <span className="s-convo__main">
           <span className="s-row s-row--between">
-            <span className="o-t-title s-convo__title">{c.title}</span>
+            <span className="s-convo__name">
+              <span className="o-t-title s-convo__title">{c.title}</span>
+              {tag ? (
+                <span className="s-convo__tag o-t-label" data-testid="conversation-tag">
+                  {tag}
+                </span>
+              ) : null}
+            </span>
             {c.lastMessage && <span className="o-t-caption s-muted">{whenOf(c.lastMessage.at)}</span>}
           </span>
           {c.subtitle && <span className="o-t-caption s-muted">{c.subtitle}</span>}
@@ -164,6 +142,7 @@ export function ConversationRow({ c, href }: { c: ConversationSummary; href?: st
             </span>
           )}
         </span>
+        {c.storyThumbUrl ? <StoryThumb url={c.storyThumbUrl} /> : null}
         {c.unreadCount > 0 && (
           <span className="s-convo__count o-t-credit">
             {c.unreadCount}
@@ -173,4 +152,9 @@ export function ConversationRow({ c, href }: { c: ConversationSummary; href?: st
       </a>
     </li>
   );
+}
+
+/** Vignette d'une story à laquelle répond le dernier message (l'image est celle de la story, déjà floutée côté API). */
+function StoryThumb({ url }: { url: string }) {
+  return <img className="s-convo__thumb" src={url} alt={messagingLabels.tagStoryReply} loading="lazy" />;
 }

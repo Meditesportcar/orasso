@@ -111,7 +111,7 @@ test("un crew : Fil · Sorties · Membres · Spots, Discussion, voitures dans la
   // Discussion : la conversation du crew.
   await page.getByTestId("crew-tab-feed").click();
   await page.getByTestId("crew-discussion").click();
-  await page.waitForURL(/boite\//, { timeout: 30_000 });
+  await page.waitForURL(/messages\//, { timeout: 30_000 });
   await ctx.close();
 });
 

@@ -304,6 +304,7 @@ function Body({
   const [held, setHeld] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const offset = useRef(0);
+  const scrollListeners = useRef(new Set<() => void>());
   // Lot R3a : mesures de la page pour `endGate` (hauteur visible, hauteur du contenu ; 0 = à remesurer).
   const viewport = useRef(0);
   const content = useRef(0);
@@ -361,6 +362,13 @@ function Body({
   const assist = useMemo<ScrollAssist>(
     () => ({
       hold: (on) => setHeld(on),
+      top: () => scroll.current?.scrollTo({ y: 0, animated: false }),
+      watchScroll: (listener) => {
+        scrollListeners.current.add(listener);
+        return () => {
+          scrollListeners.current.delete(listener);
+        };
+      },
       reveal: (view) => {
         // Après le rendu de la fiche : on mesure la page et la vue à l'écran, puis on défile (`revealOffset`).
         setTimeout(() => {
@@ -392,6 +400,7 @@ function Body({
       onTouchCancel={() => setHeld(false)}
       onScroll={(e) => {
         offset.current = e.nativeEvent.contentOffset.y;
+        for (const listener of scrollListeners.current) listener();
         if (gate.current) checkEnd();
       }}
       onLayout={(e) => {

@@ -111,7 +111,7 @@ export const contactsService = {
       if (incoming) {
         throw conflict(
           "contact_request_exists",
-          "Cette personne t'a déjà envoyé une demande : réponds-y dans ta Boîte.",
+          "Cette personne t'a déjà envoyé une demande : réponds-y dans tes Messages (Demandes de message).",
           {
             incomingId: incoming.id,
           },
@@ -135,9 +135,9 @@ export const contactsService = {
         data: {
           contactRequestId: created.id,
           actor: { userId: me, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
-          link: "/app/boite/demandes",
+          link: "/app/messages/demandes",
         },
-        link: { label: "Voir la demande", path: "/app/boite/demandes" },
+        link: { label: "Voir la demande", path: "/app/messages/demandes" },
       });
       after(() => notificationsService.kick());
       after(() => inboxService.publish(target.userId));
