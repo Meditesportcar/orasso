@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD, setTheme } from "./helpers";
+import { cleanVotes, createHandVote, draftEvent, dropDraft } from "./helpers/lotr7l2";
 import { RELAIS } from "./relais";
 
 // Lot R7l2 : captures avant / après des écrans touchés (éditeur d'événement, fiche de l'événement côté organisateur, Direct,
@@ -162,5 +163,88 @@ test("captures du site", async ({ browser }) => {
       }
       await sarah.ctx.close();
     }
+  }
+});
+
+// Tour 2 (TOUR2=1) : l'écran « Votes » d'un événement en brouillon (prévu, modifiable, Lancer inactif) et la feuille du scan
+// ouverte sur un vote à la main du Lydia ; appli seulement, Béton et Sable, 390 / 384 / 384 police 1,3.
+test("captures tour 2 : votes d'un brouillon et feuille du scan (appli)", async ({ browser }) => {
+  test.skip(!APP || process.env.TOUR2 !== "1", "Appli : lancer avec APP_URL et TOUR2=1");
+  const ev = await lydia();
+  const draft = await draftEvent(`Capture R7l2 tour 2 ${Date.now().toString(36)}`);
+  const draftVote = await createHandVote(draft.id, "Concours de rupteur", "damien@orasso.local");
+  const lydiaVote = await createHandVote(ev.id, "Capture R7l2 scan");
+  try {
+    for (const theme of THEMES) {
+      for (const [width, scale] of VARIANTS) {
+        const sarah = await appContext(browser, theme, width, scale, "sarah@orasso.local", 1500);
+        await sarah.page.goto("/moi");
+        await afterOpening(sarah.page);
+        await sarah.page
+          .getByTestId("casquette-organizer")
+          .filter({ hasText: "Roues Libres" })
+          .first()
+          .click()
+          .catch(() => undefined);
+        await sarah.page.waitForURL(/\/direct/, { timeout: 60_000 }).catch(() => undefined);
+        await snap(
+          sarah.page,
+          `/evenement/${ev.id}/vote-detail?vote=${lydiaVote}`,
+          `${tag(width, scale, theme)}-vote-detail`,
+          "vote-search",
+        );
+        await sarah.page.getByTestId("vote-scan-open").click();
+        await sarah.page.getByTestId("vote-scan-payload").waitFor({ timeout: 30_000 });
+        await sarah.page.waitForTimeout(1200);
+        await sarah.page.screenshot({ path: `${DIR}/${tag(width, scale, theme)}-scan.png` });
+        await sarah.ctx.close();
+        const damien = await appContext(browser, theme, width, scale, "damien@orasso.local", 1500);
+        await damien.page.goto("/moi");
+        await afterOpening(damien.page);
+        await damien.page
+          .getByTestId("casquette-organizer")
+          .filter({ hasText: /M.ditesportcar/i })
+          .first()
+          .click()
+          .catch(() => undefined);
+        await damien.page.waitForURL(/\/direct/, { timeout: 60_000 }).catch(() => undefined);
+        await snap(
+          damien.page,
+          `/evenement/${draft.id}/votes`,
+          `${tag(width, scale, theme)}-brouillon-votes`,
+          "votes-screen",
+        );
+        await snap(
+          damien.page,
+          `/evenement/${draft.id}/modifier?temps=votes`,
+          `${tag(width, scale, theme)}-brouillon-etape-votes`,
+          "wizard-votes",
+        );
+        await damien.ctx.close();
+      }
+    }
+  } finally {
+    await cleanVotes(ev.id, "Capture R7l2");
+    await dropDraft(draft.id);
+  }
+  expect(draftVote).toBeTruthy();
+});
+
+// Tour 2 (TOUR2=1), site : l'écran « Votes » d'un brouillon (candidats ouverts) et d'un vote en cours, 390 et 1280.
+test("captures tour 2 : votes d'un brouillon (site)", async ({ browser }) => {
+  test.skip(process.env.TOUR2 !== "1", "Lancer avec TOUR2=1");
+  const draft = await draftEvent(`Capture R7l2 site ${Date.now().toString(36)}`);
+  await createHandVote(draft.id, "Concours de rupteur", "damien@orasso.local");
+  try {
+    for (const theme of THEMES) {
+      for (const width of [390, 1280]) {
+        const damien = await siteContext(browser, theme, width, "damien@orasso.local");
+        const base = `/orga/${draft.structureSlug}/e/${draft.id}`;
+        await siteSnap(damien.page, `${base}/votes`, `site-${width}-${theme}-brouillon-votes`);
+        await damien.ctx.close();
+      }
+    }
+  } finally {
+    await dropDraft(draft.id);
   }
 });
