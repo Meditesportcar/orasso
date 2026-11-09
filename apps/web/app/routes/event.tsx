@@ -884,7 +884,7 @@ function EventPage({
             <Button
               variant="primary"
               icon="trophy"
-              href={`/app/vote/${event.slug}`}
+              href={`/app/votes/${event.slug}`}
               fullWidth
               data-testid="event-votes"
             >

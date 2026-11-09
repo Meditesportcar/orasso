@@ -100,7 +100,7 @@ test.describe("fiche et Jour J pendant l'événement", () => {
         await expect(primary).toContainText(label);
         await shot(page, `fiche-entre-${theme}`);
         await primary.click();
-        await expect(page).toHaveURL(new RegExp(`/vote/${ev.id}`));
+        await expect(page).toHaveURL(new RegExp(`/votes/${ev.id}`));
       } else {
         await expect(primary).toContainText("Mon accès");
       }

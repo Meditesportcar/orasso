@@ -33,6 +33,7 @@ import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { ShareCard } from "../components/ShareButtons";
 import { StyleProposal } from "../components/StylePicker";
+import { VehicleTrophies } from "../components/VehicleTrophies";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import { plateFields } from "../lib/vehicle-add";
@@ -335,6 +336,9 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
           </Button>
         </Form>
       )}
+
+      {/* Lot R7l3 : les podiums de vote (et le partenaire quand l'API le renvoie). */}
+      <VehicleTrophies vehicle={v} />
 
       <section className="s-stack s-stack--tight" aria-labelledby="fiche">
         <h2 id="fiche" className="s-h2">

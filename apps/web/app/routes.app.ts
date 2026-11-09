@@ -35,6 +35,8 @@ export default [
     route("app/sorties", "routes/sorties.tsx"),
     route("app/passeport", "routes/passeport.tsx"),
     route("app/vote/:slug", "routes/vote.tsx"),
+    // Lot R7l3 : la liste des votes d'un événement (un vote : `app/vote/:slug?vote=`).
+    route("app/votes/:slug", "routes/votes.tsx"),
     route("app/recap/:eventId", "routes/recap.tsx"),
     route("app/media", "routes/media.tsx"),
     route("app/media/nouveau", "routes/media-nouveau.tsx"),

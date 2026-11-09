@@ -25,8 +25,9 @@ import {
   eventPageLabels,
   formatDayDate,
   liveAt,
+  openVotesIn,
   presenceLabels,
-  voteScreenTexts,
+  votePassTexts,
   wholeEventEntered,
   wholeEventEntryHolds,
   wholeEventReentry,
@@ -39,6 +40,7 @@ import { seenText } from "@/features/event/CandSheet";
 import { CaptureBanner, GpsRow, OfflineLine, useBlockCapture, useMaxBrightness } from "@/features/jour-j/QrExtras";
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
+import { useVotesList } from "@/features/vote/useVote";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
@@ -119,6 +121,11 @@ function JourJScreen() {
   const liveClock = useServerClock(endsAtIso ? { endsAt: endsAtIso } : null, () => void liveNow.reload());
   useReloadOnForeground(online && Boolean(slug), () => void liveNow.reload());
   const liveGuarded = endsAtIso ? liveAt(liveNow.data, { endsAt: endsAtIso }, liveClock) : (liveNow.data ?? null);
+  // Lot R7l3 : « Votes · N ouverts » : le bouton s'allume quand un vote ouvre (relu par le canal des votes ; hors ligne, il reste « Votes »).
+  const votesEnabled =
+    online && Boolean(app?.event.id ?? kit?.event.id) && Boolean(app?.checkedInAt ?? kit?.checkedInAt);
+  const votesList = useVotesList(votesEnabled ? (app?.event.id ?? kit?.event.id ?? null) : null);
+  const votesOpen = openVotesIn(votesList.data?.items ?? []);
   const onSiteNow = liveGuarded?.phase === "running" ? (liveGuarded.onSiteCount ?? null) : null;
   const lastAnnouncement =
     [...(feed.data?.items ?? [])]
@@ -296,14 +303,14 @@ function JourJScreen() {
       {/* Prix du public (lot 50) : ouvert dès le pointage, jusqu'à la fin de l'événement. En bouton secondaire. */}
       {(entered || Boolean(app?.checkedInAt)) && now < new Date(kit.event.endsAt) ? (
         <Button
-          variant="plate"
-          icon="badge"
+          variant={votesOpen > 0 ? "primary" : "plate"}
+          icon="trophy"
           next
           fullWidth
           testID="jourj-vote"
-          onPress={() => router.push(`/vote/${kit.event.id}?titre=${encodeURIComponent(kit.event.title)}`)}
+          onPress={() => router.push(`/votes/${kit.event.id}?titre=${encodeURIComponent(kit.event.title)}`)}
         >
-          {voteScreenTexts.open}
+          {votesOpen > 0 ? votePassTexts.listOpen(votesOpen) : votePassTexts.listTitle}
         </Button>
       ) : null}
 

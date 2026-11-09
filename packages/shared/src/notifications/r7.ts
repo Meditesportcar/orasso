@@ -114,7 +114,7 @@ export const r7NotificationTable = {
   },
   vote_opened: {
     family: "event",
-    label: "Un vote s'ouvre à l'événement",
+    label: "Vote lancé pendant un événement",
     title: "Un vote est ouvert",
     body: "Le vote « {name} » est ouvert : tu peux voter.",
     push: true,

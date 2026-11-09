@@ -221,6 +221,6 @@ export const photoBlurService = {
     }
     const row = await vehiclesRepo.findFullById(vehicleId);
     if (!row) throw notFound("Véhicule introuvable");
-    return vehicleFull(row);
+    return vehicleFull(row, { owner: true });
   },
 };

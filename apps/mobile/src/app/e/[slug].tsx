@@ -464,7 +464,11 @@ export default function EventPage() {
                           }
                         : null;
   const primary = votesLabel
-    ? { label: votesLabel, icon: "trophy" as const, onPress: () => router.push(`/vote/${e.id}`) }
+    ? {
+        label: votesLabel,
+        icon: "trophy" as const,
+        onPress: () => router.push(`/votes/${e.id}?titre=${encodeURIComponent(e.title)}`),
+      }
     : basePrimary;
 
   // Tour 2 (Codex) : le vote disponible passe avant le blocage des candidatures (un passionné présent par GPS, sans

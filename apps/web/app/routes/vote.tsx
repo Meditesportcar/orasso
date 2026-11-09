@@ -1,24 +1,42 @@
-// Prix du public (lot 57, parité de l'appli du lot 50, prototype DA v2 `s-vote`) : une voix par personne pointée, pas
-// pour soi, modifiable jusqu'à la fin de l'événement ; le classement bouge en direct (canal `event:{id}:votes`). Les
-// règles sont toutes dans l'API (lot 49) : ici, la grille des véhicules pointés, le vote et le classement.
-import { Button, Chip, Plate } from "@orasso/design-system/web";
-import { audiencePrizeTexts, type ClosingWatch, voteScreenTexts, watchClosing } from "@orasso/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+// Un vote (lots 57, R7-0 et R7l3, parité de l'appli `/vote/<événement>?vote=`) : la grille des candidats d'un vote à thème ou de
+// « Toutes catégories » (comme dans l'appli : on **choisit** une voiture, puis « Voter pour … » ; une voix, modifiable jusqu'à
+// la clôture par le même geste en deux temps, jamais pour soi), un candidat
+// pas encore entré grisé, puis le classement, **montré seulement après la voix** (à tous après la clôture, à l'équipe
+// toujours). Les règles sont toutes dans l'API : la page affiche ce qu'elle a servi (`ranking: null` + raison), elle n'en
+// déduit rien. Sans `vote` dans l'adresse : « Toutes catégories » (anciens liens et notifications).
+import { Button, Plate } from "@orasso/design-system/web";
+import {
+  audiencePrizeTexts,
+  rankingHiddenLine,
+  votePassTexts as T,
+  VOTE_CLOSING_SOON_MIN,
+  VOTE_RELOAD_JITTER_MS,
+  voteBlockedLine,
+  voteMinutesLeft,
+  voteResultCard,
+  voteScreenMode,
+  voteScreenTexts,
+} from "@orasso/shared";
+import { useEffect, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
-import { nowMs } from "../lib/clock";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+import { useClosingWatch, useOrassoNow } from "../components/votes/useVoteClock";
+import { VoteGrid } from "../components/votes/VoteGrid";
+import { VoteRanking } from "../components/votes/VoteRanking";
+import { confirmationIsStale, eventAfterVote } from "../components/votes/voteFallback";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import { loadVote, voteAction } from "../lib/vote.server";
-import "../styles/passport.css";
-import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/vote";
+import "../styles/passport.css";
+import "../styles/votes-pass.css";
 
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
 export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [
-    { title: `${audiencePrizeTexts.title}${d?.event ? ` · ${d.event.title}` : ""} · Orasso` },
+    { title: `${d?.vote?.title ?? T.voteScreenTitle}${d?.event ? ` · ${d.event.title}` : ""} · Orasso` },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -32,73 +50,60 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, board, candidates } = loaderData;
-  const mine = loaderData.mine;
+  const { candidates, candidatesComplete, back } = loaderData;
   const busy = useNavigation().state !== "idle";
   const revalidator = useRevalidator();
-  const [liveTotal, setLiveTotal] = useState(board?.total ?? 0);
-  useEffect(() => setLiveTotal(board?.total ?? 0), [board?.total]);
-  // Clôture du vote (lot R7-0, tours 2 et 3) : à l'échéance **du serveur** (écart calculé à partir de sa réponse, jamais
-  // l'horloge brute du navigateur), la page se relit, puis se relit encore (délais croissants, bornés) jusqu'à ce que
-  // l'API confirme la clôture. Lot R7-0, tour 3 : la voix qui vient de réussir (réponse de l'API) sert tant que la
+  // La voix qui vient de réussir (réponse de l'API, avec le classement que j'ai maintenant le droit de voir) sert tant que la
   // relecture n'est pas revenue.
-  const justVoted = actionData?.ok ? actionData.mine : null;
-  const closesAt = board?.closesAt ?? mine?.closesAt ?? justVoted?.closesAt ?? null;
-  const stillOpen = board ? board.open && !board.settled : true;
-  const skew = useRef(0);
-  useMemo(() => {
-    skew.current = loaderData.serverAt - nowMs();
-  }, [loaderData.serverAt]);
-  const latest = useRef({ board, revalidate: revalidator.revalidate });
-  latest.current = { board, revalidate: revalidator.revalidate };
-  const closing = useRef<ClosingWatch | null>(null);
+  const justVoted = actionData?.ok ? actionData.vote : null;
+  const vote = loaderData.vote ?? justVoted;
+  // L'événement ne s'est pas relu (panne passagère) mais la voix a réussi : la confirmation reste, avec « Réessayer ».
+  const event = eventAfterVote(loaderData.event, actionData, loaderData.slug, justVoted);
+  // Le compte à rebours avance seul (rendu toutes les 30 s), sans attendre un message du canal.
+  const now = useOrassoNow();
+  // Le geste en deux temps (parité avec l'appli) : la voiture choisie dans la grille, et la grille rouverte pour changer sa voix.
+  const [pick, setPick] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+  // Une voix qui réussit referme le choix : on revoit le classement, la grille ne revient que par « Changer mon vote ».
   useEffect(() => {
-    if (!closesAt || !stillOpen) return undefined;
-    const watch = watchClosing({
-      deadline: new Date(closesAt),
-      now: () => new Date(nowMs() + skew.current),
-      reload: async () => {
-        await latest.current.revalidate();
-        await new Promise((resolve) => setTimeout(resolve, 0)); // laisse la page prendre les données relues
-        const fresh = latest.current.board;
-        return fresh !== null && (!fresh.open || fresh.settled);
-      },
-    });
-    closing.current = watch;
-    return () => {
-      watch.stop();
-      if (closing.current === watch) closing.current = null;
-    };
-  }, [closesAt, stillOpen]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque lecture de la page est l'occasion de revoir l'heure du serveur
-  useEffect(() => closing.current?.check(), [loaderData.serverAt]);
-  // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
-  // qui revient après une coupure la recharge aussi (relecture du lot 57).
+    if (actionData?.ok) {
+      setPick(null);
+      setChanging(false);
+    }
+  }, [actionData]);
+  // La relecture a échoué après ma voix : la réponse à la voix reste affichée, avec « Réessayer ».
+  const stale = confirmationIsStale(loaderData, justVoted);
+  // Clôture : à l'échéance du serveur, la page se relit (et réessaie jusqu'à la clôture confirmée) ; surveillée tant que le
+  // vote n'est pas fini, ouvert ou pas encore.
+  useClosingWatch(vote, loaderData.serverAt);
+  // Grille et classement en direct : un message utile de CE vote recharge la page, au plus une fois toutes les 10 s, et le canal
+  // qui revient après une coupure la recharge aussi.
+  const voteId = vote?.id ?? null;
   const { connected } = useLiveRevalidate(
     event ? `event:${event.id}:votes` : null,
-    (m) => m.type === "votes.changed" || m.type === "votes.candidates.changed",
-    {
-      onMessage: (m) => {
-        const total = (m.payload as { total?: number } | null)?.total;
-        if (m.type === "votes.changed" && typeof total === "number") setLiveTotal(total);
-      },
+    (m) => {
+      if (
+        m.type !== "votes.changed" &&
+        m.type !== "theme_votes.changed" &&
+        m.type !== "votes.opened" &&
+        m.type !== "votes.closed" &&
+        m.type !== "votes.candidates.changed"
+      )
+        return false;
+      const id = (m.payload as { voteId?: unknown } | null)?.voteId;
+      return voteId === null || typeof id !== "string" || id === voteId;
     },
+    { jitterMs: VOTE_RELOAD_JITTER_MS },
   );
 
   // Relecture impossible (panne passagère) : la confirmation de la voix reste affichée avec « Réessayer » ; jamais un
   // retour à la connexion ni un écran d'erreur pour une panne.
-  if (!board || !mine || !event) {
-    const voted = mine?.votedFor ? mine : justVoted;
+  if (!vote || !event) {
     return (
       <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-        <FicheBar title={audiencePrizeTexts.title} facts={event?.title} back={loaderData.back} />
-        {voted?.votedFor && (
-          <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-            {voteScreenTexts.saved(new Date(voted.closesAt), new Date(nowMs()))}
-          </p>
-        )}
+        <FicheBar title={vote?.title ?? T.voteScreenTitle} facts={event?.title || undefined} back={back} />
         <p className="s-error" role="alert" data-testid="vote-ranking-failed">
-          {voted?.votedFor ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
+          {T.loadFailed}
         </p>
         <Button
           variant="secondary"
@@ -106,146 +111,192 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           onClick={() => void revalidator.revalidate()}
           data-testid="vote-ranking-retry"
         >
-          {voteScreenTexts.retry}
+          {T.retry}
         </Button>
         <Button variant="secondary" icon="calendar" href={`/e/${event?.slug ?? loaderData.slug}`}>
-          Voir l'événement
+          {T.seeEvent}
         </Button>
       </div>
     );
   }
-  const own = new Set(mine.ownApplicationIds);
-  const myEntry = board.entries.find((e) => own.has(e.applicationId));
-  const reason = board.settled
-    ? null
-    : mine.canVote
-      ? null
-      : mine.reason === "vote_closed" || (!board.open && board.total > 0)
-        ? voteScreenTexts.closedNote
-        : mine.reason === "not_checked_in"
-          ? audiencePrizeTexts.errors.not_checked_in
-          : audiencePrizeTexts.notOpen;
-  const top = board.entries[0]?.votes ?? 0;
+
+  const mode = voteScreenMode(vote, changing);
+  const closesAt = new Date(vote.closesAt);
+  const left = vote.state === "open" ? voteMinutesLeft(vote.closesAt, now) : null;
+  const until = vote.state === "open" ? audiencePrizeTexts.openUntil(closesAt, now) : null;
+  const podium = voteResultCard(vote);
+  // Grille : pour choisir, ou (désactivée) pour voir pourquoi on ne peut pas voter ; une fois voté, seulement via « Changer mon vote ».
+  const showGrid = mode === "choose" || mode === "blocked" || mode === "upcoming";
+  const pickedCandidate = candidates.find((c) => c.applicationId === pick) ?? null;
 
   return (
     <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-      <FicheBar title={audiencePrizeTexts.title} facts={event.title} back={loaderData.back} />
-      <p className="s-lead">
-        {board.settled
-          ? voteScreenTexts.results
-          : board.open
-            ? audiencePrizeTexts.openUntil(new Date(board.closesAt), new Date(nowMs()))
-            : audiencePrizeTexts.closed}
-        {mine.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(mine.checkedInAt))}` : ""}
+      <FicheBar title={vote.title} facts={event.title || undefined} back={back} />
+      <p className="s-lead" data-testid="vote-lead">
+        {mode === "closed"
+          ? vote.settled
+            ? voteScreenTexts.results
+            : audiencePrizeTexts.closed
+          : until
+            ? left !== null && left <= VOTE_CLOSING_SOON_MIN
+              ? `${T.minutesLeft(left)} · ${until}`
+              : until
+            : T.notOpen}
+        {vote.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(vote.checkedInAt))}` : ""}
       </p>
 
+      {stale && (
+        <>
+          <p className="s-error" role="alert" data-testid="vote-ranking-failed">
+            {T.refreshFailed}
+          </p>
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => void revalidator.revalidate()}
+            data-testid="vote-ranking-retry"
+          >
+            {T.retry}
+          </Button>
+        </>
+      )}
       {actionData?.error && (
         <p className="s-error" role="alert">
           {actionData.error}
         </p>
       )}
-      {mine.votedFor && !board.settled && (
+      {vote.myVote && vote.state === "open" && !changing && (
         <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-          {voteScreenTexts.saved(new Date(board.closesAt), new Date(nowMs()))}
+          {voteScreenTexts.saved(closesAt, now)}
         </p>
       )}
-      {reason && (
+      {mode === "blocked" && (
         <p className="s-notice" data-testid="vote-reason">
-          {reason}
+          {voteBlockedLine(vote)}
         </p>
+      )}
+      {mode === "upcoming" && (
+        <p className="s-notice" data-testid="vote-reason">
+          {T.notOpen}
+        </p>
+      )}
+      {mode === "closed" && (
+        <p className="s-notice" data-testid="vote-reason">
+          {T.closedNote}
+        </p>
+      )}
+      {mode === "voted" && (
+        <div className="s-row">
+          <Button variant="secondary" icon="undo" onClick={() => setChanging(true)} data-testid="vote-change">
+            {T.change}
+          </Button>
+        </div>
+      )}
+      {mode === "choose" && changing && (
+        <div className="s-row">
+          <Button
+            variant="secondary"
+            icon="back"
+            onClick={() => {
+              setPick(null);
+              setChanging(false);
+            }}
+            data-testid="vote-back"
+          >
+            {T.backToRanking}
+          </Button>
+        </div>
       )}
 
-      {board.settled && (
+      {mode === "closed" && podium?.[0] && vote.ranking?.[0] && (
         <Plate className="s-stack s-stack--tight" data-testid="vote-winner">
-          <div className="o-t-label">{voteScreenTexts.winner}</div>
-          {board.winner ? (
-            <strong className="o-never-truncate">
-              {board.winner.vehicleLabel} · {board.winner.pseudo}
-            </strong>
-          ) : (
-            <p>{voteScreenTexts.noWinner}</p>
-          )}
+          <div className="o-t-label">{T.winnerLine(vote.ranking[0].votes, vote.total).toUpperCase()}</div>
+          <div className="vp-winner">
+            {vote.ranking[0].photoUrl ? <img src={vote.ranking[0].photoUrl} alt="" /> : null}
+            <span>
+              <strong className="o-never-truncate">{vote.ranking[0].vehicleLabel}</strong>
+              <br />
+              <small>{vote.ranking[0].pseudo}</small>
+            </span>
+          </div>
         </Plate>
       )}
+      {mode === "closed" && !podium && vote.ranking && (
+        <p className="o-t-caption s-muted" data-testid="vote-no-podium">
+          {T.noPodium}
+        </p>
+      )}
 
-      {!board.settled && (
+      {showGrid && (
         <section className="s-stack s-stack--tight" aria-labelledby="vote-grid">
           <h2 id="vote-grid" className="s-h2">
-            {audiencePrizeTexts.oneVote}
+            {T.oneVote}
           </h2>
-          <p className="o-t-caption s-muted">{audiencePrizeTexts.rules(board.winnerPoints)}</p>
-          {candidates.length === 0 ? (
-            <p className="s-muted">{voteScreenTexts.empty}</p>
-          ) : (
-            <Form method="post">
-              <input type="hidden" name="eventId" value={event.id} />
-              <ul className="vote-grid" data-testid="vote-grid">
-                {candidates.map((c, i) => {
-                  const mineOwn = own.has(c.applicationId);
-                  const chosen = mine.votedFor === c.applicationId;
-                  return (
-                    <li key={c.applicationId}>
-                      <button
-                        type="submit"
-                        name="applicationId"
-                        value={c.applicationId}
-                        className="vote-card"
-                        aria-pressed={chosen}
-                        aria-label={mineOwn ? voteScreenTexts.you : voteScreenTexts.pick(c.vehicleLabel)}
-                        disabled={!mine.canVote || mineOwn || busy}
-                        data-testid="vote-candidate"
-                      >
-                        {c.photoUrl ? <img className="vote-card__photo" src={c.photoUrl} alt="" /> : null}
-                        <span className="o-t-caption s-muted">{voteScreenTexts.number(i + 1)}</span>
-                        <strong className="o-never-truncate">{c.vehicleLabel}</strong>
-                        <span className="o-t-caption">{c.pseudo}</span>
-                        {mineOwn && <Chip>{voteScreenTexts.you}</Chip>}
-                        {chosen && <Chip variant="accent">{voteScreenTexts.yourVote}</Chip>}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Form>
+          <p className="o-t-caption s-muted">{T.rulesLine}</p>
+          {!candidatesComplete && (
+            <>
+              <p className="s-error" role="alert" data-testid="vote-grid-failed">
+                {T.gridLoadFailed}
+              </p>
+              <Button
+                variant="secondary"
+                icon="undo"
+                onClick={() => void revalidator.revalidate()}
+                data-testid="vote-grid-retry"
+              >
+                {T.retry}
+              </Button>
+            </>
           )}
+          <Form method="post">
+            <input type="hidden" name="eventId" value={event.id} />
+            <input type="hidden" name="voteId" value={vote.id} />
+            <input type="hidden" name="applicationId" value={pick ?? ""} />
+            <VoteGrid
+              candidates={candidates}
+              failed={!candidatesComplete}
+              ownIds={vote.ownApplicationIds}
+              myVote={vote.myVote}
+              canVote={vote.canVote}
+              busy={busy}
+              pick={pick}
+              onPick={setPick}
+            />
+            {mode === "choose" && (
+              <div className="vp-cta" data-testid="vote-cta-bar">
+                <Button
+                  type="submit"
+                  icon="trophy"
+                  fullWidth
+                  disabled={!pickedCandidate || busy}
+                  data-testid="vote-cta"
+                >
+                  {pickedCandidate ? T.pickCta(pickedCandidate.vehicleLabel) : T.chooseCta}
+                </Button>
+              </div>
+            )}
+          </Form>
         </section>
       )}
 
-      <section className="s-stack s-stack--tight" aria-labelledby="vote-ranking" data-testid="vote-ranking">
-        <div className="s-row s-row--between">
-          <h2 id="vote-ranking" className="s-h2">
-            {audiencePrizeTexts.ranking}
-          </h2>
-          {!board.settled && board.open && <Chip>{audiencePrizeTexts.live}</Chip>}
-        </div>
-        {board.rankingHidden && (
-          <p className="s-notice" data-testid="vote-ranking-hidden">
-            {voteScreenTexts.rankingHidden(mine.canVote)}
-          </p>
-        )}
-        <p className="o-t-caption s-muted" data-testid="vote-total">
-          {audiencePrizeTexts.votes(liveTotal)}
-          {myEntry ? ` · ${audiencePrizeTexts.rank(myEntry.rank, board.vehicles)}` : ""}
+      {/* Le classement n'est pas servi : la phrase qui dit quand il le sera (raison de l'API, jamais déduite ici). */}
+      {vote.ranking === null && mode !== "closed" && (
+        <p className="s-notice" data-testid="vote-ranking-hidden">
+          {rankingHiddenLine(vote)}
         </p>
-        <ol className="vote-rank">
-          {board.entries.slice(0, 10).map((e) => (
-            <li key={e.applicationId}>
-              <span className="o-t-number-narrow">{e.rank}</span>
-              <span className="o-never-truncate">
-                {e.vehicleLabel} <span className="s-muted">· {e.pseudo}</span>
-                <span
-                  className="vote-bar"
-                  style={{ width: `${top && e.votes ? Math.max(4, (e.votes / top) * 100) : 0}%` }}
-                />
-              </span>
-              <span className="o-t-caption">{audiencePrizeTexts.votes(e.votes)}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
-        Voir l'événement
-      </Button>
+      )}
+      {vote.ranking && !(mode === "choose" && changing) && (
+        <VoteRanking vote={vote} entries={vote.ranking} closed={mode === "closed"} />
+      )}
+
+      <div className="s-row">
+        <Button variant="secondary" icon="flag" href={`/app/votes/${event.slug}?retour=${encodeURIComponent(back)}`}>
+          {T.seeAllVotes}
+        </Button>
+        <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
+          {T.seeEvent}
+        </Button>
+      </div>
     </div>
   );
 }

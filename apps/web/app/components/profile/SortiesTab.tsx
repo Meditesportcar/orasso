@@ -84,7 +84,7 @@ export function SortiesTab({ data }: { data: SortiesData }) {
               variant="secondary"
               icon="badge"
               next
-              href={withRetour(`/app/vote/${e.slug}`, "/app/moi?onglet=sorties")}
+              href={withRetour(`/app/votes/${e.slug}`, "/app/moi?onglet=sorties")}
             >
               {`${passportScreenTexts.votesTitle} · ${e.title}`}
             </Button>

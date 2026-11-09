@@ -301,7 +301,7 @@ export function SortiesScreen() {
                   router.push(`/e/${app.event.slug}`);
                 }}
                 onJourJ={() => router.push(`/jour-j/${app.id}`)}
-                onVote={() => router.push(`/vote/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
+                onVote={() => router.push(`/votes/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
                 onWithdraw={() => setWithdrawing(app)}
                 onAccept={() => void run(app, () => api.acceptOffer(app.id))}
                 onDecline={() => void run(app, () => api.declineOffer(app.id))}
@@ -320,7 +320,7 @@ export function SortiesScreen() {
               onOpen={() => router.push(`/e/${x.event.slug}`)}
               onShow={() => router.push(`/billet/${x.id}`)}
               onGiveBack={() => setGiving(x)}
-              onVote={() => router.push(`/vote/${x.event.id}?titre=${encodeURIComponent(x.event.title)}`)}
+              onVote={() => router.push(`/votes/${x.event.id}?titre=${encodeURIComponent(x.event.title)}`)}
             />
           ))}
 
@@ -363,7 +363,7 @@ export function SortiesScreen() {
               item={s}
               unsent={unsentBy.get(s.event.id)?.count ?? 0}
               now={now}
-              onVote={() => router.push(`/vote/${s.event.id}?titre=${encodeURIComponent(s.event.title)}`)}
+              onVote={() => router.push(`/votes/${s.event.id}?titre=${encodeURIComponent(s.event.title)}`)}
               onOpen={() => router.push(`/staff/${s.event.id}`)}
               onChanged={() => void staff.reload()}
             />
