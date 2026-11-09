@@ -8,12 +8,14 @@ import {
   PRO_DISCOUNT_MAX_PERCENT,
   PRO_MAX_PHOTOS,
   type ProOwner,
+  type ProPartnerships,
   type StructureCard,
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
 import { FileField } from "../components/Fields";
 import { ProFicheFields } from "../components/ProFicheFields";
+import { ManagePartnerships } from "../components/partnerships/ManagePartnerships";
 import { api, apiOrThrow, originOf } from "../lib/api.server";
 import { formatDay } from "../lib/format";
 import { proBodyFrom } from "../lib/proForm.server";
@@ -26,16 +28,19 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const pro = await apiOrThrow<ProOwner>(request, "/me/pro");
   const structures = await api<Page<StructureCard>>(request, "/structures?limit=100");
+  // Lot R7m1 : mes partenaires (passionnés) et mes propositions en attente.
+  const partnerships = await api<ProPartnerships>(request, `/pros/${pro.id}/partnerships`);
   const url = new URL(request.url);
   return {
     pro,
+    partnerships: partnerships.ok ? partnerships.data : null,
     structures: structures.ok ? structures.data.items : [],
     origin: originOf(request),
     created: url.searchParams.get("creee") === "1",
   };
 }
 
-type Section = "publish" | "siret" | "fiche" | "discounts" | "photos" | "partners";
+type Section = "publish" | "siret" | "fiche" | "discounts" | "photos" | "partners" | "member-partners";
 type Result = { section: Section; error?: string; ok?: string };
 
 export async function action({ request }: Route.ActionArgs) {
@@ -128,6 +133,18 @@ export async function action({ request }: Route.ActionArgs) {
     return ok("partners", "Demande envoyée : l'équipe organisatrice doit l'accepter.");
   }
 
+  // Lot R7m1 : mettre fin à un partenariat, ou retirer une proposition sans réponse.
+  if (intent === "partnership_end" || intent === "partnership_withdraw") {
+    const res = await api(request, `/pros/${pro.id}/partnerships/${encodeURIComponent(text("id"))}/end`, {
+      method: "POST",
+    });
+    if (!res.ok) return fail("member-partners", res.error.message, res.status);
+    return ok(
+      "member-partners",
+      intent === "partnership_end" ? "Partenariat terminé : la personne est prévenue." : "Proposition retirée.",
+    );
+  }
+
   if (intent === "partner-remove") {
     const res = await api(request, `/pros/${pro.id}/partners/${encodeURIComponent(text("structureSlug"))}`, {
       method: "DELETE",
@@ -140,7 +157,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ProFiche({ loaderData, actionData }: Route.ComponentProps) {
-  const { pro, structures, origin, created } = loaderData;
+  const { pro, structures, origin, created, partnerships } = loaderData;
   const busy = useNavigation().state !== "idle";
   const result = actionData as Result | undefined;
   const check = pro.registryCheck;
@@ -387,6 +404,9 @@ export default function ProFiche({ loaderData, actionData }: Route.ComponentProp
         )}
         {message("partners")}
       </section>
+
+      <ManagePartnerships data={partnerships} busy={busy} />
+      {message("member-partners")}
 
       <Plate as="section" kind="note">
         <p className="s-muted">

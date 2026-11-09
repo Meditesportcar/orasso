@@ -3,6 +3,7 @@ import {
   type AccountSettings,
   accountAppLabels,
   gradeLabels,
+  type MyPartnerships,
   moderationLabels,
   mutableTypesByFamily,
   networkLabels as N,
@@ -58,17 +59,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   // Lot R7b1 : l'onglet interne ; seule sa lecture est faite (le Garage par défaut, partout).
   const onglet = profileTabFromParam(url.searchParams.get("onglet"));
-  const [settings, network, garage, sorties] = await Promise.all([
+  const [settings, network, garage, sorties, partnerships] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     // Lot R4c : abonnés, abonnements, sorties (R6b).
     api<NetworkCounts>(request, "/me/network"),
     onglet === "garage" ? loadGarage(request) : Promise.resolve(null),
     onglet === "sorties" ? loadSorties(request) : Promise.resolve(null),
+    // Lot R7m1 : mes partenaires (la ligne « Partenaires », « Mettre fin »).
+    api<MyPartnerships>(request, "/me/partnerships"),
   ]);
   return {
     me,
     settings,
     network: network.ok ? network.data : null,
+    partnerships: partnerships.ok ? partnerships.data.items : null,
     onglet,
     // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
     retryHref: panelRetryHref(url.searchParams),
@@ -95,6 +99,14 @@ export async function action({ request }: Route.ActionArgs) {
   // Lot R7b1 : les actions de l'onglet Garage (mettre en avant, transferts de plaque).
   if (intent === "feature" || intent === "transfer-accept" || intent === "transfer-decline") {
     return garageAction(request, form, intent);
+  }
+  // Lot R7m1 : mettre fin à un partenariat (le pro est prévenu ; les contenus déjà publiés gardent leur mention).
+  if (intent === "partnership_end") {
+    const res = await api(request, `/me/partnerships/${encodeURIComponent(String(form.get("id") ?? ""))}/end`, {
+      method: "POST",
+    });
+    if (!res.ok) return data({ scope: "partnership", error: res.error.message }, { status: res.status });
+    return redirect("/app/moi?fait=partenariat");
   }
   if (intent === "settings") {
     const prefs = Object.fromEntries(
@@ -148,6 +160,7 @@ export async function action({ request }: Route.ActionArgs) {
 const SAVED: Record<string, string> = {
   reglages: "Réglages enregistrés.",
   email: "E-mail de confirmation renvoyé.",
+  partenariat: "Partenariat terminé : le pro est prévenu.",
 };
 
 export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
@@ -219,7 +232,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
       </div>
       {/* Lot R7b1 (maquette R7.12) : la photo dans son anneau (sans story pour l'instant : `ring = null`, le lot R7f2 l'ouvrira),
           le pseudo, le grade, le secteur et la roue dentée ; les trois nombres (chacun ouvre sa liste), « Partenaires »
-          (réservé au lot R7m1) et « Profil public ». */}
+          (lot R7m1) et « Profil public ». */}
       <section className="s-stack" data-testid="profil-card" aria-label="Mon profil">
         <div className="pt-head">
           <div className="pt-head__av">
@@ -269,7 +282,12 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </a>
           ))}
         </nav>
-        <PartnersLine pseudo={me.profile.pseudo} mine />
+        <PartnersLine mine={loaderData.partnerships} busy={busy} />
+        {err("partnership") && (
+          <p className="s-error" role="alert">
+            {err("partnership")}
+          </p>
+        )}
         <Button variant="secondary" icon="eye" href="/app/profil-public" data-testid="profil-public">
           {PT.publicProfile}
         </Button>

@@ -14,6 +14,7 @@ import {
 import { type CSSProperties, useEffect } from "react";
 import { Form, redirect } from "react-router";
 
+import { PartnersOfPro } from "../components/partnerships/PartnersOfPro";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { apiFetch } from "../lib/api.client";
@@ -238,6 +239,9 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
           </ul>
         </Plate>
       )}
+
+      {/* Lot R7m1 : « Ses partenaires » (passionnés à partenariat actif ; l'API ne sert rien sans compte connecté). */}
+      <PartnersOfPro items={pro.memberPartners ?? []} />
 
       {pro.photos.length > 0 && (
         <section className="s-stack" aria-labelledby="pro-photos">
