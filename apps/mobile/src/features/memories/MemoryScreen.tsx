@@ -117,8 +117,8 @@ function MemoryBody({ m }: { m: MemoryDetail }) {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: 24, overflow: "hidden" },
-  heroBody: { marginTop: -40, paddingHorizontal: space4, paddingBottom: space4 + 2, gap: space2 },
-  heroTitle: { fontSize: 34, lineHeight: 32 },
+  heroBody: { marginTop: -10, paddingHorizontal: space4, paddingBottom: space4 + 2, gap: space2 },
+  heroTitle: { fontSize: 26, lineHeight: 27 },
   stampTile: { borderRadius: 18, padding: space3 + 2, flexDirection: "row", alignItems: "center", gap: space3 },
   stampText: { flex: 1, minWidth: 0, gap: 4 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: space2 + 2 },

@@ -51,7 +51,7 @@ export function Memories({ data }: { data: HomeMemory }) {
 const styles = StyleSheet.create({
   wrap: { gap: space2 },
   card: { borderRadius: 24, overflow: "hidden" },
-  body: { marginTop: -30, paddingHorizontal: space3 + 4, paddingBottom: space3 + 4, gap: space2 },
-  title: { fontSize: 28, lineHeight: 28 },
+  body: { marginTop: -8, paddingHorizontal: space3 + 4, paddingBottom: space3 + 4, gap: space2 },
+  title: { fontSize: 24, lineHeight: 25 },
   actions: { flexDirection: "row", gap: space2 + 2 },
 });
