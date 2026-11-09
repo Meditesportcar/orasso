@@ -52,6 +52,7 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { isVerifiedStaff } from "../passport/presence";
+import { gpsPresentAt } from "../presence/repo";
 
 type Award = (entry: {
   userId: string;
@@ -94,7 +95,7 @@ function windowOf(event: EventRow, entered: { checkedInAt: Date }[]): AudienceVo
   };
 }
 
-/** Ce qui fait de la personne un votant : un véhicule pointé, un billet scanné, une présence au staff. */
+/** Ce qui fait de la personne un votant : un véhicule pointé, un billet scanné, une présence au staff ou par GPS. */
 async function voterOf(
   ex: Executor,
   eventId: string,
@@ -112,6 +113,8 @@ async function voterOf(
     ticketScannedAt,
     // Staff présent vérifiable : une trace du jour J (relecture du lot 49).
     staffPresent: await isVerifiedStaff(ex, eventId, userId),
+    // Lot R7d1 : la présence validée par GPS (visiteur sans voiture) donne aussi le droit de vote.
+    gpsPresentAt: await gpsPresentAt(ex, eventId, userId),
   } satisfies AudienceVoter;
 }
 
