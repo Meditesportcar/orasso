@@ -331,3 +331,195 @@ test("police agrandie (1,3) à 384 px : la barre et la visionneuse tiennent, nom
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await ctx.close();
 });
+
+// --- Tour 2 (relectures Opus et Codex) -------------------------------------------------------------------------------------
+
+test("tour 2 : sortir pendant les 1,5 s de « Ne plus voir ses stories » ne recule qu'une fois", async ({ browser }) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  const theo = await userIdOf("Theo_66");
+  await apiCall(damien, "DELETE", `/me/story-mutes/u:${theo}`);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await openFrom(page, "Theo_66");
+  await playing(page);
+  await page.getByTestId("story-more").click();
+  await page.getByTestId("story-menu-mute").click();
+  await expect(page.getByTestId("story-notice")).toContainText("Tu ne verras plus ces stories", { timeout: 15_000 });
+  await page.getByTestId("story-close").click();
+  await expect(page.getByTestId("stories-bar")).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/fil/);
+  // Passé les 1,5 s, la minuterie du mute n'a rien refermé de plus : on est toujours sur Le Fil.
+  await page.waitForTimeout(2800);
+  await expect(page).toHaveURL(/\/fil/);
+  await expect(page.getByTestId("stories-bar")).toBeVisible();
+  await apiCall(damien, "DELETE", `/me/story-mutes/u:${theo}`);
+  await ctx.close();
+});
+
+test("tour 2 : réponse perdue puis texte modifié = autre identifiant ; envoi tardif sans effet sur le brouillon suivant", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  const ids: string[] = [];
+  let mode: "lost" | "pass" | "slow" = "lost";
+  await page.route("**/api/stories/*/reply", async (route) => {
+    ids.push((route.request().postDataJSON() as { clientId: string }).clientId);
+    if (mode === "lost") {
+      // Le serveur reçoit la réponse, mais elle est perdue avant d'arriver à l'écran.
+      await route.fetch();
+      await route.abort();
+    } else if (mode === "slow") {
+      // Réponse tardive et réussie (rendue par la recette : la règle « une seule demande de contact » est celle de l'API).
+      await new Promise((r) => setTimeout(r, 2500));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ mode: "message" }),
+      });
+    } else await route.continue();
+  });
+  const input = page.getByTestId("story-reply-input");
+  await input.fill("Belle auto");
+  await page.getByTestId("story-reply-send").click();
+  await expect(page.getByTestId("story-notice")).toBeVisible({ timeout: 15_000 });
+  await expect(input).toHaveValue("Belle auto");
+  await page.getByTestId("story-reply-send").click();
+  await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(2);
+  // La même soumission renvoyée garde son identifiant (pas de doublon côté serveur).
+  expect(ids[1]).toBe(ids[0]);
+  mode = "pass";
+  await input.fill("Belle auto !");
+  await page.getByTestId("story-reply-send").click();
+  await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(3);
+  expect(ids[2]).not.toBe(ids[0]);
+  await expect(input).toHaveValue("", { timeout: 15_000 });
+
+  // Envoi tardif : on passe à la story suivante pendant que la réponse part ; le brouillon suivant reste.
+  mode = "slow";
+  while ((await page.getByTestId("story-bar-done").count()) > 0) {
+    await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
+    await page.waitForTimeout(300);
+  }
+  await input.fill("Premier");
+  await page.getByTestId("story-reply-send").click();
+  await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
+  await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
+  await input.fill("Brouillon suivant");
+  await expect(page.getByTestId("story-notice")).toContainText("Message envoyé", { timeout: 20_000 });
+  await expect.poll(() => ids.length).toBe(4);
+  await expect(input).toHaveValue("Brouillon suivant");
+  await ctx.close();
+});
+
+test("tour 2 : « Réessayer » de la photo est touchable après une panne du média", async ({ browser }) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await page.route("**/api/stories/*/media/**", (route) => route.abort());
+  await go(page, "/fil");
+  await expect(page.getByTestId("stories-bar")).toBeVisible({ timeout: 30_000 });
+  await page.getByLabel("Voir les stories de Lea_11").click();
+  const retry = page.getByTestId("photo-retry");
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  await page.unroute("**/api/stories/*/media/**");
+  // Un vrai toucher : la surface de gestes ne couvre plus le bouton.
+  await retry.click();
+  await playing(page);
+  await ctx.close();
+});
+
+test("tour 2 : appli masquée = pause et aucune vue ; reculer sur la première story la rejoue", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const lea = await userIdOf("Lea_11");
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await ctx.addInitScript(() => {
+    const w = window as unknown as { __hidden: boolean };
+    // L'état « masqué » survit aux chargements de page.
+    w.__hidden = sessionStorage.getItem("recette.masque") === "1";
+    Object.defineProperty(document, "visibilityState", {
+      get: () => (w.__hidden ? "hidden" : "visible"),
+      configurable: true,
+    });
+  });
+  const setHidden = (hidden: boolean) =>
+    page.evaluate((h) => {
+      (window as unknown as { __hidden: boolean }).__hidden = h;
+      Object.defineProperty(document, "visibilityState", {
+        get: () => ((window as unknown as { __hidden: boolean }).__hidden ? "hidden" : "visible"),
+        configurable: true,
+      });
+      sessionStorage.setItem("recette.masque", h ? "1" : "0");
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, hidden);
+  const views = async () =>
+    (await sql<{ v: number }>("select views_count as v from stories where author_id = $1", [lea]))[0]?.v;
+  await openFrom(page, "Lea_11");
+  await playing(page);
+  await expect.poll(views, { timeout: 15_000 }).toBe(1);
+  // Pause en arrière-plan : la barre ne bouge plus, le temps restant est gardé.
+  await setHidden(true);
+  await page.waitForTimeout(400);
+  const frozen = await currentFill(page);
+  await page.waitForTimeout(1300);
+  expect(Math.abs((await currentFill(page)) - frozen)).toBeLessThan(3);
+  await setHidden(false);
+  await expect.poll(() => currentFill(page), { timeout: 10_000 }).toBeGreaterThan(frozen + 5);
+  // Reculer sur la première story : elle repart du début.
+  await page.waitForTimeout(1500);
+  const before = await currentFill(page);
+  await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
+  await page.waitForTimeout(200);
+  expect(await currentFill(page)).toBeLessThan(before - 25);
+  await playing(page);
+  // Une story ouverte appli masquée n'est pas comptée vue.
+  await sql("delete from story_views");
+  await sql("update stories set views_count = 0");
+  await page.getByTestId("story-close").click();
+  await expect(page.getByTestId("stories-bar")).toBeVisible({ timeout: 30_000 });
+  await setHidden(true);
+  await page.getByLabel("Voir les stories de Lea_11").click();
+  await expect(page.getByTestId("story-viewer")).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(3500);
+  expect(await views()).toBe(0);
+  await setHidden(false);
+  await expect.poll(views, { timeout: 15_000 }).toBe(1);
+  await ctx.close();
+});
+
+test("tour 2 : le total des vues reste vrai au-delà de 200 ; l'aperçu du profil n'ouvre pas la visionneuse", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  await dropMyStories(damien);
+  const id = await publishStory(damien, { caption: "Beaucoup de vues" });
+  await sql("update stories set views_count = 250 where id = $1", [id]);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await go(page, "/fil");
+  await expect(page.getByTestId("stories-mine-ring")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("stories-mine-ring").click();
+  await expect(page.getByTestId("story-viewer")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("story-views")).toContainText("Vues · 250", { timeout: 30_000 });
+  await page.getByTestId("story-views").click();
+  await expect(page.getByTestId("story-viewers-partial")).toContainText("200", { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Vues · 250" })).toBeVisible();
+  await page.getByTestId("story-viewers-close").click();
+  // L'aperçu de mon profil : l'anneau ne mène nulle part.
+  await go(page, "/profil-public");
+  const ring = page.getByTestId("profil-story-ring");
+  await expect(ring).toBeVisible({ timeout: 30_000 });
+  await ring.click({ force: true });
+  await page.waitForTimeout(1200);
+  await expect(page).toHaveURL(/profil-public/);
+  await expect(page.getByTestId("story-viewer")).toHaveCount(0);
+  await dropMyStories(damien);
+  await ctx.close();
+});
