@@ -463,6 +463,7 @@ export async function linkedViewsOf(
   },
 ): Promise<Map<string, StoryLinkedView>> {
   const out = new Map<string, StoryLinkedView>();
+  const voteViews = new Map<string, Awaited<ReturnType<typeof votesService.get>> | null>();
   const at = now();
   for (const { story: s } of rows) {
     if (!s.linkedType || !s.linkedId) continue;
@@ -530,7 +531,15 @@ export async function linkedViewsOf(
       const e = vote ? await loadEvent(vote.eventId) : null;
       // Même règle qu'au partage : un classement d'un événement sur invitation ou non publié n'est plus ouvrable.
       if (vote && e && shareable(e) && (await canSeeEvent(e, v))) {
-        const view = await votesService.get(v, vote.eventId, vote.id).catch(() => null);
+        // Le classement ne sert qu'à dire à l'auteur si sa story s'exporte : jamais chargé pour un autre lecteur, et une
+        // seule fois par vote pendant cette lecture (plusieurs stories du même vote).
+        let view: Awaited<ReturnType<typeof votesService.get>> | null = null;
+        if (s.authorId === v.user.id) {
+          if (!voteViews.has(vote.id)) {
+            voteViews.set(vote.id, await votesService.get(v, vote.eventId, vote.id).catch(() => null));
+          }
+          view = voteViews.get(vote.id) ?? null;
+        }
         out.set(s.id, {
           type: "vote_result",
           id: vote.id,

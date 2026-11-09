@@ -142,8 +142,9 @@ export const postExportPath = (id: string) => `/api/feed-posts/${id}/export`;
 export type { ExportKind };
 
 /**
- * Télécharge un fichier sortant. `key` : nom stable dans le cache (le même contenu ne se retélécharge pas deux fois de
- * suite). `mediaKind` : la nature réelle du fichier (une story vidéo sort en .mp4 / video/mp4, jamais en image).
+ * Télécharge un fichier sortant. `key` : base du nom dans le cache, suivie d'un suffixe unique par téléchargement (deux
+ * téléchargements du même contenu ne partagent jamais un fichier). Un téléchargement coupé efface son fichier partiel.
+ * `mediaKind` : la nature réelle du fichier (une story vidéo sort en .mp4 / video/mp4, jamais en image).
  */
 export async function prepareExport(
   path: string,
@@ -170,18 +171,18 @@ export async function prepareExport(
       ext: video ? "mp4" : "jpg",
     };
   }
+  const kind = exportKindOf(mediaKind);
+  const target = new File(Paths.cache, exportCacheName(key, kind, nextExportNonce()));
   try {
-    const kind = exportKindOf(mediaKind);
-    const file = await File.downloadFileAsync(
-      url,
-      new File(Paths.cache, exportCacheName(key, kind, nextExportNonce())),
-      {
-        headers: authHeaders(),
-        idempotent: true,
-      },
-    );
+    const file = await File.downloadFileAsync(url, target, { headers: authHeaders() });
     return { uri: file.uri, fileName: exportFileName(fileName, kind), temp: true, ...kind };
   } catch (e) {
+    // Téléchargement coupé : le fichier partiel (ouvert avant la copie) ne reste pas dans le cache.
+    try {
+      if (target.exists) target.delete();
+    } catch {
+      // rien à effacer
+    }
     throw shareError(null, e instanceof Error ? e.message : String(e));
   }
 }
