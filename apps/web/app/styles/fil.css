@@ -32,6 +32,11 @@
   text-decoration: none;
   box-shadow: var(--shadow-card);
 }
+/* Le lien générique du contenu (« .s-main a », couleur d'accent) l'emportait sur l'encre du bouton : moutarde sur moutarde. */
+.s-main a.fil-publish,
+.app__body a.fil-publish {
+  color: var(--accent-ink);
+}
 .fil-publish:focus-visible,
 .fil-link:focus-visible,
 .fil-chip:focus-visible,
