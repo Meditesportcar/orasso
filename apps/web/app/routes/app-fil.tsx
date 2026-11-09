@@ -1,6 +1,7 @@
 import { navLabels } from "@orasso/shared";
 
 import { Fil } from "../components/fil/Fil";
+import { StoriesBar } from "../components/stories/StoriesBar";
 import { requireMe } from "../lib/api.server";
 import type { Route } from "./+types/app-fil";
 
@@ -8,7 +9,7 @@ import type { Route } from "./+types/app-fil";
 // « ⋯ ». Mode A : bande ORASSO et barre d'onglets (le layout). Les cartes sont lues dans le navigateur (`/api/fil`).
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  return { userId: me.user.id };
+  return { userId: me.user.id, pseudo: me.profile.pseudo, avatarUrl: me.profile.avatarUrl };
 }
 
 export function meta() {
@@ -19,6 +20,9 @@ export default function AppFil({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <h1 className="fil-sr">{navLabels.fil.title}</h1>
+      <div className="stories-wrap">
+        <StoriesBar userId={loaderData.userId} pseudo={loaderData.pseudo} avatarUrl={loaderData.avatarUrl} />
+      </div>
       <Fil userId={loaderData.userId} />
     </>
   );

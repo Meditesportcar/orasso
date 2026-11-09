@@ -14,6 +14,8 @@ export default [
     route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
     // Lot R7f3 : publier une story (photo en 9:16).
     route("app/story/publier", "routes/app-story-publier.tsx"),
+    // Lot R7f2 : la visionneuse de stories (superposition 9:16) ; `authorKey` = `u:<compte>`, `s:<structure>` ou `p:<pro>`.
+    route("app/story/:authorKey", "routes/app-story.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
     // Lot R7i : rendez-vous au spot (lancer, recevoir, répondre).
     route("app/spot/nouveau", "routes/app-spot-nouveau.tsx"),

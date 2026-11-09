@@ -36,6 +36,7 @@ import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { spotApi } from "./spot";
 import { staffApi } from "./staff";
+import { storiesApi } from "./stories";
 import { storiesPublishApi } from "./storiesPublish";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
@@ -99,5 +100,6 @@ export const api = {
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...storiesApi,
   ...storiesPublishApi,
 };

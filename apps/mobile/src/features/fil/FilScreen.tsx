@@ -17,6 +17,7 @@ import { Linking, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
+import { StoriesBar } from "@/features/stories/StoriesBar";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { Seg, SmButton } from "@/ui/Kit";
@@ -28,7 +29,6 @@ import { Waiting } from "@/ui/Waiting";
 import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
 import { PublishChoice } from "./PublishChoice";
-import { StoriesBarSlot } from "./StoriesBarSlot";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
 
@@ -136,7 +136,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const items = feed.items;
   return (
     <>
-      <StoriesBarSlot />
+      <StoriesBar />
       <SmButton
         kind="p"
         big

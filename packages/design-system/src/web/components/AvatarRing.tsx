@@ -17,13 +17,31 @@ export type AvatarRingProps = {
   /** Texte alternatif du lien ; sans lien, l'avatar est décoratif. */
   label?: string;
   className?: string;
+  /** Lot R7f2 : `false` retire le néon d'un anneau `live` (un seul néon moutarde par écran). */
+  neon?: boolean;
   /** Remplace la photo (par exemple un logo de structure). */
   children?: ReactNode;
 };
 
 /** Anneau d'avatar (lot R7b1, maquette R7 `.r7ring`) : une photo ronde et l'anneau de ce qu'elle a à montrer. Sans texte dans l'anneau. */
-export function AvatarRing({ ring = null, size = "lg", src, name, href, label, className, children }: AvatarRingProps) {
-  const cls = cx("o-avring", `o-avring--${size}`, ring && `o-avring--${ring}`, className);
+export function AvatarRing({
+  ring = null,
+  size = "lg",
+  src,
+  name,
+  href,
+  label,
+  neon = true,
+  className,
+  children,
+}: AvatarRingProps) {
+  const cls = cx(
+    "o-avring",
+    `o-avring--${size}`,
+    ring && `o-avring--${ring}`,
+    ring === "live" && !neon && "o-avring--flat",
+    className,
+  );
   const face = (
     <span className="o-avring__face">
       {children ??

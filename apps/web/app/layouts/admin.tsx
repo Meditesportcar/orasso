@@ -7,6 +7,7 @@ import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { requireModeration } from "../lib/admin.server";
 import { api } from "../lib/api.server";
 import { devClockEnabled } from "../lib/clock.server";
+import { useAnnounceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/admin";
 import "../styles/admin.css";
 
@@ -46,6 +47,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Compteurs de la barre (super admin) : facultatifs, la page s'affiche sans eux.
   const overview = moderator ? null : await api<AdminOverview>(request, "/admin/overview");
   return {
+    userId: me.user.id,
     pseudo: me.profile.pseudo,
     twoFactorHint: me.twoFactorHint,
     moderator,
@@ -60,6 +62,7 @@ export function meta() {
 
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
   const { pseudo, twoFactorHint, moderator, counts, devClock } = loaderData;
+  useAnnounceSession(loaderData.userId);
   // Lot 34a : le lien de l'horloge simulée n'existe que si DEV_CLOCK est posée (et pour le super admin).
   const sections: AdminSection[] = devClock
     ? [...adminSections, { href: "/admin/horloge", label: devClockLabels.navLink }]

@@ -4,6 +4,7 @@ import { Outlet, useLocation } from "react-router";
 
 import { SiteFooter, SiteHeader } from "../components/SiteChrome";
 import { getMe } from "../lib/api.server";
+import { useAnnounceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/public";
 
 // Mise en page publique (DA v2, lot 56) : fond de bataille (lampe en Béton, uni en Sable), en-tête avec le logo, pied
@@ -11,6 +12,7 @@ import type { Route } from "./+types/public";
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await getMe(request);
   return {
+    userId: me?.user.id ?? null,
     pseudo: me?.profile.pseudo ?? null,
     orga: (me?.memberships ?? []).find((m) => m.status === "active")?.structureSlug ?? null,
     pro: me?.pro?.slug ?? null,
@@ -21,6 +23,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 const BLEED = new Set(["/", "/evenements", "/organisateurs", "/professionnels"]);
 
 export default function PublicLayout({ loaderData }: Route.ComponentProps) {
+  useAnnounceSession(loaderData.userId);
   const { pathname, search } = useLocation();
   const retour = encodeURIComponent(pathname + search);
   return (
