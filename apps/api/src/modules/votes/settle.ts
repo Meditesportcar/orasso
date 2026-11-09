@@ -180,8 +180,15 @@ export const votesSettle = {
         const points = mine && mine.voteId === p.vote.id ? podiumPoints(settings, r.rank) : 0;
         const common = {
           eventId: event.id,
-          data: { eventId: event.id, voteId: p.vote.id, applicationId: r.applicationId, rank: r.rank, screen: "recap" },
-          link: { label: "Voir mon récap", path: `/app/recap/${event.id}` },
+          data: {
+            eventId: event.id,
+            voteId: p.vote.id,
+            applicationId: r.applicationId,
+            rank: r.rank,
+            screen: "vote_result",
+          },
+          // Lot R7l3 : « Tu gagnes … » ouvre le résultat de ce vote (le récap reste dans le Journal de l'événement).
+          link: { label: "Voir le résultat", path: `/app/vote/${event.slug}?vote=${p.vote.id}` },
         };
         if (r.rank === 1) {
           await notificationsService.notify(ex, who.userId, "vote_won", {

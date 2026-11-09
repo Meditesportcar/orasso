@@ -36,6 +36,7 @@ import {
   passportStamps,
   platformSettings,
   pointEntries,
+  profiles,
   scanEvents,
   vehicleGenerations,
   vehicleMakes,
@@ -1609,5 +1610,86 @@ describe("tour 3 : dernière retouche", () => {
     const refused = await api(orga, "POST", `/${id}/candidates`, { qr: await codeOf(p.marc) });
     expect(refused.status).toBe(409);
     expect(refused.json.error.code).toBe("not_checked_in");
+  });
+});
+
+describe("lot R7l3 : cibles des notifications et trophées sur la carte du véhicule", () => {
+  /** Un vote japonais joué (trois voix, deux candidats) puis réglé : Kenji 1er, Lea 2e. */
+  async function playedJapanese() {
+    await enterAll();
+    const jp = await createTheme();
+    await api(orga, "POST", `/${jp}/open`);
+    for (const [voter, target] of [
+      [p.nina.u, p.kenji],
+      [p.marc.u, p.kenji],
+      [staff, p.lea],
+    ] as const) {
+      expect((await voteFor(voter, jp, target.applicationId)).status).toBe(200);
+    }
+    return jp;
+  }
+  const slugOf = async () => (await db.query.events.findFirst({ where: eq(events.id, eventId) }))!.slug;
+
+  it("« vote lancé » ouvre la liste des votes de l'événement ; « tu gagnes » ouvre le résultat de ce vote", async () => {
+    const jp = await playedJapanese();
+    const slug = await slugOf();
+    const opened = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    expect(opened.length).toBeGreaterThan(0);
+    for (const n of opened) {
+      expect((n.data as { link?: string }).link).toBe(`/app/votes/${slug}`);
+      expect((n.data as { voteId?: string }).voteId).toBe(jp);
+    }
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    const won = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_won") });
+    const kenji = won.find((n) => n.userId === p.kenji.u.id);
+    expect(kenji).toBeTruthy();
+    const data = kenji!.data as { link?: string; voteId?: string; screen?: string };
+    expect(data.link).toBe(`/app/vote/${slug}?vote=${jp}`);
+    expect(data.voteId).toBe(jp);
+    expect(data.screen).toBe("vote_result");
+  });
+
+  it("le podium est servi sur la carte du véhicule (liste blanche de champs), au propriétaire et à un autre membre", async () => {
+    const jp = await playedJapanese();
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    const mine = await call(p.kenji.u, "GET", "/me/vehicles");
+    expect(mine.status).toBe(200);
+    const row = (mine.json as { id: string; trophies: Record<string, unknown>[] }[]).find(
+      (v) => v.id === p.kenji.vehicleId,
+    )!;
+    expect(row.trophies).toHaveLength(1);
+    expect(Object.keys(row.trophies[0]!).sort()).toEqual(["awardedAt", "eventTitle", "id", "rank", "voteTitle"]);
+    expect(row.trophies[0]).toMatchObject({ rank: 1, voteTitle: "Plus belle japonaise", eventTitle: "Béziers Night" });
+    expect(jp).toBeTruthy();
+    // Lea 2e : son trophée de rang 2 ; Marc n'est pas sur le podium japonais : aucun trophée.
+    const lea = (await call(p.lea.u, "GET", "/me/vehicles")).json as { id: string; trophies: { rank: number }[] }[];
+    expect(lea.find((v) => v.id === p.lea.vehicleId)?.trophies.map((t) => t.rank)).toEqual([2]);
+    const marc = (await call(p.marc.u, "GET", "/me/vehicles")).json as { id: string; trophies: unknown[] }[];
+    expect(marc.find((v) => v.id === p.marc.vehicleId)?.trophies).toEqual([]);
+    // Un autre membre (compte public) voit le podium sur la fiche du véhicule.
+    const other = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(other.status).toBe(200);
+    expect((other.json.trophies as { voteTitle: string }[]).map((t) => t.voteTitle)).toEqual(["Plus belle japonaise"]);
+  });
+
+  it("le titre d'un événement sur invitation ne sort pas de chez le propriétaire ; un compte privé ne montre pas ses trophées", async () => {
+    await playedJapanese();
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, eventId));
+    // Le propriétaire garde son podium ; un autre membre (même s'il pouvait voir la voiture) ne le voit pas.
+    const mine = (await call(p.kenji.u, "GET", "/me/vehicles")).json as { id: string; trophies: unknown[] }[];
+    expect(mine.find((v) => v.id === p.kenji.vehicleId)?.trophies).toHaveLength(1);
+    const other = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(other.status).toBe(200);
+    expect(other.json.trophies).toEqual([]);
+    // Un compte privé n'est vu que par la fiche réduite : aucun champ de trophée.
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, p.kenji.u.id));
+    const reduced = await call(outsider, "GET", `/vehicles/${p.kenji.vehicleId}`);
+    expect(reduced.status).toBe(200);
+    expect(reduced.json.detailed).toBe(false);
+    expect(reduced.json).not.toHaveProperty("trophies");
   });
 });

@@ -16,6 +16,7 @@ import {
   vehiclePhotos,
   vehicles,
 } from "./vehicles";
+import { vehicleTrophies } from "./votes";
 
 export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   make: one(vehicleMakes, { fields: [vehicles.makeId], references: [vehicleMakes.id] }),
@@ -23,10 +24,17 @@ export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   generation: one(vehicleGenerations, { fields: [vehicles.generationId], references: [vehicleGenerations.id] }),
   photos: many(vehiclePhotos),
   categories: many(vehicleCategories),
+  // Lot R7l3 : les podiums de vote, lus par la carte du véhicule.
+  trophies: many(vehicleTrophies),
   pendingTransfer: one(plateTransferRequests, {
     fields: [vehicles.pendingTransferId],
     references: [plateTransferRequests.id],
   }),
+}));
+
+export const vehicleTrophiesRelations = relations(vehicleTrophies, ({ one }) => ({
+  vehicle: one(vehicles, { fields: [vehicleTrophies.vehicleId], references: [vehicles.id] }),
+  event: one(events, { fields: [vehicleTrophies.eventId], references: [events.id] }),
 }));
 
 export const vehiclePhotosRelations = relations(vehiclePhotos, ({ one }) => ({
