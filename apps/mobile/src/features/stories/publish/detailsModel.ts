@@ -48,7 +48,7 @@ export const audienceOptionDisabled = (
   options: readonly StoryAudienceOption[],
   key: string,
   locked: boolean,
-): boolean => locked || (options.length === 1 && !audienceLost(options, key));
+): boolean => locked || (options.length === 1 && options[0]?.key === key);
 
 /** « Ma ville » arrive : seul le lieu change, sur l'état d'aujourd'hui (jamais sur celui d'avant la lecture). */
 export const withPlace =
