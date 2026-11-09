@@ -106,7 +106,8 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
   await n.page.getByText("BMW", { exact: false }).first().click();
   await shot(n.page, "01-publier-beton");
   await n.page.getByTestId("crew-publish-send").click();
-  await n.page.waitForURL(new RegExp(`/crew/${crew.slug}$`), { timeout: 60_000 });
+  // Lot R7b2 : après la publication on revient sur l'onglet Crew (`/crew?crew=<adresse>`).
+  await n.page.waitForURL(new RegExp(`/crew(/${crew.slug}$|\[?]crew=${crew.slug}$)`), { timeout: 60_000 });
   const post = n.page.getByTestId("crew-post").first();
   await expect(post.getByTestId("crew-post-text")).toHaveText("Lavée, prête pour dimanche 🔥", { timeout: 30_000 });
   await expect(post.getByTestId("crew-post-photo-count")).toHaveText("1 / 2");
@@ -162,7 +163,7 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
     await k.page.getByText("Dans 3 jours", { exact: true }).click();
     await shot(k.page, `04-sondage-publier-${theme}`);
     await k.page.getByTestId("crew-publish-send").click();
-    await k.page.waitForURL(new RegExp(`/crew/${crew.slug}$`), { timeout: 60_000 });
+    await k.page.waitForURL(new RegExp(`/crew(/${crew.slug}$|\[?]crew=${crew.slug}$)`), { timeout: 60_000 });
     const poll = k.page.getByTestId("crew-post").filter({ hasText: question });
     await expect(poll.getByTestId("crew-poll")).toBeVisible({ timeout: 30_000 });
     await poll.getByTestId("crew-poll-option").first().click();

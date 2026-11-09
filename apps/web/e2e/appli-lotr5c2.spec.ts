@@ -74,7 +74,8 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await expect(k.getByTestId("crew-tabs")).toBeVisible();
     await expect(k.getByTestId("crew-feed")).toBeVisible();
     await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
-    await expect(k.getByText("Tu es le chef")).toBeVisible();
+    // Lot R7b2 : l'en-tête dit aussi « N membres · tu es le chef » ; on vise l'étiquette exacte.
+    await expect(k.getByText("Tu es le chef", { exact: true })).toBeVisible();
     await shot(k, `01-chef-fil-${theme}`);
     await k.getByTestId("crew-tab-outings").click();
     await expect(k.getByTestId("crew-propose-outing")).toBeVisible();
