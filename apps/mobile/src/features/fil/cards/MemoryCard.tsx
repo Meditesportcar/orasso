@@ -38,15 +38,28 @@ export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
           >
             {memoryLabels.see}
           </SmButton>
+          <SmButton
+            kind="s"
+            icon="grid"
+            onPress={() => router.push({ pathname: "/e/[slug]/plateau", params: { slug: memory.slug } })}
+            testID="feed-memory-plateau"
+          >
+            {memoryLabels.seePlateau}
+          </SmButton>
         </>
       }
     >
       <View style={styles.photo}>
-        <MemoryPhoto memory={memory} height={190} />
+        <MemoryPhoto memory={memory} height={190} stamp={64} />
       </View>
       <Text variant="caption" color={t.color.inkMuted}>
         {memoryLabels.eyebrow(memory.yearsAgo)}
       </Text>
+      {memory.car ? (
+        <Text variant="caption" color={t.color.inkMuted} testID="feed-memory-car">
+          {memoryLabels.plateauLine(memory.car.label, memory.car.rank, memory.car.total)}
+        </Text>
+      ) : null}
     </CardShell>
   );
 }

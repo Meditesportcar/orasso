@@ -1,7 +1,10 @@
 // Bloc « Souvenirs » de l'Accueil du site (lot R7j, maquette R7.10) : même contenu que l'appli. Les jours où il y a un
 // souvenir seulement (`GET /me/home` renvoie `memories: null` sinon). Le bouton « En story » est posé par R7f4 sur la page.
 import { Button } from "@orasso/design-system/web";
-import { type HomeMemory, memoryLabels } from "@orasso/shared";
+import { type HomeMemory, memoryLabels, widestWordEm } from "@orasso/shared";
+import type { CSSProperties } from "react";
+
+import { PassportStamp } from "../PassportStamp";
 
 import "../../styles/souvenirs.css";
 
@@ -21,10 +24,24 @@ export function MemoriesBlock({ data }: { data: HomeMemory }) {
               aria-label={memoryLabels.cardTitle(m.yearsAgo, m.title)}
             >
               {image ? <img src={image} alt="" loading="lazy" /> : null}
+              <span className="sv-poster__stamp" aria-hidden="true" data-testid="home-memory-stamp">
+                <PassportStamp stamp={m.stamp} size={72} />
+              </span>
             </a>
             <div className="sv-poster__body">
               <span className="o-t-label sv-poster__eyebrow">{memoryLabels.eyebrow(m.yearsAgo)}</span>
-              <h3 className="o-t-poster-m o-never-truncate">{memoryLabels.headline(m.title)}</h3>
+              <h3
+                className="o-t-poster-m o-never-truncate sv-poster__title"
+                style={{ "--em": widestWordEm(memoryLabels.headline(m.title)) } as CSSProperties}
+                data-testid="home-memory-title"
+              >
+                {memoryLabels.headline(m.title)}
+              </h3>
+              {m.car ? (
+                <p className="o-t-caption sv-poster__muted" data-testid="home-memory-car">
+                  {memoryLabels.plateauLine(m.car.label, m.car.rank, m.car.total)}
+                </p>
+              ) : null}
               <div className="sv-actions">
                 <Button
                   variant="secondary"
@@ -33,6 +50,9 @@ export function MemoriesBlock({ data }: { data: HomeMemory }) {
                   data-testid="home-memory-open"
                 >
                   {memoryLabels.see}
+                </Button>
+                <Button variant="secondary" icon="grid" href={`/e/${m.slug}/plateau`} data-testid="home-memory-plateau">
+                  {memoryLabels.seePlateau}
                 </Button>
               </div>
             </div>

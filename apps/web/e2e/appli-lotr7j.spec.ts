@@ -8,7 +8,43 @@ import { apiCall, login, SEED_PASSWORD } from "./helpers";
 const APP = process.env.APP_URL;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 30_000 });
-type Today = { eventId: string; title: string; yearsAgo: number; photoUrl: string | null }[];
+type Today = {
+  eventId: string;
+  title: string;
+  yearsAgo: number;
+  photoUrl: string | null;
+  car: { label: string; rank: number; total: number } | null;
+}[];
+
+/** Les mots d'un élément coupés entre deux lignes (un mot dont les rectangles n'ont pas le même haut) : doit rester vide. */
+async function cutWords(page: Page, testId: string): Promise<string[]> {
+  return page
+    .getByTestId(testId)
+    .first()
+    .evaluate((el) => {
+      const out: string[] = [];
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const text = n.textContent ?? "";
+        for (const m of text.matchAll(/S+/g)) {
+          const r = document.createRange();
+          r.setStart(n, m.index ?? 0);
+          r.setEnd(n, (m.index ?? 0) + m[0].length);
+          const tops = new Set([...r.getClientRects()].map((q) => Math.round(q.top)));
+          if (tops.size > 1) out.push(m[0]);
+        }
+      }
+      return out;
+    });
+}
+
+/** Le bouton tient dans l'écran (rien ne déborde à droite). */
+async function insideViewport(page: Page, testId: string) {
+  const box = await page.getByTestId(testId).first().boundingBox();
+  const width = page.viewportSize()?.width ?? 384;
+  expect(box, testId).not.toBeNull();
+  expect((box?.x ?? 0) + (box?.width ?? 0), `${testId} déborde`).toBeLessThanOrEqual(width);
+}
 
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
@@ -34,7 +70,10 @@ async function open(browser: Browser, email: string, scale = 1) {
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 60_000 });
-  await page.getByTestId("whatsnew-dismiss").click({ timeout: 4_000 }).catch(() => undefined);
+  await page
+    .getByTestId("whatsnew-dismiss")
+    .click({ timeout: 4_000 })
+    .catch(() => undefined);
   return { ctx, page };
 }
 
@@ -44,7 +83,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
   test.setTimeout(300_000);
   const cookie = await login("damien@orasso.local");
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
-  const memory = (await apiCall<Today>(cookie, "GET", "/me/memories/today")).data[0];
+  const memory = (await apiCall<Today>(cookie, "GET", "/me/memories/today")).data[0]!;
   expect(memory).toBeTruthy();
   expect(memory.photoUrl ?? "").not.toContain("scirocco-plaque-lisible");
   try {
@@ -53,12 +92,24 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
       const home = page.getByTestId("home-memories");
       await expect(home).toBeVisible({ timeout: 30_000 });
       await expect(home).toContainText("Il y a un an, jour pour jour");
-      await expect(home).toContainText(`Tu étais à ${memory.title}`);
+      await expect(home).toContainText(`Tu étais là : ${memory.title}`);
       await expect(page.getByText("En story")).toHaveCount(0);
+      // La carte suit la maquette : le tampon, « Le plateau » en secondaire, la ligne de ma voiture quand elle y était.
+      await expect(home.getByTestId("memory-photo-stamp")).toBeVisible();
+      await expect(home.getByTestId("home-memory-plateau")).toBeVisible();
+      if (memory.car) {
+        await expect(home.getByTestId("home-memory-car")).toContainText(`n° ${memory.car.rank} du plateau`);
+      }
+      // Titre : aucun mot coupé au milieu, police 1 comme 1,3.
+      expect(await cutWords(page, "home-memory-title"), `titre de l'Accueil à la police ${scale}`).toEqual([]);
+      await insideViewport(page, "home-memory-plateau");
       await page.getByTestId("home-memory-open").click();
-      await expect(page.getByTestId("memory-title")).toHaveText(`Tu étais à ${memory.title}`, { timeout: 30_000 });
+      await expect(page.getByTestId("memory-title")).toHaveText(`Tu étais là : ${memory.title}`, { timeout: 30_000 });
       await expect(page.getByTestId("memory-stamp")).toBeVisible();
       await expect(page.getByTestId("memory-event")).toBeVisible();
+      await expect(page.getByTestId("memory-eyebrow")).toHaveText("Il y a un an, jour pour jour");
+      expect(await cutWords(page, "memory-title"), `titre de la page à la police ${scale}`).toEqual([]);
+      await insideViewport(page, "memory-event");
       await expect(page.getByText("En story")).toHaveCount(0);
       if (scale === 1) {
         await page.goto("/fil");

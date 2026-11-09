@@ -75,3 +75,11 @@ export function memoryDayStart(now: Date, timeZone: string = BUSINESS_TIMEZONE):
   const n = wallTime(now, timeZone);
   return fromWallTime({ year: n.year, month: n.month, day: n.day, hour: 0, minute: 0 }, timeZone);
 }
+
+/** Heure locale à partir de laquelle on ne crée plus de souvenir : la livraison passerait au lendemain (heures calmes), qui n'est plus l'anniversaire. */
+export const MEMORY_LAST_CREATE_HOUR = 22;
+
+/** Peut-on créer la notification du souvenir de ce jour à cet instant ? Pas à 22 h locales ni après. */
+export function memoryCanCreate(now: Date, timeZone: string = BUSINESS_TIMEZONE): boolean {
+  return wallTime(now, timeZone).hour < MEMORY_LAST_CREATE_HOUR;
+}

@@ -3,7 +3,8 @@
 // « En story » (R7f4). 404 de l'API (pas mon tampon, pas encore un an) : « Ce souvenir n'est pas disponible », rien de plus.
 // Cible de la notification `memory` (`/app/souvenir/<eventId>`).
 import { Button } from "@orasso/design-system/web";
-import { type MemoryDetail, memoryLabels } from "@orasso/shared";
+import { type MemoryDetail, memoryLabels, widestWordEm } from "@orasso/shared";
+import type { CSSProperties } from "react";
 
 import { PassportStamp } from "../components/PassportStamp";
 import { api, requireMe } from "../lib/api.server";
@@ -24,7 +25,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   await requireMe(request);
   const res = await api<MemoryDetail>(request, `/me/memories/${encodeURIComponent(params.eventId)}`);
   if (res.ok) return { memory: res.data };
-  if (res.status === 404 || res.status === 403) return { memory: null };
+  // Identifiant invalide (400), inconnu ou pas le mien (404, 403) : la même page « Ce souvenir n'est pas disponible ».
+  if (res.status === 400 || res.status === 404 || res.status === 403) return { memory: null };
   throw new Response(res.error.message, { status: res.status });
 }
 
@@ -50,8 +52,17 @@ export default function Souvenir({ loaderData }: Route.ComponentProps) {
         <article className="sv-poster" data-testid="memory-hero">
           <div className="sv-poster__photo">{image ? <img src={image} alt="" /> : null}</div>
           <div className="sv-poster__body">
-            <span className="o-t-label sv-poster__eyebrow">{memoryLabels.eyebrow(m.yearsAgo)}</span>
-            <h1 className="o-t-poster-xl o-never-truncate" data-testid="memory-title">
+            {/* « Jour pour jour » seulement le jour anniversaire ; la page ouverte plus tard donne la date. */}
+            <span className="o-t-label sv-poster__eyebrow" data-testid="memory-eyebrow">
+              {m.anniversary
+                ? memoryLabels.eyebrow(m.yearsAgo)
+                : memoryLabels.eyebrowOn(m.yearsAgo, formatDay(m.startsAt))}
+            </span>
+            <h1
+              className="o-t-poster-xl o-never-truncate"
+              style={{ "--em": widestWordEm(memoryLabels.headline(m.title)) } as CSSProperties}
+              data-testid="memory-title"
+            >
               {memoryLabels.headline(m.title)}
             </h1>
             <p className="o-t-caption sv-poster__muted" data-testid="memory-date">

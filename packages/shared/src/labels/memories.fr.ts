@@ -3,13 +3,19 @@ export const memoryLabels = {
   title: "Souvenirs",
   /** « Il y a un an, jour pour jour » ; « Il y a 2 ans, jour pour jour ». */
   eyebrow: (years: number) => `${memoryAgo(years)}, jour pour jour`,
-  /** « Tu étais à Béziers Night ». */
-  headline: (title: string) => `Tu étais à ${title}`,
+  /** Page ouverte un autre jour que l'anniversaire : « Il y a un an, le 8 novembre 2025 ». */
+  eyebrowOn: (years: number, day: string) => `${memoryAgo(years)}, le ${day}`,
+  /** « Tu étais là : Béziers Night » (neutre : exposant ou visiteur, quel que soit l'article du nom). */
+  headline: (title: string) => `Tu étais là : ${title}`,
   /** Ligne de la carte du Fil et de la notification. */
-  cardTitle: (years: number, title: string) => `${memoryAgo(years)}, tu étais à ${title}`,
+  cardTitle: (years: number, title: string) => `${memoryAgo(years)}, tu étais là : ${title}`,
   notificationTitle: "Un souvenir pour toi",
-  notificationBody: (years: number, title: string) => `${memoryAgo(years)}, tu étais à ${title}.`,
+  notificationBody: (years: number, title: string) => `${memoryAgo(years)}, tu étais là : ${title}.`,
   see: "Voir",
+  seePlateau: "Le plateau",
+  /** « Ta Toyota GR Supra, n° 37 du plateau, au milieu de 118 voitures. » */
+  plateauLine: (label: string, rank: number, total: number) =>
+    `Ta ${label}, n° ${rank} du plateau${total > 1 ? `, au milieu de ${total} voitures` : ""}.`,
   seeRecap: "Voir le récap",
   seeEvent: "La fiche de l'événement",
   yourStamp: "Ton tampon",

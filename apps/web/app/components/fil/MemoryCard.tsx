@@ -3,6 +3,8 @@
 import { Icon } from "@orasso/design-system/web";
 import { memoryLabels } from "@orasso/shared";
 
+import { PassportStamp } from "../PassportStamp";
+
 import { type CardProps, Shell } from "./Shell";
 
 export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
@@ -22,17 +24,28 @@ export function MemoryCard({ card, onMenu, faded }: CardProps<"memory">) {
       onMenu={onMenu}
       faded={faded}
       actions={
-        <a className="fil-link" href={href} data-testid="feed-memory-open">
-          <Icon name="stamp" size={16} /> {memoryLabels.see}
-        </a>
+        <>
+          <a className="fil-link" href={href} data-testid="feed-memory-open">
+            <Icon name="stamp" size={16} /> {memoryLabels.see}
+          </a>
+          <a className="fil-link" href={`/e/${memory.slug}/plateau`} data-testid="feed-memory-plateau">
+            <Icon name="grid" size={16} /> {memoryLabels.seePlateau}
+          </a>
+        </>
       }
     >
-      {image ? (
-        <a className="fil-media" href={href} aria-label={memory.title}>
-          <img src={image} alt="" loading="lazy" />
-        </a>
-      ) : null}
+      <a className="fil-media sv-fil-media" href={href} aria-label={memory.title}>
+        {image ? <img src={image} alt="" loading="lazy" /> : null}
+        <span className="sv-poster__stamp" aria-hidden="true" data-testid="feed-memory-stamp">
+          <PassportStamp stamp={memory.stamp} size={64} />
+        </span>
+      </a>
       <p className="o-t-caption">{memoryLabels.eyebrow(memory.yearsAgo)}</p>
+      {memory.car ? (
+        <p className="o-t-caption" data-testid="feed-memory-car">
+          {memoryLabels.plateauLine(memory.car.label, memory.car.rank, memory.car.total)}
+        </p>
+      ) : null}
     </Shell>
   );
 }

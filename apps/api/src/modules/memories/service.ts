@@ -9,6 +9,7 @@ import {
   type MemoryDetail,
   type MemoryItem,
   maskedPhoto,
+  memoryCanCreate,
   memoryDayKeys,
   memoryDayStamp,
   memoryDeliverAt,
@@ -18,7 +19,7 @@ import {
   memoryYearsSince,
   shouldDeliver,
 } from "@orasso/shared";
-import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -37,11 +38,12 @@ import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
 import { eventPosterUrl } from "../events/card";
 import { notificationsService } from "../notifications/service";
-import { passportService } from "../passport/service";
+import { serialize as serializeStamp } from "../passport/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
 type Hit = {
+  stamp: typeof passportStamps.$inferSelect;
   stampId: string;
   kind: (typeof memoryStampKinds)[number];
   stampedAt: Date;
@@ -70,7 +72,15 @@ function pickOne(hits: Hit[]): Hit[] {
 }
 
 const toHits = (rows: { s: typeof passportStamps.$inferSelect; e: typeof events.$inferSelect }[]): Hit[] =>
-  pickOne(rows.map((r) => ({ stampId: r.s.id, kind: r.s.kind as Hit["kind"], stampedAt: r.s.stampedAt, event: r.e })));
+  pickOne(
+    rows.map((r) => ({
+      stamp: r.s,
+      stampId: r.s.id,
+      kind: r.s.kind as Hit["kind"],
+      stampedAt: r.s.stampedAt,
+      event: r.e,
+    })),
+  );
 
 /** Les tampons de souvenir de la personne dont le jour local est celui de `at`, avec leur nombre d'années. */
 async function hitsToday(ex: Executor, userId: string, at: Date): Promise<(Hit & { years: number })[]> {
@@ -83,6 +93,7 @@ async function hitsToday(ex: Executor, userId: string, at: Date): Promise<(Hit &
         eq(passportStamps.userId, userId),
         inArray(passportStamps.kind, [...memoryStampKinds]),
         eq(events.status, "published"),
+        ne(events.admission, "invite_only"),
         inArray(stampDayKey, memoryDayKeys(at)),
       ),
     );
@@ -97,7 +108,7 @@ async function hitsToday(ex: Executor, userId: string, at: Date): Promise<(Hit &
  * (un véhicule archivé ou cédé n'est plus montré, comme sur le plateau), une photo montrable seulement (`maskedPhoto`).
  */
 async function carsOf(ex: Executor, userId: string, eventIds: string[]) {
-  const out = new Map<string, { photoUrl: string | null; label: string | null }>();
+  const out = new Map<string, { photoUrl: string | null; label: string | null; vehicleId: string }>();
   if (!eventIds.length) return out;
   const apps = await ex
     .select({ eventId: applications.eventId, vehicleId: applications.vehicleId })
@@ -124,7 +135,56 @@ async function carsOf(ex: Executor, userId: string, eventIds: string[]) {
     if (!v) continue;
     const photo = maskedPhoto(v.photos, v.unregistered);
     // Sans photo montrable, pas de photo (l'affiche prend le relais) ; le nom de la voiture, lui, reste dit.
-    out.set(eventId, { photoUrl: storage.url(photo?.storageKey ?? null), label: vehicleLabel(v) });
+    out.set(eventId, { photoUrl: storage.url(photo?.storageKey ?? null), label: vehicleLabel(v), vehicleId });
+  }
+  return out;
+}
+
+/**
+ * Numéro de ma voiture sur le plateau de l'événement (ordre d'acceptation, comme le plateau) et nombre de voitures du
+ * plateau. Le plateau d'un événement fini ne garde que les entrées pointées ; une voiture absente du plateau n'a pas de numéro.
+ */
+async function plateauRanks(
+  ex: Executor,
+  eventIds: string[],
+  mine: Map<string, string>,
+  at: Date,
+): Promise<Map<string, { rank: number; total: number }>> {
+  const out = new Map<string, { rank: number; total: number }>();
+  if (!eventIds.length) return out;
+  const rows = await ex
+    .select({
+      eventId: applications.eventId,
+      vehicleId: vehicles.id,
+      at: sql<number>`extract(epoch from min(coalesce(${applications.decidedAt}, ${applications.createdAt})))::float8`,
+    })
+    .from(applications)
+    .innerJoin(events, eq(events.id, applications.eventId))
+    .innerJoin(vehicles, eq(vehicles.id, applications.vehicleId))
+    .innerJoin(profiles, eq(profiles.userId, applications.userId))
+    .where(
+      and(
+        inArray(applications.eventId, eventIds),
+        eq(applications.kind, "vehicle"),
+        eq(applications.status, "accepted"),
+        eq(vehicles.status, "active"),
+        accountOk(at),
+        or(
+          sql`${events.endsAt} > ${at}`,
+          exists(ex.select({ one: sql`1` }).from(checkins).where(eq(checkins.applicationId, applications.id))),
+        ),
+      ),
+    )
+    .groupBy(applications.eventId, vehicles.id);
+  const byEvent = new Map<string, { vehicleId: string; at: number }[]>();
+  for (const r of rows)
+    byEvent.set(r.eventId, [...(byEvent.get(r.eventId) ?? []), { vehicleId: r.vehicleId, at: r.at }]);
+  for (const [eventId, list] of byEvent) {
+    const mineId = mine.get(eventId);
+    if (!mineId) continue;
+    list.sort((a, b) => a.at - b.at || (a.vehicleId < b.vehicleId ? -1 : 1));
+    const index = list.findIndex((v) => v.vehicleId === mineId);
+    if (index >= 0) out.set(eventId, { rank: index + 1, total: list.length });
   }
   return out;
 }
@@ -152,6 +212,7 @@ async function recapsOf(ex: Executor, userId: string, eventIds: string[], at: Da
 async function toItems(ex: Executor, userId: string, hits: (Hit & { years: number })[], at: Date) {
   const ids = hits.map((h) => h.event.id);
   const [cars, recaps] = await Promise.all([carsOf(ex, userId, ids), recapsOf(ex, userId, ids, at)]);
+  const ranks = await plateauRanks(ex, ids, new Map([...cars].map(([id, c]) => [id, c.vehicleId])), at);
   const items = hits.map(
     (h): MemoryItem => ({
       eventId: h.event.id,
@@ -163,6 +224,12 @@ async function toItems(ex: Executor, userId: string, hits: (Hit & { years: numbe
       posterUrl: eventPosterUrl(h.event),
       photoUrl: cars.get(h.event.id)?.photoUrl ?? null,
       stampId: h.stampId,
+      stamp: serializeStamp(h.stamp, h.event),
+      car: (() => {
+        const car = cars.get(h.event.id);
+        const rank = ranks.get(h.event.id);
+        return car?.label && rank ? { label: car.label, ...rank } : null;
+      })(),
       recapAvailable: recaps.has(h.event.id),
     }),
   );
@@ -196,6 +263,7 @@ export const memoriesService = {
           eq(passportStamps.eventId, eventId),
           inArray(passportStamps.kind, [...memoryStampKinds]),
           eq(events.status, "published"),
+          ne(events.admission, "invite_only"),
         ),
       );
     const [hit] = toHits(rows);
@@ -203,20 +271,24 @@ export const memoriesService = {
     if (!hit || years < 1) throw notFound(memoryLabels.unavailable);
     const { items, labels } = await toItems(db, userId, [{ ...hit, years }], at);
     const item = items[0];
-    const stamp = (await passportService.ofEvent(userId, eventId)).find((s) => s.id === hit.stampId);
-    if (!item || !stamp) throw notFound(memoryLabels.unavailable);
-    const { sentence: _sentence, ...bare } = stamp;
-    return { ...item, stamp: bare, vehicleLabel: labels.get(eventId) ?? null };
+    if (!item) throw notFound(memoryLabels.unavailable);
+    return {
+      ...item,
+      anniversary: memoryYearsAgo(hit.stampedAt, at) !== null,
+      vehicleLabel: labels.get(eventId) ?? null,
+    };
   },
 
   /**
-   * Tâche `memories.daily` (chaque jour à 9 h, Paris) : une notification `memory` par personne concernée, livrée à 10 h
+   * Tâche `memories.daily` (chaque jour à 9 h, Paris, jamais à 22 h ou après) : une notification `memory` par personne concernée, livrée à 10 h
    * (jamais pendant les heures calmes), pour le souvenir le plus récent du jour (« + 1 autre » s'il y en a d'autres : le
    * bloc de l'Accueil les montre tous). Seulement si la famille « social » n'est pas coupée. Rejouée, elle ne prévient
    * personne deux fois : une personne n'a qu'une notification `memory` par jour local, donc un événement n'en a qu'une par
    * personne et par jour. Rend le nombre de notifications créées.
    */
   async daily(at: Date = now()): Promise<number> {
+    // Passé 22 h locales, la livraison tomberait le lendemain (heures calmes), qui n'est plus l'anniversaire : rien.
+    if (!memoryCanCreate(at)) return 0;
     const candidates = await db
       .selectDistinct({ userId: passportStamps.userId })
       .from(passportStamps)
@@ -226,6 +298,7 @@ export const memoriesService = {
         and(
           inArray(passportStamps.kind, [...memoryStampKinds]),
           eq(events.status, "published"),
+          ne(events.admission, "invite_only"),
           inArray(stampDayKey, memoryDayKeys(at)),
           accountOk(at),
         ),

@@ -158,6 +158,8 @@ describe("todayFor : les souvenirs du jour", () => {
       posterUrl: null,
       photoUrl: null,
       stampId: stamp.id,
+      stamp: expect.objectContaining({ id: stamp.id, kind: "participation", shape: "round", seed: 42 }),
+      car: null,
       recapAvailable: false,
     });
   });
@@ -281,6 +283,51 @@ describe("photo du souvenir : plaques", () => {
 
 // --- La page du souvenir ---------------------------------------------------------------------------------------------------
 
+// --- Événement sur invitation, numéro du plateau, anniversaire, 22 h ----------------------------------------------------------
+
+describe("événement sur invitation", () => {
+  it("jamais de souvenir : ni dans la liste du jour, ni sur la page (404), ni de notification (comme « Sorties »)", async () => {
+    const u = await person("Invite_66");
+    const { event } = await memory(u, { title: "Soirée sur invitation", event: { admission: "invite_only" } });
+    expect(await memoriesService.todayFor(u.id, NOW)).toEqual([]);
+    expect((await call(u, "GET", `/me/memories/${event.id}`)).status).toBe(404);
+    expect((await call(u, "GET", "/me/memories/today")).json).toEqual([]);
+    expect(await memoriesService.daily(NOW)).toBe(0);
+    expect(await memoryNotifications(u.id)).toEqual([]);
+    // Le même jour, un événement ouvert reste un souvenir (le filtre ne touche que l'invitation).
+    await memory(u, { title: "Rassemblement ouvert" });
+    expect((await memoriesService.todayFor(u.id, NOW)).map((i) => i.title)).toEqual(["Rassemblement ouvert"]);
+    expect(await memoriesService.daily(NOW)).toBe(1);
+    expect((await memoryNotifications(u.id))[0]?.body).toContain("Rassemblement ouvert");
+  });
+});
+
+describe("ma voiture sur le plateau", () => {
+  it("le nom, le numéro d'acceptation et le nombre de voitures du plateau ; sans voiture retenue, rien", async () => {
+    const u = await person("Numero_66");
+    const { event } = await memory(u);
+    // Deux autres voitures retenues et entrées avant la mienne, une retenue mais jamais entrée (hors plateau).
+    for (const name of ["Avant_1", "Avant_2"]) {
+      const o = await person(name);
+      const { app } = await withCar(o, event.id);
+      await db
+        .update(applications)
+        .set({ decidedAt: new Date(YEAR_AGO.getTime() - 40 * DAY) })
+        .where(eq(applications.id, app.id));
+    }
+    const absent = await person("Absent_1");
+    const away = await withCar(absent, event.id);
+    await db.delete(checkins).where(eq(checkins.applicationId, away.app.id));
+    await withCar(u, event.id);
+    const [item] = await memoriesService.todayFor(u.id, NOW);
+    expect(item?.car).toEqual({ label: "BMW Série 3 E36", rank: 3, total: 3 });
+    const none = await person("Visiteur_car");
+    await memory(none, { kind: "visit" });
+    const [other] = await memoriesService.todayFor(none.id, NOW);
+    expect(other?.car).toBeNull();
+  });
+});
+
 describe("GET /me/memories/:eventId", () => {
   it("rend le souvenir avec le tampon et la voiture ; sans session : 401", async () => {
     const u = await person("Page_66");
@@ -313,13 +360,15 @@ describe("GET /me/memories/:eventId", () => {
     expect((await call(u, "GET", `/me/memories/${recent.event.id}`)).status).toBe(404);
   });
 
-  it("ouverte le lendemain de la notification, elle répond encore (« il y a un an »)", async () => {
+  it("ouverte le lendemain de la notification, elle répond encore (« il y a un an ») mais n'est plus « jour pour jour »", async () => {
     const u = await person("Lendemain_66");
     const { event } = await memory(u);
+    expect((await call(u, "GET", `/me/memories/${event.id}`)).json.anniversary).toBe(true);
     clock.set(new Date(NOW.getTime() + 2 * DAY));
     const res = await call(u, "GET", `/me/memories/${event.id}`);
     expect(res.status).toBe(200);
     expect(res.json.yearsAgo).toBe(1);
+    expect(res.json.anniversary).toBe(false);
   });
 
   it("GET /me/memories/today : la liste du jour, sans session 401, vide un autre jour", async () => {
@@ -347,7 +396,7 @@ describe("memories.daily", () => {
     expect(n.family).toBe("social");
     expect(n.eventId).toBe(event.id);
     expect(n.title).toBe("Un souvenir pour toi");
-    expect(n.body).toBe("Il y a un an, tu étais à Rassemblement des Aspres.");
+    expect(n.body).toBe("Il y a un an, tu étais là : Rassemblement des Aspres.");
     expect(n.deliverAfter.toISOString()).toBe("2026-11-10T09:00:00.000Z");
     expect(n.deliveredAt).toBeNull();
     expect(n.data).toMatchObject({
@@ -372,13 +421,22 @@ describe("memories.daily", () => {
     expect(await memoryNotifications(v.id)).toHaveLength(1);
   });
 
+  it("pas de souvenir créé à 22 h locales ou après : la livraison tomberait le lendemain", async () => {
+    const u = await person("Tard_66");
+    await memory(u);
+    // 21 h 59 : encore possible ; 22 h : plus rien (le tampon est du 10 novembre, jour local de NOW).
+    expect(await memoriesService.daily(new Date("2026-11-10T21:00:00Z"))).toBe(0);
+    expect(await memoryNotifications(u.id)).toEqual([]);
+    expect(await memoriesService.daily(new Date("2026-11-10T20:59:00Z"))).toBe(1);
+  });
+
   it("une par personne et par jour : deux souvenirs le même jour (1 an et 3 ans) = une notification qui le dit", async () => {
     const u = await person("Deux_66");
     await memory(u, { title: "Vieille sortie", startsAt: new Date("2023-11-10T09:00:00Z") });
     await memory(u, { title: "Sortie de l'an dernier" });
     expect(await memoriesService.daily(NOW)).toBe(1);
     const [n] = await memoryNotifications(u.id);
-    expect(n?.body).toBe("Il y a un an, tu étais à Sortie de l'an dernier. (+ 1 autre)");
+    expect(n?.body).toBe("Il y a un an, tu étais là : Sortie de l'an dernier. (+ 1 autre)");
   });
 
   it("l'année suivante, le même événement ne re-notifie pas un autre jour, mais prévient à nouveau son anniversaire", async () => {

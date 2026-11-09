@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { memoryAgo, memoryLabels } from "../labels/memories.fr";
 import {
   MEMORY_NOTIFY_HOUR,
+  memoryCanCreate,
   memoryDayKeys,
   memoryDayStamp,
   memoryDayStart,
@@ -115,7 +116,25 @@ describe("libellés", () => {
     expect(memoryAgo(1)).toBe("Il y a un an");
     expect(memoryAgo(3)).toBe("Il y a 3 ans");
     expect(memoryLabels.eyebrow(1)).toBe("Il y a un an, jour pour jour");
-    expect(memoryLabels.headline("Béziers Night")).toBe("Tu étais à Béziers Night");
-    expect(memoryLabels.notificationBody(2, "Béziers Night")).toBe("Il y a 2 ans, tu étais à Béziers Night.");
+    expect(memoryLabels.headline("Béziers Night")).toBe("Tu étais là : Béziers Night");
+    expect(memoryLabels.notificationBody(2, "Béziers Night")).toBe("Il y a 2 ans, tu étais là : Béziers Night.");
+  });
+});
+
+describe("création tardive et formules", () => {
+  it("pas de souvenir créé à 22 h locales ou après (la livraison passerait au lendemain)", () => {
+    expect(memoryCanCreate(d("2026-11-09T07:00:00Z"))).toBe(true); // 8 h
+    expect(memoryCanCreate(d("2026-11-09T20:59:00Z"))).toBe(true); // 21 h 59
+    expect(memoryCanCreate(d("2026-11-09T21:00:00Z"))).toBe(false); // 22 h
+    expect(memoryCanCreate(d("2026-07-09T19:59:00Z"))).toBe(true); // 21 h 59 en été
+    expect(memoryCanCreate(d("2026-07-09T20:00:00Z"))).toBe(false); // 22 h en été
+  });
+
+  it("formule datée, formule neutre et ligne du plateau", () => {
+    expect(memoryLabels.eyebrowOn(1, "8 novembre 2025")).toBe("Il y a un an, le 8 novembre 2025");
+    expect(memoryLabels.plateauLine("Toyota GR Supra", 37, 118)).toBe(
+      "Ta Toyota GR Supra, n° 37 du plateau, au milieu de 118 voitures.",
+    );
+    expect(memoryLabels.plateauLine("Mazda MX-5", 1, 1)).toBe("Ta Mazda MX-5, n° 1 du plateau.");
   });
 });

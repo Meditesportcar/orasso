@@ -15,15 +15,22 @@ export type MemoryItem = {
   posterUrl: string | null;
   /** Une photo masquée de ma voiture sur le plateau ; `null` sans voiture montrable (on retombe sur l'affiche). */
   photoUrl: string | null;
-  /** Le tampon du souvenir (participation avant visite). */
+  /** Le tampon du souvenir (participation avant visite), de quoi le dessiner sans autre appel. */
   stampId: string;
+  stamp: PassportStamp;
+  /**
+   * Ma voiture retenue sur le plateau (active et à moi) : son nom, son numéro d'arrivée sur le plateau (ordre d'acceptation)
+   * et le nombre de voitures du plateau. `null` sans voiture retenue et pointée.
+   */
+  car: { label: string; rank: number; total: number } | null;
   /** Le récap de l'événement est ouvert (je l'ai vécu : pointé ou billet contrôlé, et l'événement est fini). */
   recapAvailable: boolean;
 };
 
 /** `GET /me/memories/:eventId` : la page du souvenir. */
 export type MemoryDetail = MemoryItem & {
-  stamp: PassportStamp;
+  /** Vrai seulement le jour anniversaire ; la page ouverte plus tard dit une formule datée. */
+  anniversary: boolean;
   /** « Toyota GR Supra » : la voiture que j'avais ce jour-là, seulement si elle est montrable. */
   vehicleLabel: string | null;
 };

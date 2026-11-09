@@ -25,7 +25,24 @@
   background: linear-gradient(180deg, transparent 45%, var(--poster) 98%);
   pointer-events: none;
 }
+.sv-poster__stamp,
+.sv-fil-media .sv-poster__stamp {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+.sv-fil-media {
+  position: relative;
+  display: block;
+}
 .sv-poster__body {
+  container-type: inline-size;
   position: relative;
   z-index: 1;
   display: grid;
@@ -56,10 +73,10 @@
   align-items: flex-start;
   min-width: 0;
 }
-/* Un nom d'événement ne se coupe jamais au milieu d'un mot : la taille suit la largeur. */
+/* Un nom d'événement ne se coupe jamais au milieu d'un mot : la taille suit la largeur de la colonne et la chasse du mot le plus large (`--em`, `widestWordEm`). */
 .sv-poster .o-t-poster-xl,
 .sv-poster .o-t-poster-m {
-  font-size: clamp(1.25rem, 5.6vw, 2.25rem);
+  font-size: clamp(14px, calc(100cqi / var(--em, 10)), 2.25rem);
   line-height: 1.05;
   overflow-wrap: normal;
   word-break: normal;
