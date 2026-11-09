@@ -55,6 +55,12 @@ export const rateRules = {
   accountQrDaily: { max: 500, windowMs: 86_400_000, message: "Limite quotidienne de vérifications atteinte." },
   /** Compteurs de la fiche pro (vues, appels, itinéraires) : par visiteur et par fiche. */
   proTrack: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur cette fiche." },
+  /** Lot R7m1 : proposer, accepter, refuser, mettre fin à un partenariat (protège le passionné d'une rafale de propositions). */
+  partnershipWrite: {
+    max: 30,
+    windowMs: 3_600_000,
+    message: "Trop d'actions sur les partenariats : réessaie plus tard.",
+  },
   /** Création et modification de fiche pro, photos, publications. */
   proWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Réservation de billets gratuits ou ouverture d'un paiement. */
@@ -108,6 +114,10 @@ export const rateRules = {
   homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
+  /** Rendez-vous au spot (lot R7i) : lancements (chacun prévient des dizaines de personnes), lectures, réponses. */
+  spotLaunch: { max: 6, windowMs: 3_600_000, message: "Trop de rendez-vous lancés : réessaie plus tard." },
+  spotRead: { max: 120, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
+  spotReply: { max: 60, windowMs: 3_600_000, message: "Trop de réponses : réessaie plus tard." },
   /**
    * Lot R7k1, tour 2 : affichages d'un emplacement (Accueil, Garage, Fil), une limite à part des clics : une longue lecture du
    * Fil en envoie beaucoup (l'appli dédoublonne, voir R7k2), un clic reste un geste rare.

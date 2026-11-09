@@ -18,7 +18,7 @@ import {
 import { RELAIS } from "./relais";
 
 // Lot R6c (maquettes R6.3 à R6.7), côté site, à deux personnes : Kenji invite, Julie reçoit. « Qui y va » et
-// « Inviter du monde » sur la fiche, la page « Inviter à … », l'invitation dans le Journal et le bandeau de la fiche,
+// « Inviter du monde » sur la fiche, la page « Inviter à … », l'invitation sur les Demandes et le bandeau de la fiche,
 // couper les invitations, la carte « Invite du monde à venir » après la candidature, et le crew (Julie invite Marc,
 // Kenji voit « Invité(e) par Julie… »). Tour 2 : « Tout <crew> », la recherche, l'invitation regroupée (Nina invite
 // aussi : mots attribués, couper chacun), et la page « Inviter à … » sans JavaScript. API et site seedés.
@@ -126,21 +126,22 @@ for (const theme of ["beton", "sable"] as const) {
       await nojs.close();
     }
 
-    // 2. Julie : le Journal, le bandeau, couper.
+    // 2. Julie : la carte des Demandes (R7-fix-invite : le « ⋯ » y est revenu), le bandeau, couper.
     const jCtx = await browser.newContext({ viewport: MOBILE });
     const j = await jCtx.newPage();
     await setTheme(j, theme);
-    await loginInBrowser(j, julie.email, SEED_PASSWORD, "/app/fil");
+    await loginInBrowser(j, julie.email, SEED_PASSWORD, "/app/activite/demandes");
     const item = j
-      .getByTestId("journal-item")
-      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent à ${event.title}` });
+      .getByTestId("request-event-invitation-peer")
+      .filter({ hasText: `${nina.pseudo} et ${kenji.pseudo} t'invitent` })
+      .filter({ hasText: event.title });
     await expect(item).toBeVisible({ timeout: 20_000 });
     // Tour 2 : chaque mot attribué à son auteur ; le « ⋯ » propose de couper chacun.
     await expect(item).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
     await expect(item).toContainText(`${nina.pseudo} : « Viens aussi ! »`);
-    await item.getByTestId("notif-invite-more").click();
+    await item.getByTestId("request-invite-more").click();
     await expect(item.getByTestId("invite-mute")).toHaveCount(2);
-    await shot(j, `04-journal-invitation-${theme}`);
+    await shot(j, `04-demandes-invitation-${theme}`);
     await j.goto(`/e/${event.slug}`);
     const banner = j.getByTestId("invite-banner");
     await expect(banner).toContainText(`${nina.pseudo} et ${kenji.pseudo} t'invitent`);

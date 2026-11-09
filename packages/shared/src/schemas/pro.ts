@@ -14,6 +14,7 @@ import {
   weekdays,
 } from "../rules/pro";
 import { optionalText } from "./common";
+import type { PartnerOfPro } from "./partnerships";
 import type { RegistryCheck } from "./structure";
 
 /** Adresse web : http ou https seulement (jamais javascript:, data:…). */
@@ -190,6 +191,14 @@ export type ProPublic = ProCard & {
   posts: ProPostView[] | null;
   isFollowing: boolean | null;
   isOwner: boolean;
+  /**
+   * Lot R7m1 : « Ses partenaires », les passionnés à partenariat actif, vus selon le regard (aucun sans compte connecté ;
+   * un compte privé non suivi : sans voiture). Servi par `GET /pros/by-slug/:slug`, absent de `/me/pro`. `partners` reste
+   * les organisateurs partenaires.
+   */
+  memberPartners?: PartnerOfPro[];
+  /** Nombre total de ces partenaires (la liste n'en montre que 6 : « Voir tout » ouvre la page complète). */
+  memberPartnersTotal?: number;
 };
 
 export type ProStatsDay = { day: string; views: number; calls: number; routes: number; discounts: number };

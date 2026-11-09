@@ -706,7 +706,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
                       </Button>
                     )}
                     {s.presence === "present" && Date.parse(s.event.startsAt) - 3 * 3_600_000 <= nowMs() && (
-                      <Button variant="secondary" icon="badge" next href={`/app/vote/${s.event.slug}`}>
+                      <Button variant="secondary" icon="badge" next href={`/app/votes/${s.event.slug}`}>
                         {voteScreenTexts.open}
                       </Button>
                     )}
@@ -850,7 +850,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
                   </Button>
                 )}
                 {x.status === "used" && Date.parse(x.event.endsAt) > nowMs() && (
-                  <Button variant="secondary" icon="badge" next href={`/app/vote/${x.event.slug}`}>
+                  <Button variant="secondary" icon="badge" next href={`/app/votes/${x.event.slug}`}>
                     {voteScreenTexts.open}
                   </Button>
                 )}

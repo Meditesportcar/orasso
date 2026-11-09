@@ -3,11 +3,17 @@
 // mélangé : une carte par genre, chacune avec sa raison et son « ⋯ ». Mode A (bande ORASSO, barre d'onglets). Liste
 // paginée par le curseur de l'API (`useFeed`) ; une erreur n'est jamais une liste vide ; un état vide par filtre.
 import { EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type FeedCard, feedCardKindLabels, feedScreenFilters, feedScreenLabels as L } from "@orasso/shared";
+import {
+  CONTACT_EMAIL,
+  type FeedCard,
+  feedCardKindLabels,
+  feedScreenFilters,
+  feedScreenLabels as L,
+} from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
@@ -151,7 +157,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         testID="fil-filters"
       />
       {notice ? (
-        <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" testID="fil-notice">
+        <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" selectable testID="fil-notice">
           {notice}
         </Text>
       ) : null}
@@ -185,7 +191,15 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         <View style={styles.list} testID="fil-list">
           {items.map((card) => {
             const Card = cardFor(card.kind);
-            return <Card key={card.id} card={card} onMenu={setMenu} faded={Boolean(faded[card.id])} />;
+            return (
+              <Card
+                key={card.id}
+                card={card}
+                onMenu={setMenu}
+                faded={Boolean(faded[card.id])}
+                onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
+              />
+            );
           })}
         </View>
       ) : null}
@@ -222,6 +236,20 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           onReport={(card) => {
             setMenu(null);
             if (card.kind === "feed_post") openReport({ type: "feed_post", id: card.payload.post.id });
+            // Publicité : pas de cible de modération, un e-mail à l'assistance avec l'annonceur et l'emplacement.
+            if (card.kind === "sponsored") {
+              const { advertiserName, id } = card.payload;
+              const q = [
+                `subject=${encodeURIComponent(L.reportAdSubject)}`,
+                `body=${encodeURIComponent(L.reportAdBody(advertiserName, id))}`,
+              ].join("&");
+              // Sans appli de messagerie : l'adresse s'affiche en secours, sélectionnable.
+              // La carte est au moins en 4e place : on remonte en haut du Fil, où la note s'affiche.
+              void Linking.openURL(`mailto:${CONTACT_EMAIL}?${q}`).catch(() => {
+                setNotice(L.reportAdNoMail(CONTACT_EMAIL));
+                assist?.top();
+              });
+            }
           }}
           onRemove={(card) => void remove(card)}
         />

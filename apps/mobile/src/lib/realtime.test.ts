@@ -34,6 +34,9 @@ describe("temps réel de l'appli", () => {
     expect(appLinkOf(`/app/activite/${id}`)).toBeNull();
     expect(appLinkOf("/app/boite/../acces")).toBeNull();
     expect(appLinkOf("/u/Kenji_66")).toBe("/u/Kenji_66");
+    // Lot R7m1 : « Ton partenariat est terminé » mène à la fiche du pro.
+    expect(appLinkOf("/p/garage-du-port")).toBe("/p/garage-du-port");
+    expect(appLinkOf("/p/garage-du-port/../x")).toBeNull();
     expect(appLinkOf("https://exemple.com")).toBeNull();
   });
 
@@ -43,6 +46,19 @@ describe("temps réel de l'appli", () => {
     expect(appLinkOf("/app/recap/abc")).toBeNull();
     expect(appLinkOf("/app/passeport")).toBe("/mon-passeport");
     expect(appLinkOf("/app/passeport/../acces")).toBeNull();
+  });
+
+  it("notifications des votes (lot R7l3) : « vote lancé » ouvre la liste, « tu gagnes » ouvre le résultat du vote", () => {
+    const vote = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
+    expect(appLinkOf("/app/votes/rassemblement-du-lydia")).toBe("/votes/rassemblement-du-lydia");
+    expect(appLinkOf(`/app/vote/rassemblement-du-lydia?vote=${vote}`)).toBe(
+      `/vote/rassemblement-du-lydia?vote=${vote}`,
+    );
+    // Rien d'autre que des adresses d'événement et des identifiants de vote : pas de chemin glissé.
+    expect(appLinkOf("/app/votes/../acces")).toBeNull();
+    expect(appLinkOf("/app/votes/a/b")).toBeNull();
+    expect(appLinkOf("/app/vote/lydia?vote=pas-un-identifiant")).toBeNull();
+    expect(appLinkOf("/app/vote/lydia?vote=" + vote + "&x=1")).toBeNull();
   });
 
   it("lien d'avis d'un remerciement vers la feuille d'avis de l'onglet Accès (lot 27)", () => {

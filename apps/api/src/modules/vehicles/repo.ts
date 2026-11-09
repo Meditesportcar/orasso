@@ -1,8 +1,16 @@
 import { type VehicleType, vehicleTypes } from "@orasso/shared";
-import { asc, eq, inArray, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, type SQL } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories, vehicleGenerations, vehicleMakes, vehicleModels, vehiclePhotos, vehicles } from "../../db/schema";
+import {
+  categories,
+  vehicleGenerations,
+  vehicleMakes,
+  vehicleModels,
+  vehiclePhotos,
+  vehicles,
+  vehicleTrophies,
+} from "../../db/schema";
 import type { Executor } from "../../lib/tx";
 
 export type VehicleRow = typeof vehicles.$inferSelect;
@@ -19,6 +27,11 @@ export const vehiclesRepo = {
         photos: { orderBy: [asc(vehiclePhotos.position)] },
         categories: { with: { category: true } },
         pendingTransfer: true,
+        // Lot R7l3 : les podiums, avec le réglage d'admission de l'événement (un événement privé ne se montre qu'au propriétaire).
+        trophies: {
+          orderBy: [desc(vehicleTrophies.awardedAt), asc(vehicleTrophies.rank)],
+          with: { event: { columns: { admission: true } } },
+        },
       },
       orderBy: [asc(vehicles.createdAt)],
     });

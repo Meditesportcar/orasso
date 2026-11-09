@@ -89,9 +89,9 @@ for (const theme of ["beton", "sable"] as const) {
     const title = `Appli 53 ${unique()}`;
 
     // (1) Type.
-    // Lot C4a : la frise montre « 1 Type » ; « Étape 1 sur 8 · Type » reste le nom accessible de la pastille.
+    // Lot C4a : la frise montre « 1 Type » ; « Étape 1 sur 9 · Type » reste le nom accessible de la pastille.
     await expect(v(page, "wizard-step")).toContainText("Type");
-    await expect(v(page, "wizard-step")).toHaveAttribute("aria-label", "Étape 1 sur 8 · Type");
+    await expect(v(page, "wizard-step")).toHaveAttribute("aria-label", "Étape 1 sur 9 · Type");
     await v(page, "wizard-formats").getByText("Nocturne", { exact: true }).click();
     await v(page, "wizard-title").fill(title);
     await v(page, "wizard-date").fill(parisDay(25));
@@ -147,6 +147,7 @@ for (const theme of ["beton", "sable"] as const) {
         .first(),
     ).toBeVisible();
     await shot(page, "06-reglement", theme);
+    await next(page, "Votes");
     await next(page, "Affiche");
 
     // (7) Affiche : photo factice, style, titre, aperçu rendu par l'API.
@@ -243,6 +244,7 @@ test("appli, relecture : hors réseau sur son temps, saisie gardée, série en �
   await page.goto(`/evenement/${id}/modifier?temps=reglement`);
   await expect(v(page, "wizard-resumed")).toBeVisible({ timeout: 30_000 });
   await expect(v(page, "wizard-rules")).toHaveValue("Règlement tapé hors réseau.");
+  await next(page, "Votes");
   await next(page, "Affiche");
 
   // Récurrent, puis la série échoue à la fin : rien n'est publié, la règle reste, l'erreur le dit.

@@ -74,7 +74,7 @@ describe("types de notification de la vague R7 (lot R7c1)", () => {
 
   it("« vote lancé » se coupe seul dans les réglages, avec son libellé", () => {
     expect(mutableTypesByFamily().event).toContain("vote_opened");
-    expect(notificationTypeLabels.vote_opened).toBe("Un vote s'ouvre à l'événement");
+    expect(notificationTypeLabels.vote_opened).toBe("Vote lancé pendant un événement");
     expect(shouldDeliver({ event: true }, ["vote_opened"], "vote_opened")).toBe(false);
     expect(shouldDeliver({ event: true }, ["vote_opened"], "vote_won")).toBe(true);
     expect(shouldDeliver({ event: false }, [], "vote_opened")).toBe(false);

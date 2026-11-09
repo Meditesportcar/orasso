@@ -5,6 +5,7 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   applyFeedPage,
+  CONTACT_EMAIL,
   emptyFeedList,
   type FeedCard,
   type FeedErrorSource,
@@ -16,10 +17,13 @@ import {
   feedRetryAction,
   feedScreenFilters,
   feedWhyText,
+  isFeedSponsoredTargeted,
   feedScreenLabels as L,
   pinnedPublished,
+  sponsoredNotBeforeFourth,
   storyPublishLabels as S,
   withMyPublished,
+  withoutPlacement,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -167,7 +171,8 @@ export function Fil({ userId }: { userId: string }) {
   }
 
   const shown = list && list.filter === filter ? list.items : null;
-  const items = shown ? withMyPublished(shown, pinnedPublished(mineCards)) : null;
+  // La carte « Sponsorisé » ne remonte jamais avant la 4e place, même si une des trois premières cartes sort (tour 2).
+  const items = shown ? sponsoredNotBeforeFourth(withMyPublished(shown, pinnedPublished(mineCards))) : null;
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = () => (feedRetryAction(errorSource) === "loadMore" ? more() : load(filter));
   const empty = L.empty[filter];
@@ -264,7 +269,28 @@ export function Fil({ userId }: { userId: string }) {
         <div className="fil-list" data-testid="fil-list">
           {items.map((card) => {
             const Card = cardFor(card.kind);
-            return <Card key={card.id} card={card} onMenu={setMenu} faded={Boolean(faded[card.id])} />;
+            return (
+              <Card
+                key={card.id}
+                card={card}
+                onMenu={setMenu}
+                faded={Boolean(faded[card.id])}
+                userId={userId}
+                onRemoved={(c) =>
+                  setList((s) =>
+                    s
+                      ? {
+                          ...s,
+                          items:
+                            c.kind === "sponsored"
+                              ? withoutPlacement(s.items, c.payload.id)
+                              : s.items.filter((x) => x.id !== c.id),
+                        }
+                      : s,
+                  )
+                }
+              />
+            );
           })}
         </div>
       ) : null}
@@ -333,18 +359,40 @@ export function Fil({ userId }: { userId: string }) {
               </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  className="fil-menu__row"
-                  onClick={() => void less(menu)}
-                  data-testid="feed-menu-less"
-                >
-                  <Icon name="eyeOff" size={20} />
-                  <span>
-                    <strong>{L.lessFaded}</strong>
-                    <small>{L.menuLessHint}</small>
-                  </span>
-                </button>
+                {menu.kind === "sponsored" ? null : (
+                  <button
+                    type="button"
+                    className="fil-menu__row"
+                    onClick={() => void less(menu)}
+                    data-testid="feed-menu-less"
+                  >
+                    <Icon name="eyeOff" size={20} />
+                    <span>
+                      <strong>{L.lessFaded}</strong>
+                      <small>{L.menuLessHint}</small>
+                    </span>
+                  </button>
+                )}
+                {menu.kind === "sponsored" ? (
+                  <a
+                    className="fil-menu__row"
+                    href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(L.reportAdSubject)}&body=${encodeURIComponent(
+                      L.reportAdBody(menu.payload.advertiserName, menu.payload.id),
+                    )}`}
+                    data-testid="feed-menu-report"
+                  >
+                    <Icon name="flag" size={20} />
+                    <span>
+                      <strong>{L.report}</strong>
+                      <small>{L.reportAdHint}</small>
+                    </span>
+                  </a>
+                ) : null}
+                {menu.kind === "sponsored" ? (
+                  <p className="o-t-caption fil-menu__address" data-testid="feed-menu-report-address">
+                    {L.reportAdAddress(CONTACT_EMAIL)}
+                  </p>
+                ) : null}
                 {menu.kind === "feed_post" ? (
                   <div className="fil-menu__report" data-testid="feed-menu-report">
                     <ReportDialog targetType="feed_post" targetId={menu.payload.post.id} label={L.report} look="link" />
@@ -365,10 +413,15 @@ export function Fil({ userId }: { userId: string }) {
             <h2 className="s-h2">{L.whyTitle}</h2>
             <p className="o-t-body" data-testid="feed-why-text">
               <strong>
-                {feedWhyText(why.reason.code, whoOf(why), why.kind === "feed_post" && why.payload.post.mine)}
+                {feedWhyText(
+                  why.reason.code,
+                  whoOf(why),
+                  why.kind === "feed_post" && why.payload.post.mine,
+                  isFeedSponsoredTargeted(why.reason.label),
+                )}
               </strong>
             </p>
-            <p className="o-t-caption">{L.whyNote}</p>
+            {why.kind === "sponsored" ? null : <p className="o-t-caption">{L.whyNote}</p>}
             <Button variant="secondary" icon="check" fullWidth onClick={() => setWhy(null)} data-testid="feed-why-ok">
               {L.whyClose}
             </Button>

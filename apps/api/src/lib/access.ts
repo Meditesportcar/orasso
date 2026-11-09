@@ -1,6 +1,6 @@
 // Droits : rôles de plateforme, rôles de structure, double authentification obligatoire (ARCHITECTURE.md § 5.2).
 import { staffRoles as ALL_STAFF_ROLES, assistanceActive, type StaffRole, type StructureRole } from "@orasso/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { adminAuditLog, assistanceRequests, eventStaff, passkey, structureMembers, structures } from "../db/schema";
@@ -10,6 +10,7 @@ import { now } from "./deps";
 import { AppError, forbidden } from "./errors";
 import { requestContext } from "./request-context";
 import type { Viewer } from "./session";
+import type { Executor } from "./tx";
 
 export const isSuperAdmin = (v: Viewer) => v.profile.platformRole === "super_admin";
 
@@ -62,6 +63,40 @@ export async function openAssistanceRequest(structureId: string) {
 }
 
 /**
+ * Trace `structure.view_as` (consultation d'une structure par un super admin) **une fois par heure** pour un même super admin,
+ * une même structure et un même motif : un écran en direct relit toutes les 10 s, le journal n'a pas à compter chaque relecture.
+ * L'heure est celle de la base (comme `created_at`).
+ */
+export async function traceViewAs(
+  ex: Executor,
+  entry: { actorUserId: string; structureId: string; reason: string | null; ip: string | null },
+): Promise<void> {
+  const [recent] = await ex
+    .select({ id: adminAuditLog.id })
+    .from(adminAuditLog)
+    .where(
+      and(
+        eq(adminAuditLog.actorUserId, entry.actorUserId),
+        eq(adminAuditLog.action, "structure.view_as"),
+        eq(adminAuditLog.structureId, entry.structureId),
+        entry.reason === null ? isNull(adminAuditLog.reason) : eq(adminAuditLog.reason, entry.reason),
+        sql`${adminAuditLog.createdAt} > now() - interval '1 hour'`,
+      ),
+    )
+    .limit(1);
+  if (recent) return;
+  await ex.insert(adminAuditLog).values({
+    actorUserId: entry.actorUserId,
+    action: "structure.view_as",
+    targetType: "structure",
+    targetId: entry.structureId,
+    structureId: entry.structureId,
+    reason: entry.reason,
+    ip: entry.ip,
+  });
+}
+
+/**
  * Organisateur de la structure (propriétaire ou co-organisateur), 2FA exigée.
  * Un super admin passe partout en lecture ; chaque passage est tracé (`structure.view_as`). Mode assistance (lot 33,
  * S41) : une écriture d'un super admin dans l'espace de la structure n'est permise que si la structure a une demande
@@ -90,14 +125,7 @@ export async function requireOrganizer(v: Viewer, structureId: string, ip?: stri
       requestContext.noteAssist({ actorUserId: v.user.id, structureId, assistanceRequestId: open.id });
       return { role: "super_admin" };
     }
-    await db.insert(adminAuditLog).values({
-      actorUserId: v.user.id,
-      action: "structure.view_as",
-      targetType: "structure",
-      targetId: structureId,
-      structureId,
-      ip: ip ?? req?.ip ?? null,
-    });
+    await traceViewAs(db, { actorUserId: v.user.id, structureId, reason: null, ip: ip ?? req?.ip ?? null });
     return { role: "super_admin" };
   }
   throw forbidden("Réservé aux organisateurs de la structure");

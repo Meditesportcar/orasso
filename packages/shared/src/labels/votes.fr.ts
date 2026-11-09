@@ -50,6 +50,7 @@ export const voteTexts = {
     other_event: "Ce QR est celui d'un autre événement.",
     opens_at_past: "L'heure d'ouverture est déjà passée ou tombe après la fin de l'événement.",
     not_retained: "Cette candidature n'est pas retenue.",
+    restore_has_voices: "Ce vote a déjà reçu des voix : il ne peut plus être remis.",
     too_many_votes: `${VOTES_PER_EVENT_MAX} votes au plus par événement.`,
     zone_unknown: "Cette zone n'existe pas pour cet événement.",
     title_taken: "Un vote porte déjà ce titre.",

@@ -129,6 +129,30 @@
 .fil-card__reason {
   color: var(--ink-muted);
 }
+/* L'étiquette « Sponsorisé » (`.tag.line` de l'artefact) : inclinée, contour, texte redressé ; tailles par les jetons du texte « label ». */
+.fil-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: calc(var(--type-label-line) + var(--space-2));
+  padding: 0 var(--space-2);
+  margin-top: calc(var(--space-1) / 2);
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  transform: skewX(var(--skew));
+}
+.fil-tag > span {
+  display: block;
+  font-family: var(--font-narrow);
+  font-stretch: var(--stretch-narrow);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-spacing);
+  text-transform: uppercase;
+  transform: skewX(calc(var(--skew) * -1));
+}
 .fil-card__more {
   width: 36px;
   height: 36px;
@@ -204,6 +228,32 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* Carte « Sponsorisé » : l'image au format 4:5 (celui du Fil), ou un bloc de texte sans image. */
+.fil-ad-media {
+  display: block;
+  aspect-ratio: 4 / 5;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.fil-ad-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-ad-block {
+  display: grid;
+  align-content: end;
+  min-height: 150px;
+  padding: var(--space-3);
+  border-radius: calc(var(--radius-md) + 2px);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.fil-ad-block strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 .fil-grid {
   display: grid;
@@ -326,6 +376,11 @@
 .fil-menu__row small {
   display: block;
   color: var(--ink-muted);
+}
+.fil-menu__address {
+  padding: 0 var(--space-3);
+  color: var(--ink-muted);
+  user-select: all;
 }
 .fil-menu__report {
   padding: var(--space-1) var(--space-3);

@@ -3,6 +3,7 @@ import { type VehicleStatus, type VehicleType, vehicleStatuses, vehicleTypes } f
 import type { CategoryFamily, CategoryIcon } from "../rules/styles";
 import { optionalText } from "./common";
 import type { PlateTransferInfo, VehicleCertification } from "./garage";
+import type { VehiclePartner } from "./partnerships";
 
 const currentYear = new Date().getUTCFullYear();
 
@@ -166,6 +167,17 @@ export type VehiclePublic = {
   certified: boolean;
   /** Prix du public remportés avec ce véhicule (lot 50 : badge de la carte du garage). */
   audiencePrizes: number;
+  /** Lot R7l3 : les podiums de vote de ce véhicule (le plus récent d'abord) ; vide sans podium. */
+  trophies: VehicleTrophy[];
+};
+
+/** Un podium de vote (R7l1 : `vehicle_trophies`), lu par la carte du véhicule. */
+export type VehicleTrophy = {
+  id: string;
+  voteTitle: string;
+  eventTitle: string;
+  rank: number;
+  awardedAt: string;
 };
 
 /** Fiche du propriétaire et de l'organisateur : avec la plaque. */
@@ -184,6 +196,8 @@ export type VehicleFull = VehiclePublic & {
    */
   proposedMake: string | null;
   proposedModel: string | null;
+  /** Lot R7m1 : « Partenaire : … » (pro à partenariat actif cité sur cette voiture), servi par `/me/vehicles` et `/me/vehicles/:id`. */
+  partner?: VehiclePartner | null;
 };
 
 /** Page du véhicule (propriétaire) : fiche, plus l'état de la certification. */
