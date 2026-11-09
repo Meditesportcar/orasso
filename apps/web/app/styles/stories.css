@@ -1,0 +1,529 @@
+/* Stories sur le site (lot R7f2, maquettes R7.6 `.r7stories` et R7.7 `.r7sv`) : la barre du Fil et la visionneuse 9:16.
+   Jetons seulement ; la visionneuse est toujours sombre (`--night`, `--night-ink`), quel que soit le thème. */
+
+/* ---------- La barre ---------- */
+.stories-bar {
+  margin-inline: calc(var(--space-4) * -1);
+}
+.stories-bar__row {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 2px var(--space-4);
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  align-items: flex-start;
+}
+.stories-bar__row::-webkit-scrollbar {
+  display: none;
+}
+.stories-bar__item {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 5px;
+  width: 68px;
+  flex: none;
+  color: var(--ink);
+}
+.stories-bar__link {
+  position: relative;
+  display: inline-grid;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 50%;
+}
+.stories-bar__link:focus-visible,
+.stories-bar__add:focus-visible,
+.stories-bar__plus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.stories-bar__name {
+  max-width: 68px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.stories-bar__name--live {
+  margin-top: 4px;
+}
+/* « Ta story » sans story : rond en tirets avec un « + ». */
+.stories-bar__add {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 64px;
+  height: 64px;
+  border: 2px dashed var(--line);
+  border-radius: 50%;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.stories-bar__plus {
+  position: absolute;
+  right: 2px;
+  bottom: 22px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--ground);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+/* Étiquette « EN COURS », inclinée, sur le bas de l'anneau ; le néon n'est que sur la première. */
+.stories-bar__live {
+  position: absolute;
+  left: 50%;
+  top: 52px;
+  transform: translateX(-50%) skewX(-8deg);
+  display: grid;
+  place-items: center;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.stories-bar__live.is-neon {
+  box-shadow: var(--neon-accent-soft);
+}
+.stories-bar__error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) 0;
+}
+.stories-bar__error p {
+  flex: 1;
+  margin: 0;
+}
+.stories-wrap {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto var(--space-3);
+}
+
+/* ---------- La visionneuse ---------- */
+.story-view {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: var(--night);
+  color: var(--night-ink);
+  animation: story-fade 120ms ease-out;
+}
+@keyframes story-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* Le cadre 9:16 : toute la hauteur de la fenêtre, jamais plus large qu'elle (téléphone : plein écran). */
+.story-view__frame {
+  position: relative;
+  height: 100dvh;
+  max-height: 100dvh;
+  aspect-ratio: 9 / 16;
+  max-width: 100vw;
+  overflow: hidden;
+  background: var(--night);
+  touch-action: none;
+  user-select: none;
+}
+@media (max-width: 600px) {
+  .story-view__frame {
+    width: 100vw;
+    aspect-ratio: auto;
+  }
+}
+.story-view__frame--empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: auto;
+  width: min(100vw, 420px);
+  height: auto;
+  min-height: 240px;
+}
+.story-view__empty {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  padding: var(--space-4);
+  text-align: center;
+}
+.story-view__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.story-view__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.story-view__gone {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+}
+.story-view__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--night) 60%, transparent) 0,
+    transparent 26%,
+    transparent 62%,
+    color-mix(in srgb, var(--night) 75%, transparent) 100%
+  );
+}
+.story-view__surface {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}
+.story-view__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.story-view__top {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 0;
+  pointer-events: none;
+}
+.story-view__top > * {
+  pointer-events: auto;
+}
+.story-view__bars {
+  display: flex;
+  gap: var(--space-1);
+  pointer-events: none;
+}
+.story-view__bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--night-ink) 35%, transparent);
+}
+.story-view__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--night-ink);
+}
+.story-view__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.story-view__who {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+.story-view__av {
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  padding: 2px;
+  border: 2px solid var(--night-ink);
+  border-radius: 50%;
+  overflow: hidden;
+  background-clip: content-box;
+}
+.story-view__av.is-crew {
+  border-color: var(--win);
+}
+.story-view__av img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.story-view__av > span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--win);
+  color: var(--win-ink);
+  font-size: 12px;
+}
+.story-view__who-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.story-view__name {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.story-view__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.story-view__crew {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--win);
+  color: var(--win-ink);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.story-view__btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--night-ink);
+  cursor: pointer;
+}
+.story-view__shared {
+  margin: 0;
+  padding-inline: var(--space-1);
+}
+.story-view__btn:focus-visible,
+.story-view__pill:focus-visible,
+.story-view__sticker:focus-visible,
+.story-view__who:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.story-view__bottom {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 3;
+  display: grid;
+  gap: 14px;
+  padding: 0 14px 22px;
+  pointer-events: none;
+}
+.story-view__bottom > * {
+  pointer-events: auto;
+}
+.story-view__stickers {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.story-view__caption {
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--night) 72%, transparent);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.story-view__sticker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.story-view__sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--night-ink);
+  color: var(--night);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+.story-view__notice {
+  justify-self: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--night-ink);
+  color: var(--night);
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.story-view__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.story-view__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1.5px solid color-mix(in srgb, var(--night-ink) 55%, transparent);
+  border-radius: 999px;
+  background: none;
+  color: var(--night-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+button.story-view__pill {
+  cursor: pointer;
+}
+.story-view__pill--grow {
+  flex: 1;
+  min-width: 0;
+}
+.story-view__pill--flame {
+  justify-content: center;
+  min-width: 48px;
+}
+.story-view__pill--flame.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.story-view__pill--flame.is-on svg {
+  fill: currentColor;
+}
+.story-view__input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: var(--night-ink);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  outline: none;
+}
+.story-view__input::placeholder {
+  color: color-mix(in srgb, var(--night-ink) 75%, transparent);
+}
+.story-view__pill:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.story-view__send {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* Menu « ⋯ » et vues (feuilles). */
+.story-menu__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.story-menu__row small {
+  display: block;
+  color: var(--ink-muted);
+}
+.story-menu__report {
+  padding: var(--space-1) var(--space-3);
+}
+.story-menu__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-menu__viewer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.story-menu__viewer strong {
+  flex: 1;
+}
+.story-menu__viewer small {
+  color: var(--ink-muted);
+}
+.story-menu__viewer .story-view__av {
+  width: 36px;
+  height: 36px;
+  border-color: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-view {
+    animation-duration: 120ms;
+  }
+}

@@ -18,9 +18,11 @@ import {
   type ProfileVehicle,
   profileTabsLabels as PT,
   publicPreviewLabels as PV,
+  profileRingState,
   profileTabFromParam,
   socialsLabels,
   socialUrl,
+  storyViewerLabels,
   type UserProfileView,
   wideWordEm,
 } from "@orasso/shared";
@@ -54,10 +56,9 @@ function daysUntil(iso: string): number {
 const typeIcon = (v: ProfileVehicle): IconName =>
   v.vehicleType === "moto" ? "moto" : v.vehicleType === "truck" ? "truck" : "vehicle";
 
-/** L'anneau des stories de la personne ; `null` sans story ou tant que l'API ne le sert pas. */
+/** L'anneau des stories de la personne (`stories` de `GET /users/:pseudo`) : `null` sans story, anneau fin quand tout est vu. */
 function storyRingOf(p: UserProfileView): AvatarRingState {
-  const ring = (p as UserProfileView & { stories?: { ring?: AvatarRingState } }).stories?.ring;
-  return ring ?? null;
+  return profileRingState(p.stories);
 }
 
 export type PublicProfileMode = "live" | "self" | "preview";
@@ -128,8 +129,15 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
       <aside className="pr5-card" data-testid="public-head">
         <div className="pr5-hd">
           {/* Retour 6 de Damien : la même tête que l'appli (la photo, sinon l'initiale sur le rouge du grade), dans l'anneau
-              de ses stories (lot R7f1 : `stories.ring`, absent tant qu'il n'est pas fusionné ; le lot R7f2 l'ouvrira). */}
-          <AvatarRing ring={storyRingOf(p)} size="xl" src={p.avatarUrl} name={p.pseudo} />
+              de ses stories ; lot R7f2 : dès qu'il y a une story, l'anneau est un lien qui ouvre la visionneuse. */}
+          <AvatarRing
+            ring={storyRingOf(p)}
+            size="xl"
+            src={p.avatarUrl}
+            name={p.pseudo}
+            href={p.stories.count > 0 ? `/app/story/${encodeURIComponent(`u:${p.userId}`)}` : undefined}
+            label={storyViewerLabels.openStories(p.pseudo)}
+          />
           <div className="pr5-hd__id">
             <Title style={{ "--em": wideWordEm(p.pseudo) } as CSSProperties}>{p.pseudo}</Title>
             <div className="pr5-tags">

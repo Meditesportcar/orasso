@@ -12,6 +12,8 @@ export default [
     // Lot R7e2 : publier au Fil et « Mes publications ».
     route("app/fil/publier", "routes/app-fil-publier.tsx"),
     route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
+    // Lot R7f2 : la visionneuse de stories (superposition 9:16) ; `authorKey` = `u:<compte>`, `s:<structure>` ou `p:<pro>`.
+    route("app/story/:authorKey", "routes/app-story.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
     // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
     route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
