@@ -433,7 +433,10 @@ function Grid({
               />
               {own ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `${c.night}8c` }]} /> : null}
               <View style={styles.tag}>
-                <Tag tone={own ? "line" : "ink"}>{own ? "Toi" : voteScreenTexts.number(i + 1)}</Tag>
+                {/* Le badge « Toi » est posé sur le voile sombre de la photo : encre d'affiche (crème), pas l'encre du thème (sombre en Sable). */}
+                <Tag tone={own ? "line" : "ink"} on={own ? "poster" : "card"}>
+                  {own ? "Toi" : voteScreenTexts.number(i + 1)}
+                </Tag>
               </View>
               {chosen ? (
                 <View style={[styles.check, { backgroundColor: c.accent }]}>

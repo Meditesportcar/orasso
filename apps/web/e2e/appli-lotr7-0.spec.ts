@@ -192,3 +192,30 @@ test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessa
   await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0);
   await ctx.close();
 });
+
+test("Classement qui ne se charge pas, quel que soit l'état du vote : l'écran le dit avec « Réessayer » (tour 3)", async ({
+  browser,
+}) => {
+  const place = await myPlace("damien@orasso.local");
+  const board = /\/events\/[^/]+\/audience-prize$/;
+  for (const state of ["ouvert", "clos"] as const) {
+    const { ctx, page } = await open(browser, "beton");
+    await signIn(page, "damien@orasso.local");
+    let failing = true;
+    await page.route(board, async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      if (failing) return route.fulfill({ status: 500, body: "{}" });
+      const res = await route.fetch();
+      const json = await res.json();
+      // « clos » : la lecture qui revient dit que le vote est fini et le classement servi à tout le monde.
+      return route.fulfill({ response: res, json: state === "clos" ? { ...json, open: false } : json });
+    });
+    await page.goto(`/vote/${place.event.id}`);
+    await afterOpening(page);
+    await expect(page.getByTestId("vote-ranking-failed")).toBeVisible({ timeout: 45_000 });
+    failing = false;
+    await page.getByTestId("vote-ranking-retry").click();
+    await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0, { timeout: 30_000 });
+    await ctx.close();
+  }
+});

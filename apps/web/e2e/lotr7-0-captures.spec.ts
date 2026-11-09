@@ -97,11 +97,26 @@ test("captures de l'appli", async ({ browser }) => {
         ["/accueil", "accueil"],
         ["/sorties", "sorties"],
         [`/e/${SLUG}`, "fiche"],
-        [`/jour-j/${appId}`, "jour-j", "qr-poster"],
+        [`/jour-j/${appId}`, "jour-j", "jourj-entered"],
         ["/mon-passeport", "passeport"],
         [`/vote/${id}`, "vote"],
       ] as readonly (readonly [string, string, string?])[]) {
         await snap(page, path, `${tag}-${name}`, false, waitFor);
+      }
+      // Tour 3 : le QR d'une personne déjà entrée s'ouvre « pour un contrôle » (feuille), derrière un bouton en bas.
+      await snap(page, `/jour-j/${appId}`, `${tag}-jour-j-tmp`, false, "jourj-entered");
+      const qrButton = page.getByTestId("jourj-qr-open");
+      if (await qrButton.isVisible().catch(() => false)) {
+        await qrButton.scrollIntoViewIfNeeded().catch(() => undefined);
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: `${DIR}/${tag}-jour-j-bas.png` });
+        await qrButton.click();
+        await page
+          .getByTestId("qr-poster")
+          .waitFor({ timeout: 30_000 })
+          .catch(() => undefined);
+        await page.waitForTimeout(1500);
+        await page.screenshot({ path: `${DIR}/${tag}-jour-j-qr.png` });
       }
       await ctx.close();
     }
