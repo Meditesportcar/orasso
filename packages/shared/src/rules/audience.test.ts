@@ -37,8 +37,13 @@ describe("canSeeStory", () => {
     expect(storyDenial(null, base, rel())).toBe("no_session");
   });
 
-  it("public : tout membre connecté", () => {
-    expect(canSeeStory(me, { ...base, audience: "public", authorVisibility: "private" }, rel())).toBe(true);
+  it("public : tout membre connecté, sauf d'un compte privé où elle se lit comme « abonnés »", () => {
+    expect(canSeeStory(me, { ...base, audience: "public" }, rel())).toBe(true);
+    const priv = { ...base, audience: "public" as const, authorVisibility: "private" as const };
+    expect(canSeeStory(me, priv, rel())).toBe(false);
+    expect(storyDenial(me, priv, rel())).toBe("followers_only");
+    expect(canSeeStory(me, priv, rel({ followAccepted: true }))).toBe(true);
+    expect(canSeeStory({ id: "author", active: true }, priv, rel())).toBe(true);
   });
 
   it("abonnés d'un compte public : tout membre connecté", () => {

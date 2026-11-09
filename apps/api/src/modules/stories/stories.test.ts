@@ -1,10 +1,12 @@
 // Stories photo (lot R7f1) : composition 9:16, plaque obligatoire pour toute audience, audiences × regards, barre, fichiers,
 // vues et flammes, réponses, signalement, identification, expiration. Aucune plaque lisible : les photos d'essai sont
 // du bruit coloré.
+
+import { randomUUID } from "node:crypto";
 import { fitDefault, fromWallTime, HOUR, mapRect, STORY_H, STORY_W } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -17,24 +19,34 @@ import {
   signUp,
   type TestUser,
   useClock,
+  viewerOf,
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
+  contactRequests,
   crewMembers,
+  events,
+  mediaProfiles,
   messages,
   notifications,
   profiles,
+  providerProfiles,
   reports,
   stories,
   storyTags,
+  storyViews,
   structureFollows,
   userFollows,
+  vehicles,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { type RealtimeSocket, realtime } from "../../lib/realtime";
 import { storage } from "../../lib/storage";
+import { accountService } from "../account/service";
 import { storyThumbFor } from "../messaging/story-thumb";
-import { reportMediaOf } from "../moderation/media";
+import { reportMedia } from "../moderation/media";
+import { retryRemove } from "../vehicles/photos-blur";
 import { composeStoryPhoto } from "./compose";
 import { storiesExpire } from "./expire";
 
@@ -469,7 +481,7 @@ describe("fichiers et expiration", () => {
     const path = fileUrl(view);
     const good = await req(nina, "GET", path);
     expect(good.status).toBe(200);
-    expect(good.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(good.headers.get("cache-control")).toBe("private, no-store");
     expect(good.headers.get("content-type")).toBe("image/webp");
     expect((await req(paul, "GET", path)).status).toBe(403);
     expect((await req(nina, "GET", path.replace(/[0-9a-f]{16}\.webp$/, `${"a".repeat(16)}.webp`))).status).toBe(404);
@@ -524,14 +536,17 @@ describe("fichiers et expiration", () => {
     clock.advance(24 * HOUR + 1000);
     await storiesExpire.run();
     expect(await storage.get(row!.storageKey)).not.toBeNull();
-    const media = await reportMediaOf("story")?.(s.id, row!.storageKey.split("/").pop() ?? "");
-    expect(media?.contentType).toBe("image/webp");
+    // La modération voit le média par le registre de `moderation/media.ts` (R7e1), même après l'expiration.
+    const modo = await viewerOf(await signUp("Modo", { twoFactor: true, role: "moderator" }));
+    const media = await reportMedia(modo, report!.id, row!.storageKey.split("/").pop() ?? "");
+    expect(media.contentType).toBe("image/webp");
     expect((await req(nina, "GET", `/stories/${s.id}/thumb`)).status).toBe(404);
     // Décision prise : le balayage suivant efface le fichier.
     await db.update(reports).set({ status: "resolved_no_action" }).where(eq(reports.id, report!.id));
     await storiesExpire.run();
     expect(await storage.get(row!.storageKey)).toBeNull();
-    expect(await reportMediaOf("story")?.(s.id, "x.webp")).toBeNull();
+    await expect(reportMedia(modo, report!.id, "x.webp")).rejects.toMatchObject({ status: 404 });
+    await expect(reportMedia(modo, report!.id, `${"a".repeat(16)}.webp`)).rejects.toMatchObject({ status: 404 });
   });
 
   it("signaler : seulement une story qu'on voit, jamais la sienne, une seule fois", async () => {
@@ -814,6 +829,503 @@ describe("identification, notifications, voiture, événement", () => {
     expect((await req(nina, "GET", "/stories/bar")).json.authors).toEqual([]);
     expect((await req(nina, "GET", `/users/${kenji.pseudo}`)).json.stories.count).toBe(0);
     resetRateLimits();
+  });
+});
+
+// --- Tour 2 (corrections après relectures Opus et Codex) -------------------------------------------------------------
+
+const rows = (n: number, make: (i: number) => Partial<typeof stories.$inferInsert>) =>
+  Array.from({ length: n }, (_, i) => ({
+    audience: "public" as const,
+    storageKey: `private/stories/fictive/${String(i).padStart(16, "0")}.webp`,
+    plateState: "none_confirmed" as const,
+    status: "ready" as const,
+    expiresAt: new Date(clock.now.getTime() + 20 * HOUR),
+    ...make(i),
+  })) as (typeof stories.$inferInsert)[];
+
+describe("tour 2 : cache, comptes privés, plaques", () => {
+  it("les fichiers ne sont jamais gardés par le navigateur ; un second compte sur le même appareil reçoit 403", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    await makePrivate(kenji);
+    await follow(nina, kenji);
+    await ok(kenji, { audience: "followers" });
+    const view = (await byAuthor(nina, keyOf(kenji))).json.stories[0];
+    const id = view.id as string;
+    for (const path of [fileUrl(view), `/stories/${id}/thumb`]) {
+      const good = await req(nina, "GET", path);
+      expect(good.status).toBe(200);
+      expect(good.headers.get("cache-control")).toBe("private, no-store");
+      // Même adresse, autre compte : le contrôle d'audience est refait, rien ne vient d'un cache.
+      expect((await req(paul, "GET", path)).status).toBe(403);
+    }
+    const [row] = await db.select().from(stories).where(eq(stories.id, id));
+    await db.update(stories).set({ posterKey: row?.storageKey }).where(eq(stories.id, id));
+    const poster = await req(nina, "GET", `/stories/${id}/poster/${row?.storageKey.split("/").pop()}`);
+    expect(poster.status).toBe(200);
+    expect(poster.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("une story « publique » d'un compte devenu privé est servie aux abonnés seulement (profil, auteur, fichiers, barre)", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    await follow(nina, kenji);
+    await ok(kenji, { audience: "public" });
+    expect((await byAuthor(paul, keyOf(kenji))).json.stories).toHaveLength(1);
+    await makePrivate(kenji);
+    const path = fileUrl((await byAuthor(nina, keyOf(kenji))).json.stories[0]);
+    expect((await byAuthor(paul, keyOf(kenji))).json).toEqual({ author: null, stories: [] });
+    expect((await req(paul, "GET", path)).status).toBe(403);
+    const [row] = await db.select().from(stories);
+    expect((await req(paul, "GET", `/stories/${row?.id}/thumb`)).status).toBe(403);
+    expect((await req(paul, "POST", `/stories/${row?.id}/reply`, { text: "Salut" })).status).toBe(403);
+    expect((await req(paul, "GET", `/users/${kenji.pseudo}`)).json.stories?.count ?? 0).toBe(0);
+    // L'abonné accepté la voit toujours.
+    expect((await req(nina, "GET", path)).status).toBe(200);
+    expect((await req(nina, "GET", "/stories/bar")).json.authors).toHaveLength(1);
+    expect((await req(paul, "GET", "/stories/bar")).json.authors).toHaveLength(0);
+  });
+
+  it("casquettes « prestataire » et « média » d'un compte privé : la story publique reste réservée aux abonnés", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    await db.insert(providerProfiles).values({ userId: kenji.id, type: "photographer", name: "Studio Kenji" });
+    await db.insert(mediaProfiles).values({ userId: kenji.id, name: "Kenji Média" });
+    await follow(nina, kenji);
+    await makePrivate(kenji);
+    // Compte privé : « public » est refusé à la casquette « passionné » (400) ; les autres casquettes l'acceptent, mais la
+    // lecture le traite comme « abonnés ».
+    expect((await publish(kenji, { persona: "fan", audience: "public" })).status).toBe(400);
+    await ok(kenji, { persona: "provider", audience: "public" });
+    await ok(kenji, { persona: "media", audience: "public" });
+    expect((await byAuthor(nina, keyOf(kenji))).json.stories).toHaveLength(2);
+    expect((await byAuthor(paul, keyOf(kenji))).json.stories).toEqual([]);
+    const [one] = await db.select().from(stories).where(eq(stories.persona, "provider"));
+    expect((await req(paul, "GET", `/stories/${one?.id}/thumb`)).status).toBe(403);
+    expect((await req(paul, "GET", "/stories/bar")).json.authors).toHaveLength(0);
+  });
+
+  it("la plaque ne reste pas dans le fond flouté, même avec un cadrage décalé", async () => {
+    const w = 1600;
+    const h = 900;
+    const raw = Buffer.alloc(w * h * 3, 128);
+    // « Plaque » fictive : damier noir et blanc de grosses cases (50 px), 200 × 150 px.
+    for (let y = 100; y < 250; y++) {
+      for (let x = 700; x < 900; x++) {
+        const v = (Math.floor((x - 700) / 50) + Math.floor((y - 100) / 50)) % 2 ? 255 : 0;
+        raw.fill(v, (y * w + x) * 3, (y * w + x) * 3 + 3);
+      }
+    }
+    const src = await sharp(raw, { raw: { width: w, height: h, channels: 3 } })
+      .png()
+      .toBuffer();
+    const rect = { x: 700 / w, y: 100 / h, w: 200 / w, h: 150 / h };
+    // La photo est poussée vers le bas : le haut du canevas ne montre que le fond (couverture floutée), où la plaque se
+    // trouve vers (330-750, 210-530).
+    const frame = { scale: 1, offsetX: 0, offsetY: 700 };
+    const plain = await composeStoryPhoto(src, { frame });
+    const masked = await composeStoryPhoto(src, { frame, rects: [rect] });
+    const region = { left: 340, top: 230, width: 400, height: 290 };
+    // Écart-type des gris de la zone : le damier flouté laisse des variations, la zone masquée est presque lisse.
+    const spread = async (data: Buffer) => {
+      const { data: px } = await sharp(data).extract(region).greyscale().raw().toBuffer({ resolveWithObject: true });
+      const mean = px.reduce((sum, v) => sum + v, 0) / px.length;
+      return Math.sqrt(px.reduce((sum, v) => sum + (v - mean) ** 2, 0) / px.length);
+    };
+    const before = await spread(plain.data);
+    const after = await spread(masked.data);
+    // Sans masque le fond garde la trace du damier ; avec, la zone est lisse.
+    expect(before).toBeGreaterThan(25);
+    expect(after).toBeLessThan(before * 0.35);
+  });
+
+  it("l'original non flouté est repris par la tâche de suppression quand sa suppression échoue", async () => {
+    const kenji = await signUp("Kenji");
+    const up = await upload(kenji);
+    const original = storage.remove.bind(storage);
+    const spy = vi.spyOn(storage, "remove").mockImplementation(async (key: string) => {
+      if (key === up.json.key) throw new Error("disque indisponible");
+      return original(key);
+    });
+    try {
+      const res = await req(kenji, "POST", "/me/stories", {
+        uploadKey: up.json.key,
+        noPlateConfirmed: true,
+        audience: "public",
+      });
+      expect(res.status).toBe(201);
+    } finally {
+      spy.mockRestore();
+    }
+    // L'original est encore là, mais une reprise est planifiée.
+    expect(await storage.get(up.json.key)).not.toBeNull();
+    const job = clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === up.json.key);
+    expect(job).toBeDefined();
+    await retryRemove(up.json.key);
+    expect(await storage.get(up.json.key)).toBeNull();
+  });
+});
+
+describe("tour 2 : contenu lié, résumé du profil, identifications, flammes", () => {
+  it("le contenu lié est refiltré pour chaque lecteur avec les droits actuels", async () => {
+    const orga = await signUp("Orga");
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const structure = await createStructure(orga.id);
+    const event = await createEvent(structure.id);
+    const mine = await createVehicle(kenji.id, ref);
+    await ok(kenji, { linked: { type: "event", id: event.id } });
+    await ok(kenji, { linked: { type: "vehicle", id: mine.id } });
+    const linked = async (u: TestUser) =>
+      ((await byAuthor(u, keyOf(kenji))).json.stories as { linked: { type: string } | null }[]).map(
+        (x) => x.linked?.type ?? null,
+      );
+    expect(await linked(nina)).toEqual(["event", "vehicle"]);
+    // L'événement devient privé : seule l'organisation le voit encore.
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, event.id));
+    expect(await linked(nina)).toEqual([null, "vehicle"]);
+    expect(await linked(orga)).toEqual(["event", "vehicle"]);
+    // Il repasse en brouillon : plus de lien pour personne.
+    await db.update(events).set({ admission: "open", status: "draft" }).where(eq(events.id, event.id));
+    expect(await linked(nina)).toEqual([null, "vehicle"]);
+    // La voiture est vendue : plus de lien, pas même son identifiant.
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, mine.id));
+    expect(await linked(nina)).toEqual([null, null]);
+    expect(JSON.stringify((await byAuthor(nina, keyOf(kenji))).json)).not.toContain(mine.id);
+  });
+
+  it("le résumé du profil ignore les stories de crew, la barre les garde pour les membres", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const crew = await newCrew(kenji);
+    await addToCrew(crew.id, kenji, nina);
+    await ok(kenji, { audience: "crew", crewId: crew.id });
+    expect((await req(nina, "GET", `/users/${kenji.pseudo}`)).json.stories).toEqual({
+      count: 0,
+      hasUnseen: false,
+      ring: null,
+    });
+    const bar = (await req(nina, "GET", "/stories/bar")).json;
+    expect(bar.authors).toHaveLength(1);
+    expect(bar.authors[0].ring).toBe("crew");
+    // Une story d'abonnés, elle, apparaît sur le profil.
+    await follow(nina, kenji);
+    await ok(kenji, { audience: "followers" });
+    expect((await req(nina, "GET", `/users/${kenji.pseudo}`)).json.stories).toMatchObject({
+      count: 1,
+      ring: "followers",
+    });
+  });
+
+  it("identifier une structure ou un pro prévient ses responsables (propriétaire, co-organisateurs actifs, propriétaire de la fiche)", async () => {
+    const orga = await signUp("Orga");
+    const co = await signUp("Co");
+    const staff = await signUp("Staff");
+    const owner = await signUp("Pro");
+    const kenji = await signUp("Kenji");
+    const structure = await createStructure(orga.id);
+    await addMember(structure.id, co.id, "co_organizer");
+    await addMember(structure.id, staff.id, "staff");
+    const pro = await createPro(owner.id);
+    const res = await ok(kenji, {
+      audience: "public",
+      tags: [
+        { kind: "structure", id: structure.id },
+        { kind: "pro", id: pro.id },
+      ],
+    });
+    expect(res.skipped).toEqual([]);
+    const mention = async (u: TestUser) =>
+      db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, u.id), eq(notifications.type, "story_mention")));
+    expect(await mention(orga)).toHaveLength(1);
+    expect(await mention(co)).toHaveLength(1);
+    expect(await mention(owner)).toHaveLength(1);
+    expect(await mention(staff)).toHaveLength(0);
+    expect(await mention(kenji)).toHaveLength(0);
+    expect((await mention(orga))[0]?.body).toContain("Club de test");
+    expect((await mention(orga))[0]?.data).toMatchObject({ storyId: res.id, authorKey: keyOf(kenji) });
+  });
+
+  it("la flamme renvoie vers l'auteur affiché : personne, structure ou pro", async () => {
+    const orga = await signUp("Orga");
+    const owner = await signUp("Pro");
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const structure = await createStructure(orga.id);
+    const pro = await createPro(owner.id);
+    const mine = await ok(kenji, {});
+    const sStory = await ok(orga, { persona: "organizer", structureId: structure.id });
+    const pStory = await ok(owner, { persona: "pro", proId: pro.id });
+    for (const id of [mine.id, sStory.id, pStory.id]) {
+      expect((await req(nina, "PUT", `/stories/${id}/reaction`)).status).toBe(200);
+    }
+    const linkOf = async (u: TestUser) => {
+      const [n] = await db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, u.id), eq(notifications.type, "story_like")));
+      return (n?.data as { link?: string } | undefined)?.link;
+    };
+    expect(await linkOf(kenji)).toBe(`/app/story/u:${kenji.id}`);
+    expect(await linkOf(orga)).toBe(`/app/story/s:${structure.id}`);
+    expect(await linkOf(owner)).toBe(`/app/story/p:${pro.id}`);
+  });
+});
+
+describe("tour 2 : réponses aux stories", () => {
+  it("story d'une structure : la réponse va dans la conversation de la structure, jamais au compte du co-organisateur", async () => {
+    const orga = await signUp("Orga");
+    const co = await signUp("Co");
+    const fan = await signUp("Fan");
+    const structure = await createStructure(orga.id);
+    await addMember(structure.id, co.id, "co_organizer");
+    const s = await ok(co, { persona: "organizer", structureId: structure.id });
+    const res = await req(fan, "POST", `/stories/${s.id}/reply`, { text: "Super affiche !" });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({ mode: "message" });
+    const convs = await db.query.conversations.findMany();
+    expect(convs).toHaveLength(1);
+    expect(convs[0]).toMatchObject({ kind: "organizer", structureId: structure.id });
+    expect(res.json.conversationId).toBe(convs[0]?.id);
+    // Aucune conversation ni demande vers le compte personnel de qui a publié.
+    expect(await db.select().from(contactRequests)).toHaveLength(0);
+    const [msg] = await db.select().from(messages);
+    expect(msg).toMatchObject({ storyId: s.id, senderId: fan.id, body: "Super affiche !" });
+    const page = (await req(fan, "GET", `/conversations/${convs[0]?.id}/messages`)).json;
+    expect(page.items[0].storyThumbUrl).toBe(`/api/stories/${s.id}/thumb`);
+    expect((await req(fan, "GET", page.items[0].storyThumbUrl.replace(/^\/api/, ""))).status).toBe(200);
+    // Un organisateur de la structure ne se répond pas à lui-même.
+    expect((await req(orga, "POST", `/stories/${s.id}/reply`, { text: "Moi" })).status).toBe(400);
+    // Le pseudo de qui a publié n'apparaît dans aucune réponse.
+    expect(JSON.stringify(res.json)).not.toContain(co.pseudo);
+  });
+
+  it("story d'un pro : aucune messagerie de pro, refus 403 reply_unavailable sans rien créer", async () => {
+    const owner = await signUp("Pro");
+    const fan = await signUp("Fan");
+    const pro = await createPro(owner.id);
+    const s = await ok(owner, { persona: "pro", proId: pro.id });
+    const res = await req(fan, "POST", `/stories/${s.id}/reply`, { text: "Bonjour" });
+    expect(res.status).toBe(403);
+    expect(res.json.error.code).toBe("reply_unavailable");
+    expect(JSON.stringify(res.json)).not.toContain(owner.pseudo);
+    expect(await db.select().from(messages)).toHaveLength(0);
+    expect(await db.select().from(contactRequests)).toHaveLength(0);
+  });
+
+  it("le contexte voyage dans le message : HTTP, temps réel, et il est gardé quand la demande de contact est acceptée", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    await follow(kenji, nina);
+    const s = await ok(kenji, {});
+    // Conversation déjà ouverte : le temps réel porte la vignette.
+    const open = await req(nina, "POST", "/conversations/direct", { userId: kenji.id });
+    expect(open.status).toBe(201);
+    const received: string[] = [];
+    const socket: RealtimeSocket = { userId: kenji.id, send: (d) => received.push(d) };
+    realtime.subscribe(`conversation:${open.json.id}`, socket);
+    const reply = await req(nina, "POST", `/stories/${s.id}/reply`, { text: "Belle bête" });
+    realtime.unsubscribeAll(socket);
+    expect(reply.status).toBe(201);
+    expect(received.some((d) => d.includes("message.new") && d.includes(`/api/stories/${s.id}/thumb`))).toBe(true);
+    const page = (await req(kenji, "GET", `/conversations/${open.json.id}/messages`)).json;
+    expect(page.items[0]).toMatchObject({ body: "Belle bête", storyThumbUrl: `/api/stories/${s.id}/thumb` });
+    // Demande de contact : le contexte suit le premier message à l'acceptation.
+    const request = await req(paul, "POST", `/stories/${s.id}/reply`, { text: "Salut !" });
+    expect(request.json).toMatchObject({ mode: "contact_request" });
+    const accepted = await req(kenji, "POST", `/contact-requests/${request.json.requestId}/accept`);
+    expect(accepted.status).toBe(200);
+    const first = (await req(kenji, "GET", `/conversations/${accepted.json.conversationId}/messages`)).json.items[0];
+    expect(first).toMatchObject({ body: "Salut !", storyThumbUrl: `/api/stories/${s.id}/thumb` });
+    // La story expire : la vignette disparaît partout.
+    clock.advance(24 * HOUR + 1000);
+    await storiesExpire.run();
+    const later = (await req(kenji, "GET", `/conversations/${accepted.json.conversationId}/messages`)).json.items[0];
+    expect(later.storyThumbUrl).toBeNull();
+    expect((await db.select().from(contactRequests))[0]?.storyId).toBeNull();
+  });
+
+  it("l'auteur m'a écrit en dernier : la réponse part (pas de 409 use_direct)", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    await follow(nina, kenji);
+    const open = await req(kenji, "POST", "/conversations/direct", { userId: nina.id });
+    expect(open.status).toBe(201);
+    const first = await req(kenji, "POST", `/conversations/${open.json.id}/messages`, {
+      clientId: randomUUID(),
+      body: "Salut",
+    });
+    expect(first.status).toBe(201);
+    // Nina ne suit plus Kenji, qui ne la suit pas : seul son dernier message ouvre encore la conversation.
+    await db.delete(userFollows);
+    const s = await ok(kenji, {});
+    const res = await req(nina, "POST", `/stories/${s.id}/reply`, { text: "Merci !" });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({ mode: "message", conversationId: open.json.id });
+    expect(await db.select().from(contactRequests)).toHaveLength(0);
+  });
+
+  it("un clientId rejoué ne crée qu'un message (ou qu'une demande)", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const paul = await signUp("Paul");
+    await follow(kenji, nina);
+    const s = await ok(kenji, {});
+    const clientId = randomUUID();
+    const a = await req(nina, "POST", `/stories/${s.id}/reply`, { text: "Une fois", clientId });
+    const b = await req(nina, "POST", `/stories/${s.id}/reply`, { text: "Une fois", clientId });
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(b.json.messageId).toBe(a.json.messageId);
+    expect(await db.select().from(messages)).toHaveLength(1);
+    const c = await req(paul, "POST", `/stories/${s.id}/reply`, { text: "Salut" });
+    const d = await req(paul, "POST", `/stories/${s.id}/reply`, { text: "Salut" });
+    expect([c.status, d.status]).toEqual([201, 201]);
+    expect(d.json.requestId).toBe(c.json.requestId);
+    expect(await db.select().from(contactRequests)).toHaveLength(1);
+  });
+});
+
+describe("tour 2 : barre, identifiants, plafond, suppressions", () => {
+  it("la barre filtre avant de limiter : mille stories d'un auteur masqué n'effacent pas un auteur visible", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const muet = await signUp("Muet");
+    await ok(kenji, {});
+    await follow(nina, kenji);
+    await follow(nina, muet);
+    await req(nina, "PUT", `/me/story-mutes/${keyOf(muet)}`);
+    await db.insert(stories).values(
+      rows(1010, (i) => ({
+        authorId: muet.id,
+        createdAt: new Date(clock.now.getTime() + 1000 + i * 1000),
+        expiresAt: new Date(clock.now.getTime() + 20 * HOUR),
+      })),
+    );
+    const bar = (await req(nina, "GET", "/stories/bar")).json;
+    expect(bar.authors.map((a: { key: string }) => a.key)).toEqual([keyOf(kenji)]);
+  });
+
+  it("hasUnseen se lit sur toutes les stories visibles de l'auteur", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    await follow(nina, kenji);
+    const inserted = await db
+      .insert(stories)
+      .values(
+        rows(53, (i) => ({
+          authorId: kenji.id,
+          createdAt: new Date(clock.now.getTime() - 3 * HOUR + i * 1000),
+        })),
+      )
+      .returning({ id: stories.id, createdAt: stories.createdAt });
+    inserted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    // Elle a vu les 50 plus récentes ; les 3 plus anciennes ne sont pas vues.
+    await db.insert(storyViews).values(inserted.slice(3).map((r) => ({ storyId: r.id, viewerId: nina.id })));
+    const bar = (await req(nina, "GET", "/stories/bar")).json;
+    expect(bar.authors).toHaveLength(1);
+    expect(bar.authors[0].hasUnseen).toBe(true);
+  });
+
+  it("des identifiants invalides donnent 400 ou 404, jamais 500", async () => {
+    const kenji = await signUp("Kenji");
+    const s = await ok(kenji, {});
+    for (const id of ["pas-un-uuid", "123", "{}", "../x"]) {
+      expect((await publish(kenji, { linked: { type: "event", id } })).status, id).toBe(400);
+      expect((await publish(kenji, { linked: { type: "vehicle", id } })).status, id).toBe(400);
+      expect((await publish(kenji, { tags: [{ kind: "structure", id }] })).status, id).toBe(400);
+      expect((await publish(kenji, { tags: [{ kind: "pro", id }] })).status, id).toBe(400);
+      expect((await publish(kenji, { tags: [{ kind: "user", id: `${id} é` }] })).status, id).toBe(400);
+    }
+    for (const key of ["s:xyz", "p:123", "s:", "x:abc", "u:", "u:a b", `s:${"0".repeat(36)}`]) {
+      expect((await byAuthor(kenji, key)).status, key).toBe(404);
+      expect((await req(kenji, "PUT", `/me/story-mutes/${encodeURIComponent(key)}`)).status, key).toBe(404);
+    }
+    expect((await req(kenji, "POST", `/me/story-tags/${s.id}/remove`, { kind: "structure", id: "xyz" })).status).toBe(
+      400,
+    );
+    expect((await req(kenji, "POST", "/me/story-tags/pas-un-uuid/remove", {})).status).toBe(400);
+    // Un UUID valide d'une structure inconnue : liste vide, pas d'erreur.
+    expect((await byAuthor(kenji, `s:${randomUUID()}`)).json).toEqual({ author: null, stories: [] });
+  });
+
+  it("50 stories vivantes au plus par auteur : la 51e est refusée (409 too_many_stories), une expirée ne compte pas", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    await db.insert(stories).values([
+      ...rows(48, () => ({ authorId: kenji.id })),
+      // Expirée, et supprimée : ne comptent pas.
+      ...rows(1, () => ({ authorId: kenji.id, expiresAt: new Date(clock.now.getTime() - HOUR) })),
+      ...rows(1, () => ({ authorId: kenji.id, deletedAt: clock.now })),
+      // Autre auteur : pas dans le compte.
+      ...rows(60, () => ({ authorId: nina.id })),
+    ]);
+    await ok(kenji, {});
+    await ok(kenji, {});
+    const refused = await publish(kenji, {});
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("too_many_stories");
+    expect(refused.json.error.message).toContain("50");
+    expect(await db.select().from(stories).where(eq(stories.authorId, kenji.id))).toHaveLength(52);
+    // Le plafond est par auteur : une structure a le sien.
+    const structure = await createStructure(kenji.id);
+    await ok(kenji, { persona: "organizer", structureId: structure.id });
+  });
+
+  it("la suppression du compte retire ses stories, efface les fichiers, mais retient celle qui est signalée", async () => {
+    const kenji = await signUp("Kenji");
+    const lea = await signUp("Lea");
+    const nina = await signUp("Nina");
+    const k = await ok(kenji, {});
+    const l = await ok(lea, {});
+    const [kRow] = await db.select().from(stories).where(eq(stories.id, k.id));
+    const [lRow] = await db.select().from(stories).where(eq(stories.id, l.id));
+    expect((await req(nina, "POST", `/stories/${l.id}/report`, { reason: "shocking" })).status).toBe(201);
+    await req(nina, "PUT", `/stories/${k.id}/reaction`);
+    await accountService.anonymize(kenji.id, null);
+    await accountService.anonymize(lea.id, null);
+    const [kAfter] = await db.select().from(stories).where(eq(stories.id, k.id));
+    expect(kAfter?.deletedAt).not.toBeNull();
+    expect(kAfter?.filesRemovedAt).not.toBeNull();
+    expect(await storage.get(kRow?.storageKey ?? "")).toBeNull();
+    // Signalée : retenue (invisible de tous) jusqu'à la décision.
+    const [lAfter] = await db.select().from(stories).where(eq(stories.id, l.id));
+    expect(lAfter?.deletedAt).not.toBeNull();
+    expect(lAfter?.filesRemovedAt).toBeNull();
+    expect(await storage.get(lRow?.storageKey ?? "")).not.toBeNull();
+    expect((await byAuthor(nina, keyOf(lea))).json.stories).toEqual([]);
+    const [report] = await db.select().from(reports);
+    await db
+      .update(reports)
+      .set({ status: "resolved_no_action" })
+      .where(eq(reports.id, report?.id ?? ""));
+    await storiesExpire.run();
+    expect(await storage.get(lRow?.storageKey ?? "")).toBeNull();
+  });
+
+  it("la dissolution d'un crew retire ses stories et efface leurs fichiers", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const crew = await newCrew(kenji);
+    await addToCrew(crew.id, kenji, nina);
+    const s = await ok(kenji, { audience: "crew", crewId: crew.id });
+    const keep = await ok(kenji, { audience: "followers" });
+    const [row] = await db.select().from(stories).where(eq(stories.id, s.id));
+    expect(await storage.get(row?.storageKey ?? "")).not.toBeNull();
+    expect((await req(kenji, "DELETE", `/crews/${crew.id}`)).status).toBe(204);
+    const [after] = await db.select().from(stories).where(eq(stories.id, s.id));
+    expect(after?.deletedAt).not.toBeNull();
+    expect(await storage.get(row?.storageKey ?? "")).toBeNull();
+    // Les autres stories de l'auteur ne bougent pas.
+    const [other] = await db.select().from(stories).where(eq(stories.id, keep.id));
+    expect(other?.deletedAt).toBeNull();
   });
 });
 
