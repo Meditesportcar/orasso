@@ -6,6 +6,7 @@ import {
   blurInstead,
   confirmNoPlate,
   type FeedDraftPhoto,
+  framesFromDetection,
   newDraftPhoto,
   plateBadge,
   plateControls,
@@ -47,6 +48,26 @@ describe("décision de plaque d'une photo du Fil", () => {
     // Sans cadre repéré : un cadre à poser à la main.
     expect(blurInstead(confirmNoPlate(withDetection(base(), []))).rects).toHaveLength(1);
   });
+  it("« Aucune plaque visible » est refusé tant que la détection cherche ; un recadrage repart en recherche", () => {
+    const searching = base();
+    expect(plateControls(searching).canNone).toBe(false);
+    expect(confirmNoPlate(searching)).toBe(searching);
+    // Confirmé, puis recadré : la décision repart de zéro et la confirmation est impossible pendant la recherche.
+    const confirmed = confirmNoPlate(withDetection(base(), []));
+    expect(confirmed.noPlate).toBe(true);
+    const again = recropped(confirmed, { ...pic, uri: "file:///b.jpg" }, { x: 0.2, y: 0.5 });
+    expect(again.noPlate).toBe(false);
+    expect(plateControls(again).canNone).toBe(false);
+    expect(confirmNoPlate(again).noPlate).toBe(false);
+  });
+  it("libellé : « repérée » pour les cadres de la détection, « posée » pour un cadre posé à la main", () => {
+    expect(framesFromDetection(withDetection(base(), [RECT]))).toBe(true);
+    expect(framesFromDetection(withDetection(base(), []))).toBe(false);
+    expect(framesFromDetection(addFrame(withDetection(base(), [RECT])))).toBe(false);
+    expect(framesFromDetection(addFrame(withDetection(base(), [])))).toBe(false);
+    expect(L.platePlaced(1)).toBe("1 plaque posée : ajuste le cadre si besoin.");
+    expect(L.platePlaced(2)).toContain("plaques posées");
+  });
   it("cadres : ajouter (au plus MAX), retirer ; retirer le dernier cadre ôte la décision", () => {
     let p = withDetection(base(), [RECT]);
     for (let i = 0; i < MAX_PLATE_RECTS + 2; i++) p = addFrame(p);
@@ -74,8 +95,8 @@ describe("décision de plaque d'une photo du Fil", () => {
     expect(withDetection(hand, [{ ...RECT, x: 0.41 }]).rects).toEqual([RECT]);
     expect(after.detected).toEqual([other]);
   });
-  it("une détection qui arrive après « Aucune plaque visible » ne change pas la décision", () => {
-    const none = confirmNoPlate(base());
+  it("une détection tardive (réponse en retard) après « Aucune plaque visible » ne change pas la décision", () => {
+    const none = confirmNoPlate(withDetection(base(), []));
     const after = withDetection(none, [RECT]);
     expect(after.noPlate).toBe(true);
     expect(after.rects).toEqual([]);

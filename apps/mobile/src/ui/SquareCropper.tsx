@@ -78,7 +78,7 @@ export function SquareCropper({
   const [stage, setStage] = useState(0);
   const frame = Math.round(stage * (1 - FRAME_MARGIN * 2));
   const { width: w, height: h } = photo;
-  const square = ratio === 1;
+  const square = !onConfirmFocus;
   const squareRef = useRef(square);
   squareRef.current = square;
 

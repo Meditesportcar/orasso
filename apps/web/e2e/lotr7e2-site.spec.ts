@@ -216,6 +216,48 @@ test("recadrer au doigt : un glissement déplace le cadre, Valider rend l'image 
   expect((await digest()).ratio).toBeCloseTo(0.8, 2);
 });
 
+test("recadrer en 1:1 : le recadreur du site s'ouvre en carré, Valider recadre et ferme la confirmation de plaque", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const out = process.env.CAPTURES_DIR3 ?? `${RELAIS}/lot-r7e2-captures/apres3`;
+  await setTheme(page, "beton");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/fil/publier");
+  await page.getByTestId("fil-publish-format-square").click();
+  await page.getByTestId("fil-publish-file").setInputFiles([photo("car-golf-gti.jpg")]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+  const thumb = page.getByTestId("fil-publish-photo").first().locator("img");
+  const ratio = () =>
+    thumb.evaluate(async (img: HTMLImageElement) => {
+      const bitmap = await createImageBitmap(await (await fetch(img.src)).blob());
+      return bitmap.width / bitmap.height;
+    });
+  expect(await ratio()).toBeCloseTo(1, 2);
+  await page.getByTestId("fil-publish-none").click();
+  await expect(page.getByTestId("fil-publish-none-confirm")).toBeVisible();
+  await page.getByTestId("fil-publish-crop").click();
+  const frame = page.getByTestId("site-crop-frame");
+  await expect(frame).toBeVisible();
+  const fb = (await frame.boundingBox()) as { width: number; height: number };
+  expect(fb.width / fb.height).toBeCloseTo(1, 1);
+  const imgBox = async () => (await frame.locator("img").boundingBox()) as { y: number };
+  const start = await imgBox();
+  const at = (await frame.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2 - 70, { steps: 8 });
+  await page.mouse.up();
+  expect(start.y - (await imgBox()).y).toBeGreaterThan(20);
+  mkdirSync(out, { recursive: true });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${out}/recadrage-1-1-site-390.png` });
+  await page.getByTestId("site-crop-validate").click();
+  await expect(page.getByTestId("site-crop")).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
+  expect(await ratio()).toBeCloseTo(1, 2);
+});
+
 test("un compte qui ne suit personne : état vide d'Abonnements, sans annuaire", async ({ page }) => {
   test.setTimeout(120_000);
   await setTheme(page, "beton");

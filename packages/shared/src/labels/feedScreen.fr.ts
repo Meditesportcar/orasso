@@ -125,6 +125,9 @@ export const feedScreenLabels = {
   plateSearching: "Recherche de la plaque…",
   plateFound: (n: number) =>
     n === 1 ? "1 plaque repérée : ajuste le cadre si besoin." : `${n} plaques repérées : ajuste les cadres si besoin.`,
+  /** Cadres posés à la main (ou sur le site, sans détection) : « posée », jamais « repérée ». */
+  platePlaced: (n: number) =>
+    n === 1 ? "1 plaque posée : ajuste le cadre si besoin." : `${n} plaques posées : ajuste les cadres si besoin.`,
   plateNotFound:
     "Aucune plaque repérée automatiquement : pose un cadre à la main, ou confirme qu'aucune plaque n'est visible.",
   plateConfirmNone: "Aucune plaque n'est visible",

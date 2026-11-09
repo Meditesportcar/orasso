@@ -17,6 +17,7 @@ import {
   feedScreenFilters,
   feedWhyText,
   feedScreenLabels as L,
+  pinnedPublished,
   withMyPublished,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,7 +31,7 @@ import { forgetPublished, readPublished } from "./mine";
 const asFilter = (v: string | null): FeedFilter =>
   (feedFilters as readonly string[]).includes(v ?? "") ? (v as FeedFilter) : "for_you";
 
-export function Fil({ pseudo }: { pseudo: string }) {
+export function Fil({ userId }: { userId: string }) {
   const [filter, setFilter] = useState<FeedFilter>("for_you");
   // Le filtre de l'adresse est lu une seule fois, au premier affichage : aucune lecture ne part avant.
   const [ready, setReady] = useState(false);
@@ -72,10 +73,9 @@ export function Fil({ pseudo }: { pseudo: string }) {
   // Le filtre vient de l'adresse au premier affichage (après l'hydratation : jamais de décalage serveur/navigateur).
   useEffect(() => {
     setFilter(asFilter(new URLSearchParams(window.location.search).get("filtre")));
-    setMineCards(readPublished(pseudo));
+    setMineCards(readPublished(userId));
     setReady(true);
-  }, [pseudo]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: le filtre relance la lecture.
+  }, [userId]);
   useEffect(() => {
     if (!ready) return;
     setList(null);
@@ -166,7 +166,7 @@ export function Fil({ pseudo }: { pseudo: string }) {
   }
 
   const shown = list && list.filter === filter ? list.items : null;
-  const items = shown ? withMyPublished(shown, mineCards) : null;
+  const items = shown ? withMyPublished(shown, pinnedPublished(mineCards)) : null;
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = () => (feedRetryAction(errorSource) === "loadMore" ? more() : load(filter));
   const empty = L.empty[filter];

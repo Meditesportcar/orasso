@@ -241,6 +241,17 @@ export function publishedCard(post: FeedPostView): FeedCard<"feed_post"> {
   };
 }
 
+/** Ma publication reste en tête du Fil 24 h après son envoi (`createdAt`), pas plus. */
+export const MY_PUBLISHED_PIN_MS = 24 * 60 * 60 * 1000;
+
+/** Mes cartes encore épinglées en tête : celles de moins de 24 h (une date illisible ou future compte comme récente). */
+export function pinnedPublished(mine: readonly FeedCard[], now: number = Date.now()): FeedCard[] {
+  return mine.filter((c) => {
+    const at = Date.parse(c.at);
+    return Number.isNaN(at) || now - at < MY_PUBLISHED_PIN_MS;
+  });
+}
+
 /** La liste affichée : mes publications récentes en tête, puis la page de l'API, sans doublon (la carte de l'API l'emporte). */
 export function withMyPublished(items: readonly FeedCard[], mine: readonly FeedCard[]): FeedCard[] {
   if (!mine.length) return [...items];

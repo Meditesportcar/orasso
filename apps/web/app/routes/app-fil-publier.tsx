@@ -10,7 +10,7 @@ import type { Route } from "./+types/app-fil-publier";
 export const handle = ficheHandle;
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireMe(request);
+  const me = await requireMe(request);
   const [vehicles, applications] = await Promise.all([
     api<{ id: string; label: string; status?: string }[]>(request, "/me/vehicles"),
     api<{ status: string; event: { id: string; title: string; startsAt: string; status: string } }[]>(
@@ -19,6 +19,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     ),
   ]);
   return {
+    userId: me.user.id,
     vehicles: vehicles.ok
       ? vehicles.data.filter((v) => !v.status || v.status === "active").map((v) => ({ id: v.id, label: v.label }))
       : [],
@@ -34,6 +35,7 @@ export function meta() {
 export default function AppFilPublier({ loaderData }: Route.ComponentProps) {
   return (
     <PublishForm
+      userId={loaderData.userId}
       vehicles={loaderData.vehicles}
       applications={loaderData.applications}
       optionsFailed={loaderData.optionsFailed}

@@ -79,10 +79,12 @@ async function upload(file: File): Promise<{ ok: true; key: string } | { ok: fal
 }
 
 export function PublishForm({
+  userId,
   vehicles,
   applications,
   optionsFailed,
 }: {
+  userId: string;
   vehicles: { id: string; label: string }[];
   applications: { status: string; event: { id: string; title: string; startsAt: string; status: string } }[];
   optionsFailed: boolean;
@@ -165,7 +167,7 @@ export function PublishForm({
   const item = items[index];
   // La confirmation « Aucune plaque visible » est celle de la photo affichée : elle ne suit pas la photo suivante.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
-  useEffect(() => setConfirming(false), [index, item?.key]);
+  useEffect(() => setConfirming(false), [index, item?.key, item?.url]);
 
   /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro. */
   async function recropAt(key: string, focus: { x: number; y: number }) {
@@ -217,7 +219,7 @@ export function PublishForm({
     setProgress(null);
     if (res.ok) {
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements »).
-      rememberPublished(res.data as FeedPostView);
+      rememberPublished(userId, res.data as FeedPostView);
       return setDone(true);
     }
     if (res.status === 429) return setError(L.tooManyRequests);
@@ -389,7 +391,7 @@ export function PublishForm({
                 onChange={(rects) => patch(item.key, (i) => (i.rects === rects ? i : { ...i, rects }))}
               />
               <p className="o-t-caption" data-testid="fil-publish-plate-state">
-                {item.rects.length ? L.plateFound(item.rects.length).replace("repérée", "posée") : L.plateNotFound}
+                {item.rects.length ? L.platePlaced(item.rects.length) : L.plateNotFound}
               </p>
               <Button
                 type="button"

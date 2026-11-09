@@ -60,8 +60,19 @@ export function plateControls(p: Pick<FeedDraftPhoto, "rects" | "detection">): {
   return { searching, canAdd: !searching && p.rects.length < MAX_PLATE_RECTS, canNone: !searching };
 }
 
-/** « Aucune plaque n'est visible », confirmé : les cadres tombent, la décision est prise. */
-export const confirmNoPlate = (p: FeedDraftPhoto): FeedDraftPhoto => ({ ...p, noPlate: true, rects: [] });
+/**
+ * Les cadres viennent de la détection (« repérée ») tant qu'il n'y en a pas plus que de cadres repérés ; un cadre posé à
+ * la main ou ajouté (ou rien de repéré) se dit « posée », comme sur le site.
+ */
+export const framesFromDetection = (p: Pick<FeedDraftPhoto, "rects" | "detected" | "detection">): boolean =>
+  p.detection === "found" && p.detected.length > 0 && p.rects.length <= p.detected.length;
+
+/**
+ * « Aucune plaque n'est visible », confirmé : les cadres tombent, la décision est prise. Refusé tant que la détection
+ * cherche (la recherche pourrait contredire ce qu'on confirme) : la photo reste telle quelle.
+ */
+export const confirmNoPlate = (p: FeedDraftPhoto): FeedDraftPhoto =>
+  p.detection === "pending" ? p : { ...p, noPlate: true, rects: [] };
 
 /** Finalement, flouter : les cadres repérés reviennent, ou un cadre à poser à la main. */
 export const blurInstead = (p: FeedDraftPhoto): FeedDraftPhoto => ({

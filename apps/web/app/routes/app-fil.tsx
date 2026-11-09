@@ -8,7 +8,7 @@ import type { Route } from "./+types/app-fil";
 // « ⋯ ». Mode A : bande ORASSO et barre d'onglets (le layout). Les cartes sont lues dans le navigateur (`/api/fil`).
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  return { pseudo: me.profile.pseudo };
+  return { userId: me.user.id };
 }
 
 export function meta() {
@@ -19,7 +19,7 @@ export default function AppFil({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <h1 className="fil-sr">{navLabels.fil.title}</h1>
-      <Fil pseudo={loaderData.pseudo} />
+      <Fil userId={loaderData.userId} />
     </>
   );
 }

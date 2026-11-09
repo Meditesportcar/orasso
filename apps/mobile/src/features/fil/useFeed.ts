@@ -15,6 +15,7 @@ import {
   type FeedListState,
   feedFilters,
   feedRetryAction,
+  pinnedPublished,
   withMyPublished,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
@@ -164,7 +165,7 @@ export function useFeed() {
   useFocusEffect(revalidate);
 
   const shown: FeedCard[] | null = list && list.filter === filter ? list.items : null;
-  const items: FeedCard[] | null = shown ? withMyPublished(shown, mine) : null;
+  const items: FeedCard[] | null = shown ? withMyPublished(shown, pinnedPublished(mine)) : null;
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = useCallback(
     () => (feedRetryAction(errorSource) === "loadMore" ? loadMore() : reload()),

@@ -386,6 +386,64 @@ test("recadrer au doigt : un glissement déplace le cadre, Valider recadre la ph
   await ctx.close();
 });
 
+test("recadrer en 1:1 : le recadreur du Fil s'ouvre en carré sans zoom, Valider recadre et ferme la confirmation de plaque", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const out = process.env.CAPTURES_DIR3 ?? `${RELAIS}/lot-r7e2-captures/apres3`;
+  for (const theme of ["beton", "sable"]) {
+    const { ctx, page } = await open(browser, "kenji@orasso.local", theme, { width: 384, scale: 1 });
+    await go(page, "/fil/publier");
+    await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("fil-publish-format-square").click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("fil-publish-add").click();
+    await (await chooser).setFiles([photo("car-golf-gti.jpg")]);
+    await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+    const tile = page.getByTestId("fil-publish-photo").first();
+    const picture = () =>
+      tile.evaluate((el) => {
+        const img = el.querySelector("img");
+        return (
+          (img as HTMLImageElement | null)?.currentSrc ||
+          getComputedStyle(el.firstElementChild as Element).backgroundImage
+        );
+      });
+    const before = await picture();
+    // La confirmation « Aucune plaque visible » ouverte : un recadrage la ferme.
+    await page.getByTestId("fil-publish-none").click();
+    await expect(page.getByTestId("fil-publish-none-confirm")).toBeVisible();
+    await page.getByTestId("fil-publish-crop").click();
+    const stage = page.getByTestId("crop-stage");
+    await expect(stage).toBeVisible();
+    // Mode « autre format » : ni zoom ni aperçus, le cadre est carré.
+    await expect(page.getByTestId("crop-zoom-in")).toHaveCount(0);
+    const box = (await stage.boundingBox()) as { x: number; y: number; width: number; height: number };
+    await page.waitForTimeout(600);
+    const image = stage.locator("img").first();
+    const y0 = ((await image.boundingBox()) as { y: number }).y;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 70, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    expect(y0 - ((await image.boundingBox()) as { y: number }).y).toBeGreaterThan(20);
+    await shot2(page, out, `recadrage-1-1-${theme}-384`);
+    await page.getByTestId("crop-validate").click();
+    await expect(page.getByTestId("square-cropper")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
+    await expect.poll(picture, { timeout: 30_000 }).not.toBe(before);
+    await shot2(page, out, `recadre-1-1-${theme}-384`);
+    await ctx.close();
+  }
+});
+
+async function shot2(page: Page, dir: string, name: string) {
+  mkdirSync(dir, { recursive: true });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${dir}/${name}.png` });
+}
+
 test("captures Béton et Sable, 384 px, police 1 et 1,3 : Fil, menu, publier, plaque, recadrage, carte d'événement", async ({
   browser,
 }) => {

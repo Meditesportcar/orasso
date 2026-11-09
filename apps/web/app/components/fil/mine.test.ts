@@ -23,33 +23,43 @@ const post = (id: string, pseudo = "Damien_66"): FeedPostView =>
 describe("ma publication gardée dans l'onglet", () => {
   it("la rend en carte « Ta publication », la plus récente d'abord", () => {
     const s = memory();
-    rememberPublished(post("a"), s);
-    rememberPublished(post("b"), s);
-    const cards = readPublished("Damien_66", s);
+    rememberPublished("u1", post("a"), s);
+    rememberPublished("u1", post("b"), s);
+    const cards = readPublished("u1", s);
     expect(cards.map((c) => c.id)).toEqual(["feed_post:b", "feed_post:a"]);
     expect(cards[0]?.reason.label).toBe("Ta publication");
     expect(cards[0]?.kind === "feed_post" && cards[0].payload.post.mine).toBe(true);
   });
-  it("ne montre jamais la publication d'un autre pseudo (autre compte dans le même onglet)", () => {
+  it("filtre par l'identifiant du compte, jamais par le pseudo (même pseudo, autre compte : rien)", () => {
     const s = memory();
-    rememberPublished(post("a", "Kenji_66"), s);
-    expect(readPublished("Damien_66", s)).toEqual([]);
+    rememberPublished("u2", post("a", "Damien_66"), s);
+    expect(readPublished("u1", s)).toEqual([]);
+  });
+  it("un pseudo changé n'y change rien : c'est le compte qui compte", () => {
+    const s = memory();
+    rememberPublished("u1", post("a", "Ancien_pseudo"), s);
+    expect(readPublished("u1", s)).toHaveLength(1);
+  });
+  it("écarte une entrée de l'ancien format (sans compte)", () => {
+    const s = memory();
+    s.setItem("orasso:fil:mes-publications", JSON.stringify([post("old")]));
+    expect(readPublished("u1", s)).toEqual([]);
   });
   it("une publication supprimée ne reste pas, un doublon ne compte qu'une fois", () => {
     const s = memory();
-    rememberPublished(post("a"), s);
-    rememberPublished(post("a"), s);
-    expect(readPublished("Damien_66", s)).toHaveLength(1);
+    rememberPublished("u1", post("a"), s);
+    rememberPublished("u1", post("a"), s);
+    expect(readPublished("u1", s)).toHaveLength(1);
     forgetPublished("feed_post:a", s);
-    expect(readPublished("Damien_66", s)).toEqual([]);
+    expect(readPublished("u1", s)).toEqual([]);
   });
   it("garde cinq publications au plus, et résiste à un stockage absent ou abîmé", () => {
     const s = memory();
-    for (let i = 0; i < 8; i++) rememberPublished(post(`p${i}`), s);
-    expect(readPublished("Damien_66", s)).toHaveLength(5);
+    for (let i = 0; i < 8; i++) rememberPublished("u1", post(`p${i}`), s);
+    expect(readPublished("u1", s)).toHaveLength(5);
     s.setItem("orasso:fil:mes-publications", "{pas du json");
-    expect(readPublished("Damien_66", s)).toEqual([]);
-    expect(readPublished("Damien_66", null)).toEqual([]);
-    expect(() => rememberPublished(post("x"), null)).not.toThrow();
+    expect(readPublished("u1", s)).toEqual([]);
+    expect(readPublished("u1", null)).toEqual([]);
+    expect(() => rememberPublished("u1", post("x"), null)).not.toThrow();
   });
 });

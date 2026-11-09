@@ -58,7 +58,7 @@ export function SquareCrop({
   badge?: string;
   hint?: string;
 }) {
-  const square = ratio === 1;
+  const square = !onFocus;
   const box = frameSize(FRAME, ratio);
   const dialog = useRef<HTMLDialogElement>(null);
   const [src, setSrc] = useState<Loaded | null>(null);

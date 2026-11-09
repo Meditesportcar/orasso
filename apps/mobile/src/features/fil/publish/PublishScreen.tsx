@@ -42,6 +42,7 @@ import {
   blurInstead,
   confirmNoPlate,
   type FeedDraftPhoto,
+  framesFromDetection,
   newDraftPhoto,
   plateBadge,
   plateControls,
@@ -175,7 +176,7 @@ export function PublishScreen() {
   const photo = photos[index];
   // Les cartes de décision d'une photo retirée ne doivent pas rester ouvertes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
-  useEffect(() => setConfirming(false), [index]);
+  useEffect(() => setConfirming(false), [index, photo?.photo.uri]);
 
   // Départ de l'écran (publié, abandonné) : les JPEG non floutés du cache de l'appli sont effacés.
   useEffect(() => () => discardTempPhotos(), []);
@@ -190,6 +191,7 @@ export function PublishScreen() {
       rememberTempPhotos(cropped.uri);
       discardTempPhotos([target.photo.uri]);
       setPhotos((list) => list.map((p) => (p.key === key ? recropped(p, cropped, focus) : p)));
+      setConfirming(false);
       setCropping(null);
       void detect(key, cropped, generation.current);
     } catch (e) {
@@ -435,7 +437,7 @@ export function PublishScreen() {
               : photo.noPlate
                 ? L.plateConfirmNoneHint
                 : photo.rects.length
-                  ? L.plateFound(photo.rects.length)
+                  ? (framesFromDetection(photo) ? L.plateFound : L.platePlaced)(photo.rects.length)
                   : L.plateNotFound}
           </Text>
           <View style={styles.row}>
@@ -492,6 +494,7 @@ export function PublishScreen() {
                 kind="s"
                 icon="check"
                 wide
+                disabled={busy || !controls?.canNone}
                 onPress={() => {
                   patch(photo.key, confirmNoPlate);
                   setConfirming(false);
