@@ -11,6 +11,8 @@ export type ScrollAssist = {
   hold: (on: boolean) => void;
   /** Fait défiler la page pour que la vue soit entièrement visible (rien si elle l'est déjà). */
   reveal: (view: View | null) => void;
+  /** Lot R7e2 : remonte la page tout en haut (le Fil dont la liste repart de zéro). */
+  top: () => void;
 };
 
 export const ScrollAssistContext = createContext<ScrollAssist | null>(null);

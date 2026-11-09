@@ -18,6 +18,7 @@ export * from "./eventInvites";
 export * from "./eventProgress";
 export * from "./explore";
 export * from "./feed";
+export * from "./feedList";
 export * from "./follows";
 export * from "./garage";
 export * from "./invitations";

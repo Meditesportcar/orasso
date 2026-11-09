@@ -361,6 +361,7 @@ function Body({
   const assist = useMemo<ScrollAssist>(
     () => ({
       hold: (on) => setHeld(on),
+      top: () => scroll.current?.scrollTo({ y: 0, animated: false }),
       reveal: (view) => {
         // Après le rendu de la fiche : on mesure la page et la vue à l'écran, puis on défile (`revealOffset`).
         setTimeout(() => {

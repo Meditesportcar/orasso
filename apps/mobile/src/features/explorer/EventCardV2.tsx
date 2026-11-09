@@ -96,6 +96,7 @@ export function EventCardV2({
   event,
   big = false,
   portrait = false,
+  hideSeats = false,
   onPress,
   onPressIn,
 }: {
@@ -103,6 +104,8 @@ export function EventCardV2({
   big?: boolean;
   /** Lot M4 : affiche en portrait à gauche, infos à droite (Explorer, carte). */
   portrait?: boolean;
+  /** Lot R7e2 : sans jauge ni mention de places (le Fil ne connaît pas la capacité de l'événement). */
+  hideSeats?: boolean;
   /** Lot M3 : reçoit la place de l'affiche dans la fenêtre (transition vers l'en-tête de la fiche). */
   onPress: (poster: PosterRect | null) => void;
   /**
@@ -211,24 +214,26 @@ export function EventCardV2({
           </Text>
         </View>
       ) : null}
-      <View style={styles.seats}>
-        <View style={[styles.gauge, { backgroundColor: c.plateLine }]}>
-          {seats ? (
-            <View
-              style={[
-                styles.gaugeFill,
-                {
-                  width: `${Math.round(seats.taken * 100)}%`,
-                  backgroundColor: seats.taken > 0.7 ? c.accent : c.plateInk,
-                },
-              ]}
-            />
-          ) : null}
+      {hideSeats ? null : (
+        <View style={styles.seats}>
+          <View style={[styles.gauge, { backgroundColor: c.plateLine }]}>
+            {seats ? (
+              <View
+                style={[
+                  styles.gaugeFill,
+                  {
+                    width: `${Math.round(seats.taken * 100)}%`,
+                    backgroundColor: seats.taken > 0.7 ? c.accent : c.plateInk,
+                  },
+                ]}
+              />
+            ) : null}
+          </View>
+          <Text variant="meta" color={c.plateMuted} testID="event-seats">
+            {seats ? seats.text : L.seatsFree}
+          </Text>
         </View>
-        <Text variant="meta" color={c.plateMuted} testID="event-seats">
-          {seats ? seats.text : L.seatsFree}
-        </Text>
-      </View>
+      )}
     </View>
   );
 
