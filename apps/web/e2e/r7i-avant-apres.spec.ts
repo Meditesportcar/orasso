@@ -275,6 +275,14 @@ test("R7i après : les six démos (jour / soir × lancer, reçu, après), appli 
               .scrollIntoViewIfNeeded()
               .catch(() => undefined);
             await shot(nina2, `p-spot-accueil-${m.id}-appli-${tag}`);
+            // Le Fil : la carte du rendez-vous (tour 2 : visible depuis la fusion de R7e2).
+            await go(nina2, "/fil");
+            await nina2
+              .getByTestId("feed-card-spot_meetup")
+              .first()
+              .scrollIntoViewIfNeeded()
+              .catch(() => undefined);
+            await shot(nina2, `p-spot-fil-${m.id}-appli-${tag}`);
             await go(nina2, `/spot/${id}`);
             await shot(nina2, `p-spot-recu-${m.id}-appli-${tag}`);
             await nina2.context().close();
@@ -290,6 +298,14 @@ test("R7i après : les six démos (jour / soir × lancer, reçu, après), appli 
           await loginInBrowser(page, "nina@orasso.local", undefined, "/app");
           await page.waitForLoadState("networkidle");
           await shot(page, `p-spot-accueil-${m.id}-site-${tag}`);
+          await page.goto("/app/fil");
+          await page.waitForLoadState("networkidle");
+          await page
+            .getByTestId("feed-card-spot_meetup")
+            .first()
+            .scrollIntoViewIfNeeded()
+            .catch(() => undefined);
+          await shot(page, `p-spot-fil-${m.id}-site-${tag}`);
           await page.goto(`/app/spot/${id}`);
           await page.getByTestId("spot-detail").waitFor({ timeout: 30_000 });
           await shot(page, `p-spot-recu-${m.id}-site-${tag}`);

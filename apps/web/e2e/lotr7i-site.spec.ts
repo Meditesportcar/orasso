@@ -261,3 +261,116 @@ test("après la fin : plus de lieu, « Ce rendez-vous est terminé » ; l'onglet
   const replies = await apiCall<{ items: unknown[] }>(damien, "GET", `/spot-meetups/${meetupId}/replies`);
   expect(replies.data.items).toHaveLength(0);
 });
+
+// ---- Tour 2 (relectures Opus et Codex) ----------------------------------------------------------------------------------
+
+/** Lance un rendez-vous par l'API, à l'heure simulée, pour `ms` millisecondes. */
+async function launchBy(cookie: string, label: string, ms: number): Promise<string> {
+  const sim = await apiCall<{ now: string }>(cookie, "GET", "/dev/clock");
+  const start = new Date(sim.data.now);
+  const res = await apiCall<SpotMeetupView>(cookie, "POST", "/me/spot-meetups", {
+    placeLabel: label,
+    lat: 42.62,
+    lng: 3.03,
+    startsAt: start.toISOString(),
+    endsAt: new Date(start.getTime() + ms).toISOString(),
+    note: null,
+    audience: "followers",
+    crewId: null,
+  });
+  expect(res.status, JSON.stringify(res.data)).toBe(201);
+  return res.data.id;
+}
+
+test("tour 2 : « Autour de moi » efface le point choisi et masque l'épingle ; « Lancer » attend une nouvelle sélection", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await cancelActive(damien);
+  await page.context().grantPermissions(["geolocation"]);
+  await page.context().setGeolocation({ latitude: 42.7, longitude: 2.9 });
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app/spot/nouveau");
+  await expect(page.getByTestId("spot-form")).toBeVisible({ timeout: 30_000 });
+  await clickMap(page);
+  await expect(page.getByTestId("spot-missing")).not.toContainText("Choisis un lieu");
+  await expect(page.getByTestId("wizard-pin")).toBeVisible();
+  await page.getByTestId("spot-around-me").click();
+  // Le point visé n'est plus celui qui est montré : il est effacé, l'épingle disparaît, « Lancer » attend.
+  await expect(page.getByTestId("spot-missing")).toContainText("Choisis un lieu", { timeout: 20_000 });
+  await expect(page.getByTestId("wizard-pin")).toBeHidden();
+  await expect(page.getByTestId("spot-launch")).toBeDisabled();
+  // Une nouvelle sélection (toucher sur la carte) ramène l'épingle, et c'est elle qui est envoyée.
+  const map = page.getByTestId("event-map");
+  const box = await map.boundingBox();
+  if (!box) throw new Error("carte sans cadre");
+  await page.mouse.click(box.x + box.width / 2 + 60, box.y + box.height / 2 + 40);
+  await expect(page.getByTestId("wizard-pin")).toBeVisible();
+  await expect(page.getByTestId("spot-missing")).not.toContainText("Choisis un lieu");
+});
+
+test("tour 2 : annulé pendant que la page est ouverte, la page se vide sans rechargement (aucun lieu)", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Quai Vauban", 2 * 3_600_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "lea@orasso.local", undefined, `/app/spot/${id}`);
+  await expect(page.getByTestId("spot-place")).toHaveText("Quai Vauban", { timeout: 30_000 });
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+  // La page relit toutes les 30 s : refus définitif → « indisponible », jamais l'ancienne donnée devant l'erreur.
+  await expect(page.getByTestId("spot-gone")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator("body")).not.toContainText("Quai Vauban");
+});
+
+test("tour 2 : la liste « Qui vient ? » se relit quand le total ne change pas (Léa part, Nina arrive)", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Plage du Barcarès", 3 * 3_600_000);
+  const lea = await login("lea@orasso.local");
+  const nina = await login("nina@orasso.local");
+  await apiCall(lea, "PUT", `/spot-meetups/${id}/reply`, { answer: "yes" });
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "damien@orasso.local", undefined, `/app/spot/${id}`);
+  await expect(page.getByTestId("spot-who")).toContainText("Lea_11", { timeout: 30_000 });
+  await apiCall(lea, "DELETE", `/spot-meetups/${id}/reply`);
+  await apiCall(nina, "PUT", `/spot-meetups/${id}/reply`, { answer: "yes" });
+  await expect(page.getByTestId("spot-who")).toContainText("Nina", { timeout: 60_000 });
+  await expect(page.getByTestId("spot-who")).not.toContainText("Lea_11");
+  await expect(page.getByTestId("spot-who")).toContainText("1 vient");
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+});
+
+test("tour 2 : la page ouverte passe « terminée » à l'heure de fin, même sans réseau", async ({ page }) => {
+  test.setTimeout(240_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Parking des Capellans", 55_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "lea@orasso.local", undefined, `/app/spot/${id}`);
+  await expect(page.getByTestId("spot-place")).toHaveText("Parking des Capellans", { timeout: 30_000 });
+  await page.context().setOffline(true);
+  // La fin passe pendant que le réseau est coupé : lieu, liste et réponses disparaissent d'eux-mêmes.
+  await expect(page.getByTestId("spot-ended")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator("body")).not.toContainText("Capellans");
+  await page.context().setOffline(false);
+});
+
+test("tour 2 : le Fil du site porte la carte d'un rendez-vous pour mes abonnés, jamais celle d'un crew", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Cap Béar", 3 * 3_600_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "lea@orasso.local", undefined, "/app/fil");
+  const card = page.getByTestId("feed-card-spot_meetup");
+  await expect(card.first()).toBeVisible({ timeout: 30_000 });
+  await expect(card.first()).toContainText("Cap Béar");
+  // Dans une liste, les réponses sont des boutons secondaires (pas de bouton principal).
+  await expect(card.first().getByTestId("feed-spot-yes")).toBeVisible();
+  await shot(page, "10-fil-carte");
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+});

@@ -250,3 +250,118 @@ test("après la fin : plus de lieu, « Ce rendez-vous est terminé » ; l'onglet
   const replies = await apiCall<{ items: unknown[] }>(damien, "GET", `/spot-meetups/${meetupId}/replies`);
   expect(replies.data.items).toHaveLength(0);
 });
+
+// ---- Tour 2 (relectures Opus et Codex) ----------------------------------------------------------------------------------
+
+/** Lance un rendez-vous par l'API, à l'heure simulée, pour `ms` millisecondes. */
+async function launchBy(cookie: string, label: string, ms: number): Promise<string> {
+  const sim = await apiCall<{ now: string }>(cookie, "GET", "/dev/clock");
+  const start = new Date(sim.data.now);
+  const res = await apiCall<SpotMeetupView>(cookie, "POST", "/me/spot-meetups", {
+    placeLabel: label,
+    lat: 42.62,
+    lng: 3.03,
+    startsAt: start.toISOString(),
+    endsAt: new Date(start.getTime() + ms).toISOString(),
+    note: null,
+    audience: "followers",
+    crewId: null,
+  });
+  expect(res.status, JSON.stringify(res.data)).toBe(201);
+  return res.data.id;
+}
+
+test("tour 2 : « Autour de moi » efface le point choisi et masque l'épingle ; « Lancer » attend une nouvelle sélection", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await cancelActive(damien);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await ctx.grantPermissions(["geolocation"]);
+  await ctx.setGeolocation({ latitude: 42.7, longitude: 2.9 });
+  await go(page, "/spot/nouveau");
+  await expect(page.getByTestId("spot-launch")).toBeVisible({ timeout: 30_000 });
+  await placeOnMap(page);
+  await expect(page.getByTestId("spot-missing")).not.toContainText("Choisis un lieu");
+  await page.getByTestId("spot-around-me").click();
+  await expect(page.getByTestId("spot-missing")).toContainText("Choisis un lieu", { timeout: 20_000 });
+  await expect(page.getByTestId("wizard-pin")).toBeHidden();
+  await expect(page.getByTestId("spot-launch")).toBeDisabled();
+  await placeOnMap(page);
+  await expect(page.getByTestId("wizard-pin")).toBeVisible();
+  await expect(page.getByTestId("spot-missing")).not.toContainText("Choisis un lieu");
+  await ctx.close();
+});
+
+test("tour 2 : annulé pendant que l'écran est ouvert, il se vide sans rechargement (aucun lieu)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Quai Vauban", 2 * 3_600_000);
+  const lea = await open(browser, "lea@orasso.local");
+  await go(lea.page, `/spot/${id}`);
+  await expect(lea.page.getByTestId("spot-place")).toHaveText("Quai Vauban", { timeout: 30_000 });
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+  await expect(lea.page.getByTestId("spot-gone")).toBeVisible({ timeout: 60_000 });
+  await expect(lea.page.locator("body")).not.toContainText("Quai Vauban");
+  await lea.ctx.close();
+});
+
+test("tour 2 : « Qui vient ? » se relit quand le total ne change pas (Léa part, Nina arrive)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Plage du Barcarès", 3 * 3_600_000);
+  const lea = await login("lea@orasso.local");
+  const nina = await login("nina@orasso.local");
+  await apiCall(lea, "PUT", `/spot-meetups/${id}/reply`, { answer: "yes" });
+  const d = await open(browser, "damien@orasso.local");
+  await go(d.page, `/spot/${id}`);
+  await expect(d.page.getByTestId("spot-who")).toContainText("Lea_11", { timeout: 30_000 });
+  await apiCall(lea, "DELETE", `/spot-meetups/${id}/reply`);
+  await apiCall(nina, "PUT", `/spot-meetups/${id}/reply`, { answer: "yes" });
+  await expect(d.page.getByTestId("spot-who")).toContainText("Nina", { timeout: 60_000 });
+  await expect(d.page.getByTestId("spot-who")).not.toContainText("Lea_11");
+  await expect(d.page.getByTestId("spot-who")).toContainText("1 vient");
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+  await d.ctx.close();
+});
+
+test("tour 2 : l'écran ouvert passe « terminé » à l'heure de fin, même sans réseau", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Parking des Capellans", 55_000);
+  const lea = await open(browser, "lea@orasso.local");
+  await go(lea.page, `/spot/${id}`);
+  await expect(lea.page.getByTestId("spot-place")).toHaveText("Parking des Capellans", { timeout: 30_000 });
+  await lea.ctx.setOffline(true);
+  await expect(lea.page.getByTestId("spot-ended")).toBeVisible({ timeout: 60_000 });
+  await expect(lea.page.locator("body")).not.toContainText("Capellans");
+  await lea.ctx.close();
+});
+
+test("tour 2 : le Fil porte la carte du rendez-vous pour mes abonnés ; l'Accueil gardé hors ligne n'a aucun lieu", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await cancelActive(damien);
+  const id = await launchBy(damien, "Cap Béar", 3 * 3_600_000);
+  const lea = await open(browser, "lea@orasso.local");
+  await go(lea.page, "/accueil");
+  await expect(lea.page.getByTestId("home-spot-meetup")).toContainText("Cap Béar", { timeout: 30_000 });
+  await go(lea.page, "/fil");
+  const card = lea.page.getByTestId("feed-card-spot_meetup");
+  await expect(card.first()).toBeVisible({ timeout: 30_000 });
+  await expect(card.first()).toContainText("Cap Béar");
+  await shot(lea.page, "10-fil-carte");
+  // Rien du lieu n'a été écrit dans la copie locale de l'Accueil (cache du téléphone), alors que la copie existe bien.
+  const stored = await lea.page.evaluate(() =>
+    Object.entries(localStorage)
+      .filter(([k]) => k.includes("home-"))
+      .map(([, v]) => v),
+  );
+  expect(stored.length).toBeGreaterThan(0);
+  expect(stored.join(" ")).not.toMatch(/Cap Béar|42\.62/);
+  await apiCall(damien, "DELETE", `/me/spot-meetups/${id}`);
+  await lea.ctx.close();
+});
