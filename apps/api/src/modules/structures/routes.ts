@@ -16,6 +16,7 @@ import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
+import { storiesSummaryFor } from "../stories/bar";
 import { structuresService } from "./service";
 import { verificationService } from "./verification";
 
@@ -65,9 +66,12 @@ export const structuresRoutes = new Hono<AppEnv>()
   .post("/structures/:id/verification/submit", async (c) =>
     c.json(await verificationService.submit(await requireUser(c), uuidParam(c, "id"))),
   )
-  .get("/structures/by-slug/:slug", async (c) =>
-    c.json(await structuresService.getPublic(c.req.param("slug"), await optionalUser(c))),
-  )
+  .get("/structures/by-slug/:slug", async (c) => {
+    const viewer = await optionalUser(c);
+    const view = await structuresService.getPublic(c.req.param("slug"), viewer);
+    // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
+    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "structure", view.id) });
+  })
   .get("/structures/:id", async (c) =>
     c.json(await structuresService.getForOrganizer(await requireUser(c), uuidParam(c, "id"))),
   )

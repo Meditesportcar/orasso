@@ -17,6 +17,7 @@ import {
   liveLabels,
   localDate,
   orgaDriveLabels,
+  orgaLabels,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { now as clockNow } from "../lib/clock";
@@ -164,7 +165,8 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   });
 
   // Lot 26 : liste d'un jour : « arrivé » ce jour-là (même règle que le direct) ; sinon, entrée enregistrée.
-  const isIn = (i: CheckinListItem) => i.arrivedOnDay ?? Boolean(i.checkedInAt);
+  // Lot R7-0 (tour 2) : « sur place » ce jour-là (une entrée « tout l'événement » vaut les jours suivants).
+  const isIn = (i: CheckinListItem) => i.presentOnDay ?? i.arrivedOnDay ?? Boolean(i.checkedInAt);
   const arrived = items.filter(isIn).length;
   const drive = items.filter((i) => i.method === "drive" && isIn(i)).length;
   const shown = items.filter((i) => {
@@ -244,7 +246,18 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
         items={
           live
             ? [
-                { value: fmtCount(live.arrived), label: "arrivés" },
+                // Jour choisi : « sur place » (une entrée valable tout l'événement compte les jours suivants) et les arrivées du jour.
+                { value: fmtCount(live.arrived), label: live.arrivedToday === undefined ? "arrivés" : "sur place" },
+                ...(live.arrivedToday === undefined
+                  ? []
+                  : [
+                      {
+                        value: fmtCount(live.arrivedToday),
+                        label: orgaLabels
+                          .directArrivedToday(event.days.find((d) => d.id === dayId)?.date === localDate(clockNow()))
+                          .toLowerCase(),
+                      },
+                    ]),
                 { value: Math.max(live.expected - live.arrived, 0), label: "attendus" },
                 { value: `${fmtCount(live.staffPresent)}/${fmtCount(live.staffExpected)}`, label: "staff" },
                 ...(live.providers.expected > 0

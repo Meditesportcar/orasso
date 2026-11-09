@@ -232,7 +232,10 @@ function DirectEvent({
             <View style={styles.counters} testID="orga-direct-counters">
               <Counters
                 items={[
-                  { value: l.arrived, label: orgaLabels.directArrived },
+                  {
+                    value: l.arrived,
+                    label: l.arrivedToday === undefined ? orgaLabels.directArrived : orgaLabels.directOnSite,
+                  },
                   { value: missingVehicles(l), label: orgaLabels.directExpected },
                   { value: l.alertsOpen, label: orgaLabels.directAlerts },
                 ]}
@@ -240,6 +243,16 @@ function DirectEvent({
               />
               <Counters
                 items={[
+                  ...(l.arrivedToday === undefined
+                    ? []
+                    : [
+                        {
+                          value: l.arrivedToday,
+                          label: orgaLabels.directArrivedToday(
+                            days.find((d) => d.id === shownDay)?.date === localDate(clockNow()),
+                          ),
+                        },
+                      ]),
                   { value: `${l.staffPresent}/${l.staffExpected}`, label: orgaLabels.directStaff },
                   ...(l.providers.expected > 0
                     ? [{ value: `${l.providers.arrived}/${l.providers.expected}`, label: orgaLabels.directProviders }]

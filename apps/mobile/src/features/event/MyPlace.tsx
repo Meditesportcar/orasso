@@ -35,8 +35,8 @@ export function MyPlace({
   const slot = app.arrival ?? null;
   const late = app.status === "accepted" && now >= new Date(app.withdrawDeadline);
   const canWithdraw = !app.checkedInAt && ["pending", "waitlisted", "accepted", "offered"].includes(app.status);
-  const startsAt = app.day?.startsAt ?? app.event.startsAt;
-  const live = now >= new Date(startsAt) && now < new Date(app.day?.endsAt ?? app.event.endsAt);
+  // Lot R7-0 : « En cours · jour 2 sur 4 » pour tout l'événement, « En cours » pour un jour choisi.
+  const span = app.day ?? app.event;
   return (
     <View style={[styles.box, { backgroundColor: c.poster, boxShadow: t.shadow.shadowPoster }]} testID="my-place">
       <View style={styles.head}>
@@ -46,7 +46,7 @@ export function MyPlace({
         <View style={styles.status}>
           <ApplicationTag app={app} onPoster />
           <Text variant="meta" color={c.posterMuted} testID="my-place-countdown">
-            {live ? L.live : nearCountdown(startsAt, now)}
+            {nearCountdown(span, now)}
           </Text>
         </View>
       </View>

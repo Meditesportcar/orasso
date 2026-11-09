@@ -63,6 +63,7 @@ import { anonymizeCommunicationForDeletedAccount } from "../communication/anonym
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
+import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
@@ -79,8 +80,10 @@ import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
+import { anonymizeStoriesForDeletedAccount } from "../stories/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 import { assertInterests } from "../vehicles/categories";
+import { removeOrRetry } from "../vehicles/photos-blur";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -462,10 +465,15 @@ export const accountService = {
       await anonymizeSocialForDeletedAccount(tx, userId);
       // Lot R6c : invitations à un événement (envoyées, reçues), invitations coupées, notifications qui le citent.
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
+      // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.
+      await anonymizeStoriesForDeletedAccount(tx, userId, after);
+
       // Lot R7c1 : les notifications regroupées des autres (flammes sur une story…) perdent son pseudo et son avatar.
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
+      // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
+      photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
@@ -528,9 +536,7 @@ export const accountService = {
         ip,
       });
     });
-    for (const key of photoKeys) {
-      await storage.remove(key).catch(() => undefined);
-    }
+    for (const key of photoKeys) await removeOrRetry(key);
     if (oldEmail && opts.confirm) {
       // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
       // anonymisée et la copie du transport journal supprimée.

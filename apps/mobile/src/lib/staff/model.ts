@@ -192,17 +192,36 @@ export function markSeen(state: StaffState, passId: string, at: Date): void {
 }
 
 /**
- * Arrivé ce jour-là (même règle que le direct de l'API) : événement d'un jour ou candidature d'un jour = entrée
- * enregistrée ; « tout l'événement » sur plusieurs jours = entrée, lecture reçue par le serveur (`lastSeenAt`) ou
- * lecture sur cet appareil datées d'aujourd'hui (Paris).
+ * Présent sur place (même règle que le direct de l'API, `wholeEventAccess`) : événement d'un jour ou candidature d'un
+ * jour = entrée enregistrée ; « tout l'événement » sur plusieurs jours = entré un jour précédent ou aujourd'hui, sans
+ * rescan (personne ne pointe les sorties), ou lecture du QR d'aujourd'hui. Une entrée datée d'un jour à venir (horloge
+ * déréglée) ne compte pas.
  */
 export function arrivedOn(state: StaffState, entry: AccessListEntry, now: Date): boolean {
   const at = checkedInAt(state, entry);
   if ((state.meta.days?.length ?? 0) < 2 || entry.dayDate) return Boolean(at);
   const today = localDate(now);
-  return [at, entry.lastSeenAt ?? null, state.seen?.get(entry.passId) ?? null].some(
+  if (at !== null && localDate(new Date(at)) <= today) return true;
+  return seenToday(state, entry, now);
+}
+
+/** Lecture du QR reçue par le serveur (`lastSeenAt`) ou faite sur cet appareil, datée d'aujourd'hui (Paris). */
+function seenToday(state: StaffState, entry: AccessListEntry, now: Date): boolean {
+  const today = localDate(now);
+  return [entry.lastSeenAt ?? null, state.seen?.get(entry.passId) ?? null].some(
     (x) => x !== null && localDate(new Date(x)) === today,
   );
+}
+
+/**
+ * Arrivée du jour (à part de « présent ») : événement d'un jour ou candidature d'un jour = entrée enregistrée ;
+ * « tout l'événement » sur plusieurs jours = entrée d'aujourd'hui, ou QR lu aujourd'hui.
+ */
+export function arrivedTodayOn(state: StaffState, entry: AccessListEntry, now: Date): boolean {
+  const at = checkedInAt(state, entry);
+  if ((state.meta.days?.length ?? 0) < 2 || entry.dayDate) return Boolean(at);
+  if (at !== null && localDate(new Date(at)) === localDate(now)) return true;
+  return seenToday(state, entry, now);
 }
 
 // --- Synchro ---------------------------------------------------------------------------------------------------
@@ -681,6 +700,11 @@ export type ZoneCount = {
   capacity: number | null;
 };
 
+/** Places restantes d'une zone : les présents sur place déduits de la capacité, jamais au-delà (0 au plus bas). */
+export function placesLeft(z: Pick<ZoneCount, "arrived" | "capacity">): number | null {
+  return z.capacity === null ? null : Math.max(0, z.capacity - z.arrived);
+}
+
 /**
  * Lot 26 : une entrée est attendue ce jour-là — toujours pour un événement d'un jour ; sinon tout l'événement, ou le
  * jour de sa candidature (date locale de Paris).
@@ -696,23 +720,26 @@ export function expectedOn(
 
 /**
  * « 62 / 116 » (entrés / retenus) et attendus / arrivés par zone, d'après la liste locale. Plusieurs jours (lot 26) :
- * les attendus du jour (tout l'événement et le jour de `now`).
+ * les attendus du jour (tout l'événement et le jour de `now`) ; `arrived` = les présents sur place (lot R7-0, tour 3 :
+ * un « tout l'événement » entré la veille est toujours là), `arrivedToday` = les arrivées du jour, à part.
  */
 export function counters(
   state: StaffState,
   now: Date = clockNow(),
-): { arrived: number; expected: number; zones: ZoneCount[] } {
+): { arrived: number; arrivedToday: number; expected: number; zones: ZoneCount[] } {
   const zones = new Map<string | null, ZoneCount>();
   for (const z of state.meta.zones) {
     zones.set(z.code, { code: z.code, name: z.name, arrived: 0, expected: 0, capacity: z.capacity });
   }
   let arrived = 0;
+  let arrivedToday = 0;
   let expected = 0;
   for (const e of state.entries.values()) {
     if (e.status !== "valid" || !expectedOn(state.meta, e, now)) continue;
     expected++;
     const inside = arrivedOn(state, e, now);
     if (inside) arrived++;
+    if (arrivedTodayOn(state, e, now)) arrivedToday++;
     const z = zones.get(e.zoneCode) ?? {
       code: e.zoneCode,
       name: e.zoneName ?? "Sans zone",
@@ -724,7 +751,7 @@ export function counters(
     if (inside) z.arrived++;
     zones.set(e.zoneCode, z);
   }
-  return { arrived, expected, zones: [...zones.values()] };
+  return { arrived, arrivedToday, expected, zones: [...zones.values()] };
 }
 
 // --- File d'envoi ----------------------------------------------------------------------------------------------

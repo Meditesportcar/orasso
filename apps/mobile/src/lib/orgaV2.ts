@@ -54,7 +54,7 @@ export function draftMissing(event: EventOrganizer, at: Date, structureVerified 
 export function publishedStatus(startsAt: string, endsAt: string, at: Date): string {
   const t = at.getTime();
   if (Date.parse(startsAt) <= t && t < Date.parse(endsAt)) return orgaV2Labels.statusLive;
-  const countdown = dayCountdown(startsAt, at);
+  const countdown = dayCountdown({ startsAt, endsAt }, at);
   const days = Math.round((Date.parse(startsAt) - t) / 86_400_000);
   if (days > 30) return orgaV2Labels.statusPublishedOn(`${formatShortDate(startsAt)}.`);
   return orgaV2Labels.statusPublishedIn(countdown);

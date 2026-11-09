@@ -274,6 +274,12 @@ describe("événement sur plusieurs jours (lot 26)", () => {
       ],
     });
     expect(day1.json.results.map((r: { result: string }) => r.result)).toEqual(["accepted", "accepted"]);
+    // Direct du jour 1 : A (tout l'événement) et C (jour 1) entrés, ce sont les arrivées du jour.
+    expect((await call(damien, "GET", `/events/${eventId}/live?dayId=${d1.id}`)).json).toMatchObject({
+      dayId: d1.id,
+      arrived: 2,
+      arrivedToday: 2,
+    });
 
     // Jour 2 : la liste resynchronisée montre A déjà entré → « déjà entré » (S29), le staff laisse passer.
     clock.set(paris(3, 15, 9, 30));
@@ -282,9 +288,11 @@ describe("événement sur plusieurs jours (lot 26)", () => {
       sync2.entries.map((e: LocalAccessEntry) => [e.passId, e] as const),
     );
     expect(scan(aPayload, paris(3, 15, 10), entries2)).toMatchObject({ decision: "already" });
-    // Direct du jour 2 : attendus A + D ; A pas encore lu ce jour-là (son entrée date du jour 1).
+    // Direct du jour 2 : attendus A + D. A (tout l'événement, entré le jour 1) est sur place sans nouveau scan, mais n'est pas
+    // une arrivée du jour ; C (accès du jour 1) n'est pas du jour 2 (lot R7-0, tour 2).
     const live0 = (await call(damien, "GET", `/events/${eventId}/live?dayId=${d2.id}`)).json;
-    expect(live0).toMatchObject({ dayId: d2.id, expected: 2, arrived: 0 });
+    expect(live0).toMatchObject({ dayId: d2.id, expected: 2, arrived: 1, arrivedToday: 0 });
+    expect(live0.byZone.reduce((n: number, z: { arrived: number }) => n + z.arrived, 0)).toBe(1);
     clock.set(paris(3, 15, 10, 5));
     const day2 = await call(julie, "POST", `/events/${eventId}/scans`, {
       deviceId: dev!.id,
@@ -309,7 +317,14 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     expect((await call(damien, "GET", `/events/${eventId}/live?dayId=${d2.id}`)).json).toMatchObject({
       expected: 2,
       arrived: 2,
+      arrivedToday: 2,
     });
+    // Jour 3 : A, entré le jour 1, est toujours sur place ; personne n'est entré ce jour-là (et C, jour 1, n'y est pas).
+    const live3 = (await call(damien, "GET", `/events/${eventId}/live?dayId=${d3.id}`)).json;
+    expect(live3.arrived).toBeGreaterThanOrEqual(1);
+    expect(live3.arrivedToday).toBe(0);
+    // Sans jour choisi : tout l'événement, pas de champ « arrivées du jour ».
+    expect((await call(damien, "GET", `/events/${eventId}/live`)).json.arrivedToday).toBeUndefined();
     // Direct d'un jour d'un autre événement : introuvable.
     expect((await call(damien, "GET", `/events/${eventId}/live?dayId=${randomUUID()}`)).status).toBe(404);
 

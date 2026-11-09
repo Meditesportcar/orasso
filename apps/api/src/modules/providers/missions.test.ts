@@ -484,7 +484,7 @@ describe("droits : structure suspendue, assistance, auto-évaluation, staff", ()
   it("super admin en assistance : jamais d'avis au nom de la structure (403)", async () => {
     const appId = await acceptedOn(sofia, nocturneId);
     clock.set(paris(10, 18, 10));
-    const admin = await signUp("Admin_Orasso", { twoFactor: true, role: "super_admin" });
+    const admin = await signUp("Admin_Plateforme", { twoFactor: true, role: "super_admin" });
     await db
       .insert(assistanceRequests)
       .values({ structureId, requestedBy: orga.id, message: "Aide", createdAt: clock.now });

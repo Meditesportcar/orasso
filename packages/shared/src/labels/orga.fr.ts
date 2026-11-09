@@ -37,6 +37,9 @@ export const orgaLabels = {
   directEventDay: "Jour J",
   directNext: "Prochain événement",
   directArrived: "Arrivés",
+  /** Jour choisi d'un événement sur plusieurs jours (lot R7-0, tour 2) : `arrived` dit qui est là, pas qui vient d'entrer. */
+  directOnSite: "Sur place",
+  directArrivedToday: (isToday: boolean) => (isToday ? "Arrivées aujourd'hui" : "Arrivées du jour"),
   directExpected: "Attendus",
   directStaff: "Staff",
   directProviders: "Prestataires",

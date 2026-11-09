@@ -7,9 +7,10 @@
 
 import { Plate, Text, useTheme } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, wallTime, yearToShow } from "@orasso/shared";
-import { createContext, type ReactNode, useContext } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { createContext, type ReactNode, useContext, useState } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { fitTitle } from "@/features/home/fit";
 import { now } from "@/lib/clock";
 
 const WEEKDAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
@@ -61,13 +62,57 @@ export function Ticket({
 }: TicketProps) {
   const { t } = useTheme();
   const c = t.color;
+  // Le titre ne se coupe qu'entre deux mots (lot R7-0, tour 2) : son corps suit le mot le plus large, police du système comprise.
+  const { fontScale } = useWindowDimensions();
+  const [bodyW, setBodyW] = useState(0);
+  const [plateW, setPlateW] = useState(0);
+  // Lot R7-0, tour 3 : jamais sous 11 ; si le mot le plus long ne tient pas à 11 dans la colonne, le titre passe sur toute
+  // la largeur du ticket (sous la date et l'en-tête) au lieu de rétrécir.
+  const { size: titleSize, full: titleFull } = fitTitle(
+    title,
+    bodyW - 2 * BODY_PAD,
+    plateW - 2 * BODY_PAD,
+    fontScale,
+    styles.title.fontSize,
+  );
   const w = wallTime(new Date(date), BUSINESS_TIMEZONE);
   const weekday = WEEKDAYS[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()];
   const year = yearToShow(date, now(), BUSINESS_TIMEZONE);
   const ink = highlight ? c.posterInk : c.plateInk;
   const muted = highlight ? c.posterMuted : c.plateMuted;
-  const content = (
+  const titleNode = (
+    <Pressable
+      onPress={onPressTitle ?? onPress}
+      disabled={!(onPressTitle ?? onPress)}
+      accessibilityRole={onPressTitle || onPress ? "link" : undefined}
+      accessibilityLabel={onPressTitle || onPress ? `${title} : ouvrir la fiche` : undefined}
+    >
+      <Text
+        variant="posterS"
+        color={dim ? muted : ink}
+        style={[styles.title, { fontSize: titleSize, lineHeight: Math.round(titleSize * 1.07) }]}
+      >
+        {title}
+      </Text>
+    </Pressable>
+  );
+  const rest = (
     <>
+      {detail ? (
+        <Text variant="caption" color={muted} style={styles.cap}>
+          {detail}
+        </Text>
+      ) : null}
+      {notes?.map((n) => (
+        <Text key={n} variant="caption" color={muted} style={styles.cap}>
+          {n}
+        </Text>
+      ))}
+      {children ? <View style={styles.actions}>{children}</View> : null}
+    </>
+  );
+  const top = (
+    <View style={styles.row} onLayout={(e) => setPlateW(e.nativeEvent.layout.width)}>
       <View style={[styles.stub, { borderRightColor: highlight ? c.posterMuted : c.plateLine }]}>
         <Text variant="label" color={muted} style={styles.stubSmall}>
           {weekday}
@@ -88,7 +133,7 @@ export function Ticket({
         <View style={[styles.notch, styles.notchTop, { backgroundColor: c.ground }]} />
         <View style={[styles.notch, styles.notchBottom, { backgroundColor: c.ground }]} />
       </View>
-      <View style={styles.body}>
+      <View style={styles.body} onLayout={(e) => setBodyW(e.nativeEvent.layout.width)}>
         {badge || lead ? (
           <View style={styles.head}>
             {badge}
@@ -99,29 +144,21 @@ export function Ticket({
             ) : null}
           </View>
         ) : null}
-        <Pressable
-          onPress={onPressTitle ?? onPress}
-          disabled={!(onPressTitle ?? onPress)}
-          accessibilityRole={onPressTitle || onPress ? "link" : undefined}
-          accessibilityLabel={onPressTitle || onPress ? `${title} : ouvrir la fiche` : undefined}
-        >
-          <Text variant="posterS" color={dim ? muted : ink} style={styles.title}>
-            {title}
-          </Text>
-        </Pressable>
-        {detail ? (
-          <Text variant="caption" color={muted} style={styles.cap}>
-            {detail}
-          </Text>
-        ) : null}
-        {notes?.map((n) => (
-          <Text key={n} variant="caption" color={muted} style={styles.cap}>
-            {n}
-          </Text>
-        ))}
-        {children ? <View style={styles.actions}>{children}</View> : null}
+        {titleFull ? null : titleNode}
+        {titleFull ? null : rest}
+      </View>
+    </View>
+  );
+  const content = titleFull ? (
+    <>
+      {top}
+      <View style={styles.wide}>
+        {titleNode}
+        {rest}
       </View>
     </>
+  ) : (
+    top
   );
   const ticket = highlight ? (
     <View style={[styles.plate, { backgroundColor: c.poster, boxShadow: t.shadow.shadowCard }]} testID={testID}>
@@ -154,8 +191,14 @@ export function Ticket({
   );
 }
 
+/** Marge latérale du texte d'un ticket. */
+const BODY_PAD = 14;
+
 const styles = StyleSheet.create({
-  plate: { flexDirection: "row", padding: 0, borderRadius: 18, overflow: "hidden" },
+  plate: { flexDirection: "column", padding: 0, borderRadius: 18, overflow: "hidden" },
+  row: { flexDirection: "row" },
+  // Titre passé sur toute la largeur du ticket (lot R7-0, tour 3) : sous la date et l'en-tête.
+  wide: { gap: 7, paddingBottom: 12, paddingHorizontal: BODY_PAD },
   stub: {
     width: 70,
     alignItems: "center",
@@ -170,7 +213,7 @@ const styles = StyleSheet.create({
   notch: { position: "absolute", right: -9, width: 16, height: 16, borderRadius: 8 },
   notchTop: { top: -8 },
   notchBottom: { bottom: -8 },
-  body: { flex: 1, minWidth: 0, gap: 7, paddingVertical: 12, paddingHorizontal: 14 },
+  body: { flex: 1, minWidth: 0, gap: 7, paddingVertical: 12, paddingHorizontal: BODY_PAD },
   head: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   title: { fontSize: 15, lineHeight: 16 },
   cap: { fontSize: 12.5, lineHeight: 17 },

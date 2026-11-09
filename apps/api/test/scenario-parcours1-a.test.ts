@@ -68,7 +68,7 @@ describe("parcours n° 1, première moitié", () => {
   it("de l'inscription à la liste d'attente automatique, puis le verrouillage", async () => {
     // L'organisateur crée sa structure, l'équipe Orasso la vérifie, il crée et publie un événement de 2 places.
     const damien = await signUp("Damien_66", { twoFactor: true });
-    const admin = await signUp("Equipe_Orasso", { twoFactor: true, role: "super_admin" });
+    const admin = await signUp("Equipe_Plateforme", { twoFactor: true, role: "super_admin" });
     const structure = await call(damien, "POST", "/structures", {
       kind: "association",
       name: "MéditeSportCar",

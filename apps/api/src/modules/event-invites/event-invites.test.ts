@@ -320,6 +320,11 @@ describe("inviter du monde", () => {
     ]);
     // Un autre ne voit pas les invitations de Julie.
     expect((await call(kenji, "GET", `/events/${e.id}/peer-invitations/received`)).json).toBeNull();
+    // Lot R7-0 : candidature en attente, le bandeau reste ; retenue (a fortiori entrée), il disparaît.
+    await apply(julie, e.id, "pending");
+    expect((await call(julie, "GET", `/events/${e.id}/peer-invitations/received`)).json).not.toBeNull();
+    await db.update(applications).set({ status: "accepted" }).where(eq(applications.userId, julie.id));
+    expect((await call(julie, "GET", `/events/${e.id}/peer-invitations/received`)).json).toBeNull();
   });
 
   it("garde de livraison : événement annulé, invité déjà inscrit, auteur coupé entre-temps", async () => {
