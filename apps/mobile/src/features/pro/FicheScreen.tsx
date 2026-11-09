@@ -15,6 +15,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
+import { PartnersManage } from "@/features/partnerships/PartnersManage";
+import { PartnersSection } from "@/features/partnerships/PartnersSection";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
 import { mapsUrl } from "@/lib/directions";
@@ -56,6 +58,8 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   const { fait } = useLocalSearchParams<{ fait?: string }>();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
+  // Lot R7m1 : mes partenaires (passionnés) et mes propositions en attente.
+  const partnerships = useApi(() => api.proPartnerships(pro?.id ?? ""), [pro?.id], { enabled: Boolean(pro?.id) });
   const [mode, setMode] = useState<Mode>(initial);
   const [viewer, setViewer] = useState<number | null>(null);
   const siretPending: SiretPending = useRef(null);
@@ -178,6 +182,17 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               <Muted variant="body">{proV2Labels.discountsNone}</Muted>
             )}
 
+            <PartnersSection
+              items={(partnerships.data?.items ?? [])
+                .filter((i) => i.status === "active")
+                .map((i) => ({
+                  pseudo: i.user.pseudo,
+                  avatarUrl: i.user.avatarUrl,
+                  grade: i.user.grade,
+                  vehicle: i.vehicle,
+                }))}
+            />
+
             <SecH
               title={proV2Labels.worksTitle}
               hint={pro.photos.length ? proV2Labels.works(pro.photos.length) : undefined}
@@ -242,6 +257,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
             />
             <DiscountsBlock pro={pro} reload={reload} />
             <MediaBlock pro={pro} reload={reload} />
+            <PartnersManage proId={pro.id} data={partnerships.data} reload={partnerships.reload} />
           </View>
 
           <View style={[styles.stack, mode !== "posts" && styles.hidden]} testID="pro-posts">

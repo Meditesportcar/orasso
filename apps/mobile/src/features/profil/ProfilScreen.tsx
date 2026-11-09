@@ -225,7 +225,7 @@ export function ProfilScreen() {
               target === "sorties" ? setTab("sorties") : router.push({ pathname: "/reseau", params: { liste: target } })
             }
           />
-          <PartnersLine pseudo={profile?.pseudo ?? ""} mine />
+          <PartnersLine mine />
           <Button
             variant="secondary"
             icon="eye"

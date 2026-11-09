@@ -134,6 +134,16 @@ function SettingsBody() {
   }
 
   const [pointsIssue, setPointsIssue] = useState<string | null>(null);
+  // Lot R7m1 : le jour à partir duquel proposer un partenariat demande l'abonnement pro.
+  const [partnershipFrom, setPartnershipFrom] = useState("");
+  useEffect(() => {
+    setPartnershipFrom(String(entryOf(settings, "partnerships.subscription_from")?.value ?? ""));
+  }, [settings]);
+  async function savePartnershipFrom() {
+    setNotice(null);
+    if (await gesture.run(() => put("partnerships.subscription_from", partnershipFrom.trim())))
+      setNotice(adminTexts.saved);
+  }
 
   // Modèles de messages d'Orasso.
   const [tplAsk, setTplAsk] = useState<TemplateView | null>(null);
@@ -323,6 +333,28 @@ function SettingsBody() {
                 Dernière modification : {formatDayHour(entryOf(settings, "points.malus")?.updatedAt ?? "")}
               </Text>
             ) : null}
+          </Plate>
+
+          <SectionTitle>{adminTexts.partnershipsTitle}</SectionTitle>
+          <Muted variant="caption">{adminTexts.partnershipsHint}</Muted>
+          <Plate style={styles.block} testID="admin-partnerships">
+            <TextField
+              label={adminSettingLabels["partnerships.subscription_from"]}
+              value={partnershipFrom}
+              onChangeText={setPartnershipFrom}
+              placeholder={adminTexts.partnershipsDayHint}
+              keyboardType="numbers-and-punctuation"
+              testID="field-partnerships.subscription_from"
+            />
+            <Button
+              variant="plate"
+              icon="check"
+              onPress={() => void savePartnershipFrom()}
+              fullWidth
+              testID="admin-partnerships-save"
+            >
+              {adminTexts.partnershipsSave}
+            </Button>
           </Plate>
 
           <SectionTitle>{adminTexts.listsTitle}</SectionTitle>

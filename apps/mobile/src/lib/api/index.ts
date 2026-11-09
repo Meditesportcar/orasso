@@ -24,6 +24,7 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
@@ -77,6 +78,7 @@ export const api = {
   ...afterEventApi,
   ...passportApi,
   ...presenceApi,
+  ...partnershipsApi,
   ...adminApi,
 
   ...orgaApi,
