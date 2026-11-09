@@ -68,7 +68,8 @@ export function deliverAfter(
   urgent?: QuietOverride,
 ): Date {
   if (!isQuietHour(now, timeZone)) return now;
+  // Un type qui a sa propre exception (`urgent`) n'obéit qu'à elle : la règle « jour J » ne s'y ajoute pas.
+  if (urgent) return isUrgent(urgent, eventStartsAt, now, timeZone) ? now : endOfQuietHours(now, timeZone);
   if (eventStartsAt && isEventDay(eventStartsAt, now, timeZone)) return now;
-  if (isUrgent(urgent, eventStartsAt, now, timeZone)) return now;
   return endOfQuietHours(now, timeZone);
 }

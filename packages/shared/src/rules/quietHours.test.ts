@@ -46,6 +46,13 @@ describe("heures calmes et notification urgente (lot R7c1)", () => {
       endOfQuietHours(at(9, 22, 30)),
     );
   });
+  it("rendez-vous au spot du même jour : à 1 h pour 18 h il attend 8 h, à 16 h 30 pour 18 h il part tout de suite", () => {
+    const within = { within: TWO_HOURS };
+    expect(deliverAfter(at(10, 1, 0), at(10, 18, 0), undefined, within)).toEqual(endOfQuietHours(at(10, 1, 0)));
+    expect(deliverAfter(at(10, 16, 30), at(10, 18, 0), undefined, within)).toEqual(at(10, 16, 30));
+    // sans exception propre, le jour J lève toujours les heures calmes
+    expect(deliverAfter(at(10, 1, 0), at(10, 18, 0))).toEqual(at(10, 1, 0));
+  });
   it("en journée, rien ne change", () => {
     const day = at(9, 14, 0);
     expect(deliverAfter(day, at(12, 14), undefined, { days: 1 })).toEqual(day);

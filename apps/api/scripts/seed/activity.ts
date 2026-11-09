@@ -5,7 +5,7 @@
 //   Narbonne) et une invitation à rejoindre le staff d'une structure (Sarah_66).
 // Idempotent : chaque ligne porte une marque (`data.seed`), posée une seule fois. Aucune notification n'est envoyée (insérées
 // déjà livrées, jamais de push). Le Lydia peut être recréé par son seed : l'horaire modifié est reposé s'il a disparu.
-import { type NotificationType, notificationTypes, r7DefaultContent, r7NotificationTable } from "@orasso/shared";
+import { type NotificationType, notificationTypes, r7DefaultContent, type r7NotificationTable } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -75,7 +75,13 @@ export async function seedActivity() {
         actors: likers.slice(0, 3).map((a) => ({ pseudo: a.pseudo, avatarUrl: a.avatarUrl })),
       },
     },
-    { key: "story_mention", type: "story_mention", hoursAgo: 3, ...content("story_mention", who("Julie")), data: { actor: actor("Julie") } },
+    {
+      key: "story_mention",
+      type: "story_mention",
+      hoursAgo: 3,
+      ...content("story_mention", who("Julie")),
+      data: { actor: actor("Julie") },
+    },
     {
       key: "vote_opened",
       type: "vote_opened",
@@ -92,8 +98,20 @@ export async function seedActivity() {
       body: `${who("Nina")} te suit.`,
       data: { actor: actor("Nina"), actorIds: [actor("Nina").userId], pseudos: [who("Nina")] },
     },
-    { key: "vote_podium", type: "vote_podium", hoursAgo: 22, ...content("vote_podium", "Plus belle japonaise"), eventId: lydia?.id ?? null },
-    { key: "presence_validated", type: "presence_validated", hoursAgo: 26, ...content("presence_validated", lydia?.title ?? "Rassemblement du Lydia"), eventId: lydia?.id ?? null },
+    {
+      key: "vote_podium",
+      type: "vote_podium",
+      hoursAgo: 22,
+      ...content("vote_podium", "Plus belle japonaise"),
+      eventId: lydia?.id ?? null,
+    },
+    {
+      key: "presence_validated",
+      type: "presence_validated",
+      hoursAgo: 26,
+      ...content("presence_validated", lydia?.title ?? "Rassemblement du Lydia"),
+      eventId: lydia?.id ?? null,
+    },
     {
       key: "event_updated",
       type: "event_updated",
@@ -104,7 +122,13 @@ export async function seedActivity() {
       read: true,
     },
     // Il y a deux jours
-    { key: "memory", type: "memory", hoursAgo: 44, ...content("memory", "la Nocturne de Canet"), data: { actor: actor("Kenji") } },
+    {
+      key: "memory",
+      type: "memory",
+      hoursAgo: 44,
+      ...content("memory", "la Nocturne de Canet"),
+      data: { actor: actor("Kenji") },
+    },
     {
       key: "follow_accepted",
       type: "follow_accepted",
@@ -114,8 +138,20 @@ export async function seedActivity() {
       data: { actor: actor("Marc") },
       read: true,
     },
-    { key: "spot_meetup_reply", type: "spot_meetup_reply", hoursAgo: 50, ...content("spot_meetup_reply", who("Theo")), data: { actor: actor("Theo") } },
-    { key: "partnership_accepted", type: "partnership_accepted", hoursAgo: 52, ...content("partnership_accepted", "Wrap 66"), read: true },
+    {
+      key: "spot_meetup_reply",
+      type: "spot_meetup_reply",
+      hoursAgo: 50,
+      ...content("spot_meetup_reply", who("Theo")),
+      data: { actor: actor("Theo") },
+    },
+    {
+      key: "partnership_accepted",
+      type: "partnership_accepted",
+      hoursAgo: 52,
+      ...content("partnership_accepted", "Wrap 66"),
+      read: true,
+    },
   ];
 
   let added = 0;
@@ -160,7 +196,8 @@ export async function seedActivity() {
       .values({
         fromUserId: nina.userId,
         toUserId: damien.userId,
-        message: "Salut Damien, ta Nissan était au Lydia ? Elle est superbe, je peux te poser une question sur la préparation ?",
+        message:
+          "Salut Damien, ta Nissan était au Lydia ? Elle est superbe, je peux te poser une question sur la préparation ?",
       })
       .onConflictDoNothing()
       .returning({ id: t.contactRequests.id });
@@ -186,7 +223,13 @@ export async function seedActivity() {
     if (structure) {
       const done = await db
         .insert(t.structureMembers)
-        .values({ structureId: structure.id, userId: damien.userId, role: "staff", status: "invited", invitedBy: sarah.userId })
+        .values({
+          structureId: structure.id,
+          userId: damien.userId,
+          role: "staff",
+          status: "invited",
+          invitedBy: sarah.userId,
+        })
         .onConflictDoNothing()
         .returning({ id: t.structureMembers.id });
       requests += done.length;
