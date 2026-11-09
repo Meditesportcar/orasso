@@ -29,13 +29,14 @@ describe("migration 0068 sur une base avec données", () => {
       await admin.query(`drop database if exists "${name}"`);
       await admin.query(`create database "${name}"`);
 
-      // Les migrations jusqu'à 0067 seulement.
+      // Les migrations d'avant celle des stories seulement (elle et celles qui la suivent sont retirées).
       cpSync(full, folder, { recursive: true });
-      rmSync(join(folder, "0070_stories.sql"));
       const journalPath = join(folder, "meta", "_journal.json");
       const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
-      expect(journal.entries.at(-1)?.tag).toBe("0070_stories");
-      journal.entries = journal.entries.filter((e) => e.tag !== "0070_stories");
+      const at = journal.entries.findIndex((e) => e.tag.endsWith("_stories"));
+      expect(at).toBeGreaterThan(0);
+      for (const e of journal.entries.slice(at)) rmSync(join(folder, `${e.tag}.sql`));
+      journal.entries = journal.entries.slice(0, at);
       writeFileSync(journalPath, JSON.stringify(journal));
 
       pool = new pg.Pool({ connectionString: urlOfDatabase(name), max: 2 });
