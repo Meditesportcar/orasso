@@ -46,7 +46,7 @@ export const afterEventLabels = {
   // Remerciement.
   thanksTitle: "Remerciement aux présents",
   thanksIntro:
-    "Un message dans la Boîte de chaque présent, avec son lien pour laisser un avis. Il part une seule fois, jusqu'à J+7.",
+    "Un message dans les Messages de chaque présent, avec son lien pour laisser un avis. Il part une seule fois, jusqu'à J+7.",
   thanksTemplate: "Modèle de remerciement",
   thanksBody: "Texte du message",
   thanksPreview: "Aperçu pour toi",
@@ -63,7 +63,7 @@ export const afterEventLabels = {
     too_late: "Le remerciement n'est plus possible après J+7.",
   },
   thanksNoPresent: "Personne n'a été pointé : il n'y a personne à remercier.",
-  thanksEmail: "Les présents reçoivent un message dans leur Boîte, une notification et une ligne du Journal.",
+  thanksEmail: "Les présents reçoivent un message dans leurs Messages, une notification et une ligne du Journal.",
 
   // Export.
   exportTitle: "Export des participants",

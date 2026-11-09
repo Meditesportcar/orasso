@@ -93,8 +93,8 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   expect(summary.data.requests.staffInvitation).toBe(1);
   const guestCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const guestPage = await guestCtx.newPage();
-  await loginInBrowser(guestPage, `${invited.toLowerCase()}@e2e.orasso.test`, undefined, "/app/boite/demandes");
-  await guestPage.goto("/app/boite/demandes");
+  await loginInBrowser(guestPage, `${invited.toLowerCase()}@e2e.orasso.test`, undefined, "/app/activite/demandes");
+  await guestPage.goto("/app/activite/demandes");
   const card = guestPage.getByTestId("request-staff-invitation");
   await expect(card).toContainText("MéditeSportCar");
   await guestPage.screenshot({ path: `${DIR}/05-invitation-staff-demandes-390.png` });

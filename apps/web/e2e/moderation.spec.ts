@@ -156,7 +156,7 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   }
   const ctxA = await context(browser, aCookie);
   const pageA = await ctxA.newPage();
-  await pageA.goto(`/app/boite/${conv.data.id}`);
+  await pageA.goto(`/app/messages/${conv.data.id}`);
   await pageA.waitForLoadState("networkidle");
   const insult = pageA.getByTestId("message").filter({ hasText: "Tu es nul" });
   await insult.getByTestId("report-open").click();

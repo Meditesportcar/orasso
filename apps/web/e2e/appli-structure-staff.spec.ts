@@ -180,9 +180,8 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   deliverNow("damien@orasso.local");
   await tab(page, "Direct").click();
   await expect(page.getByTestId("orga-direct-event")).toBeVisible({ timeout: 30_000 });
-  await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-  await page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
-  await page.getByTestId("journal-item").filter({ hasText: "Demande pour rejoindre le staff" }).first().click();
+  await page.goto("/activite"); // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
+  await page.getByTestId("activity-row").filter({ hasText: "Demande pour rejoindre le staff" }).first().click();
   await page.getByTestId("team-requests-bubble").click();
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/equipe/);

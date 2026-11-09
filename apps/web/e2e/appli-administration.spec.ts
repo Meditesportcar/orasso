@@ -441,10 +441,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   // Le lien profond : la demande arrive au Journal de l'équipe et ouvre la file des demandes d'aide.
   deliverNow("equipe@orasso.local");
   await toTab(page, "Équipe");
-  await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-  await page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
+  await page.goto("/activite"); // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
   await page
-    .getByTestId("journal-item")
+    .getByTestId("activity-row")
     .filter({ hasText: `Demande d'aide · ${name}` })
     .first()
     .click();
@@ -521,9 +520,8 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
   // Le lien profond de l'alerte prioritaire (suspension automatique) mène à la file.
   deliverNow("moderatrice@orasso.local");
   await go(m.page, "/administration");
-  await m.page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-  await m.page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
-  await m.page.getByTestId("journal-item").filter({ hasText: "Alerte prioritaire" }).first().click();
+  await m.page.goto("/activite"); // Lot R7c2 : la cloche ouvre l'Activité (la Boîte a disparu).
+  await m.page.getByTestId("activity-row").filter({ hasText: "Alerte prioritaire" }).first().click();
   await expect(m.page).toHaveURL(/signalements/, { timeout: 20_000 });
   await m.ctx.close();
 

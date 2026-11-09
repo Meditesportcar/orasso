@@ -18,7 +18,7 @@ import {
 } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { PrivateImage } from "@/features/boite/PrivateImage";
+import { PrivateImage } from "@/features/messages/PrivateImage";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { useApi } from "@/lib/useApi";

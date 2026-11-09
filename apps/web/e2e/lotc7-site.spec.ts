@@ -84,25 +84,6 @@ test("accueil : la battle autour du O et ses affiches, à l'échelle de l'artefa
   await ctx.close();
 });
 
-test("Boîte, « Tout » : messages, demandes et notifications dans un seul fil", async ({ browser }) => {
-  test.setTimeout(240_000);
-  for (const [size, viewport] of SIZES) {
-    const ctx = await browser.newContext({ viewport });
-    const page = await ctx.newPage();
-    await setTheme(page, "beton");
-    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/journal");
-    await page.goto("/app/journal");
-    await expect(page.getByTestId("journal")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("inbox-unavailable")).toHaveCount(0);
-    const feed = page.getByTestId("inbox-all");
-    await expect(feed).toBeVisible();
-    // Un seul fil : notifications et conversations sont des éléments du même `ul`.
-    expect(await feed.getByTestId("journal-item").count()).toBeGreaterThan(0);
-    await shot(page, `boite-tout-beton-${size}`);
-    await ctx.close();
-  }
-});
-
 test("administration : les conflits de plaque sous les transferts", async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ viewport: DESKTOP });

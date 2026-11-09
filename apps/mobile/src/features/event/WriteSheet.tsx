@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { AboutCard } from "@/features/boite/AboutCard";
+import { AboutCard } from "@/features/messages/AboutCard";
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -98,7 +98,7 @@ export function WriteSheet({
               icon="chat"
               onPress={() => {
                 onClose();
-                router.push(`/boite/${sent}`);
+                router.push(`/messages/${sent}`);
               }}
               testID="write-open"
             >

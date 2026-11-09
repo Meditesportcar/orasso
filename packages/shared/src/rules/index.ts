@@ -1,4 +1,5 @@
 export * from "./activity";
+export * from "./activityLabels";
 export * from "./admin";
 export * from "./affinity";
 export * from "./afterEvent";
@@ -7,6 +8,7 @@ export * from "./applicationTransitions";
 export * from "./arrival";
 export * from "./audience";
 export * from "./audiencePrize";
+export * from "./conversationTag";
 export * from "./crewFeed";
 export * from "./crewLive";
 export * from "./crewPage";

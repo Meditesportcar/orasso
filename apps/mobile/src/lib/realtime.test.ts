@@ -22,11 +22,16 @@ describe("temps réel de l'appli", () => {
     expect(wsUrlOf("https://dev.orasso.fr/")).toBe("wss://dev.orasso.fr/api/ws");
   });
 
-  it("liens des notifications de la Boîte vers les écrans de l'appli", () => {
+  it("liens des notifications (Activité, Messages, ancienne Boîte) vers les écrans de l'appli", () => {
     const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
-    expect(appLinkOf(`/app/boite/${id}`)).toBe(`/boite/${id}`);
-    expect(appLinkOf("/app/boite/demandes")).toBe("/boite?segment=demandes");
-    expect(appLinkOf("/app/boite")).toBe("/boite");
+    // Lot R7c2 : la Boîte a disparu (anciens liens gardés dans des notifications déjà envoyées).
+    expect(appLinkOf(`/app/boite/${id}`)).toBe(`/messages/${id}`);
+    expect(appLinkOf("/app/boite/demandes")).toBe("/activite/demandes");
+    expect(appLinkOf("/app/boite")).toBe("/messages");
+    expect(appLinkOf(`/app/messages/${id}`)).toBe(`/messages/${id}`);
+    expect(appLinkOf("/app/messages/demandes")).toBe("/messages/demandes");
+    expect(appLinkOf("/app/activite")).toBe("/activite");
+    expect(appLinkOf(`/app/activite/${id}`)).toBeNull();
     expect(appLinkOf("/app/boite/../acces")).toBeNull();
     expect(appLinkOf("/u/Kenji_66")).toBe("/u/Kenji_66");
     expect(appLinkOf("https://exemple.com")).toBeNull();
