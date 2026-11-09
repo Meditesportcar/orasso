@@ -22,6 +22,7 @@ export * from "./follows";
 export * from "./garage";
 export * from "./invitations";
 export * from "./lineup";
+export * from "./liveFiche";
 export * from "./lock";
 export * from "./mainVehicle";
 export * from "./markdown";
