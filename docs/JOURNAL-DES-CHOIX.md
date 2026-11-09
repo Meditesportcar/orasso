@@ -3385,3 +3385,5 @@ Choix pris seul (détails que la fiche et la maquette R7.12 ne tranchaient pas) 
 À revoir avec Damien :
 - Le nombre « sorties » de l'en-tête compte les retenues (lot R6b) ; pour un visiteur qui n'a que des billets ou des tampons de visite, il vaut 0 alors que son passeport est plein. Passer à « tampons de participation et de visite » est un changement de sens (et de l'API) : à décider.
 - Le bouton « Passionné » (changement de casquette) de la maquette en haut du Profil n'est pas posé, voir plus haut.
+- **Un seul bouton principal sur Mon compte (site)** : « Enregistrer les réglages » passe en secondaire, « Ajouter un véhicule » (onglet Garage) est le principal. « Créer un crew » (onglet Garage du site) mène à `/app/crews/nouveau`, comme demandé par le coordinateur (R7b2 fait rediriger `/app/crews` vers l'onglet Crew).
+- **`apps/mobile/src/app/_layout.tsx`** (fichier commun, une modification) : la redirection « mauvais groupe » gardait l'adresse sans sa recherche, donc `/profil?onglet=sorties` ouvrait le Garage ; elle garde maintenant la recherche. La phrase « Ta demande attend sa réponse. » du compte privé est conservée dans le nouveau texte.
