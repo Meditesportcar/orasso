@@ -239,7 +239,27 @@ export const adminAppLabels = {
     deleted: "Brouillon supprimé.",
   },
   // Sponsorisés.
-  sponsoredHint: "Une carte « Sponsorisé » sur l'Accueil, ciblée par département. Aucune facturation.",
+  sponsoredHint:
+    "Une carte « Sponsorisé » sur l'Accueil et dans le Fil, ciblée par département seulement. Aucune facturation.",
+  sponsoredAdvertiser: "Annonceur",
+  sponsoredAdvertiserPro: "Un pro d'Orasso",
+  sponsoredAdvertiserExternal: "Un annonceur externe",
+  sponsoredAdvertiserName: "Nom de l'annonceur",
+  sponsoredSurfacesField: "Où l'afficher",
+  sponsoredSurfaceHome: "Accueil",
+  sponsoredSurfaceFeed: "Le Fil",
+  sponsoredDisclosureField: "Mention (ex. Publicité)",
+  sponsoredDisclosureNone: "Aucune mention en plus de « Sponsorisé »",
+  sponsoredExternalWarning:
+    "Annonceurs externes désactivés tant que « sponsored.external_enabled » est à non (avis juridique attendu).",
+  sponsoredExternalCut: "Diffusion coupée",
+  sponsoredExternalOnly: "Un annonceur externe s'affiche dans le Fil seulement, ciblé par département.",
+  sponsoredPreview: "Aperçu de la carte",
+  sponsoredPreviewBadge: "Sponsorisé",
+  sponsoredPreviewMore: "En savoir plus",
+  sponsoredPreviewNoImage: "Image à envoyer après la création",
+  sponsoredSurfaceStats: (surface: string, impressions: number, clicks: number) =>
+    `${surface} : ${impressions} affichages · ${clicks} clics`,
   sponsoredNew: "Nouvel emplacement",
   sponsoredPro: "Pro",
   sponsoredProPlaceholder: "Choisir une fiche publiée",

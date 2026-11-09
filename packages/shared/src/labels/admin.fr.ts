@@ -1,4 +1,5 @@
 import type { AdminSettingKey } from "../rules/admin";
+import type { SponsoredSurface } from "../rules/sponsored";
 import type { AdminOverview, AssistanceCloseReason, AssistanceStatus, NewsletterStatus } from "../schemas/admin";
 
 // Administration (lot 33) : accueil et files, registres, mode assistance, réglages, newsletter, désinscription.
@@ -118,6 +119,12 @@ export const placementStatusLabels: Record<"draft" | "active" | "paused" | "ende
   active: "Actif",
   paused: "En pause",
   ended: "Terminé",
+};
+
+/** Où s'affiche un emplacement (lot R7k1). */
+export const placementSurfaceLabels: Record<SponsoredSurface, string> = {
+  home: "Accueil",
+  feed: "Le Fil",
 };
 
 /** Contrôle automatique du SIRET d'une fiche pro (lot 14). */
