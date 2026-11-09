@@ -339,12 +339,61 @@ test("vie privée : la publication d'un compte privé n'apparaît qu'à son abon
   }
 });
 
-test("captures Béton et Sable, 384 et 390 px, police 1 et 1,3 : Fil, menu, publier", async ({ browser }) => {
+test("recadrer au doigt : un glissement déplace le cadre, Valider recadre la photo et remet sa plaque à zéro", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser, "kenji@orasso.local");
+  await go(page, "/fil/publier");
+  await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("fil-publish-add").click();
+  await (await chooser).setFiles([photo("car-golf-gti.jpg")]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
+  // Une décision de plaque : « Aucune plaque visible » ; un nouveau cadrage la remet à zéro.
+  await page.getByTestId("fil-publish-none").click();
+  await page.getByTestId("fil-publish-none-yes").click();
+  await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
+  const tile = page.getByTestId("fil-publish-photo").first();
+  const picture = () =>
+    tile.evaluate((el) => {
+      const img = el.querySelector("img");
+      return (
+        (img as HTMLImageElement | null)?.currentSrc ||
+        getComputedStyle(el.firstElementChild as Element).backgroundImage
+      );
+    });
+  const before = await picture();
+  await page.getByTestId("fil-publish-crop").click();
+  const stage = page.getByTestId("crop-stage");
+  await expect(stage).toBeVisible();
+  await page.waitForTimeout(600);
+  const image = stage.locator("img").first();
+  const y0 = ((await image.boundingBox()) as { y: number }).y;
+  const at = (await stage.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2 - 70, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const y1 = ((await image.boundingBox()) as { y: number }).y;
+  // Les photos du seed sont en portrait : dans un cadre 4:5 elles ne glissent qu'en hauteur.
+  expect(y0 - y1).toBeGreaterThan(20);
+  await page.getByTestId("crop-validate").click();
+  await expect(page.getByTestId("square-cropper")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1", { timeout: 30_000 });
+  await expect.poll(picture, { timeout: 30_000 }).not.toBe(before);
+  await ctx.close();
+});
+
+test("captures Béton et Sable, 384 px, police 1 et 1,3 : Fil, menu, publier, plaque, recadrage, carte d'événement", async ({
+  browser,
+}) => {
   test.setTimeout(420_000);
   for (const theme of ["beton", "sable"]) {
     for (const [width, scale] of [
       [384, 1],
-      [390, 1.3],
+      [384, 1.3],
     ] as const) {
       const { ctx, page } = await open(browser, "damien@orasso.local", theme, { width, scale });
       const tag = `${theme}-${width}-f${String(scale).replace(".", "")}`;
@@ -365,6 +414,22 @@ test("captures Béton et Sable, 384 et 390 px, police 1 et 1,3 : Fil, menu, publ
       await (await chooser).setFiles([photo("car-golf-gti.jpg")]);
       await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1, { timeout: 60_000 });
       await shot(page, `publier-${tag}`);
+      // Cadre posé (plaque), puis recadrage au doigt.
+      await page.getByTestId("fil-publish-frame-add").click();
+      await shot(page, `publier-plaque-${tag}`);
+      await page.getByTestId("fil-publish-crop").click();
+      await expect(page.getByTestId("square-cropper")).toBeVisible();
+      await shot(page, `publier-recadrage-${tag}`);
+      await page.getByTestId("crop-cancel").click();
+      // La carte d'événement du Fil (celle de la maquette).
+      await go(page, "/fil");
+      await page.getByTestId("fil-filters-for_you").click();
+      await loaded(page);
+      const eventCard = page.getByTestId("feed-card-event_recommended").first();
+      if (await eventCard.count()) {
+        await eventCard.scrollIntoViewIfNeeded();
+        await shot(page, `fil-carte-evenement-${tag}`);
+      }
       await ctx.close();
     }
   }
