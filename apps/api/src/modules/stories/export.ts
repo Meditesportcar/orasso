@@ -15,7 +15,15 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
 import { CANVAS_H, CANVAS_W, GROUND_BLUR, GROUND_BRIGHTNESS, signFile } from "./card";
-import { composeLinkedPost, composeLinkedStory, loadLinked, renderLinkedCard, renderLinkedGround } from "./linked";
+import {
+  composeLinkedPost,
+  composeLinkedStory,
+  inspect,
+  LinkedError,
+  loadLinked,
+  renderLinkedCard,
+  renderLinkedGround,
+} from "./linked";
 import { requireVisibleStory } from "./service";
 
 export type ExportedFile = { data: Buffer; type: string; name: string };
@@ -35,6 +43,16 @@ export const exportService = {
       throw new AppError(403, "author_only", shareLabels.errors.authorOnly);
     }
     if (story.status !== "ready") throw new AppError(409, "story_not_ready", shareLabels.errors.notFound);
+    // Le fichier garde la provenance de son contenu lié : repartager la publication d'un autre en story ne la fait pas
+    // devenir « à moi », et un classement ne sort que par les règles de `/me/share/export` (événement ouvert à tous,
+    // publié, visible pour moi). Un contenu supprimé ou devenu privé ne sort plus non plus (ses pixels sont dans le fichier).
+    if (story.linkedType && story.linkedId) {
+      const found = await inspect(v, story.linkedType, story.linkedId);
+      if (!found.ok) throw new LinkedError(found.refusal);
+      if (found.content.type === "feed_post" && !found.content.mine) {
+        throw new AppError(403, "author_only", shareLabels.errors.authorOnly);
+      }
+    }
     const file = await storage.get(story.storageKey);
     if (!file) throw notFound("Story introuvable");
     // Une vidéo sort telle quelle : pas de floutage de plaque, pas de signature (décision de Damien, 09/11).

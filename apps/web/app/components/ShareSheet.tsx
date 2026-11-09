@@ -4,12 +4,17 @@
 // l'API dit ce qui est ouvert et pourquoi une destination est fermée (`GET /api/me/share/info`).
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  addShareTargets,
+  type ConversationPage,
   type ConversationSummary,
   shareLabels as L,
+  noShareTargets,
+  retryIds,
   type ShareFileFormat,
   type ShareInfo,
   STORY_CAPTION_MAX,
   type StoryLinkType,
+  shareTargetsEmpty,
 } from "@orasso/shared";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -90,7 +95,7 @@ function Row({
   onClick,
   dest,
 }: {
-  icon: "phone" | "feed" | "chat" | "export";
+  icon: "smartphone" | "feed" | "chat" | "export";
   title: string;
   hint: string;
   disabled?: boolean;
@@ -205,7 +210,7 @@ export function ShareBody({
       </div>
       <p className="o-t-label s-muted">{L.sectionTitle.toUpperCase()}</p>
       <Row
-        icon="phone"
+        icon="smartphone"
         title={L.story}
         hint={L.storyHint(info.linkLabel)}
         disabled={!d.story}
@@ -310,28 +315,42 @@ function ToFeed({ info, onBack, onClose }: { info: ShareInfo; onBack: () => void
 }
 
 function ToMessage({ info, onBack, onClose }: { info: ShareInfo; onBack: () => void; onClose: () => void }) {
-  const [items, setItems] = useState<ConversationSummary[] | null>(null);
+  // Les conversations se lisent page par page (« Voir plus ») : « Aucune conversation » seulement si tout est lu et vide.
+  const [targets, setTargets] = useState(noShareTargets);
+  const [reading, setReading] = useState(true);
+  const [readError, setReadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Un identifiant par conversation, gardé tant que l'envoi n'a pas abouti : une réponse perdue puis une reprise ne
+  // créent pas deux messages.
+  const ids = useRef(retryIds(uuid)).current;
+  const read = async (cursor?: string) => {
+    setReading(true);
+    setReadError(null);
+    const r = await apiFetch<ConversationPage>(
+      `/me/conversations?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    if (r.ok) setTargets((s) => addShareTargets(cursor ? s : noShareTargets, r.data));
+    else setReadError(r.error.message);
+    setReading(false);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: première page à l'ouverture seulement.
   useEffect(() => {
-    void apiFetch<{ items: ConversationSummary[] }>("/me/conversations?limit=30").then((r) => {
-      if (r.ok) {
-        setItems(
-          r.data.items.filter((x) => (x.kind === "direct" || x.kind === "crew") && x.side === "member" && !x.closedAt),
-        );
-      } else setError(r.error.message);
-    });
+    void read();
   }, []);
+  const items = targets.items;
   const send = async (conv: ConversationSummary) => {
     setBusy(true);
     setError(null);
     const r = await apiFetch(`/conversations/${conv.id}/messages`, {
       method: "POST",
-      json: { clientId: uuid(), body: L.messageBody(info.title || L.title, info.url) },
+      json: { clientId: ids.get(conv.id), body: L.messageBody(info.title || L.title, info.url) },
     });
-    if (r.ok) setSent(conv.title);
-    else setError(r.error.message);
+    if (r.ok) {
+      ids.done(conv.id);
+      setSent(conv.title);
+    } else setError(r.error.message);
     setBusy(false);
   };
   return (
@@ -341,10 +360,11 @@ function ToMessage({ info, onBack, onClose }: { info: ShareInfo; onBack: () => v
         <p className="s-notice" data-testid="share-message-done">{`${L.messageSent} (${sent})`}</p>
       ) : (
         <>
-          {!items && !error ? <p className="s-muted">Chargement…</p> : null}
-          {items && !items.length ? <p className="s-muted">{L.messageEmpty}</p> : null}
+          {reading && !targets.loaded ? <p className="s-muted">Chargement…</p> : null}
+          {shareTargetsEmpty(targets) ? <p className="s-muted">{L.messageEmpty}</p> : null}
+          {readError ? <p className="s-notice s-notice--error">{readError}</p> : null}
           {error ? <p className="s-notice s-notice--error">{error}</p> : null}
-          {items?.map((conv) => (
+          {items.map((conv) => (
             <button
               key={conv.id}
               type="button"
@@ -359,6 +379,17 @@ function ToMessage({ info, onBack, onClose }: { info: ShareInfo; onBack: () => v
               </span>
             </button>
           ))}
+          {targets.next || readError ? (
+            <Button
+              variant="secondary"
+              icon={readError ? "undo" : "next"}
+              disabled={reading}
+              onClick={() => void read(targets.next ?? undefined)}
+              data-testid="share-conv-more"
+            >
+              {readError ? "Réessayer" : reading ? "Chargement…" : L.messageMore}
+            </Button>
+          ) : null}
         </>
       )}
     </div>

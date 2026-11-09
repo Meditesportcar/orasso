@@ -23,7 +23,8 @@ export function linkedHref(story: StoryView): string | null {
     case "vehicle":
       return mine ? `/app/garage/${l.id}` : `/v/${l.id}`;
     case "vote_result":
-      return l.slug ? `/app/vote/${l.slug}` : null;
+      // `?vote=` : le vote de la carte (un événement en a plusieurs), sinon la page ouvrirait « Toutes catégories ».
+      return l.slug ? `/app/vote/${l.slug}?vote=${encodeURIComponent(l.id)}` : null;
     case "memory":
       return l.eventId ? `/app/souvenir/${l.eventId}` : null;
     default:

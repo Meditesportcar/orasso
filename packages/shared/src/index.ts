@@ -19,4 +19,5 @@ export * from "./roles";
 export * from "./rules";
 export * from "./rules/homeAgo";
 export * from "./schemas";
+export * from "./shareMessage";
 export * from "./weather";

@@ -23,7 +23,18 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { events, notifications, profiles, stories, storyTags, userFollows, vehiclePhotos } from "../../db/schema";
+import {
+  applications,
+  audiencePrizeResults,
+  eventInvitations,
+  events,
+  notifications,
+  profiles,
+  stories,
+  storyTags,
+  userFollows,
+  vehiclePhotos,
+} from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { storage } from "../../lib/storage";
 import { blurPlateRegions } from "../vehicles/photos-blur";
@@ -355,8 +366,15 @@ describe("la feuille « Partager »", () => {
     expect(ev.url).toContain(`/e/${e.slug}`);
     const v = await createVehicle(kenji.id, ref);
     const car = (await req(kenji, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).json;
-    expect(car.destinations).toMatchObject({ story: false, feed: false, external: false });
+    // L'affiche du lot 50 (qui produit elle-même une photo sûre) reste ouverte ; story et Fil montreraient la photo nette.
+    expect(car.destinations).toEqual({ story: false, feed: false, message: true, external: true });
+    expect(car.reasons.external).toBeUndefined();
+    expect(car.formats).toEqual([]);
+    expect((await req(kenji, "GET", `/me/share/export?type=vehicle&id=${v.id}&format=story`)).status).toBe(409);
     expect(car.reasons.story).toContain("plaque floutée");
+    // Sans photo montrable, « En message » porte tout de même la page publique de la voiture (jamais l'accueil).
+    expect(car.destinations.message).toBe(true);
+    expect(car.url).toContain(`/v/${v.id}`);
     await blurPlatesOf(kenji.id);
     const ready = (await req(kenji, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).json;
     expect(ready.destinations).toEqual({ story: true, feed: true, message: true, external: true });
@@ -491,5 +509,203 @@ describe("carte au Fil en 4:5", () => {
     const first = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "event", id: e.id }, clientId });
     const again = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "event", id: e.id }, clientId });
     expect(again.json.id).toBe(first.json.id);
+  });
+});
+
+// --- Tour 2 : contenus privés et plaques dans ce qui sort ---------------------------------------------------------------
+
+/** Dépose une photo de Fil (bruit) et publie : l'identifiant de la publication. */
+async function postFeed(u: TestUser, over: Over = {}) {
+  const form = new FormData();
+  form.append("purpose", "feed_post");
+  form.append("file", new File([new Uint8Array(await noise(800, 1000))], "p.jpg", { type: "image/jpeg" }));
+  const up = await app.request("/api/me/uploads", {
+    method: "POST",
+    headers: { origin: ORIGIN, cookie: u.cookie },
+    body: form,
+  });
+  const posted = await req(u, "POST", "/me/feed-posts", {
+    caption: "Belle sortie",
+    photos: [{ uploadKey: ((await up.json()) as { key: string }).key, noPlateConfirmed: true }],
+    aspect: "portrait_4_5",
+    ...over,
+  });
+  expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+  return posted.json.id as string;
+}
+
+/** Un événement terminé dont le vote « Toutes catégories » est clos et réglé, gagné par la voiture de `exhibitor`. */
+async function closedVote(
+  orga: TestUser,
+  exhibitor: TestUser,
+  over: Partial<typeof events.$inferInsert> = {},
+  photo: "blurred" | "none_confirmed" = "blurred",
+) {
+  const structure = await createStructure(orga.id);
+  const car = await maskedVehicle(exhibitor);
+  if (photo === "none_confirmed") {
+    await db
+      .update(vehiclePhotos)
+      .set({ plateBlurred: false, noPlateConfirmed: true })
+      .where(eq(vehiclePhotos.vehicleId, car.id));
+  }
+  const ended = new Date(clock.now.getTime() - 26 * 3_600_000);
+  const event = await createEvent(structure.id, {
+    title: "Nocturne du port",
+    city: "Argelès",
+    startsAt: new Date(ended.getTime() - 4 * 3_600_000),
+    endsAt: ended,
+    ...over,
+  });
+  const [win] = await db
+    .insert(applications)
+    .values({
+      eventId: event.id,
+      userId: exhibitor.id,
+      vehicleId: car.id,
+      status: "accepted",
+      rulesAcceptedAt: clock.now,
+      followStructure: false,
+      decidedAt: new Date(ended.getTime() - 40 * 3_600_000),
+    })
+    .returning();
+  const voteId = await allCategoriesId(event.id);
+  await db.insert(audiencePrizeResults).values({
+    eventId: event.id,
+    voteId,
+    applicationId: win?.id as string,
+    rank: 1,
+    votes: 9,
+    winner: true,
+    createdAt: clock.now,
+  });
+  await db.update(events).set({ settledAt: clock.now }).where(eq(events.id, event.id));
+  return { event, voteId };
+}
+
+describe("tour 2 : un classement d'un événement sur invitation ne se repartage pas", () => {
+  it("ouvert à tous : partageable ; passé sur invitation, un invité ne peut ni le publier ni l'exporter, la carte devient inerte", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { event, voteId } = await closedVote(orga, winner);
+    const ok = await share(guest, { type: "vote_result", id: voteId });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+    expect((await byAuthor(winner, guest)).json.stories[0].linked).not.toBeNull();
+
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, event.id));
+    await db
+      .insert(eventInvitations)
+      .values({ eventId: event.id, userId: guest.id, token: randomUUID(), status: "pending" });
+    // L'invité voit encore le résultat (lire), mais ne le repartage pas : ni en story publique, ni en fichier.
+    expect((await req(guest, "GET", `/events/${event.id}/votes/${voteId}`)).status).toBe(200);
+    const refused = await share(guest, { type: "vote_result", id: voteId });
+    expect(refused.status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/export?type=vote_result&id=${voteId}&format=story`)).status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/export?type=vote_result&id=${voteId}&format=post`)).status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/info?type=vote_result&id=${voteId}`)).status).toBe(404);
+    // La story déjà publiée : la carte devient inerte et son fichier ne sort plus.
+    expect((await byAuthor(winner, guest)).json.stories[0].linked).toBeNull();
+    expect((await req(guest, "GET", `/stories/${ok.json.id}/export`)).status).toBe(404);
+  });
+
+  it("un événement non publié (annulé) : même refus", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { event, voteId } = await closedVote(orga, winner);
+    expect((await share(guest, { type: "vote_result", id: voteId })).status).toBe(201);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, event.id));
+    expect((await share(guest, { type: "vote_result", id: voteId })).status).toBe(404);
+  });
+
+  it("la plaque de la story d'un vote suit la vraie photo du gagnant (floutée, ou confirmée sans plaque)", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const a = await closedVote(orga, winner);
+    const first = await share(guest, { type: "vote_result", id: a.voteId });
+    expect((await db.select().from(stories).where(eq(stories.id, first.json.id)))[0]?.plateState).toBe("blurred");
+    const orga2 = await signUp("Orga2");
+    const winner2 = await signUp("Gagnant2");
+    const b = await closedVote(orga2, winner2, {}, "none_confirmed");
+    const second = await share(guest, { type: "vote_result", id: b.voteId });
+    expect(second.status, JSON.stringify(second.json)).toBe(201);
+    expect((await db.select().from(stories).where(eq(stories.id, second.json.id)))[0]?.plateState).toBe(
+      "none_confirmed",
+    );
+  });
+});
+
+describe("tour 2 : l'export d'une story garde la provenance de son contenu", () => {
+  it("la publication d'un autre, partagée en story puis exportée : 403 author_only ; la mienne sort", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const post = await postFeed(nina);
+    const copy = await share(kenji, { type: "feed_post", id: post });
+    expect(copy.status, JSON.stringify(copy.json)).toBe(201);
+    const refused = await req(kenji, "GET", `/stories/${copy.json.id}/export`);
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.code).toBe("author_only");
+    // Pareil par la route des contenus pas encore partagés (déjà refusé avant ce tour).
+    expect((await req(kenji, "GET", `/me/share/export?type=feed_post&id=${post}&format=post`)).status).toBe(403);
+    // L'auteur partage sa propre publication en story : elle sort.
+    const own = await share(nina, { type: "feed_post", id: post }, { audience: "followers" });
+    expect((await req(nina, "GET", `/stories/${own.json.id}/export`)).status).toBe(200);
+  });
+});
+
+/** La photo de la carte (860 × 620 posée à (110, 145)) : le cadre sombre uni, hors du O de la marque. */
+const photoCorner = { left: 140, top: 190, width: 90, height: 50 };
+
+describe("tour 2 : l'affiche d'un événement ne sort jamais nette (pas de décision de plaque)", () => {
+  it("carte, 9:16 et 4:5 : le cadre de la marque et un fond illisible, même si l'affiche porte une zone de plaque", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    // Affiche = bruit très contrasté de bout en bout : une « plaque » lisible partout si elle sortait nette.
+    const key = `private/test-affiche-${randomUUID()}.jpg`;
+    const poster = await noise(1600, 900);
+    await storage.put(key, poster);
+    await db.update(events).set({ posterPhotoKey: key }).where(eq(events.id, e.id));
+    expect(await variance(poster, { left: 600, top: 400, width: 120, height: 50 })).toBeGreaterThan(500);
+
+    const card = await req(kenji, "GET", `/me/share/card?type=event&id=${e.id}&part=card`);
+    expect(card.status).toBe(200);
+    // La photo de la carte (860 × 620 posée à (110, 145)) : le cadre sombre uni, hors du O de la marque.
+    expect(await variance(card.buf, photoCorner)).toBeLessThan(40);
+    const ground = await req(kenji, "GET", `/me/share/card?type=event&id=${e.id}&part=ground`);
+    expect(await variance(ground.buf, { left: 300, top: 900, width: 120, height: 50 })).toBeLessThan(40);
+
+    const edge = { left: 0, top: 0, width: 30, height: 30 };
+    const story = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=story`);
+    expect(await variance(story.buf, { left: 20, top: 20, width: 200, height: 200 })).toBeLessThan(40);
+    expect(await variance(story.buf, { left: 140, top: 480, width: 90, height: 50 })).toBeLessThan(40);
+    const post = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=post`);
+    expect(await variance(post.buf, edge)).toBeLessThan(40);
+    expect(await variance(post.buf, photoCorner)).toBeLessThan(40);
+
+    // Une story d'événement : son 9:16 stocké n'est pas net non plus, et la plaque décidée est « floutée » (rien de lisible).
+    const made = await share(kenji, { type: "event", id: e.id });
+    const stored = await req(kenji, "GET", fileOf((await req(kenji, "GET", "/me/stories")).json.stories[0]));
+    expect(await variance(stored.buf, { left: 140, top: 480, width: 90, height: 50 })).toBeLessThan(40);
+    const [row] = await db.select().from(stories).where(eq(stories.id, made.json.id));
+    expect(row?.plateState).toBe("blurred");
+  });
+
+  it("la publication d'un événement au Fil : photo rendue sans l'affiche nette", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const key = `private/test-affiche-${randomUUID()}.jpg`;
+    await storage.put(key, await noise(1600, 900));
+    await db.update(events).set({ posterPhotoKey: key }).where(eq(events.id, e.id));
+    const ev = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "event", id: e.id },
+      clientId: randomUUID(),
+    });
+    expect(ev.status, JSON.stringify(ev.json)).toBe(201);
+    const photo = await req(kenji, "GET", ev.json.photos[0].url.replace(/^\/api/, ""));
+    expect(await variance(photo.buf, photoCorner)).toBeLessThan(40);
   });
 });

@@ -123,10 +123,15 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const [held, setHeld] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  // La story ciblée par « Vers l'extérieur » reste celle choisie jusqu'à la fermeture de la feuille.
+  const [externalTarget, setExternalTarget] = useState<{ story: string; mediaKind: StoryView["mediaKind"] } | null>(
+    null,
+  );
   const [viewersFor, setViewersFor] = useState<StoryView | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
-  const running = focused && appActive && ready && !held && !menuOpen && !viewersFor && !replyFocused && !reportOpen;
+  const running =
+    focused && appActive && ready && !held && !menuOpen && !externalOpen && !viewersFor && !replyFocused && !reportOpen;
 
   // --- Fermer, avancer, reculer ---------------------------------------------------------------------------------------
   const ty = useSharedValue(0);
@@ -547,6 +552,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
           mine && story.audience !== "crew" && story.status === "ready" && !story.sharedFrom
             ? () => {
                 setMenuOpen(false);
+                setExternalTarget({ story: story.id, mediaKind: story.mediaKind });
                 setExternalOpen(true);
               }
             : undefined
@@ -555,7 +561,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
       <ShareSheet
         visible={externalOpen}
         onClose={() => setExternalOpen(false)}
-        target={{ story: story.id, mediaKind: story.mediaKind }}
+        target={externalTarget ?? { story: story.id, mediaKind: story.mediaKind }}
       />
       <ViewersSheet story={viewersFor} onClose={() => setViewersFor(null)} onProfile={openProfile} />
     </KeyboardSafe>

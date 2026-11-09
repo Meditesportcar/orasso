@@ -9,13 +9,17 @@
 //    téléphone ; pour une voiture, l'affiche à trois styles du lot 50 (`PosterBody`).
 import { Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  addShareTargets,
   type ConversationSummary,
   shareLabels as L,
+  noShareTargets,
+  retryIds,
   type ShareDestination,
   type ShareFileFormat,
   type ShareInfo,
   STORY_CAPTION_MAX,
   type StoryLinkType,
+  shareTargetsEmpty,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
@@ -130,7 +134,7 @@ export function ShareBody({
 
   const open = (d: ShareDestination) => data.destinations[d];
   const reason = (d: ShareDestination) => data.reasons[d];
-  const row = (d: ShareDestination, icon: "phone" | "feed" | "chat" | "export", title: string, hint: string) => (
+  const row = (d: ShareDestination, icon: "smartphone" | "feed" | "chat" | "export", title: string, hint: string) => (
     <View key={d} style={styles.row}>
       <Option
         icon={icon}
@@ -195,7 +199,7 @@ export function ShareBody({
         </View>
       </View>
       <Label>{L.sectionTitle.toUpperCase()}</Label>
-      {row("story", "phone", L.story, L.storyHint(data.linkLabel))}
+      {row("story", "smartphone", L.story, L.storyHint(data.linkLabel))}
       {row("feed", "feed", L.feed, L.feedHint)}
       {row("message", "chat", L.message, L.messageHint)}
       {row("external", "export", L.external, L.externalHint)}
@@ -323,19 +327,37 @@ function ToMessage({
   onClose: () => void;
   sheet?: boolean;
 }) {
-  const list = useApi(() => api.conversations(), []);
+  // Les conversations se lisent page par page (« Voir plus ») : « Aucune conversation » seulement si tout est lu et vide.
+  const [targets, setTargets] = useState(noShareTargets);
+  const [reading, setReading] = useState(true);
+  const [readError, setReadError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const items = (list.data?.items ?? []).filter(
-    (x: ConversationSummary) => (x.kind === "direct" || x.kind === "crew") && x.side === "member" && !x.closedAt,
-  );
+  // Un identifiant par conversation, gardé tant que l'envoi n'a pas abouti : une réponse perdue puis une reprise ne
+  // créent pas deux messages.
+  const ids = useRef(retryIds(randomUUID)).current;
+  const read = (cursor?: string) => {
+    setReading(true);
+    setReadError(null);
+    api
+      .conversations(cursor)
+      .then((page) => setTargets((s) => addShareTargets(cursor ? s : noShareTargets, page)))
+      .catch((e) => setReadError(errorMessage(e)))
+      .finally(() => setReading(false));
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: première page à l'ouverture seulement.
+  useEffect(() => read(), []);
+  const items = targets.items;
   const send = (conv: ConversationSummary) => {
     setSending(conv.id);
     setError(null);
     api
-      .sendMessage(conv.id, { clientId: randomUUID(), body: L.messageBody(info.title || L.title, info.url) })
-      .then(() => setSent(conv.title))
+      .sendMessage(conv.id, { clientId: ids.get(conv.id), body: L.messageBody(info.title || L.title, info.url) })
+      .then(() => {
+        ids.done(conv.id);
+        setSent(conv.title);
+      })
       .catch((e) => setError(errorMessage(e)))
       .finally(() => setSending(null));
   };
@@ -352,9 +374,16 @@ function ToMessage({
         </>
       ) : (
         <>
-          {list.loading && !list.data ? <Muted variant="body">Chargement…</Muted> : null}
-          {list.error && !list.data ? <Notice tone="error">{errorMessage(list.error)}</Notice> : null}
-          {list.data && !items.length ? <Muted variant="body">{L.messageEmpty}</Muted> : null}
+          {reading && !targets.loaded ? <Muted variant="body">Chargement…</Muted> : null}
+          {readError ? (
+            <>
+              <Notice tone="error">{readError}</Notice>
+              <SmButton kind="s" icon="undo" onPress={() => read(targets.next ?? undefined)} testID="share-conv-retry">
+                Réessayer
+              </SmButton>
+            </>
+          ) : null}
+          {shareTargetsEmpty(targets) ? <Muted variant="body">{L.messageEmpty}</Muted> : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
           {items.map((conv: ConversationSummary) => (
             <Pressable
@@ -373,6 +402,17 @@ function ToMessage({
               <Icon name="send" size={18} color={t.color.inkMuted} />
             </Pressable>
           ))}
+          {targets.next && !readError ? (
+            <SmButton
+              kind="s"
+              icon="next"
+              disabled={reading}
+              onPress={() => read(targets.next ?? undefined)}
+              testID="share-conv-more"
+            >
+              {reading ? "Chargement…" : L.messageMore}
+            </SmButton>
+          ) : null}
         </>
       )}
     </View>
@@ -414,7 +454,7 @@ function External({
     setError(null);
     setNote(null);
     try {
-      const file = await prepareExport(path, fileName, key);
+      const file = await prepareExport(path, fileName, key, story?.mediaKind ?? "photo");
       kept.current.push(file);
       const outcome = await sendShareImage(file, "share", file.mime);
       setNote(

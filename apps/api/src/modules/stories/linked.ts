@@ -1,9 +1,11 @@
 // Contenus partagés (lot R7f4, maquette R7.23) : ce qu'on peut partager (événement, voiture, publication du Fil, souvenir,
 // résultat de vote), la carte rendue pour chacun, et le 9:16 composé par le serveur (fond aux couleurs du contenu + carte
 // posée selon le cadrage de l'auteur). Toute règle de visibilité est ici : l'écran n'en applique aucune.
-// Plaques : l'image d'une carte est toujours une image que l'API a le droit de montrer (`maskedPhoto` : plaque floutée
-// ou « aucune plaque confirmée », ou véhicule non immatriculé ; une publication du Fil a sa décision de plaque) ; sans
-// photo montrable, une voiture ne se partage pas. Jamais la plaque : rien ici ne lit ce champ.
+// Plaques : l'image NETTE d'une carte est toujours une image que l'API a le droit de montrer (`maskedPhoto` : plaque
+// floutée ou « aucune plaque confirmée », ou véhicule non immatriculé ; une publication du Fil a sa décision de plaque) ;
+// sans photo montrable, une voiture ne se partage pas. L'affiche d'un événement n'a pas de décision de plaque : elle ne
+// sort jamais nette (carte au cadre de la marque, l'affiche ne sert que de fond fortement flouté). Jamais la plaque :
+// rien ici ne lit ce champ.
 import {
   BUSINESS_TIMEZONE,
   type ErrorCode,
@@ -22,7 +24,7 @@ import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { events, eventVotes, feedPostPhotos, profiles } from "../../db/schema";
+import { events, eventVotes, feedPostPhotos, profiles, vehiclePhotos } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
@@ -47,11 +49,16 @@ export type LinkedContent = {
   badge: string | null;
   stats: ShareStat[];
   stripe: boolean;
-  /** Image de la carte et du fond (déjà masquée), ou `null`. */
+  /** Photo nette de la carte (déjà masquée), ou `null` : le cadre de la marque. Jamais l'affiche d'un événement. */
   image: Buffer | null;
+  /** Image dont on tire le fond flouté (la photo de la carte, ou l'affiche d'un événement), ou `null`. */
+  ground: Buffer | null;
   /** Vignette de la feuille (adresse publique de la photo ou de l'affiche), ou `null`. */
   imageUrl: string | null;
-  /** `blurred` : la photo montrée a sa plaque floutée ; `none_confirmed` : aucune plaque n'a jamais été à montrer. */
+  /**
+   * `blurred` : l'image montrée a sa plaque floutée (ou rien de lisible n'est montré : événement, souvenir) ;
+   * `none_confirmed` : une confirmation réelle (« aucune plaque », véhicule non immatriculé) existe pour la photo montrée.
+   */
   plate: "blurred" | "none_confirmed";
   /** Page publique à coller dans un message. */
   url: string;
@@ -110,6 +117,10 @@ async function loadEvent(id: string) {
   return e ?? null;
 }
 
+/** Un événement ne se repartage que publié et ouvert à tous (ni brouillon, ni annulé, ni sur invitation). */
+const shareable = (e: { status: string; admission: string }) =>
+  e.status === "published" && e.admission !== "invite_only";
+
 async function eventContent(e: NonNullable<EventRowShare>, type: StoryLinkType, extra: Partial<LinkedContent> = {}) {
   const at = now();
   const { subtitle, live } = eventDetail(e, at);
@@ -123,9 +134,11 @@ async function eventContent(e: NonNullable<EventRowShare>, type: StoryLinkType, 
     badge: live ? shareLabels.badgeLive : null,
     stats: [],
     stripe: false,
-    image: img.data,
+    // L'affiche n'a pas de décision de plaque : jamais nette sur une carte ; seulement un fond illisible.
+    image: null,
+    ground: img.data,
     imageUrl: storage.url(img.key),
-    plate: "none_confirmed" as const,
+    plate: "blurred" as const,
     url: `${origin()}/e/${e.slug}`,
     event: { id: e.id, slug: e.slug, structureId: e.structureId },
     mine: false,
@@ -143,7 +156,7 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
   if (type === "event") {
     const e = await loadEvent(id);
     // Un brouillon ou un événement sur invitation ne se partage pas (comme l'autocollant d'événement : écarté).
-    if (!e || e.status !== "published" || e.admission === "invite_only" || !(await canSeeEvent(e, v))) {
+    if (!e || !shareable(e) || !(await canSeeEvent(e, v))) {
       return refuse(404, "not_found", shareLabels.errors.notFound);
     }
     return { ok: true, content: await eventContent(e, "event") };
@@ -161,6 +174,7 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
       .map((c) => c.category)
       .filter((c) => c.active)
       .sort((a, b) => a.position - b.position)[0];
+    const photoData = await storage.get(photo.storageKey);
     return {
       ok: true,
       content: {
@@ -172,7 +186,8 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
         badge: null,
         stats: storyStats(veh),
         stripe: true,
-        image: await storage.get(photo.storageKey),
+        image: photoData,
+        ground: photoData,
         imageUrl: storage.url(photo.storageKey),
         plate: photo.plateBlurred ? "blurred" : "none_confirmed",
         url: `${origin()}/v/${veh.id}`,
@@ -196,6 +211,7 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
       .orderBy(asc(feedPostPhotos.position))
       .limit(1);
     if (!first) return refuse(404, "not_found", shareLabels.errors.notFound);
+    const firstData = await storage.get(first.storageKey);
     const excerpt = post.caption
       ? post.caption.length > 72
         ? `${post.caption.slice(0, 71).trimEnd()}…`
@@ -212,7 +228,8 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
         badge: null,
         stats: [],
         stripe: false,
-        image: await storage.get(first.storageKey),
+        image: firstData,
+        ground: firstData,
         imageUrl: null,
         plate: first.plateBlurred ? "blurred" : "none_confirmed",
         url: `${origin()}/app/fil`,
@@ -227,7 +244,6 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
     if (!detail) return refuse(404, "not_found", shareLabels.errors.notFound);
     const e = await loadEvent(id);
     if (!e) return refuse(404, "not_found", shareLabels.errors.notFound);
-    const img = await eventImage(e);
     return {
       ok: true,
       content: {
@@ -235,7 +251,6 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
         kicker: shareLabels.kicker.memory,
         subtitle: [shareLabels.memoryYears(detail.yearsAgo), e.city].filter(Boolean).join(" · "),
         badge: shareLabels.memoryYears(detail.yearsAgo),
-        image: img.data,
         mine: true,
       },
     };
@@ -247,8 +262,9 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
     .where(eq(eventVotes.id, id));
   if (!vote) return refuse(404, "not_found", shareLabels.errors.notFound);
   const e = await loadEvent(vote.eventId);
-  if (!e || e.status === "draft" || !(await canSeeEvent(e, v)))
-    return refuse(404, "not_found", shareLabels.errors.notFound);
+  // Même règle que l'événement : un classement ne se repartage pas depuis un événement sur invitation ou non publié
+  // (lire un résultat n'est pas le repartager).
+  if (!e || !shareable(e) || !(await canSeeEvent(e, v))) return refuse(404, "not_found", shareLabels.errors.notFound);
   const view = await votesService.get(v, vote.eventId, id).catch(() => null);
   if (!view) return refuse(404, "not_found", shareLabels.errors.notFound);
   if (view.state !== "closed")
@@ -256,6 +272,15 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
   const winner = view.ranking?.[0];
   if (!winner) return refuse(409, "no_ranking", shareLabels.errors.notFound, shareLabels.reasons.noRanking);
   const key = withoutPrefix(winner.photoUrl);
+  const winnerData = key ? await storage.get(key) : null;
+  // L'état de plaque réel de la photo du gagnant (floutée, ou confirmée sans plaque) ; sans photo, rien n'est montré.
+  const [winnerPhoto] = key
+    ? await db
+        .select({ blurred: vehiclePhotos.plateBlurred })
+        .from(vehiclePhotos)
+        .where(eq(vehiclePhotos.storageKey, key))
+        .limit(1)
+    : [];
   return {
     ok: true,
     content: {
@@ -267,9 +292,10 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
       badge: shareLabels.badgeFirst(winner.votes),
       stats: [],
       stripe: true,
-      image: key ? await storage.get(key) : null,
+      image: winnerData,
+      ground: winnerData,
       imageUrl: winner.photoUrl,
-      plate: "blurred",
+      plate: winnerPhoto && !winnerPhoto.blurred ? "none_confirmed" : "blurred",
       url: `${origin()}/e/${e.slug}`,
       event: { id: e.id, slug: e.slug, structureId: e.structureId },
       mine: false,
@@ -308,7 +334,8 @@ export async function renderLinkedCard(c: LinkedContent): Promise<Buffer> {
 
 /** Le fond d'une story (1080 × 1920) aux couleurs du contenu, ou d'une publication (1080 × 1350). */
 export async function renderLinkedGround(c: LinkedContent, height: number): Promise<Buffer> {
-  return renderGround(c.image, 1080, height);
+  // L'affiche d'un événement (sans décision de plaque) ne sert que de fond fortement flouté.
+  return renderGround(c.ground, 1080, height, c.type === "event" || c.type === "memory");
 }
 
 /** Le 9:16 final d'une story de carte : fond + carte posée selon le cadrage (WebP q80). Aucune plaque lisible par construction. */
@@ -339,8 +366,11 @@ export async function shareInfo(v: Viewer, type: StoryLinkType, id: string): Pro
   if (!found.ok) {
     if (found.refusal.status === 404) throw notFound(shareLabels.errors.notFound);
     // Contenu connu mais pas partageable maintenant (voiture sans photo, vote ouvert) : tout est fermé, avec la raison,
-    // sauf l'envoi du lien en message pour une voiture (la page publique n'a pas besoin de la photo).
+    // sauf l'envoi du lien en message pour une voiture (la page publique n'a pas besoin de la photo) et, pour une voiture
+    // sans photo montrable, l'affiche à trois styles du lot 50 (« Vers l'extérieur ») : c'est elle, avec sa vérification
+    // de plaque, qui produit une photo sûre. Seules les destinations qui montreraient la photo nette restent fermées.
     const reason = found.refusal.reason;
+    const poster = type === "vehicle" && found.refusal.code === "no_masked_photo";
     return {
       type,
       id,
@@ -348,9 +378,10 @@ export async function shareInfo(v: Viewer, type: StoryLinkType, id: string): Pro
       subtitle: "",
       imageUrl: null,
       linkLabel: link,
-      url: `${origin()}/`,
-      destinations: { ...CLOSED, message: type === "vehicle" },
-      reasons: { story: reason, feed: reason, external: reason },
+      // Voiture sans photo montrable : le message porte tout de même sa page publique (jamais l'accueil).
+      url: type === "vehicle" ? `${origin()}/v/${id}` : `${origin()}/`,
+      destinations: { ...CLOSED, message: type === "vehicle", external: poster },
+      reasons: poster ? { story: reason, feed: reason } : { story: reason, feed: reason, external: reason },
       organizerNotified: null,
       formats: [],
     };
@@ -428,7 +459,8 @@ export async function linkedViewsOf(
         .from(eventVotes)
         .where(eq(eventVotes.id, s.linkedId));
       const e = vote ? await loadEvent(vote.eventId) : null;
-      if (vote && e && e.status !== "draft" && (await canSeeEvent(e, v))) {
+      // Même règle qu'au partage : un classement d'un événement sur invitation ou non publié n'est plus ouvrable.
+      if (vote && e && shareable(e) && (await canSeeEvent(e, v))) {
         out.set(s.id, {
           type: "vote_result",
           id: vote.id,

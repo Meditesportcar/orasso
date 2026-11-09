@@ -22,6 +22,8 @@ export const CARD_TILT = -2.2;
 /** Flou et assombrissement du fond (les mêmes que la story photo : `compose.ts`). */
 export const GROUND_BLUR = 40;
 export const GROUND_BRIGHTNESS = 0.8;
+/** Flou fort d'une image sans décision de plaque (affiche d'événement) : illisible, plaque comprise. */
+export const GROUND_BLUR_STRONG = 96;
 
 const CREAM = "#f3ebdd";
 const INK = "#131417";
@@ -206,9 +208,30 @@ export async function renderCard(spec: CardSpec): Promise<Buffer> {
  * Le fond : l'image du contenu en couverture, floutée et assombrie (les couleurs du contenu) ; sans image, un fond
  * sombre de la marque avec une lueur moutarde en haut à droite. `width × height` : 1080 × 1920 (story) ou 1080 × 1350.
  */
-export async function renderGround(image: Buffer | null, width: number, height: number): Promise<Buffer> {
+export async function renderGround(
+  image: Buffer | null,
+  width: number,
+  height: number,
+  strong = false,
+): Promise<Buffer> {
   if (image) {
     try {
+      if (strong) {
+        // Flou fort : l'image (une affiche, sans décision de plaque) est réduite au huitième avant d'être floutée, puis
+        // reprise à la taille du fond : rien de lisible n'en reste, plaque comprise.
+        const small = await sharp(image, { limitInputPixels: MAX_INPUT_PIXELS })
+          .rotate()
+          .resize(Math.round(width / 8), Math.round(height / 8), { fit: "cover" })
+          .blur(GROUND_BLUR_STRONG / 8)
+          .png()
+          .toBuffer();
+        return await sharp(small)
+          .resize(width, height, { fit: "fill" })
+          .blur(GROUND_BLUR / 2)
+          .modulate({ brightness: GROUND_BRIGHTNESS })
+          .png()
+          .toBuffer();
+      }
       return await sharp(image, { limitInputPixels: MAX_INPUT_PIXELS })
         .rotate()
         .resize(width, height, { fit: "cover" })

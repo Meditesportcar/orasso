@@ -11,6 +11,15 @@ import { Platform } from "react-native";
 import { apiUrl } from "@/api";
 import { ApiRequestError, getSessionToken } from "./http";
 import { shareErrorInfo } from "./shareErrors";
+import {
+  type ExportKind,
+  type ExportMediaKind,
+  exportCacheName,
+  exportFileName,
+  exportKindOf,
+  nativeShareOptions,
+  releaseAction,
+} from "./shareFile";
 
 const shareError = (status: number | null, detail?: string) => {
   const info = shareErrorInfo(status, detail);
@@ -19,8 +28,8 @@ const shareError = (status: number | null, detail?: string) => {
 
 export type ShareOutcome = "shared" | "saved" | "unavailable";
 
-/** Une affiche rendue : de quoi l'afficher (`uri`) et la partager. */
-export type PreparedShare = { uri: string; fileName: string };
+/** Une affiche rendue : de quoi l'afficher (`uri`) et la partager. `temp` : fichier d'export du cache, à effacer ensuite. */
+export type PreparedShare = { uri: string; fileName: string; temp?: boolean };
 
 /**
  * `version` (`VehicleFull.shareVersion`) évite de resservir une affiche périmée après une modification ; `masks` : les
@@ -75,9 +84,17 @@ export async function prepareShareImage(
   }
 }
 
-/** Libère l'adresse d'objet d'une affiche (web) ; sans effet sur le téléphone. */
+/** Libère une affiche : l'adresse d'objet (web) ; sur le téléphone, le fichier d'export du cache est effacé pour de bon. */
 export function releasePrepared(prepared: PreparedShare): void {
-  if (Platform.OS === "web" && prepared.uri.startsWith("blob:")) URL.revokeObjectURL(prepared.uri);
+  const action = releaseAction(prepared, Platform.OS);
+  if (action === "revoke") URL.revokeObjectURL(prepared.uri);
+  else if (action === "delete") {
+    try {
+      new File(prepared.uri).delete();
+    } catch {
+      // Déjà effacé, ou cache vidé par le système : rien à faire.
+    }
+  }
 }
 
 /**
@@ -97,11 +114,7 @@ export async function sendShareImage(
     return "saved";
   }
   if (!(await Sharing.isAvailableAsync())) return "unavailable";
-  await Sharing.shareAsync(prepared.uri, {
-    mimeType: mime,
-    UTI: mime === "image/png" ? "public.png" : mime === "video/mp4" ? "public.mpeg-4" : "public.jpeg",
-    dialogTitle: kind === "save" ? "Enregistrer l'image" : "Partager sur Instagram",
-  });
+  await Sharing.shareAsync(prepared.uri, nativeShareOptions(mime, kind));
   return "shared";
 }
 
@@ -118,10 +131,18 @@ export const storyExportPath = (id: string) => `/api/stories/${id}/export`;
 /** Adresse du fichier de ma publication du Fil (auteur seul). */
 export const postExportPath = (id: string) => `/api/feed-posts/${id}/export`;
 
-export type ExportKind = { mime: "image/jpeg" | "video/mp4"; ext: "jpg" | "mp4" };
+export type { ExportKind };
 
-/** Télécharge un fichier sortant. `key` : nom stable dans le cache (le même contenu ne se retélécharge pas deux fois de suite). */
-export async function prepareExport(path: string, fileName: string, key: string): Promise<PreparedShare & ExportKind> {
+/**
+ * Télécharge un fichier sortant. `key` : nom stable dans le cache (le même contenu ne se retélécharge pas deux fois de
+ * suite). `mediaKind` : la nature réelle du fichier (une story vidéo sort en .mp4 / video/mp4, jamais en image).
+ */
+export async function prepareExport(
+  path: string,
+  fileName: string,
+  key: string,
+  mediaKind: ExportMediaKind = "photo",
+): Promise<PreparedShare & ExportKind> {
   const url = apiUrl(path);
   if (Platform.OS === "web") {
     let res: Response;
@@ -142,11 +163,12 @@ export async function prepareExport(path: string, fileName: string, key: string)
     };
   }
   try {
-    const file = await File.downloadFileAsync(url, new File(Paths.cache, `orasso-export-${key}.bin`), {
+    const kind = exportKindOf(mediaKind);
+    const file = await File.downloadFileAsync(url, new File(Paths.cache, exportCacheName(key, kind)), {
       headers: authHeaders(),
       idempotent: true,
     });
-    return { uri: file.uri, fileName, mime: "image/jpeg", ext: "jpg" };
+    return { uri: file.uri, fileName: exportFileName(fileName, kind), temp: true, ...kind };
   } catch (e) {
     throw shareError(null, e instanceof Error ? e.message : String(e));
   }

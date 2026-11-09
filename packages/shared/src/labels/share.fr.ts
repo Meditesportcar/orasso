@@ -61,6 +61,7 @@ export const shareLabels = {
   /** En message. */
   messageTitle: "Envoyer à…",
   messageEmpty: "Aucune conversation : écris d'abord à quelqu'un depuis la Boîte.",
+  messageMore: "Voir plus de conversations",
   messageSent: "Message envoyé.",
   messageBody: (title: string, url: string) => `${title} : ${url}`,
   /** Vers l'extérieur. */
