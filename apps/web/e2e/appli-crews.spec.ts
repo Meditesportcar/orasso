@@ -89,7 +89,10 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await expect(k.page.getByTestId("profil-crew")).toBeVisible({ timeout: 30_000 });
     await shot(k.page, `03-profil-crew-${theme}`);
     await k.page.goto("/accueil");
-    await k.page.getByRole("button", { name: "Activité", exact: true }).first().click();
+    await k.page
+      .getByRole("button", { name: /^Activité/ })
+      .first()
+      .click();
     await k.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
@@ -119,7 +122,10 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await l.page.goto("/accueil");
-    await l.page.getByRole("button", { name: "Activité", exact: true }).first().click();
+    await l.page
+      .getByRole("button", { name: /^Activité/ })
+      .first()
+      .click();
     await l.page.getByTestId("inbox-requests").click(); // Lot C2a : segment de la feuille Boîte.
     await expect(l.page.getByTestId("request-crew-confirmation")).toBeVisible({ timeout: 20_000 });
     await shot(l.page, `07-demandes-venue-${theme}`);

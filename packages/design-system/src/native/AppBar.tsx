@@ -3,6 +3,7 @@
 // `--bar-line`, logotype 118 px, boutons `.abtn` 38 px rayon 12, pastille `.capchip` « Organisateur ») ; plus de
 // métal brossé. Écran de flux = `.flowbar` (pas de barre : titre italique et ✕ carré `.closex` posés sur le fond).
 
+import { navLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
 import type { IconName } from "../icons";
@@ -404,19 +405,19 @@ export function AppBar({
           </>
         ) : (
           <>
-            <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
+            <AppBarAction icon="search" label={navLabels.top.search} onPress={onSearch} on={searchOn} />
             {onActivity || onMessages ? (
               <>
                 <AppBarAction
                   icon="bell"
-                  label="Activité"
+                  label={navLabels.topCounted.activity(activityOn ? 0 : (activityCount ?? 0))}
                   onPress={onActivity}
                   on={activityOn}
                   count={activityOn ? undefined : activityCount}
                 />
                 <AppBarAction
                   icon="bubble"
-                  label="Messages"
+                  label={navLabels.topCounted.messages(messagesOn ? 0 : (messagesCount ?? 0))}
                   onPress={onMessages}
                   on={messagesOn}
                   count={messagesOn ? undefined : messagesCount}

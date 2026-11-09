@@ -104,6 +104,8 @@ export const organizerInboxService = {
           : null,
         unreadCount: await unreadCountOf(db, row.id, access.reader),
         closedAt: row.closedAt?.toISOString() ?? null,
+        // Boîte de l'organisateur : jamais de réponse à une story (lot R7c1).
+        storyThumbUrl: null,
       });
     }
     const last = page.at(-1);

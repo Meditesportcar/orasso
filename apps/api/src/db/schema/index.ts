@@ -20,6 +20,7 @@ export * from "./moderation";
 export * from "./notifications";
 export * from "./passport";
 export * from "./points";
+export * from "./presence";
 export * from "./profiles";
 export * from "./pros";
 export * from "./providers";

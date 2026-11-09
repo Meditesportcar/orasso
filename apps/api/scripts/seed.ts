@@ -14,6 +14,7 @@ import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { syncVehicleReference } from "../src/modules/vehicles/reference-sync";
+import { seedActivity } from "./seed/activity";
 import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
 import { seedBase, seedMissingCategories } from "./seed/base";
@@ -164,6 +165,8 @@ async function main() {
   await seedVisitorStamps();
   // 08/11 : « Rassemblement du Lydia » en direct (4 jours, commencé la veille) ; recréé quand il est fini.
   await seedLiveEvent();
+  // Lot R7c1 : 12 notifications (cloche) et 3 demandes de Damien_66.
+  await seedActivity();
 }
 
 try {

@@ -75,6 +75,7 @@ import { staffChatsService } from "../communication/staff-chats";
 import { assertCanSeeEvent, hasPendingInvitation } from "../invitations/access";
 import { decorateForMedia } from "../media/explore";
 import { notificationsService } from "../notifications/service";
+import { presenceService } from "../presence/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -95,6 +96,8 @@ type ViewRights = {
   exhibitorSlot: boolean;
   /** Lot R4b, tour 2 : retenus et places restantes après la fin (organisation seulement, `publicCountsHidden`). */
   countsAfterEnd?: boolean;
+  /** Lot R7d1 : la personne qui regarde (son état « sur place » dans le bloc `live`), `null` = visiteur sans compte. */
+  viewerId?: string | null;
 };
 
 async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Promise<EventPublic> {
@@ -141,6 +144,8 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
     instructions: rights.instructions ? e.instructions : null,
     entranceNote: e.entranceNote,
     acceptedCount: hideCounts ? null : counters.accepted,
+    // Lot R7d1 : le direct. Hors de l'événement, ni retenues ni présents (règle des absents), organisation comprise.
+    live: await presenceService.liveOf(e, rights.viewerId ?? null),
   };
 }
 
@@ -238,6 +243,7 @@ function copyValues(e: EventRow) {
     department: e.department,
     lat: e.lat,
     lng: e.lng,
+    presenceRadiusM: e.presenceRadiusM,
     admittedVehicleTypes: e.admittedVehicleTypes,
     capacity: e.capacity,
     maxVehiclesPerUser: e.maxVehiclesPerUser,
@@ -328,7 +334,12 @@ export const eventsService = {
     // Lot M4, tour 2 : le créneau strict des exposants n'est donné qu'aux concernés (`holdsExhibitorSlot`). La feuille
     // de candidature le lit à part, par `applyContext`, seulement si l'on peut candidater maintenant.
     const exhibitorSlot = viewer !== null && holdsExhibitorSlot(member, mine);
-    const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot, countsAfterEnd: member });
+    const view = await publicView(e, s, {
+      instructions: member || accepted,
+      exhibitorSlot,
+      countsAfterEnd: member,
+      viewerId: viewer?.user.id ?? null,
+    });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
     const full: EventPublic = {
@@ -395,7 +406,12 @@ export const eventsService = {
     });
     const settings = posterSettingsOf(e);
     return {
-      ...(await publicView(e, s, { instructions: true, exhibitorSlot: true, countsAfterEnd: true })),
+      ...(await publicView(e, s, {
+        instructions: true,
+        exhibitorSlot: true,
+        countsAfterEnd: true,
+        viewerId: v.user.id,
+      })),
       zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity, position: z.position })),
       counters: await eventsRepo.counters(e),
       publishedAt: e.publishedAt?.toISOString() ?? null,
@@ -403,6 +419,7 @@ export const eventsService = {
       lockedAt: e.lockedAt?.toISOString() ?? null,
       parentEventId: e.parentEventId,
       recurrenceRule: e.recurrenceRule ?? null,
+      presenceRadiusM: e.presenceRadiusM,
       shopEnabled: e.shopEnabled,
       posterSettings: settings ? { ...settings, photoUrl: storage.url(settings.photoKey) } : null,
     };

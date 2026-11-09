@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import { creerComptePastilles } from "./r7a1-pastilles";
 import { RELAIS } from "./relais";
 
 // Lot R7a1 (D38), côté site : la barre Explorer · Le Fil · Accueil · Crew · Profil, Sorties et Garage joignables par leur
@@ -43,18 +44,25 @@ test("la barre : cinq onglets dans l'ordre, la loupe, la cloche et la bulle, plu
     await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/boite");
     await expect(header.getByRole("link", { name: "Boîte" })).toHaveCount(0);
 
-    // Les pastilles sont celles de `GET /me` : notifications non lues pour la cloche, conversations et demandes pour la bulle.
-    // (La lecture passe par la session du navigateur : une nouvelle connexion ajouterait elle-même une notification.)
-    const me = {
-      data: (await (await page.request.get("/api/me")).json()) as {
-        unreadInbox: number;
-        counts: { unreadNotifications: number };
-      },
+    // Tour 2 : la cloche compte les notifications non lues et les demandes en attente, la bulle les conversations non lues
+    // seulement. (La lecture passe par la session du navigateur : une nouvelle connexion ajouterait elle-même une notification.)
+    const me = (await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } };
+    const summary = (await (await page.request.get("/api/me/inbox/summary")).json()) as {
+      unreadMessages: number;
+      requests: Record<string, number>;
     };
+    const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
     const bell = (await header.getByRole("link", { name: "Activité" }).innerText()).trim();
     const bubble = (await header.getByRole("link", { name: "Messages" }).innerText()).trim();
-    expect(bell).toBe(me.data.counts.unreadNotifications ? String(me.data.counts.unreadNotifications) : "");
-    expect(bubble).toBe(me.data.unreadInbox ? String(me.data.unreadInbox) : "");
+    const wantBell = me.counts.unreadNotifications + requests;
+    expect(bell).toBe(wantBell ? String(wantBell) : "");
+    expect(bubble).toBe(summary.unreadMessages ? String(summary.unreadMessages) : "");
+    // Les noms accessibles annoncent le nombre.
+    if (wantBell) {
+      await expect(
+        header.getByRole("link", { name: `Activité, ${wantBell} non lue${wantBell > 1 ? "s" : ""}` }),
+      ).toBeVisible();
+    }
     await shot(page, `barre-${theme}-390`);
 
     // Chaque onglet ouvre sa page, l'onglet actif suit.
@@ -106,11 +114,27 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   expect(res === null || [200, 301, 302, 303, 307, 308].includes(res.status())).toBe(true);
 });
 
-test("Le Fil (coquille) rend le Journal sous son titre ; la cloche mène toujours au Journal", async ({ page }) => {
-  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la cloche mène au Journal", async ({
+  page,
+}) => {
+  const compte = await creerComptePastilles();
+  await compte.ajouterNotificationNonLue();
+  await loginInBrowser(page, compte.email, undefined, "/app");
+  const unread = async () =>
+    ((await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } }).counts
+      .unreadNotifications;
+  const before = await unread();
+  expect(before).toBeGreaterThan(0);
   await page.goto("/app/fil");
   await expect(page.getByRole("heading", { name: "Le Fil", exact: true })).toBeVisible();
   await expect(page.getByTestId("journal")).toBeVisible();
+  // Comme l'appli : les notifications seules (ni conversations ni demandes), et la page ne marque rien comme lu.
+  await expect(page.getByTestId("journal-item").first()).toBeVisible();
+  await expect(page.locator(".s-convo")).toHaveCount(0);
+  await expect(page.getByTestId("inbox-request")).toHaveCount(0);
+  expect(await unread()).toBe(before);
+  // Tour 3 : comme l'appli, pas de « Tout marquer comme lu » sur Le Fil.
+  await expect(page.getByRole("button", { name: "Tout marquer comme lu" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
@@ -144,14 +168,20 @@ test("Crew : avec un crew (onglet du lot R7b2), sans crew", async ({ browser }) 
   await s.close();
 });
 
-test("le bandeau « où sont passées les choses » : vu une fois par compte, jamais deux", async ({ browser }) => {
+test("le bandeau « où sont passées les choses » : vu une fois par navigateur, jamais deux", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
   await page.goto("/app");
   await expect(banner(page)).toBeVisible();
-  await expect(banner(page)).toContainText("Sorties est dans l'Accueil");
+  await expect(banner(page)).toContainText("Orasso se range autrement");
+  await expect(banner(page)).toContainText("Mon garage");
   await expect(banner(page)).toContainText("Rien n'est perdu");
+  // Sous le bonjour (maquette R7.1), avec de l'air entre les deux, et un ✕ qui se lit « Fermer l'explication ».
+  const hello = await page.getByRole("heading", { name: /^Salut / }).boundingBox();
+  const box = await banner(page).boundingBox();
+  expect((box?.y ?? 0) - ((hello?.y ?? 0) + (hello?.height ?? 0))).toBeGreaterThanOrEqual(8);
+  await expect(page.getByTestId("whatsnew-dismiss")).toHaveAccessibleName("Fermer l'explication");
   await shot(page, "bandeau-kenji-390");
   // Seulement sur l'Accueil.
   await page.goto("/app/explorer");
@@ -163,29 +193,75 @@ test("le bandeau « où sont passées les choses » : vu une fois par compte, ja
   await expect(banner(page)).toHaveCount(0);
   const cookie = (await ctx.cookies()).find((c) => c.name === "whatsnew_r7");
   expect(cookie).toBeDefined();
-  // Un haché : jamais l'identifiant du compte.
-  expect(cookie?.value).toMatch(/^[0-9a-f]{16}$/);
-  const me = await apiCall<{ user: { id: string } }>(await login("kenji@orasso.local"), "GET", "/me");
-  expect(cookie?.value).not.toContain(me.data.user.id);
+  // Tour 3 : un cookie de préférence `vu` par navigateur, sans identifiant de compte ni secret.
+  expect(cookie?.value).toBe("vu");
   await page.reload();
   await expect(banner(page)).toHaveCount(0);
 
-  // Un autre compte sur le même navigateur le voit à son tour ; le premier ne le revoit pas.
+  // Un autre compte sur le même navigateur ne le revoit pas (accepté : le cookie est par navigateur).
   await page.goto("/app/moi");
   await page.getByTestId("reglage-deconnexion").click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app"));
   await loginInBrowser(page, "lea@orasso.local", undefined, "/app");
   await page.goto("/app");
-  await expect(banner(page)).toBeVisible();
-  await page.getByTestId("whatsnew-dismiss").click();
   await expect(banner(page)).toHaveCount(0);
-  const both = (await ctx.cookies()).find((c) => c.name === "whatsnew_r7");
-  expect(both?.value.split(".").length).toBe(2);
-  await page.goto("/app/moi");
-  await page.getByTestId("reglage-deconnexion").click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/app"));
-  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+  await ctx.close();
+});
+
+test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par un lien du Profil (l'exposant a la ligne « Mon garage »)", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  const pseudo = `Visiteur_${unique()}`;
+  await signUpApi(pseudo);
+  await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, undefined, "/app");
   await page.goto("/app");
-  await expect(banner(page)).toHaveCount(0);
+  await expect(banner(page)).toBeVisible();
+  await expect(banner(page)).toContainText("Orasso se range autrement");
+  await expect(banner(page)).not.toContainText("garage");
+  await shot(page, "bandeau-visiteur-390");
+  await page.goto("/app/moi");
+  // Tour 3 : le visiteur garde ses archives et son QR de compte, comme dans l'appli.
+  await expect(page.getByTestId("garage-archives-link")).toHaveText("Mes véhicules archivés et mon QR de compte");
+  await expect(page.getByTestId("garage-archives-link")).toHaveAttribute("href", "/app/garage");
+  await shot(page, "profil-visiteur-390");
+  await ctx.close();
+  // L'exposant (Kenji) : la ligne est là, comme dans l'appli.
+  const k = await browser.newContext({ viewport: MOBILE });
+  const kp = await k.newPage();
+  await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app/moi");
+  await kp.goto("/app/moi");
+  await expect(kp.getByTestId("garage-link")).toBeVisible();
+  await expect(kp.getByTestId("garage-link")).toContainText("Tes véhicules et leurs photos");
+  await expect(kp.getByTestId("garage-archives-link")).toHaveCount(0);
+  await k.close();
+});
+
+test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const compte = await creerComptePastilles();
+  const before = await compte.summary();
+  expect(before.unreadMessages).toBe(0);
+  expect(before.requests.contact).toBe(1);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, compte.email, undefined, "/app");
+  await page.goto("/app");
+  const header = page.locator("header.o-appbar--tab");
+  // Demande seule : la bulle est sans pastille, la cloche en a une (au moins la demande).
+  await expect(header.getByRole("link", { name: "Messages" })).toHaveAccessibleName("Messages");
+  await expect(header.getByRole("link", { name: "Messages" }).locator(".o-appbar__count")).toHaveCount(0);
+  await expect(header.getByRole("link", { name: /^Activité, \d+ non lues?$/ })).toBeVisible();
+  await shot(page, "pastilles-demande-seule-390");
+  // Une conversation non lue : la bulle affiche 1.
+  await compte.ajouterConversationNonLue();
+  await page.reload();
+  const bubble = header.getByRole("link", { name: "Messages, 1 non lu" });
+  await expect(bubble).toBeVisible();
+  await expect(bubble.locator(".o-appbar__count")).toHaveText("1");
+  await shot(page, "pastilles-conversation-390");
   await ctx.close();
 });

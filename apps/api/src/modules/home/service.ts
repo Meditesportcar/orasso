@@ -49,6 +49,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { applicationsQueries } from "../applications/queries";
 import { exploreEvents } from "../events/explore";
+import { presenceService } from "../presence/service";
 import { proOwnerActive } from "../pros/explore";
 import { weatherService } from "../weather/service";
 import { enrichNextAccess, mediaBlock, nextTicketOf, proBlock, providerBlock, stampsThisSeason } from "./profiles";
@@ -91,6 +92,8 @@ export const homeService = {
 
     const widgets = normalizeHomeWidgets(v.profile.homeWidgets);
     const shown = new Set<HomeWidgetId>(visibleHomeWidgets(widgets));
+    // Lot R7d1 : « En cours » suit le réglage de la personne (masqué = non calculé), même dans l'Accueil v2 de l'appli.
+    const liveShown = shown.has("live");
     const located = resolvePosition({ lat: q.lat, lng: q.lng }, v.profile.departments);
 
     // Lot 43 : l'accueil du profil demandé (`?persona=`, la casquette active de l'appli).
@@ -116,6 +119,7 @@ export const homeService = {
     // (Overpass, prix des carburants) ne sont plus appelées tant que `NEARBY_STATIONS_ENABLED` est faux.
     for (const id of homeWidgetIds) if (!homeWidgetOffered(id, nearbyStations.enabled)) shown.delete(id);
     const extras = full && q.blocks !== "places";
+    const wantLive = extras && liveShown;
 
     const upcomingPromise = applicationsQueries.mine(v, "upcoming");
     const interestsPromise = db
@@ -138,6 +142,7 @@ export const homeService = {
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
       extras ? this.nudge(v) : Promise.resolve(null),
     ]);
+    const live = wantLive ? await presenceService.homeLive(v) : null;
     // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
     const sponsored = extras
       ? await sponsoredService.select(
@@ -186,6 +191,7 @@ export const homeService = {
       nudge,
       sponsored,
       widgets,
+      live,
     };
   },
 

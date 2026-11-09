@@ -321,9 +321,12 @@ describe("rendu serveur des composants", () => {
     // Lot R7a1 (D38) : la barre du passionné, et la cloche « Activité » et la bulle « Messages » à la place de la Boîte.
     expect(tabSets.exhibitor.map((t) => t.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
     expect(tabSets.visitor.map((t) => t.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
-    const passionate = html(<AppBar kind="tab" activityHref="/a" activityCount={2} messagesHref="/m" messagesCount={120} />);
-    expect(passionate).toContain('aria-label="Activité"');
-    expect(passionate).toContain('aria-label="Messages"');
+    const passionate = html(
+      <AppBar kind="tab" activityHref="/a" activityCount={2} messagesHref="/m" messagesCount={120} />,
+    );
+    // Les noms accessibles annoncent le nombre (tour 2).
+    expect(passionate).toContain('aria-label="Activité, 2 non lues"');
+    expect(passionate).toContain('aria-label="Messages, plus de 99 non lus"');
     expect(passionate).not.toContain('aria-label="Boîte"');
     expect(passionate).toContain("99+");
     const title = html(<BigTitle title="Mon garage" label="3 véhicules" />);
