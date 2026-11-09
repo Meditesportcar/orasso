@@ -278,7 +278,12 @@ export function PublicProfile({
   // Lot R7b1 : l'onglet interne (Garage par défaut) ; `?onglet=sorties` ouvre l'autre.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
   const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
-  useEffect(() => setTab(profileTabFromParam(onglet)), [onglet]);
+  // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
+  useEffect(() => {
+    if (onglet === undefined) return;
+    setTab(profileTabFromParam(onglet));
+    router.setParams({ onglet: undefined });
+  }, [onglet, router]);
   const limited = p.audience === "public_limited";
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
@@ -419,17 +424,7 @@ export function PublicProfile({
 
       {limited ? (
         <>
-          <SecHead title={L.vehiclesPrivate} hint={L.vehiclesPrivateHint} />
-          <View style={styles.plist} testID="profile-vehicles-private">
-            {p.vehicles.map((v) => (
-              <View key={v.id} style={[styles.pitem, { backgroundColor: c.surface }]}>
-                <Icon name={TYPE_ICON[v.vehicleType]} size={16} color={c.ink} />
-                <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
-                  {v.label}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {/* Tour 2 (maquette R7.12) : un compte privé vu d'un inconnu montre les nombres seulement ; ses véhicules ne sont plus listés. */}
           <View style={[styles.note, { backgroundColor: c.surface }]} testID="profile-private-note">
             <Icon name="lock" size={16} color={c.inkMuted} />
             <Text variant="caption" color={c.inkMuted} style={styles.noteText}>

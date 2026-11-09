@@ -14,7 +14,17 @@
 // Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, sorties),
 // les deux premiers ouvrent leur liste (`/reseau`), les sorties l'onglet Sorties, puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
 // réglages.
-import { AvatarRing, Button, Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  AvatarRing,
+  Button,
+  GradientFill,
+  Icon,
+  Tag,
+  Text,
+  tokens,
+  useTheme,
+  withAlpha,
+} from "@orasso/design-system/native";
 import {
   capLabels,
   fitWideWordSize,
@@ -28,7 +38,7 @@ import {
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
 import { GarageScreen } from "@/features/garage/GarageScreen";
@@ -50,7 +60,7 @@ import { PhotoSheet } from "./PhotoSheet";
 import { ProfileTabs } from "./ProfileTabs";
 import { CapRows, CreateSheet, HeadAvatar, LinkRow, SeasonBlock } from "./parts";
 
-const { space1, space3 } = tokens.spacing;
+const { space1, space3, space4 } = tokens.spacing;
 
 export function ProfilScreen() {
   const { t } = useTheme();
@@ -59,10 +69,16 @@ export function ProfilScreen() {
   const { persona, active, entries } = usePersona();
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | "photo" | null>(null);
   const [headW, setHeadW] = useState(0);
+  const { fontScale } = useWindowDimensions();
   // Lot R7b1 : l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut, partout) ; un toucher le change.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
   const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
-  useEffect(() => setTab(profileTabFromParam(onglet)), [onglet]);
+  // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
+  useEffect(() => {
+    if (onglet === undefined) return;
+    setTab(profileTabFromParam(onglet));
+    router.setParams({ onglet: undefined });
+  }, [onglet, router]);
   // Change à chaque « tirer pour actualiser » : le garage et le passeport se relisent aussi.
   const [round, setRound] = useState(0);
   const close = () => setSheet(null);
@@ -78,7 +94,7 @@ export function ProfilScreen() {
   const profile = me?.profile;
   const department = profile?.departments[0];
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
-  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW, base ? 26 : 22, 14);
+  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW / Math.max(1, fontScale), base ? 26 : 22, 9);
 
   // Les deux boutons de l'en-tête : QR de compte (Ma fiche pour le pro) et roue dentée (Réglages), l'un sur l'autre.
   const headButtons = (
@@ -124,7 +140,10 @@ export function ProfilScreen() {
       <Text
         variant="posterL"
         color={t.color.ink}
-        // Lot R4c : un pseudo long rapetisse au lieu de se couper.
+        // Lot R4c : un pseudo long rapetisse au lieu de se couper. Tour 2 : la taille tient compte de la police du système
+        // (`fontScale`) et peut descendre à 9 ; une seule ligne, jamais de mot coupé (`adjustsFontSizeToFit` en dernier recours).
+        numberOfLines={1}
+        adjustsFontSizeToFit
         style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
         testID="profil-pseudo"
       >
@@ -166,6 +185,12 @@ export function ProfilScreen() {
           {/* En-tête de la maquette R7.12 : la photo dans son anneau, le pseudo, le grade et le département, le QR de compte et
               la roue dentée. Sans story, l'anneau est vide (`ring = null`) ; l'écran des stories (lot R7f2) l'ouvrira. */}
           <View style={styles.head} testID="profil-head">
+            {/* Tour 2 : un voile du fond de l'écran derrière l'en-tête, pour que le pseudo reste lisible sur les lumières du fond
+                (Béton comme Sable) ; il s'éteint vers le bas. Jetons seulement. */}
+            <GradientFill
+              css={`linear-gradient(180deg, ${withAlpha(t.color.ground, 0.82)} 0%, ${withAlpha(t.color.ground, 0.82)} 62%, ${withAlpha(t.color.ground, 0)} 100%)`}
+              style={styles.headVeil}
+            />
             {/* Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit. */}
             <Pressable
               accessibilityRole="button"
@@ -273,6 +298,7 @@ export function ProfilScreen() {
 
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
+  headVeil: { top: -space3, bottom: -space3, left: -space4, right: -space4 },
   headText: { flex: 1, minWidth: 0, gap: space1 + 1 },
   pseudo: { fontSize: 22, lineHeight: 23 },
   headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
