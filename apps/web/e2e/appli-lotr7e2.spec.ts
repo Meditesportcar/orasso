@@ -324,6 +324,8 @@ test("tour 4 : une photo du Fil qui n'arrive pas montre « Réessayer », et rev
   await page.route(photoRoute, (route) => route.abort());
   await go(page, "/fil");
   await loaded(page);
+  // Les photos ne se chargent que près de l'écran : on amène la première publication à l'écran.
+  await page.getByTestId("feed-card-feed_post").first().scrollIntoViewIfNeeded();
   await expect(page.getByTestId("photo-failed").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("photo-retry").first()).toBeVisible();
   await shot(page, "photo-en-panne");

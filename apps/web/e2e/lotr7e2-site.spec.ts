@@ -278,7 +278,7 @@ test("tour 4 : pendant l'envoi les cadres sont figés ; la confirmation suit la 
   await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1);
   await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
   await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1");
-  await expect(page.getByTestId("fil-publish-plate-state")).not.toContainText("Aucune plaque");
+  await expect(page.getByTestId("fil-publish-plate-blur")).toHaveCount(0);
 
   // Un cadre posé et placé, puis un envoi retardé : rien ne bouge pendant l'envoi.
   await page
