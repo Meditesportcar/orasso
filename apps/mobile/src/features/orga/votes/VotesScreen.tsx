@@ -105,7 +105,7 @@ export function VotesScreen({ eventId, readOnly }: { eventId: string; readOnly: 
       {error && !pending ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice testID="votes-notice">{notice}</Notice> : null}
       {!manage.data && !manage.error ? <Muted variant="body">{L.loading}</Muted> : null}
-      {manage.error && !manage.data ? (
+      {manage.error ? (
         <Button variant="secondary" icon="undo" onPress={() => void manage.reload()} testID="votes-retry">
           {L.retry}
         </Button>

@@ -87,13 +87,13 @@ export function VoteDetail({ eventId }: { eventId: string }) {
   useEffect(() => {
     gate.invalidate();
     const q = query.trim();
-    setSearching(false);
-    if (q.length < 2) {
-      setHits(null);
-      setNext(null);
-      setSearchError(null);
-      return;
-    }
+    // Dès que le champ change : les résultats et le curseur de la saisie d'avant sont vidés (jamais mélangés avec la
+    // suivante), « Voir plus » reste éteint jusqu'à la réponse de la nouvelle recherche.
+    setHits(null);
+    setNext(null);
+    setSearchError(null);
+    setSearching(q.length >= 2);
+    if (q.length < 2) return;
     const timer = setTimeout(() => loadPage(q, null), 300);
     return () => {
       clearTimeout(timer);
@@ -222,6 +222,12 @@ export function VoteDetail({ eventId }: { eventId: string }) {
       }
     >
       <OrgaFailure error={manage.error} />
+      {staleMinutes !== null ? <Notice tone="error">{L.staleData(staleMinutes)}</Notice> : null}
+      {manage.error ? (
+        <Button variant="secondary" icon="undo" onPress={() => void manage.reload()} testID="vote-detail-retry">
+          {L.retry}
+        </Button>
+      ) : null}
       {error && !confirm ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice testID="vote-detail-notice">{notice}</Notice> : null}
       {!vote && manage.data ? <Notice tone="error">{L.empty2}</Notice> : null}

@@ -66,9 +66,9 @@ export function VotesTemps({ event }: StepContext) {
     <View style={styles.root} testID="wizard-votes">
       <OrgaFailure error={manage.error} />
       {staleMinutes !== null ? <Notice tone="error">{L.staleData(staleMinutes)}</Notice> : null}
-      {manage.error && !manage.data ? (
+      {manage.error ? (
         <>
-          <Muted variant="body">{L.loadError}</Muted>
+          {!manage.data ? <Muted variant="body">{L.loadError}</Muted> : null}
           <Button variant="secondary" icon="undo" onPress={() => void manage.reload()} testID="wizard-votes-retry">
             {L.retry}
           </Button>

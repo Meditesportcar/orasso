@@ -202,28 +202,29 @@ test("Votes : Lancer inactif et expliqué, candidats par recherche et par QR, La
       );
       await shot(page, "vote-scan-refuse");
     }
-    const scan = scannable[0];
-    if (scan) {
-      await page.getByTestId("vote-scan-payload").fill(scan.payload);
-      await page.getByTestId("vote-scan-payload").press("Enter");
-      await expect(page.getByTestId("vote-scan-ok")).toContainText("ajoutée");
-      await shot(page, "vote-scan-ajoute");
-      const sources = (await manage(ev.id)).items.find((v) => v.id === voteId)?.handCandidates ?? [];
-      expect(sources.find((c) => c.applicationId === scan.item.applicationId)?.source).toBe("scan");
-      expect(sources.find((c) => c.applicationId === first.applicationId)?.source).toBe("hand");
-      // Tour 2 : un deuxième scan annonce SA voiture (pas la première scannée), un doublon dit « déjà candidate ».
-      const second = scannable[1];
-      if (second?.item.vehicleLabel) {
-        await page.getByTestId("vote-scan-payload").fill(second.payload);
-        await page.getByTestId("vote-scan-payload").press("Enter");
-        await expect(page.getByTestId("vote-scan-ok")).toContainText(second.item.vehicleLabel);
-        await expect(page.getByTestId("vote-scan-ok")).toContainText("ajoutée");
-      }
-      await page.getByTestId("vote-scan-payload").fill(scan.payload);
-      await page.getByTestId("vote-scan-payload").press("Enter");
-      await expect(page.getByTestId("vote-scan-ok")).toContainText("déjà candidate");
-      await shot(page, "vote-scan-doublon");
-    }
+    // Tour 3 : le deuxième scan est obligatoire (deux voitures entrées au QR lisible), jamais sauté en silence.
+    const [scan, second] = scannable;
+    expect(
+      scannable.length,
+      "Il faut deux voitures entrées au QR lisible : relancer pnpm db:seed",
+    ).toBeGreaterThanOrEqual(2);
+    if (!scan || !second) throw new Error("deux voitures scannables attendues");
+    await page.getByTestId("vote-scan-payload").fill(scan.payload);
+    await page.getByTestId("vote-scan-payload").press("Enter");
+    await expect(page.getByTestId("vote-scan-ok")).toContainText("ajoutée");
+    await shot(page, "vote-scan-ajoute");
+    const sources = (await manage(ev.id)).items.find((v) => v.id === voteId)?.handCandidates ?? [];
+    expect(sources.find((c) => c.applicationId === scan.item.applicationId)?.source).toBe("scan");
+    expect(sources.find((c) => c.applicationId === first.applicationId)?.source).toBe("hand");
+    // Un deuxième scan annonce SA voiture (pas la première scannée), un doublon dit « déjà candidate ».
+    await page.getByTestId("vote-scan-payload").fill(second.payload);
+    await page.getByTestId("vote-scan-payload").press("Enter");
+    await expect(page.getByTestId("vote-scan-ok")).toContainText(second.item.vehicleLabel ?? "");
+    await expect(page.getByTestId("vote-scan-ok")).toContainText("ajoutée");
+    await page.getByTestId("vote-scan-payload").fill(scan.payload);
+    await page.getByTestId("vote-scan-payload").press("Enter");
+    await expect(page.getByTestId("vote-scan-ok")).toContainText("déjà candidate");
+    await shot(page, "vote-scan-doublon");
     await page.getByTestId("vote-scan-done").click();
 
     // Le staff (Damien) : la liste sans Lancer, sans Clore, sans scan ; l'API lui refuse les écritures.

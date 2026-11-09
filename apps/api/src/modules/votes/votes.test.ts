@@ -324,12 +324,18 @@ describe("création et droits", () => {
     // Ouvert de lui-même (premiers pointages) puis clos à la main : clos, sans voix, il peut être retiré.
     expect((await api(orga, "POST", `/${id}/close`)).status).toBe(200);
     expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    // Une ouverture ancienne qui traînerait sur la ligne retirée : elle ne doit pas survivre au retour du vote.
+    const stale = paris(10, 17, 18, 30);
+    await db.update(eventVotes).set({ openedAt: stale }).where(eq(eventVotes.id, id));
     const back = await api(orga, "POST", "/all-categories");
     expect(back.status).toBe(201);
     // Plus clos, et pas de candidats figés d'avant : un vote neuf, que les premiers pointages ouvrent de nouveau (state `open`).
     expect(back.json).toMatchObject({ id, state: "open", closedAt: null });
     const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
     expect(row).toMatchObject({ deletedAt: null, closedAt: null });
+    // L'ouverture est reposée par le cycle de vie à la première entrée (19 h 02), pas l'ancienne valeur gardée sur la ligne.
+    expect(row?.openedAt).toEqual(paris(10, 17, 19, 2));
+    expect(row?.openedAt).not.toEqual(stale);
     expect(await db.query.eventVoteCandidates.findMany({ where: eq(eventVoteCandidates.voteId, id) })).toHaveLength(0);
     // Retiré à nouveau, puis des voix existent malgré tout : il ne revient pas, avec un libellé clair.
     expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
@@ -344,6 +350,26 @@ describe("création et droits", () => {
     expect(refused.json.error.code).toBe("restore_has_voices");
     expect(refused.json.error.message).toMatch(/déjà reçu des voix/);
     expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.deletedAt).not.toBeNull();
+  });
+
+  it("« Toutes catégories » remis (tour 3) : un brouillon le voit revenir « prévu », sans ouverture ni clôture", async () => {
+    const draft = await createEvent(structureId, {
+      status: "draft",
+      startsAt: paris(11, 7, 19),
+      endsAt: paris(11, 7, 23),
+    });
+    const id = await allCategoriesIdOf(draft.id);
+    expect((await api(orga, "DELETE", `/${id}`, undefined, draft.id)).status).toBe(200);
+    // Une ouverture et une clôture anciennes sur la ligne retirée : le brouillon n'en garde rien.
+    await db
+      .update(eventVotes)
+      .set({ openedAt: paris(10, 1, 10), closedAt: paris(10, 1, 11) })
+      .where(eq(eventVotes.id, id));
+    const back = await api(orga, "POST", "/all-categories", undefined, draft.id);
+    expect(back.status).toBe(201);
+    expect(back.json).toMatchObject({ id, state: "upcoming", closedAt: null });
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    expect(row).toMatchObject({ deletedAt: null, openedAt: null, closedAt: null });
   });
 
   it("« Toutes catégories » remis (tour 2) : le plafond de votes par événement vaut aussi pour lui", async () => {

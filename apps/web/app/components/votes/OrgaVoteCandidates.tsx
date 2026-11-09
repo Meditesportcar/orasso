@@ -67,13 +67,13 @@ export function OrgaVoteCandidates({
   useEffect(() => {
     gate.invalidate();
     const q = query.trim();
-    setSearching(false);
-    if (q.length < 2) {
-      setHits(null);
-      setNext(null);
-      setSearchError(null);
-      return;
-    }
+    // Dès que le champ change : les résultats et le curseur de la saisie d'avant sont vidés (jamais mélangés avec la
+    // suivante), « Voir plus » reste éteint jusqu'à la réponse de la nouvelle recherche.
+    setHits(null);
+    setNext(null);
+    setSearchError(null);
+    setSearching(q.length >= 2);
+    if (q.length < 2) return;
     const timer = setTimeout(() => void loadPage(q, null), 300);
     return () => {
       clearTimeout(timer);
