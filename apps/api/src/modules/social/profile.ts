@@ -39,6 +39,7 @@ import {
   vehiclePrivate,
   vehiclePublic,
 } from "../vehicles/serializers";
+import { storiesBar } from "../stories/bar";
 import { followsService } from "./follows";
 
 const DAY = 86_400_000;
@@ -377,6 +378,8 @@ export const socialProfile = {
       socials: fields.socials ? (target.socials ?? {}) : null,
       nextOuting,
       seenAt: fields.pastEvents ? await seenAtOf(target.userId, at) : null,
+      // Lot R7f1 : ses stories selon le regard (zéro si rien n'est visible, sans rien révéler).
+      stories: await storiesBar.summary(viewer, "user", target.userId),
     };
   },
 

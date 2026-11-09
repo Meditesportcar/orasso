@@ -56,6 +56,7 @@ import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
+import { storiesRoutes } from "./modules/stories/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
 import { uploadsRoutes } from "./modules/uploads/routes";
@@ -220,6 +221,7 @@ app.route("/", messagingRoutes);
 app.route("/", crewsRoutes);
 // Lot R5c1 : le fil du crew (publications, photos, flamme, commentaires, sondages).
 app.route("/", crewFeedRoutes);
+app.route("/", storiesRoutes);
 app.route("/", invitationsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);

@@ -12,7 +12,7 @@ import {
   STORY_H,
   STORY_W,
 } from "@orasso/shared";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 
 import { blurPlateRegions, MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
 
@@ -55,7 +55,7 @@ export async function composeStoryPhoto(
   const y0 = Math.max(0, top);
   const x1 = Math.min(STORY_W, left + fw);
   const y1 = Math.min(STORY_H, top + fh);
-  const layers: sharp.OverlayOptions[] = [];
+  const layers: OverlayOptions[] = [];
   if (x1 > x0 && y1 > y0) {
     const foreground = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
       .resize(fw, fh, { fit: "fill" })

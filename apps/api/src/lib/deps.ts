@@ -8,6 +8,7 @@ export interface Clock {
 export const systemClock: Clock = { now: () => new Date() };
 
 export type JobName =
+  | "stories.expire"
   | "waitlist.offer-expire"
   | "event.lock"
   | "event.preview-open"
