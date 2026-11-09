@@ -6,6 +6,11 @@ export default [
   layout("layouts/app.tsx", [
     route("app", "routes/app-home.tsx"),
     route("app/explorer", "routes/app-explorer.tsx"),
+    // Lot R7a1 (D38) : Le Fil et Crew, deux onglets en coquille (les écrans viennent des lots R7e2 et R7b2) ; « Compris » du
+    // bandeau « où sont passées les choses » (action seulement).
+    route("app/fil", "routes/app-fil.tsx"),
+    route("app/crew", "routes/app-crew.tsx"),
+    route("app/bandeau", "routes/app-bandeau.ts"),
     // Boîte (lot 18) : conversations, demandes, conversation en temps réel.
     route("app/boite", "routes/boite.tsx"),
     route("app/boite/demandes", "routes/boite-demandes.tsx"),

@@ -12,7 +12,7 @@ import {
   socialLabels,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useLocation, useNavigation } from "react-router";
 
 import { InviteMenu } from "../components/EventInvite";
 import { ConversationRow, InboxSegments } from "../components/Messaging";
@@ -69,7 +69,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "read_all") {
     const res = await api(request, "/me/notifications/read", { method: "POST", json: { all: true } });
     if (!res.ok) return data({ error: res.error.message }, { status: res.status });
-    return redirect("/app/journal");
+    // Lot R7a1 : la page Le Fil (`/app/fil`) rend ce même Journal et lui renvoie son formulaire.
+    const here = new URL(request.url).pathname;
+    return redirect(here === "/app/fil" ? here : "/app/journal");
   }
   // Lot R6c : couper les invitations d'une personne (« ⋯ » d'une notification d'invitation).
   if (intent === "invite_mute") {
@@ -143,9 +145,19 @@ function JournalRow({ item }: { item: JournalItem }) {
   );
 }
 
-export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
+/**
+ * Le Journal, tel que le rend la Boîte (segment « Tout ») ; depuis le lot R7a1, l'onglet Le Fil (`/app/fil`, coquille en
+ * attendant le lot R7e2) l'affiche aussi, sous son titre et sans les segments de la Boîte.
+ */
+export function JournalView({
+  loaderData,
+  actionData,
+  title,
+  segments = true,
+}: Pick<Route.ComponentProps, "loaderData" | "actionData"> & { title: string; segments?: boolean }) {
   const { items, nextCursor, summary, conversations, requests, unavailable } = loaderData;
   const busy = useNavigation().state !== "idle";
+  const here = useLocation().pathname;
   const unread = items.filter((i) => !i.readAt).length;
   const feed: { at: string; node: ReactNode }[] = byRecent<{ at: string; node: ReactNode }>(
     conversations.map((c: ConversationSummary) => ({
@@ -170,12 +182,14 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
   );
   return (
     <div className="s-narrow s-stack" data-testid="journal">
-      <h1 className="s-title">{messagingLabels.inbox}</h1>
-      <InboxSegments
-        active="all"
-        messages={summary.unreadMessages}
-        requests={Object.values(summary.requests).reduce((a, b) => a + b, 0)}
-      />
+      <h1 className="s-title">{title}</h1>
+      {segments ? (
+        <InboxSegments
+          active="all"
+          messages={summary.unreadMessages}
+          requests={Object.values(summary.requests).reduce((a, b) => a + b, 0)}
+        />
+      ) : null}
       <div className="s-row s-row--between">
         <h2 className="s-h2">{socialLabels.journal}</h2>
         {unread > 0 && (
@@ -206,7 +220,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
                 ? "Messages indisponibles pour le moment."
                 : "Demandes indisponibles pour le moment."}
           </span>
-          <Button variant="secondary" icon="undo" href="/app/journal" data-testid="inbox-retry">
+          <Button variant="secondary" icon="undo" href={here} data-testid="inbox-retry">
             Réessayer
           </Button>
         </div>
@@ -220,10 +234,14 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
         </ul>
       )}
       {nextCursor && (
-        <Button variant="secondary" icon="next" href={`/app/journal?suite=${encodeURIComponent(nextCursor)}`}>
+        <Button variant="secondary" icon="next" href={`${here}?suite=${encodeURIComponent(nextCursor)}`}>
           Plus ancien
         </Button>
       )}
     </div>
   );
+}
+
+export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
+  return <JournalView loaderData={loaderData} actionData={actionData} title={messagingLabels.inbox} />;
 }
