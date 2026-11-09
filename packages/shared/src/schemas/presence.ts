@@ -47,6 +47,12 @@ export type EventLive = {
   acceptedCount: number | null;
   /** Connecté seulement : comment je suis sur place, `null` sinon. */
   myPresence: MyPresence | null;
+  /**
+   * « Je suis sur place » est proposable : l'API ne refuserait pas avant la mesure (ouvert, pas de place de véhicule,
+   * accès et billet, pas déjà présent). Calculé par la même règle que la validation (`presenceGate`) ; faux sans
+   * connexion. L'écran lit ce booléen, il ne devine rien.
+   */
+  canValidatePresence: boolean;
   /** Votes ouverts maintenant (0 ou 1 aujourd'hui : le prix du public ; R7l1 y branche les votes à thème). */
   votesOpen: number;
   /** Story « En cours » de l'organisateur (R7h) ; faux tant qu'elle n'existe pas. */

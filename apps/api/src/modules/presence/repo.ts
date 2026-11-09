@@ -85,19 +85,32 @@ export async function entryOf(
  * billet contrôlé ou l'entrée de son véhicule n'est pas comptée une seconde fois). Comptes supprimés exclus des entrées,
  * comme le classement du prix du public. Des nombres seulement.
  */
-export async function onSiteCount(ex: Executor, eventId: string): Promise<number> {
+export async function onSiteCount(
+  ex: Executor,
+  eventId: string,
+  /**
+   * Événement de plusieurs jours, direct d'un jour : un véhicule n'est « sur place » que ce jour-là s'il a une candidature
+   * **de ce jour** (pas celle d'un autre jour) ; un accès « tout l'événement » (sans jour, `wholeEventAccess`) vaut dès son
+   * entrée jusqu'à la fin, pas avant. Même règle que le direct de l'organisateur (`liveCounters`).
+   */
+  day: { id: string; dayDate: string; timezone: string } | null = null,
+): Promise<number> {
+  const vehicleDay = day
+    ? sql`and (a.event_day_id = ${day.id}
+        or (a.event_day_id is null and (c.checked_in_at at time zone ${day.timezone})::date <= ${day.dayDate}::date))`
+    : sql``;
   const rows = await ex.execute<{ n: number }>(sql`select (
       (select count(*) from checkins c
         join applications a on a.id = c.application_id
         join profiles p on p.user_id = a.user_id
-        where c.event_id = ${eventId} and a.kind = 'vehicle' and p.deleted_at is null)
+        where c.event_id = ${eventId} and a.kind = 'vehicle' and p.deleted_at is null ${vehicleDay})
       + (select count(*) from tickets t where t.event_id = ${eventId} and t.used_at is not null)
       + (select count(*) from event_presences g
         where g.event_id = ${eventId}
           and not exists (select 1 from tickets t where t.event_id = g.event_id and t.user_id = g.user_id
             and t.used_at is not null)
           and not exists (select 1 from checkins c join applications a on a.id = c.application_id
-            where c.event_id = g.event_id and a.user_id = g.user_id and a.kind = 'vehicle'))
+            where c.event_id = g.event_id and a.user_id = g.user_id and a.kind = 'vehicle' ${vehicleDay}))
     )::int as n`);
   return Number(rows.rows[0]?.n ?? 0);
 }

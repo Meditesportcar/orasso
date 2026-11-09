@@ -142,7 +142,7 @@ async function arbitrate(
   return { ticketId: row.id, serverResult: "accepted", reason: null };
 }
 
-async function publishLive(eventId: string) {
+export async function publishLive(eventId: string) {
   const { checkinsService } = await import("../checkins/service");
   let counters: Awaited<ReturnType<typeof checkinsService.liveCounters>>;
   try {
