@@ -33,6 +33,11 @@ export type TargetRules = {
    */
   remove?: (tx: Tx, v: Viewer, report: ReportRow, after: (cb: () => unknown) => void) => Promise<string[]>;
   /**
+   * Verrou du contenu, pris au début d'une transaction qui crée ou clôt un signalement dessus : il la sérialise avec les
+   * autres écritures sur ce contenu (retrait par son auteur, autre décision). Absent : rien à sérialiser.
+   */
+  lock?: (tx: Tx, targetId: string) => Promise<void>;
+  /**
    * Une décision vient de clore des signalements sur ce contenu (dans la transaction de la décision) : rend les fichiers
    * gardés pour la preuve et devenus inutiles, à effacer après la validation. Absent : rien n'est gardé.
    */

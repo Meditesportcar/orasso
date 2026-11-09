@@ -32,12 +32,21 @@ registerReportMedia("feed_post", async (report, name) => {
   return data ? { data, contentType: "image/webp" } : null;
 });
 
-/** Efface les lignes de photos gardées d'une publication retirée ; rend les fichiers à effacer après la validation. */
+/**
+ * Efface les lignes de photos gardées d'une publication retirée ; rend les fichiers à effacer après la validation. Si
+ * l'auteur a supprimé son compte entre-temps, la publication elle-même (légende comprise) n'a plus de raison d'être gardée.
+ */
 async function purgeHeldPhotos(tx: Tx, postId: string): Promise<string[]> {
   const gone = await tx
     .delete(feedPostPhotos)
     .where(eq(feedPostPhotos.postId, postId))
     .returning({ key: feedPostPhotos.storageKey });
+  const [author] = await tx
+    .select({ deletedAt: profiles.deletedAt })
+    .from(feedPosts)
+    .innerJoin(profiles, eq(profiles.userId, feedPosts.authorId))
+    .where(eq(feedPosts.id, postId));
+  if (author?.deletedAt) await tx.delete(feedPosts).where(eq(feedPosts.id, postId));
   return gone.map((p) => p.key);
 }
 
@@ -51,6 +60,12 @@ async function pseudoOf(userId: string) {
 
 export const feedPostTarget: TargetRules = {
   type: "feed_post",
+  // Même verrou que le retrait par l'auteur (`select … for update` sur la publication) : création d'un signalement,
+  // décision et retrait se suivent l'un après l'autre, et chacun relit l'état des autres sous ce verrou.
+  async lock(tx, targetId) {
+    if (!UUID_RE.test(targetId)) return;
+    await tx.select({ id: feedPosts.id }).from(feedPosts).where(eq(feedPosts.id, targetId)).for("update");
+  },
   async resolve(v, targetId) {
     const row = await requireVisiblePost(v, targetId);
     return { ownerId: row.post.authorId };
@@ -87,10 +102,12 @@ export const feedPostTarget: TargetRules = {
   // la dernière décision prise sur ce contenu, elles partent.
   async afterDecision(tx, report) {
     if (!UUID_RE.test(report.targetId)) return [];
+    // Sous le verrou de la publication (déjà pris par `lock`) : un retrait simultané est vu, ou attend la fin.
     const [post] = await tx
       .select({ deletedAt: feedPosts.deletedAt })
       .from(feedPosts)
-      .where(eq(feedPosts.id, report.targetId));
+      .where(eq(feedPosts.id, report.targetId))
+      .for("update");
     if (!post?.deletedAt) return [];
     if (await hasOpenReport(tx, report.targetId)) return [];
     return purgeHeldPhotos(tx, report.targetId);

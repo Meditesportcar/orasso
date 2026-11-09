@@ -3,13 +3,15 @@
 // d'un compte privé du seed (Marc_66, que seuls ses abonnés acceptés voient : cas de test de la vie privée). Les photos sont
 // celles du seed regardées une à une, « aucune plaque lisible » (`NO_PLATE_REVIEWED` de `photos.ts`) : la décision de
 // plaque est donc vraie (`no_plate_confirmed`). Le texte « contenu produit par Orasso pour les débuts » est ce seed,
-// pas une règle de l'API. Idempotent : rien si le compte Orasso a déjà des publications.
+// pas une règle de l'API. Idempotent : rien si le compte Orasso a déjà des publications. Une base de développement semée
+// au premier tour garde des photos sous l'ancienne clé publique `feed/<postId>/<hex>.webp` : le seed les range sous
+// `private/feed/…` (même nom, la ligne suit) et efface l'ancien fichier, que `/api/files` ne sert plus.
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type FeedAspect, feedLabels, OFFICIAL_PSEUDO } from "@orasso/shared";
 import { hashPassword } from "better-auth/crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -171,7 +173,29 @@ const PLAN: Planned[] = [
   },
 ];
 
+/** Photos du Fil sous l'ancienne clé publique `feed/…` : rangées sous `private/feed/…` (même nom). Rend le nombre migré. */
+export async function migrateLegacyFeedKeys(): Promise<number> {
+  const rows = await db
+    .select({ id: t.feedPostPhotos.id, key: t.feedPostPhotos.storageKey })
+    .from(t.feedPostPhotos)
+    .where(like(t.feedPostPhotos.storageKey, "feed/%"));
+  let moved = 0;
+  for (const row of rows) {
+    const next = `private/${row.key}`;
+    const data = await storage.get(row.key);
+    // Le fichier absent (disque vidé) : la ligne passe quand même sous la nouvelle clé, la route répondra 404 comme pour
+    // n'importe quelle photo perdue.
+    if (data) await storage.put(next, data);
+    await db.update(t.feedPostPhotos).set({ storageKey: next }).where(eq(t.feedPostPhotos.id, row.id));
+    await storage.remove(row.key);
+    moved += 1;
+  }
+  if (moved) console.log(`Fil : ${moved} photo(s) rangée(s) sous private/feed/ (ancienne clé publique).`);
+  return moved;
+}
+
 export async function seedFeed() {
+  await migrateLegacyFeedKeys();
   // Le compte officiel : jamais de connexion possible (mot de passe aléatoire, e-mail non distribuable).
   let orasso = await byPseudo(ORASSO);
   // Le statut officiel ne se rattache jamais à un compte ordinaire qui porterait déjà ce nom : on s'arrête, sans rien changer.

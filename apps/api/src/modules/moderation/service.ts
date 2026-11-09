@@ -106,6 +106,9 @@ async function closeReports(
   after: After,
 ): Promise<string[]> {
   const at = now();
+  const rules = targetOf(report.targetType);
+  // Le contenu est verrouillé avant tout : un retrait par son auteur, en même temps, lit l'état des signalements après.
+  await rules.lock?.(tx, report.targetId);
   const set = {
     status,
     handledBy: v.user.id,
@@ -142,7 +145,6 @@ async function closeReports(
       .where(and(inArray(reports.id, ids), isNull(reports.sanctionId)));
   }
   // Fichiers gardés pour la preuve (publication retirée par son auteur) : ils partent avec la dernière décision.
-  const rules = targetOf(report.targetType);
   if (closed.length && rules.afterDecision) {
     const keys = await rules.afterDecision(tx, report);
     if (keys.length) {
@@ -221,6 +223,12 @@ export const moderationService = {
     return withTx(async (tx, after) => {
       const at = now();
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`report:${v.user.id}`}, 0))`);
+      // Sérialisé avec le retrait par l'auteur : sous le verrou du contenu, on revérifie qu'il est toujours visible (404
+      // s'il vient d'être retiré), et un retrait qui suit verra ce signalement.
+      if (rules.lock) {
+        await rules.lock(tx, input.targetId);
+        await rules.resolve(v, input.targetId);
+      }
       const [existing] = await tx
         .select({ id: reports.id })
         .from(reports)

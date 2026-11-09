@@ -2,7 +2,7 @@
 // suivi, jamais un compte suspendu, jamais une photo dont la plaque n'est pas traitée, jamais sans session ; décision de
 // plaque obligatoire à la publication ; curseur sans doublon ni trou ; signalement et média réservés à la modération.
 import { randomBytes, randomUUID } from "node:crypto";
-import { type FeedCard, type FeedCardKind, feedCardKinds } from "@orasso/shared";
+import { FEED_CURSOR_MAX, type FeedCard, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 import { eq, inArray } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,19 +27,23 @@ import {
   applications,
   audiencePrizeResults,
   eventAnnouncements,
+  events,
   feedPostPhotos,
   feedPostReactions,
   feedPosts,
   profiles,
+  reports,
   structureFollows,
   uploads,
   userFollows,
   vehiclePhotos,
+  vehicles,
 } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { retryRemove } from "../vehicles/photos-blur";
 import { anonymizeFeedForDeletedAccount } from "./anonymize";
+import { cursorCardId, decodeCursor, encodeCursor } from "./cursor";
 import { feedPhotoKey } from "./posts";
 
 afterAll(async () => {
@@ -991,6 +995,8 @@ async function walk(viewer: TestUser, filter = "", between?: (page: number, next
     const res: Awaited<ReturnType<typeof fil>> = await fil(viewer, query ? `?${query}` : "");
     expect(res.status).toBe(200);
     expect(res.items.length).toBeLessThanOrEqual(20);
+    // jamais de page vide avec une suite
+    if (res.next) expect(res.items.length).toBeGreaterThan(0);
     pages.push(res.items);
     cursor = res.next;
     if (cursor && between) await between(pages.length, cursor);
@@ -1079,8 +1085,7 @@ describe("curseur par clé (tour 2)", () => {
       const pages = await walk(viewer, "", async (page, next) => {
         if (page !== 1) return;
         // la clé du curseur est la dernière carte de la tranche (phase 1) ou de la page (phase 2) : on la retire
-        const cursor = JSON.parse(Buffer.from(next, "base64url").toString()) as { i: string };
-        const id = cursor.i.replace("feed_post:", "");
+        const id = (cursorCardId(next) ?? "").replace("feed_post:", "");
         removed.push(id);
         await db.update(feedPosts).set({ deletedAt: new Date(), deletedBy: author.id }).where(eq(feedPosts.id, id));
       });
@@ -1126,9 +1131,279 @@ describe("curseur par clé (tour 2)", () => {
   it("un curseur trafiqué ou incomplet : 400", async () => {
     const viewer = await person("Viewer_Trafic");
     const encode = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
-    const bad = encode({ r: new Date().toISOString(), p: 2, a: "pas-une-date", x: [], o: 0 });
-    expect((await fil(viewer, `?cursor=${bad}`)).status).toBe(400);
     expect((await fil(viewer, `?cursor=${encode({ r: new Date().toISOString(), p: 1 })}`)).status).toBe(400);
+    // un vrai curseur, tronqué ou rallongé d'un octet, ou d'une autre version
+    const author = await person("Auteur_Trafic");
+    await bulkPosts(
+      author,
+      Array.from({ length: 30 }, (_, i) => hoursAgo(1 + i)),
+    );
+    const good = (await fil(viewer)).next as string;
+    expect(good).toBeTruthy();
+    const raw = Buffer.from(good, "base64url");
+    for (const bad of [
+      raw.subarray(0, raw.length - 1),
+      Buffer.concat([raw, Buffer.from([0])]),
+      Buffer.concat([Buffer.from([1]), raw.subarray(1)]),
+      Buffer.concat([raw.subarray(0, 1), Buffer.from([3]), raw.subarray(2)]),
+    ]) {
+      expect((await fil(viewer, `?cursor=${bad.toString("base64url")}`)).status).toBe(400);
+    }
+    expect((await fil(viewer, `?cursor=${good}`)).status).toBe(200);
+  });
+});
+
+// --- Tour 3 (09/11) : un curseur stable du début à la fin ---------------------------------------------------------------
+
+/** Événements en nombre, insérés d'un coup : la carte est datée de leur publication (`startsAt - 7 jours` est plus ancien). */
+async function bulkEvents(structureId: string, publishedAt: Date[]) {
+  const rows = publishedAt.map((at) => ({
+    id: randomUUID(),
+    plateSalt: randomBytes(16),
+    structureId,
+    slug: `evenement-${randomBytes(6).toString("hex")}`,
+    title: "Rassemblement en nombre",
+    addressLine: "1 quai du Port",
+    city: "Canet-en-Roussillon",
+    department: "66",
+    format: "gathering" as const,
+    startsAt: new Date(clock.now.getTime() + 6 * 24 * HOUR),
+    endsAt: new Date(clock.now.getTime() + 6 * 24 * HOUR + 4 * HOUR),
+    admittedVehicleTypes: ["car", "moto", "truck"] as ("car" | "moto" | "truck")[],
+    admission: "filtered" as const,
+    status: "published" as const,
+    publishedAt: at,
+    registrationsOpenAt: new Date(0),
+  }));
+  if (rows.length) await db.insert(events).values(rows);
+  return rows.map((r) => r.id);
+}
+const eventCardId = (id: string) => `event_recommended:${id}`;
+
+/** Tout ce qui est attendu a été vu une fois, sauf ce qui a été retiré (qui peut avoir été vu avant). */
+function expectCompleteExcept(pages: FeedCard[][], expected: string[], removed: string[]) {
+  const seen = allIds(pages);
+  expect(new Set(seen).size).toBe(seen.length);
+  expect(expected.filter((id) => !removed.includes(id) && !seen.includes(id))).toEqual([]);
+  expect(seen.filter((id) => !expected.includes(id))).toEqual([]);
+}
+
+describe("curseur stable du début à la fin (tour 3)", () => {
+  it("deux sources au-delà du plafond de 300 : parcours complet, sans doublon ni trou, curseurs courts", async () => {
+    const viewer = await person("Viewer_DeuxSources");
+    const author = await person("Auteur_DeuxSources");
+    const orga = await person("Orga_DeuxSources");
+    const structure = await createStructure(orga.id);
+    const posts = await bulkPosts(
+      author,
+      Array.from({ length: 305 }, (_, i) => hoursAgo(0.05 + i * 0.15)),
+    );
+    const evts = await bulkEvents(
+      structure.id,
+      Array.from({ length: 302 }, (_, i) => hoursAgo(0.04 + i * 0.07)),
+    );
+    let longest = 0;
+    const pages = await walk(viewer, "", async (_page, next) => {
+      longest = Math.max(longest, next.length);
+    });
+    const seen = allIds(pages);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect([...seen].sort()).toEqual([...posts.map(postCardId), ...evts.map(eventCardId)].sort());
+    expect(longest).toBeGreaterThan(0);
+    expect(longest).toBeLessThanOrEqual(FEED_CURSOR_MAX);
+    console.info(
+      `Tour 3 : plus long curseur d'un parcours à deux sources dépassant le plafond : ${longest} caractères`,
+    );
+  }, 300_000);
+
+  it("un retrait en plein parcours ne fait pas entrer la 301e carte d'une source (elle reste en phase 2, servie une fois)", async () => {
+    const viewer = await person("Viewer_301");
+    const author = await person("Auteur_301");
+    const posts = await bulkPosts(
+      author,
+      Array.from({ length: 305 }, (_, i) => hoursAgo(0.05 + i * 0.15)),
+    );
+    // la 250e carte (par date) n'est pas servie dans la première page : on la retire après
+    const gone = posts[249] as string;
+    const pages = await walk(viewer, "", async (page) => {
+      if (page === 1)
+        await db.update(feedPosts).set({ deletedAt: new Date(), deletedBy: author.id }).where(eq(feedPosts.id, gone));
+    });
+    expectCompleteExcept(pages, posts.map(postCardId), [postCardId(gone)]);
+    expect(allIds(pages)).not.toContain(postCardId(gone));
+    // et le même parcours sans retrait rend les 305
+    await db.update(feedPosts).set({ deletedAt: null, deletedBy: null }).where(eq(feedPosts.id, gone));
+    expectComplete(await walk(viewer), posts);
+  }, 300_000);
+
+  it("« Moins de ce genre » en plein parcours : ni doublon ni trou, et le même ordre que sans le geste (figé au curseur)", async () => {
+    const viewer = await person("Viewer_MoinsMilieu");
+    const author = await person("Auteur_MoinsMilieu");
+    const orga = await person("Orga_MoinsMilieu");
+    const structure = await createStructure(orga.id);
+    const posts = await bulkPosts(
+      author,
+      Array.from({ length: 50 }, (_, i) => hoursAgo(1 + i * 0.5)),
+    );
+    const evts = await bulkEvents(
+      structure.id,
+      Array.from({ length: 30 }, (_, i) => hoursAgo(1 + i * 0.7)),
+    );
+    const plain = await walk(viewer);
+    expect(allIds(plain)).toHaveLength(80);
+    const during = await walk(viewer, "", async (page) => {
+      if (page === 1) expect((await call(viewer, "POST", "/me/feed/less", { kind: "feed_post" })).status).toBe(200);
+    });
+    expect(allIds(during)).toEqual(allIds(plain));
+    expect(allIds(during).sort()).toEqual([...posts.map(postCardId), ...evts.map(eventCardId)].sort());
+    // un nouveau parcours, lui, tient compte du réglage
+    const after = await walk(viewer);
+    expect(allIds(after).sort()).toEqual(allIds(plain).sort());
+    expect(allIds(after)).not.toEqual(allIds(plain));
+  }, 300_000);
+
+  it("un nouvel abonnement en plein parcours : `reset`, la liste repart de la première page, sans reset sinon", async () => {
+    const viewer = await person("Viewer_Reset");
+    const author = await person("Auteur_Reset");
+    const other = await person("Autre_Reset");
+    const old = await bulkPosts(
+      author,
+      Array.from({ length: 45 }, (_, i) => hoursAgo(1 + i * 0.5)),
+    );
+    await bulkPosts(
+      other,
+      Array.from({ length: 5 }, (_, i) => hoursAgo(30 + i)),
+    );
+    const first = await fil(viewer);
+    expect(first.json.reset).toBeUndefined();
+    const second = await fil(viewer, `?cursor=${encodeURIComponent(first.next as string)}`);
+    expect(second.json.reset).toBeUndefined();
+    // l'abonnement change le classement : le curseur n'est plus valable
+    await follow(viewer, other);
+    const third = await fil(viewer, `?cursor=${encodeURIComponent(second.next as string)}`);
+    expect(third.status).toBe(200);
+    expect(third.json.reset).toBe(true);
+    const fresh = await fil(viewer);
+    expect(ids(third.items)).toEqual(ids(fresh.items));
+    // le parcours repris est complet et sans doublon
+    const rest: FeedCard[][] = [third.items];
+    let cursor = third.next;
+    while (cursor) {
+      const res = await fil(viewer, `?cursor=${encodeURIComponent(cursor)}`);
+      expect(res.json.reset).toBeUndefined();
+      rest.push(res.items);
+      cursor = res.next;
+    }
+    const seen = allIds(rest);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen).toHaveLength(50);
+    expect(old.every((id) => seen.includes(postCardId(id)))).toBe(true);
+  }, 120_000);
+
+  it("21 publications mieux classées qu'une voiture : la voiture est dans la première page (diversité pendant la sélection)", async () => {
+    const viewer = await person("Viewer_Voiture");
+    const author = await person("Auteur_Voiture");
+    const owner = await person("Proprio_Voiture");
+    await bulkPosts(
+      author,
+      Array.from({ length: 21 }, (_, i) => hoursAgo(1 + i * 0.01)),
+    );
+    const car = await createVehicle(owner.id, ref);
+    await blurPlatesOf(owner.id);
+    await db
+      .update(vehicles)
+      .set({ createdAt: hoursAgo(20) })
+      .where(eq(vehicles.id, car.id));
+    const res = await fil(viewer);
+    expect(res.items).toHaveLength(20);
+    const k = res.items.map((c) => c.kind);
+    expect(k).toContain("vehicle_public");
+    // jamais trois publications de suite tant qu'il reste autre chose
+    expect(k.slice(0, 3)).toContain("vehicle_public");
+    const car2 = k.indexOf("vehicle_public");
+    for (let i = 2; i < k.length; i++) {
+      if (k[i] === "feed_post" && k[i - 1] === "feed_post" && k[i - 2] === "feed_post") expect(car2).toBeLessThan(i);
+    }
+  });
+
+  it("un genre qui domine ne fait pas perdre la diversité d'une page à l'autre : parcours complet, jamais trois de suite", async () => {
+    const viewer = await person("Viewer_Domine");
+    const author = await person("Auteur_Domine");
+    const orga = await person("Orga_Domine");
+    const structure = await createStructure(orga.id);
+    const posts = await bulkPosts(
+      author,
+      Array.from({ length: 70 }, (_, i) => hoursAgo(1 + i * 0.1)),
+    );
+    // 12 événements classés parmi les 40 premières cartes (un peu plus bas que les publications du même âge)
+    const evts = await bulkEvents(
+      structure.id,
+      Array.from({ length: 12 }, (_, i) => hoursAgo(1.5 + i * 0.3)),
+    );
+    const pages = await walk(viewer);
+    const seen = allIds(pages);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect([...seen].sort()).toEqual([...posts.map(postCardId), ...evts.map(eventCardId)].sort());
+    // jamais trois publications de suite tant qu'il reste un événement à placer, y compris d'une page à l'autre
+    const k = pages.flat().map((c) => c.kind);
+    expect(k.slice(0, 20).filter((x) => x === "event_recommended").length).toBeGreaterThanOrEqual(7);
+    for (let i = 2; i < k.length; i++) {
+      if (k[i] === "feed_post" && k[i - 1] === "feed_post" && k[i - 2] === "feed_post") {
+        expect(k.slice(i + 1).every((x) => x === "feed_post")).toBe(true);
+      }
+    }
+  }, 120_000);
+
+  it("aucune page vide avec une suite, pour les trois filtres, sur un Fil mêlé de plusieurs sources", async () => {
+    const viewer = await person("Viewer_Vide");
+    const author = await person("Auteur_Vide");
+    const orga = await person("Orga_Vide");
+    const structure = await createStructure(orga.id);
+    await follow(viewer, author);
+    await bulkPosts(
+      author,
+      Array.from({ length: 70 }, (_, i) => hoursAgo(1 + i * 3)),
+    );
+    await bulkEvents(
+      structure.id,
+      Array.from({ length: 40 }, (_, i) => hoursAgo(2 + (i % 20))),
+    );
+    for (const filter of ["", "following", "nearby"]) {
+      const pages = await walk(viewer, filter);
+      expect(pages.flat().length, filter).toBeGreaterThan(0);
+      for (const p of pages.slice(0, -1)) expect(p.length, filter).toBeGreaterThan(0);
+    }
+  }, 120_000);
+
+  it("le plus grand curseur possible reste dans la limite acceptée par l'API", async () => {
+    const viewer = await person("Viewer_Plafond");
+    const id = (kind: string, n: number) => `${kind}:00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const key = (n: number) => ({
+      at: new Date(clock.now.getTime() - n * HOUR),
+      id: id(feedCardKinds[n % 10] as string, n),
+    });
+    const biggest = {
+      ref: clock.now,
+      fp: "ffffffffffff",
+      less: new Set(feedCardKinds),
+      offset: 4_000_000_000,
+      x: Array.from({ length: 16 }, (_, n) => key(n)),
+      phase: 1 as const,
+      score: Number.MAX_VALUE,
+      frontier: id("event_recommended", 999),
+      kinds: ["event_recommended", "sponsored"] as FeedCardKind[],
+      deferred: Array.from({ length: 20 }, (_, n) => id("event_recommended", 100 + n)),
+    };
+    const raw = encodeCursor(biggest);
+    expect(raw.length).toBe(1011);
+    expect(raw.length).toBeLessThanOrEqual(FEED_CURSOR_MAX);
+    expect(decodeCursor(raw)).toEqual(biggest);
+    // l'API l'accepte (empreinte inconnue : un nouveau parcours, pas un refus)
+    const res = await fil(viewer, `?cursor=${raw}`);
+    expect(res.status).toBe(200);
+    expect(res.json.reset).toBe(true);
+    // un curseur plus long que le maximum est refusé avant tout calcul
+    expect((await fil(viewer, `?cursor=${"A".repeat(FEED_CURSOR_MAX + 1)}`)).status).toBe(400);
   });
 });
 
@@ -1537,5 +1812,216 @@ describe("suppressions reprises et preuve d'une publication signalée (tour 2)",
     expect(clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === key)).toBeTruthy();
     await retryRemove(key);
     expect(await storage.get(key)).toBeNull();
+  });
+});
+
+// --- Tour 3 : un seul verrou pour le retrait, la décision et le signalement ; compte supprimé ; anciennes clés ---------
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Une connexion à part tient le verrou de la publication (`select … for update`) : elle joue l'écriture « en cours ». */
+async function holdPostLock(postId: string) {
+  const client = await pool.connect();
+  await client.query("begin");
+  await client.query("select id from feed_posts where id = $1 for update", [postId]);
+  return client;
+}
+
+/** Attend (3 s au plus) qu'une requête de la base soit en attente d'un verrou : la synchronisation explicite des tests. */
+async function waitForLockWait(): Promise<boolean> {
+  const end = Date.now() + 3000;
+  while (Date.now() < end) {
+    const r = await pool.query<{ n: number }>(
+      "select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+    );
+    if ((r.rows[0]?.n ?? 0) > 0) return true;
+    await sleep(40);
+  }
+  return false;
+}
+
+describe("un seul verrou pour le retrait, la décision et le signalement (tour 3)", () => {
+  async function postWithReport(withReport = true) {
+    const author = await person("Verrou_Auteur");
+    const reporter = await person("Verrou_Signaleur");
+    const mod = await person("Verrou_Moderateur", { role: "moderator" });
+    const sent = await upload(author, await jpeg(1080, 1350));
+    const post = await publish(author, { photos: [{ uploadKey: sent.json.key, noPlateConfirmed: true }] });
+    expect(post.status).toBe(201);
+    let report: { id: string } | null = null;
+    if (withReport) {
+      const r = await call(reporter, "POST", `/feed-posts/${post.json.id}/report`, { reason: "plate_or_face" });
+      expect(r.status).toBe(201);
+      report = r.json;
+    }
+    return { author, reporter, mod, post: post.json, report: report as { id: string } };
+  }
+  const decide = (mod: TestUser, reportId: string) =>
+    call(mod, "POST", `/admin/reports/${reportId}/status`, { status: "resolved_no_action", note: null });
+
+  it("retrait ∥ décision : le retrait (signalement encore ouvert) garde les photos, la décision qui l'attendait les efface", async () => {
+    const { author, mod, post, report } = await postWithReport();
+    const key = keyOfUrl(post.photos[0].url);
+    // le retrait de l'auteur tient le verrou et a lu « signalement en attente »
+    const removal = await holdPostLock(post.id);
+    const deciding = decide(mod, report.id);
+    // la décision attend le verrou de la publication (sinon elle lirait la publication avant le retrait)
+    expect(await waitForLockWait()).toBe(true);
+    await removal.query("update feed_posts set deleted_at = now(), deleted_by = $2 where id = $1", [
+      post.id,
+      author.id,
+    ]);
+    await removal.query("commit");
+    removal.release();
+    expect((await deciding).status).toBe(200);
+    // la décision a vu le retrait : aucune photo gardée sans signalement ouvert
+    expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, post.id))).toHaveLength(0);
+    expect(await storage.get(key)).toBeNull();
+  });
+
+  it("décision ∥ retrait : le retrait qui attend la décision voit le signalement clos et efface tout de suite", async () => {
+    const { author, mod, post, report } = await postWithReport();
+    const key = keyOfUrl(post.photos[0].url);
+    // la décision tient le verrou ; le signalement n'est pas encore clos pour les autres
+    const decision = await holdPostLock(post.id);
+    const removing = call(author, "DELETE", `/me/feed-posts/${post.id}`);
+    expect(await waitForLockWait()).toBe(true);
+    await decision.query("update reports set status = 'resolved_no_action', handled_by = $2 where id = $1", [
+      report.id,
+      mod.id,
+    ]);
+    await decision.query("commit");
+    decision.release();
+    expect((await removing).status).toBe(204);
+    expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, post.id))).toHaveLength(0);
+    expect(await storage.get(key)).toBeNull();
+  });
+
+  it("signalement ∥ retrait : le signalement qui attend un retrait fini est refusé (404), rien n'est créé", async () => {
+    const { author, reporter, post } = await postWithReport(false);
+    const key = keyOfUrl(post.photos[0].url);
+    // le retrait tient le verrou : il n'a vu aucun signalement, il efface tout
+    const removal = await holdPostLock(post.id);
+    const reporting = call(reporter, "POST", `/feed-posts/${post.id}/report`, { reason: "spam" });
+    expect(await waitForLockWait()).toBe(true);
+    await removal.query("update feed_posts set deleted_at = now(), deleted_by = $2 where id = $1", [
+      post.id,
+      author.id,
+    ]);
+    await removal.query("delete from feed_post_photos where post_id = $1", [post.id]);
+    await removal.query("commit");
+    removal.release();
+    await storage.remove(key);
+    const res = await reporting;
+    expect(res.status).toBe(404);
+    expect(await db.select().from(reports)).toHaveLength(0);
+  });
+
+  it("retrait ∥ signalement : le retrait qui attend un signalement créé voit ce signalement et garde les photos", async () => {
+    const { author, reporter, post } = await postWithReport(false);
+    const key = keyOfUrl(post.photos[0].url);
+    // la création du signalement tient le verrou
+    const reporting = await holdPostLock(post.id);
+    const removing = call(author, "DELETE", `/me/feed-posts/${post.id}`);
+    expect(await waitForLockWait()).toBe(true);
+    await reporting.query(
+      "insert into reports (reporter_id, target_type, target_id, target_owner_id, reason) values ($1, 'feed_post', $2, $3, 'spam')",
+      [reporter.id, post.id, author.id],
+    );
+    await reporting.query("commit");
+    reporting.release();
+    expect((await removing).status).toBe(204);
+    expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, post.id))).toHaveLength(1);
+    expect(await storage.get(key)).not.toBeNull();
+  });
+});
+
+describe("compte supprimé et publication signalée (tour 3)", () => {
+  it("un signalement ouvert : le compte supprimé garde les photos jusqu'à la décision, qui les efface avec la publication", async () => {
+    const author = await person("Compte_Signale");
+    const reporter = await person("Compte_Signaleur");
+    const mod = await person("Compte_Moderateur", { role: "moderator" });
+    const reported = await publish(author, {
+      photos: [{ uploadKey: (await upload(author, await jpeg(1080, 1350))).json.key, noPlateConfirmed: true }],
+    });
+    const calm = await publish(author, {
+      photos: [{ uploadKey: (await upload(author, await jpeg(1080, 1350))).json.key, noPlateConfirmed: true }],
+    });
+    const reportedKey = keyOfUrl(reported.json.photos[0].url);
+    const calmKey = keyOfUrl(calm.json.photos[0].url);
+    const report = await call(reporter, "POST", `/feed-posts/${reported.json.id}/report`, { reason: "plate_or_face" });
+    expect(report.status).toBe(201);
+    await call(reporter, "PUT", `/feed-posts/${reported.json.id}/reaction`);
+
+    const keys = await withTx((tx) => anonymizeFeedForDeletedAccount(tx, author.id));
+    // la publication tranquille part avec ses photos ; la signalée est seulement retirée, photos et ligne gardées
+    expect(keys).toEqual([calmKey]);
+    expect(await db.select().from(feedPosts).where(eq(feedPosts.id, calm.json.id))).toHaveLength(0);
+    const [held] = await db.select().from(feedPosts).where(eq(feedPosts.id, reported.json.id));
+    expect(held?.deletedAt).not.toBeNull();
+    expect(held?.deletedBy).toBe(author.id);
+    expect(
+      await db.select().from(feedPostReactions).where(eq(feedPostReactions.postId, reported.json.id)),
+    ).toHaveLength(0);
+    expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, reported.json.id))).toHaveLength(1);
+    expect(await storage.get(reportedKey)).not.toBeNull();
+    // invisible de tous, mais le modérateur voit toujours la photo
+    expect((await call(reporter, "GET", `/feed-posts/${reported.json.id}`)).status).toBe(404);
+    expect(postIdsOf((await fil(reporter)).items)).toEqual([]);
+    const detail = await call(mod, "GET", `/admin/reports/${report.json.id}`);
+    expect(detail.json.target.removed).toBe(true);
+    const served = await app.request(detail.json.target.imageUrl as string, {
+      headers: { cookie: mod.cookie, origin: ORIGIN },
+    });
+    expect(served.status).toBe(200);
+
+    // le compte est anonymisé (profil supprimé), puis la décision tombe
+    await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, author.id));
+    expect(
+      (await call(mod, "POST", `/admin/reports/${report.json.id}/status`, { status: "resolved_no_action", note: null }))
+        .status,
+    ).toBe(200);
+    expect(await storage.get(reportedKey)).toBeNull();
+    expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, reported.json.id))).toHaveLength(0);
+    // plus rien à garder de la publication d'un compte supprimé (légende comprise)
+    expect(await db.select().from(feedPosts).where(eq(feedPosts.id, reported.json.id))).toHaveLength(0);
+  });
+});
+
+describe("anciennes clés publiques du Fil (tour 3)", () => {
+  it("`/api/files` ne sert aucune clé `feed/…` ; le seed range les photos sous `private/feed/…` (relance sans effet)", async () => {
+    const { migrateLegacyFeedKeys } = await import("../../../scripts/seed/feed");
+    const viewer = await person("Viewer_Ancienne");
+    const author = await person("Auteur_Ancienne");
+    const id = await dbPost(author, { photos: [] });
+    const hex = randomBytes(16).toString("hex");
+    const oldKey = `feed/${id}/${hex}.webp`;
+    const data = await jpeg(540, 675);
+    await storage.put(oldKey, data);
+    await db.insert(feedPostPhotos).values({
+      postId: id,
+      storageKey: oldKey,
+      width: 540,
+      height: 675,
+      position: 0,
+      plateBlurred: false,
+      noPlateConfirmed: true,
+    });
+    // l'ancienne adresse publique ne répond plus
+    expect((await app.request(`/api/files/${oldKey}`, { headers: { origin: ORIGIN } })).status).toBe(404);
+    expect((await app.request(`/api/files/FEED/${id}/${hex}.webp`, { headers: { origin: ORIGIN } })).status).toBe(404);
+    // le seed la range
+    expect(await migrateLegacyFeedKeys()).toBe(1);
+    const [row] = await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, id));
+    expect(row?.storageKey).toBe(`private/feed/${id}/${hex}.webp`);
+    expect(await storage.get(oldKey)).toBeNull();
+    expect((await storage.get(`private/feed/${id}/${hex}.webp`))?.length).toBe(data.length);
+    // la photo se lit par la route protégée, avec une session
+    const photo = await getPhoto(viewer, `/api/feed-posts/${id}/photos/${hex}.webp`);
+    expect(photo.status).toBe(200);
+    expect((await getPhoto(null, `/api/feed-posts/${id}/photos/${hex}.webp`)).status).toBe(401);
+    // relance : rien à ranger
+    expect(await migrateLegacyFeedKeys()).toBe(0);
+    await storage.remove(`private/feed/${id}/${hex}.webp`);
   });
 });
