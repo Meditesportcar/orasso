@@ -3,6 +3,41 @@
 
 export type PlacementStatus = "draft" | "active" | "paused" | "ended";
 
+/** Où un emplacement s'affiche (lot R7k1) : l'Accueil (un pro, ciblage départements + centres d'intérêt) et le Fil. */
+export const sponsoredSurfaces = ["home", "feed"] as const;
+export type SponsoredSurface = (typeof sponsoredSurfaces)[number];
+
+/** Qui paie : un pro de la plateforme, ou un annonceur externe (Fil seulement, derrière `sponsored.external_enabled`). */
+export const advertiserKinds = ["pro", "external"] as const;
+export type AdvertiserKind = (typeof advertiserKinds)[number];
+
+/**
+ * « Pourquoi je vois ça » d'une carte Sponsorisé du Fil (D38 : non personnalisé, le seul critère est le département) :
+ * la phrase du département ne se dit que pour un emplacement **ciblé** par département ; un emplacement ouvert à toute la
+ * France dit seulement « Sponsorisé » (rien n'a été choisi d'après la personne).
+ */
+export const FEED_SPONSORED_REASON = "Sponsorisé · choisi d'après ton département";
+export const FEED_SPONSORED_OPEN_REASON = "Sponsorisé";
+
+/** Le libellé de la raison selon que l'emplacement vise des départements (`targeted`) ou toute la France. */
+export function feedSponsoredReason(targeted: boolean): string {
+  return targeted ? FEED_SPONSORED_REASON : FEED_SPONSORED_OPEN_REASON;
+}
+
+/** Les départements d'un emplacement sans doublon (l'ordre de saisie est gardé). */
+export function distinctDepartments(departments: readonly string[]): string[] {
+  return [...new Set(departments)];
+}
+
+/** Domaine affiché sous une carte d'annonceur externe : le nom d'hôte du lien, sans `www.` (jamais saisi à la main). */
+export function displayDomain(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 export type PlacementTarget = {
   id: string;
   status: PlacementStatus;
@@ -74,4 +109,23 @@ export function pickWeighted<T extends { id: string; weight: number }>(candidate
     if (point < 0) return c;
   }
   return list[list.length - 1] ?? null;
+}
+
+/**
+ * Éligibilité d'un emplacement pour le Fil (lot R7k1, D38 : publicité non personnalisée). Même règle que l'Accueil
+ * (actif, dans sa période, sous le plafond du jour) mais **le département est le seul ciblage** : les centres d'intérêt
+ * de l'emplacement ne comptent pas. Poids = 1 + le nombre de départements de la personne que l'emplacement vise (0 si
+ * l'emplacement est ouvert à tous).
+ */
+export function feedPlacementMatch(
+  p: PlacementTarget,
+  ctx: Pick<SponsoredContext, "today" | "sector" | "impressionsToday">,
+): { eligible: boolean; weight: number } {
+  const no = { eligible: false, weight: 0 };
+  if (p.status !== "active") return no;
+  if (ctx.today < p.startsOn || ctx.today > p.endsOn) return no;
+  if (p.dailyCap !== null && ctx.impressionsToday >= p.dailyCap) return no;
+  if (!p.departments.length) return { eligible: true, weight: 1 };
+  const touched = distinctDepartments(p.departments).filter((d) => ctx.sector.includes(d)).length;
+  return touched ? { eligible: true, weight: 1 + touched } : no;
 }

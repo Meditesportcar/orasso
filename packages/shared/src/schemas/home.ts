@@ -3,6 +3,13 @@ import { z } from "zod";
 
 import { departmentSchema } from "../enums";
 import { HOME_RADIUS, homeWidgetIds } from "../home";
+import {
+  type AdvertiserKind,
+  advertiserKinds,
+  distinctDepartments,
+  type SponsoredSurface,
+  sponsoredSurfaces,
+} from "../rules/sponsored";
 import { personaKinds } from "./profile";
 
 const widgetId = z.enum(homeWidgetIds);
@@ -60,13 +67,24 @@ const httpUrl = z
   .max(500)
   .refine((u) => !/\s/.test(u), "Lien invalide");
 
+const advertiserName = z.string().trim().min(1).max(80);
+/** Mention légale libre (« Publicité »), en plus du libellé « Sponsorisé » de la carte. */
+const disclosureText = z.string().trim().min(1).max(40);
+const surfaceList = z.array(z.enum(sponsoredSurfaces)).min(1).max(sponsoredSurfaces.length);
+
 export const sponsoredPlacementCreateSchema = z
   .object({
-    proProfileId: z.uuid(),
+    /** Lot R7k1 : un pro du référentiel (`pro`, défaut) ou un annonceur hors Orasso (`external`, Fil seulement). */
+    advertiserKind: z.enum(advertiserKinds).default("pro"),
+    proProfileId: z.uuid().nullish(),
+    /** Obligatoire pour un annonceur externe ; pour un pro, le nom de la fiche s'il est absent. */
+    advertiserName: advertiserName.optional(),
+    disclosure: disclosureText.nullish(),
+    surfaces: surfaceList.default(["home"]),
     title: z.string().trim().min(1).max(60),
     body: z.string().trim().min(1).max(160),
     linkUrl: httpUrl,
-    departments: z.array(departmentSchema).max(20).default([]),
+    departments: z.array(departmentSchema).max(20).default([]).transform(distinctDepartments),
     categoryIds: z.array(z.uuid()).max(30).default([]),
     startsOn: isoDay,
     endsOn: isoDay,
@@ -74,15 +92,27 @@ export const sponsoredPlacementCreateSchema = z
     priceCents: z.number().int().min(0).max(1_000_000).optional(),
     status: z.enum(placementStatuses).default("draft"),
   })
-  .refine((p) => p.startsOn <= p.endsOn, "La fin doit suivre le début");
+  .refine((p) => p.startsOn <= p.endsOn, "La fin doit suivre le début")
+  .superRefine((p, ctx) => {
+    const problem = placementAdvertiserProblem(p.advertiserKind, {
+      proProfileId: p.proProfileId ?? null,
+      advertiserName: p.advertiserName ?? null,
+      surfaces: p.surfaces,
+      categoryIds: p.categoryIds,
+    });
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  });
 export type SponsoredPlacementCreate = z.infer<typeof sponsoredPlacementCreateSchema>;
 
 export const sponsoredPlacementUpdateSchema = z
   .object({
+    advertiserName,
+    disclosure: disclosureText.nullable(),
+    surfaces: surfaceList,
     title: z.string().trim().min(1).max(60),
     body: z.string().trim().min(1).max(160),
     linkUrl: httpUrl,
-    departments: z.array(departmentSchema).max(20),
+    departments: z.array(departmentSchema).max(20).transform(distinctDepartments),
     categoryIds: z.array(z.uuid()).max(30),
     startsOn: isoDay,
     endsOn: isoDay,
@@ -94,11 +124,47 @@ export const sponsoredPlacementUpdateSchema = z
   .refine((o) => Object.values(o).some((v) => v !== undefined), "Rien à modifier");
 export type SponsoredPlacementUpdate = z.infer<typeof sponsoredPlacementUpdateSchema>;
 
+/**
+ * Corps (facultatif) de `POST /sponsored/:id/impression|click` : l'endroit où la carte est apparue. Sans corps (anciens
+ * clients) : l'Accueil.
+ */
+export const sponsoredEventSchema = z.object({ surface: z.enum(sponsoredSurfaces).default("home") });
+export type SponsoredEventInput = z.infer<typeof sponsoredEventSchema>;
+
+/**
+ * Règle commune à la création et à la modification : un annonceur externe n'a pas de fiche pro, un nom, aucun ciblage par
+ * centre d'intérêt (le Fil n'en connaît pas), et ne s'affiche que dans le Fil (l'Accueil montre la fiche d'un pro) ; un
+ * pro a une fiche. Rend le message du problème, ou `null`.
+ */
+export function placementAdvertiserProblem(
+  kind: AdvertiserKind,
+  p: {
+    proProfileId: string | null;
+    advertiserName: string | null;
+    surfaces: readonly SponsoredSurface[];
+    categoryIds: readonly string[];
+  },
+): string | null {
+  if (kind === "pro") return p.proProfileId ? null : "Choisis la fiche du pro";
+  if (p.proProfileId) return "Un annonceur externe n'a pas de fiche pro";
+  if (!p.advertiserName) return "Le nom de l'annonceur est obligatoire";
+  if (p.surfaces.some((s) => s !== "feed")) return "Un annonceur externe s'affiche dans le Fil seulement";
+  if (p.categoryIds.length) return "Un annonceur externe ne se cible que par département";
+  return null;
+}
+
 /** Un emplacement vu par l'administration. */
 export type SponsoredPlacementAdmin = {
   id: string;
-  proProfileId: string;
-  proName: string;
+  advertiserKind: AdvertiserKind;
+  /** Nom affiché sur la carte : celui du pro ou celui de l'annonceur externe. */
+  advertiserName: string;
+  proProfileId: string | null;
+  proName: string | null;
+  disclosure: string | null;
+  /** Domaine du lien, affiché sous la carte d'un annonceur externe. */
+  externalUrlDomain: string | null;
+  surfaces: SponsoredSurface[];
   title: string;
   body: string;
   imageUrl: string | null;
@@ -112,4 +178,16 @@ export type SponsoredPlacementAdmin = {
   status: (typeof placementStatuses)[number];
   impressions: number;
   clicks: number;
+  /** Affichages et clics par endroit (Accueil, Fil). */
+  bySurface: Record<SponsoredSurface, { impressions: number; clicks: number }>;
 };
+
+/**
+ * Endroits dont l'administration montre les statistiques d'un emplacement : ceux où il est diffusé, et aussi ceux qui ont
+ * des statistiques passées (même décochés depuis), pour que la somme affichée reste lisible endroit par endroit.
+ */
+export function statsSurfaces(p: Pick<SponsoredPlacementAdmin, "surfaces" | "bySurface">): SponsoredSurface[] {
+  return sponsoredSurfaces.filter(
+    (x) => p.surfaces.includes(x) || p.bySurface[x].impressions + p.bySurface[x].clicks > 0,
+  );
+}
