@@ -333,9 +333,10 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     const res = await apiFetch(`/me/stories/${story.id}`, { method: "DELETE" });
     if (!res.ok) return setNotice(res.error.message || L.actionError);
     const left = list.filter((s) => s.id !== story.id).length;
+    // La dernière story supprimée : on ferme tout de suite (l'écran « plus disponible » n'a rien à dire de plus).
+    if (left === 0) return close();
     setRemoved((r) => new Set(r).add(story.id));
     setNotice(L.deleteDone);
-    if (left === 0) setTimeout(close, 900);
   };
   const openViewers = async (s: StoryView) => {
     setMenu(false);

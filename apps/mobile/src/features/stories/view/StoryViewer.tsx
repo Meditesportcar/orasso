@@ -313,9 +313,10 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     try {
       await api.storyDelete(story.id);
       const left = list.filter((s) => s.id !== story.id).length;
+      // La dernière story supprimée : on ferme tout de suite (l'écran « plus disponible » n'a rien à dire de plus).
+      if (left === 0) return close();
       setRemoved((r) => new Set(r).add(story.id));
       setNotice(L.deleteDone);
-      if (left === 0) setTimeout(close, 900);
     } catch (e) {
       setNotice(errorMessage(e));
     }
