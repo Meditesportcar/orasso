@@ -53,7 +53,7 @@ async function req(u: TestUser | null, method: string, path: string, body?: unkn
   } catch {
     json = null;
   }
-  return { status: res.status, json, text };
+  return { status: res.status, json, text, headers: res.headers };
 }
 
 async function follow(a: TestUser, b: TestUser, accepted = true) {
@@ -739,16 +739,65 @@ describe("migration 0074 : les garde-fous en base", () => {
     expect(n?.n).toBe(1);
   });
 
-  it("l'API de lancement limite le débit (6 par heure) sans jamais répondre 500", async () => {
+  it("l'API de lancement limite le débit (6 lancements réussis par heure) sans jamais répondre 500", async () => {
     const { kenji } = await world();
     resetRateLimits();
-    let last = 0;
-    for (let i = 0; i < 8; i++) {
-      const res = await req(kenji, "POST", "/me/spot-meetups", body());
-      last = res.status;
-      expect([201, 409, 429]).toContain(res.status);
+    for (let i = 0; i < 6; i++) {
+      const m = await launch(kenji);
+      expect((await req(kenji, "DELETE", `/me/spot-meetups/${m.id}`)).status).toBe(200);
     }
-    expect(last).toBe(429);
+    const seventh = await req(kenji, "POST", "/me/spot-meetups", body());
+    expect(seventh.status).toBe(429);
+  });
+
+  it("tour 3 : une erreur d'heure, un conflit ou un crew refusé ne consomme pas la limite de lancements", async () => {
+    const { kenji, lea } = await world();
+    resetRateLimits();
+    // Trois erreurs d'heure, un crew inconnu : rien ne compte.
+    const past = new Date(clock.now.getTime() - 2 * HOUR).toISOString();
+    for (let i = 0; i < 3; i++) {
+      expect((await req(kenji, "POST", "/me/spot-meetups", body({ startsAt: past }))).status).toBe(400);
+    }
+    const crewId = "0b9d6a3e-4c2f-4d1a-9a1b-3f2e8c7d5a10";
+    expect((await req(kenji, "POST", "/me/spot-meetups", body({ audience: "crew", crewId }))).status).toBe(404);
+    // Six lancements réussis passent encore, le septième seulement est refusé.
+    for (let i = 0; i < 6; i++) {
+      const m = await launch(kenji);
+      // Un conflit (déjà un actif) ne compte pas non plus.
+      expect((await req(kenji, "POST", "/me/spot-meetups", body())).status).toBe(409);
+      expect((await req(kenji, "DELETE", `/me/spot-meetups/${m.id}`)).status).toBe(200);
+    }
+    expect((await req(kenji, "POST", "/me/spot-meetups", body())).status).toBe(429);
+    // La limite est par personne.
+    expect((await req(lea, "POST", "/me/spot-meetups", body())).status).toBe(201);
+  });
+
+  it("tour 3 : toutes les réponses du lieu sont privées et jamais gardées (no-store), refus compris", async () => {
+    const { kenji, lea } = await world();
+    await follow(lea, kenji);
+    const m = await launch(kenji);
+    const crew = await newCrew(kenji);
+    const NO_STORE = "private, no-store";
+    const paths: Array<[TestUser | null, string, string]> = [
+      [kenji, "GET", "/me/spot-meetups/audiences"],
+      [kenji, "GET", "/me/spot-meetups/active"],
+      [lea, "GET", "/me/spot-meetups/incoming"],
+      [lea, "GET", `/spot-meetups/${m.id}`],
+      [kenji, "GET", `/spot-meetups/${m.id}/replies`],
+      [kenji, "GET", `/crews/${crew.id}/spot-meetups`],
+      [lea, "GET", `/spot-meetups/${"0b9d6a3e-4c2f-4d1a-9a1b-3f2e8c7d5a10"}`],
+      [null, "GET", `/spot-meetups/${m.id}`],
+      [lea, "PUT", `/spot-meetups/${m.id}/reply`],
+    ];
+    for (const [who, method, path] of paths) {
+      const res = await req(who, method, path, method === "PUT" ? { answer: "yes" } : undefined);
+      expect(res.headers.get("cache-control"), `${method} ${path} (${res.status})`).toBe(NO_STORE);
+    }
+    const launched = await req(lea, "POST", "/me/spot-meetups", body());
+    expect(launched.headers.get("cache-control")).toBe(NO_STORE);
+    // Le Fil et l'Accueil portent la carte et le bloc « Au spot » : même règle.
+    expect((await req(lea, "GET", "/fil")).headers.get("cache-control")).toBe(NO_STORE);
+    expect((await req(lea, "GET", "/me/home")).headers.get("cache-control")).toBe(NO_STORE);
   });
 });
 

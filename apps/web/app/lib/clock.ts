@@ -45,3 +45,30 @@ export function subscribeClock(listener: () => void) {
 export function useClockOffset(): number {
   return useSyncExternalStore(subscribeClock, clockOffsetMs, clockOffsetMs);
 }
+
+// Lot R7i (tour 3) : décalage entre l'horloge du navigateur et celle du serveur. Le loader racine donne l'heure du serveur
+// (`serverAt`) ; le décalage se mesure une fois par valeur reçue, dans le navigateur seulement. Positif : le navigateur retarde.
+let serverSkew = 0;
+let serverAtSeen: number | null = null;
+
+/** Retient le décalage navigateur / serveur d'une nouvelle valeur `serverAt` du loader (navigateur seulement). */
+export function noteServerAt(serverAt: number) {
+  if (typeof window === "undefined" || serverAt === serverAtSeen || !Number.isFinite(serverAt)) return;
+  serverAtSeen = serverAt;
+  serverSkew = Math.round(serverAt - Date.now());
+  // Appelé pendant le rendu du Layout : on prévient les abonnés juste après, pas au milieu du rendu.
+  queueMicrotask(() => {
+    for (const listener of listeners) listener();
+  });
+}
+
+/** Décalage navigateur / serveur en millisecondes (0 tant qu'aucune mesure ou au rendu serveur). */
+export const serverSkewMs = () => serverSkew;
+
+/** Heure du serveur estimée (horloge simulée comprise), en millisecondes : celle qui décide de la fin d'un rendez-vous. */
+export const serverNowMs = () => nowMs() + serverSkew;
+
+/** Décalage navigateur / serveur, avec rendu à chaque changement. */
+export function useServerSkew(): number {
+  return useSyncExternalStore(subscribeClock, serverSkewMs, () => 0);
+}

@@ -12,7 +12,7 @@ import {
   spotTimeLabel,
   spotUntilLabel,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { now } from "../../lib/clock";
@@ -62,6 +62,7 @@ function Meetup({
   const [cursor, setCursor] = useState<string | null>(null);
   const [moreBusy, setMoreBusy] = useState(false);
   const [repliesError, setRepliesError] = useState<string | null>(null);
+  const firstPageKey = useRef<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +76,14 @@ function Meetup({
     void apiFetch<SpotReplies>(`/spot-meetups/${meetup.id}/replies`).then((res) => {
       if (!alive) return;
       if (res.ok) {
-        setReplies(res.data);
-        setMore([]);
-        setCursor(res.data.nextCursor);
+        // Les pages déjà chargées par « Voir plus » restent tant que les compteurs et la première page ne changent pas.
+        const key = JSON.stringify([meetup.yesCount, meetup.maybeCount, res.data]);
+        if (key !== firstPageKey.current) {
+          firstPageKey.current = key;
+          setReplies(res.data);
+          setMore([]);
+          setCursor(res.data.nextCursor);
+        }
         setRepliesError(null);
       } else if (refusedStatus(res.status)) onRefused();
       else setRepliesError(res.error.message);
@@ -90,6 +96,7 @@ function Meetup({
   // Fini : la liste n'existe plus, ni à l'écran ni en mémoire.
   useEffect(() => {
     if (!over) return;
+    firstPageKey.current = null;
     setReplies(null);
     setMore([]);
     setCursor(null);

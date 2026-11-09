@@ -13,7 +13,7 @@ import {
   spotUntilLabel,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -102,14 +102,20 @@ function Meetup({
   useEffect(() => {
     if (isRefused(replies.error)) onRefused();
   }, [replies.error, onRefused]);
-  // « Voir plus » : les pages suivantes de « Qui vient ? » (50 par page), repartant de zéro à chaque relecture.
+  // « Voir plus » : les pages suivantes de « Qui vient ? » (50 par page). La relecture (toutes les 30 s) garde les pages
+  // chargées tant que les compteurs et la première page ne changent pas ; sinon elle repart de la première page.
   const [more, setMore] = useState<{ items: SpotReplies["items"]; cursor: string | null }>({ items: [], cursor: null });
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
+  const firstPageKey = useRef<string | null>(null);
   useEffect(() => {
-    setMore({ items: [], cursor: replies.data?.nextCursor ?? null });
+    if (!replies.data) return;
+    const key = JSON.stringify([meetup.yesCount, meetup.maybeCount, replies.data]);
+    if (key === firstPageKey.current) return;
+    firstPageKey.current = key;
+    setMore({ items: [], cursor: replies.data.nextCursor });
     setMoreError(null);
-  }, [replies.data]);
+  }, [replies.data, meetup.yesCount, meetup.maybeCount]);
   async function loadMore() {
     if (!more.cursor || moreBusy) return;
     setMoreBusy(true);

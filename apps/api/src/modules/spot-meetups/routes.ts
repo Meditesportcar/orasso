@@ -2,12 +2,24 @@
 // décidée dans le service, jamais ici. Les chemins fixes (`/me/spot-meetups/...`) passent avant `/spot-meetups/:id`.
 import { spotListQuery, spotReplySchema } from "@orasso/shared";
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { spotMeetupsService } from "./service";
 
+// Lot R7i, tour 3 : le lieu d'un rendez-vous ne reste ni dans un cache partagé ni dans celui de l'appareil (réponses privées,
+// y compris les refus : l'en-tête est posé avant le traitement).
+const noStore = createMiddleware<AppEnv>(async (c, next) => {
+  c.header("cache-control", "private, no-store");
+  await next();
+});
+
 export const spotMeetupsRoutes = new Hono<AppEnv>()
+  .use("/me/spot-meetups", noStore)
+  .use("/me/spot-meetups/*", noStore)
+  .use("/spot-meetups/*", noStore)
+  .use("/crews/:id/spot-meetups", noStore)
   .post("/me/spot-meetups", async (c) => {
     const v = await requireUser(c);
     let data: unknown;

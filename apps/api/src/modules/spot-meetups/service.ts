@@ -210,7 +210,6 @@ export const spotMeetupsService = {
   /** Lancer un rendez-vous. 409 `meetup_active` s'il en a déjà un ; 400 si les heures ne vont pas (12 h au plus). */
   async create(v: Viewer, input: unknown): Promise<SpotMeetupView> {
     const data = parse(spotCreateSchema, input);
-    rateLimit("spotLaunch", v.user.id);
     const at = now();
     const bad = validateSpotTimes(data.startsAt, data.endsAt, at);
     if (bad)
@@ -230,6 +229,8 @@ export const spotMeetupsService = {
         const access = await requireCrewMember(tx, v, data.crewId ?? "", "write");
         crewId = access.crew.id;
       }
+      // Lot R7i, tour 3 : seul un lancement qui va aboutir compte dans la limite (une erreur d'heure, un conflit ou un crew refusé non).
+      rateLimit("spotLaunch", v.user.id);
       let created: SpotRow | undefined;
       try {
         [created] = await tx

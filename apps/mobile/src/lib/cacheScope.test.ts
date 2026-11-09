@@ -208,3 +208,24 @@ describe("clés de cache à identifiant (registre des préfixes)", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("copies de l'Accueil écrites avant le correctif du rendez-vous au spot (R7i, tour 3)", () => {
+  const spot = { id: "s1", place: { label: "Port", lat: 42.6, lng: 3.0 } };
+  const raw = (key: string) => kvKey(`cache.compte-spot.${key}`);
+
+  it("au lancement, chaque copie connue perd le bloc « Au spot » et garde le reste ; les autres clés ne bougent pas", async () => {
+    for (const key of ["home-visitor", "home-exhibitor", "home-media"]) {
+      store.set(raw(key), JSON.stringify({ nearby: { events: [] }, spotMeetup: spot }));
+    }
+    store.set(raw("home-pro"), JSON.stringify({ nearby: null, spotMeetup: null }));
+    store.set(raw("passport-home"), JSON.stringify({ spotMeetup: spot }));
+    await bindCacheScope("compte-spot");
+    for (const key of ["home-visitor", "home-exhibitor", "home-media"]) {
+      expect(await cacheGetJson(key)).toEqual({ nearby: { events: [] }, spotMeetup: null });
+    }
+    expect(JSON.parse(store.get(raw("passport-home")) as string)).toEqual({ spotMeetup: spot });
+    expect(JSON.parse(store.get(raw("home-pro")) as string)).toEqual({ nearby: null, spotMeetup: null });
+    // Une seule fois par compte : le drapeau est posé.
+    expect([...store.keys()].some((k) => k.includes("home-spot-scrubbed"))).toBe(true);
+  });
+});
