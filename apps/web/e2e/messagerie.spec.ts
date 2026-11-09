@@ -160,7 +160,7 @@ test("messagerie : abonnés en direct, lu par, image privée, demande de contact
 
   // Pastille de la Boîte : C a la réponse d'Alma non lue.
   // Lot C5 : la Boîte est en haut à droite (compteur de l'AppBar), plus dans la barre d'onglets.
-  await pageC.goto("/app/sorties");
+  await pageC.goto("/app");
   await expect(pageC.getByRole("link", { name: "Messages" }).locator(".o-appbar__count")).toBeVisible();
   const summary = await apiCall<{ unreadMessages: number }>(cCookie, "GET", "/me/inbox/summary");
   expect(summary.data.unreadMessages).toBe(1);
