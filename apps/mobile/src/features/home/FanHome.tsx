@@ -434,7 +434,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           onOpen={openEvent}
           sponsored={rail.sponsored}
           onSponsored={(s) => {
-            void api.sponsoredClick(s.id).catch(() => undefined);
+            void api.sponsoredClick(s.id, "home").catch(() => undefined);
             if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
           }}
         />

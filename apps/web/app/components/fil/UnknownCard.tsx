@@ -1,5 +1,5 @@
-// Carte neutre pour un genre que cet écran ne dessine pas encore (`spot_meetup` : lot R7i ; `memory` : lot R7j ;
-// `sponsored` : lot R7k2) ou inconnu : la raison, rien d'autre.
+// Carte neutre pour un genre que cet écran ne dessine pas encore (`spot_meetup` : lot R7i ; `memory` : lot R7j) ou inconnu :
+// la raison, rien d'autre.
 import { Icon } from "@orasso/design-system/web";
 import { feedCardKindLabels, feedScreenLabels as L } from "@orasso/shared";
 
