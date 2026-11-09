@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LABEL_ROOM, tabBarLabelFits, tabLabelFit } from "./tabLabel";
 
-const exhibitor = ["Explorer", "Sorties", "Accueil", "Garage", "Profil"];
+const exhibitor = ["Explorer", "Le Fil", "Accueil", "Crew", "Profil"];
 const organizer = ["Événements", "Tri", "Direct", "Équipe", "Structure"];
 const pro = ["Missions", "Candidatures", "Accueil", "Vitrine", "Profil"];
 

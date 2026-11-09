@@ -91,7 +91,8 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "damien@orasso.local");
-    await tab(page, "Garage");
+    // Lot R7a1 : le Garage n'est plus un onglet, la page garde son adresse (en-tête de fiche).
+    await goto(page, "/garage");
     await wholeTitle(page, "Mon garage");
     // Passionné → organisateur (Mon profil, casquettes).
     await goto(page, "/moi");
@@ -101,12 +102,12 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     // Organisateur → passionné, puis le Garage : le titre est entier.
     await goto(page, "/moi");
     await page.getByTestId("casquette-fan").first().click();
-    await expect(page.getByRole("tab", { name: "Garage", exact: true }).last()).toBeVisible({ timeout: 30_000 });
-    await tab(page, "Garage");
+    await expect(page.getByRole("tab", { name: "Crew", exact: true }).last()).toBeVisible({ timeout: 30_000 });
+    await goto(page, "/garage");
     await wholeTitle(page, "Mon garage");
     // Un aller-retour d'onglets ne le change pas.
-    await tab(page, "Explorer");
-    await tab(page, "Garage");
+    await goto(page, "/explorer");
+    await goto(page, "/garage");
     await wholeTitle(page, "Mon garage");
     await shot(page, `garage-apres-casquette-${theme}`);
     await ctx.close();
@@ -212,7 +213,7 @@ test("Explorer : les sélecteurs gardent le choix (onglets, redémarrage), jamai
       await expect(page.getByTestId("sort-line")).not.toContainText("à 50 km");
     };
     // Un autre onglet, puis retour.
-    await tab(page, "Sorties");
+    await tab(page, "Le Fil");
     await tab(page, "Explorer");
     await kept();
     // Redémarrage de l'appli.

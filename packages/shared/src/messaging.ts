@@ -76,3 +76,16 @@ export const acceptedUploadPurposes = [
   // Lot R5c1 : photo du fil d'un crew (`POST /crews/:id/posts`).
   "crew_post",
 ] as const satisfies readonly UploadPurpose[];
+
+/**
+ * Pastilles de la barre du haut du passionné (lot R7a1, tour 2) : la cloche « Activité » compte les notifications non lues
+ * et les demandes en attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu
+ * seulement. Une demande seule ne fait donc jamais monter la bulle. Appli et site s'en servent tous les deux.
+ */
+export function topBarCounts(
+  unreadNotifications: number,
+  summary: { unreadMessages: number; requests: Record<string, number> } | null,
+): { activity: number; messages: number } {
+  const requests = summary ? Object.values(summary.requests).reduce((a, b) => a + b, 0) : 0;
+  return { activity: unreadNotifications + requests, messages: summary?.unreadMessages ?? 0 };
+}

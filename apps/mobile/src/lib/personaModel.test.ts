@@ -8,6 +8,7 @@ import { neighbourRoute, shouldCaptureSwipe, swipeDirection } from "../features/
 import {
   type AppPersonaKind,
   baseOf,
+  destinationHref,
   FAN,
   homeOf,
   isBaseKind,
@@ -64,6 +65,15 @@ describe("casquette de base : exposant ou visiteur (V5)", () => {
   });
 });
 
+describe("la barre du passionné (lot R7a1, D38)", () => {
+  it("Explorer · Le Fil · Accueil · Crew · Profil, pour l'exposant comme pour le visiteur", () => {
+    expect(Object.keys(personaTabs.fan)).toEqual(["explorer", "fil", "accueil", "crew", "profil"]);
+    expect(Object.keys(personaTabs.visitor)).toEqual(["explorer", "fil", "accueil", "crew", "profil"]);
+    expect(tabSets.exhibitor.map((tab) => tab.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
+    expect(tabSets.visitor.map((tab) => tab.label)).toEqual(["Explorer", "Le Fil", "Accueil", "Crew", "Profil"]);
+  });
+});
+
 describe("six groupes de routes, cinq onglets chacun", () => {
   const kinds = ["fan", "visitor", "pro", "provider", "media", "organizer"] as const;
 
@@ -104,21 +114,34 @@ describe("six groupes de routes, cinq onglets chacun", () => {
 
   it("exposant ↔ visiteur : même onglet dans la nouvelle barre, sinon le Profil ; ailleurs l'écran d'ouverture", () => {
     expect(misplacedTarget(FAN, ["(visitor)", "profil"])).toBe("/(tabs)/profil");
+    // Lot R7a1 : même barre pour l'exposant et le visiteur ; l'ancien Passeport du visiteur n'est plus un onglet.
     expect(misplacedTarget(FAN, ["(visitor)", "passeport"])).toBe("/(tabs)/profil");
+    expect(misplacedTarget(FAN, ["(visitor)", "fil"])).toBe("/(tabs)/fil");
+    expect(misplacedTarget(VISITOR, ["(tabs)", "crew"])).toBe("/(visitor)/crew");
     expect(misplacedTarget(VISITOR, ["(tabs)", "explorer"])).toBe("/(visitor)/explorer");
     expect(misplacedTarget(VISITOR, ["(tabs)", "garage"])).toBe("/(visitor)/profil");
+    expect(misplacedTarget(VISITOR, ["(tabs)", "sorties"])).toBe("/(visitor)/profil");
     expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(orga)", "tri"])).toBe("/(pro)/accueil");
     // `/explorer` résolu dans le groupe média, `/accueil` dans celui du pro : l'onglet de la casquette active.
     expect(misplacedTarget(VISITOR, ["(media)", "explorer"])).toBe("/(visitor)/explorer");
     expect(misplacedTarget(FAN, ["(pro)", "accueil"])).toBe("/(tabs)/accueil");
-    expect(misplacedTarget(FAN, ["(tabs)", "garage"])).toBeNull();
+    expect(misplacedTarget(FAN, ["(tabs)", "profil"])).toBeNull();
     expect(misplacedTarget(FAN, ["boite"])).toBeNull();
   });
 
   it("chemin d'un onglet, `null` quand la barre ne l'a pas", () => {
-    expect(tabHref("visitor", "sorties")).toBe("/(visitor)/sorties");
-    expect(tabHref("fan", "garage")).toBe("/(tabs)/garage");
-    expect(tabHref("visitor", "garage")).toBeNull();
+    expect(tabHref("visitor", "fil")).toBe("/(visitor)/fil");
+    expect(tabHref("fan", "crew")).toBe("/(tabs)/crew");
+    // Lot R7a1 : Sorties, Garage et Passeport ne sont plus des onglets, mais des pages qui gardent leur adresse.
+    expect(tabHref("visitor", "sorties")).toBeNull();
+    expect(tabHref("fan", "garage")).toBeNull();
+    expect(destinationHref("fan", "sorties")).toBe("/sorties");
+    expect(destinationHref("fan", "garage")).toBe("/garage");
+    expect(destinationHref("visitor", "sorties")).toBe("/sorties");
+    expect(destinationHref("visitor", "passeport")).toBe("/mon-passeport");
+    expect(destinationHref("visitor", "garage")).toBeNull();
+    expect(destinationHref("fan", "profil")).toBe("/(tabs)/profil");
+    expect(destinationHref("pro", "sorties")).toBeNull();
     expect(tabHref("pro", "explorer")).toBeNull();
     expect(tabHref("organizer", "equipe")).toBe("/(orga)/equipe");
     expect(tabHref("admin", "profil")).toBeNull();
@@ -127,8 +150,9 @@ describe("six groupes de routes, cinq onglets chacun", () => {
   it("onglet voisin pour le glissement, rien au bord ; une page masquée ne glisse pas", () => {
     const ids = (kind: keyof typeof personaTabs) => Object.values(personaTabs[kind]);
     const fanRoutes = personaTabs.fan as Record<string, string>;
-    expect(neighbourRoute(ids("fan"), fanRoutes, "accueil", 1)).toBe("garage");
-    expect(neighbourRoute(ids("fan"), fanRoutes, "accueil", -1)).toBe("sorties");
+    expect(neighbourRoute(ids("fan"), fanRoutes, "accueil", 1)).toBe("crew");
+    expect(neighbourRoute(ids("fan"), fanRoutes, "accueil", -1)).toBe("fil");
+    expect(neighbourRoute(ids("fan"), fanRoutes, "fil", -1)).toBe("explorer");
     expect(neighbourRoute(ids("fan"), fanRoutes, "explorer", -1)).toBeNull();
     expect(neighbourRoute(ids("fan"), fanRoutes, "profil", 1)).toBeNull();
     const proRoutes = { ...personaTabs.pro, modifier: "card" } as Record<string, string>;

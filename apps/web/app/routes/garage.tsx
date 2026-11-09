@@ -24,6 +24,7 @@ import { data, Form, useNavigation } from "react-router";
 
 import { AccountQr } from "../components/AccountQr";
 import { CrewLogo } from "../components/Crews";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
@@ -31,6 +32,10 @@ import type { Route } from "./+types/garage";
 import "../styles/garage.css";
 import "../styles/home.css";
 import "../styles/network.css";
+
+// Lot R7a1 (D38) : le Garage n'est plus un onglet (il est dans le Profil) : la page garde son adresse, en mode fiche
+// (en-tête de fiche et ✕ qui revient au Profil, ni bande ni barre d'onglets), comme dans l'appli.
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Garage · Orasso" }, { name: "robots", content: "noindex" }];
@@ -101,13 +106,21 @@ export async function action({ request }: Route.ActionArgs) {
   return data({ error: "Ajoute la photo depuis la fiche du véhicule." }, { status: 400 });
 }
 
-export default function Garage({ loaderData, actionData }: Route.ComponentProps) {
+export default function Garage(props: Route.ComponentProps) {
+  return (
+    <>
+      <FicheBar title="Garage" back="/app/moi" />
+      <GarageBody {...props} />
+    </>
+  );
+}
+
+function GarageBody({ loaderData, actionData }: Route.ComponentProps) {
   const { vehicles, archived, incoming, crews, photoRefused, qrSecret, certs, pros } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-stack">
       <div className="s-row s-row--between">
-        <h1 className="s-title">Garage</h1>
         <Button variant="primary" icon="add" href="/app/garage/nouveau">
           Ajouter un véhicule
         </Button>

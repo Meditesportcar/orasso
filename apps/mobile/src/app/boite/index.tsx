@@ -54,9 +54,11 @@ export default function Boite() {
   const insets = useSafeAreaInsets();
   const { me, refreshMe } = useSession();
   // Lot 40 : `/boite?segment=demandes` (lien `/app/boite/demandes` du site) ouvre directement les Demandes.
-  const params = useLocalSearchParams<{ segment?: string }>();
+  // Lot R7a1 : la bulle « Messages » de la barre du haut ouvre `/boite?onglet=messages` (`segment` reste valable).
+  const params = useLocalSearchParams<{ segment?: string; onglet?: string }>();
+  const wanted = params.onglet ?? params.segment;
   const [segment, setSegment] = useState<Segment>(
-    params.segment === "demandes" ? "requests" : params.segment === "messages" ? "messages" : "all",
+    wanted === "demandes" ? "requests" : wanted === "messages" ? "messages" : "all",
   );
   const [refreshKey, setRefreshKey] = useState(0);
   const conversations = useApi(() => api.conversations(), []);

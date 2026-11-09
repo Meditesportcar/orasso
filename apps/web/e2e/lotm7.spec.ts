@@ -44,14 +44,17 @@ async function ids(): Promise<Ids> {
 const TABS: [string, string][] = [
   ["accueil", "/app"],
   ["explorer", "/app/explorer"],
-  ["sorties", "/app/sorties"],
-  ["garage", "/app/garage"],
+  // Lot R7a1 (D38) : Le Fil et Crew sont des onglets ; Sorties et Garage sont des pages en mode B (voir `fiches`).
+  ["fil", "/app/fil"],
+  ["crew", "/app/crew"],
   ["profil", "/app/moi"],
 ];
 
 /** Pages du compte en mode B (fiche, parcours) : nom → adresse. */
 function fiches(id: Ids): [string, string][] {
   return [
+    ["sorties", "/app/sorties"],
+    ["garage", "/app/garage"],
     ["fiche-vehicule", `/app/garage/${id.vehicle}`],
     ["ajout-vehicule", "/app/garage/nouveau"],
     ["profil-public", `/u/${id.pseudo}`],
@@ -134,7 +137,7 @@ for (const [label, viewport] of [
       const { ctx, page } = await openSite(browser, theme, viewport);
       await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
       for (const [name, path] of TABS) {
-        if (theme === "sable" && name !== "garage") continue;
+        if (theme === "sable" && name !== "crew") continue;
         expect(await visit(page, path), path).toBeLessThan(400);
         await modeA(page, `${name} (${label})`);
         await page.screenshot({ path: `${DIR}/A-${name}-${label}-${theme}.png` });
