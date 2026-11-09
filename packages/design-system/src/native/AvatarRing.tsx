@@ -29,6 +29,8 @@ export type AvatarRingProps = {
   name: string;
   /** Fourni : l'anneau est un bouton (ouvre les stories). */
   onPress?: () => void;
+  /** Lot R7f2 : `false` retire le néon d'un anneau `live` (un seul néon moutarde par écran : les autres gardent la bordure pleine). */
+  neon?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 };
@@ -39,6 +41,7 @@ export function AvatarRing({
   source,
   name,
   onPress,
+  neon = true,
   accessibilityLabel,
   testID,
 }: AvatarRingProps) {
@@ -71,7 +74,7 @@ export function AvatarRing({
           borderColor: color ?? "transparent",
           padding: d.gap + d.ring - width,
         },
-        ring === "live" && { boxShadow: t.shadow.neonAccentSoft },
+        ring === "live" && neon && { boxShadow: t.shadow.neonAccentSoft },
       ]}
     >
       <View style={[styles.face, { width: inner, height: inner, borderRadius: inner / 2, backgroundColor: c.win }]}>
