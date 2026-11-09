@@ -11,9 +11,11 @@ import { arrivalProblems } from "./labels/arrival.fr";
 import { eventAddressRequired } from "./labels/corrections.fr";
 import { criteriaOrigins, wizardV2Labels } from "./labels/event-editor.fr";
 import { defaultEventRules } from "./labels/events.fr";
+import { presenceLabels } from "./labels/presence.fr";
 import { EVENT_NEED_MAX_QUANTITY, type ProviderPower, type VendorTypeCode } from "./provider";
 import { type ArrivalSlot, type Arrivals, arrivalInstant, validateArrivals } from "./rules/arrival";
 import { POSTER_DEFAULT_STYLE, POSTER_TITLE_MAX } from "./rules/poster";
+import { validPresenceRadius } from "./rules/presence";
 import {
   nthWeekdayOfMonth,
   RECURRENCE_MAX_COUNT,
@@ -170,6 +172,11 @@ export type EventDraft = {
   poster?: PosterSettings | null;
   /** Lot 53 : « Précision pour l'entrée (facultatif) » (absent des brouillons d'avant). */
   entranceNote?: string;
+  /**
+   * Lot R7d1 : « Zone de présence (m) » (étape « Lieu », écran en R7d2) : texte saisi, vide = 300 m. Absent des brouillons
+   * d'avant : rien n'est envoyé, l'API garde la valeur enregistrée.
+   */
+  presenceRadiusM?: string;
   /** Lot 53 : missions du volet « Sur place » (absentes des brouillons d'avant). */
   needs?: NeedDraft[];
   /**
@@ -228,6 +235,7 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
       instructions: "",
       zones: [],
       entranceNote: "",
+      presenceRadiusM: "",
       needs: [],
       recurrence: null,
     };
@@ -283,6 +291,7 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
     })),
     arrivals: event.arrivals,
     entranceNote: event.entranceNote ?? "",
+    presenceRadiusM: event.presenceRadiusM === null ? "" : String(event.presenceRadiusM),
     needs: [],
     recurrence: null,
     poster: event.posterSettings
@@ -413,6 +422,13 @@ export function eventTicketLinkProblem(
     : null;
 }
 
+/** Zone de présence (R7d1) : vide (300 m), ou un nombre entier de mètres entre 50 et 2000. */
+export function eventPresenceRadiusProblem(d: Pick<EventDraft, "presenceRadiusM">): string | null {
+  const raw = d.presenceRadiusM?.trim() ?? "";
+  if (!raw) return null;
+  return /^\d+$/.test(raw) && validPresenceRadius(Number(raw)) ? null : presenceLabels.radiusProblem;
+}
+
 /** Zones : un code de 1 à 4 lettres ou chiffres, un nom, pas deux fois le même code. */
 export function eventZonesProblem(d: Pick<EventDraft, "zones">): string | null {
   const codes = d.zones.map((z) => z.code.trim().toUpperCase());
@@ -484,7 +500,7 @@ export function eventStepProblem(step: EventWizardStep, d: EventDraft): string |
         eventCapacityProblem(d)
       );
     case "lieu":
-      return eventAddressProblem(d) ?? eventZonesProblem(d) ?? eventNeedsProblem(d);
+      return eventAddressProblem(d) ?? eventPresenceRadiusProblem(d) ?? eventZonesProblem(d) ?? eventNeedsProblem(d);
     case "arrivees":
       return eventArrivalsProblem(d) ?? eventTicketLinkProblem(d);
     case "avant-premiere":
@@ -664,6 +680,10 @@ export function eventPayload(d: EventDraft, editingMultiDay = false) {
     rulesText: d.rulesText.trim() || null,
     instructions: d.instructions.trim() || null,
     entranceNote: d.entranceNote?.trim() || null,
+    // Lot R7d1 : vide = la valeur par défaut (300 m) ; envoyé seulement quand le brouillon le porte.
+    ...(d.presenceRadiusM !== undefined
+      ? { presenceRadiusM: d.presenceRadiusM.trim() ? Number(d.presenceRadiusM) : null }
+      : {}),
     vendorTypes: d.vendorTypes,
     shopEnabled: d.shopEnabled,
     // Lot 47 : envoyés seulement quand le brouillon les porte (sinon l'API garde ce qui est enregistré).
