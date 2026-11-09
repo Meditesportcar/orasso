@@ -3,10 +3,10 @@
 // « En story » (R7f4). 404 de l'API (pas mon tampon, pas encore un an) : « Ce souvenir n'est pas disponible », rien de plus.
 // Cible de la notification `memory` (`/app/souvenir/<eventId>`).
 import { Button } from "@orasso/design-system/web";
-import { type MemoryDetail, memoryLabels, widestWordEm } from "@orasso/shared";
+import { type MemoryDetail, memoryLabels, shareLabels, widestWordEm } from "@orasso/shared";
 import type { CSSProperties } from "react";
-
 import { PassportStamp } from "../components/PassportStamp";
+import { ShareDialog } from "../components/ShareSheet";
 import { api, requireMe } from "../lib/api.server";
 import { formatDay } from "../lib/format";
 import "../styles/passport.css";
@@ -99,7 +99,7 @@ export default function Souvenir({ loaderData }: Route.ComponentProps) {
             {memoryLabels.seeEvent}
           </Button>
         </div>
-        {/* Emplacement réservé au bouton « En story » (lot R7f4, partage en story). */}
+        <ShareDialog target={{ type: "memory", id: m.eventId }} label={shareLabels.story} testId="memory-share" />
       </div>
     </>
   );

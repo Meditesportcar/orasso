@@ -4,7 +4,7 @@
 // système), « Image » (enregistrer) et le lien de la fiche. Jamais de fausse plaque : la photo garde la plaque floutée
 // par le serveur ; filet de sécurité : la plaque est re-détectée sur l'affiche composée avant le partage, et une plaque
 // lisible se masque d'un toucher (l'API floute la zone).
-// Le contenu (`ShareBody`) est commun à l'écran de flux (`/vehicule/<id>/partager`) et à la feuille de fin d'ajout.
+// Le contenu (`PosterBody`) est celui de « Vers l'extérieur » d'une voiture (écran `/vehicule/<id>/affiche`) et de la feuille de fin d'ajout.
 
 import { Button, FitTitle, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -23,19 +23,13 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Platform, Share, StyleSheet, View } from "react-native";
 import { siteUrl } from "@/api";
 import { Seg, SmButton } from "@/features/passionne/kit";
+import { PLATE_CHECK_TIMEOUT_MS, type PlateCheck, plateGate } from "@/features/vehicle/sharePlateGate";
+import { shareSheetKey } from "@/features/vehicle/shareSheetKey";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { type PreparedShare, prepareShareImage, releasePrepared, type ShareOutcome, sendShareImage } from "@/lib/share";
 import { detectSharePlates } from "@/lib/sharePlates";
-import {
-  type PreparedShare,
-  prepareShareImage,
-  releasePrepared,
-  type ShareOutcome,
-  sendShareImage,
-} from "@/lib/shareVehicle";
 import { AppSheet } from "@/ui/AppSheet";
-import { PLATE_CHECK_TIMEOUT_MS, type PlateCheck, plateGate } from "./sharePlateGate";
-import { shareSheetKey } from "./shareSheetKey";
 
 const { space1, space2 } = tokens.spacing;
 
@@ -61,7 +55,7 @@ function confirmShareAnyway(go: () => void, unchecked = false) {
  * La feuille repart de zéro quand le véhicule ou sa version change (relecture du lot 50) : après le floutage d'une
  * plaque, la version change et l'ancien PNG (plaque nette) ne doit jamais être resservi.
  */
-export function ShareSheet(props: {
+export function PosterSheet(props: {
   vehicleId: string;
   /** `VehicleFull.shareVersion`. */
   version: string;
@@ -70,13 +64,13 @@ export function ShareSheet(props: {
 }) {
   return (
     <AppSheet visible={props.visible} onClose={props.onClose} accessibilityLabel={L.title}>
-      <ShareBody key={shareSheetKey(props.vehicleId, props.version)} {...props} sheet />
+      <PosterBody key={shareSheetKey(props.vehicleId, props.version)} {...props} sheet />
     </AppSheet>
   );
 }
 
 /** Le contenu de l'affiche à partager (écran de flux ou feuille). `visible` : l'aperçu se prépare seulement à l'écran. */
-export function ShareBody({
+export function PosterBody({
   vehicleId,
   version,
   visible,

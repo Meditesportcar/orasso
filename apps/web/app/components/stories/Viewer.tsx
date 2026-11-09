@@ -18,6 +18,7 @@ import {
   type StoryReplyResult,
   type StoryTagView,
   type StoryView,
+  shareLabels,
   shouldCloseOnDrag,
   storyDurationMs,
   storyNext,
@@ -834,6 +835,20 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                   <strong>{L.views(story.viewsCount ?? 0)}</strong>
                 </span>
               </button>
+              {story.exportable ? (
+                <a
+                  className="story-menu__row"
+                  href={`/api/stories/${story.id}/export?download=1`}
+                  download
+                  data-testid="story-menu-external"
+                >
+                  <Icon name="export" size={20} />
+                  <span>
+                    <strong>{shareLabels.menuExternal}</strong>
+                    <small>{shareLabels.externalStoryFile}</small>
+                  </span>
+                </a>
+              ) : null}
               <button
                 type="button"
                 className="story-menu__row"

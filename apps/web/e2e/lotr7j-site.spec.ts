@@ -48,7 +48,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien pour un co
     // Le contrôle voit-il un mot coupé ? (témoin volontaire), puis les vrais titres.
     await expectCutWordsDetected(page);
     expect(await cutWords(page, "home-memory-title")).toEqual([]);
-    await expect(page.getByText("En story")).toHaveCount(0);
+    await expect(page.getByTestId("memory-share")).toBeVisible();
 
     await block.getByTestId("home-memory-open").click();
     await expect(page).toHaveURL(new RegExp(`/app/souvenir/${memory.eventId}`));
@@ -59,7 +59,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien pour un co
     await expect(page.getByTestId("memory-stamp-tile")).toContainText("Ton tampon");
     await expect(page.getByTestId("memory-stamp-tile")).toContainText("Posé le");
     await expect(page.getByTestId("memory-event")).toBeVisible();
-    await expect(page.getByText("En story")).toHaveCount(0);
+    await expect(page.getByTestId("memory-share")).toBeVisible();
 
     // La carte du Fil, onglet « Pour toi » : visible de moi seul.
     await page.goto("/app/fil");

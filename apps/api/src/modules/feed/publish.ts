@@ -16,6 +16,7 @@ import {
   type ReportReason,
 } from "@orasso/shared";
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import sharp from "sharp";
 
 import { db } from "../../db/client";
 import { feedPostPhotos, feedPostReactions, feedPosts, uploads } from "../../db/schema";
@@ -26,6 +27,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
+import { composeLinkedPost, loadLinked } from "../stories/linked";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
 import { hasOpenReport, requireVisiblePost } from "./access";
@@ -85,11 +87,14 @@ export const feedPostsService = {
       throw new AppError(400, "plate_decision_required", feedLabels.plateDecision, { photoIndex: missing });
     }
 
-    // 2. Véhicule (le sien, actif) et événement (public).
-    if (input.vehicleId && !(await ownActiveVehicle(db, userId, input.vehicleId))) {
+    // 2. Véhicule (le sien, actif) et événement (public). Une carte partagée (R7f4) donne elle-même son véhicule ou son événement.
+    const linkedContent = input.linked ? await loadLinked(v, input.linked.type, input.linked.id) : null;
+    const vehicleId = linkedContent?.type === "vehicle" ? linkedContent.id : (input.vehicleId ?? null);
+    const eventId = linkedContent?.type === "event" ? linkedContent.id : (input.eventId ?? null);
+    if (vehicleId && !(await ownActiveVehicle(db, userId, vehicleId))) {
       throw validation("Véhicule introuvable dans ton garage");
     }
-    if (input.eventId && !(await eventSummariesByIds(db, [input.eventId])).has(input.eventId)) {
+    if (eventId && !(await eventSummariesByIds(db, [eventId])).has(eventId)) {
       throw validation("Événement introuvable");
     }
 
@@ -121,7 +126,8 @@ export const feedPostsService = {
       height: number;
       blurred: boolean;
       confirmed: boolean;
-      uploadKey: string;
+      /** Absent pour une carte rendue par l'API (aucun fichier envoyé). */
+      uploadKey: string | null;
     }[] = [];
     try {
       for (const [index, p] of input.photos.entries()) {
@@ -151,10 +157,27 @@ export const feedPostsService = {
         });
       }
 
+      // Carte partagée : l'API rend le 4:5 elle-même (image déjà masquée : plaque floutée ou « aucune plaque »).
+      if (linkedContent) {
+        const png = await composeLinkedPost(linkedContent);
+        const webp = await sharp(png).webp({ quality: 82 }).toBuffer({ resolveWithObject: true });
+        const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
+        await storage.put(key, webp.data);
+        written.push(key);
+        photos.push({
+          key,
+          width: webp.info.width,
+          height: webp.info.height,
+          blurred: linkedContent.plate === "blurred",
+          confirmed: linkedContent.plate === "none_confirmed",
+          uploadKey: null,
+        });
+      }
+
       // 5. Une transaction : rattacher les fichiers (une seule fois), écrire la publication et ses photos.
       await withTx(async (tx) => {
         for (const p of photos) {
-          if (!(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
+          if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
             throw validation("Photo déjà utilisée : envoie-la à nouveau.");
           }
         }
@@ -162,9 +185,9 @@ export const feedPostsService = {
           id: postId,
           authorId: userId,
           caption: input.caption,
-          vehicleId: input.vehicleId ?? null,
-          eventId: input.eventId ?? null,
-          aspect: input.aspect,
+          vehicleId,
+          eventId,
+          aspect: linkedContent ? "portrait_4_5" : input.aspect,
           department: v.profile.departments[0] ?? "",
           clientId: input.clientId ?? null,
         });
@@ -196,7 +219,7 @@ export const feedPostsService = {
       throw error;
     }
     // Les envois (privés) ont été copiés : on les efface (leurs lignes restent, rattachées).
-    for (const p of photos) await removeOrRetry(p.uploadKey);
+    for (const p of photos) if (p.uploadKey) await removeOrRetry(p.uploadKey);
     return ownView(v, postId);
   },
 

@@ -19,6 +19,7 @@ import {
   type StoryReplyResult,
   type StoryTagInput,
   type StoryTagKind,
+  shareLabels,
   storyAuthorKeyOf,
   storyDenial,
   storyExpiresAt,
@@ -81,6 +82,7 @@ import {
 } from "./common";
 import { composeStoryPhoto } from "./compose";
 import { purgeStoryFiles } from "./expire";
+import { composeLinkedStory, inspect, type LinkedContent, loadLinked } from "./linked";
 import { softDeleteWithCopies } from "./purge";
 
 export { softDeleteWithCopies };
@@ -344,7 +346,9 @@ export const storiesService = {
   async create(v: Viewer, input: StoryCreate): Promise<StoryCreated> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     // Reprise : cette publication existe déjà (la réponse s'est perdue) → la même story, sans doublon ni erreur.
-    const id = storyIdFor(v.user.id, input.uploadKey);
+    // Une carte liée (R7f4) n'a pas de fichier envoyé : l'identifiant de l'appareil (`clientId`) tient lieu de clé d'envoi.
+    const sendKey = input.uploadKey ?? `linked:${input.clientId}`;
+    const id = storyIdFor(v.user.id, sendKey);
     const replay = async (): Promise<StoryCreated | null> => {
       const [done] = await db
         .select({ status: stories.status, expiresAt: stories.expiresAt })
@@ -360,7 +364,8 @@ export const storiesService = {
     rateLimit("storyPublish", v.user.id);
     const rects = input.plateRects ?? [];
     // Photo : la décision de plaque est obligatoire quel que soit le public, crew compris (D38, « règle des plaques partout »).
-    if (!rects.length && !input.noPlateConfirmed) {
+    // Une carte liée n'a pas de photo de l'auteur : son image est déjà celle que l'API a le droit de montrer (`linked.ts`).
+    if (input.uploadKey && !rects.length && !input.noPlateConfirmed) {
       throw new AppError(400, "plate_decision_required", storyLabels.plateDecisionRequired);
     }
     await checkPersona(v, input);
@@ -416,14 +421,32 @@ export const storiesService = {
     };
     const eventId = input.eventId ? await eventOk(input.eventId, "event") : null;
     let linked: { type: NonNullable<StoryCreate["linked"]>["type"]; id: string } | null = null;
-    if (input.linked) {
+    // Carte liée sans média (R7f4) : le serveur résout le contenu (visible, partageable par ce regard) et rendra le 9:16.
+    let card: LinkedContent | null = null;
+    if (!input.uploadKey && input.linked) {
+      card = await loadLinked(v, input.linked.type, input.linked.id);
+      if (card.type === "feed_post" && !card.mine && !card.authorPublic) {
+        throw new AppError(403, "private_author", shareLabels.errors.privateAuthor);
+      }
+      linked = { type: card.type, id: card.id };
+      // Partager un événement prévient son organisateur (identification de sa structure) seulement depuis un compte
+      // public et hors d'une story de crew ; sinon la story part sans identification, sans rien écarter.
+      if (card.type === "event" && card.event && author.visibility !== "private" && input.audience !== "crew") {
+        stickerStructure = card.event.structureId;
+      }
+    } else if (input.linked) {
       if (input.linked.type === "event") {
         if (await eventOk(input.linked.id, "linked")) linked = input.linked;
       } else if (input.linked.type === "vehicle") {
         const veh = await vehiclesRepo.byId(input.linked.id);
         if (veh && veh.ownerId === v.user.id && veh.status === "active") linked = input.linked;
         else skipped.push({ kind: "vehicle", id: input.linked.id, reason: storyLabels.skipped.not_yours });
-      } else throw validation(storyLabels.linkedUnsupported, { field: "linked" });
+      } else {
+        // Publication du Fil, souvenir, résultat de vote avec une photo à soi : le lien est gardé s'il est visible.
+        const found = await inspect(v, input.linked.type, input.linked.id);
+        if (found.ok) linked = input.linked;
+        else skipped.push({ kind: "event", id: input.linked.id, reason: found.refusal.reason });
+      }
     }
 
     // Identifications : on n'identifie que quelqu'un qui peut voir la story ; compte privé : ni structure, ni pro.
@@ -466,33 +489,41 @@ export const storiesService = {
       else tags.push(t);
     }
 
-    // Le fichier envoyé : à moi, pour une story, pas encore rattaché.
-    const [pending] = await db
-      .select()
-      .from(uploads)
-      .where(
-        and(
-          eq(uploads.key, input.uploadKey),
-          eq(uploads.userId, v.user.id),
-          eq(uploads.purpose, "story" satisfies UploadPurpose),
-          isNull(uploads.consumedAt),
-        ),
-      );
+    // Le fichier envoyé : à moi, pour une story, pas encore rattaché (absent pour une carte liée).
+    const uploadKey = input.uploadKey;
+    const [pending] = uploadKey
+      ? await db
+          .select()
+          .from(uploads)
+          .where(
+            and(
+              eq(uploads.key, uploadKey),
+              eq(uploads.userId, v.user.id),
+              eq(uploads.purpose, "story" satisfies UploadPurpose),
+              isNull(uploads.consumedAt),
+            ),
+          )
+      : [];
     // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
     // on retrouve alors sa story avant de refuser.
-    if (!pending) {
+    if (uploadKey && !pending) {
       const won = await replay();
       if (won) return won;
       throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
     }
-    const source = await storage.get(pending.key);
-    if (!source) {
+    const source = pending ? await storage.get(pending.key) : null;
+    if (pending && !source) {
       const won = await replay();
       if (won) return won;
       throw validation("Image introuvable : envoie-la à nouveau.");
     }
     const frame: Frame | undefined = input.frame;
-    const composed = await composeStoryPhoto(source, { frame, rects });
+    const composed = card
+      ? await composeLinkedStory(card, frame).then((c) => ({
+          data: c.data,
+          info: { width: c.width, height: c.height },
+        }))
+      : await composeStoryPhoto(source as Buffer, { frame, rects });
 
     const key = `private/stories/${id}/${randomBytes(8).toString("hex")}.webp`;
     await storage.put(key, composed.data);
@@ -519,8 +550,10 @@ export const storiesService = {
         if ((live?.n ?? 0) >= STORY_LIVE_MAX) {
           throw new AppError(409, "too_many_stories", storyLabels.tooManyStories);
         }
-        const upload = await uploadsService.consume(tx, v.user.id, input.uploadKey, "story");
-        if (!upload) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+        if (uploadKey) {
+          const upload = await uploadsService.consume(tx, v.user.id, uploadKey, "story");
+          if (!upload) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+        }
         const [row] = await tx
           .insert(stories)
           .values({
@@ -536,7 +569,7 @@ export const storiesService = {
             width: composed.info.width,
             height: composed.info.height,
             status: "ready",
-            plateState: rects.length ? "blurred" : "none_confirmed",
+            plateState: card ? card.plate : rects.length ? "blurred" : "none_confirmed",
             caption: input.caption || null,
             placeLabel: input.placeLabel || null,
             vehicleId,
@@ -632,7 +665,7 @@ export const storiesService = {
       throw error;
     }
     // Le fichier d'origine n'est jamais gardé : si sa suppression échoue, elle est reprise par la tâche `storage.remove`.
-    await removeOrRetry(pending.key);
+    if (pending) await removeOrRetry(pending.key);
     return { id, status: "ready", expiresAt: storyExpiresAt(at).toISOString(), skipped };
   },
 
