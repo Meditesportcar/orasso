@@ -38,6 +38,12 @@ export type PartnerOfPro = {
   vehicle: PartnershipVehicle | null;
 };
 
+/** Une page de « Ses partenaires » : `total` compte tous les partenaires visibles, la page en montre `limit` au plus. */
+export type ProPartnersPage = { items: PartnerOfPro[]; nextCursor: string | null; total: number };
+
+/** Combien de partenaires la fiche d'un pro montre avant « Voir tout ». */
+export const PARTNERS_ON_FICHE = 6;
+
 /** Une ligne de « Partenaires » (profil) : un pro. */
 export type PartnerLogo = { proId: string; name: string; logoUrl: string | null; slug: string };
 
@@ -47,6 +53,8 @@ export type VehiclePartner = { name: string; logoUrl: string | null; slug: strin
 /** `GET /me/partnerships` : mes partenaires actifs (je suis le passionné). */
 export type MyPartnership = {
   id: string;
+  /** Faux quand la fiche du pro est dépubliée, non vérifiée ou son titulaire suspendu : le passionné peut y mettre fin. */
+  available: boolean;
   pro: PartnerLogo & { city: string | null; activities: string[] };
   vehicle: PartnershipVehicle | null;
   since: string;

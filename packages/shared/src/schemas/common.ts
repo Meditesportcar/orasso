@@ -103,6 +103,7 @@ export const errorCodes = [
 
   // Lot R7m1 : partenariats pro ↔ passionné.
   "not_verified",
+  "not_published",
   "subscription_required",
   "partnership_exists",
   "partnership_cooldown",

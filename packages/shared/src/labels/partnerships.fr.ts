@@ -26,14 +26,17 @@ export const partnershipLabels = {
   close: "Fermer",
   /** Fiche d'un pro. */
   partnersTitle: "Ses partenaires",
+  partnersSeeAll: "Voir tout",
   partnersCount: (n: number) => `${n} passionné${n > 1 ? "s" : ""}`,
   partnersEmpty: "Aucun partenaire pour le moment.",
   subscriptionOnly: "Réservé à l'abonnement pro",
   notVerified: "Vérifie ta fiche (SIRET) pour proposer des partenariats.",
+  notPublished: "Publie ta fiche pour proposer des partenariats.",
   mineTitle: "Mes partenaires",
   pendingTitle: "Propositions en attente",
   withdraw: "Retirer la proposition",
   /** Profil d'un passionné : la ligne « Partenaires ». */
+  unavailablePro: "Pro indisponible",
   partnersLine: (n: number) => `Partenaires · ${n}`,
   partnersLineOpen: (names: string) => `Partenaires : ${names}`,
   /** Demande reçue (Activité › Demandes). */
@@ -55,10 +58,12 @@ export const partnershipLabels = {
   /** Erreurs de l'API. */
   errors: {
     not_verified: "Seul un pro dont la fiche est vérifiée peut proposer un partenariat.",
+    not_published: "Seule une fiche publiée peut proposer un partenariat.",
     subscription_required: "Proposer un partenariat est réservé à l'abonnement pro.",
     self: "Tu ne peux pas te proposer un partenariat à toi-même.",
     exists: "Un partenariat est déjà en cours ou proposé avec cette personne.",
-    cooldown: "Cette personne a décliné récemment : réessaie dans quelques semaines.",
+    cooldown: "Une proposition récente à cette personne est restée sans suite : réessaie dans quelques semaines.",
+    limit: "Tu as déjà fait trois propositions à cette personne ce mois-ci : réessaie dans quelques semaines.",
     vehicle: "Ce véhicule n'est pas visible sur son profil.",
     gone: "Ce partenariat n'existe plus.",
     notVerifiedAnymore: "Ce pro n'est plus vérifié : le partenariat ne peut pas être accepté.",

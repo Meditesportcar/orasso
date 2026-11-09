@@ -197,6 +197,8 @@ export type ProPublic = ProCard & {
    * les organisateurs partenaires.
    */
   memberPartners?: PartnerOfPro[];
+  /** Nombre total de ces partenaires (la liste n'en montre que 6 : « Voir tout » ouvre la page complète). */
+  memberPartnersTotal?: number;
 };
 
 export type ProStatsDay = { day: string; views: number; calls: number; routes: number; discounts: number };

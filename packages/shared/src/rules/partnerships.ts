@@ -12,6 +12,9 @@ export const PARTNERSHIP_MESSAGE_MAX = 200;
 /** Après un refus, le même pro ne repropose pas à la même personne avant 30 jours (même esprit que la demande d'abonnement). */
 export const PARTNERSHIP_RETRY_DAYS = 30;
 
+/** Au plus 3 propositions d'un même pro à une même personne sur 30 jours, toutes causes confondues (retrait, refus, fin). */
+export const PARTNERSHIP_MAX_PER_PERIOD = 3;
+
 /** Date (Paris, minuit) à partir de laquelle proposer un partenariat demande l'abonnement pro. Réglable : `partnerships.subscription_from`. */
 export const PARTNERSHIP_SUBSCRIPTION_FROM_DEFAULT = "2027-06-21";
 
@@ -30,19 +33,20 @@ export function subscriptionFromInstant(subscriptionFrom: string): Date {
   return fromWallTime({ year, month, day, hour: 0, minute: 0 });
 }
 
-export type PartnershipRefusal = "not_verified" | "subscription_required";
+export type PartnershipRefusal = "not_verified" | "not_published" | "subscription_required";
 
 /**
- * Un pro peut-il proposer ? Il faut une fiche vérifiée (SIRET). À partir de `subscriptionFrom`, il faudra l'abonnement
+ * Un pro peut-il proposer ? Il faut une fiche vérifiée (SIRET) et publiée. À partir de `subscriptionFrom`, il faudra l'abonnement
  * pro ; tant que la billetterie pro n'existe pas, personne ne l'a : la proposition est refusée pour tous (le réglage
  * permet de reculer la date).
  */
 export function canPropose(
-  pro: { verifiedAt: Date | null },
+  pro: { verifiedAt: Date | null; publishedAt: Date | null },
   settings: { subscriptionFrom: string },
   now: Date,
 ): PartnershipRefusal | null {
   if (!pro.verifiedAt) return "not_verified";
+  if (!pro.publishedAt) return "not_published";
   if (now.getTime() >= subscriptionFromInstant(settings.subscriptionFrom).getTime()) return "subscription_required";
   return null;
 }
@@ -53,7 +57,8 @@ export type PartnershipView = "none" | "limited" | "full";
 /**
  * Qui voit un partenariat :
  * - sans compte connecté : rien (les identifiés ne sont jamais montrés à un visiteur) ;
- * - une proposition, un refus, une fin : la personne concernée et le titulaire de la fiche, personne d'autre ;
+ * - une proposition, un refus, une fin : la personne concernée et le titulaire de la fiche, personne d'autre (le titulaire
+ *   sans la voiture si le compte est privé et qu'il n'en est pas l'abonné accepté) ;
  * - un partenariat actif : la personne concernée voit tout ; pour les autres membres connectés, tout si son compte est
  *   public ou s'ils sont ses abonnés acceptés, sinon la ligne réduite (pseudo et grade, sans voiture).
  */
@@ -64,9 +69,11 @@ export function partnershipVisibleTo(
 ): PartnershipView {
   if (!viewer.userId) return "none";
   if (viewer.userId === partnership.userId) return "full";
-  if (partnership.status !== "active") return viewer.userId === partnership.proOwnerId ? "full" : "none";
-  if (partnership.userVisibility === "public" || rel.followAccepted) return "full";
-  return "limited";
+  const regard = partnership.userVisibility === "public" || rel.followAccepted ? "full" : "limited";
+  // Le titulaire de la fiche lit sa proposition, mais la voiture (« full ») ne sort que s'il a encore le droit de la voir :
+  // compte passé privé ou abonné retiré depuis la proposition, plus de voiture.
+  if (partnership.status !== "active") return viewer.userId === partnership.proOwnerId ? regard : "none";
+  return regard;
 }
 
 /** Date de début de la ligne « depuis le 8 nov. ». */

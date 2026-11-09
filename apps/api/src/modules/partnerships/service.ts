@@ -6,9 +6,9 @@ import {
   canPropose,
   partnershipLabels as L,
   type MyPartnerships,
+  PARTNERSHIP_MAX_PER_PERIOD,
   PARTNERSHIP_RETRY_DAYS,
   type PartnerLogo,
-  type PartnerOfPro,
   type PartnershipOffer,
   type PartnershipPropose,
   type PartnershipRefusal,
@@ -16,6 +16,7 @@ import {
   type PartnershipStatus,
   type PartnershipVehicle,
   type ProPartnerships,
+  type ProPartnersPage,
   partnershipSince,
   partnershipVisibleTo,
   type VehiclePartner,
@@ -26,11 +27,13 @@ import { db } from "../../db/client";
 import { partnerships, profiles, proProfiles, vehicles } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, invalidTransition, notFound, validation } from "../../lib/errors";
+import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { proOwnerActive } from "../pros/explore";
@@ -48,7 +51,7 @@ const REQUESTS_LINK = { label: "Voir la demande", path: "/app/activite/demandes"
 
 const err = (
   status: 403 | 409,
-  code: "not_verified" | "subscription_required" | "partnership_exists" | "partnership_cooldown",
+  code: "not_verified" | "not_published" | "subscription_required" | "partnership_exists" | "partnership_cooldown",
   message: string,
 ) => new AppError(status, code, message);
 
@@ -56,13 +59,17 @@ const err = (
 const profileActive = (at: Date) =>
   sql`${profiles.deletedAt} is null and ${profiles.bannedAt} is null and (${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at})`;
 
-/** Fiche pro visible : non supprimée, publiée, titulaire en règle. */
-const proShown = (at: Date): SQL | undefined =>
-  and(isNull(proProfiles.deletedAt), isNotNull(proProfiles.publishedAt), proOwnerActive(at));
-
-/** Fiche pro avec laquelle un partenariat peut se faire ou se défaire : non supprimée, vérifiée, titulaire en règle. */
-const proValid = (at: Date): SQL | undefined =>
-  and(isNull(proProfiles.deletedAt), isNotNull(proProfiles.verifiedAt), proOwnerActive(at));
+/**
+ * Fiche pro avec laquelle un partenariat existe aux yeux des autres : non supprimée, **publiée, vérifiée** et titulaire en
+ * règle. Une seule règle pour l'afficher comme partenaire, lire une demande, accepter et proposer (lot R7m1, tour 2).
+ */
+const proShown = (at: Date): SQL =>
+  and(
+    isNull(proProfiles.deletedAt),
+    isNotNull(proProfiles.publishedAt),
+    isNotNull(proProfiles.verifiedAt),
+    proOwnerActive(at),
+  ) as SQL;
 
 const toResult = (p: PartnershipRow, userPseudo: string): PartnershipResult => ({
   id: p.id,
@@ -91,12 +98,13 @@ async function vehicleLabels(
   return out;
 }
 
-/** Le partenariat, ou 404 s'il n'est pas le mien (jamais de 403 : rien ne dit qu'il existe). */
+/** Le partenariat (ligne verrouillée jusqu'à la fin de la transaction), ou 404 s'il n'est pas le mien (jamais de 403). */
 async function ownPartnership(tx: Tx, userId: string, id: string): Promise<PartnershipRow> {
   const [row] = await tx
     .select()
     .from(partnerships)
-    .where(and(eq(partnerships.id, id), eq(partnerships.userId, userId)));
+    .where(and(eq(partnerships.id, id), eq(partnerships.userId, userId)))
+    .for("update");
   if (!row) throw notFound(L.errors.gone);
   return row;
 }
@@ -104,7 +112,10 @@ async function ownPartnership(tx: Tx, userId: string, id: string): Promise<Partn
 /** Jour de début de la contrainte « après le refus » : le plus récent de la réponse ou de la fin. */
 const cooldownSince = sql`coalesce(${partnerships.endedAt}, ${partnerships.respondedAt})`;
 
-/** Un refus récent, ou une fin décidée par la personne : le même pro ne revient pas avant 30 jours. */
+/**
+ * Un refus récent, une fin décidée par la personne, ou une proposition retirée par le pro avant réponse : le même pro ne
+ * revient pas avant 30 jours (sinon un pro pourrait reproposer en boucle et noyer la personne de notifications).
+ */
 async function inCooldown(proId: string, userId: string, at: Date, ex: Executor = db): Promise<boolean> {
   const [row] = await ex
     .select({ id: partnerships.id })
@@ -115,13 +126,35 @@ async function inCooldown(proId: string, userId: string, at: Date, ex: Executor 
         eq(partnerships.userId, userId),
         or(
           eq(partnerships.status, "declined"),
-          and(eq(partnerships.status, "ended"), eq(partnerships.endedBy, userId)),
+          and(eq(partnerships.status, "ended"), or(eq(partnerships.endedBy, userId), isNull(partnerships.respondedAt))),
         ),
         sql`${cooldownSince} > ${new Date(at.getTime() - PARTNERSHIP_RETRY_DAYS * DAY)}`,
       ),
     )
     .limit(1);
   return Boolean(row);
+}
+
+/** Nombre de propositions de ce pro à cette personne sur les 30 derniers jours, toutes causes confondues. */
+async function recentProposals(proId: string, userId: string, at: Date, ex: Executor = db): Promise<number> {
+  const [row] = await ex
+    .select({ n: sql<number>`count(*)::int` })
+    .from(partnerships)
+    .where(
+      and(
+        eq(partnerships.proId, proId),
+        eq(partnerships.userId, userId),
+        sql`${partnerships.proposedAt} > ${new Date(at.getTime() - PARTNERSHIP_RETRY_DAYS * DAY)}`,
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+/** Prévient les appareils des deux parties que leurs Demandes ont changé, après la validation (jamais sur une annulation). */
+function syncInbox(after: (cb: () => unknown) => void, ...userIds: string[]) {
+  after(() => {
+    for (const id of new Set(userIds)) inboxService.publish(id);
+  });
 }
 
 async function notifyParty(
@@ -168,8 +201,12 @@ export const partnershipsService = {
       if (!car || !mine || !(await socialProfile.vehicleDetailFor(v, target))) throw validation(L.errors.vehicle);
       vehicleId = car.id;
     }
-    if (await inCooldown(pro.id, target.userId, at)) throw err(409, "partnership_cooldown", L.errors.cooldown);
     return withTx(async (tx, after) => {
+      // Un pro ne propose pas deux fois en même temps au même passionné : le verrou ordonne les essais simultanés.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`partnership:${pro.id}:${target.userId}`}))`);
+      if (await inCooldown(pro.id, target.userId, at, tx)) throw err(409, "partnership_cooldown", L.errors.cooldown);
+      if ((await recentProposals(pro.id, target.userId, at, tx)) >= PARTNERSHIP_MAX_PER_PERIOD)
+        throw err(409, "partnership_cooldown", L.errors.limit);
       const [open] = await tx
         .select({ id: partnerships.id })
         .from(partnerships)
@@ -201,6 +238,7 @@ export const partnershipsService = {
         proId: pro.id,
         link: REQUESTS_LINK,
       });
+      syncInbox(after, target.userId, v.user.id);
       return toResult(row, target.pseudo);
     });
   },
@@ -254,15 +292,24 @@ export const partnershipsService = {
   },
 
   /** `POST /pros/:id/partnerships/:pid/end` : le pro met fin à un partenariat actif ou retire sa proposition. */
-  async endByPro(v: Viewer, proId: string, id: string): Promise<PartnershipResult> {
+  async endByPro(
+    v: Viewer,
+    proId: string,
+    id: string,
+    expectedStatus?: "pending" | "active",
+  ): Promise<PartnershipResult> {
     rateLimit("partnershipWrite", v.user.id);
     const pro = await ownedPro(v, proId);
     return withTx(async (tx, after) => {
       const [row] = await tx
         .select()
         .from(partnerships)
-        .where(and(eq(partnerships.id, id), eq(partnerships.proId, pro.id)));
+        .where(and(eq(partnerships.id, id), eq(partnerships.proId, pro.id)))
+        .for("update");
       if (!row) throw notFound(L.errors.gone);
+      // Le retrait d'une proposition ne termine jamais un partenariat que la personne vient d'accepter (et inversement) :
+      // l'écran dit ce qu'il croit défaire, la ligne verrouillée dit ce qui est vrai.
+      if (expectedStatus && row.status !== expectedStatus) throw invalidTransition(row.status, "ended");
       const ended = await endRow(tx, row, v.user.id);
       const user = await tx.query.profiles.findFirst({
         where: eq(profiles.userId, row.userId),
@@ -278,6 +325,7 @@ export const partnershipsService = {
           link: { label: "Voir la fiche", path: `/p/${pro.slug}` },
         });
       }
+      syncInbox(after, row.userId, v.user.id);
       return toResult(ended, user?.pseudo ?? "");
     });
   },
@@ -292,7 +340,7 @@ export const partnershipsService = {
       const [pro] = await tx
         .select()
         .from(proProfiles)
-        .where(and(eq(proProfiles.id, row.proId), proValid(at)));
+        .where(and(eq(proProfiles.id, row.proId), proShown(at)));
       // Un pro qui n'est plus vérifié (ou dont la fiche a disparu) ne peut plus devenir partenaire.
       if (!pro) throw conflict("conflict", L.errors.notVerifiedAnymore);
       const [done] = await tx
@@ -312,6 +360,7 @@ export const partnershipsService = {
         proId: pro.id,
         link: { label: "Voir ma fiche", path: `/p/${pro.slug}` },
       });
+      syncInbox(after, v.user.id, pro.ownerUserId);
       return toResult(done, me?.pseudo ?? "");
     });
   },
@@ -342,7 +391,8 @@ export const partnershipsService = {
           proId: pro.id,
           link: { label: "Voir ma fiche", path: `/p/${pro.slug}` },
         });
-      }
+        syncInbox(after, v.user.id, pro.ownerUserId);
+      } else syncInbox(after, v.user.id);
       return toResult(done, me?.pseudo ?? "");
     });
   },
@@ -367,7 +417,8 @@ export const partnershipsService = {
           proId: pro.id,
           link: { label: "Voir ma fiche", path: `/p/${pro.slug}` },
         });
-      }
+        syncInbox(after, v.user.id, pro.ownerUserId);
+      } else syncInbox(after, v.user.id);
       return toResult(ended, me?.pseudo ?? "");
     });
   },
@@ -376,15 +427,18 @@ export const partnershipsService = {
   async mine(v: Viewer): Promise<MyPartnerships> {
     const at = now();
     const rows = await db
-      .select({ p: partnerships, pro: proProfiles })
+      .select({ p: partnerships, pro: proProfiles, available: sql<boolean>`(${proShown(at)})` })
       .from(partnerships)
       .innerJoin(proProfiles, eq(proProfiles.id, partnerships.proId))
-      .where(and(eq(partnerships.userId, v.user.id), eq(partnerships.status, "active"), proShown(at)))
+      // Côté passionné, un partenariat actif reste lisible et on peut y mettre fin même quand la fiche du pro est
+      // dépubliée, non vérifiée ou son titulaire suspendu : `available` le dit à l'écran (jamais caché).
+      .where(and(eq(partnerships.userId, v.user.id), eq(partnerships.status, "active"), isNull(proProfiles.deletedAt)))
       .orderBy(desc(partnerships.respondedAt), desc(partnerships.id));
     const labels = await vehicleLabels(rows.map((r) => r.p));
     return {
-      items: rows.map(({ p, pro }) => ({
+      items: rows.map(({ p, pro, available }) => ({
         id: p.id,
+        available,
         pro: {
           proId: pro.id,
           name: pro.name,
@@ -400,21 +454,37 @@ export const partnershipsService = {
   },
 
   /**
-   * « Ses partenaires » d'une fiche pro : les passionnés actifs, vus par `viewer`. Sans compte connecté : aucun (jamais un
-   * identifié montré à un visiteur). Un compte privé que `viewer` ne suit pas : pseudo, photo et grade seulement, sans voiture.
+   * « Ses partenaires » d'une fiche pro : les passionnés actifs, vus par `viewer`, une page à la fois (`limit`, `cursor`) avec
+   * le nombre total. Sans compte connecté : aucun (jamais un identifié montré à un visiteur). Un compte privé que `viewer`
+   * ne suit pas : pseudo, photo et grade seulement, sans voiture ; son pseudo reste dans la liste et dans le total (comme
+   * ses nombres d'abonnés, visibles de tout membre), alors que son profil cache ses partenaires.
    */
-  async partnersOfPro(proId: string, viewer: Viewer | null): Promise<PartnerOfPro[]> {
-    if (!viewer) return [];
+  async partnersOfPro(
+    proId: string,
+    viewer: Viewer | null,
+    page: { limit: number; cursor?: string } = { limit: 20 },
+  ): Promise<ProPartnersPage> {
+    const empty = { items: [], nextCursor: null, total: 0 };
+    if (!viewer) return empty;
     const at = now();
     const [owner] = await db
       .select({ id: proProfiles.ownerUserId })
       .from(proProfiles)
       .where(and(eq(proProfiles.id, proId), proShown(at)));
-    if (!owner) return [];
+    if (!owner) return empty;
     const ownerId = owner.id;
+    const since = sql<Date>`coalesce(${partnerships.respondedAt}, ${partnerships.proposedAt})`;
+    const base = and(eq(partnerships.proId, proId), eq(partnerships.status, "active"), profileActive(at));
+    const [{ n: total = 0 } = { n: 0 }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(partnerships)
+      .innerJoin(profiles, eq(profiles.userId, partnerships.userId))
+      .where(base);
+    const cursor = decodeCursor(page.cursor);
     const rows = await db
       .select({
         p: partnerships,
+        since,
         pseudo: profiles.pseudo,
         avatarKey: profiles.avatarKey,
         grade: profiles.grade,
@@ -422,25 +492,39 @@ export const partnershipsService = {
       })
       .from(partnerships)
       .innerJoin(profiles, eq(profiles.userId, partnerships.userId))
-      .where(and(eq(partnerships.proId, proId), eq(partnerships.status, "active"), profileActive(at)))
-      .orderBy(desc(partnerships.respondedAt), desc(partnerships.id));
-    if (!rows.length) return [];
-    const rel = await followsService.relationsWith(viewer.user.id, [...new Set(rows.map((r) => r.p.userId))]);
-    const shown = rows.flatMap((r) => {
-      const view = partnershipVisibleTo(
+      .where(and(base, cursor ? sql`(${since}, ${partnerships.id}) < (${cursor.createdAt}, ${cursor.id})` : undefined))
+      .orderBy(desc(since), desc(partnerships.id))
+      .limit(page.limit + 1);
+    const pageRows = rows.slice(0, page.limit);
+    const last = pageRows.at(-1);
+    const nextCursor = rows.length > page.limit && last ? encodeCursor(new Date(last.since), last.p.id) : null;
+    if (!pageRows.length) return { items: [], nextCursor, total };
+    const rel = await followsService.relationsWith(viewer.user.id, [...new Set(pageRows.map((r) => r.p.userId))]);
+    const withView = pageRows.map((r) => ({
+      ...r,
+      view: partnershipVisibleTo(
         { userId: viewer.user.id },
         { status: r.p.status, userId: r.p.userId, proOwnerId: ownerId, userVisibility: r.visibility },
         { followAccepted: rel.get(r.p.userId)?.mine === "accepted" },
-      );
-      return view === "none" ? [] : [{ ...r, view }];
-    });
-    const labels = await vehicleLabels(shown.filter((r) => r.view === "full").map((r) => r.p));
-    return shown.map(({ p, pseudo, avatarKey, grade, view }) => ({
-      pseudo,
-      avatarUrl: storage.url(avatarKey),
-      grade,
-      vehicle: view === "full" && p.vehicleId ? (labels.get(p.vehicleId) ?? null) : null,
+      ),
     }));
+    const labels = await vehicleLabels(withView.filter((r) => r.view === "full").map((r) => r.p));
+    return {
+      total,
+      nextCursor,
+      items: withView.flatMap(({ p, pseudo, avatarKey, grade, view }) =>
+        view === "none"
+          ? []
+          : [
+              {
+                pseudo,
+                avatarUrl: storage.url(avatarKey),
+                grade,
+                vehicle: view === "full" && p.vehicleId ? (labels.get(p.vehicleId) ?? null) : null,
+              },
+            ],
+      ),
+    };
   },
 
   /** « Partenaires » d'un profil : les pros actifs de la personne (le regard vide pour un compte privé est décidé par l'appelant). */
@@ -497,7 +581,7 @@ export const partnershipsService = {
       .select({ p: partnerships, pro: proProfiles })
       .from(partnerships)
       .innerJoin(proProfiles, eq(proProfiles.id, partnerships.proId))
-      .where(and(eq(partnerships.userId, userId), eq(partnerships.status, "pending"), proValid(at)))
+      .where(and(eq(partnerships.userId, userId), eq(partnerships.status, "pending"), proShown(at)))
       .orderBy(desc(partnerships.proposedAt), desc(partnerships.id));
     const labels = await vehicleLabels(
       rows.map((r) => r.p),
@@ -524,7 +608,7 @@ export const partnershipsService = {
       .select({ n: sql<number>`count(*)::int` })
       .from(partnerships)
       .innerJoin(proProfiles, eq(proProfiles.id, partnerships.proId))
-      .where(and(eq(partnerships.userId, userId), eq(partnerships.status, "pending"), proValid(now())));
+      .where(and(eq(partnerships.userId, userId), eq(partnerships.status, "pending"), proShown(now())));
     return row?.n ?? 0;
   },
 

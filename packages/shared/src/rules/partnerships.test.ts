@@ -11,16 +11,26 @@ import {
 } from "./partnerships";
 import { fromWallTime } from "./time";
 
-const verified = { verifiedAt: new Date(0) };
+const verified = { verifiedAt: new Date(0), publishedAt: new Date(0) };
 const settings = { subscriptionFrom: PARTNERSHIP_SUBSCRIPTION_FROM_DEFAULT };
 
 describe("canPropose", () => {
   it("un pro non vérifié ne propose pas, quelle que soit la date", () => {
     const early = fromWallTime({ year: 2026, month: 11, day: 9, hour: 12, minute: 0 });
-    expect(canPropose({ verifiedAt: null }, settings, early)).toBe("not_verified");
+    expect(canPropose({ verifiedAt: null, publishedAt: new Date(0) }, settings, early)).toBe("not_verified");
     expect(
-      canPropose({ verifiedAt: null }, settings, fromWallTime({ year: 2028, month: 1, day: 1, hour: 0, minute: 0 })),
+      canPropose(
+        { verifiedAt: null, publishedAt: new Date(0) },
+        settings,
+        fromWallTime({ year: 2028, month: 1, day: 1, hour: 0, minute: 0 }),
+      ),
     ).toBe("not_verified");
+  });
+
+  it("une fiche non publiée ne propose pas", () => {
+    expect(canPropose({ verifiedAt: new Date(0), publishedAt: null }, settings, new Date("2026-11-09T12:00:00Z"))).toBe(
+      "not_published",
+    );
   });
 
   it("tout pro vérifié propose jusqu'au 20/06/2027 inclus (heure de Paris), puis l'abonnement est requis", () => {
@@ -67,6 +77,13 @@ describe("partnershipVisibleTo", () => {
     expect(partnershipVisibleTo({ userId: "x" }, priv, { followAccepted: true })).toBe("full");
     expect(partnershipVisibleTo({ userId: "x" }, priv, { followAccepted: false })).toBe("limited");
     expect(partnershipVisibleTo({ userId: "p1" }, priv, { followAccepted: false })).toBe("limited");
+  });
+
+  it("proposition d'un compte privé : le titulaire la lit sans la voiture, sauf s'il est abonné accepté", () => {
+    const p = { ...base, status: "pending", userVisibility: "private" } as const;
+    expect(partnershipVisibleTo({ userId: "p1" }, p, { followAccepted: false })).toBe("limited");
+    expect(partnershipVisibleTo({ userId: "p1" }, p, { followAccepted: true })).toBe("full");
+    expect(partnershipVisibleTo({ userId: "x" }, p, { followAccepted: true })).toBe("none");
   });
 
   it("proposition, refus, fin : la personne et le titulaire de la fiche, personne d'autre", () => {

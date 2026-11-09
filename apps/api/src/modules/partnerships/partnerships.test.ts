@@ -26,6 +26,7 @@ import {
   userFollows,
   vehicles,
 } from "../../db/schema";
+import { realtime } from "../../lib/realtime";
 import { settingsStore } from "../../lib/settings";
 import { notificationsService } from "../notifications/service";
 
@@ -269,8 +270,34 @@ describe("répondre et mettre fin : chacun de son côté seulement", () => {
     expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end`)).status).toBe(200);
     expect((await call(kenji, "GET", "/me/requests")).json.items).toEqual([]);
     expect(await notifsOf(kenji, "partnership_ended")).toEqual([]);
-    // La personne n'a rien refusé : le pro peut proposer de nouveau.
-    expect((await propose(proOwner, { userPseudo: kenji.pseudo, message: "Autre texte" })).status).toBe(201);
+  });
+
+  it("proposer, retirer, proposer… en boucle est refusé : un retrait ouvre le même délai de 30 jours qu'un refus", async () => {
+    const res = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Salut" });
+    await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${res.json.id}/end`);
+    const again = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Encore" });
+    expect(again.status).toBe(409);
+    expect(again.json.error.code).toBe("partnership_cooldown");
+    // Un seul « te propose » est parti, pas une rafale.
+    expect(await notifsOf(kenji, "partnership_proposed")).toHaveLength(1);
+    // 30 jours plus tard, le pro peut de nouveau proposer.
+    clock.set(new Date(clock.now.getTime() + 31 * 86_400_000));
+    expect((await propose(proOwner, { userPseudo: kenji.pseudo, message: "Un mois après" })).status).toBe(201);
+  });
+
+  it("au plus 3 propositions par 30 jours au même passionné, toutes causes confondues", async () => {
+    for (let i = 0; i < 3; i++) {
+      const id = await partner(kenji);
+      expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end`)).status).toBe(200);
+    }
+    const fourth = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Quatrième" });
+    expect(fourth.status).toBe(409);
+    expect(fourth.json.error.code).toBe("partnership_cooldown");
+    expect(fourth.json.error.message).toContain("trois propositions");
+    // Un autre passionné n'est pas concerné, et le compteur se vide après 30 jours.
+    expect((await propose(proOwner, { userPseudo: marc.pseudo, message: "Autre" })).status).toBe(201);
+    clock.set(new Date(clock.now.getTime() + 31 * 86_400_000));
+    expect((await propose(proOwner, { userPseudo: kenji.pseudo, message: "Plus tard" })).status).toBe(201);
   });
 
   it("accepter est refusé quand le pro n'est plus vérifié ; la demande disparaît de la liste", async () => {
@@ -599,5 +626,187 @@ describe("migration", () => {
     expect(row).toMatchObject({ status: "active", vehicleId: null });
     await db.delete(proProfiles).where(eq(proProfiles.id, pro.id));
     expect(await db.select().from(partnerships)).toEqual([]);
+  });
+});
+
+describe("tour 2 : liste du passionné, filtres alignés, voitures, simultanéité, Demandes synchronisées", () => {
+  it("GET /me/partnerships : le passionné garde le partenariat d'un pro dépublié, non vérifié ou suspendu (available: false) et peut y mettre fin", async () => {
+    const id = await partner(kenji);
+    const list = async () => (await call(kenji, "GET", "/me/partnerships")).json.items;
+    expect((await list())[0]).toMatchObject({ id, available: true });
+    await db.update(proProfiles).set({ publishedAt: null });
+    expect((await list())[0]).toMatchObject({ id, available: false, pro: { name: "Wrap 66" } });
+    await db.update(proProfiles).set({ publishedAt: new Date(0), verifiedAt: null });
+    expect((await list())[0]).toMatchObject({ id, available: false });
+    await db.update(proProfiles).set({ verifiedAt: new Date(0) });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 86_400_000) })
+      .where(eq(profiles.userId, proOwner.id));
+    expect((await list())[0]).toMatchObject({ id, available: false });
+    // Les autres regards ne changent pas : le profil public ne montre plus ce pro.
+    expect((await call(await person("Lea_11"), "GET", `/users/${kenji.pseudo}`)).json.partners).toEqual([]);
+    expect((await call(kenji, "POST", `/me/partnerships/${id}/end`)).status).toBe(200);
+    expect(await list()).toEqual([]);
+  });
+
+  it("un pro n'est affiché comme partenaire et ne propose que publié, vérifié et en règle (une seule règle)", async () => {
+    const id = await partner(kenji);
+    const lea = await person("Lea_11");
+    const shown = async () => (await call(lea, "GET", `/users/${kenji.pseudo}`)).json.partners;
+    const ofPro = async () => (await call(lea, "GET", "/pros/by-slug/wrap-66")).json.memberPartners;
+    expect(await shown()).toHaveLength(1);
+    // Vérification retirée : plus affiché, et la fiche ne propose plus.
+    await db.update(proProfiles).set({ verifiedAt: null });
+    expect(await shown()).toEqual([]);
+    expect(await ofPro()).toEqual([]);
+    const refused = await propose(proOwner, { userPseudo: lea.pseudo, message: "Salut" });
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.code).toBe("not_verified");
+    expect((await call(proOwner, "GET", `/pros/${pro.id}/partnerships`)).json.canPropose).toBe("not_verified");
+    await db.update(proProfiles).set({ verifiedAt: new Date(0) });
+    expect(await shown()).toHaveLength(1);
+    // Fiche dépubliée : pas affichée comme partenaire, ne propose pas non plus.
+    await db.update(proProfiles).set({ publishedAt: null });
+    expect(await shown()).toEqual([]);
+    const unpublished = await propose(proOwner, { userPseudo: lea.pseudo, message: "Salut" });
+    expect(unpublished.status).toBe(403);
+    expect(unpublished.json.error.code).toBe("not_published");
+    expect((await call(proOwner, "GET", `/pros/${pro.id}/partnerships`)).json.canPropose).toBe("not_published");
+    // Le passionné peut encore y mettre fin.
+    expect((await call(kenji, "POST", `/me/partnerships/${id}/end`)).status).toBe(200);
+  });
+
+  it("« Ses partenaires » : 6 sur la fiche avec le total, puis « Voir tout » page par page, sans doublon ni trou", async () => {
+    const names = ["A_one", "B_two", "C_three", "D_four", "E_five", "F_six", "G_seven", "H_eight"];
+    for (const [i, n] of names.entries()) {
+      const u = await person(n);
+      await db.insert(partnerships).values({
+        proId: pro.id,
+        userId: u.id,
+        message: "Direct",
+        status: "active",
+        respondedAt: new Date(clock.now.getTime() - (names.length - i) * 60_000),
+      });
+    }
+    const viewer = await person("Lea_11");
+    const fiche = (await call(viewer, "GET", "/pros/by-slug/wrap-66")).json;
+    expect(fiche.memberPartners).toHaveLength(6);
+    expect(fiche.memberPartnersTotal).toBe(8);
+    expect(fiche.memberPartners[0].pseudo).toBe("H_eight");
+    const page1 = await call(viewer, "GET", "/pros/by-slug/wrap-66/partners?limit=5");
+    expect(page1.status).toBe(200);
+    expect(page1.json.total).toBe(8);
+    expect(page1.json.items).toHaveLength(5);
+    expect(page1.json.nextCursor).toBeTruthy();
+    const page2 = await call(
+      viewer,
+      "GET",
+      `/pros/by-slug/wrap-66/partners?limit=5&cursor=${encodeURIComponent(page1.json.nextCursor)}`,
+    );
+    expect(page2.json.items).toHaveLength(3);
+    expect(page2.json.nextCursor).toBeNull();
+    const all = [...page1.json.items, ...page2.json.items].map((i: { pseudo: string }) => i.pseudo);
+    expect(all).toEqual([...names].reverse());
+    // Sans compte : 401. Le total compte les partenaires visibles (un compte banni n'y est plus).
+    expect((await call(null, "GET", "/pros/by-slug/wrap-66/partners")).status).toBe(401);
+    await db.update(profiles).set({ bannedAt: clock.now }).where(eq(profiles.pseudo, "H_eight"));
+    expect((await call(viewer, "GET", "/pros/by-slug/wrap-66")).json.memberPartnersTotal).toBe(7);
+  });
+
+  it("proposition en attente d'un compte privé : le pro la lit, la voiture n'est servie que s'il peut encore la voir", async () => {
+    const mine = await car(marc);
+    await follow(proOwner, marc);
+    const res = await propose(proOwner, { userPseudo: marc.pseudo, message: "Covering", vehicleId: mine.id });
+    expect(res.status).toBe(201);
+    const row = async () =>
+      (await call(proOwner, "GET", `/pros/${pro.id}/partnerships`)).json.items.find(
+        (i: { id: string }) => i.id === res.json.id,
+      );
+    expect((await row()).vehicle).toMatchObject({ id: mine.id });
+    // L'abonné est retiré : la proposition reste lisible, sans voiture.
+    await db.delete(userFollows).where(eq(userFollows.followerId, proOwner.id));
+    const after = await row();
+    expect(after).toMatchObject({ message: "Covering", status: "pending" });
+    expect(after.vehicle).toBeNull();
+    // De nouveau abonné accepté : la voiture revient ; le compte passe public : idem sans abonnement.
+    await follow(proOwner, marc);
+    expect((await row()).vehicle).toMatchObject({ id: mine.id });
+    await db.delete(userFollows).where(eq(userFollows.followerId, proOwner.id));
+    await db.update(profiles).set({ visibility: "public" }).where(eq(profiles.userId, marc.id));
+    expect((await row()).vehicle).toMatchObject({ id: mine.id });
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, marc.id));
+    expect((await row()).vehicle).toBeNull();
+  });
+
+  it("acceptation et retrait simultanés : une seule transition gagne, l'autre répond 409, les notifications suivent la vraie transition", async () => {
+    for (let i = 0; i < 4; i++) {
+      const target = await person(`Race_${i}`);
+      const res = await propose(proOwner, { userPseudo: target.pseudo, message: "Course" });
+      const id = res.json.id as string;
+      const [accepted, withdrawn] = await Promise.all([
+        call(target, "POST", `/me/partnerships/${id}/accept`),
+        call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=pending`),
+      ]);
+      expect([accepted.status, withdrawn.status].sort()).toEqual([200, 409]);
+      const [row] = await db.select().from(partnerships).where(eq(partnerships.id, id));
+      expect(row?.status).toBe(accepted.status === 200 ? "active" : "ended");
+      const toPro = (await notifsOf(proOwner, "partnership_accepted")).filter(
+        (n) => (n.data as { partnershipId?: string }).partnershipId === id,
+      );
+      expect(toPro).toHaveLength(accepted.status === 200 ? 1 : 0);
+      const toUser = (await notifsOf(target, "partnership_ended")).filter(
+        (n) => (n.data as { partnershipId?: string }).partnershipId === id,
+      );
+      expect(toUser).toEqual([]);
+    }
+  });
+
+  it("« mettre fin » demandé comme retrait (expect=pending) sur un partenariat actif : 409, il reste actif", async () => {
+    const id = await partner(kenji);
+    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=pending`)).status).toBe(409);
+    const [row] = await db.select().from(partnerships).where(eq(partnerships.id, id));
+    expect(row?.status).toBe("active");
+    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=oups`)).status).toBe(400);
+    expect((await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=active`)).status).toBe(200);
+  });
+
+  it("inbox.changed part vers les deux parties après chaque transition, même sans notification", async () => {
+    const watch = (u: TestUser) => {
+      const types: string[] = [];
+      const socket = { send: (m: string) => types.push(JSON.parse(m).type) };
+      realtime.subscribe(`user:${u.id}`, socket);
+      return {
+        count: () => types.filter((t) => t === "inbox.changed").length,
+        stop: () => realtime.unsubscribe(`user:${u.id}`, socket),
+      };
+    };
+    const a = watch(proOwner);
+    const b = watch(kenji);
+    try {
+      const res = await propose(proOwner, { userPseudo: kenji.pseudo, message: "Salut" });
+      const id = res.json.id as string;
+      expect([a.count(), b.count()]).toEqual([1, 1]);
+      // Retrait (aucune notification) : les deux Demandes se rechargent quand même.
+      await call(proOwner, "POST", `/pros/${pro.id}/partnerships/${id}/end?expect=pending`);
+      expect([a.count(), b.count()]).toEqual([2, 2]);
+      clock.set(new Date(clock.now.getTime() + 31 * 86_400_000));
+      const second = (await propose(proOwner, { userPseudo: kenji.pseudo, message: "Encore" })).json.id as string;
+      expect([a.count(), b.count()]).toEqual([3, 3]);
+      await call(kenji, "POST", `/me/partnerships/${second}/accept`);
+      expect([a.count(), b.count()]).toEqual([4, 4]);
+      await call(kenji, "POST", `/me/partnerships/${second}/end`);
+      expect([a.count(), b.count()]).toEqual([5, 5]);
+      clock.set(new Date(clock.now.getTime() + 31 * 86_400_000));
+      const third = (await propose(proOwner, { userPseudo: kenji.pseudo, message: "Trois" })).json.id as string;
+      await call(kenji, "POST", `/me/partnerships/${third}/decline`);
+      expect([a.count(), b.count()]).toEqual([7, 7]);
+      // Une transition refusée (409) n'annonce rien.
+      expect((await call(kenji, "POST", `/me/partnerships/${third}/decline`)).status).toBe(409);
+      expect([a.count(), b.count()]).toEqual([7, 7]);
+    } finally {
+      a.stop();
+      b.stop();
+    }
   });
 });
