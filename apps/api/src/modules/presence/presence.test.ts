@@ -695,6 +695,23 @@ describe("Accueil : le widget « En cours »", () => {
     expect((await home(other)).json.live).toMatchObject({ event: { id: event.id }, onSiteCount: 1 });
   });
 
+  it("tour 2 : droit de vote personnel (avant / après pointage) et hasPlace (place ou billet, pas une simple présence)", async () => {
+    await exhibitor(await signUp("Pilote_001"), { entered: true });
+    await exhibitor(await signUp("Pilote_002"), { entered: true });
+    await ticket(visitor);
+    // Avec un billet mais pas encore pointé : le vote est ouvert pour l'événement, pas pour moi.
+    const before = (await home(visitor)).json.live;
+    expect(before.hasPlace).toBe(true);
+    expect(before.votes).toMatchObject({ open: 1, canVote: false });
+    await here(visitor);
+    expect((await home(visitor)).json.live.votes.canVote).toBe(true);
+    // Une personne présente sans place ni billet : le bloc, mais pas « Mon accès ».
+    await here(other);
+    const guest = (await home(other)).json.live;
+    expect(guest.hasPlace).toBe(false);
+    expect(guest.votes.canVote).toBe(true);
+  });
+
   it("personne d'autre : null ; pas de bloc hors de l'événement (règle des absents)", async () => {
     await exhibitor(await signUp("Pilote_001"), { entered: true });
     expect((await home(other)).json.live).toBeNull();

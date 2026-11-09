@@ -10,6 +10,8 @@ export default [
     // bandeau « où sont passées les choses » (action seulement).
     route("app/fil", "routes/app-fil.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
+    // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
+    route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
     // Lot R7c2 (D38) : la Boîte disparaît. Activité (la cloche) et ses Demandes, Messages (la bulle), ses Demandes de message
     // et la conversation en temps réel ; les anciennes adresses `/app/boite*` et `/app/journal` redirigent (302).

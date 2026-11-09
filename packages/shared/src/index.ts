@@ -17,5 +17,6 @@ export * from "./provider";
 export * from "./qr";
 export * from "./roles";
 export * from "./rules";
+export * from "./rules/homeAgo";
 export * from "./schemas";
 export * from "./weather";
