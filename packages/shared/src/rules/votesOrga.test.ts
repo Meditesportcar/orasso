@@ -14,6 +14,8 @@ import {
   voteDurationLabel,
   voteScanMessage,
   voteScanOutcome,
+  voteSearchView,
+  voteStaleMinutes,
   voteStatus,
   voteWhen,
 } from "./votesOrga";
@@ -299,5 +301,32 @@ describe("voteScanOutcome (annonce après un scan)", () => {
       "Alfa Romeo 147 · ajoutée · 2 au total",
       "Honda S2000 · déjà candidate",
     ]);
+  });
+});
+
+describe("recherche d'une voiture à ajouter (plus de 12 correspondances)", () => {
+  const page = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => ({ id: `a${from + i}` }));
+  const taken = new Set(page(0, 12).map((h) => h.id));
+
+  it("12 premières déjà choisies et une 13e à la page suivante : jamais « aucune voiture » avant la dernière page", () => {
+    const first = voteSearchView({ items: page(0, 12), next: "c1", loading: false }, taken);
+    expect(first).toMatchObject({ results: [], needMore: true, showNone: false, canMore: true });
+    const loading = voteSearchView({ items: page(0, 12), next: "c1", loading: true }, taken);
+    expect(loading).toMatchObject({ needMore: false, showNone: false });
+    const second = voteSearchView({ items: page(0, 13), next: null, loading: false }, taken);
+    expect(second).toMatchObject({ results: [{ id: "a12" }], needMore: false, showNone: false, canMore: false });
+  });
+
+  it("« aucune voiture » seulement quand la dernière page est lue et que tout est déjà choisi", () => {
+    expect(voteSearchView({ items: page(0, 12), next: null, loading: false }, taken).showNone).toBe(true);
+    expect(voteSearchView({ items: null, next: null, loading: false }, taken)).toMatchObject({ showNone: false });
+  });
+});
+
+describe("données gardées après une coupure", () => {
+  it("compte les minutes depuis la dernière lecture réussie", () => {
+    expect(voteStaleMinutes(1_000, 1_000 + 30_000)).toBe(0);
+    expect(voteStaleMinutes(1_000, 1_000 + 3 * 60_000 + 5_000)).toBe(3);
+    expect(voteStaleMinutes(5_000, 1_000)).toBe(0);
   });
 });

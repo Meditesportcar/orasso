@@ -305,3 +305,27 @@ export function voteScanOutcome(res: VoteCandidateAdded): { label: string; count
   const named = candidates.find((x) => x.applicationId === res.addedApplicationId);
   return { label: named?.vehicleLabel ?? "Voiture", count: candidates.length, already: !res.added };
 }
+
+/** Les minutes écoulées depuis la dernière lecture réussie des votes (ligne « Données d'il y a N min » après une coupure). */
+export function voteStaleMinutes(loadedAtMs: number, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - loadedAtMs) / 60_000));
+}
+
+/**
+ * La recherche d'une voiture retenue à ajouter, page après page : les résultats sont les pages lues moins les voitures déjà
+ * candidates. Tant qu'il reste des pages et qu'aucune voiture n'est à proposer, l'écran charge la suivante (`needMore`) ;
+ * « aucune voiture » ne se dit qu'à la dernière page (`showNone`) ; « Voir plus » (`canMore`) tant qu'il en reste.
+ */
+export function voteSearchView<T extends { id: string }>(
+  state: { items: readonly T[] | null; next: string | null; loading: boolean },
+  taken: ReadonlySet<string>,
+): { results: T[]; needMore: boolean; showNone: boolean; canMore: boolean } {
+  if (!state.items) return { results: [], needMore: false, showNone: false, canMore: false };
+  const results = state.items.filter((h) => !taken.has(h.id));
+  return {
+    results,
+    needMore: results.length === 0 && Boolean(state.next) && !state.loading,
+    showNone: results.length === 0 && !state.next && !state.loading,
+    canMore: Boolean(state.next),
+  };
+}

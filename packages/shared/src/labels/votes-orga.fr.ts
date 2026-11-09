@@ -154,9 +154,13 @@ export const voteOrgaLabels = {
   notEnoughShort: "moins de deux candidats entrés",
   notEnough: "Il faut deux candidats entrés au moins pour ouvrir ce vote.",
   notPublished: "Le vote se lancera après la publication de l'événement.",
-  bell: "Un vote lancé pendant l'événement envoie une notification aux présents. Un vote prévu n'en envoie pas : l'onglet « Votes » s'allume à l'heure. Chacun peut couper cette notification dans ses réglages.",
+  bell: "L'ouverture d'un vote à thème envoie une notification aux personnes présentes, qu'il soit lancé à la main, programmé à une heure ou ouvert dès les premières entrées (« Toutes catégories » n'en envoie pas). L'onglet « Votes » s'allume aussi. Chacun peut couper cette notification dans ses réglages.",
   rankingTitle: "Classement",
   rankingLive: "en direct, pour l'équipe",
+  rankingStale: "classement à la dernière lecture réussie",
+  /** Après une coupure, avec des données gardées : « Données d'il y a 3 min ». */
+  staleData: (minutes: number) =>
+    minutes < 1 ? "Données d'il y a moins d'une minute" : `Données d'il y a ${minutes} min`,
   rankingEmpty: "Pas encore de voix.",
   voiceCount: (n: number) => `${n} voix`,
   addVoteOnScreen: "Ajouter un vote",
@@ -178,6 +182,7 @@ export const voteOrgaLabels = {
   addCandidate: "Ajouter",
   searchField: "Un pseudo ou un modèle, 2 lettres au moins",
   searchShort: "Saisis au moins deux lettres.",
+  searchMore: "Voir plus de voitures",
   searchNone: "Aucune voiture retenue ne correspond.",
   searchError: "Recherche impossible pour l'instant.",
   scanButton: "Par QR",

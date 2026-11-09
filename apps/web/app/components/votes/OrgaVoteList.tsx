@@ -15,6 +15,7 @@ import {
 import { useState } from "react";
 import { apiFetch } from "../../lib/api.client";
 import { OrgaVoteForm } from "./OrgaVoteForm";
+import { OrgaVotesLoadError } from "./OrgaVotesLoadError";
 import { useOrgaVotes } from "./useOrgaVotes";
 import { voteIconName } from "./voteIcon";
 
@@ -29,7 +30,7 @@ export function OrgaVoteList({
   zones: readonly EventZone[];
   makes: readonly VehicleMake[];
 }) {
-  const { manage, error: loadError, loading, reload, now } = useOrgaVotes(eventId);
+  const { manage, error: loadError, loading, reload, now, staleMinutes } = useOrgaVotes(eventId);
   const [form, setForm] = useState<{ editing: VoteManageItem | null } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -67,17 +68,13 @@ export function OrgaVoteList({
   return (
     <div className="s-stack" data-testid="wizard-votes">
       {loading ? <p className="s-muted">{L.loading}</p> : null}
-      {loadError && !manage ? (
-        <div className="s-stack s-stack--tight">
-          <p className="s-error" role="alert">
-            {loadError}
-          </p>
-          <div className="s-row">
-            <Button variant="secondary" icon="undo" onClick={() => void reload()} data-testid="wizard-votes-retry">
-              {L.retry}
-            </Button>
-          </div>
-        </div>
+      {loadError ? (
+        <OrgaVotesLoadError
+          error={loadError}
+          staleMinutes={staleMinutes}
+          onRetry={() => void reload()}
+          testId="wizard-votes-retry"
+        />
       ) : null}
       {error ? (
         <p className="s-error" role="alert">

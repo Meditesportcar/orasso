@@ -25,7 +25,10 @@ export function VotesTemps({ event }: StepContext) {
   const router = useRouter();
   const at = useNow(60_000);
   const eventId = event?.id ?? "";
-  const { manage, zoneName, makeNames } = useVotesData(eventId, { organizer: true, enabled: Boolean(event) });
+  const { manage, zoneName, makeNames, staleMinutes } = useVotesData(eventId, {
+    organizer: true,
+    enabled: Boolean(event),
+  });
   const [menu, setMenu] = useState<string | null>(null);
   const [removing, setRemoving] = useState<VoteManageItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,6 +65,7 @@ export function VotesTemps({ event }: StepContext) {
   return (
     <View style={styles.root} testID="wizard-votes">
       <OrgaFailure error={manage.error} />
+      {staleMinutes !== null ? <Notice tone="error">{L.staleData(staleMinutes)}</Notice> : null}
       {manage.error && !manage.data ? (
         <>
           <Muted variant="body">{L.loadError}</Muted>

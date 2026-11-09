@@ -655,6 +655,43 @@ describe("ouverture et clôture", () => {
     expect(shouldDeliver(null, ["vote_opened"], "vote_opened")).toBe(false);
   });
 
+  it("l'ouverture d'un vote à thème prévient les présents quel que soit son mode (premières entrées, heure fixée, lancé à la main) ; « Toutes catégories » jamais", async () => {
+    const all = await allCategoriesId();
+    const first = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "Dès l'entrée",
+    });
+    const timed = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "À 21 h",
+      openMode: "at",
+      opensAt: paris(10, 17, 21).toISOString(),
+    });
+    const manual = await createTheme({
+      ...japanese,
+      candidateMode: "all",
+      candidateFilter: null,
+      title: "Lancé",
+      openMode: "manual",
+    });
+    await enterAll();
+    expect((await api(orga, "POST", `/${manual}/open`)).status).toBe(200);
+    clock.set(paris(10, 17, 21));
+    await votesLifecycle.sweep();
+    await votesLifecycle.sweep();
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") });
+    const forVote = (voteId: string) =>
+      sent.filter((n) => (n.data as { voteId?: string } | null)?.voteId === voteId).length;
+    expect(forVote(first)).toBeGreaterThan(0);
+    expect(forVote(timed)).toBeGreaterThan(0);
+    expect(forVote(manual)).toBeGreaterThan(0);
+    expect(forVote(all)).toBe(0);
+  });
+
   it("le présent par GPS et le billet contrôlé sont prévenus aussi", async () => {
     await enterAll();
     const gps = await signUp("Gina_75");

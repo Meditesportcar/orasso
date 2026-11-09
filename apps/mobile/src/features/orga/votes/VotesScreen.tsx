@@ -37,7 +37,7 @@ export function OrgaVotes({ eventId }: { eventId: string }) {
 export function VotesScreen({ eventId, readOnly }: { eventId: string; readOnly: boolean }) {
   const router = useRouter();
   const at = useNow(30_000);
-  const { manage, event } = useVotesData(eventId, { organizer: !readOnly });
+  const { manage, event, staleMinutes } = useVotesData(eventId, { organizer: !readOnly });
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +100,7 @@ export function VotesScreen({ eventId, readOnly }: { eventId: string; readOnly: 
       }
     >
       {!readOnly ? <OrgaFailure error={manage.error} /> : null}
+      {staleMinutes !== null ? <Notice tone="error">{L.staleData(staleMinutes)}</Notice> : null}
       {readOnly && manage.error ? <Notice tone="error">{errorMessage(manage.error)}</Notice> : null}
       {error && !pending ? <Notice tone="error">{error}</Notice> : null}
       {notice ? <Notice testID="votes-notice">{notice}</Notice> : null}

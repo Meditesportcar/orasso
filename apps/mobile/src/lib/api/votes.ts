@@ -42,8 +42,8 @@ export const votesApi = {
       method: "DELETE",
     }),
   /** Recherche d'une voiture retenue (pseudo, marque ou modèle) pour un vote « à la main » : la file de tri, filtrée. */
-  voteSearchRetained: (eventId: string, q: string) =>
+  voteSearchRetained: (eventId: string, q: string, cursor?: string | null) =>
     request<Page<ApplicationForTriage>>(
-      `/api/events/${eventId}/applications${qs({ kind: "vehicle", status: "accepted", sort: "pseudo", q, limit: 12 })}`,
+      `/api/events/${eventId}/applications${qs({ kind: "vehicle", status: "accepted", sort: "pseudo", q, limit: 12, cursor })}`,
     ),
 };

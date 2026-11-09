@@ -15,6 +15,7 @@ import { useState } from "react";
 import { apiFetch } from "../../lib/api.client";
 import { OrgaVoteCandidates } from "./OrgaVoteCandidates";
 import { OrgaVoteForm } from "./OrgaVoteForm";
+import { OrgaVotesLoadError } from "./OrgaVotesLoadError";
 import { useOrgaVotes } from "./useOrgaVotes";
 import { voteIconName } from "./voteIcon";
 
@@ -37,7 +38,8 @@ export function OrgaVotesLive({
   zones: readonly EventZone[];
   makes: readonly VehicleMake[];
 }) {
-  const { manage, error: loadError, loading, reload, now } = useOrgaVotes(eventId, initial);
+  const { manage, error: loadError, loading, reload, now, staleMinutes } = useOrgaVotes(eventId, initial);
+  const stale = staleMinutes !== null;
   const [pending, setPending] = useState<Pending | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [form, setForm] = useState<{ editing: VoteManageItem | null } | null>(null);
@@ -70,17 +72,13 @@ export function OrgaVotesLive({
   return (
     <div className="s-stack" data-testid="votes-screen">
       {loading ? <p className="s-muted">{L.loading}</p> : null}
-      {loadError && !manage ? (
-        <div className="s-stack s-stack--tight">
-          <p className="s-error" role="alert">
-            {loadError}
-          </p>
-          <div className="s-row">
-            <Button variant="secondary" icon="undo" onClick={() => void reload()} data-testid="votes-retry">
-              {L.retry}
-            </Button>
-          </div>
-        </div>
+      {loadError ? (
+        <OrgaVotesLoadError
+          error={loadError}
+          staleMinutes={staleMinutes}
+          onRetry={() => void reload()}
+          testId="votes-retry"
+        />
       ) : null}
       {error && !pending ? (
         <p className="s-error" role="alert">
@@ -230,7 +228,7 @@ export function OrgaVotesLive({
               {expanded && v.state !== "upcoming" ? (
                 <div className="s-stack s-stack--tight" data-testid="vote-ranking">
                   <span className="o-t-caption s-muted">
-                    {v.state === "open" ? L.rankingLive : L.voiceCount(v.total)}
+                    {v.state === "open" ? (stale ? L.rankingStale : L.rankingLive) : L.voiceCount(v.total)}
                   </span>
                   {v.ranking.length === 0 ? <p className="s-muted">{L.rankingEmpty}</p> : null}
                   <ol className="ov-rows">

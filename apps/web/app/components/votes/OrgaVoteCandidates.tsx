@@ -3,9 +3,16 @@
 // les retenues. Pas de scan du QR sur le site (appareil photo : appli seulement). Les candidats ne changent plus une fois le
 // vote ouvert : l'API refuse (409 `vote_locked`), l'écran masque alors la recherche et les boutons.
 import { Button, TextField } from "@orasso/design-system/web";
-import { type ApplicationForTriage, voteOrgaLabels as L, type Page, type VoteManageItem } from "@orasso/shared";
+import {
+  type ApplicationForTriage,
+  voteOrgaLabels as L,
+  type Page,
+  type VoteManageItem,
+  voteSearchView,
+} from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../lib/api.client";
+import { createLatestGate } from "../../lib/latestRequest";
 
 export function OrgaVoteCandidates({
   eventId,
@@ -25,35 +32,54 @@ export function OrgaVoteCandidates({
   const candidates = vote.handCandidates ?? [];
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ApplicationForTriage[] | null>(null);
+  const [next, setNext] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const seq = useRef(0);
+  const gate = useRef(createLatestGate()).current;
 
-  // Deux lettres au moins ; la réponse d'une saisie passée est ignorée.
+  // Une page de résultats (12 voitures) ; la suite s'ajoute à la fin. Une réponse d'une saisie passée, ou d'un champ vidé,
+  // est jetée (la porte avance à chaque changement du champ et au nettoyage de l'effet).
+  async function loadPage(q: string, cursor: string | null) {
+    const ticket = gate.start();
+    setSearching(true);
+    const res = await apiFetch<Page<ApplicationForTriage>>(
+      `/events/${eventId}/applications?kind=vehicle&status=accepted&sort=pseudo&limit=12&q=${encodeURIComponent(q)}${
+        cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+      }`,
+    );
+    if (!ticket.latest()) return;
+    setSearching(false);
+    if (res.ok) {
+      setHits((old) => (cursor ? [...(old ?? []), ...res.data.items] : res.data.items));
+      setNext(res.data.nextCursor);
+      setSearchError(null);
+    } else {
+      setHits(null);
+      setNext(null);
+      setSearchError(L.searchError);
+    }
+  }
+
+  // Deux lettres au moins.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `loadPage` ne lit que `eventId` et la porte, stables ici.
   useEffect(() => {
+    gate.invalidate();
     const q = query.trim();
+    setSearching(false);
     if (q.length < 2) {
       setHits(null);
+      setNext(null);
       setSearchError(null);
       return;
     }
-    const mine = ++seq.current;
-    const timer = setTimeout(async () => {
-      const res = await apiFetch<Page<ApplicationForTriage>>(
-        `/events/${eventId}/applications?kind=vehicle&status=accepted&sort=pseudo&limit=12&q=${encodeURIComponent(q)}`,
-      );
-      if (mine !== seq.current) return;
-      if (res.ok) {
-        setHits(res.data.items);
-        setSearchError(null);
-      } else {
-        setHits(null);
-        setSearchError(L.searchError);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query, eventId]);
+    const timer = setTimeout(() => void loadPage(q, null), 300);
+    return () => {
+      clearTimeout(timer);
+      gate.invalidate();
+    };
+  }, [query, eventId, gate]);
 
   async function run(key: string, call: () => ReturnType<typeof apiFetch>) {
     setBusy(key);
@@ -65,7 +91,13 @@ export function OrgaVoteCandidates({
   }
 
   const taken = new Set(candidates.map((x) => x.applicationId));
-  const results = (hits ?? []).filter((h) => !taken.has(h.id));
+  const { results, needMore, showNone, canMore } = voteSearchView({ items: hits, next, loading: searching }, taken);
+
+  // Toutes les voitures de la page sont déjà candidates : la page suivante se charge d'elle-même.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenché par l'état de la recherche seulement.
+  useEffect(() => {
+    if (needMore && next) void loadPage(query.trim(), next);
+  }, [needMore, next]);
 
   return (
     <div className="s-stack s-stack--tight ov-candidates" data-testid="vote-candidates-panel">
@@ -124,7 +156,7 @@ export function OrgaVoteCandidates({
               {searchError}
             </p>
           ) : null}
-          {hits && results.length === 0 && !searchError ? <p className="s-muted">{L.searchNone}</p> : null}
+          {showNone && !searchError ? <p className="s-muted">{L.searchNone}</p> : null}
           <ul className="ov-rows">
             {results.map((h) => (
               <li key={h.id} data-testid={`vote-hit-${h.id}`}>
@@ -151,6 +183,17 @@ export function OrgaVoteCandidates({
               </li>
             ))}
           </ul>
+          {canMore ? (
+            <Button
+              variant="secondary"
+              icon="add"
+              disabled={searching}
+              onClick={() => void loadPage(query.trim(), next)}
+              data-testid="vote-search-more"
+            >
+              {L.searchMore}
+            </Button>
+          ) : null}
           <p className="o-t-caption s-muted">{L.scanSiteNote}</p>
         </>
       ) : (

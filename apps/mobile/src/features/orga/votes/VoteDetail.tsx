@@ -9,6 +9,7 @@ import {
   type VoteManageItem,
   voteDurationOptions,
   voteScanOutcome,
+  voteSearchView,
   voteStatus,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,6 +18,7 @@ import { StyleSheet, View } from "react-native";
 import { VoteScanSheet } from "@/features/staff/VoteScanSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { createRequestGate } from "@/lib/requestGate";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -35,7 +37,7 @@ export function VoteDetail({ eventId }: { eventId: string }) {
   const router = useRouter();
   const { vote: voteId } = useLocalSearchParams<{ vote?: string }>();
   const at = useNow(30_000);
-  const { manage, event } = useVotesData(eventId, { organizer: true });
+  const { manage, event, staleMinutes } = useVotesData(eventId, { organizer: true });
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,10 @@ export function VoteDetail({ eventId }: { eventId: string }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ApplicationForTriage[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const seq = useRef(0);
+  const [next, setNext] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  // Seule la dernière recherche compte ; elle est jetée aussi quand le champ est vidé ou l'écran quitté.
+  const gate = useRef(createRequestGate(() => null)).current;
 
   const vote: VoteManageItem | undefined = manage.data?.items.find((v) => v.id === voteId);
   const canWrite = manage.data?.canWrite === true;
@@ -55,31 +60,46 @@ export function VoteDetail({ eventId }: { eventId: string }) {
   const candidates = vote?.handCandidates ?? [];
   const back = () => (router.canGoBack() ? router.back() : router.replace(`/evenement/${eventId}/votes`));
 
-  // Recherche d'une voiture retenue : au moins deux lettres, une réponse tardive d'une saisie passée est ignorée.
+  // Une page de résultats (12 voitures), la suite s'ajoute à la fin ; la réponse d'une saisie passée ou d'un champ vidé est jetée.
+  function loadPage(q: string, cursor: string | null) {
+    const ticket = gate.start();
+    setSearching(true);
+    api
+      .voteSearchRetained(eventId, q, cursor)
+      .then((page) => {
+        if (!ticket.latest()) return;
+        setSearching(false);
+        setHits((old) => (cursor ? [...(old ?? []), ...page.items] : page.items));
+        setNext(page.nextCursor);
+        setSearchError(null);
+      })
+      .catch((err) => {
+        if (!ticket.latest()) return;
+        setSearching(false);
+        setHits(null);
+        setNext(null);
+        setSearchError(errorMessage(err));
+      });
+  }
+
+  // Recherche d'une voiture retenue : au moins deux lettres.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `loadPage` ne lit que `eventId` et la porte, stables ici.
   useEffect(() => {
+    gate.invalidate();
     const q = query.trim();
+    setSearching(false);
     if (q.length < 2) {
       setHits(null);
+      setNext(null);
       setSearchError(null);
       return;
     }
-    const mine = ++seq.current;
-    const timer = setTimeout(() => {
-      api
-        .voteSearchRetained(eventId, q)
-        .then((page) => {
-          if (mine !== seq.current) return;
-          setHits(page.items);
-          setSearchError(null);
-        })
-        .catch((err) => {
-          if (mine !== seq.current) return;
-          setHits(null);
-          setSearchError(errorMessage(err));
-        });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query, eventId]);
+    const timer = setTimeout(() => loadPage(q, null), 300);
+    return () => {
+      clearTimeout(timer);
+      gate.invalidate();
+    };
+  }, [query, eventId, gate]);
 
   async function run(key: string, action: () => Promise<unknown>, done?: string) {
     setBusy(key);
@@ -124,7 +144,13 @@ export function VoteDetail({ eventId }: { eventId: string }) {
 
   const enteredIds = new Set(manage.data?.enteredApplicationIds ?? []);
   const taken = new Set(candidates.map((x) => x.applicationId));
-  const results = (hits ?? []).filter((h) => !taken.has(h.id));
+  const { results, needMore, showNone, canMore } = voteSearchView({ items: hits, next, loading: searching }, taken);
+
+  // Toutes les voitures de la page sont déjà candidates : la page suivante se charge d'elle-même.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenché par l'état de la recherche seulement.
+  useEffect(() => {
+    if (needMore && next) loadPage(query.trim(), next);
+  }, [needMore, next]);
 
   return (
     <FlowScreen
@@ -298,7 +324,7 @@ export function VoteDetail({ eventId }: { eventId: string }) {
                     <Muted variant="caption">{L.searchShort}</Muted>
                   ) : null}
                   {searchError ? <Notice tone="error">{L.searchError}</Notice> : null}
-                  {hits && results.length === 0 && !searchError ? <Muted variant="body">{L.searchNone}</Muted> : null}
+                  {showNone && !searchError ? <Muted variant="body">{L.searchNone}</Muted> : null}
                   <View style={styles.list}>
                     {results.map((h) => (
                       <Plate key={h.id} style={styles.candidate} testID={`vote-hit-${h.id}`}>
@@ -326,6 +352,17 @@ export function VoteDetail({ eventId }: { eventId: string }) {
                       </Plate>
                     ))}
                   </View>
+                  {canMore ? (
+                    <Button
+                      variant="secondary"
+                      icon="add"
+                      disabled={searching}
+                      onPress={() => loadPage(query.trim(), next)}
+                      testID="vote-search-more"
+                    >
+                      {L.searchMore}
+                    </Button>
+                  ) : null}
                 </>
               ) : (
                 <Muted variant="caption">{L.lockedCandidates}</Muted>
@@ -336,7 +373,13 @@ export function VoteDetail({ eventId }: { eventId: string }) {
           {vote.state !== "upcoming" ? (
             <>
               <SectionTitle>{L.rankingTitle}</SectionTitle>
-              <Muted variant="caption">{vote.state === "open" ? L.rankingLive : L.voiceCount(vote.total)}</Muted>
+              <Muted variant="caption">
+                {vote.state === "open"
+                  ? staleMinutes !== null
+                    ? L.rankingStale
+                    : L.rankingLive
+                  : L.voiceCount(vote.total)}
+              </Muted>
               {vote.ranking.length === 0 ? <Muted variant="body">{L.rankingEmpty}</Muted> : null}
               <View style={styles.list} testID="vote-ranking">
                 {vote.ranking.slice(0, 10).map((r) => (
