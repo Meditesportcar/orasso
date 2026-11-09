@@ -331,6 +331,8 @@ describe("à la une (highlighted)", () => {
     const { damien, lydia, other } = await setup();
     await apply(damien.id, lydia.id);
     await send(damien.id, "event_updated", { eventId: lydia.id, title: "Ancien", eventStartsAt: lydia.startsAt });
+    // L'horloge est figée : sans cette minute, les deux ont la même heure de livraison et l'ordre dépend de l'identifiant.
+    clock.advance(60_000);
     await send(damien.id, "schedule_change", {
       eventId: lydia.id,
       title: "Horaire modifié",
