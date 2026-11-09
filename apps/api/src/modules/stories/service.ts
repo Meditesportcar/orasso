@@ -399,7 +399,8 @@ export const storiesService = {
     const tags: { kind: StoryTagKind; id: string }[] = [];
     const seen = new Set<string>();
     const wanted: StoryTagInput[] = [...input.tags];
-    if (stickerStructure && stickerStructure !== ctx.structureId) wanted.push({ kind: "structure", id: stickerStructure });
+    if (stickerStructure && stickerStructure !== ctx.structureId)
+      wanted.push({ kind: "structure", id: stickerStructure });
     for (const t of wanted) {
       const key = `${t.kind}:${t.id}`;
       if (seen.has(key)) continue;

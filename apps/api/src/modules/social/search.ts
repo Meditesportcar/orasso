@@ -59,7 +59,8 @@ function taggableSql(viewer: Viewer, query: PeopleSearchQuery): SQL {
         where cm.crew_id = ${query.crewId} and cm.user_id = p.user_id and cm.status = 'active' and c.deleted_at is null)
       and exists (select 1 from crew_members me where me.crew_id = ${query.crewId} and me.user_id = ${me} and me.status = 'active'))`;
   }
-  const publicAuthor = query.persona === "organizer" || query.persona === "pro" || viewer.profile.visibility === "public";
+  const publicAuthor =
+    query.persona === "organizer" || query.persona === "pro" || viewer.profile.visibility === "public";
   if (publicAuthor) return sql`true`;
   return sql`exists (select 1 from user_follows uf where uf.follower_id = p.user_id and uf.followed_id = ${me} and uf.status = 'accepted')`;
 }

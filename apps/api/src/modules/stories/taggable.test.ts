@@ -110,9 +110,7 @@ describe("recherche d'une personne à identifier (taggableFor)", () => {
     expect(pseudos(ok)).toEqual(["Tag_Membre"]);
     // Sans crew choisi, ou pour quelqu'un qui n'est pas du crew : rien.
     expect(pseudos(await req(leader, "GET", "/users/search?q=Tag_&taggableFor=crew"))).toEqual([]);
-    expect(
-      pseudos(await req(outsider, "GET", `/users/search?q=Tag&taggableFor=crew&crewId=${crew.id}`)),
-    ).toEqual([]);
+    expect(pseudos(await req(outsider, "GET", `/users/search?q=Tag&taggableFor=crew&crewId=${crew.id}`))).toEqual([]);
     // Le membre retiré n'est plus proposé.
     expect((await req(leader, "DELETE", `/crews/${crew.id}/members/${member.id}`)).status).toBeLessThan(300);
     expect(pseudos(await req(leader, "GET", `/users/search?q=Tag_&taggableFor=crew&crewId=${crew.id}`))).toEqual([]);
