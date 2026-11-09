@@ -50,11 +50,13 @@ export function fromWallInput(value: string): string | null {
 }
 
 /**
- * Les huit temps de l'assistant, site et appli (lot 53, `s-create`, V13). Ils regroupent les douze étapes d'avant sans
- * rien retirer : format, dates, titre, description, véhicules et places → `type` ; adresse, zones, prestataires
- * attendus et missions → `lieu` ; créneaux, entrée du public et billetterie → `arrivees` ; admission et critères →
- * `criteres` ; ouverture, avant-première, hauts grades et verrouillage → `avant-premiere` ; règlement et consignes →
- * `reglement` ; affiche générée et affiche perso → `affiche` ; récapitulatif → `publier`.
+ * Les neuf temps de l'assistant, site et appli (lot 53, `s-create`, V13 ; lot R7l2 : « Votes du public » s'ajoute). Ils
+ * regroupent les douze étapes d'avant sans rien retirer : format, dates, titre, description, véhicules et places →
+ * `type` ; adresse, zones, prestataires attendus et missions → `lieu` ; créneaux, entrée du public et billetterie →
+ * `arrivees` ; admission et critères → `criteres` ; ouverture, avant-première, hauts grades et verrouillage →
+ * `avant-premiere` ; règlement et consignes → `reglement` ; les votes à thème du public → `votes` (lot R7l2 : étape non
+ * bloquante, enregistrée vote par vote par l'API) ; affiche générée et affiche perso → `affiche` ; récapitulatif →
+ * `publier`.
  */
 export const eventWizardSteps = [
   "type",
@@ -63,6 +65,7 @@ export const eventWizardSteps = [
   "criteres",
   "avant-premiere",
   "reglement",
+  "votes",
   "affiche",
   "publier",
 ] as const;
@@ -751,7 +754,7 @@ export const lockOffsetOptions = [
   { value: "1440", label: "24 h avant" },
 ] as const;
 
-// --- Assistant en huit temps (lot 53) ---------------------------------------------------------------------------
+// --- Assistant en neuf temps (lot 53, lot R7l2) ---------------------------------------------------------------------------
 
 /** Ponctuel, récurrent ou plusieurs jours (« Combien de fois ? »). */
 export type EventKind = "one" | "rec" | "multi";
@@ -1345,7 +1348,7 @@ export function parseWizardMemo(raw: string | null | undefined): WizardMemo | nu
 }
 
 /**
- * Index de temps gardé avec une saisie : valable seulement s'il a été écrit avec le découpage actuel (`steps` = 8) ;
+ * Index de temps gardé avec une saisie : valable seulement s'il a été écrit avec le découpage actuel (`steps` = 9 depuis le lot R7l2) ;
  * sinon `null` (ancien brouillon à douze étapes : on rouvre au temps calculé).
  */
 export function storedStepIndex(steps: unknown, index: unknown): number | null {

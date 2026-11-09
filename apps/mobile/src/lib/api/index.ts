@@ -38,6 +38,7 @@ import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
 import { ticketsApi } from "./tickets";
 import { triageApi } from "./triage";
+import { votesApi } from "./votes";
 import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
@@ -83,6 +84,7 @@ export const api = {
   ...orgaApi,
   ...structureApi,
   ...triageApi,
+  ...votesApi,
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,

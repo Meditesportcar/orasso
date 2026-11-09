@@ -28,6 +28,7 @@ import {
   orgaV2Labels,
   ticketingAppLabels,
   triageAppLabels,
+  voteOrgaLabels,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
@@ -607,6 +608,16 @@ export function EventPage({
                 testID="orga-public-page"
               >
                 {EL.publicPage}
+              </Button>
+              {/* Lot R7l2 : les votes du public (état, Lancer, Clore, candidats). */}
+              <Button
+                variant="secondary"
+                icon="trophy"
+                onPress={() => router.push(`/evenement/${eventId}/votes`)}
+                fullWidth
+                testID="orga-votes"
+              >
+                {voteOrgaLabels.linkVotes}
               </Button>
             </ActionBlock>
           ) : null}

@@ -11,6 +11,8 @@ export default [
     route("e/:eventId/modifier", "routes/orga-evenement-modifier.tsx"),
     route("e/:eventId/candidatures", "routes/orga-candidatures.tsx"),
     route("e/:eventId/jour-j", "routes/orga-jour-j.tsx"),
+    // Lot R7l2 : les votes du public (état, Lancer, Clore, candidats ; le staff lit seulement).
+    route("e/:eventId/votes", "routes/orga-evenement-votes.tsx"),
     // Lot 27 : après l'événement (bilan, remerciement, export tracé, édition suivante).
     route("e/:eventId/apres", "routes/orga-apres.tsx"),
     route("e/:eventId/billets", "routes/orga-billets.tsx"),
