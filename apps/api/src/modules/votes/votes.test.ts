@@ -662,6 +662,7 @@ describe("ouverture et clôture", () => {
       candidateMode: "all",
       candidateFilter: null,
       title: "Dès l'entrée",
+      openMode: "first_entry",
     });
     const timed = await createTheme({
       ...japanese,
@@ -678,6 +679,11 @@ describe("ouverture et clôture", () => {
       title: "Lancé",
       openMode: "manual",
     });
+    // L'horloge du test est simulée, pas celle de la base : les votes sont créés « avant » les premiers pointages.
+    await db
+      .update(eventVotes)
+      .set({ createdAt: paris(10, 17, 10) })
+      .where(eq(eventVotes.eventId, eventId));
     await enterAll();
     expect((await api(orga, "POST", `/${manual}/open`)).status).toBe(200);
     clock.set(paris(10, 17, 21));
