@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { addPendingSecondPlace, apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7a2 (D38), côté appli (version web compilée de recette) : l'Accueil « tableau de bord » de Damien_66 pendant le
@@ -110,4 +110,91 @@ test("hors événement : pas de ligne ni de bloc « En cours », Au spot et Souv
   await expect(page.getByTestId("home-personalize")).toBeVisible();
   await page.screenshot({ path: `${DIR}/04-accueil-hors-evenement.png`, fullPage: true });
   await ctx.close();
+});
+
+// --- Tour 3 -------------------------------------------------------------------------------------------------------------
+test("tour 3 : participant sans droit de vote : pas de « Voter », « Mon accès » en bouton principal", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  mkdirSync(DIR, { recursive: true });
+  const cookie = await login("pilote7@orasso.local");
+  const home = (
+    await apiCall<{ live: { hasPlace: boolean; votes: { canVote: boolean } } | null }>(cookie, "GET", "/me/home")
+  ).data;
+  expect(home.live?.hasPlace).toBe(true);
+  expect(home.live?.votes.canVote).toBe(false);
+  const { ctx, page } = await open(browser, "pilote7@orasso.local");
+  await expect(page.getByTestId("home-live-line")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("home-live-vote")).toHaveCount(0);
+  await expect(page.getByTestId("home-live-access")).toBeVisible();
+  await page.screenshot({ path: `${DIR}/05-sans-droit-de-vote.png`, fullPage: true });
+  await ctx.close();
+});
+
+test("tour 3 : Personnaliser avec /me/settings lent puis en erreur 500 : Enregistrer éteint, puis Réessayer", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  mkdirSync(DIR, { recursive: true });
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  let broken = true;
+  await page.route("**/api/me/settings", async (route) => {
+    if (!broken || route.request().method() !== "GET") return route.continue();
+    await new Promise((r) => setTimeout(r, 4_000));
+    return route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' });
+  });
+  await page.getByTestId("home-personalize").click();
+  // Lent : « Enregistrer » éteint, aucun bloc présenté.
+  await expect(page.getByTestId("personalize-loading")).toBeVisible();
+  await expect(page.getByTestId("personalize-save")).toBeDisabled();
+  await expect(page.getByTestId("personalize-list")).toHaveCount(0);
+  // Erreur 500 : le message et « Réessayer », « Enregistrer » toujours éteint.
+  await expect(page.getByTestId("personalize-load-failed")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("personalize-save")).toBeDisabled();
+  await expect(page.getByTestId("personalize-list")).toHaveCount(0);
+  await expect(page.getByTestId("personalize-retry")).toBeVisible();
+  await page.screenshot({ path: `${DIR}/06-personnaliser-echec.png`, fullPage: true });
+  broken = false;
+  await page.getByTestId("personalize-retry").click();
+  await expect(page.getByTestId("personalize-list")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("personalize-save")).toBeEnabled();
+  await ctx.close();
+});
+
+test("tour 3 : une ligne à deux véhicules de statuts différents, et Réinitialiser aux défauts du compte", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  mkdirSync(DIR, { recursive: true });
+  const cookie = await login("damien@orasso.local");
+  const remove = await addPendingSecondPlace();
+  try {
+    expect(remove).not.toBeNull();
+    const { ctx, page } = await open(browser, "damien@orasso.local");
+    const line = page.getByTestId("home-my-outing").filter({ hasText: "Rassemblement du Lydia" });
+    await expect(line).toBeVisible({ timeout: 30_000 });
+    // La ligne est « Retenue » ; le véhicule encore en attente le dit, l'autre non.
+    const detail = line.getByTestId("home-my-outing-detail");
+    await expect(detail).toContainText("(en attente)");
+    expect((await detail.innerText()).split(" · ").filter((x) => x.includes("(en attente)"))).toHaveLength(1);
+    await line.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${DIR}/07-mes-sorties-deux-vehicules.png`, fullPage: true });
+
+    // Réinitialiser = défauts du compte, calculés par l'API (réglage effacé).
+    await apiCall(cookie, "PUT", "/me/home/widgets", {
+      order: ["next_access", "weather"],
+      hidden: ["friends_news", "agenda"],
+    });
+    await page.getByTestId("home-personalize-bottom").click();
+    await expect(page.getByTestId("personalize-row-friends_news")).toContainText("Ajouter", { timeout: 30_000 });
+    await page.getByTestId("personalize-reset").click();
+    await expect(page.getByTestId("personalize-row-friends_news")).not.toContainText("Ajouter", { timeout: 30_000 });
+    const after = (await apiCall<{ homeWidgets: { hidden: string[] } | null }>(cookie, "GET", "/me/settings")).data;
+    expect(after.homeWidgets).toBeNull();
+    await ctx.close();
+  } finally {
+    await remove?.();
+    await apiCall(cookie, "PUT", "/me/home/widgets", DEFAULT);
+  }
 });

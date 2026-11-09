@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser } from "./helpers";
+import { addPendingSecondPlace, apiCall, login, loginInBrowser } from "./helpers";
 
 // Lot R7a2 (D38), côté site : l'Accueil « tableau de bord » et « Personnaliser ». Damien_66 est retenu et entré au
 // « Rassemblement du Lydia » (seed `live-event`) : la ligne « En cours », le bloc « En cours » et « Voter » ; Paul_Photo (hors
@@ -114,4 +114,47 @@ test("hors événement : pas de bloc « En cours », le réglage par défaut", a
   await expect(page.getByTestId("home-live-line")).toHaveCount(0);
   await expect(page.getByTestId("widget-live")).toHaveCount(0);
   await expect(page.getByTestId("widget-agenda")).toHaveCount(0);
+});
+
+// --- Tour 3 -------------------------------------------------------------------------------------------------------------
+test("tour 3 : présence seule (sans place ni billet) : la ligne « En cours » n'a pas de « Mon accès »", async ({
+  page,
+}) => {
+  const cookie = await login("pilote5@orasso.local");
+  const home = (await apiCall<{ live: { hasPlace: boolean } | null }>(cookie, "GET", "/me/home")).data;
+  expect(home.live?.hasPlace).toBe(false);
+  await loginInBrowser(page, "pilote5@orasso.local", undefined, "/app");
+  await expect(page.getByTestId("home-live-line")).toBeVisible();
+  await expect(page.getByTestId("home-live-access")).toHaveCount(0);
+});
+
+test("tour 3 : une ligne à deux véhicules de statuts différents ; Réinitialiser aux défauts du compte", async ({
+  page,
+}) => {
+  const cookie = await login("damien@orasso.local");
+  const remove = await addPendingSecondPlace();
+  try {
+    expect(remove).not.toBeNull();
+    await apiCall(cookie, "PUT", "/me/home/widgets", DEFAULT);
+    await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+    const line = page.getByTestId("home-my-outing").filter({ hasText: "Rassemblement du Lydia" });
+    await expect(line).toContainText("(en attente)");
+    const detail = (await line.innerText()).split("\n").find((x) => x.includes("(en attente)")) ?? "";
+    expect(detail.split(" · ").filter((x) => x.includes("(en attente)"))).toHaveLength(1);
+    if (process.env.CAPTURES_DIR)
+      await page.screenshot({ path: `${process.env.CAPTURES_DIR}/site-mes-sorties-deux-vehicules.png` });
+
+    // Réinitialiser : les défauts du compte, réglage effacé côté API.
+    await apiCall(cookie, "PUT", "/me/home/widgets", { order: ["next_access", "weather"], hidden: ["friends_news"] });
+    await page.goto("/app/accueil/personnaliser");
+    await page.getByTestId("reset").click();
+    await expect
+      .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden)
+      .toEqual(["agenda", "favorite_garage", "pending"]);
+    const settings = (await apiCall<{ homeWidgets: unknown }>(cookie, "GET", "/me/settings")).data;
+    expect(settings.homeWidgets).toBeNull();
+  } finally {
+    await remove?.();
+    await apiCall(cookie, "PUT", "/me/home/widgets", DEFAULT);
+  }
 });
