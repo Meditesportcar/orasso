@@ -393,7 +393,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     friends_news: data?.friendsNews ? (
       <FriendsNews data={data.friendsNews} now={now} onOpen={openNews} onFeed={() => goTab("fil")} />
     ) : null,
-    spot_meetup: data?.spotMeetup ? <SpotMeetup data={data.spotMeetup} /> : null,
+    spot_meetup: data?.spotMeetup ? <SpotMeetup data={data.spotMeetup} onOthers={() => goTab("fil")} /> : null,
     memories: data?.memories ? <Memories data={data.memories} /> : null,
     nearby: rail.visible ? (
       <>

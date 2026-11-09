@@ -9,6 +9,7 @@ import {
   meetupPhase,
   meetupVisibleTo,
   SPOT_MAX_DURATION_MS,
+  spotEndLabel,
   spotStartLabel,
   spotTimeLabel,
   spotUntilLabel,
@@ -101,6 +102,9 @@ describe("heures", () => {
     expect(spotUntilLabel(at(21), at(0, 0, 16))).toBe("jusqu'à minuit");
     expect(spotUntilLabel(at(10), at(12))).toBe("jusqu'à 12 h");
     expect(spotUntilLabel(at(19), at(6, 0, 16))).toBe("jusqu'à demain 6 h");
+    expect(spotEndLabel(at(21), at(0, 0, 16))).toBe("à minuit");
+    expect(spotEndLabel(at(10), at(12))).toBe("à 12 h");
+    expect(spotEndLabel(at(19), at(6, 0, 16))).toBe("demain à 6 h");
     expect(spotStartLabel(at(21), at(20))).toBe("à 21 h");
     expect(spotStartLabel(at(9, 0, 16), at(20))).toBe("demain à 9 h");
     expect(spotStartLabel(at(19), at(20))).toBe("maintenant");

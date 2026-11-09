@@ -60,10 +60,13 @@ export const spotLabels = {
   seeActive: "Voir mon rendez-vous",
   // Reçu
   from: (pseudo: string) => `${pseudo} · rendez-vous au spot`,
-  whoCome: (names: string[], maybe: number) => {
-    const come = names.length ? `${names.join(", ")} ${names.length > 1 ? "viennent" : "vient"}` : "";
+  whoCome: (names: string[], yes: number, maybe: number) => {
+    const more = yes - names.length;
+    const who = names.length
+      ? `${names.join(", ")}${more > 0 ? ` et ${more} autre${more > 1 ? "s" : ""}` : ""} ${yes > 1 ? "viennent" : "vient"}`
+      : "";
     const may = maybe > 0 ? `${maybe} peut-être` : "";
-    return [come, may].filter(Boolean).join(" · ");
+    return [who, may].filter(Boolean).join(" · ");
   },
   nobodyYet: "Personne n'a répondu pour l'instant.",
   yesCount: (n: number) => (n === 1 ? "1 vient" : `${n} viennent`),

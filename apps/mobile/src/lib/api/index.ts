@@ -31,6 +31,7 @@ import { providersApi } from "./providers";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
+import { spotApi } from "./spot";
 import { staffApi } from "./staff";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
@@ -88,4 +89,5 @@ export const api = {
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
+  ...spotApi,
 };

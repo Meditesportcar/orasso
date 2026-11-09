@@ -172,6 +172,15 @@ export function spotUntilLabel(startsAt: Date, endsAt: Date): string {
   return `jusqu'à ${nextDay ? "demain " : ""}${spotTimeLabel(endsAt)}`;
 }
 
+/** « à minuit », « à 12 h », « demain à 6 h » : le moment où le rendez-vous disparaît (heure de Paris). */
+export function spotEndLabel(startsAt: Date, endsAt: Date): string {
+  const w = wallTime(endsAt, BUSINESS_TIMEZONE);
+  const s = wallTime(startsAt, BUSINESS_TIMEZONE);
+  if (w.hour === 0 && w.minute === 0) return "à minuit";
+  const nextDay = w.year !== s.year || w.month !== s.month || w.day !== s.day;
+  return `${nextDay ? "demain " : ""}à ${spotTimeLabel(endsAt)}`;
+}
+
 /** « maintenant » (déjà commencé), « à 21 h » ou « demain à 9 h » (heure de Paris). */
 export function spotStartLabel(startsAt: Date, now: Date): string {
   if (startsAt.getTime() <= now.getTime()) return "maintenant";
