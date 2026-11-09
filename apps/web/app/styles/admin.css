@@ -419,7 +419,7 @@
   place-items: center;
   padding: var(--space-3);
   text-align: center;
-  background: var(--surface-2, var(--line));
+  background: var(--surface-raised);
 }
 .adm-ad__media img {
   width: 100%;
@@ -465,6 +465,10 @@
 @media (max-width: 52rem) {
   .adm-form-split {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Une colonne : l'aperçu se détache du dernier champ. */
+  .adm-form-split > .adm-ad {
+    margin-top: var(--space-4);
   }
 }
 .adm-fieldset {

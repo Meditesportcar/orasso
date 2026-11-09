@@ -17,7 +17,7 @@ import {
   type SponsoredSurface,
   sponsoredSurfaces,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { FileField } from "../../components/Fields";
@@ -210,6 +210,12 @@ export default function AdminSponsored({ loaderData, actionData }: Route.Compone
   const { placements, pros, externalEnabled, done } = loaderData;
   const busy = useNavigation().state !== "idle";
   const [editing, setEditing] = useState<string | null>(null);
+  // Le panneau de modification se referme quand l'enregistrement a réussi (en cas d'erreur, il reste ouvert).
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy && !actionData) setEditing(null);
+    wasBusy.current = busy;
+  }, [busy, actionData]);
   const today = new Date().toISOString().slice(0, 10);
   const [draft, setDraft] = useState({
     kind: "pro",

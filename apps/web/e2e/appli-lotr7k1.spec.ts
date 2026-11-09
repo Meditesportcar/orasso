@@ -108,7 +108,8 @@ test("site : emplacements sponsorisés, Béton et Sable, 390 et 1280 px", async 
         await page.waitForURL(/fait=1/, { timeout: 30_000 });
         await page.waitForTimeout(800);
         const saved = page.getByTestId("placement-row").filter({ hasText: "Assure ta sportive" }).first();
-        await expect(saved.getByTestId("placement-preview")).toContainText("Annonce");
+        await expect(saved.getByTestId("placement-preview").first()).toContainText("Annonce");
+        await expect(saved.getByTestId("placement-edit")).toHaveCount(0);
         await saved.screenshot({ path: `${DIR}/site-modifier-apres-${theme}-${width}.png` });
         // Remise de la mention d'origine pour les passages suivants.
         const api = await apiCall<{ id: string; title: string }[]>(damien, "GET", "/admin/sponsored-placements");
