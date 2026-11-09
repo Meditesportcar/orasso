@@ -3,7 +3,7 @@
 // (`tabSets` du système de design). La première casquette est l'exposant (`fan`, au moins un véhicule actif) **ou** le
 // visiteur (`visitor`, sans véhicule), jamais les deux (V5) : c'est la « casquette de base », toujours là.
 import type { TabSetName } from "@orasso/design-system";
-import type { PersonaEntry, PersonaKind } from "@orasso/shared";
+import type { PersonaEntry, PersonaKind, ProfileTab } from "@orasso/shared";
 import { personaKindLabels as sharedKindLabels } from "@orasso/shared";
 
 /**
@@ -109,18 +109,25 @@ export function tabHref(kind: AppPersonaKind, route: string): string | null {
 }
 
 /**
+ * Lot R7b1, tour 2 : le Profil de la casquette de base sur son onglet interne (`?onglet=garage|sorties`). Le Garage et le
+ * Passeport n’ont plus de page : leurs anciennes adresses et tous les retours mènent ici.
+ */
+export function profileHref(base: BaseKind, onglet: ProfileTab): string {
+  return `${tabHref(base, "profil")}?onglet=${onglet}`;
+}
+
+/**
  * Lot R7a1 : pages qui ont quitté la barre mais gardent leur adresse (en-tête de fiche avec retour, sans barre
- * d'onglets) : Sorties (ouverte depuis l'Accueil), Garage et Passeport (depuis le Profil). Par casquette de base :
- * le visiteur n'a pas de Garage.
+ * d'onglets) : Sorties (ouverte depuis l'Accueil). Lot R7b1 : Garage et Passeport vivent dans le Profil (`profileHref`).
  */
 export const standalonePages = {
-  fan: { sorties: "/sorties", garage: "/garage", passeport: "/mon-passeport" },
-  visitor: { sorties: "/sorties", passeport: "/mon-passeport" },
+  fan: { sorties: "/sorties" },
+  visitor: { sorties: "/sorties" },
 } as const;
 
 /**
  * Où mène « cet onglet » pour cette casquette : son onglet s'il existe, sinon la page autonome qui a pris sa place
- * (`sorties`, `garage`, `passeport`), sinon `null`.
+ * (`sorties`), sinon `null`.
  */
 export function destinationHref(kind: AppPersonaKind, route: string): string | null {
   const tab = tabHref(kind, route);

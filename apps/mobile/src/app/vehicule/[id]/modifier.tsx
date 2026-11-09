@@ -4,19 +4,21 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { VehicleWizard } from "@/features/vehicle/add/VehicleWizard";
 import { api } from "@/lib/api";
+import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 
 export default function ModifierVehicule() {
   const router = useRouter();
+  const { openProfile } = usePersona();
   const { id } = useLocalSearchParams<{ id: string }>();
   const vehicle = useApi(() => api.vehicle(id), [id]);
   if (!vehicle.data) {
     return (
       <FlowScreen
         title="Modifier le véhicule"
-        onClose={() => (router.canGoBack() ? router.back() : router.replace("/garage"))}
+        onClose={() => (router.canGoBack() ? router.back() : openProfile("garage"))}
       >
         <Muted variant="body">{vehicle.error ? vehicle.error.message : "Chargement…"}</Muted>
       </FlowScreen>

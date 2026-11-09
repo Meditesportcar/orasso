@@ -367,8 +367,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
             ) : undefined
           }
           testID="home-passport"
-          // Le visiteur a son onglet Passeport ; l'exposant ouvre l'écran (lot 50).
-          onPress={() => (exhibitor ? router.push("/mon-passeport") : goTab("passeport"))}
+          // Lot R7b1 : le passeport est l'onglet Sorties du Profil.
+          onPress={() => goTab("passeport")}
         />
       ) : null}
     </TabScreen>
