@@ -288,19 +288,8 @@ test("le profil d'un inconnu : « Message » ouvre la feuille à l'écran (jamai
 const allBars = (page: Page) =>
   page.locator('[role="tablist"]').filter({ has: page.locator('[role="tab"]', { hasText: "Accueil" }) });
 
-test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, le retour ne rouvre pas l'assistant", async ({
-  browser,
-}) => {
-  test.setTimeout(360_000);
-  const pseudo = `Barre_${unique()}`.slice(0, 20);
-  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
-  const cookie = await signUpApi(pseudo, email);
-  await addVehicleApi(cookie, randomPlate().replace(/[IOUSW]/g, "A"));
-  const { ctx, page } = await open(browser);
-  await signIn(page, email);
-  await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
-  await page.getByTestId("garage-add").click();
+// L'assistant d'ajout, de la première étape à l'écran « Terminé » (Supra Mk5 avec photo et plaque au hasard).
+async function runVehicleWizard(page: Page) {
   await page.waitForURL(/vehicule\/nouveau/, { timeout: 30_000 });
   const next = async () => {
     await seeStepEnd(page);
@@ -330,6 +319,22 @@ test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, 
   await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
   await next();
   await expect(page.getByTestId("vehicle-done-title")).toBeVisible({ timeout: 60_000 });
+}
+
+test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, le retour ne rouvre pas l'assistant", async ({
+  browser,
+}) => {
+  test.setTimeout(360_000);
+  const pseudo = `Barre_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  await addVehicleApi(cookie, randomPlate().replace(/[IOUSW]/g, "A"));
+  const { ctx, page } = await open(browser);
+  await signIn(page, email);
+  await go(page, "/profil");
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await page.getByTestId("garage-add").click();
+  await runVehicleWizard(page);
   await page.getByTestId("vehicle-done-garage").click();
   await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
   await expect(page).not.toHaveURL(/vehicule\/nouveau/);
@@ -370,5 +375,56 @@ test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, l
   await expect(allBars(page)).toHaveCount(1);
   const left = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
   expect(left.data.map((v) => v.id)).not.toContain(gone);
+  await ctx.close();
+});
+
+// Tour 4, point 2 : le même parcours depuis la casquette organisateur (la barre de l'organisateur n'a pas d'onglet Profil :
+// l'assistant et la fiche s'ouvrent à froid, puis tout passe par les boutons de l'appli).
+test("casquette organisateur : ajout puis « Retour au garage », suppression depuis la fiche, une seule barre d'onglets", async ({
+  browser,
+}) => {
+  test.setTimeout(420_000);
+  const cookie = await login("damien@orasso.local");
+  const before = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
+  const { ctx, page } = await open(browser);
+  await signIn(page, "damien@orasso.local");
+  const asOrganizer = async () => {
+    await page.goto("/moi");
+    await afterOpening(page);
+    await page.getByTestId("casquette-organizer").first().click();
+    await page.waitForURL(/direct/, { timeout: 30_000 });
+  };
+
+  // Ajout : « Retour au garage » ouvre Profil › Garage de la base, une seule barre, le retour ne rouvre pas l'assistant.
+  await asOrganizer();
+  await go(page, "/vehicule/nouveau");
+  await runVehicleWizard(page);
+  await page.getByTestId("vehicle-done-garage").click();
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/vehicule\/nouveau/);
+  await expect(allBars(page)).toHaveCount(1);
+  await shot(page, "10-organisateur-apres-ajout-garage");
+  await page.goBack();
+  await expect(page).not.toHaveURL(/vehicule\/nouveau/);
+  await expect(page.getByTestId("vehicle-done-title")).toHaveCount(0);
+  await expect(allBars(page)).toHaveCount(1);
+
+  // Suppression depuis la fiche du véhicule ajouté (casquette organisateur de nouveau active).
+  const after = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
+  const known = new Set(before.data.map((v) => v.id));
+  const added = after.data.find((v) => !known.has(v.id));
+  expect(added, "le véhicule ajouté par l'assistant").toBeTruthy();
+  await asOrganizer();
+  await go(page, `/vehicule/${added?.id}`);
+  await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
+  await page.getByTestId("vehicle-delete").click();
+  await page.getByTestId("orga-confirm").click();
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(allBars(page)).toHaveCount(1);
+  await page.goBack();
+  await expect(page).not.toHaveURL(new RegExp(`vehicule/${added?.id}`));
+  await expect(allBars(page)).toHaveCount(1);
+  const left = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
+  expect(left.data.map((v) => v.id)).not.toContain(added?.id);
   await ctx.close();
 });

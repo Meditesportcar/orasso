@@ -32,7 +32,7 @@ import { type GarageActionData, garageAction, loadGarage } from "../components/p
 import { PanelDown } from "../components/profile/PanelDown";
 import { PartnersLine } from "../components/profile/PartnersLine";
 import { ProfileTabs } from "../components/profile/ProfileTabs";
-import { isPanelFailure } from "../components/profile/panel";
+import { isPanelFailure, panelRetryHref } from "../components/profile/panel";
 import { loadSorties } from "../components/profile/passport.server";
 import { SortiesTab } from "../components/profile/SortiesTab";
 import { ThemeSwitch } from "../components/SiteChrome";
@@ -70,6 +70,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     settings,
     network: network.ok ? network.data : null,
     onglet,
+    // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
+    retryHref: panelRetryHref(url.searchParams),
     garage,
     sorties,
     saved: url.searchParams.get("fait"),
@@ -284,7 +286,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         {/* Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (message + « Réessayer »). */}
         {loaderData.onglet === "garage" && loaderData.garage ? (
           isPanelFailure(loaderData.garage) ? (
-            <PanelDown message={PT.garageDown} href="/app/moi?onglet=garage" />
+            <PanelDown message={PT.garageDown} href={loaderData.retryHref} />
           ) : (
             <GarageTab
               data={loaderData.garage}
@@ -294,7 +296,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         ) : null}
         {loaderData.onglet === "sorties" && loaderData.sorties ? (
           isPanelFailure(loaderData.sorties) ? (
-            <PanelDown message={PT.outingsDown} href="/app/moi?onglet=sorties" />
+            <PanelDown message={PT.outingsDown} href={loaderData.retryHref} />
           ) : (
             <>
               <SortiesTab data={loaderData.sorties} />

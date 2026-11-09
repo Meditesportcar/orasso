@@ -5,3 +5,14 @@ export type PanelFailure = { failed: true; status: number };
 export function isPanelFailure(value: unknown): value is PanelFailure {
   return typeof value === "object" && value !== null && "failed" in value;
 }
+
+/** L'adresse de « Réessayer » : celle du Profil avec les paramètres utiles (l'onglet, la saison), jamais les autres. */
+export function panelRetryHref(search: URLSearchParams): string {
+  const keep = new URLSearchParams();
+  for (const key of ["onglet", "saison"]) {
+    const value = search.get(key);
+    if (value) keep.set(key, value);
+  }
+  const query = keep.toString();
+  return query ? `/app/moi?${query}` : "/app/moi";
+}

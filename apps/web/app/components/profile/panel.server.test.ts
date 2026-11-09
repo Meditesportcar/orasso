@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ApiResult } from "../../lib/api.server";
-import { isPanelFailure } from "./panel";
+import { isPanelFailure, panelRetryHref } from "./panel";
 import { mainOrFailure } from "./panel.server";
 
 // Lot R7b1, tour 2 : la panne d'un panneau du Profil n'emporte que lui ; la session expirée renvoie à la connexion.
@@ -42,5 +42,13 @@ describe("panneaux du Profil", () => {
   it("un contenu n'est pas une panne", () => {
     expect(isPanelFailure({ vehicles: [] })).toBe(false);
     expect(isPanelFailure(null)).toBe(false);
+  });
+
+  it("« Réessayer » garde l'onglet et la saison, rien d'autre", () => {
+    expect(panelRetryHref(new URLSearchParams("onglet=sorties&saison=2025&fait=email"))).toBe(
+      "/app/moi?onglet=sorties&saison=2025",
+    );
+    expect(panelRetryHref(new URLSearchParams("onglet=garage"))).toBe("/app/moi?onglet=garage");
+    expect(panelRetryHref(new URLSearchParams(""))).toBe("/app/moi");
   });
 });
