@@ -38,6 +38,10 @@ export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = fa
       return "Orasso publie ces cartes pour bien démarrer, tant que ton Fil se remplit.";
     case "new_here":
       return "C'est nouveau sur Orasso, dans ton secteur.";
+    case "sponsored":
+      // Fusion avec R7k1 : vrai pour un emplacement ciblé par département comme pour un emplacement ouvert à toute la
+      // France (aucune autre donnée du profil). Le lot R7k2 pourra préciser selon le ciblage.
+      return "C'est un contenu sponsorisé. Pour le choisir, Orasso se sert au plus de ton département : jamais du reste de ton profil ni de ton activité.";
   }
 }
 
