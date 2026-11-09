@@ -57,7 +57,12 @@ export const moderationRoutes = new Hono<AppEnv>()
   })
   // Lot R7e1 : média (photo) du contenu signalé d'une publication du Fil ou d'une story, pour la modération seulement.
   .get("/admin/reports/:id/media/:name", async (c) => {
-    const media = await reportMedia(await requireUser(c), uuidParam(c, "id"), c.req.param("name"));
+    const media = await reportMedia(
+      await requireUser(c),
+      uuidParam(c, "id"),
+      c.req.param("name"),
+      c.req.header("range"),
+    );
     const headers = { "content-type": media.contentType, "cache-control": "private, no-store" };
     // Lot R7g (tour 2) : une vidéo signalée se lit par morceaux (`Range`), comme pour son auteur, sans la charger en mémoire.
     if ("key" in media) return rangedFile(c, media.key, media.size, headers);

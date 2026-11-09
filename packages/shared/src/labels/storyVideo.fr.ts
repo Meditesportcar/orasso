@@ -48,6 +48,7 @@ export const storyVideoLabels = {
   apiCodec: "Cette vidéo n'est pas en H.264 : envoie-la depuis l'appli, elle la compresse.",
   apiUnreadable: "Cette vidéo est illisible : filme-la à nouveau ou choisis-en une autre.",
   apiNoVideo: "Ce fichier ne contient pas de piste vidéo.",
+  apiLocationTrack: "Cette vidéo contient une piste de position : filme-la depuis Orasso ou retire la piste.",
   apiBusy: "Plusieurs envois de vidéos sont en cours : réessaie dans un instant.",
   apiPendingFull: `Trop de vidéos en attente (${PENDING_MEGABYTES} Mo) : publie-les, supprime-les ou réessaie demain.`,
   apiLengthRequired: "Taille de la vidéo manquante : envoie-la depuis l'appli ou le site.",

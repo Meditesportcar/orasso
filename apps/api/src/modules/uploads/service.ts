@@ -22,7 +22,7 @@ import sharp from "sharp";
 import { uploads } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
-import { Mp4Error, readMp4File, stripMp4Metadata } from "../../lib/mp4";
+import { Mp4Error, mp4ErrorMessage, readMp4File, stripMp4Metadata } from "../../lib/mp4";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -154,7 +154,8 @@ async function register(
         const [sum] = await tx
           .select({ bytes: sql<number>`coalesce(sum(${uploads.bytes}), 0)::float8` })
           .from(uploads)
-          .where(and(eq(uploads.userId, v.user.id), isNull(uploads.consumedAt)));
+          // Seuls les envois vidéo en attente comptent (pas les photos), comme dans `assertVideoRoom`.
+          .where(and(eq(uploads.userId, v.user.id), eq(uploads.purpose, "story_video"), isNull(uploads.consumedAt)));
         if ((sum?.bytes ?? 0) + info.bytes > STORY_VIDEO_PENDING_MAX_BYTES) {
           throw new AppError(429, "rate_limited", storyVideoLabels.apiPendingFull);
         }
@@ -188,6 +189,8 @@ async function assertVideoRoom(userId: string, incoming: number): Promise<void> 
       .where(
         and(
           eq(uploads.userId, userId),
+          // Seuls les envois vidéo en attente comptent (les photos ont leur propre plafond de fichiers).
+          eq(uploads.purpose, "story_video"),
           isNull(uploads.consumedAt),
           gte(uploads.createdAt, new Date(now().getTime() - PENDING_UPLOAD_TTL_MS)),
         ),
@@ -235,7 +238,7 @@ export const uploadsService = {
   /**
    * Lot R7g (tour 2) : une vidéo de story, reçue **brute** (`POST /me/uploads/story-video`, `Content-Type: video/mp4`,
    * `Content-Length` obligatoire et 60 Mo au plus). Rien n'est lu avant que les garde-fous aient parlé : limite de débit,
-   * place dans les envois en cours (2 en tout, 1 par personne, libérée dans un `finally`) et plafond d'octets en attente.
+   * place dans les envois en cours (6 en tout, 1 par personne, libérée dans un `finally`) et plafond d'octets en attente.
    * Le corps va ensuite sur le disque **en flux**, compté octet par octet (plus long ou plus court que `Content-Length` :
    * refus, fichier effacé) : la mémoire de l'API ne porte jamais plus que quelques morceaux. Puis le lecteur de conteneur
    * (`lib/mp4.ts`, sans ffmpeg) vérifie le format, la durée, le codec et les dimensions, et les boîtes qui peuvent porter la
@@ -315,11 +318,7 @@ export const uploadsService = {
       } catch (error) {
         await storage.remove(key).catch(() => undefined);
         if (error instanceof Mp4Error) {
-          throw new AppError(
-            415,
-            "unsupported_media_type",
-            error.kind === "no_video" ? storyVideoLabels.apiNoVideo : storyVideoLabels.apiUnreadable,
-          );
+          throw new AppError(415, "unsupported_media_type", mp4ErrorMessage(error));
         }
         throw error;
       }

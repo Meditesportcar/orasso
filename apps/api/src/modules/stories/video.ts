@@ -15,7 +15,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../../db/client";
 import { uploads } from "../../db/schema";
 import { AppError, validation } from "../../lib/errors";
-import { Mp4Error, readMp4File } from "../../lib/mp4";
+import { Mp4Error, mp4ErrorMessage, readMp4File } from "../../lib/mp4";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { removeOrRetry } from "../vehicles/photos-blur";
@@ -68,7 +68,7 @@ export async function prepareVideo(
     info = await readMp4File(storage.localPath(video.key));
   } catch (error) {
     if (error instanceof Mp4Error) {
-      throw new AppError(415, "unsupported_media_type", storyVideoLabels.apiUnreadable);
+      throw new AppError(415, "unsupported_media_type", mp4ErrorMessage(error));
     }
     throw error;
   }

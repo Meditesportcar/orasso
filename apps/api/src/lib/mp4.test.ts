@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { appendChild, box, FAKE_PLACE, shrinkBox, withLocation } from "../../test/mp4-builders";
+import { appendChild, bareTrack, box, FAKE_PLACE, mebxKeys, shrinkBox, withLocation } from "../../test/mp4-builders";
 import { Mp4Error, readMp4Buffer, readMp4File, stripMp4Metadata } from "./mp4";
 
 // Lecteur de conteneur du lot R7g. Fixtures : `story-2s.mp4` (2 s, 720 × 1280, H.264 + AAC, moov en tête) et
@@ -189,11 +189,20 @@ describe("lecteur mp4 : durée réelle", () => {
     return at;
   }
 
+  /** Fait dire à `stts` (première entrée de la piste vidéo) que la piste dure `seconds` secondes. */
+  function setVideoSamples(data: Buffer, seconds: number) {
+    const stts = data.indexOf("stts");
+    const timescale = data.readUInt32BE(data.indexOf("mdhd") + 16);
+    const count = data.readUInt32BE(stts + 12);
+    data.writeUInt32BE(Math.round((seconds * timescale) / count), stts + 16);
+  }
+
   it("retient la plus longue durée de mvhd et de chaque piste : 10 s annoncées, 40 s dans la piste vidéo, 35 s dans le son", async () => {
     const base = await fixture("story-2s.mp4");
     const video = Buffer.from(base);
     setSeconds(video, "mvhd", 10);
     setSeconds(video, "mdhd", 40);
+    setVideoSamples(video, 40); // tour 3 : la somme de `stts` doit dire la même chose que `mdhd`
     expect((await readMp4Buffer(video)).durationMs).toBeGreaterThanOrEqual(39_900);
 
     const audio = Buffer.from(base);
@@ -309,6 +318,166 @@ describe("effacement des métadonnées (stripMp4Metadata)", () => {
       expect((await readMp4File(path)).h264).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── Tour 3 : fragmentés, durée par échantillons, pistes de position, configuration AVC ───────────────────────────────
+
+describe("lecteur mp4 : fichiers fragmentés (refusés)", () => {
+  it("refuse mvex et moof, et la fixture fragmentée sans mdat (zéro image) n'est plus acceptée", async () => {
+    const data = await fixture("story-2s.mp4");
+    expect(await kind(readMp4Buffer(appendChild(data, ["moov"], box("mvex", box("trex", Buffer.alloc(24))))))).toBe(
+      "unreadable",
+    );
+    expect(await kind(readMp4Buffer(Buffer.concat([data, box("moof", box("mfhd", Buffer.alloc(8)))])))).toBe(
+      "unreadable",
+    );
+    // Le cas relevé par la relecture : plus de mdat, un mvex, un moof vide, zéro échantillon vidéo.
+    const boxes = topLevel(data);
+    const moov = appendChild(
+      boxes.find((x) => x.type === "moov")?.data ?? Buffer.alloc(0),
+      ["moov"],
+      box("mvex", box("trex", Buffer.alloc(24))),
+    );
+    const fragmented = Buffer.concat([
+      boxes[0]?.data ?? Buffer.alloc(0),
+      moov,
+      box("moof", box("mfhd", Buffer.alloc(8))),
+    ]);
+    expect(await kind(readMp4Buffer(fragmented))).toBe("unreadable");
+  });
+});
+
+describe("lecteur mp4 : durée de la piste vidéo par les échantillons (stts)", () => {
+  it("refuse un stts qui ne dit pas la même chose que mdhd, accepte celui qui concorde", async () => {
+    const base = Buffer.from(await fixture("story-2s.mp4"));
+    const stts = base.indexOf("stts");
+    // 300 s d'échantillons derrière un mdhd de 2 s.
+    const hidden = Buffer.from(base);
+    hidden.writeUInt32BE(hidden.readUInt32BE(stts + 16) * 150, stts + 16);
+    expect(await kind(readMp4Buffer(hidden))).toBe("unreadable");
+    // mdhd à 40 s, échantillons à 2 s.
+    const short = Buffer.from(base);
+    const mdhd = short.indexOf("mdhd");
+    short.writeUInt32BE(40 * short.readUInt32BE(mdhd + 16), mdhd + 20);
+    expect(await kind(readMp4Buffer(short))).toBe("unreadable");
+    // Une table dont les entrées sortent de la boîte.
+    const wide = Buffer.from(base);
+    wide.writeUInt32BE(1_000_000, stts + 8);
+    expect(await kind(readMp4Buffer(wide))).toBe("unreadable");
+    expect((await readMp4Buffer(base)).durationMs).toBeLessThan(2200);
+  });
+});
+
+describe("lecteur mp4 : pistes de position", () => {
+  // moov placé à la fin : ajouter une piste ne décale pas les données (les décalages de `stco` sont absolus).
+  const withTrack = async (track: Buffer) => {
+    const boxes = topLevel(await fixture("story-2s.mp4"));
+    const moovLast = Buffer.concat(
+      [...boxes.filter((b) => b.type !== "moov"), ...boxes.filter((b) => b.type === "moov")].map((b) => b.data),
+    );
+    return appendChild(moovLast, ["moov"], track);
+  };
+
+  it("refuse une piste dont le gestionnaire n'est ni vide, ni soun, ni tmcd (gpmd, texte, caméra…)", async () => {
+    for (const handler of ["gpmd", "text", "camm", "sbtl", "zzzz"]) {
+      expect(await kind(readMp4Buffer(await withTrack(bareTrack(handler)))), handler).toBe("location_track");
+    }
+    // Sans tkhd ni quoi que ce soit d'autre : le gestionnaire est lu en premier.
+    expect(await kind(readMp4Buffer(await withTrack(box("trak", box("mdia", box("hdlr", Buffer.alloc(8)))))))).toBe(
+      "unreadable",
+    );
+    expect(await kind(readMp4Buffer(await withTrack(box("trak", box("mdia", box("mdhd", Buffer.alloc(24)))))))).toBe(
+      "location_track",
+    );
+  });
+
+  it("accepte le code temporel (tmcd)", async () => {
+    expect((await readMp4Buffer(await withTrack(bareTrack("tmcd")))).h264).toBe(true);
+  });
+
+  it("refuse une piste meta ou mebx dont les clés parlent d'un lieu, accepte celle qui n'en dit rien", async () => {
+    const place = mebxKeys("com.apple.quicktime.location.ISO6709");
+    expect(await kind(readMp4Buffer(await withTrack(bareTrack("mebx", place))))).toBe("location_track");
+    expect(
+      await kind(readMp4Buffer(await withTrack(bareTrack("meta", mebxKeys("Com.Apple.Quicktime.LOCATION.Name"))))),
+    ).toBe("location_track");
+    expect(await kind(readMp4Buffer(await withTrack(bareTrack("mebx", mebxKeys("a.b.iso6709")))))).toBe(
+      "location_track",
+    );
+    const calm = mebxKeys("com.apple.quicktime.still-image-time", "com.apple.quicktime.detected-face");
+    expect((await readMp4Buffer(await withTrack(bareTrack("mebx", calm)))).h264).toBe(true);
+    expect((await readMp4Buffer(await withTrack(bareTrack("meta", calm)))).h264).toBe(true);
+  });
+});
+
+describe("lecteur mp4 : configuration AVC", () => {
+  /** Octets de `avcC` : version, profil, compatibilité, niveau, longueurs, nb de SPS, [longueur, SPS], nb de PPS, [longueur, PPS]. */
+  async function config() {
+    const data = Buffer.from(await fixture("story-2s.mp4"));
+    const at = data.indexOf("avcC") + 4;
+    const spsLength = data.readUInt16BE(at + 6);
+    const ppsCount = at + 8 + spsLength;
+    return {
+      data,
+      at,
+      spsLength,
+      spsAt: at + 8,
+      ppsCount,
+      ppsLength: data.readUInt16BE(ppsCount + 1),
+      ppsAt: ppsCount + 3,
+    };
+  }
+
+  it("accepte la configuration de la fixture, refuse une configuration vide, sans SPS ou sans PPS", async () => {
+    const c = await config();
+    expect((await readMp4Buffer(c.data)).h264).toBe(true);
+
+    // Le cas relevé : tout à zéro, sauf la version et un SPS déclaré.
+    const zeros = Buffer.from(c.data);
+    zeros.fill(0, c.at + 1, c.at + 46);
+    zeros[c.at + 5] = 0xe1;
+    expect(await kind(readMp4Buffer(zeros))).toBe("unreadable");
+
+    const noSps = Buffer.from(c.data);
+    noSps[c.at + 5] = 0xe0;
+    expect(await kind(readMp4Buffer(noSps))).toBe("unreadable");
+
+    const noPps = Buffer.from(c.data);
+    noPps[c.ppsCount] = 0;
+    expect(await kind(readMp4Buffer(noPps))).toBe("unreadable");
+  });
+
+  it("refuse des longueurs hors bornes, vides, un mauvais type de NAL, une mauvaise version ou des longueurs de NAL invalides", async () => {
+    const c = await config();
+    const patched = (change: (b: Buffer) => void) => {
+      const b = Buffer.from(c.data);
+      change(b);
+      return b;
+    };
+    const cases: [string, Buffer][] = [
+      ["SPS plus long que la boîte", patched((b) => b.writeUInt16BE(0xffff, c.at + 6))],
+      ["SPS vide", patched((b) => b.writeUInt16BE(0, c.at + 6))],
+      ["PPS plus long que la boîte", patched((b) => b.writeUInt16BE(0xffff, c.ppsCount + 1))],
+      ["PPS vide", patched((b) => b.writeUInt16BE(0, c.ppsCount + 1))],
+      ["NAL du SPS d'un autre type", patched((b) => (b[c.spsAt] = 0x68))],
+      ["NAL du PPS d'un autre type", patched((b) => (b[c.ppsAt] = 0x67))],
+      ["version 2", patched((b) => (b[c.at] = 2))],
+      ["longueurs de NAL sur 3 octets", patched((b) => (b[c.at + 4] = 0xfe))],
+      ["deux SPS annoncés, un seul présent", patched((b) => (b[c.at + 5] = 0xe2))],
+    ];
+    for (const [name, data] of cases) expect(await kind(readMp4Buffer(data)), name).toBe("unreadable");
+  });
+
+  it("refuse une boîte avcC tronquée à chaque longueur", async () => {
+    const c = await config();
+    // Jusqu'à la fin du PPS : au-delà, ce sont les octets facultatifs du profil High (chroma, profondeur), qui ne manquent à personne.
+    const end = c.ppsAt + c.ppsLength - c.at;
+    for (let payload = 0; payload < end; payload++) {
+      const b = Buffer.from(c.data);
+      b.writeUInt32BE(8 + payload, c.at - 8);
+      expect(await kind(readMp4Buffer(b)), `avcC à ${payload} octets`).toBe("unreadable");
     }
   });
 });

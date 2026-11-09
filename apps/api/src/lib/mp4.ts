@@ -2,9 +2,17 @@
 // s'en servent aussi pour savoir si une vidéo est en H.264 avant de l'envoyer). Ici seulement les sources de l'API : un
 // fichier du disque (lu par petits morceaux, jamais chargé) ou un tampon (essais).
 import { open } from "node:fs/promises";
-import { type Mp4Info, mp4BufferSource, readMp4 } from "@orasso/shared";
+import { type Mp4Error, type Mp4Info, mp4BufferSource, readMp4, storyVideoLabels } from "@orasso/shared";
 
 export { Mp4Error, type Mp4ErrorKind, type Mp4Info } from "@orasso/shared";
+
+/** Message (415) d'un fichier que le lecteur refuse. */
+export const mp4ErrorMessage = (error: Mp4Error): string =>
+  error.kind === "no_video"
+    ? storyVideoLabels.apiNoVideo
+    : error.kind === "location_track"
+      ? storyVideoLabels.apiLocationTrack
+      : storyVideoLabels.apiUnreadable;
 
 /** Lit un fichier du disque sans le charger (un descripteur, des lectures de quelques octets). */
 export async function readMp4File(path: string): Promise<Mp4Info> {

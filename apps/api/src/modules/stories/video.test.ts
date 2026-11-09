@@ -6,15 +6,21 @@ import { randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fromWallTime, STORY_VIDEO_MAX_BYTES, STORY_VIDEO_PENDING_MAX_BYTES, storyVideoLabels } from "@orasso/shared";
+import {
+  fromWallTime,
+  STORY_VIDEO_MAX_BYTES,
+  STORY_VIDEO_PENDING_MAX_BYTES,
+  STORY_VIDEO_UPLOADS_MAX_PARALLEL,
+  storyVideoLabels,
+} from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
-import { withLocation } from "../../../test/mp4-builders";
+import { appendChild, bareTrack, mebxKeys, withLocation } from "../../../test/mp4-builders";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { crewMembers, profiles, reports, stories, uploads, userFollows } from "../../db/schema";
+import { adminAuditLog, crewMembers, profiles, reports, stories, uploads, userFollows } from "../../db/schema";
 import { readMp4Buffer } from "../../lib/mp4";
 import { storage, storageDir } from "../../lib/storage";
 import { storiesExpire } from "./expire";
@@ -516,33 +522,32 @@ beforeEach(async () => {
 const newFiles = async () => (await storedVideoFiles()).length - filesAtStart;
 
 describe("envoi brut d'une vidéo (route dédiée)", () => {
-  it("garde-fous avant lecture : le 3e envoi est refusé sans lire son corps, une personne n'en a qu'un, la place est rendue ensuite", async () => {
-    const [a, b, c] = [await signUp("Anna"), await signUp("Boris"), await signUp("Chloe")];
+  it("garde-fous avant lecture : le 7e envoi est refusé sans lire son corps, une personne n'en a qu'un, la place est rendue ensuite", async () => {
+    const people = [];
+    for (let i = 0; i < STORY_VIDEO_UPLOADS_MAX_PARALLEL; i++) people.push(await signUp(`Envoi${i}`));
+    const extra = await signUp("Dernier");
     const data = new Uint8Array(await fixture("story-2s.mp4"));
-    const first = pausedBody(data);
-    const second = pausedBody(data);
-    const pa = uploadRaw(a, first.stream, {}, first.length);
-    await Promise.race([first.reading, pa]);
-    const pb = uploadRaw(b, second.stream, {}, second.length);
-    await Promise.race([second.reading, pb]);
+    const held = people.map((who) => {
+      const body = pausedBody(data);
+      return { body, pending: uploadRaw(who, body.stream, {}, body.length) };
+    });
+    for (const h of held) await Promise.race([h.body.reading, h.pending]);
 
-    const third = untouchedBody();
-    const refused = await uploadRaw(c, third.stream, {}, data.length);
+    const seventh = untouchedBody();
+    const refused = await uploadRaw(extra, seventh.stream, {}, data.length);
     expect([refused.status, refused.json.error.code]).toEqual([429, "rate_limited"]);
-    expect(third.state.pulls).toBe(0);
+    expect(seventh.state.pulls).toBe(0);
 
-    // Anna a déjà un envoi en cours : un second est refusé aussi, sans lecture.
+    // La première personne a déjà un envoi en cours : un second est refusé aussi, sans lecture.
     const again = untouchedBody();
-    expect((await uploadRaw(a, again.stream, {}, data.length)).status).toBe(429);
+    expect((await uploadRaw(people[0] as TestUser, again.stream, {}, data.length)).status).toBe(429);
     expect(again.state.pulls).toBe(0);
 
-    first.release();
-    second.release();
-    expect((await pa).status).toBe(201);
-    expect((await pb).status).toBe(201);
-    // Les places sont rendues (`finally`) : Chloé passe, et Anna peut renvoyer.
-    expect((await upload(c, "story_video", Buffer.from(data))).status).toBe(201);
-    expect((await upload(a, "story_video", Buffer.from(data))).status).toBe(201);
+    for (const h of held) h.body.release();
+    for (const h of held) expect((await h.pending).status).toBe(201);
+    // Les places sont rendues (`finally`) : le dernier passe, et la première personne peut renvoyer.
+    expect((await upload(extra, "story_video", Buffer.from(data))).status).toBe(201);
+    expect((await upload(people[0] as TestUser, "story_video", Buffer.from(data))).status).toBe(201);
   });
 
   it("rend la place quand l'envoi échoue (fichier illisible, coupure en route)", async () => {
@@ -624,6 +629,32 @@ describe("envoi brut d'une vidéo (route dédiée)", () => {
     expect(await newFiles()).toBe(1);
   });
 
+  it("corps sans longueur ou en Transfer-Encoding : 411 tout de suite, avant la session, sans lire un seul octet", async () => {
+    const kenji = await signUp("Kenji");
+    const cases: [string, typeof kenji | null, Record<string, string | null>, number | null][] = [
+      ["sans Content-Length", kenji, {}, null],
+      ["sans Content-Length, sans session", null, {}, null],
+      ["Content-Length non entier", kenji, { "content-length": "12abc" }, 12],
+      ["Content-Length négatif", kenji, { "content-length": "-5" }, 12],
+      ["Content-Length vide", kenji, { "content-length": "" }, 12],
+      ["Transfer-Encoding chunked", kenji, { "transfer-encoding": "chunked" }, null],
+      ["Transfer-Encoding chunked avec une longueur", kenji, { "transfer-encoding": "chunked" }, 5000],
+      ["Transfer-Encoding chunked, sans session", null, { "transfer-encoding": "chunked" }, null],
+    ];
+    for (const [name, who, headers, length] of cases) {
+      const untouched = untouchedBody();
+      const res = await uploadRaw(who, untouched.stream, headers, length);
+      expect([res.status, res.json?.error?.message], name).toEqual([411, storyVideoLabels.apiLengthRequired]);
+      expect(untouched.state.pulls, `${name} : aucune lecture`).toBe(0);
+    }
+    // Plus de bodyLimit sur cette route : un corps qui annonce trop gros est refusé (413) sans être lu non plus.
+    const heavy = untouchedBody();
+    const res = await uploadRaw(null, heavy.stream, {}, STORY_VIDEO_MAX_BYTES + 1);
+    expect(res.status).toBe(413);
+    expect(heavy.state.pulls).toBe(0);
+    expect(await newFiles()).toBe(0);
+  });
+
   it("efface le lieu du fichier enregistré : udta/©xyz, uuid et meta vidés, même taille, vidéo lisible, images intactes", async () => {
     const kenji = await signUp("Kenji");
     const original = await fixture("story-2s.mp4");
@@ -653,6 +684,9 @@ describe("envoi brut d'une vidéo (route dédiée)", () => {
     // `mdhd` de la piste vidéo (première) : 40 s dans l'échelle de temps de la piste.
     const mdhd = long.indexOf("mdhd") + 4;
     long.writeUInt32BE(Math.round(long.readUInt32BE(mdhd + 4 + 8) * 40), mdhd + 4 + 12);
+    // Tour 3 : les échantillons (`stts`) doivent dire la même chose que `mdhd`, sinon le fichier est illisible.
+    const stts = long.indexOf("stts");
+    long.writeUInt32BE(Math.round((40 * long.readUInt32BE(mdhd + 4 + 8)) / long.readUInt32BE(stts + 12)), stts + 16);
     const res = await upload(kenji, "story_video", long);
     expect([res.status, res.json.error.code]).toEqual([400, "too_long"]);
     // Plus aucune image : `stsz` vide.
@@ -701,6 +735,61 @@ describe("plafond d'octets de vidéos en attente", () => {
   });
 });
 
+describe("plafond de 300 Mo : les photos en attente ne comptent pas", () => {
+  it("des photos en attente (même énormes) ne gênent pas un envoi vidéo ; les vidéos en attente, si", async () => {
+    const kenji = await signUp("Kenji");
+    const data = await fixture("story-2s.mp4");
+    const insert = (purpose: "report" | "story_video", bytes: number) =>
+      db.insert(uploads).values({
+        key: `private/${purpose === "report" ? "reports" : "story-videos"}/${randomBytes(8).toString("hex")}.${purpose === "report" ? "webp" : "mp4"}`,
+        userId: kenji.id,
+        purpose,
+        width: 720,
+        height: 1280,
+        bytes,
+        createdAt: clock.now,
+      });
+    await insert("report", STORY_VIDEO_PENDING_MAX_BYTES * 2);
+    expect((await upload(kenji, "story_video", data)).status).toBe(201);
+    await insert("story_video", STORY_VIDEO_PENDING_MAX_BYTES - data.length);
+    // 1 Mo de photos de plus ne change rien ; la vidéo en attente (sa somme avec celle déjà envoyée) fait déborder.
+    const full = await upload(kenji, "story_video", data);
+    expect([full.status, full.json.error.message]).toEqual([429, storyVideoLabels.apiPendingFull]);
+  });
+});
+
+describe("pistes de position et fichiers fragmentés : refus à l'envoi", () => {
+  it("415 avec le message de la piste de position pour gpmd et mebx avec lieu ; mebx sans lieu accepté ; rien n'est gardé", async () => {
+    const kenji = await signUp("Kenji");
+    const base = await fixture("story-2s.mp4");
+    // moov en dernier : l'ajout d'une piste ne décale pas les données.
+    const parts: Buffer[] = [];
+    const tail: Buffer[] = [];
+    for (let o = 0; o + 8 <= base.length; ) {
+      const size = base.readUInt32BE(o);
+      (base.toString("latin1", o + 4, o + 8) === "moov" ? tail : parts).push(base.subarray(o, o + size));
+      o += size;
+    }
+    const moovLast = Buffer.concat([...parts, ...tail]);
+    const gpmd = appendChild(moovLast, ["moov"], bareTrack("gpmd"));
+    const located = appendChild(
+      moovLast,
+      ["moov"],
+      bareTrack("mebx", mebxKeys("com.apple.quicktime.location.ISO6709")),
+    );
+    const calm = appendChild(moovLast, ["moov"], bareTrack("mebx", mebxKeys("com.apple.quicktime.still-image-time")));
+    for (const [name, file] of [
+      ["gpmd", gpmd],
+      ["mebx avec lieu", located],
+    ] as const) {
+      const res = await upload(kenji, "story_video", file);
+      expect([res.status, res.json.error.message], name).toEqual([415, storyVideoLabels.apiLocationTrack]);
+    }
+    expect(await newFiles()).toBe(0);
+    expect((await upload(kenji, "story_video", calm)).status).toBe(201);
+  });
+});
+
 describe("modération d'une story vidéo signalée", () => {
   it("le dossier du signalement montre un lecteur : la vidéo est servie par morceaux, mêmes droits du modérateur", async () => {
     const kenji = await signUp("Kenji");
@@ -731,6 +820,28 @@ describe("modération d'une story vidéo signalée", () => {
     expect(part.buf.equals(data.subarray(100, 200))).toBe(true);
     expect((await req(modo, "GET", url, undefined, { range: `bytes=${data.length}-` })).status).toBe(416);
     expect((await req(modo, "GET", strip(target.imageUrl ?? ""))).status).toBe(200);
+
+    // Une seule ligne d'audit pour la consultation de la vidéo (la lecture complète, l'intervalle du milieu et celui hors du
+    // fichier n'en ajoutent pas) ; la vignette a la sienne.
+    const lines = () => db.select().from(adminAuditLog).where(eq(adminAuditLog.action, "moderation.media_view"));
+    const videoLines = async () => (await lines()).filter((l) => l.reason === "vidéo");
+    expect(await videoLines()).toHaveLength(1);
+    expect(await lines()).toHaveLength(2);
+    // Des morceaux de plus (la lecture reprend, un saut dans la vidéo, la fin pour le moov) : toujours une ligne.
+    await req(modo, "GET", url, undefined, { range: "bytes=0-" });
+    await req(modo, "GET", url, undefined, { range: "bytes=500-1500" });
+    await req(modo, "GET", url, undefined, { range: "bytes=-300" });
+    expect(await videoLines()).toHaveLength(1);
+    // Une consultation plus tard (la ligne a plus d'une minute) : une seconde ligne, un premier morceau seul.
+    await db
+      .update(adminAuditLog)
+      .set({ createdAt: new Date(Date.now() - 5 * 60_000) })
+      .where(eq(adminAuditLog.action, "moderation.media_view"));
+    await req(modo, "GET", url, undefined, { range: "bytes=1000-1999" });
+    expect(await videoLines()).toHaveLength(1);
+    await req(modo, "GET", url, undefined, { range: "bytes=0-1" });
+    await req(modo, "GET", url, undefined, { range: "bytes=0-" });
+    expect(await videoLines()).toHaveLength(2);
 
     // Mêmes droits que la modération seule : un membre, même l'auteur, ne passe pas par ici.
     expect((await req(nina, "GET", url)).status).toBe(403);

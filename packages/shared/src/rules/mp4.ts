@@ -3,7 +3,8 @@
 // les en-têtes de boîtes (`ftyp`, `moov` et ce qu'elle contient) à travers une source à accès direct : un fichier de 60 Mo
 // n'est jamais chargé en mémoire pour être vérifié. Il rend ce qu'il faut savoir d'une story vidéo : durée, dimensions
 // (rotation comprise), codec de la première piste vidéo, présence d'un son. Il ne décode rien et ne prouve pas que les images
-// sont lisibles ; il écarte les fichiers qui ne sont pas des vidéos MP4/MOV, tronqués ou illisibles.
+// sont lisibles ; il écarte les fichiers qui ne sont pas des vidéos MP4/MOV, tronqués ou illisibles, fragmentés (`mvex`, `moof` :
+// les téléphones n'en produisent pas) ou portant une piste de position (tour 3).
 // Qui s'en sert : l'API (vérification de l'envoi, source = fichier du disque), l'appli (« cette vidéo de la galerie est-elle en
 // H.264 ? », source = fichier du téléphone) et le site (même question avant l'envoi, source = `File.slice`).
 
@@ -27,7 +28,8 @@ export type Mp4Info = {
   hasAudio: boolean;
 };
 
-export type Mp4ErrorKind = "unreadable" | "no_video";
+/** `location_track` : une piste qui n'est ni image, ni son, ni code temporel, ou qui annonce un lieu (télémétrie, GPS). */
+export type Mp4ErrorKind = "unreadable" | "no_video" | "location_track";
 export class Mp4Error extends Error {
   constructor(
     readonly kind: Mp4ErrorKind,
@@ -128,16 +130,14 @@ type TrackInfo = {
   chunks: Chunks | null;
 };
 
-/** Plages d'octets des `mdat` (données seulement) et présence d'un fragment `moof` : ce que le fichier contient vraiment. */
-type FileContext = { mdats: [number, number][]; sawMoof: boolean };
+/** Plages d'octets des `mdat` (données seulement) : ce que le fichier contient vraiment. */
+type FileContext = { mdats: [number, number][] };
 
 /** Parcourt `moov` et en tire ce qui compte. */
 function parseMoov(moov: Uint8Array, ctx: FileContext) {
   const dv = view(moov);
   let timescale = 0;
   let duration = 0;
-  let fragmented = false;
-  let fragmentDuration = 0;
   let video: TrackInfo | null = null;
   let hasAudio = false;
   let longestTrack = 0;
@@ -157,15 +157,8 @@ function parseMoov(moov: Uint8Array, ctx: FileContext) {
         duration = u32(dv, o + 12);
       }
     } else if (box.type === "mvex") {
-      fragmented = true;
-      const mehd = find(moov, dv, box, "mehd");
-      if (mehd) {
-        need(mehd, 4);
-        const v = u8(dv, mehd.start + mehd.header);
-        const o = mehd.start + mehd.header + 4;
-        need(mehd, 4 + (v === 1 ? 8 : 4));
-        fragmentDuration = v === 1 ? u64(dv, o) : u32(dv, o);
-      }
+      // Fichier fragmenté : les échantillons sont dans des fragments qu'on ne vérifie pas ; les téléphones n'en produisent pas.
+      throw bad("fichier fragmenté");
     } else if (box.type === "trak") {
       const t = parseTrak(moov, dv, box);
       longestTrack = Math.max(longestTrack, t.durationSeconds);
@@ -174,19 +167,13 @@ function parseMoov(moov: Uint8Array, ctx: FileContext) {
     }
   }
   if (!timescale) throw bad("durée absente");
-  if (!duration && fragmented) duration = fragmentDuration;
-  if (video) checkVideoTrack(dv, video, fragmented, ctx);
+  if (video) checkVideoTrack(dv, video, ctx);
   return { timescale, duration, video, hasAudio, longestTrack };
 }
 
 /** La piste vidéo contient-elle de quoi s'afficher ? (configuration, échantillons, morceaux dans le fichier) ; sans décodage. */
-function checkVideoTrack(dv: DataView, video: TrackInfo, fragmented: boolean, ctx: FileContext): void {
+function checkVideoTrack(dv: DataView, video: TrackInfo, ctx: FileContext): void {
   if (!video.configured) throw bad("configuration du codec absente");
-  if (fragmented) {
-    // Fichier fragmenté : les échantillons sont dans les fragments, pas dans les tables de la piste.
-    if (!ctx.sawMoof) throw bad("aucun fragment vidéo");
-    return;
-  }
   if (!video.samples) throw bad("aucun échantillon vidéo");
   if (!video.chunks) throw bad("table des morceaux absente");
   const { box, wide } = video.chunks;
@@ -200,6 +187,62 @@ function checkVideoTrack(dv: DataView, video: TrackInfo, fragmented: boolean, ct
     const at = wide ? u64(dv, o) : u32(dv, o);
     if (!ctx.mdats.some(([from, to]) => at >= from && at < to)) throw bad("morceau hors des données");
   }
+}
+
+/** Les octets `from`..`to` contiennent-ils ce texte ASCII, sans tenir compte de la casse ? `needle` est en minuscules. */
+function hasAscii(data: Uint8Array, from: number, to: number, needle: string): boolean {
+  const n = needle.length;
+  for (let i = from; i + n <= to; i++) {
+    let j = 0;
+    for (; j < n; j++) {
+      let c = data[i + j] as number;
+      if (c >= 65 && c <= 90) c += 32;
+      if (c !== needle.charCodeAt(j)) break;
+    }
+    if (j === n) return true;
+  }
+  return false;
+}
+
+/** Une piste de métadonnées dont un octet parle d'un lieu (clés comprises) : « location » ou « ISO6709 ». */
+const mentionsLocation = (moov: Uint8Array, trak: Box) =>
+  hasAscii(moov, trak.start, trak.end, "location") || hasAscii(moov, trak.start, trak.end, "iso6709");
+
+/**
+ * Configuration H.264 (`avcC`) utilisable, sans rien décoder : version 1, taille des longueurs de NAL valide (1, 2 ou 4),
+ * au moins un SPS **et** un PPS, chacun non vide, dans les bornes de la boîte, dont le premier octet est bien un NAL du bon type
+ * (7 pour un SPS, 8 pour un PPS ; un SPS porte au moins son en-tête et profil, compatibilité, niveau).
+ */
+function avcConfigured(data: Uint8Array, dv: DataView, box: Box): boolean {
+  let o = box.start + box.header;
+  // Version, profil, compatibilité, niveau, longueurs de NAL (6 bits réservés à 1), nombre de SPS (3 bits réservés + 5).
+  if (o + 6 > box.end) return false;
+  if (u8(dv, o) !== 1) return false;
+  if ((u8(dv, o + 4) & 0x03) === 2) return false;
+  const spsCount = u8(dv, o + 5) & 0x1f;
+  o += 6;
+  if (spsCount < 1) return false;
+  for (let i = 0; i < spsCount; i++) {
+    if (o + 2 > box.end) return false;
+    const length = dv.getUint16(o);
+    o += 2;
+    if (length < 4 || o + length > box.end) return false;
+    if (((data[o] as number) & 0x1f) !== 7) return false;
+    o += length;
+  }
+  if (o + 1 > box.end) return false;
+  const ppsCount = u8(dv, o);
+  o += 1;
+  if (ppsCount < 1) return false;
+  for (let i = 0; i < ppsCount; i++) {
+    if (o + 2 > box.end) return false;
+    const length = dv.getUint16(o);
+    o += 2;
+    if (length < 1 || o + length > box.end) return false;
+    if (((data[o] as number) & 0x1f) !== 8) return false;
+    o += length;
+  }
+  return true;
 }
 
 function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
@@ -216,6 +259,7 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
   const mdia = find(moov, dv, trak, "mdia");
   if (!mdia) return other;
   const mdhd = find(moov, dv, mdia, "mdhd");
+  let mediaTimescale = 0;
   if (mdhd) {
     need(mdhd, 4);
     const mv = u8(dv, mdhd.start + mdhd.header);
@@ -223,15 +267,25 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
     need(mdhd, 4 + (mv === 1 ? 28 : 16));
     const ts = mv === 1 ? u32(dv, o + 16) : u32(dv, o + 8);
     const dur = mv === 1 ? u64(dv, o + 20) : u32(dv, o + 12);
+    mediaTimescale = ts;
     if (ts > 0) other.durationSeconds = dur / ts;
   }
+  // Le gestionnaire se lit AVANT toute autre chose : une piste de position ne passe pas parce qu'elle n'a pas de `tkhd`.
+  const hdlr = find(moov, dv, mdia, "hdlr");
+  if (!hdlr) throw new Mp4Error("location_track", "Piste sans gestionnaire");
+  need(hdlr, 12);
+  const handler = text(moov, hdlr.start + hdlr.header + 8, hdlr.start + hdlr.header + 12);
+  if (handler === "soun") return { ...other, kind: "audio" };
+  // Code temporel (`tmcd`) : sans position. Pistes de métadonnées (`meta`, `mebx`) : acceptées seulement si leurs clés
+  // ne parlent ni de lieu (« location ») ni de position (« ISO6709 »). Toute autre piste (`gpmd`, texte…) est refusée.
+  if (handler === "tmcd") return other;
+  if (handler === "meta" || handler === "mebx") {
+    if (mentionsLocation(moov, trak)) throw new Mp4Error("location_track", "Piste de métadonnées avec un lieu");
+    return other;
+  }
+  if (handler !== "vide") throw new Mp4Error("location_track", `Piste de type « ${handler} »`);
   const tkhd = find(moov, dv, trak, "tkhd");
   if (!tkhd) return other;
-  const hdlr = find(moov, dv, mdia, "hdlr");
-  if (hdlr) need(hdlr, 12);
-  const handler = hdlr ? text(moov, hdlr.start + hdlr.header + 8, hdlr.start + hdlr.header + 12) : "";
-  if (handler === "soun") return { ...other, kind: "audio" };
-  if (handler !== "vide") return other;
 
   need(tkhd, 4);
   const v = u8(dv, tkhd.start + tkhd.header);
@@ -266,10 +320,7 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
     if (childrenAt <= entry + entrySize) {
       for (const child of children(moov, dv, childrenAt, entry + entrySize)) {
         if (child.type !== "avcC") continue;
-        // Version 1, puis profil, compatibilité, niveau, taille des longueurs, nombre de SPS (5 bits).
-        if (child.start + child.header + 7 > child.end) break;
-        const at = child.start + child.header;
-        configured = u8(dv, at) === 1 && (codec === "avc3" || (u8(dv, at + 5) & 0x1f) >= 1);
+        configured = avcConfigured(moov, dv, child);
         break;
       }
     }
@@ -285,13 +336,27 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
     // Tailles individuelles (sample_size à 0) : la table doit tenir dans la boîte.
     if (sizes === stsz && u32(dv, sizes.start + sizes.header + 4) === 0) need(sizes, 12 + samples * 4);
   }
+  // Durée de la piste vidéo par la somme des durées d'échantillon (`stts`) : elle doit concorder avec `mdhd` (à 1 s près), sinon
+  // le fichier annonce une durée et en cache une autre. La plus longue des deux est retenue.
+  let durationSeconds = other.durationSeconds;
+  const stts = find(moov, dv, stbl, "stts");
+  if (stts && mediaTimescale > 0) {
+    need(stts, 8);
+    const entries = u32(dv, stts.start + stts.header + 4);
+    need(stts, 8 + entries * 8);
+    let ticks = 0;
+    for (let i = 0, o = stts.start + stts.header + 8; i < entries; i++, o += 8) ticks += u32(dv, o) * u32(dv, o + 4);
+    const fromSamples = ticks / mediaTimescale;
+    if (Math.abs(fromSamples - durationSeconds) > 1) throw bad("durée de la piste incohérente");
+    durationSeconds = Math.max(durationSeconds, fromSamples);
+  }
   const stco = find(moov, dv, stbl, "stco");
   const co64 = stco ? null : find(moov, dv, stbl, "co64");
   const chunks: Chunks | null = stco ? { box: stco, wide: false } : co64 ? { box: co64, wide: true } : null;
 
   return {
     kind: "video",
-    durationSeconds: other.durationSeconds,
+    durationSeconds,
     codec,
     width: Math.round(quarter ? rawHeight : rawWidth),
     height: Math.round(quarter ? rawWidth : rawHeight),
@@ -327,7 +392,7 @@ async function readMp4Unchecked(source: Mp4Source): Promise<Mp4Info> {
   // Boîtes de premier niveau : les en-têtes seulement, `mdat` est sauté sans être lu.
   let offset = 0;
   let moov: Uint8Array | null = null;
-  const ctx: FileContext = { mdats: [], sawMoof: false };
+  const ctx: FileContext = { mdats: [] };
   for (let n = 0; offset + 8 <= source.size; n++) {
     if (n > TOP_LEVEL_MAX) throw bad("trop de boîtes");
     const h = await source.read(offset, 16);
@@ -344,7 +409,7 @@ async function readMp4Unchecked(source: Mp4Source): Promise<Mp4Info> {
     // Une boîte qui dépasse la fin du fichier : envoi incomplet.
     if (size < header || offset + size > source.size) throw bad("fichier tronqué");
     if (type === "mdat" && size > header) ctx.mdats.push([offset + header, offset + size]);
-    if (type === "moof") ctx.sawMoof = true;
+    if (type === "moof") throw bad("fichier fragmenté");
     if (type === "moov") {
       if (size > MOOV_MAX) throw bad("moov démesuré");
       moov = await source.read(offset, size);
@@ -353,7 +418,7 @@ async function readMp4Unchecked(source: Mp4Source): Promise<Mp4Info> {
     offset += size;
   }
   if (!moov) throw bad("moov absent");
-  if (ctx.mdats.length === 0 && !ctx.sawMoof) throw bad("aucune donnée de média");
+  if (ctx.mdats.length === 0) throw bad("aucune donnée de média");
 
   const info = parseMoov(moov, ctx);
   if (!info.video) throw new Mp4Error("no_video", "Ce fichier ne contient pas de piste vidéo");

@@ -16,8 +16,10 @@ export const STORY_VIDEO_BITRATE = 3_500_000;
 export const STORY_POSTER_MAX_SIDE = 1080;
 /** Un fichier reçu doit avoir au moins cette durée (anti-fichier vide). */
 export const STORY_VIDEO_MIN_MS = 300;
-/** Au plus ce nombre d'envois de 60 Mo en même temps sur le serveur (mémoire de l'API). */
-export const STORY_VIDEO_UPLOADS_MAX_PARALLEL = 2;
+/** Au plus ce nombre d'envois de 60 Mo en même temps sur le serveur (disque et sockets ; la mémoire n'en porte jamais plus que quelques morceaux). */
+export const STORY_VIDEO_UPLOADS_MAX_PARALLEL = 6;
+/** Délai d'un envoi vidéo, partout (appli, site, Node, Nginx) : 10 min pour 60 Mo en mauvaise 4G. */
+export const STORY_VIDEO_UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 /** Envois de vidéos non publiés qu'une personne peut garder sur le disque (envoyés, pas encore rattachés à une story) : 300 Mo. */
 export const STORY_VIDEO_PENDING_MAX_BYTES = 300 * 1024 * 1024;
 /** Route d'envoi d'une vidéo : le fichier brut (`Content-Type: video/mp4`), `Content-Length` obligatoire, jamais en multipart. */

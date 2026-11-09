@@ -83,3 +83,17 @@ export function withLocation(data: Buffer): Buffer {
   const meta = box("meta", Buffer.alloc(4), Buffer.from(`com.apple.quicktime.location.ISO6709 ${FAKE_PLACE}`));
   return Buffer.concat([out, uuid, meta]);
 }
+
+/** Une piste (`trak`) sans image, avec ce gestionnaire (`vide`, `soun`, `tmcd`, `mebx`, `gpmd`…) et d'autres boîtes dans `mdia`. */
+export function bareTrack(handler: string, ...inMdia: Buffer[]): Buffer {
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from(handler, "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box("trak", box("mdia", hdlr, ...inMdia));
+}
+
+/** Boîte `keys` d'une piste `mebx` (clés de métadonnées, espace de noms `mdta`). */
+export function mebxKeys(...names: string[]): Buffer {
+  const entries = names.map((name) => box("mdta", Buffer.from(name, "latin1")));
+  const count = Buffer.alloc(8);
+  count.writeUInt32BE(entries.length, 4);
+  return box("minf", box("stbl", box("stsd", count, box("mebx", Buffer.alloc(8), box("keys", ...entries)))));
+}
