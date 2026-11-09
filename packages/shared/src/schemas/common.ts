@@ -100,6 +100,8 @@ export const errorCodes = [
   "gps_imprecise",
   "out_of_zone",
   "no_zone",
+  // Lot R7i : un seul rendez-vous au spot actif par personne.
+  "meetup_active",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

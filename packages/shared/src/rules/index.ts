@@ -56,6 +56,7 @@ export * from "./signupMissing";
 export * from "./socials";
 export * from "./solar";
 export * from "./sorties";
+export * from "./spotMeetup";
 export * from "./sponsored";
 export * from "./squareCrop";
 export * from "./stampArt";

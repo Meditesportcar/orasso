@@ -30,6 +30,7 @@ export * from "./reports";
 export * from "./reviews";
 export * from "./security";
 export * from "./social";
+export * from "./spotMeetups";
 export * from "./staff";
 export * from "./stories";
 export * from "./structures";

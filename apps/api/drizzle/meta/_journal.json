@@ -512,6 +512,13 @@
       "when": 1794199845359,
       "tag": "0072_event-votes",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1794219712932,
+      "tag": "0073_spot-meetups",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@ import {
   feedFilters,
 } from "../rules/feed";
 import { optionalText } from "./common";
+import type { SpotFeedPayload } from "./spotMeetup";
 import { plateRectsSchema } from "./vehicle";
 
 // Le Fil (lot R7e1) : `GET /fil`, publications, « Moins de ce genre », signalement.
@@ -143,7 +144,7 @@ export type FeedPayloads = {
     };
   };
   feed_post: { post: FeedPostView };
-  spot_meetup: Record<string, unknown>;
+  spot_meetup: SpotFeedPayload;
   memory: Record<string, unknown>;
   sponsored: Record<string, unknown>;
 };

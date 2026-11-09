@@ -108,6 +108,10 @@ export const rateRules = {
   homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
+  /** Rendez-vous au spot (lot R7i) : lancements (chacun prévient des dizaines de personnes), lectures, réponses. */
+  spotLaunch: { max: 6, windowMs: 3_600_000, message: "Trop de rendez-vous lancés : réessaie plus tard." },
+  spotRead: { max: 120, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
+  spotReply: { max: 60, windowMs: 3_600_000, message: "Trop de réponses : réessaie plus tard." },
   /** Export des participants d'un événement (lot 27) : chaque export est tracé, pas de rafale. */
   participantsExport: { max: 10, windowMs: 3_600_000, message: "Trop d'exports : réessaie dans une heure." },
   /** Notes internes (lot 27) : créations, modifications, suppressions. */
