@@ -1,6 +1,6 @@
 import { DEPT_COOKIE } from "@orasso/design-system/web";
 import { redirect } from "react-router";
-
+import { purgePublished } from "../components/fil/mine";
 import { api, safeReturn, withCookies } from "../lib/api.server";
 import { clearExplorerCookie } from "../lib/explorerChoice.server";
 import type { Route } from "./+types/deconnexion";
@@ -19,4 +19,11 @@ export async function action({ request }: Route.ActionArgs) {
 
 export function loader() {
   return redirect("/");
+}
+
+// Lot R7e2, tour 4 : « Ma publication » gardée dans l'onglet (Fil) appartient au compte qui se déconnecte : elle part avec lui,
+// avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
+export async function clientAction({ serverAction }: Route.ClientActionArgs) {
+  purgePublished();
+  return serverAction();
 }

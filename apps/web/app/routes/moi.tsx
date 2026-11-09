@@ -2,6 +2,7 @@ import { AvatarRing, Button, CheckboxField, Chip, Icon, type IconName, TextField
 import {
   type AccountSettings,
   accountAppLabels,
+  feedScreenLabels,
   gradeLabels,
   moderationLabels,
   mutableTypesByFamily,
@@ -182,6 +183,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
       title: S.editProfile,
       caption: S.editProfileCaption,
       testId: "reglage-profil",
+    },
+    {
+      key: "mes-publications",
+      href: "/app/fil/mes-publications",
+      icon: "gallery",
+      title: feedScreenLabels.mineTitle,
+      caption: feedScreenLabels.mineSettingCaption,
+      testId: "reglage-mes-publications",
     },
     { key: "compte", href: "#compte", icon: "profile", title: S.account, caption: S.accountCaption },
     {

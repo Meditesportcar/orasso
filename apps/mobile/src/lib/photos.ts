@@ -1,5 +1,6 @@
 // Photos d'un véhicule : choisies dans la photothèque, converties en JPEG avant l'envoi (les photos HEIC d'iPhone
 // ne passent pas partout ; l'API les recompresse en WebP), 8 au plus (règle de l'API).
+import { DEFAULT_FEED_ASPECT, type FeedAspect, feedCropPlan } from "@orasso/shared";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Platform } from "react-native";
@@ -63,6 +64,30 @@ export async function cropSquare(
 ): Promise<PickedPhoto> {
   const context = ImageManipulator.manipulate(photo.uri).crop(crop);
   if (crop.width > SQUARE_SIDE) context.resize({ width: SQUARE_SIDE, height: SQUARE_SIDE });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.88 });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
+/**
+ * Lot R7e2 : recadre une photo au format d'une publication du Fil (4:5 par défaut, 1:1, paysage) : le plus grand cadre de
+ * ce format, centré (`focus` : le centre voulu, 0 à 1), côté le plus long 1350 px (1080 pour le carré), JPEG. C'est cette
+ * photo recadrée qui part au serveur, et la plaque est cherchée et masquée dessus. Généralise `cropSquare` ; le lot R7f3
+ * (story 9:16) s'en servira : la signature reste simple.
+ */
+export async function cropAspect(
+  photo: PickedPhoto,
+  aspect: FeedAspect | number = DEFAULT_FEED_ASPECT,
+  focus?: { x: number; y: number },
+): Promise<PickedPhoto> {
+  const plan = feedCropPlan(photo.width, photo.height, aspect, focus);
+  const context = ImageManipulator.manipulate(photo.uri).crop({
+    originX: plan.originX,
+    originY: plan.originY,
+    width: plan.width,
+    height: plan.height,
+  });
+  if (plan.width > plan.outWidth) context.resize({ width: plan.outWidth, height: plan.outHeight });
   const rendered = await context.renderAsync();
   const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.88 });
   return { uri: saved.uri, width: saved.width, height: saved.height };

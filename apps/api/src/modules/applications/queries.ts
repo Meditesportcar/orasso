@@ -152,6 +152,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
           endsAt: e.endsAt.toISOString(),
           city: e.city,
           status: e.status,
+          admission: e.admission,
           posterUrl: eventPosterUrl(e),
           photoUrl: eventPhotoUrl(e),
         },

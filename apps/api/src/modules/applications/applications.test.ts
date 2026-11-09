@@ -236,6 +236,8 @@ describe("tri", () => {
     expect(n?.body).not.toContain("Hors thème");
     const mine = await call(p.u, "GET", "/me/applications");
     expect(mine.json[0].refusalReasons).toBeNull();
+    // Le Fil ne propose que les événements où l'API accepte une publication : l'admission accompagne l'événement.
+    expect(mine.json[0].event.admission).toBe(e.admission);
   });
 
   it("transitions interdites : 409 invalid_transition", async () => {

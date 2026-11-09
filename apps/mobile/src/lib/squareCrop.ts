@@ -6,6 +6,8 @@ export {
   cropFromView,
   cropPixels,
   displayScale,
+  focusFromView,
+  frameSize,
   MAX_ZOOM,
   MIN_ZOOM,
   pinchZoom,
@@ -13,5 +15,6 @@ export {
   type SquareCrop,
   stepZoom,
   viewFromCrop,
+  viewFromFocus,
   ZOOM_STEP,
 } from "@orasso/shared";

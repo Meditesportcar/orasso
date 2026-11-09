@@ -206,6 +206,8 @@ export function PlateFrame({
   name = "plateRects",
   initial = [DEFAULT_PLATE_FRAME],
   testId,
+  onChange,
+  readOnly = false,
 }: {
   src: string;
   alt: string;
@@ -213,21 +215,44 @@ export function PlateFrame({
   name?: string;
   initial?: PlateRect[];
   testId?: string;
+  /** Lot R7e2 : les cadres à chaque changement (le champ caché reste celui des formulaires). */
+  onChange?: (rects: PlateRect[]) => void;
+  /** Lot R7e2, tour 4 : cadres figés (envoi en cours) : ni geste, ni ajout, ni retrait. */
+  readOnly?: boolean;
 }) {
   const [rects, setRects] = useState<PlateRect[]>(initial);
+  const changed = useRef(onChange);
+  changed.current = onChange;
+  // Pas d'`onChange` au premier affichage : le composant repart de `initial`, il n'y a rien à annoncer (sinon une photo
+  // retrouvée en revenant dessus perdrait ses cadres).
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!shown.current) {
+      shown.current = true;
+      return;
+    }
+    changed.current?.(rects);
+  }, [rects]);
   // Le cadre s'ouvre toujours en Déplacer (le composant est recréé à chaque photo choisie).
   const [mode, setMode] = useState<PlateFrameMode>(PLATE_FRAME_FIRST_MODE);
   const [held, setHeld] = useState<{ index: number; edges: PlateEdge[] } | null>(null);
   const [cursor, setCursor] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
+  // Un geste en cours quand le composant se fige est abandonné : ce qui est affiché est ce qui part.
+  useEffect(() => {
+    if (!readOnly) return;
+    drag.current = null;
+    setHeld(null);
+    setCursor("");
+  }, [readOnly]);
 
   const point = (e: ReactPointerEvent<HTMLElement>) => {
     const r = (box.current as HTMLDivElement).getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top, W: r.width, H: r.height };
   };
   const down = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!box.current || (e.target as HTMLElement).closest("button")) return;
+    if (readOnly || !box.current || (e.target as HTMLElement).closest("button")) return;
     const p = point(e);
     const found = pick(rects, p.x, p.y, p.W, p.H, mode);
     const start = found ? rects[found.index] : undefined;
@@ -237,7 +262,7 @@ export function PlateFrame({
     drag.current = { ...found, start, x: p.x, y: p.y, t0: Date.now(), moved: false };
   };
   const move = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!box.current) return;
+    if (readOnly || !box.current) return;
     const p = point(e);
     const d = drag.current;
     if (!d) {
@@ -265,7 +290,7 @@ export function PlateFrame({
     const d = drag.current;
     drag.current = null;
     setHeld(null);
-    if (!d || !box.current) return;
+    if (readOnly || !d || !box.current) return;
     const p = point(e);
     if (!d.moved && d.hit.inside && isPlateFrameTap(Math.hypot(p.x - d.x, p.y - d.y), Date.now() - d.t0)) {
       const next = nextPlateFrameMode(mode);
@@ -364,13 +389,19 @@ export function PlateFrame({
           type="button"
           variant="secondary"
           icon="add"
-          disabled={rects.length >= MAX_PLATE_RECTS}
+          disabled={readOnly || rects.length >= MAX_PLATE_RECTS}
           onClick={() => setRects((all) => [...all, nextPlateFrame(all)])}
         >
           {L.addFrame}
         </Button>
         {rects.length ? (
-          <Button type="button" variant="secondary" icon="close" onClick={() => setRects((all) => all.slice(0, -1))}>
+          <Button
+            type="button"
+            variant="secondary"
+            icon="close"
+            disabled={readOnly}
+            onClick={() => setRects((all) => all.slice(0, -1))}
+          >
             {L.removeFrame}
           </Button>
         ) : null}
