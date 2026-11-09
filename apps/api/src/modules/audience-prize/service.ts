@@ -27,11 +27,11 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  adminAuditLog,
   applications,
   audiencePrizeResults,
   audienceVotes,
   checkins,
-  eventStaff,
   profiles,
   tickets,
   user,
@@ -41,10 +41,12 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
-import { activeMembership, isSuperAdmin, openAssistanceRequest } from "../../lib/access";
+import { activeMembership, hasSecondFactor, isSuperAdmin, openAssistanceRequest } from "../../lib/access";
+import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
+import { requestContext } from "../../lib/request-context";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
@@ -252,16 +254,24 @@ async function canSeeRanking(ex: Executor, event: EventRow, v: Viewer): Promise<
 
 async function isEventTeam(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
   const member = await activeMembership(v.user.id, event.structureId);
-  if (member && (member.role === "owner" || member.role === "co_organizer")) return true;
-  if (member?.role === "staff") {
-    // Le staff d'un autre événement de la structure ne voit pas le classement de celui-ci.
-    const assigned = await ex.query.eventStaff.findFirst({
-      where: and(eq(eventStaff.eventId, event.id), eq(eventStaff.userId, v.user.id)),
-      columns: { id: true },
-    });
-    return Boolean(assigned);
-  }
-  return isSuperAdmin(v) && Boolean(await openAssistanceRequest(event.structureId));
+  // Règle C25 : le staff actif de la structure est le staff de ses événements (`event_staff` en reprend une ligne par
+  // événement publié) ; il suit le classement en direct comme les organisateurs. Personne hors structure n'en fait partie.
+  if (member && (member.role === "owner" || member.role === "co_organizer" || member.role === "staff")) return true;
+  if (!isSuperAdmin(v)) return false;
+  // Super admin : seulement en assistance, avec le même contrôle que l'espace organisateur (`requireOrganizer`) :
+  // second facteur prouvé par la session, puis consultation tracée.
+  if (!(env.DEV_SKIP_2FA || hasSecondFactor(v))) return false;
+  if (!(await openAssistanceRequest(event.structureId))) return false;
+  await ex.insert(adminAuditLog).values({
+    actorUserId: v.user.id,
+    action: "structure.view_as",
+    targetType: "structure",
+    targetId: event.structureId,
+    structureId: event.structureId,
+    reason: "audience_prize.ranking",
+    ip: requestContext.get()?.ip ?? null,
+  });
+  return true;
 }
 
 /** Diffusions regroupées : au plus une par seconde et par événement (la dernière part en fin de seconde). */

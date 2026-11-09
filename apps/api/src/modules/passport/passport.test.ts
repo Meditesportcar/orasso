@@ -20,6 +20,7 @@ import {
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
+  adminAuditLog,
   applications,
   assistanceRequests,
   audiencePrizeResults,
@@ -511,21 +512,18 @@ describe("prix du public", () => {
     ws.stop();
   });
 
-  it("classement pendant le vote : équipe de l'événement, votants, jamais un autre staff ni un non-votant (lot R7-0)", async () => {
+  it("classement pendant le vote : équipe de la structure (staff compris), votants, jamais un non-votant hors structure (lot R7-0)", async () => {
     await checkin(p.kenji, paris(10, 17, 19, 2));
     await checkin(p.lea, paris(10, 17, 19, 10));
     clock.set(paris(10, 17, 20));
     const coOrga = await signUp("CoOrga_66", { twoFactor: true });
     await addMember(structureId, coOrga.id, "co_organizer");
-    // Julie est affectée à cet événement ; Tom est du staff de la structure, mais pas de cet événement-ci.
+    // Règle C25 : le staff actif de la structure est le staff de ses événements (Julie comme Tom).
     await db.insert(eventStaff).values({ eventId, userId: julie.id }).onConflictDoNothing();
     const tom = await signUp("Tom_66");
     await addMember(structureId, tom.id, "staff", ["scan"]);
-    // Les lectures du staff recréent les lignes manquantes (choix C25) : on retire celle de Tom avant chaque vérification.
-    const tomAway = () =>
-      db.delete(eventStaff).where(and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, tom.id)));
-    await tomAway();
     const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    const adminNoSecondFactor = await signUp("AdminSans2fa_66", { role: "super_admin" });
     expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
 
     const hidden = async (u: TestUser) => (await call(u, "GET", `/events/${eventId}/audience-prize`)).json;
@@ -538,26 +536,33 @@ describe("prix du public", () => {
       const b = await hidden(u);
       expect(b).toMatchObject({ rankingHidden: true, entries: [], winner: null, total: 1, vehicles: 2 });
     };
+    const views = async () =>
+      (
+        await db.query.adminAuditLog.findMany({
+          where: and(eq(adminAuditLog.action, "structure.view_as"), eq(adminAuditLog.structureId, structureId)),
+        })
+      ).length;
     await shown(p.kenji.u); // a voté
     await shown(orga); // propriétaire
     await shown(coOrga); // co-organisateur qui n'a pas voté
-    await shown(julie); // staff affecté à cet événement
-    await covered(p.marc.u); // n'a pas voté (ni pu)
-    await tomAway();
-    await covered(tom); // staff d'un autre événement de la structure
+    await shown(julie); // staff de la structure
+    await shown(tom); // staff de la structure (ligne `event_staff` créée ou non : la règle est celle de la structure)
+    await covered(p.marc.u); // hors structure, n'a pas voté (ni pu)
     await covered(admin); // super admin sans demande d'aide ouverte
     await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
-    await shown(admin); // super admin en assistance
+    const before = await views();
+    await covered(adminNoSecondFactor); // super admin en assistance, mais session sans second facteur
+    expect(await views()).toBe(before);
+    await shown(admin); // super admin en assistance, second facteur prouvé : servi et tracé
+    expect(await views()).toBe(before + 1);
     // Nina est pointée puis vote : elle le voit à son tour ; Marc, jamais entré, ne le voit pas.
     await checkin(p.nina, paris(10, 17, 20, 5));
     expect((await vote(p.nina.u, p.lea.applicationId)).status).toBe(200);
     expect((await hidden(p.nina.u)).rankingHidden).toBe(false);
     expect((await hidden(p.marc.u)).rankingHidden).toBe(true);
-    await tomAway();
-    expect((await hidden(tom)).rankingHidden).toBe(true);
-    // Clôture : tout le monde, y compris le staff d'un autre événement.
+    // Clôture : tout le monde.
     clock.set(ENDS);
-    for (const u of [tom, p.nina.u]) expect((await hidden(u)).rankingHidden).toBe(false);
+    for (const u of [p.marc.u, p.nina.u]) expect((await hidden(u)).rankingHidden).toBe(false);
   });
 
   it("150 pointés (cas terrain) : la grille du vote les liste tous, par pages, sans voix ; le classement reste limité à 100", async () => {
