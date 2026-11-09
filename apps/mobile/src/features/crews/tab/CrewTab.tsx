@@ -7,7 +7,7 @@
 // sa vitrine.
 import { tokens, useTheme } from "@orasso/design-system/native";
 import { crewTabLabels as T } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,6 +78,18 @@ export function CrewTab() {
   // Le crew du lien : un des miens, il devient le choix ; sinon la liste est relue une fois (crew qui vient d'être créé ou
   // accepté), et s'il n'y est toujours pas, c'est la vitrine du crew qui s'ouvre (jamais un autre de mes crews en silence).
   const checking = useRef<string | null>(null);
+  // La relecture est asynchrone : la vitrine ne s'ouvre que si l'onglet est encore affiché (monté et au premier plan), et
+  // par `push` pour que « retour » ramène à l'onglet au lieu de fermer l'appli.
+  const navigation = useNavigation();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const shown = useRef<() => boolean>(() => false);
+  shown.current = () => mounted.current && navigation.isFocused();
   useEffect(() => {
     if (!wanted || !list) return;
     if (list.some((c) => c.slug === wanted)) {
@@ -95,7 +107,7 @@ export function CrewTab() {
       if (fresh.some((c) => c.slug === wanted)) {
         setChosen(wanted);
         setUnread(0);
-      } else router.replace(`/crew/${encodeURIComponent(wanted)}`);
+      } else if (shown.current()) router.push(`/crew/${encodeURIComponent(wanted)}`);
     });
   }, [wanted, list, reloadCrews, router]);
 

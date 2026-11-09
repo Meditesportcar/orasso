@@ -88,7 +88,12 @@ export async function action({ request }: Route.ActionArgs) {
     const res = await crewAction(request, form);
     return data({ ...res.data, crewId: String(form.get("crewId") ?? "") }, { status: res.init?.status ?? 200 });
   }
-  if (isCrewIntent(intent)) return crewAction(request, form);
+  if (isCrewIntent(intent)) {
+    const res = await crewAction(request, form);
+    // Quitter le crew : pas de retour sur la vitrine du crew quitté, mais le crew suivant ou « Pas encore de crew ».
+    if (intent === "crew_leave" && !res.data.crewError) throw redirect("/app/crew");
+    return res;
+  }
   const crewId = encodeURIComponent(String(form.get("crewId") ?? ""));
   const outingId = encodeURIComponent(String(form.get("outingId") ?? ""));
   if (intent === "outing_rsvp") {

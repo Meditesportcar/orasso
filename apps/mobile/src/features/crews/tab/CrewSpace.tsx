@@ -154,11 +154,14 @@ export function CrewSpace({
   }
 
   if (!v) {
-    return crew.error && crew.error.status !== 404 ? (
-      <LoadError message={crew.error.message} onRetry={() => void crew.reload()} />
-    ) : (
-      <Muted variant="body">Chargement…</Muted>
-    );
+    if (crew.error && crew.error.status !== 404) {
+      return <LoadError message={crew.error.message} onRetry={() => void crew.reload()} />;
+    }
+    // Crew introuvable (404) puis panne en relisant mes crews : « Réessayer », jamais un « Chargement… » sans fin.
+    if (crew.error?.status === 404 && lostFailed) {
+      return <LoadError message={T.loadError} onRetry={() => void retryLost()} />;
+    }
+    return <Muted variant="body">Chargement…</Muted>;
   }
   if (gone) {
     return lostFailed ? (

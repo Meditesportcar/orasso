@@ -107,8 +107,7 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
   await shot(n.page, "01-publier-beton");
   await n.page.getByTestId("crew-publish-send").click();
   // Lot R7b2 : après la publication on revient sur l'onglet Crew (`/crew?crew=<adresse>`, puis `/crew` : le lien est consommé, tour 2).
-  // (tour 2 : le lien est consommé, l'adresse redevient `/crew`).
-  await n.page.waitForURL(/\/crew(\/[^/?]+|\?crew=[^&]+)?$/, { timeout: 60_000 });
+  await n.page.waitForURL(/\/crew$/,{ timeout: 60_000 });
   const post = n.page.getByTestId("crew-post").first();
   await expect(post.getByTestId("crew-post-text")).toHaveText("Lavée, prête pour dimanche 🔥", { timeout: 30_000 });
   await expect(post.getByTestId("crew-post-photo-count")).toHaveText("1 / 2");
@@ -164,7 +163,7 @@ test("appli R5c1 : publier des photos, flamme, commentaire, sondage, accès reti
     await k.page.getByText("Dans 3 jours", { exact: true }).click();
     await shot(k.page, `04-sondage-publier-${theme}`);
     await k.page.getByTestId("crew-publish-send").click();
-    await k.page.waitForURL(/\/crew(\/[^/?]+|\?crew=[^&]+)?$/, { timeout: 60_000 });
+    await k.page.waitForURL(/\/crew$/,{ timeout: 60_000 });
     const poll = k.page.getByTestId("crew-post").filter({ hasText: question });
     await expect(poll.getByTestId("crew-poll")).toBeVisible({ timeout: 30_000 });
     await poll.getByTestId("crew-poll-option").first().click();
