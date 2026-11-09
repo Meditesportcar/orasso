@@ -570,6 +570,25 @@ describe("aucun argent", () => {
   });
 });
 
+describe("export des données", () => {
+  it("l'export du passionné contient ses partenariats (pro, texte, dates), jamais ceux d'un autre", async () => {
+    await partner(kenji);
+    await partner(marc);
+    const res = await call(kenji, "GET", "/me/export");
+    expect(res.status).toBe(200);
+    expect(res.json.partnerships).toHaveLength(1);
+    expect(res.json.partnerships[0]).toMatchObject({ pro: "Wrap 66", status: "active", message: "Covering offert" });
+    expect(Object.keys(res.json.partnerships[0]).sort()).toEqual([
+      "endedAt",
+      "message",
+      "pro",
+      "proposedAt",
+      "respondedAt",
+      "status",
+    ]);
+  });
+});
+
 describe("migration", () => {
   it("un véhicule supprimé laisse le partenariat (sans voiture) ; une fiche pro supprimée emporte ses partenariats", async () => {
     const mine = await car(kenji);

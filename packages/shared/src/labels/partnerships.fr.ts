@@ -13,7 +13,6 @@ export const partnershipLabels = {
   messageLabel: "Ton message",
   messageHint: "court",
   messagePlaceholder: "Covering offert, on te suit sur la saison",
-  messageCount: (n: number) => `${n} / ${PARTNERSHIP_MESSAGE_MAX}`,
   vehicleLabel: "Un véhicule concerné",
   vehicleOptional: "facultatif",
   noVehicle: "Aucun véhicule précis",

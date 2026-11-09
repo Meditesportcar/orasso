@@ -100,9 +100,6 @@ export function ProposeSheet({
             multiline
             testID="partnership-message"
           />
-          <Text variant="caption" color={c.inkMuted} style={styles.count}>
-            {L.messageCount(message.length)}
-          </Text>
           <Text variant="label" color={c.inkMuted}>
             {`${L.vehicleLabel} · ${L.vehicleOptional}`.toUpperCase()}
           </Text>
@@ -172,7 +169,6 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: space2 },
   headText: { flex: 1, gap: 2 },
   title: { fontSize: 18, lineHeight: 20 },
-  count: { textAlign: "right", marginTop: -space2 },
   options: { gap: space2 },
   option: {
     flexDirection: "row",

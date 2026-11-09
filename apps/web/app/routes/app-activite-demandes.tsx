@@ -458,7 +458,7 @@ function PartnershipCard({ r, busy }: { r: RequestItem; busy: boolean }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <li className="s-person" data-testid="request-partnership">
+    <li className="s-person ptn-request" data-testid="request-partnership">
       <PersonAvatar url={imageUrl} pseudo={name} size={44} />
       <div className="s-person__main">
         {slug ? (
