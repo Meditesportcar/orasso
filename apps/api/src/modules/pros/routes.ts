@@ -1,4 +1,6 @@
 import {
+  PARTNERS_ON_FICHE,
+  pageQuery,
   proCreateSchema,
   proDiscountsSchema,
   proListQuery,
@@ -17,6 +19,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { partnershipsService } from "../partnerships/service";
 import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
 import { prosService } from "./service";
@@ -46,7 +49,21 @@ export const prosRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     const view = await prosService.getPublic(c.req.param("slug"), viewer);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
-    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "pro", view.id) });
+    // Lot R7m1 : « Ses partenaires » (passionnés), vus selon le regard ; `partners` reste les organisateurs partenaires.
+    const partners = await partnershipsService.partnersOfPro(view.id, viewer, { limit: PARTNERS_ON_FICHE });
+    return c.json({
+      ...view,
+      stories: await storiesSummaryFor(viewer, "pro", view.id),
+      memberPartners: partners.items,
+      memberPartnersTotal: partners.total,
+    });
+  })
+  // Lot R7m1, tour 2 : « Voir tout » de « Ses partenaires », page par page (connecté seulement, mêmes regards que la fiche).
+  .get("/pros/by-slug/:slug/partners", async (c) => {
+    const viewer = await requireUser(c);
+    const q = query(c, pageQuery);
+    const view = await prosService.getPublic(c.req.param("slug"), viewer);
+    return c.json(await partnershipsService.partnersOfPro(view.id, viewer, q), 200, { "cache-control": "no-store" });
   })
   .post("/pros/by-slug/:slug/track", async (c) => {
     const viewer = await optionalUser(c);

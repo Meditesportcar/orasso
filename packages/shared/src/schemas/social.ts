@@ -7,6 +7,7 @@ import type { ProfileSocials } from "../rules/socials";
 import type { ProfileAudience } from "../rules/visibility";
 import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";
+import type { PartnerLogo, PartnershipOffer, VehiclePartner } from "./partnerships";
 import type { PassportStamp } from "./passport";
 import type { PublicProfile } from "./profile";
 import type { StoriesSummary } from "./stories";
@@ -55,6 +56,8 @@ export type PersonCard = {
 
 /** Fiche d'un véhicule d'un autre (`GET /vehicles/:id`) : complète ou réduite, avec son propriétaire. */
 export type OtherVehicle = (VehiclePublic | VehiclePrivate) & {
+  /** Lot R7m1 : « Partenaire : … », seulement quand la fiche complète est visible. */
+  partner?: VehiclePartner | null;
   /** Vrai si la fiche complète est consultable (compte public ou abonné accepté). */
   detailed: boolean;
   owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
@@ -95,6 +98,8 @@ export type ProfileVehicle = {
   /** Lot R5b (« Sa voiture ») : l'année et les catégories, seulement quand la fiche complète est consultable. */
   year: number | null;
   categories: string[];
+  /** Lot R7m1 : « Partenaire : … » de la voiture (un pro à partenariat actif), seulement quand la fiche complète est visible. */
+  partner?: VehiclePartner | null;
 };
 
 export type ProfileEvent = {
@@ -152,6 +157,13 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   seenAt: { events: number; stamps: PassportStamp[] } | null;
   /** Lot R7f1 : ses stories visibles pour le regard ; `{ count: 0, hasUnseen: false, ring: null }` sans rien révéler. */
   stories: StoriesSummary;
+  /**
+   * Lot R7m1 : ses partenaires (pros à partenariat actif), vide pour un compte privé que je ne suis pas ; `partnershipOffer`
+   * pour un pro vérifié qui regarde : le bouton « Proposer un partenariat », ou la proposition déjà envoyée. Absents des
+   * aperçus de son propre profil.
+   */
+  partners?: PartnerLogo[];
+  partnershipOffer?: PartnershipOffer | null;
 };
 
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */
