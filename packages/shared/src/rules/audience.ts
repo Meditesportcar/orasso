@@ -87,6 +87,18 @@ export function isStoryLive(
   return story.status === "ready" && story.deletedAt === null && story.expiresAt.getTime() > now.getTime();
 }
 
+/**
+ * Une story peut-elle être publiée (`status ready`) ? Photo : seulement avec une décision de plaque (`blurred` ou
+ * `none_confirmed`). Vidéo : sans décision (`not_required`, décision de Damien du 09/11 : pas de floutage vidéo).
+ */
+export function isStoryPublishable(story: {
+  mediaKind: "photo" | "video";
+  plateState: "blurred" | "none_confirmed" | "not_required" | null;
+}): boolean {
+  if (story.mediaKind === "video") return story.plateState === "not_required" || story.plateState === null;
+  return story.plateState === "blurred" || story.plateState === "none_confirmed";
+}
+
 // --- Barre -------------------------------------------------------------------------------------------------------
 
 /** Ce que `storyRing` lit d'une story déjà jugée visible pour le regard. */

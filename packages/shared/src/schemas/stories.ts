@@ -14,8 +14,11 @@ export type StoryMediaKind = (typeof storyMediaKinds)[number];
 export const storyStatuses = ["processing", "ready", "failed"] as const;
 export type StoryStatus = (typeof storyStatuses)[number];
 
-/** Décision de plaque : `blurred` (floutage fait) ou `none_confirmed` (l'auteur a dit « aucune plaque visible »). */
-export const storyPlateStates = ["blurred", "none_confirmed"] as const;
+/**
+ * Décision de plaque d'une photo : `blurred` (floutage fait) ou `none_confirmed` (l'auteur a dit « aucune plaque
+ * visible »). Décision de Damien (09/11) : pas de floutage pour les vidéos, qui portent `not_required`.
+ */
+export const storyPlateStates = ["blurred", "none_confirmed", "not_required"] as const;
 export type StoryPlateState = (typeof storyPlateStates)[number];
 
 /** Contenu lié à une story (carte touchable). R7f1 ne résout que `event` et `vehicle` ; le reste vient avec R7f4. */
@@ -90,7 +93,7 @@ export type StoryCreated = {
   status: StoryStatus;
   expiresAt: string;
   /** Identifications ou liens écartés par les règles (compte privé, hors public…), pour que l'appli le dise. */
-  skipped: { kind: StoryTagKind | "event"; id: string; reason: string }[];
+  skipped: { kind: StoryTagKind | "event" | "vehicle"; id: string; reason: string }[];
 };
 
 export type StoryTagView = { kind: StoryTagKind; id: string; name: string; slug: string | null; avatarUrl: string | null };

@@ -7,6 +7,7 @@ import {
   canSeeStory,
   canTag,
   isStoryLive,
+  isStoryPublishable,
   STORY_TTL_MS,
   storyBarOrder,
   storyDenial,
@@ -113,6 +114,17 @@ describe("canTag", () => {
       expect(canTag(priv, { audience: "followers" }, { kind, canSee: true, available: true })).toBe("private_account");
       expect(canTag(pub, { audience: "crew" }, { kind, canSee: true, available: true })).toBe("crew_story");
     }
+  });
+});
+
+describe("isStoryPublishable", () => {
+  it("photo : décision de plaque obligatoire ; vidéo : sans décision", () => {
+    expect(isStoryPublishable({ mediaKind: "photo", plateState: null })).toBe(false);
+    expect(isStoryPublishable({ mediaKind: "photo", plateState: "not_required" })).toBe(false);
+    expect(isStoryPublishable({ mediaKind: "photo", plateState: "blurred" })).toBe(true);
+    expect(isStoryPublishable({ mediaKind: "photo", plateState: "none_confirmed" })).toBe(true);
+    expect(isStoryPublishable({ mediaKind: "video", plateState: null })).toBe(true);
+    expect(isStoryPublishable({ mediaKind: "video", plateState: "not_required" })).toBe(true);
   });
 });
 

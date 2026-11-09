@@ -1,5 +1,5 @@
 {
-  "id": "ae2ab510-1c22-416e-b001-6042dbea3168",
+  "id": "2a369ec5-01e6-4863-9f48-542115d1b15a",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -14949,6 +14949,10 @@
           "name": "stories_plate_check",
           "value": "\"stories\".\"status\" <> 'ready' or \"stories\".\"plate_state\" is not null"
         },
+        "stories_plate_photo_check": {
+          "name": "stories_plate_photo_check",
+          "value": "\"stories\".\"media_kind\" = 'video' or \"stories\".\"plate_state\" is distinct from 'not_required'"
+        },
         "stories_caption_check": {
           "name": "stories_caption_check",
           "value": "\"stories\".\"caption\" is null or char_length(\"stories\".\"caption\") <= 200"
@@ -18907,7 +18911,8 @@
       "schema": "public",
       "values": [
         "blurred",
-        "none_confirmed"
+        "none_confirmed",
+        "not_required"
       ]
     },
     "public.story_status": {

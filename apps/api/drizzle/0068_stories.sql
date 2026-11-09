@@ -2,7 +2,7 @@ CREATE TYPE "public"."story_audience" AS ENUM('followers', 'crew', 'public');-->
 CREATE TYPE "public"."story_link" AS ENUM('event', 'vehicle', 'feed_post', 'memory', 'vote_result');--> statement-breakpoint
 CREATE TYPE "public"."story_media" AS ENUM('photo', 'video');--> statement-breakpoint
 CREATE TYPE "public"."story_persona" AS ENUM('fan', 'organizer', 'pro', 'provider', 'media');--> statement-breakpoint
-CREATE TYPE "public"."story_plate" AS ENUM('blurred', 'none_confirmed');--> statement-breakpoint
+CREATE TYPE "public"."story_plate" AS ENUM('blurred', 'none_confirmed', 'not_required');--> statement-breakpoint
 CREATE TYPE "public"."story_status" AS ENUM('processing', 'ready', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."story_tag_target" AS ENUM('user', 'structure', 'pro');--> statement-breakpoint
 ALTER TYPE "public"."upload_purpose" ADD VALUE 'story';--> statement-breakpoint
@@ -42,6 +42,7 @@ CREATE TABLE "stories" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "stories_crew_check" CHECK (("stories"."audience" = 'crew') = ("stories"."crew_id" is not null)),
 	CONSTRAINT "stories_plate_check" CHECK ("stories"."status" <> 'ready' or "stories"."plate_state" is not null),
+	CONSTRAINT "stories_plate_photo_check" CHECK ("stories"."media_kind" = 'video' or "stories"."plate_state" is distinct from 'not_required'),
 	CONSTRAINT "stories_caption_check" CHECK ("stories"."caption" is null or char_length("stories"."caption") <= 200),
 	CONSTRAINT "stories_place_check" CHECK ("stories"."place_label" is null or char_length("stories"."place_label") <= 80)
 );
