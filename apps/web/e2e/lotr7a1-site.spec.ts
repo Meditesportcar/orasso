@@ -162,9 +162,14 @@ test("Crew : avec un crew (onglet du lot R7b2), sans crew", async ({ browser }) 
   await loginInBrowser(sp, "sarah@orasso.local", undefined, "/app/crew");
   await sp.goto("/app/crew");
   await expect(sp.getByTestId("crew-tab-none")).toBeVisible();
-    await expect(sp.getByTestId("crew-tab-join")).toContainText("Rejoindre un crew");
+  await expect(sp.getByTestId("crew-tab-join")).toContainText("Rejoindre un crew");
   await expect(sp.getByTestId("crew-tab-create")).toContainText("Créer un crew");
   await shot(sp, "crew-sarah-390");
+  // Lot R7b2 : « Rejoindre un crew » envoie la recherche à l'écran qui rejoint (et « Créer un crew » à sa page).
+  await expect(sp.getByTestId("crew-tab-create")).toHaveAttribute("href", "/app/crews/nouveau");
+  await sp.getByTestId("crew-tab-q").fill("Rou");
+  await sp.getByTestId("crew-tab-join").click();
+  await sp.waitForURL(/\/app\/crews\/rejoindre\?q=Rou/);
   await s.close();
 });
 

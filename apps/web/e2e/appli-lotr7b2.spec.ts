@@ -1,6 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, SEED_PASSWORD, unique } from "./helpers";
+import { type R5Crew, r5Crew } from "./lotr5c2-setup";
+import { postText, removeMember } from "./lotr6a-setup";
 import { RELAIS } from "./relais";
 
 // Lot R7b2 (D38), côté appli (version web compilée de recette) : l'onglet Crew. Sélecteur avec deux crews (Théo : « Roussillon
@@ -20,12 +22,16 @@ async function afterOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function open(browser: Browser, email: string, theme = "beton") {
-  const ctx = await browser.newContext({ viewport: { width: 384, height: 860 }, baseURL: APP });
-  await ctx.addInitScript((t) => {
-    localStorage.setItem("orasso.onboarded", "1");
-    localStorage.setItem("orasso.theme", t);
-  }, theme);
+async function open(browser: Browser, email: string, theme = "beton", size: { height?: number; scale?: number } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 384, height: size.height ?? 860 }, baseURL: APP });
+  await ctx.addInitScript(
+    ([t, scale]) => {
+      localStorage.setItem("orasso.onboarded", "1");
+      localStorage.setItem("orasso.theme", t);
+      if (Number(scale) > 1) localStorage.setItem("orasso.recette.echellePolice", String(scale));
+    },
+    [theme, size.scale ?? 1] as const,
+  );
   const page = await ctx.newPage();
   await page.goto("/auth");
   await afterOpening(page);
@@ -66,7 +72,9 @@ test("sélecteur : deux crews, le dernier ouvert revient", async ({ browser }) =
   await ctx.close();
 });
 
-test("un crew : Fil · Sorties · Membres · Spots, Discussion, voitures dans la fiche d'un membre", async ({ browser }) => {
+test("un crew : Fil · Sorties · Membres · Spots, Discussion, voitures dans la fiche d'un membre", async ({
+  browser,
+}) => {
   test.setTimeout(180_000);
   const { ctx, page } = await open(browser, "kenji@orasso.local");
   await go(page, "/crew");
@@ -143,3 +151,180 @@ test("sans crew : rejoindre ou créer ; vitrine d'un crew sans fil ni sorties ni
   expect(seen.filter((u) => /\/crews\/[^/]+\/(photos|posts|outings)/.test(u))).toEqual([]);
   await ctx.close();
 });
+
+/** Un crew de recette dont le chef en a un second (le sélecteur), et un fil bien plus long que l'écran. */
+async function longFeedCrews(posts = 10) {
+  const crew = await r5Crew(unique());
+  const tag = crew.slug.slice(-6);
+  const created = await apiCall<{ id: string; slug: string }>(crew.chef.cookie, "POST", "/crews", {
+    name: `Second ${tag}`,
+    description: "Le second crew du chef, pour le sélecteur.",
+    department: "66",
+  });
+  expect(created.status).toBe(201);
+  for (let i = 1; i <= posts; i += 1) {
+    await postText(
+      crew,
+      crew.chef,
+      `Publication n° ${i} : rendez-vous au parking de la cave coopérative de Thuir à 9 h.`,
+    );
+  }
+  return { crew, second: { ...created.data, name: `Second ${tag}` } };
+}
+
+/** La zone qui défile de l'onglet Crew : tout en haut (0) ou tout en bas ("bas"). */
+async function scrollTab(page: Page, to: 0 | "bas") {
+  await page.getByTestId("crew-tab").evaluate((el, y) => {
+    el.scrollTop = y === "bas" ? el.scrollHeight : 0;
+  }, to);
+  await page.waitForTimeout(400);
+}
+
+/** La feuille est dans la zone des feuilles de l'écran, pas dans la zone qui défile (où elle se caserait en bas du contenu). */
+async function expectOutsideScroller(page: Page, testId: string) {
+  await expect(page.getByTestId(testId)).toBeVisible();
+  await expect(page.locator(`[data-testid="crew-tab"] [data-testid="${testId}"]`)).toHaveCount(0);
+}
+
+/** Sur un fil long, tout en haut : « Mes crews », l'invitation et la fiche d'un membre couvrent l'écran (Overlay). */
+async function openSheets(page: Page, crew: R5Crew, suffix: string, capture = false) {
+  await expect(page.getByTestId("crew-post").first()).toBeVisible({ timeout: 30_000 });
+  const tall = await page.getByTestId("crew-tab").evaluate((el) => el.scrollHeight / el.clientHeight);
+  expect(tall, "le fil est bien plus long que l'écran").toBeGreaterThan(1.8);
+  await scrollTab(page, 0);
+  await page.getByTestId("crew-selector").click();
+  await expect(page.getByTestId("crew-selector-list")).toBeInViewport({ ratio: 0.9 });
+  await expectOutsideScroller(page, "crew-selector-list");
+  if (capture) await shot(page, `selecteur-${suffix}`);
+  await page.getByTestId("crew-choice-more").waitFor();
+  await page.mouse.click(190, 40);
+  await expect(page.getByTestId("crew-selector-list")).toHaveCount(0);
+  // L'invitation (le chef).
+  await page.getByTestId("crew-invite").click();
+  await expect(page.getByTestId("crew-invite-sheet")).toBeInViewport({ ratio: 0.9 });
+  await expectOutsideScroller(page, "crew-invite-sheet");
+  if (capture) await shot(page, `invitation-${suffix}`);
+  await page.mouse.click(190, 40);
+  await expect(page.getByTestId("crew-invite-sheet")).toHaveCount(0);
+  // La fiche d'un membre.
+  await page.getByTestId("crew-tab-members").click();
+  await scrollTab(page, 0);
+  await page.getByTestId("crew-member").first().click();
+  await expect(page.getByTestId("crew-member-sheet")).toBeInViewport({ ratio: 0.9 });
+  await expect(page.getByTestId("crew-member-profile")).toBeInViewport();
+  await expectOutsideScroller(page, "crew-member-sheet");
+  if (capture) await shot(page, `fiche-membre-${suffix}`);
+  await page.mouse.click(190, 40);
+  await expect(page.getByTestId("crew-member-sheet")).toHaveCount(0);
+  void crew;
+}
+
+test("tour 2 : les feuilles couvrent l'écran, même sur un fil long", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { crew } = await longFeedCrews();
+  const { ctx, page } = await open(browser, crew.chef.email, "beton", { height: 560 });
+  await go(page, `/crew?crew=${crew.slug}`);
+  await openSheets(page, crew, "beton-384-x1");
+  await ctx.close();
+});
+
+/** Navigation interne, sans recharger l'appli : l'historique du navigateur, comme un lien ouvert depuis l'appli. */
+async function navigateInApp(page: Page, path: string) {
+  await page.evaluate((p) => {
+    window.history.pushState({}, "", p);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+  await page.waitForTimeout(1_200);
+}
+
+test("tour 2 : un lien reçu alors que l'onglet est déjà monté l'emporte, et un même lien relu agit encore", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { crew, second } = await longFeedCrews(1);
+  const { ctx, page } = await open(browser, crew.chef.email);
+  await go(page, `/crew?crew=${second.slug}`);
+  const selector = page.getByTestId("crew-selector");
+  await expect(selector).toContainText(second.name, { timeout: 30_000 });
+  await page.evaluate(() => {
+    (window as unknown as { __sansRechargement: boolean }).__sansRechargement = true;
+  });
+  // Notification du crew A pendant que B est affiché : A. Les paramètres sont retirés.
+  await navigateInApp(page, `/crew?crew=${crew.slug}`);
+  await expect(selector).toContainText(crew.name, { timeout: 15_000 });
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+  // Choix manuel de B, puis le même lien relu : A de nouveau (il l'emporte sur le choix manuel).
+  await selector.click();
+  await page.getByTestId(`crew-choice-${second.slug}`).click();
+  await expect(selector).toContainText(second.name, { timeout: 15_000 });
+  await navigateInApp(page, `/crew?crew=${crew.slug}`);
+  await expect(selector).toContainText(crew.name, { timeout: 15_000 });
+  // Un onglet demandé alors que le crew est déjà affiché.
+  await navigateInApp(page, "/crew?onglet=sorties");
+  await expect(page.getByTestId("crew-outings")).toBeVisible({ timeout: 15_000 });
+  await navigateInApp(page, "/crew?onglet=membres");
+  await expect(page.getByTestId("crew-members")).toBeVisible({ timeout: 15_000 });
+  await navigateInApp(page, `/crew?crew=${second.slug}&onglet=sorties`);
+  await expect(selector).toContainText(second.name, { timeout: 15_000 });
+  await expect(page.getByTestId("crew-outings")).toBeVisible();
+  // Un crew créé à l'instant (la liste en mémoire ne le connaît pas encore) : le nouveau s'affiche.
+  const made = await apiCall<{ id: string; slug: string }>(crew.chef.cookie, "POST", "/crews", {
+    name: `Neuf ${crew.slug.slice(-6)}`,
+    description: "Créé pendant que l'onglet est ouvert.",
+    department: "66",
+  });
+  expect(made.status).toBe(201);
+  await navigateInApp(page, `/crew?crew=${made.data.slug}`);
+  await expect(selector).toContainText(`Neuf ${crew.slug.slice(-6)}`, { timeout: 20_000 });
+  // Le crew d'un lien qui n'est pas le mien : sa vitrine, pas un autre de mes crews en silence.
+  await navigateInApp(page, "/crew?crew=roussillon-drift");
+  await expect(page.getByTestId("crew-vitrine")).toBeVisible({ timeout: 20_000 });
+  expect(new URL(page.url()).pathname).toBe("/crew/roussillon-drift");
+  expect(await page.evaluate(() => (window as unknown as { __sansRechargement?: boolean }).__sansRechargement)).toBe(
+    true,
+  );
+  await ctx.close();
+});
+
+test("tour 2 : signaler son crew depuis l'espace privé, sauf le chef", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const crew: R5Crew = await r5Crew(unique());
+  const lea = await open(browser, crew.lea.email);
+  await go(lea.page, `/crew?crew=${crew.slug}`);
+  await expect(lea.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
+  await expect(lea.page.getByTestId("report-open-crew")).toBeVisible();
+  await lea.ctx.close();
+  const chef = await open(browser, crew.chef.email);
+  await go(chef.page, `/crew?crew=${crew.slug}`);
+  await expect(chef.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
+  await expect(chef.page.getByTestId("report-open-crew")).toHaveCount(0);
+  await chef.ctx.close();
+});
+
+for (const retour of ["le bouton Réessayer", "le retour du réseau"] as const) {
+  test(`tour 2 : retiré du crew puis panne, un échec avec reprise (${retour})`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    const crew: R5Crew = await r5Crew(unique());
+    const { ctx, page } = await open(browser, crew.lea.email);
+    await go(page, `/crew?crew=${crew.slug}`);
+    await expect(page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
+    // La liste de mes crews ne répond plus, puis la cheffe retire Léa : le crew n'est plus le sien.
+    await page.route("**/api/me/crews", (route) => route.abort("failed"));
+    await removeMember(crew, crew.lea);
+    const failed = page.getByTestId("crew-tab").getByTestId("load-error");
+    await expect(failed).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText("Chargement…")).toHaveCount(0);
+    await shot(page, `perte-puis-panne-${retour.includes("bouton") ? "bouton" : "reseau"}`);
+    if (retour.includes("bouton")) {
+      await page.unroute("**/api/me/crews");
+      await failed.getByRole("button", { name: "Réessayer" }).click();
+    } else {
+      await ctx.setOffline(true);
+      await page.unroute("**/api/me/crews");
+      await page.waitForTimeout(500);
+      await ctx.setOffline(false);
+    }
+    await expect(page.getByTestId("crew-tab-none")).toBeVisible({ timeout: 25_000 });
+    await ctx.close();
+  });
+}

@@ -265,6 +265,7 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   await expect(k.page.getByTestId("crew-tabs")).toBeVisible({ timeout: 30_000 });
   await expect(k.page.getByTestId("crew-tab-none")).toHaveCount(0);
   await shot(k.page, "crew-kenji");
+  await k.ctx.close();
 
   // Sarah (sans crew) : « Rejoindre un crew » et « Créer un crew », un seul bouton principal.
   const s = await open(browser);
