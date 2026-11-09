@@ -3757,3 +3757,19 @@ Lot sensible (voix, points, données existantes). Migration `0072_event-votes` (
 - **Vitrine ouverte depuis l'onglet (appli)** : `router.push` au lieu de `router.replace` (le retour Android ramène à l'onglet au lieu de fermer l'appli), et seulement si l'onglet est encore monté et au premier plan (`navigation.isFocused()`) quand la relecture asynchrone de mes crews se termine. Pas de recette dédiée (cas de course) ; `appli-lotr7b2` (lien vers un crew qui n'est pas le mien) reste verte.
 - **« Chargement… » sans fin** (`CrewSpace`) : crew introuvable (404) puis panne en relisant mes crews : `LoadError` avec « Réessayer » (`retryLost`). Couvert par les recettes « retiré du crew puis panne » du tour 2.
 - **Recette `appli-lotr5c1`** : les deux attentes d'adresse sont `/crew` exactement (le lien est consommé), plus l'expression large.
+
+## Lot R7l2 : les votes à thème côté organisateur et staff, appli et site (10/11/2026)
+
+Lot sensible (droits de l'organisateur). Les règles restent dans l'API (R7l1) ; les écrans n'en cachent aucune. Une seule route ajoutée : `POST /events/:id/votes/all-categories`.
+
+- **Étape de l'éditeur.** « Votes du public » est la 9e étape de `eventWizardSteps`, entre « Règlement » et « Affiche ». Un index d'étape mémorisé avec l'ancien nombre d'étapes (8) est ignoré par `storedStepIndex` (le brouillon et la récurrence s'ouvrent à la première étape), testé dans `eventWizard.test.ts`. L'étape n'est pas bloquante pour publier.
+- **Formulaire.** « Nouveau vote » est un écran de flux dans l'appli (`vote-form`) et un panneau sous la liste sur le site. Titre libre, 9 modèles, candidats (tous les véhicules entrés, une origine ou des marques, une zone du plateau, à la main), ouverture (dès les premières entrées, heure fixée, je le lance moi-même), durée. Un vote à la main ne s'ouvre jamais « au premier pointage ».
+- **« Toutes catégories ».** Présent d'office, retirable, remis par « Ajouter » avec son modèle (`POST …/votes/all-categories`, idempotent, testé).
+- **Points.** Le podium « 15 / 10 / 5 » est affiché en lecture, écrit dans les libellés partagés : aucune route publique ne sert les réglages admin.
+- **Écran « Votes ».** Chaque vote porte son état (ouvert avec voix et fermeture, prévu, prêt à lancer, clos). « Lancer le vote » reste visible mais inactif avec la raison (moins de deux candidats entrés, événement non publié) ; un seul bouton principal par écran (le premier vote prêt). « Lancer » et « Clore maintenant » passent par une confirmation. Temps réel : `theme_votes.changed`, filtré par `voteId`.
+- **Candidats.** Ajout par recherche parmi les retenues (route de tri des candidatures, statut retenu ; une non entrée est marquée « pas encore entrée ») ou, dans l'appli, par scan du QR (`VoteScanSheet`, scanner existant, `POST …/candidates { qr }`). Refus `not_checked_in` affiché « Pas encore entrée : scanne-la à l'entrée d'abord ». Pas de scan sur le site (dit à l'écran).
+- **Staff : lecture seule partout.** D38 : la liste et les états, sans Lancer, Clore, ni candidats ; boutons absents côté écran et 403 côté API (testé en recette). Le scan de candidats est donc réservé à l'organisateur. Si Damien veut le staff au scan, c'est une ligne à changer dans l'API.
+- **Pas de « Prolonger »** : on clôt, ou on lance un autre vote.
+- **Liens « Votes »** : fiche de l'événement, Direct, accueil staff (appli) ; `orga-evenement` et `orga-jour-j` (site).
+
+À revoir avec Damien : aucune route ne sert les points du podium aux organisateurs ; si l'admin les change, l'affichage « 15 / 10 / 5 » doit suivre (aujourd'hui une constante partagée).
