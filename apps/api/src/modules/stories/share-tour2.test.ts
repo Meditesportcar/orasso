@@ -22,10 +22,11 @@ import { db, pool } from "../../db/client";
 import { profiles, sanctions, stories, storyTags, structures } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { type Tx, withTx } from "../../lib/tx";
+import { liveStoriesOf } from "../messaging/core";
 import { recomputeSuspension } from "../moderation/suspension";
 import { organizerStoryOf } from "./live";
 import { softDeleteWithCopies } from "./purge";
-import { dropCopiesOfTag, retireCopiesOfPrivateAccount } from "./share";
+import { dropCopiesOfTag, retireCopiesOfPrivateAccount, shareTestHooks } from "./share";
 
 afterAll(async () => {
   await pool.end();
@@ -72,7 +73,7 @@ async function photo() {
     .toBuffer();
 }
 
-async function ok(u: TestUser, over: Record<string, unknown> = {}) {
+async function publish(u: TestUser, over: Record<string, unknown> = {}) {
   const form = new FormData();
   form.append("purpose", "story");
   form.append("file", new File([new Uint8Array(await photo())], "photo.jpg", { type: "image/jpeg" }));
@@ -83,12 +84,16 @@ async function ok(u: TestUser, over: Record<string, unknown> = {}) {
   });
   expect(up.status).toBe(201);
   const key = ((await up.json()) as { key: string }).key;
-  const res = await req(u, "POST", "/me/stories", {
+  return req(u, "POST", "/me/stories", {
     uploadKey: key,
     noPlateConfirmed: true,
     audience: "public",
     ...over,
   });
+}
+
+async function ok(u: TestUser, over: Record<string, unknown> = {}) {
+  const res = await publish(u, over);
   expect(res.status, res.text).toBe(201);
   return res.json as { id: string };
 }
@@ -112,39 +117,47 @@ const liveCopies = (storyId: string) =>
     .from(stories)
     .where(and(eq(stories.sharedFromStoryId, storyId), isNull(stories.deletedAt)));
 
-/** Une sanction posée et recalculée comme la modération le fait (dans la transaction de la décision). */
-async function sanction(u: TestUser, kind: "suspension_7d" | "ban") {
-  await withTx(async (tx, after) => {
-    await tx.insert(sanctions).values({
-      userId: u.id,
-      kind,
-      reason: "spam",
-      reportIds: [],
-      startsAt: clock.now,
-      endsAt: kind === "ban" ? null : new Date(clock.now.getTime() + 7 * 24 * HOUR),
-      auto: true,
-      createdAt: clock.now,
-      updatedAt: clock.now,
-    });
-    await recomputeSuspension(tx, u.id, after);
+/** Une sanction posée et recalculée comme la modération le fait, dans la transaction donnée. */
+async function sanctionIn(tx: Tx, after: (cb: () => unknown) => void, u: TestUser, kind: "suspension_7d" | "ban") {
+  await tx.insert(sanctions).values({
+    userId: u.id,
+    kind,
+    reason: "spam",
+    reportIds: [],
+    startsAt: clock.now,
+    endsAt: kind === "ban" ? null : new Date(clock.now.getTime() + 7 * 24 * HOUR),
+    auto: true,
+    createdAt: clock.now,
+    updatedAt: clock.now,
   });
+  await recomputeSuspension(tx, u.id, after);
 }
 
+/** Une sanction posée et recalculée comme la modération le fait (dans la transaction de la décision). */
+const sanction = (u: TestUser, kind: "suspension_7d" | "ban") => withTx((tx, after) => sanctionIn(tx, after, u, kind));
+
 describe("copie d'un auteur indisponible", () => {
-  it("suspension après repartage : la copie tombe (cascade) et plus rien ne la sert", async () => {
+  it("suspension après repartage : la copie est masquée (pas supprimée), et revient quand la suspension est levée", async () => {
     const w = await world();
     const s = await ok(w.kenji, tagStructure(w.structure.id));
     const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
     expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(1);
     await sanction(w.kenji, "suspension_7d");
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
+    // Masquée partout, mais toujours là : une suspension levée avant l'expiration ne fait rien perdre à l'organisateur.
+    const [kept] = await db.select().from(stories).where(eq(stories.id, copy.id));
+    expect(kept?.deletedAt).toBeNull();
     expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
     expect((await req(w.stranger, "GET", `/stories/${copy.id}/thumb`)).status).toBe(404);
     expect((await req(w.owner, "GET", "/me/stories")).json.stories).toHaveLength(0);
+    expect(await organizerStoryOf(w.structure.id, clock.now)).toBeNull();
+    // Levée par un modérateur : l'auteur redevient actif, la copie réapparaît.
+    await db.update(sanctions).set({ liftedAt: clock.now }).where(eq(sanctions.userId, w.kenji.id));
+    await withTx((tx, after) => recomputeSuspension(tx, w.kenji.id, after));
+    expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(1);
+    expect((await req(w.stranger, "GET", `/stories/${copy.id}/thumb`)).status).toBe(200);
   });
 
-  it("bannissement après repartage : même chose", async () => {
+  it("bannissement après repartage : la copie est supprimée et plus rien ne la sert", async () => {
     const w = await world();
     const s = await ok(w.kenji, tagStructure(w.structure.id));
     const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
@@ -249,9 +262,13 @@ describe("crédit d'une copie : l'identité publique de l'originale", () => {
 });
 
 describe("courses partage / retrait : jamais de copie qui survit", () => {
-  // Déterministe : la transaction de retrait fait son travail (compte, suppression ou identification verrouillés, copies
-  // cherchées : aucune), puis reste ouverte pendant que le partage démarre. Sans les verrous du partage, il insérerait sa
-  // copie sans attendre et elle survivrait au retrait ; avec eux, il attend la validation, revérifie ses droits et refuse.
+  // Deux ordres, synchronisés sur des faits et non sur des durées.
+  //  A. Le retrait fait son travail dans sa transaction (verrous pris, copies cherchées : aucune) et la laisse ouverte ;
+  //     le partage démarre, atteint ses verrous et s'y bloque (vu dans `pg_stat_activity`) ; le retrait se valide, le
+  //     partage revérifie ses droits et refuse.
+  //  B. Le partage prend ses verrous, relit ses droits, puis attend à un point d'attente injecté dans sa transaction
+  //     (`shareTestHooks.afterLocks`) ; le retrait démarre et s'y bloque (vu dans `pg_stat_activity`) ; le partage insère
+  //     sa copie et se valide, le retrait la trouve et la retire dans sa propre transaction.
   const deferred = () => {
     let resolve!: () => void;
     const promise = new Promise<void>((r) => {
@@ -259,12 +276,32 @@ describe("courses partage / retrait : jamais de copie qui survit", () => {
     });
     return { promise, resolve };
   };
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   type After = (cb: () => unknown) => void;
-  async function retireWhileSharing(
-    retire: (tx: Tx, after: After) => Promise<void>,
-    sharing: () => Promise<{ status: number }>,
-  ) {
+  type Retire = (tx: Tx, after: After) => Promise<void>;
+
+  /** Attend qu'une session de la base soit en attente d'un verrou ; faux si l'opération suivie s'est terminée avant. */
+  async function lockWaitSeen(watched: Promise<unknown>): Promise<boolean> {
+    let settled = false;
+    watched.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    const end = Date.now() + 15_000;
+    while (!settled && Date.now() < end) {
+      const r = await pool.query(
+        "select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+      );
+      if (r.rowCount) return true;
+      await new Promise((res) => setImmediate(res));
+    }
+    return false;
+  }
+
+  async function retireThenShare(retire: Retire, sharing: () => Promise<{ status: number }>) {
     const held = deferred();
     const gate = deferred();
     const done = withTx(async (tx, after) => {
@@ -272,81 +309,114 @@ describe("courses partage / retrait : jamais de copie qui survit", () => {
       held.resolve();
       await gate.promise;
     });
-    await held.promise;
-    const attempt = sharing();
-    await sleep(2500);
-    gate.resolve();
-    await done;
-    return attempt;
+    done.catch(() => held.resolve());
+    try {
+      await held.promise;
+      const attempt = sharing();
+      const blocked = await lockWaitSeen(attempt);
+      gate.resolve();
+      await done;
+      return { res: await attempt, blocked };
+    } finally {
+      gate.resolve();
+    }
   }
 
-  it("partage pendant le passage en privé de l'auteur", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const res = await retireWhileSharing(
-      async (tx, after) => {
+  async function shareThenRetire(retire: Retire, sharing: () => Promise<{ status: number }>) {
+    const reached = deferred();
+    const gate = deferred();
+    shareTestHooks.afterLocks = async () => {
+      reached.resolve();
+      await gate.promise;
+    };
+    try {
+      const attempt = sharing();
+      await Promise.race([
+        reached.promise,
+        attempt.then(() => {
+          throw new Error("le partage s'est terminé avant d'atteindre le point d'attente");
+        }),
+      ]);
+      const retiring = withTx(retire);
+      const blocked = await lockWaitSeen(retiring);
+      gate.resolve();
+      await retiring;
+      return { res: await attempt, blocked };
+    } finally {
+      shareTestHooks.afterLocks = undefined;
+      gate.resolve();
+    }
+  }
+
+  type Scenario = {
+    name: string;
+    retire: (w: Awaited<ReturnType<typeof world>>, storyId: string) => Retire;
+    /** Une suspension masque la copie (elle revient à la levée) ; les autres gestes la suppriment. */
+    masked?: boolean;
+  };
+  const scenarios: Scenario[] = [
+    {
+      name: "passage en privé de l'auteur",
+      retire: (w) => async (tx, after) => {
         await tx.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, w.kenji.id));
         await retireCopiesOfPrivateAccount(tx, after, w.kenji.id);
       },
-      () => share(w.owner, s.id, { asStructureId: w.structure.id }),
-    );
-    expect([403, 404]).toContain(res.status);
-    expect(await liveCopies(s.id)).toHaveLength(0);
-  });
-
-  it("partage pendant la suppression de l'originale", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const res = await retireWhileSharing(
-      async (tx) => {
-        await softDeleteWithCopies(tx, [s.id]);
+    },
+    {
+      name: "suppression de l'originale",
+      retire: (_w, id) => async (tx) => {
+        await softDeleteWithCopies(tx, [id]);
       },
-      () => share(w.owner, s.id, { asStructureId: w.structure.id }),
-    );
-    expect([403, 404]).toContain(res.status);
-    expect(await liveCopies(s.id)).toHaveLength(0);
-  });
-
-  it("partage pendant le retrait de l'identification", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const res = await retireWhileSharing(
-      async (tx) => {
+    },
+    {
+      name: "retrait de l'identification",
+      retire: (w, id) => async (tx) => {
         await tx
           .update(storyTags)
           .set({ removedAt: clock.now })
-          .where(and(eq(storyTags.storyId, s.id), isNull(storyTags.removedAt)));
-        await dropCopiesOfTag(tx, s.id, "structure", w.structure.id);
+          .where(and(eq(storyTags.storyId, id), isNull(storyTags.removedAt)));
+        await dropCopiesOfTag(tx, id, "structure", w.structure.id);
       },
-      () => share(w.owner, s.id, { asStructureId: w.structure.id }),
-    );
-    expect([403, 404]).toContain(res.status);
-    expect(await liveCopies(s.id)).toHaveLength(0);
-  });
+    },
+    { name: "bannissement de l'auteur", retire: (w) => (tx, after) => sanctionIn(tx, after, w.kenji, "ban") },
+    {
+      name: "suspension de l'auteur",
+      retire: (w) => (tx, after) => sanctionIn(tx, after, w.kenji, "suspension_7d"),
+      masked: true,
+    },
+  ];
 
-  it("partage pendant la suspension de l'auteur", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const res = await retireWhileSharing(
-      async (tx, after) => {
-        await tx.insert(sanctions).values({
-          userId: w.kenji.id,
-          kind: "suspension_7d",
-          reason: "spam",
-          reportIds: [],
-          startsAt: clock.now,
-          endsAt: new Date(clock.now.getTime() + 7 * 24 * HOUR),
-          auto: true,
-          createdAt: clock.now,
-          updatedAt: clock.now,
-        });
-        await recomputeSuspension(tx, w.kenji.id, after);
-      },
-      () => share(w.owner, s.id, { asStructureId: w.structure.id }),
-    );
-    expect([403, 404]).toContain(res.status);
-    expect(await liveCopies(s.id)).toHaveLength(0);
-  });
+  for (const sc of scenarios) {
+    it(`retrait d'abord (${sc.name}) : le partage se bloque, puis refuse ; aucune copie ne subsiste`, async () => {
+      const w = await world();
+      const s = await ok(w.kenji, tagStructure(w.structure.id));
+      const { res, blocked } = await retireThenShare(sc.retire(w, s.id), () =>
+        share(w.owner, s.id, { asStructureId: w.structure.id }),
+      );
+      expect(blocked, "le partage devait attendre les verrous du retrait").toBe(true);
+      expect([403, 404]).toContain(res.status);
+      expect(await liveCopies(s.id)).toHaveLength(0);
+      expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
+    });
+
+    it(`partage d'abord (${sc.name}) : le retrait se bloque, puis retire la copie`, async () => {
+      const w = await world();
+      const s = await ok(w.kenji, tagStructure(w.structure.id));
+      const { res, blocked } = await shareThenRetire(sc.retire(w, s.id), () =>
+        share(w.owner, s.id, { asStructureId: w.structure.id }),
+      );
+      expect(blocked, "le retrait devait attendre les verrous du partage").toBe(true);
+      expect(res.status).toBe(201);
+      if (sc.masked) {
+        // Copie conservée mais masquée : elle n'est servie nulle part.
+        expect(await liveCopies(s.id)).toHaveLength(1);
+        expect(await organizerStoryOf(w.structure.id, clock.now)).toBeNull();
+      } else {
+        expect(await liveCopies(s.id)).toHaveLength(0);
+      }
+      expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
+    });
+  }
 
   it("sans course, le partage réussit (les verrous ne bloquent rien d'autre)", async () => {
     const w = await world();
@@ -419,5 +489,67 @@ describe("compteur de mentions et aperçu", () => {
     });
     const out = await organizerStoryOf(w.structure.id, clock.now);
     expect(out).toEqual({ structureKey: storyAuthorKeyOf("structure", w.structure.id), posterUrl: null });
+  });
+});
+
+describe("tour 3 : second facteur à la publication, gestion le lendemain, droits du compteur, messages", () => {
+  it("publier au nom d'une structure sans second facteur : refusé, aucune story créée ; avec : accepté", async () => {
+    const w = await world();
+    const noFactor = await signUp("Sans2fa_66");
+    await addMember(w.structure.id, noFactor.id, "co_organizer");
+    const res = await publish(noFactor, { persona: "organizer", structureId: w.structure.id });
+    expect(res.status).toBe(403);
+    expect(res.json.error.code).toBe("two_factor_required");
+    expect(await db.select({ id: stories.id }).from(stories).where(eq(stories.authorId, noFactor.id))).toHaveLength(0);
+    // Une story personnelle ne demande rien de plus ; au nom de la structure, avec le second facteur, elle passe.
+    expect((await publish(noFactor)).status).toBe(201);
+    expect((await publish(w.co, { persona: "organizer", structureId: w.structure.id })).status).toBe(201);
+  });
+
+  it("le lendemain, une story non expirée publiée par un autre responsable reste visible et retirable", async () => {
+    const w = await world();
+    const mine = await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
+    clock.advance(14 * HOUR);
+    expect((await byAuthor(w.co, `s:${w.structure.id}`)).json.stories).toHaveLength(1);
+    const removed = await req(w.co, "DELETE", `/me/stories/${mine.id}`);
+    expect(removed.status, removed.text).toBe(204);
+    expect((await byAuthor(w.co, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
+  });
+
+  it("la page suivante des mentions reprend après la première, sans trou ni doublon", async () => {
+    const w = await world();
+    const ids: string[] = [];
+    for (let i = 0; i < 23; i++) {
+      ids.push((await ok(w.kenji, tagStructure(w.structure.id))).id);
+      clock.advance(1000);
+    }
+    const first = await req(w.owner, "GET", `/structures/${w.structure.id}/story-mentions`);
+    // Le compteur est le nombre de mentions que la liste donne, toutes pages comprises.
+    expect(first.json.count).toBe(23);
+    expect(first.json.items).toHaveLength(20);
+    expect(first.json.nextCursor).not.toBeNull();
+    const second = await req(
+      w.owner,
+      "GET",
+      `/structures/${w.structure.id}/story-mentions?cursor=${encodeURIComponent(first.json.nextCursor)}`,
+    );
+    expect(second.json.items).toHaveLength(3);
+    expect(second.json.nextCursor).toBeNull();
+    const all = [...first.json.items, ...second.json.items].map((m: { storyId: string }) => m.storyId);
+    expect(new Set(all).size).toBe(23);
+    expect(all).toEqual([...ids].reverse());
+  });
+
+  it("un message qui cite une copie masquée (auteur suspendu) ne la croit plus en ligne ; elle revient à la levée", async () => {
+    const w = await world();
+    const s = await ok(w.kenji, tagStructure(w.structure.id));
+    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
+    const cited = [{ storyId: copy.id }];
+    expect((await liveStoriesOf(db, cited)).has(copy.id)).toBe(true);
+    await sanction(w.kenji, "suspension_7d");
+    expect((await liveStoriesOf(db, cited)).has(copy.id)).toBe(false);
+    await db.update(sanctions).set({ liftedAt: clock.now }).where(eq(sanctions.userId, w.kenji.id));
+    await withTx((tx, after) => recomputeSuspension(tx, w.kenji.id, after));
+    expect((await liveStoriesOf(db, cited)).has(copy.id)).toBe(true);
   });
 });

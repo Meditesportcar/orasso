@@ -13,6 +13,7 @@ import {
   orgaLabels,
   orgaV2Labels,
   presenceLabels,
+  storyAuthorKeyOf,
   storyShareLabels,
   voteOrgaLabels,
 } from "@orasso/shared";
@@ -106,6 +107,12 @@ function DirectEvent({
   // Lot R7h : les stories qui nous identifient (le nombre de « Mentions »), relues avec le reste du direct.
   const { structureId } = useOrga();
   const mentions = useApi(() => api.storyMentions(structureId), [structureId], { enabled: field, refreshMs: 60_000 });
+  // « Ma story » (et ses retraits) reste accessible hors événement tant qu'une story de la structure est en ligne : une
+  // story publiée la veille au soir est servie 24 h, un autre responsable doit pouvoir la retirer le lendemain.
+  const myStories = useApi(() => api.storiesByAuthor(storyAuthorKeyOf("structure", structureId)), [structureId], {
+    refreshMs: 60_000,
+  });
+  const hasMyStories = Boolean(myStories.data && myStories.data.stories.length > 0);
   const at = useNow(60_000);
   // Lot C4a, tour 2 : le mode staff s'ouvre dès J-1 (l'API l'ouvre dès J-1 0 h) pour synchroniser la liste la veille.
   const staffOpen = field || calendarDaysBetween(at, new Date(current.event.startsAt)) <= 1;
@@ -311,23 +318,25 @@ function DirectEvent({
         </>
       ) : null}
 
-      {field ? (
+      {field || hasMyStories ? (
         <>
           <SectionTitle>{storyShareLabels.mine}</SectionTitle>
           <Plate style={styles.block} testID="orga-direct-story">
-            <Pressable
-              onPress={() => router.push("/story/mentions" as never)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions
-              }
-              style={styles.storyRow}
-              testID="orga-direct-mentions"
-            >
-              <Text variant="bodyStrong" color={c.plateInk}>
-                {mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions}
-              </Text>
-            </Pressable>
+            {field ? (
+              <Pressable
+                onPress={() => router.push("/story/mentions" as never)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions
+                }
+                style={styles.storyRow}
+                testID="orga-direct-mentions"
+              >
+                <Text variant="bodyStrong" color={c.plateInk}>
+                  {mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => router.push("/story/ma-story" as never)}
               accessibilityRole="button"
@@ -339,6 +348,11 @@ function DirectEvent({
               </Text>
             </Pressable>
           </Plate>
+        </>
+      ) : null}
+
+      {field ? (
+        <>
           <SectionTitle>{presenceLabels.summaryTitle}</SectionTitle>
           {presents.data ? (
             <Plate style={styles.block} testID="orga-direct-presents">

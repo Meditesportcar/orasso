@@ -222,6 +222,8 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
         ),
       );
     if (!m) throw forbidden(storyLabels.notOrganizer);
+    // Lot R7h, tour 3 : publier au nom d'une structure exige le second facteur, comme le repartage et le retrait.
+    await requireOrganizer(v, input.structureId);
     return;
   }
   if (persona === "pro") {

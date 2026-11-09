@@ -92,15 +92,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     event.status === "published" &&
     ((new Date(event.startsAt).getTime() <= at.getTime() && at.getTime() < new Date(event.endsAt).getTime()) ||
       isEventDay(new Date(event.startsAt), at));
-  const [mentions, mine] = fieldDay
-    ? await Promise.all([
-        api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`),
-        api<StoriesByAuthor>(
+  // Les mentions seulement ce jour-là ; « Ma story » et ses retraits tant qu'une story de la structure est en ligne (le
+  // lendemain aussi : une story publiée la veille au soir reste visible 24 h, un autre responsable doit pouvoir la retirer).
+  const [mentions, mine] = await Promise.all([
+    fieldDay ? api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`) : null,
+    event.status === "published"
+      ? api<StoriesByAuthor>(
           request,
           `/stories/by-author/${encodeURIComponent(storyAuthorKeyOf("structure", membership.structureId))}`,
-        ),
-      ])
-    : [null, null];
+        )
+      : null,
+  ]);
   return {
     event,
     // Aucune adresse de média dans les données de la page (les aperçus se lisent par `/thumb`, dans le navigateur).
@@ -112,6 +114,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : null,
     storyFailed: Boolean(mentions && !mentions.ok),
     storyFieldDay: fieldDay,
+    storyHasMine: Boolean(mine?.ok && mine.data.stories.length > 0),
     structureId: membership.structureId,
     storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,
@@ -505,6 +508,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
     storyFailed,
     storyNotice,
     storyFieldDay,
+    storyHasMine,
     structureId,
   } = loaderData;
   const base = `/orga/${event.structure.slug}`;
@@ -672,10 +676,11 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         </section>
       )}
 
-      {published && storyFieldDay && (
+      {published && (storyFieldDay || storyHasMine) && (
         <OrgaStory
           structureId={structureId}
           mentions={storyMentions}
+          withMentions={storyFieldDay}
           mine={storyMine}
           failed={storyFailed}
           notice={

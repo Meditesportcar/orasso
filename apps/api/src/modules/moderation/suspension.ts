@@ -57,10 +57,13 @@ export async function recomputeSuspension(
     .where(eq(profiles.userId, userId));
   if (until && until > at) {
     after(() => realtime.revokeUser(CREW_CHANNEL_PREFIX, userId));
-    // Lot R7h, tour 2 : ce que ce compte a publié n'est plus servi, les copies qu'on en a faites non plus (le profil
-    // vient d'être mis à jour ci-dessus : un partage en cours est terminé, il ne laisse pas de copie derrière).
-    const copies = await dropCopiesOfAuthor(tx, userId, "all");
-    if (copies.length) after(() => purgeStoryFiles(copies).catch(() => undefined));
+    // Lot R7h, tour 3 : pendant une suspension, ce que ce compte a publié n'est plus servi et les copies qu'on en a faites
+    // non plus : elles sont masquées par le filtre de lecture (`originAvailable`) et reviennent si la suspension est levée
+    // avant leur expiration. Elles ne sont supprimées qu'au bannissement (définitif).
+    if (banned) {
+      const copies = await dropCopiesOfAuthor(tx, userId, "all");
+      if (copies.length) after(() => purgeStoryFiles(copies).catch(() => undefined));
+    }
   }
   return { until, banned };
 }

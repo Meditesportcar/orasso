@@ -34,6 +34,7 @@ import {
   authorDisplay,
   authorKeyOf,
   relationOf,
+  type StoryRow,
   selectStories,
   setsFor,
   viewerOf,
@@ -44,6 +45,13 @@ import { mediaUrlOf } from "./serialize";
 import { ownedPros } from "./sharing";
 
 const MENTIONS_PAGE = 20;
+/**
+ * Points d'attente pour les tests de concurrence (lot R7h, tour 3) : `afterLocks` est attendu dans la transaction du
+ * partage, une fois les verrous pris et les droits relus, avant d'insérer la copie. Jamais posé hors des tests.
+ */
+export const shareTestHooks: { afterLocks?: () => Promise<void> } = {};
+/** Au plus autant de candidats jugés : des stories de moins de 24 h identifiant une structure. */
+const MENTIONS_MAX = 500;
 
 const suspended = (v: Viewer) => Boolean(v.profile.suspendedUntil && v.profile.suspendedUntil > now());
 
@@ -186,6 +194,7 @@ export const storiesShare = {
         await tx.execute(sql`select 1 from story_tags
           where story_id = ${id} and target_kind = ${tagKind} and target_id = ${tagTarget} and removed_at is null for share`);
         await checkRights(tx);
+        await shareTestHooks.afterLocks?.();
         const sharer = structureId
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, structureId))
           : proId
@@ -296,19 +305,37 @@ export const storiesShare = {
         or (s.event_id in (select e.id from events e where e.structure_id = ${structureId} and e.status = 'published')
           and not exists (select 1 from story_tags t where t.story_id = s.id and t.target_kind = 'structure'
             and t.target_id = ${structureId} and t.removed_at is not null)))`;
-    const counted = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from stories s join profiles p on p.user_id = s.author_id where ${base}`,
-    );
-    const count = Number(counted.rows[0]?.n ?? 0);
-    const page = await db.execute<{ id: string; created_at: Date }>(sql`
+    // Lot R7h, tour 3 : le nombre et la liste suivent les mêmes droits. Les candidats (des stories de moins de 24 h) sont
+    // tous jugés par `storyDenial` (audience, blocages, abonnés) ; le nombre est celui des visibles, la page est prise dans
+    // cette liste.
+    const candidates = await db.execute<{ id: string; created_at: Date }>(sql`
       select s.id, s.created_at from stories s join profiles p on p.user_id = s.author_id
-      where ${base} ${after ? sql`and (date_trunc('milliseconds', s.created_at), s.id) < (${after.at}, ${after.id}::uuid)` : sql``}
-      order by date_trunc('milliseconds', s.created_at) desc, s.id desc limit ${MENTIONS_PAGE + 1}`);
-    const shown = page.rows.slice(0, MENTIONS_PAGE);
+      where ${base}
+      order by date_trunc('milliseconds', s.created_at) desc, s.id desc limit ${MENTIONS_MAX}`);
+    const candidateIds = candidates.rows.map((r) => r.id);
+    const msOf = new Map(candidates.rows.map((r) => [r.id, new Date(r.created_at).getTime()]));
+    const visible: StoryRow[] = [];
+    for (let i = 0; i < candidateIds.length; i += 200) {
+      const chunk = candidateIds.slice(i, i + 200);
+      const rows = await selectStories(inArray(stories.id, chunk));
+      const sets = await setsFor(v.user.id, rows);
+      for (const r of rows) {
+        if (!accountActive(r.author, at)) continue;
+        // L'aperçu passe par la route protégée : on ne liste que ce que le regard a le droit de voir.
+        if (storyDenial(viewerOf(v), audienceStoryOf(r, at), relationOf(sets, r)) !== null) continue;
+        visible.push(r);
+      }
+    }
+    const rank = (r: StoryRow) => msOf.get(r.story.id) ?? 0;
+    visible.sort((x, y) => rank(y) - rank(x) || (x.story.id < y.story.id ? 1 : -1));
+    const count = visible.length;
+    const afterMs = after ? after.at.getTime() : null;
+    const rest = after
+      ? visible.filter((r) => rank(r) < (afterMs ?? 0) || (rank(r) === afterMs && r.story.id < after.id))
+      : visible;
+    const shown = rest.slice(0, MENTIONS_PAGE);
     if (!shown.length) return { items: [], nextCursor: null, count };
-    const shownIds = shown.map((r) => r.id);
-    const rows = await selectStories(inArray(stories.id, shownIds));
-    const sets = await setsFor(v.user.id, rows);
+    const shownIds = shown.map((r) => r.story.id);
     const copies = await db
       .select({ id: stories.id, from: stories.sharedFromStoryId })
       .from(stories)
@@ -320,14 +347,9 @@ export const storiesShare = {
           eq(stories.structureId, structureId),
         ),
       );
-    const order = new Map(shownIds.map((x, i) => [x, i]));
-    const items: StoryMentionItem[] = [];
-    for (const r of [...rows].sort((a, b) => (order.get(a.story.id) ?? 0) - (order.get(b.story.id) ?? 0))) {
-      if (!accountActive(r.author, at)) continue;
-      // L'aperçu passe par la route protégée : on ne liste que ce que le regard a le droit de voir.
-      if (storyDenial(viewerOf(v), audienceStoryOf(r, at), relationOf(sets, r)) !== null) continue;
+    const items: StoryMentionItem[] = shown.map((r) => {
       const display = authorDisplay(r, storage.url);
-      items.push({
+      return {
         storyId: r.story.id,
         authorKey: authorKeyOf(r)?.key ?? storyAuthorKeyOf("user", r.story.authorId),
         authorName: display.name,
@@ -337,12 +359,12 @@ export const storiesShare = {
         createdAt: r.story.createdAt.toISOString(),
         expiresAt: r.story.expiresAt.toISOString(),
         copyId: copies.find((c) => c.from === r.story.id)?.id ?? null,
-      });
-    }
+      };
+    });
     const last = shown[shown.length - 1];
     return {
       items,
-      nextCursor: page.rows.length > MENTIONS_PAGE && last ? `${new Date(last.created_at).getTime()}_${last.id}` : null,
+      nextCursor: rest.length > MENTIONS_PAGE && last ? `${rank(last)}_${last.story.id}` : null,
       count,
     };
   },

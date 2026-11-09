@@ -36,26 +36,37 @@ const when = (iso: string) =>
   }).format(new Date(iso));
 
 /**
- * Les pages suivantes des mentions (« Voir plus »). Elles se rattachent à la première page courante : quand le chargeur en
- * rend une nouvelle (après un ajout, un retrait, une revalidation), les pages suivantes sont vidées, et la réponse d'une
- * page demandée pour une première page dépassée est rejetée (même règle que l'appli).
+ * Empreinte de la première page des mentions : change quand son contenu change (nouvelle mention, ajout, retrait), pas à
+ * chaque rechargement identique (le vote du public revalide la page toutes les quelques secondes).
  */
-function useMentionPages(structureId: string, first: StoryMentions | null) {
+const firstPageKey = (first: StoryMentions | null) =>
+  first
+    ? `${first.count}|${first.nextCursor ?? ""}|${first.items.map((m) => `${m.storyId}:${m.copyId ?? ""}`).join(",")}`
+    : "";
+
+/**
+ * Les pages suivantes des mentions (« Voir plus »). Elles se rattachent à l'empreinte de la première page courante et à
+ * un compteur de gestes (ajout, retrait) : quand l'une des deux change, les pages suivantes sont vidées et la réponse d'une
+ * page demandée pour une première page dépassée est rejetée (même règle que l'appli). Un rechargement qui rend la même
+ * première page (vote du public) ne vide rien et n'abandonne pas une page en cours.
+ */
+function useMentionPages(structureId: string, first: StoryMentions | null, epoch: number) {
+  const key = `${epoch}#${firstPageKey(first)}`;
   const [tail, setTail] = useState<{
-    base: StoryMentions | null;
+    base: string;
     items: StoryMentionItem[];
     next: string | null | undefined;
     busy: boolean;
     error: string | null;
   } | null>(null);
-  const current = useRef(first);
-  current.current = first;
-  const mine = tail && tail.base === first ? tail : null;
+  const current = useRef(key);
+  current.current = key;
+  const mine = tail && tail.base === key ? tail : null;
   const items = mine?.items ?? [];
   const next = mine && mine.next !== undefined ? mine.next : (first?.nextCursor ?? null);
   const more = async () => {
     if (!first || !next || mine?.busy) return;
-    const base = first;
+    const base = key;
     setTail({ base, items, next, busy: true, error: null });
     const res = await apiFetch<StoryMentions>(
       `/structures/${structureId}/story-mentions?cursor=${encodeURIComponent(next)}`,
@@ -77,98 +88,123 @@ export function OrgaStory({
   mine,
   failed,
   notice,
+  withMentions,
 }: {
   structureId: string;
   mentions: StoryMentions | null;
   mine: StoriesByAuthor | null;
   failed: boolean;
   notice: string | null;
+  /** Les mentions seulement le jour de l'événement ; « Ma story » (et ses retraits) tant qu'une story est en ligne. */
+  withMentions: boolean;
 }) {
-  const busy = useNavigation().state !== "idle";
+  const nav = useNavigation();
+  const busy = nav.state !== "idle";
   const stories = mine?.stories ?? [];
-  const pages = useMentionPages(structureId, mentions);
+  // Un geste (ajout, retrait) change ce que les pages suivantes montrent : on les vide, la première page est relue.
+  const [epoch, setEpoch] = useState(0);
+  const intent = nav.formData ? String(nav.formData.get("intent") ?? "") : "";
+  useEffect(() => {
+    if (intent === "story-share" || intent === "story-remove") setEpoch((n) => n + 1);
+  }, [intent]);
+  const pages = useMentionPages(structureId, mentions, epoch);
   // « Ignorer » (comme dans l'appli) laisse la mention de côté le temps de la page ; rien n'est enregistré.
   const [ignored, setIgnored] = useState<ReadonlySet<string>>(new Set());
   const shown = [...(mentions?.items ?? []), ...pages.items].filter((m) => !ignored.has(m.storyId));
   return (
     <section className="orga__panel s-stack" aria-labelledby="story-title" data-testid="orga-story">
-      <h2 id="story-title" className="s-h2">
-        {mentions ? L.mentionsCount(mentions.count) : L.mentions}
-      </h2>
-      <p className="s-muted">{L.mentionsHint}</p>
+      {withMentions ? (
+        <>
+          <h2 id="story-title" className="s-h2">
+            {mentions ? L.mentionsCount(mentions.count) : L.mentions}
+          </h2>
+          <p className="s-muted">{L.mentionsHint}</p>
+        </>
+      ) : null}
       {notice ? (
         <p className="s-notice" role="status" data-testid="orga-story-notice">
           {notice}
         </p>
       ) : null}
-      {failed ? (
-        <p className="s-notice" role="alert">
-          {L.mentionsError}
-        </p>
+      {withMentions ? (
+        <>
+          {failed ? (
+            <p className="s-notice" role="alert">
+              {L.mentionsError}
+            </p>
+          ) : null}
+          {mentions && mentions.items.length === 0 ? <p className="s-muted">{L.mentionsEmpty}</p> : null}
+          <ul className="ostory" data-testid="orga-mentions">
+            {shown.map((m) => (
+              <li key={m.storyId} className="ostory__row" data-testid="orga-mention">
+                <Thumb storyId={m.storyId} alt={`Story de ${m.authorName}`} />
+                <span className="ostory__text">
+                  <strong>{m.authorName}</strong>
+                  <span className="o-t-caption s-muted">{when(m.createdAt)}</span>
+                  {m.caption ? <span className="o-t-caption s-muted">{m.caption}</span> : null}
+                </span>
+                <Form method="post" className="ostory__act">
+                  <input type="hidden" name="intent" value={m.copyId ? "story-remove" : "story-share"} />
+                  <input type="hidden" name="storyId" value={m.copyId ?? m.storyId} />
+                  {m.copyId ? (
+                    <Button
+                      variant="secondary"
+                      icon="close"
+                      type="submit"
+                      disabled={busy}
+                      data-testid="orga-mention-remove"
+                    >
+                      {L.remove}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="secondary"
+                        icon="add"
+                        type="submit"
+                        disabled={busy}
+                        data-testid="orga-mention-add"
+                      >
+                        {L.add}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        icon="close"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setIgnored((cur) => new Set(cur).add(m.storyId))}
+                        data-testid="orga-mention-ignore"
+                      >
+                        {L.ignore}
+                      </Button>
+                    </>
+                  )}
+                </Form>
+              </li>
+            ))}
+          </ul>
+          {pages.error ? (
+            <p className="s-notice" role="alert">
+              {pages.error}
+            </p>
+          ) : null}
+          {pages.next ? (
+            <Button
+              variant="secondary"
+              icon="down"
+              type="button"
+              disabled={pages.busy}
+              onClick={() => void pages.more()}
+              data-testid="orga-mentions-more"
+            >
+              {L.mentionsMore}
+            </Button>
+          ) : null}
+        </>
       ) : null}
-      {mentions && mentions.items.length === 0 ? <p className="s-muted">{L.mentionsEmpty}</p> : null}
-      <ul className="ostory" data-testid="orga-mentions">
-        {shown.map((m) => (
-          <li key={m.storyId} className="ostory__row" data-testid="orga-mention">
-            <Thumb storyId={m.storyId} alt={`Story de ${m.authorName}`} />
-            <span className="ostory__text">
-              <strong>{m.authorName}</strong>
-              <span className="o-t-caption s-muted">{when(m.createdAt)}</span>
-              {m.caption ? <span className="o-t-caption s-muted">{m.caption}</span> : null}
-            </span>
-            <Form method="post" className="ostory__act">
-              <input type="hidden" name="intent" value={m.copyId ? "story-remove" : "story-share"} />
-              <input type="hidden" name="storyId" value={m.copyId ?? m.storyId} />
-              {m.copyId ? (
-                <Button
-                  variant="secondary"
-                  icon="close"
-                  type="submit"
-                  disabled={busy}
-                  data-testid="orga-mention-remove"
-                >
-                  {L.remove}
-                </Button>
-              ) : (
-                <>
-                  <Button variant="secondary" icon="add" type="submit" disabled={busy} data-testid="orga-mention-add">
-                    {L.add}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    icon="close"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setIgnored((cur) => new Set(cur).add(m.storyId))}
-                    data-testid="orga-mention-ignore"
-                  >
-                    {L.ignore}
-                  </Button>
-                </>
-              )}
-            </Form>
-          </li>
-        ))}
-      </ul>
-      {pages.error ? (
-        <p className="s-notice" role="alert">
-          {pages.error}
-        </p>
-      ) : null}
-      {pages.next ? (
-        <Button
-          variant="secondary"
-          icon="down"
-          type="button"
-          disabled={pages.busy}
-          onClick={() => void pages.more()}
-          data-testid="orga-mentions-more"
-        >
-          {L.mentionsMore}
-        </Button>
-      ) : null}
-
-      <h2 className="s-h2">{L.mine}</h2>
+      <h2 id={withMentions ? undefined : "story-title"} className="s-h2">
+        {L.mine}
+      </h2>
       <p className="s-muted">{L.mineHint}</p>
       {mine && stories.length === 0 ? <p className="s-muted">{L.mineEmpty}</p> : null}
       <ul className="ostory" data-testid="orga-mystory">
