@@ -4,7 +4,10 @@ import type { VoteView } from "@orasso/shared";
 
 type EventRef = { id: string; slug: string; title: string };
 
-/** L'événement à afficher : celui du chargeur, sinon (voix réussie) celui que l'action a rendu avec la voix. */
+/**
+ * L'événement à afficher : celui du chargeur, sinon (voix réussie) celui que l'action a rendu avec la voix. Son titre n'est
+ * alors pas connu (`""`) : jamais celui du vote, qui s'afficherait deux fois.
+ */
 export function eventAfterVote(
   loaded: EventRef | null,
   action: { ok?: boolean; eventId?: string } | null | undefined,
@@ -12,7 +15,7 @@ export function eventAfterVote(
   justVoted: VoteView | null,
 ): EventRef | null {
   if (loaded) return loaded;
-  if (justVoted && action?.ok && action.eventId) return { id: action.eventId, slug, title: justVoted.title };
+  if (justVoted && action?.ok && action.eventId) return { id: action.eventId, slug, title: "" };
   return null;
 }
 

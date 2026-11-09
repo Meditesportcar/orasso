@@ -10,6 +10,7 @@ import {
   rankingHiddenLine,
   votePassTexts as T,
   VOTE_CLOSING_SOON_MIN,
+  VOTE_RELOAD_JITTER_MS,
   voteBlockedLine,
   voteMinutesLeft,
   voteResultCard,
@@ -78,25 +79,29 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // Grille et classement en direct : un message utile de CE vote recharge la page, au plus une fois toutes les 10 s, et le canal
   // qui revient après une coupure la recharge aussi.
   const voteId = vote?.id ?? null;
-  const { connected } = useLiveRevalidate(event ? `event:${event.id}:votes` : null, (m) => {
-    if (
-      m.type !== "votes.changed" &&
-      m.type !== "theme_votes.changed" &&
-      m.type !== "votes.opened" &&
-      m.type !== "votes.closed" &&
-      m.type !== "votes.candidates.changed"
-    )
-      return false;
-    const id = (m.payload as { voteId?: unknown } | null)?.voteId;
-    return voteId === null || typeof id !== "string" || id === voteId;
-  });
+  const { connected } = useLiveRevalidate(
+    event ? `event:${event.id}:votes` : null,
+    (m) => {
+      if (
+        m.type !== "votes.changed" &&
+        m.type !== "theme_votes.changed" &&
+        m.type !== "votes.opened" &&
+        m.type !== "votes.closed" &&
+        m.type !== "votes.candidates.changed"
+      )
+        return false;
+      const id = (m.payload as { voteId?: unknown } | null)?.voteId;
+      return voteId === null || typeof id !== "string" || id === voteId;
+    },
+    { jitterMs: VOTE_RELOAD_JITTER_MS },
+  );
 
   // Relecture impossible (panne passagère) : la confirmation de la voix reste affichée avec « Réessayer » ; jamais un
   // retour à la connexion ni un écran d'erreur pour une panne.
   if (!vote || !event) {
     return (
       <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-        <FicheBar title={T.voteScreenTitle} facts={event?.title} back={back} />
+        <FicheBar title={vote?.title ?? T.voteScreenTitle} facts={event?.title || undefined} back={back} />
         <p className="s-error" role="alert" data-testid="vote-ranking-failed">
           {T.loadFailed}
         </p>
@@ -126,7 +131,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
 
   return (
     <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-      <FicheBar title={vote.title} facts={event.title} back={back} />
+      <FicheBar title={vote.title} facts={event.title || undefined} back={back} />
       <p className="s-lead" data-testid="vote-lead">
         {mode === "closed"
           ? vote.settled

@@ -87,7 +87,8 @@ export async function loadVote(request: Request, slug: string): Promise<VotePage
     event: null,
     vote: null,
     candidates: [],
-    candidatesComplete: true,
+    // Rien n'a été relu : la grille vide n'est pas « aucune voiture », c'est une relecture qui a échoué (« Réessayer »).
+    candidatesComplete: false,
     serverAt: nowMs(),
   };
   const event = await eventOf(request, slug);

@@ -115,6 +115,9 @@ describe("chargeur de la page d'un vote", () => {
       const page = await loadVote(request(), "lydia");
       expect(page).toMatchObject({ event: null, vote: null, slug: "lydia" });
     }
+    // Rien n'a été relu : la grille vide n'est pas « Aucune voiture », elle est en échec (« Réessayer »).
+    stubApi({ ...healthy, "/me": fail(502) });
+    expect((await loadVote(request(), "lydia")).candidatesComplete).toBe(false);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {

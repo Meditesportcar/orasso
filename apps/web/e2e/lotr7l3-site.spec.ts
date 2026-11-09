@@ -23,6 +23,18 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}-${THEME}.png`, fullPage: true });
 }
 
+/**
+ * Choisit une carte de la grille. Un toucher avant l'hydratation de la page est perdu : on le répète jusqu'à ce que « Voter pour … »
+ * confirme que la carte est prise (tour 3).
+ */
+async function pickCard(page: Page, which: "first" | "last") {
+  const cards = page.locator('[data-testid="vote-candidate"]:not([disabled])');
+  await expect(async () => {
+    await (which === "first" ? cards.first() : cards.last()).click();
+    await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/, { timeout: 1_500 });
+  }).toPass({ timeout: 30_000 });
+}
+
 test("la liste, le vote dans le concours, classement absent avant la voix et présent après, une voix modifiable", async ({
   page,
 }) => {
@@ -55,9 +67,8 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
 
     // Le geste en deux temps (parité avec l'appli) : toucher une voiture la choisit sans voter ; « Voter pour … » vote.
     await expect(page.getByTestId("vote-cta")).toBeDisabled();
-    await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
+    await pickCard(page, "first");
     await expect(page.getByTestId("vote-saved")).toHaveCount(0);
-    await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/);
     expect((await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId)).myVote).toBeFalsy();
     await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
@@ -71,8 +82,7 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
     // Une voix modifiable, par le même geste en deux temps : « Changer mon vote » rouvre la grille.
     await expect(page.getByTestId("vote-candidate")).toHaveCount(0);
     await page.getByTestId("vote-change").click();
-    await page.locator('[data-testid="vote-candidate"]:not([disabled])').last().click();
-    await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/);
+    await pickCard(page, "last");
     await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
     const changed = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);

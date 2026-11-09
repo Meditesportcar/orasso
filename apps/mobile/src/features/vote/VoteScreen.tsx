@@ -216,7 +216,7 @@ export function VoteScreen() {
         </PosterSurface>
       ) : null}
 
-      {data && (mode === "choose" || mode === "blocked" || mode === "upcoming") && grid.error && !grid.data ? (
+      {data && (mode === "choose" || mode === "blocked" || mode === "upcoming") && grid.error ? (
         <>
           <Notice tone="error" testID="vote-grid-failed">
             {T.gridLoadFailed}
@@ -225,7 +225,8 @@ export function VoteScreen() {
             {T.retry}
           </SmButton>
         </>
-      ) : data && (mode === "choose" || mode === "blocked" || mode === "upcoming") ? (
+      ) : null}
+      {data && (mode === "choose" || mode === "blocked" || mode === "upcoming") && !(grid.error && !grid.data) ? (
         <Grid
           entries={gridOrder(grid.data ?? [])}
           ownIds={data.ownApplicationIds}

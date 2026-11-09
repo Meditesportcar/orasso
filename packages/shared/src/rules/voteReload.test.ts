@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createThrottledRun, createVoteReloader, VOTE_RELOAD_MIN_MS } from "./voteReload";
+import { createPacedRun, createVoteReloader, VOTE_RELOAD_MIN_MS } from "./voteReload";
+
+/** Sans gigue (hasard à 0) sauf mention : les tests de temps lisent des départs exacts. */
+const noJitter = { random: () => 0 };
 
 describe("relectures d'un vote (charge du jour J)", () => {
   beforeEach(() => {
@@ -13,7 +16,7 @@ describe("relectures d'un vote (charge du jour J)", () => {
     const reads: boolean[] = [];
     const reloader = createVoteReloader(async (withGrid) => {
       reads.push(withGrid);
-    });
+    }, noJitter);
     // 30 messages (t = 0 … 29 s) : des voix, et trois événements qui changent la grille (t = 5, 15, 25).
     const gridAt: Record<number, string> = { 5: "votes.opened", 15: "votes.candidates.changed", 25: "votes.closed" };
     for (let t = 0; t < 30; t++) {
@@ -33,7 +36,7 @@ describe("relectures d'un vote (charge du jour J)", () => {
     const reads: boolean[] = [];
     const reloader = createVoteReloader(async (withGrid) => {
       reads.push(withGrid);
-    });
+    }, noJitter);
     for (let t = 0; t < 60; t++) {
       void reloader.message("theme_votes.changed");
       await vi.advanceTimersByTimeAsync(1_000);
@@ -46,7 +49,7 @@ describe("relectures d'un vote (charge du jour J)", () => {
     const reads: boolean[] = [];
     const reloader = createVoteReloader(async (withGrid) => {
       reads.push(withGrid);
-    });
+    }, noJitter);
     void reloader.message("votes.changed");
     await vi.advanceTimersByTimeAsync(1_000);
     void reloader.refresh();
@@ -61,7 +64,7 @@ describe("relectures d'un vote (charge du jour J)", () => {
     const reloader = createVoteReloader(async (withGrid) => {
       reads.push(withGrid);
       if (fail) throw new Error("coupure");
-    });
+    }, noJitter);
     await expect(reloader.message("votes.closed")).rejects.toThrow("coupure");
     fail = false;
     void reloader.message("votes.changed");
@@ -69,13 +72,113 @@ describe("relectures d'un vote (charge du jour J)", () => {
     expect(reads).toEqual([true, true]);
   });
 
-  it("createThrottledRun : le premier appel part tout de suite, les suivants n'en font qu'un", async () => {
+  it("une première lecture de 25 s : les départs restent espacés d'au moins 10 s (pas 0, 25, 30)", async () => {
+    const starts: number[] = [];
+    const reloader = createVoteReloader(async () => {
+      starts.push(Date.now());
+      await new Promise((r) => setTimeout(r, starts.length === 1 ? 25_000 : 100));
+    }, noJitter);
+    void reloader.message("votes.changed"); // t = 0 : part tout de suite, dure 25 s
+    await vi.advanceTimersByTimeAsync(1_000);
+    void reloader.message("votes.changed"); // t = 1 s : attend derrière la lecture lente
+    await vi.advanceTimersByTimeAsync(24_000); // t = 25 s : la lecture finit, la suivante part (10 s écoulées depuis 0)
+    expect(starts).toEqual([0, 25_000]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    void reloader.message("votes.changed"); // t = 26 s : doit attendre 35 s, pas partir à 26
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(starts).toEqual([0, 25_000, 35_000]);
+    for (let i = 1; i < starts.length; i++)
+      expect((starts[i] as number) - (starts[i - 1] as number)).toBeGreaterThanOrEqual(VOTE_RELOAD_MIN_MS);
+  });
+
+  it("une lecture lente de 25 s puis une demande à 5 s : la suivante attend la fin de la lecture (jamais deux à la fois)", async () => {
+    let running = 0;
+    let maxRunning = 0;
+    const reloader = createVoteReloader(async () => {
+      running++;
+      maxRunning = Math.max(maxRunning, running);
+      await new Promise((r) => setTimeout(r, 25_000));
+      running--;
+    }, noJitter);
+    void reloader.message("votes.changed");
+    await vi.advanceTimersByTimeAsync(5_000);
+    void reloader.message("votes.changed");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(maxRunning).toBe(1);
+  });
+
+  it("gigue : un message du canal part après 0 à 2 s ; un geste de la personne (retour au premier plan) part sans attendre", async () => {
+    const reads: number[] = [];
+    const reloader = createVoteReloader(async () => void reads.push(Date.now()), { random: () => 0.5 });
+    void reloader.message("votes.changed");
+    await vi.advanceTimersByTimeAsync(999);
+    expect(reads).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reads).toEqual([1_000]); // 0,5 × 2 s
+    // Un geste : sans gigue, à l'échéance exacte du délai minimal (10 s après le départ de 1 s).
+    await vi.advanceTimersByTimeAsync(2_000);
+    void reloader.refresh();
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(reads).toEqual([1_000, 11_000]);
+  });
+
+  it("un geste qui rejoint une relecture du canal en attente lui retire la gigue", async () => {
+    const reads: number[] = [];
+    const reloader = createVoteReloader(async () => void reads.push(Date.now()), { random: () => 0.99 });
+    void reloader.message("votes.changed"); // gigue de ~2 s
+    await vi.advanceTimersByTimeAsync(100);
+    void reloader.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toEqual([100]);
+  });
+
+  it("la gigue est tirée au hasard entre 0 et 2 s (150 téléphones, 150 départs différents)", async () => {
+    const starts = new Set<number>();
+    for (let i = 0; i < 50; i++) {
+      const reloader = createVoteReloader(async () => void starts.add(Date.now()), {
+        random: () => i / 50,
+      });
+      void reloader.message("votes.changed");
+    }
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(starts.size).toBe(50);
+    expect(Math.min(...starts)).toBe(0);
+    expect(Math.max(...starts)).toBeLessThan(2_000);
+  });
+
+  it("grille chargée, candidats changés, panne, message suivant : la grille est relue (la relecture de l'appli ne rejette jamais, l'enveloppe lève)", async () => {
+    // Imite l'enveloppe de `useVote` : `grid.reload()` absorbe l'erreur (résultat null), l'échec est noté à part et relevé.
+    let gridDown = false;
+    let gridFailed = false;
+    const gridReads: string[] = [];
+    const gridReload = async () => {
+      if (gridDown) {
+        gridFailed = true;
+        return null;
+      }
+      gridFailed = false;
+      gridReads.push("ok");
+      return [];
+    };
+    const reloader = createVoteReloader(async (withGrid) => {
+      if (withGrid) await gridReload();
+      if (withGrid && gridFailed) throw new Error("grid_reload_failed");
+    }, noJitter);
+    gridDown = true;
+    await expect(reloader.message("votes.candidates.changed")).rejects.toThrow("grid_reload_failed");
+    gridDown = false; // le réseau revient ; un simple message de voix suffit à relire la grille
+    void reloader.message("votes.changed");
+    await vi.advanceTimersByTimeAsync(VOTE_RELOAD_MIN_MS);
+    expect(gridReads).toEqual(["ok"]);
+  });
+
+  it("createPacedRun : le premier appel part tout de suite, les suivants n'en font qu'un", async () => {
     const run = vi.fn(async () => "ok");
-    const throttled = createThrottledRun(run, 10_000);
-    await throttled();
+    const paced = createPacedRun(run, 10_000);
+    await paced.request();
     expect(run).toHaveBeenCalledTimes(1);
-    const a = throttled();
-    const b = throttled();
+    const a = paced.request();
+    const b = paced.request();
     expect(a).toBe(b);
     expect(run).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(10_000);

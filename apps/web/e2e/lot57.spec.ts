@@ -268,6 +268,10 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
 
     // Prix du public : la grille, sa propre voiture grisée, un vote, le classement.
     await page.goto(`/app/vote/${event.slug}`);
+    // Au passage Sable, Kenji a déjà voté : la grille ne revient que par « Changer mon vote » (comme `lotr7-0-site`).
+    const change = page.getByTestId("vote-change");
+    await expect(change.or(page.getByTestId("vote-candidate").first())).toBeVisible();
+    if (await change.isVisible()) await change.click();
     await expect(page.getByTestId("vote-candidate")).toHaveCount(candidatesCount);
     await page
       .getByTestId("vote-candidate")

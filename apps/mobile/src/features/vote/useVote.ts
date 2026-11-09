@@ -57,16 +57,16 @@ function useVoteChannel(
     focused && eventId ? `event:${eventId}:votes` : null,
     (message) => {
       if (VOTE_MESSAGES.has(message.type) && messageConcerns(message.payload, voteId))
-        void reloader.message(message.type);
+        reloader.message(message.type).catch(() => undefined); // l'échec est gardé par le relecteur (grille à relire)
     },
     () => {
-      if (subscribedOnce.current) void reloader.refresh();
+      if (subscribedOnce.current) reloader.refresh().catch(() => undefined);
       subscribedOnce.current = true;
     },
   );
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void reloader.refresh();
+      if (state === "active") reloader.refresh().catch(() => undefined);
     });
     return () => sub.remove();
   }, [reloader]);
@@ -105,9 +105,23 @@ export function useVote(eventId: string | null, voteId: string | null) {
     enabled,
     refreshMs: 60_000,
   });
-  const grid = useApi<VoteCandidate[]>(() => loadGrid(eventId as string, voteId as string), [eventId, voteId], {
-    enabled,
-  });
+  // `useApi.reload` ne rejette jamais : l'échec de la dernière lecture de la grille est noté ici pour que le relecteur du canal
+  // la garde « à relire » (tour 3).
+  const gridFailed = useRef(false);
+  const grid = useApi<VoteCandidate[]>(
+    async () => {
+      try {
+        const items = await loadGrid(eventId as string, voteId as string);
+        gridFailed.current = false;
+        return items;
+      } catch (error) {
+        gridFailed.current = true;
+        throw error;
+      }
+    },
+    [eventId, voteId],
+    { enabled },
+  );
   // Les rechargeurs changent à chaque rendu : les minuteries lisent toujours le dernier.
   const reloadAll = useRef<() => Promise<boolean>>(async () => false);
   reloadAll.current = async () => {
@@ -117,6 +131,7 @@ export function useVote(eventId: string | null, voteId: string | null) {
   // Le canal relit le détail (classement compris) ; la grille seulement quand les candidats changent (ouverture, clôture…).
   useVoteChannel(eventId, voteId, async (withGrid) => {
     await Promise.all([view.reload(), withGrid ? grid.reload() : null]);
+    if (withGrid && gridFailed.current) throw new Error("grid_reload_failed"); // la grille reste à relire
   });
   // Le geste de l'utilisateur (« Réessayer ») relit tout, tout de suite.
   const reload = () => reloadAll.current();

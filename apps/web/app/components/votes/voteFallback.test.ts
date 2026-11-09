@@ -9,7 +9,7 @@ const voted = { title: "Plus belle japonaise" } as VoteView;
 describe("confirmation de la voix quand la relecture échoue", () => {
   it("l'événement non relu est retrouvé par l'action : l'écran reste, avec « Réessayer »", () => {
     const event = eventAfterVote(null, { ok: true, eventId: "e1" }, "lydia", voted);
-    expect(event).toEqual({ id: "e1", slug: "lydia", title: "Plus belle japonaise" });
+    expect(event).toEqual({ id: "e1", slug: "lydia", title: "" }); // un seul titre : celui du vote
     expect(confirmationIsStale({ vote: { id: "v" }, event: null }, voted)).toBe(true);
     expect(confirmationIsStale({ vote: null, event: { id: "e1" } }, voted)).toBe(true);
   });
