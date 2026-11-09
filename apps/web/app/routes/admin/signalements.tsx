@@ -100,9 +100,23 @@ function Detail({ d, back, busy, error }: { d: AdminReportDetail; back: string; 
       {d.target.gone && <p className="s-notice">{moderationLabels.targetGone}</p>}
       {d.target.removed && <p className="s-notice">{moderationLabels.targetRemoved}</p>}
       {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
-      {(d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
-        <img key={url} className="mod-target__img" src={url} alt="" />
-      ))}
+      {d.target.videoUrl ? (
+        // Lot R7g, tour 2 : une story vidéo signalée se lit dans le dossier (par morceaux, droits du modérateur).
+        // biome-ignore lint/a11y/useMediaCaption: la modération regarde le contenu signalé, il n'a pas de sous-titres.
+        <video
+          className="mod-target__video"
+          src={d.target.videoUrl}
+          poster={d.target.imageUrl ?? undefined}
+          controls
+          playsInline
+          preload="metadata"
+          data-testid="report-video"
+        />
+      ) : (
+        (d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
+          <img key={url} className="mod-target__img" src={url} alt="" />
+        ))
+      )}
       {d.target.text && d.targetType !== "message" && <p className="s-prewrap">{d.target.text}</p>}
       {d.target.link && (
         <a href={d.target.link} target="_blank" rel="noopener">
