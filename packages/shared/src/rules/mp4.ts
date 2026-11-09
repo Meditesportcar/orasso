@@ -108,28 +108,51 @@ const find = (data: Uint8Array, dv: DataView, parent: Box, type: string): Box | 
   return null;
 };
 
-type VideoTrack = { kind: "video"; codec: string; width: number; height: number; durationSeconds: number };
+/** Lit `bytes` octets de données de la boîte (après son en-tête) : une boîte trop courte est refusée, jamais lue au-delà. */
+function need(box: Box, bytes: number): void {
+  if (box.start + box.header + bytes > box.end) throw bad(`boîte ${box.type} tronquée`);
+}
+
+type Chunks = { box: Box; wide: boolean };
+type TrackInfo = {
+  kind: "video" | "audio" | "other";
+  /** Durée du média de la piste (`mdhd`), en secondes ; 0 si absente. */
+  durationSeconds: number;
+  codec: string;
+  width: number;
+  height: number;
+  /** Configuration AVC (`avcC`) présente et plausible, ou codec qui n'est pas H.264. */
+  configured: boolean;
+  /** Nombre d'échantillons (`stsz`/`stz2`), `null` si la table est absente. */
+  samples: number | null;
+  chunks: Chunks | null;
+};
+
+/** Plages d'octets des `mdat` (données seulement) et présence d'un fragment `moof` : ce que le fichier contient vraiment. */
+type FileContext = { mdats: [number, number][]; sawMoof: boolean };
 
 /** Parcourt `moov` et en tire ce qui compte. */
-function parseMoov(moov: Uint8Array) {
+function parseMoov(moov: Uint8Array, ctx: FileContext) {
   const dv = view(moov);
   let timescale = 0;
   let duration = 0;
   let fragmented = false;
   let fragmentDuration = 0;
-  let video: VideoTrack | null = null;
+  let video: TrackInfo | null = null;
   let hasAudio = false;
+  let longestTrack = 0;
 
   for (const box of children(moov, dv, 8, moov.length)) {
     if (box.type === "mvhd") {
+      need(box, 4);
       const v = u8(dv, box.start + box.header);
       const o = box.start + box.header + 4;
       if (v === 1) {
-        if (o + 28 > box.end) throw bad("mvhd");
+        need(box, 4 + 28);
         timescale = u32(dv, o + 16);
         duration = u64(dv, o + 20);
       } else {
-        if (o + 16 > box.end) throw bad("mvhd");
+        need(box, 4 + 16);
         timescale = u32(dv, o + 8);
         duration = u32(dv, o + 12);
       }
@@ -137,30 +160,80 @@ function parseMoov(moov: Uint8Array) {
       fragmented = true;
       const mehd = find(moov, dv, box, "mehd");
       if (mehd) {
+        need(mehd, 4);
         const v = u8(dv, mehd.start + mehd.header);
         const o = mehd.start + mehd.header + 4;
+        need(mehd, 4 + (v === 1 ? 8 : 4));
         fragmentDuration = v === 1 ? u64(dv, o) : u32(dv, o);
       }
     } else if (box.type === "trak") {
       const t = parseTrak(moov, dv, box);
+      longestTrack = Math.max(longestTrack, t.durationSeconds);
       if (t.kind === "audio") hasAudio = true;
       else if (t.kind === "video" && !video) video = t;
     }
   }
   if (!timescale) throw bad("durée absente");
   if (!duration && fragmented) duration = fragmentDuration;
-  return { timescale, duration, video, hasAudio };
+  if (video) checkVideoTrack(dv, video, fragmented, ctx);
+  return { timescale, duration, video, hasAudio, longestTrack };
 }
 
-function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): { kind: "audio" | "other" } | VideoTrack {
-  const tkhd = find(moov, dv, trak, "tkhd");
-  const mdia = find(moov, dv, trak, "mdia");
-  if (!tkhd || !mdia) return { kind: "other" };
-  const hdlr = find(moov, dv, mdia, "hdlr");
-  const handler = hdlr ? text(moov, hdlr.start + hdlr.header + 8, hdlr.start + hdlr.header + 12) : "";
-  if (handler === "soun") return { kind: "audio" };
-  if (handler !== "vide") return { kind: "other" };
+/** La piste vidéo contient-elle de quoi s'afficher ? (configuration, échantillons, morceaux dans le fichier) ; sans décodage. */
+function checkVideoTrack(dv: DataView, video: TrackInfo, fragmented: boolean, ctx: FileContext): void {
+  if (!video.configured) throw bad("configuration du codec absente");
+  if (fragmented) {
+    // Fichier fragmenté : les échantillons sont dans les fragments, pas dans les tables de la piste.
+    if (!ctx.sawMoof) throw bad("aucun fragment vidéo");
+    return;
+  }
+  if (!video.samples) throw bad("aucun échantillon vidéo");
+  if (!video.chunks) throw bad("table des morceaux absente");
+  const { box, wide } = video.chunks;
+  need(box, 8);
+  const count = u32(dv, box.start + box.header + 4);
+  if (count === 0) throw bad("aucun morceau vidéo");
+  const step = wide ? 8 : 4;
+  need(box, 8 + count * step);
+  let o = box.start + box.header + 8;
+  for (let i = 0; i < count; i++, o += step) {
+    const at = wide ? u64(dv, o) : u32(dv, o);
+    if (!ctx.mdats.some(([from, to]) => at >= from && at < to)) throw bad("morceau hors des données");
+  }
+}
 
+function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
+  const other: TrackInfo = {
+    kind: "other",
+    durationSeconds: 0,
+    codec: "",
+    width: 0,
+    height: 0,
+    configured: false,
+    samples: null,
+    chunks: null,
+  };
+  const mdia = find(moov, dv, trak, "mdia");
+  if (!mdia) return other;
+  const mdhd = find(moov, dv, mdia, "mdhd");
+  if (mdhd) {
+    need(mdhd, 4);
+    const mv = u8(dv, mdhd.start + mdhd.header);
+    const o = mdhd.start + mdhd.header + 4;
+    need(mdhd, 4 + (mv === 1 ? 28 : 16));
+    const ts = mv === 1 ? u32(dv, o + 16) : u32(dv, o + 8);
+    const dur = mv === 1 ? u64(dv, o + 20) : u32(dv, o + 12);
+    if (ts > 0) other.durationSeconds = dur / ts;
+  }
+  const tkhd = find(moov, dv, trak, "tkhd");
+  if (!tkhd) return other;
+  const hdlr = find(moov, dv, mdia, "hdlr");
+  if (hdlr) need(hdlr, 12);
+  const handler = hdlr ? text(moov, hdlr.start + hdlr.header + 8, hdlr.start + hdlr.header + 12) : "";
+  if (handler === "soun") return { ...other, kind: "audio" };
+  if (handler !== "vide") return other;
+
+  need(tkhd, 4);
   const v = u8(dv, tkhd.start + tkhd.header);
   const base = tkhd.start + tkhd.header + 4;
   // Après version/indicateurs : créée, modifiée, identifiant, réservé, durée (4 ou 8 octets selon la version), puis
@@ -174,39 +247,78 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): { kind: "audio" |
   // Rotation à 90° ou 270° (a = d = 0, b et c non nuls) : la largeur affichée est la hauteur stockée.
   const quarter = a === 0 && b !== 0;
 
-  let durationSeconds = 0;
-  const mdhd = find(moov, dv, mdia, "mdhd");
-  if (mdhd) {
-    const mv = u8(dv, mdhd.start + mdhd.header);
-    const o = mdhd.start + mdhd.header + 4;
-    const ts = mv === 1 ? u32(dv, o + 16) : u32(dv, o + 8);
-    const dur = mv === 1 ? u64(dv, o + 20) : u32(dv, o + 12);
-    if (ts > 0) durationSeconds = dur / ts;
-  }
-
   const minf = find(moov, dv, mdia, "minf");
   const stbl = minf ? find(moov, dv, minf, "stbl") : null;
   const stsd = stbl ? find(moov, dv, stbl, "stsd") : null;
-  if (!stsd) throw bad("description de la piste vidéo absente");
+  if (!stbl || !stsd) throw bad("description de la piste vidéo absente");
   // Version/indicateurs (4), nombre d'entrées (4), puis la première entrée : taille (4) et format (4).
   const entry = stsd.start + stsd.header + 8;
   if (entry + 8 > stsd.end) throw bad("stsd");
+  const entrySize = u32(dv, entry);
+  if (entrySize < 8 || entry + entrySize > stsd.end) throw bad("stsd");
+  const codec = text(moov, entry + 4, entry + 8);
+
+  let configured = true;
+  if (codec === "avc1" || codec === "avc3") {
+    // Entrée vidéo : 8 d'en-tête + 78 de champs fixes, puis ses boîtes (dont `avcC`, la configuration H.264).
+    const childrenAt = entry + 8 + 78;
+    configured = false;
+    if (childrenAt <= entry + entrySize) {
+      for (const child of children(moov, dv, childrenAt, entry + entrySize)) {
+        if (child.type !== "avcC") continue;
+        // Version 1, puis profil, compatibilité, niveau, taille des longueurs, nombre de SPS (5 bits).
+        if (child.start + child.header + 7 > child.end) break;
+        const at = child.start + child.header;
+        configured = u8(dv, at) === 1 && (codec === "avc3" || (u8(dv, at + 5) & 0x1f) >= 1);
+        break;
+      }
+    }
+  }
+
+  let samples: number | null = null;
+  const stsz = find(moov, dv, stbl, "stsz");
+  const stz2 = stsz ? null : find(moov, dv, stbl, "stz2");
+  const sizes = stsz ?? stz2;
+  if (sizes) {
+    need(sizes, 12);
+    samples = u32(dv, sizes.start + sizes.header + 8);
+    // Tailles individuelles (sample_size à 0) : la table doit tenir dans la boîte.
+    if (sizes === stsz && u32(dv, sizes.start + sizes.header + 4) === 0) need(sizes, 12 + samples * 4);
+  }
+  const stco = find(moov, dv, stbl, "stco");
+  const co64 = stco ? null : find(moov, dv, stbl, "co64");
+  const chunks: Chunks | null = stco ? { box: stco, wide: false } : co64 ? { box: co64, wide: true } : null;
+
   return {
     kind: "video",
-    codec: text(moov, entry + 4, entry + 8),
+    durationSeconds: other.durationSeconds,
+    codec,
     width: Math.round(quarter ? rawHeight : rawWidth),
     height: Math.round(quarter ? rawWidth : rawHeight),
-    durationSeconds,
+    configured,
+    samples,
+    chunks,
   };
 }
 
 export async function readMp4(source: Mp4Source): Promise<Mp4Info> {
+  try {
+    return await readMp4Unchecked(source);
+  } catch (error) {
+    // Toute lecture hors bornes d'un fichier corrompu (RangeError…) est un fichier illisible, jamais une erreur interne.
+    if (error instanceof Mp4Error) throw error;
+    throw bad("lecture impossible");
+  }
+}
+
+async function readMp4Unchecked(source: Mp4Source): Promise<Mp4Info> {
   if (source.size < 16) throw bad("fichier trop court");
   const head = await source.read(0, 16);
   if (head.length < 12 || text(head, 4, 8) !== "ftyp") throw bad("pas un fichier MP4 ou MOV");
   const ftypSize = u32(view(head), 0);
   if (ftypSize < 12 || ftypSize > 4096 || ftypSize > source.size) throw bad("ftyp");
   const ftyp = await source.read(0, ftypSize);
+  if (ftyp.length !== ftypSize) throw bad("ftyp");
   const brand = text(ftyp, 8, 12);
   const compatible: string[] = [];
   for (let o = 16; o + 4 <= ftyp.length; o += 4) compatible.push(text(ftyp, o, o + 4));
@@ -215,7 +327,7 @@ export async function readMp4(source: Mp4Source): Promise<Mp4Info> {
   // Boîtes de premier niveau : les en-têtes seulement, `mdat` est sauté sans être lu.
   let offset = 0;
   let moov: Uint8Array | null = null;
-  let sawMedia = false;
+  const ctx: FileContext = { mdats: [], sawMoof: false };
   for (let n = 0; offset + 8 <= source.size; n++) {
     if (n > TOP_LEVEL_MAX) throw bad("trop de boîtes");
     const h = await source.read(offset, 16);
@@ -231,7 +343,8 @@ export async function readMp4(source: Mp4Source): Promise<Mp4Info> {
     } else if (size === 0) size = source.size - offset;
     // Une boîte qui dépasse la fin du fichier : envoi incomplet.
     if (size < header || offset + size > source.size) throw bad("fichier tronqué");
-    if (type === "mdat" || type === "moof") sawMedia = true;
+    if (type === "mdat" && size > header) ctx.mdats.push([offset + header, offset + size]);
+    if (type === "moof") ctx.sawMoof = true;
     if (type === "moov") {
       if (size > MOOV_MAX) throw bad("moov démesuré");
       moov = await source.read(offset, size);
@@ -240,11 +353,14 @@ export async function readMp4(source: Mp4Source): Promise<Mp4Info> {
     offset += size;
   }
   if (!moov) throw bad("moov absent");
-  if (!sawMedia) throw bad("aucune donnée de média");
+  if (ctx.mdats.length === 0 && !ctx.sawMoof) throw bad("aucune donnée de média");
 
-  const info = parseMoov(moov);
+  const info = parseMoov(moov, ctx);
   if (!info.video) throw new Mp4Error("no_video", "Ce fichier ne contient pas de piste vidéo");
-  const seconds = info.duration > 0 ? info.duration / info.timescale : info.video.durationSeconds;
+  // Durée retenue : la plus longue de l'en-tête du film et du média de chaque piste (un fichier ne peut pas annoncer 10 s
+  // dans `mvhd` et cacher une piste plus longue).
+  const headerSeconds = info.duration > 0 ? info.duration / info.timescale : 0;
+  const seconds = Math.max(headerSeconds, info.longestTrack);
   if (!Number.isFinite(seconds) || seconds <= 0) throw bad("durée nulle");
   if (!info.video.width || !info.video.height) throw bad("dimensions absentes");
   return {

@@ -10,18 +10,19 @@ import {
   STORY_VIDEO_LIMIT_MS,
   STORY_VIDEO_MAX_BYTES,
   STORY_VIDEO_MIN_MS,
+  STORY_VIDEO_PENDING_MAX_BYTES,
   STORY_VIDEO_UPLOADS_MAX_PARALLEL,
   storyVideoLabels,
   type UploadPurpose,
   type UploadResult,
 } from "@orasso/shared";
-import { and, count, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { uploads } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
-import { Mp4Error, readMp4File } from "../../lib/mp4";
+import { Mp4Error, readMp4File, stripMp4Metadata } from "../../lib/mp4";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -82,8 +83,13 @@ const extOf = (purpose: UploadPurpose) => (purpose === "story_video" ? "mp4" : "
 
 /** Surface maximale d'une vidéo (un 4K) : au-delà, le téléphone d'un spectateur ne la lirait pas. */
 const VIDEO_MAX_PIXELS = 4096 * 2304;
-/** Envois de vidéos en cours (chacun pèse sur la mémoire de l'API : au plus `STORY_VIDEO_UPLOADS_MAX_PARALLEL`). */
+/**
+ * Envois de vidéos en cours (chacun écrit un fichier de 60 Mo au plus, en flux : le corps ne passe jamais en mémoire). Au plus
+ * `STORY_VIDEO_UPLOADS_MAX_PARALLEL` en tout, un seul par personne ; la place est prise **avant** de lire le corps et rendue
+ * dans un `finally`.
+ */
 let videoUploadsRunning = 0;
+const videoUploaders = new Set<string>();
 
 export const isPrivatePurpose = (purpose: UploadPurpose) => privateUploadPurposes.includes(purpose);
 
@@ -144,6 +150,15 @@ async function register(
       if ((pending?.n ?? 0) >= MAX_PENDING_UPLOADS) {
         throw new AppError(429, "rate_limited", "Trop de fichiers en attente d'envoi : réessaie plus tard.");
       }
+      if (purpose === "story_video") {
+        const [sum] = await tx
+          .select({ bytes: sql<number>`coalesce(sum(${uploads.bytes}), 0)::float8` })
+          .from(uploads)
+          .where(and(eq(uploads.userId, v.user.id), isNull(uploads.consumedAt)));
+        if ((sum?.bytes ?? 0) + info.bytes > STORY_VIDEO_PENDING_MAX_BYTES) {
+          throw new AppError(429, "rate_limited", storyVideoLabels.apiPendingFull);
+        }
+      }
       await tx.insert(uploads).values({
         key,
         userId: v.user.id,
@@ -159,6 +174,28 @@ async function register(
     throw error;
   }
   for (const old of expired) await storage.remove(old).catch(() => undefined);
+}
+
+/**
+ * Refus avant toute lecture du corps : cette personne garde déjà trop d'octets de vidéos non publiées (les envois de plus
+ * de 24 h ne comptent plus : la tâche `uploads.purge` et `register` les effacent). `register` refait le calcul sous verrou.
+ */
+async function assertVideoRoom(userId: string, incoming: number): Promise<void> {
+  const [sum] = await withTx((tx) =>
+    tx
+      .select({ bytes: sql<number>`coalesce(sum(${uploads.bytes}), 0)::float8` })
+      .from(uploads)
+      .where(
+        and(
+          eq(uploads.userId, userId),
+          isNull(uploads.consumedAt),
+          gte(uploads.createdAt, new Date(now().getTime() - PENDING_UPLOAD_TTL_MS)),
+        ),
+      ),
+  );
+  if ((sum?.bytes ?? 0) + incoming > STORY_VIDEO_PENDING_MAX_BYTES) {
+    throw new AppError(429, "rate_limited", storyVideoLabels.apiPendingFull);
+  }
 }
 
 export const uploadsService = {
@@ -181,7 +218,8 @@ export const uploadsService = {
     // Photo d'annonce (lot 20) : seulement un organisateur qui peut publier.
     if (purpose === "announcement") await requireAnnouncementUploader(v);
     if (file.size === 0) throw validation("Fichier vide");
-    if (purpose === "story_video") return uploadsService.uploadVideo(v, file);
+    // Les vidéos arrivent brutes par `POST /me/uploads/story-video` (jamais en multipart : le corps serait lu en mémoire).
+    if (purpose === "story_video") throw validation(storyVideoLabels.apiWrongType);
     if (file.size > MAX_UPLOAD_BYTES) throw new AppError(413, "payload_too_large", "Image de 15 Mo au plus");
     const webp = await toWebp(Buffer.from(await file.arrayBuffer()), purpose);
     // Lot 57 (D28) : plaques floutées sur l'image recompressée, avant tout stockage (aucun original gardé).
@@ -195,36 +233,84 @@ export const uploadsService = {
   },
 
   /**
-   * Lot R7g : une vidéo de story. Le fichier va sur le disque sans tampon de plus, puis le lecteur de conteneur
-   * (`lib/mp4.ts`, sans ffmpeg) vérifie le format MP4/MOV, la durée (31 s au plus), le codec (H.264) et les dimensions. Un
-   * fichier refusé est effacé tout de suite. Rien n'est décodé ni transformé : la vidéo est servie telle que l'appareil l'a
-   * produite (décision de Damien du 09/11 : pas de floutage de plaque pour les vidéos).
+   * Lot R7g (tour 2) : une vidéo de story, reçue **brute** (`POST /me/uploads/story-video`, `Content-Type: video/mp4`,
+   * `Content-Length` obligatoire et 60 Mo au plus). Rien n'est lu avant que les garde-fous aient parlé : limite de débit,
+   * place dans les envois en cours (2 en tout, 1 par personne, libérée dans un `finally`) et plafond d'octets en attente.
+   * Le corps va ensuite sur le disque **en flux**, compté octet par octet (plus long ou plus court que `Content-Length` :
+   * refus, fichier effacé) : la mémoire de l'API ne porte jamais plus que quelques morceaux. Puis le lecteur de conteneur
+   * (`lib/mp4.ts`, sans ffmpeg) vérifie le format, la durée, le codec et les dimensions, et les boîtes qui peuvent porter la
+   * position GPS ou l'appareil (`udta`, `meta`, `uuid`) sont neutralisées dans le fichier avant l'enregistrement. Rien n'est
+   * décodé ni transformé (décision de Damien du 09/11 : pas de floutage de plaque pour les vidéos).
    */
-  async uploadVideo(v: Viewer, file: File): Promise<UploadResult> {
-    if (file.size > STORY_VIDEO_MAX_BYTES) {
+  async uploadStoryVideo(v: Viewer, req: Request): Promise<UploadResult> {
+    if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
+      throw forbidden("Ton compte est suspendu : lecture seule.");
+    }
+    const type = (req.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
+    if (type !== "video/mp4" && type !== "video/quicktime") {
+      throw new AppError(415, "unsupported_media_type", storyVideoLabels.apiWrongType);
+    }
+    const header = req.headers.get("content-length")?.trim() ?? "";
+    if (!/^\d{1,12}$/.test(header)) throw new AppError(411, "validation_error", storyVideoLabels.apiLengthRequired);
+    const declared = Number(header);
+    if (declared === 0) throw validation("Fichier vide");
+    if (declared > STORY_VIDEO_MAX_BYTES) {
       throw new AppError(
         413,
         "payload_too_large",
         "Vidéo de 60 Mo au plus : envoie-la depuis l'appli, elle la compresse.",
       );
     }
-    if (videoUploadsRunning >= STORY_VIDEO_UPLOADS_MAX_PARALLEL) {
+    if (!req.body) throw validation(storyVideoLabels.apiBadBody);
+    rateLimit("storyVideoUpload", v.user.id);
+    await assertVideoRoom(v.user.id, declared);
+    if (videoUploadsRunning >= STORY_VIDEO_UPLOADS_MAX_PARALLEL || videoUploaders.has(v.user.id)) {
       throw new AppError(429, "rate_limited", storyVideoLabels.apiBusy);
     }
     videoUploadsRunning++;
+    videoUploaders.add(v.user.id);
     const id = randomUUID();
     const key = `private/${FOLDER.story_video}/${id}.mp4`;
     try {
-      await storage.putStream(key, file.stream());
+      let seen = 0;
+      let badLength = false;
+      const counted = req.body.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            seen += chunk.byteLength;
+            if (seen > declared) {
+              badLength = true;
+              throw new Error("corps plus long que Content-Length");
+            }
+            controller.enqueue(chunk);
+          },
+          flush() {
+            if (seen !== declared) {
+              badLength = true;
+              throw new Error("corps plus court que Content-Length");
+            }
+          },
+        }),
+      );
       try {
-        const info = await readMp4File(storage.localPath(key));
+        await storage.putStream(key, counted);
+      } catch (error) {
+        // `putStream` a déjà effacé le fichier partiel.
+        if (badLength) throw validation(storyVideoLabels.apiBadBody);
+        throw error;
+      }
+      try {
+        const path = storage.localPath(key);
+        const info = await readMp4File(path);
         if (!info.h264) throw new AppError(400, "codec", storyVideoLabels.apiCodec);
         if (info.durationMs > STORY_VIDEO_LIMIT_MS) throw new AppError(400, "too_long", storyVideoLabels.apiTooLong);
         if (info.durationMs < STORY_VIDEO_MIN_MS) throw validation(storyVideoLabels.apiUnreadable);
         if (info.width * info.height > VIDEO_MAX_PIXELS) {
           throw validation("Définition trop grande : 4K au plus. Envoie-la depuis l'appli, elle la compresse.");
         }
-        await register(v, key, "story_video", { width: info.width, height: info.height, bytes: file.size });
+        // Lieu, appareil, auteur : effacés du fichier lui-même (même taille, le reste se lit comme avant).
+        await stripMp4Metadata(path);
+        await register(v, key, "story_video", { width: info.width, height: info.height, bytes: declared });
         return { id, key, width: info.width, height: info.height, durationMs: info.durationMs };
       } catch (error) {
         await storage.remove(key).catch(() => undefined);
@@ -239,6 +325,7 @@ export const uploadsService = {
       }
     } finally {
       videoUploadsRunning--;
+      videoUploaders.delete(v.user.id);
     }
   },
 

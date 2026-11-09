@@ -3,18 +3,20 @@
 // contrainte en base, lecture par morceaux (`Range`) avec les droits de la photo, expiration. La fixture est une mire
 // de 2 s (aucune plaque, aucune personne) ; la vidéo « trop longue » est la même dont la durée est réécrite.
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fromWallTime, STORY_VIDEO_MAX_BYTES } from "@orasso/shared";
+import { fromWallTime, STORY_VIDEO_MAX_BYTES, STORY_VIDEO_PENDING_MAX_BYTES, storyVideoLabels } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-
 import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { withLocation } from "../../../test/mp4-builders";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { crewMembers, profiles, stories, userFollows } from "../../db/schema";
-import { storage } from "../../lib/storage";
+import { crewMembers, profiles, stories, uploads, userFollows } from "../../db/schema";
+import { readMp4Buffer } from "../../lib/mp4";
+import { storage, storageDir } from "../../lib/storage";
 import { storiesExpire } from "./expire";
 
 afterAll(async () => {
@@ -60,7 +62,31 @@ async function req(
   return { status: res.status, json, buf, headers: res.headers };
 }
 
+/** Envoi brut d'une vidéo (`POST /me/uploads/story-video`) : `Content-Length` posé à la main (une `Request` de test n'en calcule pas). */
+async function uploadRaw(
+  u: TestUser | null,
+  body: RequestInit["body"],
+  headers: Record<string, string | null> = {},
+  length: number | null = typeof body === "string" ? body.length : body instanceof Uint8Array ? body.length : null,
+) {
+  const h: Record<string, string> = { origin: ORIGIN, "content-type": "video/mp4", ...(u ? { cookie: u.cookie } : {}) };
+  if (length !== null) h["content-length"] = String(length);
+  for (const [k, v] of Object.entries(headers)) {
+    if (v === null) delete h[k];
+    else h[k] = v;
+  }
+  const res = await app.request("/api/me/uploads/story-video", {
+    method: "POST",
+    headers: h,
+    body,
+    ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
+  } as RequestInit);
+  // biome-ignore lint/suspicious/noExplicitAny: réponses JSON lues librement dans les tests
+  return { status: res.status, json: (await res.json().catch(() => null)) as any };
+}
+
 async function upload(u: TestUser | null, purpose: string, data: Buffer, name = "story.mp4", type = "video/mp4") {
+  if (purpose === "story_video") return uploadRaw(u, new Uint8Array(data), { "content-type": type });
   const form = new FormData();
   form.append("purpose", purpose);
   form.append("file", new File([new Uint8Array(data)], name, { type }));
@@ -137,9 +163,9 @@ describe("envoi d'une vidéo", () => {
     expect([res.json.width, res.json.height]).toEqual([720, 1280]);
     expect(res.json.durationMs).toBeGreaterThan(1900);
     expect(res.json.durationMs).toBeLessThan(2200);
-    // Le fichier est gardé tel quel : même contenu, octet pour octet.
+    // Le fichier est gardé tel quel, à une chose près : les boîtes de métadonnées sont vidées (même taille, voir plus bas).
     const stored = await storage.get(res.json.key);
-    expect(stored?.equals(data)).toBe(true);
+    expect(stored?.length).toBe(data.length);
     // Une vidéo n'est jamais servie par la route des fichiers publics.
     expect((await req(null, "GET", `/files/${res.json.key}`)).status).toBe(404);
   });
@@ -222,7 +248,7 @@ describe("publier une vidéo", () => {
     // Les envois d'origine sont consommés puis effacés ; la vidéo publiée est la même, octet pour octet.
     expect(await storage.size(sent.video)).toBeNull();
     expect(await storage.size(sent.poster)).toBeNull();
-    expect((await storage.get(row?.storageKey ?? ""))?.equals(await fixture("story-2s.mp4"))).toBe(true);
+    expect((await storage.get(row?.storageKey ?? ""))?.length).toBe((await fixture("story-2s.mp4")).length);
     // L'abonné la voit : vidéo, durée, vignette.
     const view = await viewOf(lea, kenji);
     expect(view.mediaKind).toBe("video");
@@ -346,7 +372,9 @@ describe("lecture par morceaux", () => {
     await follow(lea, kenji);
     await okVideo(kenji, { audience: "followers" });
     const view = await viewOf(lea, kenji);
-    const data = await fixture("story-2s.mp4");
+    // Le fichier servi est celui qui est enregistré (métadonnées vidées à l'envoi).
+    const [stored] = await db.select().from(stories);
+    const data = (await storage.get(stored?.storageKey ?? "")) as Buffer;
     return { kenji, lea, view, data, url: strip(view.mediaUrl) };
   }
 
@@ -433,5 +461,242 @@ describe("lecture par morceaux", () => {
     await storiesExpire.run();
     expect(await storage.size(row?.storageKey ?? "")).toBeNull();
     expect(await storage.size(row?.posterKey ?? "")).toBeNull();
+  });
+});
+
+// ─── Tour 2 : envoi brut en flux, garde-fous avant lecture, position GPS effacée, plafond d'octets en attente ──────────────
+
+const MB = 1024 * 1024;
+
+/** Corps qui n'avance qu'à la demande : `reading` se réalise quand le serveur commence à le lire, `release` livre les octets. */
+function pausedBody(bytes: Uint8Array) {
+  let started!: () => void;
+  let go!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    go = resolve;
+  });
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        started();
+        await gate;
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, reading, release: go, length: bytes.length };
+}
+
+/** Corps dont on compte les lectures : il ne doit jamais être lu quand l'envoi est refusé d'avance. */
+function untouchedBody() {
+  const state = { pulls: 0 };
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        state.pulls++;
+        controller.enqueue(new Uint8Array(1024));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, state };
+}
+
+const storedVideoFiles = () => readdir(join(storageDir, "private", "story-videos")).catch(() => [] as string[]);
+/** Fichiers de vidéos de plus qu'au début du test (le dossier de stockage n'est pas vidé entre deux tests). */
+let filesAtStart = 0;
+beforeEach(async () => {
+  filesAtStart = (await storedVideoFiles()).length;
+});
+const newFiles = async () => (await storedVideoFiles()).length - filesAtStart;
+
+describe("envoi brut d'une vidéo (route dédiée)", () => {
+  it("garde-fous avant lecture : le 3e envoi est refusé sans lire son corps, une personne n'en a qu'un, la place est rendue ensuite", async () => {
+    const [a, b, c] = [await signUp("Anna"), await signUp("Boris"), await signUp("Chloe")];
+    const data = new Uint8Array(await fixture("story-2s.mp4"));
+    const first = pausedBody(data);
+    const second = pausedBody(data);
+    const pa = uploadRaw(a, first.stream, {}, first.length);
+    await Promise.race([first.reading, pa]);
+    const pb = uploadRaw(b, second.stream, {}, second.length);
+    await Promise.race([second.reading, pb]);
+
+    const third = untouchedBody();
+    const refused = await uploadRaw(c, third.stream, {}, data.length);
+    expect([refused.status, refused.json.error.code]).toEqual([429, "rate_limited"]);
+    expect(third.state.pulls).toBe(0);
+
+    // Anna a déjà un envoi en cours : un second est refusé aussi, sans lecture.
+    const again = untouchedBody();
+    expect((await uploadRaw(a, again.stream, {}, data.length)).status).toBe(429);
+    expect(again.state.pulls).toBe(0);
+
+    first.release();
+    second.release();
+    expect((await pa).status).toBe(201);
+    expect((await pb).status).toBe(201);
+    // Les places sont rendues (`finally`) : Chloé passe, et Anna peut renvoyer.
+    expect((await upload(c, "story_video", Buffer.from(data))).status).toBe(201);
+    expect((await upload(a, "story_video", Buffer.from(data))).status).toBe(201);
+  });
+
+  it("rend la place quand l'envoi échoue (fichier illisible, coupure en route)", async () => {
+    const kenji = await signUp("Kenji");
+    const lea = await signUp("Lea");
+    const marc = await signUp("Marc");
+    for (const who of [kenji, lea, marc]) {
+      expect((await upload(who, "story_video", Buffer.from("pas une vidéo, du tout"))).status).toBe(415);
+    }
+    const broken = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("connexion coupée"));
+      },
+    });
+    expect((await uploadRaw(kenji, broken, {}, 5000)).status).toBeGreaterThanOrEqual(400);
+    expect((await upload(kenji, "story_video", await fixture("story-2s.mp4"))).status).toBe(201);
+    expect(await newFiles()).toBe(1);
+  });
+
+  it("un corps plus long ou plus court que Content-Length est refusé et ne laisse aucun fichier", async () => {
+    const kenji = await signUp("Kenji");
+    const data = await fixture("story-2s.mp4");
+    const longer = await uploadRaw(kenji, new Uint8Array(Buffer.concat([data, randomBytes(500)])), {}, data.length);
+    expect([longer.status, longer.json.error.code]).toEqual([400, "validation_error"]);
+    const shorter = await uploadRaw(kenji, new Uint8Array(data.subarray(0, 1000)), {}, data.length);
+    expect([shorter.status, shorter.json.error.code]).toEqual([400, "validation_error"]);
+    expect(await newFiles()).toBe(0);
+    expect(await db.query.uploads.findMany({})).toHaveLength(0);
+    // Le compte exact passe.
+    expect((await uploadRaw(kenji, new Uint8Array(data), {}, data.length)).status).toBe(201);
+  });
+
+  it("coupe au-delà de 60 Mo : déclaré trop gros, refusé sans lecture ; déclaré 60 Mo mais plus long, coupé en route", async () => {
+    const kenji = await signUp("Kenji");
+    const untouched = untouchedBody();
+    const tooBig = await uploadRaw(kenji, untouched.stream, {}, STORY_VIDEO_MAX_BYTES + 1);
+    expect([tooBig.status, tooBig.json.error.code]).toEqual([413, "payload_too_large"]);
+    expect(untouched.state.pulls).toBe(0);
+    const huge = await uploadRaw(kenji, untouchedBody().stream, {}, 70 * MB);
+    expect([huge.status, huge.json.error.code]).toEqual([413, "payload_too_large"]);
+
+    let sent = 0;
+    const endless = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          sent += MB;
+          controller.enqueue(new Uint8Array(MB));
+          if (sent >= 80 * MB) controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const cut = await uploadRaw(kenji, endless, {}, STORY_VIDEO_MAX_BYTES);
+    expect([cut.status, cut.json.error.code]).toEqual([400, "validation_error"]);
+    // Coupé à l'octet 60 Mo + 1 : le serveur n'a pas lu le reste (quelques morceaux d'avance au plus).
+    expect(sent).toBeLessThan(STORY_VIDEO_MAX_BYTES + 6 * MB);
+    expect(await newFiles()).toBe(0);
+  });
+
+  it("exige Content-Length (411), un type vidéo (415) ; l'ancienne route ne prend plus de vidéo (400)", async () => {
+    const kenji = await signUp("Kenji");
+    const data = new Uint8Array(await fixture("story-2s.mp4"));
+    const noLength = await uploadRaw(kenji, data, {}, null);
+    expect([noLength.status, noLength.json.error.message]).toEqual([411, storyVideoLabels.apiLengthRequired]);
+    const form = await uploadRaw(kenji, data, { "content-type": "multipart/form-data; boundary=x" });
+    expect(form.status).toBe(415);
+    expect((await uploadRaw(kenji, data, { "content-type": "application/octet-stream" })).status).toBe(415);
+    expect((await uploadRaw(kenji, data, { "content-type": "video/quicktime" })).status).toBe(201);
+    // Multipart sur `/me/uploads` : la vidéo n'y passe plus.
+    const fd = new FormData();
+    fd.append("purpose", "story_video");
+    fd.append("file", new File([data], "v.mp4", { type: "video/mp4" }));
+    const old = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: kenji.cookie },
+      body: fd,
+    });
+    expect(old.status).toBe(400);
+    expect(await newFiles()).toBe(1);
+  });
+
+  it("efface le lieu du fichier enregistré : udta/©xyz, uuid et meta vidés, même taille, vidéo lisible, images intactes", async () => {
+    const kenji = await signUp("Kenji");
+    const original = await fixture("story-2s.mp4");
+    const located = withLocation(original);
+    expect(located.includes("+42.6887")).toBe(true);
+    expect(located.includes(Buffer.from([0xa9, 0x78, 0x79, 0x7a]))).toBe(true);
+    const res = await upload(kenji, "story_video", located);
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    const stored = (await storage.get(res.json.key)) as Buffer;
+    expect(stored.length).toBe(located.length);
+    for (const trace of ["+42.6887", "002.8948", "Perpignan", "ISO6709", "udta", "uuid", "ilst"]) {
+      expect(stored.includes(trace), trace).toBe(false);
+    }
+    expect(stored.includes(Buffer.from([0xa9, 0x78, 0x79, 0x7a]))).toBe(false);
+    const info = await readMp4Buffer(stored);
+    expect([info.width, info.height, info.h264]).toEqual([720, 1280, true]);
+    // Les images (mdat) n'ont pas bougé d'un octet.
+    const mdatAt = original.indexOf("mdat") - 4;
+    const mdatSize = original.readUInt32BE(mdatAt);
+    expect(stored.subarray(mdatAt, mdatAt + mdatSize).equals(original.subarray(mdatAt, mdatAt + mdatSize))).toBe(true);
+  });
+
+  it("refuse un fichier qui annonce 10 s dans mvhd et plus dans une piste, ou qui n'a aucune image", async () => {
+    const kenji = await signUp("Kenji");
+    const base = await fixture("story-2s.mp4");
+    const long = Buffer.from(withDuration(base, 10));
+    // `mdhd` de la piste vidéo (première) : 40 s dans l'échelle de temps de la piste.
+    const mdhd = long.indexOf("mdhd") + 4;
+    long.writeUInt32BE(Math.round(long.readUInt32BE(mdhd + 4 + 8) * 40), mdhd + 4 + 12);
+    const res = await upload(kenji, "story_video", long);
+    expect([res.status, res.json.error.code]).toEqual([400, "too_long"]);
+    // Plus aucune image : `stsz` vide.
+    const empty = Buffer.from(base);
+    empty.writeUInt32BE(0, empty.indexOf("stsz") + 4 + 4);
+    empty.writeUInt32BE(0, empty.indexOf("stsz") + 4 + 4 + 4);
+    const none = await upload(kenji, "story_video", empty);
+    expect([none.status, none.json.error.code]).toEqual([415, "unsupported_media_type"]);
+  });
+});
+
+describe("plafond d'octets de vidéos en attente", () => {
+  const pendingRow = (userId: string, bytes: number, createdAt: Date) =>
+    db.insert(uploads).values({
+      key: `private/story-videos/${randomBytes(8).toString("hex")}.mp4`,
+      userId,
+      purpose: "story_video",
+      width: 720,
+      height: 1280,
+      bytes,
+      createdAt,
+    });
+
+  it("refuse au-delà de 300 Mo non publiés, sans lire le corps ; les envois de plus de 24 h et ceux de quelqu'un d'autre ne comptent pas", async () => {
+    const kenji = await signUp("Kenji");
+    const lea = await signUp("Lea");
+    const data = await fixture("story-2s.mp4");
+    await pendingRow(kenji.id, STORY_VIDEO_PENDING_MAX_BYTES - 100_000, clock.now);
+    const untouched = untouchedBody();
+    const full = await uploadRaw(kenji, untouched.stream, {}, data.length);
+    expect([full.status, full.json.error.code, full.json.error.message]).toEqual([
+      429,
+      "rate_limited",
+      storyVideoLabels.apiPendingFull,
+    ]);
+    expect(full.json.error.message).toContain("300 Mo");
+    expect(untouched.state.pulls).toBe(0);
+    // Quelqu'un d'autre n'est pas gêné.
+    expect((await upload(lea, "story_video", data)).status).toBe(201);
+    // Un envoi abandonné depuis plus de 24 h ne compte plus (et sera effacé par la règle existante).
+    await db
+      .update(uploads)
+      .set({ createdAt: new Date(clock.now.getTime() - 25 * 3_600_000) })
+      .where(eq(uploads.userId, kenji.id));
+    expect((await upload(kenji, "story_video", data)).status).toBe(201);
   });
 });

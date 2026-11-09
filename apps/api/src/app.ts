@@ -3,6 +3,7 @@ import {
   feedLabels,
   isReservedPseudo,
   STORY_VIDEO_MAX_BYTES,
+  STORY_VIDEO_UPLOAD_PATH,
   signUpRequiredSchema,
 } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
@@ -199,16 +200,16 @@ app.get("/files/*", async (c) => {
   });
 });
 
-// Envois de fichiers : 16 Mo au plus par requête (photos de 15 Mo). Lot R7g : `POST /me/uploads` seule accepte 60 Mo (+ 256 Ko
-// d'enveloppe multipart) pour les vidéos de story ; le service refuse ensuite toute image de plus de 15 Mo et toute vidéo de
-// plus de 60 Mo, et ne laisse que deux vidéos à la fois entrer dans la mémoire de l'API.
+// Envois de fichiers : 16 Mo au plus par requête (photos de 15 Mo), partout. Lot R7g (tour 2) : `POST /me/uploads/story-video` seule
+// accepte 60 Mo (+ 256 Ko de marge), pour le fichier vidéo **brut** écrit en flux sur le disque (jamais lu en mémoire) ; le
+// service exige `Content-Length`, compte les octets et ne laisse que deux envois vidéo à la fois (un par personne).
 const tooHeavy = () => {
   throw new AppError(413, "payload_too_large", "Requête trop lourde");
 };
 const generalLimit = bodyLimit({ maxSize: 16 * 1024 * 1024, onError: tooHeavy });
 const videoUploadLimit = bodyLimit({ maxSize: STORY_VIDEO_MAX_BYTES + 256 * 1024, onError: tooHeavy });
 app.use("*", (c, next) =>
-  c.req.method === "POST" && c.req.path === "/api/me/uploads" ? videoUploadLimit(c, next) : generalLimit(c, next),
+  c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoUploadLimit(c, next) : generalLimit(c, next),
 );
 app.use("*", loadSession);
 

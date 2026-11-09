@@ -1,9 +1,10 @@
-import { STORY_VIDEO_MAX_BYTES, STORY_VIDEO_MAX_MS } from "../rules/storyVideo";
+import { STORY_VIDEO_MAX_BYTES, STORY_VIDEO_MAX_MS, STORY_VIDEO_PENDING_MAX_BYTES } from "../rules/storyVideo";
 
 // Stories vidéo (lot R7g, maquettes R7.8 `ps_4_md_video`, R7.7 `sk_video` et R7.22 `sf_cam`) : libellés de l'API, de l'appli
 // et du site, mêmes mots partout.
 const SECONDS = STORY_VIDEO_MAX_MS / 1000;
 const MEGABYTES = STORY_VIDEO_MAX_BYTES / (1024 * 1024);
+const PENDING_MEGABYTES = STORY_VIDEO_PENDING_MAX_BYTES / (1024 * 1024);
 
 export const storyVideoLabels = {
   mode: "Vidéo",
@@ -48,6 +49,10 @@ export const storyVideoLabels = {
   apiUnreadable: "Cette vidéo est illisible : filme-la à nouveau ou choisis-en une autre.",
   apiNoVideo: "Ce fichier ne contient pas de piste vidéo.",
   apiBusy: "Plusieurs envois de vidéos sont en cours : réessaie dans un instant.",
+  apiPendingFull: `Trop de vidéos en attente (${PENDING_MEGABYTES} Mo) : publie-les, supprime-les ou réessaie demain.`,
+  apiLengthRequired: "Taille de la vidéo manquante : envoie-la depuis l'appli ou le site.",
+  apiBadBody: "La vidéo n'est pas arrivée en entier : réessaie.",
+  apiWrongType: "Envoie la vidéo telle quelle (MP4 ou MOV), sans formulaire.",
   apiPosterMissing: "La vignette de la vidéo est manquante : envoie-la à nouveau.",
   apiPosterUnused: "Cette vignette ne va pas avec cette vidéo.",
   // Lecture.

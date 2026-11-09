@@ -29,6 +29,13 @@ export const uploadsRoutes = new Hono<AppEnv>()
     }
     return c.json(await uploadsService.upload(v, purpose, file, plateRects), 201);
   })
+  // Lot R7g (tour 2) : `POST /me/uploads/story-video` reçoit le fichier **brut** (`Content-Type: video/mp4`, `Content-Length`
+  // obligatoire, 60 Mo au plus) et l'écrit en flux sur le disque : pas de multipart, rien en mémoire. Les garde-fous (limite de débit,
+  // place dans les envois en cours) passent avant la lecture du corps.
+  .post("/me/uploads/story-video", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await uploadsService.uploadStoryVideo(v, c.req.raw), 201);
+  })
   .delete("/me/uploads/:id", async (c) => {
     await uploadsService.remove(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
