@@ -76,7 +76,7 @@ export function applyFeedPage(
   };
 }
 
-/** Genres que le Fil dessine (lot R7e2, puis `spot_meetup` du lot R7i et `sponsored` du lot R7k2) ; `memory` est réservé. */
+/** Genres que le Fil dessine (lot R7e2, puis `spot_meetup` du lot R7i, `sponsored` du lot R7k2 et `memory` du lot R7j) : plus aucun n'est réservé. */
 export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "event_recommended",
   "vehicle_public",
@@ -87,6 +87,8 @@ export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "feed_post",
   "spot_meetup",
   "sponsored",
+  // Lot R7j : la carte « Souvenir » est dessinée (appli et site).
+  "memory",
 ];
 
 /** Une carte d'un genre réservé à un autre lot : rendue par `UnknownCard` tant que ce lot n'est pas fusionné. */

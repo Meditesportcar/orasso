@@ -278,6 +278,15 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
+/** Lot R7f2 : la feuille de signalement est-elle ouverte ? (la visionneuse de stories reste en pause tant qu'elle l'est). */
+export function useReportOpen(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => current !== null,
+    () => false,
+  );
+}
+
 export function ReportSheetHost() {
   const target = useSyncExternalStore(
     subscribe,

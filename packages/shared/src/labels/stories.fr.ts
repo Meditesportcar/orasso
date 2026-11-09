@@ -24,6 +24,7 @@ export const storyLabels = {
     private_account: "Un compte privé ne peut pas identifier une structure, un pro ou un événement.",
     crew_story: "Une story de crew ne s'identifie pas hors du crew.",
     unavailable: "Introuvable.",
+    tags_full: "Dix identifications au plus : celle-ci n'a pas été gardée.",
     not_yours: "Ce véhicule n'est pas le tien.",
   },
   mention: (pseudo: string) => `${pseudo} t'a identifié dans sa story.`,

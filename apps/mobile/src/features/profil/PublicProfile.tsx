@@ -34,10 +34,12 @@ import {
   type ProfileTab,
   type ProfileVehicle,
   profileTabsLabels as PT,
+  profileRingState,
   profileTabFromParam,
   type SocialNetwork,
   socialsLabels,
   socialUrl,
+  storyViewerLabels,
   type UserProfileView,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -91,12 +93,11 @@ const FOLLOW_LABEL = {
 } as const;
 
 /**
- * L'anneau des stories de la personne (lot R7f1 : `stories.ring` de `GET /users/:pseudo`, absent tant qu'il n'est pas
- * fusionné) ; `null` sans story. L'écran des stories (lot R7f2) fera ouvrir l'anneau ; ici il ne fait rien.
+ * L'anneau des stories de la personne (`stories` de `GET /users/:pseudo`, lot R7f1) : `null` sans story, anneau fin quand
+ * tout est vu. Touchable dès qu'il y a une story (lot R7f2) : il ouvre la visionneuse (`/story/u:<compte>`).
  */
 function storyRingOf(p: UserProfileView): AvatarRingState {
-  const ring = (p as UserProfileView & { stories?: { ring?: AvatarRingState } }).stories?.ring;
-  return ring ?? null;
+  return profileRingState(p.stories);
 }
 
 /** Une photo carrée de véhicule, ou la silhouette (pas de photo montrable). */
@@ -355,7 +356,20 @@ export function PublicProfile({
     <View style={styles.page} onLayout={(e) => setW(e.nativeEvent.layout.width)} testID="profil">
       {/* (1) La tête (`.r5hd`). */}
       <View style={styles.hd} testID="public-head">
-        <AvatarRing ring={storyRingOf(p)} size="xl" source={mediaSource(p.avatarUrl)} name={p.pseudo} />
+        <AvatarRing
+          ring={storyRingOf(p)}
+          neon={false}
+          size="xl"
+          source={mediaSource(p.avatarUrl)}
+          name={p.pseudo}
+          onPress={
+            mode !== "preview" && p.stories.count > 0
+              ? () => router.push({ pathname: "/story/[authorKey]", params: { authorKey: `u:${p.userId}` } })
+              : undefined
+          }
+          accessibilityLabel={storyViewerLabels.openStories(p.pseudo)}
+          testID="profil-story-ring"
+        />
         <View style={styles.hdText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
           <Text
             variant="posterL"

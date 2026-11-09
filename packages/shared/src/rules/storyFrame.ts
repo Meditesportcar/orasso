@@ -99,3 +99,68 @@ export function mapRects<T extends FrameRect>(
 ) {
   return rects.map((r) => mapRect(r, frame, src)).filter(rectIntersectsCanvas);
 }
+
+// --- Ajuster une photo de la galerie (lot R7f3) ------------------------------------------------------------------------
+// L'écran « Ajuster » (appli : pince et glissement ; site : molette et souris) calcule le même `Frame` que le serveur lit :
+// ces fonctions pures le tiennent dans ses bornes et disent dans quel état il est (maquette R7.22 : posée, ajustée, remplie).
+
+/** Une image déjà en 9:16 (à un centième près : 1080 × 1920, 720 × 1280, un recadrage de l'appareil) n'a rien à ajuster. */
+export const isStoryRatio = (w: number, h: number): boolean => h > 0 && Math.abs(w / h - STORY_W / STORY_H) < 0.012;
+
+// `+ 0` : un « -0 » (borne nulle) redevient 0.
+const within = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v)) + 0;
+
+/**
+ * Cadrage dans ses bornes de zoom, et déplacement borné pour que la photo ne sorte jamais « à moitié » : d'un axe où elle
+ * dépasse le canevas, ses bords ne laissent aucun vide (le fond flouté ne se voit pas là) ; d'un axe où elle est plus petite,
+ * elle reste dans le canevas. `w` et `h` : la photo d'origine.
+ */
+export function limitFrame(frame: Frame, w: number, h: number): Frame {
+  const f = clampFrame(frame);
+  const box = frameToCanvas({ ...f, offsetX: 0, offsetY: 0 }, w, h);
+  const room = (size: number, canvas: number) => Math.abs(size - canvas) / 2;
+  const rx = room(box.width, STORY_W);
+  const ry = room(box.height, STORY_H);
+  return { scale: f.scale, offsetX: within(f.offsetX, -rx, rx), offsetY: within(f.offsetY, -ry, ry) };
+}
+
+/** Le plus fort zoom qui tient dans les bornes : « remplir » si la photo peut remplir le canevas (sinon le zoom maximal). */
+export const fillScale = (w: number, h: number): number => Math.min(coverScale(w, h), STORY_SCALE_MAX);
+
+/** « Remplir » : la photo couvre tout le canevas, centrée (jusqu'à la limite de zoom). */
+export const fillFrame = (w: number, h: number): Frame => ({ scale: fillScale(w, h), offsetX: 0, offsetY: 0 });
+
+export type FrameState = "fit" | "adjusted" | "full";
+
+/**
+ * Les trois états de la maquette : `fit` (posée : la photo entière sur son fond flouté, rien n'a bougé), `full` (remplie :
+ * 9:16 sans bande), `adjusted` (entre les deux, ou déplacée).
+ */
+export function frameState(frame: Frame, w: number, h: number): FrameState {
+  const f = clampFrame(frame);
+  const cover = fillScale(w, h);
+  if (cover > 1.01 && f.scale >= cover - 0.01) return "full";
+  if (Math.abs(f.scale - 1) < 0.01 && Math.abs(f.offsetX) < 1 && Math.abs(f.offsetY) < 1) return "fit";
+  return "adjusted";
+}
+
+/** « Zoom 62 % » : où l'on en est entre « posée » (0) et « remplie » (100). Une photo qui remplit déjà : 100. */
+export function zoomPercent(frame: Frame, w: number, h: number): number {
+  const cover = fillScale(w, h);
+  if (cover <= 1.01) return 100;
+  return Math.round(within((clampFrame(frame).scale - 1) / (cover - 1), 0, 1) * 100);
+}
+
+/**
+ * Le cadrage après un geste : `ratio` = rapport des écartements des doigts (ou cran de molette) depuis le début du geste ;
+ * (`dx`, `dy`) = glissement en pixels du canevas final (1080 × 1920), pas de l'écran. Zoom autour du centre du canevas.
+ */
+export function moveFrame(start: Frame, ratio: number, dx: number, dy: number, w: number, h: number): Frame {
+  const r = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  const mx = Number.isFinite(dx) ? dx : 0;
+  const my = Number.isFinite(dy) ? dy : 0;
+  return limitFrame({ scale: start.scale * r, offsetX: start.offsetX * r + mx, offsetY: start.offsetY * r + my }, w, h);
+}
+
+/** Pixels de l'écran → pixels du canevas final, pour un aperçu de `viewWidth` pixels de large. */
+export const canvasPerView = (viewWidth: number): number => (viewWidth > 0 ? STORY_W / viewWidth : 1);

@@ -9,7 +9,7 @@
 
 import { useIsGroundQuiet } from "@orasso/design-system/native";
 import { useFocusEffect } from "expo-router";
-import { createContext, type MutableRefObject, useCallback, useContext, useMemo, useRef } from "react";
+import { createContext, type MutableRefObject, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { PanResponder, type PanResponderInstance, useWindowDimensions } from "react-native";
 
 import { shouldCaptureSwipe, swipeDirection } from "./swipe";
@@ -86,4 +86,33 @@ export function useTabSwipeDisabled(disabled = true) {
       return control.disable();
     }, [control, disabled]),
   );
+}
+
+/**
+ * Coupe le glissement entre onglets seulement PENDANT le défilement d'une liste horizontale (la barre de stories du Fil) :
+ * à poser sur le `ScrollView` (`{...guard}`). Hors défilement, le glissement d'onglet reste disponible. La coupure est
+ * levée à la fin du geste (doigt levé), à la fin de l'élan, et au démontage.
+ */
+export function useTabSwipeScrollGuard() {
+  const control = useContext(TabSwipeContext);
+  const release = useRef<(() => void) | null>(null);
+  const end = useCallback(() => {
+    release.current?.();
+    release.current = null;
+  }, []);
+  const begin = useCallback(() => {
+    if (control && !release.current) release.current = control.disable();
+  }, [control]);
+  useFocusEffect(useCallback(() => end, [end]));
+  // Démontage : la coupure ne reste jamais posée si l'écran disparaît en plein geste.
+  useEffect(() => end, [end]);
+  // Doigt levé ou geste annulé sans défilement (le défilement n'a pas commencé ou a été repris par un parent) : on lève
+  // aussi la coupure, sinon le glissement d'onglet resterait coupé.
+  return {
+    onScrollBeginDrag: begin,
+    onScrollEndDrag: end,
+    onMomentumScrollEnd: end,
+    onTouchEnd: end,
+    onTouchCancel: end,
+  } as const;
 }

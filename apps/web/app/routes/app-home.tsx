@@ -23,6 +23,7 @@ import {
   WeatherBlock,
 } from "../components/HomeWidgets";
 import { FriendsNewsBlock, LiveBlock, LiveLine, MyCrewBlock, MyOutingsBlock } from "../components/home/DashboardBlocks";
+import { MemoriesBlock } from "../components/home/Memories";
 import { SpotMeetupBlock } from "../components/home/SpotMeetup";
 import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
@@ -117,6 +118,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
         pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
         weather: <WeatherBlock weather={home.weather} />,
+        memories: home.memories ? <MemoriesBlock data={home.memories} /> : null,
         agenda: home.agenda.length ? <AgendaBlock items={home.agenda} /> : null,
         favorite_garage: home.favoriteGarage ? <GarageBlock garage={home.favoriteGarage} /> : null,
         wash: <PlacesBlock kind="wash" places={home.wash} />,

@@ -16,6 +16,7 @@ import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { now as clockNow } from "../lib/clock";
 import { formatDay } from "../lib/format";
+import { useAnnounceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/orga";
 import "../styles/admin.css";
 import "../styles/after-event.css";
@@ -57,6 +58,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   }
   return {
+    userId: me.user.id,
     badge,
     assistance,
     structure: { id: structure.id, slug: structure.slug, name: structure.name, logoUrl: structure.logoUrl },
@@ -84,6 +86,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
   const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge, assistance } = loaderData;
+  useAnnounceSession(loaderData.userId);
   const { pathname } = useLocation();
   const { eventId } = useParams();
   const fiche = isFiche(useMatches());

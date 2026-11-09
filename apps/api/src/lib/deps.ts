@@ -67,6 +67,8 @@ export type JobName =
   | "votes.open"
   | "votes.close"
   | "votes.sweep"
+  // Lot R7j : souvenirs du jour (« il y a un an »), notification à 10 h.
+  | "memories.daily"
   // Lot R7i : lieu et liste des rendez-vous au spot finis effacés (toutes les 5 minutes).
   | "spot.purge";
 

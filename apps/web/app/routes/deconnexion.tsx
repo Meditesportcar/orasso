@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 import { purgePublished } from "../components/fil/mine";
 import { api, safeReturn, withCookies } from "../lib/api.server";
 import { clearExplorerCookie } from "../lib/explorerChoice.server";
+import { announceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/deconnexion";
 
 export async function action({ request }: Route.ActionArgs) {
@@ -25,5 +26,16 @@ export function loader() {
 // avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
 export async function clientAction({ serverAction }: Route.ClientActionArgs) {
   purgePublished();
-  return serverAction();
+  let result: Awaited<ReturnType<typeof serverAction>>;
+  try {
+    result = await serverAction();
+  } catch (thrown) {
+    // L'action répond par une redirection (`redirect(...)`) : `serverAction()` la lève ; la session est révoquée, on annonce.
+    if (thrown instanceof Response && thrown.status >= 300 && thrown.status < 400) announceSession(null);
+    throw thrown;
+  }
+  // Tour 6 : les autres fenêtres ne l'apprennent qu'APRÈS la révocation de la session (annoncé avant, une visionneuse pouvait
+  // relire `/me`, encore valide, et réafficher les données du compte). Elle se masque, relit le compte (401 → rechargement).
+  announceSession(null);
+  return result;
 }

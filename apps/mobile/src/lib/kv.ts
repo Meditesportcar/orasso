@@ -118,6 +118,8 @@ export const CACHE_KEY_PREFIXES = [
   "event-wizard-memo-",
   // Lot M4 : la liste par défaut de l'Explorer, une par tri.
   "explore-events.",
+  // Lot R7j : la page d'un souvenir, une par événement (propre au compte).
+  "memory.",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {

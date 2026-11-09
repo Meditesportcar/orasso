@@ -49,6 +49,10 @@
   --avring-color: var(--accent);
   box-shadow: var(--neon-accent-soft);
 }
+/* Lot R7f2 : un seul néon par écran, l'anneau en direct suivant garde la bordure pleine. */
+.o-avring--live.o-avring--flat {
+  box-shadow: none;
+}
 /* Story déjà vue : anneau fin, l'écart gagné va à l'espace avec la photo. */
 .o-avring--seen {
   --avring-color: var(--line);

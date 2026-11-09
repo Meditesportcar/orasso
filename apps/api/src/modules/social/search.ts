@@ -44,6 +44,27 @@ export function detailVisibleSql(viewerId: string): SQL {
   return sql`(p.visibility = 'public' or exists (select 1 from user_follows uf where uf.status = 'accepted' and uf.follower_id = ${viewerId} and uf.followed_id = p.user_id))`;
 }
 
+/**
+ * Lot R7f3 : condition SQL (alias `p`) « cette personne pourrait voir la story que je prépare » (la même règle que
+ * `seesStory` / `canTag` de `stories/service.ts`, tenue ici en SQL pour pouvoir paginer). Story de crew : membres actifs du
+ * crew choisi, et seulement si j'en suis moi-même membre actif (sinon personne). Sinon : si l'auteur affiché est public
+ * (compte public, casquette organisateur ou pro) tout membre en règle, s'il est privé mes abonnés acceptés. L'API refuse
+ * de toute façon une identification hors de ces règles à la publication : ce filtre évite de la proposer.
+ */
+function taggableSql(viewer: Viewer, query: PeopleSearchQuery): SQL {
+  const me = viewer.user.id;
+  if (query.taggableFor === "crew") {
+    if (!query.crewId) return sql`false`;
+    return sql`(exists (select 1 from crew_members cm join crews c on c.id = cm.crew_id
+        where cm.crew_id = ${query.crewId} and cm.user_id = p.user_id and cm.status = 'active' and c.deleted_at is null)
+      and exists (select 1 from crew_members me where me.crew_id = ${query.crewId} and me.user_id = ${me} and me.status = 'active'))`;
+  }
+  const publicAuthor =
+    query.persona === "organizer" || query.persona === "pro" || viewer.profile.visibility === "public";
+  if (publicAuthor) return sql`true`;
+  return sql`exists (select 1 from user_follows uf where uf.follower_id = p.user_id and uf.followed_id = ${me} and uf.status = 'accepted')`;
+}
+
 type Row = {
   user_id: string;
   pseudo: string;
@@ -156,6 +177,7 @@ async function run(
       sql`not exists (select 1 from user_follows uf where uf.follower_id = ${viewerId} and uf.followed_id = p.user_id)`,
     );
   }
+  if (query.taggableFor) where.push(taggableSql(viewer, query));
   if (cursor) where.push(sql`(lower(p.pseudo), p.user_id) > (${cursor.pseudo}, ${cursor.id})`);
 
   const result = await db.execute<Row>(sql`

@@ -37,6 +37,8 @@ export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = fa
       return "Un professionnel de la plateforme, près de chez toi.";
     case "from_orasso":
       return "Orasso publie ces cartes pour bien démarrer, tant que ton Fil se remplit.";
+    case "your_memory":
+      return "Tu étais à cet événement il y a un ou plusieurs ans, jour pour jour. Ce souvenir n'est montré qu'à toi.";
     case "new_here":
       return "C'est nouveau sur Orasso, dans ton secteur.";
     case "sponsored":

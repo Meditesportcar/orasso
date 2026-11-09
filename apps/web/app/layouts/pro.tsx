@@ -3,6 +3,7 @@ import { proVisibility } from "@orasso/shared";
 import { Form, Outlet, redirect, useLocation } from "react-router";
 import { requireMe } from "../lib/api.server";
 import { now as clockNow } from "../lib/clock";
+import { useAnnounceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/pro";
 
 // Espace pro (`/pro/<slug>`, docs/02) : fiche, publications, statistiques, abonnement. Outil de gestion en barre
@@ -12,7 +13,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!me.pro) throw redirect("/app/pro/nouvelle");
   if (me.pro.slug !== params.pro) throw redirect(`/pro/${me.pro.slug}`);
   // « Fiche de base » après le 21/06/2027 sans abonnement actif : bandeau d'explication (lot 21).
-  return { pro: me.pro, pseudo: me.profile.pseudo, banner: proVisibility(me.pro, null, clockNow()).banner };
+  return {
+    userId: me.user.id,
+    pro: me.pro,
+    pseudo: me.profile.pseudo,
+    banner: proVisibility(me.pro, null, clockNow()).banner,
+  };
 }
 
 export function meta() {
@@ -29,6 +35,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 
 export default function ProLayout({ loaderData }: Route.ComponentProps) {
   const { pro, pseudo, banner } = loaderData;
+  useAnnounceSession(loaderData.userId);
   const { pathname } = useLocation();
   const base = `/pro/${pro.slug}`;
   return (

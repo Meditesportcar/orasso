@@ -1,0 +1,99 @@
+/* Lot R7j : les souvenirs (maquette R7.10) : bloc de l'Accueil, carte du Fil, page du souvenir. Jetons seulement. */
+.sv-poster {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--poster);
+  color: var(--poster-ink);
+  box-shadow: var(--shadow-poster);
+}
+.sv-poster__photo {
+  position: relative;
+  height: 200px;
+  background: var(--night);
+}
+.sv-poster__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sv-poster__photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 45%, var(--poster) 98%);
+  pointer-events: none;
+}
+.sv-poster__stamp,
+.sv-fil-media .sv-poster__stamp {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+.sv-fil-media {
+  position: relative;
+  display: block;
+}
+.sv-poster__body {
+  container-type: inline-size;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: calc(var(--space-2) * -1);
+  padding: 0 var(--space-4) var(--space-4);
+}
+.sv-poster__body h2,
+.sv-poster__body h1 {
+  margin: 0;
+}
+.sv-poster__eyebrow {
+  color: var(--accent-text);
+}
+.sv-poster__muted {
+  margin: 0;
+  color: var(--poster-muted);
+}
+.s-card.sv-stamp {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  text-align: left;
+}
+.sv-stamp .s-stack {
+  align-items: flex-start;
+  min-width: 0;
+}
+/* Un nom d'événement ne se coupe jamais au milieu d'un mot : la taille suit la largeur de la colonne et la chasse du mot le plus large (`--em`, `widestWordEm`). */
+.sv-poster .o-t-poster-xl,
+.sv-poster .o-t-poster-m {
+  font-size: clamp(14px, calc(100cqi / var(--em, 10)), 2.25rem);
+  line-height: 1.05;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.sv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (min-width: 1100px) {
+  .sv-poster__photo {
+    height: 260px;
+  }
+}
+/* Les boutons posés sur l'affiche prennent l'encre de l'affiche (le secondaire est clair en Béton : invisible sur le papier). */
+.sv-poster .o-button--secondary {
+  background: transparent;
+  color: var(--poster-ink);
+  border-color: var(--poster-muted);
+}

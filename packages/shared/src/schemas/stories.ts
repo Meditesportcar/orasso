@@ -110,6 +110,8 @@ export type StoryCreated = {
   expiresAt: string;
   /** Identifications ou liens écartés par les règles (compte privé, hors public…), pour que l'appli le dise. */
   skipped: { kind: StoryTagKind | "event" | "vehicle"; id: string; reason: string }[];
+  /** Vrai quand c'est une reprise : la story existait déjà (réponse perdue), sans les dernières modifications. */
+  replayed?: boolean;
 };
 
 export type StoryTagView = {

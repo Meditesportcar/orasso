@@ -21,6 +21,7 @@ import { invitationsApi } from "./invitations";
 import { lineupApi } from "./lineup";
 import { listsApi } from "./lists";
 import { mediaApi } from "./media";
+import { memoriesApi } from "./memories";
 import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
@@ -35,6 +36,8 @@ import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { spotApi } from "./spot";
 import { staffApi } from "./staff";
+import { storiesApi } from "./stories";
+import { storiesPublishApi } from "./storiesPublish";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
@@ -80,6 +83,7 @@ export const api = {
   ...invitationsApi,
   ...afterEventApi,
   ...passportApi,
+  ...memoriesApi,
   ...presenceApi,
   ...partnershipsApi,
   ...adminApi,
@@ -96,4 +100,6 @@ export const api = {
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...storiesApi,
+  ...storiesPublishApi,
 };

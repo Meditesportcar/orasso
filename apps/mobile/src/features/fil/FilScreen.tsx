@@ -17,6 +17,7 @@ import { Linking, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport } from "@/features/ReportSheet";
+import { StoriesBar } from "@/features/stories/StoriesBar";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { Seg, SmButton } from "@/ui/Kit";
@@ -27,7 +28,7 @@ import { useScrollAssist } from "@/ui/ScrollAssist";
 import { Waiting } from "@/ui/Waiting";
 import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
-import { StoriesBarSlot } from "./StoriesBarSlot";
+import { PublishChoice } from "./PublishChoice";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
 
@@ -57,6 +58,8 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const [faded, setFaded] = useState<Record<string, FeedCard>>({});
   const [lessNote, setLessNote] = useState<{ card: FeedCard; error: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // « Publier » demande où : en story (9:16, 24 h) ou dans le Fil (4:5).
+  const [choosing, setChoosing] = useState(false);
 
   // Un `reset` de l'API : la liste a été remplacée, on remonte en haut.
   const lastTop = useRef(feed.scrollTop);
@@ -133,13 +136,13 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const items = feed.items;
   return (
     <>
-      <StoriesBarSlot />
+      <StoriesBar />
       <SmButton
         kind="p"
         big
         wide
         icon="camera"
-        onPress={() => router.push("/fil/publier")}
+        onPress={() => setChoosing(true)}
         testID="fil-publish-open"
         accessibilityLabel={L.publishTitle}
       >
@@ -251,6 +254,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           onRemove={(card) => void remove(card)}
         />
         <WhyThisSheet card={why} onClose={() => setWhy(null)} />
+        <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
     </>
   );
