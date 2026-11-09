@@ -20,7 +20,9 @@ import {
   isFeedSponsoredTargeted,
   feedScreenLabels as L,
   pinnedPublished,
+  sponsoredNotBeforeFourth,
   withMyPublished,
+  withoutPlacement,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -168,7 +170,8 @@ export function Fil({ userId }: { userId: string }) {
   }
 
   const shown = list && list.filter === filter ? list.items : null;
-  const items = shown ? withMyPublished(shown, pinnedPublished(mineCards)) : null;
+  // La carte « Sponsorisé » ne remonte jamais avant la 4e place, même si une des trois premières cartes sort (tour 2).
+  const items = shown ? sponsoredNotBeforeFourth(withMyPublished(shown, pinnedPublished(mineCards))) : null;
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = () => (feedRetryAction(errorSource) === "loadMore" ? more() : load(filter));
   const empty = L.empty[filter];
@@ -252,7 +255,20 @@ export function Fil({ userId }: { userId: string }) {
                 card={card}
                 onMenu={setMenu}
                 faded={Boolean(faded[card.id])}
-                onRemoved={(c) => setList((s) => (s ? { ...s, items: s.items.filter((x) => x.id !== c.id) } : s))}
+                userId={userId}
+                onRemoved={(c) =>
+                  setList((s) =>
+                    s
+                      ? {
+                          ...s,
+                          items:
+                            c.kind === "sponsored"
+                              ? withoutPlacement(s.items, c.payload.id)
+                              : s.items.filter((x) => x.id !== c.id),
+                        }
+                      : s,
+                  )
+                }
               />
             );
           })}
@@ -351,6 +367,11 @@ export function Fil({ userId }: { userId: string }) {
                       <small>{L.reportAdHint}</small>
                     </span>
                   </a>
+                ) : null}
+                {menu.kind === "sponsored" ? (
+                  <p className="o-t-caption fil-menu__address" data-testid="feed-menu-report-address">
+                    {L.reportAdAddress(CONTACT_EMAIL)}
+                  </p>
                 ) : null}
                 {menu.kind === "feed_post" ? (
                   <div className="fil-menu__report" data-testid="feed-menu-report">

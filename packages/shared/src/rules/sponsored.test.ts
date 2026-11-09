@@ -12,6 +12,7 @@ import {
   feedPlacementMatch,
   feedSponsoredReason,
   isFeedSponsoredTargeted,
+  sponsoredSessionKey,
 } from "./sponsored";
 
 const base = {
@@ -120,5 +121,22 @@ describe("« Pourquoi je vois ça » d'une carte Sponsorisé du Fil (lot R7k2)",
     // Sans précision : la forme sûre, qui ne parle d'aucune donnée de la personne.
     expect(feedWhyText("sponsored")).toBe(FEED_SPONSORED_OPEN_WHY);
     expect(FEED_SPONSORED_OPEN_WHY).not.toMatch(/département/i);
+    expect(FEED_SPONSORED_OPEN_WHY).toBe(
+      "Cette publicité n'est pas ciblée : elle peut être montrée partout en France.",
+    );
+  });
+
+  it("compte par compte, par jour de Paris et par emplacement", () => {
+    const noon = new Date("2026-11-09T11:00:00Z");
+    const key = sponsoredSessionKey("u1", "p1", noon);
+    expect(sponsoredSessionKey("u1", "p1", new Date("2026-11-09T20:00:00Z"))).toBe(key);
+    expect(sponsoredSessionKey("u2", "p1", noon)).not.toBe(key);
+    expect(sponsoredSessionKey("u1", "p2", noon)).not.toBe(key);
+    expect(sponsoredSessionKey("u1", "p1", new Date("2026-11-10T11:00:00Z"))).not.toBe(key);
+    // Le jour est celui de Paris : 23 h 30 UTC le 9 est déjà le 10 à Paris (hiver, UTC+1).
+    expect(sponsoredSessionKey("u1", "p1", new Date("2026-11-09T23:30:00Z"))).toBe(
+      sponsoredSessionKey("u1", "p1", new Date("2026-11-10T08:00:00Z")),
+    );
+    expect(sponsoredSessionKey(null, "p1", noon)).toContain("p1");
   });
 });

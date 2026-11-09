@@ -154,7 +154,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         testID="fil-filters"
       />
       {notice ? (
-        <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" testID="fil-notice">
+        <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" selectable testID="fil-notice">
           {notice}
         </Text>
       ) : null}
@@ -194,7 +194,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 card={card}
                 onMenu={setMenu}
                 faded={Boolean(faded[card.id])}
-                onRemoved={(c) => feed.drop(c.id)}
+                onRemoved={(c) => (c.kind === "sponsored" ? feed.dropPlacement(c.payload.id) : feed.drop(c.id))}
               />
             );
           })}
@@ -240,7 +240,10 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 `subject=${encodeURIComponent(L.reportAdSubject)}`,
                 `body=${encodeURIComponent(L.reportAdBody(advertiserName, id))}`,
               ].join("&");
-              void Linking.openURL(`mailto:${CONTACT_EMAIL}?${q}`).catch(() => undefined);
+              // Sans appli de messagerie : l'adresse s'affiche en secours, sélectionnable.
+              void Linking.openURL(`mailto:${CONTACT_EMAIL}?${q}`).catch(() =>
+                setNotice(L.reportAdNoMail(CONTACT_EMAIL)),
+              );
             }
           }}
           onRemove={(card) => void remove(card)}

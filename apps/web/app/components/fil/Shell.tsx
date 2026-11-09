@@ -8,6 +8,8 @@ export type CardProps<K extends FeedCardKind = FeedCardKind> = {
   faded: boolean;
   /** Une carte que l'API refuse d'afficher (publicité arrêtée, plafond atteint) sort de la liste. */
   onRemoved?: (card: FeedCard) => void;
+  /** Le compte affiché : le comptage d'une publicité est par compte (lot R7k2, tour 2). */
+  userId?: string;
 };
 
 export const reasonLine = (card: FeedCard) => `${card.reason.label} · ${feedAgo(card.at, new Date())}`;
@@ -31,6 +33,7 @@ export function Shell({
   head,
   title,
   href,
+  onTitle,
   tag,
   onMenu,
   faded,
@@ -41,6 +44,8 @@ export function Shell({
   head: React.ReactNode;
   title: string;
   href?: string;
+  /** Appelé au clic sur le titre (la carte « Sponsorisé » compte le clic vers la fiche du pro). */
+  onTitle?: () => void;
   /** Une étiquette en contour à la place de la ligne de raison (carte « Sponsorisé » : toujours visible). */
   tag?: string;
   onMenu: (card: FeedCard) => void;
@@ -54,7 +59,7 @@ export function Shell({
         {head}
         <div className="fil-card__titles">
           {href ? (
-            <a className="fil-card__title o-t-strong" href={href}>
+            <a className="fil-card__title o-t-strong" href={href} onClick={onTitle}>
               {title}
             </a>
           ) : (

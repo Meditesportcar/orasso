@@ -160,16 +160,19 @@ test("annonceur externe ouvert à toute la France : domaine, lien hors de l'appl
 }) => {
   test.setTimeout(240_000);
   const admin = await adminCookie();
-  await setExternalEnabled(admin, true);
-  const mine = await createFeedPlacement(admin, {
-    kind: "external",
-    advertiserName: "Assurance Soleil",
-    departments: [],
-    disclosure: "Publicité",
-    linkUrl: "https://www.assurance-soleil.fr/devis",
-  });
-  const restore = await pauseOthers(admin, mine.id);
+  let mine: { id: string; title: string } | null = null;
+  let restore: (() => Promise<void>) | null = null;
   try {
+    // Le réglage « annonceurs externes » est allumé dans le `try` : le `finally` le remet à « non » en premier.
+    await setExternalEnabled(admin, true);
+    mine = await createFeedPlacement(admin, {
+      kind: "external",
+      advertiserName: "Assurance Soleil",
+      departments: [],
+      disclosure: "Publicité",
+      linkUrl: "https://www.assurance-soleil.fr/devis",
+    });
+    restore = await pauseOthers(admin, mine.id);
     const user = await freshUser();
     const { ctx, page } = await open(browser, user.email, "sable");
     const calls = trackSponsored(page);
@@ -187,8 +190,7 @@ test("annonceur externe ouvert à toute la France : domaine, lien hors de l'appl
     await card.getByTestId("feed-card-more").click();
     await page.getByTestId("feed-menu-why").click();
     const why = (await page.getByTestId("feed-why-text").textContent()) ?? "";
-    expect(why).toMatch(/^Sponsorisé\./);
-    expect(why).not.toMatch(/département/i);
+    expect(why).toBe("Cette publicité n'est pas ciblée : elle peut être montrée partout en France.");
     await page.getByTestId("feed-why-ok").click();
     // Le lien s'ouvre hors de l'appli, le clic est compté.
     await card.getByTestId("feed-sponsored-open").click();
@@ -197,9 +199,13 @@ test("annonceur externe ouvert à toute la France : domaine, lien hors de l'appl
     expect(calls.filter((c) => c.kind === "click")).toHaveLength(1);
     await ctx.close();
   } finally {
-    await restore();
-    await deletePlacement(admin, mine.id).catch(() => undefined);
-    await setExternalEnabled(admin, false);
+    try {
+      await setExternalEnabled(admin, false);
+    } catch (e) {
+      console.error("sponsored.external_enabled : retour à « non » impossible", e);
+    }
+    await restore?.().catch(() => undefined);
+    if (mine) await deletePlacement(admin, mine.id).catch(() => undefined);
   }
 });
 

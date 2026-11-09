@@ -1,6 +1,7 @@
 // Les affichages d'une carte « Sponsorisé » sur le site (lot R7k2) : un emplacement est compté une seule fois par page
 // ouverte (mêmes règles que l'appli : `features/fil/cards/sponsoredSession.ts`). `sent` : déjà envoyé ou en cours ;
-// `refused` : l'API a répondu 409 (plafond atteint) ou 404 (emplacement arrêté), la carte ne s'affiche plus.
+// `refused` : l'API a répondu 409 (plafond atteint) ou 404 (emplacement arrêté), la carte ne s'affiche plus. La clé est
+// `sponsoredSessionKey(compte, emplacement)` : compte, jour de Paris et emplacement (tour 2).
 const sent = new Set<string>();
 const refused = new Set<string>();
 
@@ -19,6 +20,8 @@ export function releaseImpression(placementId: string): void {
 export function refuseImpression(placementId: string): void {
   refused.add(placementId);
 }
+
+export const isImpressionRefused = (placementId: string): boolean => refused.has(placementId);
 
 /** Pour les tests. */
 export function resetSponsoredSession(): void {

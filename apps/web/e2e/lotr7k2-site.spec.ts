@@ -90,6 +90,8 @@ test("carte en 4e position, étiquette, image 4:5, affichage compté une fois, c
     const href = (await report.getAttribute("href")) ?? "";
     expect(href).toMatch(/^mailto:contact@orasso\.fr\?/);
     expect(decodeURIComponent(href)).toContain(mine.id);
+    // Sans appli de messagerie : l'adresse est écrite dans le menu, à copier.
+    await expect(page.getByTestId("feed-menu-report-address")).toContainText("contact@orasso.fr");
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${DIR}/menu-1280.png` });
     await page.getByTestId("feed-menu-why").click();
@@ -117,17 +119,20 @@ test("annonceur externe : domaine, lien dans un autre onglet (rel sponsored), te
   await page.setViewportSize({ width: 390, height: 844 });
   await setTheme(page, "sable");
   const admin = await adminCookie();
-  await setExternalEnabled(admin, true);
-  const mine = await createFeedPlacement(admin, {
-    kind: "external",
-    advertiserName: "Assurance Soleil",
-    departments: [],
-    disclosure: "Publicité",
-    linkUrl: "https://www.assurance-soleil.fr/devis",
-    image: true,
-  });
-  const restore = await pauseOthers(admin, mine.id);
+  let mine: { id: string; title: string } | null = null;
+  let restore: (() => Promise<void>) | null = null;
   try {
+    // Le réglage « annonceurs externes » est allumé dans le `try` : le `finally` le remet à « non » en premier.
+    await setExternalEnabled(admin, true);
+    mine = await createFeedPlacement(admin, {
+      kind: "external",
+      advertiserName: "Assurance Soleil",
+      departments: [],
+      disclosure: "Publicité",
+      linkUrl: "https://www.assurance-soleil.fr/devis",
+      image: true,
+    });
+    restore = await pauseOthers(admin, mine.id);
     const user = await freshUser();
     await openFil(page, user.email);
     const card = page.getByTestId("feed-card-sponsored");
@@ -137,7 +142,7 @@ test("annonceur externe : domaine, lien dans un autre onglet (rel sponsored), te
       const link = card.getByTestId(id);
       await expect(link).toHaveAttribute("href", "https://www.assurance-soleil.fr/devis");
       await expect(link).toHaveAttribute("target", "_blank");
-      await expect(link).toHaveAttribute("rel", "noopener nofollow sponsored");
+      await expect(link).toHaveAttribute("rel", "noopener noreferrer nofollow sponsored");
     }
     await card.scrollIntoViewIfNeeded();
     await page.waitForTimeout(900);
@@ -147,12 +152,15 @@ test("annonceur externe : domaine, lien dans un autre onglet (rel sponsored), te
     await card.getByTestId("feed-card-more").click();
     await page.getByTestId("feed-menu-why").click();
     const why = (await page.getByTestId("feed-why-text").textContent()) ?? "";
-    expect(why).toMatch(/^Sponsorisé\./);
-    expect(why).not.toMatch(/département/i);
+    expect(why).toBe("Cette publicité n'est pas ciblée : elle peut être montrée partout en France.");
   } finally {
-    await restore();
-    await deletePlacement(admin, mine.id).catch(() => undefined);
-    await setExternalEnabled(admin, false);
+    try {
+      await setExternalEnabled(admin, false);
+    } catch (e) {
+      console.error("sponsored.external_enabled : retour à « non » impossible", e);
+    }
+    await restore?.().catch(() => undefined);
+    if (mine) await deletePlacement(admin, mine.id).catch(() => undefined);
   }
 });
 

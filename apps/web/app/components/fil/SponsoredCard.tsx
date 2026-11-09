@@ -1,53 +1,68 @@
 // Carte « Sponsorisé » du Fil sur le site (lot R7k2, maquette R7.6 `p-fil`) : mêmes règles et mêmes mots que l'appli.
 // L'étiquette « Sponsorisé » remplace la ligne de raison. L'affichage est compté quand la moitié de la carte est visible
 // (`IntersectionObserver`), une fois par emplacement et par page ; le clic est compté ; un refus de l'API (409, 404)
-// retire la carte. Le lien d'un annonceur s'ouvre dans un autre onglet (`rel="noopener nofollow sponsored"`) ; la fiche
+// retire la carte. Le lien d'un annonceur s'ouvre dans un autre onglet (`rel="noopener noreferrer nofollow sponsored"`) ; la fiche
 // d'un pro de la plateforme s'ouvre sur le site.
 import { Icon } from "@orasso/design-system/web";
-import { feedScreenLabels as L } from "@orasso/shared";
+import { feedScreenLabels as L, sponsoredSessionKey } from "@orasso/shared";
 import { useEffect, useRef } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { type CardProps, OrgLogo, Shell } from "./Shell";
-import { claimImpression, isRefusalStatus, refuseImpression, releaseImpression } from "./sponsoredSession";
+import {
+  claimImpression,
+  isImpressionRefused,
+  isRefusalStatus,
+  refuseImpression,
+  releaseImpression,
+} from "./sponsoredSession";
 
 /** La moitié de la carte est visible, ou la moitié de la fenêtre (une carte plus haute que deux fenêtres). */
 const halfSeen = (e: IntersectionObserverEntry) =>
   e.isIntersecting &&
   (e.intersectionRatio >= 0.5 || (e.rootBounds !== null && e.intersectionRect.height >= e.rootBounds.height / 2));
 
-export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"sponsored">) {
+export function SponsoredCard({ card, onMenu, faded, onRemoved, userId }: CardProps<"sponsored">) {
   const p = card.payload;
   const ref = useRef<HTMLDivElement>(null);
   const removed = useRef(onRemoved);
   removed.current = onRemoved;
+  // Un emplacement déjà refusé (plafond atteint, arrêté) ne se réaffiche pas : ni cette carte ni ses reprises plus bas.
+  const refused = isImpressionRefused(sponsoredSessionKey(userId ?? null, p.id));
+  useEffect(() => {
+    if (refused) removed.current?.(card);
+  }, [refused, card]);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
+    if (refused || !el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => {
         if (!entries.some(halfSeen)) return;
         io.disconnect();
-        if (!claimImpression(p.id)) return;
+        const key = sponsoredSessionKey(userId ?? null, p.id);
+        if (!claimImpression(key)) return;
         void apiFetch(`/sponsored/${p.id}/impression`, { method: "POST", json: { surface: "feed" } }).then((r) => {
           if (r.ok) return;
           if (isRefusalStatus(r.status)) {
-            refuseImpression(p.id);
+            refuseImpression(key);
             removed.current?.(card);
-          } else releaseImpression(p.id);
+          } else releaseImpression(key);
         });
       },
       { threshold: [0.1, 0.25, 0.5, 0.75, 1] },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [p.id, card]);
+  }, [p.id, card, userId, refused]);
 
-  const count = () => void apiFetch(`/sponsored/${p.id}/click`, { method: "POST", json: { surface: "feed" } });
+  // `keepalive` : la requête survit à la navigation vers la fiche du pro (ou vers l'annonceur).
+  const count = () =>
+    void apiFetch(`/sponsored/${p.id}/click`, { method: "POST", json: { surface: "feed" }, keepalive: true });
   const href = p.pro ? `/p/${p.pro.slug}` : p.linkUrl;
-  const ext = p.pro ? {} : { target: "_blank", rel: "noopener nofollow sponsored" };
+  const ext = p.pro ? {} : { target: "_blank", rel: "noopener noreferrer nofollow sponsored" };
   const mention = [p.disclosure, p.domain].filter(Boolean).join(" · ");
+  if (refused) return null;
   return (
     <div ref={ref}>
       <Shell
@@ -55,6 +70,7 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
         head={<OrgLogo url={p.pro?.logoUrl ?? null} name={p.advertiserName} />}
         title={p.advertiserName}
         href={p.pro ? href : undefined}
+        onTitle={p.pro ? count : undefined}
         tag={L.sponsoredTag}
         onMenu={onMenu}
         faded={faded}

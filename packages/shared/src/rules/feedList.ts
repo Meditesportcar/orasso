@@ -25,6 +25,26 @@ export type FeedListState = {
 
 export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null });
 
+/** La première place d'une carte « Sponsorisé » dans la liste affichée (0 = première) : la 4e, jamais avant (D38). */
+export const SPONSORED_MIN_INDEX = 3;
+
+/**
+ * Garde « jamais avant la 4e place » sur la liste **affichée** (lot R7k2, tour 2) : si des cartes sortent de la liste
+ * (« Supprimer »), une carte « Sponsorisé » ne remonte pas parmi les trois premières ; elle descend à la 4e place, ou
+ * disparaît quand il y a moins de trois autres cartes. Les autres cartes gardent leur ordre.
+ */
+export function sponsoredNotBeforeFourth(items: readonly FeedCard[]): FeedCard[] {
+  const early = items.filter((c, i) => i < SPONSORED_MIN_INDEX && c.kind === "sponsored");
+  if (!early.length) return [...items];
+  const rest = items.filter((c) => !early.includes(c));
+  if (rest.length < SPONSORED_MIN_INDEX) return rest;
+  return [...rest.slice(0, SPONSORED_MIN_INDEX), ...early, ...rest.slice(SPONSORED_MIN_INDEX)];
+}
+
+/** Retire de la liste toutes les cartes « Sponsorisé » d'un emplacement (l'API l'a refusé : une carte, ou toutes ses reprises). */
+export const withoutPlacement = (items: readonly FeedCard[], placementId: string): FeedCard[] =>
+  items.filter((c) => !(c.kind === "sponsored" && c.payload.id === placementId));
+
 /** Ajoute des cartes sans doublon (l'identifiant d'une carte est stable d'une page à l'autre). */
 export function appendCards(current: readonly FeedCard[], next: readonly FeedCard[]): FeedCard[] {
   const seen = new Set(current.map((c) => c.id));

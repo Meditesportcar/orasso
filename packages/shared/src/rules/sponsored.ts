@@ -1,5 +1,6 @@
 // Emplacement sponsorisé de l'accueil (lot 30, ARCHITECTURE-SUITE § 13.3) : éligibilité d'un emplacement pour une
 // personne, et tirage pondéré déterministe (même graine, même résultat). Fonctions pures, testées.
+import { BUSINESS_TIMEZONE } from "../enums";
 
 export type PlacementStatus = "draft" | "active" | "paused" | "ended";
 
@@ -31,7 +32,21 @@ export function isFeedSponsoredTargeted(reasonLabel: string): boolean {
 
 /** « Pourquoi je vois ça » d'une carte Sponsorisé (D38) : ciblée par département, ou ouverte à toute la France. */
 export const FEED_SPONSORED_WHY = "Sponsorisé. Choisi d'après ton département, rien d'autre.";
-export const FEED_SPONSORED_OPEN_WHY = "Sponsorisé. Montré à tout le monde en France : rien n'est choisi d'après toi.";
+export const FEED_SPONSORED_OPEN_WHY = "Cette publicité n'est pas ciblée : elle peut être montrée partout en France.";
+
+/**
+ * Clé du comptage d'un affichage dans la session de l'écran (lot R7k2, tour 2) : le compte, le jour de Paris et
+ * l'emplacement. Un autre compte, ou le lendemain, recompte ; le même jour pour le même compte, une seule fois.
+ */
+export function sponsoredSessionKey(account: string | null, placementId: string, now: Date = new Date()): string {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  return `${account ?? "-"}|${day}|${placementId}`;
+}
 
 /** Les départements d'un emplacement sans doublon (l'ordre de saisie est gardé). */
 export function distinctDepartments(departments: readonly string[]): string[] {

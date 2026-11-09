@@ -16,7 +16,9 @@ import {
   feedFilters,
   feedRetryAction,
   pinnedPublished,
+  sponsoredNotBeforeFourth,
   withMyPublished,
+  withoutPlacement,
 } from "@orasso/shared";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -165,7 +167,10 @@ export function useFeed() {
   useFocusEffect(revalidate);
 
   const shown: FeedCard[] | null = list && list.filter === filter ? list.items : null;
-  const items: FeedCard[] | null = shown ? withMyPublished(shown, pinnedPublished(mine)) : null;
+  // La carte « Sponsorisé » ne remonte jamais avant la 4e place, même si une des trois premières cartes sort (tour 2).
+  const items: FeedCard[] | null = shown
+    ? sponsoredNotBeforeFourth(withMyPublished(shown, pinnedPublished(mine)))
+    : null;
   /** « Réessayer » : relit la première page après un échec d'actualisation, la page suivante après un échec de « Voir plus ». */
   const retry = useCallback(
     () => (feedRetryAction(errorSource) === "loadMore" ? loadMore() : reload()),
@@ -183,7 +188,9 @@ export function useFeed() {
     retry,
     errorSource,
     scrollTop,
-    /** Une carte sort de la liste (publication supprimée). */
+    /** Une carte sort de la liste (publication supprimée). `dropPlacement` : toutes les cartes d'un emplacement refusé. */
+    dropPlacement: (placementId: string) =>
+      setList((s) => (s ? { ...s, items: withoutPlacement(s.items, placementId) } : s)),
     drop: (id: string) => {
       forgetMyPublished(id);
       setMine((m) => m.filter((c) => c.id !== id));

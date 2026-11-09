@@ -129,14 +129,14 @@
 .fil-card__reason {
   color: var(--ink-muted);
 }
-/* L'étiquette « Sponsorisé » (`.tag.line` de l'artefact) : 22 px, inclinée de -8°, contour, texte redressé. */
+/* L'étiquette « Sponsorisé » (`.tag.line` de l'artefact) : inclinée, contour, texte redressé ; tailles par les jetons du texte « label ». */
 .fil-tag {
   display: inline-flex;
   align-items: center;
   justify-self: start;
-  height: 22px;
-  padding: 0 10px;
-  margin-top: 2px;
+  min-height: calc(var(--type-label-line) + var(--space-2));
+  padding: 0 var(--space-2);
+  margin-top: calc(var(--space-1) / 2);
   border: 1.5px solid var(--ink);
   background: transparent;
   color: var(--ink);
@@ -144,9 +144,10 @@
 }
 .fil-tag > span {
   display: block;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-spacing);
   text-transform: uppercase;
   transform: skewX(calc(var(--skew) * -1));
 }
@@ -373,6 +374,11 @@
 .fil-menu__row small {
   display: block;
   color: var(--ink-muted);
+}
+.fil-menu__address {
+  padding: 0 var(--space-3);
+  color: var(--ink-muted);
+  user-select: all;
 }
 .fil-menu__report {
   padding: var(--space-1) var(--space-3);

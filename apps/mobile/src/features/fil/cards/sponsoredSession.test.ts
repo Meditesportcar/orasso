@@ -1,7 +1,9 @@
+import { sponsoredSessionKey } from "@orasso/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   claimImpression,
+  countsAsSeen,
   isImpressionRefused,
   isRefusalStatus,
   refuseImpression,
@@ -30,6 +32,33 @@ describe("affichages d'une carte Sponsorisé dans la session", () => {
     releaseImpression("a");
     expect(isImpressionRefused("a")).toBe(true);
     expect(claimImpression("a")).toBe(false);
+  });
+
+  it("compte par compte et par jour : un autre compte ou le lendemain recompte", () => {
+    const d1 = new Date("2026-11-09T11:00:00Z");
+    const d2 = new Date("2026-11-10T11:00:00Z");
+    expect(claimImpression(sponsoredSessionKey("u1", "a", d1))).toBe(true);
+    expect(claimImpression(sponsoredSessionKey("u1", "a", d1))).toBe(false);
+    expect(claimImpression(sponsoredSessionKey("u2", "a", d1))).toBe(true);
+    expect(claimImpression(sponsoredSessionKey("u1", "a", d2))).toBe(true);
+  });
+
+  it("un emplacement refusé reste refusé pour ce compte ce jour-là (la carte ne revient pas plus bas), pas pour un autre", () => {
+    const d1 = new Date("2026-11-09T11:00:00Z");
+    refuseImpression(sponsoredSessionKey("u1", "a", d1));
+    expect(isImpressionRefused(sponsoredSessionKey("u1", "a", d1))).toBe(true);
+    expect(isImpressionRefused(sponsoredSessionKey("u2", "a", d1))).toBe(false);
+    expect(isImpressionRefused(sponsoredSessionKey("u1", "a", new Date("2026-11-10T11:00:00Z")))).toBe(false);
+  });
+
+  it("ne compte que la partie visible, pas ce qui est caché sous la bande ou la barre d'onglets", () => {
+    // Zone visible : de 100 (sous la bande) à 700 (au-dessus de la barre d'onglets).
+    expect(countsAsSeen(300, 200, 100, 700)).toBe(true);
+    expect(countsAsSeen(650, 200, 100, 700)).toBe(false); // centre à 750 : sous la barre
+    expect(countsAsSeen(560, 200, 100, 700)).toBe(true); // centre à 660
+    expect(countsAsSeen(-50, 200, 100, 700)).toBe(false); // centre à 50 : sous la bande
+    expect(countsAsSeen(0, 0, 100, 700)).toBe(false);
+    expect(countsAsSeen(300, 200, 700, 100)).toBe(false);
   });
 
   it("retire la carte sur 409 et 404 seulement", () => {

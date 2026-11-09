@@ -62,6 +62,10 @@ export const feedScreenLabels = {
   seeAdFor: (advertiser: string) => `Voir : ${advertiser}`,
   reportAdHint: "Une publicité trompeuse, choquante ou déplacée",
   reportAdSubject: "Signaler une publicité du Fil",
+  /** Sans appli de messagerie : l'adresse s'affiche, à copier (lot R7k2, tour 2). */
+  reportAdNoMail: (email: string) =>
+    `Pas d'application de messagerie sur cet appareil. Écris à ${email} en indiquant l'annonceur.`,
+  reportAdAddress: (email: string) => `Ou par e-mail : ${email}`,
   reportAdBody: (advertiser: string, placementId: string) =>
     `Annonceur : ${advertiser}\nEmplacement : ${placementId}\n\nCe que je signale :\n`,
   reportHint: "Un contenu choquant, une plaque lisible, du spam",

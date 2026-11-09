@@ -6,17 +6,26 @@
 // moitié de la carte dans la fenêtre), une fois par emplacement et par session ; le clic est compté au toucher ; un refus
 // de l'API (plafond atteint, emplacement arrêté) retire la carte.
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { feedScreenLabels as L } from "@orasso/shared";
+import { feedScreenLabels as L, sponsoredSessionKey } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { api } from "@/lib/api";
+import { cacheScope } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { SmButton } from "@/ui/Kit";
+import { useScrollAssist } from "@/ui/ScrollAssist";
 import { CardShell } from "./CardShell";
 import { OrgLogo } from "./parts";
-import { claimImpression, isRefusalStatus, refuseImpression, releaseImpression } from "./sponsoredSession";
+import {
+  claimImpression,
+  countsAsSeen,
+  isImpressionRefused,
+  isRefusalStatus,
+  refuseImpression,
+  releaseImpression,
+} from "./sponsoredSession";
 import type { CardProps } from "./types";
 
 const { space2, space3 } = tokens.spacing;
@@ -29,24 +38,38 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
   const ref = useRef<View>(null);
   const focused = useIsFocused();
   const { height } = useWindowDimensions();
+  const assist = useScrollAssist();
   const removed = useRef(onRemoved);
   removed.current = onRemoved;
+  // Un emplacement déjà refusé dans cette session (plafond atteint, arrêté) ne se réaffiche pas : ni cette carte ni ses reprises.
+  const refused = isImpressionRefused(sponsoredSessionKey(cacheScope(), p.id));
+  useEffect(() => {
+    if (refused) removed.current?.(card);
+  }, [refused, card]);
 
   // L'affichage : compté quand la moitié de la carte est dans la fenêtre, écran au premier plan, une fois par session.
+  // Tour 2 : la carte n'est comptée que si sa partie visible n'est pas cachée sous la bande ORASSO ou la barre d'onglets
+  // (`visibleArea`) ; la session est celle du compte et du jour de Paris.
   useEffect(() => {
-    if (!focused) return;
+    if (!focused || refused) return;
     let stopped = false;
     const check = () =>
       ref.current?.measureInWindow((_x, y, _w, h) => {
-        if (stopped || h <= 0 || y + h / 2 > height || y + h / 2 < 0) return;
-        stopped = true;
-        if (!claimImpression(p.id)) return;
-        api.sponsoredImpression(p.id, "feed").catch((e: { status?: number }) => {
-          if (isRefusalStatus(e.status)) {
-            refuseImpression(p.id);
-            removed.current?.(card);
-          } else releaseImpression(p.id);
-        });
+        if (stopped) return;
+        const count = (top: number, bottom: number) => {
+          if (stopped || !countsAsSeen(y, h, top, bottom)) return;
+          stopped = true;
+          const key = sponsoredSessionKey(cacheScope(), p.id);
+          if (!claimImpression(key)) return;
+          api.sponsoredImpression(p.id, "feed").catch((e: { status?: number }) => {
+            if (isRefusalStatus(e.status)) {
+              refuseImpression(key);
+              removed.current?.(card);
+            } else releaseImpression(key);
+          });
+        };
+        if (assist) assist.visibleArea(count);
+        else count(0, height);
       });
     check();
     const timer = setInterval(check, 700);
@@ -54,7 +77,7 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
       stopped = true;
       clearInterval(timer);
     };
-  }, [p.id, focused, height, card]);
+  }, [p.id, focused, refused, height, card, assist]);
 
   function open() {
     void api.sponsoredClick(p.id, "feed").catch(() => undefined);
@@ -62,6 +85,7 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
     else if (/^https?:\/\//i.test(p.linkUrl)) void Linking.openURL(p.linkUrl).catch(() => undefined);
   }
 
+  if (refused) return null;
   const image = mediaSource(p.imageUrl);
   const mention = [p.disclosure, p.domain].filter(Boolean).join(" · ");
   return (
