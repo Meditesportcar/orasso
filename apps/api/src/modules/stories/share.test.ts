@@ -85,7 +85,12 @@ async function variance(data: Buffer, r: { left: number; top: number; width: num
 async function maskedVehicle(owner: TestUser) {
   const v = await createVehicle(owner.id, ref);
   const [photo] = await db.select().from(vehiclePhotos).where(eq(vehiclePhotos.vehicleId, v.id));
-  await storage.put(photo?.storageKey as string, await sharp(await noise(1200, 800)).webp().toBuffer());
+  await storage.put(
+    photo?.storageKey as string,
+    await sharp(await noise(1200, 800))
+      .webp()
+      .toBuffer(),
+  );
   await blurPlatesOf(owner.id);
   return v;
 }
@@ -97,7 +102,8 @@ const follow = async (a: TestUser, b: TestUser) => {
     .set({ status: "accepted", acceptedAt: clock.now })
     .where(and(eq(userFollows.followerId, a.id), eq(userFollows.followedId, b.id)));
 };
-const makePrivate = (u: TestUser) => db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
+const makePrivate = (u: TestUser) =>
+  db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
 
 type Over = Record<string, unknown>;
 const share = (u: TestUser, linked: { type: string; id: string }, over: Over = {}) =>
@@ -171,7 +177,11 @@ describe("story sans média : une voiture", () => {
     const nina = await signUp("Nina");
     const v = await maskedVehicle(kenji);
     const clientId = randomUUID();
-    const res = await share(kenji, { type: "vehicle", id: v.id }, { clientId, frame: { scale: 1.3, offsetX: 40, offsetY: -80 } });
+    const res = await share(
+      kenji,
+      { type: "vehicle", id: v.id },
+      { clientId, frame: { scale: 1.3, offsetX: 40, offsetY: -80 } },
+    );
     expect(res.status, JSON.stringify(res.json)).toBe(201);
     expect(res.json.status).toBe("ready");
     const [row] = await db.select().from(stories).where(eq(stories.id, res.json.id));
@@ -182,7 +192,11 @@ describe("story sans média : une voiture", () => {
     const meta = await sharp(file.buf).metadata();
     expect([meta.width, meta.height, meta.format]).toEqual([STORY_W, STORY_H, "webp"]);
     // Même `clientId` : la même story, pas de doublon.
-    const again = await req(kenji, "POST", "/me/stories", { linked: { type: "vehicle", id: v.id }, clientId, audience: "public" });
+    const again = await req(kenji, "POST", "/me/stories", {
+      linked: { type: "vehicle", id: v.id },
+      clientId,
+      audience: "public",
+    });
     expect(again.status).toBe(201);
     expect(again.json.id).toBe(res.json.id);
     expect(await db.select().from(stories)).toHaveLength(1);
@@ -325,7 +339,7 @@ describe("autres contenus liés", () => {
     expect(refused.status).toBe(403);
     expect(refused.json.error.code).toBe("private_author");
     // L'auteur partage sa propre publication, même privée.
-    expect((await share(nina, { type: "feed_post", id: posted.json.id })).status).toBe(201);
+    expect((await share(nina, { type: "feed_post", id: posted.json.id }, { audience: "followers" })).status).toBe(201);
   });
 });
 
@@ -391,7 +405,11 @@ describe("fichiers qui sortent d'Orasso", () => {
     const form = new FormData();
     form.append("purpose", "feed_post");
     form.append("file", new File([new Uint8Array(await noise(1350, 1080))], "p.jpg", { type: "image/jpeg" }));
-    const up = await app.request("/api/me/uploads", { method: "POST", headers: { origin: ORIGIN, cookie: kenji.cookie }, body: form });
+    const up = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: kenji.cookie },
+      body: form,
+    });
     const posted = await req(kenji, "POST", "/me/feed-posts", {
       photos: [{ uploadKey: ((await up.json()) as { key: string }).key, noPlateConfirmed: true }],
       aspect: "landscape",
@@ -403,7 +421,9 @@ describe("fichiers qui sortent d'Orasso", () => {
     expect([meta.width, meta.height, meta.format]).toEqual([1080, 1350, "jpeg"]);
     expect((await req(nina, "GET", `/feed-posts/${posted.json.id}/export`)).status).toBe(403);
     // Une publication d'un autre ne part pas non plus par la route des contenus partagés.
-    expect((await req(nina, "GET", `/me/share/export?type=feed_post&id=${posted.json.id}&format=post`)).status).toBe(403);
+    expect((await req(nina, "GET", `/me/share/export?type=feed_post&id=${posted.json.id}&format=post`)).status).toBe(
+      403,
+    );
   });
 
   it("un événement en 9:16 ou en 4:5, signé ; une voiture sans photo montrable est refusée", async () => {
@@ -423,7 +443,9 @@ describe("fichiers qui sortent d'Orasso", () => {
   });
 
   it("la signature se pose sur n'importe quelle image 9:16 ou 4:5", async () => {
-    const base = await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#202020" } }).png().toBuffer();
+    const base = await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#202020" } })
+      .png()
+      .toBuffer();
     const out = await signFile(base, { width: 1080, height: 1350 });
     expect(await variance(out, { left: 700, top: 1350 - 44 - 70, width: 320, height: 70 })).toBeGreaterThan(300);
   });
@@ -436,13 +458,20 @@ describe("carte au Fil en 4:5", () => {
     const orga = await signUp("Orga");
     const { e } = await structureEvent(orga);
     const v = await maskedVehicle(kenji);
-    const ev = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "event", id: e.id }, clientId: randomUUID(), caption: "On y va" });
+    const ev = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "event", id: e.id },
+      clientId: randomUUID(),
+      caption: "On y va",
+    });
     expect(ev.status, JSON.stringify(ev.json)).toBe(201);
     expect(ev.json.event.slug).toBe(e.slug);
     expect(ev.json.aspect).toBe("portrait_4_5");
     expect(ev.json.photos).toHaveLength(1);
     expect([ev.json.photos[0].width, ev.json.photos[0].height]).toEqual([1080, 1350]);
-    const car = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "vehicle", id: v.id }, clientId: randomUUID() });
+    const car = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "vehicle", id: v.id },
+      clientId: randomUUID(),
+    });
     expect(car.status, JSON.stringify(car.json)).toBe(201);
     expect(car.json.vehicle.id).toBe(v.id);
     // La photo est servie par la route protégée (session) ; Nina la voit (compte public).
@@ -450,7 +479,10 @@ describe("carte au Fil en 4:5", () => {
     expect(photo.status).toBe(200);
     // Sans photo montrable : refus, et l'envoi d'une photo seule ou d'un lien seul reste exigé.
     const bare = await createVehicle(nina.id, ref);
-    expect((await req(nina, "POST", "/me/feed-posts", { linked: { type: "vehicle", id: bare.id }, clientId: randomUUID() })).status).toBe(409);
+    expect(
+      (await req(nina, "POST", "/me/feed-posts", { linked: { type: "vehicle", id: bare.id }, clientId: randomUUID() }))
+        .status,
+    ).toBe(409);
     expect((await req(kenji, "POST", "/me/feed-posts", { clientId: randomUUID() })).status).toBe(400);
     // Seuls un événement et une voiture se partagent au Fil.
     expect((await req(kenji, "POST", "/me/feed-posts", { linked: { type: "memory", id: e.id } })).status).toBe(400);

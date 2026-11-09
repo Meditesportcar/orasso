@@ -32,7 +32,7 @@ export function ShareDialog({
 }: {
   target: ShareTarget;
   label?: string;
-  look?: "secondary" | "ghost";
+  look?: "secondary";
   testId?: string;
   /** Voiture : « Vers l'extérieur » mène à l'affiche à trois styles (la fiche du véhicule). */
   onPoster?: () => void;

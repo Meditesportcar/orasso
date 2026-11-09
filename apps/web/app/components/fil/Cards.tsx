@@ -284,7 +284,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
             <Icon name="fire" size={17} />
             <span data-testid="feed-post-fire-count">{fire.count}</span>
           </button>
-          <ShareDialog target={{ type: "feed_post", id: post.id }} look="ghost" testId="feed-post-share" />
+          <ShareDialog target={{ type: "feed_post", id: post.id }} testId="feed-post-share" />
         </>
       }
     >
