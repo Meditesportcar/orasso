@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
-import { cars, cleanVotes, createHandVote, draftEvent, dropDraft, lydia, manage } from "./helpers/lotr7l2";
+import { cars, cleanVotes, createHandVote, draftEvent, dropDraft, lydia, lydiaStaff, manage } from "./helpers/lotr7l2";
 import { RELAIS } from "./relais";
 
 // Lot R7l2, appli : les votes à thème côté organisateur et staff.
@@ -75,7 +75,7 @@ test("éditeur : étape Votes, Toutes catégories retiré puis remis, vote à la
     await go(page, `/evenement/${draft.id}/modifier?temps=votes`, "wizard-votes");
     // Neuf étapes : « Votes » entre « Règlement » et « Affiche ».
     await expect(page.getByTestId("wizard-title-head")).toHaveText(/Votes du public/i);
-    await expect(page.getByText(/7 sur 9|Étape 7 sur 9/).first()).toBeVisible();
+    await expect(page.getByLabel(/Étape 7 sur 9/).first()).toBeVisible();
     await expect(page.getByTestId("wizard-votes-count")).toHaveText("1 vote prévu");
     const start = await manage(draft.id, "damien@orasso.local");
     const all = start.items.find((v) => v.kind === "all_categories");
@@ -202,9 +202,13 @@ test("Votes : Lancer inactif et expliqué, candidats par recherche et par QR, La
     await page.getByTestId("vote-scan-done").click();
 
     // Le staff (Damien) : la liste sans Lancer, sans Clore, sans scan ; l'API lui refuse les écritures.
-    const staff = await open(browser, "damien@orasso.local", null);
+    const staffEmail = await lydiaStaff(ev.structure.id);
+    const staff = await open(browser, staffEmail, null);
     const staffPage = staff.page;
-    await go(staffPage, `/staff/${ev.id}`, "staff-tile-votes");
+    await staffPage.goto(`/staff/${ev.id}`);
+    await afterOpening(staffPage).catch(() => undefined);
+    await staffPage.getByRole("button", { name: "Synchroniser la liste" }).click();
+    await expect(staffPage.getByTestId("staff-tile-votes")).toBeVisible({ timeout: 45_000 });
     await staffPage.getByTestId("staff-tile-votes").click();
     await expect(staffPage.getByTestId("votes-screen")).toBeVisible({ timeout: 45_000 });
     await expect(staffPage.getByTestId(`vote-card-${voteId}`)).toBeVisible();
@@ -214,7 +218,7 @@ test("Votes : Lancer inactif et expliqué, candidats par recherche et par QR, La
     await expect(staffPage.getByTestId("vote-scan-open")).toHaveCount(0);
     await shot(staffPage, "staff-votes-lecture");
     await staff.ctx.close();
-    const staffCookie = await login("damien@orasso.local");
+    const staffCookie = await login(staffEmail);
     for (const [method, path] of [
       ["POST", `/events/${ev.id}/votes/${voteId}/open`],
       ["POST", `/events/${ev.id}/votes/${voteId}/close`],

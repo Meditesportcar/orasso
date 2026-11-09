@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, setTheme } from "./helpers";
-import { cars, cleanVotes, createHandVote, draftEvent, dropDraft, lydia, manage } from "./helpers/lotr7l2";
+import { cars, cleanVotes, createHandVote, draftEvent, dropDraft, lydia, lydiaStaff, manage } from "./helpers/lotr7l2";
 
 // Lot R7l2, site : les votes à thème côté organisateur et staff.
 //  - l'éditeur passe à neuf étapes : « Votes du public » (après « Règlement ») ; « Toutes catégories » est là d'office, se
@@ -154,7 +154,8 @@ test("Direct : Lancer refusé sans deux candidats entrés, candidats par la rech
     // Un autre onglet (le staff) ne voit aucun bouton, et l'API lui refuse Lancer.
     const ctx = await browser.newContext({ locale: "fr-FR", timezoneId: "Europe/Paris" });
     const staff = await ctx.newPage();
-    await loginInBrowser(staff, "damien@orasso.local", undefined, "/app");
+    const staffEmail = await lydiaStaff(ev.structure.id);
+    await loginInBrowser(staff, staffEmail, undefined, "/app");
     await staff.goto(`${base}/votes`);
     await expect(staff.getByTestId("votes-screen")).toBeVisible();
     await expect(staff.getByTestId(`vote-card-${voteId}`)).toBeVisible();
@@ -163,7 +164,7 @@ test("Direct : Lancer refusé sans deux candidats entrés, candidats par la rech
     await expect(staff.locator("[data-testid^=vote-remove-]")).toHaveCount(0);
     await expect(staff.getByTestId("votes-add")).toHaveCount(0);
     await expect(staff.getByText("en lecture seule")).toBeVisible();
-    const staffCookie = await login("damien@orasso.local");
+    const staffCookie = await login(staffEmail);
     for (const [method, path] of [
       ["POST", `/events/${ev.id}/votes/${voteId}/open`],
       ["POST", `/events/${ev.id}/votes/${voteId}/close`],

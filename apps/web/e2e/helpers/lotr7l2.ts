@@ -1,7 +1,7 @@
 import { apiCall, login } from "../helpers";
 
 // Outils communs des recettes du lot R7l2 (votes à thème côté organisateur et staff, appli et site) : l'événement en
-// cours « Rassemblement du Lydia » du seed (Sarah propriétaire de Roues Libres 66, Damien staff de la structure), ses
+// cours « Rassemblement du Lydia » du seed (Sarah propriétaire de Roues Libres 66 ; Damien n'y est qu'invité), ses
 // voitures entrées ou pas, le QR d'une voiture, un brouillon d'événement de MéditeSportCar, et le ménage des votes que
 // la recette a créés (un vote sans voix se retire, même clos).
 export const SLUG = "rassemblement-du-lydia";
@@ -147,4 +147,22 @@ export async function cleanVotes(eventId: string, prefix: string): Promise<void>
 export async function dropDraft(eventId: string): Promise<void> {
   const owner = await login("damien@orasso.local");
   await apiCall(owner, "POST", `/events/${eventId}/cancel`, { reason: "Recette R7l2" }).catch(() => undefined);
+}
+
+/**
+ * Un vrai membre du staff (actif, sans droit d'administrateur) de la structure du Lydia : Marc, invité par Sarah puis
+ * l'invitation acceptée. Damien n'y est qu'invité, et en super administrateur il passerait pour un organisateur.
+ * Idempotent : déjà membre, rien ne change.
+ */
+export async function lydiaStaff(structureId: string): Promise<string> {
+  const email = "marc@orasso.local";
+  const owner = await login("sarah@orasso.local");
+  await apiCall(owner, "POST", `/structures/${structureId}/members`, { email, role: "staff" });
+  const marc = await login(email);
+  await apiCall(marc, "POST", `/me/memberships/${structureId}/accept`);
+  // Sans rôle, la synchronisation du mode staff est refusée : le contrôle suffit (il ne donne aucun droit sur les votes).
+  const me = await apiCall<{ id?: string; user?: { id: string } }>(marc, "GET", "/me");
+  const userId = me.data.user?.id ?? me.data.id;
+  if (userId) await apiCall(owner, "PATCH", `/structures/${structureId}/members/${userId}`, { staffRoles: ["control"] });
+  return email;
 }
