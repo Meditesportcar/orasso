@@ -1,8 +1,8 @@
 // GlitchTip / Sentry d'abord (lot 15).
 import "./instrument";
 
-import { STORY_VIDEO_UPLOAD_TIMEOUT_MS } from "@orasso/shared";
 import { serve } from "@hono/node-server";
+import { STORY_VIDEO_UPLOAD_TIMEOUT_MS } from "@orasso/shared";
 import { WebSocketServer } from "ws";
 
 import { app } from "./app";
