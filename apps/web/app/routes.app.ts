@@ -10,6 +10,9 @@ export default [
     // bandeau « où sont passées les choses » (action seulement).
     route("app/fil", "routes/app-fil.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
+    // Lot R7i : rendez-vous au spot (lancer, recevoir, répondre).
+    route("app/spot/nouveau", "routes/app-spot-nouveau.tsx"),
+    route("app/spot/:id", "routes/app-spot.tsx"),
     // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
     route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),

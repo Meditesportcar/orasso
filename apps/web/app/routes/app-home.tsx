@@ -23,6 +23,7 @@ import {
   WeatherBlock,
 } from "../components/HomeWidgets";
 import { FriendsNewsBlock, LiveBlock, LiveLine, MyCrewBlock, MyOutingsBlock } from "../components/home/DashboardBlocks";
+import { SpotMeetupBlock } from "../components/home/SpotMeetup";
 import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
@@ -105,6 +106,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
         my_outings: home.myOutings ? <MyOutingsBlock data={home.myOutings} /> : null,
         my_crew: home.myCrew ? <MyCrewBlock data={home.myCrew} /> : null,
         friends_news: home.friendsNews ? <FriendsNewsBlock data={home.friendsNews} /> : null,
+        spot_meetup: home.spotMeetup ? <SpotMeetupBlock data={home.spotMeetup} /> : null,
         pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
         weather: <WeatherBlock weather={home.weather} />,
