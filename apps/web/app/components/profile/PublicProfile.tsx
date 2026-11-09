@@ -273,20 +273,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
       </aside>
 
       {limited ? (
-        <section className="pr5-block pr5-priv" aria-labelledby="pr5-priv-t">
-          <div className="pr5-sh">
-            <h2 id="pr5-priv-t" className="s-h2">
-              {L.vehiclesPrivate}
-            </h2>
-            <small>{L.vehiclesPrivateHint}</small>
-          </div>
-          <div className="pr5-plist" data-testid={preview ? "preview-vehicles" : "profile-vehicles-private"}>
-            {p.vehicles.map((v) => (
-              <span key={v.id} className="o-never-truncate">
-                <Icon name={typeIcon(v)} size={16} /> {v.label}
-              </span>
-            ))}
-          </div>
+        <section className="pr5-block pr5-priv">
+          {/* Tour 2 (maquette R7.12) : un compte privé vu d'un inconnu montre les nombres seulement, plus la liste de ses véhicules. */}
           <p className="pr5-note" data-testid="profile-private-note">
             <Icon name="lock" size={16} />
             <span>

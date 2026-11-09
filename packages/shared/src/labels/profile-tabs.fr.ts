@@ -8,6 +8,10 @@ export const profileTabsLabels = {
   outings: "Sorties",
   /** Le bouton secondaire de l'onglet Sorties : mes places (candidatures, billets) sont dans la page Sorties. */
   seePlaces: "Voir mes places",
+  /** Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (le reste du compte reste là). */
+  garageDown: "Ton garage ne se charge pas pour le moment.",
+  outingsDown: "Ton passeport ne se charge pas pour le moment.",
+  retry: "Réessayer",
   /** Toucher l'anneau d'avatar ouvre ses stories. */
   openStories: (pseudo: string) => `Voir les stories de ${pseudo}`,
   /** Accès à l'aperçu de mon profil, comme le voient les autres. */

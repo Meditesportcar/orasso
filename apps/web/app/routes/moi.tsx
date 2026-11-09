@@ -29,8 +29,10 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
 import { GarageTab } from "../components/profile/GarageTab";
 import { type GarageActionData, garageAction, loadGarage } from "../components/profile/garage.server";
+import { PanelDown } from "../components/profile/PanelDown";
 import { PartnersLine } from "../components/profile/PartnersLine";
 import { ProfileTabs } from "../components/profile/ProfileTabs";
+import { isPanelFailure } from "../components/profile/panel";
 import { loadSorties } from "../components/profile/passport.server";
 import { SortiesTab } from "../components/profile/SortiesTab";
 import { ThemeSwitch } from "../components/SiteChrome";
@@ -230,7 +232,10 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </a>
           </div>
           <div className="pt-head__id">
-            <p className="pt-head__name o-t-poster" style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}>
+            <p
+              className="pt-head__name o-t-poster-l"
+              style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}
+            >
               {me.profile.pseudo}
             </p>
             <div className="pt-head__tags">
@@ -276,19 +281,28 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
       {/* Lot R7b1 : les deux onglets internes, Garage par défaut ; chaque onglet n'est lu que quand il est ouvert. */}
       <ProfileTabs value={loaderData.onglet} hrefOf={(tab) => `/app/moi?${PT.param}=${tab}`} />
       <div className="pt-panel" data-testid="profil-panel">
+        {/* Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (message + « Réessayer »). */}
         {loaderData.onglet === "garage" && loaderData.garage ? (
-          <GarageTab
-            data={loaderData.garage}
-            actionData={(actionData?.scope === "garage" ? actionData : undefined) as GarageActionData | undefined}
-          />
+          isPanelFailure(loaderData.garage) ? (
+            <PanelDown message={PT.garageDown} href="/app/moi?onglet=garage" />
+          ) : (
+            <GarageTab
+              data={loaderData.garage}
+              actionData={(actionData?.scope === "garage" ? actionData : undefined) as GarageActionData | undefined}
+            />
+          )
         ) : null}
         {loaderData.onglet === "sorties" && loaderData.sorties ? (
-          <>
-            <SortiesTab data={loaderData.sorties} />
-            <Button variant="secondary" icon="ticket" href="/app/sorties" data-testid="profil-places">
-              {PT.seePlaces}
-            </Button>
-          </>
+          isPanelFailure(loaderData.sorties) ? (
+            <PanelDown message={PT.outingsDown} href="/app/moi?onglet=sorties" />
+          ) : (
+            <>
+              <SortiesTab data={loaderData.sorties} />
+              <Button variant="secondary" icon="ticket" href="/app/sorties" data-testid="profil-places">
+                {PT.seePlaces}
+              </Button>
+            </>
+          )
         ) : null}
       </div>
 

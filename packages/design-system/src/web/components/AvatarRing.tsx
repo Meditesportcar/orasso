@@ -30,7 +30,7 @@ export function AvatarRing({ ring = null, size = "lg", src, name, href, label, c
         (src ? (
           <img src={src} alt="" className="o-avring__img" />
         ) : (
-          <span className="o-avring__initial o-t-poster">{name.charAt(0).toUpperCase()}</span>
+          <span className="o-avring__initial o-t-poster-l">{name.charAt(0).toUpperCase()}</span>
         ))}
     </span>
   );

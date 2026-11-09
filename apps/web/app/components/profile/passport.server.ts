@@ -1,7 +1,9 @@
 import type { MyApplication, MyStaffEvent, MyTicket, PassportView, RecapListItem } from "@orasso/shared";
 
-import { api, apiOrThrow } from "../../lib/api.server";
+import { api } from "../../lib/api.server";
 import { nowMs } from "../../lib/clock";
+import type { PanelFailure } from "./panel";
+import { mainOrFailure } from "./panel.server";
 
 // Lot R7b1 : lecture de l'onglet « Sorties » du Profil (avant : la page `/app/passeport`, lots 57 et suivants).
 
@@ -18,24 +20,31 @@ function votable(apps: MyApplication[], tickets: MyTicket[], staff: MyStaffEvent
   return [...found.entries()].map(([id, e]) => ({ id, slug: e.slug, title: e.title }));
 }
 
+export type SortiesData = {
+  view: PassportView;
+  votes: { id: string; slug: string; title: string }[];
+  recaps: RecapListItem[];
+};
+
 /** Ce que l'onglet « Sorties » lit : le passeport de la saison, les votes ouverts pour moi, les récaps prêts. */
-export async function loadSorties(request: Request) {
+export async function loadSorties(request: Request): Promise<SortiesData | PanelFailure> {
   const season = new URL(request.url).searchParams.get("saison");
   const [view, recaps, apps, tickets, staff] = await Promise.all([
-    apiOrThrow<PassportView>(request, `/me/passport${season ? `?season=${encodeURIComponent(season)}` : ""}`),
+    api<PassportView>(request, `/me/passport${season ? `?season=${encodeURIComponent(season)}` : ""}`),
     api<RecapListItem[]>(request, "/me/recaps"),
     api<MyApplication[]>(request, "/me/applications?scope=upcoming"),
     api<MyTicket[]>(request, "/me/tickets"),
     api<MyStaffEvent[]>(request, "/me/staff-events"),
   ]);
+  // Tour 2 : sans le passeport, le panneau tombe seul (message + « Réessayer »), jamais tout Mon compte.
+  const main = mainOrFailure(request, view);
+  if ("failed" in main) return main;
   const now = nowMs();
   return {
-    view,
+    view: main.data,
     votes: votable(apps.ok ? apps.data : [], tickets.ok ? tickets.data : [], staff.ok ? staff.data : [], now),
     recaps: (recaps.ok ? recaps.data : [])
       .filter((r) => Date.parse(r.readyAt) <= now)
       .sort((a, b) => b.endsAt.localeCompare(a.endsAt)),
   };
 }
-
-export type SortiesData = Awaited<ReturnType<typeof loadSorties>>;

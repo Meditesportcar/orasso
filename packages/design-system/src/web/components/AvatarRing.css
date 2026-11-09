@@ -72,7 +72,7 @@
   height: 100%;
   object-fit: cover;
 }
-.o-avring__initial {
+.o-avring .o-avring__initial {
   font-size: calc(var(--avring-box) * 0.3);
   line-height: 1;
 }
