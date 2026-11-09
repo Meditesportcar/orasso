@@ -29,6 +29,7 @@ export * from "./reviews";
 export * from "./security";
 export * from "./social";
 export * from "./staff";
+export * from "./stories";
 export * from "./structures";
 export * from "./styles";
 export * from "./ticketing";

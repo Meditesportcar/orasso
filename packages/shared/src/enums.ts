@@ -26,6 +26,7 @@ import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notif
 import { passportJournalOnlyTypes, passportNoEmailTypes, passportNotificationTypes } from "./notifications/passport";
 import { pointsNotificationTypes } from "./notifications/points";
 import { providersV2NotificationTypes } from "./notifications/providers-v2";
+import { storyJournalOnlyTypes, storyNoEmailTypes, storyNotificationTypes } from "./notifications/stories";
 import {
   journalOnlyNotificationTypes as socialJournalOnly,
   socialNoEmailTypes,
@@ -41,6 +42,7 @@ export const pushOnlyNotificationTypes: readonly string[] = [
   ...afterEventNoEmailTypes,
   ...passportNoEmailTypes,
   ...socialNoEmailTypes,
+  ...storyNoEmailTypes,
 ];
 /** Actualités du Journal : ni push ni e-mail, livrées tout de suite (un tableau par domaine). */
 export const journalOnlyNotificationTypes: readonly string[] = [
@@ -48,6 +50,7 @@ export const journalOnlyNotificationTypes: readonly string[] = [
   ...communicationJournalOnlyTypes,
   ...afterEventJournalOnlyTypes,
   ...passportJournalOnlyTypes,
+  ...storyJournalOnlyTypes,
 ];
 
 /**
@@ -184,6 +187,7 @@ export const notificationTypes = {
   ...providersV2NotificationTypes,
   ...passportNotificationTypes,
   ...crewOutingNotificationTypes,
+  ...storyNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 

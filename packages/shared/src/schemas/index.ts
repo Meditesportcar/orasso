@@ -25,6 +25,7 @@ export * from "./review";
 export * from "./search";
 export * from "./shop";
 export * from "./social";
+export * from "./stories";
 export * from "./structure";
 export * from "./styles";
 export * from "./team";

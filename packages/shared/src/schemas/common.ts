@@ -61,6 +61,10 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
+  // Lot R7f1 : stories (plaque non décidée, story réservée au crew).
+  "plate_decision_required",
+  "crew_only",
+  "not_implemented",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

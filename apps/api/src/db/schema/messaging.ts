@@ -21,6 +21,7 @@ import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
 import { events } from "./events";
+import { stories } from "./stories";
 import { structures } from "./structures";
 
 export const conversationKindEnum = pgEnum("conversation_kind", conversationKinds);
@@ -110,6 +111,8 @@ export const messages = pgTable(
     groupMessageId: uuid("group_message_id"),
     /** Lot M4 : écrit depuis la fiche de cet événement (« À propos de »), visible des deux côtés. */
     aboutEventId: uuid("about_event_id").references(() => events.id, { onDelete: "set null" }),
+    /** Lot R7f1 : réponse à une story ; la vignette n'est servie que tant que la story existe (remise à `null` à son expiration). */
+    storyId: uuid("story_id").references(() => stories.id, { onDelete: "set null" }),
     deletedAt: tstz("deleted_at"),
     moderatedAt: tstz("moderated_at"),
     ...timestamps,
