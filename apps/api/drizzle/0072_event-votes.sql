@@ -1,5 +1,5 @@
 CREATE TYPE "public"."vote_candidate_mode" AS ENUM('all', 'origins', 'zone', 'hand');--> statement-breakpoint
-CREATE TYPE "public"."vote_candidate_source" AS ENUM('rule', 'hand', 'scan');--> statement-breakpoint
+CREATE TYPE "public"."vote_candidate_source" AS ENUM('frozen', 'hand', 'scan');--> statement-breakpoint
 CREATE TYPE "public"."vote_kind" AS ENUM('all_categories', 'theme');--> statement-breakpoint
 CREATE TYPE "public"."vote_open_mode" AS ENUM('first_entry', 'at', 'manual');--> statement-breakpoint
 ALTER TYPE "public"."point_kind" ADD VALUE 'vote_podium';--> statement-breakpoint

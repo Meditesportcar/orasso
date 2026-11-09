@@ -3670,6 +3670,17 @@ Lot sensible (voix, points, données existantes). Migration `0072_event-votes` (
 - **Planification (15).** Après l'écriture, un échec de `scheduleVoteJobs` est journalisé ; le balayage reprend la main, rien n'est rendu au client.
 - **Récap (16).** `vehiclesCount` = véhicules entrés, indépendamment du vote « Toutes catégories ».
 
+### Tour 3 (dernière retouche après les re-relectures, 09/11)
+- **Clôture et figeage atomiques (1).** `closeIfDue` (context.ts) : verrou de la ligne, relecture, `closed_at` en comparaison-et-pose **et** figeage des candidats dans la même transaction, seulement si cet appel clôt ; un échec ne pose rien et le balayage reprend (test avec un déclencheur SQL qui échoue).
+- **Figeage de secours au règlement (2).** `settleEvent` appelle `closeDueVotes` : tout vote clos par le temps que le balayage n'a pas constaté reçoit `closed_at` (fin déduite) et son ensemble figé, dans la transaction du règlement.
+- **Choix manuels et ensemble figé distingués (3).** La colonne `event_vote_candidates.source` existait déjà (`rule | hand | scan`) : sa valeur `rule` devient `frozen` (`frozen | hand | scan`) dans la migration 0072 elle-même (SQL et instantané modifiés à la main, `drizzle-kit generate` ne voit plus aucun changement ; la reprise SQL du prix du public n'est pas touchée, elle ne lit pas cette colonne). Un vote qui quitte le mode « à la main » perd ses lignes ; l'ouverture ne lit que les choix `hand`/`scan` ; après la clôture, seules les lignes `frozen` (ou `hand` en mode « à la main ») comptent. Vérifiée sur base neuve (migrations des tests) ; pas rejouée sur une base semée avec des données d'avant (la reprise SQL est identique à celle déjà vérifiée au premier tour).
+- **Synchro hors ligne (4).** Un véhicule est disponible à `max(checked_in_at, checkins.created_at, choix à la main)`. Les trois écritures de pointage du code (`recordEntry`, express, contestation acceptée) posent `created_at` avec l'horloge de l'application.
+- **« À l'heure » (5).** Début réel = le plus tard entre `opens_at` et l'arrivée du 2e candidat ; la durée court depuis ; sans deux candidats, l'heure prévue est annoncée mais la durée ne court pas (`voteStart`, `rules/votes.ts`).
+- **« À la main » + « au premier pointage » (6).** Refusé à la création et à la modification : 409 `hand_first_entry`, « Un vote à la main se lance toi-même ou à une heure fixée. » Un concours préparé à la main se lance avec « Lancer le vote ».
+- **Ouverture constatée après écriture (7).** `afterWrite` appelle `syncEvent` : un vote rendu ouvrable par sa création ou un candidat ajouté s'ouvre tout de suite, et les présents sont prévenus une fois, après validation.
+- **Brouillons (8).** Un vote d'un événement en brouillon se crée, se modifie et reçoit des candidats ; il ne se lance pas (409 `event_not_published`).
+- **État sous verrou (9).** `update`, `open`, `addCandidate` et `removeCandidate` lisent l'état sous verrou de la ligne du vote, dans la transaction (`lockedState`).
+
 ### À revoir avec Damien (lot R7l1)
 - Un vote qui a reçu des voix ne se retire plus, il se clôt (pour ne pas faire disparaître un podium) : à confirmer à l'usage.
 - Une voiture garde son meilleur podium par événement (D38) : un 1er d'un vote à thème et un 3e de « Toutes catégories » donnent 15 points, pas 20 ; le trophée se gagne à chaque vote.

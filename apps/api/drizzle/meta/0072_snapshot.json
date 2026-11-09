@@ -20374,7 +20374,7 @@
       "name": "vote_candidate_source",
       "schema": "public",
       "values": [
-        "rule",
+        "frozen",
         "hand",
         "scan"
       ]

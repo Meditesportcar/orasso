@@ -82,6 +82,7 @@ import {
   handCandidates,
   type LoadedVotes,
   loadEventVotes,
+  lockVote,
   rankingEntries,
   rankVote,
   ruleOfVote,
@@ -89,7 +90,7 @@ import {
   type VoteRow,
   voterOf,
 } from "./context";
-import { markOpened, scheduleVoteJobs } from "./lifecycle";
+import { markOpened, scheduleVoteJobs, votesLifecycle } from "./lifecycle";
 import { publishVotes, votesRealtime } from "./realtime";
 
 const refusal = {
@@ -312,6 +313,7 @@ export const votesService = {
     assertEditable(event);
     await assertZone(event.id, input);
     assertOpensAt(event, input);
+    assertLaunchMode(input);
     const id = await withTx(async (tx) => {
       await ensureAllCategories(tx, event);
       const existing = await activeVotes(tx, eventId);
@@ -347,44 +349,53 @@ export const votesService = {
   async update(v: Viewer, eventId: string, voteId: string, input: VoteUpdate): Promise<VoteManageItem> {
     const event = await eventsRepo.byId(eventId);
     await teamAccess(v, event, true);
-    const vote = await ownVote(event.id, voteId);
-    if (vote.kind === "all_categories") throw conflict("vote_fixed", voteTexts.errors.vote_fixed);
-    assertUnlocked(event, vote, await unlockedState(event, vote));
-    const mode = input.candidateMode ?? vote.candidateMode;
-    const openMode = input.openMode ?? vote.openMode;
-    const merged = parse(voteCreateSchema, {
-      title: input.title ?? vote.title,
-      candidateMode: mode,
-      // Un changement de mode des candidats sans nouveau filtre : on repart de zéro (le filtre d'un autre mode n'a pas de sens).
-      candidateFilter:
-        input.candidateFilter !== undefined
-          ? input.candidateFilter
-          : input.candidateMode && input.candidateMode !== vote.candidateMode
-            ? null
-            : vote.candidateFilter,
-      openMode,
-      opensAt:
-        input.opensAt !== undefined
-          ? input.opensAt
-          : input.openMode && input.openMode !== vote.openMode
-            ? null
-            : vote.opensAt,
-      durationMinutes: input.durationMinutes !== undefined ? input.durationMinutes : vote.durationMinutes,
+    await ownVote(event.id, voteId);
+    await withTx(async (tx) => {
+      // Verrou de la ligne, état recalculé sous verrou (tour 3) : rien ne change sous une voix qui arrive.
+      const { vote, state } = await lockedState(tx, event, voteId);
+      if (vote.kind === "all_categories") throw conflict("vote_fixed", voteTexts.errors.vote_fixed);
+      assertUnlocked(event, vote, state);
+      const mode = input.candidateMode ?? vote.candidateMode;
+      const openMode = input.openMode ?? vote.openMode;
+      const merged = parse(voteCreateSchema, {
+        title: input.title ?? vote.title,
+        candidateMode: mode,
+        // Un changement de mode des candidats sans nouveau filtre : on repart de zéro (le filtre d'un autre mode n'a pas de sens).
+        candidateFilter:
+          input.candidateFilter !== undefined
+            ? input.candidateFilter
+            : input.candidateMode && input.candidateMode !== vote.candidateMode
+              ? null
+              : vote.candidateFilter,
+        openMode,
+        opensAt:
+          input.opensAt !== undefined
+            ? input.opensAt
+            : input.openMode && input.openMode !== vote.openMode
+              ? null
+              : vote.opensAt,
+        durationMinutes: input.durationMinutes !== undefined ? input.durationMinutes : vote.durationMinutes,
+      });
+      await assertZone(event.id, merged);
+      assertOpensAt(event, merged);
+      assertLaunchMode(merged);
+      await tx
+        .update(eventVotes)
+        .set({
+          title: merged.title,
+          candidateMode: merged.candidateMode,
+          candidateFilter: merged.candidateFilter,
+          openMode: merged.openMode,
+          opensAt: merged.opensAt,
+          durationMinutes: merged.durationMinutes,
+          updatedAt: now(),
+        })
+        .where(and(eq(eventVotes.id, voteId), isNull(eventVotes.openedAt), isNull(eventVotes.closedAt)));
+      // Un vote qui quitte le mode « à la main » perd ses choix (ils ne servent plus et ne doivent rien ouvrir).
+      if (vote.candidateMode === "hand" && merged.candidateMode !== "hand") {
+        await tx.delete(eventVoteCandidates).where(eq(eventVoteCandidates.voteId, voteId));
+      }
     });
-    await assertZone(event.id, merged);
-    assertOpensAt(event, merged);
-    await db
-      .update(eventVotes)
-      .set({
-        title: merged.title,
-        candidateMode: merged.candidateMode,
-        candidateFilter: merged.candidateFilter,
-        openMode: merged.openMode,
-        opensAt: merged.opensAt,
-        durationMinutes: merged.durationMinutes,
-        updatedAt: now(),
-      })
-      .where(and(eq(eventVotes.id, voteId), isNull(eventVotes.openedAt), isNull(eventVotes.closedAt)));
     return this.afterWrite(eventId, voteId);
   },
 
@@ -426,16 +437,16 @@ export const votesService = {
   async open(v: Viewer, eventId: string, voteId: string): Promise<VoteManageItem> {
     const event = await eventsRepo.byId(eventId);
     await teamAccess(v, event, true);
-    const vote = await ownVote(event.id, voteId);
-    if (vote.openMode === "first_entry") throw conflict("vote_not_manual", voteTexts.errors.vote_not_manual);
-    assertUnlocked(event, vote, await unlockedState(event, vote));
+    await ownVote(event.id, voteId);
     await withTx(async (tx) => {
-      const l = await loadEventVotes(tx, event);
-      const fresh = l.votes.find((x) => x.id === voteId);
-      if (!fresh) throw notFound("Vote introuvable");
-      const { candidates } = ruleOfVote(l, fresh);
+      const { vote, state, l } = await lockedState(tx, event, voteId);
+      if (vote.openMode === "first_entry") throw conflict("vote_not_manual", voteTexts.errors.vote_not_manual);
+      assertUnlocked(event, vote, state);
+      // Un événement en brouillon prépare ses votes, il ne les lance pas.
+      if (event.status !== "published") throw conflict("event_not_published", voteTexts.errors.not_published);
+      const { candidates } = ruleOfVote(l, vote);
       if (candidates.length < 2) throw conflict("not_enough_candidates", voteTexts.errors.not_enough_candidates);
-      if (!(await markOpened(tx, event, fresh, now(), true))) {
+      if (!(await markOpened(tx, event, vote, now(), true))) {
         throw conflict("vote_locked", voteTexts.errors.vote_locked);
       }
     });
@@ -475,7 +486,6 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
-    assertUnlocked(event, vote, await unlockedState(event, vote));
     let applicationId: string;
     let source: "hand" | "scan" = "hand";
     if ("qr" in input) {
@@ -519,10 +529,15 @@ export const votesService = {
       const entered = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, app.id) });
       if (!entered) throw validation(voteTexts.errors.not_retained);
     }
-    await db
-      .insert(eventVoteCandidates)
-      .values({ voteId, applicationId: app.id, source, addedBy: v.user.id, addedAt: now() })
-      .onConflictDoNothing();
+    await withTx(async (tx) => {
+      const locked = await lockedState(tx, event, voteId);
+      if (locked.vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
+      assertUnlocked(event, locked.vote, locked.state);
+      await tx
+        .insert(eventVoteCandidates)
+        .values({ voteId, applicationId: app.id, source, addedBy: v.user.id, addedAt: now() })
+        .onConflictDoNothing();
+    });
     votesRealtime.candidatesChanged(eventId, voteId);
     return this.afterWrite(eventId, voteId);
   },
@@ -533,16 +548,26 @@ export const votesService = {
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
     if (vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
-    assertUnlocked(event, vote, await unlockedState(event, vote));
-    await db
-      .delete(eventVoteCandidates)
-      .where(and(eq(eventVoteCandidates.voteId, voteId), eq(eventVoteCandidates.applicationId, applicationId)));
+    await withTx(async (tx) => {
+      const locked = await lockedState(tx, event, voteId);
+      assertUnlocked(event, locked.vote, locked.state);
+      await tx
+        .delete(eventVoteCandidates)
+        .where(and(eq(eventVoteCandidates.voteId, voteId), eq(eventVoteCandidates.applicationId, applicationId)));
+    });
     votesRealtime.candidatesChanged(eventId, voteId);
     return this.afterWrite(eventId, voteId);
   },
 
   /** Après une écriture : tâches planifiées, et le vote tel que la console le montre. */
   async afterWrite(eventId: string, voteId: string): Promise<VoteManageItem> {
+    // Après validation : si l'écriture rend le vote ouvrable (deux candidats entrés, vote d'une minute…), l'ouverture est
+    // constatée tout de suite et les présents prévenus une fois, sans attendre le balayage. Un échec se journalise.
+    try {
+      await votesLifecycle.syncEvent(eventId);
+    } catch (error) {
+      console.error("Ouverture des votes non constatée après l'écriture (rattrapée par le balayage) :", error);
+    }
     const event = await eventsRepo.byId(eventId);
     const l = await loadEventVotes(db, event);
     const vote = l.votes.find((x) => x.id === voteId);
@@ -624,9 +649,24 @@ function assertUnlocked(event: EventRow, vote: VoteRow, state?: VoteState) {
   }
 }
 
-/** Verrou par l'état déduit : un vote « à l'heure » dont l'heure est passée est ouvert même si la tâche n'a rien posé. */
-async function unlockedState(event: EventRow, vote: VoteRow): Promise<VoteState> {
-  return ruleOfVote(await loadEventVotes(db, event), vote).state;
+/**
+ * Sous verrou de la ligne du vote : le vote relu et son état déduit. Un événement en brouillon se configure librement
+ * (modifier, candidats) : ses votes restent « prévus », ils ne peuvent pas s'ouvrir.
+ */
+async function lockedState(tx: Executor, event: EventRow, voteId: string) {
+  await lockVote(tx, voteId);
+  const l = await loadEventVotes(tx, event);
+  const vote = l.votes.find((x) => x.id === voteId);
+  if (!vote) throw notFound("Vote introuvable");
+  const state: VoteState = event.status === "published" ? ruleOfVote(l, vote).state : "upcoming";
+  return { vote, state, l };
+}
+
+/** Un concours préparé « à la main » se lance avec « Lancer le vote » ou à une heure fixée, jamais « au premier pointage ». */
+function assertLaunchMode(input: { candidateMode: string; openMode: string }) {
+  if (input.candidateMode === "hand" && input.openMode === "first_entry") {
+    throw conflict("hand_first_entry", voteTexts.errors.hand_first_entry);
+  }
 }
 
 /** Une heure d'ouverture doit être à venir et avant la fin de l'événement (409 `opens_at_invalid`). */
@@ -635,11 +675,6 @@ function assertOpensAt(event: EventRow, input: { openMode: string; opensAt?: Dat
   if (input.opensAt <= now() || input.opensAt >= event.endsAt) {
     throw conflict("opens_at_invalid", voteTexts.errors.opens_at_past);
   }
-}
-
-/** Verrouille la ligne d'un vote jusqu'à la fin de la transaction (voix, clôture et retrait ne se croisent pas). */
-async function lockVote(tx: Executor, voteId: string) {
-  await tx.select({ id: eventVotes.id }).from(eventVotes).where(eq(eventVotes.id, voteId)).for("update");
 }
 
 async function ownVote(eventId: string, voteId: string): Promise<VoteRow> {

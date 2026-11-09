@@ -14,10 +14,10 @@ import { verifiedStaffIds } from "../passport/presence";
 import {
   activeVotes,
   candidatesOf,
+  closeIfDue,
   contextOf,
   ensureAllCategories,
   enteredVehicles,
-  freezeCandidates,
   handCandidates,
   toRuleVote,
   type VoteRow,
@@ -123,14 +123,8 @@ export const votesLifecycle = {
       const rv = toRuleVote(vote);
       const state = voteState(rv, ctx, t);
       if (state === "closed") {
-        const closesAt = voteClosesAt(rv, ctx);
-        const closed = await db
-          .update(eventVotes)
-          .set({ closedAt: closesAt, updatedAt: t })
-          .where(and(eq(eventVotes.id, vote.id), isNull(eventVotes.closedAt)))
-          .returning({ id: eventVotes.id });
-        await freezeCandidates(db, vote, candidates);
-        if (closed.length) votesRealtime.closed(eventId, vote.id);
+        // Clôture et figeage des candidats dans la même transaction (tour 3) : un échec ne laisse rien de posé.
+        if (await withTx((tx) => closeIfDue(tx, event, vote.id))) votesRealtime.closed(eventId, vote.id);
       } else if (state === "open" && !vote.openedAt) {
         const at = voteOpensAt(rv, ctx) ?? t;
         const opened = await withTx((tx) => markOpened(tx, event, vote, at, vote.kind !== "all_categories"));

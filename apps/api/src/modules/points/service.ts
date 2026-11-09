@@ -192,6 +192,7 @@ async function decideContest(
               staffUserId: actor.user.id,
               zoneId: app.zoneId,
               note: `Contestation acceptée${input.note ? ` : ${input.note}` : ""}`,
+              createdAt: now(),
             })
             .onConflictDoNothing()
             .returning({ id: checkins.id });

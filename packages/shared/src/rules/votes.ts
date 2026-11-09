@@ -20,8 +20,8 @@ export type VoteCandidateMode = (typeof voteCandidateModes)[number];
 export const voteOpenModes = ["first_entry", "at", "manual"] as const;
 export type VoteOpenMode = (typeof voteOpenModes)[number];
 
-/** D'où vient un candidat choisi à la main : la règle, un choix, ou le scan de son QR. */
-export const voteCandidateSources = ["rule", "hand", "scan"] as const;
+/** D'où vient une ligne de candidat : l'ensemble figé à la clôture (`frozen`), un choix à la main, ou le scan de son QR. */
+export const voteCandidateSources = ["frozen", "hand", "scan"] as const;
 export type VoteCandidateSource = (typeof voteCandidateSources)[number];
 
 export type VoteState = "upcoming" | "open" | "closed";
@@ -87,21 +87,30 @@ export type VoteContext = {
 /** Il faut deux candidats entrés pour pouvoir choisir (règle du lot 49, par vote). */
 export const VOTE_MIN_CANDIDATES = AUDIENCE_PRIZE_MIN_VEHICLES;
 
-/** Début du vote, constaté ou prévu ; `null` pour un vote à lancer à la main qui ne l'est pas encore. */
+/**
+ * Début réel du vote, `null` tant qu'il ne peut pas commencer : constaté (`opened_at`), sinon le plus tard entre l'heure
+ * prévue (ou, au premier pointage, la création du vote) et le moment où ses deux premiers candidats sont disponibles. La
+ * durée court depuis. « Toutes catégories » : le premier pointage de l'événement.
+ */
+function voteStart(vote: EventVote, ctx: Pick<VoteContext, "firstCheckinAt" | "candidatesReadyAt">): Date | null {
+  if (vote.openedAt) return vote.openedAt;
+  const later = (a: Date, b: Date) => (a > b ? a : b);
+  if (vote.openMode === "at") {
+    return vote.opensAt && ctx.candidatesReadyAt ? later(vote.opensAt, ctx.candidatesReadyAt) : null;
+  }
+  if (vote.openMode === "first_entry") {
+    if (vote.kind === "all_categories") return ctx.firstCheckinAt;
+    return ctx.candidatesReadyAt ? later(ctx.candidatesReadyAt, vote.createdAt) : null;
+  }
+  return null;
+}
+
+/** Début du vote annoncé : le début réel, sinon (vote « à l'heure » pas encore ouvrable) l'heure prévue ; `null` pour un vote à lancer à la main. */
 export function voteOpensAt(
   vote: EventVote,
   ctx: Pick<VoteContext, "firstCheckinAt" | "candidatesReadyAt">,
 ): Date | null {
-  if (vote.openedAt) return vote.openedAt;
-  if (vote.openMode === "at") return vote.opensAt;
-  if (vote.openMode === "first_entry") {
-    // « Toutes catégories » : au premier pointage de l'événement. Un vote à thème : quand ses deux premiers candidats sont
-    // là, et jamais avant sa création (tour 2) ; sa durée court depuis.
-    if (vote.kind === "all_categories") return ctx.firstCheckinAt;
-    if (!ctx.candidatesReadyAt) return null;
-    return ctx.candidatesReadyAt > vote.createdAt ? ctx.candidatesReadyAt : vote.createdAt;
-  }
-  return null;
+  return voteStart(vote, ctx) ?? (vote.openMode === "at" ? vote.opensAt : null);
 }
 
 /** Fin du vote : début + durée, au plus tard la fin de l'événement ; une clôture à la main l'avance. */
@@ -109,7 +118,7 @@ export function voteClosesAt(
   vote: EventVote,
   ctx: Pick<VoteContext, "endsAt" | "firstCheckinAt" | "candidatesReadyAt">,
 ): Date {
-  const start = voteOpensAt(vote, ctx);
+  const start = voteStart(vote, ctx);
   const byDuration = start && vote.durationMinutes ? new Date(start.getTime() + vote.durationMinutes * 60_000) : null;
   const natural = byDuration && byDuration < ctx.endsAt ? byDuration : ctx.endsAt;
   return vote.closedAt && vote.closedAt < natural ? vote.closedAt : natural;
@@ -123,7 +132,7 @@ export function voteState(vote: EventVote, ctx: VoteContext, now: Date): VoteSta
   if (ctx.status !== "published") return "closed";
   if (now >= voteClosesAt(vote, ctx)) return "closed";
   if (ctx.candidatesEntered < VOTE_MIN_CANDIDATES) return "upcoming";
-  const start = voteOpensAt(vote, ctx);
+  const start = voteStart(vote, ctx);
   // Au premier pointage : dès qu'il y en a un et que deux candidats sont là ; les autres modes : à leur début.
   return start && now >= start ? "open" : "upcoming";
 }

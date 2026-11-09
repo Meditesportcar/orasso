@@ -244,3 +244,28 @@ describe("réglages du podium", () => {
     expect(adminSettingSchemas["points.vote_first"].safeParse(501).success).toBe(false);
   });
 });
+
+describe("vote à l'heure : ouvert à l'heure ou à l'arrivée du 2e candidat, le plus tard (tour 3)", () => {
+  const timed: EventVote = { ...base, openMode: "at", opensAt: at(20), durationMinutes: 60 };
+  it("candidats déjà là : à l'heure prévue", () => {
+    expect(voteOpensAt(timed, ctx)).toEqual(at(20));
+    expect(voteState(timed, ctx, at(19, 59))).toBe("upcoming");
+    expect(voteState(timed, ctx, at(20))).toBe("open");
+    expect(voteClosesAt(timed, ctx)).toEqual(at(21));
+  });
+
+  it("2e candidat arrivé après l'heure : la durée entière court depuis son arrivée", () => {
+    const late = { ...ctx, candidatesReadyAt: at(20, 20) };
+    expect(voteOpensAt(timed, late)).toEqual(at(20, 20));
+    expect(voteState(timed, late, at(20, 10))).toBe("upcoming");
+    expect(voteState(timed, late, at(20, 20))).toBe("open");
+    expect(voteClosesAt(timed, late)).toEqual(at(21, 20));
+  });
+
+  it("sans deux candidats : l'heure prévue est annoncée, mais la durée ne court pas", () => {
+    const none = { ...ctx, candidatesReadyAt: null, candidatesEntered: 1 };
+    expect(voteOpensAt(timed, none)).toEqual(at(20));
+    expect(voteClosesAt(timed, none)).toEqual(at(22, 30));
+    expect(voteState(timed, none, at(21, 30))).toBe("upcoming");
+  });
+});

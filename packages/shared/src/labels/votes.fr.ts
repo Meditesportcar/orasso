@@ -44,6 +44,8 @@ export const voteTexts = {
     not_open: "Ce vote n'est pas ouvert.",
     not_check_in: "Ce véhicule n'est pas entré.",
     invalid_qr: "Ce QR n'est pas un accès Orasso valable.",
+    hand_first_entry: "Un vote à la main se lance toi-même ou à une heure fixée.",
+    not_published: "L'événement n'est pas publié : le vote se lancera après sa publication.",
     expired_qr: "Ce QR a expiré : demande à la personne de le rouvrir et scanne-le à nouveau.",
     other_event: "Ce QR est celui d'un autre événement.",
     opens_at_past: "L'heure d'ouverture est déjà passée ou tombe après la fin de l'événement.",

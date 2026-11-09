@@ -1,7 +1,7 @@
 // Lot R7l1 : votes à thème (création par rôle, modes de candidats, QR, ouverture, clôture, une voix par vote, classement
 // caché, notification, règlement du podium 15 / 10 / 5, façade du prix du public). Horloge simulée, base de test.
 import { type Decide, fromWallTime, notificationTypes, rotatingCodeAt, shouldDeliver } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -27,6 +27,7 @@ import {
   assistanceRequests,
   audiencePrizeResults,
   audienceVotes,
+  checkins,
   eventPresences,
   events,
   eventVoteCandidates,
@@ -1055,24 +1056,6 @@ describe("tour 2 : relectures Opus et Codex", () => {
     expect(view.closesAt).toBe(ENDS.toISOString());
   });
 
-  it("« à la main » en première entrée : s'ouvre quand le 2e candidat est entré et choisi", async () => {
-    await enterAll();
-    clock.set(paris(10, 17, 20));
-    const id = await createTheme({
-      title: "Au choix",
-      candidateMode: "hand",
-      openMode: "first_entry",
-      durationMinutes: 30,
-    });
-    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.kenji.applicationId });
-    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("upcoming");
-    clock.set(paris(10, 17, 20, 10));
-    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.nina.applicationId });
-    const view = (await api(p.nina.u, "GET", `/${id}`)).json;
-    expect(view).toMatchObject({ state: "open", opensAt: paris(10, 17, 20, 10).toISOString() });
-    expect(view.closesAt).toBe(paris(10, 17, 20, 40).toISOString());
-  });
-
   it("QR : le code tournant OR2 s'accepte (valide), pas expiré, pas d'un autre événement, pas d'un accès révoqué", async () => {
     await checkin(p.kenji, paris(10, 17, 19, 2));
     await checkin(p.lea, paris(10, 17, 19, 3));
@@ -1265,5 +1248,180 @@ describe("tour 2 : relectures Opus et Codex", () => {
     clock.set(paris(10, 18, 12));
     const recap = (await call(p.kenji.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(recap.vehiclesCount).toBe(4);
+  });
+});
+
+describe("tour 3 : dernière retouche", () => {
+  it("« à la main » + « au premier pointage » : refusé à la création et à la modification (409)", async () => {
+    await enterAll();
+    const refused = await api(orga, "POST", "", {
+      title: "Au choix",
+      candidateMode: "hand",
+      openMode: "first_entry",
+    });
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("hand_first_entry");
+    const id = await createTheme({ title: "Au choix", candidateMode: "hand", openMode: "manual" });
+    const patched = await api(orga, "PATCH", `/${id}`, { openMode: "first_entry" });
+    expect(patched.status).toBe(409);
+    expect(patched.json.error.code).toBe("hand_first_entry");
+  });
+
+  it("synchro hors ligne : deux japonaises scannées à 19 h, synchronisées à 20 h 20 : le vote s'ouvre à 20 h 20, durée entière", async () => {
+    await checkin(p.nina, paris(10, 17, 19, 2));
+    await checkin(p.marc, paris(10, 17, 19, 5));
+    clock.set(paris(10, 17, 19, 10));
+    const id = await createTheme({
+      title: "Japonaises hors ligne",
+      candidateMode: "origins",
+      candidateFilter: { countries: ["JP"] },
+      openMode: "first_entry",
+      durationMinutes: 60,
+    });
+    for (const x of [p.kenji, p.lea]) {
+      await db.insert(checkins).values({
+        applicationId: x.applicationId,
+        eventId,
+        method: "scan",
+        checkedInAt: paris(10, 17, 19),
+        createdAt: paris(10, 17, 20, 20),
+        updatedAt: paris(10, 17, 20, 20),
+      });
+    }
+    clock.set(paris(10, 17, 20, 19));
+    await votesLifecycle.sweep();
+    expect((await api(p.nina.u, "GET", `/${id}`)).json.state).toBe("upcoming");
+    clock.set(paris(10, 17, 20, 20));
+    await votesLifecycle.sweep();
+    const view = (await api(p.nina.u, "GET", `/${id}`)).json;
+    expect(view).toMatchObject({ state: "open", closesAt: paris(10, 17, 21, 20).toISOString() });
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.openedAt).toEqual(
+      paris(10, 17, 20, 20),
+    );
+  });
+
+  it("vote d'une minute créé avec ses candidats entrés : ouverture constatée et notification envoyée une fois, sans attendre le balayage", async () => {
+    await enterAll();
+    clock.set(paris(10, 17, 20));
+    const id = await createTheme({
+      title: "Éclair",
+      candidateMode: "all",
+      openMode: "first_entry",
+      durationMinutes: 1,
+    });
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.openedAt).toEqual(
+      paris(10, 17, 20),
+    );
+    const count = async () =>
+      (await db.query.notifications.findMany({ where: eq(notifications.type, "vote_opened") })).filter(
+        (n) => n.userId === p.kenji.u.id,
+      ).length;
+    expect(await count()).toBe(1);
+    clock.set(paris(10, 17, 20, 5));
+    await votesLifecycle.sweep();
+    expect(await count()).toBe(1);
+    expect((await api(p.kenji.u, "GET", `/${id}`)).json.state).toBe("closed");
+  });
+
+  it("changement de mode avant l'ouverture : les choix à la main sont supprimés", async () => {
+    await enterAll();
+    const id = await createTheme({ title: "Au choix", candidateMode: "hand", openMode: "manual" });
+    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.kenji.applicationId });
+    await api(orga, "POST", `/${id}/candidates`, { applicationId: p.nina.applicationId });
+    expect(await db.select().from(eventVoteCandidates).where(eq(eventVoteCandidates.voteId, id))).toHaveLength(2);
+    expect((await api(orga, "PATCH", `/${id}`, { candidateMode: "all" })).status).toBe(200);
+    expect(await db.select().from(eventVoteCandidates).where(eq(eventVoteCandidates.voteId, id))).toHaveLength(0);
+    // Revenu à la main : repart de zéro, et ne s'ouvre pas.
+    const back = await api(orga, "PATCH", `/${id}`, { candidateMode: "hand" });
+    expect(back.status).toBe(200);
+    expect(back.json).toMatchObject({ state: "upcoming", candidatesCount: 0 });
+  });
+
+  it("événement en brouillon : un vote se crée et se modifie librement, mais ne se lance pas", async () => {
+    const draft = await createEvent(structureId, {
+      startsAt: paris(11, 7, 19),
+      endsAt: paris(11, 7, 23),
+      status: "draft",
+    });
+    const res = await api(orga, "POST", "", { ...japanese, candidateMode: "all", candidateFilter: null }, draft.id);
+    expect(res.status).toBe(201);
+    const patched = await api(orga, "PATCH", `/${res.json.id}`, { title: "Renommé" }, draft.id);
+    expect(patched.status).toBe(200);
+    expect(patched.json).toMatchObject({ title: "Renommé", state: "closed" });
+    const open = await api(orga, "POST", `/${res.json.id}/open`, undefined, draft.id);
+    expect(open.status).toBe(409);
+    expect(open.json.error.code).toBe("event_not_published");
+  });
+
+  it("clôture et figeage atomiques : si le figeage échoue, rien n'est posé ; le balayage suivant reprend", async () => {
+    await enterAll();
+    clock.set(paris(10, 17, 20));
+    const id = await createTheme({
+      title: "Tous 30 min",
+      candidateMode: "all",
+      openMode: "first_entry",
+      durationMinutes: 30,
+    });
+    await db.execute(
+      sql`create or replace function r7l1_fail() returns trigger as $$ begin raise exception 'boom'; end $$ language plpgsql`,
+    );
+    await db.execute(
+      sql`create trigger r7l1_fail before insert on event_vote_candidates for each row execute function r7l1_fail()`,
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      clock.set(paris(10, 17, 20, 31));
+      await votesLifecycle.sweep();
+      expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.closedAt).toBeNull();
+    } finally {
+      errors.mockRestore();
+      await db.execute(sql`drop trigger r7l1_fail on event_vote_candidates`);
+      await db.execute(sql`drop function r7l1_fail()`);
+    }
+    await votesLifecycle.sweep();
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.closedAt).toEqual(
+      paris(10, 17, 20, 30),
+    );
+    const frozen = await db.select().from(eventVoteCandidates).where(eq(eventVoteCandidates.voteId, id));
+    expect(frozen).toHaveLength(4);
+    expect(frozen.every((f) => f.source === "frozen")).toBe(true);
+  });
+
+  it("règlement sans balayage préalable : le vote est clos et figé au règlement, un changement de zone ensuite ne change rien", async () => {
+    await enterAll();
+    const id = await createTheme({
+      title: "Zone A",
+      candidateMode: "zone",
+      candidateFilter: { zoneId: zoneA },
+      openMode: "manual",
+    });
+    await api(orga, "POST", `/${id}/open`);
+    for (const voter of [p.kenji, p.lea, p.marc]) await voteFor(voter.u, id, p.nina.applicationId);
+    // La fin de l'événement passe sans balayage : `closed_at` n'est pas posé.
+    clock.set(SETTLE);
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.closedAt).toBeNull();
+    expect(await pointsService.settleEvent(eventId)).toBe(true);
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.closedAt).toEqual(ENDS);
+    await db.update(applications).set({ zoneId: null }).where(eq(applications.id, p.nina.applicationId));
+    const view = (await api(p.kenji.u, "GET", `/${id}`)).json;
+    expect(view).toMatchObject({ state: "closed", total: 3 });
+    expect(view.ranking[0]).toMatchObject({ applicationId: p.nina.applicationId, votes: 3, rank: 1 });
+  });
+
+  it("QR OR2 : un véhicule retenu mais pas entré, et un véhicule non retenu, ne s'ajoutent pas", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    const id = await createTheme({ title: "Concours", candidateMode: "hand", openMode: "manual" });
+    type Kit = { otpSecret: string; eventNo: number; passId: string };
+    const codeOf = async (x: Person) => {
+      const k = (await call(x.u, "GET", `/applications/${x.applicationId}/pass`)).json as Kit;
+      return rotatingCodeAt(Buffer.from(k.otpSecret, "base64url"), k.eventNo, k.passId, clock.now);
+    };
+    const notIn = await api(orga, "POST", `/${id}/candidates`, { qr: await codeOf(p.lea) });
+    expect(notIn.status).toBe(409);
+    expect(notIn.json.error.code).toBe("not_checked_in");
+    await db.update(applications).set({ status: "refused" }).where(eq(applications.id, p.marc.applicationId));
+    const refused = await api(orga, "POST", `/${id}/candidates`, { qr: await codeOf(p.marc) });
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("not_checked_in");
   });
 });
