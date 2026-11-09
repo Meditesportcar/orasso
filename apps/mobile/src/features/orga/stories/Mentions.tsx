@@ -4,13 +4,14 @@
 import { Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { storyShareLabels as L, type StoryMentionItem } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { useTail } from "@/lib/tailPages";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
@@ -28,25 +29,11 @@ export function MentionsScreen() {
   const { structureId, structureName } = useOrga();
   const close = useCloseTo("/(orga)/direct");
   const first = useApi(() => api.storyMentions(structureId), [structureId]);
-  const [more, setMore] = useState<{ items: StoryMentionItem[]; next: string | null } | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
-  const items = [...(first.data?.items ?? []), ...(more?.items ?? [])];
-  const next = more ? more.next : (first.data?.nextCursor ?? null);
-
-  const loadMore = useCallback(async () => {
-    if (!next) return;
-    setLoadingMore(true);
-    setMoreError(null);
-    try {
-      const page = await api.storyMentions(structureId, next);
-      setMore((m) => ({ items: [...(m?.items ?? []), ...page.items], next: page.nextCursor }));
-    } catch (e) {
-      setMoreError(errorMessage(e));
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [next, structureId]);
+  // Les pages suivantes : le mécanisme commun (pages vidées quand la première page est relue, réponses dépassées rejetées).
+  const fetchPage = useCallback((cursor: string) => api.storyMentions(structureId, cursor), [structureId]);
+  const tail = useTail<StoryMentionItem>(first.data ?? null, first.data?.nextCursor ?? null, fetchPage, errorMessage);
+  const items = [...(first.data?.items ?? []), ...tail.items];
+  const next = tail.nextCursor;
 
   return (
     <FlowScreen title={L.mentionsTitle} facts={structureName} onClose={close} onRefresh={first.reload}>
@@ -95,9 +82,9 @@ export function MentionsScreen() {
           </Pressable>
         ))}
       </View>
-      {moreError ? <Notice tone="error">{moreError}</Notice> : null}
+      {tail.error ? <Notice tone="error">{tail.error}</Notice> : null}
       {next ? (
-        <SmButton kind="s" icon="down" onPress={() => void loadMore()} disabled={loadingMore} testID="mentions-more">
+        <SmButton kind="s" icon="down" onPress={() => void tail.more()} disabled={tail.busy} testID="mentions-more">
           {L.mentionsMore}
         </SmButton>
       ) : null}

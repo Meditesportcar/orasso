@@ -24,8 +24,11 @@ const { space2, space3 } = tokens.spacing;
 export function MentionStoryScreen() {
   const { t } = useTheme();
   const c = t.color;
-  const { id, author } = useLocalSearchParams<{ id: string; author?: string }>();
-  const { structureId, structureName } = useOrga();
+  const { id, author, structure } = useLocalSearchParams<{ id: string; author?: string; structure?: string }>();
+  const { structureId: activeStructureId, structureName } = useOrga();
+  // La cible est explicite : la structure de la ligne d'Activité (la casquette vient d'être basculée sur elle), sinon la
+  // structure active (écran ouvert depuis la liste des mentions).
+  const structureId = structure ? String(structure) : activeStructureId;
   const close = useCloseTo("/story/mentions");
   const data = useApi(() => api.storiesByAuthor(String(author ?? "")), [author]);
   const story: StoryView | undefined = data.data?.stories.find((s) => s.id === id);
@@ -80,9 +83,14 @@ export function MentionStoryScreen() {
                 {L.remove}
               </SmButton>
             ) : (
-              <SmButton kind="p" icon="add" onPress={() => void add()} disabled={busy} testID="mention-add">
-                {L.add}
-              </SmButton>
+              <>
+                <SmButton kind="p" icon="add" onPress={() => void add()} disabled={busy} testID="mention-add">
+                  {L.add}
+                </SmButton>
+                <SmButton kind="g" icon="close" onPress={close} disabled={busy} testID="mention-ignore">
+                  {L.ignore}
+                </SmButton>
+              </>
             )}
           </View>
         ) : undefined

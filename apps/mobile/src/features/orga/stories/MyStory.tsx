@@ -69,7 +69,7 @@ export function MyStoryScreen() {
               </Text>
               {s.sharedFrom ? (
                 <Text variant="bodyStrong" color={c.plateInk} testID="mystory-credit">
-                  {L.mineAddedBy(s.sharedFrom.authorPseudo)}
+                  {L.mineAddedBy(s.sharedFrom.name)}
                 </Text>
               ) : null}
               {s.caption ? (

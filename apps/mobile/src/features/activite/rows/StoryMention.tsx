@@ -1,15 +1,18 @@
 // Ligne « X t'a identifié dans sa story » (lot R7c2, remplie par le lot R7h). Maquette R7.2 : l'identification se gère sur
 // place. Pour moi : « Repartager » (reprendre la story dans la mienne, l'auteur est crédité) et « Retirer » (l'identification
-// tombe, la story reste). Pour ma structure (`data.target = "structure"`) : « Ajouter à ma story », qui ouvre la mention.
+// tombe, la story reste). Pour ma structure (`data.target = "structure"`) : « Ajouter à ma story », seulement si je gère
+// CETTE structure (propriétaire ou co-organisateur) : la ligne bascule d'abord sur sa casquette organisateur, puis ouvre
+// la mention avec cette structure en cible explicite (jamais « la structure active du moment »).
 // L'API décide de tout (refus d'un crew, d'un compte privé, story disparue) : l'écran n'affiche que sa réponse.
 import { type ActivityItem, storyShareLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
+import { mentionStructure } from "@/lib/storyMention";
 import { Muted } from "@/ui/Muted";
 import { ActivityLine } from "../ActivityRow";
 
@@ -24,9 +27,12 @@ export function StoryMentionRow({
   day: "today" | "week" | "earlier";
   onPress?: () => void;
 }) {
-  const router = useRouter();
+  const { entries, choose } = usePersona();
   const storyId = typeof item.data.storyId === "string" ? item.data.storyId : null;
   const authorKey = typeof item.data.authorKey === "string" ? item.data.authorKey : null;
+  const structureId = typeof item.data.structureId === "string" ? item.data.structureId : null;
+  // Mes casquettes organisateur : propriétaire et co-organisateur seulement (le staff n'en a pas).
+  const managed = mentionStructure(entries, structureId);
   const target = item.data.target;
   const [done, setDone] = useState<Done>(null);
   const [busy, setBusy] = useState(false);
@@ -71,12 +77,17 @@ export function StoryMentionRow({
         {error ? <Muted variant="caption">{error}</Muted> : null}
       </View>
     );
-  } else if (storyId && authorKey && target === "structure") {
+  } else if (storyId && authorKey && managed && target === "structure") {
     actions = (
       <View style={styles.actions} testID="story-mention-actions">
         <SmallButton
           icon="add"
-          onPress={() => router.push(`/story/mention/${storyId}?author=${encodeURIComponent(authorKey)}` as never)}
+          onPress={() =>
+            choose(
+              { kind: "organizer", structureId: managed },
+              `/story/mention/${storyId}?author=${encodeURIComponent(authorKey)}&structure=${encodeURIComponent(managed)}`,
+            )
+          }
           testID="story-mention-add"
         >
           {L.add}

@@ -79,10 +79,13 @@ export function ActivityRow({
   item,
   day,
   onOpen,
+  organizerIds,
 }: {
   item: ActivityItem;
   day: ActivityDay;
   onOpen: () => Promise<void> | void;
+  /** Les structures que je gère (lot R7h) : seules celles-là offrent « Ajouter à ma story ». */
+  organizerIds?: readonly string[];
 }) {
   const { names, rest } = groupedTitle(item.title, item.actors, item.count);
   const when = activityWhen(new Date(item.latestAt), now(), day);
@@ -122,7 +125,7 @@ export function ActivityRow({
           {content}
         </button>
       )}
-      {item.type === "story_mention" ? <StoryMentionActions item={item} /> : null}
+      {item.type === "story_mention" ? <StoryMentionActions item={item} organizerIds={organizerIds} /> : null}
     </li>
   );
 }

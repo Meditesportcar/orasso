@@ -25,6 +25,7 @@ import {
   eventStatusLabels,
   invitationLabels,
   isBadWeather,
+  isEventDay,
   orgaPosterLabels,
   orgaPrizeLabels,
   pluralFr,
@@ -48,6 +49,7 @@ import { data, Form, redirect, useNavigation, useSearchParams } from "react-rout
 import { OrgaStory } from "../components/stories/OrgaStory";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { now as clockNow } from "../lib/clock";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import type { Route } from "./+types/orga-evenement";
@@ -82,17 +84,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     event.status === "published"
       ? await api<AudiencePrizeBoard>(request, `/events/${params.eventId}/audience-prize`)
       : null;
-  // Lot R7h : mentions de la structure et sa story (jamais bloquant : une panne s'affiche, la page reste).
-  const [mentions, mine] =
-    event.status === "published"
-      ? await Promise.all([
-          api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`),
-          api<StoriesByAuthor>(
-            request,
-            `/stories/by-author/${encodeURIComponent(storyAuthorKeyOf("structure", membership.structureId))}`,
-          ),
-        ])
-      : [null, null];
+  // Lot R7h : mentions de la structure et sa story (jamais bloquant : une panne s'affiche, la page reste). Seulement quand
+  // l'événement a lieu ou que c'est son jour (la même règle que le Direct de l'appli, `phase` ≠ « next ») : avant, la fiche ne
+  // dit rien de la story de l'organisateur non plus.
+  const at = clockNow();
+  const fieldDay =
+    event.status === "published" &&
+    ((new Date(event.startsAt).getTime() <= at.getTime() && at.getTime() < new Date(event.endsAt).getTime()) ||
+      isEventDay(new Date(event.startsAt), at));
+  const [mentions, mine] = fieldDay
+    ? await Promise.all([
+        api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`),
+        api<StoriesByAuthor>(
+          request,
+          `/stories/by-author/${encodeURIComponent(storyAuthorKeyOf("structure", membership.structureId))}`,
+        ),
+      ])
+    : [null, null];
   return {
     event,
     // Aucune adresse de média dans les données de la page (les aperçus se lisent par `/thumb`, dans le navigateur).
@@ -103,6 +111,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       ? { ...mine.data, stories: mine.data.stories.map((x) => ({ ...x, mediaUrl: "", posterUrl: null })) }
       : null,
     storyFailed: Boolean(mentions && !mentions.ok),
+    storyFieldDay: fieldDay,
+    structureId: membership.structureId,
     storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,
     prize: prize?.ok ? prize.data : null,
@@ -494,6 +504,8 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
     storyMine,
     storyFailed,
     storyNotice,
+    storyFieldDay,
+    structureId,
   } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
@@ -660,8 +672,9 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         </section>
       )}
 
-      {published && (
+      {published && storyFieldDay && (
         <OrgaStory
+          structureId={structureId}
           mentions={storyMentions}
           mine={storyMine}
           failed={storyFailed}

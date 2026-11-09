@@ -11,6 +11,7 @@ export const storyShareLabels = {
   mentionsMore: "Voir plus",
   mentionBy: (author: string, when: string) => `${author} · ${when}`,
   add: "Ajouter à ma story",
+  ignore: "Ignorer",
   addExplain: "Elle rejoint ta story, visible par tous, jusqu'à la fin de l'originale.",
   addCredit: (author: string) => `${author} est crédité et prévenu. S'il la supprime, elle quitte ta story.`,
   alreadyAdded: "Déjà dans ta story",

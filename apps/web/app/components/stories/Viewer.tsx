@@ -557,6 +557,11 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           {authorName}
         </strong>
         <span className="story-view__sub">
+          {author.live ? (
+            <span className="story-view__live" data-testid="story-live-badge">
+              {L.live}
+            </span>
+          ) : null}
           {crew ? (
             <span className="story-view__crew" data-testid="story-crew-badge">
               <Icon name="shield" size={13} />

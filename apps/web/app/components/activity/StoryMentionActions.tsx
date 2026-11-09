@@ -9,7 +9,13 @@ import { apiFetch } from "../../lib/api.client";
 // « Ajouter à ma story » (au nom de la structure). L'API décide de tout.
 type Done = "untagged" | "reshared" | "added" | "gone" | null;
 
-export function StoryMentionActions({ item }: { item: ActivityItem }) {
+export function StoryMentionActions({
+  item,
+  organizerIds = [],
+}: {
+  item: ActivityItem;
+  organizerIds?: readonly string[];
+}) {
   const storyId = typeof item.data.storyId === "string" ? item.data.storyId : null;
   const structureId = typeof item.data.structureId === "string" ? item.data.structureId : null;
   const target = item.data.target;
@@ -71,7 +77,8 @@ export function StoryMentionActions({ item }: { item: ActivityItem }) {
       </div>
     );
   }
-  if (target === "structure" && structureId) {
+  // Seulement pour une structure que je gère : sans ce droit, le bouton n'apparaît pas (l'API le refuserait de toute façon).
+  if (target === "structure" && structureId && organizerIds.includes(structureId)) {
     return (
       <div className="act-row__actions" data-testid="story-mention-actions">
         {done ? (
