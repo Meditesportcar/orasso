@@ -243,7 +243,7 @@ test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par
   await k.close();
 });
 
-test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+test("les pastilles (lot R7c2) : une demande de message seule fait monter la bulle, pas la cloche ; une conversation non lue s'y ajoute", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -256,17 +256,17 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
   await loginInBrowser(page, compte.email, undefined, "/app");
   await page.goto("/app");
   const header = page.locator("header.o-appbar--tab");
-  // Demande seule : la bulle est sans pastille, la cloche en a une (au moins la demande).
-  await expect(header.getByRole("link", { name: "Messages" })).toHaveAccessibleName("Messages");
-  await expect(header.getByRole("link", { name: "Messages" }).locator(".o-appbar__count")).toHaveCount(0);
-  await expect(header.getByRole("link", { name: /^Activité, \d+ non lues?$/ })).toBeVisible();
+  // Demande de message seule : la bulle affiche 1 (la ligne « Demandes de message »), la cloche rien (une demande ne compte
+  // qu'une fois : sa notification n'est pas dans les « non vus »).
+  await expect(header.getByRole("link", { name: "Messages, 1 non lu" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Activité", exact: true })).toBeVisible();
   await shot(page, "pastilles-demande-seule-390");
-  // Une conversation non lue : la bulle affiche 1.
+  // Une conversation non lue de plus : la bulle affiche 2 (la demande de message et la conversation).
   await compte.ajouterConversationNonLue();
   await page.reload();
-  const bubble = header.getByRole("link", { name: "Messages, 1 non lu" });
+  const bubble = header.getByRole("link", { name: /^Messages, 2 non lus?$/ });
   await expect(bubble).toBeVisible();
-  await expect(bubble.locator(".o-appbar__count")).toHaveText("1");
+  await expect(bubble.locator(".o-appbar__count")).toHaveText("2");
   await shot(page, "pastilles-conversation-390");
   await ctx.close();
 });
