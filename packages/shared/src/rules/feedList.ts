@@ -55,7 +55,7 @@ export function applyFeedPage(
   };
 }
 
-/** Genres que l'écran du lot R7e2 dessine lui-même ; les autres (`spot_meetup`, `memory`, `sponsored`) sont réservés. */
+/** Genres que l'écran du lot R7e2 dessine lui-même ; les autres (`spot_meetup`, `memory`) sont réservés ; `sponsored` : lot R7k2. */
 export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "event_recommended",
   "vehicle_public",
@@ -64,6 +64,7 @@ export const FEED_KINDS_DRAWN: readonly FeedCardKind[] = [
   "announcement",
   "pro",
   "feed_post",
+  "sponsored",
 ];
 
 /** Une carte d'un genre réservé à un autre lot : rendue par `UnknownCard` tant que ce lot n'est pas fusionné. */

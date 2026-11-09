@@ -1,4 +1,5 @@
 import type { FeedFilter, FeedReasonCode } from "../rules/feed";
+import { FEED_SPONSORED_OPEN_WHY, FEED_SPONSORED_WHY } from "../rules/sponsored";
 
 // L'écran du Fil et « Publier au Fil » (lot R7e2, D38, maquette R7.6 `p-fil` et R7.24 `s-ext`) : libellés communs à
 // l'appli et au site. Les libellés de l'API (raisons, genres, menu ⋯) restent dans `feed.fr.ts`.
@@ -11,7 +12,7 @@ export const feedScreenFilters: { value: FeedFilter; label: string }[] = [
 ];
 
 /** « Pourquoi je vois ça » : la raison détaillée, en clair (texte fixe pour `sponsored`, posé par le lot R7k2). */
-export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = false): string {
+export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = false, targeted = false): string {
   if (mine) return "C'est ta publication : les personnes qui te suivent la voient dans leur Fil.";
   switch (code) {
     case "following_author":
@@ -39,9 +40,8 @@ export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = fa
     case "new_here":
       return "C'est nouveau sur Orasso, dans ton secteur.";
     case "sponsored":
-      // Fusion avec R7k1 : vrai pour un emplacement ciblé par département comme pour un emplacement ouvert à toute la
-      // France (aucune autre donnée du profil). Le lot R7k2 pourra préciser selon le ciblage.
-      return "C'est un contenu sponsorisé. Pour le choisir, Orasso se sert au plus de ton département : jamais du reste de ton profil ni de ton activité.";
+      // D38 (lot R7k2) : le texte dépend du ciblage ; une carte ouverte à toute la France ne parle pas de département.
+      return targeted ? FEED_SPONSORED_WHY : FEED_SPONSORED_OPEN_WHY;
   }
 }
 
@@ -56,6 +56,14 @@ export const feedScreenLabels = {
   menuWhyHint: "La raison, en clair",
   menuLessHint: "Le Fil en tient compte au prochain rafraîchissement",
   report: "Signaler",
+  // Carte « Sponsorisé » (lot R7k2).
+  sponsoredTag: "Sponsorisé",
+  seeAd: "Voir",
+  seeAdFor: (advertiser: string) => `Voir : ${advertiser}`,
+  reportAdHint: "Une publicité trompeuse, choquante ou déplacée",
+  reportAdSubject: "Signaler une publicité du Fil",
+  reportAdBody: (advertiser: string, placementId: string) =>
+    `Annonceur : ${advertiser}\nEmplacement : ${placementId}\n\nCe que je signale :\n`,
   reportHint: "Un contenu choquant, une plaque lisible, du spam",
   lessKind: (kindLabel: string) => `On t'en montrera moins : ${kindLabel.toLowerCase()}.`,
   lessUndo: "Annuler",

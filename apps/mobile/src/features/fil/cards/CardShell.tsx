@@ -1,7 +1,7 @@
 // La coque d'une carte du Fil (maquette R7.6 `.r7c`) : l'en-tête (rond ou logo, titre, la raison en petite ligne, « ⋯ »),
 // le contenu, une ligne d'actions. Chaque genre de carte (un fichier par `kind`) ne dessine que son contenu. Un nom
 // (véhicule, événement, personne) ne se tronque jamais.
-import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedCard, feedScreenLabels as L } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -13,6 +13,7 @@ export function CardShell({
   head,
   title,
   reason,
+  tag,
   onMenu,
   onTitle,
   faded = false,
@@ -26,6 +27,8 @@ export function CardShell({
   title: string;
   /** La petite ligne sous le titre : la raison (« Autour de toi »), éventuellement suivie d'un repère. */
   reason: string;
+  /** Une étiquette en contour à la place de la ligne de raison (carte « Sponsorisé » : toujours visible, jamais un texte gris). */
+  tag?: string;
   onMenu: (card: FeedCard) => void;
   /** Toucher le titre (le pseudo → son profil). */
   onTitle?: () => void;
@@ -57,9 +60,17 @@ export function CardShell({
               {title}
             </Text>
           )}
-          <Text variant="caption" color={c.inkMuted} testID="feed-card-reason">
-            {reason}
-          </Text>
+          {tag ? (
+            <View style={styles.tagRow} testID="feed-card-reason">
+              <Tag tone="line" testID="feed-sponsored-tag">
+                {tag}
+              </Tag>
+            </View>
+          ) : (
+            <Text variant="caption" color={c.inkMuted} testID="feed-card-reason">
+              {reason}
+            </Text>
+          )}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -84,6 +95,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: space2 + 2 },
   grow: { flex: 1, minWidth: 0 },
   title: { fontSize: 14, lineHeight: 18 },
+  tagRow: { flexDirection: "row", marginTop: 2 },
   dots: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   body: { gap: space2 },
   actions: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap", marginTop: space1 - 2 },

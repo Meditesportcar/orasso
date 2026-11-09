@@ -24,6 +24,15 @@ export function feedSponsoredReason(targeted: boolean): string {
   return targeted ? FEED_SPONSORED_REASON : FEED_SPONSORED_OPEN_REASON;
 }
 
+/** La carte Sponsorisé est-elle ciblée par département ? Lu depuis le libellé de sa raison (aucun champ de plus à l'API). */
+export function isFeedSponsoredTargeted(reasonLabel: string): boolean {
+  return reasonLabel === FEED_SPONSORED_REASON;
+}
+
+/** « Pourquoi je vois ça » d'une carte Sponsorisé (D38) : ciblée par département, ou ouverte à toute la France. */
+export const FEED_SPONSORED_WHY = "Sponsorisé. Choisi d'après ton département, rien d'autre.";
+export const FEED_SPONSORED_OPEN_WHY = "Sponsorisé. Montré à tout le monde en France : rien n'est choisi d'après toi.";
+
 /** Les départements d'un emplacement sans doublon (l'ordre de saisie est gardé). */
 export function distinctDepartments(departments: readonly string[]): string[] {
   return [...new Set(departments)];

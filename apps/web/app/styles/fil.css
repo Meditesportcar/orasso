@@ -129,6 +129,27 @@
 .fil-card__reason {
   color: var(--ink-muted);
 }
+/* L'étiquette « Sponsorisé » (`.tag.line` de l'artefact) : 22 px, inclinée de -8°, contour, texte redressé. */
+.fil-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  height: 22px;
+  padding: 0 10px;
+  margin-top: 2px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  transform: skewX(var(--skew));
+}
+.fil-tag > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  transform: skewX(calc(var(--skew) * -1));
+}
 .fil-card__more {
   width: 36px;
   height: 36px;
@@ -204,6 +225,29 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* Carte « Sponsorisé » : l'image au format 4:5 (celui du Fil), ou un bloc de texte sans image. */
+.fil-ad-media {
+  display: block;
+  aspect-ratio: 4 / 5;
+  border-radius: calc(var(--radius-md) + 2px);
+  overflow: hidden;
+  background: var(--night);
+}
+.fil-ad-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fil-ad-block {
+  padding: var(--space-3);
+  border-radius: calc(var(--radius-md) + 2px);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.fil-ad-block strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 .fil-grid {
   display: grid;
