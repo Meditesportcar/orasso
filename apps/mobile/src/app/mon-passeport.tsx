@@ -1,7 +1,7 @@
-// Passeport (lot 50) : ouvert par la tuile « Mon passeport » de Mon profil. Lot R7a1 : le visiteur n'a plus son
-// onglet, et `/passeport` redirige ici.
-import { PassportScreen } from "@/features/passport/PassportScreen";
+// Passeport (lot 50 ; lot R7a1 : le visiteur n'a plus d'onglet ; lot R7b1 : le passeport vit dans le Profil, onglet interne
+// « Sorties »). Les adresses `/mon-passeport` et `/passeport` mènent au Profil de la casquette de base sur cet onglet.
+import { ProfileRedirect } from "@/features/nav/TabRedirect";
 
 export default function MonPasseport() {
-  return <PassportScreen tab={false} />;
+  return <ProfileRedirect onglet="sorties" />;
 }

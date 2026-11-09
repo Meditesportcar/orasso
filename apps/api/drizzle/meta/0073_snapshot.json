@@ -1,5 +1,5 @@
 {
-  "id": "0fbd0cb2-4448-474c-afe2-b5554fa921a7",
+  "id": "cbe6b6e6-f831-4015-9e9e-e87b3fff02c7",
   "prevId": "31aebb32-96ae-426b-be91-f86b4f5d5d45",
   "version": "7",
   "dialect": "postgresql",
@@ -7113,6 +7113,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "surface": {
+          "name": "surface",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'home'"
+        },
         "clicked": {
           "name": "clicked",
           "type": "boolean",
@@ -7159,7 +7166,8 @@
           "columns": [
             "placement_id",
             "user_hash",
-            "day"
+            "day",
+            "surface"
           ]
         }
       },
@@ -7183,6 +7191,13 @@
           "type": "date",
           "primaryKey": false,
           "notNull": true
+        },
+        "surface": {
+          "name": "surface",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'home'"
         },
         "impressions": {
           "name": "impressions",
@@ -7220,7 +7235,8 @@
           "name": "sponsored_daily_stats_pkey",
           "columns": [
             "placement_id",
-            "day"
+            "day",
+            "surface"
           ]
         }
       },
@@ -7244,7 +7260,41 @@
           "name": "pro_profile_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "advertiser_name": {
+          "name": "advertiser_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "advertiser_kind": {
+          "name": "advertiser_kind",
+          "type": "advertiser_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pro'"
+        },
+        "surfaces": {
+          "name": "surfaces",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{home}'::text[]"
+        },
+        "disclosure": {
+          "name": "disclosure",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_url_domain": {
+          "name": "external_url_domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "title": {
           "name": "title",
@@ -7393,7 +7443,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "sponsored_placements_advertiser_check": {
+          "name": "sponsored_placements_advertiser_check",
+          "value": "(\"sponsored_placements\".\"advertiser_kind\" = 'external' and \"sponsored_placements\".\"pro_profile_id\" is null) or (\"sponsored_placements\".\"advertiser_kind\" = 'pro' and \"sponsored_placements\".\"pro_profile_id\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.event_invitations": {
@@ -14808,323 +14863,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.spot_meetup_replies": {
-      "name": "spot_meetup_replies",
-      "schema": "",
-      "columns": {
-        "meetup_id": {
-          "name": "meetup_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "answer": {
-          "name": "answer",
-          "type": "spot_rsvp",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "answered_at": {
-          "name": "answered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "spot_meetup_replies_user_idx": {
-          "name": "spot_meetup_replies_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "spot_meetup_replies_meetup_id_spot_meetups_id_fk": {
-          "name": "spot_meetup_replies_meetup_id_spot_meetups_id_fk",
-          "tableFrom": "spot_meetup_replies",
-          "tableTo": "spot_meetups",
-          "columnsFrom": [
-            "meetup_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "spot_meetup_replies_user_id_user_id_fk": {
-          "name": "spot_meetup_replies_user_id_user_id_fk",
-          "tableFrom": "spot_meetup_replies",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "spot_meetup_replies_pkey": {
-          "name": "spot_meetup_replies_pkey",
-          "columns": [
-            "meetup_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.spot_meetups": {
-      "name": "spot_meetups",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "audience": {
-          "name": "audience",
-          "type": "spot_audience",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "crew_id": {
-          "name": "crew_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "place_label": {
-          "name": "place_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lat": {
-          "name": "lat",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lng": {
-          "name": "lng",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_at": {
-          "name": "cancelled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "purged_at": {
-          "name": "purged_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "came_count": {
-          "name": "came_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "spot_meetups_one_active_key": {
-          "name": "spot_meetups_one_active_key",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"spot_meetups\".\"cancelled_at\" is null and \"spot_meetups\".\"purged_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_ends_idx": {
-          "name": "spot_meetups_ends_idx",
-          "columns": [
-            {
-              "expression": "ends_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"spot_meetups\".\"purged_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_crew_idx": {
-          "name": "spot_meetups_crew_idx",
-          "columns": [
-            {
-              "expression": "crew_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ends_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"spot_meetups\".\"crew_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_author_idx": {
-          "name": "spot_meetups_author_idx",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "spot_meetups_author_id_user_id_fk": {
-          "name": "spot_meetups_author_id_user_id_fk",
-          "tableFrom": "spot_meetups",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "spot_meetups_crew_id_crews_id_fk": {
-          "name": "spot_meetups_crew_id_crews_id_fk",
-          "tableFrom": "spot_meetups",
-          "tableTo": "crews",
-          "columnsFrom": [
-            "crew_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "spot_meetups_times_check": {
-          "name": "spot_meetups_times_check",
-          "value": "\"spot_meetups\".\"ends_at\" > \"spot_meetups\".\"starts_at\" and \"spot_meetups\".\"ends_at\" <= \"spot_meetups\".\"starts_at\" + interval '12 hours'"
-        },
-        "spot_meetups_crew_check": {
-          "name": "spot_meetups_crew_check",
-          "value": "(\"spot_meetups\".\"audience\" = 'crew') = (\"spot_meetups\".\"crew_id\" is not null)"
-        },
-        "spot_meetups_place_check": {
-          "name": "spot_meetups_place_check",
-          "value": "char_length(\"spot_meetups\".\"place_label\") <= 80"
-        },
-        "spot_meetups_note_check": {
-          "name": "spot_meetups_note_check",
-          "value": "\"spot_meetups\".\"note\" is null or char_length(\"spot_meetups\".\"note\") <= 140"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.event_staff": {
       "name": "event_staff",
       "schema": "",
@@ -20107,6 +19845,14 @@
         "landscape"
       ]
     },
+    "public.advertiser_kind": {
+      "name": "advertiser_kind",
+      "schema": "public",
+      "values": [
+        "pro",
+        "external"
+      ]
+    },
     "public.placement_status": {
       "name": "placement_status",
       "schema": "public",
@@ -20455,22 +20201,6 @@
         "pending",
         "accepted",
         "declined"
-      ]
-    },
-    "public.spot_audience": {
-      "name": "spot_audience",
-      "schema": "public",
-      "values": [
-        "followers",
-        "crew"
-      ]
-    },
-    "public.spot_rsvp": {
-      "name": "spot_rsvp",
-      "schema": "public",
-      "values": [
-        "yes",
-        "maybe"
       ]
     },
     "public.staff_presence": {

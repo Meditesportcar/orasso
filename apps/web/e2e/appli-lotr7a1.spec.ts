@@ -187,18 +187,9 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await expect(page.getByTestId("appbar-close").first()).toBeVisible();
   await shot(page, "sorties-page");
 
+  // Lot R7b1 : le Garage est l'onglet interne du Profil ; `/garage` y mène (le bandeau « où sont passées les choses » marche).
   await go(page, "/garage");
-  await expect(page.getByRole("heading", { name: "Mon garage", exact: true }).first()).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByTestId("persona-tabbar")).toHaveCount(0);
-  await expect(page.getByTestId("appbar-close").first()).toBeVisible();
-
-  // Depuis le Profil : la ligne « Mon garage » ouvre la page, le ✕ ramène au Profil.
-  await go(page, "/profil");
-  await page.getByTestId("profil-garage").click();
-  await page.waitForURL(/\/garage/, { timeout: 15_000 });
-  await page.getByTestId("appbar-close").first().click();
+  await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
   await page.waitForURL(/\/profil/, { timeout: 15_000 });
 
   // Depuis l'Accueil : « Tu es staff » ouvre Sorties, le ✕ ramène à l'Accueil.
@@ -214,7 +205,8 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await go(page, "/acces");
   await page.waitForURL(/\/sorties/, { timeout: 30_000 });
   await go(page, "/passeport");
-  await page.waitForURL(/\/mon-passeport/, { timeout: 30_000 });
+  await page.waitForURL(/\/profil/, { timeout: 30_000 });
+  await expect(page.getByTestId("profil-tab-sorties")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
   await ctx.close();
 });
 
@@ -230,9 +222,10 @@ test("Sorties → événement → « Ma candidature » → Sorties : pas d'empil
   const { ctx, page } = await open(browser);
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
   await afterOpening(page);
-  // Origine : le Profil, par le nombre « sorties ».
+  // Origine : le Profil, onglet Sorties (le nombre « sorties »), puis « Voir mes places » (R7b1).
   await go(page, "/profil");
   await page.getByTestId("profil-count-sorties").click();
+  await page.getByTestId("profil-places").click();
   await page.waitForURL(/\/sorties/, { timeout: 15_000 });
   // Sorties → l'événement (le titre du ticket) → « Ma candidature » → retour à Sorties, une seule fois dans la pile.
   await page.getByTestId("ticket-application").first().getByText(event.title).first().click();
@@ -255,8 +248,10 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   await signIn(k.page, "kenji@orasso.local");
   await afterOpening(k.page);
   await k.page.getByRole("tab", { name: "Le Fil", exact: true }).click();
-  await expect(k.page.getByRole("heading", { name: "Le Fil", exact: true }).first()).toBeVisible({ timeout: 30_000 });
-  await expect(k.page.getByText("arrive bientôt")).toBeVisible();
+  // Lot R7e2 : Le Fil n'est plus le Journal : publier, trois filtres, cartes.
+  await expect(k.page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await expect(k.page.getByTestId("fil-filters")).toBeVisible();
+  await expect(k.page.getByTestId("journal-item")).toHaveCount(0);
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
   // Lot R7b2 : l'onglet montre le crew lui-même (nom, onglets internes), plus la coquille « Ouvrir mon crew ».
@@ -382,13 +377,13 @@ test("Le Fil ne marque rien comme lu, et se met à jour à la notification reçu
   const before = await unread();
   expect(before).toBeGreaterThan(0);
   await page.getByRole("tab", { name: "Le Fil", exact: true }).click();
-  await expect(page.getByTestId("journal-item").first()).toBeVisible({ timeout: 30_000 });
-  const rows = await page.getByTestId("journal-item").count();
+  // Lot R7e2 : le Journal n'est plus dans Le Fil (ses notifications sont dans la cloche) ; l'onglet ne marque rien comme lu.
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("journal-item")).toHaveCount(0);
   await page.waitForTimeout(3_000);
   expect(await unread()).toBe(before);
-  // Une notification arrive pendant que Le Fil est ouvert : la liste se relit, et rien n'est marqué non plus.
+  // Une notification arrive pendant que Le Fil est ouvert : rien n'est marqué comme lu non plus.
   await compte.ajouterNotificationNonLue();
-  await expect(page.getByTestId("journal-item")).toHaveCount(rows + 1, { timeout: 30_000 });
   await page.waitForTimeout(2_000);
   expect(await unread()).toBe(before + 1);
   await ctx.close();

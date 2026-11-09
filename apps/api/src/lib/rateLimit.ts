@@ -112,6 +112,11 @@ export const rateRules = {
   spotLaunch: { max: 6, windowMs: 3_600_000, message: "Trop de rendez-vous lancés : réessaie plus tard." },
   spotRead: { max: 120, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   spotReply: { max: 60, windowMs: 3_600_000, message: "Trop de réponses : réessaie plus tard." },
+  /**
+   * Lot R7k1, tour 2 : affichages d'un emplacement (Accueil, Garage, Fil), une limite à part des clics : une longue lecture du
+   * Fil en envoie beaucoup (l'appli dédoublonne, voir R7k2), un clic reste un geste rare.
+   */
+  sponsoredImpression: { max: 600, windowMs: 3_600_000, message: "Trop d'affichages : réessaie plus tard." },
   /** Export des participants d'un événement (lot 27) : chaque export est tracé, pas de rafale. */
   participantsExport: { max: 10, windowMs: 3_600_000, message: "Trop d'exports : réessaie dans une heure." },
   /** Notes internes (lot 27) : créations, modifications, suppressions. */

@@ -1,0 +1,82 @@
+/* AvatarRing : une photo ronde dans l'anneau de ce qu'elle a à montrer (lot R7b1). Jetons seulement. */
+
+.o-avring {
+  --avring-box: 64px;
+  --avring-w: 2.5px;
+  --avring-gap: 3px;
+  --avring-color: transparent;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--avring-box);
+  height: var(--avring-box);
+  padding: var(--avring-gap);
+  border-radius: 50%;
+  /* Sans anneau, la bordure reste (transparente) : la photo ne change pas de place. */
+  border: var(--avring-w) solid var(--avring-color);
+  color: inherit;
+  text-decoration: none;
+}
+.o-avring--sm {
+  --avring-box: 40px;
+  --avring-w: 2px;
+  --avring-gap: 2px;
+}
+.o-avring--md {
+  --avring-box: 56px;
+  --avring-w: 2.5px;
+  --avring-gap: 3px;
+}
+.o-avring--lg {
+  --avring-box: 64px;
+  --avring-w: 2.5px;
+  --avring-gap: 3px;
+}
+.o-avring--xl {
+  --avring-box: 88px;
+  --avring-w: 3px;
+  --avring-gap: 4px;
+}
+
+.o-avring--followers {
+  --avring-color: var(--ink);
+}
+.o-avring--crew {
+  --avring-color: var(--win);
+}
+.o-avring--live {
+  --avring-color: var(--accent);
+  box-shadow: var(--neon-accent-soft);
+}
+/* Story déjà vue : anneau fin, l'écart gagné va à l'espace avec la photo. */
+.o-avring--seen {
+  --avring-color: var(--line);
+  border-width: 1.5px;
+  padding: calc(var(--avring-gap) + var(--avring-w) - 1.5px);
+}
+
+.o-avring__face {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--win);
+  color: var(--win-ink);
+}
+.o-avring__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.o-avring .o-avring__initial {
+  font-size: calc(var(--avring-box) * 0.3);
+  line-height: 1;
+}
+a.o-avring:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

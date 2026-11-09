@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type ApplicationStatus, applicationStatusSchema } from "../application";
-import type { EventFormat } from "../enums";
+import type { EventAdmission, EventFormat } from "../enums";
 import {
   type ApplicationKind,
   applicationKinds,
@@ -108,6 +108,8 @@ export type MyApplication = {
     endsAt: string;
     city: string | null;
     status: "draft" | "published" | "cancelled";
+    /** Lot R7e2 : « sur invitation » ne se publie pas au Fil (l'API refuse l'événement). Absent d'une copie ancienne. */
+    admission?: EventAdmission;
     /** Lot C5 : affiche générée et photo de la voiture de l'affiche (billets de Sorties) ; absentes d'une copie ancienne. */
     posterUrl?: string | null;
     photoUrl?: string | null;

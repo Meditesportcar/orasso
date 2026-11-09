@@ -14,6 +14,7 @@ import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
+import { feedApi } from "./feed";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -90,4 +91,5 @@ export const api = {
   ...eventInvitesApi,
   ...stylesApi,
   ...spotApi,
+  ...feedApi,
 };

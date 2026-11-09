@@ -19,6 +19,8 @@ import type { Key } from "./sources/types";
 const VERSION = 2;
 export const MAX_SOURCES = 16;
 export const MAX_DEFERRED = FEED_POOL / 2;
+/** Cartes servies au plus dans un parcours : au-delà, le curseur est forgé (400). */
+export const MAX_OFFSET = 100_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type Cursor = {
@@ -184,6 +186,7 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   const mask = r.u16();
   const less = new Set(feedCardKinds.filter((_, i) => mask & (1 << i)));
   const offset = r.u32();
+  if (offset > MAX_OFFSET) invalid();
   const nx = r.u8();
   if (nx > MAX_SOURCES) invalid();
   const x: Key[] = [];

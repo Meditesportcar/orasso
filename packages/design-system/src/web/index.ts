@@ -21,6 +21,7 @@ export { OliveActivityProvider, useOliveScreenActive } from "../native/olive/act
 export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./components/AppBar";
+export { AvatarRing, type AvatarRingProps, type AvatarRingSize, type AvatarRingState } from "./components/AvatarRing";
 export { BigTitle, type BigTitleProps } from "./components/BigTitle";
 export { type BrandTone, Credit, FloatingMark, Loader, Logo, Monogram, PoweredBy } from "./components/Brand";
 export { Button, type ButtonProps } from "./components/Button";

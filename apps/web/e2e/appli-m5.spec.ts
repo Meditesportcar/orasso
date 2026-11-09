@@ -195,9 +195,10 @@ test.describe("le lot M5 à l'écran", () => {
     await expect(page.getByTestId("profil-head")).toBeVisible({ timeout: 30_000 });
     const qr = await page.getByTestId("profil-account-qr").boundingBox();
     expect(qr && qr.width < 60).toBe(true);
+    // Lot R7b1 : « Ma saison » est dans l'onglet Sorties ; le crew a son onglet.
+    await page.getByTestId("profil-tab-sorties").click();
     await expect(page.getByTestId("profil-season")).toContainText("pts");
-    await expect(page.getByTestId("profil-passport")).toBeVisible();
-    await expect(page.getByTestId("profil-crew")).toBeVisible();
+    await expect(page.getByTestId("passport-book")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Changer de casquette", { exact: true })).toBeVisible();
     await expect(page.getByTestId("casquettes-intro")).toBeVisible();
     await expect(page.getByTestId("casquette-fan").getByTestId("casquette-active")).toBeVisible();
@@ -341,7 +342,8 @@ test.describe("lot M5, tour 2", () => {
     const { ctx, page } = await open(browser, "beton");
     await signIn(page, "kenji@orasso.local");
     await go(page, "/profil");
-    for (const id of ["profil-passport", "profil-points-history", "profil-create", "casquette-staff-request"]) {
+    await page.getByTestId("profil-tab-sorties").click();
+    for (const id of ["profil-points-history", "profil-create", "casquette-staff-request"]) {
       const box = await page.getByTestId(id).boundingBox();
       expect(box?.height ?? 0, id).toBeGreaterThanOrEqual(44);
     }

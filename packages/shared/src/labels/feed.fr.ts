@@ -1,4 +1,5 @@
 import type { FeedAspect, FeedCardKind, FeedFilter, FeedReasonCode } from "../rules/feed";
+import { FEED_SPONSORED_OPEN_REASON } from "../rules/sponsored";
 
 // Le Fil (lot R7e1, D38) : libellés des raisons, des filtres, des genres de carte et du menu ⋯.
 
@@ -29,6 +30,9 @@ export function feedReasonLabel(code: FeedReasonCode, who?: string | null): stri
       return "Proposé par Orasso";
     case "new_here":
       return "Nouveau sur Orasso";
+    case "sponsored":
+      // Sans précision : la forme sûre. Une carte ciblée par département dit le département (`feedSponsoredReason`).
+      return FEED_SPONSORED_OPEN_REASON;
   }
 }
 

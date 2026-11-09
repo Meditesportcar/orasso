@@ -712,7 +712,7 @@ describe("reçus, Accueil, Fil, onglet Spots", () => {
   });
 });
 
-describe("migration 0073 : les garde-fous en base", () => {
+describe("migration 0074 : les garde-fous en base", () => {
   it("12 h au plus, crew ↔ audience, un seul actif par auteur", async () => {
     const { kenji } = await world();
     const base = {
