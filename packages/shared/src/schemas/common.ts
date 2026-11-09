@@ -64,6 +64,8 @@ export const errorCodes = [
   // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
   "closed",
   "use_qr",
+  "scan_ticket",
+  "ticket_required",
   "already_present",
   "gps_imprecise",
   "out_of_zone",
