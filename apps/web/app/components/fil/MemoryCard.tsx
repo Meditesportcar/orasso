@@ -3,6 +3,7 @@
 import { Icon } from "@orasso/design-system/web";
 import { memoryLabels } from "@orasso/shared";
 
+import "../../styles/souvenirs.css";
 import { PassportStamp } from "../PassportStamp";
 
 import { type CardProps, Shell } from "./Shell";

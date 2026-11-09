@@ -14,10 +14,12 @@ const QUICK = process.env.QUICK === "1";
 const EVENT_ID = process.env.MEMORY_EVENT_ID ?? "";
 test.use({ actionTimeout: 30_000 });
 
-const ACCOUNTS = [
-  ["souv", "damien@orasso.local"],
-  ["temoin", "kenji@orasso.local"],
-] as const;
+const ACCOUNTS = (
+  [
+    ["souv", "damien@orasso.local"],
+    ["temoin", "kenji@orasso.local"],
+  ] as const
+).filter(([who]) => !process.env.WHO || who === process.env.WHO);
 
 async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");

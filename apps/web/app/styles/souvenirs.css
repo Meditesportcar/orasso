@@ -91,3 +91,9 @@
     height: 260px;
   }
 }
+/* Les boutons posés sur l'affiche prennent l'encre de l'affiche (le secondaire est clair en Béton : invisible sur le papier). */
+.sv-poster .o-button--secondary {
+  background: transparent;
+  color: var(--poster-ink);
+  border-color: var(--poster-muted);
+}
