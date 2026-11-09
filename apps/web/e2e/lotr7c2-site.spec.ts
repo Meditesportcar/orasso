@@ -1,6 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  createEvent,
+  login,
+  loginInBrowser,
+  MOBILE,
+  randomPlate,
+  setTheme,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7c2 (D38), côté site : l'Activité (la cloche) et les Messages (la bulle) remplacent la Boîte. Damien_66 (le seed
@@ -172,4 +183,123 @@ test("l'Activité à 1 280 px : une colonne lisible, Béton et Sable", async ({ 
     await shot(page, `messages-${theme}-1280`);
     await ctx.close();
   }
+});
+
+test("Demandes du site (tour 2) : toutes les sortes, invitation de passionné et transfert de plaque, compteur = cartes", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = unique();
+  const meP = `Sw7M${s}`;
+  const kenjiP = `Sw7K${s}`;
+  const leaP = `Sw7L${s}`;
+  const cP = `Sw7D${s}`;
+  const orga = await login("damien@orasso.local");
+  const event = await createEvent(orga, { title: `Rasso Tour2 ${s}`.slice(0, 40) });
+  const me = await signUpApi(meP);
+  const kenji = await signUpApi(kenjiP);
+  const lea = await signUpApi(leaP);
+  const other = await signUpApi(cP);
+  const idOf = async (cookie: string) => (await apiCall<{ user: { id: string } }>(cookie, "GET", "/me")).data.user.id;
+  const meId = await idOf(me);
+  // Kenji invite « moi » à l'événement (passionnés qui se suivent), Léa saisit la plaque de « moi », C demande le contact.
+  expect((await apiCall(me, "POST", `/users/${kenjiP}/follow`)).status).toBe(200);
+  expect((await apiCall(kenji, "POST", `/users/${meP}/follow`)).status).toBe(200);
+  const invite = await apiCall(kenji, "POST", `/events/${event.id}/peer-invitations`, {
+    userIds: [meId],
+    note: "Viens, on y va ensemble !",
+  });
+  expect(invite.status).toBe(200);
+  const plate = randomPlate();
+  await addVehicleApi(me, plate);
+  const leaVehicle = await addVehicleApi(lea, randomPlate());
+  expect((await apiCall(lea, "PATCH", `/me/vehicles/${leaVehicle}`, { plate })).status).toBeLessThan(300);
+  expect(
+    (await apiCall(other, "POST", "/contact-requests", { pseudo: meP, message: "Bonjour, belle voiture !" })).status,
+  ).toBeLessThan(300);
+
+  for (const theme of ["beton", "sable"] as const) {
+    const ctx = await browser.newContext({ viewport: MOBILE });
+    const page = await ctx.newPage();
+    await setTheme(page, theme);
+    await loginInBrowser(page, `${meP.toLowerCase()}@e2e.orasso.test`, undefined, "/app/activite/demandes");
+    await page.goto("/app/activite/demandes");
+    // L'invitation d'un passionné et le transfert de plaque sont là, avec leurs actions.
+    const peer = page.getByTestId("request-event-invitation-peer");
+    await expect(peer).toContainText(`${kenjiP} t'invite`);
+    await expect(peer).toContainText("Viens, on y va ensemble !");
+    const transfer = page.getByTestId("request-plate-transfer");
+    await expect(transfer).toContainText("Demande de transfert de plaque");
+    // Le compteur de l'en-tête est le nombre de cartes (et celui du résumé, hors demande de message).
+    const sum = await summaryOf(page);
+    expect(sum.requests.contact).toBe(1);
+    const cards = await page.getByTestId("request-list").locator("> li").count();
+    expect(cards).toBe(sum.pendingRequests - sum.requests.contact);
+    await expect(page.getByTestId("requests-count")).toContainText(`${cards} en attente de ta réponse`);
+    // Ancien lien d'une demande de message : une ligne mène à Messages.
+    const toMessages = page.getByTestId("requests-messages-row");
+    await expect(toMessages).toContainText("Demandes de message · 1");
+    await shot(page, `demandes-toutes-${theme}-390`);
+    if (theme === "beton") {
+      await toMessages.click();
+      await page.waitForURL((url) => url.pathname === "/app/messages");
+      await page.goto("/app/activite/demandes");
+      // Confirmer le transfert : la carte part, le compteur baisse d'une demande.
+      await page
+        .getByTestId("request-plate-transfer")
+        .getByRole("button", { name: "Je confirme le transfert" })
+        .click();
+      await expect(page.getByTestId("request-plate-transfer")).toHaveCount(0);
+      await expect
+        .poll(async () => (await summaryOf(page)).pendingRequests, { timeout: 20_000 })
+        .toBe(sum.pendingRequests - 1);
+    }
+    await ctx.close();
+  }
+});
+
+test("Kenji_66 t'invite : la page Demandes de Damien_66 (seed) montre l'invitation, compteur = cartes", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app/activite/demandes");
+  await page.goto("/app/activite/demandes");
+  await expect(
+    page.getByTestId("request-event-invitation-peer").filter({ hasText: "Kenji_66 t'invite" }),
+  ).toBeVisible();
+  const sum = await summaryOf(page);
+  const cards = await page.getByTestId("request-list").locator("> li").count();
+  expect(cards).toBe(sum.pendingRequests - sum.requests.contact);
+  await shot(page, "demandes-kenji-invite-390");
+  await ctx.close();
+});
+
+test("« Voir la fiche » et les lignes : « lu » est posé avant de naviguer (le bandeau disparaît au retour)", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app/activite");
+  await page.goto("/app/activite");
+  const unreadBefore = await page.getByTestId("activity-unread").count();
+  const band = page.getByTestId("activity-highlight");
+  await expect(band.first()).toBeVisible();
+  // Tour 2 : le clic marque d'abord les identifiants du bandeau lus, puis suit le lien.
+  await page.getByTestId("activity-highlight-open").first().click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/app/activite"));
+  await page.goto("/app/activite");
+  await expect(page.getByTestId("activity-highlight")).toHaveCount(0);
+  // Une ligne avec un lien : « lu » aussi avant de naviguer.
+  const before = await page.getByTestId("activity-unread").count();
+  expect(before).toBeLessThanOrEqual(unreadBefore);
+  const link = page.locator("a.act-row__link:has([data-testid=activity-unread])").first();
+  if (await link.count()) {
+    await link.click();
+    await page.waitForURL((url) => !url.pathname.startsWith("/app/activite"));
+    await page.goto("/app/activite");
+    await expect(page.getByTestId("activity-unread")).toHaveCount(before - 1);
+  }
+  await ctx.close();
 });

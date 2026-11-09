@@ -161,3 +161,80 @@ test("la Boîte redirige : /boite → Activité, /boite?onglet=messages → Mess
   await page.waitForURL(/\/messages$/, { timeout: 30_000 });
   await ctx.close();
 });
+
+test("Demandes (tour 2) : ligne « Demandes de message » vers Messages, demandes envoyées dans Demandes de message", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = unique();
+  const a = `Aw7R${s}`;
+  const b = `Aw7S${s}`;
+  const c = `Aw7T${s}`;
+  const d = `Aw7V${s}`;
+  const aCookie = await signUpApi(a);
+  const bCookie = await signUpApi(b);
+  const cCookie = await signUpApi(c);
+  await signUpApi(d);
+  // C demande le contact de A (demande de message) ; A demande celui de D (demande envoyée) ; B suit A (la demande
+  // d'abonnement n'existe que pour un compte privé : A devient privé).
+  await apiCall(aCookie, "PATCH", "/me/profile", { departments: ["66"], visibility: "private" });
+  expect((await apiCall(bCookie, "POST", `/users/${a}/follow`)).status).toBe(200);
+  expect(
+    (await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, belle voiture !" })).status,
+  ).toBeLessThan(300);
+  expect((await apiCall(aCookie, "POST", "/contact-requests", { pseudo: d, message: "Salut D" })).status).toBeLessThan(
+    300,
+  );
+
+  const { ctx, page } = await appLogin(browser, `${a.toLowerCase()}@e2e.orasso.test`, "sable");
+  await page.goto("/activite/demandes");
+  await skipOpening(page);
+  await expect(page.getByTestId("request-follow").first()).toBeVisible({ timeout: 30_000 });
+  const row = page.getByTestId("requests-messages-row");
+  await expect(row).toContainText("Demandes de message · 1", { timeout: 30_000 });
+  await shot(page, "demandes-ligne-messages-384");
+  await row.click();
+  await page.waitForURL(/\/messages$/, { timeout: 30_000 });
+  await page.goto("/messages/demandes");
+  await expect(page.getByTestId("request-contact").filter({ hasText: c })).toBeVisible({ timeout: 30_000 });
+  // Parité avec le site : la demande envoyée à D est listée dessous.
+  const sent = page.getByTestId("contact-requests-sent");
+  await expect(sent).toContainText(d);
+  await expect(sent).toContainText("Demandes de contact envoyées");
+  await shot(page, "messages-demandes-envoyees-384");
+  await ctx.close();
+});
+
+test("« Vu » (tour 2) : une notification reçue pendant la consultation d'une fiche n'est pas vue avant le retour", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const s = unique();
+  const a = `Aw7X${s}`;
+  const b = `Aw7Y${s}`;
+  const c = `Aw7Z${s}`;
+  const aCookie = await signUpApi(a);
+  const bCookie = await signUpApi(b);
+  const cCookie = await signUpApi(c);
+  expect((await apiCall(bCookie, "POST", `/users/${a}/follow`)).status).toBe(200);
+  const unseen = async () => (await apiCall<Summary>(aCookie, "GET", "/me/inbox/summary")).data.unseenActivity;
+  await expect.poll(unseen, { timeout: 20_000 }).toBe(1);
+
+  const { ctx, page } = await appLogin(browser, `${a.toLowerCase()}@e2e.orasso.test`, "beton");
+  await page.goto("/activite");
+  await skipOpening(page);
+  // Activité devant, liste lue : « vu ».
+  await expect.poll(unseen, { timeout: 30_000 }).toBe(0);
+  // Une fiche s'ouvre par-dessus (le profil de B), puis C suit A pendant ce temps : la notification arrive, pas de « vu ».
+  await page.getByTestId("activity-row").first().click();
+  await page.waitForURL(/\/u\//, { timeout: 30_000 });
+  expect((await apiCall(cCookie, "POST", `/users/${a}/follow`)).status).toBe(200);
+  await expect.poll(unseen, { timeout: 20_000 }).toBe(1);
+  await page.waitForTimeout(4_000);
+  expect(await unseen()).toBe(1);
+  // Retour sur l'Activité : la liste est relue, puis « vu ».
+  await page.goBack();
+  await page.waitForURL(/\/activite$/, { timeout: 30_000 });
+  await expect.poll(unseen, { timeout: 30_000 }).toBe(0);
+  await ctx.close();
+});
