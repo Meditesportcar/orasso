@@ -87,6 +87,8 @@ test("appli : captures du vote, du garage, de la fiche, du Jour J, Béton et Sab
   const k = await ids();
   const shots: { name: string; who: string; path: string }[] = [
     { name: "vote", who: PILOTE, path: `/vote/${k.eventId}` },
+    // Après la voix (Kenji a voté au seed) : le classement et « En direct » (tour 2 : à 384 px, police 1,3, ça ne sort plus de l'écran).
+    { name: "vote-classement", who: KENJI, path: `/vote/${k.eventId}` },
     ...(AFTER
       ? [
           { name: "votes-liste", who: DAMIEN, path: `/votes/${k.eventId}` },
