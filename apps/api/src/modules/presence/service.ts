@@ -130,7 +130,7 @@ export const presenceService = {
           link: { label: "Voir l'événement", path: `/e/${event.slug}` },
         });
         const stampId = await visitStampId(tx, eventId, v.user.id);
-        after(() => this.announce(eventId));
+        after(() => presenceService.announce(eventId));
         after(() => notificationsService.kick());
         return { validatedAt: row.validatedAt.toISOString(), stampId, canVote: true as const };
       });
