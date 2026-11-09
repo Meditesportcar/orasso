@@ -174,3 +174,13 @@ test("une story de crew ne sort jamais ; la sortie d'une story publique est un f
     expect(res.status).toBe(200);
   }
 });
+
+// La recette publie des stories de carte avec les comptes du seed : elle les retire (les autres recettes comptent les stories du seed).
+test.afterAll(async () => {
+  for (const email of ["damien@orasso.local", "kenji@orasso.local", "marc@orasso.local"]) {
+    const cookie = await login(email);
+    for (const s of await myStories(cookie)) {
+      if (s.linked) await apiCall(cookie, "DELETE", `/me/stories/${s.id}`);
+    }
+  }
+});

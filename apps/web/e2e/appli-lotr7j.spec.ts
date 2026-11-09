@@ -99,7 +99,7 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
       await expect(page.getByTestId("memory-eyebrow")).toHaveText("Il y a un an, jour pour jour");
       expect(await cutWords(page, "memory-title"), `titre de la page à la police ${scale}`).toEqual([]);
       await insideViewport(page, "memory-event");
-      await expect(page.getByTestId("memory-share")).toBeVisible();
+      await expect(page.getByTestId("memory-share").last()).toBeVisible();
       if (scale === 1) {
         await page.goto("/fil");
         await afterOpening(page);

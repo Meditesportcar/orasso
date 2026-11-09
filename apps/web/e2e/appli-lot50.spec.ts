@@ -460,6 +460,8 @@ test("carte à partager : trois styles, zones masquées par Instagram, les trois
     await goto(page, "/garage");
     await expect(page.getByTestId("garage-card").first()).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("garage-share").first().click();
+    // Lot R7f4 : « Partager » ouvre d'abord les quatre destinations ; l'affiche à trois styles est derrière « Vers l'extérieur ».
+    await page.getByTestId("share-dest-external").click();
     await expect(page.getByText("Affiche à partager", { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/signée Orasso/)).toBeVisible();
     for (const [label, file] of [

@@ -68,11 +68,15 @@ test("site : composer une story de carte à la souris, publier, la carte est tou
   const card = page.getByTestId("share-story-card");
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("share-story-link")).toContainText("Voir l'événement");
+  await page.waitForLoadState("networkidle");
   const stage = page.getByTestId("share-story-stage");
   const box = await stage.boundingBox();
   if (box) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.wheel(0, -300);
+    await expect(async () => {
+      await page.mouse.wheel(0, -300);
+      await expect(card).toHaveAttribute("style", /scale\(1\.\d+\)/, { timeout: 1500 });
+    }).toPass({ timeout: 20_000 });
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 30, { steps: 5 });
     await page.mouse.up();
@@ -90,4 +94,12 @@ test("site : composer une story de carte à la souris, publier, la carte est tou
   await expect(page.getByTestId("story-linked")).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: `${DIR}/site-visionneuse-carte-1280.png` });
   await ctx.close();
+});
+
+// La recette publie une story de carte avec Damien : elle la retire (les autres recettes comptent les stories du seed).
+test.afterAll(async () => {
+  const cookie = await login("damien@orasso.local");
+  const mine = (await apiCall<{ stories: { id: string; linked: unknown }[] }>(cookie, "GET", "/me/stories")).data
+    .stories;
+  for (const s of mine) if (s.linked) await apiCall(cookie, "DELETE", `/me/stories/${s.id}`);
 });
