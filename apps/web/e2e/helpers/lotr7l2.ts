@@ -163,6 +163,7 @@ export async function lydiaStaff(structureId: string): Promise<string> {
   // Sans rôle, la synchronisation du mode staff est refusée : le contrôle suffit (il ne donne aucun droit sur les votes).
   const me = await apiCall<{ id?: string; user?: { id: string } }>(marc, "GET", "/me");
   const userId = me.data.user?.id ?? me.data.id;
-  if (userId) await apiCall(owner, "PATCH", `/structures/${structureId}/members/${userId}`, { staffRoles: ["control"] });
+  if (userId)
+    await apiCall(owner, "PATCH", `/structures/${structureId}/members/${userId}`, { staffRoles: ["control"] });
   return email;
 }

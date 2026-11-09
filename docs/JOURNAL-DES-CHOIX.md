@@ -3773,3 +3773,5 @@ Lot sensible (droits de l'organisateur). Les règles restent dans l'API (R7l1) ;
 - **Liens « Votes »** : fiche de l'événement, Direct, accueil staff (appli) ; `orga-evenement` et `orga-jour-j` (site).
 
 À revoir avec Damien : aucune route ne sert les points du podium aux organisateurs ; si l'admin les change, l'affichage « 15 / 10 / 5 » doit suivre (aujourd'hui une constante partagée).
+
+- **Recettes : un vrai membre du staff.** Dans le seed, Damien n'est qu'invité (pas encore membre) de Roues Libres 66 et il est super administrateur : l'écran le prend pour un organisateur. Les recettes invitent donc Marc (`helpers/lotr7l2.ts`, `lydiaStaff`), l'invitation est acceptée et le rôle « Contrôle » donné (sans rôle, la synchronisation du mode staff est refusée). Résultat : le staff ne voit aucun bouton et l'API lui répond 403. Les recettes de l'éditeur (`lot53`, `appli-lot53`, `site-public`, `appli-evenements`) passent à « 9 étapes » avec le temps « Votes ». Aucune règle de l'API ne change.
