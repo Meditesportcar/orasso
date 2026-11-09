@@ -124,11 +124,14 @@ export async function cropAll(
   crop: (source: PickedPhoto) => Promise<PickedPhoto>,
   alive: () => boolean,
   discard: (uris: string[]) => void,
+  remember?: (uri: string) => void,
 ): Promise<PickedPhoto[] | null> {
   const done: PickedPhoto[] = [];
   try {
     for (const source of sources) {
       const out = await crop(source);
+      // Noté dès sa création (pas à la fin du lot) : une purge qui tombe pendant le recadrage suivant le voit.
+      remember?.(out.uri);
       done.push(out);
       if (!alive()) {
         discard(done.map((p) => p.uri));

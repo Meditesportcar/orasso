@@ -30,6 +30,7 @@ import { FicheBar } from "../FicheBar";
 import { PlateFrame } from "../PlateFrame";
 import { SquareCrop } from "../SquareCrop";
 import { rememberPublished } from "./mine";
+import { convertAll, holdLock } from "./prepare";
 
 type Item = {
   key: string;
@@ -128,28 +129,35 @@ export function PublishForm({
   async function pick(files: FileList | null) {
     if (!files?.length || locked) return;
     setError(null);
-    setPreparing(true);
     const gen = generation.current;
     const room = FEED_POST_PHOTOS_MAX - items.length;
-    const fresh: Item[] = [];
-    for (const file of [...files].slice(0, room)) {
-      const cropped = await crop(file, aspect);
-      fresh.push({
-        key: crypto.randomUUID(),
-        source: file,
-        cropped,
-        url: URL.createObjectURL(cropped),
-        rects: [],
-        noPlate: false,
-      });
-    }
-    setPreparing(false);
-    if (gen !== generation.current) {
-      for (const f of fresh) URL.revokeObjectURL(f.url);
-      return;
-    }
-    setItems((list) => [...list, ...fresh].slice(0, FEED_POST_PHOTOS_MAX));
-    if (input.current) input.current.value = "";
+    await holdLock(
+      setPreparing,
+      async () => {
+        const fresh = await convertAll(
+          [...files].slice(0, room),
+          async (file): Promise<Item> => {
+            const cropped = await crop(file, aspect);
+            return {
+              key: crypto.randomUUID(),
+              source: file,
+              cropped,
+              url: URL.createObjectURL(cropped),
+              rects: [],
+              noPlate: false,
+            };
+          },
+          (f) => URL.revokeObjectURL(f.url),
+        );
+        if (gen !== generation.current) {
+          for (const f of fresh) URL.revokeObjectURL(f.url);
+          return;
+        }
+        setItems((list) => [...list, ...fresh].slice(0, FEED_POST_PHOTOS_MAX));
+        if (input.current) input.current.value = "";
+      },
+      setError,
+    );
   }
 
   async function changeAspect(next: FeedAspect) {
@@ -159,19 +167,26 @@ export function PublishForm({
     setConfirmKey(null);
     if (!items.length) return;
     setFormatNote(true);
-    setPreparing(true);
-    const again: Item[] = [];
-    for (const i of items) {
-      const cropped = await crop(i.source, next);
-      again.push({ ...i, cropped, url: URL.createObjectURL(cropped), rects: [], noPlate: false });
-    }
-    setPreparing(false);
-    if (gen !== generation.current) {
-      for (const f of again) URL.revokeObjectURL(f.url);
-      return;
-    }
-    setItems(again);
-    keys.current = {};
+    await holdLock(
+      setPreparing,
+      async () => {
+        const again = await convertAll(
+          items,
+          async (i): Promise<Item> => {
+            const cropped = await crop(i.source, next);
+            return { ...i, cropped, url: URL.createObjectURL(cropped), rects: [], noPlate: false };
+          },
+          (f) => URL.revokeObjectURL(f.url),
+        );
+        if (gen !== generation.current) {
+          for (const f of again) URL.revokeObjectURL(f.url);
+          return;
+        }
+        setItems(again);
+        keys.current = {};
+      },
+      setError,
+    );
   }
 
   const index = Math.min(current, Math.max(0, items.length - 1));
@@ -185,15 +200,19 @@ export function PublishForm({
     const target = items.find((i) => i.key === key);
     setCropping(null);
     if (!target) return;
-    setPreparing(true);
     const gen = generation.current;
-    const cropped = await crop(target.source, aspect, focus);
-    setPreparing(false);
-    if (gen !== generation.current) return;
-    const url = URL.createObjectURL(cropped);
-    URL.revokeObjectURL(target.url);
-    delete keys.current[target.key + target.url];
-    patch(key, (i) => ({ ...i, cropped, url, focus, rects: [], noPlate: false }));
+    await holdLock(
+      setPreparing,
+      async () => {
+        const cropped = await crop(target.source, aspect, focus);
+        if (gen !== generation.current) return;
+        const url = URL.createObjectURL(cropped);
+        URL.revokeObjectURL(target.url);
+        delete keys.current[target.key + target.url];
+        patch(key, (i) => ({ ...i, cropped, url, focus, rects: [], noPlate: false }));
+      },
+      setError,
+    );
   }
   const issue = publishIssue({ photos: items, caption, preparing });
 

@@ -146,10 +146,19 @@ export function PublishScreen() {
       // Ces JPEG ne sont pas floutés : effacés dès qu'ils ne servent plus (`tempPhotos`), tout de suite s'ils arrivent trop tard.
       if (!alive()) return discardTempPhotos(picked.map((s) => s.uri));
       if (!sources.length) return;
+      // Les sources sont notées dès leur retour : une purge pendant le recadrage les voit.
+      rememberTempPhotos(...sources.map((s) => s.uri));
       const wanted = aspectRef.current;
-      const cropped = await cropAll(sources, (s) => cropAspect(s, wanted), alive, discardTempPhotos);
+      const cropped = await cropAll(
+        sources,
+        (s) => cropAspect(s, wanted),
+        alive,
+        discardTempPhotos,
+        rememberTempPhotos,
+      );
       if (!cropped) return discardTempPhotos(sources.map((s) => s.uri));
-      rememberTempPhotos(...sources.map((s) => s.uri), ...cropped.map((p) => p.uri));
+      // Devenu caduc entre la fin de `cropAll` et ici (démontage, purge du compte) : rien n'est gardé.
+      if (!alive()) return discardTempPhotos([...sources.map((s) => s.uri), ...cropped.map((p) => p.uri)]);
       const fresh = sources.map((source, i) => newDraftPhoto(randomUUID(), source, cropped[i] as PickedPhoto));
       setPhotos((list) => [...list, ...fresh].slice(0, FEED_POST_PHOTOS_MAX));
       for (const p of fresh) void detect(p.key, p.photo, gen);
@@ -176,9 +185,10 @@ export function PublishScreen() {
         (s) => cropAspect(s, next),
         alive,
         discardTempPhotos,
+        rememberTempPhotos,
       );
       if (!cropped) return;
-      rememberTempPhotos(...cropped.map((p) => p.uri));
+      if (!alive()) return discardTempPhotos(cropped.map((p) => p.uri));
       const again = new Map(photos.map((p, i) => [p.key, cropped[i] as PickedPhoto]));
       discardTempPhotos(photos.map((p) => p.photo.uri));
       // Par clé, sur la liste d'aujourd'hui : une photo retirée ne revient pas, une photo ajoutée n'est pas perdue.
