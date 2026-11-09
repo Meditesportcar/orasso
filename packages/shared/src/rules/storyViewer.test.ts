@@ -221,6 +221,38 @@ describe("réponses en parallèle : un envoi et un identifiant par soumission", 
     expect(k.idFor("s1", "Belle auto")).toBe(first);
   });
 
+  it("au-delà de 51 soumissions incertaines : la première garde son identifiant, la nouvelle est refusée", () => {
+    const k = keys();
+    const first = k.begin("s0", "texte");
+    k.end("s0", "texte", false);
+    for (let i = 1; i < 50; i++) {
+      expect(k.begin(`s${i}`, "texte")).not.toBeNull();
+      k.end(`s${i}`, "texte", false);
+    }
+    // 50 soumissions incertaines : une 51e est refusée au lieu d'oublier un identifiant.
+    expect(k.isFull("s50", "texte")).toBe(true);
+    expect(k.begin("s50", "texte")).toBeNull();
+    expect(k.isSending("s50")).toBe(false);
+    // Renvoyer la première reprend son identifiant (pas de doublon).
+    expect(k.isFull("s0", "texte")).toBe(false);
+    expect(k.begin("s0", "texte")).toBe(first);
+    // Un succès libère une place.
+    k.end("s0", "texte", true);
+    expect(k.begin("s50", "texte")).not.toBeNull();
+  });
+
+  it("une soumission incertaine expire après 30 minutes", () => {
+    let t = 0;
+    let n = 0;
+    const k = createReplyKeys(() => `id-${++n}`, () => t);
+    const first = k.begin("s0", "texte");
+    k.end("s0", "texte", false);
+    t = 29 * 60 * 1000;
+    expect(k.idFor("s0", "texte")).toBe(first);
+    t = 31 * 60 * 1000;
+    expect(k.idFor("s0", "texte")).not.toBe(first);
+  });
+
   it("la mémoire est bornée mais n'oublie jamais un envoi en cours", () => {
     const k = keys();
     const pending = k.begin("s0", "en cours");

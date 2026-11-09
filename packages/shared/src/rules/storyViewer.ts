@@ -139,38 +139,65 @@ export function viewersListPartial(total: number | null | undefined): boolean {
  * identifiant **jusqu'à sa résolution** (`end` avec succès), et chaque story garde son propre envoi en cours. Un envoi sur
  * une autre story n'efface donc ni l'identifiant ni le verrou de celle-ci ; une seule réponse à la fois par story.
  */
-export function createReplyKeys(newId: () => string) {
+export function createReplyKeys(newId: () => string, now: () => number = Date.now) {
   const MAX_KEYS = 50;
-  const keys = new Map<string, string>();
+  // Une soumission d'issue incertaine (réponse perdue) est gardée jusqu'à un succès ou ce délai.
+  const UNCERTAIN_MS = 30 * 60 * 1000;
+  const keys = new Map<string, { id: string; uncertainAt: number | null }>();
   const sending = new Map<string, string>();
   const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
+  const expire = () => {
+    const t = now();
+    for (const [k, v] of keys) if (v.uncertainAt !== null && t - v.uncertainAt >= UNCERTAIN_MS) keys.delete(k);
+  };
+  /** Identifiants à ne jamais oublier : envoi en cours ou issue incertaine non expirée. */
+  const protectedKeys = () => {
+    const live = new Set([...sending].map(([s, t]) => keyOf(s, t)));
+    return new Set([...keys].filter(([k, v]) => v.uncertainAt !== null || live.has(k)).map(([k]) => k));
+  };
   const idFor = (storyId: string, text: string): string => {
+    expire();
     const k = keyOf(storyId, text);
-    let id = keys.get(k);
-    if (!id) {
-      id = newId();
-      keys.set(k, id);
-      // Mémoire bornée : on oublie d'abord les plus anciennes soumissions qui ne sont pas en cours d'envoi.
-      const live = new Set([...sending].map(([s, t]) => keyOf(s, t)));
+    let entry = keys.get(k);
+    if (!entry) {
+      entry = { id: newId(), uncertainAt: null };
+      keys.set(k, entry);
+      // Mémoire bornée : on n'oublie que des soumissions ni en cours d'envoi ni d'issue incertaine.
+      const keep = protectedKeys();
       for (const old of [...keys.keys()]) {
         if (keys.size <= MAX_KEYS) break;
-        if (old !== k && !live.has(old)) keys.delete(old);
+        if (old !== k && !keep.has(old)) keys.delete(old);
       }
     }
-    return id;
+    return entry.id;
+  };
+  const isFull = (storyId: string, text: string): boolean => {
+    expire();
+    return !keys.has(keyOf(storyId, text)) && protectedKeys().size >= MAX_KEYS;
   };
   return {
     idFor,
-    /** Marque l'envoi de cette soumission en cours et rend son identifiant ; `null` si cette story a déjà un envoi en cours. */
+    /**
+     * Le plafond est atteint par des soumissions qu'on ne peut pas oublier, et celle-ci est nouvelle : l'envoyer ferait
+     * oublier un identifiant incertain (doublon possible). `begin` la refuse alors.
+     */
+    isFull,
+    /** Marque l'envoi de cette soumission en cours et rend son identifiant ; `null` si cette story a déjà un envoi en cours ou si le plafond est plein (`isFull`). */
     begin(storyId: string, text: string): string | null {
       if (sending.has(storyId)) return null;
+      if (isFull(storyId, text)) return null;
       sending.set(storyId, text);
       return idFor(storyId, text);
     },
-    /** Fin de l'envoi : l'identifiant n'est oublié que si la réponse est arrivée (`ok`) ; sinon un renvoi le reprend. */
+    /** Fin de l'envoi : l'identifiant n'est oublié que si la réponse est arrivée (`ok`) ; sinon il reste incertain, gardé 30 min ou jusqu'à un succès. */
     end(storyId: string, text: string, ok: boolean) {
       if (sending.get(storyId) === text) sending.delete(storyId);
-      if (ok) keys.delete(keyOf(storyId, text));
+      const k = keyOf(storyId, text);
+      if (ok) keys.delete(k);
+      else {
+        const e = keys.get(k);
+        if (e) e.uncertainAt = now();
+      }
     },
     isSending: (storyId: string) => sending.has(storyId),
     /** Les stories dont un envoi est en cours (pour l'affichage des boutons). */

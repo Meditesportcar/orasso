@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 import { purgePublished } from "../components/fil/mine";
 import { api, safeReturn, withCookies } from "../lib/api.server";
 import { clearExplorerCookie } from "../lib/explorerChoice.server";
+import { announceSession } from "../lib/sessionChannel";
 import type { Route } from "./+types/deconnexion";
 
 export async function action({ request }: Route.ActionArgs) {
@@ -25,5 +26,7 @@ export function loader() {
 // avant même la réponse du serveur (le compte suivant, dans le même onglet, ne doit rien en voir).
 export async function clientAction({ serverAction }: Route.ClientActionArgs) {
   purgePublished();
+  // Les autres fenêtres savent tout de suite qu'il n'y a plus de compte (une visionneuse ouverte se masque).
+  announceSession(null);
   return serverAction();
 }

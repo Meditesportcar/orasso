@@ -17,6 +17,7 @@ import { api, requireMe } from "../lib/api.server";
 import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
+import { useAnnounceSession } from "../lib/sessionChannel";
 import { useChannel } from "../lib/useChannel";
 import "../styles/activity.css";
 import "../styles/moderation.css";
@@ -102,6 +103,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
   // Activité et Messages en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
+  useAnnounceSession(loaderData.userId);
   const announcements = useAnnouncements(loaderData.userId);
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {

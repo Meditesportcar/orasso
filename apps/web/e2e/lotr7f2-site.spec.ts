@@ -639,6 +639,116 @@ test("tour 4 : session changée dans un autre onglet : la photo d'une story de c
   expect(await page.locator("body").innerText()).not.toContain("Mon crew");
 });
 
+// --- Tour 5 (re-relecture Codex du tour 4) --------------------------------------------------------------------------------
+
+const focusBack = (page: Page) =>
+  page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new Event("focus"));
+  });
+
+async function openOwnStory(page: Page, caption: string) {
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  await dropMyStories(damien);
+  const id = await publishStory(damien, { caption });
+  const me = await userIdOf("Damien_66");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
+  await page.goto(`/app/story/${encodeURIComponent(`u:${me}`)}`);
+  await expect(page.getByTestId("story-media")).toBeVisible({ timeout: 30_000 });
+  return { damien, id, me, url: page.url() };
+}
+
+test("tour 5 : deux pages visibles en même temps : B se connecte, la première ne montre plus rien de A (même avec /me retardée)", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const { damien, id, me } = await openOwnStory(page, "Légende privée de Damien");
+  for (const n of ["Lea_11", "Theo_66"])
+    await sql("insert into story_views (story_id, viewer_id) values ($1, $2) on conflict do nothing", [
+      id,
+      await userIdOf(n),
+    ]);
+  await sql("update stories set views_count = 2 where id = $1", [id]);
+  await page.goto(`/app/story/${encodeURIComponent(`u:${me}`)}`);
+  await expect(page.getByTestId("story-views")).toContainText("Vues · 2", { timeout: 30_000 });
+  await page.getByTestId("story-views").click();
+  await expect(page.getByTestId("story-viewer-Lea_11")).toBeVisible({ timeout: 15_000 });
+  // La page reste visible (aucune bascule d'onglet) ; la réponse de `/me` est retenue pour voir l'état intermédiaire.
+  let release = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route("**/api/me", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  expect(await page.evaluate(() => document.visibilityState)).toBe("visible");
+  await switchAccountElsewhere(page, "pilote100@orasso.local");
+  // Annonce reçue : tout est masqué pendant la vérification (réponse de `/me` toujours en attente).
+  await expect(page.getByTestId("story-checking")).toBeVisible({ timeout: 15_000 });
+  const during = await page.evaluate(() => ({
+    text: document.body.innerText,
+    openDialogs: document.querySelectorAll("dialog[open]").length,
+    media: document.querySelectorAll('img[data-testid="story-media"]').length,
+  }));
+  expect(during.text).not.toContain("Légende privée de Damien");
+  expect(during.text).not.toContain("Lea_11");
+  expect(during.text).not.toContain("Theo_66");
+  expect(during.text).not.toContain("Vues ·");
+  expect(during.openDialogs).toBe(0);
+  expect(during.media).toBe(0);
+  release();
+  await expect(page.getByTestId("story-checking")).toHaveCount(0, { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("story-views")).toHaveCount(0);
+  const text = await page.locator("body").innerText();
+  expect(text).not.toContain("Lea_11");
+  expect(text).not.toContain("Theo_66");
+  await dropMyStories(damien);
+});
+
+test("tour 5 : /me retardée au retour du focus : la story ne défile pas ; panne de /me : « Réessayer », la story ne se ferme pas", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const { damien, url } = await openOwnStory(page, "Une seule story");
+  const here = () => new URL(page.url()).pathname;
+  const path = new URL(url).pathname;
+  // (b) /me retardée plus longtemps que la durée d'une photo : rien ne défile, la visionneuse ne se ferme pas.
+  let release = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route("**/api/me", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await focusBack(page);
+  await expect(page.getByTestId("story-checking")).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(7000);
+  expect(here()).toBe(path);
+  await expect(page.getByTestId("story-checking")).toBeVisible();
+  release();
+  await expect(page.getByTestId("story-checking")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("story-media")).toBeVisible();
+  expect(here()).toBe(path);
+  await page.unroute("**/api/me");
+  // (c) Panne réseau de /me : « Réessayer », rien ne se ferme ni ne défile.
+  await page.route("**/api/me", (route) => route.abort());
+  await focusBack(page);
+  await expect(page.getByTestId("story-unverified")).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(7000);
+  expect(here()).toBe(path);
+  await expect(page.getByTestId("story-retry")).toBeVisible();
+  await page.unroute("**/api/me");
+  await page.getByTestId("story-retry").click();
+  await expect(page.getByTestId("story-unverified")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("story-media")).toBeVisible();
+  await dropMyStories(damien);
+});
+
 test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bouton inactif pendant l'envoi, reprise sans doublon", async ({
   page,
 }) => {

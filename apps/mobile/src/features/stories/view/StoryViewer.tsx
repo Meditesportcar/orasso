@@ -303,7 +303,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     // Identifiant lié à la soumission (story + texte), gardé jusqu'à sa résolution : une réponse perdue renvoyée à
     // l'identique n'est pas doublée, même après un envoi sur une autre story ; un texte modifié est un autre identifiant.
     const clientId = replyKeys.begin(sent.storyId, body);
-    if (!clientId) return;
+    if (!clientId) return replyKeys.isSending(sent.storyId) ? undefined : setNotice(L.replyWait);
     syncSending();
     let ok = false;
     try {

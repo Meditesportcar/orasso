@@ -35,6 +35,7 @@ import { useNavigate } from "react-router";
 import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
 import { now } from "../../lib/clock";
+import { listenSession } from "../../lib/sessionChannel";
 import { ReportDialog } from "../ReportDialog";
 import { CommercialBadge } from "./CommercialBadge";
 import { LinkedCard } from "./LinkedCard";
@@ -259,18 +260,24 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) recheck();
     };
+    // Une autre fenêtre (visible en même temps) annonce son compte : s'il diffère du nôtre (ou plus aucun), tout est masqué
+    // tout de suite, puis le compte est relu. Rien d'autre que l'identifiant du compte passe dans le canal.
+    const stopListening = listenSession((other) => {
+      if (other !== userId) recheck();
+    });
     sync();
     document.addEventListener("visibilitychange", sync);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
     return () => {
+      stopListening();
       document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [verifySession]);
+  }, [verifySession, userId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: une autre story (ou la première rejouée) repart de zéro.
   useEffect(() => {
     elapsed.current = 0;
@@ -416,7 +423,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     // Identifiant lié à la soumission (story + texte), gardé jusqu'à sa résolution : une réponse perdue renvoyée à
     // l'identique n'est pas doublée, même après un envoi sur une autre story ; un texte modifié est un autre identifiant.
     const clientId = replyKeys.begin(sent.storyId, body);
-    if (!clientId) return;
+    if (!clientId) return replyKeys.isSending(sent.storyId) ? undefined : setNotice(L.replyWait);
     syncSending();
     const res = await apiFetch<StoryReplyResult>(`/stories/${sent.storyId}/reply`, {
       method: "POST",

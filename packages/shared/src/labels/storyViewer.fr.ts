@@ -40,6 +40,7 @@ export const storyViewerLabels = {
   replySend: "Envoyer",
   replySending: "Envoi…",
   replySentMessage: "Message envoyé",
+  replyWait: "Patiente un instant avant d'envoyer une autre réponse.",
   replySentRequest: "Envoyé en demande de message",
   replyUnavailable: "Cette page ne reçoit pas de messages pour le moment.",
 
