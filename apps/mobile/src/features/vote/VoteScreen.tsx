@@ -137,8 +137,10 @@ export function VoteScreen() {
     >
       {failed ? (
         <>
-          <Notice tone="error">{T.loadFailed}</Notice>
-          <SmButton kind="s" icon="undo" onPress={retry} testID="vote-retry">
+          <Notice tone="error" testID="vote-ranking-failed">
+            {T.loadFailed}
+          </Notice>
+          <SmButton kind="s" icon="undo" onPress={retry} testID="vote-ranking-retry">
             {T.retry}
           </SmButton>
         </>
@@ -146,7 +148,7 @@ export function VoteScreen() {
       {view.error && data ? (
         <>
           <Notice tone="error" testID="vote-ranking-failed">
-            {mode === "voted" ? T.rankingFailed : T.loadFailed}
+            {T.refreshFailed}
           </Notice>
           <SmButton kind="s" icon="undo" onPress={retry} testID="vote-ranking-retry">
             {T.retry}
@@ -279,7 +281,7 @@ function Grid({
         return (
           <Pressable
             key={e.applicationId}
-            testID={own ? "vote-card-own" : waiting ? "vote-card-waiting" : "vote-card"}
+            testID={own ? "vote-card-own" : waiting ? "vote-card-waiting" : interactive ? "vote-card" : "vote-card-off"}
             accessibilityRole="button"
             accessibilityLabel={
               own

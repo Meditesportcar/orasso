@@ -54,6 +54,8 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // relecture n'est pas revenue.
   const justVoted = actionData?.ok ? actionData.vote : null;
   const vote = loaderData.vote ?? justVoted;
+  // La relecture a échoué après ma voix : la réponse à la voix reste affichée, avec « Réessayer ».
+  const stale = !loaderData.vote && Boolean(justVoted);
   // Clôture : à l'échéance du serveur, la page se relit (et réessaie jusqu'à la clôture confirmée) ; surveillée tant que le
   // vote n'est pas fini, ouvert ou pas encore.
   useClosingWatch(vote, loaderData.serverAt);
@@ -121,6 +123,21 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         {vote.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(vote.checkedInAt))}` : ""}
       </p>
 
+      {stale && (
+        <>
+          <p className="s-error" role="alert" data-testid="vote-ranking-failed">
+            {T.refreshFailed}
+          </p>
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => void revalidator.revalidate()}
+            data-testid="vote-ranking-retry"
+          >
+            {T.retry}
+          </Button>
+        </>
+      )}
       {actionData?.error && (
         <p className="s-error" role="alert">
           {actionData.error}

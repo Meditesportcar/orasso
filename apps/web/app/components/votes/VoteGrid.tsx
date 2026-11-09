@@ -42,7 +42,15 @@ export function VoteGrid({
                     : T.pickCta(c.vehicleLabel)
               }
               disabled={!canVote || own || waiting || busy}
-              data-testid={own ? "vote-candidate-own" : waiting ? "vote-candidate-waiting" : "vote-candidate"}
+              data-testid={
+                own
+                  ? "vote-candidate-own"
+                  : waiting
+                    ? "vote-candidate-waiting"
+                    : canVote
+                      ? "vote-candidate"
+                      : "vote-candidate-off"
+              }
             >
               {c.photoUrl ? (
                 <img className="vp-card__photo" src={c.photoUrl} alt="" />

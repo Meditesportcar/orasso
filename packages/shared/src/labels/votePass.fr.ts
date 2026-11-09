@@ -65,7 +65,8 @@ export const votePassTexts = {
   rankingAfterVote: "Le classement s'affiche après ton vote.",
   rankingAtClose: "Le classement s'affiche à la clôture du vote.",
   rankingLoading: "Chargement du classement…",
-  rankingFailed: "Ton vote est enregistré, mais le classement ne se charge pas.",
+  /** Le vote est affiché (réponse à ma voix, ou dernière lecture) mais la relecture a échoué. */
+  refreshFailed: "Ce vote ne s'actualise pas : vérifie ta connexion.",
   loadFailed: "Impossible de charger ce vote : vérifie ta connexion.",
   saved: (closes: string) => `Vote enregistré · tu peux le changer ${closes}`,
   notOpen: "Ce vote n'est pas encore ouvert.",

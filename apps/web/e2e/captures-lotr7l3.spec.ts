@@ -14,6 +14,10 @@ const AFTER = PHASE.startsWith("apres");
 const SLUG = "rassemblement-du-lydia";
 test.use({ actionTimeout: 30_000 });
 
+// CAP_ONLY=jour-j,sorties : seulement ces écrans (reprise d'une capture ratée).
+const ONLY = process.env.CAP_ONLY?.split(",") ?? null;
+const wanted = <T extends { name: string }>(shots: T[]) => (ONLY ? shots.filter((x) => ONLY.includes(x.name)) : shots);
+
 type Theme = "beton" | "sable";
 const DAMIEN = "damien@orasso.local";
 const KENJI = "kenji@orasso.local";
@@ -25,8 +29,12 @@ async function ids() {
   const supra = mine.data.find((v) => v.audiencePrizes > 0) ?? mine.data[0];
   if (!ev.data?.id || !supra) throw new Error("Seed incomplet : lancer pnpm db:seed.");
   const votes = await apiCall<{ items: { id: string; title: string }[] }>(kenji, "GET", `/events/${ev.data.id}/votes`);
+  // Le Jour J s'ouvre par l'identifiant de la candidature de Damien (son QR), pas par celui de l'événement.
+  const damien = await login(DAMIEN);
+  const apps = await apiCall<{ id: string; event: { id: string } }[]>(damien, "GET", "/me/applications");
+  const application = apps.data.find((a) => a.event.id === ev.data.id)?.id ?? ev.data.id;
   const rupteur = votes.data.items.find((v) => /rupteur/i.test(v.title));
-  return { eventId: ev.data.id, vehicleId: supra.id, rupteurId: rupteur?.id ?? null };
+  return { eventId: ev.data.id, vehicleId: supra.id, rupteurId: rupteur?.id ?? null, application };
 }
 
 async function openApp(browser: Browser, theme: Theme, width: number, fontScale: number) {
@@ -85,7 +93,8 @@ test("appli : captures du vote, du garage, de la fiche, du Jour J, Béton et Sab
         ]
       : []),
     { name: "fiche-evenement", who: DAMIEN, path: `/e/${SLUG}` },
-    { name: "jour-j", who: DAMIEN, path: `/jour-j/${k.eventId}` },
+    { name: "activite", who: DAMIEN, path: "/activite" },
+    { name: "jour-j", who: DAMIEN, path: `/jour-j/${k.application}` },
     { name: "sorties", who: DAMIEN, path: "/sorties" },
     { name: "garage", who: KENJI, path: "/garage" },
     { name: "vehicule", who: KENJI, path: `/vehicule/${k.vehicleId}` },
@@ -96,7 +105,7 @@ test("appli : captures du vote, du garage, de la fiche, du Jour J, Béton et Sab
         const { ctx, page } = await openApp(browser, theme, width, fs);
         await signIn(page, who);
         await afterOpening(page);
-        for (const s of shots.filter((x) => x.who === who)) {
+        for (const s of wanted(shots).filter((x) => x.who === who)) {
           await page.goto(s.path);
           await afterOpening(page).catch(() => undefined);
           await shot(page, "appli", `${s.name}-${theme}-${width}-f${String(fs).replace(".", "")}`);
