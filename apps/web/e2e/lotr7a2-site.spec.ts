@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addPendingSecondPlace, apiCall, login, loginInBrowser } from "./helpers";
+import { addPendingSecondPlace, apiCall, login, loginInBrowser, sidelineOtherEvents } from "./helpers";
 
 // Lot R7a2 (D38), côté site : l'Accueil « tableau de bord » et « Personnaliser ». Damien_66 est retenu et entré au
 // « Rassemblement du Lydia » (seed `live-event`) : la ligne « En cours », le bloc « En cours » et « Voter » ; Paul_Photo (hors
@@ -120,12 +120,18 @@ test("hors événement : pas de bloc « En cours », le réglage par défaut", a
 test("tour 3 : présence seule (sans place ni billet) : la ligne « En cours » n'a pas de « Mon accès »", async ({
   page,
 }) => {
-  const cookie = await login("pilote5@orasso.local");
-  const home = (await apiCall<{ live: { hasPlace: boolean } | null }>(cookie, "GET", "/me/home")).data;
-  expect(home.live?.hasPlace).toBe(false);
-  await loginInBrowser(page, "pilote5@orasso.local", undefined, "/app");
-  await expect(page.getByTestId("home-live-line")).toBeVisible();
-  await expect(page.getByTestId("home-live-access")).toHaveCount(0);
+  // Le Salon Argelès du seed, en cours lui aussi, passerait devant : Pilote_005 ne vit ici que le Rassemblement du Lydia.
+  const restore = await sidelineOtherEvents("Pilote_005");
+  try {
+    const cookie = await login("pilote5@orasso.local");
+    const home = (await apiCall<{ live: { hasPlace: boolean } | null }>(cookie, "GET", "/me/home")).data;
+    expect(home.live?.hasPlace).toBe(false);
+    await loginInBrowser(page, "pilote5@orasso.local", undefined, "/app");
+    await expect(page.getByTestId("home-live-line")).toBeVisible();
+    await expect(page.getByTestId("home-live-access")).toHaveCount(0);
+  } finally {
+    await restore();
+  }
 });
 
 test("tour 3 : une ligne à deux véhicules de statuts différents ; Réinitialiser aux défauts du compte", async ({

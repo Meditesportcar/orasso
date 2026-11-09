@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
+import { addPendingSecondPlace, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7a2 : captures avant / après de l'Accueil (appli et site), un jour normal (Kenji, exposant) et pendant un événement
@@ -76,62 +76,73 @@ async function go(page: Page, path: string) {
 test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ browser }) => {
   test.setTimeout(2_400_000);
   mkdirSync(DIR, { recursive: true });
-
-  if (APP) {
-    for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
-      for (const [width, scale] of QUICK
-        ? ([[384, 1]] as const)
-        : ([
-            [384, 1],
-            [384, 1.3],
-            [390, 1],
-          ] as const)) {
-        for (const [demo, email] of DEMOS) {
-          if (ONLY && demo !== ONLY) continue;
-          const tag = `${demo}-${width}-x${scale}-${theme}`;
-          for (const [kind, height] of [
-            ["top", 844],
-            ["long", 2600],
-          ] as const) {
-            const page = await appLogin(browser, email, theme, width, scale, height);
-            await go(page, "/accueil");
-            if (await page.getByTestId("whatsnew-dismiss").count()) await page.getByTestId("whatsnew-dismiss").click();
-            await shot(page, `appli-accueil-${kind}-${tag}`);
-            if (AFTER && kind === "top" && demo === "normal") {
-              await go(page, "/accueil-personnaliser");
-              await shot(page, `appli-personnaliser-${tag}`);
+  // Tour 3 : `TWO_VEHICLES=1` pose une seconde place « en attente » de Damien_66 (ligne à deux véhicules), retirée à la fin.
+  const remove = process.env.TWO_VEHICLES === "1" ? await addPendingSecondPlace() : null;
+  try {
+    if (APP) {
+      for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
+        for (const [width, scale] of QUICK
+          ? ([[384, 1]] as const)
+          : process.env.T3 === "1"
+            ? ([
+                [384, 1],
+                [384, 1.3],
+              ] as const)
+            : ([
+                [384, 1],
+                [384, 1.3],
+                [390, 1],
+              ] as const)) {
+          for (const [demo, email] of DEMOS) {
+            if (ONLY && demo !== ONLY) continue;
+            const tag = `${demo}-${width}-x${scale}-${theme}`;
+            for (const [kind, height] of [
+              ["top", 844],
+              ["long", 2600],
+            ] as const) {
+              const page = await appLogin(browser, email, theme, width, scale, height);
+              await go(page, "/accueil");
+              if (await page.getByTestId("whatsnew-dismiss").count())
+                await page.getByTestId("whatsnew-dismiss").click();
+              await shot(page, `appli-accueil-${kind}-${tag}`);
+              if (AFTER && kind === "top" && demo === "normal") {
+                await go(page, "/accueil-personnaliser");
+                await shot(page, `appli-personnaliser-${tag}`);
+              }
+              await page.context().close();
             }
-            await page.context().close();
           }
         }
       }
     }
-  }
 
-  for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
-    for (const width of QUICK ? [390] : [390, 1280]) {
-      for (const [demo, email] of DEMOS) {
-        if (ONLY && demo !== ONLY) continue;
-        const tag = `${demo}-${width}-${theme}`;
-        const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
-        const page = await ctx.newPage();
-        await setTheme(page, theme);
-        await loginInBrowser(page, email, undefined, "/app");
-        await page.goto("/app");
-        await page.waitForLoadState("networkidle");
-        if (await page.getByTestId("whatsnew-dismiss").count()) {
-          await page.getByTestId("whatsnew-dismiss").click();
+    for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
+      for (const width of QUICK ? [390] : [390, 1280]) {
+        for (const [demo, email] of DEMOS) {
+          if (ONLY && demo !== ONLY) continue;
+          const tag = `${demo}-${width}-${theme}`;
+          const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
+          const page = await ctx.newPage();
+          await setTheme(page, theme);
+          await loginInBrowser(page, email, undefined, "/app");
+          await page.goto("/app");
           await page.waitForLoadState("networkidle");
+          if (await page.getByTestId("whatsnew-dismiss").count()) {
+            await page.getByTestId("whatsnew-dismiss").click();
+            await page.waitForLoadState("networkidle");
+          }
+          await shot(page, `site-accueil-${tag}`);
+          await page.screenshot({ path: `${DIR}/site-accueil-long-${tag}.png`, fullPage: true });
+          if (AFTER && demo === "normal") {
+            await page.goto("/app/accueil/personnaliser");
+            await page.waitForLoadState("networkidle");
+            await shot(page, `site-personnaliser-${tag}`);
+          }
+          await ctx.close();
         }
-        await shot(page, `site-accueil-${tag}`);
-        await page.screenshot({ path: `${DIR}/site-accueil-long-${tag}.png`, fullPage: true });
-        if (AFTER && demo === "normal") {
-          await page.goto("/app/accueil/personnaliser");
-          await page.waitForLoadState("networkidle");
-          await shot(page, `site-personnaliser-${tag}`);
-        }
-        await ctx.close();
       }
     }
+  } finally {
+    await remove?.();
   }
 });

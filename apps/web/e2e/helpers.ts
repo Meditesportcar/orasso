@@ -390,3 +390,42 @@ export async function addPendingSecondPlace(): Promise<(() => Promise<void>) | n
   });
   return inserted > 0 ? remove : null;
 }
+
+/**
+ * Lot R7a2, tour 3 : pour qu'un compte du seed ne vive que le « Rassemblement du Lydia » (le « Salon Argelès » du seed, en cours
+ * lui aussi une partie de la journée, passerait devant), met de côté ses places retenues ailleurs. Rend de quoi les remettre.
+ */
+export async function sidelineOtherEvents(
+  pseudo: string,
+  keepSlug = "rassemblement-du-lydia",
+): Promise<() => Promise<void>> {
+  const run = async <T>(fn: (c: pg.Client) => Promise<T>): Promise<T> => {
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      return await fn(client);
+    } finally {
+      await client.end();
+    }
+  };
+  const saved = await run(
+    async (c) =>
+      (
+        await c.query<{ id: string; status: string }>(
+          `select a.id, a.status from applications a
+             join events e on e.id = a.event_id
+             join profiles p on p.user_id = a.user_id
+           where p.pseudo = $1 and e.slug <> $2 and a.status in ('accepted', 'pending', 'waitlisted', 'offered')`,
+          [pseudo, keepSlug],
+        )
+      ).rows,
+  );
+  if (saved.length)
+    await run((c) =>
+      c.query("update applications set status = 'cancelled' where id = any($1::uuid[])", [saved.map((r) => r.id)]),
+    );
+  return async () => {
+    for (const r of saved)
+      await run((c) => c.query("update applications set status = $2 where id = $1", [r.id, r.status]));
+  };
+}

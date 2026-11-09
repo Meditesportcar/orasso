@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { addPendingSecondPlace, apiCall, login, SEED_PASSWORD } from "./helpers";
+import { addPendingSecondPlace, apiCall, login, SEED_PASSWORD, sidelineOtherEvents } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7a2 (D38), côté appli (version web compilée de recette) : l'Accueil « tableau de bord » de Damien_66 pendant le
@@ -33,7 +33,9 @@ async function open(browser: Browser, email: string) {
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 60_000 });
-  if (await page.getByTestId("whatsnew-dismiss").count()) await page.getByTestId("whatsnew-dismiss").click();
+  const dismiss = page.getByTestId("whatsnew-dismiss");
+  // Le bandeau « Du nouveau » (compte jamais ouvert) peut ne pas être cliquable : on le range si on peut, sinon on passe.
+  await dismiss.click({ timeout: 4_000 }).catch(() => undefined);
   return { ctx, page };
 }
 
@@ -118,18 +120,26 @@ test("tour 3 : participant sans droit de vote : pas de « Voter », « Mon accè
 }) => {
   test.setTimeout(180_000);
   mkdirSync(DIR, { recursive: true });
-  const cookie = await login("pilote7@orasso.local");
-  const home = (
-    await apiCall<{ live: { hasPlace: boolean; votes: { canVote: boolean } } | null }>(cookie, "GET", "/me/home")
-  ).data;
-  expect(home.live?.hasPlace).toBe(true);
-  expect(home.live?.votes.canVote).toBe(false);
-  const { ctx, page } = await open(browser, "pilote7@orasso.local");
-  await expect(page.getByTestId("home-live-line")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("home-live-vote")).toHaveCount(0);
-  await expect(page.getByTestId("home-live-access")).toBeVisible();
-  await page.screenshot({ path: `${DIR}/05-sans-droit-de-vote.png`, fullPage: true });
-  await ctx.close();
+  // Le Salon Argelès du seed, en cours lui aussi, passerait devant : Pilote_007 ne vit ici que le Rassemblement du Lydia.
+  const restore = await sidelineOtherEvents("Pilote_007");
+  try {
+    const cookie = await login("pilote7@orasso.local");
+    const home = (
+      await apiCall<{ live: { hasPlace: boolean; votes: { canVote: boolean } } | null }>(cookie, "GET", "/me/home")
+    ).data;
+    expect(home.live?.hasPlace).toBe(true);
+    expect(home.live?.votes.canVote).toBe(false);
+    const { ctx, page } = await open(browser, "pilote7@orasso.local");
+    // Retenu et pas encore entré, le jour J : l'appli ouvre d'elle-même l'écran du QR ; on le ferme pour revenir à l'Accueil.
+    if (/jour-j/.test(page.url())) await page.mouse.click(349, 31);
+    await expect(page.getByTestId("home-live-line")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("home-live-vote")).toHaveCount(0);
+    await expect(page.getByTestId("home-live-access")).toBeVisible();
+    await page.screenshot({ path: `${DIR}/05-sans-droit-de-vote.png`, fullPage: true });
+    await ctx.close();
+  } finally {
+    await restore();
+  }
 });
 
 test("tour 3 : Personnaliser avec /me/settings lent puis en erreur 500 : Enregistrer éteint, puis Réessayer", async ({
