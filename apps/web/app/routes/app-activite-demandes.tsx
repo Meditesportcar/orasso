@@ -1,7 +1,5 @@
 import { Button, Chip } from "@orasso/design-system/web";
 import {
-  type ContactAcceptResult,
-  type ContactRequestView,
   type CrewConfirmationRequest,
   type CrewInboxRequest,
   crewInviteLabels,
@@ -11,6 +9,7 @@ import {
   followRequestNotificationTitle,
   gradeLabels,
   type InboxSummary,
+  inboxRowCounts,
   invitationLabels,
   messagingLabels,
   networkLabels,
@@ -19,37 +18,35 @@ import {
   staffRequestLabels,
   staffRoleLabels,
 } from "@orasso/shared";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
-import { InboxSegments } from "../components/Messaging";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import { formatDateTime } from "../lib/format";
-import type { Route } from "./+types/boite-demandes";
+import type { Route } from "./+types/app-activite-demandes";
 
-// Boîte > Demandes (lot 18) : rangées à part — demandes d'abonnement (lot R6b : elles remplacent les anciennes demandes)
-// et demandes de contact (le message est affiché, on accepte ou on refuse ; le refus est silencieux). Les lots 19 et
-// suivants ajoutent leurs sortes ici. Lot R6b, tour 2 (relecture Codex 4) : les demandes d'abonnement vont par 30,
+// Activité > Demandes (lot 18, repris au lot R7c2 : la Boîte a disparu) : tout ce qui attend ta réponse — demandes d'abonnement
+// (lot R6b), crews, invitations à un événement, staff. Les demandes de message (contacts) sont dans Messages
+// (`/app/messages/demandes`). Les actions restent celles du lot 18 (routes de chaque domaine). Lot R6b, tour 2 (relecture Codex 4) : les demandes d'abonnement vont par 30,
 // « Suivants » (`?apres=`) ouvre la page suivante : aucune n'est cachée.
 /** Lot R6c : libellé court local (pas dans `crewInviteLabels`) d'une invitation reçue d'un membre. */
 const LEADER_CONFIRMS = "Si tu acceptes, le chef confirme ton arrivée.";
 
 export function meta() {
-  return [{ title: "Demandes · Boîte · Orasso" }, { name: "robots", content: "noindex" }];
+  return [{ title: "Demandes · Activité · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
   const cursor = new URL(request.url).searchParams.get("apres") ?? "";
-  const [follows, contacts, summary, crews, confirmations, staffInvitations] = await Promise.all([
+  const [follows, summary, crews, confirmations, staffInvitations] = await Promise.all([
     apiOrThrow<FollowRequestsPage>(
       request,
       `/me/follow-requests${cursor ? `?${new URLSearchParams({ cursor }).toString()}` : ""}`,
     ),
-    apiOrThrow<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
     // Crews (lot 19) : demandes reçues par un chef, invitations reçues, venues en crew à confirmer.
     apiOrThrow<CrewInboxRequest[]>(request, "/me/crew-requests"),
@@ -63,8 +60,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     follows: follows.items,
     followsNext: follows.nextCursor,
     followsAfter: cursor !== "",
-    contactsIn: contacts.items.filter((c) => c.direction === "in"),
-    contactsOut: contacts.items.filter((c) => c.direction === "out"),
     summary,
     crews,
     confirmations,
@@ -86,17 +81,6 @@ export async function action({ request }: Route.ActionArgs) {
     const structureId = encodeURIComponent(String(form.get("structureId") ?? ""));
     const answer = intent === "staff_accept" ? "accept" : "decline";
     const res = await api(request, `/me/memberships/${structureId}/${answer}`, { method: "POST" });
-    if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
-    return data({ formError: null as string | null });
-  }
-  const id = encodeURIComponent(String(form.get("id") ?? ""));
-  if (intent === "contact_accept") {
-    const res = await api<ContactAcceptResult>(request, `/contact-requests/${id}/accept`, { method: "POST" });
-    if (res.ok) throw redirect(`/app/boite/${res.data.conversationId}`);
-    return data({ formError: res.error.message }, { status: res.status });
-  }
-  if (intent === "contact_decline") {
-    const res = await api(request, `/contact-requests/${id}/decline`, { method: "POST" });
     if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
     return data({ formError: null as string | null });
   }
@@ -147,34 +131,11 @@ function DecideFollow({ p, busy }: { p: FollowPerson; busy: boolean }) {
   );
 }
 
-function Decide({ id, busy }: { id: string; busy: boolean }) {
-  return (
-    <div className="s-row">
-      <Form method="post">
-        <input type="hidden" name="intent" value="contact_accept" />
-        <input type="hidden" name="id" value={id} />
-        <Button type="submit" variant="secondary" icon="check" loading={busy}>
-          {messagingLabels.accept}
-        </Button>
-      </Form>
-      <Form method="post">
-        <input type="hidden" name="intent" value="contact_decline" />
-        <input type="hidden" name="id" value={id} />
-        <Button type="submit" variant="secondary" icon="close" loading={busy}>
-          {messagingLabels.decline}
-        </Button>
-      </Form>
-    </div>
-  );
-}
-
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
   const {
     follows,
     followsNext,
     followsAfter,
-    contactsIn,
-    contactsOut,
     summary,
     crews,
     confirmations,
@@ -185,18 +146,24 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
   const message = { error: done?.formError ?? done?.followError ?? null, notice: done?.followNotice ?? null };
-  const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
+  const { activityRequests } = inboxRowCounts(summary);
   const empty =
     follows.length === 0 &&
-    contactsIn.length === 0 &&
     crews.length === 0 &&
     confirmations.length === 0 &&
     staffInvitations.length === 0 &&
     invitations.length === 0;
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
-      <h1 className="s-title">{messagingLabels.inbox}</h1>
-      <InboxSegments active="requests" messages={summary.unreadMessages} requests={requests} />
+      <h1 className="s-title">{messagingLabels.requests}</h1>
+      <p className="o-t-caption s-muted">
+        {activityRequests > 0 ? `${activityRequests} en attente de ta réponse` : "Rien n'attend ta réponse"}
+      </p>
+      <div>
+        <Button variant="secondary" icon="back" href="/app/activite" data-testid="requests-back">
+          Retour à l'Activité
+        </Button>
+      </div>
       {message.error && (
         <p className="s-error" role="alert">
           {message.error}
@@ -208,7 +175,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
         </p>
       )}
       {empty && <p className="s-notice">{messagingLabels.noRequests}</p>}
-      {(follows.length > 0 || contactsIn.length > 0) && (
+      {follows.length > 0 && (
         <ul className="s-people">
           {follows.map((r) => (
             <li key={r.userId} className="s-person" data-testid="request-follow">
@@ -220,22 +187,12 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
               <DecideFollow p={r} busy={busy} />
             </li>
           ))}
-          {contactsIn.map((r) => (
-            <li key={r.id} className="s-person" data-testid="request-contact">
-              <Person p={r.person} />
-              <div className="s-person__main">
-                <span className="s-label o-t-label">{messagingLabels.contactRequestFrom}</span>
-                <p className="s-prewrap">{r.message}</p>
-              </div>
-              <Decide id={r.id} busy={busy} />
-            </li>
-          ))}
         </ul>
       )}
       {(followsNext || followsAfter) && (
         <div className="s-row" data-testid="request-follow-pages">
           {followsAfter && (
-            <Button variant="secondary" icon="back" href="/app/boite/demandes">
+            <Button variant="secondary" icon="back" href="/app/activite/demandes">
               {networkLabels.firstPage}
             </Button>
           )}
@@ -243,7 +200,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
             <Button
               variant="secondary"
               icon="down"
-              href={`/app/boite/demandes?${new URLSearchParams({ apres: followsNext }).toString()}`}
+              href={`/app/activite/demandes?${new URLSearchParams({ apres: followsNext }).toString()}`}
               data-testid="request-follow-more"
             >
               {networkLabels.next}
@@ -412,21 +369,6 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
                     </Button>
                   </Form>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {contactsOut.length > 0 && (
-        <section className="s-section" aria-labelledby="envoyees-titre">
-          <h2 id="envoyees-titre" className="s-h2">
-            Demandes de contact envoyées
-          </h2>
-          <ul className="s-people">
-            {contactsOut.map((r) => (
-              <li key={r.id} className="s-person" data-testid="request-contact-out">
-                <Person p={r.person} />
-                <span className="o-t-caption s-muted">{messagingLabels.pendingOut}</span>
               </li>
             ))}
           </ul>

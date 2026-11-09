@@ -18,12 +18,13 @@ import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
 import { useChannel } from "../lib/useChannel";
+import "../styles/activity.css";
 import "../styles/moderation.css";
 import { AnnounceBanner, announcementOf, useAnnouncements } from "../components/AnnounceBanner";
 import type { Route } from "./+types/app";
 
-// Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base, la recherche et
-// la Boîte en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent
+// Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base, la recherche,
+// la cloche et la bulle en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent
 // dans Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
 // Lot R7a1 (D38) : la barre est Explorer · Le Fil · Accueil · Crew · Profil, la même pour l'exposant et le visiteur ;
 // Sorties (dans l'Accueil) et Garage (dans le Profil) gardent leur adresse, en mode fiche. En haut à droite : la loupe,
@@ -43,14 +44,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     api<MyStaffEvent[]>(request, "/me/staff-events"),
     api<InboxSummary>(request, "/me/inbox/summary"),
   ]);
-  const counts = topBarCounts(me.counts.unreadNotifications, summary.ok ? summary.data : null);
+  const counts = topBarCounts(summary.ok ? summary.data : null);
   return {
     userId: me.user.id,
     // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
     base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
-    // Pastilles (lots 18, C5 et R7a1) : la cloche « Activité » compte les notifications non lues et les demandes en
-    // attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu seulement (tour 2 :
-    // `unreadMessages` du résumé de la Boîte, `GET /me` n'en porte que le total avec les demandes).
+    // Pastilles (lots 18, C5, R7a1 et R7c2) : la cloche « Activité » compte ce qui est nouveau depuis sa dernière ouverture et
+    // les demandes en attente (hors demandes de message) ; la bulle « Messages » les conversations non lues et les
+    // demandes de message (`topBarCounts`, le même calcul que l'appli).
     unreadNotifications: counts.activity,
     unreadMessages: counts.messages,
     near: nearAccessOf(
@@ -77,9 +78,9 @@ const HREFS: Record<string, string> = {
   profile: "/app/moi",
 };
 
-/** Onglet actif d'après l'adresse ; la Boîte et le Journal sont une feuille au-dessus de l'écran, sans onglet. */
+/** Onglet actif d'après l'adresse ; l'Activité et les Messages sont une feuille au-dessus de l'écran, sans onglet. */
 function activeTab(pathname: string): string {
-  if (pathname.startsWith("/app/boite") || pathname.startsWith("/app/journal")) return "";
+  if (pathname.startsWith("/app/activite") || pathname.startsWith("/app/messages")) return "";
   if (pathname === "/app") return "home";
   // Lot R7a1 : Sorties (et ses suites : billets, vote, récap) est dans l'Accueil ; Garage et Passeport, dans le Profil.
   if (/^\/app\/(sorties|acces|billets|vote|recap)(\/|$)/.test(pathname)) return "home";
@@ -99,7 +100,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const revalidator = useRevalidator();
   const { setDepartment } = useTheme();
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
-  // Boîte et Journal en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
+  // Activité et Messages en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
   const announcements = useAnnouncements(loaderData.userId);
   useChannel(`user:${loaderData.userId}`, (m) => {
@@ -130,12 +131,11 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             className="app__bar"
             searchHref="/app/explorer?segment=resultats"
             searchOn={pathname.startsWith("/app/explorer") && /[?&](q=|segment=resultats)/.test(search)}
-            // Tant que le lot R7c2 n'existe pas : la cloche ouvre le Journal, la bulle la Boîte.
-            activityHref="/app/journal"
-            activityOn={pathname.startsWith("/app/journal")}
+            activityHref="/app/activite"
+            activityOn={pathname.startsWith("/app/activite")}
             activityCount={loaderData.unreadNotifications}
-            messagesHref="/app/boite"
-            messagesOn={pathname.startsWith("/app/boite")}
+            messagesHref="/app/messages"
+            messagesOn={pathname.startsWith("/app/messages")}
             messagesCount={loaderData.unreadMessages}
           />
         )}
