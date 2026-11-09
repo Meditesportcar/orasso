@@ -144,6 +144,8 @@
 }
 .fil-tag > span {
   display: block;
+  font-family: var(--font-narrow);
+  font-stretch: var(--stretch-narrow);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line);

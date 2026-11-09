@@ -53,7 +53,13 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
   useEffect(() => {
     if (!focused || refused) return;
     let stopped = false;
-    const check = () =>
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const check = () => {
+      // Affichage compté (ou écran quitté) : plus aucune mesure.
+      if (stopped) {
+        if (timer) clearInterval(timer);
+        return;
+      }
       ref.current?.measureInWindow((_x, y, _w, h) => {
         if (stopped) return;
         const count = (top: number, bottom: number) => {
@@ -71,8 +77,9 @@ export function SponsoredCard({ card, onMenu, faded, onRemoved }: CardProps<"spo
         if (assist) assist.visibleArea(count);
         else count(0, height);
       });
+    };
     check();
-    const timer = setInterval(check, 700);
+    timer = setInterval(check, 700);
     return () => {
       stopped = true;
       clearInterval(timer);

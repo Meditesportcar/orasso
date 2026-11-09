@@ -34,11 +34,12 @@ export const SPONSORED_MIN_INDEX = 3;
  * disparaît quand il y a moins de trois autres cartes. Les autres cartes gardent leur ordre.
  */
 export function sponsoredNotBeforeFourth(items: readonly FeedCard[]): FeedCard[] {
-  const early = items.filter((c, i) => i < SPONSORED_MIN_INDEX && c.kind === "sponsored");
-  if (!early.length) return [...items];
-  const rest = items.filter((c) => !early.includes(c));
-  if (rest.length < SPONSORED_MIN_INDEX) return rest;
-  return [...rest.slice(0, SPONSORED_MIN_INDEX), ...early, ...rest.slice(SPONSORED_MIN_INDEX)];
+  if (!items.some((c, i) => i < SPONSORED_MIN_INDEX && c.kind === "sponsored")) return [...items];
+  // Les trois premières places reviennent aux trois premières cartes non sponsorisées ; tout le reste suit dans son ordre
+  // (une 2e carte « Sponsorisé » qui remonterait à son tour ne passe donc jamais devant non plus).
+  const head = items.filter((c) => c.kind !== "sponsored").slice(0, SPONSORED_MIN_INDEX);
+  if (head.length < SPONSORED_MIN_INDEX) return head;
+  return [...head, ...items.filter((c) => !head.includes(c))];
 }
 
 /** Retire de la liste toutes les cartes « Sponsorisé » d'un emplacement (l'API l'a refusé : une carte, ou toutes ses reprises). */

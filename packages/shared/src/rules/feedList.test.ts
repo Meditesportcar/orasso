@@ -343,6 +343,10 @@ describe("la carte Sponsorisé jamais avant la 4e place (lot R7k2, tour 2)", () 
     const l = [post("a"), post("b"), ad("s"), post("d"), post("e"), post("f")];
     expect(ids(sponsoredNotBeforeFourth(l))).toEqual(["a", "b", "d", "s", "e", "f"]);
   });
+  it("deux cartes remontées ensemble ne passent jamais devant (relecture du tour 2)", () => {
+    const l = [post("a"), ad("s1"), post("b"), ad("s2", "pl2"), post("c"), post("d")];
+    expect(ids(sponsoredNotBeforeFourth(l))).toEqual(["a", "b", "c", "s1", "s2", "d"]);
+  });
   it("la fait disparaître quand il reste moins de trois autres cartes", () => {
     expect(ids(sponsoredNotBeforeFourth([post("a"), ad("s"), post("b")]))).toEqual(["a", "b"]);
     expect(ids(sponsoredNotBeforeFourth([ad("s")]))).toEqual([]);

@@ -241,9 +241,11 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 `body=${encodeURIComponent(L.reportAdBody(advertiserName, id))}`,
               ].join("&");
               // Sans appli de messagerie : l'adresse s'affiche en secours, sélectionnable.
-              void Linking.openURL(`mailto:${CONTACT_EMAIL}?${q}`).catch(() =>
-                setNotice(L.reportAdNoMail(CONTACT_EMAIL)),
-              );
+              // La carte est au moins en 4e place : on remonte en haut du Fil, où la note s'affiche.
+              void Linking.openURL(`mailto:${CONTACT_EMAIL}?${q}`).catch(() => {
+                setNotice(L.reportAdNoMail(CONTACT_EMAIL));
+                assist?.top();
+              });
             }
           }}
           onRemove={(card) => void remove(card)}
