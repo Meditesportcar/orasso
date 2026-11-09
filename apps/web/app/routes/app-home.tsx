@@ -62,9 +62,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const res = await api<HomeData>(request, `/me/home${params.size ? `?${params}` : ""}`);
   return {
     pseudo: me.profile.pseudo,
-    // Bandeau « où sont passées les choses » (lot R7a1) : une seule fois par compte (cookie `whatsnew_r7`, HMAC du compte) ;
+    // Bandeau « où sont passées les choses » (lot R7a1) : une seule fois par navigateur (cookie `whatsnew_r7=vu`) ;
     // le visiteur (sans véhicule) n'a pas de garage, sa variante n'en parle pas.
-    whatsNew: whatsNewSeen(request, me.user.id)
+    whatsNew: whatsNewSeen(request)
       ? null
       : me.personas.some((p) => p.kind === "visitor")
         ? ("visitor" as const)

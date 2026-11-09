@@ -13,7 +13,7 @@ export const navLabels = {
   },
   /**
    * Bandeau montré une seule fois après la mise à jour (clé `whatsnew:r7` par compte dans l'appli, cookie
-   * `whatsnew_r7` haché par compte sur le site).
+   * `whatsnew_r7=vu` par navigateur sur le site).
    */
   whatsNew: {
     title: "Orasso se range autrement",

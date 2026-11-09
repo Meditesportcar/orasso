@@ -158,7 +158,7 @@ export function JournalView({
       ) : null}
       <div className="s-row s-row--between">
         <h2 className="s-h2">{socialLabels.journal}</h2>
-        {unread > 0 && (
+        {unread > 0 && segments && (
           <Form method="post">
             <input type="hidden" name="intent" value="read_all" />
             <Button type="submit" variant="secondary" icon="check" loading={busy}>

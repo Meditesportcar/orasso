@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
 import { creerComptePastilles } from "./r7a1-pastilles";
 import { RELAIS } from "./relais";
 
@@ -134,6 +133,8 @@ test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la c
   await expect(page.locator(".s-convo")).toHaveCount(0);
   await expect(page.getByTestId("inbox-request")).toHaveCount(0);
   expect(await unread()).toBe(before);
+  // Tour 3 : comme l'appli, pas de « Tout marquer comme lu » sur Le Fil.
+  await expect(page.getByRole("button", { name: "Tout marquer comme lu" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
@@ -168,7 +169,7 @@ test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {
   await s.close();
 });
 
-test("le bandeau « où sont passées les choses » : vu une fois par compte, jamais deux", async ({ browser }) => {
+test("le bandeau « où sont passées les choses » : vu une fois par navigateur, jamais deux", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
@@ -193,36 +194,22 @@ test("le bandeau « où sont passées les choses » : vu une fois par compte, ja
   await expect(banner(page)).toHaveCount(0);
   const cookie = (await ctx.cookies()).find((c) => c.name === "whatsnew_r7");
   expect(cookie).toBeDefined();
-  // Un HMAC à clé secrète : ni l'identifiant du compte, ni son simple haché SHA-256 (recalculable de l'extérieur).
-  expect(cookie?.value).toMatch(/^[0-9a-f]{16}$/);
-  const me = await apiCall<{ user: { id: string } }>(await login("kenji@orasso.local"), "GET", "/me");
-  expect(cookie?.value).not.toContain(me.data.user.id);
-  const plain = createHash("sha256").update(`orasso-whatsnew-r7:${me.data.user.id}`).digest("hex").slice(0, 16);
-  expect(cookie?.value).not.toBe(plain);
+  // Tour 3 : un cookie de préférence `vu` par navigateur, sans identifiant de compte ni secret.
+  expect(cookie?.value).toBe("vu");
   await page.reload();
   await expect(banner(page)).toHaveCount(0);
 
-  // Un autre compte sur le même navigateur le voit à son tour ; le premier ne le revoit pas.
+  // Un autre compte sur le même navigateur ne le revoit pas (accepté : le cookie est par navigateur).
   await page.goto("/app/moi");
   await page.getByTestId("reglage-deconnexion").click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app"));
   await loginInBrowser(page, "lea@orasso.local", undefined, "/app");
   await page.goto("/app");
-  await expect(banner(page)).toBeVisible();
-  await page.getByTestId("whatsnew-dismiss").click();
-  await expect(banner(page)).toHaveCount(0);
-  const both = (await ctx.cookies()).find((c) => c.name === "whatsnew_r7");
-  expect(both?.value.split(".").length).toBe(2);
-  await page.goto("/app/moi");
-  await page.getByTestId("reglage-deconnexion").click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/app"));
-  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
-  await page.goto("/app");
   await expect(banner(page)).toHaveCount(0);
   await ctx.close();
 });
 
-test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans son Profil (l'exposant l'a)", async ({
+test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par un lien du Profil (l'exposant a la ligne « Mon garage »)", async ({
   browser,
 }) => {
   const ctx = await browser.newContext({ viewport: MOBILE });
@@ -236,7 +223,10 @@ test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans s
   await expect(banner(page)).not.toContainText("garage");
   await shot(page, "bandeau-visiteur-390");
   await page.goto("/app/moi");
-  await expect(page.getByTestId("garage-link")).toHaveCount(0);
+  // Tour 3 : le visiteur garde ses archives et son QR de compte, comme dans l'appli.
+  await expect(page.getByTestId("garage-archives-link")).toHaveText("Mes véhicules archivés et mon QR de compte");
+  await expect(page.getByTestId("garage-archives-link")).toHaveAttribute("href", "/app/garage");
+  await shot(page, "profil-visiteur-390");
   await ctx.close();
   // L'exposant (Kenji) : la ligne est là, comme dans l'appli.
   const k = await browser.newContext({ viewport: MOBILE });
@@ -244,6 +234,8 @@ test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans s
   await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app/moi");
   await kp.goto("/app/moi");
   await expect(kp.getByTestId("garage-link")).toBeVisible();
+  await expect(kp.getByTestId("garage-link")).toContainText("Tes véhicules et leurs photos");
+  await expect(kp.getByTestId("garage-archives-link")).toHaveCount(0);
   await k.close();
 });
 

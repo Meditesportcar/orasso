@@ -1,6 +1,16 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  createEvent,
+  login,
+  randomPlate,
+  SEED_PASSWORD,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { creerComptePastilles } from "./r7a1-pastilles";
 import { RELAIS } from "./relais";
 
@@ -210,6 +220,36 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await ctx.close();
 });
 
+test("Sorties → événement → « Ma candidature » → Sorties : pas d'empilement, le ✕ ramène à l'écran d'origine", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const orga = await login("damien@orasso.local");
+  const event = await createEvent(orga, { title: `Boucle R7a1 ${unique()}`.slice(0, 40), admission: "filtered" });
+  const pseudo = `Boucle${unique()}`.slice(0, 20);
+  const cookie = await signUpApi(pseudo);
+  await applyApi(cookie, event.id, await addVehicleApi(cookie, randomPlate()));
+  const { ctx, page } = await open(browser);
+  await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await afterOpening(page);
+  // Origine : le Profil, par le nombre « sorties ».
+  await go(page, "/profil");
+  await page.getByTestId("profil-count-sorties").click();
+  await page.waitForURL(/\/sorties/, { timeout: 15_000 });
+  // Sorties → l'événement (le titre du ticket) → « Ma candidature » → retour à Sorties, une seule fois dans la pile.
+  await page.getByTestId("ticket-application").first().getByText(event.title).first().click();
+  await page.waitForURL(/\/e\//, { timeout: 15_000 });
+  await page.getByTestId("event-primary").click();
+  await page.waitForURL(/\/sorties/, { timeout: 15_000 });
+  await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 30_000 });
+  await shot(page, "boucle-sorties-retour");
+  // Le ✕ ramène au Profil (écran d'origine), pas à l'événement ni à une seconde page Sorties.
+  await page.getByTestId("appbar-close").first().click();
+  await page.waitForURL(/\/profil/, { timeout: 15_000 });
+  await expect(page.getByTestId("profil-count-sorties")).toBeVisible();
+  await ctx.close();
+});
+
 test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) => {
   test.setTimeout(300_000);
   // Kenji (chef de Roussillon Drift) : Le Fil montre le Journal sous son titre ; Crew ouvre la page de son crew.
@@ -288,7 +328,9 @@ test("le bandeau « où sont passées les choses » : vu une fois par compte, ja
   await ctx.close();
 });
 
-test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans son Profil", async ({ browser }) => {
+test("le visiteur : bandeau sans le Garage, pas de ligne « Mon garage » dans son Profil (ses archives restent joignables)", async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
   const pseudo = `Visiteur_${unique()}`;
   await signUpApi(pseudo);
