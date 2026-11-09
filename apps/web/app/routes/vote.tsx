@@ -3,21 +3,16 @@
 // règles sont toutes dans l'API (lot 49) : ici, la grille des véhicules pointés, le vote et le classement.
 import { Button, Chip, Plate } from "@orasso/design-system/web";
 import {
-  type AudienceCandidate,
-  type AudienceCandidates,
-  type AudiencePrizeBoard,
-  type AudiencePrizeMine,
   audiencePrizeTexts,
-  type EventPublic,
   runAtDeadline,
   voteScreenTexts,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { data, Form, redirect, useNavigation, useRevalidator } from "react-router";
+import { Form, useNavigation, useRevalidator } from "react-router";
 
-import { api, apiOrThrow, loginUrl, requireMe, safeReturn } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
+import { loadVote, voteAction } from "../lib/vote.server";
 import "../styles/passport.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/vote";
@@ -27,75 +22,36 @@ export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [
-    { title: `${audiencePrizeTexts.title}${d ? ` · ${d.event.title}` : ""} · Orasso` },
+    { title: `${audiencePrizeTexts.title}${d?.event ? ` · ${d.event.title}` : ""} · Orasso` },
     { name: "robots", content: "noindex" },
   ];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
-  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app/sorties");
-  await requireMe(request);
-  const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
-  // Lot R7-0 (tour 2) : le classement n'est servi qu'après la voix ; s'il ne se relit pas après un vote réussi (panne,
-  // réseau), la page le dit avec « Réessayer » au lieu de tomber dans l'écran d'erreur ou de rester vide.
-  const [boardRes, mine] = await Promise.all([
-    api<AudiencePrizeBoard>(request, `/events/${event.id}/audience-prize`),
-    apiOrThrow<AudiencePrizeMine>(request, `/events/${event.id}/audience-prize/mine`),
-  ]);
-  // Connexion perdue ou événement hors de portée : les écrans d'erreur habituels ; une panne (5xx, réseau, 429) : la page.
-  if (!boardRes.ok && boardRes.status === 401) throw redirect(loginUrl(request));
-  if (!boardRes.ok && boardRes.status >= 400 && boardRes.status < 500 && boardRes.status !== 429) {
-    throw new Response(boardRes.error.message, { status: boardRes.status, statusText: boardRes.error.message });
-  }
-  const board = boardRes.ok ? boardRes.data : null;
-  // La grille : tous les véhicules pointés (pages de l'API), dans un ordre stable sans rapport avec le classement.
-  const candidates: AudienceCandidate[] = [];
-  let cursor: number | null = 0;
-  for (let guard = 0; cursor !== null && guard < 20; guard++) {
-    const res: Awaited<ReturnType<typeof api<AudienceCandidates>>> = await api<AudienceCandidates>(
-      request,
-      `/events/${event.id}/audience-prize/candidates?cursor=${cursor}`,
-    );
-    if (!res.ok) break;
-    candidates.push(...res.data.items);
-    cursor = res.data.next;
-  }
-  candidates.sort((a, b) => a.applicationId.localeCompare(b.applicationId));
-  return {
-    back,
-    event: { id: event.id, slug: event.slug, title: event.title },
-    board,
-    mine,
-    candidates,
-  };
+  return loadVote(request, params.slug);
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const form = await request.formData();
-  const eventId = String(form.get("eventId") ?? "");
-  const res = await api(request, `/events/${encodeURIComponent(eventId)}/audience-prize/vote`, {
-    method: "PUT",
-    json: { applicationId: String(form.get("applicationId") ?? "") },
-  });
-  if (!res.ok) return data({ error: res.error.message, ok: false }, { status: res.status });
-  return data({ error: null, ok: true });
+  return voteAction(request);
 }
 
 export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, board, mine, candidates } = loaderData;
+  const { event, board, candidates } = loaderData;
+  const mine = loaderData.mine;
   const busy = useNavigation().state !== "idle";
   const revalidator = useRevalidator();
   const [liveTotal, setLiveTotal] = useState(board?.total ?? 0);
   useEffect(() => setLiveTotal(board?.total ?? 0), [board?.total]);
   // Clôture du vote (lot R7-0, tour 2) : à l'échéance, le classement et le droit de voter changent ; la page se relit sans
   // attendre un message du serveur.
-  const closesAt = board?.closesAt ?? mine.closesAt;
+  // Lot R7-0, tour 3 : la voix qui vient de réussir (réponse de l'API) sert tant que la relecture n'est pas revenue.
+  const justVoted = actionData?.ok ? actionData.mine : null;
+  const closesAt = board?.closesAt ?? mine?.closesAt ?? justVoted?.closesAt ?? null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `revalidate` change d'identité à chaque rendu ; seule l'échéance relance la minuterie
   useEffect(
     () =>
       runAtDeadline(
-        new Date(closesAt),
+        closesAt ? new Date(closesAt) : null,
         () => void revalidator.revalidate(),
         () => new Date(nowMs()),
       ),
@@ -104,7 +60,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
   // qui revient après une coupure la recharge aussi (relecture du lot 57).
   const { connected } = useLiveRevalidate(
-    `event:${event.id}:votes`,
+    event ? `event:${event.id}:votes` : null,
     (m) => m.type === "votes.changed" || m.type === "votes.candidates.changed",
     {
       onMessage: (m) => {
@@ -114,17 +70,20 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
     },
   );
 
-  if (!board) {
+  // Relecture impossible (panne passagère) : la confirmation de la voix reste affichée avec « Réessayer » ; jamais un
+  // retour à la connexion ni un écran d'erreur pour une panne.
+  if (!board || !mine || !event) {
+    const voted = mine?.votedFor ? mine : justVoted;
     return (
       <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-        <FicheBar title={audiencePrizeTexts.title} facts={event.title} back={loaderData.back} />
-        {mine.votedFor && (
+        <FicheBar title={audiencePrizeTexts.title} facts={event?.title} back={loaderData.back} />
+        {voted?.votedFor && (
           <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-            {voteScreenTexts.saved(new Date(mine.closesAt), new Date(nowMs()))}
+            {voteScreenTexts.saved(new Date(voted.closesAt), new Date(nowMs()))}
           </p>
         )}
         <p className="s-error" role="alert" data-testid="vote-ranking-failed">
-          {mine.votedFor ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
+          {voted?.votedFor ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
         </p>
         <Button
           variant="secondary"
@@ -134,7 +93,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         >
           {voteScreenTexts.retry}
         </Button>
-        <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
+        <Button variant="secondary" icon="calendar" href={`/e/${event?.slug ?? loaderData.slug}`}>
           Voir l'événement
         </Button>
       </div>
