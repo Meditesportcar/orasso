@@ -371,13 +371,13 @@ for (const kind of Object.keys(ACCOUNTS) as Kind[]) {
   });
 }
 
-test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de compte)", async ({ browser }) => {
+test("feuilles : au-dessus de la bande ORASSO et de la barre (Activité, Mon QR de compte)", async ({ browser }) => {
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
   for (const theme of ["beton", "sable"] as const) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, ACCOUNTS.fan);
-    // La Boîte, ouverte par la bande : une feuille par-dessus l'écran.
+    // L'Activité (la cloche), ouverte par la bande : un écran plein par-dessus l'écran (plus une feuille transparente depuis R7c2), sans bande ni barre visibles.
     await page
       .getByRole("button", { name: /^Activité/ })
       .first()
@@ -386,8 +386,8 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
     await expect(page.getByRole("heading", { name: "Activité", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(600);
     let top = await onTop(page, CHROME);
-    expect.soft(top["topbar-logo"], "Boîte : la bande est sous la feuille").toBe(0);
-    expect.soft(top["persona-tabbar"], "Boîte : la barre est sous la feuille").toBe(0);
+    expect.soft(top["topbar-logo"], "Activité : la bande est sous l'écran").toBe(0);
+    expect.soft(top["persona-tabbar"], "Activité : la barre est sous l'écran").toBe(0);
     await shot(page, `feuille-activite-${theme}`);
     // Une feuille d'un onglet : Mon QR de compte, depuis Mon profil.
     await page.goto("/moi");
@@ -490,7 +490,7 @@ test("glissement entre onglets : seule la page glisse, la bande ORASSO ne bouge 
   await page.mouse.down();
   for (let i = 1; i <= 12; i++) await page.mouse.move(320 + ((60 - 320) * i) / 12, 112 + i * 0.2);
   await page.mouse.up();
-  // Pendant que la page qui arrive se gare (220 ms), la bande reste à la même place.
+  // Pendant que la page qui arrive se gare (220 ms), la bande reste à la même place. (Depuis R7a1, le glissement vers la gauche depuis Accueil mène à Crew, plus à Garage.)
   const seen: { x: number; y: number }[] = [];
   for (let i = 0; i < 12; i++) {
     const box = await page
@@ -502,7 +502,7 @@ test("glissement entre onglets : seule la page glisse, la bande ORASSO ne bouge 
     if (box) seen.push({ x: box.x, y: box.y });
     await page.waitForTimeout(30);
   }
-  await page.waitForURL(/\/garage/, { timeout: 15_000 });
+  await page.waitForURL(/\/crew/, { timeout: 15_000 });
   expect(seen.length, "bande visible pendant le glissement").toBeGreaterThan(0);
   for (const p of seen) expect(p, "la bande n'a pas bougé").toEqual({ x: before?.x, y: before?.y });
   const after = await page.getByTestId("topbar-logo").filter({ visible: true }).first().boundingBox();
