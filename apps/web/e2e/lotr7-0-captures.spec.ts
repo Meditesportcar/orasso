@@ -39,7 +39,7 @@ async function afterOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function appContext(browser: Browser, theme: Theme, width: number, scale: number) {
+async function appContext(browser: Browser, theme: Theme, width: number, scale: number, email = "damien@orasso.local") {
   const ctx = await browser.newContext({
     viewport: { width, height: 860 },
     baseURL: APP,
@@ -58,16 +58,23 @@ async function appContext(browser: Browser, theme: Theme, width: number, scale: 
   const page = await ctx.newPage();
   await page.goto("/auth");
   await afterOpening(page);
-  await page.getByLabel("E-mail").fill("damien@orasso.local");
+  await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil|explorer|sorties|profil/, { timeout: 60_000 });
   return { ctx, page };
 }
 
-async function snap(page: Page, path: string, name: string, full = false) {
+async function snap(page: Page, path: string, name: string, full = false, waitFor?: string) {
   await page.goto(path);
   await afterOpening(page).catch(() => undefined);
+  // Jour J, billet, stand : on attend le QR (kit chargé), l'écran « pas encore enregistré » ne prouve rien.
+  if (waitFor)
+    await page
+      .getByTestId(waitFor)
+      .first()
+      .waitFor({ timeout: 45_000 })
+      .catch(() => undefined);
   await page.waitForTimeout(2500);
   mkdirSync(`${DIR}`, { recursive: true });
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: full });
@@ -86,17 +93,48 @@ test("captures de l'appli", async ({ browser }) => {
     for (const [width, scale] of variants) {
       const { ctx, page } = await appContext(browser, theme, width, scale);
       const tag = `appli-${width}-x${String(scale).replace(".", "")}-${theme}`;
-      for (const [path, name] of [
+      for (const [path, name, waitFor] of [
         ["/accueil", "accueil"],
         ["/sorties", "sorties"],
         [`/e/${SLUG}`, "fiche"],
-        [`/jour-j/${appId}`, "jour-j"],
+        [`/jour-j/${appId}`, "jour-j", "qr-poster"],
         ["/mon-passeport", "passeport"],
         [`/vote/${id}`, "vote"],
-      ] as const) {
-        await snap(page, path, `${tag}-${name}`);
+      ] as readonly (readonly [string, string, string?])[]) {
+        await snap(page, path, `${tag}-${name}`, false, waitFor);
       }
       await ctx.close();
+    }
+  }
+});
+
+// Billet (billet/[id]), billets, stand du prestataire (stand/[id]) : les écrans dont le QR devient crème en Sable.
+test("captures billets et stand", async ({ browser }) => {
+  test.skip(!APP, "Appli : lancer avec APP_URL");
+  const kenji = await login("kenji@orasso.local");
+  const tickets = await apiCall<{ id: string }[]>(kenji, "GET", "/me/tickets");
+  const sofia = await login("sofia@orasso.local");
+  const prov = await apiCall<{ id: string; status: string }[]>(
+    sofia,
+    "GET",
+    "/me/provider-applications?scope=upcoming",
+  );
+  const standId = prov.data.find((a) => a.status === "accepted")?.id;
+  for (const theme of THEMES) {
+    for (const [width, scale] of [
+      [384, 1],
+      [384, 1.3],
+    ] as [number, number][]) {
+      const tag = `appli-${width}-x${String(scale).replace(".", "")}-${theme}`;
+      const k = await appContext(browser, theme, width, scale, "kenji@orasso.local");
+      await snap(k.page, "/billets", `${tag}-billets`);
+      if (tickets.data[0]) await snap(k.page, `/billet/${tickets.data[0].id}`, `${tag}-billet`, false, "qr-poster");
+      await k.ctx.close();
+      if (standId) {
+        const s = await appContext(browser, theme, width, scale, "sofia@orasso.local");
+        await snap(s.page, `/stand/${standId}`, `${tag}-stand`, false, "qr-poster");
+        await s.ctx.close();
+      }
     }
   }
 });

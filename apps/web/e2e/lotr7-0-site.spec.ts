@@ -52,7 +52,7 @@ test("Nina_34, entrée la veille : l'entrée vaut jusqu'à la fin, le QR reste e
   await signIn(page, "nina@orasso.local", "beton");
   await page.goto("/app/sorties");
   const entered = page.getByTestId("pass-entered").first();
-  await expect(entered).toContainText(/Entré \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/);
+  await expect(entered).toContainText(/Entrée \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/);
   await expect(entered).toContainText("pour un contrôle");
   await expect(page.getByTestId("pass-qr").first()).toBeVisible();
 });

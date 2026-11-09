@@ -4,8 +4,9 @@
 // bloquées sur cet écran.
 import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { StyleSheet, useWindowDimensions } from "react-native";
-
+import { useState } from "react";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { fitWideTitleSize } from "@/features/home/fit";
 import { CaptureNote, HowItWorks, useBlockCapture } from "@/features/jour-j/QrExtras";
 import { QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
@@ -22,7 +23,9 @@ export default function StandQr() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  // Le titre ne se coupe qu'entre deux mots (lot R7-0, tour 2) : sa taille suit son mot le plus large.
+  const [headW, setHeadW] = useState(0);
   const { id } = useLocalSearchParams<{ id: string }>();
   const pass = useApi(() => api.pass(id), [id], { cacheKey: `stand-pass-${id}` });
   const apps = useApi(() => api.providerApplications("upcoming"), [], { cacheKey: "provider-applications" });
@@ -38,9 +41,18 @@ export default function StandQr() {
     <FlowScreen title="Mon QR de stand" onClose={close} still>
       {app ? (
         <Plate style={styles.head}>
-          <Text variant="posterXl" color={c.plateInk}>
-            {app.event.title}
-          </Text>
+          <View onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
+            <Text
+              variant="posterXl"
+              color={c.plateInk}
+              style={(() => {
+                const size = fitWideTitleSize(app.event.title, headW, fontScale, tokens.type.posterXl.fontSize, 14);
+                return { fontSize: size, lineHeight: Math.round(size * 0.9) };
+              })()}
+            >
+              {app.event.title}
+            </Text>
+          </View>
           <Text variant="body" color={c.plateMuted}>
             {formatDayHour(app.event.startsAt)}
             {profile.data ? ` · ${profile.data.name}` : ""}

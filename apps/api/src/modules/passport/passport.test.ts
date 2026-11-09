@@ -521,7 +521,10 @@ describe("prix du public", () => {
     await db.insert(eventStaff).values({ eventId, userId: julie.id }).onConflictDoNothing();
     const tom = await signUp("Tom_66");
     await addMember(structureId, tom.id, "staff", ["scan"]);
-    await db.delete(eventStaff).where(and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, tom.id)));
+    // Les lectures du staff recréent les lignes manquantes (choix C25) : on retire celle de Tom avant chaque vérification.
+    const tomAway = () =>
+      db.delete(eventStaff).where(and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, tom.id)));
+    await tomAway();
     const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
     expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
 
@@ -540,6 +543,7 @@ describe("prix du public", () => {
     await shown(coOrga); // co-organisateur qui n'a pas voté
     await shown(julie); // staff affecté à cet événement
     await covered(p.marc.u); // n'a pas voté (ni pu)
+    await tomAway();
     await covered(tom); // staff d'un autre événement de la structure
     await covered(admin); // super admin sans demande d'aide ouverte
     await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
@@ -549,6 +553,7 @@ describe("prix du public", () => {
     expect((await vote(p.nina.u, p.lea.applicationId)).status).toBe(200);
     expect((await hidden(p.nina.u)).rankingHidden).toBe(false);
     expect((await hidden(p.marc.u)).rankingHidden).toBe(true);
+    await tomAway();
     expect((await hidden(tom)).rankingHidden).toBe(true);
     // Clôture : tout le monde, y compris le staff d'un autre événement.
     clock.set(ENDS);

@@ -7,9 +7,10 @@
 
 import { Plate, Text, useTheme } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, wallTime, yearToShow } from "@orasso/shared";
-import { createContext, type ReactNode, useContext } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { createContext, type ReactNode, useContext, useState } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { fitWideTitleSize } from "@/features/home/fit";
 import { now } from "@/lib/clock";
 
 const WEEKDAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
@@ -61,6 +62,10 @@ export function Ticket({
 }: TicketProps) {
   const { t } = useTheme();
   const c = t.color;
+  // Le titre ne se coupe qu'entre deux mots (lot R7-0, tour 2) : son corps suit le mot le plus large, police du système comprise.
+  const { fontScale } = useWindowDimensions();
+  const [bodyW, setBodyW] = useState(0);
+  const titleSize = fitWideTitleSize(title, bodyW, fontScale, styles.title.fontSize, 8);
   const w = wallTime(new Date(date), BUSINESS_TIMEZONE);
   const weekday = WEEKDAYS[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()];
   const year = yearToShow(date, now(), BUSINESS_TIMEZONE);
@@ -100,12 +105,17 @@ export function Ticket({
           </View>
         ) : null}
         <Pressable
+          onLayout={(e) => setBodyW(e.nativeEvent.layout.width)}
           onPress={onPressTitle ?? onPress}
           disabled={!(onPressTitle ?? onPress)}
           accessibilityRole={onPressTitle || onPress ? "link" : undefined}
           accessibilityLabel={onPressTitle || onPress ? `${title} : ouvrir la fiche` : undefined}
         >
-          <Text variant="posterS" color={dim ? muted : ink} style={styles.title}>
+          <Text
+            variant="posterS"
+            color={dim ? muted : ink}
+            style={[styles.title, { fontSize: titleSize, lineHeight: Math.round(titleSize * 1.07) }]}
+          >
             {title}
           </Text>
         </Pressable>

@@ -125,7 +125,7 @@ test("Mon accès suit le thème, la carte du QR reste crème ; entré la veille,
     // Entrée de la veille : « Entrée enregistrée », « Entrée … · accès jusqu'au … », et le QR en second.
     await expect(page.getByTestId("jourj-entered")).toContainText("Entrée enregistrée");
     await expect(page.getByTestId("jourj-entered")).toContainText(
-      /Entré \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/,
+      /Entrée \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/,
     );
     await expect(page.getByTestId("jourj-reentry")).toContainText("pour un contrôle");
     await expect(page.getByTestId("qr-say")).toContainText("Seulement si on te le demande");
@@ -153,21 +153,33 @@ test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessa
   const place = await myPlace("nina@orasso.local");
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, "nina@orasso.local");
-  // La relecture du classement (GET, sans suffixe) échoue tant que la route est posée ; le vote (PUT) passe.
+  // Avant le vote, l'API ne sert pas le classement (rankingHidden) : on le simule sur la lecture d'ouverture (Nina a déjà
+  // voté si la recette est relancée), puis la relecture qui suit le vote échoue (500) tant que la route est posée.
   const board = /\/events\/[^/]+\/audience-prize$/;
-  const failing = (route: import("@playwright/test").Route) =>
-    route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback();
+  let failing = false;
+  const hideOrFail = async (route: import("@playwright/test").Route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (failing) return route.fulfill({ status: 500, body: "{}" });
+    const res = await route.fetch();
+    const json = await res.json();
+    return route.fulfill({ response: res, json: { ...json, rankingHidden: true, entries: [], winner: null } });
+  };
+  await page.route(board, hideOrFail);
   await page.goto(`/vote/${place.event.id}`);
   await afterOpening(page);
-  await expect(page.getByTestId("vote-grid")).toBeVisible({ timeout: 45_000 });
-  await page.route(board, failing);
+  // Déjà voté (relance de la recette) : on rouvre la grille pour changer de voiture.
+  const change = page.getByTestId("vote-change");
+  await expect(change.or(page.getByTestId("vote-grid"))).toBeVisible({ timeout: 45_000 });
+  if (await change.isVisible()) await change.click();
+  await expect(page.getByTestId("vote-grid")).toBeVisible();
+  failing = true;
   // Une voiture qui n'est pas la sienne (la grille grise la sienne).
   await page.getByTestId("vote-card").first().click();
   await page.getByTestId("vote-cta").click();
   await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("vote-ranking-failed")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("vote-board")).toHaveCount(0);
-  await page.unroute(board, failing);
+  await page.unroute(board, hideOrFail);
   await page.getByTestId("vote-ranking-retry").click();
   await expect(page.getByTestId("vote-board")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0);
