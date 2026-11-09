@@ -28,6 +28,7 @@ import {
   tabHref,
 } from "./personaModel";
 import { useSession } from "./session";
+import { openStandalone } from "./standalone";
 
 const KEY = "persona";
 
@@ -126,9 +127,9 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
       if (own) {
         // Lot R7a1 : une page qui n'est plus un onglet (Sorties, Garage) s'ouvre par-dessus la barre, avec son retour.
         // Tour 2 : si elle est déjà dans la pile (Sorties → événement → « Ma candidature » → Sorties), on y revient
-        // (`dismissTo`) au lieu d'en empiler une seconde.
+        // au lieu d'en empiler une seconde (`openStandalone`).
         if (tabHref(persona.kind, route)) router.navigate(own as never);
-        else router.dismissTo(own as never);
+        else openStandalone(router, own);
         return;
       }
       const fallback = destinationHref(base.kind, route);

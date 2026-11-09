@@ -216,18 +216,9 @@ test("Le Fil (coquille) et Crew : avec un crew, sans crew", async ({ browser }) 
   const k = await open(browser);
   await signIn(k.page, "kenji@orasso.local");
   await afterOpening(k.page);
-  // Tour 2 : Le Fil ne marque rien comme lu (la cloche garde sa pastille), même après un glissement.
-  const kCookie = await login("kenji@orasso.local");
-  const unread = async () =>
-    (await apiCall<{ counts: { unreadNotifications: number } }>(kCookie, "GET", "/me")).data.counts.unreadNotifications;
-  const before = await unread();
-  expect(before).toBeGreaterThan(0);
   await k.page.getByRole("tab", { name: "Le Fil", exact: true }).click();
   await expect(k.page.getByRole("heading", { name: "Le Fil", exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await expect(k.page.getByText("arrive bientôt")).toBeVisible();
-  await expect(k.page.getByTestId("journal-item").first()).toBeVisible({ timeout: 30_000 });
-  await k.page.waitForTimeout(3_000);
-  expect(await unread()).toBe(before);
   await shot(k.page, "fil-kenji");
   await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
   await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
@@ -336,5 +327,30 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
     timeout: 30_000,
   });
   await shot(page, "pastilles-conversation");
+  await ctx.close();
+});
+
+test("Le Fil ne marque rien comme lu, et se met à jour à la notification reçue", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const compte = await creerComptePastilles();
+  const cookie = await login(compte.email);
+  const unread = async () =>
+    (await apiCall<{ counts: { unreadNotifications: number } }>(cookie, "GET", "/me")).data.counts.unreadNotifications;
+  await compte.ajouterNotificationNonLue();
+  const { ctx, page } = await open(browser);
+  await signIn(page, compte.email);
+  await afterOpening(page);
+  const before = await unread();
+  expect(before).toBeGreaterThan(0);
+  await page.getByRole("tab", { name: "Le Fil", exact: true }).click();
+  await expect(page.getByTestId("journal-item").first()).toBeVisible({ timeout: 30_000 });
+  const rows = await page.getByTestId("journal-item").count();
+  await page.waitForTimeout(3_000);
+  expect(await unread()).toBe(before);
+  // Une notification arrive pendant que Le Fil est ouvert : la liste se relit, et rien n'est marqué non plus.
+  await compte.ajouterNotificationNonLue();
+  await expect(page.getByTestId("journal-item")).toHaveCount(rows + 1, { timeout: 30_000 });
+  await page.waitForTimeout(2_000);
+  expect(await unread()).toBe(before + 1);
   await ctx.close();
 });

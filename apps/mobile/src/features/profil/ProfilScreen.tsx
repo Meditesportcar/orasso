@@ -32,6 +32,7 @@ import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
 import { isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
+import { openStandalone } from "@/lib/standalone";
 import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
@@ -225,7 +226,7 @@ export function ProfilScreen() {
           lead={<RowIcon name="vehicle" />}
           title={navLabels.garageRow.title}
           caption={navLabels.garageRow.caption}
-          onPress={() => router.dismissTo("/garage")}
+          onPress={() => openStandalone(router, "/garage")}
           testID="profil-garage"
         />
       ) : null}

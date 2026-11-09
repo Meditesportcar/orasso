@@ -49,6 +49,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { openStandalone } from "@/lib/standalone";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { NotificationAsk } from "@/ui/NotificationAsk";
@@ -336,7 +337,7 @@ export function CandSheet({
             icon="ticket"
             onPress={() => {
               closeAll();
-              router.dismissTo("/sorties");
+              openStandalone(router, "/sorties");
             }}
             testID="cand-sorties"
           >

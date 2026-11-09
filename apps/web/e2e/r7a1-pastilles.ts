@@ -9,6 +9,8 @@ export type PastilleCompte = {
   email: string;
   cookie: string;
   summary: () => Promise<{ unreadMessages: number; requests: Record<string, number> }>;
+  /** Une notification non lue de plus (une demande de contact d'une nouvelle personne ; un abonnement se regroupe). */
+  ajouterNotificationNonLue: () => Promise<void>;
   /** Une conversation avec un message non lu (la personne qui écrit est suivie par le compte). */
   ajouterConversationNonLue: () => Promise<void>;
 };
@@ -34,6 +36,11 @@ export async function creerComptePastilles(): Promise<PastilleCompte> {
     email,
     cookie,
     summary,
+    async ajouterNotificationNonLue() {
+      const asker = await signUpApi(`Dora_${unique()}`);
+      const res = await apiCall(asker, "POST", "/contact-requests", { pseudo, message: "Salut" });
+      expect(res.status).toBeLessThan(300);
+    },
     async ajouterConversationNonLue() {
       const other = `Cyril_${s}`;
       const otherCookie = await signUpApi(other);

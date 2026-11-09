@@ -2697,8 +2697,10 @@
 /* Bandeau « où sont passées les choses » (lot R7a1, tour 2) : le texte à gauche, le ✕ à droite (maquette R7.1). */
 .s-whatsnew {
   align-items: flex-start;
+  flex-wrap: nowrap;
 }
 .s-whatsnew__text {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;

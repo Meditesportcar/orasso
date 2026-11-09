@@ -118,7 +118,9 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
 test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la cloche mène au Journal", async ({
   page,
 }) => {
-  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+  const compte = await creerComptePastilles();
+  await compte.ajouterNotificationNonLue();
+  await loginInBrowser(page, compte.email, undefined, "/app");
   const unread = async () =>
     ((await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } }).counts
       .unreadNotifications;
@@ -128,6 +130,7 @@ test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la c
   await expect(page.getByRole("heading", { name: "Le Fil", exact: true })).toBeVisible();
   await expect(page.getByTestId("journal")).toBeVisible();
   // Comme l'appli : les notifications seules (ni conversations ni demandes), et la page ne marque rien comme lu.
+  await expect(page.getByTestId("journal-item").first()).toBeVisible();
   await expect(page.locator(".s-convo")).toHaveCount(0);
   await expect(page.getByTestId("inbox-request")).toHaveCount(0);
   expect(await unread()).toBe(before);
