@@ -19,7 +19,7 @@ import {
   seasonYear,
   type UserProfileView,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, events, passportStamps, seasons, structures, user, vehicles } from "../../db/schema";
@@ -254,19 +254,23 @@ async function seenAtOf(userId: string, at: Date): Promise<{ events: number; sta
   };
 }
 
-/** Sorties d'une personne : retenue à un événement publié (hors invitation), à venir ou fini depuis moins d'un an. */
-export async function outingsCount(userId: string, at: Date = now()): Promise<number> {
+/**
+ * Sorties d'une personne (lot R7b1, tour 2, relecture Codex 4) : le nombre d'événements distincts attestés par un tampon de
+ * participation ou de visite (billet scanné, GPS) à un événement publié, hors invitation. Une candidature retenue sans
+ * tampon (à venir, ou jamais venu) ne compte pas ; deux véhicules au même événement font une seule sortie. Même règle pour
+ * `/me/network` et les profils : ce nombre ouvre le panneau des tampons.
+ */
+export async function outingsCount(userId: string): Promise<number> {
   const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(applications)
-    .innerJoin(events, eq(events.id, applications.eventId))
+    .select({ n: sql<number>`count(distinct ${passportStamps.eventId})::int` })
+    .from(passportStamps)
+    .innerJoin(events, eq(events.id, passportStamps.eventId))
     .where(
       and(
-        eq(applications.userId, userId),
-        eq(applications.status, "accepted"),
+        eq(passportStamps.userId, userId),
+        inArray(passportStamps.kind, ["participation", "visit"]),
         eq(events.status, "published"),
         ne(events.admission, "invite_only"),
-        gte(events.endsAt, new Date(at.getTime() - 365 * DAY)),
       ),
     );
   return row?.n ?? 0;
@@ -359,7 +363,7 @@ export const socialProfile = {
       visibility: target.visibility,
       bio: fields.bio ? target.bio : null,
       departments: fields.departments ? target.departments : null,
-      outingsCount: showCounts ? await outingsCount(target.userId, at) : null,
+      outingsCount: showCounts ? await outingsCount(target.userId) : null,
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
       pastEvents: fields.pastEvents && ev ? ev.past : null,

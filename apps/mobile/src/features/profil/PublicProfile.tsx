@@ -346,7 +346,7 @@ export function PublicProfile({
           />
         </View>
         <View style={styles.actCell}>
-          <MessageButton userId={p.userId} pseudo={p.pseudo} fullWidth />
+          <MessageButton userId={p.userId} pseudo={p.pseudo} fullWidth sheetInOverlay />
         </View>
       </View>
     );

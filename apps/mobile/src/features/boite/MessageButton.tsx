@@ -8,6 +8,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { Notice } from "@/ui/Notice";
+import { Overlay } from "@/ui/Overlay";
 
 import { ContactRequestSheet } from "./ContactRequestSheet";
 
@@ -15,11 +16,17 @@ export function MessageButton({
   userId,
   pseudo,
   fullWidth = false,
+  sheetInOverlay = false,
 }: {
   userId: string;
   pseudo: string;
   /** Lot R7b1 : le bouton remplit sa cellule (profil d'un autre : « Suivre » et « Message » côte à côte). */
   fullWidth?: boolean;
+  /**
+   * Lot R7b1, tour 2 (relecture Codex 1) : la feuille « Demande de contact » est posée dans la zone des feuilles de l'écran
+   * (`<Overlay>`) : rendue dans la cellule du bouton, elle serait rognée à la largeur de la cellule.
+   */
+  sheetInOverlay?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -50,7 +57,13 @@ export function MessageButton({
         {messagingLabels.message}
       </Button>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <ContactRequestSheet pseudo={contact ? pseudo : null} onClose={() => setContact(false)} />
+      {sheetInOverlay ? (
+        <Overlay>
+          <ContactRequestSheet pseudo={contact ? pseudo : null} onClose={() => setContact(false)} />
+        </Overlay>
+      ) : (
+        <ContactRequestSheet pseudo={contact ? pseudo : null} onClose={() => setContact(false)} />
+      )}
     </>
   );
 }

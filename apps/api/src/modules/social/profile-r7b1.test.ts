@@ -19,7 +19,7 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, profiles, userFollows } from "../../db/schema";
+import { applications, passportStamps, profiles, seasons, userFollows } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -211,5 +211,68 @@ describe("photos de véhicule : seulement à plaque floutée, pour chaque regard
       [b.id, true],
       [a.id, false],
     ]);
+  });
+});
+
+// Relecture Codex 4 (tour 2) : « Sorties » = les événements distincts attestés par un tampon de participation ou de visite.
+describe("le nombre « Sorties » compte les événements attestés par un tampon", () => {
+  it("deux véhicules au même événement = 1 ; visite (billet ou GPS) comptée ; candidature future ou sans tampon non ; même nombre partout", async () => {
+    const me = await person("Sorties_R7b1");
+    const viewer = await person("Lecteur2_R7b1");
+    const orga = await person("OrgaS_R7b1");
+    const structure = await createStructure(orga.id);
+    const [season] = await db
+      .insert(seasons)
+      .values({ name: "Saison 2026", startsOn: "2026-01-01", endsOn: "2026-12-31" })
+      .onConflictDoNothing()
+      .returning();
+    const seasonId =
+      season?.id ?? (await db.query.seasons.findFirst({ where: eq(seasons.startsOn, "2026-01-01") }))!.id;
+    const past = (days: number) => new Date(Date.now() - days * 86_400_000);
+    const stamp = (eventId: string, kind: "participation" | "visit") =>
+      db.insert(passportStamps).values({
+        userId: me.id,
+        eventId,
+        seasonId,
+        kind,
+        shape: "round",
+        ink: "default",
+        seed: 1,
+        stampedAt: new Date(),
+      });
+    const accept = (eventId: string, vehicleId: string) =>
+      db.insert(applications).values({
+        eventId,
+        userId: me.id,
+        vehicleId,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    const v1 = await createVehicle(me.id, ref);
+    const v2 = await createVehicle(me.id, ref);
+
+    // A : deux véhicules retenus au même événement fini, un seul tampon de participation = 1 sortie.
+    const a = await createEvent(structure.id, { startsAt: past(20), endsAt: past(19) });
+    await accept(a.id, v1.id);
+    await accept(a.id, v2.id);
+    await stamp(a.id, "participation");
+    // B : visiteur (billet ou GPS), jamais candidat = compté.
+    const b = await createEvent(structure.id, { startsAt: past(10), endsAt: past(9) });
+    await stamp(b.id, "visit");
+    // C : participation ET visite au même événement = une seule sortie.
+    const c = await createEvent(structure.id, { startsAt: past(5), endsAt: past(4) });
+    await stamp(c.id, "participation");
+    await stamp(c.id, "visit");
+    // D : candidature retenue à un événement futur, sans tampon = non.
+    const d = await createEvent(structure.id);
+    await accept(d.id, v1.id);
+    // E : retenue à un événement fini mais jamais venu (aucun tampon) = non.
+    const e = await createEvent(structure.id, { startsAt: past(30), endsAt: past(29) });
+    await accept(e.id, v2.id);
+
+    expect((await call(viewer, "GET", "/users/Sorties_R7b1")).json.outingsCount).toBe(3);
+    expect((await call(me, "GET", "/users/Sorties_R7b1")).json.outingsCount).toBe(3);
+    expect((await call(me, "GET", "/me/network")).json.outings).toBe(3);
   });
 });
