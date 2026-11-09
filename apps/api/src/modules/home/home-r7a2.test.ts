@@ -172,11 +172,17 @@ describe("Mes sorties", () => {
       { ...base, eventId: other.id, status: "pending" },
     ]);
     const r = await home(u);
-    const items = r.json.myOutings.items as { title: string; status: string; vehicles: string[] }[];
+    const items = r.json.myOutings.items as {
+      title: string;
+      status: string;
+      vehicles: { label: string; status: string }[];
+    }[];
     expect(items.map((i) => i.title)).toEqual(["Deux voitures", "Autre sortie"]);
     expect(r.json.myOutings.total).toBe(2);
     // La place qui donne l'accès représente l'événement ; les deux véhicules restent listés (même modèle, deux voitures).
     expect(items[0]?.status).toBe("accepted");
+    // Tour 3 : chaque véhicule garde SON statut (la ligne ne prête pas « retenue » au véhicule encore en attente).
+    expect(items[0]?.vehicles.map((x) => x.status).sort()).toEqual(["accepted", "pending"]);
     expect(items[0]?.vehicles).toHaveLength(2);
   });
 
@@ -208,6 +214,8 @@ describe("Mes sorties", () => {
       days: { date: string }[];
     };
     expect(r.json.myOutings.items).toHaveLength(1);
+    // Tour 3 : la ligne finit à la fin la plus tardive du groupe (journée 3), pas à celle de la journée courante.
+    expect(outing.endsAt).toBe(future?.endsAt.toISOString());
     // La journée passée ne compte plus ; la journée courante donne la date et « en cours » ; la future reste lisible.
     expect(outing.days.map((d) => d.date)).toEqual(["2026-11-10", "2026-11-11"]);
     expect(outing.startsAt).toBe(today?.startsAt.toISOString());
@@ -224,6 +232,28 @@ describe("Mes sorties", () => {
     await db.delete(applications).where(eq(applications.userId, u.id));
     await db.insert(applications).values({ ...base, eventId: fest.id, eventDayId: past?.id, status: "accepted" });
     expect((await home(u)).json.myOutings).toBeNull();
+  });
+
+  it("tour 3 : une journée en attente garde son statut à côté d'une journée retenue", async () => {
+    const { s, u, base, at } = await world();
+    const fest = await createEvent(s.id, { title: "Deux journées", startsAt: at(1, -2), endsAt: at(2, 7) });
+    const [d1, d2] = await db
+      .insert(eventDays)
+      .values([
+        { eventId: fest.id, dayDate: "2026-11-11", startsAt: at(1, -2), endsAt: at(1, 7) },
+        { eventId: fest.id, dayDate: "2026-11-12", startsAt: at(2, -2), endsAt: at(2, 7) },
+      ])
+      .returning();
+    await db.insert(applications).values([
+      { ...base, eventId: fest.id, eventDayId: d1?.id, status: "accepted" },
+      { ...base, eventId: fest.id, eventDayId: d2?.id, status: "pending" },
+    ]);
+    const o = (await home(u)).json.myOutings.items[0] as { status: string; days: { date: string; status: string }[] };
+    expect(o.status).toBe("accepted");
+    expect(o.days.map((d) => [d.date, d.status])).toEqual([
+      ["2026-11-11", "accepted"],
+      ["2026-11-12", "pending"],
+    ]);
   });
 
   it("tour 2 : un billet contrôlé reste dans le bloc jusqu'à la fin de l'événement, entré ; un billet annulé jamais", async () => {

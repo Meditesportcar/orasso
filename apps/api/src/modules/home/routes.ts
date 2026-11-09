@@ -36,6 +36,12 @@ export const homeRoutes = new Hono<AppEnv>()
     c.header("cache-control", "no-store");
     return c.json(await homeService.setWidgets(v, await body(c, homeWidgetsPutSchema)));
   })
+  // Lot R7a2, tour 3 : « Réinitialiser » = revenir aux défauts DU COMPTE (réglage effacé ; le défaut se recalcule).
+  .delete("/me/home/widgets", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await homeService.resetWidgets(v));
+  })
   .post("/pros/:id/favorite", async (c) => {
     await homeService.setFavorite(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);

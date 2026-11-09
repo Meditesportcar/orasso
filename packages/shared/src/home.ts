@@ -411,17 +411,35 @@ export type HomeOuting = {
   checkedIn: boolean;
   /** La place (ou la journée) a commencé et n'est pas finie. */
   ongoing: boolean;
-  /** Véhicules des candidatures à cet événement (une ligne par événement, tour 2). */
-  vehicles: string[];
+  /** Véhicules des candidatures à cet événement (une ligne par événement, tour 2), chacun avec son propre statut (tour 3). */
+  vehicles: HomeOutingPart<{ label: string }>[];
   /** Journées auxquelles la personne est inscrite (événement sur plusieurs jours) ; vide sinon. Date locale `AAAA-MM-JJ`. */
-  days: { date: string; startsAt: string; endsAt: string }[];
+  days: HomeOutingPart<{ date: string; startsAt: string; endsAt: string }>[];
 };
+/** Un véhicule ou une journée d'une ligne « Mes sorties », avec le statut de SA place (tour 3). */
+export type HomeOutingPart<T> = T & { status: HomeOuting["status"] };
 const OUTING_DAY = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", timeZone: BUSINESS_TIMEZONE });
 
-/** La ligne de détail d'une sortie : ses véhicules, puis ses journées (« jeu 12 · ven 13 ») ; vide s'il n'y a ni l'un ni l'autre. */
-export function outingDetail(o: Pick<HomeOuting, "vehicles" | "days">): string {
-  const days = (o.days ?? []).map((d) => OUTING_DAY.format(new Date(d.startsAt)).replace(/\./g, ""));
-  return [...(o.vehicles ?? []), ...(days.length ? [days.join(" · ")] : [])].join(" · ");
+const OUTING_STATUS_WORD: Partial<Record<HomeOuting["status"], string>> = {
+  accepted: "retenue",
+  pending: "en attente",
+  waitlisted: "liste d'attente",
+  offered: "place libérée",
+  ticket: "billet",
+};
+
+/**
+ * La ligne de détail d'une sortie : ses véhicules, puis ses journées (« jeu 12 · ven 13 ») ; vide s'il n'y a ni l'un ni l'autre.
+ * Un véhicule ou une journée dont le statut diffère de celui de la ligne porte le sien : « 911 · Golf (en attente) ».
+ */
+export function outingDetail(o: Pick<HomeOuting, "vehicles" | "days" | "status">): string {
+  const own = (status: HomeOuting["status"]) =>
+    status === o.status ? "" : ` (${OUTING_STATUS_WORD[status] ?? status})`;
+  const vehicles = (o.vehicles ?? []).map((v) => `${v.label}${own(v.status)}`);
+  const days = (o.days ?? []).map(
+    (d) => `${OUTING_DAY.format(new Date(d.startsAt)).replace(/\./g, "")}${own(d.status)}`,
+  );
+  return [...vehicles, ...(days.length ? [days.join(" · ")] : [])].join(" · ");
 }
 
 /** « Mes sorties » : les 3 prochaines places, et leur nombre total pour « Tout voir ». */

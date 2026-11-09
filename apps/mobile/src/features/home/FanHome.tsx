@@ -49,6 +49,7 @@ import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
 import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
+import { liveAccessHref, showsLocalCopy } from "./liveAccess";
 import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, splitSponsored } from "./rail";
 import { todayLine } from "./today";
@@ -93,6 +94,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // Le sponsorisé ne vient que de la réponse fraîche de l'API (celle qui l'a compté) ; la réponse gardée dans le cache
   // n'en porte jamais (`splitSponsored`).
   const [sponsored, setSponsored] = useState<HomeSponsored | null>(null);
+  const [liveOn, setLiveOn] = useState(false);
   const home = useApi(
     async () => {
       const fresh = await api.homeData({
@@ -108,7 +110,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       return parts.cacheable;
     },
     [position.position?.lat, position.position?.lng, variant],
-    { cacheKey: `home-${variant}` },
+    // Tour 3 : tant que « En cours » est affiché, l'Accueil se rafraîchit lui-même (option de `useApi` : suit l'écran affiché).
+    { cacheKey: `home-${variant}`, refreshMs: liveOn ? LIVE_REFRESH_MS : undefined },
   );
   const data: HomeData | null = home.data;
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
@@ -292,26 +295,26 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   reloadHome.current = home.reload;
   const liveShown = liveNow !== null;
   useEffect(() => {
+    setLiveOn(liveShown);
     if (!liveShown) return undefined;
-    const timer = setInterval(() => void reloadHome.current(), LIVE_REFRESH_MS);
+    // Retour de l'appli au premier plan : relecture tout de suite (le minuteur, lui, est celui de `useApi`).
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") void reloadHome.current();
     });
-    return () => {
-      clearInterval(timer);
-      sub.remove();
-    };
+    return () => sub.remove();
   }, [liveShown]);
+  // La copie du téléphone est montrée avant la première réponse et après une lecture ratée (réseau ou serveur).
+  const homeCopy = showsLocalCopy({
+    hasData: home.data !== null,
+    loading: home.loading,
+    failed: home.error !== null,
+    offline: home.offline,
+  });
   const openPersonalize = () => router.push("/accueil-personnaliser" as never);
 
-  // « Mon accès » de l'événement en cours : ma place retenue (QR), sinon mon billet ; rien si je ne suis là que par présence.
-  const liveAccess = (() => {
-    if (!liveNow) return null;
-    const place = live.find((a) => a.status === "accepted" && a.event.slug === liveNow.event.slug);
-    if (place) return `/jour-j/${place.id}`;
-    const pass = (myTickets.data ?? []).find((x) => x.status === "valid" && x.event.slug === liveNow.event.slug);
-    return pass ? `/billet/${pass.id}` : null;
-  })();
+  // « Mon accès » de l'événement en cours : ma place retenue (QR), sinon mon billet (même contrôlé), sinon mes sorties ; rien si je
+  // ne suis là que par présence (`hasPlace`, comme sur le site).
+  const liveAccess = liveAccessHref(liveNow, live, myTickets.data ?? []);
   const openOuting = (o: HomeOuting) => openEvent(o.slug);
   const openNews = (n: HomeFriendNews) => {
     if (n.target?.type === "event") openEvent(n.target.slug);
@@ -360,7 +363,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     live: liveNow ? (
       <LiveBlock
         live={liveNow}
-        offline={home.offline}
+        offline={homeCopy}
         onVote={() =>
           router.push(`/vote/${liveNow.event.id}?titre=${encodeURIComponent(liveNow.event.title)}` as never)
         }

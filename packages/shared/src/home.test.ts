@@ -332,14 +332,33 @@ describe("emplacement sponsorisé", () => {
 });
 
 describe("Mes sorties : ligne de détail", () => {
+  const v = (label: string, status: "accepted" | "pending" = "accepted") => ({ label, status });
+  const day = (d: string, status: "accepted" | "pending" = "accepted") => ({
+    date: d,
+    startsAt: `${d}T10:00:00Z`,
+    endsAt: `${d}T18:00:00Z`,
+    status,
+  });
   it("véhicules puis journées ; vide sans l'un ni l'autre", () => {
-    expect(outingDetail({ vehicles: [], days: [] })).toBe("");
-    expect(outingDetail({ vehicles: ["Golf GTI 1995", "Clio V6 2001"], days: [] })).toBe(
+    expect(outingDetail({ status: "accepted", vehicles: [], days: [] })).toBe("");
+    expect(outingDetail({ status: "accepted", vehicles: [v("Golf GTI 1995"), v("Clio V6 2001")], days: [] })).toBe(
       "Golf GTI 1995 · Clio V6 2001",
     );
-    const day = (d: string) => ({ date: d, startsAt: `${d}T10:00:00Z`, endsAt: `${d}T18:00:00Z` });
-    expect(outingDetail({ vehicles: ["Golf GTI 1995"], days: [day("2026-11-12"), day("2026-11-13")] })).toBe(
-      "Golf GTI 1995 · jeu 12 · ven 13",
+    expect(
+      outingDetail({
+        status: "accepted",
+        vehicles: [v("Golf GTI 1995")],
+        days: [day("2026-11-12"), day("2026-11-13")],
+      }),
+    ).toBe("Golf GTI 1995 · jeu 12 · ven 13");
+  });
+
+  it("tour 3 : un véhicule ou une journée au statut différent de la ligne porte le sien", () => {
+    expect(outingDetail({ status: "accepted", vehicles: [v("911"), v("Golf", "pending")], days: [] })).toBe(
+      "911 · Golf (en attente)",
     );
+    expect(
+      outingDetail({ status: "accepted", vehicles: [], days: [day("2026-11-12"), day("2026-11-13", "pending")] }),
+    ).toBe("jeu 12 · ven 13 (en attente)");
   });
 });

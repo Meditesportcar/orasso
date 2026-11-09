@@ -1,7 +1,6 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   addHomeWidget,
-  defaultHomeWidgets,
   HOME_FIXED_WIDGET,
   type HomeWidgetId,
   type HomeWidgetsConfig,
@@ -38,12 +37,17 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const op = String(form.get("op") ?? "");
   const id = String(form.get("id") ?? "") as HomeWidgetId;
+  // Tour 3 : « Réinitialiser » = les défauts du compte, par l'API (réglage effacé, garage favori gardé s'il existe).
+  if (op === "reset") {
+    const res = await api(request, "/me/home/widgets", { method: "DELETE" });
+    if (!res.ok) return data({ error: res.error.message }, { status: res.status });
+    throw redirect("/app/accueil/personnaliser");
+  }
   const cur = await api<{ homeWidgets: unknown }>(request, "/me/settings");
   if (!cur.ok) return data({ error: L.saveFailed }, { status: cur.status });
   const config: HomeWidgetsConfig = normalizeHomeWidgets(cur.data.homeWidgets);
   let next: HomeWidgetsConfig;
-  if (op === "reset") next = defaultHomeWidgets;
-  else if (!homeWidgetIds.includes(id)) return data({ error: L.saveFailed }, { status: 400 });
+  if (!homeWidgetIds.includes(id)) return data({ error: L.saveFailed }, { status: 400 });
   else if (op === "up") next = moveVisibleHomeWidget(config, id, -1);
   else if (op === "down") next = moveVisibleHomeWidget(config, id, 1);
   else if (op === "add") next = addHomeWidget(config, id);
@@ -82,7 +86,7 @@ export default function AppHomePersonnaliser({ loaderData, actionData }: Route.C
   const { config, failed } = loaderData;
   const shown = visibleHomeWidgets(config).filter((id) => homeWidgetOffered(id));
   const hidden = config.hidden.filter((id) => homeWidgetOffered(id));
-  const error = actionData?.error ?? (failed ? L.saveFailed : null);
+  const error = actionData?.error ?? null;
   return (
     <div className="s-stack">
       <h1 className="s-title">{L.title}</h1>
@@ -94,50 +98,64 @@ export default function AppHomePersonnaliser({ loaderData, actionData }: Route.C
           {error}
         </p>
       )}
-      <ul className="hm-perso" data-testid="personalize-list">
-        {shown.map((id, i) => {
-          const fixed = id === HOME_FIXED_WIDGET;
-          return (
-            <li key={id} className="hm-perso__item" data-testid={`personalize-row-${id}`}>
-              <span className="hm-perso__text">
-                <strong>{L.widgets[id].title}</strong>
-                <span className="o-t-caption hm-block__muted">{fixed ? L.fixedHint : L.widgets[id].hint}</span>
-              </span>
-              {fixed ? (
-                <Icon name="lock" size={18} />
-              ) : (
-                <span className="hm-reorder__actions">
-                  <Op op="up" id={id} label={L.moveUp} icon="up" disabled={i <= 1} />
-                  <Op op="down" id={id} label={L.moveDown} icon="down" disabled={i === shown.length - 1} />
-                  <Op op="hide" id={id} label={L.hide} icon="eye" />
+      {/* Tour 3 : réglage non chargé = aucun geste (comme dans l'appli), jamais les valeurs par défaut présentées comme les siennes. */}
+      {failed ? (
+        <div className="hm-actions" data-testid="personalize-load-failed">
+          <p className="s-error" role="alert">
+            {L.loadFailed}
+          </p>
+          <Button variant="plate" icon="undo" href="/app/accueil/personnaliser" data-testid="personalize-retry">
+            {L.retry}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <ul className="hm-perso" data-testid="personalize-list">
+            {shown.map((id, i) => {
+              const fixed = id === HOME_FIXED_WIDGET;
+              return (
+                <li key={id} className="hm-perso__item" data-testid={`personalize-row-${id}`}>
+                  <span className="hm-perso__text">
+                    <strong>{L.widgets[id].title}</strong>
+                    <span className="o-t-caption hm-block__muted">{fixed ? L.fixedHint : L.widgets[id].hint}</span>
+                  </span>
+                  {fixed ? (
+                    <Icon name="lock" size={18} />
+                  ) : (
+                    <span className="hm-reorder__actions">
+                      <Op op="up" id={id} label={L.moveUp} icon="up" disabled={i <= 1} />
+                      <Op op="down" id={id} label={L.moveDown} icon="down" disabled={i === shown.length - 1} />
+                      <Op op="hide" id={id} label={L.hide} icon="eye" />
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <h2 className="o-t-label hm-block__muted">{L.hiddenTitle}</h2>
+          <ul className="hm-perso" data-testid="personalize-hidden">
+            {hidden.length === 0 && <li className="s-muted">{L.hiddenEmpty}</li>}
+            {hidden.map((id) => (
+              <li key={id} className="hm-perso__item" data-testid={`personalize-row-${id}`}>
+                <span className="hm-perso__text">
+                  <strong>{L.widgets[id].title}</strong>
+                  <span className="o-t-caption hm-block__muted">{L.widgets[id].hint}</span>
                 </span>
-              )}
+                <Op op="add" id={id} label={L.add} icon="add" />
+              </li>
+            ))}
+            <li className="hm-perso__item hm-perso__item--soon" data-testid="personalize-soon" aria-disabled="true">
+              <span className="hm-perso__text">
+                <strong>{L.soonTitle}</strong>
+                <span className="o-t-caption hm-block__muted">{L.soonHint}</span>
+              </span>
+              <span className="o-t-label">{L.soon}</span>
             </li>
-          );
-        })}
-      </ul>
-      <h2 className="o-t-label hm-block__muted">{L.hiddenTitle}</h2>
-      <ul className="hm-perso" data-testid="personalize-hidden">
-        {hidden.length === 0 && <li className="s-muted">{L.hiddenEmpty}</li>}
-        {hidden.map((id) => (
-          <li key={id} className="hm-perso__item" data-testid={`personalize-row-${id}`}>
-            <span className="hm-perso__text">
-              <strong>{L.widgets[id].title}</strong>
-              <span className="o-t-caption hm-block__muted">{L.widgets[id].hint}</span>
-            </span>
-            <Op op="add" id={id} label={L.add} icon="add" />
-          </li>
-        ))}
-        <li className="hm-perso__item hm-perso__item--soon" data-testid="personalize-soon" aria-disabled="true">
-          <span className="hm-perso__text">
-            <strong>{L.soonTitle}</strong>
-            <span className="o-t-caption hm-block__muted">{L.soonHint}</span>
-          </span>
-          <span className="o-t-label">{L.soon}</span>
-        </li>
-      </ul>
+          </ul>
+        </>
+      )}
       <div className="hm-actions">
-        <Op op="reset" label={L.reset} icon="undo" />
+        {!failed && <Op op="reset" label={L.reset} icon="undo" />}
         <Button variant="primary" icon="check" href="/app" data-testid="personalize-done">
           {L.save}
         </Button>

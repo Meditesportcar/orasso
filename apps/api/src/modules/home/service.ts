@@ -355,6 +355,18 @@ export const homeService = {
   },
 
   /**
+   * `DELETE /me/home/widgets` (tour 3) : efface le réglage (`null` en base) et rend les défauts du compte, qui se recalculent :
+   * garage favori affiché s'il existe, Agenda et « En attente » masqués.
+   */
+  async resetWidgets(v: Viewer): Promise<HomeWidgetsConfig> {
+    rateLimit("homeWrite", v.user.id);
+    await db.update(profiles).set({ homeWidgets: null }).where(eq(profiles.userId, v.user.id));
+    // Le profil lu avant l'effacement porte encore l'ancien réglage : le défaut se juge comme sans réglage.
+    const cleared = { ...v, profile: { ...v.profile, homeWidgets: null } };
+    return normalizeHomeWidgets(null, { favoriteGarage: await hasFavoriteGarage(cleared) });
+  },
+
+  /**
    * `POST /pros/:id/favorite` : marque ce pro comme garage favori (un seul par personne, suivi s'il ne l'était pas).
    * Réservé aux pros visibles : fiche publiée, titulaire en règle, et fiche complète (`proVisibility`, lot 21).
    */

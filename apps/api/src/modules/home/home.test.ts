@@ -634,6 +634,25 @@ describe("garage favori", () => {
     expect((await req(u, "GET", "/me/settings")).json.homeWidgets.hidden).toEqual(["agenda", "pending"]);
   });
 
+  it("tour 3 : DELETE /me/home/widgets = les défauts du compte (garage favori affiché s'il existe), réglage effacé", async () => {
+    const { pro, u } = await setup();
+    expect((await req(null, "DELETE", "/me/home/widgets")).status).toBe(401);
+    // Sans garage favori : Agenda, Garage favori et En attente masqués ; le réglage enregistré est effacé.
+    const first = await req(u, "DELETE", "/me/home/widgets");
+    expect(first.status).toBe(200);
+    expect(first.json.hidden).toEqual(["agenda", "favorite_garage", "pending"]);
+    const stored = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
+    expect(stored?.homeWidgets).toBeNull();
+    // Avec un garage favori et un réglage personnel (tout affiché) : le défaut garde le garage visible.
+    expect((await req(u, "POST", `/pros/${pro.id}/favorite`)).status).toBe(204);
+    await req(u, "PUT", "/me/home/widgets", { order: ["next_access", "weather"], hidden: ["weather", "agenda"] });
+    const reset = await req(u, "DELETE", "/me/home/widgets");
+    expect(reset.json.hidden).toEqual(["agenda", "pending"]);
+    expect(reset.json.order[0]).toBe("next_access");
+    expect((await req(u, "GET", "/me/settings")).json.homeWidgets.hidden).toEqual(["agenda", "pending"]);
+    expect((await req(u, "GET", "/me/home")).json.widgets.hidden).toEqual(["agenda", "pending"]);
+  });
+
   it("réservé aux pros visibles : publié, titulaire en règle, pas le sien, fiche complète", async () => {
     const { owner, pro, u } = await setup();
     // Brouillon et fiche supprimée : introuvables.

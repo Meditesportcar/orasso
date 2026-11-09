@@ -1,6 +1,8 @@
 // Bloc « Mes sorties » de l'Accueil (lot R7a2, maquette R7.4) : mes 3 prochains événements où j'ai une place (retenue, en
 // attente, liste d'attente, billet), du plus proche au plus lointain ; « Tout voir » mène à Sorties. Une place en cours
 // (commencée et pas finie) compte et passe en tête de fait.
+// Tour 3 : le statut d'un véhicule ou d'une journée est le sien (jamais celui de la meilleure place du groupe) ; la fin est
+// la plus tardive du groupe.
 // Tour 2 :
 //  - une ligne par événement : plusieurs candidatures au même événement (deux véhicules, deux journées) ou une candidature
 //    et un billet se regroupent en une ligne qui garde les véhicules et les journées ;
@@ -67,7 +69,7 @@ export async function myOutingsWidget(v: Viewer, upcoming: MyApplication[]): Pro
           checkedIn: a.checkedInAt !== null,
           ongoing: ongoing(startsAt, endsAt),
           vehicles: [],
-          days: a.day ? [{ date: a.day.date, startsAt: a.day.startsAt, endsAt: a.day.endsAt }] : [],
+          days: a.day ? [{ date: a.day.date, startsAt: a.day.startsAt, endsAt: a.day.endsAt, status: a.status }] : [],
         },
       };
     }),
@@ -102,17 +104,32 @@ export async function myOutingsWidget(v: Viewer, upcoming: MyApplication[]): Pro
     // La place qui représente l'événement : la plus « ouverte » (retenue, billet, …), puis la plus proche dans le temps.
     const sorted = [...group].sort((a, b) => rankOf(a.outing) - rankOf(b.outing) || byStart(a.outing, b.outing));
     const main = (sorted[0] as Candidate).outing;
-    const days = group
-      .flatMap((c) => c.outing.days)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .filter((d, i, all) => all.findIndex((x) => x.date === d.date) === i);
+    // Chaque journée et chaque véhicule garde le statut de SA meilleure place (tour 3) : la ligne n'en prête aucun.
+    const best = <T>(items: { key: string; status: HomeOuting["status"]; part: T }[]) => {
+      const byKey = new Map<string, (typeof items)[number]>();
+      for (const it of items) {
+        const known = byKey.get(it.key);
+        if (!known || (RANK[it.status] ?? 9) < (RANK[known.status] ?? 9)) byKey.set(it.key, it);
+      }
+      return [...byKey.values()];
+    };
+    const days = best(
+      group.flatMap((c) => c.outing.days.map((d) => ({ key: d.date, status: c.outing.status, part: d }))),
+    )
+      .map((x) => ({ ...x.part, status: x.status }))
+      .sort((a, b) => a.date.localeCompare(b.date));
     // Dédoublonné par véhicule (deux voitures de même modèle gardent chacune leur ligne).
-    const own = group.flatMap((c) => (c.vehicle ? [c.vehicle] : []));
-    const vehicles = own.filter((v, i) => own.findIndex((x) => x.id === v.id) === i).map((v) => v.label);
+    const vehicles = best(
+      group.flatMap((c) => (c.vehicle ? [{ key: c.vehicle.id, status: c.outing.status, part: c.vehicle }] : [])),
+    ).map((x) => ({ label: x.part.label, status: x.status }));
     return {
       ...main,
       // Plusieurs journées : l'événement est daté de la première journée à venir, « en cours » si l'une l'est.
       startsAt: [...group].map((c) => c.outing).sort(byStart)[0]?.startsAt ?? main.startsAt,
+      // Fin : la plus tardive du groupe (dernière journée, pas la première).
+      endsAt:
+        [...group].map((c) => c.outing.endsAt).sort((x, y) => new Date(y).getTime() - new Date(x).getTime())[0] ??
+        main.endsAt,
       ongoing: group.some((c) => c.outing.ongoing),
       vehicles,
       days,

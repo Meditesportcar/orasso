@@ -85,6 +85,19 @@ export function PersonalizeScreen() {
     }
   }
 
+  // « Réinitialiser » : les défauts DU COMPTE (garage favori affiché s'il existe), calculés par l'API qui efface le réglage.
+  async function reset() {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setDraft(normalizeHomeWidgets(await api.resetHomeWidgets()));
+    } catch (e) {
+      setError(errorMessage(e) || L.saveFailed);
+    }
+    setBusy(false);
+  }
+
   return (
     <FlowScreen
       title={L.title}
@@ -195,8 +208,8 @@ export function PersonalizeScreen() {
           </View>
 
           <Pressable
-            onPress={() => change(defaultHomeWidgets)}
-            disabled={locked}
+            onPress={() => void reset()}
+            disabled={locked || busy}
             accessibilityState={{ disabled: locked }}
             accessibilityRole="button"
             accessibilityLabel={L.reset}
