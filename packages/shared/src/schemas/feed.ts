@@ -18,6 +18,7 @@ import {
 } from "../rules/feed";
 import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
+import type { MemoryCardPayload } from "./memories";
 import type { SpotFeedPayload } from "./spotMeetup";
 import { plateRectsSchema } from "./vehicle";
 
@@ -146,7 +147,7 @@ export type FeedPayloads = {
   };
   feed_post: { post: FeedPostView };
   spot_meetup: SpotFeedPayload;
-  memory: Record<string, unknown>;
+  memory: MemoryCardPayload;
   /**
    * Carte « Sponsorisé » (lot R7k1). `id` = l'emplacement (à envoyer à `POST /sponsored/:id/impression|click` avec
    * `{ surface: "feed" }`). `domain` : le domaine du lien, affiché pour un annonceur externe. `disclosure` : la mention

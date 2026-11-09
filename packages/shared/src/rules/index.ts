@@ -30,6 +30,7 @@ export * from "./liveFiche";
 export * from "./lock";
 export * from "./mainVehicle";
 export * from "./markdown";
+export * from "./memories";
 export * from "./menu";
 export * from "./messaging";
 export * from "./misc";

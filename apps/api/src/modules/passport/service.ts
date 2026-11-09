@@ -62,7 +62,7 @@ async function stampEvent(ex: Executor, eventId: string): Promise<StampEvent | n
   return row ?? null;
 }
 
-function serialize(row: StampRow, event: StampEvent): PassportStamp {
+export function serialize(row: StampRow, event: StampEvent): PassportStamp {
   return {
     id: row.id,
     kind: row.kind,

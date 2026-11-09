@@ -42,6 +42,7 @@ import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
 import { mediaRoutes } from "./modules/media/routes";
+import { memoriesRoutes } from "./modules/memories/routes";
 import { messagingRoutes } from "./modules/messaging/routes";
 import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
@@ -257,6 +258,7 @@ app.route("/", presenceRoutes);
 // Lot R7m1 : partenariats pro ↔ passionné.
 app.route("/", partnershipsRoutes);
 app.route("/", recapRoutes);
+app.route("/", memoriesRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);
 

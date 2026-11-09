@@ -82,7 +82,7 @@ describe("genres de carte", () => {
     for (const kind of feedCardKinds) {
       expect(FEED_KINDS_DRAWN.includes(kind) || isFeedKindReserved(kind)).toBe(true);
     }
-    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual(["memory"]);
+    expect(feedCardKinds.filter(isFeedKindReserved).sort()).toEqual([]);
   });
 });
 

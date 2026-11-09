@@ -30,6 +30,7 @@ export * from "./labels/invitations.fr";
 export * from "./labels/lineup.fr";
 export * from "./labels/media.fr";
 export * from "./labels/media-app.fr";
+export * from "./labels/memories.fr";
 export * from "./labels/messaging.fr";
 export * from "./labels/missions.fr";
 export * from "./labels/moderation.fr";

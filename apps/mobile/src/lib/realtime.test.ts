@@ -44,6 +44,9 @@ describe("temps réel de l'appli", () => {
     const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
     expect(appLinkOf(`/app/recap/${id}`)).toBe(`/recap/${id}`);
     expect(appLinkOf("/app/recap/abc")).toBeNull();
+    // Lot R7j : la notification « Un souvenir pour toi ».
+    expect(appLinkOf(`/app/souvenir/${id}`)).toBe(`/souvenir/${id}`);
+    expect(appLinkOf("/app/souvenir/abc")).toBeNull();
     expect(appLinkOf("/app/passeport")).toBe("/mon-passeport");
     expect(appLinkOf("/app/passeport/../acces")).toBeNull();
   });
