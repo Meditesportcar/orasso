@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import { accessClosesAt, entryHolds, isWholeEventAccess, wholeEventEntryHolds } from "./wholeEventAccess";
 import { fromWallTime } from "./time";
+import { accessClosesAt, entryHolds, isWholeEventAccess, wholeEventEntryHolds } from "./wholeEventAccess";
 
 const at = (month: number, day: number, hour = 10, minute = 0) =>
   fromWallTime({ year: 2026, month, day, hour, minute });

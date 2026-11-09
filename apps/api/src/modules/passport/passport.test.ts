@@ -21,8 +21,8 @@ import {
 import { db, pool } from "../../db/client";
 import {
   applications,
-  audiencePrizeResults,
   assistanceRequests,
+  audiencePrizeResults,
   audienceVotes,
   checkins,
   devices,
@@ -345,7 +345,8 @@ describe("passeport : tampons", () => {
     const view = (await call(p.marc.u, "GET", "/me/passport")).json as { pages: { stamps: PassportStamp[] }[] };
     const mine = view.pages.flatMap((pg) => pg.stamps).filter((s) => s.event.id === camp.id);
     expect(mine.map((s) => s.kind).sort()).toEqual(["first_outing", "full_moon", "participation"]);
-    const day = (d: Date) => stampText({ kind: "participation", rare: false, event: mine[0]!.event, stampedAt: d.toISOString() }).date;
+    const day = (d: Date) =>
+      stampText({ kind: "participation", rare: false, event: mine[0]!.event, stampedAt: d.toISOString() }).date;
     for (const s of mine) {
       expect(stampText(s).date).toBe(day(s.kind === "participation" ? entry : moon));
     }

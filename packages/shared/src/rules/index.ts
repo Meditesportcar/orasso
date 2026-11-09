@@ -63,5 +63,5 @@ export * from "./visibility";
 export * from "./voteScreen";
 export * from "./waitlistDeadline";
 export * from "./weather";
-export * from "./wideWord";
 export * from "./wholeEventAccess";
+export * from "./wideWord";

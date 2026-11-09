@@ -92,7 +92,15 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // attendre un message du serveur.
   const closesAt = board?.closesAt ?? mine.closesAt;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `revalidate` change d'identité à chaque rendu ; seule l'échéance relance la minuterie
-  useEffect(() => runAtDeadline(new Date(closesAt), () => void revalidator.revalidate(), () => new Date(nowMs())), [closesAt]);
+  useEffect(
+    () =>
+      runAtDeadline(
+        new Date(closesAt),
+        () => void revalidator.revalidate(),
+        () => new Date(nowMs()),
+      ),
+    [closesAt],
+  );
   // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
   // qui revient après une coupure la recharge aussi (relecture du lot 57).
   const { connected } = useLiveRevalidate(
@@ -118,7 +126,12 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         <p className="s-error" role="alert" data-testid="vote-ranking-failed">
           {mine.votedFor ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
         </p>
-        <Button variant="secondary" icon="undo" onClick={() => void revalidator.revalidate()} data-testid="vote-ranking-retry">
+        <Button
+          variant="secondary"
+          icon="undo"
+          onClick={() => void revalidator.revalidate()}
+          data-testid="vote-ranking-retry"
+        >
           {voteScreenTexts.retry}
         </Button>
         <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>

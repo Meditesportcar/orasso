@@ -684,9 +684,7 @@ export const checkinsService = {
       // Sur place ce jour-là : tout l'événement entré ce jour-là ou avant (l'entrée vaut jusqu'à la fin, lot R7-0, tour 2).
       presentOnDay: Boolean(
         i.checkedInAt &&
-          (i.dayDate ||
-            localDate(new Date(i.checkedInAt), event.timezone) <= day.dayDate ||
-            seen.has(i.applicationId)),
+          (i.dayDate || localDate(new Date(i.checkedInAt), event.timezone) <= day.dayDate || seen.has(i.applicationId)),
       ),
       arrivedOnDay: Boolean(
         i.checkedInAt &&
@@ -866,18 +864,13 @@ export const checkinsService = {
           .filter(
             (r) =>
               r.at &&
-              (r.eventDayId !== null ||
-                localDate(r.at, event.timezone) === day.dayDate ||
-                seenThatDay.has(r.appId)),
+              (r.eventDayId !== null || localDate(r.at, event.timezone) === day.dayDate || seenThatDay.has(r.appId)),
           )
           .map((r) => r.appId),
       );
       // Sur place : une entrée « tout l'événement » vaut aussi les jours suivants, pas les jours d'avant l'entrée.
       rows = rows.map((r) =>
-        r.eventDayId === null &&
-        r.at &&
-        localDate(r.at, event.timezone) > day.dayDate &&
-        !seenThatDay.has(r.appId)
+        r.eventDayId === null && r.at && localDate(r.at, event.timezone) > day.dayDate && !seenThatDay.has(r.appId)
           ? { ...r, at: null }
           : r,
       );

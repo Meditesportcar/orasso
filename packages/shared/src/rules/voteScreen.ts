@@ -40,11 +40,7 @@ export type RankingZone = "ready" | "loading" | "failed" | "hidden";
  * si la relecture échoue (HTTP ou réseau), l'écran le dit avec « Réessayer » au lieu de rester vide ; tant qu'elle n'est
  * pas revenue, il dit qu'il charge. `hidden` : le classement n'est pas servi à cette personne (voix pas encore donnée).
  */
-export function rankingZoneState(input: {
-  voted: boolean;
-  rankingHidden: boolean;
-  loadFailed: boolean;
-}): RankingZone {
+export function rankingZoneState(input: { voted: boolean; rankingHidden: boolean; loadFailed: boolean }): RankingZone {
   if (!input.rankingHidden) return "ready";
   if (!input.voted) return "hidden";
   return input.loadFailed ? "failed" : "loading";

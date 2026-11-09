@@ -107,7 +107,6 @@ export type AudiencePrizeMine = {
  */
 export type AudienceVotesChanged = { total: number; top3: [] };
 
-
 // --- Récap -------------------------------------------------------------------------------------------------------
 
 export type RecapPointLine = { kind: PointKind; points: number; label: string };

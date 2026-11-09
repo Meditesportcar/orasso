@@ -89,5 +89,10 @@ export function eventCountdownParts(span: Span, now: Date, timeZone = BUSINESS_T
         }
       : { label, lead: "En cours", detail: null, tight: { big: "Auj.", small: "en cours" } };
   }
-  return { label, lead: label, detail: null, tight: { big: label.replace("Aujourd'hui", "Auj.").replace("Terminé", "Fini"), small: null } };
+  return {
+    label,
+    lead: label,
+    detail: null,
+    tight: { big: label.replace("Aujourd'hui", "Auj.").replace("Terminé", "Fini"), small: null },
+  };
 }

@@ -232,7 +232,10 @@ function DirectEvent({
             <View style={styles.counters} testID="orga-direct-counters">
               <Counters
                 items={[
-                  { value: l.arrived, label: l.arrivedToday === undefined ? orgaLabels.directArrived : orgaLabels.directOnSite },
+                  {
+                    value: l.arrived,
+                    label: l.arrivedToday === undefined ? orgaLabels.directArrived : orgaLabels.directOnSite,
+                  },
                   { value: missingVehicles(l), label: orgaLabels.directExpected },
                   { value: l.alertsOpen, label: orgaLabels.directAlerts },
                 ]}

@@ -6,9 +6,9 @@ import {
   lineFontSize,
   PAGE_BOX,
   silhouetteOf,
+  stampDate,
   stampLook,
   stampPlacement,
-  stampDate,
   stampShapeArt,
   stampText,
 } from "./stampArt";

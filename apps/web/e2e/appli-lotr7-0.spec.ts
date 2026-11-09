@@ -154,7 +154,7 @@ test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessa
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, "nina@orasso.local");
   // La relecture du classement (GET, sans suffixe) échoue tant que la route est posée ; le vote (PUT) passe.
-  const board = //events/[^/]+/audience-prize$/;
+  const board = /\/events\/[^/]+\/audience-prize$/;
   const failing = (route: import("@playwright/test").Route) =>
     route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback();
   await page.goto(`/vote/${place.event.id}`);
