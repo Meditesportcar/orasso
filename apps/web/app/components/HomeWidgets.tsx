@@ -311,7 +311,7 @@ const NUDGE_HREF: Record<HomeNudgeKind, string> = {
   verify_email: "/app/moi",
   enable_2fa: "/app/securite",
   add_vehicle: "/app/garage/nouveau",
-  create_crew: "/app/crews",
+  create_crew: "/app/crews/nouveau",
 };
 
 /** Une seule incitation à la fois. `primary` : aucun « Prochain accès » ne porte déjà le bouton principal. */
