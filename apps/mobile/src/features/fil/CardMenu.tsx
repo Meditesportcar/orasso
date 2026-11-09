@@ -1,6 +1,7 @@
 // Le menu « ⋯ » d'une carte du Fil (maquette R7.6 `mn_why_mk_ad`) : une feuille de trois lignes. « Pourquoi je vois ça »
 // (la raison, en clair), « Moins de ce genre » (`POST /me/feed/less` ; la carte s'estompe avec un « Annuler »), « Signaler »
-// (la feuille de signalement de l'appli, cible `feed_post` pour une publication). Une carte qui n'est pas signalable
+// (la feuille de signalement de l'appli, cible `feed_post` pour une publication ; pour une carte « Sponsorisé », un e-mail à
+// l'assistance : la modération n'a pas de cible « publicité », lot R7k2). Une carte qui n'est pas signalable
 // (pas de publication d'une personne : événement, voiture…) n'a pas « Signaler » ; ma propre publication a « Supprimer ».
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedCard, feedCardKindLabels, feedScreenLabels as L } from "@orasso/shared";
@@ -9,8 +10,11 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { SetRow } from "@/features/profil/parts";
 import { AppSheet } from "@/ui/AppSheet";
 
-/** La carte est-elle une publication du Fil ? Seule cible de signalement du Fil (R7e1). */
+/** La carte est-elle une publication du Fil ? Cible de signalement de la modération (R7e1). */
 export const isPostCard = (card: FeedCard): card is FeedCard<"feed_post"> => card.kind === "feed_post";
+
+/** Une carte « Sponsorisé » : pas de « Moins de ce genre » (on ne cache pas la publicité du Fil), « Signaler » par e-mail (R7k2). */
+export const isSponsoredCard = (card: FeedCard): card is FeedCard<"sponsored"> => card.kind === "sponsored";
 
 export function CardMenu({
   card,
@@ -68,18 +72,20 @@ export function CardMenu({
               />
             ) : (
               <>
-                <SetRow
-                  icon="eyeOff"
-                  title={L.lessFaded}
-                  caption={L.menuLessHint}
-                  onPress={() => onLess(card)}
-                  testID="feed-menu-less"
-                />
-                {isPostCard(card) ? (
+                {isSponsoredCard(card) ? null : (
+                  <SetRow
+                    icon="eyeOff"
+                    title={L.lessFaded}
+                    caption={L.menuLessHint}
+                    onPress={() => onLess(card)}
+                    testID="feed-menu-less"
+                  />
+                )}
+                {isPostCard(card) || isSponsoredCard(card) ? (
                   <SetRow
                     icon="flag"
                     title={L.report}
-                    caption={L.reportHint}
+                    caption={isSponsoredCard(card) ? L.reportAdHint : L.reportHint}
                     onPress={() => onReport(card)}
                     tone="out"
                     testID="feed-menu-report"

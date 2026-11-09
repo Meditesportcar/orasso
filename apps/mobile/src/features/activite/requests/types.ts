@@ -8,6 +8,8 @@ import type { RequestItem } from "@orasso/shared";
 export type RequestCardProps = {
   item: RequestItem;
   onDone: () => void;
+  /** Lot R7-fix-invite : ouvre le menu « ⋯ » d'une invitation de passionnés (couper chacun) ; l'écran porte la feuille. */
+  onInviteMenu?: (from: { userId: string; pseudo: string }[]) => void;
 };
 
 /** Lit un champ texte de `payload` (liste blanche de l'API, propre à chaque sorte) sans le supposer. */

@@ -19,6 +19,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
+import { decorateMyVehicle, decorateMyVehicles } from "../partnerships/decorate";
 import { categoryOptions } from "./categories";
 import { certificationService } from "./certification";
 import { photoBlurService } from "./photos-blur";
@@ -60,13 +61,17 @@ export const vehiclesRoutes = new Hono<AppEnv>()
     return c.json(await styleProposalsService.propose(v, await body(c, categoryProposalSchema)), 201);
   })
   // Garage.
-  .get("/me/vehicles", async (c) => c.json(await vehiclesService.listMine(await requireUser(c))))
+  .get("/me/vehicles", async (c) =>
+    c.json(await decorateMyVehicles(await vehiclesService.listMine(await requireUser(c)))),
+  )
   .post("/me/vehicles", async (c) => {
     const v = await requireUser(c);
     rateLimit("vehicleWrite", v.user.id);
     return c.json(await vehiclesService.create(v, await body(c, vehicleCreateSchema)), 201);
   })
-  .get("/me/vehicles/:id", async (c) => c.json(await vehiclesService.getMine(await requireUser(c), uuidParam(c, "id"))))
+  .get("/me/vehicles/:id", async (c) =>
+    c.json(await decorateMyVehicle(await vehiclesService.getMine(await requireUser(c), uuidParam(c, "id")))),
+  )
   .patch("/me/vehicles/:id", async (c) => {
     const v = await requireUser(c);
     rateLimit("vehicleWrite", v.user.id);

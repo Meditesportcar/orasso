@@ -104,7 +104,11 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays }:
           <TopBar />
           <SwipeEntry>
             <KeyboardSafe style={styles.fill}>
-              <Body onRefresh={onRefresh} bottom={footer ? space6 : TAB_BODY_BOTTOM + insets.bottom}>
+              <Body
+                onRefresh={onRefresh}
+                bottom={footer ? space6 : TAB_BODY_BOTTOM + insets.bottom}
+                covered={TAB_BAR_SPACE + insets.bottom}
+              >
                 {title ? <TabTitle title={title} label={facts} /> : null}
                 {children}
               </Body>
@@ -290,9 +294,12 @@ function Body({
   bottom,
   endGate,
   hideEndHint = false,
+  covered = 0,
 }: {
   children: ReactNode;
   onRefresh?: () => Promise<unknown>;
+  /** Lot R7k2, tour 2 : hauteur du bas de la page cachée par la barre d'onglets flottante (`ScrollAssist.visibleArea`). */
+  covered?: number;
   /** Marge sous le contenu (onglets : place de la barre flottante). */
   bottom?: number;
   endGate?: EndGate;
@@ -312,6 +319,8 @@ function Body({
   const [atEnd, setAtEnd] = useState(true);
   const gate = useRef(endGate);
   gate.current = endGate;
+  const coveredRef = useRef(covered);
+  coveredRef.current = covered;
   // Le bas doit rester visible un court instant : une mise en page passagère (premier rendu, polices, en-tête qui se
   // pose) ne débloque pas l'étape.
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,6 +372,11 @@ function Body({
     () => ({
       hold: (on) => setHeld(on),
       top: () => scroll.current?.scrollTo({ y: 0, animated: false }),
+      visibleArea: (read) => {
+        const page = scroll.current?.getNativeScrollRef();
+        if (!page) return;
+        page.measureInWindow((_x, y, _w, h) => read(y, y + h - coveredRef.current));
+      },
       watchScroll: (listener) => {
         scrollListeners.current.add(listener);
         return () => {

@@ -34,6 +34,9 @@ describe("temps réel de l'appli", () => {
     expect(appLinkOf(`/app/activite/${id}`)).toBeNull();
     expect(appLinkOf("/app/boite/../acces")).toBeNull();
     expect(appLinkOf("/u/Kenji_66")).toBe("/u/Kenji_66");
+    // Lot R7m1 : « Ton partenariat est terminé » mène à la fiche du pro.
+    expect(appLinkOf("/p/garage-du-port")).toBe("/p/garage-du-port");
+    expect(appLinkOf("/p/garage-du-port/../x")).toBeNull();
     expect(appLinkOf("https://exemple.com")).toBeNull();
   });
 

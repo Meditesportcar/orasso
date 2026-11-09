@@ -110,8 +110,9 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await expect(page.getByTestId("follow-button")).toContainText("Abonné");
   // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
   deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
-  await page.goto("/app/fil");
-  await expect(page.getByTestId("journal-item").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
+  // Tour 2 : le Journal a cédé la place au Fil (R7e2) ; la notification se lit dans l'Activité.
+  await page.goto("/app/activite");
+  await expect(page.getByTestId("activity-row").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
   await expect(page.getByRole("link", { name: "Messages" }).first()).toBeVisible();
 
   // Se désabonner : le profil redevient réduit.
@@ -120,22 +121,8 @@ test("social : profils selon l'audience, recherche, demande à suivre, acceptati
   await page.getByTestId("follow-confirm-yes").click();
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "public_limited");
 
-  // Journal de Léa : l'actualité de Kenji, qu'elle suit (retenues du seed), jamais plus de sept jours en arrière sauf non lues.
-  const lea = await browser.newPage();
-  await loginInBrowser(lea, "lea@orasso.local", undefined, "/app/fil");
-  // Les specs précédentes ajoutent des entrées au Journal de Léa : on cherche l'entrée attendue à travers la pagination
-  // (« Plus ancien ») au lieu de supposer qu'elle est sur la première page.
-  const kenjiEntry = lea.getByTestId("journal-item").filter({ hasText: "Kenji_66 va à" });
-  for (let pageNo = 0; pageNo < 50; pageNo++) {
-    await expect(lea.getByTestId("journal")).toBeVisible();
-    if ((await kenjiEntry.count()) > 0) break;
-    const older = lea.getByRole("link", { name: "Plus ancien" });
-    if ((await older.count()) === 0) break;
-    await older.click();
-    await lea.waitForLoadState("networkidle");
-  }
-  await expect(kenjiEntry.first()).toBeVisible();
-  await lea.close();
+  // Tour 2 : le Journal de Léa (l'actualité de Kenji, qu'elle suit) n'existe plus sur le site depuis le Fil (R7e2) : ses
+  // assertions sont retirées ; l'actualité des personnes suivies se lit dans « Du nouveau chez tes potes » (Accueil).
   await bravoPage.close();
   await page.close();
 });

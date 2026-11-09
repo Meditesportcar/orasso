@@ -25,6 +25,7 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
@@ -32,6 +33,7 @@ import { providersApi } from "./providers";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
+import { spotApi } from "./spot";
 import { staffApi } from "./staff";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
@@ -79,6 +81,7 @@ export const api = {
   ...afterEventApi,
   ...passportApi,
   ...presenceApi,
+  ...partnershipsApi,
   ...adminApi,
 
   ...orgaApi,
@@ -91,5 +94,6 @@ export const api = {
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
+  ...spotApi,
   ...feedApi,
 };

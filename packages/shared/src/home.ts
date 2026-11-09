@@ -6,6 +6,7 @@ import type { MyApplication } from "./schemas/application";
 import type { EventCard } from "./schemas/event";
 import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
+import type { SpotMeetupView } from "./schemas/spotMeetup";
 import type { MyWeather } from "./weather";
 
 /**
@@ -385,7 +386,7 @@ export type HomeData = {
   myOutings: HomeMyOutings | null;
   myCrew: HomeMyCrew | null;
   friendsNews: HomeFriendsNews | null;
-  /** Réservés : R7i (rendez-vous au spot) et R7j (souvenirs) les rempliront ; `null` d'ici là. */
+  /** `spotMeetup` : R7i ; `memory` : R7j (`null` d ici là). */
   spotMeetup: HomeSpotMeetup | null;
   memories: HomeMemory | null;
 };
@@ -487,6 +488,6 @@ export const HOME_FRIENDS_NEWS_LIMIT = 3;
 export const HOME_OUTINGS_LIMIT = 3;
 
 /** Rendez-vous au spot (lot R7i) : vide tant que ce lot n'existe pas (le bloc ne s'affiche que s'il y a quelque chose). */
-export type HomeSpotMeetup = never;
+export type HomeSpotMeetup = { meetup: SpotMeetupView; others: number };
 /** Souvenir du jour (lot R7j) : vide tant que ce lot n'existe pas. */
 export type HomeMemory = never;

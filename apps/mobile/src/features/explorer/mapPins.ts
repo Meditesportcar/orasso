@@ -72,10 +72,10 @@ export function proPins(pros: ProCard[]): MapPin[] {
 }
 
 /** Vue de départ : la France sans épingle, un zoom de ville avec une seule, sinon le cadre qui les contient toutes. */
-export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[]): MapView {
+export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[], singleZoom = 10): MapView {
   const first = pins[0];
   if (!first) return FRANCE_VIEW;
-  if (pins.length === 1) return { center: [first.lng, first.lat], zoom: 10 };
+  if (pins.length === 1) return { center: [first.lng, first.lat], zoom: singleZoom };
   let west = first.lng;
   let east = first.lng;
   let south = first.lat;
@@ -87,7 +87,7 @@ export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[]): MapView {
     north = Math.max(north, p.lat);
   }
   // Toutes au même endroit : un cadre vide ne se montre pas, on zoome comme pour une seule.
-  if (west === east && south === north) return { center: [west, south], zoom: 10 };
+  if (west === east && south === north) return { center: [west, south], zoom: singleZoom };
   return { bounds: [west, south, east, north] };
 }
 
@@ -153,4 +153,9 @@ export type ExplorerMapProps = {
    * par-dessus, en bas (l'aperçu flottant).
    */
   fill?: boolean;
+  /**
+   * Lot R7i : zoom d'une épingle seule (10 par défaut, un zoom de ville). Le lieu d'un rendez-vous se montre en zoom de rue,
+   * avec une attribution réduite dans le coin.
+   */
+  zoom?: number;
 };

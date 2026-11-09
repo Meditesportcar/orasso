@@ -43,9 +43,9 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
-
-import { MessageButton } from "@/features/messages/MessageButton";
 import { daysUntil } from "@/features/media/model";
+import { MessageButton } from "@/features/messages/MessageButton";
+import { OfferButton } from "@/features/partnerships/OfferButton";
 import { Stamp } from "@/features/passport/Stamp";
 import { FollowButton } from "@/features/social/FollowButton";
 import { now } from "@/lib/clock";
@@ -415,10 +415,19 @@ export function PublicProfile({
       ) : null}
       {!limited ? <Socials p={p} /> : null}
       <Numbers p={p} />
-      <PartnersLine pseudo={p.pseudo} mine={mode === "self"} />
+      <PartnersLine partners={p.partners} mine={mode === "self"} />
 
       {/* (2) Le bouton unique « Suivre ». */}
       {actions}
+      {/* Lot R7m1 : « Proposer un partenariat », seulement pour un pro vérifié qui regarde (décidé par l'API). */}
+      {mode === "live" && p.partnershipOffer ? (
+        <OfferButton
+          offer={p.partnershipOffer}
+          pseudo={p.pseudo}
+          vehicles={p.vehicles}
+          onChanged={() => onChanged?.()}
+        />
+      ) : null}
       {mode === "preview" ? <Muted variant="caption">{P.inert}</Muted> : null}
       {topNotice}
 

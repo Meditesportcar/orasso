@@ -576,11 +576,6 @@ function EventPage({
             {inviteResult.inviteNotice}
           </p>
         )}
-        {inviteResult?.inviteError && (
-          <p className="s-error" role="alert">
-            {inviteResult.inviteError}
-          </p>
-        )}
         {shareable && invited && invited.inviters.length > 0 && <InviteBanner invitation={invited} />}
         <Reveal>
           {/* DA v2 (lot 56) : l'affiche générée en vedette, le titre en contour sur le fond ; sans affiche générée,
