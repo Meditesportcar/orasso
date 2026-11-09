@@ -150,6 +150,10 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   page.once("dialog", (d) => void d.accept());
   await page.getByTestId("fil-mine-remove").first().click();
   await expect(posts).toHaveCount(total - 1);
+  // Tour 4 : la publication supprimée ne revient pas en tête du Fil.
+  await page.goto("/app/fil?filtre=following");
+  await loaded(page);
+  await expect(page.getByTestId("fil-list")).not.toContainText("Site : prêtes pour dimanche");
 });
 
 test("recadrer au doigt : un glissement déplace le cadre, Valider rend l'image 4:5 recentrée et remet la plaque à zéro", async ({
@@ -256,6 +260,74 @@ test("recadrer en 1:1 : le recadreur du site s'ouvre en carré, Valider recadre 
   await expect(page.getByTestId("site-crop")).toBeHidden({ timeout: 30_000 });
   await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
   expect(await ratio()).toBeCloseTo(1, 2);
+});
+
+test("tour 4 : pendant l'envoi les cadres sont figés ; la confirmation suit la photo ; la déconnexion vide la mémoire de l'onglet", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/fil/publier");
+  await page.getByTestId("fil-publish-file").setInputFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg")]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(2, { timeout: 60_000 });
+
+  // La confirmation « Aucune plaque visible » porte la photo 1 : la retirer ferme la confirmation, la photo 2 reste intacte.
+  await page.getByTestId("fil-publish-none").click();
+  await expect(page.getByTestId("fil-publish-none-confirm")).toBeVisible();
+  await page.getByTestId("fil-publish-photo-remove").first().click();
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1);
+  await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1");
+  await expect(page.getByTestId("fil-publish-plate-state")).not.toContainText("Aucune plaque");
+
+  // Un cadre posé et placé, puis un envoi retardé : rien ne bouge pendant l'envoi.
+  await page
+    .getByTestId("fil-publish-plate")
+    .getByRole("button", { name: /Poser un cadre/ })
+    .click();
+  const frame = page.getByTestId("site-plate-frame").first();
+  const at = (await frame.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at.x + at.width / 2 + 28, at.y + at.height / 2 - 22, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId("fil-publish-missing")).toHaveCount(0);
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolveGate) => {
+    release = resolveGate;
+  });
+  await page.route("**/api/me/uploads", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-progress")).toBeVisible();
+  const before = await page.getByTestId("site-plate-frame").first().getAttribute("style");
+  for (const id of ["fil-publish-none", "fil-publish-crop", "fil-publish-photo-remove", "fil-publish-add"]) {
+    await expect(page.getByTestId(id).first()).toBeDisabled();
+  }
+  await expect(page.getByTestId("fil-publish-format-square")).toBeDisabled();
+  await expect(
+    page
+      .getByTestId("fil-publish-plate")
+      .getByRole("button", { name: /Poser un cadre|Ajouter un cadre/ })
+      .first(),
+  ).toBeDisabled();
+  const now = (await page.getByTestId("site-plate-frame").first().boundingBox()) as typeof at;
+  await page.mouse.move(now.x + now.width / 2, now.y + now.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(now.x + now.width / 2 + 40, now.y + now.height / 2 + 30, { steps: 6 });
+  await page.mouse.up();
+  expect(await page.getByTestId("site-plate-frame").first().getAttribute("style")).toBe(before);
+  release();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+
+  // Déconnexion : « Ma publication » gardée dans l'onglet part avec le compte.
+  expect(await page.evaluate(() => sessionStorage.getItem("orasso:fil:mes-publications"))).not.toBeNull();
+  await page.goto("/app/moi");
+  await page.getByTestId("reglage-deconnexion").click();
+  await expect(page.getByTestId("reglage-deconnexion")).toHaveCount(0, { timeout: 30_000 });
+  expect(await page.evaluate(() => sessionStorage.getItem("orasso:fil:mes-publications"))).toBeNull();
 });
 
 test("un compte qui ne suit personne : état vide d'Abonnements, sans annuaire", async ({ page }) => {

@@ -8,6 +8,7 @@ import "../../styles/fil.css";
 import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
 import { FeedPhotos } from "./Cards";
+import { forgetPublished } from "./mine";
 
 export function MyPosts() {
   const [items, setItems] = useState<FeedPostView[] | null>(null);
@@ -44,6 +45,8 @@ export function MyPosts() {
     if (!window.confirm(L.removeConfirm)) return;
     const res = await apiFetch(`/me/feed-posts/${post.id}`, { method: "DELETE" });
     if (!res.ok) return setNotice(res.error.message);
+    // La copie gardée dans l'onglet part aussi : le Fil ne remet pas en tête une publication qui n'existe plus.
+    forgetPublished(post.id);
     setItems((list) => (list ?? []).filter((p) => p.id !== post.id));
     setNotice(L.removeDone);
   }

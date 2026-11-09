@@ -92,7 +92,9 @@ export function PublishForm({
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [items, setItems] = useState<Item[]>([]);
   const [current, setCurrent] = useState(0);
-  const [confirming, setConfirming] = useState(false);
+  // La confirmation « Aucune plaque visible » porte la clé de la photo qu'elle concerne (jamais l'index : une photo retirée
+  // ferait passer la suivante à sa place).
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
@@ -104,6 +106,8 @@ export function PublishForm({
   const [cropping, setCropping] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  // Pendant l'envoi comme pendant un recadrage, rien de ce qui part ne bouge : l'écran montre exactement ce qui est envoyé.
+  const locked = busy || preparing;
   const [clientId] = useState(() => crypto.randomUUID());
   const keys = useRef<Record<string, string>>({});
   const generation = useRef(0);
@@ -116,12 +120,13 @@ export function PublishForm({
   useEffect(
     () => () => {
       for (const i of live.current) URL.revokeObjectURL(i.url);
+      generation.current++;
     },
     [],
   );
 
   async function pick(files: FileList | null) {
-    if (!files?.length) return;
+    if (!files?.length || locked) return;
     setError(null);
     setPreparing(true);
     const gen = generation.current;
@@ -139,16 +144,19 @@ export function PublishForm({
       });
     }
     setPreparing(false);
-    if (gen !== generation.current) return;
+    if (gen !== generation.current) {
+      for (const f of fresh) URL.revokeObjectURL(f.url);
+      return;
+    }
     setItems((list) => [...list, ...fresh].slice(0, FEED_POST_PHOTOS_MAX));
     if (input.current) input.current.value = "";
   }
 
   async function changeAspect(next: FeedAspect) {
-    if (busy || next === aspect) return;
+    if (locked || next === aspect) return;
     const gen = ++generation.current;
     setAspect(next);
-    setConfirming(false);
+    setConfirmKey(null);
     if (!items.length) return;
     setFormatNote(true);
     setPreparing(true);
@@ -158,7 +166,10 @@ export function PublishForm({
       again.push({ ...i, cropped, url: URL.createObjectURL(cropped), rects: [], noPlate: false });
     }
     setPreparing(false);
-    if (gen !== generation.current) return;
+    if (gen !== generation.current) {
+      for (const f of again) URL.revokeObjectURL(f.url);
+      return;
+    }
     setItems(again);
     keys.current = {};
   }
@@ -167,7 +178,7 @@ export function PublishForm({
   const item = items[index];
   // La confirmation « Aucune plaque visible » est celle de la photo affichée : elle ne suit pas la photo suivante.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
-  useEffect(() => setConfirming(false), [index, item?.key, item?.url]);
+  useEffect(() => setConfirmKey(null), [index, item?.key, item?.url]);
 
   /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro. */
   async function recropAt(key: string, focus: { x: number; y: number }) {
@@ -175,8 +186,10 @@ export function PublishForm({
     setCropping(null);
     if (!target) return;
     setPreparing(true);
+    const gen = generation.current;
     const cropped = await crop(target.source, aspect, focus);
     setPreparing(false);
+    if (gen !== generation.current) return;
     const url = URL.createObjectURL(cropped);
     URL.revokeObjectURL(target.url);
     delete keys.current[target.key + target.url];
@@ -296,7 +309,7 @@ export function PublishForm({
                 type="button"
                 className="fil-thumb__x"
                 aria-label={L.removePhoto}
-                disabled={busy}
+                disabled={locked}
                 onClick={() => {
                   setItems((list) => list.filter((x) => x.key !== p.key));
                   setCurrent(0);
@@ -323,7 +336,7 @@ export function PublishForm({
               type="button"
               variant="secondary"
               icon="gallery"
-              disabled={busy}
+              disabled={locked}
               onClick={() => input.current?.click()}
               data-testid="fil-publish-add"
             >
@@ -341,6 +354,7 @@ export function PublishForm({
               key={a}
               type="button"
               role="tab"
+              disabled={locked}
               aria-selected={aspect === a}
               className={aspect === a ? "is-on" : undefined}
               onClick={() => void changeAspect(a)}
@@ -373,6 +387,7 @@ export function PublishForm({
                 type="button"
                 variant="secondary"
                 icon="undo"
+                disabled={locked}
                 onClick={() => patch(item.key, (i) => ({ ...i, noPlate: false }))}
                 data-testid="fil-publish-plate-blur"
               >
@@ -383,6 +398,7 @@ export function PublishForm({
             <>
               <PlateFrame
                 key={item.url}
+                readOnly={locked}
                 src={item.url}
                 alt={L.plateFrameFor(index + 1)}
                 name={`plateRects${index}`}
@@ -397,13 +413,13 @@ export function PublishForm({
                 type="button"
                 variant="secondary"
                 icon="crop"
-                disabled={busy}
+                disabled={locked}
                 onClick={() => setCropping(item.key)}
                 data-testid="fil-publish-crop"
               >
                 {L.crop}
               </Button>
-              {confirming ? (
+              {confirmKey === item.key ? (
                 <div className="fil-confirm" data-testid="fil-publish-none-confirm">
                   <strong>{V.noPlateConfirmTitle}</strong>
                   <p className="o-t-caption">{V.noPlateConfirmBody}</p>
@@ -412,15 +428,24 @@ export function PublishForm({
                     variant="secondary"
                     icon="check"
                     fullWidth
+                    disabled={locked}
                     onClick={() => {
+                      if (confirmKey !== item.key) return;
                       patch(item.key, (i) => ({ ...i, noPlate: true, rects: [] }));
-                      setConfirming(false);
+                      setConfirmKey(null);
                     }}
                     data-testid="fil-publish-none-yes"
                   >
                     {V.noPlateConfirm}
                   </Button>
-                  <Button type="button" variant="plate" icon="close" fullWidth onClick={() => setConfirming(false)}>
+                  <Button
+                    type="button"
+                    variant="plate"
+                    icon="close"
+                    fullWidth
+                    disabled={locked}
+                    onClick={() => setConfirmKey(null)}
+                  >
                     Annuler
                   </Button>
                 </div>
@@ -429,8 +454,8 @@ export function PublishForm({
                   type="button"
                   variant="secondary"
                   icon="eye"
-                  disabled={busy}
-                  onClick={() => setConfirming(true)}
+                  disabled={locked}
+                  onClick={() => setConfirmKey(item.key)}
                   data-testid="fil-publish-none"
                 >
                   {L.plateConfirmNone}
@@ -472,6 +497,7 @@ export function PublishForm({
                 type="button"
                 className={vehicleId === v.id ? "fil-chip is-on" : "fil-chip"}
                 aria-pressed={vehicleId === v.id}
+                disabled={busy}
                 onClick={() => setVehicleId(vehicleId === v.id ? null : v.id)}
               >
                 {v.label}
@@ -492,6 +518,7 @@ export function PublishForm({
                 type="button"
                 className={eventId === e.id ? "fil-chip is-on" : "fil-chip"}
                 aria-pressed={eventId === e.id}
+                disabled={busy}
                 onClick={() => setEventId(eventId === e.id ? null : e.id)}
               >
                 {e.title}

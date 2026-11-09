@@ -60,6 +60,7 @@ export const feedScreenLabels = {
   publishTitle: "Publier au Fil",
   publishSubtitle: "Pour tes abonnés",
   retry: "Réessayer",
+  photoFailed: "Photo indisponible.",
   loadMore: "Voir la suite",
   loadingMore: "Chargement…",
   end: "Tu as tout vu pour l'instant.",

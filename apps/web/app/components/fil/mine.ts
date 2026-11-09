@@ -8,7 +8,7 @@ import { type FeedCard, type FeedPostView, publishedCard } from "@orasso/shared"
 const KEY = "orasso:fil:mes-publications";
 const MAX = 5;
 
-type Store = Pick<Storage, "getItem" | "setItem">;
+type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type Entry = { userId: string; post: FeedPostView };
 
 function tabStore(): Store | null {
@@ -42,9 +42,22 @@ function writePosts(store: Store | null, posts: Entry[]): void {
   }
 }
 
+/** Efface tout ce que l'onglet garde de mes publications (déconnexion : rien ne reste pour le compte suivant). */
+export function purgePublished(store: Store | null = tabStore()): void {
+  try {
+    store?.removeItem(KEY);
+  } catch {
+    // Stockage refusé : rien à effacer.
+  }
+}
+
 /** Garde la publication qui vient de partir (la plus récente d'abord). */
 export function rememberPublished(userId: string, post: FeedPostView, store: Store | null = tabStore()): void {
-  writePosts(store, [{ userId, post }, ...readPosts(store).filter((e) => e.post.id !== post.id)]);
+  // Les entrées d'un autre compte (même onglet) sont jetées au passage : elles ne servent plus à personne.
+  writePosts(store, [
+    { userId, post },
+    ...readPosts(store).filter((e) => e.userId === userId && e.post.id !== post.id),
+  ]);
 }
 
 /** Mes publications de cette session, en cartes, seulement celles de ce compte (par identifiant, jamais par pseudo). */

@@ -30,7 +30,7 @@ vi.mock("expo-file-system", () => ({
 }));
 vi.mock("./kv", () => ({ onCacheScopeDropped: (h: () => Promise<void>) => void device.dropped.push(h) }));
 
-import { discardTempPhotos, rememberTempPhotos, tempPhotoCount } from "./tempPhotos";
+import { discardTempPhotos, rememberTempPhotos, tempPhotoCount, tempPhotoEpoch } from "./tempPhotos";
 
 beforeEach(() => {
   // D'abord oublier ce que le test d'avant avait noté, ensuite remettre les fichiers.
@@ -62,5 +62,10 @@ describe("photos temporaires du Fil (JPEG non floutés)", () => {
     rememberTempPhotos("file:///cache/c.jpg");
     await Promise.all(device.dropped.map((h) => h()));
     expect(device.files.has("file:///cache/c.jpg")).toBe(false);
+  });
+  it("la purge d'un compte change d'époque : une opération lancée avant n'est plus d'actualité", async () => {
+    const before = tempPhotoEpoch();
+    await Promise.all(device.dropped.map((h) => h()));
+    expect(tempPhotoEpoch()).toBe(before + 1);
   });
 });

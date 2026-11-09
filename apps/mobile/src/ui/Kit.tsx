@@ -112,9 +112,12 @@ export function Seg<T extends string>({
   testID,
   cmode,
   wrap,
+  disabled,
 }: {
   cmode?: boolean;
   wrap?: boolean;
+  /** Lot R7e2, tour 4 : segments grisés et sans effet (une opération est en cours). */
+  disabled?: boolean;
   options: { value: T; label: string; lead?: ReactNode; icon?: IconName }[];
   value: T;
   onChange: (v: T) => void;
@@ -123,7 +126,12 @@ export function Seg<T extends string>({
   const { t } = useTheme();
   return (
     <View
-      style={[styles.seg, { backgroundColor: cmode ? t.color.surface : t.color.surfaceRaised }, cmode && styles.cmode]}
+      style={[
+        styles.seg,
+        { backgroundColor: cmode ? t.color.surface : t.color.surfaceRaised },
+        cmode && styles.cmode,
+        disabled && { opacity: 0.5 },
+      ]}
       accessibilityRole="tablist"
       testID={testID}
     >
@@ -134,7 +142,8 @@ export function Seg<T extends string>({
           <Pressable
             key={o.value}
             accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
+            accessibilityState={{ selected: on, disabled: disabled === true }}
+            disabled={disabled}
             onPress={() => onChange(o.value)}
             style={[
               styles.segBtn,

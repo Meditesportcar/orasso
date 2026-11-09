@@ -33,4 +33,14 @@ export function discardTempPhotos(uris?: readonly string[]): void {
 /** Les photos encore notées (pour les tests). */
 export const tempPhotoCount = (): number => live.size;
 
-onCacheScopeDropped(async () => discardTempPhotos());
+/**
+ * Change à chaque purge d'un compte (déconnexion, changement de compte) : une opération lancée avant et qui finit après
+ * n'est plus d'actualité (ses JPEG tardifs sont effacés, jamais gardés).
+ */
+let epoch = 0;
+export const tempPhotoEpoch = (): number => epoch;
+
+onCacheScopeDropped(async () => {
+  epoch++;
+  discardTempPhotos();
+});

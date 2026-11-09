@@ -1,11 +1,15 @@
 import type { FeedPostView } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { forgetPublished, readPublished, rememberPublished } from "./mine";
+import { forgetPublished, purgePublished, readPublished, rememberPublished } from "./mine";
 
 const memory = () => {
   const data = new Map<string, string>();
-  return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+  return {
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => void data.set(k, v),
+    removeItem: (k: string) => void data.delete(k),
+  };
 };
 const post = (id: string, pseudo = "Damien_66"): FeedPostView =>
   ({
@@ -61,5 +65,22 @@ describe("ma publication gardée dans l'onglet", () => {
     expect(readPublished("u1", s)).toEqual([]);
     expect(readPublished("u1", null)).toEqual([]);
     expect(() => rememberPublished("u1", post("x"), null)).not.toThrow();
+  });
+  it("la déconnexion efface tout : le compte B qui reprend le pseudo de A ne voit rien de A", () => {
+    const s = memory();
+    rememberPublished("u1", post("a", "Pseudo_libere"), s);
+    purgePublished(s);
+    expect(readPublished("u2", s)).toEqual([]);
+    expect(readPublished("u1", s)).toEqual([]);
+    expect(s.getItem("orasso:fil:mes-publications")).toBeNull();
+    expect(() => purgePublished(null)).not.toThrow();
+  });
+  it("sans purge (déconnexion sans script), l'autre compte ne voit rien et sa première publication jette celles de A", () => {
+    const s = memory();
+    rememberPublished("u1", post("a", "Pseudo_libere"), s);
+    expect(readPublished("u2", s)).toEqual([]);
+    rememberPublished("u2", post("b", "Pseudo_libere"), s);
+    expect(readPublished("u1", s)).toEqual([]);
+    expect(readPublished("u2", s).map((c) => c.id)).toEqual(["feed_post:b"]);
   });
 });

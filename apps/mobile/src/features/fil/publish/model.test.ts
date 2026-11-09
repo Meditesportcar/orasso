@@ -5,8 +5,11 @@ import {
   addFrame,
   blurInstead,
   confirmNoPlate,
+  confirmNoPlateFor,
+  cropAll,
   type FeedDraftPhoto,
   framesFromDetection,
+  mergeRecropped,
   newDraftPhoto,
   plateBadge,
   plateControls,
@@ -123,5 +126,97 @@ describe("décision de plaque d'une photo du Fil", () => {
     expect(both.rects).toHaveLength(2);
     expect(publishIssue({ photos: [both], caption: "" })).toBe(L.placeFrame(1));
     expect(publishIssue({ photos: [removeFrame(both)], caption: "" })).toBeNull();
+  });
+});
+
+describe("opérations tardives du composeur (lot R7e2, tour 4)", () => {
+  const later = <T>(value: T) => {
+    let release: () => void = () => undefined;
+    const promise = new Promise<T>((resolve) => {
+      release = () => resolve(value);
+    });
+    return { promise, release };
+  };
+  const shot = (n: number) => ({ uri: `file:///c${n}.jpg`, width: 1080, height: 1350 });
+
+  it("un recadrage qui finit après le départ est effacé tout de suite et ne rend rien", async () => {
+    const slow = later(shot(1));
+    let alive = true;
+    const erased: string[] = [];
+    const run = cropAll(
+      [pic],
+      () => slow.promise,
+      () => alive,
+      (uris) => erased.push(...uris),
+    );
+    alive = false; // l'écran est quitté pendant la découpe
+    slow.release();
+    expect(await run).toBeNull();
+    expect(erased).toEqual(["file:///c1.jpg"]);
+  });
+  it("un recadrage encore d'actualité rend toutes les photos et n'efface rien", async () => {
+    const erased: string[] = [];
+    const out = await cropAll(
+      [pic, pic],
+      async () => shot(2),
+      () => true,
+      (uris) => erased.push(...uris),
+    );
+    expect(out).toHaveLength(2);
+    expect(erased).toEqual([]);
+  });
+  it("une opération qui devient caduque à la deuxième photo efface aussi la première", async () => {
+    let calls = 0;
+    const erased: string[] = [];
+    const out = await cropAll(
+      [pic, pic, pic],
+      async () => shot(++calls),
+      () => calls < 2,
+      (uris) => erased.push(...uris),
+    );
+    expect(out).toBeNull();
+    expect(erased).toEqual(["file:///c1.jpg", "file:///c2.jpg"]);
+  });
+  it("un échec efface ce qui était déjà produit", async () => {
+    let calls = 0;
+    const erased: string[] = [];
+    await expect(
+      cropAll(
+        [pic, pic],
+        async () => {
+          if (++calls === 2) throw new Error("disque plein");
+          return shot(1);
+        },
+        () => true,
+        (uris) => erased.push(...uris),
+      ),
+    ).rejects.toThrow("disque plein");
+    expect(erased).toEqual(["file:///c1.jpg"]);
+  });
+  it("un changement de format qui finit après un retrait ne ressuscite pas la photo, et garde la photo ajoutée", () => {
+    const b = newDraftPhoto("b", pic, pic);
+    const added = newDraftPhoto("c", pic, pic);
+    // Recadrage lancé sur [a, b] ; entre-temps a est retiré et c ajouté.
+    const merged = mergeRecropped(
+      [b, added],
+      new Map([
+        ["a", shot(7)],
+        ["b", shot(8)],
+      ]),
+    );
+    expect(merged.map((p) => p.key)).toEqual(["b", "c"]);
+    expect(merged[0]?.photo.uri).toBe("file:///c8.jpg");
+    expect(merged[1]).toBe(added);
+  });
+  it("« Je confirme » vise la clé de la confirmation : la photo 1 retirée, la photo 2 (devenue index 0) reste intacte", () => {
+    const one = { ...newDraftPhoto("one", pic, pic), detection: "found" as const, rects: [RECT] };
+    const two = { ...newDraftPhoto("two", pic, pic), detection: "found" as const, rects: [RECT] };
+    const after = confirmNoPlateFor([two], "one"); // la confirmation ouverte sur "one" est validée après son retrait
+    expect(after[0]).toBe(two);
+    expect(after[0]?.rects).toEqual([RECT]);
+    // Sur la bonne photo, elle joue ; sans confirmation, rien.
+    expect(confirmNoPlateFor([one, two], "one")[0]?.noPlate).toBe(true);
+    expect(confirmNoPlateFor([one, two], "one")[1]).toBe(two);
+    expect(confirmNoPlateFor([one, two], null)).toEqual([one, two]);
   });
 });

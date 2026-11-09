@@ -28,7 +28,7 @@ import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cropAspect, type PickedPhoto, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
-import { discardTempPhotos, rememberTempPhotos } from "@/lib/tempPhotos";
+import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
 import { Seg, SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
@@ -40,9 +40,11 @@ import { markFeedDirty } from "../feedSignal";
 import {
   addFrame,
   blurInstead,
-  confirmNoPlate,
+  confirmNoPlateFor,
+  cropAll,
   type FeedDraftPhoto,
   framesFromDetection,
+  mergeRecropped,
   newDraftPhoto,
   plateBadge,
   plateControls,
@@ -79,7 +81,9 @@ export function PublishScreen() {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
   const [photos, setPhotos] = useState<FeedDraftPhoto[]>([]);
   const [current, setCurrent] = useState(0);
-  const [confirming, setConfirming] = useState(false);
+  // La confirmation « Aucune plaque visible » porte la clé de la photo qu'elle concerne (jamais l'index : une photo retirée
+  // ferait passer la suivante à sa place).
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
@@ -89,7 +93,9 @@ export function PublishScreen() {
   const [formatNote, setFormatNote] = useState(false);
   // « Recadrer » : la clé de la photo qu'on recadre au doigt (plein écran), et l'attente de la découpe.
   const [cropping, setCropping] = useState<string | null>(null);
-  const [cropBusy, setCropBusy] = useState(false);
+  // Une photo se prépare (choix, recadrage, changement de format) : tout ce qui change la liste des photos est grisé
+  // jusqu'à la fin, une seule opération à la fois.
+  const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
   const [clientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
@@ -98,6 +104,12 @@ export function PublishScreen() {
   const generation = useRef(0);
   const aspectRef = useRef(aspect);
   aspectRef.current = aspect;
+  // Une opération est d'actualité tant que l'écran est là, que le compte est le même et que le format n'a pas rechangé : un
+  // JPEG qui arrive après est effacé tout de suite, jamais gardé.
+  const aliveFor = (gen: number) => {
+    const epoch = tempPhotoEpoch();
+    return () => gen === generation.current && epoch === tempPhotoEpoch();
+  };
 
   const vehicles = useApi(() => api.vehicles(), []);
   const applications = useApi(() => api.applications("upcoming"), []);
@@ -121,51 +133,61 @@ export function PublishScreen() {
   }, []);
 
   async function add(from: "gallery" | "camera") {
+    if (busy || working) return;
     setError(null);
+    setWorking(true);
+    const gen = generation.current;
+    const alive = aliveFor(gen);
+    let sources: PickedPhoto[] = [];
     try {
       const room = FEED_POST_PHOTOS_MAX - photos.length;
       const picked = from === "camera" ? await takePhoto(4096) : await pickPhotos(room, undefined, 4096);
-      if (!picked.length) return;
-      const gen = generation.current;
+      sources = picked.slice(0, room);
+      // Ces JPEG ne sont pas floutés : effacés dès qu'ils ne servent plus (`tempPhotos`), tout de suite s'ils arrivent trop tard.
+      if (!alive()) return discardTempPhotos(picked.map((s) => s.uri));
+      if (!sources.length) return;
       const wanted = aspectRef.current;
-      const fresh: FeedDraftPhoto[] = [];
-      for (const source of picked.slice(0, room)) {
-        const cropped = await cropAspect(source, wanted);
-        // Ces JPEG ne sont pas floutés : effacés dès qu'ils ne servent plus (`tempPhotos`).
-        rememberTempPhotos(source.uri, cropped.uri);
-        fresh.push(newDraftPhoto(randomUUID(), source, cropped));
-      }
-      if (gen !== generation.current) return;
+      const cropped = await cropAll(sources, (s) => cropAspect(s, wanted), alive, discardTempPhotos);
+      if (!cropped) return discardTempPhotos(sources.map((s) => s.uri));
+      rememberTempPhotos(...sources.map((s) => s.uri), ...cropped.map((p) => p.uri));
+      const fresh = sources.map((source, i) => newDraftPhoto(randomUUID(), source, cropped[i] as PickedPhoto));
       setPhotos((list) => [...list, ...fresh].slice(0, FEED_POST_PHOTOS_MAX));
       for (const p of fresh) void detect(p.key, p.photo, gen);
     } catch (e) {
-      setError(errorMessage(e));
+      discardTempPhotos(sources.map((s) => s.uri));
+      if (alive()) setError(errorMessage(e));
+    } finally {
+      setWorking(false);
     }
   }
 
   async function changeAspect(next: FeedAspect) {
-    if (busy || next === aspect) return;
+    if (busy || working || next === aspect) return;
     const gen = ++generation.current;
+    const alive = aliveFor(gen);
     setAspect(next);
-    setConfirming(false);
+    setConfirmKey(null);
     if (!photos.length) return;
     setFormatNote(true);
+    setWorking(true);
     try {
-      const again: FeedDraftPhoto[] = [];
-      for (const p of photos) {
-        const cropped = await cropAspect(p.source, next);
-        rememberTempPhotos(cropped.uri);
-        again.push(recropped(p, cropped));
-      }
-      if (gen !== generation.current) {
-        discardTempPhotos(again.map((p) => p.photo.uri));
-        return;
-      }
+      const cropped = await cropAll(
+        photos.map((p) => p.source),
+        (s) => cropAspect(s, next),
+        alive,
+        discardTempPhotos,
+      );
+      if (!cropped) return;
+      rememberTempPhotos(...cropped.map((p) => p.uri));
+      const again = new Map(photos.map((p, i) => [p.key, cropped[i] as PickedPhoto]));
       discardTempPhotos(photos.map((p) => p.photo.uri));
-      setPhotos(again);
-      for (const p of again) void detect(p.key, p.photo, gen);
+      // Par clé, sur la liste d'aujourd'hui : une photo retirée ne revient pas, une photo ajoutée n'est pas perdue.
+      setPhotos((list) => mergeRecropped(list, again));
+      for (const [key, photo] of again) void detect(key, photo, gen);
     } catch (e) {
-      setError(errorMessage(e));
+      if (alive()) setError(errorMessage(e));
+    } finally {
+      setWorking(false);
     }
   }
 
@@ -176,38 +198,52 @@ export function PublishScreen() {
   const photo = photos[index];
   // Les cartes de décision d'une photo retirée ne doivent pas rester ouvertes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la confirmation se ferme quand on change de photo.
-  useEffect(() => setConfirming(false), [index, photo?.photo.uri]);
+  useEffect(() => setConfirmKey(null), [index, photo?.key, photo?.photo.uri]);
+  const confirming = photo !== undefined && confirmKey === photo.key;
 
-  // Départ de l'écran (publié, abandonné) : les JPEG non floutés du cache de l'appli sont effacés.
-  useEffect(() => () => discardTempPhotos(), []);
+  // Départ de l'écran (publié, abandonné) : les opérations en cours sont invalidées (leurs JPEG tardifs sont effacés à
+  // leur arrivée) et les JPEG non floutés du cache de l'appli sont effacés.
+  useEffect(
+    () => () => {
+      generation.current++;
+      discardTempPhotos();
+    },
+    [],
+  );
 
   /** Un nouveau cadrage au doigt : la photo est recadrée sur ce centre, sa décision de plaque repart de zéro, la détection est relancée. */
   async function recropAt(key: string, focus: { x: number; y: number }) {
     const target = photos.find((p) => p.key === key);
-    if (!target || cropBusy) return;
-    setCropBusy(true);
+    if (!target || busy || working) return;
+    setWorking(true);
+    const gen = generation.current;
+    const alive = aliveFor(gen);
     try {
       const cropped = await cropAspect(target.source, aspect, focus);
+      if (!alive()) return discardTempPhotos([cropped.uri]);
       rememberTempPhotos(cropped.uri);
       discardTempPhotos([target.photo.uri]);
       setPhotos((list) => list.map((p) => (p.key === key ? recropped(p, cropped, focus) : p)));
-      setConfirming(false);
+      setConfirmKey(null);
       setCropping(null);
-      void detect(key, cropped, generation.current);
+      void detect(key, cropped, gen);
     } catch (e) {
-      setError(errorMessage(e));
-      setCropping(null);
+      if (alive()) {
+        setError(errorMessage(e));
+        setCropping(null);
+      }
     } finally {
-      setCropBusy(false);
+      setWorking(false);
     }
   }
 
   const controls = photo ? plateControls(photo) : null;
-  const preparing = photos.some((p) => p.detection === "pending");
+  const preparing = working || photos.some((p) => p.detection === "pending");
+  const locked = busy || working;
   const issue = publishIssue({ photos, caption, preparing });
 
   async function publish() {
-    if (busy || issue) return;
+    if (busy || working || issue) return;
     setBusy(true);
     setError(null);
     try {
@@ -267,7 +303,7 @@ export function PublishScreen() {
           subtitle={L.cropOf(at + 1, photos.length, label)}
           badge={L.cropBadge(label)}
           hint={L.cropHint}
-          busy={cropBusy}
+          busy={working}
           onCancel={() => setCropping(null)}
           onConfirmFocus={(focus) => void recropAt(target.key, focus)}
         />
@@ -358,7 +394,7 @@ export function PublishScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={L.removePhoto}
-                disabled={busy}
+                disabled={locked}
                 onPress={() => {
                   discardTempPhotos([p.source.uri, p.photo.uri]);
                   setPhotos((list) => list.filter((x) => x.key !== p.key));
@@ -376,7 +412,7 @@ export function PublishScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${L.addPhotos}, ${L.publishPhotosCount(photos.length, FEED_POST_PHOTOS_MAX)}`}
-              disabled={busy}
+              disabled={locked}
               onPress={() => void add("gallery")}
               style={[styles.tile, styles.addTile, { borderColor: c.line }]}
               testID="fil-publish-add"
@@ -390,10 +426,10 @@ export function PublishScreen() {
         </View>
         {photos.length < FEED_POST_PHOTOS_MAX ? (
           <View style={styles.row}>
-            <SmButton kind="s" icon="gallery" disabled={busy} onPress={() => void add("gallery")}>
+            <SmButton kind="s" icon="gallery" disabled={locked} onPress={() => void add("gallery")}>
               {L.gallery}
             </SmButton>
-            <SmButton kind="s" icon="camera" disabled={busy} onPress={() => void add("camera")}>
+            <SmButton kind="s" icon="camera" disabled={locked} onPress={() => void add("camera")}>
               {L.camera}
             </SmButton>
           </View>
@@ -405,6 +441,7 @@ export function PublishScreen() {
         <Seg<FeedAspect>
           value={aspect}
           onChange={(v) => void changeAspect(v)}
+          disabled={locked}
           options={ASPECTS}
           testID="fil-publish-format"
         />
@@ -425,7 +462,7 @@ export function PublishScreen() {
             width={photo.photo.width}
             height={photo.photo.height}
             rects={photo.rects}
-            editable={photo.rects.length > 0 && !busy}
+            editable={photo.rects.length > 0 && !locked}
             onChange={(rects) => patch(photo.key, (p) => setFrames(p, rects))}
             mask="black"
             loupe
@@ -444,7 +481,7 @@ export function PublishScreen() {
             <SmButton
               kind="s"
               icon="crop"
-              disabled={busy || controls?.searching}
+              disabled={locked || controls?.searching}
               onPress={() => setCropping(photo.key)}
               testID="fil-publish-crop"
             >
@@ -453,7 +490,7 @@ export function PublishScreen() {
             <SmButton
               kind="s"
               icon="add"
-              disabled={busy || !controls?.canAdd}
+              disabled={locked || !controls?.canAdd}
               onPress={() => patch(photo.key, addFrame)}
               testID="fil-publish-frame-add"
             >
@@ -463,7 +500,7 @@ export function PublishScreen() {
               <SmButton
                 kind="s"
                 icon="close"
-                disabled={busy}
+                disabled={locked}
                 onPress={() => patch(photo.key, removeFrame)}
                 testID="fil-publish-frame-remove"
               >
@@ -476,7 +513,7 @@ export function PublishScreen() {
               kind="s"
               icon="undo"
               wide
-              disabled={busy}
+              disabled={locked}
               onPress={() => patch(photo.key, blurInstead)}
               testID="fil-publish-plate-blur"
             >
@@ -494,16 +531,17 @@ export function PublishScreen() {
                 kind="s"
                 icon="check"
                 wide
-                disabled={busy || !controls?.canNone}
+                disabled={locked || !controls?.canNone}
                 onPress={() => {
-                  patch(photo.key, confirmNoPlate);
-                  setConfirming(false);
+                  // La confirmation vise la photo dont elle porte la clé : si elle n'est plus là, rien ne bouge.
+                  setPhotos((list) => confirmNoPlateFor(list, confirmKey));
+                  setConfirmKey(null);
                 }}
                 testID="fil-publish-none-yes"
               >
                 {V.noPlateConfirm}
               </SmButton>
-              <SmButton kind="g" icon="close" wide onPress={() => setConfirming(false)}>
+              <SmButton kind="g" icon="close" wide onPress={() => setConfirmKey(null)}>
                 Annuler
               </SmButton>
             </View>
@@ -512,8 +550,8 @@ export function PublishScreen() {
               kind="s"
               icon="eye"
               wide
-              disabled={busy || !controls?.canNone}
-              onPress={() => setConfirming(true)}
+              disabled={locked || !controls?.canNone}
+              onPress={() => setConfirmKey(photo.key)}
               testID="fil-publish-none"
             >
               {L.plateConfirmNone}

@@ -18,6 +18,7 @@ import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 import { Waiting } from "@/ui/Waiting";
 import { FeedPhotos } from "./FeedPhotos";
+import { forgetMyPublished, markFeedDirty } from "./feedSignal";
 
 export function MyPostsScreen() {
   const { t } = useTheme();
@@ -64,6 +65,9 @@ export function MyPostsScreen() {
     if (!(await confirmRemove(L.removeConfirm))) return;
     try {
       await api.removeFeedPost(post.id);
+      // La copie gardée en tête du Fil part aussi, et le Fil se relit à son retour : la carte n'y revient pas.
+      forgetMyPublished(`feed_post:${post.id}`);
+      markFeedDirty();
       setItems((list) => (list ?? []).filter((p) => p.id !== post.id));
       setNotice(L.removeDone);
     } catch (e) {

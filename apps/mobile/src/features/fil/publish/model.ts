@@ -113,3 +113,51 @@ export function plateBadge(p: Pick<FeedDraftPhoto, "rects" | "noPlate" | "detect
   if (p.noPlate) return "none";
   return p.detection === "pending" ? "pending" : "todo";
 }
+
+/**
+ * Recadre chaque photo, une à une. `alive` dit si l'opération est encore d'actualité (écran quitté, compte changé,
+ * format rechangé) : dès qu'un résultat arrive et qu'elle ne l'est plus, ce résultat et ceux d'avant sont effacés tout
+ * de suite (ce sont des JPEG non floutés) et rien n'est rendu (`null`). Un échec efface aussi ce qui était déjà produit.
+ */
+export async function cropAll(
+  sources: readonly PickedPhoto[],
+  crop: (source: PickedPhoto) => Promise<PickedPhoto>,
+  alive: () => boolean,
+  discard: (uris: string[]) => void,
+): Promise<PickedPhoto[] | null> {
+  const done: PickedPhoto[] = [];
+  try {
+    for (const source of sources) {
+      const out = await crop(source);
+      done.push(out);
+      if (!alive()) {
+        discard(done.map((p) => p.uri));
+        return null;
+      }
+    }
+  } catch (e) {
+    discard(done.map((p) => p.uri));
+    throw e;
+  }
+  return done;
+}
+
+/**
+ * Applique un recadrage terminé à la liste d'aujourd'hui, photo par photo (par clé) : une photo retirée entre-temps ne
+ * revient pas, une photo ajoutée entre-temps reste telle quelle (elle n'est pas dans `again`).
+ */
+export const mergeRecropped = (
+  list: readonly FeedDraftPhoto[],
+  again: ReadonlyMap<string, PickedPhoto>,
+): FeedDraftPhoto[] =>
+  list.map((p) => {
+    const photo = again.get(p.key);
+    return photo ? recropped(p, photo) : p;
+  });
+
+/**
+ * « Je confirme » pour la photo dont la confirmation porte la clé `key` : aucune autre photo n'est touchée, et si cette
+ * photo n'est plus là (retirée, passée à une autre place) il ne se passe rien. Jamais par l'index.
+ */
+export const confirmNoPlateFor = (list: readonly FeedDraftPhoto[], key: string | null): FeedDraftPhoto[] =>
+  list.map((p) => (key !== null && p.key === key ? confirmNoPlate(p) : p));

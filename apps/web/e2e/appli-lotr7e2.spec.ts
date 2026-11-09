@@ -272,13 +272,64 @@ test("publier au Fil en 4:5 : bouton grisé expliqué sans décision de plaque, 
   const posted = mine.data.items.find((p) => p.caption === "Prêtes pour dimanche");
   expect(posted?.aspect).toBe("portrait_4_5");
   expect(posted?.photos).toHaveLength(2);
-  await go(page, "/fil/mes-publications");
+  // Sans recharger la page (la copie gardée en mémoire ne doit pas s'envoler) : « Mes publications », puis retour au Fil.
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/fil/mes-publications");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  });
   await expect(page.getByTestId("fil-mine-post").first()).toBeVisible({ timeout: 30_000 });
   await shot(page, "mes-publications");
   page.once("dialog", (d) => void d.accept());
   const total = await page.getByTestId("fil-mine-post").count();
   await page.getByTestId("fil-mine-remove").first().click();
   await expect(page.getByTestId("fil-mine-post")).toHaveCount(total - 1, { timeout: 15_000 });
+  // Tour 4 : la publication supprimée ne revient pas en tête du Fil.
+  await page.goBack();
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await loaded(page);
+  await expect(page.getByTestId("fil-list")).not.toContainText("Prêtes pour dimanche");
+  await ctx.close();
+});
+
+test("tour 4 : la confirmation « Aucune plaque visible » suit la photo, pas l'index (retirer la photo 1)", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser, "kenji@orasso.local");
+  await go(page, "/fil/publier");
+  await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("fil-publish-add").click();
+  await (await chooser).setFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg")]);
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(2, { timeout: 60_000 });
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1", { timeout: 30_000 });
+  await page.getByTestId("fil-publish-none").click();
+  await expect(page.getByTestId("fil-publish-none-confirm")).toBeVisible();
+  await page.getByTestId("fil-publish-photo-remove").first().click();
+  await expect(page.getByTestId("fil-publish-photo")).toHaveCount(1);
+  // La confirmation de la photo 1 est fermée ; la photo restante (devenue la première) n'a aucune décision.
+  await expect(page.getByTestId("fil-publish-none-confirm")).toHaveCount(0);
+  await expect(page.getByTestId("fil-publish-missing")).toContainText("Photo 1");
+  await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
+  await ctx.close();
+});
+
+test("tour 4 : une photo du Fil qui n'arrive pas montre « Réessayer », et revient quand la requête passe", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  // Seule la requête des photos de publication échoue : la liste, elle, charge.
+  const photoRoute = /\/feed-posts\/[^/]+\/photos\//;
+  await page.route(photoRoute, (route) => route.abort());
+  await go(page, "/fil");
+  await loaded(page);
+  await expect(page.getByTestId("photo-failed").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("photo-retry").first()).toBeVisible();
+  await shot(page, "photo-en-panne");
+  await page.unroute(photoRoute);
+  await page.getByTestId("photo-retry").first().click();
+  await expect(page.getByTestId("feed-post-photos").first().locator("img").first()).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
 
