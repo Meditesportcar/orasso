@@ -6,6 +6,7 @@ import {
   lineFontSize,
   PAGE_BOX,
   silhouetteOf,
+  stampDate,
   stampLook,
   stampPlacement,
   stampShapeArt,
@@ -88,6 +89,25 @@ describe("texte et encre", () => {
     expect(text.date).toBe("24.10");
     expect(text.year).toBe("2026");
     expect(text.ring).toBe("NOCTURNE DE CANET · 66 ·");
+  });
+
+  it("la date est celle de l'entrée, pas celle du début de l'événement (lot R7-0)", () => {
+    const later = stamp({ stampedAt: "2026-10-25T08:12:00.000Z" });
+    expect(stampText(later).date).toBe("25.10");
+    expect(stampText(later).year).toBe("2026");
+    expect(stampText(stamp({ kind: "visit", stampedAt: "2026-10-25T08:12:00.000Z" })).date).toBe("25.10");
+    expect(stampText(stamp({ kind: "staff", stampedAt: "2026-10-25T08:12:00.000Z" })).date).toBe("25.10");
+  });
+
+  it("un rare est posé au règlement : il porte le jour du début de l'événement, pas celui du règlement (lot R7-0, tour 2)", () => {
+    const settled = "2026-10-26T20:30:00.000Z";
+    for (const kind of ["first_outing", "tenth_event", "full_moon", "audience_prize"] as const) {
+      const rare = stamp({ kind, rare: true, stampedAt: settled });
+      expect(stampText(rare).date).toBe("24.10");
+      expect(stampDate(rare)).toEqual(new Date(rare.event.startsAt));
+    }
+    // Minuit passé à Paris : le jour est celui de Paris, pas celui de l'UTC.
+    expect(stampText(stamp({ stampedAt: "2026-10-24T22:30:00.000Z" })).date).toBe("25.10");
   });
 
   it("un rare porte le nom de son genre, un titre long est coupé sur la ligne mais pas sur l'anneau", () => {

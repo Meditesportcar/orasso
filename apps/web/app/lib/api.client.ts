@@ -7,7 +7,11 @@ export type ClientResult<T> =
 
 export async function apiFetch<T>(
   path: string,
-  init: { method?: string; json?: unknown } = {},
+  init: {
+    method?: string;
+    json?: unknown /** La requête survit à un changement de page (« lu » posé juste avant de naviguer). */;
+    keepalive?: boolean;
+  } = {},
 ): Promise<ClientResult<T>> {
   try {
     const res = await fetch(`/api${path}`, {
@@ -15,6 +19,7 @@ export async function apiFetch<T>(
       headers: init.json !== undefined ? { "content-type": "application/json" } : undefined,
       body: init.json !== undefined ? JSON.stringify(init.json) : undefined,
       credentials: "same-origin",
+      keepalive: init.keepalive,
     });
     if (res.ok) return { ok: true, status: res.status, data: (res.status === 204 ? null : await res.json()) as T };
     const payload = (await res.json().catch(() => null)) as Partial<ApiError> | null;

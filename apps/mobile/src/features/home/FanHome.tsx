@@ -12,6 +12,7 @@
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   defaultHomeWidgets,
+  eventCountdownParts,
   type HomeData,
   type HomeFriendNews,
   type HomeNudgeKind,
@@ -37,7 +38,7 @@ import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
 import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sorties/model";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { dayCountdown, formatDay, formatHour } from "@/lib/format";
+import { formatDay, formatHour } from "@/lib/format";
 import { kvGet, kvSet } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
@@ -180,7 +181,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       key: `app-${a.id}`,
       title: a.event.title,
       startsAt: a.event.startsAt,
-      countdown: dayCountdown(a.event.startsAt, now),
+      countdown: eventCountdownParts(a.event, now).lead,
+      countdownDetail: eventCountdownParts(a.event, now).detail,
       posterUrl: fileUrl(fromApi?.posterUrl ?? a.event.posterUrl ?? null),
       tags: (
         <>
@@ -227,14 +229,22 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const ticketOuting = (x: {
     id: string;
     priceCents: number | null;
-    event: { slug: string; title: string; startsAt: string; city: string | null; posterUrl?: string | null };
+    event: {
+      slug: string;
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      city: string | null;
+      posterUrl?: string | null;
+    };
     posterUrl?: string | null;
     arrivalText?: string | null;
   }): Outing => ({
     key: `ticket-${x.id}`,
     title: x.event.title,
     startsAt: x.event.startsAt,
-    countdown: dayCountdown(x.event.startsAt, now),
+    countdown: eventCountdownParts(x.event, now).lead,
+    countdownDetail: eventCountdownParts(x.event, now).detail,
     posterUrl: fileUrl(x.posterUrl ?? x.event.posterUrl ?? null),
     tags: (
       <>

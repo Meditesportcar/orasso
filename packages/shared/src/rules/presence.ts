@@ -127,21 +127,35 @@ export function entryRefusal(ctx: Pick<PresenceContext, "access" | "ticket">): P
 }
 
 /**
- * Refus de la présence par GPS, dans l'ordre où on l'explique : événement publié et ouvert (`closed`), exposant
- * (`use_qr`), accès et billet (`closed_to_public`, `pay_at_entry`, `scan_ticket`, `ticket_required`), déjà présent
- * (`already_present`), position trop imprécise (`gps_imprecise`), lieu sans position (`no_zone`), hors de la zone
- * (`out_of_zone`). `null` = la présence est validée.
+ * Les refus qui ne dépendent pas de la mesure : événement publié et ouvert (`closed`), exposant (`use_qr`), accès et
+ * billet (`closed_to_public`, `pay_at_entry`, `scan_ticket`, `ticket_required`), déjà présent (`already_present`). C'est
+ * la règle unique du bouton « Je suis sur place » (le bloc `live` de la fiche en tire `canValidatePresence`) et de la
+ * validation : le bouton n'est proposé que si l'API ne refuserait pas avant même de regarder la position.
  */
-export function presenceRefusal(ctx: PresenceContext): PresenceRefusal | null {
+export function presenceGate(
+  ctx: Pick<PresenceContext, "event" | "now" | "holdsVehicleSlot" | "access" | "ticket" | "alreadyPresent">,
+): PresenceRefusal | null {
   if (ctx.event.status !== "published" || !inPresenceWindow(ctx.event, ctx.now)) return "closed";
   if (ctx.holdsVehicleSlot) return "use_qr";
   const entry = entryRefusal(ctx);
   if (entry) return entry;
   if (ctx.alreadyPresent) return "already_present";
+  // Un lieu sans coordonnées n'a pas de zone : le bouton n'est pas proposé et la validation répond `no_zone`.
+  if (ctx.event.lat === null || ctx.event.lng === null) return "no_zone";
+  return null;
+}
+
+/**
+ * Refus de la présence par GPS, dans l'ordre où on l'explique : `presenceGate` (fermé, exposant, accès et billet, déjà
+ * présent), puis position trop imprécise (`gps_imprecise`), lieu sans position (`no_zone`), hors de la zone
+ * (`out_of_zone`). `null` = la présence est validée.
+ */
+export function presenceRefusal(ctx: PresenceContext): PresenceRefusal | null {
+  const gate = presenceGate(ctx);
+  if (gate) return gate;
   if (ctx.accuracyM !== null && ctx.accuracyM !== undefined && ctx.accuracyM > PRESENCE_MAX_ACCURACY_M) {
     return "gps_imprecise";
   }
-  if (ctx.event.lat === null || ctx.event.lng === null) return "no_zone";
   if (!inZone(ctx.point, ctx.accuracyM, ctx.event)) return "out_of_zone";
   return null;
 }

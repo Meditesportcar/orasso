@@ -74,6 +74,8 @@ export const iconShapes = {
   grade: [p("M12 3l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.3 6.8 19l1-5.8L3.5 9.1l5.9-.8z")], // grade (réservée : points)
   staff: crew, // onglet Staff de l'organisateur (prototype) : même pictogramme que crew
   live: [p("M3 12h4l3-7 4 14 3-7h4")], // Direct (prototype)
+  // Lot R7d2 (maquette R7.13, « Je suis sur place ») : la cible, pour valider sa présence par la position.
+  target: [c(12, 12, 8), c(12, 12, 3), p("M12 2v3M12 19v3M2 12h3M19 12h3")],
   eye: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3)], // afficher le mot de passe
   eyeOff: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3), p("M4 4l16 16")],
   // Signaler (lot 32, ajout daté dans docs/design-system/README.md) : drapeau, même grille, même trait.

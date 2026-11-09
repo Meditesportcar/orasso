@@ -153,7 +153,9 @@ function followingProsCount(userId: string, q?: string) {
 }
 
 /** Marque et modèle du véhicule principal de chacune de ces personnes (jamais la plaque, jamais l'année). */
-async function mainVehicleLabels(people: Pick<Profile, "userId" | "mainVehicleId">[]): Promise<Map<string, string>> {
+export async function mainVehicleLabels(
+  people: Pick<Profile, "userId" | "mainVehicleId">[],
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!people.length) return out;
   const rows = await db

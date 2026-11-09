@@ -56,13 +56,16 @@ const codeLabel: Record<ListKey, Record<string, string>> = {
   "lists.event_formats": eventFormatLabels,
 };
 
-// Lot 57 : les points du prix du public (lot 49) se règlent aussi ici, comme sur le site.
+// Lot 57 : les points se règlent aussi ici, comme sur le site. Lot R7l1 : le podium de chaque vote (1er, 2e, 3e)
+// remplace le prix du public.
 const POINT_KEYS = [
   "points.participation",
   "points.staff",
   "points.referral",
   "points.malus",
-  "points.audience_prize",
+  "points.vote_first",
+  "points.vote_second",
+  "points.vote_third",
 ] as const;
 
 function entryOf(settings: AdminSettings | null, key: AdminSettingKey) {

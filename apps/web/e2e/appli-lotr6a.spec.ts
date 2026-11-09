@@ -76,7 +76,12 @@ async function scrollBy(page: Page, px: number) {
 /** Place la page du crew à une position (zone qui défile de React Native Web) : 0 en haut, `"bas"` tout en bas. */
 async function scrollPage(page: Page, to: number | "bas") {
   await page.evaluate((y) => {
-    const el = document.querySelector('[data-testid="crew-page"]') as HTMLElement | null;
+    // Lot R7b2 : la page du crew est l'onglet Crew ; sa zone qui défile est le premier parent défilant du fil.
+    let el = document.querySelector('[data-testid="crew-page"]') as HTMLElement | null;
+    if (!el) {
+      el = document.querySelector('[data-testid="crew-feed"]') as HTMLElement | null;
+      while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+    }
     if (el) el.scrollTop = y === "bas" ? el.scrollHeight : y;
   }, to);
   await page.waitForTimeout(500);
@@ -146,8 +151,9 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
       timeout: 15_000,
     });
     await shot(k, `03-commentaire-en-direct-${theme}`);
-    // Fermer la feuille : toucher le voile, au-dessus d'elle.
-    await k.mouse.click(195, 80);
+    // Fermer la feuille : toucher le voile, au-dessus d'elle (lot R7b2 : la page du crew est un onglet, la barre du haut
+    // reste hors du voile ; on touche donc sous elle).
+    await k.mouse.click(195, 150);
     await expect(k.getByText("Je serai là à 9 h pile.")).toHaveCount(0, { timeout: 10_000 });
     await expect(mine.getByTestId("crew-post-comments")).toContainText("1", { timeout: 15_000 });
 
@@ -183,7 +189,8 @@ test("appli : la page du crew en direct, à deux", async ({ browser }) => {
     await openCrew(j, crew.slug);
     await expect(j.getByTestId("crew-feed")).toBeVisible();
     await removeMember(crew, julie);
-    await expect(j.getByTestId("crew-vitrine")).toBeVisible({ timeout: 15_000 });
+    // Lot R7b2 : sans autre crew, l'onglet Crew devient l'écran « sans crew » (plus la vitrine, qui reste pour un crew étranger).
+    await expect(j.getByTestId("crew-tab-none")).toBeVisible({ timeout: 15_000 });
     // Nina entre dans le crew et publie : la page de Kenji la montre, celle de Julie non.
     await acceptNina(crew);
     await scrollPage(k, 0);

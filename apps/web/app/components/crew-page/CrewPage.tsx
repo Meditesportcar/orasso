@@ -13,6 +13,7 @@ import {
   crewLabels,
   gradeLabels,
   crewPageLabels as L,
+  crewTabLabels as T,
   wallTime,
 } from "@orasso/shared";
 import { useEffect, useId, useRef, useState } from "react";
@@ -422,5 +423,85 @@ export function CrewRequestDialog({
         </div>
       </dialog>
     </>
+  );
+}
+
+/** Champs cachés des formulaires d'action de crew (`crewAction`). */
+export function Hidden({ crewId, userId, intent }: { crewId: string; userId?: string; intent: string }) {
+  return (
+    <>
+      <input type="hidden" name="intent" value={intent} />
+      <input type="hidden" name="crewId" value={crewId} />
+      {userId && <input type="hidden" name="userId" value={userId} />}
+    </>
+  );
+}
+
+/** Lot R7b2 : le rond du crew (son logo, sinon ses initiales sur la moutarde, `.cr-mini` de la maquette R7.11). */
+export function CrewBadge({ name, logoUrl, size = 40 }: { name: string; logoUrl: string | null; size?: number }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
+  return (
+    <span className="crw-badge" style={{ width: size, height: size }} aria-hidden="true">
+      {logoUrl ? <img src={logoUrl} alt="" /> : <span>{initials}</span>}
+    </span>
+  );
+}
+
+/**
+ * Lot R7b2 (D38) : la fiche d'un membre dans l'onglet Membres : sa ligne (pseudo, véhicule principal, « Chef ») s'ouvre sur
+ * ses voitures (l'ancien « Garage du crew ») et son profil. Sans JavaScript : un `<details>`.
+ */
+export function MemberFiche({
+  pseudo,
+  avatarUrl,
+  caption,
+  leader,
+  back,
+  cars,
+}: {
+  pseudo: string;
+  avatarUrl: string | null;
+  caption: string;
+  leader: boolean;
+  back: string;
+  cars: readonly CrewGarageVehicle[];
+}) {
+  return (
+    <li className="crw-mfiche" data-testid="crew-member">
+      <details>
+        <summary className="crw-prow" aria-label={T.memberA11y(pseudo)} data-testid="crew-member-open">
+          <PersonAvatar url={avatarUrl} pseudo={pseudo} size={42} />
+          <span className="crw-grow">
+            <span className="o-t-body-strong crw-block">{pseudo}</span>
+            <span className="o-t-caption s-muted">{caption}</span>
+          </span>
+          {leader ? <span className="crw-tag crw-tag--acc">{L.roleLeader}</span> : null}
+          <Icon name="down" size={18} />
+        </summary>
+        <div className="crw-mfiche__body" data-testid="crew-member-sheet">
+          <CrewSecHead title={T.memberCars} hint={T.memberCarsCount(cars.length)} />
+          {cars.length === 0 ? <p className="s-muted">{T.memberCarsEmpty}</p> : null}
+          <div className="crw-grid" data-testid="crew-member-cars">
+            {cars.map((g) => (
+              <GarageTile key={g.id} vehicle={g} />
+            ))}
+          </div>
+          <Button
+            variant="secondary"
+            icon="profile"
+            href={withRetour(`/u/${encodeURIComponent(pseudo)}`, back)}
+            fullWidth
+            data-testid="crew-member-profile"
+          >
+            {T.memberProfile}
+          </Button>
+        </div>
+      </details>
+    </li>
   );
 }

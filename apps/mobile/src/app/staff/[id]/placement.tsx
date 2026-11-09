@@ -4,7 +4,7 @@ import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import { counters } from "@/lib/staff/model";
+import { counters, placesLeft } from "@/lib/staff/model";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -46,7 +46,7 @@ export default function Placement() {
           </Text>
           <Text variant="meta" color={c.plateMuted}>
             {z.capacity !== null
-              ? `${Math.max(0, z.capacity - z.arrived)} places restantes sur ${z.capacity}`
+              ? `${placesLeft(z)} places restantes sur ${z.capacity}`
               : `${z.expected - z.arrived} attendus`}
           </Text>
         </Plate>

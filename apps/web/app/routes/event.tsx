@@ -16,6 +16,7 @@ import {
   arrivalLabel,
   arrivalTime,
   type Category,
+  canOfferPresence,
   countFr,
   crewLabels,
   type EventLineup,
@@ -30,11 +31,17 @@ import {
   siteLabels as L,
   LINEUP_BLOCK_SIZE,
   lineupLabels,
+  liveAt,
+  liveOnSiteLine,
+  liveRunning,
+  liveVotesLabel,
   type MediaContentView,
   type MyCrew,
   type MyTicket,
   mediaContentKindLabels,
   mediaPlatformLabels,
+  nearCountdown,
+  presenceLabels,
   previewSummary,
   publicAccessText,
   type ReceivedEventInvitation,
@@ -49,7 +56,7 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import type { CSSProperties } from "react";
-import { data, Form, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation, useRevalidator } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { InviteBanner, WhoGoes } from "../components/EventInvite";
@@ -69,7 +76,9 @@ import { type InviteNoticeData, isShareable, muteInviterAction } from "../lib/ev
 import { formatDateTime, formatDateTimeYear, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
+import { useNowUntil, useReloadOnReturn } from "../lib/useNowUntil";
 import "../styles/invitations.css";
+import "../styles/live.css";
 import "../styles/providers.css";
 import type { Route } from "./+types/event";
 
@@ -143,10 +152,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ended: new Date(event.endsAt).getTime() <= nowMs(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
+    // Lot R7d2, tour 3 : la ligne « Depuis l'appli, valide ta présence » suit la casquette COURANTE, comme le bouton de
+    // l'appli. Le site n'a pas de casquette mémorisée : la casquette est l'espace d'où l'on vient (`/orga`, `/pro`) ; sur
+    // une page publique ouverte d'ailleurs, c'est la casquette de base (visiteur ou exposant), comme dans l'appli au
+    // premier lancement.
+    gpsProfile: Boolean(me) && !comesFromHatSpace(request),
     origin: originOf(request),
     state: registrationState(event, nowMs()),
     block: registrationBlock(event, nowMs()),
   };
+}
+
+/** La personne arrive d'un espace de casquette autre que la base (organisateur ou pro) : sa casquette courante n'est pas le passionné. */
+function comesFromHatSpace(request: Request): boolean {
+  const from = request.headers.get("referer");
+  if (!from) return false;
+  try {
+    return /^\/(orga|pro)(\/|$)/.test(new URL(from).pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -410,6 +435,7 @@ function EventPage({
     structure,
     categories,
     connected,
+    gpsProfile,
     origin,
     state,
     block,
@@ -463,6 +489,24 @@ function EventPage({
   const mySlot = mine.length > 0 ? event.arrivals.exhibitors : null;
   const publicFrom = event.arrivals.public?.strict ? arrivalTime(event.arrivals.public.from) : null;
   const whenShort = formatWhen(event.startsAt, event.endsAt);
+
+  // Lot R7d2 (maquette R7.13) : pendant l'événement, l'état du direct vient du bloc `live` de l'API (jamais calculé ici,
+  // rien après la fin) ; une fois entré, « Votes · N ouverts » devient le bouton principal de la fiche. La présence par
+  // GPS est réservée à l'appli (la position du téléphone) : le site le dit.
+  const revalidator = useRevalidator();
+  const reloadPage = () => void revalidator.revalidate();
+  const liveClock = useNowUntil(event, reloadPage);
+  useReloadOnReturn(Boolean(event.live), reloadPage);
+  const live = liveAt(event.live ?? null, event, liveClock);
+  const running = liveRunning(live);
+  const onSiteLine = liveOnSiteLine(live);
+  const votesLabel = liveVotesLabel(live);
+  const offerPresence = canOfferPresence(live, {
+    signedIn: connected,
+    eligibleProfile: gpsProfile,
+    holdsVehicleSlot: mine.some((a) => a.status === "accepted"),
+  });
+  const mainVariant = votesLabel ? "secondary" : "primary";
 
   return (
     <div className="ev">
@@ -585,6 +629,28 @@ function EventPage({
             </span>
           )}
         </div>
+
+        {/* Lot R7d2 : le direct de la fiche pendant l'événement. */}
+        {running && (
+          <section className="ev__live" aria-label="En cours" data-testid="event-live">
+            <p className="ev__live-phase o-t-label" data-testid="event-live-phase">
+              <Icon name="live" size={18} />
+              {nearCountdown(event, new Date(nowMs()))}
+            </p>
+            {onSiteLine && (
+              <p className="ev__live-onsite" data-testid="event-live-onsite">
+                <Icon name="staff" size={18} />
+                <strong>{onSiteLine}</strong>
+              </p>
+            )}
+            {offerPresence && (
+              <p className="o-t-caption s-muted ev__live-app" data-testid="presence-app-only">
+                <Icon name="target" size={16} />
+                {presenceLabels.appOnly}
+              </p>
+            )}
+          </section>
+        )}
 
         {/* Lot R6c (R6.3) : « Qui y va » et « Inviter du monde » (membre connecté, événement qui se partage). */}
         {shareable && connected && <WhoGoes going={going} slug={event.slug} />}
@@ -819,6 +885,17 @@ function EventPage({
                 : { value: event.acceptedCount ?? "–", label: "retenus" },
             ]}
           />
+          {votesLabel && (
+            <Button
+              variant="primary"
+              icon="trophy"
+              href={`/app/vote/${event.slug}`}
+              fullWidth
+              data-testid="event-votes"
+            >
+              {votesLabel}
+            </Button>
+          )}
           {mine.length > 0 ? (
             <div className="s-stack s-stack--tight" data-testid="my-place">
               <span className="s-label o-t-label">Ta place</span>
@@ -841,8 +918,8 @@ function EventPage({
                   {mySlot.note ? ` · ${mySlot.note}` : ""}
                 </p>
               )}
-              <Button variant="primary" icon="qr" href="/app/sorties" fullWidth>
-                Voir mon accès
+              <Button variant={mainVariant} icon="qr" href="/app/sorties" fullWidth>
+                {running ? "Mon accès" : "Voir mon accès"}
               </Button>
               {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
               {event.days.length > 1 &&
@@ -877,13 +954,13 @@ function EventPage({
           ) : event.admission === "invite_only" ? (
             <div className="s-stack s-stack--tight" data-testid="invite-only">
               <p className="o-t-caption s-muted">{invitationLabels.invitationRequired}</p>
-              <Button variant="primary" icon="entry" href="/app/sorties" fullWidth>
+              <Button variant={mainVariant} icon="entry" href="/app/sorties" fullWidth>
                 {invitationLabels.openAccess}
               </Button>
             </div>
           ) : state.kind === "open" ? (
             <>
-              <Button variant="primary" icon="vehicle" href={candidateHref} fullWidth>
+              <Button variant={mainVariant} icon="vehicle" href={candidateHref} fullWidth>
                 Candidater avec un véhicule
               </Button>
               {leadsCrew && (
@@ -906,7 +983,7 @@ function EventPage({
               Événement terminé. Les participants pointés à l'entrée peuvent laisser leur avis pendant une semaine.
             </p>
           ) : (
-            <Button variant="primary" icon="vehicle" disabled fullWidth>
+            <Button variant={mainVariant} icon="vehicle" disabled fullWidth>
               Candidater avec un véhicule
             </Button>
           )}

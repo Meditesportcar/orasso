@@ -69,7 +69,7 @@ export default function JoinCrew({ loaderData, actionData }: Route.ComponentProp
   );
   return (
     <>
-      <FicheBar title={crewLabels.joinTitle} back="/app/moi" />
+      <FicheBar title={crewLabels.joinTitle} back="/app/crew" />
       <div className="s-narrow s-stack" data-testid="crew-join-page">
         <p className="o-t-meta s-muted">{crewLabels.joinHint}</p>
         <Form method="get" className="s-row" role="search">
@@ -111,7 +111,7 @@ export default function JoinCrew({ loaderData, actionData }: Route.ComponentProp
         <div className="s-stack s-stack--tight" data-testid="crew-join-create">
           <p className="o-t-caption s-muted">{crewLabels.joinOrCreate}</p>
           <p>
-            <Button variant="secondary" icon="add" href="/app/crews" data-testid="crew-new">
+            <Button variant="secondary" icon="add" href="/app/crews/nouveau" data-testid="crew-new">
               {crewLabels.createCrew}
             </Button>
           </p>

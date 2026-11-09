@@ -149,6 +149,8 @@ async function recordEntry(
         zoneId: input.zoneId,
         sourceScanId: input.scanId ?? null,
         note: input.note ?? null,
+        // Heure de la synchro : un pointage hors ligne devient « disponible » pour les votes à cet instant (R7l1, tour 3).
+        createdAt: now(),
       })
       .returning();
     if (!row) throw new Error("Entrée non enregistrée");
@@ -359,7 +361,7 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   if (!applicationIds.length) return;
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
-    announceCandidatesChanged(eventId);
+    await announceCandidatesChanged(eventId);
     // Lot R4b, tour 2 : un pointage change le plateau d'un événement terminé (rattrapage, envoi différé).
     lineupService.changed(eventId);
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));
@@ -681,6 +683,11 @@ export const checkinsService = {
     const seen = await seenOnDay(eventId, whole, day.dayDate, event.timezone);
     return items.map((i) => ({
       ...i,
+      // Sur place ce jour-là : tout l'événement entré ce jour-là ou avant (l'entrée vaut jusqu'à la fin, lot R7-0, tour 2).
+      presentOnDay: Boolean(
+        i.checkedInAt &&
+          (i.dayDate || localDate(new Date(i.checkedInAt), event.timezone) <= day.dayDate || seen.has(i.applicationId)),
+      ),
       arrivedOnDay: Boolean(
         i.checkedInAt &&
           (i.dayDate ||
@@ -822,8 +829,11 @@ export const checkinsService = {
   /**
    * Direct de l'organisateur : arrivés / attendus par catégorie et par zone, staff présent, alertes ouvertes.
    * Plusieurs jours (lot 26) : `dayId` = un jour — attendus : candidatures de ce jour et de tout l'événement ;
-   * arrivés : entrée enregistrée (candidature du jour), ou, pour tout l'événement, entrée ou lecture du QR ce jour-là
-   * (l'entrée garde le premier passage, S29 : les jours suivants, la lecture « déjà entré » fait foi).
+   * `arrived` = **sur place** ce jour-là : entrée enregistrée (candidature du jour), ou, pour tout l'événement, une
+   * entrée de ce jour **ou d'un jour précédent** (lot R7-0, tour 2 : l'entrée vaut jusqu'à la fin, personne ne pointe
+   * les sorties, la voiture entrée la veille est toujours là) ; `arrivedToday` = les **arrivées du jour** : entrées de ce
+   * jour-là, ou lecture du QR ce jour-là (l'entrée garde le premier passage, S29 : les jours suivants, la lecture
+   * « déjà entré » fait foi). Accès par jour : sans nouvelle entrée, absent le jour suivant.
    */
   async liveCounters(eventId: string, dayId: string | null = null): Promise<LiveCounters> {
     const event = await eventsRepo.byId(eventId);
@@ -846,11 +856,23 @@ export const checkinsService = {
           day ? or(isNull(applications.eventDayId), eq(applications.eventDayId, day.id)) : undefined,
         ),
       );
+    // Arrivées du jour : `today` (une candidature du jour entrée ; tout l'événement entré ou lu ce jour-là).
+    let today = new Set(rows.filter((r) => r.at).map((r) => r.appId));
     if (day) {
       const whole = rows.filter((r) => r.eventDayId === null && r.at).map((r) => r.appId);
       const seenThatDay = await seenOnDay(eventId, whole, day.dayDate, event.timezone);
+      today = new Set(
+        rows
+          .filter(
+            (r) =>
+              r.at &&
+              (r.eventDayId !== null || localDate(r.at, event.timezone) === day.dayDate || seenThatDay.has(r.appId)),
+          )
+          .map((r) => r.appId),
+      );
+      // Sur place : une entrée « tout l'événement » vaut aussi les jours suivants, pas les jours d'avant l'entrée.
       rows = rows.map((r) =>
-        r.eventDayId === null && r.at && localDate(r.at, event.timezone) !== day.dayDate && !seenThatDay.has(r.appId)
+        r.eventDayId === null && r.at && localDate(r.at, event.timezone) > day.dayDate && !seenThatDay.has(r.appId)
           ? { ...r, at: null }
           : r,
       );
@@ -903,6 +925,7 @@ export const checkinsService = {
     return {
       dayId: day?.id ?? null,
       arrived: rows.filter((r) => r.at).length,
+      ...(day ? { arrivedToday: rows.filter((r) => today.has(r.appId)).length } : {}),
       expected: rows.length,
       byCategory: [...byCategory.values()]
         .sort((a, b) => a.position - b.position)

@@ -61,6 +61,21 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
+  // Lot R7l1 : votes à thème (modifier un vote ouvert, candidats, lancement, QR d'accès).
+  "vote_locked",
+  "vote_fixed",
+  "vote_has_voices",
+  "vote_not_manual",
+  "expired_qr",
+  "hand_first_entry",
+  "event_not_published",
+  "opens_at_invalid",
+  "not_hand",
+  "not_enough_candidates",
+  "event_over",
+  "invalid_qr",
+  "other_event",
+  "too_many_votes",
   // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
   "plate_decision_required",
   // Lot R7e1 (tour 2) : pseudo réservé au compte officiel d'Orasso.

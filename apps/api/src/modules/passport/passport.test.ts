@@ -1,6 +1,6 @@
 // Lot 49 : passeport et tampons, prix du public, récap (ARCHITECTURE-DA-V2 § 5.5), avec l'horloge simulée.
 import { randomUUID } from "node:crypto";
-import { type Decide, fromWallTime, nearestFullMoon, stampSeed } from "@orasso/shared";
+import { type Decide, fromWallTime, nearestFullMoon, type PassportStamp, stampSeed, stampText } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,11 +20,14 @@ import {
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
+  adminAuditLog,
   applications,
+  assistanceRequests,
   audiencePrizeResults,
   audienceVotes,
   checkins,
   devices,
+  eventStaff,
   events,
   notifications,
   passportStamps,
@@ -116,9 +119,9 @@ const vote = (u: TestUser, applicationId: string, eid = eventId) =>
   call(u, "PUT", `/events/${eid}/audience-prize/vote`, { applicationId });
 
 /** Une connexion WebSocket simulée, abonnée à un canal. */
-function listen(channel: string) {
+function listen(channel: string, userId?: string) {
   const messages: { type: string; payload: Record<string, unknown> }[] = [];
-  const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+  const socket = { send: (data: string) => messages.push(JSON.parse(data)), userId };
   realtime.subscribe(channel, socket);
   return { messages, stop: () => realtime.unsubscribeAll(socket) };
 }
@@ -324,6 +327,32 @@ describe("passeport : tampons", () => {
     const passport = (await call(p.marc.u, "GET", "/me/passport")).json;
     expect(passport).toMatchObject({ total: 3, rare: 2 });
   });
+
+  it("dates affichées : du pointage au règlement, le tampon de présence dit le jour d'entrée, les rares le début de l'événement (lot R7-0)", async () => {
+    // Événement sur trois jours à la pleine lune ; entré le deuxième jour, réglé à J+2 de la fin.
+    const moon = nearestFullMoon(paris(10, 17, 19));
+    const camp = await createEvent(structureId, {
+      format: "gathering",
+      department: "66",
+      startsAt: moon,
+      endsAt: new Date(moon.getTime() + 3 * 86_400_000),
+    });
+    clock.set(new Date(moon.getTime() - 7 * 86_400_000));
+    const marc = await enroll(camp.id, p.marc.u, p.marc.v);
+    const entry = new Date(moon.getTime() + 30 * 3_600_000);
+    await checkin({ ...p.marc, ...marc }, entry, camp.id);
+    clock.set(new Date(moon.getTime() + 3 * 86_400_000 + 48 * 3_600_000));
+    await pointsService.settleEvent(camp.id);
+    const view = (await call(p.marc.u, "GET", "/me/passport")).json as { pages: { stamps: PassportStamp[] }[] };
+    const mine = view.pages.flatMap((pg) => pg.stamps).filter((s) => s.event.id === camp.id);
+    expect(mine.map((s) => s.kind).sort()).toEqual(["first_outing", "full_moon", "participation"]);
+    const day = (d: Date) =>
+      stampText({ kind: "participation", rare: false, event: mine[0]!.event, stampedAt: d.toISOString() }).date;
+    for (const s of mine) {
+      expect(stampText(s).date).toBe(day(s.kind === "participation" ? entry : moon));
+    }
+    expect(day(entry)).not.toBe(day(moon));
+  });
 });
 
 describe("passeport : contestation", () => {
@@ -335,7 +364,8 @@ describe("passeport : contestation", () => {
     const ws = listen(`event:${eventId}:votes`);
     try {
       await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
-      expect(ws.messages).toEqual([
+      // Une entrée accordée après coup : la grille se recharge ; le vote d'un événement fini est constaté clos (lot R7l1).
+      expect(ws.messages.filter((m) => m.type === "votes.candidates.changed" && !m.payload.voteId)).toEqual([
         { channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} },
       ]);
     } finally {
@@ -351,21 +381,24 @@ describe("prix du public", () => {
     const channel = `event:${eventId}:votes`;
     expect(await realtime.canSubscribe(julie.id, channel)).toBe(true);
     const ws = listen(channel);
+    // Lot R7l1 : l'ouverture de « Toutes catégories » (deux véhicules) s'annonce aussi (`votes.opened`) ; la grille a ses messages.
+    const changed = () => ws.messages.filter((m) => m.type === "votes.candidates.changed");
     try {
       await checkin(p.kenji, paris(10, 17, 19, 2));
-      expect(ws.messages).toEqual([{ type: "votes.candidates.changed", channel, payload: {} }]);
+      expect(changed()).toEqual([{ type: "votes.candidates.changed", channel, payload: {} }]);
       await checkin(p.lea, paris(10, 17, 19, 10));
-      expect(ws.messages).toHaveLength(2);
+      expect(changed()).toHaveLength(2);
+      expect(ws.messages.filter((m) => m.type === "votes.opened")).toHaveLength(1);
       expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(2);
       await checkin(p.lea, paris(10, 17, 19, 11));
-      expect(ws.messages).toHaveLength(2); // Pointage idempotent : aucun changement de liste.
+      expect(changed()).toHaveLength(2); // Pointage idempotent : aucun changement de liste.
       // Aucun parcours d'annulation API aujourd'hui : contrat réutilisable après une suppression validée.
       await withTx(async (tx, after) => {
         await tx.delete(checkins).where(eq(checkins.applicationId, p.lea.applicationId));
         after(() => announceCandidatesChanged(eventId));
       });
-      expect(ws.messages).toHaveLength(3);
-      expect(ws.messages.at(-1)).toMatchObject({ type: "votes.candidates.changed", payload: {} });
+      expect(changed()).toHaveLength(3);
+      expect(changed().at(-1)).toMatchObject({ type: "votes.candidates.changed", payload: {} });
       expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(1);
     } finally {
       ws.stop();
@@ -397,15 +430,11 @@ describe("prix du public", () => {
     const ok = await vote(p.kenji.u, p.lea.applicationId);
     expect(ok.status).toBe(200);
     expect(ok.json).toMatchObject({ canVote: true, votedFor: p.lea.applicationId, open: true });
-    expect(ws.messages.at(-1)).toMatchObject({
+    // Lot R7-0 : le canal ne porte que le total ; `top3` reste un tableau vide (APK R6-police), jamais un classement.
+    expect(ws.messages.at(-1)).toEqual({
+      channel: `event:${eventId}:votes`,
       type: "votes.changed",
-      payload: {
-        total: 1,
-        top3: [
-          { applicationId: p.lea.applicationId, votes: 1, rank: 1 },
-          { applicationId: p.kenji.applicationId, votes: 0, rank: 2 },
-        ],
-      },
+      payload: { voteId: expect.any(String), total: 1, state: "open", top3: [] },
     });
     ws.stop();
     // Une voix, une seule : elle se déplace (Lea vote pour Kenji, puis Julie aussi).
@@ -423,8 +452,12 @@ describe("prix du public", () => {
       ownApplicationIds: [p.kenji.applicationId],
       closesAt: ENDS.toISOString(),
     });
-    const board = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
-    expect(board).toMatchObject({ open: true, settled: false, total: 3, vehicles: 2, winnerPoints: 50, winner: null });
+    // Lot R7-0 (D38) : pendant le vote, le classement n'est servi qu'à qui a voté.
+    const hidden = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    expect(hidden).toMatchObject({ open: true, rankingHidden: true, entries: [], winner: null, total: 3, vehicles: 2 });
+    const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    expect(board.rankingHidden).toBe(false);
+    expect(board).toMatchObject({ open: true, settled: false, total: 3, vehicles: 2, winnerPoints: 15, winner: null });
     expect(board.entries).toMatchObject([
       { applicationId: p.kenji.applicationId, votes: 2, rank: 1, vehicleLabel: "BMW Série 3 E36", pseudo: "Kenji_66" },
       { applicationId: p.lea.applicationId, votes: 1, rank: 2 },
@@ -432,16 +465,108 @@ describe("prix du public", () => {
     // Vague R4, après fusion : une photo sans décision de plaque ne sort pas du garage ; floutée, oui.
     expect(board.entries[0].photoUrl).toBeNull();
     await blurPlatesOf(p.kenji.u.id);
-    expect((await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0].photoUrl).toContain(
+    expect((await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0].photoUrl).toContain(
       "test/",
     );
     expect((await call(null, "GET", `/events/${eventId}/audience-prize`)).status).toBe(401);
 
-    // Fin de l'événement : vote clos.
+    // Fin de l'événement : vote clos, et le classement est servi à tout le monde (même qui n'a pas voté ni pu voter).
     clock.set(ENDS);
+    for (const who of [p.marc.u, p.nina.u]) {
+      const after = (await call(who, "GET", `/events/${eventId}/audience-prize`)).json;
+      expect(after.rankingHidden).toBe(false);
+      expect(after.entries).toHaveLength(2);
+    }
     const closed = await vote(p.kenji.u, p.lea.applicationId);
     expect(closed.status).toBe(409);
     expect(closed.json.error.code).toBe("vote_closed");
+  });
+
+  it("canal des votes : `top3` toujours vide, compatible avec l'écran de l'APK R6-police (lot R7-0)", async () => {
+    // `applyTop3` tel qu'il est dans l'APK en ligne (base 46ec3f8c) : il lit `top3` sans le tester.
+    const applyTop3 = (
+      entries: { applicationId: string; votes: number; rank: number }[],
+      top3: readonly { applicationId: string; votes: number; rank: number }[],
+    ) => {
+      const by = new Map(top3.map((t) => [t.applicationId, t]));
+      return entries
+        .map((e) => {
+          const t = by.get(e.applicationId);
+          return t ? { ...e, votes: t.votes, rank: t.rank } : e;
+        })
+        .sort((a, b) => b.votes - a.votes || a.rank - b.rank);
+    };
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    clock.set(paris(10, 17, 20));
+    const ws = listen(`event:${eventId}:votes`);
+    // Après une voix, après plusieurs : toujours le même format, jamais de classement.
+    expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
+    expect((await vote(p.lea.u, p.kenji.applicationId)).status).toBe(200);
+    await vi.waitFor(() => expect(ws.messages.at(-1)?.payload.total).toBe(2), { timeout: 4000 });
+    for (const m of ws.messages) {
+      expect(m.type).toBe("votes.changed");
+      expect(Object.keys(m.payload).sort()).toEqual(["state", "top3", "total", "voteId"]);
+      expect(m.payload.top3).toEqual([]);
+      const rows = [{ applicationId: p.kenji.applicationId, votes: 0, rank: 1 }];
+      expect(() => applyTop3(rows, m.payload.top3 as [])).not.toThrow();
+      expect(applyTop3(rows, m.payload.top3 as [])).toEqual(rows);
+    }
+    expect(ws.messages.at(-1)!.payload.total).toBe(2);
+    ws.stop();
+  });
+
+  it("classement pendant le vote : équipe de la structure (staff compris), votants, jamais un non-votant hors structure (lot R7-0)", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    clock.set(paris(10, 17, 20));
+    const coOrga = await signUp("CoOrga_66", { twoFactor: true });
+    await addMember(structureId, coOrga.id, "co_organizer");
+    // Règle C25 : le staff actif de la structure est le staff de ses événements (Julie comme Tom).
+    await db.insert(eventStaff).values({ eventId, userId: julie.id }).onConflictDoNothing();
+    const tom = await signUp("Tom_66");
+    await addMember(structureId, tom.id, "staff", ["scan"]);
+    const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    const adminNoSecondFactor = await signUp("AdminSans2fa_66", { role: "super_admin" });
+    expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
+
+    const hidden = async (u: TestUser) => (await call(u, "GET", `/events/${eventId}/audience-prize`)).json;
+    const shown = async (u: TestUser) => {
+      const b = await hidden(u);
+      expect(b.rankingHidden).toBe(false);
+      expect(b.entries).toHaveLength(2);
+    };
+    const covered = async (u: TestUser) => {
+      const b = await hidden(u);
+      expect(b).toMatchObject({ rankingHidden: true, entries: [], winner: null, total: 1, vehicles: 2 });
+    };
+    const views = async () =>
+      (
+        await db.query.adminAuditLog.findMany({
+          where: and(eq(adminAuditLog.action, "structure.view_as"), eq(adminAuditLog.structureId, structureId)),
+        })
+      ).length;
+    await shown(p.kenji.u); // a voté
+    await shown(orga); // propriétaire
+    await shown(coOrga); // co-organisateur qui n'a pas voté
+    await shown(julie); // staff de la structure
+    await shown(tom); // staff de la structure (ligne `event_staff` créée ou non : la règle est celle de la structure)
+    await covered(p.marc.u); // hors structure, n'a pas voté (ni pu)
+    await covered(admin); // super admin sans demande d'aide ouverte
+    await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
+    const before = await views();
+    await covered(adminNoSecondFactor); // super admin en assistance, mais session sans second facteur
+    expect(await views()).toBe(before);
+    await shown(admin); // super admin en assistance, second facteur prouvé : servi et tracé
+    expect(await views()).toBe(before + 1);
+    // Nina est pointée puis vote : elle le voit à son tour ; Marc, jamais entré, ne le voit pas.
+    await checkin(p.nina, paris(10, 17, 20, 5));
+    expect((await vote(p.nina.u, p.lea.applicationId)).status).toBe(200);
+    expect((await hidden(p.nina.u)).rankingHidden).toBe(false);
+    expect((await hidden(p.marc.u)).rankingHidden).toBe(true);
+    // Clôture : tout le monde.
+    clock.set(ENDS);
+    for (const u of [p.marc.u, p.nina.u]) expect((await hidden(u)).rankingHidden).toBe(false);
   });
 
   it("150 pointés (cas terrain) : la grille du vote les liste tous, par pages, sans voix ; le classement reste limité à 100", async () => {
@@ -476,7 +601,9 @@ describe("prix du public", () => {
     expect(ids.size).toBe(151);
     // Aucune voix dans la grille (pas de fuite du classement) ; le classement garde ses 100 lignes.
     expect(Object.keys(first.items[0]).sort()).toEqual(["applicationId", "photoUrl", "pseudo", "vehicleLabel"]);
-    const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    // Le classement n'est servi qu'après un vote (lot R7-0) : Lea (pointée) vote d'abord.
+    expect((await vote(p.lea.u, first.items[0].applicationId)).status).toBe(200);
+    const board = (await call(p.lea.u, "GET", `/events/${eventId}/audience-prize`)).json;
     expect(board.entries).toHaveLength(100);
     expect(board.vehicles).toBe(151);
     // Voter pour une voiture au-delà de la centième de la grille est possible (la 101e pointée).
@@ -492,7 +619,7 @@ describe("prix du public", () => {
     clock.set(paris(10, 17, 20));
     await vote(p.nina.u, p.lea.applicationId);
     await vote(p.lea.u, p.kenji.applicationId);
-    const board = (await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    const board = (await call(p.nina.u, "GET", `/events/${eventId}/audience-prize`)).json;
     expect(board.entries.map((e: { applicationId: string; rank: number }) => [e.applicationId, e.rank])).toEqual([
       [p.kenji.applicationId, 1],
       [p.lea.applicationId, 2],
@@ -511,18 +638,18 @@ describe("prix du public", () => {
     clock.set(SETTLE);
     expect(await pointsService.settleEvent(eventId)).toBe(true);
     const prize = await db.query.pointEntries.findFirst({
-      where: and(eq(pointEntries.userId, p.lea.u.id), eq(pointEntries.kind, "audience_prize")),
+      where: and(eq(pointEntries.userId, p.lea.u.id), eq(pointEntries.kind, "vote_podium")),
     });
-    expect(prize).toMatchObject({ points: 50, eventId, applicationId: p.lea.applicationId });
+    expect(prize).toMatchObject({ points: 15, eventId, applicationId: p.lea.applicationId });
     const lea = await db.query.profiles.findFirst({ where: eq(profiles.userId, p.lea.u.id) });
-    expect(lea?.pointsSeason).toBe(70); // participation 20 + prix 50
+    expect(lea?.pointsSeason).toBe(35); // participation 20 + podium du vote 15 (lot R7l1)
     const vehicle = await db.query.vehicles.findFirst({ where: eq(vehicles.id, p.lea.vehicleId) });
     expect(vehicle?.audiencePrizes).toBe(1);
     expect((await stampsOf(p.lea.u.id)).find((s) => s.kind === "audience_prize")).toMatchObject({ rare: true });
     const won = await db.query.notifications.findFirst({
-      where: and(eq(notifications.userId, p.lea.u.id), eq(notifications.type, "audience_prize_won")),
+      where: and(eq(notifications.userId, p.lea.u.id), eq(notifications.type, "vote_won")),
     });
-    expect(won?.body).toContain("+50 points");
+    expect(won?.body).toContain("+15 points");
     const results = await db.query.audiencePrizeResults.findMany({
       where: eq(audiencePrizeResults.eventId, eventId),
     });
@@ -538,9 +665,9 @@ describe("prix du public", () => {
     expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, p.lea.vehicleId) }))?.audiencePrizes).toBe(1);
     expect(
       await db.query.pointEntries.findMany({
-        where: and(eq(pointEntries.eventId, eventId), eq(pointEntries.kind, "audience_prize")),
+        where: and(eq(pointEntries.eventId, eventId), eq(pointEntries.kind, "vote_podium")),
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(2); // Une ligne par voiture du podium : Lea (15) et Kenji (10).
   });
 
   it("pas de prix sous trois voix ; points réglables par l'administration", async () => {
@@ -551,15 +678,15 @@ describe("prix du public", () => {
     await vote(p.lea.u, p.kenji.applicationId);
     clock.set(SETTLE);
     await pointsService.settleEvent(eventId);
-    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "audience_prize") })).toHaveLength(0);
+    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "vote_podium") })).toHaveLength(0);
     expect(
       (await db.query.audiencePrizeResults.findMany({ where: eq(audiencePrizeResults.eventId, eventId) })).some(
         (r) => r.winner,
       ),
     ).toBe(false);
 
-    // Réglage à 80 points (lot 33, `points.audience_prize`).
-    await db.insert(platformSettings).values({ key: "points.audience_prize", value: 80 });
+    // Réglage du 1er d'un vote à 80 points (lot 33, `points.vote_first`, lot R7l1).
+    await db.insert(platformSettings).values({ key: "points.vote_first", value: 80 });
     settingsStore.invalidate();
     const other = await createEvent(structureId, { startsAt: paris(11, 7, 19), endsAt: paris(11, 7, 23) });
     clock.set(paris(10, 20, 12));
@@ -579,7 +706,11 @@ describe("prix du public", () => {
     clock.set(paris(11, 9, 23));
     await pointsService.settleEvent(other.id);
     const prize = await db.query.pointEntries.findFirst({
-      where: and(eq(pointEntries.eventId, other.id), eq(pointEntries.kind, "audience_prize")),
+      where: and(
+        eq(pointEntries.eventId, other.id),
+        eq(pointEntries.kind, "vote_podium"),
+        eq(pointEntries.userId, p.kenji.u.id),
+      ),
     });
     expect(prize).toMatchObject({ userId: p.kenji.u.id, points: 80 });
   });
@@ -635,10 +766,8 @@ describe("récap", () => {
     expect(board).toMatchObject({ total: 1, vehicles: 2 });
     clock.set(SETTLE);
     await pointsService.settleEvent(eventId);
-    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "audience_prize") })).toHaveLength(0);
-    expect(await db.query.notifications.findMany({ where: eq(notifications.type, "audience_prize_won") })).toHaveLength(
-      0,
-    );
+    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "vote_podium") })).toHaveLength(0);
+    expect(await db.query.notifications.findMany({ where: eq(notifications.type, "vote_won") })).toHaveLength(0);
   });
 });
 
@@ -766,7 +895,7 @@ describe("scénario avec l'horloge simulée", () => {
     await vote(p.kenji.u, p.lea.applicationId);
     await vote(p.nina.u, p.lea.applicationId);
     await vote(p.lea.u, p.nina.applicationId);
-    expect((await call(p.marc.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0]).toMatchObject({
+    expect((await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json.entries[0]).toMatchObject({
       applicationId: p.lea.applicationId,
       votes: 2,
       rank: 1,
@@ -794,13 +923,13 @@ describe("scénario avec l'horloge simulée", () => {
       audienceRank: { rank: 1, of: 3, votes: 2, winner: true },
       points: {
         status: "projected",
-        total: 70,
+        total: 35,
         detail: [
           { kind: "participation", points: 20, label: "Présent à un événement" },
-          { kind: "audience_prize", points: 50, label: "Prix du public" },
+          { kind: "vote_podium", points: 15, label: "Podium d'un vote" },
         ],
       },
-      nextGradeIn: { grade: "route", points: 30 },
+      nextGradeIn: { grade: "route", points: 65 },
       stamp: {
         kind: "participation",
         shape: "octagon",
@@ -817,12 +946,9 @@ describe("scénario avec l'horloge simulée", () => {
     expect(await pointsService.settleEvent(eventId)).toBe(true);
     const settled = (await call(p.lea.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(settled.points.status).toBe("settled");
-    expect(settled.points.total).toBe(70);
-    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual([
-      "audience_prize",
-      "participation",
-    ]);
-    expect(settled.nextGradeIn).toEqual({ grade: "route", points: 30 });
+    expect(settled.points.total).toBe(35);
+    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual(["participation", "vote_podium"]);
+    expect(settled.nextGradeIn).toEqual({ grade: "route", points: 65 });
     expect(settled.stamp).toMatchObject({ rare: true });
     const kenji = (await call(p.kenji.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(kenji.audienceRank).toMatchObject({ rank: 3, of: 3, votes: 0, winner: false });

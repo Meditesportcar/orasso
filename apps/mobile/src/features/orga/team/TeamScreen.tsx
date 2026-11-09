@@ -19,7 +19,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { MessageButton } from "@/features/boite/MessageButton";
+import { MessageButton } from "@/features/messages/MessageButton";
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";

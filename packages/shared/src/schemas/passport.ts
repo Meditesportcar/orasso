@@ -77,6 +77,8 @@ export type AudiencePrizeBoard = {
   vehicles: number;
   /** Points du gagnant (réglage de l'administration, 50 par défaut). */
   winnerPoints: number;
+  /** Lot R7-0 : vrai pendant le vote pour qui n'a pas voté (`entries` et `winner` vides : « Le classement s'affiche après ton vote »). */
+  rankingHidden: boolean;
   entries: AudiencePrizeEntry[];
   /** Après le règlement : le gagnant, ou `null` si le prix n'a pas été décerné (moins de 2 véhicules ou 3 voix). */
   winner: AudiencePrizeEntry | null;
@@ -97,8 +99,13 @@ export type AudiencePrizeMine = {
   ownApplicationIds: string[];
 };
 
-/** Canal `event:{id}:votes`, événement `votes.changed` ; `votes.candidates.changed` invalide la grille (payload vide). */
-export type AudienceVotesChanged = { total: number; top3: { applicationId: string; votes: number; rank: number }[] };
+/**
+ * Canal `event:{id}:votes`, événement `votes.changed` : le total de voix, et `top3` **toujours vide** (lot R7-0 : aucun
+ * classement sur le canal, les clients relisent `GET /events/:id/audience-prize`, qui applique la règle de visibilité).
+ * `top3` n'existe que pour l'APK R6-police, dont l'écran applique `top3` sans le tester : à retirer en R8.
+ * `votes.candidates.changed` invalide la grille (payload vide).
+ */
+export type AudienceVotesChanged = { total: number; top3: [] };
 
 // --- Récap -------------------------------------------------------------------------------------------------------
 

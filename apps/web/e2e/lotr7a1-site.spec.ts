@@ -40,23 +40,27 @@ test("la barre : cinq onglets dans l'ordre, la loupe, la cloche et la bulle, plu
 
     const header = page.locator("header.o-appbar--tab");
     await expect(header.getByRole("link", { name: "Rechercher" })).toBeVisible();
-    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/journal");
-    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/boite");
+    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/activite");
+    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/messages");
     await expect(header.getByRole("link", { name: "Boîte" })).toHaveCount(0);
 
     // Tour 2 : la cloche compte les notifications non lues et les demandes en attente, la bulle les conversations non lues
     // seulement. (La lecture passe par la session du navigateur : une nouvelle connexion ajouterait elle-même une notification.)
-    const me = (await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } };
+    // Lot R7c2 : cloche = nouveautés depuis la dernière ouverture + demandes hors demandes de message ; bulle = conversations
+    // non lues + demandes de message (une demande ne compte qu'une fois).
     const summary = (await (await page.request.get("/api/me/inbox/summary")).json()) as {
       unreadMessages: number;
-      requests: Record<string, number>;
+      unseenActivity: number;
+      pendingRequests: number;
+      requests: { contact: number };
     };
-    const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
+    const contact = summary.requests.contact;
     const bell = (await header.getByRole("link", { name: "Activité" }).innerText()).trim();
     const bubble = (await header.getByRole("link", { name: "Messages" }).innerText()).trim();
-    const wantBell = me.counts.unreadNotifications + requests;
+    const wantBell = summary.unseenActivity + Math.max(0, summary.pendingRequests - contact);
+    const wantBubble = summary.unreadMessages + contact;
     expect(bell).toBe(wantBell ? String(wantBell) : "");
-    expect(bubble).toBe(summary.unreadMessages ? String(summary.unreadMessages) : "");
+    expect(bubble).toBe(wantBubble ? String(wantBubble) : "");
     // Les noms accessibles annoncent le nombre.
     if (wantBell) {
       await expect(
@@ -139,20 +143,20 @@ test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la c
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Activité" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/journal");
-  await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/app/activite");
+  await expect(page.getByRole("heading", { name: "Activité", exact: true })).toBeVisible();
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Messages" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/boite");
+  await page.waitForURL((url) => url.pathname === "/app/messages");
 });
 
-test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {
+test("Crew : avec un crew (onglet du lot R7b2), sans crew", async ({ browser }) => {
   const k = await browser.newContext({ viewport: MOBILE });
   const kp = await k.newPage();
   await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app/crew");
   await kp.goto("/app/crew");
-  await expect(kp.getByRole("heading", { name: "Crew", exact: true })).toBeVisible();
-  await expect(kp.getByTestId("crew-tab-mine")).toBeVisible();
-  await expect(kp.getByTestId("crew-tab-open")).toHaveAttribute("href", "/c/roussillon-drift");
+  // Lot R7b2 : l'onglet montre le crew (nom, onglets Fil · Sorties · Membres · Spots), plus la coquille.
+  await expect(kp.getByTestId("crew-selector-single")).toContainText("Roussillon Drift");
+  await expect(kp.getByTestId("crew-tabs")).toBeVisible();
   await expect(kp.getByTestId("crew-tab-none")).toHaveCount(0);
   await shot(kp, "crew-kenji-390");
   await k.close();
@@ -162,10 +166,14 @@ test("Crew (coquille) : avec un crew, sans crew", async ({ browser }) => {
   await loginInBrowser(sp, "sarah@orasso.local", undefined, "/app/crew");
   await sp.goto("/app/crew");
   await expect(sp.getByTestId("crew-tab-none")).toBeVisible();
-  await expect(sp.getByTestId("crew-tab-join")).toHaveAttribute("href", "/app/crews/rejoindre");
   await expect(sp.getByTestId("crew-tab-join")).toContainText("Rejoindre un crew");
   await expect(sp.getByTestId("crew-tab-create")).toContainText("Créer un crew");
   await shot(sp, "crew-sarah-390");
+  // Lot R7b2 : « Rejoindre un crew » envoie la recherche à l'écran qui rejoint (et « Créer un crew » à sa page).
+  await expect(sp.getByTestId("crew-tab-create")).toHaveAttribute("href", "/app/crews/nouveau");
+  await sp.getByTestId("crew-tab-q").fill("Rou");
+  await sp.getByTestId("crew-tab-join").click();
+  await sp.waitForURL(/\/app\/crews\/rejoindre\?q=Rou/);
   await s.close();
 });
 
@@ -239,7 +247,7 @@ test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par
   await k.close();
 });
 
-test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+test("les pastilles (lot R7c2) : une demande de message seule fait monter la bulle, pas la cloche ; une conversation non lue s'y ajoute", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -252,17 +260,17 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
   await loginInBrowser(page, compte.email, undefined, "/app");
   await page.goto("/app");
   const header = page.locator("header.o-appbar--tab");
-  // Demande seule : la bulle est sans pastille, la cloche en a une (au moins la demande).
-  await expect(header.getByRole("link", { name: "Messages" })).toHaveAccessibleName("Messages");
-  await expect(header.getByRole("link", { name: "Messages" }).locator(".o-appbar__count")).toHaveCount(0);
-  await expect(header.getByRole("link", { name: /^Activité, \d+ non lues?$/ })).toBeVisible();
+  // Demande de message seule : la bulle affiche 1 (la ligne « Demandes de message »), la cloche rien (une demande ne compte
+  // qu'une fois : sa notification n'est pas dans les « non vus »).
+  await expect(header.getByRole("link", { name: "Messages, 1 non lu" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Activité", exact: true })).toBeVisible();
   await shot(page, "pastilles-demande-seule-390");
-  // Une conversation non lue : la bulle affiche 1.
+  // Une conversation non lue de plus : la bulle affiche 2 (la demande de message et la conversation).
   await compte.ajouterConversationNonLue();
   await page.reload();
-  const bubble = header.getByRole("link", { name: "Messages, 1 non lu" });
+  const bubble = header.getByRole("link", { name: /^Messages, 2 non lus?$/ });
   await expect(bubble).toBeVisible();
-  await expect(bubble.locator(".o-appbar__count")).toHaveText("1");
+  await expect(bubble.locator(".o-appbar__count")).toHaveText("2");
   await shot(page, "pastilles-conversation-390");
   await ctx.close();
 });

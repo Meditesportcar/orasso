@@ -6,7 +6,7 @@
 // aucune lecture de personnes (une panne de la recherche de personnes ne vide pas l'écran).
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { crewLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { ExSearch } from "@/features/explorer/ExplorerHead";
@@ -21,9 +21,11 @@ export default function JoinCrew() {
   const router = useRouter();
   const { t } = useTheme();
   const { me } = useSession();
-  const [q, setQ] = useState("");
+  // Lot R7b2 : l'onglet Crew (sans crew) transmet ce qui a été tapé.
+  const params = useLocalSearchParams<{ q?: string }>();
+  const [q, setQ] = useState(params.q ?? "");
   const coin = me?.profile.departments ?? [];
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/crew"));
   return (
     <FlowScreen title={crewLabels.joinTitle} onClose={close}>
       <Text variant="body" color={t.color.inkMuted}>

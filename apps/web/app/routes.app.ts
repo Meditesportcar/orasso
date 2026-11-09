@@ -13,10 +13,16 @@ export default [
     // Lot R7a2 : « Personnaliser » l'Accueil (blocs choisis, ordonnés, masqués).
     route("app/accueil/personnaliser", "routes/app-home-personnaliser.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
-    // Boîte (lot 18) : conversations, demandes, conversation en temps réel.
-    route("app/boite", "routes/boite.tsx"),
-    route("app/boite/demandes", "routes/boite-demandes.tsx"),
-    route("app/boite/:id", "routes/boite-conversation.tsx"),
+    // Lot R7c2 (D38) : la Boîte disparaît. Activité (la cloche) et ses Demandes, Messages (la bulle), ses Demandes de message
+    // et la conversation en temps réel ; les anciennes adresses `/app/boite*` et `/app/journal` redirigent (302).
+    route("app/activite", "routes/app-activite.tsx"),
+    route("app/activite/demandes", "routes/app-activite-demandes.tsx"),
+    route("app/messages", "routes/app-messages.tsx"),
+    route("app/messages/demandes", "routes/app-messages-demandes.tsx"),
+    route("app/messages/:id", "routes/app-messages-conversation.tsx"),
+    route("app/boite", "routes/app-boite-redirect.ts", { id: "boite-index" }),
+    route("app/boite/demandes", "routes/app-boite-redirect.ts", { id: "boite-demandes" }),
+    route("app/boite/:id", "routes/app-boite-redirect.ts", { id: "boite-conversation" }),
     route("app/acces", "routes/acces.tsx"),
     // Lot 57 (DA v2) : l'onglet Accès devient Sorties (`/app/acces` redirige) ; passeport, prix du public, récap, média,
     // fiche d'un média et vitrine d'un prestataire (connectés seulement), comme l'appli.
@@ -52,11 +58,13 @@ export default [
     route("app/profil-public", "routes/profil-public.tsx"),
     // Lot R5b : « Modifier mon profil » (photo, pseudo, description, réseaux).
     route("app/profil/modifier", "routes/profil-modifier.tsx"),
-    route("app/journal", "routes/journal.tsx"),
+    route("app/journal", "routes/app-boite-redirect.ts", { id: "journal-redirect" }),
     route("u/:pseudo", "routes/profil.tsx"),
     route("v/:id", "routes/vehicule.tsx"),
     // Crews (lot 19) : mes crews et création, fiche d'un crew (connectés seulement).
     route("app/crews", "routes/crews.tsx"),
+    // Lot R7b2 : créer un crew (l'ancien « Mes crews » est l'onglet Crew).
+    route("app/crews/nouveau", "routes/crews-nouveau.tsx"),
     // Lot R3b : « Rejoins ou crée un crew » du profil propose d'abord de rejoindre.
     route("app/crews/rejoindre", "routes/crews-rejoindre.tsx"),
     route("c/:slug", "routes/crew.tsx"),

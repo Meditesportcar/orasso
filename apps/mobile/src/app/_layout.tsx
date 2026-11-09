@@ -215,17 +215,7 @@ function Shell() {
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       <NavigationThemeProvider value={navigationTheme}>
         {status === "loading" || onboarded === null ? null : (
-          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }}>
-            {/* Lot C2a : la Boîte est une feuille (`sh-inbox`) par-dessus l'écran d'où l'on vient. */}
-            <Stack.Screen
-              name="boite/index"
-              options={{
-                presentation: "transparentModal",
-                animation: "fade",
-                contentStyle: { backgroundColor: "transparent" },
-              }}
-            />
-          </Stack>
+          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }} />
         )}
       </NavigationThemeProvider>
       {/* Lot M6 : les annonces arrivent par un seul bandeau en haut (voir ui/Announce.tsx). */}

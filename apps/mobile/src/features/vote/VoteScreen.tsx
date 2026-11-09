@@ -13,7 +13,10 @@ import {
   type AudiencePrizeMine,
   type AudienceVotesChanged,
   audiencePrizeTexts,
+  type ClosingWatch,
+  rankingZoneState,
   voteScreenTexts,
+  watchClosing,
 } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -23,6 +26,7 @@ import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Num, PosterSurface, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
+import { now as orassoNow, serverNow } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useChannel } from "@/lib/realtime";
@@ -39,7 +43,7 @@ import {
   type LiveBoard,
   type LoadTracker,
 } from "./liveBoard";
-import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
 import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -164,26 +168,63 @@ export function VoteScreen() {
     });
     return () => sub.remove();
   }, [scheduleReload, scheduleListReload]);
+  // Clôture du vote (lot R7-0, tours 2 et 3) : à l'échéance **du serveur** (pas l'horloge brute du téléphone), le
+  // classement et mon droit de voter changent ; on les relit sans attendre un message, et on réessaie (délais croissants,
+  // bornés) jusqu'à ce que l'API confirme la clôture. Une réponse reçue après l'échéance relance la relecture.
+  const deadline = board.data?.closesAt ?? mine.data?.closesAt ?? null;
+  const stillOpen = board.data ? board.data.open && !board.data.settled : true;
+  const closing = useRef<ClosingWatch | null>(null);
+  useEffect(() => {
+    if (!deadline || !stillOpen) return undefined;
+    const watch = watchClosing({
+      deadline: new Date(deadline),
+      now: serverNow,
+      reload: async () => {
+        const [fresh] = await Promise.all([
+          reloaders.current.board(),
+          reloaders.current.mine(),
+          reloaders.current.candidates(),
+        ]);
+        return fresh !== null && (!fresh.open || fresh.settled);
+      },
+    });
+    closing.current = watch;
+    return () => {
+      watch.stop();
+      if (closing.current === watch) closing.current = null;
+    };
+  }, [deadline, stillOpen]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque réponse reçue (classement, droit de voter) est l'occasion de revoir l'heure du serveur
+  useEffect(() => closing.current?.check(), [board.data, mine.data]);
   useEffect(
     () => () => {
       gates.current?.board.dispose();
       gates.current?.list.dispose();
     },
     [],
-  ); // Le total et le top 3 du message, reportés sur le classement chargé.
+  ); // Le total du message, reporté sur le classement chargé (le classement lui-même vient de la route, lot R7-0).
   const shown: AudiencePrizeBoard | null = board.data
     ? {
         ...board.data,
         total: live ? Math.max(live.total, 0) : board.data.total,
-        entries: live ? applyTop3(board.data.entries, live.top3) : board.data.entries,
       }
     : null;
 
   const view = voteView(board.data, mine.data);
+  // Lot R7-0, tour 3 : l'état du classement (chargement, échec + « Réessayer ») se dit quel que soit l'état du vote
+  // (ouvert, voté, clos), y compris quand le classement ne s'est jamais chargé.
+  const voted = Boolean(mine.data?.votedFor);
+  const zone = rankingZoneState({
+    voted,
+    rankingHidden: board.data ? board.data.rankingHidden : true,
+    loadFailed: Boolean(board.error),
+    closed: board.data ? !board.data.open || board.data.settled : false,
+  });
   const closesAt = mine.data ? new Date(mine.data.closesAt) : null;
-  const facts = [title, view === "vote" && closesAt ? audiencePrizeTexts.openUntil(closesAt) : null]
-    .filter(Boolean)
-    .join(" · ");
+  // Lot R7-0 : avec la date, « vote ouvert jusqu'au mercredi 11 novembre, 23 h » ne tient plus sur la ligne de faits de
+  // l'en-tête (une ligne, jamais coupée) : l'en-tête ne garde que le titre, la fin du vote passe dans l'affiche.
+  const facts = title;
+  const openUntilText = view === "vote" && closesAt ? audiencePrizeTexts.openUntil(closesAt, orassoNow()) : null;
 
   const vote = useCallback(
     async (entry: AudienceCandidate) => {
@@ -198,17 +239,19 @@ export function VoteScreen() {
         setChanging(false);
         if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
         scheduleReload();
+        // Lot R7-0 : le classement n'est servi qu'après le vote : on le relit tout de suite, sans attendre l'intervalle.
+        void board.reload();
       } catch (e) {
         setError(errorMessage(e));
       } finally {
         setBusy(null);
       }
     },
-    [id, mine.setData, mineOrder, scheduleReload],
+    [id, mine.setData, mineOrder, scheduleReload, board.reload],
   );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
-  const failed = (board.error || mine.error) && !board.data;
+  const failed = (board.error || mine.error) && !board.data && zone !== "failed";
 
   return (
     <FlowScreen
@@ -235,12 +278,18 @@ export function VoteScreen() {
       }}
     >
       {failed ? <Notice tone="error">{voteScreenTexts.loadFailed}</Notice> : null}
-      {!board.data && !failed ? <Muted variant="body">Chargement…</Muted> : null}
+      {!board.data && !failed && zone !== "failed" ? <Muted variant="body">Chargement…</Muted> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       {view === "not_open" ? <EmptyState title={audiencePrizeTexts.title} text={audiencePrizeTexts.notOpen} /> : null}
       {view === "not_checked_in" ? (
         <EmptyState title={audiencePrizeTexts.title} text={audiencePrizeTexts.errors.not_checked_in} />
+      ) : null}
+      {/* Qui ne peut pas voter (ou vote pas ouvert) : le classement se montre à la clôture. */}
+      {(view === "not_open" || view === "not_checked_in") && board.data?.rankingHidden && zone === "hidden" ? (
+        <Muted variant="body" testID="vote-ranking-hidden">
+          {voteScreenTexts.rankingHidden(false)}
+        </Muted>
       ) : null}
 
       {view === "vote" && board.data && mine.data && (!mine.data.votedFor || changing) ? (
@@ -271,6 +320,11 @@ export function VoteScreen() {
             <Text variant="caption" color={c.posterMuted}>
               {audiencePrizeTexts.rules(board.data.winnerPoints)}
             </Text>
+            {openUntilText ? (
+              <Text variant="caption" color={c.posterMuted} testID="vote-open-until">
+                {openUntilText}
+              </Text>
+            ) : null}
           </PosterSurface>
           <Grid
             entries={gridOrder(candidates.data ?? [])}
@@ -279,11 +333,18 @@ export function VoteScreen() {
             busy={busy}
             onPick={setPick}
           />
+          {board.data.rankingHidden && zone === "hidden" ? (
+            <Muted variant="body" testID="vote-ranking-hidden">
+              {voteScreenTexts.rankingHidden(mine.data.canVote)}
+            </Muted>
+          ) : null}
         </>
       ) : null}
       {view === "vote" && mine.data?.votedFor && !changing ? (
         <>
-          {saved && closesAt ? <Notice testID="vote-saved">{voteScreenTexts.saved(closesAt)}</Notice> : null}
+          {saved && closesAt ? (
+            <Notice testID="vote-saved">{voteScreenTexts.saved(closesAt, orassoNow())}</Notice>
+          ) : null}
           <SmButton kind="s" icon="undo" onPress={() => setChanging(true)} testID="vote-change">
             Changer mon vote
           </SmButton>
@@ -292,7 +353,31 @@ export function VoteScreen() {
 
       {view === "closed" ? <Notice>{voteScreenTexts.closedNote}</Notice> : null}
 
-      {shown && ((view === "vote" && mine.data?.votedFor && !changing) || view === "closed" || view === "settled") ? (
+      {/* Classement pas (encore) relu : jamais un écran sans explication, ni sans « Réessayer » en cas d'échec. */}
+      {zone === "loading" && board.data && (voted || view === "closed" || view === "settled") ? (
+        <Muted variant="body" testID="vote-ranking-loading">
+          {voteScreenTexts.rankingLoading}
+        </Muted>
+      ) : null}
+      {zone === "failed" ? (
+        <>
+          <Notice tone="error" testID="vote-ranking-failed">
+            {voted ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
+          </Notice>
+          <SmButton
+            kind="s"
+            icon="undo"
+            onPress={() => void Promise.all([board.reload(), mine.reload(), candidates.reload()])}
+            testID="vote-ranking-retry"
+          >
+            {voteScreenTexts.retry}
+          </SmButton>
+        </>
+      ) : null}
+
+      {shown &&
+      !shown.rankingHidden &&
+      ((view === "vote" && mine.data?.votedFor && !changing) || view === "closed" || view === "settled") ? (
         <Ranking board={shown} mine={mine.data} settled={view === "settled"} />
       ) : null}
     </FlowScreen>
@@ -348,7 +433,10 @@ function Grid({
               />
               {own ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `${c.night}8c` }]} /> : null}
               <View style={styles.tag}>
-                <Tag tone={own ? "line" : "ink"}>{own ? "Toi" : voteScreenTexts.number(i + 1)}</Tag>
+                {/* Le badge « Toi » est posé sur le voile sombre de la photo : encre d'affiche (crème), pas l'encre du thème (sombre en Sable). */}
+                <Tag tone={own ? "line" : "ink"} on={own ? "poster" : "card"}>
+                  {own ? "Toi" : voteScreenTexts.number(i + 1)}
+                </Tag>
               </View>
               {chosen ? (
                 <View style={[styles.check, { backgroundColor: c.accent }]}>
