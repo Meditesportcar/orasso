@@ -359,6 +359,42 @@ describe("modération, chef, idempotence, commentaires", () => {
     expect(await db.select().from(crewPostPhotos)).toHaveLength(0);
   });
 
+  it("preuve d'un signalement : retirée par son auteur, la publication garde ses photos jusqu'à la décision", async () => {
+    const { nina, lea, crew } = await crewOf3();
+    const moderator = await signUp("Modo_Preuve", { role: "moderator", twoFactor: true });
+    const decide = (id: string, status: string) =>
+      req(moderator, "POST", `/admin/reports/${id}/status`, { status, note: null });
+    const reportOn = async (postId: string) =>
+      (await req(lea, "POST", "/reports", { targetType: "crew_post", targetId: postId, reason: "shocking" })).json
+        .id as string;
+
+    // Sans signalement : photos effacées tout de suite (inchangé).
+    const plain = await photoPost(nina, crew.id, 1);
+    const [plainPhoto] = await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, plain.id));
+    expect((await req(nina, "DELETE", `/crews/${crew.id}/posts/${plain.id}`)).status).toBe(204);
+    expect(await storage.get(plainPhoto!.storageKey)).toBeNull();
+
+    // Avec un signalement ouvert : retirée du fil, mais fichiers et lignes gardés.
+    const post = await photoPost(nina, crew.id, 2);
+    const keys = (await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).map(
+      (r) => r.storageKey,
+    );
+    const reportId = await reportOn(post.id);
+    expect((await req(nina, "DELETE", `/crews/${crew.id}/posts/${post.id}`)).status).toBe(204);
+    expect((await req(lea, "GET", `/crews/${crew.id}/photos/${keys[0]!.split("/").pop()}`)).status).toBe(404);
+    for (const k of keys) expect(await storage.get(k)).not.toBeNull();
+    const detail = await req(moderator, "GET", `/admin/reports/${reportId}`);
+    expect(detail.json.target.removed).toBe(true);
+    expect((await req(moderator, "GET", path(detail.json.target.imageUrls[0]))).status).toBe(200);
+
+    // À la décision : tout part (lignes, envois, fichiers).
+    expect((await decide(reportId, "reviewing")).status).toBe(200);
+    for (const k of keys) expect(await storage.get(k)).not.toBeNull();
+    expect((await decide(reportId, "resolved_no_action")).status).toBe(200);
+    for (const k of keys) expect(await storage.get(k)).toBeNull();
+    expect(await db.select().from(crewPostPhotos).where(eq(crewPostPhotos.postId, post.id))).toHaveLength(0);
+  });
+
   it("création idempotente : même identifiant, même publication, ni doublon ni photo « déjà utilisée »", async () => {
     const { kenji, nina, crew } = await crewOf3();
     const clientId = "0b8f6c2e-3a7d-4f51-9c4e-2d1a5b6c7d8e";
