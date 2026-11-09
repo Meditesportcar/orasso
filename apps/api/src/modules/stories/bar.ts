@@ -60,11 +60,7 @@ async function seenSet(userId: string, rows: readonly StoryRow[]): Promise<Set<s
 const personal = sql`${stories.persona} not in ('organizer','pro')`;
 
 /** Pour une page publique (structure, pro) : zéro sans session (aucune story n'est servie sans session). */
-export async function storiesSummaryFor(
-  v: Viewer | null,
-  kind: StoryTagKind,
-  id: string,
-): Promise<StoriesSummary> {
+export async function storiesSummaryFor(v: Viewer | null, kind: StoryTagKind, id: string): Promise<StoriesSummary> {
   if (!v) return { count: 0, hasUnseen: false, ring: null };
   return storiesBar.summary(v, kind, id);
 }

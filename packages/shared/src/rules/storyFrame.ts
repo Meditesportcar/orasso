@@ -92,6 +92,10 @@ export function rectIntersectsCanvas(rect: FrameRect): boolean {
 }
 
 /** Les rectangles transformés qui touchent encore le canevas (les autres sortent du cadre : rien à flouter). */
-export function mapRects<T extends FrameRect>(rects: readonly T[], frame: Frame, src: { width: number; height: number }) {
+export function mapRects<T extends FrameRect>(
+  rects: readonly T[],
+  frame: Frame,
+  src: { width: number; height: number },
+) {
   return rects.map((r) => mapRect(r, frame, src)).filter(rectIntersectsCanvas);
 }

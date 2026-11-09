@@ -14,9 +14,9 @@ import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
-import { storiesSummaryFor } from "../stories/bar";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
+import { storiesSummaryFor } from "../stories/bar";
 import { structuresService } from "./service";
 import { verificationService } from "./verification";
 

@@ -30,6 +30,7 @@ import { storage } from "../../lib/storage";
 import { crewsService } from "../crews/service";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
+import { storiesBar } from "../stories/bar";
 import { vehiclesRepo } from "../vehicles/repo";
 import {
   makeNameOf,
@@ -39,7 +40,6 @@ import {
   vehiclePrivate,
   vehiclePublic,
 } from "../vehicles/serializers";
-import { storiesBar } from "../stories/bar";
 import { followsService } from "./follows";
 
 const DAY = 86_400_000;

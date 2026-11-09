@@ -1,9 +1,15 @@
 // Stories (lot R7f1, ARCHITECTURE-R7 § 1.5 et § 2.5) : formes des routes, schémas Zod, types de réponse. Les règles de
 // visibilité sont dans `rules/audience.ts`, le cadrage 9:16 dans `rules/storyFrame.ts`.
 import { z } from "zod";
-
-import { STORY_CAPTION_MAX, STORY_PLACE_MAX, STORY_TAGS_MAX, storyAudiences, storyPersonas, storyTagKinds } from "../rules/audience";
 import type { StoryAudience, StoryPersona, StoryRing, StoryTagKind } from "../rules/audience";
+import {
+  STORY_CAPTION_MAX,
+  STORY_PLACE_MAX,
+  STORY_TAGS_MAX,
+  storyAudiences,
+  storyPersonas,
+  storyTagKinds,
+} from "../rules/audience";
 import { STORY_OFFSET_MAX, STORY_SCALE_MAX, STORY_SCALE_MIN } from "../rules/storyFrame";
 import { MAX_PLATE_RECTS, plateRectSchema } from "./vehicle";
 
@@ -25,7 +31,9 @@ export type StoryPlateState = (typeof storyPlateStates)[number];
 export const storyLinkTypes = ["event", "vehicle", "feed_post", "memory", "vote_result"] as const;
 export type StoryLinkType = (typeof storyLinkTypes)[number];
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Identifiant invalide");
+const uuid = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Identifiant invalide");
 
 export const storyFrameSchema = z.object({
   scale: z.number().min(STORY_SCALE_MIN).max(STORY_SCALE_MAX),
@@ -70,9 +78,7 @@ export const storyReportSchema = z.object({
   reason: z.enum(["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"]),
   details: z.string().trim().max(1000).nullish(),
 });
-export const storyTagRemoveSchema = z
-  .object({ kind: z.enum(["structure", "pro"]), id: uuid })
-  .optional();
+export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuid }).optional();
 
 /** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>`. */
 export const storyAuthorKeyRe = /^([usp]):([A-Za-z0-9_-]{1,64})$/;
@@ -96,7 +102,13 @@ export type StoryCreated = {
   skipped: { kind: StoryTagKind | "event" | "vehicle"; id: string; reason: string }[];
 };
 
-export type StoryTagView = { kind: StoryTagKind; id: string; name: string; slug: string | null; avatarUrl: string | null };
+export type StoryTagView = {
+  kind: StoryTagKind;
+  id: string;
+  name: string;
+  slug: string | null;
+  avatarUrl: string | null;
+};
 
 export type StoryView = {
   id: string;

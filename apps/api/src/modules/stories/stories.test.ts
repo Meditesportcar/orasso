@@ -114,7 +114,8 @@ async function follow(a: TestUser, b: TestUser) {
     .set({ status: "accepted", acceptedAt: clock.now })
     .where(and(eq(userFollows.followerId, a.id), eq(userFollows.followedId, b.id)));
 }
-const makePrivate = (u: TestUser) => db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
+const makePrivate = (u: TestUser) =>
+  db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
 
 let crewCounter = 0;
 async function newCrew(leader: TestUser) {
@@ -344,7 +345,12 @@ describe("audiences × regards", () => {
     expect((await publish(kenji, { audience: "crew" })).status).toBe(400);
     expect((await publish(kenji, { audience: "followers", crewId: crew.id })).status).toBe(400);
     const structure = await createStructure(kenji.id);
-    const orga = await publish(kenji, { audience: "crew", crewId: crew.id, persona: "organizer", structureId: structure.id });
+    const orga = await publish(kenji, {
+      audience: "crew",
+      crewId: crew.id,
+      persona: "organizer",
+      structureId: structure.id,
+    });
     expect(orga.status).toBe(400);
   });
 
@@ -391,9 +397,16 @@ describe("audiences × regards", () => {
     const nina = await signUp("Nina");
     await ok(kenji, {});
     const up = await upload(kenji);
-    await db.update(profiles).set({ suspendedUntil: new Date(clock.now.getTime() + 24 * HOUR) }).where(eq(profiles.userId, kenji.id));
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 24 * HOUR) })
+      .where(eq(profiles.userId, kenji.id));
     expect((await byAuthor(nina, keyOf(kenji))).json.stories).toEqual([]);
-    const res = await req(kenji, "POST", "/me/stories", { uploadKey: up.json.key, noPlateConfirmed: true, audience: "public" });
+    const res = await req(kenji, "POST", "/me/stories", {
+      uploadKey: up.json.key,
+      noPlateConfirmed: true,
+      audience: "public",
+    });
     expect(res.status).toBe(403);
   });
 });
@@ -731,7 +744,10 @@ describe("identification, notifications, voiture, événement", () => {
 
   it("onze identifications : 400 ; 10 passent", async () => {
     const kenji = await signUp("Kenji");
-    const tags = Array.from({ length: 11 }, (_, i) => ({ kind: "pro", id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}` }));
+    const tags = Array.from({ length: 11 }, (_, i) => ({
+      kind: "pro",
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    }));
     expect((await publish(kenji, { tags })).status).toBe(400);
     expect((await publish(kenji, { tags: tags.slice(0, 10) })).status).toBe(201);
   });
@@ -774,7 +790,10 @@ describe("identification, notifications, voiture, événement", () => {
     await ok(kenji, {});
     await ok(kenji, {});
     const of = (u: TestUser) =>
-      db.select().from(notifications).where(and(eq(notifications.userId, u.id), eq(notifications.type, "story_published")));
+      db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, u.id), eq(notifications.type, "story_published")));
     expect(await of(nina)).toHaveLength(1);
     expect(await of(mute)).toHaveLength(0);
     expect(await of(outsider)).toHaveLength(0);

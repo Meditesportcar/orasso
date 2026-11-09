@@ -2,10 +2,10 @@
 // plus de 24 h est marquée supprimée (avec ses copies), ses fichiers sont effacés, la vignette des réponses disparaît.
 // Seule exception : une story qui a un signalement ouvert garde son fichier (invisible de tous sauf des modérateurs)
 // jusqu'à la décision. Les lignes (vues, flammes) restent 7 jours pour les compteurs, puis disparaissent.
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { messages, reports, stories } from "../../db/schema";
+import { messages, stories } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { removeOrRetry } from "../vehicles/photos-blur";
 

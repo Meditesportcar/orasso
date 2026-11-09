@@ -5,7 +5,16 @@ import { maskedPhoto, type StoryTagView, type StoryView } from "@orasso/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { events, profiles, proProfiles, stories, storyReactions, storyTags, storyViews, structures } from "../../db/schema";
+import {
+  events,
+  profiles,
+  proProfiles,
+  stories,
+  storyReactions,
+  storyTags,
+  storyViews,
+  structures,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -35,13 +44,25 @@ async function tagsOf(ids: string[]): Promise<Map<string, StoryTagView[]>> {
     userIds.length ? db.select().from(profiles).where(inArray(profiles.userId, userIds)) : [],
     structureIds.length
       ? db
-          .select({ id: structures.id, name: structures.name, slug: structures.slug, logoKey: structures.logoKey, deletedAt: structures.deletedAt })
+          .select({
+            id: structures.id,
+            name: structures.name,
+            slug: structures.slug,
+            logoKey: structures.logoKey,
+            deletedAt: structures.deletedAt,
+          })
           .from(structures)
           .where(inArray(structures.id, structureIds))
       : [],
     proIds.length
       ? db
-          .select({ id: proProfiles.id, name: proProfiles.name, slug: proProfiles.slug, logoKey: proProfiles.logoKey, deletedAt: proProfiles.deletedAt })
+          .select({
+            id: proProfiles.id,
+            name: proProfiles.name,
+            slug: proProfiles.slug,
+            logoKey: proProfiles.logoKey,
+            deletedAt: proProfiles.deletedAt,
+          })
           .from(proProfiles)
           .where(inArray(proProfiles.id, proIds))
       : [],
@@ -53,13 +74,16 @@ async function tagsOf(ids: string[]): Promise<Map<string, StoryTagView[]>> {
     let view: StoryTagView | null = null;
     if (t.targetKind === "user") {
       const p = personBy.get(t.targetId);
-      if (p && accountActive(p, at)) view = { kind: "user", id: p.userId, name: p.pseudo, slug: p.pseudo, avatarUrl: storage.url(p.avatarKey) };
+      if (p && accountActive(p, at))
+        view = { kind: "user", id: p.userId, name: p.pseudo, slug: p.pseudo, avatarUrl: storage.url(p.avatarKey) };
     } else if (t.targetKind === "structure") {
       const s = structBy.get(t.targetId);
-      if (s && !s.deletedAt) view = { kind: "structure", id: s.id, name: s.name, slug: s.slug, avatarUrl: storage.url(s.logoKey) };
+      if (s && !s.deletedAt)
+        view = { kind: "structure", id: s.id, name: s.name, slug: s.slug, avatarUrl: storage.url(s.logoKey) };
     } else {
       const p = proBy.get(t.targetId);
-      if (p && !p.deletedAt) view = { kind: "pro", id: p.id, name: p.name, slug: p.slug, avatarUrl: storage.url(p.logoKey) };
+      if (p && !p.deletedAt)
+        view = { kind: "pro", id: p.id, name: p.name, slug: p.slug, avatarUrl: storage.url(p.logoKey) };
     }
     if (!view) continue;
     const list = out.get(t.storyId) ?? [];
@@ -139,7 +163,9 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       status: s.status,
       caption: s.caption,
       placeLabel: s.placeLabel,
-      vehicle: vehicle ? { id: vehicle.id, label: vehicleLabel(vehicle), photoUrl: storage.url(photo?.storageKey ?? null) } : null,
+      vehicle: vehicle
+        ? { id: vehicle.id, label: vehicleLabel(vehicle), photoUrl: storage.url(photo?.storageKey ?? null) }
+        : null,
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
       linked: s.linkedType && s.linkedId ? { type: s.linkedType, id: s.linkedId } : null,

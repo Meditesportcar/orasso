@@ -11,9 +11,9 @@ import {
   type Frame,
   type StoryCreate,
   type StoryCreated,
+  type StoryDenial,
   type StoryReplyResult,
   type StoryTagKind,
-  type StoryDenial,
   storyAuthorKeyOf,
   storyDenial,
   storyExpiresAt,
@@ -30,10 +30,10 @@ import {
   mediaProfiles,
   messages,
   notifications,
-  profiles,
-  providerProfiles,
   proFollows,
+  profiles,
   proProfiles,
+  providerProfiles,
   stories,
   storyMutes,
   storyReactions,
@@ -52,9 +52,9 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { canSeeEvent } from "../invitations/access";
-import { messagingService } from "../messaging/service";
-import { contactsService } from "../messaging/contacts";
 import { canTalkDirect } from "../messaging/access/direct";
+import { contactsService } from "../messaging/contacts";
+import { messagingService } from "../messaging/service";
 import { moderationService } from "../moderation/service";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
@@ -89,17 +89,31 @@ export async function requireVisibleStory(v: Viewer, id: string, ex: Tx | typeof
 }
 
 /** Les liens d'une personne avec l'auteur d'une story qu'elle ne publie pas (pour juger si elle la verrait). */
-async function seesStory(userId: string, story: AudienceStory, ctx: { structureId: string | null; proId: string | null }) {
+async function seesStory(
+  userId: string,
+  story: AudienceStory,
+  ctx: { structureId: string | null; proId: string | null },
+) {
   const [p] = await db.select().from(profiles).where(eq(profiles.userId, userId));
   if (!p || !accountActive(p, now())) return false;
   let followAccepted = false;
   if (ctx.structureId) {
     followAccepted = Boolean(
-      (await db.select().from(structureFollows).where(and(eq(structureFollows.userId, userId), eq(structureFollows.structureId, ctx.structureId))))[0],
+      (
+        await db
+          .select()
+          .from(structureFollows)
+          .where(and(eq(structureFollows.userId, userId), eq(structureFollows.structureId, ctx.structureId)))
+      )[0],
     );
   } else if (ctx.proId) {
     followAccepted = Boolean(
-      (await db.select().from(proFollows).where(and(eq(proFollows.userId, userId), eq(proFollows.proId, ctx.proId))))[0],
+      (
+        await db
+          .select()
+          .from(proFollows)
+          .where(and(eq(proFollows.userId, userId), eq(proFollows.proId, ctx.proId)))
+      )[0],
     );
   } else {
     followAccepted = Boolean(
@@ -107,7 +121,13 @@ async function seesStory(userId: string, story: AudienceStory, ctx: { structureI
         await db
           .select()
           .from(userFollows)
-          .where(and(eq(userFollows.followerId, userId), eq(userFollows.followedId, story.authorId), eq(userFollows.status, "accepted")))
+          .where(
+            and(
+              eq(userFollows.followerId, userId),
+              eq(userFollows.followedId, story.authorId),
+              eq(userFollows.status, "accepted"),
+            ),
+          )
       )[0],
     );
   }
@@ -129,7 +149,10 @@ async function seesStory(userId: string, story: AudienceStory, ctx: { structureI
         )[0],
       )
     : false;
-  return canSeeStory({ id: userId, active: true }, story, { followAccepted, crewMemberActive: (id) => id === story.crewId && member });
+  return canSeeStory({ id: userId, active: true }, story, {
+    followAccepted,
+    crewMemberActive: (id) => id === story.crewId && member,
+  });
 }
 
 async function checkPersona(v: Viewer, input: StoryCreate) {
@@ -182,12 +205,18 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
     const [p] = await db
       .select({ id: proProfiles.id })
       .from(proProfiles)
-      .where(and(eq(proProfiles.id, input.proId), eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)));
+      .where(
+        and(eq(proProfiles.id, input.proId), eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)),
+      );
     if (!p) throw forbidden(storyLabels.notPro);
     return;
   }
   if (persona === "provider") {
-    const [p] = await db.select({ id: providerProfiles.id }).from(providerProfiles).where(eq(providerProfiles.userId, v.user.id)).limit(1);
+    const [p] = await db
+      .select({ id: providerProfiles.id })
+      .from(providerProfiles)
+      .where(eq(providerProfiles.userId, v.user.id))
+      .limit(1);
     if (!p) throw forbidden(storyLabels.personaUnavailable);
     return;
   }
@@ -200,7 +229,14 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
 
 async function notifyPublished(
   tx: Tx,
-  story: { id: string; authorId: string; persona: string; structureId: string | null; proId: string | null; audience: string },
+  story: {
+    id: string;
+    authorId: string;
+    persona: string;
+    structureId: string | null;
+    proId: string | null;
+    audience: string;
+  },
   authorKey: { kind: StoryTagKind; id: string; key: string },
   name: string,
   tagged: string[],
@@ -221,7 +257,10 @@ async function notifyPublished(
   if (story.audience === "crew") return;
   const rows =
     authorKey.kind === "structure"
-      ? await tx.select({ id: structureFollows.userId }).from(structureFollows).where(eq(structureFollows.structureId, authorKey.id))
+      ? await tx
+          .select({ id: structureFollows.userId })
+          .from(structureFollows)
+          .where(eq(structureFollows.structureId, authorKey.id))
       : authorKey.kind === "pro"
         ? await tx.select({ id: proFollows.userId }).from(proFollows).where(eq(proFollows.proId, authorKey.id))
         : await tx
@@ -233,7 +272,13 @@ async function notifyPublished(
   const muted = await tx
     .select({ id: storyMutes.userId })
     .from(storyMutes)
-    .where(and(eq(storyMutes.authorKind, authorKey.kind), eq(storyMutes.authorId, authorKey.id), inArray(storyMutes.userId, audience)));
+    .where(
+      and(
+        eq(storyMutes.authorKind, authorKey.kind),
+        eq(storyMutes.authorId, authorKey.id),
+        inArray(storyMutes.userId, audience),
+      ),
+    );
   // Une seule actualité non lue par auteur et par 6 h et par abonné (cinq stories d'affilée, une ligne).
   const recent = await tx
     .select({ id: notifications.userId })
@@ -277,7 +322,10 @@ export const storiesService = {
       authorActive: true,
     };
     const author = { visibility: v.profile.visibility };
-    const ctx = { structureId: input.persona === "organizer" ? (input.structureId ?? null) : null, proId: input.persona === "pro" ? (input.proId ?? null) : null };
+    const ctx = {
+      structureId: input.persona === "organizer" ? (input.structureId ?? null) : null,
+      proId: input.persona === "pro" ? (input.proId ?? null) : null,
+    };
 
     // Voiture : la mienne et active.
     let vehicleId: string | null = null;
@@ -290,10 +338,19 @@ export const storiesService = {
     // Autocollant d'événement et contenu lié (événement ou voiture seulement dans ce lot).
     const eventOk = async (id: string, kind: "event" | "linked"): Promise<string | null> => {
       const [e] = await db
-        .select({ id: events_.id, status: events_.status, admission: events_.admission, structureId: events_.structureId })
+        .select({
+          id: events_.id,
+          status: events_.status,
+          admission: events_.admission,
+          structureId: events_.structureId,
+        })
         .from(events_)
         .where(eq(events_.id, id));
-      const refusal = canTag(author, storyShape, { kind: "event", canSee: true, available: Boolean(e && e.status !== "draft" && (await canSeeEvent(e, v))) });
+      const refusal = canTag(author, storyShape, {
+        kind: "event",
+        canSee: true,
+        available: Boolean(e && e.status !== "draft" && (await canSeeEvent(e, v))),
+      });
       if (refusal) {
         skipped.push({ kind: kind === "event" ? "event" : "event", id, reason: storyLabels.skipped[refusal] });
         return null;
@@ -328,7 +385,10 @@ export const storiesService = {
         canSee = available && (await seesStory(t.id, storyShape, ctx));
       } else if (t.kind === "structure") {
         if (!/^[0-9a-f-]{36}$/i.test(t.id)) continue;
-        const [s] = await db.select({ d: structures.deletedAt, ver: structures.verification }).from(structures).where(eq(structures.id, t.id));
+        const [s] = await db
+          .select({ d: structures.deletedAt, ver: structures.verification })
+          .from(structures)
+          .where(eq(structures.id, t.id));
         available = Boolean(s && !s.d && s.ver !== "suspended");
         canSee = true;
       } else {
@@ -346,7 +406,14 @@ export const storiesService = {
     const [pending] = await db
       .select()
       .from(uploads)
-      .where(and(eq(uploads.key, input.uploadKey), eq(uploads.userId, v.user.id), eq(uploads.purpose, "story" satisfies UploadPurpose), isNull(uploads.consumedAt)));
+      .where(
+        and(
+          eq(uploads.key, input.uploadKey),
+          eq(uploads.userId, v.user.id),
+          eq(uploads.purpose, "story" satisfies UploadPurpose),
+          isNull(uploads.consumedAt),
+        ),
+      );
     if (!pending) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
     const source = await storage.get(pending.key);
     if (!source) throw validation("Image introuvable : envoie-la à nouveau.");
@@ -400,9 +467,11 @@ export const storiesService = {
               : { kind: "user" as const, id: v.user.id, key: storyAuthorKeyOf("user", v.user.id) };
         const name =
           authorKey.kind === "structure"
-            ? ((await tx.select({ n: structures.name }).from(structures).where(eq(structures.id, authorKey.id)))[0]?.n ?? v.profile.pseudo)
+            ? ((await tx.select({ n: structures.name }).from(structures).where(eq(structures.id, authorKey.id)))[0]
+                ?.n ?? v.profile.pseudo)
             : authorKey.kind === "pro"
-              ? ((await tx.select({ n: proProfiles.name }).from(proProfiles).where(eq(proProfiles.id, authorKey.id)))[0]?.n ?? v.profile.pseudo)
+              ? ((await tx.select({ n: proProfiles.name }).from(proProfiles).where(eq(proProfiles.id, authorKey.id)))[0]
+                  ?.n ?? v.profile.pseudo)
               : v.profile.pseudo;
         await notifyPublished(
           tx,
@@ -446,7 +515,10 @@ export const storiesService = {
         .onConflictDoNothing()
         .returning({ id: storyViews.storyId });
       if (added) {
-        await tx.update(stories).set({ viewsCount: sql`${stories.viewsCount} + 1` }).where(eq(stories.id, id));
+        await tx
+          .update(stories)
+          .set({ viewsCount: sql`${stories.viewsCount} + 1` })
+          .where(eq(stories.id, id));
       }
     });
   },
@@ -459,7 +531,15 @@ export const storiesService = {
       .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id), isNull(stories.deletedAt)));
     if (!mine) throw notFound("Story introuvable");
     const rows = await db
-      .select({ userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey, at: storyViews.viewedAt, d: profiles.deletedAt, b: profiles.bannedAt, s: profiles.suspendedUntil })
+      .select({
+        userId: profiles.userId,
+        pseudo: profiles.pseudo,
+        avatarKey: profiles.avatarKey,
+        at: storyViews.viewedAt,
+        d: profiles.deletedAt,
+        b: profiles.bannedAt,
+        s: profiles.suspendedUntil,
+      })
       .from(storyViews)
       .innerJoin(profiles, eq(profiles.userId, storyViews.viewerId))
       .where(eq(storyViews.storyId, id))
@@ -469,7 +549,12 @@ export const storiesService = {
     return {
       viewers: rows
         .filter((r) => !r.d && !r.b && !(r.s && r.s > at))
-        .map((r) => ({ userId: r.userId, pseudo: r.pseudo, avatarUrl: storage.url(r.avatarKey), viewedAt: r.at.toISOString() })),
+        .map((r) => ({
+          userId: r.userId,
+          pseudo: r.pseudo,
+          avatarUrl: storage.url(r.avatarKey),
+          viewedAt: r.at.toISOString(),
+        })),
     };
   },
 
@@ -498,7 +583,10 @@ export const storiesService = {
         .onConflictDoNothing()
         .returning({ id: storyReactions.storyId });
       if (!added) return;
-      await tx.update(stories).set({ reactionsCount: sql`${stories.reactionsCount} + 1` }).where(eq(stories.id, id));
+      await tx
+        .update(stories)
+        .set({ reactionsCount: sql`${stories.reactionsCount} + 1` })
+        .where(eq(stories.id, id));
       // Flamme regroupée : une ligne non lue par story (group_key `story_like:<id>`), complétée à chaque flamme.
       const groupKey = `story_like:${id}`;
       const actor = { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) };
@@ -585,7 +673,9 @@ export const storiesService = {
     } else {
       await db
         .delete(storyMutes)
-        .where(and(eq(storyMutes.userId, v.user.id), eq(storyMutes.authorKind, key.kind), eq(storyMutes.authorId, key.id)));
+        .where(
+          and(eq(storyMutes.userId, v.user.id), eq(storyMutes.authorKind, key.kind), eq(storyMutes.authorId, key.id)),
+        );
     }
   },
 

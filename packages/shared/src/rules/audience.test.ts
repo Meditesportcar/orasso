@@ -104,7 +104,9 @@ describe("canTag", () => {
   const priv = { visibility: "private" as const };
   it("une personne : seulement si elle peut voir la story", () => {
     expect(canTag(pub, { audience: "followers" }, { kind: "user", canSee: true, available: true })).toBeNull();
-    expect(canTag(pub, { audience: "followers" }, { kind: "user", canSee: false, available: true })).toBe("not_visible");
+    expect(canTag(pub, { audience: "followers" }, { kind: "user", canSee: false, available: true })).toBe(
+      "not_visible",
+    );
     expect(canTag(pub, { audience: "crew" }, { kind: "user", canSee: true, available: true })).toBeNull();
     expect(canTag(pub, { audience: "crew" }, { kind: "user", canSee: true, available: false })).toBe("unavailable");
   });

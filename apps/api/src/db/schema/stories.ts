@@ -94,33 +94,22 @@ export const stories = pgTable(
   },
   (t) => [
     index("stories_author_expires_idx").on(t.authorId, t.expiresAt),
-    index("stories_expires_idx")
-      .on(t.expiresAt)
-      .where(sql`${t.deletedAt} is null`),
-    index("stories_public_event_idx")
-      .on(t.eventId)
-      .where(sql`${t.audience} = 'public'`),
-    index("stories_structure_idx")
-      .on(t.structureId, t.expiresAt)
-      .where(sql`${t.structureId} is not null`),
-    index("stories_pro_idx")
-      .on(t.proId, t.expiresAt)
-      .where(sql`${t.proId} is not null`),
-    index("stories_crew_idx")
-      .on(t.crewId, t.expiresAt)
-      .where(sql`${t.crewId} is not null`),
-    index("stories_shared_from_idx")
-      .on(t.sharedFromStoryId)
-      .where(sql`${t.sharedFromStoryId} is not null`),
-    index("stories_sweep_idx")
-      .on(t.deletedAt)
-      .where(sql`${t.deletedAt} is not null`),
+    index("stories_expires_idx").on(t.expiresAt).where(sql`${t.deletedAt} is null`),
+    index("stories_public_event_idx").on(t.eventId).where(sql`${t.audience} = 'public'`),
+    index("stories_structure_idx").on(t.structureId, t.expiresAt).where(sql`${t.structureId} is not null`),
+    index("stories_pro_idx").on(t.proId, t.expiresAt).where(sql`${t.proId} is not null`),
+    index("stories_crew_idx").on(t.crewId, t.expiresAt).where(sql`${t.crewId} is not null`),
+    index("stories_shared_from_idx").on(t.sharedFromStoryId).where(sql`${t.sharedFromStoryId} is not null`),
+    index("stories_sweep_idx").on(t.deletedAt).where(sql`${t.deletedAt} is not null`),
     // Une story de crew a son crew ; les autres n'en ont pas.
     check("stories_crew_check", sql`(${t.audience} = 'crew') = (${t.crewId} is not null)`),
     // Prête = plaque traitée. Structurel : aucune story ne sort sans décision.
     check("stories_plate_check", sql`${t.status} <> 'ready' or ${t.plateState} is not null`),
     // Une photo prête porte une vraie décision ; `not_required` est réservé aux vidéos (pas de floutage vidéo).
-    check("stories_plate_photo_check", sql`${t.mediaKind} = 'video' or ${t.plateState} is distinct from 'not_required'`),
+    check(
+      "stories_plate_photo_check",
+      sql`${t.mediaKind} = 'video' or ${t.plateState} is distinct from 'not_required'`,
+    ),
     check("stories_caption_check", sql`${t.caption} is null or char_length(${t.caption}) <= 200`),
     check("stories_place_check", sql`${t.placeLabel} is null or char_length(${t.placeLabel}) <= 80`),
   ],

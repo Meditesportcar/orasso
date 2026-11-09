@@ -74,5 +74,9 @@ export async function composeStoryPhoto(
     return { data: out.data, info: out.info, blurredRects };
   }
   const out = await sharp(flat).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
-  return { data: out.data, info: { width: out.info.width, height: out.info.height, size: out.info.size }, blurredRects };
+  return {
+    data: out.data,
+    info: { width: out.info.width, height: out.info.height, size: out.info.size },
+    blurredRects,
+  };
 }

@@ -15,8 +15,8 @@ import { db } from "../../db/client";
 import {
   crewMembers,
   crews,
-  profiles,
   proFollows,
+  profiles,
   proProfiles,
   stories,
   structureFollows,
@@ -101,7 +101,9 @@ export const accountActive = (p: Pick<StoryRow["author"], "deletedAt" | "bannedA
 export function authorKeyOf(row: StoryRow): { kind: StoryTagKind; id: string; key: string } | null {
   const { story } = row;
   if (story.persona === "organizer") {
-    return story.structureId ? { kind: "structure", id: story.structureId, key: storyAuthorKeyOf("structure", story.structureId) } : null;
+    return story.structureId
+      ? { kind: "structure", id: story.structureId, key: storyAuthorKeyOf("structure", story.structureId) }
+      : null;
   }
   if (story.persona === "pro") {
     return story.proId ? { kind: "pro", id: story.proId, key: storyAuthorKeyOf("pro", story.proId) } : null;
@@ -169,7 +171,11 @@ export async function loadViewerSets(userId: string, ex: Executor = db): Promise
 
 /** Les liens du regard limités aux auteurs et crews de ces stories (lecture d'une ou de quelques stories). */
 export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Executor = db): Promise<ViewerSets> {
-  const users = [...new Set(rows.filter((r) => r.story.persona !== "organizer" && r.story.persona !== "pro").map((r) => r.story.authorId))];
+  const users = [
+    ...new Set(
+      rows.filter((r) => r.story.persona !== "organizer" && r.story.persona !== "pro").map((r) => r.story.authorId),
+    ),
+  ];
   const structureIds = [...new Set(rows.flatMap((r) => (r.story.structureId ? [r.story.structureId] : [])))];
   const proIds = [...new Set(rows.flatMap((r) => (r.story.proId ? [r.story.proId] : [])))];
   const crewIds = [...new Set(rows.flatMap((r) => (r.story.crewId ? [r.story.crewId] : [])))];
@@ -179,7 +185,11 @@ export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Exe
           .select({ id: userFollows.followedId })
           .from(userFollows)
           .where(
-            and(eq(userFollows.followerId, userId), eq(userFollows.status, "accepted"), inArray(userFollows.followedId, users)),
+            and(
+              eq(userFollows.followerId, userId),
+              eq(userFollows.status, "accepted"),
+              inArray(userFollows.followedId, users),
+            ),
           )
       : [],
     structureIds.length

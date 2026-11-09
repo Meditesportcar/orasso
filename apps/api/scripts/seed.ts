@@ -43,6 +43,7 @@ import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedStaff } from "./seed/staff";
+import { seedStories } from "./seed/stories";
 import { seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
@@ -164,6 +165,8 @@ async function main() {
   await seedVisitorStamps();
   // 08/11 : « Rassemblement du Lydia » en direct (4 jours, commencé la veille) ; recréé quand il est fini.
   await seedLiveEvent();
+  // Lot R7f1 : six stories de démonstration (photos relues sans plaque), 20 h de vie restantes.
+  await seedStories();
 }
 
 try {

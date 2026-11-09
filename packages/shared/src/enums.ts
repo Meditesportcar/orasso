@@ -26,13 +26,13 @@ import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notif
 import { passportJournalOnlyTypes, passportNoEmailTypes, passportNotificationTypes } from "./notifications/passport";
 import { pointsNotificationTypes } from "./notifications/points";
 import { providersV2NotificationTypes } from "./notifications/providers-v2";
-import { storyJournalOnlyTypes, storyNoEmailTypes, storyNotificationTypes } from "./notifications/stories";
 import {
   journalOnlyNotificationTypes as socialJournalOnly,
   socialNoEmailTypes,
   socialNotificationTypes,
 } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
+import { storyJournalOnlyTypes, storyNoEmailTypes, storyNotificationTypes } from "./notifications/stories";
 import { weatherNotificationTypes } from "./notifications/weather";
 
 /** Types sans e-mail de repli (push et Journal seulement), un tableau par domaine. */
