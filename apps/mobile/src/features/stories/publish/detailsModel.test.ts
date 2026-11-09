@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   audienceLost,
   audienceOption,
+  audienceOptionDisabled,
   chooseAudience,
   type DetailsState,
   initialDetails,
@@ -33,6 +34,23 @@ describe("détails d'une story", () => {
     const chosen = { ...initialDetails(options), audienceKey: "crew:c1", caption: "Belle sortie" };
     expect(settleAudience(chosen, withoutC1)).toBe(chosen);
     expect(audienceLost(withoutC1, chosen.audienceKey)).toBe(true);
+  });
+
+  it("crew disparu, « Mes abonnés » seul restant : l'option est sélectionnable, puis la ligne d'erreur disparaît", () => {
+    const only = storyAudienceOptions({ persona: "fan" }, "public", []);
+    expect(only).toHaveLength(1);
+    const lostState = { ...initialDetails(options), audienceKey: "crew:c1" };
+    expect(audienceLost(only, lostState.audienceKey)).toBe(true);
+    expect(audienceOptionDisabled(only, lostState.audienceKey, false)).toBe(false);
+    // Pendant l'envoi, elle reste inactive.
+    expect(audienceOptionDisabled(only, lostState.audienceKey, true)).toBe(true);
+    const next = chooseAudience(lostState, only, "followers");
+    expect(next.state.audienceKey).toBe("followers");
+    expect(audienceLost(only, next.state.audienceKey)).toBe(false);
+    // Choix déjà valide et option unique : rien à changer, inactive.
+    expect(audienceOptionDisabled(only, "followers", false)).toBe(true);
+    // Plusieurs options : jamais inactive hors envoi.
+    expect(audienceOptionDisabled(options, "followers", false)).toBe(false);
   });
 
   it("au tout début, la première option du moment est prise (« Public » pour un organisateur) ; ensuite plus d'office", () => {

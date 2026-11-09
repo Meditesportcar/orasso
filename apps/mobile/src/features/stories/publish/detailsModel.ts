@@ -39,6 +39,17 @@ export function audienceOption(options: readonly StoryAudienceOption[], key: str
 export const audienceLost = (options: readonly StoryAudienceOption[], key: string): boolean =>
   key !== "" && !options.some((o) => o.key === key);
 
+/**
+ * Une option de public est inactive pendant l'envoi, ou quand elle est l'unique option ET déjà le choix valide (rien à
+ * changer). Si le choix courant a disparu, l'unique option restante reste sélectionnable : sinon la personne ne peut plus
+ * en sortir.
+ */
+export const audienceOptionDisabled = (
+  options: readonly StoryAudienceOption[],
+  key: string,
+  locked: boolean,
+): boolean => locked || (options.length === 1 && !audienceLost(options, key));
+
 /** « Ma ville » arrive : seul le lieu change, sur l'état d'aujourd'hui (jamais sur celui d'avant la lecture). */
 export const withPlace =
   (place: string) =>

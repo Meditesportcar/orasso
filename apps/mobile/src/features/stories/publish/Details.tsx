@@ -20,7 +20,14 @@ import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { CommercialLine } from "./CommercialLine";
-import { audienceLost, audienceOption, chooseAudience, type DetailsState, withPlace } from "./detailsModel";
+import {
+  audienceLost,
+  audienceOption,
+  audienceOptionDisabled,
+  chooseAudience,
+  type DetailsState,
+  withPlace,
+} from "./detailsModel";
 import type { StoryDraft } from "./model";
 import { Label, Option, StoryOverlays } from "./parts";
 import { currentCity } from "./place";
@@ -248,7 +255,7 @@ export function Details({
             title={o.label}
             hint={o.hint}
             selected={chosen?.key === o.key}
-            disabled={locked || options.length === 1}
+            disabled={audienceOptionDisabled(options, details.audienceKey, locked)}
             onPress={() => {
               const next = chooseAudience(details, options, o.key);
               setDropped(next.dropped);
