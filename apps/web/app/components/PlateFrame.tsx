@@ -206,6 +206,7 @@ export function PlateFrame({
   name = "plateRects",
   initial = [DEFAULT_PLATE_FRAME],
   testId,
+  onChange,
 }: {
   src: string;
   alt: string;
@@ -213,8 +214,13 @@ export function PlateFrame({
   name?: string;
   initial?: PlateRect[];
   testId?: string;
+  /** Lot R7e2 : les cadres à chaque changement (le champ caché reste celui des formulaires). */
+  onChange?: (rects: PlateRect[]) => void;
 }) {
   const [rects, setRects] = useState<PlateRect[]>(initial);
+  const changed = useRef(onChange);
+  changed.current = onChange;
+  useEffect(() => changed.current?.(rects), [rects]);
   // Le cadre s'ouvre toujours en Déplacer (le composant est recréé à chaque photo choisie).
   const [mode, setMode] = useState<PlateFrameMode>(PLATE_FRAME_FIRST_MODE);
   const [held, setHeld] = useState<{ index: number; edges: PlateEdge[] } | null>(null);

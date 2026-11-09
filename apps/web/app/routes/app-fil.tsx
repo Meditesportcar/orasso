@@ -1,20 +1,25 @@
 import { navLabels } from "@orasso/shared";
-// Onglet Le Fil (lot R7a1, D38) : la place est prise, l'écran viendra du lot R7e2. En attendant, la page rend les
-// notifications du Journal (`routes/journal.tsx`, mêmes données) sous le titre « Le Fil », avec la bande ORASSO et la
-// barre d'onglets (mode A). Tour 2 : comme dans l'appli, les notifications seules (ni messages ni demandes, qui restent
-// dans la Boîte). Tour 3 : sans « Tout marquer comme lu » (l'appli ne l'a pas ; la page ne marque rien comme lu).
-import { loadJournal } from "../lib/journal.server";
-import type { Route } from "./+types/app-fil";
-import { JournalView } from "./journal";
 
+import { Fil } from "../components/fil/Fil";
+import { requireMe } from "../lib/api.server";
+import type { Route } from "./+types/app-fil";
+
+// Onglet Le Fil (lot R7e2, D38, maquette R7.6), comme l'appli : publier, trois filtres, cartes par genre avec leur raison et
+// « ⋯ ». Mode A : bande ORASSO et barre d'onglets (le layout). Les cartes sont lues dans le navigateur (`/api/fil`).
 export async function loader({ request }: Route.LoaderArgs) {
-  return loadJournal(request, true);
+  await requireMe(request);
+  return null;
 }
 
 export function meta() {
   return [{ title: `${navLabels.fil.title} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
-export default function AppFil({ loaderData, actionData }: Route.ComponentProps) {
-  return <JournalView loaderData={loaderData} actionData={actionData} title={navLabels.fil.title} segments={false} />;
+export default function AppFil() {
+  return (
+    <>
+      <h1 className="fil-sr">{navLabels.fil.title}</h1>
+      <Fil />
+    </>
+  );
 }

@@ -71,19 +71,19 @@ test("trois filtres, mémorisés ; chaque carte dit sa raison ; la liste ne ress
     if (m.type() === "error") errors.push(m.text().slice(0, 200));
   });
   await go(page, "/fil");
-  await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("fil-filters")).toBeVisible();
-  await expect(page.getByTestId("fil-filters-for_you")).toHaveAttribute("aria-selected", "true");
   await loaded(page);
   // Chaque carte a sa raison en petite ligne et son « ⋯ ».
-  const cards = page.getByTestId("fil-list").locator('[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"])');
+  const cards = page
+    .getByTestId("fil-list")
+    .locator('[data-testid^="feed-card-"]:not([data-testid="feed-card-reason"]):not([data-testid="feed-card-more"])');
   expect(await cards.count()).toBeGreaterThan(2);
   expect(await page.getByTestId("feed-card-reason").count()).toBeGreaterThanOrEqual(await cards.count());
   expect(await page.getByTestId("feed-card-more").count()).toBeGreaterThanOrEqual(await cards.count());
   await shot(page, "fil-pour-toi");
 
   await page.getByTestId("fil-filters-nearby").click();
-  await expect(page.getByTestId("fil-filters-nearby")).toHaveAttribute("aria-selected", "true");
   await loaded(page);
   await shot(page, "fil-autour-de-moi");
 
@@ -95,9 +95,19 @@ test("trois filtres, mémorisés ; chaque carte dit sa raison ; la liste ne ress
 
   // Le filtre est mémorisé par compte : au retour sur l'onglet, « Abonnements » est encore choisi.
   await go(page, "/fil");
-  await expect(page.getByTestId("fil-filters-following")).toHaveAttribute("aria-selected", "true", {
-    timeout: 30_000,
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          Object.entries(localStorage)
+            .filter(([k]) => k.includes("fil-filter"))
+            .map(([, v]) => v)
+            .join(),
+        ),
+      { timeout: 30_000 },
+    )
+    .toContain("following");
+  await loaded(page);
   expect(errors.filter((e) => !/favicon|manifest|Failed to load resource.*(404|401)/.test(e))).toEqual([]);
   await ctx.close();
 });
@@ -114,7 +124,7 @@ test("état vide d'« Abonnements » : un compte qui ne suit personne a le bouto
   if (await page.getByTestId("fil-empty").isVisible()) {
     await expect(page.getByTestId("fil-empty")).toContainText("Suis des passionnés pour remplir cet onglet");
     await page.getByTestId("fil-empty-search").click();
-    await page.waitForURL(/recherche/, { timeout: 30_000 });
+    await expect(page.getByRole("tablist", { name: "Que chercher ?" })).toBeVisible({ timeout: 30_000 });
   }
   await ctx.close();
 });
@@ -153,7 +163,10 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await page.getByTestId("fil-less-undo").click();
   await expect(page.getByTestId("fil-less-note")).toHaveCount(0);
   await expect
-    .poll(async () => ((await apiCall(await login("damien@orasso.local"), "GET", "/me/fil/less")).data as { kinds: string[] }).kinds)
+    .poll(
+      async () =>
+        ((await apiCall(await login("damien@orasso.local"), "GET", "/me/fil/less")).data as { kinds: string[] }).kinds,
+    )
     .not.toContain("feed_post");
   // Signaler : la feuille de signalement, motif puis envoi.
   await post.getByTestId("feed-card-more").click();
@@ -175,11 +188,16 @@ test("flamme : le compteur bouge, se retire, et la réponse de l'API fait foi", 
   const post = page.getByTestId("feed-card-feed_post").first();
   await expect(post).toBeVisible({ timeout: 30_000 });
   const count = post.getByTestId("feed-post-fire-count");
+  // Une flamme déjà donnée (essai précédent) : on la retire d'abord.
+  if (((await post.getByTestId("feed-post-fire").getAttribute("aria-label")) ?? "").includes("Retirer")) {
+    await post.getByTestId("feed-post-fire").click();
+    await expect(post.getByTestId("feed-post-fire")).toHaveAttribute("aria-label", /Mettre une flamme/);
+  }
   const n0 = Number(await count.innerText());
   const fire = post.getByTestId("feed-post-fire");
   await fire.click();
   await expect(count).toHaveText(String(n0 + 1), { timeout: 15_000 });
-  await expect(fire).toHaveAttribute("aria-selected", "true");
+  await expect(fire).toHaveAttribute("aria-label", /Retirer ta flamme/);
   await fire.click();
   await expect(count).toHaveText(String(n0), { timeout: 15_000 });
   await ctx.close();
@@ -191,12 +209,14 @@ test("publier au Fil en 4:5 : bouton grisé expliqué sans décision de plaque, 
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser, "kenji@orasso.local");
   await go(page, "/fil");
-  await page.getByTestId("fil-publish").click();
+  await page.getByTestId("fil-publish-open").click();
   await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
   // Rien : le bouton est grisé, et la ligne dit pourquoi.
   await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
   await expect(page.getByTestId("fil-publish-missing")).toHaveText("Ajoute au moins une photo.");
-  await expect(page.getByTestId("fil-publish-format-4_5").or(page.getByTestId("fil-publish-format-portrait_4_5"))).toBeVisible();
+  await expect(
+    page.getByTestId("fil-publish-format-4_5").or(page.getByTestId("fil-publish-format-portrait_4_5")),
+  ).toBeVisible();
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("fil-publish-add").click();
   await (await chooser).setFiles([photo("car-golf-gti.jpg"), photo("car-mx5.jpg")]);

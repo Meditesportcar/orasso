@@ -133,7 +133,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         wide
         icon="camera"
         onPress={() => router.push("/fil/publier")}
-        testID="fil-publish"
+        testID="fil-publish-open"
         accessibilityLabel={L.publishTitle}
       >
         {L.publish}

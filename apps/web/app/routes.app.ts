@@ -9,6 +9,9 @@ export default [
     // Lot R7a1 (D38) : Le Fil et Crew, deux onglets en coquille (les écrans viennent des lots R7e2 et R7b2) ; « Compris » du
     // bandeau « où sont passées les choses » (action seulement).
     route("app/fil", "routes/app-fil.tsx"),
+    // Lot R7e2 : publier au Fil et « Mes publications ».
+    route("app/fil/publier", "routes/app-fil-publier.tsx"),
+    route("app/fil/mes-publications", "routes/app-fil-mes-publications.tsx"),
     route("app/crew", "routes/app-crew.tsx"),
     route("app/bandeau", "routes/app-bandeau.ts"),
     // Boîte (lot 18) : conversations, demandes, conversation en temps réel.
