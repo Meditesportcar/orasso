@@ -24,6 +24,7 @@ import {
   STORY_CAPTION_MAX,
   STORY_PLACE_MAX,
   STORY_VIDEO_UPLOAD_PATH,
+  STORY_VIDEO_UPLOAD_TIMEOUT_MS,
   type StoryAudienceOption,
   type StoryCreated,
   type StoryTagPick,
@@ -89,8 +90,10 @@ function uploadWithProgress(
   file: File,
   purpose: "story_video" | "story_poster",
   onProgress: (ratio: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; key: string } | { ok: false; message: string }> {
   return new Promise((resolve) => {
+    if (signal?.aborted) return resolve({ ok: false, message: "" });
     const raw = purpose === "story_video";
     const body = new FormData();
     if (!raw) {
@@ -101,11 +104,16 @@ function uploadWithProgress(
     xhr.open("POST", raw ? STORY_VIDEO_UPLOAD_PATH : "/api/me/uploads");
     xhr.withCredentials = true;
     if (raw) xhr.setRequestHeader("content-type", file.type === "video/quicktime" ? file.type : "video/mp4");
-    xhr.timeout = 10 * 60_000;
+    xhr.timeout = STORY_VIDEO_UPLOAD_TIMEOUT_MS;
+    // Page quittée : l'envoi s'arrête (rien n'est publié, le serveur efface le morceau reçu).
+    const onAbort = () => xhr.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const settled = () => signal?.removeEventListener("abort", onAbort);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
     };
     xhr.onload = () => {
+      settled();
       let json: (UploadResult & { error?: { message: string } }) | null = null;
       try {
         json = JSON.parse(xhr.responseText);
@@ -119,10 +127,19 @@ function uploadWithProgress(
       }
       resolve({ ok: true, key: json.key });
     };
-    const offline = () => resolve({ ok: false, message: SV.offline });
-    xhr.onerror = offline;
-    xhr.ontimeout = offline;
-    xhr.onabort = offline;
+    xhr.onerror = () => {
+      settled();
+      resolve({ ok: false, message: SV.offline });
+    };
+    // Délai dépassé : son propre message (la connexion est là, elle est trop lente).
+    xhr.ontimeout = () => {
+      settled();
+      resolve({ ok: false, message: SV.uploadTimeout });
+    };
+    xhr.onabort = () => {
+      settled();
+      resolve({ ok: false, message: signal?.aborted ? "" : SV.offline });
+    };
     xhr.send(raw ? file : body);
   });
 }
@@ -171,10 +188,13 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   // Pendant l'envoi, la page ne se quitte pas (✕, « Annuler », lien, retour du navigateur) : rien ne part après coup. Un
   // changement de page dans l'appli est bloqué ; un lien classique est neutralisé ; fermer l'onglet est signalé.
   const open = useRef(true);
+  /** Envoi de vidéo en cours : annulé quand la page est quittée (R7g, tour 3). */
+  const uploadAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     open.current = true;
     return () => {
       open.current = false;
+      uploadAbort.current?.abort();
     };
   }, []);
   const blocker = useBlocker(busy);
@@ -295,9 +315,18 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
     clipKeys.current = keys;
     if (!keys.video) {
       setProgress(SV.sendingPercent(0));
-      const up = await uploadWithProgress(video.file, "story_video", (r) => {
-        if (open.current) setProgress(SV.sendingPercent(Math.round(r * 100)));
-      });
+      const abort = new AbortController();
+      uploadAbort.current = abort;
+      const up = await uploadWithProgress(
+        video.file,
+        "story_video",
+        (r) => {
+          if (open.current) setProgress(SV.sendingPercent(Math.round(r * 100)));
+        },
+        abort.signal,
+      );
+      if (uploadAbort.current === abort) uploadAbort.current = null;
+      if (!open.current) return;
       if (!up.ok) {
         setError(up.message);
         setBusy(false);

@@ -41,6 +41,7 @@ export const storyVideoLabels = {
   sending: "Envoi de la vidéo…",
   sendingPercent: (percent: number) => `Envoi de la vidéo · ${percent} %`,
   offline: "Impossible d'envoyer une vidéo sans réseau.",
+  uploadTimeout: "L'envoi a pris trop de temps : réessaie avec une meilleure connexion.",
   doneText: (audience: string) => `${audience} la voit pendant 24 h. Publiée telle quelle, sans floutage.`,
   readingVideo: "Lecture de la vidéo…",
   // API.

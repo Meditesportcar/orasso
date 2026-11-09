@@ -230,7 +230,7 @@ function ReportBody() {
             {d.target.removed ? <Notice>{moderationLabels.targetRemoved}</Notice> : null}
             {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
             {d.target.videoUrl ? (
-              <ReportVideo url={d.target.videoUrl} posterUrl={d.target.imageUrl} style={styles.video} />
+              <ReportVideo url={d.target.videoUrl} posterUrl={d.target.imageUrl} style={styles.video} refresh={d} />
             ) : (
               (d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
                 <PrivateImage key={url} url={url} style={styles.image} />

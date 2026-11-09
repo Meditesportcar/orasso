@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, BackHandler, Platform, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
+import { isUploadCancelled, isUploadTimeout } from "@/lib/api/storiesVideo";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import type { Persona } from "@/lib/personaModel";
@@ -135,6 +136,8 @@ export function PublishStoryScreen() {
   const [stage, setStage] = useState<{ stage: VideoStage; ratio: number } | null>(null);
   const [videoRatio, setVideoRatio] = useState<number | null>(null);
   const videoKeys = useRef<{ video?: string; poster?: string }>({});
+  /** Envoi de vidéo en cours : annulé quand l'écran est quitté (R7g, tour 3). */
+  const uploadAbort = useRef<AbortController | null>(null);
   const network = useNetworkState();
   const offline = network.isConnected === false;
   const [permission, requestPermission] = useCameraPermissions();
@@ -205,6 +208,8 @@ export function PublishStoryScreen() {
     return () => {
       mounted.current = false;
       generation.current++;
+      // Écran quitté (retour, route changée) : un envoi de vidéo en cours est annulé, pas laissé finir tout seul.
+      uploadAbort.current?.abort();
       discardTempPhotos();
     };
   }, []);
@@ -215,6 +220,7 @@ export function PublishStoryScreen() {
     if (before === "media") {
       // Retour au choix du média : l'ancienne photo (non floutée) ou vidéo est effacée.
       generation.current++;
+      uploadAbort.current?.abort();
       discardTempPhotos();
       setDraft(null);
       setVideo(null);
@@ -368,6 +374,8 @@ export function PublishStoryScreen() {
   async function publishVideo(clip: PickedVideo) {
     if (!draft || busy || issue) return;
     const alive = aliveFor(generation.current);
+    const abort = new AbortController();
+    uploadAbort.current = abort;
     setBusy(true);
     setError(null);
     setVideoRatio(0);
@@ -390,7 +398,7 @@ export function PublishStoryScreen() {
         async () => {
           if (!videoKeys.current.video) {
             videoKeys.current.video = (
-              await api.uploadStoryVideo(clip.uri, (r) => alive() && setVideoRatio(r * 0.97))
+              await api.uploadStoryVideo(clip.uri, (r) => alive() && setVideoRatio(r * 0.97), abort.signal)
             ).key;
           }
           if (!videoKeys.current.poster) {
@@ -418,7 +426,10 @@ export function PublishStoryScreen() {
       setCreated(result.value);
       setStep("done");
     } catch (e) {
+      // Annulé parce que l'écran a été quitté : rien à dire à personne.
+      if (isUploadCancelled(e)) return;
       if (e instanceof ApiRequestError && e.status === 429) setError(e.message || L.tooManyRequests);
+      else if (isUploadTimeout(e)) setError(V.uploadTimeout);
       else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
       else {
         // Un envoi refusé (format, durée, fichier inconnu) : au nouvel essai, tout repart.
@@ -426,6 +437,7 @@ export function PublishStoryScreen() {
         setError(errorMessage(e));
       }
     } finally {
+      if (uploadAbort.current === abort) uploadAbort.current = null;
       setBusy(false);
       setVideoRatio(null);
     }

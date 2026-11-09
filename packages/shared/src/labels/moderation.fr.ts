@@ -188,6 +188,9 @@ export const contestStateLabels: Record<ContestState, string> = {
 };
 
 export const moderationLabels = {
+  // Lot R7g (tour 3) : la vidéo d'une story signalée ne s'est pas lue (réseau coupé, fichier absent) : le dire, proposer de réessayer.
+  videoFailed: "La vidéo n'a pas pu être lue",
+  videoRetry: "Réessayer",
   report: "Signaler",
   reportTitle: (what: string) => `Signaler ${what}`,
   reason: "Motif",
