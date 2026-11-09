@@ -135,5 +135,5 @@ describe("migration 0073 sur une base avec des emplacements existants", () => {
       await admin.query(`drop database if exists "${name}"`);
       await admin.end();
     }
-  }, 120_000);
+  }, 300_000); // lent : deux migrations complètes, plus de 120 s sous charge
 });

@@ -822,6 +822,26 @@ describe("lire, retirer, flamme", () => {
     expect(new Set(all.map((p) => p.id)).size).toBe(25);
     expect(all.every((p) => p.mine)).toBe(true);
   });
+
+  it("GET /me/feed-posts : des publications de la même milliseconde (microsecondes différentes) ne sont ni perdues ni répétées", async () => {
+    const u = await person("Mes_Pubs_Micro");
+    // 25 publications dans la même milliseconde, à la microseconde près (PostgreSQL garde 6 décimales).
+    const ids: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      const id = await dbPost(u);
+      await pool.query(
+        `update feed_posts set created_at = $2::timestamptz + ($3 || ' microseconds')::interval where id = $1`,
+        [id, "2026-05-01T10:00:00.000Z", String(i * 30)],
+      );
+      ids.push(id);
+    }
+    const first = await call(u, "GET", "/me/feed-posts");
+    const second = await call(u, "GET", `/me/feed-posts?cursor=${encodeURIComponent(first.json.nextCursor)}`);
+    const got = [...first.json.items, ...second.json.items].map((p: { id: string }) => p.id);
+    expect(got).toHaveLength(25);
+    expect([...got].sort()).toEqual([...ids].sort());
+    expect(second.json.nextCursor).toBeNull();
+  });
 });
 
 describe("signalement et modération", () => {
@@ -1830,6 +1850,14 @@ async function holdPostLock(postId: string) {
   return client;
 }
 
+/** Une connexion à part tient le verrou du compte (celui que prend une sanction avant de toucher au contenu). */
+async function holdAccountLock(userId: string) {
+  const client = await pool.connect();
+  await client.query("begin");
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [`moderation:${userId}`]);
+  return client;
+}
+
 /** Attend (3 s au plus) qu'une requête de la base soit en attente d'un verrou : la synchronisation explicite des tests. */
 async function waitForLockWait(): Promise<boolean> {
   const end = Date.now() + 3000;
@@ -1936,6 +1964,21 @@ describe("un seul verrou pour le retrait, la décision et le signalement (tour 3
     expect((await removing).status).toBe(204);
     expect(await db.select().from(feedPostPhotos).where(eq(feedPostPhotos.postId, post.id))).toHaveLength(1);
     expect(await storage.get(key)).not.toBeNull();
+  });
+
+  it("signalement ∥ sanction : le compte de l'auteur est verrouillé avant la publication, aucune des deux requêtes n'échoue", async () => {
+    const { author, reporter, post } = await postWithReport(false);
+    // la sanction tient le compte de l'auteur ; le signalement doit l'attendre sans avoir pris la publication
+    const sanction = await holdAccountLock(author.id);
+    const reporting = call(reporter, "POST", `/feed-posts/${post.id}/report`, { reason: "spam" });
+    expect(await waitForLockWait()).toBe(true);
+    // la sanction retire ensuite la publication : son verrou est libre (sinon : interblocage, une requête échoue)
+    await sanction.query("set local lock_timeout = '5s'");
+    await sanction.query("select id from feed_posts where id = $1 for update", [post.id]);
+    await sanction.query("commit");
+    sanction.release();
+    expect((await reporting).status).toBe(201);
+    expect(await db.select().from(reports)).toHaveLength(1);
   });
 });
 

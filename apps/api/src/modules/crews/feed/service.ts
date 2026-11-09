@@ -37,6 +37,7 @@ import {
   events,
   notifications,
   profiles,
+  reports,
   uploads,
   vehicles,
 } from "../../../db/schema";
@@ -50,6 +51,7 @@ import { type Tx, withTx } from "../../../lib/tx";
 import { canSeeEvent } from "../../invitations/access";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
 import { uploadsService } from "../../uploads/service";
+import { removeOrRetry } from "../../vehicles/photos-blur";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { signalCrew } from "../live";
 import {
@@ -135,9 +137,24 @@ async function viewOf(access: FeedAccess, postId: string, ex: Tx | typeof db = d
   return view;
 }
 
-/** Retire une publication (dans la transaction de l'appelant) ; rend les clés des photos à effacer après validation. */
-export async function softDeletePost(tx: Tx, postId: string, by: string | null): Promise<string[]> {
+/**
+ * Retire une publication (dans la transaction de l'appelant) ; rend les clés des photos à effacer après validation.
+ * `keepPhotos` : un signalement attend sa décision, les photos (et leurs envois) restent pour la modération, qui les
+ * efface à sa décision (`afterDecision` de la cible `crew_post`), comme pour le Fil.
+ */
+export async function softDeletePost(
+  tx: Tx,
+  postId: string,
+  by: string | null,
+  opts: { keepPhotos?: boolean } = {},
+): Promise<string[]> {
   await tx.update(crewPosts).set({ deletedAt: now(), deletedBy: by }).where(eq(crewPosts.id, postId));
+  if (opts.keepPhotos) return [];
+  return purgePhotos(tx, postId);
+}
+
+/** Efface les photos d'une publication (lignes et envois) ; rend les clés des fichiers à effacer après validation. */
+export async function purgePhotos(tx: Tx, postId: string): Promise<string[]> {
   const photos = await tx
     .delete(crewPostPhotos)
     .where(eq(crewPostPhotos.postId, postId))
@@ -147,8 +164,25 @@ export async function softDeletePost(tx: Tx, postId: string, by: string | null):
   return keys;
 }
 
+/** Un signalement en attente (ou en cours d'examen) vise cette publication de crew. */
+export async function hasOpenCrewReport(tx: Tx, postId: string): Promise<boolean> {
+  const [open] = await tx
+    .select({ id: reports.id })
+    .from(reports)
+    .where(
+      and(
+        eq(reports.targetType, "crew_post"),
+        eq(reports.targetId, postId),
+        inArray(reports.status, ["pending", "reviewing"]),
+      ),
+    )
+    .limit(1);
+  return Boolean(open);
+}
+
+/** Efface les fichiers après la validation ; un échec du stockage est repris par la tâche `storage.remove`. */
 async function removeFiles(keys: string[]) {
-  for (const k of keys) await storage.remove(k).catch(() => undefined);
+  for (const k of keys) await removeOrRetry(k);
 }
 
 /**
@@ -403,7 +437,7 @@ export const crewFeedService = {
         throw forbidden("Seuls son auteur et le chef du crew peuvent retirer cette publication.");
       }
       signalCrew(after, crewId, "post.removed", { postId: post.id });
-      return softDeletePost(tx, post.id, v.user.id);
+      return softDeletePost(tx, post.id, v.user.id, { keepPhotos: await hasOpenCrewReport(tx, post.id) });
     });
     await removeFiles(keys);
   },
@@ -585,7 +619,7 @@ export const crewFeedService = {
         .for("update");
       const keys: string[] = [];
       for (const p of mine) {
-        keys.push(...(await softDeletePost(tx, p.id, v.user.id)));
+        keys.push(...(await softDeletePost(tx, p.id, v.user.id, { keepPhotos: await hasOpenCrewReport(tx, p.id) })));
         signalCrew(after, p.crewId, "post.removed", { postId: p.id });
       }
       const removed = await tx
