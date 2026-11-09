@@ -27,13 +27,22 @@ export function validPresenceRadius(value: number): boolean {
   return Number.isInteger(value) && value >= PRESENCE_RADIUS_BOUNDS[0] && value <= PRESENCE_RADIUS_BOUNDS[1];
 }
 
-/** Heures où la présence peut se valider : de 30 minutes avant le début à la fin de l'événement. */
+/** Heures où la présence peut se valider : de 30 minutes avant le début à la fin de l'événement (bornes extérieures). */
 export function presenceWindow(event: { startsAt: Date; endsAt: Date }): { from: Date; to: Date } {
   return { from: new Date(event.startsAt.getTime() - PRESENCE_OPENS_BEFORE_MS), to: event.endsAt };
 }
 
-/** Dans la fenêtre ? (fin exclue : à l'heure de fin, l'événement est fini). */
-export function inPresenceWindow(event: { startsAt: Date; endsAt: Date }, now: Date): boolean {
+/**
+ * Dans la fenêtre ? (fin exclue : à l'heure de fin, l'événement est fini). Un événement qui déclare des jours
+ * (`days`, `event_days`) ne se valide que dans la plage d'UN jour (30 minutes avant son début jusqu'à sa fin) : la nuit
+ * ou la pause entre deux jours, c'est fermé. Sans jour déclaré, la fenêtre de l'événement.
+ */
+export function inPresenceWindow(
+  event: { startsAt: Date; endsAt: Date; days?: readonly { startsAt: Date; endsAt: Date }[] },
+  now: Date,
+): boolean {
+  if (event.days?.length)
+    return event.days.some((d) => inPresenceWindow({ startsAt: d.startsAt, endsAt: d.endsAt }, now));
   const w = presenceWindow(event);
   return now >= w.from && now < w.to;
 }
@@ -53,7 +62,15 @@ export function inZone(
   return meters <= presenceRadiusM(event) + Math.max(0, accuracyM ?? 0);
 }
 
-export type PresenceRefusal = "closed" | "use_qr" | "already_present" | "gps_imprecise" | "out_of_zone" | "no_zone";
+export type PresenceRefusal =
+  | "closed"
+  | "use_qr"
+  | "scan_ticket"
+  | "ticket_required"
+  | "already_present"
+  | "gps_imprecise"
+  | "out_of_zone"
+  | "no_zone";
 
 /** Ce que la règle sait de la demande (l'API lit la base, la règle décide). */
 export type PresenceContext = {
@@ -64,10 +81,16 @@ export type PresenceContext = {
     lat: number | null;
     lng: number | null;
     presenceRadiusM?: number | null;
+    /** Jours déclarés (`event_days`) : la validation n'est possible que dans la plage d'un jour. */
+    days?: readonly { startsAt: Date; endsAt: Date }[];
   };
   now: Date;
   /** Candidature de véhicule retenue ou entrée : un exposant se fait scanner à l'accueil, il ne valide pas par GPS. */
   holdsVehicleSlot: boolean;
+  /** Décision de Damien (09/11) : un billet PAYANT se fait scanner à l'entrée, le GPS est pour la gratuité. La personne a un billet payant (prix réellement payé, sinon prix du type de billet). */
+  holdsPaidTicket?: boolean;
+  /** La personne n'a aucun billet et l'entrée visiteur de l'événement est payante (billetterie payante en vente). */
+  entryPaidNoTicket?: boolean;
   /** Une présence existe déjà pour ce compte et cet événement. */
   alreadyPresent: boolean;
   point: LatLng;
@@ -76,12 +99,14 @@ export type PresenceContext = {
 
 /**
  * Refus de la présence par GPS, dans l'ordre où on l'explique : événement publié et ouvert (`closed`), exposant
- * (`use_qr`), déjà présent (`already_present`), position trop imprécise (`gps_imprecise`), lieu sans position
+ * (`use_qr`), billet payant (`scan_ticket`), entrée payante sans billet (`ticket_required`), déjà présent (`already_present`), position trop imprécise (`gps_imprecise`), lieu sans position
  * (`no_zone`), hors de la zone (`out_of_zone`). `null` = la présence est validée.
  */
 export function presenceRefusal(ctx: PresenceContext): PresenceRefusal | null {
   if (ctx.event.status !== "published" || !inPresenceWindow(ctx.event, ctx.now)) return "closed";
   if (ctx.holdsVehicleSlot) return "use_qr";
+  if (ctx.holdsPaidTicket) return "scan_ticket";
+  if (ctx.entryPaidNoTicket) return "ticket_required";
   if (ctx.alreadyPresent) return "already_present";
   if (ctx.accuracyM !== null && ctx.accuracyM !== undefined && ctx.accuracyM > PRESENCE_MAX_ACCURACY_M) {
     return "gps_imprecise";

@@ -6,20 +6,21 @@ import type { LivePhase, MyPresence } from "../rules/presence";
 
 /**
  * `POST /events/:id/presence` : la position de l'appareil, vérifiée une fois puis oubliée. `accuracyM` : la précision
- * annoncée par l'appareil, en mètres (facultative ; absente = aucune tolérance). Corps strict : un champ en plus est
+ * annoncée par l'appareil, en mètres (facultative ; absente ou `null`, que certains appareils renvoient, = aucune tolérance). Corps strict : un champ en plus est
  * refusé, pour qu'aucune donnée ne passe en douce par cette route.
  */
 export const presenceInputSchema = z
   .object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
-    accuracyM: z.number().min(0).max(100_000).optional(),
+    accuracyM: z.number().min(0).max(100_000).nullish(),
   })
   .strict();
 export type PresenceInput = z.infer<typeof presenceInputSchema>;
 
-/** Réponse : l'heure de validation, le tampon posé (`null` s'il l'était déjà), le droit de vote. */
-export type PresenceResult = { validatedAt: string; stampId: string | null; canVote: true };
+/** Réponse : l'heure de validation, le tampon posé (`null` s'il l'était déjà), le droit de vote (la règle effective du vote : il
+ * faut aussi deux véhicules pointés et la fenêtre ouverte). */
+export type PresenceResult = { validatedAt: string; stampId: string | null; canVote: boolean };
 
 /** `GET /events/:id/presences/summary` : des nombres, jamais une liste, jamais un nom de non-inscrit. */
 export type PresenceSummary = {

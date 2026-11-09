@@ -25,7 +25,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { eventPresences, events, passportStamps } from "../../db/schema";
+import { eventPresences, eventStaff, events, passportStamps } from "../../db/schema";
 import { staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
@@ -34,18 +34,29 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
+import { canVoteNow } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
-import { assertCanSeeEvent } from "../invitations/access";
+import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
 import { structureById } from "../structures/service";
-import { holdsVehicleSlot, myProofs, onSiteCount, summaryCounts, ticketOf, vehiclesEntered } from "./repo";
+import {
+  holdsVehicleSlot,
+  myProofs,
+  onSiteCount,
+  summaryCounts,
+  ticketOf,
+  ticketPayment,
+  vehiclesEntered,
+} from "./repo";
 
 /** Code HTTP de chaque refus : 409 pour l'état (fermé, exposant, déjà présent, lieu sans position), 422 pour la mesure. */
 const REFUSAL_STATUS = {
   closed: 409,
   use_qr: 409,
+  scan_ticket: 409,
+  ticket_required: 409,
   already_present: 409,
   no_zone: 409,
   gps_imprecise: 422,
@@ -55,10 +66,14 @@ const REFUSAL_STATUS = {
 const refusalError = (reason: PresenceRefusal) =>
   new AppError(REFUSAL_STATUS[reason], reason, presenceLabels.errors[reason]);
 
-/** Unicité (23505) : deux demandes simultanées du même compte, la seconde est refusée comme « déjà présent ». */
-function isUniqueViolation(error: unknown): boolean {
-  const e = error as { code?: string; cause?: { code?: string } };
-  return (e.cause ?? e).code === "23505";
+/**
+ * Unicité de la présence (une par compte et par événement) : deux demandes simultanées du même compte, la seconde est
+ * refusée comme « déjà présent ». Seule cette contrainte compte : toute autre violation d'unicité reste une erreur.
+ */
+export function isPresenceUniqueViolation(error: unknown): boolean {
+  const e = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+  const pg = e.cause ?? e;
+  return pg.code === "23505" && pg.constraint === "event_presences_event_user_key";
 }
 
 /** Tampon « visite » de la personne pour cet événement (posé ou déjà là) : son identifiant, `null` sans tampon. */
@@ -98,9 +113,10 @@ export const presenceService = {
       return await withTx(async (tx, after) => {
         const t = now();
         const refusal = presenceRefusal({
-          event,
+          event: { ...event, days: await daysRepo.list(eventId, tx) },
           now: t,
           holdsVehicleSlot: await holdsVehicleSlot(tx, eventId, v.user.id),
+          ...(await ticketPayment(tx, event, v.user.id)),
           alreadyPresent: Boolean(
             await tx.query.eventPresences.findFirst({
               where: and(eq(eventPresences.eventId, eventId), eq(eventPresences.userId, v.user.id)),
@@ -119,7 +135,7 @@ export const presenceService = {
           .returning({ validatedAt: eventPresences.validatedAt });
         if (!row) throw new Error("Présence non enregistrée");
         // Le tampon ne fait jamais échouer la validation (comme pour un billet accepté) ; null = non posé.
-        await passportService.safely(tx, "présence", (sp) =>
+        const fresh = await passportService.safely(tx, "présence", (sp) =>
           passportService.stamp(sp, v.user.id, event, "visit", { ticketId, at: t }),
         );
         await notificationsService.notify(tx, v.user.id, "presence_validated", {
@@ -130,12 +146,16 @@ export const presenceService = {
           link: { label: "Voir l'événement", path: `/e/${event.slug}` },
         });
         const stampId = await visitStampId(tx, eventId, v.user.id);
+        // La règle effective du vote : la présence est écrite, restent la fenêtre et les deux véhicules pointés.
+        const canVote = await canVoteNow(tx, event, v.user.id);
+        // Le tampon tombe à l'écran (comme au contrôle d'un billet), seulement s'il vient d'être posé.
+        if (fresh) after(() => passportService.publish(v.user.id, fresh));
         after(() => presenceService.announce(eventId));
         after(() => notificationsService.kick());
-        return { validatedAt: row.validatedAt.toISOString(), stampId, canVote: true as const };
+        return { validatedAt: row.validatedAt.toISOString(), stampId, canVote };
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw refusalError("already_present");
+      if (isPresenceUniqueViolation(error)) throw refusalError("already_present");
       throw error;
     }
   },
@@ -147,12 +167,23 @@ export const presenceService = {
 
   /**
    * `GET /events/:id/presences/summary` : la statistique de l'organisateur et du staff (lecture). Des nombres, jamais une
-   * liste, jamais un nom ; disponible aussi après la fin (c'est le bilan de l'organisateur, pas un chiffre public).
+   * liste, jamais un nom. Lisible par le propriétaire et les co-organisateurs de la structure et le super admin en
+   * assistance (aussi après la fin : c'est le bilan de l'organisateur), et par le staff **affecté à cet événement**
+   * (ligne `event_staff`) tant qu'il n'est pas fini. Même règle que le classement de R7-0.
    */
   async summary(v: Viewer, eventId: string): Promise<PresenceSummary> {
     const event = await eventsRepo.byId(eventId);
     const access = await staffAccess(v, event.structureId, [...staffRoles], event.id);
     if (!access) throw new AppError(403, "forbidden", "Réservé à l'organisation et au staff de l'événement");
+    if (access.actor === "staff") {
+      const assigned = await db.query.eventStaff.findFirst({
+        where: and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, v.user.id)),
+        columns: { id: true },
+      });
+      if (!assigned || now() >= event.endsAt) {
+        throw new AppError(403, "forbidden", "Réservé à l'organisation et au staff de l'événement");
+      }
+    }
     return summaryCounts(db, eventId);
   },
 
@@ -201,11 +232,20 @@ export const presenceService = {
               and k.status <> 'cancelled')
           or exists (select 1 from event_presences g where g.event_id = e.id and g.user_id = ${v.user.id}))
       order by e.starts_at desc, e.ends_at asc
-      limit 1`);
-    const hit = rows.rows[0];
-    if (!hit) return null;
-    const e = await db.query.events.findFirst({ where: eq(events.id, hit.id) });
-    if (!e) return null;
+      limit 20`);
+    // Droits ACTUELS : un événement privé dont l'invitation de la personne a été révoquée n'apparaît plus, même si elle
+    // y a un billet ou une présence ; on prend le premier de la liste que la personne a encore le droit de voir.
+    let hit: { id: string; retained: boolean } | undefined;
+    let e: EventRow | undefined;
+    for (const candidate of rows.rows) {
+      const row = await db.query.events.findFirst({ where: eq(events.id, candidate.id) });
+      if (row && (await canSeeEvent(row, v))) {
+        hit = candidate;
+        e = row;
+        break;
+      }
+    }
+    if (!hit || !e) return null;
     const [structure, days, onSite, entered, voted] = await Promise.all([
       structureById(e.structureId),
       daysRepo.list(e.id),

@@ -27,6 +27,8 @@ export const presenceLabels = {
   errors: {
     closed: "La présence se valide pendant l'événement, à partir de 30 minutes avant son début.",
     use_qr: "Tu as une place avec ton véhicule : l'accueil te scanne à l'entrée, pas besoin de position.",
+    scan_ticket: "Ton billet se fait scanner à l'entrée : pas besoin de position.",
+    ticket_required: "L'entrée est payante : prends ton billet.",
     already_present: "Ta présence est déjà validée pour cet événement.",
     gps_imprecise: "Ta position est trop imprécise : sors à l'air libre, attends quelques secondes et réessaie.",
     out_of_zone: "Tu n'es pas encore dans la zone de l'événement : rapproche-toi du lieu et réessaie.",

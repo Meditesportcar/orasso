@@ -23,7 +23,9 @@ import {
   applications,
   checkins,
   eventDays,
+  eventInvitations,
   eventPresences,
+  eventStaff,
   events,
   notifications,
   orders,
@@ -32,9 +34,12 @@ import {
   tickets,
   ticketTypes,
 } from "../../db/schema";
+import { resetRateLimits } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import { audiencePrizeService } from "../audience-prize/service";
 import { notificationsService } from "../notifications/service";
+import { passportService } from "../passport/service";
+import { pointsService } from "../points/service";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -120,18 +125,33 @@ async function exhibitor(
   return app!;
 }
 
+/** Staff affecté à l'événement (ligne `event_staff`). */
+const assign = (u: TestUser, eid = event.id) => db.insert(eventStaff).values({ eventId: eid, userId: u.id });
+
 /** Un billet (valide, ou contrôlé si `scanned`) pour la personne, sans passer par la billetterie. */
-async function ticket(u: TestUser, opts: { scanned?: boolean; cancelled?: boolean } = {}, eid = event.id) {
+async function ticket(
+  u: TestUser,
+  opts: { scanned?: boolean; cancelled?: boolean; cents?: number } = {},
+  eid = event.id,
+) {
   const existing = await db.query.ticketTypes.findFirst({ where: eq(ticketTypes.eventId, eid) });
   const [type] = existing
     ? [existing]
     : await db
         .insert(ticketTypes)
-        .values({ eventId: eid, name: "Entrée visiteur", capacity: 100, priceCents: 0 })
+        .values({ eventId: eid, name: "Entrée visiteur", capacity: 100, priceCents: opts.cents ?? 0 })
         .returning();
   const [order] = await db
     .insert(orders)
-    .values({ eventId: eid, userId: u.id, ticketTypeId: type!.id, status: "paid", quantity: 1, paidAt: clock.now })
+    .values({
+      eventId: eid,
+      userId: u.id,
+      ticketTypeId: type!.id,
+      status: "paid",
+      quantity: 1,
+      amountCents: opts.cents ?? 0,
+      paidAt: clock.now,
+    })
     .returning();
   await db
     .insert(signingKeys)
@@ -156,10 +176,10 @@ async function ticket(u: TestUser, opts: { scanned?: boolean; cancelled?: boolea
 }
 
 describe("présence par GPS : validation", () => {
-  it("valide dans la zone : ligne sans position, tampon visite, notification, droit de vote", async () => {
+  it("valide dans la zone : ligne sans position, tampon visite, notification (vote encore fermé sans deux véhicules pointés)", async () => {
     const res = await here(visitor);
     expect(res.status).toBe(200);
-    expect(res.json).toEqual({ validatedAt: clock.now.toISOString(), stampId: expect.any(String), canVote: true });
+    expect(res.json).toEqual({ validatedAt: clock.now.toISOString(), stampId: expect.any(String), canVote: false });
     const rows = await db.query.eventPresences.findMany({ where: eq(eventPresences.eventId, event.id) });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ userId: visitor.id, kind: "gps", ticketId: null });
@@ -563,8 +583,9 @@ describe("statistique de l'organisateur", () => {
     expect(JSON.stringify(res.json)).not.toMatch(/Visiteur|Pilote|userId|pseudo|email/);
   });
 
-  it("le staff de l'événement le lit ; un participant, un visiteur ou un anonyme non", async () => {
+  it("le staff affecté à l'événement le lit ; un participant, un visiteur ou un anonyme non", async () => {
     await setupCrowd();
+    await assign(staff);
     expect((await summary(staff)).status).toBe(200);
     expect((await summary(visitor)).status).toBe(403);
     expect((await summary(other)).status).toBe(403);
@@ -709,5 +730,181 @@ describe("Accueil : le widget « En cours »", () => {
     await exhibitor(a);
     await exhibitor(a, {}, older.id);
     expect((await home(a)).json.live.event.id).toBe(event.id);
+  });
+});
+
+describe("tour 2 : corrections de la relecture", () => {
+  const home = (u: TestUser) => call(u, "GET", "/me/home");
+
+  it("accueil : une invitation retirée fait disparaître le bloc, même avec une présence", async () => {
+    const priv = await makeEvent({ admission: "invite_only" });
+    await db
+      .insert(eventInvitations)
+      .values({ eventId: priv.id, userId: other.id, token: "tok-r7d1", status: "pending" });
+    expect((await here(other, priv.id)).status).toBe(200);
+    expect((await home(other)).json.live).toMatchObject({ event: { id: priv.id } });
+    await db.update(eventInvitations).set({ status: "withdrawn" }).where(eq(eventInvitations.eventId, priv.id));
+    expect((await home(other)).json.live).toBeNull();
+  });
+
+  it("tampons rares : une présence GPS est une participation (première sortie une fois, 10e événement atteint)", async () => {
+    const stamps = (id: string) => db.query.passportStamps.findMany({ where: eq(passportStamps.userId, id) });
+    for (let i = 0; i < 10; i++) {
+      clock.set(paris(9, 1 + i, 8));
+      const e = await makeEvent({ startsAt: paris(9, 1 + i, 9), endsAt: paris(9, 1 + i, 18), title: `Sortie ${i}` });
+      clock.set(paris(9, 1 + i, 10));
+      resetRateLimits();
+      expect((await here(visitor, e.id)).status).toBe(200);
+      clock.set(paris(9, 3 + i, 18));
+      expect(await pointsService.settleEvent(e.id)).toBe(true);
+      const kinds = (await stamps(visitor.id)).filter((s) => s.eventId === e.id).map((s) => s.kind);
+      if (i === 0) expect(kinds).toContain("first_outing");
+      else expect(kinds).not.toContain("first_outing");
+      if (i === 9) expect(kinds).toContain("tenth_event");
+      else expect(kinds).not.toContain("tenth_event");
+    }
+    expect((await stamps(visitor.id)).filter((s) => s.kind === "first_outing")).toHaveLength(1);
+  });
+
+  it("rattrapage : tampon non posé à la validation, posé une seule fois au règlement", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi.spyOn(passportService, "stamp").mockRejectedValueOnce(new Error("panne"));
+    const res = await here(visitor);
+    expect(res.status).toBe(200);
+    expect(res.json.stampId).toBeNull();
+    expect(await db.query.passportStamps.findMany({ where: eq(passportStamps.userId, visitor.id) })).toHaveLength(0);
+    spy.mockRestore();
+    clock.set(new Date(ENDS.getTime() + 3 * 86_400_000));
+    await pointsService.settleEvent(event.id);
+    const visits = () =>
+      db.query.passportStamps
+        .findMany({ where: eq(passportStamps.userId, visitor.id) })
+        .then((r) => r.filter((s) => s.kind === "visit"));
+    expect(await visits()).toHaveLength(1);
+    await db.update(events).set({ settledAt: null }).where(eq(events.id, event.id));
+    await pointsService.settleEvent(event.id);
+    expect(await visits()).toHaveLength(1);
+  });
+
+  it("résumé : staff d'un autre événement 403, staff de l'événement 200 puis 403 après la fin, co-organisateur 200", async () => {
+    const co = await signUp("Co_Orga", { twoFactor: true });
+    await addMember(structureId, co.id, "co_organizer");
+    const elsewhere = await makeEvent({ title: "Autre" });
+    await assign(staff, elsewhere.id);
+    expect((await summary(staff)).status).toBe(403);
+    await assign(staff);
+    expect((await summary(staff)).status).toBe(200);
+    clock.set(ENDS);
+    expect((await summary(staff)).status).toBe(403);
+    expect((await summary(co)).status).toBe(200);
+    expect((await summary(orga)).status).toBe(200);
+  });
+
+  it("canVote : faux avec 0 ou 1 véhicule pointé, vrai avec 2", async () => {
+    expect((await here(visitor)).json.canVote).toBe(false);
+    await exhibitor(await signUp("Pilote_001"), { entered: true });
+    expect((await here(other)).json.canVote).toBe(false);
+    await exhibitor(await signUp("Pilote_002"), { entered: true });
+    expect((await here(await signUp("Visiteur_W"))).json.canVote).toBe(true);
+  });
+
+  it("publie passport.stamped une fois au succès, jamais au doublon", async () => {
+    const messages: { type: string }[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`user:${visitor.id}`, socket);
+    await here(visitor);
+    await vi.waitFor(() => expect(messages.filter((m) => m.type === "passport.stamped")).toHaveLength(1));
+    expect((await here(visitor)).status).toBe(409);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(messages.filter((m) => m.type === "passport.stamped")).toHaveLength(1);
+    realtime.unsubscribeAll(socket);
+  });
+
+  it("événement sur plusieurs jours : fermé la nuit entre deux jours, ouvert dans un jour", async () => {
+    await db.insert(eventDays).values(
+      [0, 1].map((n) => ({
+        eventId: event.id,
+        dayDate: `2026-11-${String(7 + n).padStart(2, "0")}`,
+        startsAt: paris(11, 7 + n, 9),
+        endsAt: paris(11, 7 + n, 18),
+      })),
+    );
+    await db
+      .update(events)
+      .set({ endsAt: paris(11, 8, 18) })
+      .where(eq(events.id, event.id));
+    clock.set(paris(11, 7, 23));
+    const night = await here(visitor);
+    expect(night.status).toBe(409);
+    expect(night.json.error.code).toBe("closed");
+    clock.set(paris(11, 8, 8, 40));
+    expect((await here(visitor)).status).toBe(200);
+  });
+
+  it("seule la contrainte de la présence est traduite en « déjà présent »", async () => {
+    const { isPresenceUniqueViolation } = await import("./service");
+    const same = { cause: { code: "23505", constraint: "event_presences_event_user_key" } };
+    expect(isPresenceUniqueViolation(same)).toBe(true);
+    expect(isPresenceUniqueViolation({ cause: { code: "23505", constraint: "autre_key" } })).toBe(false);
+    expect(isPresenceUniqueViolation({ code: "23503" })).toBe(false);
+  });
+
+  it("précision nulle acceptée (aucune tolérance), comme l'absence", async () => {
+    expect((await present(visitor, { ...DEVICE, accuracyM: null })).status).toBe(200);
+    expect((await present(other, { ...north(341), accuracyM: null })).json.error.code).toBe("out_of_zone");
+  });
+
+  it("résumé : les comptes supprimés sont exclus", async () => {
+    await exhibitor(await signUp("Pilote_001"), { entered: true });
+    const gone = await signUp("Pilote_gone");
+    await exhibitor(gone, { entered: true });
+    await here(visitor);
+    await here(other);
+    await db.execute(sql`update profiles set deleted_at = now() where user_id = ${gone.id}`);
+    await db.execute(sql`update profiles set deleted_at = now() where user_id = ${other.id}`);
+    expect((await summary(orga)).json).toEqual({
+      exhibitorsCheckedIn: 1,
+      visitorsWithTicketGps: 0,
+      visitorsNoTicketGps: 1,
+      total: 2,
+    });
+  });
+});
+
+describe("décision de Damien (09/11) : billet payant scanné, GPS pour la gratuité", () => {
+  const paidEvent = () => makeEvent({ publicAccess: "paid_orasso", ticketsEnabled: true, title: "Payant" });
+
+  it("billet payant : scan_ticket (409), rien d'écrit", async () => {
+    const e = await paidEvent();
+    await ticket(visitor, { cents: 1500 }, e.id);
+    const res = await here(visitor, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error).toMatchObject({ code: "scan_ticket", message: presenceLabels.errors.scan_ticket });
+    expect(await db.query.eventPresences.findMany()).toHaveLength(0);
+  });
+
+  it("billet gratuit : validation acceptée", async () => {
+    const e = await makeEvent({ title: "Gratuit" });
+    await ticket(visitor, {}, e.id);
+    expect((await here(visitor, e.id)).status).toBe(200);
+  });
+
+  it("sans billet, entrée payante : ticket_required ; entrée gratuite ou sans billetterie : acceptée", async () => {
+    const e = await paidEvent();
+    await db.insert(ticketTypes).values({ eventId: e.id, name: "Entrée", priceCents: 1000 });
+    const res = await here(visitor, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error.code).toBe("ticket_required");
+    const free = await makeEvent({ publicAccess: "free_reservation", ticketsEnabled: true, title: "Réservation" });
+    await db.insert(ticketTypes).values({ eventId: free.id, name: "Entrée", priceCents: 0 });
+    expect((await here(visitor, free.id)).status).toBe(200);
+    expect((await here(other)).status).toBe(200);
+  });
+
+  it("les deux refus viennent juste après use_qr (un exposant reçoit use_qr)", async () => {
+    const e = await paidEvent();
+    await db.insert(ticketTypes).values({ eventId: e.id, name: "Entrée", priceCents: 1000 });
+    await exhibitor(visitor, {}, e.id);
+    expect((await here(visitor, e.id)).json.error.code).toBe("use_qr");
   });
 });

@@ -35,7 +35,7 @@ import { eventsService } from "../../src/modules/events/service";
 import { messagingService } from "../../src/modules/messaging/service";
 import { pointsService } from "../../src/modules/points/service";
 import { presenceService } from "../../src/modules/presence/service";
-import { ticketsService } from "../../src/modules/tickets/service";
+import { issueTickets } from "../../src/modules/tickets/service";
 import { vehiclesService } from "../../src/modules/vehicles/service";
 import { createEvent, DAY, parisAt } from "./helpers";
 import { demoEventPhotos, reviewedNoPlateCar } from "./photos";
@@ -247,8 +247,10 @@ async function presenceDemo(eventId: string) {
 }
 
 /**
- * Un billet gratuit au visiteur de la démonstration, par le vrai service de réservation. Le Lydia est en entrée libre :
- * la billetterie est ouverte le temps de la réservation, puis l'événement retrouve son accès (le billet reste).
+ * Un billet gratuit au visiteur de la démonstration. Le Lydia est en entrée libre et le reste : le mode de l'événement
+ * n'est jamais touché (dev est partagé, Damien l'utilise), la commande et le billet sont écrits directement, avec la
+ * même émission signée que la billetterie. Un type de billet est exigé par la base (clé étrangère) : on prend celui qui
+ * existe, sinon on en crée un seul, inerte (la billetterie reste coupée), que les relances réutilisent.
  */
 async function giveTicket(v: Viewer, event: EventRow) {
   const has = await db.query.tickets.findFirst({
@@ -256,22 +258,30 @@ async function giveTicket(v: Viewer, event: EventRow) {
     columns: { id: true },
   });
   if (has) return;
-  const type = await db.query.ticketTypes.findFirst({ where: eq(t.ticketTypes.eventId, event.id) });
-  if (!type) {
-    await db.insert(t.ticketTypes).values({ eventId: event.id, name: "Entrée visiteur", capacity: 200, priceCents: 0 });
-  }
-  await db
-    .update(t.events)
-    .set({ publicAccess: "free_reservation", ticketsEnabled: true })
-    .where(eq(t.events.id, event.id));
-  try {
-    await ticketsService.reserve(v, event.id, 1);
-  } finally {
-    await db
-      .update(t.events)
-      .set({ publicAccess: event.publicAccess, ticketsEnabled: event.ticketsEnabled })
-      .where(eq(t.events.id, event.id));
-  }
+  const type =
+    (await db.query.ticketTypes.findFirst({ where: eq(t.ticketTypes.eventId, event.id) })) ??
+    (
+      await db
+        .insert(t.ticketTypes)
+        .values({ eventId: event.id, name: "Entrée visiteur", capacity: 200, priceCents: 0 })
+        .returning()
+    )[0];
+  if (!type) throw new Error("Type de billet non créé");
+  await withTx(async (tx) => {
+    const [order] = await tx
+      .insert(t.orders)
+      .values({
+        eventId: event.id,
+        userId: v.user.id,
+        ticketTypeId: type.id,
+        status: "paid",
+        quantity: 1,
+        paidAt: deps.clock.now(),
+      })
+      .returning();
+    if (!order) throw new Error("Commande non créée");
+    await issueTickets(tx, order, event.eventNo);
+  });
 }
 
 /** Suppression propre d'un « Rassemblement du Lydia » fini : ce qu'il a laissé hors de ses tables, puis lui. */

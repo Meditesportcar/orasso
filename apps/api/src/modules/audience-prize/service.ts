@@ -118,6 +118,16 @@ async function voterOf(
   } satisfies AudienceVoter;
 }
 
+/**
+ * La personne peut-elle voter maintenant ? La règle effective du vote (preuve de présence, fenêtre, deux véhicules
+ * pointés au moins), pour que d'autres modules (présence par GPS) n'annoncent pas un droit que le vote refuserait.
+ */
+export async function canVoteNow(ex: Executor, event: EventRow, userId: string): Promise<boolean> {
+  const entered = await enteredVehicles(ex, event.id);
+  const voter = await voterOf(ex, event.id, userId, entered);
+  return canVote(voter, windowOf(event, entered), now()) === null;
+}
+
 async function ranking(ex: Executor, eventId: string) {
   const entered = await enteredVehicles(ex, eventId);
   const votes = await ex
