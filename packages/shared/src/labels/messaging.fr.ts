@@ -5,6 +5,13 @@ export const messagingLabels = {
   /** Segment « Tout » de la Boîte (le Journal). */
   all: "Tout",
   messages: "Messages",
+  /** Lot R7c2 : la ligne en tête de Messages et son écran. */
+  messageRequests: "Demandes de message",
+  /** Lot R7c2 : étiquettes d'une conversation (rien pour une conversation privée). */
+  tagOrganizer: "Organisateur",
+  tagCrew: "Crew",
+  tagStaff: "Staff",
+  tagStoryReply: "Réponse à ta story",
   requests: "Demandes",
   noConversations:
     "Aucune conversation pour l'instant. Écris à quelqu'un qui te suit depuis son profil, ou contacte un organisateur.",
@@ -39,7 +46,7 @@ export const messagingLabels = {
   aboutEventHint:
     "L'organisateur voit tout de suite de quel événement tu parles. Cette étiquette reste dans la conversation, des deux côtés.",
   yourMessage: "Ton message",
-  sent: "Message envoyé : la réponse arrivera dans ta Boîte.",
+  sent: "Message envoyé : la réponse arrivera dans tes Messages.",
   openConversation: "Ouvrir la conversation",
   /** Tour 2 : envoi sans réponse (réseau) : le même message repart, sans doublon. */
   sendPending: "Le message n'est peut-être pas parti : « Envoyer » le renvoie tel quel, sans doublon.",

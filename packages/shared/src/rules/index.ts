@@ -1,4 +1,6 @@
 export * from "./activity";
+export * from "./activityLabels";
+export * from "./conversationTag";
 export * from "./admin";
 export * from "./affinity";
 export * from "./afterEvent";

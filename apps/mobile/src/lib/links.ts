@@ -2,10 +2,25 @@
 // profil, véhicule d'un autre). Jamais un chemin du site (`/app/acces`…) ni une adresse externe.
 const APP_LINK = /^\/(e|u|v)\/[^/?#\s]+$/;
 /**
- * Boîte (lot 18) : `/app/boite/<id>` (conversation) et `/app/boite/demandes` du site → écrans de l'appli. La Boîte est
- * hors de la barre d'onglets depuis le lot 40 (`/boite`, ouverte par la barre du haut).
+ * Activité et Messages (lot R7c2, la Boîte a disparu) : `/app/activite[/demandes]` et `/app/messages[/demandes|/<id>]` du
+ * site → `/activite…` et `/messages…`. Les anciennes adresses de la Boîte (`/app/boite[/demandes|/<id>]`, `/app/journal`),
+ * gardées dans des notifications déjà envoyées, y mènent aussi.
  */
-const INBOX_LINK = /^\/app\/boite(?:\/([0-9a-f-]{36}|demandes))?$/;
+const INBOX_LINK = /^\/app\/(boite|messages|activite)(?:\/([0-9a-f-]{36}|demandes))?$/;
+
+/** Écran de l'appli d'une adresse du site de l'Activité, des Messages ou de l'ancienne Boîte ; `null` si ce n'en est pas une. */
+export function inboxPathOf(pathname: string): string | null {
+  if (pathname === "/app/journal") return "/activite";
+  const m = INBOX_LINK.exec(pathname);
+  if (!m) return null;
+  const [, area, rest] = m;
+  if (area === "activite") return rest === undefined ? "/activite" : rest === "demandes" ? "/activite/demandes" : null;
+  if (area === "messages") {
+    return rest === undefined ? "/messages" : rest === "demandes" ? "/messages/demandes" : `/messages/${rest}`;
+  }
+  // Ancienne Boîte du site : `/app/boite` était la liste des messages, `/app/boite/demandes` les demandes, `/app/boite/<id>` une conversation.
+  return rest === undefined ? "/messages" : rest === "demandes" ? "/activite/demandes" : `/messages/${rest}`;
+}
 
 /**
  * Lien d'avis d'un remerciement (lot 27) : `/app/acces?avis=<candidature>` → la feuille d'avis de l'onglet Sorties
@@ -34,9 +49,7 @@ export function appLinkOf(value: unknown): string | null {
   if (crew) return `/crew/${crew[1]}${crew[2] ?? ""}`;
   const review = REVIEW_LINK.exec(value);
   if (review) return `/acces?avis=${review[1]}`;
-  const inbox = INBOX_LINK.exec(value);
-  if (inbox) return inbox[1] === "demandes" ? "/boite?segment=demandes" : inbox[1] ? `/boite/${inbox[1]}` : "/boite";
-  return null;
+  return inboxPathOf(value);
 }
 
 /**

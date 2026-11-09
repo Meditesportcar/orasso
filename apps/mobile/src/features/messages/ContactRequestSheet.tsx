@@ -69,7 +69,7 @@ export function ContactRequestSheet({ pseudo, onClose }: { pseudo: string | null
                 const conversationId = (e as ApiRequestError).details?.conversationId;
                 if (e instanceof ApiRequestError && e.code === "use_direct" && typeof conversationId === "string") {
                   close();
-                  router.push(`/boite/${conversationId}`);
+                  router.push(`/messages/${conversationId}`);
                   return;
                 }
                 setError(errorMessage(e));

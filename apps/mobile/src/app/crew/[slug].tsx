@@ -344,7 +344,7 @@ export default function CrewScreen() {
               big
               wide
               icon="chat"
-              onPress={() => router.push(`/boite/${v.conversationId}`)}
+              onPress={() => router.push(`/messages/${v.conversationId}`)}
               accessibilityLabel={L.discussionA11y(space?.unreadCount ?? 0)}
               testID="crew-discussion"
             >

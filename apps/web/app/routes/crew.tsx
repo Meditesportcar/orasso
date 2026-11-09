@@ -246,7 +246,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
               <Button
                 variant="secondary"
                 icon="chat"
-                href={`/app/boite/${crew.conversationId}`}
+                href={`/app/messages/${crew.conversationId}`}
                 aria-label={L.discussionA11y(space?.unreadCount ?? 0)}
                 data-testid="crew-discussion"
               >

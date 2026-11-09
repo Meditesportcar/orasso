@@ -1,4 +1,4 @@
-// Carte d'une demande de la Boîte (prototype « Demandes ») : photo, titre, détail, Accepter / Refuser sur la plaque.
+// Carte d'une demande de l'Activité (prototype « Demandes ») : photo, titre, détail, Accepter / Refuser sur la plaque.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { messagingLabels } from "@orasso/shared";
 import { useState } from "react";
@@ -18,6 +18,8 @@ export function RequestCard({
   onOpenProfile,
   onAccept,
   onDecline,
+  acceptLabel = messagingLabels.accept,
+  declineLabel = messagingLabels.decline,
   testID,
 }: {
   avatarUrl: string | null;
@@ -28,6 +30,9 @@ export function RequestCard({
   onOpenProfile?: () => void;
   onAccept: () => Promise<unknown>;
   onDecline: () => Promise<unknown>;
+  /** Lot R7c2 : « Confirmer » / « Pas moi » d'un transfert de plaque. */
+  acceptLabel?: string;
+  declineLabel?: string;
   testID?: string;
 }) {
   const { t } = useTheme();
@@ -82,7 +87,7 @@ export function RequestCard({
           disabled={busy !== null}
           onPress={() => void run("accept", onAccept)}
         >
-          {messagingLabels.accept}
+          {acceptLabel}
         </Button>
         <Button
           variant="plate"
@@ -92,7 +97,7 @@ export function RequestCard({
           disabled={busy !== null}
           onPress={() => void run("decline", onDecline)}
         >
-          {messagingLabels.decline}
+          {declineLabel}
         </Button>
       </View>
     </Plate>

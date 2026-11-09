@@ -100,7 +100,7 @@ export const crewPageLabels = {
     pseudo ? `Le chef, ${pseudo}, accepte les demandes.` : "Le chef accepte les demandes.",
   requestJoin: "Demander à rejoindre",
   requestSentTo: (pseudo: string | null) => (pseudo ? `Demande envoyée à ${pseudo}` : "Demande envoyée"),
-  requestSentHint: "Sa réponse arrive dans ta Boîte.",
+  requestSentHint: "Sa réponse arrive dans ton Activité.",
   cancelRequest: "Annuler la demande",
 
   // Feuille « Demander à rejoindre » (vitrine, recherche, Explorer, site).

@@ -97,14 +97,28 @@ export const acceptedUploadPurposes = [
 ] as const satisfies readonly UploadPurpose[];
 
 /**
- * Pastilles de la barre du haut du passionné (lot R7a1, tour 2) : la cloche « Activité » compte les notifications non lues
- * et les demandes en attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu
- * seulement. Une demande seule ne fait donc jamais monter la bulle. Appli et site s'en servent tous les deux.
+ * Pastilles de la barre du haut (lot R7a1, refaites au lot R7c2). Cloche « Activité » : ce qui est nouveau depuis la
+ * dernière ouverture (`unseenActivity`) et les demandes en attente de ta réponse, **hors demandes de message** (la ligne
+ * « Demandes · N » de l'Activité) ; bulle « Messages » : conversations non lues et demandes de message en attente (la
+ * ligne « Demandes de message · N »). Une demande ne compte qu'une fois : sa notification n'est pas dans `unseenActivity`
+ * (voir `requestNotificationTypes`). Appli et site s'en servent tous les deux.
  */
-export function topBarCounts(
-  unreadNotifications: number,
-  summary: { unreadMessages: number; requests: Record<string, number> } | null,
-): { activity: number; messages: number } {
-  const requests = summary ? Object.values(summary.requests).reduce((a, b) => a + b, 0) : 0;
-  return { activity: unreadNotifications + requests, messages: summary?.unreadMessages ?? 0 };
+export type InboxCountsInput = {
+  unreadMessages: number;
+  unseenActivity: number;
+  pendingRequests: number;
+  requests: { contact: number };
+};
+
+export function inboxRowCounts(summary: InboxCountsInput | null): { activityRequests: number; messageRequests: number } {
+  const contact = summary?.requests.contact ?? 0;
+  return { activityRequests: Math.max(0, (summary?.pendingRequests ?? 0) - contact), messageRequests: contact };
+}
+
+export function topBarCounts(summary: InboxCountsInput | null): { activity: number; messages: number } {
+  const { activityRequests, messageRequests } = inboxRowCounts(summary);
+  return {
+    activity: (summary?.unseenActivity ?? 0) + activityRequests,
+    messages: (summary?.unreadMessages ?? 0) + messageRequests,
+  };
 }

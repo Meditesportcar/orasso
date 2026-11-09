@@ -85,7 +85,7 @@ export const communicationLabels = {
   groupSending: "Envoi en cours",
   groupVariables: "Variables : {{pseudo}}, {{event.title}}, {{event.date}}, {{event.city}}, {{structure.name}}",
   groupHint:
-    "Chaque destinataire reçoit le message dans sa Boîte, dans sa conversation avec la structure : les réponses arrivent dans « Messages des participants ».",
+    "Chaque destinataire reçoit le message dans ses Messages, dans sa conversation avec la structure : les réponses arrivent dans « Messages des participants ».",
   quotaFollowers: (remaining: number, quota: number) =>
     `Abonnés : ${remaining} envoi${remaining > 1 ? "s" : ""} restant${remaining > 1 ? "s" : ""} sur ${quota} (30 jours glissants)`,
   quotaResetsAt: (date: string) => `Prochain envoi aux abonnés possible le ${date}.`,

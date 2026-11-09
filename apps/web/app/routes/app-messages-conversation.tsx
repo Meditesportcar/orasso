@@ -17,7 +17,7 @@ import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { useChannel } from "../lib/useChannel";
-import type { Route } from "./+types/boite-conversation";
+import type { Route } from "./+types/app-messages-conversation";
 
 // Conversation (lot 18) : messages en direct (`conversation:{id}`), envoi idempotent par `clientId` avec nouvel essai
 // tant que la page est ouverte (S13), image, « Lu par … » (S9), suppression de ses messages.
@@ -202,7 +202,7 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
-      <FicheBar heading={false} title={messagingLabels.inbox} back="/app/boite" />
+      <FicheBar heading={false} title={messagingLabels.messages} back="/app/messages" />
       <div className="s-narrow s-stack" data-testid="conversation">
         <header className="s-row s-row--top">
           <PersonAvatar url={c.avatarUrl} pseudo={c.title} size={48} />

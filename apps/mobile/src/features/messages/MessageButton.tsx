@@ -28,7 +28,7 @@ export function MessageButton({ userId, pseudo }: { userId: string; pseudo: stri
           setError(null);
           try {
             const { id } = await api.openDirect(userId);
-            router.push(`/boite/${id}`);
+            router.push(`/messages/${id}`);
           } catch (e) {
             if (e instanceof ApiRequestError && e.code === "not_friends") setContact(true);
             else setError(errorMessage(e));
@@ -73,7 +73,7 @@ export function WriteHeaderAction({
           onError(null);
           try {
             const { id } = await api.openDirect(userId);
-            router.push(`/boite/${id}`);
+            router.push(`/messages/${id}`);
           } catch (e) {
             if (e instanceof ApiRequestError && e.code === "not_friends") setContact(true);
             else onError(errorMessage(e));
@@ -105,7 +105,7 @@ export function ContactOrganizerButton({ structureId }: { structureId: string })
           setError(null);
           try {
             const { id } = await api.contactStructure(structureId);
-            router.push(`/boite/${id}`);
+            router.push(`/messages/${id}`);
           } catch (e) {
             setError(errorMessage(e));
           } finally {

@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
-import { WriteHeaderAction } from "@/features/boite/MessageButton";
+import { WriteHeaderAction } from "@/features/messages/MessageButton";
 import { PublicProfile } from "@/features/profil/PublicProfile";
 import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
