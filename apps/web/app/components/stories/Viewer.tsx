@@ -26,6 +26,7 @@ import {
   storyStartIndex,
   tapTarget,
   viewersListPartial,
+  viewersTotal,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -784,8 +785,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
       >
         {viewers ? (
           <div className="s-stack">
-            <h2 className="s-h2">{L.views(viewers.story.viewsCount ?? viewers.data?.viewers.length ?? 0)}</h2>
-            {viewersListPartial(viewers.story.viewsCount) ? (
+            <h2 className="s-h2">{L.views(viewersTotal(viewers.story.viewsCount, viewers.data?.viewers.length))}</h2>
+            {viewersListPartial(viewersTotal(viewers.story.viewsCount, viewers.data?.viewers.length)) ? (
               <p className="o-t-caption" data-testid="story-viewers-partial">
                 {L.viewsPartial(STORY_VIEWERS_MAX)}
               </p>

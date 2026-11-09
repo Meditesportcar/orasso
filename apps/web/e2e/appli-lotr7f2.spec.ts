@@ -523,3 +523,57 @@ test("tour 2 : le total des vues reste vrai au-delà de 200 ; l'aperçu du profi
   await dropMyStories(damien);
   await ctx.close();
 });
+
+test("tour 3 : changement de compte : le retour arrière ne montre ni le média de crew ni le nom de l'auteur", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  await resetViews();
+  const damien = await login("damien@orasso.local");
+  const kenji = await userIdOf("Kenji_66");
+  const crewStory = (await sql<{ id: string }>("select id from stories where audience = 'crew' limit 1"))[0]?.id ?? "";
+  expect(crewStory).toBeTruthy();
+  // B : un compte du seed qui n'a aucun droit sur cette story de crew et ne voit rien de Kenji.
+  const pilote = await login("pilote100@orasso.local");
+  const seenByB = await apiCall<{ author: unknown; stories: { id: string }[] }>(
+    pilote,
+    "GET",
+    `/stories/by-author/u:${kenji}`,
+  );
+  expect(seenByB.data.stories.map((s) => s.id)).not.toContain(crewStory);
+  const bSeesKenji = seenByB.data.author !== null;
+
+  // A ouvre une story de crew de Kenji.
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await openFrom(page, /Voir les stories de Kenji_66/);
+  await playing(page);
+  await expect(page.getByTestId("story-author")).toHaveText("Kenji_66");
+  await page.getByTestId("story-close").click();
+  await expect(page.getByTestId("stories-bar")).toBeVisible({ timeout: 30_000 });
+  // A se déconnecte (Réglages), B se connecte.
+  await go(page, "/reglages");
+  await page.getByTestId("profil-sign-out").click();
+  await page.waitForURL(/auth/, { timeout: 30_000 });
+  await page.getByLabel("E-mail").fill("pilote100@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil/, { timeout: 60_000 });
+  // Retour arrière jusqu'à la visionneuse de l'auteur (au plus 8 pas), ou ouverture directe de son adresse.
+  let reached = false;
+  for (let i = 0; i < 8 && !reached; i++) {
+    await page.goBack().catch(() => undefined);
+    await page.waitForTimeout(600);
+    reached = /story/.test(page.url());
+  }
+  if (!reached) await page.goto(`/story/${encodeURIComponent(`u:${kenji}`)}`);
+  await afterOpening(page);
+  await page.waitForTimeout(2500);
+  await expect(page.locator('[data-testid^="story-media-"]')).toHaveCount(0);
+  await expect(page.getByTestId(`story-media-${crewStory}`)).toHaveCount(0);
+  if (!bSeesKenji) {
+    await expect(page.getByTestId("story-author")).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText("Kenji_66");
+  }
+  await shot(page, "changement-de-compte");
+  await ctx.close();
+});

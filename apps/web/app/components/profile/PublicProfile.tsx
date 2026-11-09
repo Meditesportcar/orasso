@@ -132,6 +132,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
               de ses stories ; lot R7f2 : dès qu'il y a une story, l'anneau est un lien qui ouvre la visionneuse. */}
           <AvatarRing
             ring={storyRingOf(p)}
+            neon={false}
             size="xl"
             src={p.avatarUrl}
             name={p.pseudo}

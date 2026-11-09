@@ -1,7 +1,14 @@
 // « Vues · 12 » : la liste de ceux qui ont vu ma story (`GET /me/stories/:id/viewers`), pour moi seul, avec ceux que j'ai
 // identifiés. Une panne n'est jamais une liste vide : message et « Réessayer ». Les avatars viennent de l'API (publics).
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { feedAgo, storyViewerLabels as L, STORY_VIEWERS_MAX, type StoryView, viewersListPartial } from "@orasso/shared";
+import {
+  feedAgo,
+  storyViewerLabels as L,
+  STORY_VIEWERS_MAX,
+  type StoryView,
+  viewersListPartial,
+  viewersTotal,
+} from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -30,6 +37,7 @@ export function ViewersSheet({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const id = story?.id ?? null;
+  const total = viewersTotal(story?.viewsCount, data?.viewers.length);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer).
   useEffect(() => {
     if (!id) return;
@@ -53,7 +61,7 @@ export function ViewersSheet({
     <AppSheet visible={Boolean(story)} onClose={onClose} accessibilityLabel={L.viewsTitle}>
       <View style={styles.head}>
         <Text variant="posterM" color={t.color.ink} style={styles.title} accessibilityRole="header">
-          {L.views(story?.viewsCount ?? data?.viewers.length ?? 0)}
+          {L.views(total)}
         </Text>
         <Pressable
           onPress={onClose}
@@ -66,7 +74,7 @@ export function ViewersSheet({
           <Icon name="close" size={20} color={t.color.ink} />
         </Pressable>
       </View>
-      {viewersListPartial(story?.viewsCount) ? (
+      {viewersListPartial(total) ? (
         <Text variant="caption" color={t.color.inkMuted} testID="story-viewers-partial">
           {L.viewsPartial(STORY_VIEWERS_MAX)}
         </Text>

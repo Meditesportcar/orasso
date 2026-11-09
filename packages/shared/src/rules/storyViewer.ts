@@ -105,6 +105,14 @@ export function storyPlayable(s: { status: "processing" | "ready" | "failed" }):
 /** Au plus ce nombre de noms dans la liste « Vues » (les plus récents) ; le total reste celui de `viewsCount`. */
 export const STORY_VIEWERS_MAX = 200;
 
+/**
+ * Le total du titre « Vues · N » : le plus grand du compteur de l'API et de la longueur de la liste reçue (une vue arrivée
+ * entre les deux lectures ne doit jamais faire afficher moins de noms que le total).
+ */
+export function viewersTotal(viewsCount: number | null | undefined, listLength: number | null | undefined): number {
+  return Math.max(viewsCount ?? 0, listLength ?? 0);
+}
+
 /** Le titre « Vues · N » garde le total ; la liste, elle, est partielle au-delà de `STORY_VIEWERS_MAX`. */
 export function viewersListPartial(total: number | null | undefined): boolean {
   return (total ?? 0) > STORY_VIEWERS_MAX;

@@ -357,6 +357,7 @@ export function PublicProfile({
       <View style={styles.hd} testID="public-head">
         <AvatarRing
           ring={storyRingOf(p)}
+          neon={false}
           size="xl"
           source={mediaSource(p.avatarUrl)}
           name={p.pseudo}

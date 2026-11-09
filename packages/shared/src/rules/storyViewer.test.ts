@@ -19,6 +19,7 @@ import {
   storyStartIndex,
   tapTarget,
   viewersListPartial,
+  viewersTotal,
 } from "./storyViewer";
 
 describe("anneaux de la barre", () => {
@@ -175,5 +176,13 @@ describe("liste des vues", () => {
     expect(viewersListPartial(200)).toBe(false);
     expect(viewersListPartial(201)).toBe(true);
     expect(viewersListPartial(null)).toBe(false);
+  });
+
+  it("le total du titre est le plus grand du compteur et de la liste", () => {
+    expect(viewersTotal(5, 7)).toBe(7);
+    expect(viewersTotal(7, 5)).toBe(7);
+    expect(viewersTotal(null, 3)).toBe(3);
+    expect(viewersTotal(undefined, undefined)).toBe(0);
+    expect(viewersListPartial(viewersTotal(150, 201))).toBe(true);
   });
 });

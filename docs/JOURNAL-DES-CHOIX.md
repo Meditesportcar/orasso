@@ -4043,6 +4043,12 @@ Chaque point de `corrections-r7f2.md` (1 à 14) est traité ; les choix de déta
 - **Reculer sur la première (13)** : un compteur `replay` entre dans la clé de la minuterie (appli : `useStoryClock`) et remet le temps et la barre à zéro (site) : la première story repart du début.
 - **Total des vues (14)** : le titre garde `viewsCount` ; l'API plafonne la liste à `STORY_VIEWERS_MAX` (200, constante partagée) et la feuille écrit « La liste montre les 200 dernières personnes. » au-delà. Pas de pagination (les 200 plus récents suffisent à un humain ; la pagination ajouterait une route et un état).
 
+### Tour 3 (lot R7f2, 10/11/2026) : dernière retouche après la re-relecture Opus
+- **Néon du profil** : l'anneau de l'en-tête du profil public passe `neon={false}` (appli et site) ; « Suivre » garde le seul néon. Entrée du README du design system complétée.
+- **Total des vues** : `viewersTotal(viewsCount, longueur de la liste)` dans `packages/shared` (le plus grand des deux) ; le titre « Vues · N » et la mention « liste partielle » (`viewersListPartial`) partent de ce total, dans la feuille de l'appli et la fenêtre du site. Choix : pas de champ `total` ajouté à l'API (le compteur de la story et la liste suffisent, aucune route touchée).
+- **Glissement d'onglet** : `useTabSwipeScrollGuard` lève aussi la coupure sur `onTouchEnd` et `onTouchCancel`, et au démontage (`useEffect`), en plus du focus.
+- **Changement de compte** : recette ajoutée (A ouvre une story de crew, se déconnecte, B se connecte, retour arrière : ni média ni nom de l'auteur).
+
 ### À revoir avec Damien (lot R7f2)
 - Enchaîner automatiquement la story de l'auteur suivant de la barre quand une série finit (comportement d'Instagram) : non fait, à décider.
 - Ouvrir ma propre story depuis l'anneau de mon profil : non fait (conflit avec le changement de photo).

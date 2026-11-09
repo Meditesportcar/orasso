@@ -9,7 +9,7 @@
 
 import { useIsGroundQuiet } from "@orasso/design-system/native";
 import { useFocusEffect } from "expo-router";
-import { createContext, type MutableRefObject, useCallback, useContext, useMemo, useRef } from "react";
+import { createContext, type MutableRefObject, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { PanResponder, type PanResponderInstance, useWindowDimensions } from "react-native";
 
 import { shouldCaptureSwipe, swipeDirection } from "./swipe";
@@ -104,5 +104,15 @@ export function useTabSwipeScrollGuard() {
     if (control && !release.current) release.current = control.disable();
   }, [control]);
   useFocusEffect(useCallback(() => end, [end]));
-  return { onScrollBeginDrag: begin, onScrollEndDrag: end, onMomentumScrollEnd: end } as const;
+  // Démontage : la coupure ne reste jamais posée si l'écran disparaît en plein geste.
+  useEffect(() => end, [end]);
+  // Doigt levé ou geste annulé sans défilement (le défilement n'a pas commencé ou a été repris par un parent) : on lève
+  // aussi la coupure, sinon le glissement d'onglet resterait coupé.
+  return {
+    onScrollBeginDrag: begin,
+    onScrollEndDrag: end,
+    onMomentumScrollEnd: end,
+    onTouchEnd: end,
+    onTouchCancel: end,
+  } as const;
 }
