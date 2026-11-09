@@ -1,7 +1,7 @@
 import type { AudiencePrizeBoard, AudiencePrizeEntry, AudiencePrizeMine } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, reloadDelay, voteView } from "./model";
+import { BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, reloadDelay, voteView } from "./model";
 
 describe("classement en direct", () => {
   it("un rechargement complet toutes les 10 s au plus : le premier tout de suite, les suivants différés", () => {
@@ -18,29 +18,6 @@ describe("classement en direct", () => {
       }
     }
     expect(reloads).toBe(3);
-  });
-
-  it("le top 3 du message met à jour voix et rang sans recharger", () => {
-    const e = (id: string, votes: number, rank: number) => ({
-      applicationId: id,
-      vehicleLabel: id,
-      pseudo: id,
-      photoUrl: null,
-      votes,
-      rank,
-    });
-    const next = applyTop3(
-      [e("b", 31, 1), e("a", 24, 2), e("c", 11, 3)],
-      [
-        { applicationId: "a", votes: 33, rank: 1 },
-        { applicationId: "b", votes: 31, rank: 2 },
-      ],
-    );
-    expect(next.map((x) => [x.applicationId, x.votes, x.rank])).toEqual([
-      ["a", 33, 1],
-      ["b", 31, 2],
-      ["c", 11, 3],
-    ]);
   });
 });
 
@@ -62,6 +39,7 @@ const board = (over: Partial<AudiencePrizeBoard> = {}): AudiencePrizeBoard => ({
   total: 96,
   vehicles: 3,
   winnerPoints: 50,
+  rankingHidden: false,
   entries: [entry("b", 31, 1), entry("a", 24, 2), entry("c", 11, 3)],
   winner: null,
   ...over,

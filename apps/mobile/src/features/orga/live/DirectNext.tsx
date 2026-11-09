@@ -53,7 +53,7 @@ export function DirectNext({
             ) : null}
           </Text>
           <Text variant="caption" color={c.posterMuted}>
-            {dayCountdown(event.startsAt, at)}
+            {dayCountdown(event, at)}
           </Text>
         </View>
         <View style={[styles.bigCard, shadow, { backgroundColor: c.surface }]}>

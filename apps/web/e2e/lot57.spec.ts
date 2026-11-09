@@ -273,7 +273,7 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
       .getByTestId("vote-candidate")
       .filter({ hasText: pilots[theme === "beton" ? 0 : 1]?.pseudo ?? "" })
       .click();
-    await expect(page.getByTestId("vote-saved")).toContainText("Vote enregistré · tu peux le changer jusqu'à");
+    await expect(page.getByTestId("vote-saved")).toContainText(/Vote enregistré · tu peux le changer jusqu'(à|au)/);
     await expect(page.getByTestId("vote-candidate").filter({ hasText: "C'est toi" })).toBeDisabled();
     // Relecture : un pointage sans aucun vote entre-temps ajoute le véhicule à la grille ouverte (rechargement en direct).
     if (theme === "beton") {

@@ -2,7 +2,7 @@ import type { EventFormat } from "../enums";
 import { type Grade, gradeLabels } from "../grades";
 import { weekdayNames } from "../rules/recurrence";
 import { isRare, type StampInk, type StampKind, type StampShape } from "../rules/stamps";
-import { wallTime } from "../rules/time";
+import { addDays, calendarDaysBetween, wallTime } from "../rules/time";
 import { countFr } from "./plural.fr";
 
 // Passeport, prix du public, récap (lot 49) : textes du prototype DA v2 (`s-passport`, `s-vote`, `s-recap`), au « tu ».
@@ -99,10 +99,58 @@ export const passportTexts = {
   notificationTitle: (kind: StampKind) => (isRare(kind) ? "Tampon rare" : "Nouveau tampon"),
 };
 
+const monthNames = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+/**
+ * « jusqu'à 23 h » si la fin est aujourd'hui, sinon « jusqu'au mercredi 11 novembre, 23 h ». Une fin à minuit pile est la
+ * fin de la veille au soir : « jusqu'à minuit », ou « jusqu'au mercredi 11 novembre, minuit » (jamais « jeudi 12, 0 h »).
+ */
+function untilText(closesAt: Date, now: Date, timeZone?: string): string {
+  const w = wallTime(closesAt, timeZone);
+  const midnight = w.hour === 0 && w.minute === 0;
+  const last = midnight ? addDays(w, -1) : w;
+  const clock = midnight ? "minuit" : frHour(closesAt, timeZone);
+  if (calendarDaysBetween(now, closesAt, timeZone) - (midnight ? 1 : 0) <= 0) return `jusqu'à ${clock}`;
+  return `jusqu'au ${weekdayOf(last)} ${last.day === 1 ? "1er" : last.day} ${monthNames[last.month - 1]}, ${clock}`;
+}
+
+const weekdayOf = (w: { year: number; month: number; day: number }) =>
+  weekdayNames[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()] ?? "";
+
+/**
+ * Lot R7-0 (accès sur plusieurs jours) : un accès « tout l'événement » se pointe une seule fois, et vaut jusqu'au dernier
+ * jour. « Entrée samedi à 9 h 12 · accès jusqu'au mercredi 11 novembre ». `lastDay` : un instant du dernier jour (`eventLastDayInstant`).
+ */
+export function wholeEventEntered(enteredAt: Date, lastDay: Date, timeZone?: string): string {
+  const e = wallTime(enteredAt, timeZone);
+  const l = wallTime(lastDay, timeZone);
+  return `Entrée ${weekdayOf(e)} à ${frHour(enteredAt, timeZone)} · accès jusqu'au ${weekdayOf(l)} ${l.day === 1 ? "1er" : l.day} ${monthNames[l.month - 1]}`;
+}
+
+/** Sous l'entrée d'un accès « tout l'événement » : le QR reste disponible, en second. */
+export const wholeEventReentry =
+  "Ton entrée vaut pour tout l'événement. Garde ce QR pour un contrôle si tu ressors puis reviens.";
+
 export const audiencePrizeTexts = {
   title: "Prix du public",
-  /** « vote ouvert jusqu'à 22 h 30 » */
-  openUntil: (closesAt: Date, timeZone?: string) => `vote ouvert jusqu'à ${frHour(closesAt, timeZone)}`,
+  /**
+   * « vote ouvert jusqu'à 22 h 30 » quand la fin est aujourd'hui ; sinon (lot R7-0) avec la date : « vote ouvert jusqu'au
+   * mardi 10 novembre, 23 h ».
+   */
+  openUntil: (closesAt: Date, now: Date, timeZone?: string) => `vote ouvert ${untilText(closesAt, now, timeZone)}`,
   closed: "Vote clos",
   notOpen: "Le vote ouvre au premier pointage, dès deux véhicules sur place.",
   /** « Pointage à 19 h 02 » */
@@ -207,10 +255,21 @@ export const voteScreenTexts = {
   you: "C'est toi",
   number: (n: number) => `N° ${n}`,
   yourVote: "Ton vote",
-  /** Après un vote : « Vote enregistré · tu peux le changer jusqu'à 22 h 30 ». */
-  saved: (closesAt: Date, timeZone?: string) =>
-    `Vote enregistré · tu peux le changer jusqu'à ${frHour(closesAt, timeZone)}`,
+  /** Après un vote : « Vote enregistré · tu peux le changer jusqu'à 22 h 30 » (avec la date si la fin n'est pas aujourd'hui). */
+  saved: (closesAt: Date, now: Date, timeZone?: string) =>
+    `Vote enregistré · tu peux le changer ${untilText(closesAt, now, timeZone)}`,
   chooseHint: "Touche une voiture pour voter.",
+  /** Lot R7-0 (D38) : le classement n'est servi qu'à qui a voté, jusqu'à la clôture. */
+  rankingAfterVote: "Le classement s'affiche après ton vote.",
+  /** À qui ne peut pas voter (pas entré) ou quand le vote n'est pas ouvert : le classement se montre à la clôture. */
+  rankingAtClose: "Le classement s'affiche à la clôture du vote.",
+  /** La phrase selon que la personne peut voter (« après ton vote ») ou non (« à la clôture du vote »). */
+  rankingHidden: (canVote: boolean) =>
+    canVote ? "Le classement s'affiche après ton vote." : "Le classement s'affiche à la clôture du vote.",
+  /** Vote réussi, relecture du classement en échec ou en cours. */
+  rankingLoading: "Chargement du classement…",
+  rankingFailed: "Ton vote est enregistré, mais le classement ne se charge pas.",
+  retry: "Réessayer",
   pick: (label: string) => `Voter pour ${label}`,
   results: "Résultats",
   winner: "Gagnant",

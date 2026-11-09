@@ -1,7 +1,7 @@
 // « Ta place » sur un événement de plusieurs jours, ou avec plusieurs véhicules (lot M4, tour 2 : relecture Codex) :
 // l'accès montré d'abord est celui qui sert maintenant (retenu, pas encore pointé, jour en cours ou le plus proche),
 // puis les autres candidatures en cours, puis les accès déjà utilisés ou passés. Les autres restent au choix.
-import { BUSINESS_TIMEZONE, localDate, type MyApplication } from "@orasso/shared";
+import { entryHolds, type MyApplication } from "@orasso/shared";
 
 const OPEN = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
 /** Ordre des candidatures en cours qui ne sont pas (encore) un accès. */
@@ -11,20 +11,19 @@ const startOf = (a: MyApplication) => new Date(a.day?.startsAt ?? a.event.starts
 const endOf = (a: MyApplication) => new Date(a.day?.endsAt ?? a.event.endsAt).getTime();
 
 /**
- * L'accès a-t-il déjà servi ? Un jour choisi, ou un événement d'un jour : dès l'entrée. Tout l'événement sur plusieurs
- * jours : seulement aujourd'hui (le pass resservira le lendemain, comme sur l'écran du QR).
+ * L'accès a-t-il déjà servi ? Une seule règle, partagée avec le Jour J et le site (`entryHolds`) : un jour choisi, ou un
+ * événement d'un jour, dès l'entrée ; « tout l'événement » sur plusieurs jours : l'entrée vaut jusqu'à la fin de
+ * l'accès, tous les jours (le bouton ne redevient pas « Mon QR » chaque matin).
  */
-export function usedNow(a: MyApplication, now: Date, multiDay: boolean): boolean {
-  if (!a.checkedInAt) return false;
-  if (!multiDay || a.day) return true;
-  return localDate(new Date(a.checkedInAt), BUSINESS_TIMEZONE) === localDate(now, BUSINESS_TIMEZONE);
+export function usedNow(a: MyApplication, now: Date): boolean {
+  return entryHolds(a, a.event, now);
 }
 
 /** Les places de la personne pour cet événement, la plus utile d'abord. */
-export function orderPlaces(apps: readonly MyApplication[], eventId: string, now: Date, multiDay: boolean) {
+export function orderPlaces(apps: readonly MyApplication[], eventId: string, now: Date) {
   const t = now.getTime();
   const group = (a: MyApplication) => {
-    if (usedNow(a, now, multiDay) || endOf(a) <= t) return 2;
+    if (usedNow(a, now) || endOf(a) <= t) return 2;
     return a.status === "accepted" ? 0 : 1;
   };
   return apps

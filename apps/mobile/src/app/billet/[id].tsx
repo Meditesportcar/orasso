@@ -3,7 +3,7 @@
 // « Entrée · Public » avec « Billet · Gratuit / <pseudo> », la note sur les captures, l'itinéraire. Le QR du billet est
 // statique (charge utile signée OR1, lot 34) : pas d'anneau ni de « nouveau code ». Le billet reste lisible hors ligne
 // (liste gardée sur le téléphone). On le rend depuis son ticket dans Sorties. `/billets` garde la liste complète.
-import { Text, ThemeScope, useTheme } from "@orasso/design-system/native";
+import { Text, useTheme } from "@orasso/design-system/native";
 import { ticketAppLabels as L, type MyTicket } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Platform, StyleSheet, useWindowDimensions } from "react-native";
@@ -32,11 +32,8 @@ const TICKET_CAPTURE_TEXT =
 const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
 
 export default function Billet() {
-  return (
-    <ThemeScope theme="beton">
-      <BilletScreen />
-    </ThemeScope>
-  );
+  // Lot R7-0 (B1) : comme « Mon accès », l'écran suit le thème ; la carte du QR reste crème dans les deux.
+  return <BilletScreen />;
 }
 
 function BilletScreen() {

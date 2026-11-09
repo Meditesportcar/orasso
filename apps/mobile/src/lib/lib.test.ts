@@ -128,8 +128,25 @@ describe("Formats", () => {
     expect(formatDuration(102 * 60_000)).toBe("1\u00a0h\u00a042");
     expect(formatDuration(12 * 60_000)).toBe("12\u00a0min");
     expect(formatDuration(45_000)).toBe("45\u00a0s");
-    expect(dayCountdown("2026-10-17T17:00:00Z", new Date("2026-10-15T10:00:00Z"))).toBe("J-2");
-    expect(dayCountdown("2026-10-17T17:00:00Z", new Date("2026-10-17T05:00:00Z"))).toBe("Aujourd'hui");
+    expect(
+      dayCountdown(
+        { startsAt: "2026-10-17T17:00:00Z", endsAt: "2026-10-17T21:00:00Z" },
+        new Date("2026-10-15T10:00:00Z"),
+      ),
+    ).toBe("J-2");
+    expect(
+      dayCountdown(
+        { startsAt: "2026-10-17T17:00:00Z", endsAt: "2026-10-17T21:00:00Z" },
+        new Date("2026-10-17T05:00:00Z"),
+      ),
+    ).toBe("Aujourd'hui");
+    // Lot R7-0 : en cours depuis la veille, jamais « J+1 ».
+    expect(
+      dayCountdown(
+        { startsAt: "2026-10-17T07:00:00Z", endsAt: "2026-10-19T21:00:00Z" },
+        new Date("2026-10-18T10:00:00Z"),
+      ),
+    ).toBe("En cours · jour 2 sur 3");
   });
   it("titre d'affiche sur deux lignes", () => {
     expect(breakTitle("Nocturne de Canet")).toBe("Nocturne\nde Canet");

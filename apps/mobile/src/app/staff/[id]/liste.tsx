@@ -71,7 +71,7 @@ export default function StaffList() {
       if (e.status !== "valid") return false;
       if (multiDay && today && !expectedOn(state.meta, e, clockNow())) return false;
       const inside = Boolean(checkedInAt(state, e));
-      // Lot 26 : « Arrivés » / « Attendus » du jour (un « tout l'événement » entré un jour précédent est attendu).
+      // Lot 26, R7-0 tour 3 : « Arrivés » = présents sur place (un « tout l'événement » entré un jour précédent l'est encore).
       const arrived = arrivedOn(state, e, clockNow());
       if (filter === "in") return arrived;
       if (filter === "out") return !arrived;
@@ -94,7 +94,9 @@ export default function StaffList() {
         title={state ? `Liste · ${state.meta.title}` : "Liste"}
         facts={
           count
-            ? `${countFr(count.arrived, "arrivé")} · ${countFr(count.expected - count.arrived, "attendu")}`
+            ? `${countFr(count.arrived, multiDay ? "présent" : "arrivé")} · ${countFr(count.expected - count.arrived, "attendu")}${
+                multiDay ? ` · ${countFr(count.arrivedToday, "arrivée")} du jour` : ""
+              }`
             : undefined
         }
         onClose={close}

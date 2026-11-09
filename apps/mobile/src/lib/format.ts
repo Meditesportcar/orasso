@@ -1,7 +1,15 @@
 // Dates et durées en français, dans le fuseau de l'événement (Europe/Paris par défaut), comme dans les maquettes :
 // « Sam 17 oct », « 19 h », « 19 h 30 », « J-2 », « dans 1 h 42 ».
 // Lot R3b (retour 10) : une date hors de l'année en cours dit son année (« Dim 17 oct 2027 »), à l'heure d'Orasso.
-import { BUSINESS_TIMEZONE, calendarDaysBetween, keepUnits, rangeYears, wallTime, withYear } from "@orasso/shared";
+import {
+  BUSINESS_TIMEZONE,
+  calendarDaysBetween,
+  eventCountdown,
+  keepUnits,
+  rangeYears,
+  wallTime,
+  withYear,
+} from "@orasso/shared";
 
 import { now as orassoNow } from "./clock";
 
@@ -101,12 +109,13 @@ export function breakTitle(title: string): string {
   return best < 0 ? title : `${title.slice(0, best)}\n${title.slice(best + 1)}`;
 }
 
-/** « J-2 », « Aujourd'hui », « Demain », « J+1 » */
-export function dayCountdown(startsAt: string | Date, now: Date, timeZone = BUSINESS_TIMEZONE): string {
-  const days = calendarDaysBetween(now, new Date(startsAt), timeZone);
-  if (days === 0) return "Aujourd'hui";
-  if (days === 1) return "Demain";
-  return days > 0 ? `J-${days}` : `J+${-days}`;
+/** « J-2 », « Aujourd'hui », « Demain », « En cours · jour 2 sur 4 », « J+1 » (la règle commune, `eventCountdown`). */
+export function dayCountdown(
+  span: { startsAt: string | Date; endsAt: string | Date },
+  now: Date,
+  timeZone = BUSINESS_TIMEZONE,
+): string {
+  return eventCountdown(span, now, timeZone);
 }
 
 /** « dans 2 jours », « ce soir », « demain », « aujourd'hui » : l'étiquette « Prochain accès · … » de l'Accueil. */

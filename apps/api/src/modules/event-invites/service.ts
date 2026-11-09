@@ -549,6 +549,14 @@ export const eventInvitesService = {
     const e = await eventOf(eventId);
     if (!(await canSeeEvent(e, viewer))) throw inviteOnlyError();
     if (!shareable(e, at)) return null;
+    // Lot R7-0 : l'invitation a fait son œuvre dès que la personne a sa place (candidature retenue, donc a fortiori entrée)
+    // ou un billet : plus de bandeau « Kenji_66 t'invite » sur la fiche.
+    const held = await db.execute(sql`
+      select 1 from applications a where a.event_id = ${e.id} and a.user_id = ${viewer.user.id} and a.status = 'accepted'
+      union all
+      select 1 from tickets t where t.event_id = ${e.id} and t.user_id = ${viewer.user.id} and t.status <> 'cancelled'
+      limit 1`);
+    if (held.rows.length) return null;
     const result = await db.execute(sql`
       select i.inviter_id, p.pseudo, p.avatar_key, i.note
       from event_peer_invitations i
