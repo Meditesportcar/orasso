@@ -9,6 +9,7 @@ export const storyPublishLabels = {
   gallery: "Galerie",
   camera: "Appareil",
   cameraTitle: "Appareil photo",
+  modePhoto: "Photo",
   pickTitle: "Une photo pour ta story",
   pickHint:
     "L'appareil de l'appli photographie déjà en 9:16. Une photo de la galerie qui ne l'est pas se pose sur un fond flouté tiré de ses couleurs.",
@@ -53,6 +54,7 @@ export const storyPublishLabels = {
   plateSearching: "Recherche de la plaque…",
   plateSiteHint: "Trace le cadre sur la plaque, ou confirme qu'aucune n'est visible.",
   plateBlur: "Flouter la plaque",
+  plateBlurHintFound: "Proposé · la zone repérée, tu peux l'ajuster du doigt",
   plateBlurHint: "Pose un cadre sur la plaque, tu peux l'ajuster",
   plateNone: "Aucune plaque n'est visible",
   plateNoneHint: "Tu le confirmes, comme au Garage",

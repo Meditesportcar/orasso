@@ -21,6 +21,7 @@ import { useScrollAssist } from "@/ui/ScrollAssist";
 import { Waiting } from "@/ui/Waiting";
 import { CardMenu } from "./CardMenu";
 import { cardFor } from "./cards";
+import { PublishChoice } from "./PublishChoice";
 import { StoriesBarSlot } from "./StoriesBarSlot";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
@@ -51,6 +52,8 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   const [faded, setFaded] = useState<Record<string, FeedCard>>({});
   const [lessNote, setLessNote] = useState<{ card: FeedCard; error: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // « Publier » demande où : en story (9:16, 24 h) ou dans le Fil (4:5).
+  const [choosing, setChoosing] = useState(false);
 
   // Un `reset` de l'API : la liste a été remplacée, on remonte en haut.
   const lastTop = useRef(feed.scrollTop);
@@ -133,7 +136,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         big
         wide
         icon="camera"
-        onPress={() => router.push("/fil/publier")}
+        onPress={() => setChoosing(true)}
         testID="fil-publish-open"
         accessibilityLabel={L.publishTitle}
       >
@@ -223,6 +226,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
           onRemove={(card) => void remove(card)}
         />
         <WhyThisSheet card={why} onClose={() => setWhy(null)} />
+        <PublishChoice visible={choosing} onClose={() => setChoosing(false)} />
       </Overlay>
     </>
   );

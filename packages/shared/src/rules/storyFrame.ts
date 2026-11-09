@@ -107,7 +107,8 @@ export function mapRects<T extends FrameRect>(
 /** Une image déjà en 9:16 (à un centième près : 1080 × 1920, 720 × 1280, un recadrage de l'appareil) n'a rien à ajuster. */
 export const isStoryRatio = (w: number, h: number): boolean => h > 0 && Math.abs(w / h - STORY_W / STORY_H) < 0.012;
 
-const within = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+// `+ 0` : un « -0 » (borne nulle) redevient 0.
+const within = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v)) + 0;
 
 /**
  * Cadrage dans ses bornes de zoom, et déplacement borné pour que la photo ne sorte jamais « à moitié » : d'un axe où elle

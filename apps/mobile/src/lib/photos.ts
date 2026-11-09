@@ -105,6 +105,49 @@ export async function shrinkPhoto(uri: string, width: number, height: number, si
   return { uri: saved.uri, width: saved.width, height: saved.height };
 }
 
+/** Côté le plus long de la photo d'une story envoyée : le serveur la recompresse à ce côté, le rendu final fait 1080 × 1920. */
+export const STORY_UPLOAD_SIDE = 2048;
+
+/**
+ * Lot R7f3 : prépare la photo d'une story pour l'envoi. `exact916` (la photo de l'appareil, presque 9:16) : recadrée au
+ * centre en 9:16 exact (le capteur donne souvent 3:4 ou 16:9) pour que la story n'ait ni bande ni cadrage à faire. Sinon la
+ * photo garde son format (c'est l'écran « Ajuster » qui la cadre dans le 9:16, côté serveur) ; trop grande, elle est réduite
+ * à `maxSide` (2048 px par défaut, `STORY_UPLOAD_SIDE`). Les rectangles de plaque, en fractions de la photo, valent sur l'original comme sur cette copie.
+ * Fichier temporaire de l'appli (non flouté : à effacer par `discardTempPhotos`).
+ */
+export async function fitStory(
+  photo: PickedPhoto,
+  exact916 = false,
+  maxSide: number = STORY_UPLOAD_SIDE,
+): Promise<PickedPhoto> {
+  const longest = Math.max(photo.width, photo.height);
+  const context = ImageManipulator.manipulate(photo.uri);
+  let width = photo.width;
+  let height = photo.height;
+  if (exact916) {
+    const target = 9 / 16;
+    const ratio = photo.width / photo.height;
+    const cropW = ratio > target ? Math.round(photo.height * target) : photo.width;
+    const cropH = ratio > target ? photo.height : Math.round(photo.width / target);
+    context.crop({
+      originX: Math.floor((photo.width - cropW) / 2),
+      originY: Math.floor((photo.height - cropH) / 2),
+      width: cropW,
+      height: cropH,
+    });
+    width = cropW;
+    height = cropH;
+  } else if (longest <= maxSide) {
+    return photo;
+  }
+  if (Math.max(width, height) > maxSide) {
+    context.resize(width >= height ? { width: maxSide } : { height: maxSide });
+  }
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
 async function toJpeg(asset: { uri: string; width: number; height: number }, maxSide: number): Promise<PickedPhoto> {
   const context = ImageManipulator.manipulate(asset.uri);
   const longest = Math.max(asset.width, asset.height);
