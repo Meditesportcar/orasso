@@ -15,7 +15,7 @@ vi.mock("../lib/api.server", () => {
       : { ok: true as const, status: 200, data: value };
   };
   return {
-    requireMe: async () => ({ user: { id: "u1" }, profile: {} }),
+    requireMe: async () => ({ user: { id: "u1" }, profile: {}, personas: [] }),
     api: async (_r: Request, path: string) => answer(path),
     apiOrThrow: async (_r: Request, path: string) => {
       const res = answer(path);

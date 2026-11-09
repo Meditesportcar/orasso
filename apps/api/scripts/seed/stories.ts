@@ -3,8 +3,8 @@
 // Quatre auteurs : Kenji_66 (une « Mon abonnés » qui identifie Damien_66, une « Mon crew » de Roussillon Drift), Léa_11
 // (publique), Marc_66 (compte privé), Théo_66, et Roues Libres 66 (casquette organisateur de Sarah_66, avec
 // l'autocollant du Rassemblement du Lydia) ; lot R7h : une story publique de Kenji_66 avec ce même autocollant, qui
-// identifie Roues Libres 66 et date d'il y a 3 h (les six autres : il y a 4 h, donc la sienne se lit en dernier). Les six autres
-// finissent dans 20 h, celle-ci dans 21 h. Idempotent : rien si des stories existent déjà.
+// identifie Roues Libres 66 et date d'il y a 3 h ; la story de crew de Kenji_66 date d'il y a 3 h 30 (les cinq autres : il y a 4 h) :
+// l'ordre de lecture de ses trois stories est écrit (abonnés, crew, Lydia). Elles finissent dans 20 h, 21 h 30 et 21 h. Idempotent : rien si des stories existent déjà.
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -110,8 +110,12 @@ export async function seedStories() {
   await db.execute(
     sql`update stories set created_at = now() - interval '4 hours', expires_at = now() + interval '20 hours', updated_at = now()`,
   );
-  // Lot R7h, tour 2 : la story de Kenji_66 ajoutée par R7h a sa propre date (il y a 3 h), distincte des autres : l'ordre de
-  // lecture des trois stories de Kenji_66 est écrit (abonnés et crew à égalité, puis le Lydia).
+  // Lot R7h, tour 2 : les trois stories de Kenji_66 ont chacune leur date, l'ordre de lecture est écrit : abonnés (il y a 4 h),
+  // puis crew (il y a 3 h 30), puis le Lydia (il y a 3 h). Les recettes de la visionneuse comptent sur cet ordre.
+  await db.execute(
+    sql`update stories set created_at = now() - interval '210 minutes', expires_at = now() + interval '21 hours 30 minutes', updated_at = now()
+      where author_id = ${kenji.user.id} and audience = 'crew'`,
+  );
   await db.execute(
     sql`update stories set created_at = now() - interval '3 hours', expires_at = now() + interval '21 hours', updated_at = now()
       where author_id = ${kenji.user.id} and caption = ${"Le Lydia, c'est parti !"}`,

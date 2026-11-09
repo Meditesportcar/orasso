@@ -147,8 +147,8 @@ test("visionneuse : toucher à droite et à gauche, bandeau « Mon crew », paus
   await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   await playing(page);
   const badge = page.getByTestId("story-crew-badge");
-  // Les deux premières stories de Kenji (abonnés, crew) ont la même date dans le seed : leur ordre n'est pas écrit, l'une des
-  // deux porte le bandeau ; la troisième (le Lydia, il y a 3 h) vient toujours après.
+  // Le seed écrit l'ordre des trois stories de Kenji : abonnés (il y a 4 h), crew (3 h 30), Lydia (3 h). La première n'a pas le
+  // bandeau « Mon crew » ; on lit l'ordre sans le supposer.
   const first = (await badge.count()) > 0;
   await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
   await expect(page.getByTestId("story-bar-done")).toHaveCount(1);

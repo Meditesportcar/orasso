@@ -132,3 +132,70 @@ for (const v of [
     }
   });
 }
+
+// Tour 2 : les Ã©crans Ã  comparer Ã  la maquette (`og_men`, `og_add`, `og_mine`, `sk_encours_si_1`), BÃ©ton et Sable, 384 police 1
+// et 1,3. Une story neuve de Kenji_66 qui identifie la structure : la liste, l'Ã©cran d'ajout (avant l'ajout), puis Â« Ma
+// story Â» et la visionneuse de Damien (aprÃ¨s l'ajout par l'API). CAPTURES_DIR = `â€¦/lot-r7h-captures/paires-reel`.
+for (const v of [
+  { theme: "beton", scale: 1, tag: "384" },
+  { theme: "sable", scale: 1, tag: "384" },
+  { theme: "beton", scale: 1.3, tag: "384x13" },
+  { theme: "sable", scale: 1.3, tag: "384x13" },
+] as const) {
+  test(`paires maquette ${v.theme} ${v.tag} : Mentions, Ajouter, Ma story, visionneuse avec crÃ©dit`, async ({
+    browser,
+  }) => {
+    test.skip(!APP, "Appli : lancer avec APP_URL");
+    await sql("delete from stories where shared_from_story_id is not null");
+    await sql("update story_tags set removed_at = null");
+    await sql("delete from story_views");
+    const { apiCall, login } = await import("./helpers");
+    const { dropStory, publishStory } = await import("./lotr7f2-setup");
+    const structure =
+      (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
+    const kenji = await login("kenji@orasso.local");
+    const id = await publishStory(kenji, {
+      audience: "public",
+      caption: "Concours d'Ã©lÃ©gance Ã  15 h, on se place",
+      tags: [{ kind: "structure", id: structure }],
+    });
+    const name = (s: string) => `${s}-${v.theme}-${v.tag}`;
+    try {
+      const sarah = await open(browser, "sarah@orasso.local", v.theme, 384, v.scale);
+      await sarah.page.goto("/moi");
+      await afterOpening(sarah.page);
+      await sarah.page.getByTestId("casquette-organizer").filter({ hasText: "Roues Libres" }).first().click();
+      await sarah.page.waitForURL(/\/direct/, { timeout: 60_000 });
+      await sarah.page.getByTestId("orga-direct-mentions").click();
+      await expect(sarah.page.getByTestId("mention-row").first()).toBeVisible({ timeout: 40_000 });
+      await shot(sarah.page, name("og_men"));
+      await sarah.page.getByTestId("mention-row").filter({ hasText: "Kenji_66" }).first().click();
+      await expect(sarah.page.getByTestId("mention-add")).toBeVisible({ timeout: 30_000 });
+      await shot(sarah.page, name("og_add"));
+      const cookie = await login("sarah@orasso.local");
+      expect((await apiCall(cookie, "POST", `/stories/${id}/share-to-mine`, { asStructureId: structure })).status).toBe(
+        201,
+      );
+      await sarah.page.goto("/story/ma-story");
+      await afterOpening(sarah.page);
+      await expect(sarah.page.getByTestId("mystory-row").first()).toBeVisible({ timeout: 40_000 });
+      await shot(sarah.page, name("og_mine"));
+      await sarah.ctx.close();
+
+      await sql("delete from story_views");
+      const damien = await open(browser, "damien@orasso.local", v.theme, 384, v.scale);
+      await damien.page.goto("/fil");
+      await afterOpening(damien.page);
+      await damien.page
+        .getByTestId(`stories-author-s:${structure}`)
+        .getByLabel(/Voir les stories de/)
+        .click();
+      await expect(damien.page.getByTestId("story-shared-by")).toBeVisible({ timeout: 40_000 });
+      await shot(damien.page, name("sk_encours_si_1"));
+      await damien.ctx.close();
+    } finally {
+      await dropStory(kenji, id);
+      await sql("delete from stories where shared_from_story_id is not null");
+    }
+  });
+}

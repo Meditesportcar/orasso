@@ -79,15 +79,22 @@ export function MentionStoryScreen() {
         story && option ? (
           <View style={styles.footer}>
             {copy ? (
-              <SmButton kind="s" icon="close" onPress={() => void remove()} disabled={busy} testID="mention-remove">
+              <SmButton
+                kind="s"
+                icon="close"
+                onPress={() => void remove()}
+                disabled={busy}
+                wide
+                testID="mention-remove"
+              >
                 {L.remove}
               </SmButton>
             ) : (
               <>
-                <SmButton kind="p" icon="add" onPress={() => void add()} disabled={busy} testID="mention-add">
+                <SmButton kind="p" icon="add" onPress={() => void add()} disabled={busy} wide testID="mention-add">
                   {L.add}
                 </SmButton>
-                <SmButton kind="g" icon="close" onPress={close} disabled={busy} testID="mention-ignore">
+                <SmButton kind="g" icon="close" onPress={close} disabled={busy} wide testID="mention-ignore">
                   {L.ignore}
                 </SmButton>
               </>
