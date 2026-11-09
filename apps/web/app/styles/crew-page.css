@@ -494,3 +494,144 @@ fieldset.crw-seg {
 .crw-id__text .s-title.s-title--fit {
   font-size: min(var(--type-poster-l-size), calc(100cqi / var(--em, 10)));
 }
+
+/* Lot R7b2 : l'onglet Crew (maquette R7.11). Le sélecteur de crew : « Roussillon Drift ▾ » (un `<details>`, sans JavaScript). */
+.crw-sel {
+  position: relative;
+}
+.crw-sel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  list-style: none;
+  cursor: pointer;
+}
+.crw-sel__head::-webkit-details-marker {
+  display: none;
+}
+div.crw-sel__head {
+  cursor: default;
+}
+.crw-sel__name {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  text-transform: uppercase;
+  font-size: 18px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.crw-sel__menu[open] > .crw-sel__head svg:last-child {
+  transform: rotate(180deg);
+}
+.crw-sel__list {
+  position: absolute;
+  z-index: 5;
+  inset-inline: 0;
+  top: calc(100% + 6px);
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.crw-sel__list a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.crw-sel__list a[aria-current="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Le rond du crew : son logo, sinon ses initiales sur la moutarde. */
+.crw-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 14px;
+}
+.crw-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* La fiche d'un membre : sa ligne s'ouvre sur ses voitures. */
+.crw-mfiche {
+  list-style: none;
+}
+.crw-mfiche > details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.crw-mfiche > details > summary::-webkit-details-marker {
+  display: none;
+}
+.crw-mfiche > details[open] > summary svg:last-child {
+  transform: rotate(180deg);
+}
+.crw-mfiche__body {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+/* Spots : l'état vide (le contenu vient du lot R7i). */
+.crw-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink-muted);
+  text-align: center;
+}
+.crw-empty .s-h2 {
+  color: var(--ink);
+}
+/* Sans crew : l'accueil de l'onglet. */
+.crw-none__intro {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  text-align: center;
+}
+.crw-none__icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--line);
+  color: var(--ink-muted);
+}
+.crw-none__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
