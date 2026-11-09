@@ -1160,7 +1160,9 @@ describe("tour 3 de R7d2 : GPS par jour, signal et notification", () => {
   it("notification : « tu peux voter » seulement si le droit existe", async () => {
     await here(visitor);
     await notificationsService.flush();
-    const row = await db.query.notifications.findFirst({ where: eq(notifications.userId, visitor.id) });
+    const notes = await db.query.notifications.findMany({ where: eq(notifications.userId, visitor.id) });
+    const row = notes.find((n) => n.type === "presence_validated");
+    expect(row).toBeTruthy();
     // Un seul véhicule pointé ou aucun : le vote n'est pas ouvert, la phrase ne le promet pas.
     expect(row?.body).not.toContain("voter");
     expect(row?.body).toContain("ton tampon est posé.");
