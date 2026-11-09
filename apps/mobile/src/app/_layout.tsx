@@ -65,6 +65,8 @@ function Shell() {
   const { persona, backToBase, choose, entries, goTab } = usePersona();
   const router = useRouter();
   const segments = useSegments();
+  // Lot R7b1 : la redirection « mauvais groupe » garde la recherche de l'adresse (`/profil?onglet=sorties`).
+  const search = useGlobalSearchParams<Record<string, string | string[]>>();
   const navigation = useRootNavigationState();
   const [opening, setOpening] = useState(true);
 
@@ -114,8 +116,12 @@ function Shell() {
   useEffect(() => {
     if (status !== "in" || !navigation?.key) return;
     const target = misplacedTarget(persona, segments as string[]);
-    if (target) router.replace(target as never);
-  }, [status, persona, segments, router, navigation?.key]);
+    if (!target) return;
+    const query = new URLSearchParams(
+      Object.entries(search).filter((e): e is [string, string] => typeof e[1] === "string"),
+    ).toString();
+    router.replace((query && !target.includes("?") ? `${target}?${query}` : target) as never);
+  }, [status, persona, segments, search, router, navigation?.key]);
 
   // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
   const suspendedShown = useRef(false);

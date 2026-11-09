@@ -56,9 +56,12 @@ export function departmentCaption(code: string | undefined): string | null {
 export function NetworkCounters({
   counts,
   onOpen,
+  plain = false,
 }: {
   counts: Pick<NetworkCounts, "followers" | "following" | "outings"> | null;
   onOpen: (target: CounterTarget) => void;
+  /** Lot R7b1 : posés directement sur la page (sans la carte du profil), les compteurs ont leur propre fond de surface. */
+  plain?: boolean;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -71,7 +74,7 @@ export function NetworkCounters({
   return (
     <WordSafeGroup>
       <View
-        style={[styles.counts, { backgroundColor: c.ground }]}
+        style={[styles.counts, { backgroundColor: plain ? c.surface : c.ground }]}
         accessibilityRole="summary"
         accessibilityLabel={N.countsGroup}
         testID="profil-counters"

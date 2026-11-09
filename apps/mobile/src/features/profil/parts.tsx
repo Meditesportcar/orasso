@@ -391,7 +391,8 @@ export function SeasonBlock({
   data: MyPoints | null;
   /** « 9 tampons, dont 1 rare » ; `null` tant que le passeport n'est pas lu. */
   stamps: string | null;
-  onPassport: () => void;
+  /** Absent (le passeport est dessous, dans l'onglet Sorties du Profil) : le lien n'est pas montré. */
+  onPassport?: () => void;
   onHistory: () => void;
 }) {
   const { t } = useTheme();
@@ -431,18 +432,20 @@ export function SeasonBlock({
         <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: c.accent }]} />
       </View>
       <View style={styles.seasonFoot}>
-        <Pressable
-          accessibilityRole="link"
-          onPress={onPassport}
-          testID="profil-passport"
-          hitSlop={6}
-          style={styles.footLink}
-        >
-          <Text variant="caption" color={c.ink} style={styles.footText}>
-            Mon passeport
-          </Text>
-          <Icon name="next" size={14} color={c.ink} />
-        </Pressable>
+        {onPassport ? (
+          <Pressable
+            accessibilityRole="link"
+            onPress={onPassport}
+            testID="profil-passport"
+            hitSlop={6}
+            style={styles.footLink}
+          >
+            <Text variant="caption" color={c.ink} style={styles.footText}>
+              Mon passeport
+            </Text>
+            <Icon name="next" size={14} color={c.ink} />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="link"
           onPress={onHistory}

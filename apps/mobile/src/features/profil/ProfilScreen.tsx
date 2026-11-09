@@ -7,37 +7,48 @@
 // (profil public, export des données, suppression), Tes préférences (lot M6 : coin, distance, types, centres
 // d'intérêt), Apparence (thème, animations), Mon profil public, crews, Aide, Se déconnecter.
 // Plus d'accès flottant ici (retour 31).
+// Lot R7b1 (D38, maquette R7.12) : le Profil porte le Garage. En-tête : photo dans son anneau (`AvatarRing`, sans story pour
+// l'instant), pseudo, grade, département, QR de compte et roue dentée ; les trois nombres ; la ligne « Partenaires »
+// (réservée au lot R7m1) ; « Profil public » ; puis deux onglets internes, Garage (par défaut, partout) et Sorties (ma saison,
+// le passeport). Les casquettes et les accès « Devenir… » restent en bas de l'écran.
 // Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, sorties),
 // les deux premiers ouvrent leur liste (`/reseau`), les sorties l'onglet Sorties, puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
 // réglages.
-import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { AvatarRing, Button, Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   capLabels,
   fitWideWordSize,
   gradeLabels,
-  navLabels,
+  type ProfileTab,
+  profileTabsLabels as PT,
   passportScreenTexts,
   profilePhotoLabels,
+  profileTabFromParam,
   settingsHubLabels,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
+import { GarageScreen } from "@/features/garage/GarageScreen";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TagWin } from "@/features/passionne/kit";
+import { PassportPanel } from "@/features/passport/PassportScreen";
 import { api } from "@/lib/api";
+import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
-import { isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
+import { isBaseKind, personaKindLabels } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
-import { departmentCaption, NetworkCounters, ProfileLinks } from "./network";
+import { departmentCaption, NetworkCounters } from "./network";
+import { PartnersLine } from "./PartnersLine";
 import { PhotoSheet } from "./PhotoSheet";
-import { CapRows, CreateSheet, HeadAvatar, HubRow, LinkRow, RowIcon, SeasonBlock } from "./parts";
+import { ProfileTabs } from "./ProfileTabs";
+import { CapRows, CreateSheet, HeadAvatar, LinkRow, SeasonBlock } from "./parts";
 
 const { space1, space3 } = tokens.spacing;
 
@@ -48,38 +59,95 @@ export function ProfilScreen() {
   const { persona, active, entries } = usePersona();
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | "photo" | null>(null);
   const [headW, setHeadW] = useState(0);
+  // Lot R7b1 : l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut, partout) ; un toucher le change.
+  const { onglet } = useLocalSearchParams<{ onglet?: string }>();
+  const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
+  useEffect(() => setTab(profileTabFromParam(onglet)), [onglet]);
+  // Change à chaque « tirer pour actualiser » : le garage et le passeport se relisent aussi.
+  const [round, setRound] = useState(0);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
 
   const points = useApi(() => api.points(), [], { cacheKey: "points" });
-  const crews = useApi(() => api.myCrews(), [], { cacheKey: "my-crews", enabled: base });
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   // Lot 50 : le passeport compte ses tampons (la saison en cours).
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
-  // Relecture C2b : sans véhicule actif (casquette visiteur, pas d'onglet Garage), les archives restent joignables ici.
-  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
   // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, sorties ; lot R6b).
   const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
-  const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
 
   const profile = me?.profile;
   const department = profile?.departments[0];
-  const crew = crews.data?.[0];
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
-  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW, 22, 14);
+  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW, base ? 26 : 22, 14);
+
+  // Les deux boutons de l'en-tête : QR de compte (Ma fiche pour le pro) et roue dentée (Réglages), l'un sur l'autre.
+  const headButtons = (
+    <View style={styles.headBtns}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={qrLabel}
+        onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
+        testID="profil-account-qr"
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.qrb,
+          base
+            ? { backgroundColor: t.color.surfaceRaised }
+            : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
+      </Pressable>
+      {/* Lot R5b (remarque 6 de Damien) : la roue dentée, à côté du QR, ouvre l'écran « Réglages ». */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={settingsHubLabels.open}
+        onPress={() => router.push("/reglages")}
+        testID="profil-gear"
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.qrb,
+          base
+            ? { backgroundColor: t.color.surfaceRaised }
+            : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Icon name="gear" size={22} color={t.color.ink} />
+      </Pressable>
+    </View>
+  );
+
+  const headText = (
+    <View style={styles.headText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
+      <Text
+        variant="posterL"
+        color={t.color.ink}
+        // Lot R4c : un pseudo long rapetisse au lieu de se couper.
+        style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
+        testID="profil-pseudo"
+      >
+        {profile?.pseudo ?? ""}
+      </Text>
+      <View style={styles.headTags}>
+        {base && profile ? (
+          <TagWin>{gradeLabels[profile.grade]}</TagWin>
+        ) : (
+          <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
+        )}
+        <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
+          {base ? (departmentCaption(department) ?? "Passionné") : active.label}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <TabScreen
       onRefresh={async () => {
-        await Promise.all([
-          refreshMe(),
-          points.reload(),
-          crews.reload(),
-          staff.reload(),
-          passport.reload(),
-          vehicles.reload(),
-          network.reload(),
-        ]);
+        setRound((r) => r + 1);
+        await Promise.all([refreshMe(), points.reload(), staff.reload(), passport.reload(), network.reload()]);
       }}
       overlays={
         <>
@@ -93,15 +161,12 @@ export function ProfilScreen() {
       <EmailBanner />
       <PendingCard where="profil" />
 
-      {/* En-tête compact `.mh` : avatar, pseudo, grade et département ; le QR de compte (Ma fiche pour le pro) en icône.
-          Lot R4c : pour le passionné, une carte `.r4me` avec les compteurs et les deux accès. */}
-      <View
-        style={base ? [styles.me, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }] : undefined}
-        testID="profil-card"
-      >
-        <View style={styles.head} testID="profil-head">
-          {base ? (
-            // Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit.
+      {base ? (
+        <>
+          {/* En-tête de la maquette R7.12 : la photo dans son anneau, le pseudo, le grade et le département, le QR de compte et
+              la roue dentée. Sans story, l'anneau est vide (`ring = null`) ; l'écran des stories (lot R7f2) l'ouvrira. */}
+          <View style={styles.head} testID="profil-head">
+            {/* Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit. */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={profilePhotoLabels.change}
@@ -110,135 +175,78 @@ export function ProfilScreen() {
               testID="profil-avatar"
               style={({ pressed }) => [styles.avatarBtn, pressed && styles.pressed]}
             >
-              <HeadAvatar url={profile?.avatarUrl} name={profile?.pseudo ?? "?"} />
-              <View style={[styles.cam, { backgroundColor: t.color.accent, borderColor: t.color.surface }]}>
+              <AvatarRing
+                ring={null}
+                size="xl"
+                source={mediaSource(profile?.avatarUrl)}
+                name={profile?.pseudo ?? "?"}
+              />
+              <View style={[styles.cam, { backgroundColor: t.color.accent, borderColor: t.color.ground }]}>
                 <Icon name="camera" size={13} color={t.color.accentInk} />
               </View>
             </Pressable>
-          ) : (
-            <HeadAvatar url={active.logoUrl} name={active.label ?? "?"} />
-          )}
-          <View style={styles.headText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
-            <Text
-              variant="posterL"
-              color={t.color.ink}
-              // Lot R4c : l'en-tête est une carte, plus étroite ; un pseudo long rapetisse au lieu de se couper.
-              style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
-            >
-              {profile?.pseudo ?? ""}
+            {headText}
+            {headButtons}
+          </View>
+          {profile?.bio ? (
+            <Text variant="body" color={t.color.inkMuted} numberOfLines={2} style={styles.bio} testID="profil-bio">
+              {profile.bio}
             </Text>
-            <View style={styles.headTags}>
-              {base && profile ? (
-                <TagWin>{gradeLabels[profile.grade]}</TagWin>
-              ) : (
-                <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
-              )}
-              <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
-                {base ? (departmentCaption(department) ?? "Passionné") : active.label}
-              </Text>
+          ) : null}
+          <NetworkCounters
+            counts={network.data}
+            plain
+            onOpen={(target) =>
+              target === "sorties" ? setTab("sorties") : router.push({ pathname: "/reseau", params: { liste: target } })
+            }
+          />
+          <PartnersLine pseudo={profile?.pseudo ?? ""} mine />
+          <Button
+            variant="secondary"
+            icon="eye"
+            fullWidth
+            onPress={() => router.push("/profil-public")}
+            accessibilityLabel={`${PT.publicProfile}, ${PT.publicProfileHint.toLowerCase()}`}
+            testID="profil-public"
+          >
+            {PT.publicProfile}
+          </Button>
+
+          <ProfileTabs value={tab} onChange={setTab} />
+          {tab === "garage" ? (
+            <GarageScreen reloadKey={round} />
+          ) : (
+            <View style={styles.panel} testID="profil-sorties-panel">
+              {/* « Ma saison » : points et tampons en un seul bloc (maquette 7.2), puis le passeport lui-même. */}
+              {profile ? (
+                <SeasonBlock
+                  points={profile.pointsSeason}
+                  grade={gradeLabels[profile.grade]}
+                  data={points.data ?? null}
+                  stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
+                  onHistory={() => router.push("/reglages/points")}
+                />
+              ) : null}
+              <PassportPanel reloadKey={round} />
+              <Button
+                variant="secondary"
+                icon="ticket"
+                fullWidth
+                onPress={() => router.push("/sorties")}
+                testID="profil-places"
+              >
+                {PT.seePlaces}
+              </Button>
             </View>
-          </View>
-          {/* Lot R5b : le QR et la roue dentée l'un sur l'autre : le pseudo garde toute sa largeur (il ne se coupe pas). */}
-          <View style={styles.headBtns}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={qrLabel}
-              onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
-              testID="profil-account-qr"
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.qrb,
-                base
-                  ? { backgroundColor: t.color.surfaceRaised }
-                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
-            </Pressable>
-            {/* Lot R5b (remarque 6 de Damien) : la roue dentée, à côté du QR, ouvre l'écran « Réglages ». */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={settingsHubLabels.open}
-              onPress={() => router.push("/reglages")}
-              testID="profil-gear"
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.qrb,
-                base
-                  ? { backgroundColor: t.color.surfaceRaised }
-                  : { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Icon name="gear" size={22} color={t.color.ink} />
-            </Pressable>
-          </View>
+          )}
+        </>
+      ) : (
+        <View style={styles.head} testID="profil-head">
+          <HeadAvatar url={active.logoUrl} name={active.label ?? "?"} />
+          {headText}
+          {headButtons}
         </View>
-        {base && profile?.bio ? (
-          <Text variant="body" color={t.color.inkMuted} numberOfLines={2} style={styles.bio} testID="profil-bio">
-            {profile.bio}
-          </Text>
-        ) : null}
-        {base ? (
-          <>
-            <NetworkCounters
-              counts={network.data}
-              onOpen={(target) =>
-                target === "sorties"
-                  ? router.push("/sorties")
-                  : router.push({ pathname: "/reseau", params: { liste: target } })
-              }
-            />
-            <ProfileLinks
-              crew={
-                crew
-                  ? {
-                      name: crew.name,
-                      caption: `Ton crew · ${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}`,
-                    }
-                  : null
-              }
-              onPublic={() => router.push("/profil-public")}
-              // Lot R3b (retour 16) : sans crew, d'abord rejoindre (« Créer un crew » vient en second).
-              onCrew={() => router.push(crew ? `/crew/${crew.slug}` : "/rejoindre-crew")}
-            />
-          </>
-        ) : null}
-      </View>
-
-      {/* « Ma saison » : points et passeport en un seul bloc (maquette 7.2). */}
-      {base && profile ? (
-        <SeasonBlock
-          points={profile.pointsSeason}
-          grade={gradeLabels[profile.grade]}
-          data={points.data ?? null}
-          stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
-          onPassport={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
-          onHistory={() => router.push("/reglages/points")}
-        />
-      ) : null}
-
-      {/* Lot R7a1 : le Garage n'est plus un onglet ; une ligne l'ouvre, en attendant l'onglet interne du lot R7b1. */}
-      {base && persona.kind === "fan" ? (
-        <HubRow
-          lead={<RowIcon name="vehicle" />}
-          title={navLabels.garageRow.title}
-          caption={navLabels.garageRow.caption}
-          onPress={() => router.push("/garage")}
-          testID="profil-garage"
-        />
-      ) : null}
-
-      {base && archived > 0 ? (
-        <HubRow
-          lead={<RowIcon name="vehicle" />}
-          title="Mes véhicules archivés"
-          caption={`${archived} · vendus, souvenirs, accidentés`}
-          onPress={() => router.push("/vehicules-archives")}
-          testID="profil-archived"
-        />
-      ) : null}
+      )}
 
       <SecHead title={capLabels.title} />
       <Text variant="body" color={t.color.inkMuted} style={styles.capsay} testID="casquettes-intro">
@@ -258,13 +266,12 @@ export function ProfilScreen() {
         />
       </View>
 
-      {/* Lot R5b (remarque 6 de Damien) : les réglages ont quitté l'onglet ; la roue dentée de la carte les ouvre. */}
+      {/* Lot R5b (remarque 6 de Damien) : les réglages ont quitté l'onglet ; la roue dentée de l'en-tête les ouvre. */}
     </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  me: { gap: space3, padding: space3 + 2, borderRadius: 20 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   headText: { flex: 1, minWidth: 0, gap: space1 + 1 },
   pseudo: { fontSize: 22, lineHeight: 23 },
@@ -273,12 +280,13 @@ const styles = StyleSheet.create({
   qrb: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   headBtns: { gap: space1 + 4 },
   pressed: { opacity: 0.8 },
+  panel: { gap: space3 },
   // Lot R5b : l'avatar touchable et son petit appareil photo (`.r5cam` de la maquette : rond moutarde en bas à droite).
   avatarBtn: { position: "relative" },
   cam: {
     position: "absolute",
-    right: -6,
-    bottom: -6,
+    right: 0,
+    bottom: 0,
     width: 26,
     height: 26,
     borderRadius: 13,

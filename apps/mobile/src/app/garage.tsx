@@ -1,7 +1,7 @@
-// Garage de l'exposant (lot 51 : garage v2 ; lot R7a1, D38 : n'est plus un onglet). La page garde son adresse `/garage` ;
-// le Profil l'ouvre, avec l'en-tête de fiche et son retour (`TabScreen` hors d'un groupe d'onglets).
-import { GarageScreen } from "@/features/garage/GarageScreen";
+// Garage (lot 51 ; lot R7a1, D38 : n'est plus un onglet ; lot R7b1 : il vit dans le Profil, onglet interne « Garage »). La
+// vieille adresse `/garage` (bandeau « où sont passées les choses », liens et retours existants) mène au Profil sur cet onglet.
+import { Redirect } from "expo-router";
 
 export default function Garage() {
-  return <GarageScreen />;
+  return <Redirect href="/profil?onglet=garage" />;
 }

@@ -11,7 +11,16 @@ import { Notice } from "@/ui/Notice";
 
 import { ContactRequestSheet } from "./ContactRequestSheet";
 
-export function MessageButton({ userId, pseudo }: { userId: string; pseudo: string }) {
+export function MessageButton({
+  userId,
+  pseudo,
+  fullWidth = false,
+}: {
+  userId: string;
+  pseudo: string;
+  /** Lot R7b1 : le bouton remplit sa cellule (profil d'un autre : « Suivre » et « Message » côte à côte). */
+  fullWidth?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [contact, setContact] = useState(false);
@@ -22,6 +31,7 @@ export function MessageButton({ userId, pseudo }: { userId: string; pseudo: stri
         variant="secondary"
         icon="chat"
         loading={busy}
+        fullWidth={fullWidth}
         testID="message-open"
         onPress={async () => {
           setBusy(true);
