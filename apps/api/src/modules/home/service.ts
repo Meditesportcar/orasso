@@ -60,6 +60,9 @@ import { myCrewWidget } from "./widgets/my_crew";
 import { myOutingsWidget } from "./widgets/my_outings";
 import { spotMeetupWidget } from "./widgets/spot_meetup";
 
+/** Un bloc réglable qui échoue ne fait pas tomber l'Accueil : il est absent (lot R7a2). */
+const safe = <T>(p: Promise<T | null>): Promise<T | null> => p.catch(() => null);
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Candidature à mettre en tête : la première retenue, sinon la première en cours (comme l'appli). */
@@ -164,9 +167,9 @@ export const homeService = {
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
       extras ? this.nudge(v) : Promise.resolve(null),
-      want("my_outings") ? upcomingPromise.then((u) => myOutingsWidget(v, u)) : Promise.resolve(null),
-      want("my_crew") ? myCrewWidget(v) : Promise.resolve(null),
-      want("friends_news") ? friendsNewsWidget(v) : Promise.resolve(null),
+      want("my_outings") ? safe(upcomingPromise.then((u) => myOutingsWidget(v, u))) : Promise.resolve(null),
+      want("my_crew") ? safe(myCrewWidget(v)) : Promise.resolve(null),
+      want("friends_news") ? safe(friendsNewsWidget(v)) : Promise.resolve(null),
       want("spot_meetup") ? spotMeetupWidget(v) : Promise.resolve(null),
       want("memories") ? memoriesWidget(v) : Promise.resolve(null),
     ]);
