@@ -1581,55 +1581,7 @@
   list-style: none;
   color: var(--ink);
 }
-.s-journal {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.s-journal__item {
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-.s-journal__item[data-read="false"] {
-  border-color: var(--ink);
-}
-.s-journal__link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  color: inherit;
-  text-decoration: none;
-}
-.s-journal__main {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-.s-journal__title {
-  overflow-wrap: anywhere;
-}
-.s-journal__body {
-  color: var(--ink);
-  opacity: 0.85;
-}
-.s-journal__dot {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--surface-sunken);
-  border: 1.5px solid var(--line);
-}
-
 /* Liens de liste : la couleur du lien du site ne s'applique pas aux cartes, aux personnes ni au Journal. */
-.s-main .s-journal__link,
 .s-main .s-person__name,
 .s-main .s-cardlink {
   color: inherit;

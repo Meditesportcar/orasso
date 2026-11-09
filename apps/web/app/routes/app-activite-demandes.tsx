@@ -22,15 +22,18 @@ import {
   staffRoleLabels,
   widestWordEm,
 } from "@orasso/shared";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
+import { InviteMenu } from "../components/EventInvite";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
+import { type InviteNoticeData, muteInviterAction } from "../lib/eventInvite.server";
 import { type FollowActionData, followAction, isFollowIntent } from "../lib/follow.server";
 import { formatDateTime } from "../lib/format";
+import "../styles/event-invite.css";
 import "../styles/partnerships.css";
 import type { Route } from "./+types/app-activite-demandes";
 
@@ -70,6 +73,8 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   if (isFollowIntent(intent)) return followAction(request, form);
+  // Lot R7-fix-invite : « Couper les invitations de … » depuis le « ⋯ » de la carte d'une invitation de passionné (lot R6c).
+  if (intent === "invite_mute") return muteInviterAction(request, form);
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
     return data({ formError: res.data.crewError }, { status: res.init?.status ?? 200 });
@@ -347,14 +352,32 @@ function StaffCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
-function EventInvitationCard({ r }: { r: RequestItem }) {
+/** Confirmation d'une coupure d'invitations ; se met en vue (la carte peut être loin du haut de la page). */
+function InviteNotice({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest" });
+  }, []);
+  return (
+    <p className="s-notice s-notice--ok" role="status" data-testid="invite-muted" ref={ref}>
+      {text}
+    </p>
+  );
+}
+
+function EventInvitationCard({ r, notice }: { r: RequestItem; notice: string | null }) {
   const { name, imageUrl } = fromOf(r);
   const event = obj(r.payload, "event");
   const slug = str(event, "slug");
   const peer = r.payload.source === "peer";
-  const inviters = list(r.payload, "inviters")
-    .map((x) => str(x, "pseudo"))
-    .filter((x): x is string => Boolean(x));
+  const inviterRows = list(r.payload, "inviters");
+  const inviters = inviterRows.map((x) => str(x, "pseudo")).filter((x): x is string => Boolean(x));
+  // Le « ⋯ » coupe chacun des inviteurs (tous, 20 au plus, pas seulement les trois du résumé) ; il faut leur identifiant.
+  const mutable = list(r.payload, "menuInviters").flatMap((x) => {
+    const userId = str(x, "userId");
+    const pseudo = str(x, "pseudo");
+    return userId && pseudo ? [{ userId, pseudo }] : [];
+  });
   const total = typeof r.payload.invitersCount === "number" ? r.payload.invitersCount : inviters.length;
   const who = inviters.length ? inviters : [name];
   const more = Math.max(0, total - who.length);
@@ -367,7 +390,10 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
   const startsAt = str(event, "startsAt");
   const city = str(event, "city");
   return (
-    <li className="s-person" data-testid={peer ? "request-event-invitation-peer" : "request-event-invitation"}>
+    <li
+      className={peer && mutable.length > 0 ? "s-person ri-req-card" : "s-person"}
+      data-testid={peer ? "request-event-invitation-peer" : "request-event-invitation"}
+    >
       {r.from.type === "person" ? (
         <PersonAvatar url={imageUrl} pseudo={name} size={44} />
       ) : (
@@ -394,6 +420,7 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
           </span>
         ))}
         {lockAt && <span className="o-t-caption s-muted">{invitationLabels.validUntil(formatDateTime(lockAt))}</span>}
+        {notice && <InviteNotice key={notice} text={notice} />}
       </div>
       <div className="s-row">
         {peer ? null : (
@@ -406,6 +433,7 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
             {peer ? eventInviteLabels.seeEvent : invitationLabels.openEvent}
           </Button>
         )}
+        {peer && <InviteMenu inviters={mutable} testId="request-invite-more" eventId={r.id} />}
       </div>
     </li>
   );
@@ -490,7 +518,7 @@ function PartnershipCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
-function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
+function Card({ r, busy, notice }: { r: RequestItem; busy: boolean; notice: string | null }) {
   switch (r.kind) {
     case "follow":
       return <FollowCard r={r} busy={busy} />;
@@ -501,7 +529,7 @@ function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
     case "staff":
       return <StaffCard r={r} busy={busy} />;
     case "event_invitation":
-      return <EventInvitationCard r={r} />;
+      return <EventInvitationCard r={r} notice={notice} />;
     case "plate_transfer":
       return <PlateTransferCard r={r} busy={busy} />;
     case "partnership":
@@ -517,7 +545,11 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
-  const message = { error: done?.formError ?? done?.followError ?? null, notice: done?.followNotice ?? null };
+  const invite = actionData as InviteNoticeData | undefined;
+  const message = {
+    error: done?.formError ?? done?.followError ?? null,
+    notice: done?.followNotice ?? null,
+  };
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.requests}</h1>
@@ -537,6 +569,11 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
         <p className="s-error" role="alert">
           {message.error}
         </p>
+      )}
+      {/* Tour 2 : la confirmation d'une coupure s'affiche dans la carte d'où elle part ; si la carte a disparu (dernier
+          inviteur coupé), elle reste ici, en tête de liste. */}
+      {invite?.inviteNotice && !items.some((r) => r.kind === "event_invitation" && r.id === invite.inviteFor) && (
+        <InviteNotice key={invite.inviteNotice} text={invite.inviteNotice} />
       )}
       {message.notice && (
         <p className="s-notice s-notice--ok" role="status" data-testid="request-notice">
@@ -564,6 +601,9 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
               key={`${r.kind}:${r.id}:${r.kind === "crew" ? String(r.payload.requesterId ?? "") : ""}`}
               r={r}
               busy={busy}
+              notice={
+                r.kind === "event_invitation" && invite?.inviteFor === r.id ? (invite.inviteNotice ?? null) : null
+              }
             />
           ))}
         </ul>
