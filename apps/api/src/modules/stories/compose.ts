@@ -1,7 +1,9 @@
 // Composition d'une story photo en 9:16 (lot R7f1, ARCHITECTURE-R7 § 2.5 et § 3). Un seul rendu, côté serveur, à
-// l'identique de l'aperçu de l'appli : fond = la photo en couverture 1080 × 1920, floutée (`blur(40)`) et assombrie de
-// 20 % ; premier plan = la photo cadrée par `frame` ; puis les plaques floutées sur le rendu final, avec les rectangles
-// de la photo d'origine transformés par le même cadrage (`mapRects`). WebP q80. L'original n'est jamais gardé.
+// l'identique de l'aperçu de l'appli. Tour 2 : les plaques sont floutées d'abord, sur la photo **source** (rectangles en
+// fractions de la photo telle qu'elle est stockée), puis le fond (la photo en couverture 1080 × 1920, floutée à
+// `blur(40)` et assombrie de 20 %) et le premier plan (la photo cadrée par `frame`) sont construits depuis cette photo
+// déjà masquée : un cadrage décalé ou zoomé ne peut plus laisser une plaque dans le fond. WebP q80. L'original n'est
+// jamais gardé.
 import {
   clampFrame,
   type Frame,
@@ -38,7 +40,11 @@ export async function composeStoryPhoto(
   if (srcW < 1 || srcH < 1) throw new Error("Image illisible");
   const frame = clampFrame(opts.frame ?? fitDefault(srcW, srcH));
 
-  const background = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
+  // Plaques d'abord, sur la photo entière : le fond et le premier plan en héritent, quel que soit le cadrage.
+  const plates = opts.rects ?? [];
+  const masked = plates.length ? (await blurPlateRegions(input, plates)).data : input;
+
+  const background = await sharp(masked, { limitInputPixels: MAX_INPUT_PIXELS })
     .resize(STORY_W, STORY_H, { fit: "cover" })
     .blur(STORY_BG_BLUR)
     .modulate({ brightness: STORY_BG_BRIGHTNESS })
@@ -57,7 +63,7 @@ export async function composeStoryPhoto(
   const y1 = Math.min(STORY_H, top + fh);
   const layers: OverlayOptions[] = [];
   if (x1 > x0 && y1 > y0) {
-    const foreground = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
+    const foreground = await sharp(masked, { limitInputPixels: MAX_INPUT_PIXELS })
       .resize(fw, fh, { fit: "fill" })
       .extract({ left: x0 - left, top: y0 - top, width: x1 - x0, height: y1 - y0 })
       .png()
@@ -66,9 +72,8 @@ export async function composeStoryPhoto(
   }
   const flat = await sharp(background).composite(layers).png().toBuffer();
 
-  const blurredRects: PlateRect[] = opts.rects?.length
-    ? mapRects(opts.rects, frame, { width: srcW, height: srcH })
-    : [];
+  // Ceinture et bretelles : les rectangles, transformés par le cadrage, sont aussi floutés sur le rendu final.
+  const blurredRects: PlateRect[] = plates.length ? mapRects(plates, frame, { width: srcW, height: srcH }) : [];
   if (blurredRects.length) {
     const out = await blurPlateRegions(flat, blurredRects);
     return { data: out.data, info: out.info, blurredRects };

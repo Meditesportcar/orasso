@@ -355,7 +355,13 @@ export const messagingService = {
    * `POST /conversations/:id/messages` : envoi idempotent par `clientId` (même identifiant = même message, `200`).
    * 60 messages par minute et par personne, comptés en base ; une image n'est rattachée qu'une fois, par son auteur.
    */
-  async send(v: Viewer, id: string, input: MessageSend): Promise<{ message: MessageView; created: boolean }> {
+  async send(
+    v: Viewer,
+    id: string,
+    input: MessageSend,
+    /** Lot R7f1 : réponse à une story, enregistrée avec le message dans la même transaction. */
+    context: { storyId?: string } = {},
+  ): Promise<{ message: MessageView; created: boolean }> {
     const actor = actorOf(v);
     const access = await requireAccess(actor, id);
     const replay = async (row: MessageRow) => {
@@ -431,6 +437,7 @@ export const messagingService = {
           clientId: input.clientId,
           asStructure: reader.side === "structure",
           aboutEventId: input.aboutEventId ?? null,
+          storyId: context.storyId ?? null,
           createdAt: at,
         })
         .returning();

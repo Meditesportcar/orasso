@@ -79,6 +79,7 @@ CREATE TABLE "story_views" (
 	CONSTRAINT "story_views_pkey" PRIMARY KEY("story_id","viewer_id")
 );
 --> statement-breakpoint
+ALTER TABLE "contact_requests" ADD COLUMN "story_id" uuid;--> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "story_id" uuid;--> statement-breakpoint
 ALTER TABLE "stories" ADD CONSTRAINT "stories_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "stories" ADD CONSTRAINT "stories_structure_id_structures_id_fk" FOREIGN KEY ("structure_id") REFERENCES "public"."structures"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -105,4 +106,5 @@ CREATE INDEX "stories_shared_from_idx" ON "stories" USING btree ("shared_from_st
 CREATE INDEX "stories_sweep_idx" ON "stories" USING btree ("deleted_at") WHERE "stories"."deleted_at" is not null;--> statement-breakpoint
 CREATE INDEX "story_tags_target_idx" ON "story_tags" USING btree ("target_kind","target_id");--> statement-breakpoint
 CREATE INDEX "story_views_viewer_idx" ON "story_views" USING btree ("viewer_id");--> statement-breakpoint
+ALTER TABLE "contact_requests" ADD CONSTRAINT "contact_requests_story_id_stories_id_fk" FOREIGN KEY ("story_id") REFERENCES "public"."stories"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_story_id_stories_id_fk" FOREIGN KEY ("story_id") REFERENCES "public"."stories"("id") ON DELETE set null ON UPDATE no action;

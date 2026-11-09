@@ -18,8 +18,9 @@ import { storiesService } from "./service";
 
 const fileHeaders = (type: string) => ({
   "content-type": type,
-  // Privé (jamais un cache partagé) ; 5 minutes au plus sur l'appareil.
-  "cache-control": "private, max-age=300",
+  // Tour 2 : jamais gardé par le navigateur (changement de compte sur l'appareil, suppression, expiration, sortie du
+  // crew : chaque lecture repasse par le contrôle d'audience).
+  "cache-control": "private, no-store",
 });
 
 const FILE_NAME = /^[0-9a-f]{16}\.(webp|mp4)$/;
@@ -71,8 +72,8 @@ export const storiesRoutes = new Hono<AppEnv>()
   )
   .post("/stories/:id/reply", async (c) => {
     const v = await requireUser(c);
-    const { text } = await body(c, storyReplySchema);
-    return c.json(await storiesService.reply(v, uuidParam(c, "id"), text), 201);
+    const input = await body(c, storyReplySchema);
+    return c.json(await storiesService.reply(v, uuidParam(c, "id"), input), 201);
   })
   .post("/stories/:id/report", async (c) => {
     const v = await requireUser(c);

@@ -1,5 +1,5 @@
 // Lecture des stories d'un auteur et service des fichiers (lot R7f1, ARCHITECTURE-R7 § 2.5). Le fichier n'est servi
-// qu'après `canSeeStory`, à chaque lecture ; `Cache-Control: private` ; 404 après expiration ou suppression.
+// qu'après `canSeeStory`, à chaque lecture ; `Cache-Control: private, no-store` ; 404 après expiration ou suppression.
 import { parseStoryAuthorKey, type StoriesByAuthor, type StoryView, storyDenial } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 

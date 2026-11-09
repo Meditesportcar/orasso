@@ -111,11 +111,18 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
   const likedIds = new Set(liked.map((r) => r.id));
 
   // Voitures : la photo masquée (plaque floutée ou « aucune plaque visible »), sinon silhouette.
-  const vehicleIds = [...new Set(rows.flatMap((r) => (r.story.vehicleId ? [r.story.vehicleId] : [])))];
+  const linkedOf = (type: "event" | "vehicle") =>
+    rows.flatMap((r) => (r.story.linkedType === type && r.story.linkedId ? [r.story.linkedId] : []));
+  const isUuid = (x: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+  const vehicleIds = [
+    ...new Set([...rows.flatMap((r) => (r.story.vehicleId ? [r.story.vehicleId] : [])), ...linkedOf("vehicle")]),
+  ].filter(isUuid);
   const vehicleRows = await vehiclesRepo.findFullByIds(vehicleIds);
   const vehicleBy = new Map(vehicleRows.filter((x) => x.status === "active").map((x) => [x.id, x]));
 
-  const eventIds = [...new Set(rows.flatMap((r) => (r.story.eventId ? [r.story.eventId] : [])))];
+  const eventIds = [
+    ...new Set([...rows.flatMap((r) => (r.story.eventId ? [r.story.eventId] : [])), ...linkedOf("event")]),
+  ].filter(isUuid);
   const eventRows = eventIds.length
     ? await db
         .select({
@@ -154,6 +161,16 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     const mine = s.authorId === v.user.id;
     const vehicle = s.vehicleId ? vehicleBy.get(s.vehicleId) : undefined;
     const photo = vehicle ? maskedPhoto(vehicle.photos, vehicle.unregistered) : null;
+    // Contenu lié : refiltré pour chaque lecteur avec les droits actuels (événement devenu privé ou brouillon, voiture
+    // retirée ou changée de main) ; ce qui n'est pas visible n'est pas renvoyé, pas même son identifiant.
+    const linkedVisible =
+      s.linkedType && s.linkedId
+        ? s.linkedType === "event"
+          ? eventBy.has(s.linkedId)
+          : s.linkedType === "vehicle"
+            ? vehicleBy.get(s.linkedId)?.ownerId === s.authorId
+            : false
+        : false;
     return {
       id: s.id,
       mediaKind: s.mediaKind,
@@ -168,7 +185,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         : null,
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
-      linked: s.linkedType && s.linkedId ? { type: s.linkedType, id: s.linkedId } : null,
+      linked: linkedVisible && s.linkedType && s.linkedId ? { type: s.linkedType, id: s.linkedId } : null,
       commercialPartner: null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,

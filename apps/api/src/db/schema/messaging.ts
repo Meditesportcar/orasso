@@ -141,6 +141,8 @@ export const contactRequests = pgTable(
     status: contactStatusEnum("status").notNull().default("pending"),
     respondedAt: tstz("responded_at"),
     conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    /** Lot R7f1 (tour 2) : demande née d'une réponse à une story ; le contexte suit le premier message à l'acceptation. */
+    storyId: uuid("story_id").references(() => stories.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [

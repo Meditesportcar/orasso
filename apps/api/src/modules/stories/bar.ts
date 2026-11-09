@@ -3,6 +3,7 @@
 // d'abord. Un compte privé que je ne suis pas (ou dont la demande est en attente) n'apparaît pas, et rien ne dit qu'il a
 // une story. `live` (organisateur « En cours ») est faux partout : lot R7h.
 import {
+  STORY_LIVE_MAX,
   type StoriesSummary,
   type StoryBar,
   type StoryBarEntry,
@@ -32,7 +33,8 @@ import {
   viewerOf,
 } from "./common";
 
-const CANDIDATES_MAX = 1000;
+/** Stories gardées par auteur (après le filtre de visibilité) ; le plafond de publication est le même. */
+const PER_AUTHOR_MAX = STORY_LIVE_MAX;
 
 const ringStories = (rows: readonly StoryRow[]) =>
   rows.map((r) => ({ audience: r.story.audience, expiresAt: r.story.expiresAt, deletedAt: r.story.deletedAt }));
@@ -79,10 +81,12 @@ export const storiesBar = {
     if (sets.structures.size)
       ors.push(and(eq(stories.persona, "organizer"), inArray(stories.structureId, [...sets.structures])));
     if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), inArray(stories.proId, [...sets.pros])));
+    // Tour 2 : on filtre (auteurs masqués, audiences) AVANT de limiter, puis on limite par auteur : des stories masquées
+    // ou refusées ne chassent plus des stories visibles hors de la barre.
     const candidates = ors.length
-      ? (await selectStories(and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors))))
-          .sort((a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime())
-          .slice(0, CANDIDATES_MAX)
+      ? (await selectStories(and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors)))).sort(
+          (a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime(),
+        )
       : [];
 
     const viewer = viewerOf(v);
@@ -99,13 +103,15 @@ export const storiesBar = {
       if (key) byAuthor.set(key.key, [...(byAuthor.get(key.key) ?? []), r]);
     }
     const entries: { entry: Omit<StoryBarEntry, "latestAt">; hasUnseen: boolean; latestAt: Date }[] = [];
-    for (const [key, rows] of byAuthor) {
+    for (const [key, all] of byAuthor) {
+      // `hasUnseen` se lit sur toutes les stories visibles de l'auteur ; l'anneau et l'affichage sur les plus récentes.
+      const hasUnseen = all.some((r) => !seen.has(r.story.id));
+      const rows = all.slice(0, PER_AUTHOR_MAX);
       const ring = storyRing({ live: false }, ringStories(rows), at);
       if (!ring) continue;
       const latest = newest(rows);
       const display = authorDisplay(latest, storage.url);
       const crewRows = rows.filter((r) => r.story.audience === "crew");
-      const hasUnseen = rows.some((r) => !seen.has(r.story.id));
       entries.push({
         entry: {
           key,
@@ -145,7 +151,8 @@ export const storiesBar = {
         : kind === "structure"
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, id))
           : and(eq(stories.persona, "pro"), eq(stories.proId, id));
-    const rows = await selectStories(and(liveStory(at), where));
+    // Invariant : une story de crew ne se montre « ni sur le profil » ; l'anneau de crew vit dans la barre du Fil.
+    const rows = await selectStories(and(liveStory(at), where, sql`${stories.audience} <> 'crew'`));
     if (!rows.length) return { count: 0, hasUnseen: false, ring: null };
     const sets = await setsFor(v.user.id, rows);
     const viewer = viewerOf(v);

@@ -9,12 +9,12 @@ import { db } from "../../db/client";
 import { profiles, stories } from "../../db/schema";
 import { notFound } from "../../lib/errors";
 import { storage } from "../../lib/storage";
-import { registerReportMedia } from "../moderation/media";
+import { registerReportMedia, reportMediaUrl } from "../moderation/media";
 import { goneView, type TargetRules, UUID_RE } from "../moderation/targets/types";
 import { fileNameOf } from "./serialize";
 import { requireVisibleStory, softDeleteWithCopies } from "./service";
 
-registerReportMedia("story", async (targetId, name) => {
+registerReportMedia("story", async ({ targetId }, name) => {
   if (!UUID_RE.test(targetId)) return null;
   const [s] = await db.select().from(stories).where(eq(stories.id, targetId));
   if (!s || s.filesRemovedAt) return null;
@@ -39,9 +39,7 @@ export const storyTarget: TargetRules = {
     return {
       title: storyLabels.reportTitle(p?.pseudo ?? "Compte supprimé"),
       text: s.caption,
-      imageUrl: s.filesRemovedAt
-        ? null
-        : `/api/admin/reports/${report.id}/media/${fileNameOf(s.posterKey ?? s.storageKey)}`,
+      imageUrl: s.filesRemovedAt ? null : reportMediaUrl(report.id, fileNameOf(s.posterKey ?? s.storageKey)),
       link: null,
       gone: Boolean(s.filesRemovedAt),
       removed: Boolean(s.deletedAt),

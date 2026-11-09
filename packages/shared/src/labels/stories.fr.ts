@@ -1,5 +1,5 @@
 // Stories (lot R7f1) : libellés de l'API, de l'appli et du site, mêmes mots partout.
-import { STORY_CAPTION_MAX, STORY_TAGS_MAX } from "../rules/audience";
+import { STORY_CAPTION_MAX, STORY_LIVE_MAX, STORY_TAGS_MAX } from "../rules/audience";
 
 export const storyLabels = {
   stories: "Stories",
@@ -16,6 +16,8 @@ export const storyLabels = {
   privateAccountPublic: "Un compte privé publie seulement à ses abonnés ou à son crew.",
   crewAudiencePersona: "Une story de crew se publie en tant que passionné.",
   videoSoon: "Vidéo bientôt.",
+  tooManyStories: `${STORY_LIVE_MAX} stories en cours au plus : supprime-en une avant d'en publier une autre.`,
+  replyUnavailable: "Cette page ne reçoit pas de messages pour le moment.",
   linkedUnsupported: "Ce contenu ne peut pas encore être lié à une story.",
   skipped: {
     not_visible: "Cette personne ne pourrait pas voir ta story.",
@@ -25,6 +27,7 @@ export const storyLabels = {
     not_yours: "Ce véhicule n'est pas le tien.",
   },
   mention: (pseudo: string) => `${pseudo} t'a identifié dans sa story.`,
+  mentionStructure: (pseudo: string, name: string) => `${pseudo} a identifié ${name} dans sa story.`,
   mentionTitle: (pseudo: string) => `${pseudo} t'a identifié dans une story`,
   published: (name: string) => `${name} a publié une story.`,
   liked: (pseudos: string[], n: number) =>

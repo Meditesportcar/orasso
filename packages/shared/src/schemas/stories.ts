@@ -2,14 +2,7 @@
 // visibilité sont dans `rules/audience.ts`, le cadrage 9:16 dans `rules/storyFrame.ts`.
 import { z } from "zod";
 import type { StoryAudience, StoryPersona, StoryRing, StoryTagKind } from "../rules/audience";
-import {
-  STORY_CAPTION_MAX,
-  STORY_PLACE_MAX,
-  STORY_TAGS_MAX,
-  storyAudiences,
-  storyPersonas,
-  storyTagKinds,
-} from "../rules/audience";
+import { STORY_CAPTION_MAX, STORY_PLACE_MAX, STORY_TAGS_MAX, storyAudiences, storyPersonas } from "../rules/audience";
 import { STORY_OFFSET_MAX, STORY_SCALE_MAX, STORY_SCALE_MIN } from "../rules/storyFrame";
 import { MAX_PLATE_RECTS, plateRectSchema } from "./vehicle";
 
@@ -41,7 +34,16 @@ export const storyFrameSchema = z.object({
   offsetY: z.number().min(-STORY_OFFSET_MAX).max(STORY_OFFSET_MAX),
 });
 
-export const storyTagInputSchema = z.object({ kind: z.enum(storyTagKinds), id: z.string().min(1).max(64) });
+/** Identifiant d'un compte (texte de Better Auth) : jamais d'autre caractère que ceux-ci. */
+const uuidLower = uuid.transform((v) => v.toLowerCase());
+const accountId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, "Identifiant invalide");
+
+/** Une personne par son identifiant de compte ; une structure ou un pro par un UUID (jamais de texte libre : 400, pas 500). */
+export const storyTagInputSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("user"), id: accountId }),
+  z.object({ kind: z.literal("structure"), id: uuidLower }),
+  z.object({ kind: z.literal("pro"), id: uuidLower }),
+]);
 export type StoryTagInput = z.infer<typeof storyTagInputSchema>;
 
 /**
@@ -65,7 +67,7 @@ export const storyCreateSchema = z
     vehicleId: uuid.optional(),
     eventId: uuid.optional(),
     tags: z.array(storyTagInputSchema).max(STORY_TAGS_MAX).default([]),
-    linked: z.object({ type: z.enum(storyLinkTypes), id: z.string().min(1).max(64) }).optional(),
+    linked: z.object({ type: z.enum(storyLinkTypes), id: uuidLower }).optional(),
   })
   .refine((v) => !(v.plateRects?.length && v.noPlateConfirmed), {
     message: "Choisis : plaque floutée ou aucune plaque visible, pas les deux",
@@ -73,21 +75,28 @@ export const storyCreateSchema = z
   });
 export type StoryCreate = z.infer<typeof storyCreateSchema>;
 
-export const storyReplySchema = z.object({ text: z.string().trim().min(1).max(500) });
+export const storyReplySchema = z.object({
+  text: z.string().trim().min(1).max(500),
+  /** Identifiant choisi par l'appareil : une reprise réseau renvoie le même message, jamais deux. */
+  clientId: z.uuid().optional(),
+});
 export const storyReportSchema = z.object({
   reason: z.enum(["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"]),
   details: z.string().trim().max(1000).nullish(),
 });
 export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuid }).optional();
 
-/** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>`. */
-export const storyAuthorKeyRe = /^([usp]):([A-Za-z0-9_-]{1,64})$/;
+/** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>` (UUID strict pour les deux dernières). */
+export const storyAuthorKeyRe =
+  /^(?:(u):([A-Za-z0-9_-]{1,64})|([sp]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
 export type StoryAuthorKey = { kind: StoryTagKind; id: string; key: string };
 export function parseStoryAuthorKey(raw: string): StoryAuthorKey | null {
   const m = storyAuthorKeyRe.exec(raw);
   if (!m) return null;
-  const kind: StoryTagKind = m[1] === "u" ? "user" : m[1] === "s" ? "structure" : "pro";
-  return { kind, id: m[2] ?? "", key: raw };
+  const letter = m[1] ?? m[3];
+  const kind: StoryTagKind = letter === "u" ? "user" : letter === "s" ? "structure" : "pro";
+  const id = m[2] ?? m[4] ?? "";
+  return { kind, id, key: raw };
 }
 export const storyAuthorKeyOf = (kind: StoryTagKind, id: string): string =>
   `${kind === "user" ? "u" : kind === "structure" ? "s" : "p"}:${id}`;

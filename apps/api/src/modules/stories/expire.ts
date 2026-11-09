@@ -5,7 +5,7 @@
 import { and, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { messages, stories } from "../../db/schema";
+import { contactRequests, messages, stories } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { removeOrRetry } from "../vehicles/photos-blur";
 
@@ -40,6 +40,7 @@ export async function purgeStoryFiles(ids?: string[]): Promise<number> {
   await db.update(stories).set({ filesRemovedAt: now() }).where(inArray(stories.id, done));
   // La vignette d'une réponse n'est servie que tant que la story existe.
   await db.update(messages).set({ storyId: null }).where(inArray(messages.storyId, done));
+  await db.update(contactRequests).set({ storyId: null }).where(inArray(contactRequests.storyId, done));
   return rows.length;
 }
 

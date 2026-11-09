@@ -1,5 +1,5 @@
 {
-  "id": "2a369ec5-01e6-4863-9f48-542115d1b15a",
+  "id": "1bad81e4-ae08-4690-a7d5-ccb293db2fb8",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -7717,6 +7717,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "story_id": {
+          "name": "story_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7809,6 +7815,19 @@
           "tableTo": "conversations",
           "columnsFrom": [
             "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "contact_requests_story_id_stories_id_fk": {
+          "name": "contact_requests_story_id_stories_id_fk",
+          "tableFrom": "contact_requests",
+          "tableTo": "stories",
+          "columnsFrom": [
+            "story_id"
           ],
           "columnsTo": [
             "id"

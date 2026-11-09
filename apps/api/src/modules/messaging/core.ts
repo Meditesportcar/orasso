@@ -22,6 +22,7 @@ import type { Executor, Tx } from "../../lib/tx";
 import { canSeeEvent, type SeeingUser } from "../invitations/access";
 import { isSecondFactor } from "../security/passkey";
 import { type ConversationRow, type KindRules, type Reader, rulesOf } from "./access";
+import { storyThumbFor } from "./story-thumb";
 
 export type MessageRow = typeof messages.$inferSelect;
 
@@ -199,6 +200,8 @@ export function serializeMessage(
     moderated: Boolean(m.moderatedAt),
     readBy,
     about: m.aboutEventId ? (abouts?.get(m.aboutEventId) ?? null) : null,
+    // Lot R7f1 : réponse à une story (vignette protégée, rien pour un message supprimé).
+    storyThumbUrl: deleted ? null : storyThumbFor(m),
   };
 }
 

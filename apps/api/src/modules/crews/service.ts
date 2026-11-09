@@ -66,6 +66,7 @@ import { inboxService } from "../messaging/inbox";
 import { nextMessageAt } from "../messaging/service";
 import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
+import { retireStories } from "../stories/purge";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "../vehicles/photos-blur";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
@@ -845,6 +846,8 @@ export const crewsService = {
     // Lot R5c1, tour 2 : dissous par son chef, le fil part (publications et photos) ; retiré par la modération, il
     // reste pour elle (le fil répond 404 à tous dans les deux cas).
     const feedKeys = reason === "moderation" ? [] : await purgeCrewFeed(tx, crew.id);
+    // Lot R7f1, tour 2 : les stories du crew partent avec lui (fichiers effacés après la validation, sauf signalement ouvert).
+    await retireStories(tx, after, { crewId: crew.id });
     const members = (await activeCrewMembers(tx, crew.id)).filter((m) => m.role !== "leader");
     for (const m of members) {
       await notificationsService.notify(tx, m.userId, "crew_archived", {

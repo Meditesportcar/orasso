@@ -65,6 +65,9 @@ export const errorCodes = [
   "plate_decision_required",
   "crew_only",
   "not_implemented",
+  // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.
+  "too_many_stories",
+  "reply_unavailable",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

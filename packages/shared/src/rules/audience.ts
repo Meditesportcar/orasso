@@ -53,8 +53,10 @@ export function storyDenial(viewer: AudienceViewer, story: AudienceStory, rel: A
   if (viewer.id === story.authorId) return null;
   if (!story.authorActive) return "unavailable";
   switch (story.audience) {
+    // Tour 2 : une story « publique » d'un compte privé se lit comme « abonnés », quel que soit le moment où le compte
+    // est passé en privé (ou la casquette `provider` / `media` qui l'a publiée). Une structure et un pro (casquettes
+    // `organizer` / `pro`) sont publics par nature : l'API leur donne `authorVisibility: "public"`.
     case "public":
-      return null;
     case "followers":
       if (story.authorVisibility === "public") return null;
       return rel.followAccepted ? null : "followers_only";
@@ -75,6 +77,8 @@ export const STORY_TTL_MS = 24 * 3_600_000;
 export const STORY_CAPTION_MAX = 200;
 export const STORY_PLACE_MAX = 80;
 export const STORY_TAGS_MAX = 10;
+/** Stories vivantes au plus par auteur (personne, structure ou pro), en plus de la limite horaire. */
+export const STORY_LIVE_MAX = 50;
 
 /** Date de fin d'une story créée à `at`. */
 export const storyExpiresAt = (at: Date): Date => new Date(at.getTime() + STORY_TTL_MS);

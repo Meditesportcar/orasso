@@ -76,6 +76,8 @@ export type MessageView = {
   readBy: { userId: string; pseudo: string }[] | null;
   /** Lot M4 : écrit depuis la fiche de cet événement ; absent des messages d'avant. */
   about?: MessageAbout | null;
+  /** Lot R7f1 : réponse à une story, vignette servie par `GET /api/stories/:id/thumb` (contrôle d'audience à chaque lecture) tant que la story existe. */
+  storyThumbUrl?: string | null;
 };
 
 /** Pourquoi on ne peut plus écrire dans une conversation (lecture toujours possible). */

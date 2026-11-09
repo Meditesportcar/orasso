@@ -8,7 +8,9 @@ import {
   type AudienceStory,
   canSeeStory,
   canTag,
+  directKey,
   type Frame,
+  STORY_LIVE_MAX,
   type StoryCreate,
   type StoryCreated,
   type StoryDenial,
@@ -24,11 +26,12 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  contactRequests,
+  conversations,
   crewMembers,
   crews,
   events as events_,
   mediaProfiles,
-  messages,
   notifications,
   proFollows,
   profiles,
@@ -53,16 +56,30 @@ import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { canSeeEvent } from "../invitations/access";
 import { canTalkDirect } from "../messaging/access/direct";
+import { isStructureOrganizer } from "../messaging/access/organizer";
 import { contactsService } from "../messaging/contacts";
 import { messagingService } from "../messaging/service";
 import { moderationService } from "../moderation/service";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
+import { removeOrRetry } from "../vehicles/photos-blur";
 import { vehiclesRepo } from "../vehicles/repo";
-import { accountActive, audienceStoryOf, relationOf, type StoryRow, selectStories, setsFor, viewerOf } from "./common";
+import {
+  accountActive,
+  audienceStoryOf,
+  authorKeyOf,
+  relationOf,
+  type StoryRow,
+  selectStories,
+  setsFor,
+  viewerOf,
+} from "./common";
 import { composeStoryPhoto } from "./compose";
 import { purgeStoryFiles } from "./expire";
+import { softDeleteWithCopies } from "./purge";
+
+export { softDeleteWithCopies };
 
 type Skipped = StoryCreated["skipped"];
 
@@ -239,20 +256,22 @@ async function notifyPublished(
   },
   authorKey: { kind: StoryTagKind; id: string; key: string },
   name: string,
-  tagged: string[],
+  /** Les personnes à prévenir d'une identification (elles-mêmes ou, pour une structure ou un pro, ses responsables). */
+  mentions: { userId: string; body: string }[],
   actor: { userId: string; pseudo: string; avatarUrl: string | null },
 ) {
   const link = `/app/story/${authorKey.key}`;
   const data = { actor, storyId: story.id, authorKey: authorKey.key, link };
   // Identifiés : une notification chacun, jamais de vignette (invariant des stories de crew).
-  for (const userId of tagged) {
-    if (userId === story.authorId) continue;
-    await notificationsService.notify(tx, userId, "story_mention", {
+  for (const m of mentions) {
+    if (m.userId === story.authorId) continue;
+    await notificationsService.notify(tx, m.userId, "story_mention", {
       title: storyLabels.mentionTitle(actor.pseudo),
-      body: storyLabels.mention(actor.pseudo),
+      body: m.body,
       data,
     });
   }
+  const tagged = mentions.map((m) => m.userId);
   // Journal des abonnés acceptés : jamais pour une story de crew (même l'existence reste dans le crew).
   if (story.audience === "crew") return;
   const rows =
@@ -426,6 +445,26 @@ export const storiesService = {
     const at = now();
     try {
       await withTx(async (tx, after) => {
+        // Plafond : 50 stories vivantes au plus par auteur (personne, structure ou pro), compté sous verrou.
+        const capKey = ctx.structureId ? `s:${ctx.structureId}` : ctx.proId ? `p:${ctx.proId}` : `u:${v.user.id}`;
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`story-cap:${capKey}`}))`);
+        const [live] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(stories)
+          .where(
+            and(
+              sql`${stories.deletedAt} is null`,
+              sql`${stories.expiresAt} > ${at}`,
+              ctx.structureId
+                ? and(eq(stories.persona, "organizer"), eq(stories.structureId, ctx.structureId))
+                : ctx.proId
+                  ? and(eq(stories.persona, "pro"), eq(stories.proId, ctx.proId))
+                  : and(sql`${stories.persona} not in ('organizer','pro')`, eq(stories.authorId, v.user.id)),
+            ),
+          );
+        if ((live?.n ?? 0) >= STORY_LIVE_MAX) {
+          throw new AppError(409, "too_many_stories", storyLabels.tooManyStories);
+        }
         const upload = await uploadsService.consume(tx, v.user.id, input.uploadKey, "story");
         if (!upload) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
         const [row] = await tx
@@ -473,22 +512,54 @@ export const storiesService = {
               ? ((await tx.select({ n: proProfiles.name }).from(proProfiles).where(eq(proProfiles.id, authorKey.id)))[0]
                   ?.n ?? v.profile.pseudo)
               : v.profile.pseudo;
+        // Identifiés : la personne elle-même ; une structure ou un pro, ses responsables (propriétaire et co-organisateurs
+        // actifs, propriétaire de la fiche). Une personne n'est prévenue qu'une fois.
+        const mentions = new Map<string, string>();
+        const pseudo = v.profile.pseudo;
+        for (const t of tags) {
+          if (t.kind === "user") mentions.set(t.id, storyLabels.mention(pseudo));
+        }
+        for (const t of tags) {
+          if (t.kind === "structure") {
+            const [named] = await tx.select({ n: structures.name }).from(structures).where(eq(structures.id, t.id));
+            const owners = await tx
+              .select({ id: structureMembers.userId })
+              .from(structureMembers)
+              .where(
+                and(
+                  eq(structureMembers.structureId, t.id),
+                  eq(structureMembers.status, "active"),
+                  inArray(structureMembers.role, ["owner", "co_organizer"]),
+                ),
+              );
+            for (const o of owners) {
+              if (!mentions.has(o.id))
+                mentions.set(o.id, storyLabels.mentionStructure(pseudo, named?.n ?? "ta structure"));
+            }
+          } else if (t.kind === "pro") {
+            const [pro] = await tx
+              .select({ owner: proProfiles.ownerUserId, n: proProfiles.name })
+              .from(proProfiles)
+              .where(eq(proProfiles.id, t.id));
+            if (pro && !mentions.has(pro.owner)) mentions.set(pro.owner, storyLabels.mentionStructure(pseudo, pro.n));
+          }
+        }
         await notifyPublished(
           tx,
           row,
           authorKey,
           name,
-          tags.filter((t) => t.kind === "user").map((t) => t.id),
+          [...mentions].map(([userId, body]) => ({ userId, body })),
           { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
         );
         after(() => notificationsService.kick());
       });
     } catch (error) {
-      await storage.remove(key).catch(() => undefined);
+      await removeOrRetry(key);
       throw error;
     }
-    // Le fichier d'origine n'est jamais gardé.
-    await storage.remove(pending.key).catch(() => undefined);
+    // Le fichier d'origine n'est jamais gardé : si sa suppression échoue, elle est reprise par la tâche `storage.remove`.
+    await removeOrRetry(pending.key);
     return { id, status: "ready", expiresAt: storyExpiresAt(at).toISOString(), skipped };
   },
 
@@ -620,7 +691,7 @@ export const storiesService = {
             pseudos: [v.profile.pseudo],
             storyId: id,
             groupKey,
-            link: `/app/story/${storyAuthorKeyOf("user", row.story.authorId)}`,
+            link: `/app/story/${authorKeyOf(row)?.key ?? storyAuthorKeyOf("user", row.story.authorId)}`,
           },
         });
       }
@@ -630,25 +701,60 @@ export const storiesService = {
   },
 
   /**
-   * `POST /stories/:id/reply` : un message à l'auteur, avec `story_id`. Règle des messages directs (R6) : l'auteur me suit
-   * (ou une demande de contact a été acceptée) → message direct ; sinon le mot part en demande de contact.
+   * `POST /stories/:id/reply` : un message à l'auteur, avec `story_id` enregistré dans la transaction d'envoi.
+   * - story d'une personne : message direct si elle me suit (ou demande de contact acceptée, ou si elle m'a écrit en
+   *   dernier), sinon le mot part en demande de contact (le contexte suit à l'acceptation) ;
+   * - story d'une structure : la conversation de la structure (messagerie organisateur), jamais le compte personnel de
+   *   qui l'a publiée ;
+   * - story d'un pro : aucune messagerie de pro n'existe → 403 `reply_unavailable`.
+   * `clientId` (de l'appareil) est réutilisé pour l'envoi : une reprise réseau ne crée pas un second message.
    */
-  async reply(v: Viewer, id: string, text: string): Promise<StoryReplyResult> {
+  async reply(v: Viewer, id: string, input: { text: string; clientId?: string }): Promise<StoryReplyResult> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     rateLimit("storyWrite", v.user.id);
     const row = await requireVisibleStory(v, id);
-    const authorId = row.story.authorId;
-    if (authorId === v.user.id) throw validation(storyLabels.notYours);
-    if (await canTalkDirect(db, v.user.id, authorId)) {
+    const { story } = row;
+    if (story.authorId === v.user.id) throw validation(storyLabels.notYours);
+    const unavailable = () => new AppError(403, "reply_unavailable", storyLabels.replyUnavailable);
+    const clientId = input.clientId ?? randomUUID();
+    const context = { storyId: id };
+
+    if (story.persona === "pro") throw unavailable();
+    if (story.persona === "organizer") {
+      if (!story.structureId || row.structure.verification !== "verified") throw unavailable();
+      if (await isStructureOrganizer(db, v.user.id, story.structureId)) throw validation(storyLabels.notYours);
+      const opened = await messagingService.openWithStructure(v, story.structureId);
+      const sent = await messagingService.send(v, opened.id, { clientId, body: input.text }, context);
+      return { mode: "message", conversationId: opened.id, messageId: sent.message.id };
+    }
+
+    const authorId = story.authorId;
+    const [existing] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.directKey, directKey(v.user.id, authorId)));
+    if (await canTalkDirect(db, v.user.id, authorId, existing?.id)) {
       const opened = await messagingService.openDirect(v, authorId);
-      const sent = await messagingService.send(v, opened.id, { clientId: randomUUID(), body: text });
-      await db.update(messages).set({ storyId: id }).where(eq(messages.id, sent.message.id));
+      const sent = await messagingService.send(v, opened.id, { clientId, body: input.text }, context);
       return { mode: "message", conversationId: opened.id, messageId: sent.message.id };
     }
     const author = await profilesRepo.byUserId(authorId);
     if (!author) throw notFound("Story introuvable");
-    const request = await contactsService.create(v, { pseudo: author.pseudo, message: text });
-    return { mode: "contact_request", requestId: (request as { id: string }).id };
+    // Reprise réseau : la même demande (même texte, même story) est rendue telle quelle.
+    const [sameRequest] = await db
+      .select({ id: contactRequests.id })
+      .from(contactRequests)
+      .where(
+        and(
+          eq(contactRequests.fromUserId, v.user.id),
+          eq(contactRequests.toUserId, authorId),
+          eq(contactRequests.message, input.text),
+          eq(contactRequests.storyId, id),
+        ),
+      );
+    if (sameRequest) return { mode: "contact_request", requestId: sameRequest.id };
+    const request = await contactsService.create(v, { pseudo: author.pseudo, message: input.text }, context);
+    return { mode: "contact_request", requestId: request.id };
   },
 
   async report(v: Viewer, id: string, input: { reason: string; details?: string | null }) {
@@ -724,19 +830,3 @@ export const storiesService = {
     if (!done.length) throw notFound("Identification introuvable");
   },
 };
-
-/** Marque supprimées les stories données et toutes leurs copies (récursif) ; rend tous les identifiants touchés. */
-export async function softDeleteWithCopies(ex: Tx | typeof db, ids: string[]): Promise<string[]> {
-  if (!ids.every((i) => /^[0-9a-f-]{36}$/i.test(i))) throw new Error("Identifiant invalide");
-  const at = now();
-  const rows = await ex.execute<{ id: string }>(sql`
-    with recursive tree(id) as (
-      select id from stories where id = any(${sql.raw(`'{${ids.join(",")}}'::uuid[]`)})
-      union
-      select s.id from stories s join tree t on s.shared_from_story_id = t.id
-    )
-    update stories set deleted_at = coalesce(deleted_at, ${at}), updated_at = ${at}
-    where id in (select id from tree)
-    returning id`);
-  return (rows as unknown as { rows: { id: string }[] }).rows.map((r) => r.id);
-}
