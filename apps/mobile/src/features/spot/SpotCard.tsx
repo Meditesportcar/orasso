@@ -77,7 +77,7 @@ export function SpotCard({
         </View>
       ) : null}
       {meetup.note ? (
-        <View style={[styles.quote, { backgroundColor: c.surfaceSunken }]}>
+        <View style={[styles.quote, { borderColor: c.line }]}>
           <Text variant="body" color={c.ink} style={styles.quoteText}>
             {`« ${meetup.note} »`}
           </Text>
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20 },
   place: { flexDirection: "row", alignItems: "center", gap: space2 },
   placeText: { fontSize: 15, lineHeight: 20 },
-  quote: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 },
+  quote: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1 },
   quoteText: { fontSize: 14.5, lineHeight: 20 },
   whoRow: { gap: 2 },
   label: { textTransform: "uppercase", letterSpacing: 0.6, fontSize: 11 },

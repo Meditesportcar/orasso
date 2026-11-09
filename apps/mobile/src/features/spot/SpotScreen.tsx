@@ -128,7 +128,7 @@ function Meetup({
 
   return (
     <View style={styles.gap} testID="spot-detail">
-      <Card>
+      <Card style={styles.cardGap}>
         <View style={styles.head}>
           <Avatar url={meetup.author.avatarUrl} pseudo={meetup.author.pseudo} size={40} />
           <View style={styles.fill}>
@@ -153,7 +153,7 @@ function Meetup({
           </>
         ) : null}
         {meetup.note ? (
-          <View style={[styles.quote, { backgroundColor: c.surfaceSunken }]}>
+          <View style={[styles.quote, { borderColor: c.line }]}>
             <Text variant="body" color={c.ink} testID="spot-note-text">{`« ${meetup.note} »`}</Text>
           </View>
         ) : null}
@@ -165,7 +165,6 @@ function Meetup({
               <View key={which} style={styles.fill}>
                 <SmButton
                   kind={meetup.myAnswer === which ? "p" : "s"}
-                  big
                   wide
                   icon={which === "yes" ? "check" : "help"}
                   disabled={answer.busy}
@@ -271,10 +270,11 @@ function WhoList({ replies, meetup }: { replies: SpotReplies | null; meetup: Spo
 const styles = StyleSheet.create({
   fill: { flex: 1, minWidth: 0 },
   gap: { gap: space3 },
+  cardGap: { gap: space3 },
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
   title: { fontSize: 15, lineHeight: 20 },
   place: { flexDirection: "row", alignItems: "center", gap: space2 },
-  quote: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 },
+  quote: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1 },
   who: { gap: space2 },
   person: { flexDirection: "row", alignItems: "center", gap: space2 },
   two: { flexDirection: "row", gap: space2 },

@@ -68,7 +68,8 @@ export async function notifyInvitees(
 /** À la livraison : plus de rendez-vous (annulé, fini, effacé), ou plus invité → la notification est supprimée. */
 async function guard(n: NotificationRow): Promise<boolean> {
   const meetupId = (n.data as { meetupId?: string } | null)?.meetupId;
-  if (!meetupId) return false;
+  // Sans rendez-vous nommé (notification posée à la main par un test ou un script), il n’y a rien à vérifier.
+  if (!meetupId) return true;
   const [row] = await db
     .select()
     .from(spotMeetups)

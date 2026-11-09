@@ -59,12 +59,8 @@
 .spot-card__quote {
   margin: 0;
   padding: var(--space-3);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-  color: var(--ink);
-}
-.spot-card--bare .spot-card__quote {
-  background: var(--plate-field, var(--surface-sunken));
   color: inherit;
 }
 .spot-card__wholine {
