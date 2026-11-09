@@ -105,7 +105,9 @@ describe("action de vote", () => {
   });
 
   it("voix refusée : le message de l'API, sans voix", async () => {
-    stubApi({ "/audience-prize/vote": Response.json({ error: { code: "vote_closed", message: "Vote clos" } }, { status: 409 }) });
+    stubApi({
+      "/audience-prize/vote": Response.json({ error: { code: "vote_closed", message: "Vote clos" } }, { status: 409 }),
+    });
     const res = (await voteAction(formRequest())) as unknown as { data: { ok: boolean; error: string; mine: unknown } };
     expect(res.data).toMatchObject({ ok: false, error: "Vote clos", mine: null });
   });

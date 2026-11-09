@@ -125,12 +125,12 @@ test("Mon accès suit le thème, la carte du QR reste crème ; entré la veille,
     // L'écran suit le thème : le fond n'est pas le même en Béton et en Sable.
     bg[theme] = await edge(page);
     await expect(page.getByTestId("qr-poster")).toHaveCount(0);
-    const open = page.getByTestId("jourj-qr-open");
-    await expect(open).toContainText("Mon QR, pour un contrôle");
+    const qrButton = page.getByTestId("jourj-qr-open");
+    await expect(qrButton).toContainText("Mon QR, pour un contrôle");
     // Le QR est sous « Prix du public » (et le bouton après les consignes).
     const yOf = async (id: string) => (await page.getByTestId(id).boundingBox())?.y ?? Number.NaN;
     expect(await yOf("jourj-vote")).toBeLessThan(await yOf("jourj-qr-open"));
-    await open.click();
+    await qrButton.click();
     const poster = page.getByTestId("qr-poster");
     await expect(poster).toBeVisible({ timeout: 45_000 });
     expect(await poster.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(243, 235, 221)");

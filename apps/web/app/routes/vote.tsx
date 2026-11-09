@@ -2,12 +2,7 @@
 // pour soi, modifiable jusqu'à la fin de l'événement ; le classement bouge en direct (canal `event:{id}:votes`). Les
 // règles sont toutes dans l'API (lot 49) : ici, la grille des véhicules pointés, le vote et le classement.
 import { Button, Chip, Plate } from "@orasso/design-system/web";
-import {
-  audiencePrizeTexts,
-  type ClosingWatch,
-  watchClosing,
-  voteScreenTexts,
-} from "@orasso/shared";
+import { audiencePrizeTexts, type ClosingWatch, voteScreenTexts, watchClosing } from "@orasso/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
@@ -51,7 +46,6 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   const closesAt = board?.closesAt ?? mine?.closesAt ?? justVoted?.closesAt ?? null;
   const stillOpen = board ? board.open && !board.settled : true;
   const skew = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: l'écart se recalcule à chaque lecture de la page (`serverAt`)
   useMemo(() => {
     skew.current = loaderData.serverAt - nowMs();
   }, [loaderData.serverAt]);

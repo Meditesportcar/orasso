@@ -51,6 +51,7 @@ export function fitTitle(
     return Math.floor(width / Math.max(1, fontScale) / widest);
   };
   const inColumn = raw(columnWidth);
-  if (inColumn >= floor || !(fullWidth > columnWidth)) return { size: Math.max(floor, Math.min(max, inColumn)), full: false };
+  if (inColumn >= floor || !(fullWidth > columnWidth))
+    return { size: Math.max(floor, Math.min(max, inColumn)), full: false };
   return { size: Math.max(floor, Math.min(max, raw(fullWidth))), full: true };
 }

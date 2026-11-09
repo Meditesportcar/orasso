@@ -13,10 +13,10 @@ import {
   type AudiencePrizeMine,
   type AudienceVotesChanged,
   audiencePrizeTexts,
-  rankingZoneState,
   type ClosingWatch,
-  watchClosing,
+  rankingZoneState,
   voteScreenTexts,
+  watchClosing,
 } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";

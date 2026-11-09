@@ -494,12 +494,18 @@ describe("événement sur plusieurs jours", () => {
     expect(zone(c3, "LIB")).toMatchObject({ arrived: 1, expected: 1 });
     // La liste « Arrivés » / « Attendus » du jour 3 : les présents d'un jour précédent y sont, 3 reste attendu.
     const entries = [...s.entries.values()];
-    expect(entries.filter((e) => arrivedOn(s, e, day3)).map((e) => e.passId).sort()).toEqual(
-      [uuid(1), uuid(2), uuid(5)].sort(),
-    );
+    expect(
+      entries
+        .filter((e) => arrivedOn(s, e, day3))
+        .map((e) => e.passId)
+        .sort(),
+    ).toEqual([uuid(1), uuid(2), uuid(5)].sort());
     expect(entries.filter((e) => !arrivedOn(s, e, day3)).map((e) => e.passId)).toEqual([uuid(3)]);
     // Le placement ne compte jamais plus de places prises que la capacité (zone pleine : 0 restante).
-    const full = { ...s, meta: { ...s.meta, zones: s.meta.zones.map((z) => (z.code === "JDM" ? { ...z, capacity: 1 } : z)) } };
+    const full = {
+      ...s,
+      meta: { ...s.meta, zones: s.meta.zones.map((z) => (z.code === "JDM" ? { ...z, capacity: 1 } : z)) },
+    };
     const jdm = zone(counters(full, day3), "JDM");
     expect(jdm?.arrived).toBe(2);
     expect(placesLeft({ arrived: jdm?.arrived ?? 0, capacity: jdm?.capacity ?? null })).toBe(0);
