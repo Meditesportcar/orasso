@@ -19,6 +19,7 @@ import { Form, useNavigation } from "react-router";
 import type { CrewActionData } from "../../lib/crews.server";
 import { CrewFeed } from "../crew-feed/CrewFeed";
 import { CrewLiveProvider } from "../crew-feed/CrewLive";
+import { ReportDialog } from "../ReportDialog";
 import {
   CrewBadge,
   CrewEventRow,
@@ -251,13 +252,22 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
               ) : null}
             </span>
             {leader && live ? (
-              <Button
-                variant="secondary"
-                icon="gear"
-                href={`/c/${crew.slug}/reglages`}
-                aria-label={L.settingsA11y}
-                data-testid="crew-settings"
-              />
+              <>
+                <Button
+                  variant="secondary"
+                  icon="share"
+                  href={`/c/${crew.slug}/inviter`}
+                  aria-label={L.inviteA11y}
+                  data-testid="crew-invite"
+                />
+                <Button
+                  variant="secondary"
+                  icon="gear"
+                  href={`/c/${crew.slug}/reglages`}
+                  aria-label={L.settingsA11y}
+                  data-testid="crew-settings"
+                />
+              </>
             ) : null}
           </div>
         ) : null}
@@ -377,6 +387,8 @@ export function CrewSpaceView({ data, result }: { data: CrewSpaceData; result?: 
             </div>
           </>
         ) : null}
+        {/* Signaler (lot 32) : un crew dont on n'est pas le chef, depuis son espace comme avant. */}
+        {member && !leader && live ? <ReportDialog look="link" targetType="crew" targetId={crew.id} /> : null}
       </div>
     </CrewLiveProvider>
   );

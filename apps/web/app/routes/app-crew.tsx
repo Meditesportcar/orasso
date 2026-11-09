@@ -1,19 +1,24 @@
 import { Button, Icon, TextField } from "@orasso/design-system/web";
 import {
+  type CrewCard,
   type CrewInboxRequest,
   type CrewMemberView,
   type CrewPendingList,
   type CrewView,
+  crewLabels,
   crewOutingRsvps,
   crewPageLabels as L,
   type MyCrew,
   navLabels,
+  type Page,
+  explorerR2Labels as R,
   crewTabLabels as T,
 } from "@orasso/shared";
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 
 import { CrewBadge } from "../components/crew-page/CrewPage";
 import { CrewSpaceView, crewTabOf } from "../components/crew-page/CrewSpaceView";
+import { CrewRowR2, PeopleEmpty, PeopleSection, PrivacyNote } from "../components/ExplorerPeople";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewLastCookie, crewLastOf, pickCrew } from "../lib/crew-last.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
@@ -32,15 +37,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const mine = await api<MyCrew[]>(request, "/me/crews");
   if (!mine.ok) return { mode: "error" as const, message: mine.error.message };
+  const url = new URL(request.url);
   if (mine.data.length === 0) {
     const asked = await api<CrewInboxRequest[]>(request, "/me/crew-requests");
+    // La recherche se montre sur place (comme l'appli) : deux lettres au moins, pas d'annuaire.
+    const q = (url.searchParams.get("q") ?? "").trim();
+    const searching = q.length >= MIN_QUERY;
+    const found = searching
+      ? await api<Page<CrewCard>>(request, `/crews/search?${new URLSearchParams({ q, limit: "20" })}`)
+      : null;
     return {
       mode: "none" as const,
       invitations: asked.ok ? asked.data.filter((r) => r.kind === "invitation") : [],
+      q,
+      searching,
+      tooShort: q.length > 0 && !searching,
+      crews: found?.ok ? found.data.items : [],
+      failed: found && !found.ok ? found.error.message : null,
     };
   }
-  const url = new URL(request.url);
-  const current = pickCrew(mine.data, url.searchParams.get("crew"), crewLastOf(request, me.user.id)) as MyCrew;
+  // Un crew demandé par le lien qui n'est pas le mien : sa vitrine, jamais un autre de mes crews en silence.
+  const wanted = url.searchParams.get("crew");
+  if (wanted && !mine.data.some((c) => c.slug === wanted)) throw redirect(`/c/${encodeURIComponent(wanted)}`);
+  const current = pickCrew(mine.data, wanted, crewLastOf(request, me.user.id)) as MyCrew;
   const crew = await apiOrThrow<CrewView>(request, `/crews/by-slug/${encodeURIComponent(current.slug)}`);
   const member = crew.viewerState === "member" || crew.viewerState === "leader";
   const live = !crew.archived;
@@ -64,6 +83,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  // La demande faite depuis les résultats de recherche (sans crew) : l'adresse du crew sert à marquer la ligne « envoyée ».
+  if (intent === "crew_request") {
+    const res = await crewAction(request, form);
+    return data({ ...res.data, crewId: String(form.get("crewId") ?? "") }, { status: res.init?.status ?? 200 });
+  }
   if (isCrewIntent(intent)) return crewAction(request, form);
   const crewId = encodeURIComponent(String(form.get("crewId") ?? ""));
   const outingId = encodeURIComponent(String(form.get("outingId") ?? ""));
@@ -97,12 +121,34 @@ export default function AppCrew({ loaderData, actionData }: Route.ComponentProps
       </div>
     );
   }
-  if (loaderData.mode === "none") return <NoCrew invitations={loaderData.invitations} />;
-  return <CrewSpaceView data={loaderData} result={actionData as CrewActionData | undefined} />;
+  if (loaderData.mode === "none") {
+    return <NoCrew data={loaderData} sent={sentOf(actionData)} error={errorOf(actionData)} />;
+  }
+  // Un crew par clé : changer de crew (ou une relecture qui en montre un autre) remet à zéro le fil, les commentaires
+  // ouverts et la publication ; rien de l'ancien crew ne reste sous le nom du nouveau.
+  return <CrewSpaceView key={loaderData.crew.id} data={loaderData} result={actionData as CrewActionData | undefined} />;
 }
 
+/** Comme l'Explorer et l'appli : une recherche à partir de deux lettres. */
+const MIN_QUERY = 2;
+
 /** Sans crew : « Pas encore de crew », la recherche (deux lettres au moins, pas d'annuaire), rejoindre, créer. */
-function NoCrew({ invitations }: { invitations: CrewInboxRequest[] }) {
+function NoCrew({
+  data: { invitations, q, searching, tooShort, crews, failed },
+  sent,
+  error,
+}: {
+  data: {
+    invitations: CrewInboxRequest[];
+    q: string;
+    searching: boolean;
+    tooShort: boolean;
+    crews: CrewCard[];
+    failed: string | null;
+  };
+  sent: string | null;
+  error: string | null;
+}) {
   return (
     <div className="s-narrow s-stack crw-none" data-testid="crew-tab-none">
       <div className="crw-none__intro">
@@ -112,20 +158,66 @@ function NoCrew({ invitations }: { invitations: CrewInboxRequest[] }) {
         <h1 className="s-title">{T.noCrewTitle}</h1>
         <p className="s-muted">{T.noCrewBody}</p>
       </div>
-      {/* Un seul bouton principal : « Rejoindre un crew » envoie la recherche (au moins deux lettres) à l'écran qui la fait. */}
-      <form method="get" action="/app/crews/rejoindre" className="s-stack">
-        <TextField
-          label={T.searchLabel}
-          name="q"
-          type="search"
-          placeholder={T.searchPlaceholder}
-          autoComplete="off"
-          data-testid="crew-tab-q"
-        />
-        <Button type="submit" variant="primary" icon="search" fullWidth data-testid="crew-tab-join">
+      {/* Un seul bouton principal : « Rejoindre un crew » mène à l'écran qui rejoint (avec la recherche). « Chercher » (ou
+          Entrée) montre les résultats ici, sur place, comme l'appli. */}
+      <form method="get" action="/app/crew" className="s-stack">
+        <div className="s-row crw-row-end">
+          <TextField
+            label={T.searchLabel}
+            name="q"
+            type="search"
+            defaultValue={q}
+            placeholder={T.searchPlaceholder}
+            autoComplete="off"
+            data-testid="crew-tab-q"
+          />
+          <Button type="submit" variant="secondary" icon="search" data-testid="crew-tab-search">
+            {crewLabels.search}
+          </Button>
+        </div>
+        <Button
+          type="submit"
+          variant="primary"
+          icon="search"
+          fullWidth
+          // Sans JavaScript, le bouton cherche sur place comme « Chercher » ; avec, il ouvre l'écran qui rejoint.
+          onClick={(e) => {
+            const form = (e.currentTarget as HTMLButtonElement).form;
+            if (form) form.action = "/app/crews/rejoindre";
+          }}
+          data-testid="crew-tab-join"
+        >
           {T.join}
         </Button>
       </form>
+      {error ? (
+        <p className="s-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {failed ? (
+        <p className="s-error" role="alert">
+          {failed}
+        </p>
+      ) : null}
+      {tooShort ? (
+        <p className="o-t-caption s-muted" data-testid="crew-tab-short">
+          {R.tooShort}
+        </p>
+      ) : null}
+      {searching && !failed ? (
+        <>
+          <PeopleSection title={R.crewsGroup(crews.length, false)} hint={R.crewsGroupHint} testId="crew-results">
+            {crews.length === 0 ? <PeopleEmpty>{R.noCrews(q)}</PeopleEmpty> : null}
+            <ul className="s-people">
+              {crews.map((c) => (
+                <CrewRowR2 key={c.id} crew={c} mine={false} sent={sent === c.id} />
+              ))}
+            </ul>
+          </PeopleSection>
+          <PrivacyNote>{R.privacyResults}</PrivacyNote>
+        </>
+      ) : null}
       {invitations.length > 0 ? (
         <section className="s-stack" data-testid="crew-tab-invitations">
           <h2 className="s-h2">{T.invitationsTitle}</h2>
@@ -153,4 +245,13 @@ function NoCrew({ invitations }: { invitations: CrewInboxRequest[] }) {
       </p>
     </div>
   );
+}
+
+/** Le crew dont la demande vient de partir (action de la recherche sans crew). */
+function sentOf(result: unknown): string | null {
+  const r = result as { crewError?: string | null; crewId?: string } | undefined;
+  return r && !r.crewError && r.crewId ? r.crewId : null;
+}
+function errorOf(result: unknown): string | null {
+  return (result as { crewError?: string | null } | undefined)?.crewError ?? null;
 }
