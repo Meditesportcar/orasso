@@ -324,7 +324,17 @@ export function PublishStoryScreen() {
           if (!keys.current[draft.upload.uri]) keys.current[draft.upload.uri] = await uploadStoryPhoto(draft.upload);
           setSent(1);
         },
-        () => api.createStory(body(keys.current[draft.upload.uri] ?? "")),
+        // Une réponse perdue peut laisser un 400 « image déjà utilisée » si le premier envoi n'est pas encore enregistré :
+        // on refait la requête une fois avec la même clé (elle retrouve la story) avant d'oublier la clé.
+        async () => {
+          const send = () => api.createStory(body(keys.current[draft.upload.uri] ?? ""));
+          try {
+            return await send();
+          } catch (e) {
+            if (e instanceof ApiRequestError && e.status === 400 && e.code !== "plate_decision_required") return send();
+            throw e;
+          }
+        },
       );
       if (!result.sent) return;
       const story = result.value;
@@ -395,7 +405,11 @@ export function PublishStoryScreen() {
           <Text variant="body" color={c.inkMuted}>
             {L.doneText(who)}
           </Text>
-          {created.skipped.length ? <Muted variant="caption">{L.doneSkipped}</Muted> : null}
+          {created.replayed ? (
+            <Muted variant="caption">{L.doneReplayed}</Muted>
+          ) : created.skipped.length ? (
+            <Muted variant="caption">{L.doneSkipped}</Muted>
+          ) : null}
         </View>
         <View style={styles.mine}>
           <Icon name="eye" size={20} color={c.inkMuted} />

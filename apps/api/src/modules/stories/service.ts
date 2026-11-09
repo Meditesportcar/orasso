@@ -326,14 +326,13 @@ async function notifyPublished(
 }
 
 /**
- * Identifiant de publication, stable et lié à ce qui est envoyé : la même requête (même personne, même fichier, mêmes
- * réglages) donne toujours la même story. Une reprise après une réponse perdue la retrouve au lieu d'en publier une
- * seconde. UUID de version 5 (hachage SHA-256), sans colonne ni migration.
+ * Identifiant de publication, stable et lié à la personne et au fichier envoyé (`uploadKey`, tirée au hasard à chaque
+ * envoi et à usage unique) : un fichier ne donne jamais qu'une story, quels que soient les réglages. Une reprise après
+ * une réponse perdue retrouve la story au lieu d'en publier une seconde, même si la légende a changé entre-temps.
+ * UUID de version 5 (hachage SHA-256), sans colonne ni migration.
  */
-export function storyIdFor(userId: string, input: StoryCreate): string {
-  const h = createHash("sha256")
-    .update(`story:${userId}:${JSON.stringify(input)}`)
-    .digest();
+export function storyIdFor(userId: string, uploadKey: string): string {
+  const h = createHash("sha256").update(`story:${userId}:${uploadKey}`).digest();
   h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
   h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
   const hex = h.subarray(0, 16).toString("hex");
@@ -344,13 +343,16 @@ export const storiesService = {
   async create(v: Viewer, input: StoryCreate): Promise<StoryCreated> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     // Reprise : cette publication existe déjà (la réponse s'est perdue) → la même story, sans doublon ni erreur.
-    const id = storyIdFor(v.user.id, input);
+    const id = storyIdFor(v.user.id, input.uploadKey);
     const replay = async (): Promise<StoryCreated | null> => {
       const [done] = await db
         .select({ status: stories.status, expiresAt: stories.expiresAt })
         .from(stories)
         .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id)));
-      return done ? { id, status: done.status, expiresAt: done.expiresAt.toISOString(), skipped: [] } : null;
+      // `skipped` n'est pas relu : il dépendait des réglages du premier envoi, que rien ne garde (écart accepté, journal).
+      return done
+        ? { id, status: done.status, expiresAt: done.expiresAt.toISOString(), skipped: [], replayed: true }
+        : null;
     };
     const again = await replay();
     if (again) return again;
@@ -475,9 +477,19 @@ export const storiesService = {
           isNull(uploads.consumedAt),
         ),
       );
-    if (!pending) throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+    // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
+    // on retrouve alors sa story avant de refuser.
+    if (!pending) {
+      const won = await replay();
+      if (won) return won;
+      throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
+    }
     const source = await storage.get(pending.key);
-    if (!source) throw validation("Image introuvable : envoie-la à nouveau.");
+    if (!source) {
+      const won = await replay();
+      if (won) return won;
+      throw validation("Image introuvable : envoie-la à nouveau.");
+    }
     const frame: Frame | undefined = input.frame;
     const composed = await composeStoryPhoto(source, { frame, rects });
 

@@ -125,6 +125,7 @@ export const storyPublishLabels = {
   done: "Story publiée",
   doneText: (audience: string) => `${audience} la voit pendant 24 h. Plaque traitée.`,
   doneAudience: { followers: "Tes abonnés", crew: "Ton crew", public: "Tous les membres" },
+  doneReplayed: "Ta story est déjà partie (sans tes dernières modifications).",
   doneSkipped: "Certaines identifications ont été écartées : ces personnes ne pourraient pas voir ta story.",
   backToFeed: "Retour au Fil",
   mine: "Ta story",

@@ -4,7 +4,7 @@
 import { fromWallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createEvent,
@@ -27,6 +27,7 @@ import {
   userFollows,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { storage } from "../../lib/storage";
 
 afterAll(async () => {
   await pool.end();
@@ -269,11 +270,45 @@ describe("création idempotente (tour 2)", () => {
     expect(await db.select().from(stories)).toHaveLength(1);
   });
 
-  it("un autre contenu avec le même fichier n'est pas une reprise (le fichier est déjà utilisé : 400)", async () => {
+  it("réponse perdue puis légende modifiée : une seule story, rendue comme reprise (replayed)", async () => {
     const kenji = await signUp("Kenji");
     const key = await uploadKey(kenji);
-    expect((await send(kenji, key, { caption: "A" })).status).toBe(201);
-    expect((await send(kenji, key, { caption: "B" })).status).toBe(400);
+    const first = await send(kenji, key, { caption: "A" });
+    expect(first.status).toBe(201);
+    expect(first.json.replayed).toBeUndefined();
+    const again = await send(kenji, key, { caption: "B", audience: "followers" });
+    expect(again.status, JSON.stringify(again.json)).toBe(201);
+    expect(again.json.id).toBe(first.json.id);
+    expect(again.json.replayed).toBe(true);
+    const rows = await db.select().from(stories);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.caption).toBe("A");
+  });
+
+  it("un second envoi qui arrive après l'enregistrement du premier mais avant la lecture du fichier rend la story du premier", async () => {
+    const kenji = await signUp("Kenji");
+    const key = await uploadKey(kenji);
+    const original = storage.get.bind(storage);
+    let raced = false;
+    let first: Awaited<ReturnType<typeof send>> | undefined;
+    const spy = vi.spyOn(storage, "get").mockImplementation(async (k: string) => {
+      // Premier appel du second envoi : le premier se termine ici (fichier consommé, source supprimée).
+      if (k === key && !raced) {
+        raced = true;
+        first = await send(kenji, key, { caption: "A" });
+        return null;
+      }
+      return original(k);
+    });
+    try {
+      const second = await send(kenji, key, { caption: "B" });
+      expect(first?.status, JSON.stringify(first?.json)).toBe(201);
+      expect(second.status, JSON.stringify(second.json)).toBe(201);
+      expect(second.json.id).toBe(first?.json.id);
+      expect(second.json.replayed).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
     expect(await db.select().from(stories)).toHaveLength(1);
   });
 

@@ -225,10 +225,17 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       tags,
     });
     // La page peut avoir été quittée malgré tout : rien n'est créé après coup (`sendIfAlive`).
+    // Un 400 « image déjà utilisée » après une réponse perdue : on refait la requête une fois avec la même clé (elle
+    // retrouve la story) avant d'oublier la clé.
     const sent = await sendIfAlive(
       () => open.current,
       async () => undefined,
-      () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body }),
+      async () => {
+        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const first = await post();
+        if (!first.ok && first.status === 400 && first.error.code !== "plate_decision_required") return post();
+        return first;
+      },
     );
     if (!sent.sent) return;
     const res = sent.value;
@@ -250,7 +257,11 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
         <FicheBar title={L.done} back="/app/fil" />
         <div className="story-done">
           <p className="o-t-body">{L.doneText(L.doneAudience[audience])}</p>
-          {done.skipped.length ? <p className="o-t-caption">{L.doneSkipped}</p> : null}
+          {done.replayed ? (
+            <p className="o-t-caption">{L.doneReplayed}</p>
+          ) : done.skipped.length ? (
+            <p className="o-t-caption">{L.doneSkipped}</p>
+          ) : null}
         </div>
         <a className="fil-publish" href="/app/fil" data-testid="story-done-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
