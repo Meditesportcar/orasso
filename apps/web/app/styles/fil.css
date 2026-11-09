@@ -439,3 +439,46 @@
     height: 320px;
   }
 }
+
+/* « Publier » demande où (lot R7f3) : le bouton principal ouvre deux lignes, en story ou dans le Fil. `summary` sans marqueur. */
+.fil-choose {
+  display: grid;
+  gap: var(--space-2);
+}
+.fil-choose > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.fil-choose > summary::-webkit-details-marker {
+  display: none;
+}
+.fil-choose__list {
+  display: grid;
+  gap: var(--space-2);
+}
+.fil-choose__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.fil-choose__option span {
+  display: grid;
+  gap: 2px;
+}
+.fil-choose__option small {
+  color: var(--ink-muted);
+}
+.s-main a.fil-choose__option,
+.app__body a.fil-choose__option {
+  color: var(--ink);
+}
+.fil-choose__option:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
