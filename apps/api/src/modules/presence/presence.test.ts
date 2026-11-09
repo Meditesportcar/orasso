@@ -36,6 +36,7 @@ import {
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
+import * as audiencePrizeModule from "../audience-prize/service";
 import { audiencePrizeService } from "../audience-prize/service";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
@@ -872,7 +873,11 @@ describe("tour 2 : corrections de la relecture", () => {
 });
 
 describe("décision de Damien (09/11) : billet payant scanné, GPS pour la gratuité", () => {
-  const paidEvent = () => makeEvent({ publicAccess: "paid_orasso", ticketsEnabled: true, title: "Payant" });
+  const paidEvent = (overrides: Partial<typeof events.$inferInsert> = {}) =>
+    makeEvent({ publicAccess: "paid_orasso", ticketsEnabled: true, title: "Payant", ...overrides });
+  const type = (eid: string, priceCents: number, capacity: number | null = null) =>
+    db.insert(ticketTypes).values({ eventId: eid, name: "Entrée", priceCents, capacity }).returning();
+  const codeOf = async (u: TestUser, eid: string) => (await here(u, eid)).json.error?.code;
 
   it("billet payant : scan_ticket (409), rien d'écrit", async () => {
     const e = await paidEvent();
@@ -883,6 +888,12 @@ describe("décision de Damien (09/11) : billet payant scanné, GPS pour la gratu
     expect(await db.query.eventPresences.findMany()).toHaveLength(0);
   });
 
+  it("billet payant : scan_ticket aussi quand les ventes sont coupées", async () => {
+    const e = await paidEvent({ ticketsEnabled: false });
+    await ticket(visitor, { cents: 1500 }, e.id);
+    expect(await codeOf(visitor, e.id)).toBe("scan_ticket");
+  });
+
   it("billet gratuit : validation acceptée", async () => {
     const e = await makeEvent({ title: "Gratuit" });
     await ticket(visitor, {}, e.id);
@@ -891,20 +902,129 @@ describe("décision de Damien (09/11) : billet payant scanné, GPS pour la gratu
 
   it("sans billet, entrée payante : ticket_required ; entrée gratuite ou sans billetterie : acceptée", async () => {
     const e = await paidEvent();
-    await db.insert(ticketTypes).values({ eventId: e.id, name: "Entrée", priceCents: 1000 });
+    await type(e.id, 1000);
     const res = await here(visitor, e.id);
     expect(res.status).toBe(409);
     expect(res.json.error.code).toBe("ticket_required");
     const free = await makeEvent({ publicAccess: "free_reservation", ticketsEnabled: true, title: "Réservation" });
-    await db.insert(ticketTypes).values({ eventId: free.id, name: "Entrée", priceCents: 0 });
+    await type(free.id, 0);
     expect((await here(visitor, free.id)).status).toBe(200);
     expect((await here(other)).status).toBe(200);
   });
 
-  it("les deux refus viennent juste après use_qr (un exposant reçoit use_qr)", async () => {
+  it("paid_orasso, ventes coupées, sans billet : ticket_required (le payant ne dépend pas des ventes)", async () => {
+    const e = await paidEvent({ ticketsEnabled: false });
+    await type(e.id, 1000);
+    expect(await codeOf(visitor, e.id)).toBe("ticket_required");
+  });
+
+  it("paid_orasso sans aucun type de billet : ticket_required ; seul type à 0 € : GPS accepté", async () => {
     const e = await paidEvent();
-    await db.insert(ticketTypes).values({ eventId: e.id, name: "Entrée", priceCents: 1000 });
+    expect(await codeOf(visitor, e.id)).toBe("ticket_required");
+    const zero = await paidEvent({ title: "Payant à 0" });
+    await type(zero.id, 0);
+    expect((await here(visitor, zero.id)).status).toBe(200);
+  });
+
+  it("réservation gratuite puis hausse du tarif : le billet reste gratuit (montant enregistré), GPS accepté", async () => {
+    const e = await paidEvent();
+    await ticket(visitor, {}, e.id);
+    await db.update(ticketTypes).set({ priceCents: 2500 }).where(eq(ticketTypes.eventId, e.id));
+    expect((await here(visitor, e.id)).status).toBe(200);
+    // Une personne sans billet, elle, doit maintenant en prendre un.
+    expect(await codeOf(other, e.id)).toBe("ticket_required");
+  });
+
+  it("repli sur le tarif du type seulement pour une commande sans montant enregistré (session Stripe, montant nul)", async () => {
+    const e = await paidEvent();
+    const t = await ticket(visitor, {}, e.id);
+    await db.update(ticketTypes).set({ priceCents: 2500 }).where(eq(ticketTypes.eventId, e.id));
+    await db.update(orders).set({ stripeSessionId: "cs_test_ancienne" }).where(eq(orders.id, t.orderId));
+    expect(await codeOf(visitor, e.id)).toBe("scan_ticket");
+  });
+
+  it("complet : ticket_required avec le libellé « C'est complet »", async () => {
+    const e = await paidEvent();
+    await type(e.id, 1000, 1);
+    await ticket(other, { cents: 1000 }, e.id);
+    const res = await here(visitor, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error).toMatchObject({ code: "ticket_required", message: presenceLabels.ticketRequiredFull });
+    // Pas complet : le libellé ordinaire.
+    const open = await paidEvent({ title: "Presque plein" });
+    await type(open.id, 1000, 5);
+    expect((await here(visitor, open.id)).json.error.message).toBe(presenceLabels.errors.ticket_required);
+  });
+
+  it("paid_external : refusé à tous (avec ou sans billet), pay_at_entry et son libellé", async () => {
+    const e = await makeEvent({ publicAccess: "paid_external", title: "Billetterie externe" });
+    const res = await here(visitor, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error).toMatchObject({ code: "pay_at_entry", message: presenceLabels.errors.pay_at_entry });
+    await ticket(other, {}, e.id);
+    expect(await codeOf(other, e.id)).toBe("pay_at_entry");
+    expect(await db.query.eventPresences.findMany()).toHaveLength(0);
+  });
+
+  it("fermé au public : closed_to_public (409) ; un exposant reçoit use_qr", async () => {
+    const e = await makeEvent({ publicAccess: "closed", title: "Fermé" });
+    const res = await here(visitor, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error.code).toBe("closed_to_public");
+    await exhibitor(other, {}, e.id);
+    expect(await codeOf(other, e.id)).toBe("use_qr");
+  });
+
+  it("les refus d'accès viennent juste après use_qr (un exposant reçoit use_qr)", async () => {
+    const e = await paidEvent();
+    await type(e.id, 1000);
     await exhibitor(visitor, {}, e.id);
     expect((await here(visitor, e.id)).json.error.code).toBe("use_qr");
+  });
+});
+
+describe("tour 3 : accueil, droit de vote, assistance", () => {
+  it("accueil : 20 événements refusés puis un autorisé, le bloc « En cours » reste", async () => {
+    // Vingt événements privés commencés plus tard (donc en tête de liste), invitation retirée : tous refusés.
+    for (let i = 0; i < 20; i++) {
+      const priv = await makeEvent({
+        admission: "invite_only",
+        title: `Privé ${i}`,
+        startsAt: paris(11, 7, 9, 1 + i),
+      });
+      await db
+        .insert(eventInvitations)
+        .values({ eventId: priv.id, userId: other.id, token: `tok-t3-${i}`, status: "withdrawn" });
+      await db
+        .insert(eventPresences)
+        .values({ eventId: priv.id, userId: other.id, kind: "gps", validatedAt: clock.now });
+    }
+    expect((await here(other)).status).toBe(200);
+    const live = (await call(other, "GET", "/me/home")).json.live;
+    expect(live).toMatchObject({ event: { id: event.id } });
+  });
+
+  it("canVote protégé : une erreur du calcul du vote ne défait pas la présence (false, journalisée sans position)", async () => {
+    const spy = vi.spyOn(audiencePrizeModule, "canVoteNow").mockRejectedValue(new Error("boum"));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await here(visitor);
+    expect(res.status).toBe(200);
+    expect(res.json.canVote).toBe(false);
+    expect(await db.query.eventPresences.findMany()).toHaveLength(1);
+    const logged = JSON.stringify(errors.mock.calls.map((c) => c.map(String)));
+    expect(logged).toContain("boum");
+    expect(logged).not.toContain(String(DEVICE.lat));
+    expect(logged).not.toContain(String(DEVICE.lng));
+    spy.mockRestore();
+  });
+
+  it("super admin en assistance qui est aussi staff : le résumé reste lisible après la fin, sans être affecté", async () => {
+    const admin = await signUp("Admin_Staff", { twoFactor: true, role: "super_admin" });
+    await addMember(structureId, admin.id, "staff", ["scan"]);
+    expect((await summary(admin)).status).toBe(200);
+    clock.set(ENDS);
+    expect((await summary(admin)).status).toBe(200);
+    // Un staff ordinaire, lui, n'a ni affectation ni accès après la fin.
+    expect((await summary(staff)).status).toBe(403);
   });
 });

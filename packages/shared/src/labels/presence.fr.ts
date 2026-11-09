@@ -24,11 +24,15 @@ export const presenceLabels = {
   /** Statistique de l'organisateur : un nombre, jamais une liste. */
   summaryTitle: "Présents sur Orasso",
   summaryTotal: (n: number) => `${n} ${pluralFr(n, "utilisateur d'Orasso présent", "utilisateurs d'Orasso présents")}`,
+  /** Même refus `ticket_required`, quand il ne reste plus de billet. */
+  ticketRequiredFull: "C'est complet : l'entrée se fait avec un billet scanné.",
   errors: {
     closed: "La présence se valide pendant l'événement, à partir de 30 minutes avant son début.",
     use_qr: "Tu as une place avec ton véhicule : l'accueil te scanne à l'entrée, pas besoin de position.",
     scan_ticket: "Ton billet se fait scanner à l'entrée : pas besoin de position.",
     ticket_required: "L'entrée est payante : prends ton billet.",
+    pay_at_entry: "L'entrée est payante hors Orasso : la validation par GPS n'est pas possible ici.",
+    closed_to_public: "Cet événement est fermé au public : seuls les exposants entrent, par leur QR.",
     already_present: "Ta présence est déjà validée pour cet événement.",
     gps_imprecise: "Ta position est trop imprécise : sors à l'air libre, attends quelques secondes et réessaie.",
     out_of_zone: "Tu n'es pas encore dans la zone de l'événement : rapproche-toi du lieu et réessaie.",

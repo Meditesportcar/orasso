@@ -35,31 +35,49 @@ export async function ticketOf(ex: Executor, eventId: string, userId: string): P
 }
 
 /**
- * Billet et prix (décision de Damien, 09/11 : « un billet payant doit être scanné ; la validation GPS est ok pour ceux
- * où c'est gratuit »). Le prix d'un billet est celui réellement payé (montant de la commande), sinon, sans paiement
- * enregistré, le prix du type de billet. Entrée payante : billetterie payante Orasso en vente (type de billet à prix
- * non nul, billetterie ouverte) ; un événement gratuit, sans billetterie ou à billets gratuits n'a pas d'entrée payante.
+ * Accès et billet (décision de Damien, 09/11 : « un billet payant doit être scanné ; le GPS est ok pour ceux où c'est
+ * gratuit »). Le caractère payant ne dépend jamais de l'ouverture des ventes ni du tarif actuel d'un billet déjà émis :
+ * un billet est payant si le montant ENREGISTRÉ à l'émission (commande) est non nul ; une réservation gratuite le reste
+ * même si le tarif a augmenté depuis. Repli sur le tarif du type seulement pour une commande ancienne dont le montant
+ * n'a pas été enregistré (montant nul mais session Stripe présente). `full` : le type de billet n'a plus de place.
  */
-export async function ticketPayment(
+export async function entryOf(
   ex: Executor,
-  event: { id: string; publicAccess: string; ticketsEnabled: boolean },
+  event: { id: string; publicAccess: string },
   userId: string,
-): Promise<{ holdsPaidTicket: boolean; entryPaidNoTicket: boolean }> {
+  at: Date,
+): Promise<{
+  access: { publicAccess: string; ticketPricesCents: number[] };
+  ticket: "none" | "free" | "paid";
+  full: boolean;
+}> {
+  const types = await ex.execute<{ price_cents: number; capacity: number | null }>(
+    sql`select price_cents, capacity from ticket_types where event_id = ${event.id}`,
+  );
   const rows = await ex.execute<{ paid: boolean }>(sql`select (
       o.amount_cents > 0
-      or (o.amount_cents = 0 and o.stripe_session_id is null and ty.price_cents > 0)
+      or (o.amount_cents = 0 and o.stripe_session_id is not null and ty.price_cents > 0)
     ) as paid
     from tickets t
       join orders o on o.id = t.order_id
       join ticket_types ty on ty.id = t.ticket_type_id
     where t.event_id = ${event.id} and t.user_id = ${userId} and t.status <> 'cancelled'`);
-  if (rows.rows.length) return { holdsPaidTicket: rows.rows.some((r) => r.paid), entryPaidNoTicket: false };
-  if (event.publicAccess !== "paid_orasso" || !event.ticketsEnabled)
-    return { holdsPaidTicket: false, entryPaidNoTicket: false };
-  const type = await ex.execute(
-    sql`select 1 from ticket_types where event_id = ${event.id} and price_cents > 0 limit 1`,
-  );
-  return { holdsPaidTicket: false, entryPaidNoTicket: type.rows.length > 0 };
+  const ticket = !rows.rows.length ? "none" : rows.rows.some((r) => r.paid) ? "paid" : "free";
+  let full = false;
+  const capacity = types.rows[0]?.capacity ?? null;
+  if (ticket === "none" && capacity !== null) {
+    const taken = await ex.execute<{ n: number }>(sql`select (
+        (select count(*) from tickets where event_id = ${event.id} and status in ('valid', 'used'))
+        + (select coalesce(sum(quantity), 0) from orders
+            where event_id = ${event.id} and status = 'pending' and expires_at > ${at})
+      )::int as n`);
+    full = Number(taken.rows[0]?.n ?? 0) >= capacity;
+  }
+  return {
+    access: { publicAccess: event.publicAccess, ticketPricesCents: types.rows.map((r) => Number(r.price_cents)) },
+    ticket,
+    full,
+  };
 }
 
 /**

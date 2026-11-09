@@ -67,6 +67,8 @@ export type PresenceRefusal =
   | "use_qr"
   | "scan_ticket"
   | "ticket_required"
+  | "pay_at_entry"
+  | "closed_to_public"
   | "already_present"
   | "gps_imprecise"
   | "out_of_zone"
@@ -87,26 +89,54 @@ export type PresenceContext = {
   now: Date;
   /** Candidature de véhicule retenue ou entrée : un exposant se fait scanner à l'accueil, il ne valide pas par GPS. */
   holdsVehicleSlot: boolean;
-  /** Décision de Damien (09/11) : un billet PAYANT se fait scanner à l'entrée, le GPS est pour la gratuité. La personne a un billet payant (prix réellement payé, sinon prix du type de billet). */
-  holdsPaidTicket?: boolean;
-  /** La personne n'a aucun billet et l'entrée visiteur de l'événement est payante (billetterie payante en vente). */
-  entryPaidNoTicket?: boolean;
+  /**
+   * Décision de Damien (09/11) : un billet PAYANT se fait scanner à l'entrée, le GPS est pour la gratuité. Accès de
+   * l'événement (`publicAccess`, absent = entrée libre) et prix des types de billet (en centimes, liste vide = aucun
+   * type). Le caractère payant ne dépend jamais de l'ouverture des ventes.
+   */
+  access?: { publicAccess: string; ticketPricesCents: readonly number[] };
+  /**
+   * Billet de la personne : `none` (aucun), `free` (montant enregistré à l'émission nul, même si le tarif a augmenté
+   * depuis), `paid` (montant enregistré non nul). Absent = `none`.
+   */
+  ticket?: "none" | "free" | "paid";
   /** Une présence existe déjà pour ce compte et cet événement. */
   alreadyPresent: boolean;
   point: LatLng;
   accuracyM?: number | null;
 };
 
+/** L'entrée visiteur est payante : `paid_orasso` avec un type de billet à prix non nul, ou sans aucun type (ventes ouvertes ou non). */
+export function paidOrassoEntry(ticketPricesCents: readonly number[]): boolean {
+  return ticketPricesCents.length === 0 || ticketPricesCents.some((p) => p > 0);
+}
+
+/**
+ * Refus tiré de l'accès de l'événement et du billet : fermé au public (`closed_to_public`), billetterie ou paiement
+ * hors Orasso (`pay_at_entry`), billet payant (`scan_ticket`), entrée payante sans billet (`ticket_required`).
+ * Entrée gratuite : jamais de refus, avec ou sans billet.
+ */
+export function entryRefusal(ctx: Pick<PresenceContext, "access" | "ticket">): PresenceRefusal | null {
+  const access = ctx.access;
+  if (!access) return null;
+  if (access.publicAccess === "closed") return "closed_to_public";
+  if (access.publicAccess === "paid_external") return "pay_at_entry";
+  if (access.publicAccess !== "paid_orasso" || !paidOrassoEntry(access.ticketPricesCents)) return null;
+  if (ctx.ticket === "paid") return "scan_ticket";
+  return ctx.ticket === "free" ? null : "ticket_required";
+}
+
 /**
  * Refus de la présence par GPS, dans l'ordre où on l'explique : événement publié et ouvert (`closed`), exposant
- * (`use_qr`), billet payant (`scan_ticket`), entrée payante sans billet (`ticket_required`), déjà présent (`already_present`), position trop imprécise (`gps_imprecise`), lieu sans position
- * (`no_zone`), hors de la zone (`out_of_zone`). `null` = la présence est validée.
+ * (`use_qr`), accès et billet (`closed_to_public`, `pay_at_entry`, `scan_ticket`, `ticket_required`), déjà présent
+ * (`already_present`), position trop imprécise (`gps_imprecise`), lieu sans position (`no_zone`), hors de la zone
+ * (`out_of_zone`). `null` = la présence est validée.
  */
 export function presenceRefusal(ctx: PresenceContext): PresenceRefusal | null {
   if (ctx.event.status !== "published" || !inPresenceWindow(ctx.event, ctx.now)) return "closed";
   if (ctx.holdsVehicleSlot) return "use_qr";
-  if (ctx.holdsPaidTicket) return "scan_ticket";
-  if (ctx.entryPaidNoTicket) return "ticket_required";
+  const entry = entryRefusal(ctx);
+  if (entry) return entry;
   if (ctx.alreadyPresent) return "already_present";
   if (ctx.accuracyM !== null && ctx.accuracyM !== undefined && ctx.accuracyM > PRESENCE_MAX_ACCURACY_M) {
     return "gps_imprecise";

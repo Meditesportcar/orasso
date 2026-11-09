@@ -16,6 +16,7 @@ import {
   PRESENCE_OPENS_BEFORE_MS,
   PRESENCE_RADIUS_BOUNDS,
   type PresenceContext,
+  paidOrassoEntry,
   presenceRadiusM,
   presenceRefusal,
   presenceWindow,
@@ -161,9 +162,76 @@ describe("présence par GPS : refus, dans l'ordre", () => {
   });
 
   it("chaque refus a son libellé", () => {
-    for (const code of ["closed", "use_qr", "already_present", "gps_imprecise", "out_of_zone", "no_zone"] as const) {
+    for (const code of [
+      "closed",
+      "use_qr",
+      "scan_ticket",
+      "ticket_required",
+      "pay_at_entry",
+      "closed_to_public",
+      "already_present",
+      "gps_imprecise",
+      "out_of_zone",
+      "no_zone",
+    ] as const) {
       expect(presenceLabels.errors[code].length).toBeGreaterThan(10);
     }
+  });
+});
+
+describe("présence par GPS : accès et billets (décision de Damien, 09/11)", () => {
+  const access = (publicAccess: string, ...ticketPricesCents: number[]) => ({ publicAccess, ticketPricesCents });
+
+  it("entrée libre ou réservation gratuite : acceptée, avec ou sans billet", () => {
+    expect(presenceRefusal({ ...ok, access: access("free") })).toBeNull();
+    expect(presenceRefusal({ ...ok, access: access("free_reservation", 0), ticket: "free" })).toBeNull();
+    // paid_orasso dont le seul type est à 0 € : gratuit
+    expect(presenceRefusal({ ...ok, access: access("paid_orasso", 0), ticket: "none" })).toBeNull();
+  });
+
+  it("paid_orasso : billet payant scanné, sans billet ticket_required, billet gratuit accepté", () => {
+    const paid = access("paid_orasso", 1500);
+    expect(presenceRefusal({ ...ok, access: paid, ticket: "paid" })).toBe("scan_ticket");
+    expect(presenceRefusal({ ...ok, access: paid, ticket: "none" })).toBe("ticket_required");
+    expect(presenceRefusal({ ...ok, access: paid })).toBe("ticket_required");
+    // Réservation gratuite émise avant une hausse du tarif : le montant enregistré fait foi.
+    expect(presenceRefusal({ ...ok, access: paid, ticket: "free" })).toBeNull();
+  });
+
+  it("paid_orasso sans aucun type de billet : payant (ventes coupées comprises)", () => {
+    expect(paidOrassoEntry([])).toBe(true);
+    expect(paidOrassoEntry([0])).toBe(false);
+    expect(paidOrassoEntry([0, 500])).toBe(true);
+    expect(presenceRefusal({ ...ok, access: access("paid_orasso"), ticket: "none" })).toBe("ticket_required");
+  });
+
+  it("paid_external : refusé à tous, pay_at_entry ; closed : closed_to_public", () => {
+    expect(presenceRefusal({ ...ok, access: access("paid_external"), ticket: "none" })).toBe("pay_at_entry");
+    expect(presenceRefusal({ ...ok, access: access("paid_external", 0), ticket: "free" })).toBe("pay_at_entry");
+    expect(presenceRefusal({ ...ok, access: access("closed") })).toBe("closed_to_public");
+  });
+
+  it("l'ordre : fermé (heures) puis exposant puis accès, avant déjà présent et la zone", () => {
+    const late = new Date("2026-11-09T10:00:00Z");
+    expect(presenceRefusal({ ...ok, now: late, access: access("closed") })).toBe("closed");
+    expect(presenceRefusal({ ...ok, holdsVehicleSlot: true, access: access("closed") })).toBe("use_qr");
+    expect(presenceRefusal({ ...ok, alreadyPresent: true, point: north(5000), access: access("paid_external") })).toBe(
+      "pay_at_entry",
+    );
+  });
+
+  it("événement sur plusieurs jours : l'accès s'applique dans la plage d'un jour, la pause reste fermée", () => {
+    const days = [
+      { startsAt: new Date("2026-11-08T08:00:00Z"), endsAt: new Date("2026-11-08T18:00:00Z") },
+      { startsAt: new Date("2026-11-10T08:00:00Z"), endsAt: new Date("2026-11-10T18:00:00Z") },
+    ];
+    const multi = { ...ok, event: { ...ok.event, endsAt: days[1]!.endsAt, days }, access: access("paid_orasso", 1000) };
+    expect(presenceRefusal({ ...multi, ticket: "paid" })).toBe("scan_ticket");
+    expect(presenceRefusal({ ...multi, ticket: "none", now: new Date("2026-11-10T09:00:00Z") })).toBe(
+      "ticket_required",
+    );
+    expect(presenceRefusal({ ...multi, ticket: "none", now: new Date("2026-11-09T09:00:00Z") })).toBe("closed");
+    expect(presenceRefusal({ ...multi, ticket: "free", now: new Date("2026-11-10T09:00:00Z") })).toBeNull();
   });
 });
 

@@ -26,14 +26,14 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { eventPresences, eventStaff, events, passportStamps } from "../../db/schema";
-import { staffAccess } from "../../lib/access";
+import { isSuperAdmin, requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { type Executor, withTx } from "../../lib/tx";
+import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { canVoteNow } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
@@ -41,15 +41,7 @@ import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
 import { structureById } from "../structures/service";
-import {
-  holdsVehicleSlot,
-  myProofs,
-  onSiteCount,
-  summaryCounts,
-  ticketOf,
-  ticketPayment,
-  vehiclesEntered,
-} from "./repo";
+import { entryOf, holdsVehicleSlot, myProofs, onSiteCount, summaryCounts, ticketOf, vehiclesEntered } from "./repo";
 
 /** Code HTTP de chaque refus : 409 pour l'état (fermé, exposant, déjà présent, lieu sans position), 422 pour la mesure. */
 const REFUSAL_STATUS = {
@@ -57,6 +49,8 @@ const REFUSAL_STATUS = {
   use_qr: 409,
   scan_ticket: 409,
   ticket_required: 409,
+  pay_at_entry: 409,
+  closed_to_public: 409,
   already_present: 409,
   no_zone: 409,
   gps_imprecise: 422,
@@ -97,6 +91,19 @@ async function visibleEvent(v: Viewer, eventId: string): Promise<EventRow> {
   return event;
 }
 
+/**
+ * `canVote` de la réponse, dans un point de reprise : une erreur de lecture (base, règle du vote) ne défait ni ne bloque
+ * une présence déjà écrite. Elle donne `false` et est journalisée **sans la position** (l'erreur seule).
+ */
+async function canVoteSafely(ex: Executor, event: EventRow, userId: string): Promise<boolean> {
+  try {
+    return await (ex as Tx).transaction((sp) => canVoteNow(sp, event, userId));
+  } catch (error) {
+    console.error("Droit de vote non calculé après une présence validée :", error);
+    return false;
+  }
+}
+
 export const presenceService = {
   /**
    * `POST /events/:id/presence` : « Je suis sur place ». Dans l'ordre : limite de débit (5 essais en 10 minutes par
@@ -112,11 +119,13 @@ export const presenceService = {
     try {
       return await withTx(async (tx, after) => {
         const t = now();
+        const entry = await entryOf(tx, event, v.user.id, t);
         const refusal = presenceRefusal({
           event: { ...event, days: await daysRepo.list(eventId, tx) },
           now: t,
           holdsVehicleSlot: await holdsVehicleSlot(tx, eventId, v.user.id),
-          ...(await ticketPayment(tx, event, v.user.id)),
+          access: entry.access,
+          ticket: entry.ticket,
           alreadyPresent: Boolean(
             await tx.query.eventPresences.findFirst({
               where: and(eq(eventPresences.eventId, eventId), eq(eventPresences.userId, v.user.id)),
@@ -126,6 +135,9 @@ export const presenceService = {
           point,
           accuracyM,
         });
+        if (refusal === "ticket_required" && entry.full) {
+          throw new AppError(REFUSAL_STATUS[refusal], refusal, presenceLabels.ticketRequiredFull);
+        }
         if (refusal) throw refusalError(refusal);
         const ticketId = await ticketOf(tx, eventId, v.user.id);
         // Aucune position dans cette ligne : le lieu (événement), la personne, le billet, l'heure.
@@ -147,7 +159,8 @@ export const presenceService = {
         });
         const stampId = await visitStampId(tx, eventId, v.user.id);
         // La règle effective du vote : la présence est écrite, restent la fenêtre et les deux véhicules pointés.
-        const canVote = await canVoteNow(tx, event, v.user.id);
+        // Protégé : un échec de cette lecture ne défait jamais une présence validée (faux, erreur sans la position).
+        const canVote = await canVoteSafely(tx, event, v.user.id);
         // Le tampon tombe à l'écran (comme au contrôle d'un billet), seulement s'il vient d'être posé.
         if (fresh) after(() => passportService.publish(v.user.id, fresh));
         after(() => presenceService.announce(eventId));
@@ -175,7 +188,10 @@ export const presenceService = {
     const event = await eventsRepo.byId(eventId);
     const access = await staffAccess(v, event.structureId, [...staffRoles], event.id);
     if (!access) throw new AppError(403, "forbidden", "Réservé à l'organisation et au staff de l'événement");
-    if (access.actor === "staff") {
+    // Un super admin en assistance qui est aussi staff de la structure : la règle du super admin passe d'abord (aussi
+    // après la fin, c'est le bilan de l'organisateur) ; son passage est tracé comme celui d'un super admin.
+    if (access.actor === "staff" && isSuperAdmin(v)) await requireOrganizer(v, event.structureId);
+    else if (access.actor === "staff") {
       const assigned = await db.query.eventStaff.findFirst({
         where: and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, v.user.id)),
         columns: { id: true },
@@ -231,10 +247,10 @@ export const presenceService = {
           or exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${v.user.id}
               and k.status <> 'cancelled')
           or exists (select 1 from event_presences g where g.event_id = e.id and g.user_id = ${v.user.id}))
-      order by e.starts_at desc, e.ends_at asc
-      limit 20`);
+      order by e.starts_at desc, e.ends_at asc`);
     // Droits ACTUELS : un événement privé dont l'invitation de la personne a été révoquée n'apparaît plus, même si elle
-    // y a un billet ou une présence ; on prend le premier de la liste que la personne a encore le droit de voir.
+    // y a un billet ou une présence ; on prend le premier de la liste que la personne a encore le droit de voir (le filtre des droits passe avant toute limite :
+    // la liste n'est pas tronquée, elle ne compte que les événements en cours où la personne a une place).
     let hit: { id: string; retained: boolean } | undefined;
     let e: EventRow | undefined;
     for (const candidate of rows.rows) {
