@@ -79,6 +79,7 @@ import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
+import { anonymizeStoriesForDeletedAccount } from "../stories/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 import { assertInterests } from "../vehicles/categories";
 
@@ -462,6 +463,9 @@ export const accountService = {
       await anonymizeSocialForDeletedAccount(tx, userId);
       // Lot R6c : invitations à un événement (envoyées, reçues), invitations coupées, notifications qui le citent.
       await anonymizeEventInvitesForDeletedAccount(tx, userId);
+      // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.
+      await anonymizeStoriesForDeletedAccount(tx, userId, after);
+
       // Lot R7c1 : les notifications regroupées des autres (flammes sur une story…) perdent son pseudo et son avatar.
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.

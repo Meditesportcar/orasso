@@ -153,6 +153,10 @@ const RETRY_REMOVABLE = [
   /^vehicles\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
   /^private\/crew-banners\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/,
   /^crews\/[0-9a-f-]{36}\/banner-[0-9a-f]{16}\.webp$/,
+  // Lot R7f1 : fichiers d'une story effacée dont la suppression avait échoué.
+  /^private\/stories\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(webp|mp4)$/,
+  // Lot R7f1, tour 2 : l'original non flouté d'une story (envoi `story`), dont la suppression avait échoué.
+  /^private\/story-uploads\/[0-9a-f-]{36}\.webp$/,
 ];
 
 /** Tâche `storage.remove` : seules les clés de `RETRY_REMOVABLE` sont concernées. */

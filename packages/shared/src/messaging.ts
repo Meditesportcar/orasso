@@ -38,6 +38,10 @@ export const uploadPurposes = [
   "event_poster_photo",
   // Lot R5c1 : photo du fil d'un crew (privée, jamais publique : D36).
   "crew_post",
+  // Lot R7f1 : photo d'une story (privée, composée en 9:16 par le serveur) ; la vidéo (`story_video`) est déclarée,
+  // refusée (501) tant que le lot R7g1 n'est pas là.
+  "story",
+  "story_video",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -52,6 +56,9 @@ export const privateUploadPurposes: readonly UploadPurpose[] = [
   "announcement",
   // Lot R5c1 (D36) : photo du fil d'un crew, servie seulement aux membres actifs du crew.
   "crew_post",
+  // Lot R7f1 : la photo d'une story attend, privée, d'être composée.
+  "story",
+  "story_video",
 ];
 
 /**
@@ -75,6 +82,9 @@ export const acceptedUploadPurposes = [
   "event_poster_photo",
   // Lot R5c1 : photo du fil d'un crew (`POST /crews/:id/posts`).
   "crew_post",
+  // Lot R7f1 : photo d'une story (`POST /me/stories`) ; la vidéo répond 501 « Vidéo bientôt » (lot R7g1).
+  "story",
+  "story_video",
 ] as const satisfies readonly UploadPurpose[];
 
 /**

@@ -1,11 +1,8 @@
-// Vignette de la story à laquelle répond un message (lot R7c1). La colonne `messages.story_id` n'existe pas encore (elle
-// arrive avec les stories, lot R7f1) : la fonction ne lit rien et renvoie `null`. R7f1 la complète : vignette servie
-// seulement tant que la story existe, et seulement si le lecteur peut encore la voir (invariant « Accueil, Activité,
-// Messages »).
-import type { messages } from "../../db/schema";
+// Vignette de la story à laquelle répond un message (lots R7c1 et R7f1). Servie par la route protégée
+// `GET /api/stories/:id/thumb`, qui contrôle l'audience à chaque lecture ; `null` dès que la story n'existe plus
+// (`messages.story_id` est remis à `null` à l'expiration ou à la suppression, voir `stories/expire.ts`).
+import type { MessageRow } from "./core";
 
-type MessageRow = typeof messages.$inferSelect;
-
-export function storyThumbFor(_message: Pick<MessageRow, "id"> | null | undefined): string | null {
-  return null;
+export function storyThumbFor(message: Pick<MessageRow, "storyId"> | null | undefined): string | null {
+  return message?.storyId ? `/api/stories/${message.storyId}/thumb` : null;
 }

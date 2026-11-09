@@ -144,6 +144,9 @@ export const rateRules = {
   pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
   /** Lot R5c1 : fil d'un crew. Photos envoyées (6 par publication), publications, commentaires, flammes et voix. */
   crewPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
+  /** Lot R7f1 : publication d'une story (composition d'image côté serveur) et petites écritures (vue, flamme, mute…). */
+  storyPublish: { max: 30, windowMs: 3_600_000, message: "Trop de stories publiées : réessaie plus tard." },
+  storyWrite: { max: 300, windowMs: 3_600_000, message: "Trop d'actions sur les stories : réessaie plus tard." },
   crewPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   crewComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
   crewReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },

@@ -9,6 +9,7 @@ import { pageQuery } from "./common";
 import type { CrewCard } from "./crews";
 import type { PassportStamp } from "./passport";
 import type { PublicProfile } from "./profile";
+import type { StoriesSummary } from "./stories";
 import type { VehiclePrivate, VehiclePublic } from "./vehicle";
 
 // Social (lot 17, puis lot R6b : « Suivre » remplace l'amitié) : profils des autres, recherche de personnes, réseau.
@@ -149,6 +150,8 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
    * tamponnées. Mêmes données et même visibilité que ses sorties passées : événements publiés, hors invitation, finis.
    */
   seenAt: { events: number; stamps: PassportStamp[] } | null;
+  /** Lot R7f1 : ses stories visibles pour le regard ; `{ count: 0, hasUnseen: false, ring: null }` sans rien révéler. */
+  stories: StoriesSummary;
 };
 
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */
