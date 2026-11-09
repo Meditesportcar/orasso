@@ -275,7 +275,8 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
         `/events/${event.id}/audience-prize`,
       )
     ).data;
-  expect((await board()).entries.length).toBe(4);
+  // Lot R7-0 (D38) : avant son vote, Kenji ne reçoit pas le classement ; il le reçoit après (plus bas).
+  expect((await board()).entries).toEqual([]);
 
   for (const [round, theme] of THEMES.entries()) {
     const { ctx, page } = await open(browser, theme);
@@ -309,7 +310,7 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     // Lot C2b (artefact `s-vote`) : on choisit la voiture, puis « Voter pour … » ; « Changer mon vote » rouvre la grille.
     await page.getByTestId("vote-card").filter({ hasText: p2.pseudo }).click();
     await page.getByTestId("vote-cta").click();
-    await expect(page.getByTestId("vote-saved")).toContainText("Vote enregistré · tu peux le changer jusqu'à");
+    await expect(page.getByTestId("vote-saved")).toContainText(/Vote enregistré · tu peux le changer jusqu'(à|au)/);
     await page.getByTestId("vote-change").click();
     await page.getByTestId("vote-card").filter({ hasText: p1.pseudo }).click();
     await page.getByTestId("vote-cta").click();
