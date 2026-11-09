@@ -12,7 +12,7 @@ import {
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
-import { PublicProfile } from "../components/PublicProfile";
+import { PublicProfile } from "../components/profile/PublicProfile";
 import { api, apiOrThrow, getMe, safeReturn } from "../lib/api.server";
 import { followAction, isFollowIntent } from "../lib/follow.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";

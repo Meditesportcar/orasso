@@ -9,11 +9,13 @@
 // autres en lignes compactes sous « Tes autres véhicules » ; menu « ⋯ » de chaque véhicule : « Mettre en avant »,
 // Modifier, Partager son affiche, Retirer du garage (archiver) ; un bandeau confirme le nouveau principal ; « Pour ta … »
 // suit le principal.
-import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot R7b1 (D38) : le Garage n'est plus un écran : c'est le panneau « Garage » du Profil (sans en-tête ni grand titre ; ses
+// feuilles passent par `<Overlay>`) ; « Ajouter un véhicule » devient le bouton principal du panneau.
+import { Button, EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L, mainVehicleLabels as M, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -23,22 +25,28 @@ import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { TabScreen } from "@/ui/Screens";
+import { Overlay } from "@/ui/Overlay";
 import { SecHead } from "@/ui/SecHead";
 import { GarageCard } from "./GarageCard";
 import { VehiclePros } from "./VehiclePros";
 
-const { space1, space3 } = tokens.spacing;
+const { space3 } = tokens.spacing;
 
-export function GarageScreen() {
+export function GarageScreen({
+  reloadKey = 0,
+}: {
+  /** Change à chaque « tirer pour actualiser » du Profil. */ reloadKey?: number;
+}) {
   const { t } = useTheme();
   const router = useRouter();
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles" });
   const active = vehicles.data?.filter((v) => v.status === "active") ?? [];
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
   const add = () => router.push("/vehicule/nouveau");
-  const [round, setRound] = useState(0);
+  // Tour 2 : la certification et « Pour ta … » se relisent au « tirer pour actualiser » du Profil.
+  const round = reloadKey;
   const { refreshMe } = useSession();
   const [menuFor, setMenuFor] = useState<VehicleFull | null>(null);
   const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
@@ -65,16 +73,15 @@ export function GarageScreen() {
     }
   };
 
+  // Le Profil relit tout au « tirer pour actualiser » : le garage aussi.
+  const reload = vehicles.reload;
+  useEffect(() => {
+    if (reloadKey > 0) void reload();
+  }, [reloadKey, reload]);
+
   return (
-    <TabScreen
-      title={L.garageTitle}
-      facts={vehicles.data ? L.garageCount(active.length) : undefined}
-      onRefresh={async () => {
-        await vehicles.reload();
-        // Tour 2 : la certification et « Pour ta … » se relisent aussi.
-        setRound((r) => r + 1);
-      }}
-      overlays={
+    <View style={styles.panel} testID="garage-panel">
+      <Overlay>
         <>
           <AppSheet
             visible={menuFor !== null}
@@ -143,8 +150,7 @@ export function GarageScreen() {
             }}
           />
         </>
-      }
-    >
+      </Overlay>
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
 
       {active.length === 0 && !vehicles.loading ? (
@@ -159,6 +165,17 @@ export function GarageScreen() {
         />
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {vehicles.data && active.length > 0 ? (
+        <Muted variant="caption" testID="garage-count">
+          {L.garageCount(active.length)}
+        </Muted>
+      ) : null}
+      {/* Le bouton principal de l'onglet : ajouter un véhicule (vide, c'est celui de l'état vide). */}
+      {active.length > 0 ? (
+        <Button variant="primary" icon="add" onPress={add} fullWidth testID="garage-add">
+          {L.addVehicle}
+        </Button>
+      ) : null}
       {/* Tour 2 : le bandeau se pose au-dessus de la mini-fiche, dans la page : il ne couvre plus le principal. */}
       {banner ? (
         <View
@@ -199,27 +216,6 @@ export function GarageScreen() {
         />
       ))}
 
-      {active.length > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${L.addVehicle}. ${L.addVehicleHint}`}
-          onPress={add}
-          testID="garage-add"
-          style={[styles.add, { borderColor: t.color.line }]}
-        >
-          <Monogram size={56} />
-          <View style={styles.addText}>
-            <Text variant="bodyStrong" color={t.color.ink} style={styles.addTitle}>
-              {L.addVehicle}
-            </Text>
-            <Text variant="caption" color={t.color.inkMuted}>
-              {L.addVehicleHint}
-            </Text>
-          </View>
-          <Icon name="add" size={20} color={t.color.ink} />
-        </Pressable>
-      ) : null}
-
       {/* Une section par véhicule (clé) : jamais les pros d'un autre véhicule, même le temps d'une réponse. */}
       {active[0] ? (
         <VehiclePros key={active[0].id} vehicleId={active[0].id} modelName={active[0].modelName} round={round} />
@@ -231,21 +227,12 @@ export function GarageScreen() {
           {L.archived(archived.length)}
         </SmButton>
       ) : null}
-    </TabScreen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  add: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space3 + 2,
-    padding: space3 + 2,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderStyle: "dashed",
-  },
-  addTitle: { fontFamily: "Archivo-ExtraBold" },
+  panel: { gap: space3 },
   menuTitle: { marginBottom: space3 },
   banner: {
     flexDirection: "row",
@@ -257,5 +244,4 @@ const styles = StyleSheet.create({
   },
   bannerIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   bannerText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  addText: { flex: 1, gap: space1 },
 });

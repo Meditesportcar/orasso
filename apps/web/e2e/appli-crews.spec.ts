@@ -84,9 +84,12 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await k.page.getByTestId("people-q").fill(`Roussillon ${s}`);
     await expect(k.page.getByTestId("crew-row").first()).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `02-explorer-crews-${theme}`);
-    // Lot C2b : le crew vit dans Mon profil (« Mon crew »), plus dans le Garage.
+    // Lot C2b : le crew vit dans Mon profil (« Mon crew »), plus dans le Garage. Lot R7b1 : il a quitté le Profil,
+    // l'onglet Crew (R7a1) le montre.
     await k.page.goto("/profil");
-    await expect(k.page.getByTestId("profil-crew")).toBeVisible({ timeout: 30_000 });
+    await expect(k.page.getByTestId("profil-crew")).toHaveCount(0);
+    await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
+    await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
     await shot(k.page, `03-profil-crew-${theme}`);
     await k.page.goto("/accueil");
     await k.page

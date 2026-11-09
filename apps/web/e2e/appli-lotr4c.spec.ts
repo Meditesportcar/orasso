@@ -254,7 +254,8 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     // Lot R6b : plus de compteur « amis ».
     await expect(page.getByTestId("profil-count-amis")).toHaveCount(0);
     await expect(page.getByTestId("profil-public")).toBeVisible();
-    await expect(page.getByTestId("profil-crew")).toBeVisible();
+    // Lot R7b1 (D38) : le crew a quitté l'en-tête du Profil (l'onglet Crew existe depuis R7a1).
+    await expect(page.getByTestId("profil-crew")).toHaveCount(0);
     await expect(page.getByTestId("reglage-profil")).toHaveCount(0);
     await expect(page.getByTestId("reglage-amis")).toHaveCount(0);
     await shot(page, `05-profil-${theme}`);
@@ -297,6 +298,8 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId("preview-banner")).toContainText("membre connecté");
     // Tour 2 : compte public, ses sorties à venir sont visibles de tout membre : l'aperçu les montre (R5b : le ticket
     // « Prochaine sortie »).
+    // Lot R7b1 : le Garage s'ouvre par défaut, « Prochaine sortie » vit dans l'onglet Sorties.
+    await page.getByTestId("profil-tab-sorties").click();
     await expect(page.getByTestId(/^profile-next/).first()).toBeVisible();
     await shot(page, `09-apercu-membre-${theme}`);
     await audit(page);

@@ -2,13 +2,13 @@
 // (pseudo, photo, grade, marque et modèle) pour un compte privé. Jamais la plaque. Réservé aux connectés.
 // Lot R5b (maquette R5.6, retour 6 de Damien) : le même écran que l'aperçu (`PublicProfile`) ; « Écrire » et « ⋯ »
 // (signaler) passent dans l'en-tête, à gauche du ✕.
+// Lot R7b1 (maquette R7.12) : « Message » quitte l'en-tête pour le corps du profil, à côté de « Suivre » (`PublicProfile`) ;
+// il ne reste que « ⋯ » (signaler).
 import { AppBarFlowAction, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { publicProfileLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
 import { StyleSheet } from "react-native";
 
-import { WriteHeaderAction } from "@/features/messages/MessageButton";
 import { PublicProfile } from "@/features/profil/PublicProfile";
 import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
@@ -24,7 +24,6 @@ export default function UserProfile() {
   const router = useRouter();
   const { pseudo } = useLocalSearchParams<{ pseudo: string }>();
   const profile = useApi(() => api.userProfile(pseudo), [pseudo]);
-  const [writeError, setWriteError] = useState<string | null>(null);
   const p = profile.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -53,8 +52,7 @@ export default function UserProfile() {
       actions={
         isSelf ? undefined : (
           <>
-            {/* Messagerie (lot 18) : abonné → conversation, sinon demande de contact. Signaler : lot 32. */}
-            <WriteHeaderAction userId={p.userId} pseudo={p.pseudo} onError={setWriteError} />
+            {/* Signaler : lot 32. La messagerie (lot 18 : abonné → conversation, sinon demande de contact) est dans le corps. */}
             <AppBarFlowAction
               icon="more"
               label={publicProfileLabels.more}
@@ -65,12 +63,7 @@ export default function UserProfile() {
         )
       }
     >
-      <PublicProfile
-        p={p}
-        mode={isSelf ? "self" : "live"}
-        onChanged={() => void profile.reload()}
-        topNotice={writeError ? <Notice tone="error">{writeError}</Notice> : null}
-      />
+      <PublicProfile p={p} mode={isSelf ? "self" : "live"} onChanged={() => void profile.reload()} />
 
       {p.contact ? (
         <>

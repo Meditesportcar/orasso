@@ -5,8 +5,14 @@
 // garage » (les autres, deux par ligne, en carré), « Ses sorties » (les autres à venir en lignes courtes) puis « Vu à »
 // (ses tampons de la saison). Compte privé non suivi : la tête, les nombres, « Demander à suivre », ses véhicules en marque
 // et modèle, et la ligne « Ses photos, ses sorties… sont pour ses abonnés ». Les cartes carrées n'existent que dans ce profil (le `VehicleCard` du
-// système reste en bandeau ailleurs). « Écrire » et « ⋯ » (signaler) sont dans l'en-tête, posés par l'écran.
+// système reste en bandeau ailleurs). « ⋯ » (signaler) est dans l'en-tête, posé par l'écran.
+// Lot R7b1 (D38, maquette R7.12) : même mise en page que mon profil : la photo dans son anneau, les trois nombres, la ligne
+// « Partenaires » (lot R7m1), les actions « Suivre » et « Message » côte à côte, puis deux onglets internes, Garage (par défaut :
+// « Sa voiture » et « Son garage ») et Sorties (« Prochaine sortie », « Ses sorties », « Vu à »). Compte privé que je ne suis
+// pas : les nombres, « Réservé à ses abonnés » et le bouton, ni Garage ni Sorties.
 import {
+  AvatarRing,
+  type AvatarRingState,
   Button,
   Icon,
   type IconName,
@@ -25,16 +31,20 @@ import {
   publicProfileLabels as L,
   networkLabels as N,
   publicPreviewLabels as P,
+  type ProfileTab,
   type ProfileVehicle,
+  profileTabsLabels as PT,
+  profileTabFromParam,
   type SocialNetwork,
   socialsLabels,
   socialUrl,
   type UserProfileView,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { type ReactNode, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { type ReactNode, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { MessageButton } from "@/features/messages/MessageButton";
 import { daysUntil } from "@/features/media/model";
 import { Stamp } from "@/features/passport/Stamp";
 import { FollowButton } from "@/features/social/FollowButton";
@@ -47,6 +57,8 @@ import { Muted } from "@/ui/Muted";
 import { SecHead } from "@/ui/SecHead";
 import { Ticket } from "@/ui/Ticket";
 import { departmentCaption } from "./network";
+import { PartnersLine } from "./PartnersLine";
+import { ProfileTabs } from "./ProfileTabs";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -78,21 +90,13 @@ const FOLLOW_LABEL = {
   requested: N.requested,
 } as const;
 
-/** L'avatar de la tête : la photo, sinon l'initiale en rouge, comme dans l'onglet Profil (retour 6 : « DA » contre « D »). */
-function HeadFace({ url, pseudo }: { url: string | null; pseudo: string }) {
-  const { t } = useTheme();
-  const source = mediaSource(url);
-  return (
-    <View style={[styles.face, { backgroundColor: t.color.win, boxShadow: t.shadow.shadowCard }]}>
-      {source ? (
-        <Photo source={source} style={StyleSheet.absoluteFill} />
-      ) : (
-        <Text variant="posterL" color={t.color.winInk} style={styles.faceText}>
-          {pseudo.charAt(0).toUpperCase()}
-        </Text>
-      )}
-    </View>
-  );
+/**
+ * L'anneau des stories de la personne (lot R7f1 : `stories.ring` de `GET /users/:pseudo`, absent tant qu'il n'est pas
+ * fusionné) ; `null` sans story. L'écran des stories (lot R7f2) fera ouvrir l'anneau ; ici il ne fait rien.
+ */
+function storyRingOf(p: UserProfileView): AvatarRingState {
+  const ring = (p as UserProfileView & { stories?: { ring?: AvatarRingState } }).stories?.ring;
+  return ring ?? null;
 }
 
 /** Une photo carrée de véhicule, ou la silhouette (pas de photo montrable). */
@@ -270,7 +274,16 @@ export function PublicProfile({
   const { fontScale } = useWindowDimensions();
   // Un pseudo long rapetisse (jusqu'à 14 px) au lieu de se couper ; l'échelle de police du système compte.
   // Tour 2 : la chasse de chaque signe (« M », « W » dépassent la moyenne), comme le site.
-  const pseudoSize = fitWideWordSize(p.pseudo, headW / Math.max(1, fontScale), 24, 14);
+  const pseudoSize = fitWideWordSize(p.pseudo, headW / Math.max(1, fontScale), 26, 14);
+  // Lot R7b1 : l'onglet interne (Garage par défaut) ; `?onglet=sorties` ouvre l'autre.
+  const { onglet } = useLocalSearchParams<{ onglet?: string }>();
+  const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
+  // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
+  useEffect(() => {
+    if (onglet === undefined) return;
+    setTab(profileTabFromParam(onglet));
+    router.setParams({ onglet: undefined });
+  }, [onglet, router]);
   const limited = p.audience === "public_limited";
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
@@ -319,16 +332,22 @@ export function PublicProfile({
         </View>
       </View>
     ) : (
-      // Lot R6b : un seul bouton pleine largeur (`.r6acts`), « Écrire » et « ⋯ » restent dans l'en-tête de l'écran.
-      <View style={styles.acts} testID="profile-actions">
-        <FollowButton
-          pseudo={p.pseudo}
-          mine={p.follow.mine}
-          followsMe={p.follow.followsMe}
-          canFollow={p.follow.canFollow}
-          visibility={p.visibility}
-          onChanged={() => onChanged?.()}
-        />
+      // Lot R7b1 (maquette R7.12) : « Suivre » (ou « Demander à suivre ») et « Message » côte à côte ; la rangée passe à la
+      // ligne quand la police agrandie ne leur laisse pas la place. « ⋯ » (signaler) reste dans l'en-tête de l'écran.
+      <View style={styles.actsRow} testID="profile-actions">
+        <View style={styles.actCell}>
+          <FollowButton
+            pseudo={p.pseudo}
+            mine={p.follow.mine}
+            followsMe={p.follow.followsMe}
+            canFollow={p.follow.canFollow}
+            visibility={p.visibility}
+            onChanged={() => onChanged?.()}
+          />
+        </View>
+        <View style={styles.actCell}>
+          <MessageButton userId={p.userId} pseudo={p.pseudo} fullWidth sheetInOverlay />
+        </View>
       </View>
     );
 
@@ -336,7 +355,7 @@ export function PublicProfile({
     <View style={styles.page} onLayout={(e) => setW(e.nativeEvent.layout.width)} testID="profil">
       {/* (1) La tête (`.r5hd`). */}
       <View style={styles.hd} testID="public-head">
-        <HeadFace url={p.avatarUrl} pseudo={p.pseudo} />
+        <AvatarRing ring={storyRingOf(p)} size="xl" source={mediaSource(p.avatarUrl)} name={p.pseudo} />
         <View style={styles.hdText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
           <Text
             variant="posterL"
@@ -396,6 +415,7 @@ export function PublicProfile({
       ) : null}
       {!limited ? <Socials p={p} /> : null}
       <Numbers p={p} />
+      <PartnersLine pseudo={p.pseudo} mine={mode === "self"} />
 
       {/* (2) Le bouton unique « Suivre ». */}
       {actions}
@@ -404,113 +424,115 @@ export function PublicProfile({
 
       {limited ? (
         <>
-          <SecHead title={L.vehiclesPrivate} hint={L.vehiclesPrivateHint} />
-          <View style={styles.plist} testID="profile-vehicles-private">
-            {p.vehicles.map((v) => (
-              <View key={v.id} style={[styles.pitem, { backgroundColor: c.surface }]}>
-                <Icon name={TYPE_ICON[v.vehicleType]} size={16} color={c.ink} />
-                <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
-                  {v.label}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {/* Tour 2 (maquette R7.12) : un compte privé vu d'un inconnu montre les nombres seulement ; ses véhicules ne sont plus listés. */}
           <View style={[styles.note, { backgroundColor: c.surface }]} testID="profile-private-note">
             <Icon name="lock" size={16} color={c.inkMuted} />
             <Text variant="caption" color={c.inkMuted} style={styles.noteText}>
               <Text variant="caption" color={c.ink} style={styles.noteStrong}>
-                {N.privateLineStrong}
+                {PT.privateTitle}.
               </Text>{" "}
-              {p.follow.mine === "pending" ? N.privateLineWaiting : N.privateLineAsk}
+              {p.follow.mine === "pending" ? PT.privateBodyWaiting : PT.privateBody}
             </Text>
           </View>
         </>
       ) : (
         <>
-          {/* (3) « Sa voiture ». */}
-          <SecHead title={L.car} hint={L.carHint} />
-          {main ? <HeroVehicle v={main} onOpen={open(main)} /> : <Muted variant="body">{L.noVehicle}</Muted>}
-
-          {/* (4) « Prochaine sortie » : un ticket, et « Toi aussi » pour la personne qui regarde. */}
-          {next ? (
+          {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties. */}
+          <ProfileTabs value={tab} onChange={setTab} />
+          {tab === "garage" ? (
             <>
-              <SecHead title={L.next} hint={L.nextIn(days)} />
-              <Ticket
-                date={next.event.startsAt}
-                badge={<AngledTag tone="acc">{days <= 0 ? "Jour J" : `J-${days}`}</AngledTag>}
-                title={next.event.title}
-                detail={[formatHour(next.event.startsAt), next.event.city, next.event.structureName]
-                  .filter(Boolean)
-                  .join(" · ")}
-                onPress={mode === "preview" ? undefined : () => router.push(`/e/${next.event.slug}`)}
-                testID="profile-next"
-              >
-                {next.together ? (
-                  <View style={[styles.both, { backgroundColor: c.surfaceRaised }]} testID="profile-together">
-                    <Icon name="check" size={14} color={c.accentText} />
-                    <Text variant="caption" color={c.ink} style={styles.bothText}>
-                      {L.together}
-                    </Text>
+              {/* (3) « Sa voiture ». */}
+              <SecHead title={L.car} hint={L.carHint} />
+              {main ? <HeroVehicle v={main} onOpen={open(main)} /> : <Muted variant="body">{L.noVehicle}</Muted>}
+
+              {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}
+              {others.length ? (
+                <>
+                  <SecHead title={L.garage} hint={L.garageOthers(others.length)} />
+                  <View style={styles.grid} testID="profile-garage">
+                    {others.map((v) => (
+                      <SquareVehicle key={v.id} v={v} onOpen={open(v)} />
+                    ))}
                   </View>
-                ) : null}
-              </Ticket>
+                </>
+              ) : null}
             </>
-          ) : p.upcomingEvents ? (
-            // Ses sorties sont visibles mais aucune n'est à venir : on le dit (au lieu d'une section absente).
+          ) : (
             <>
-              <SecHead title={L.next} />
-              <Muted variant="body" testID="profile-next-none">
-                {L.noOuting}
-              </Muted>
-            </>
-          ) : null}
-
-          {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}
-          {others.length ? (
-            <>
-              <SecHead title={L.garage} hint={L.garageOthers(others.length)} />
-              <View style={styles.grid} testID="profile-garage">
-                {others.map((v) => (
-                  <SquareVehicle key={v.id} v={v} onOpen={open(v)} />
-                ))}
-              </View>
-            </>
-          ) : null}
-
-          {/* (6) « Ses sorties » puis « Vu à ». */}
-          {moreOutings.length ? (
-            <>
-              <SecHead title={L.outings} hint={L.outingsHint(moreOutings.length)} />
-              <View style={styles.plist} testID="profile-outings">
-                {moreOutings.map((e) => (
-                  <Pressable
-                    key={e.slug}
-                    accessibilityRole="link"
-                    accessibilityLabel={`${e.title}, ${formatDay(e.startsAt)}`}
-                    disabled={mode === "preview"}
-                    onPress={() => router.push(`/e/${e.slug}`)}
-                    style={({ pressed }) => [styles.pitem, { backgroundColor: c.surface }, pressed && styles.pressed]}
+              {/* (4) « Prochaine sortie » : un ticket, et « Toi aussi » pour la personne qui regarde. */}
+              {next ? (
+                <>
+                  <SecHead title={L.next} hint={L.nextIn(days)} />
+                  <Ticket
+                    date={next.event.startsAt}
+                    badge={<AngledTag tone="acc">{days <= 0 ? "Jour J" : `J-${days}`}</AngledTag>}
+                    title={next.event.title}
+                    detail={[formatHour(next.event.startsAt), next.event.city, next.event.structureName]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    onPress={mode === "preview" ? undefined : () => router.push(`/e/${next.event.slug}`)}
+                    testID="profile-next"
                   >
-                    <Icon name="calendar" size={16} color={c.ink} />
-                    <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
-                      {e.title}
-                    </Text>
-                    <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
-                  </Pressable>
-                ))}
-              </View>
+                    {next.together ? (
+                      <View style={[styles.both, { backgroundColor: c.surfaceRaised }]} testID="profile-together">
+                        <Icon name="check" size={14} color={c.accentText} />
+                        <Text variant="caption" color={c.ink} style={styles.bothText}>
+                          {L.together}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </Ticket>
+                </>
+              ) : p.upcomingEvents ? (
+                // Ses sorties sont visibles mais aucune n'est à venir : on le dit (au lieu d'une section absente).
+                <>
+                  <SecHead title={L.next} />
+                  <Muted variant="body" testID="profile-next-none">
+                    {L.noOuting}
+                  </Muted>
+                </>
+              ) : null}
+
+              {/* (6) « Ses sorties » puis « Vu à ». */}
+              {moreOutings.length ? (
+                <>
+                  <SecHead title={L.outings} hint={L.outingsHint(moreOutings.length)} />
+                  <View style={styles.plist} testID="profile-outings">
+                    {moreOutings.map((e) => (
+                      <Pressable
+                        key={e.slug}
+                        accessibilityRole="link"
+                        accessibilityLabel={`${e.title}, ${formatDay(e.startsAt)}`}
+                        disabled={mode === "preview"}
+                        onPress={() => router.push(`/e/${e.slug}`)}
+                        style={({ pressed }) => [
+                          styles.pitem,
+                          { backgroundColor: c.surface },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Icon name="calendar" size={16} color={c.ink} />
+                        <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
+                          {e.title}
+                        </Text>
+                        <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+              {p.seenAt?.stamps.length ? (
+                <>
+                  <SecHead title={L.seenAt} hint={L.seenAtHint(p.seenAt.events)} />
+                  <View style={styles.seen} testID="profile-seen">
+                    {p.seenAt.stamps.slice(0, 3).map((s) => (
+                      <Stamp key={s.id} stamp={s} size={stampSize} paper={c.ground} />
+                    ))}
+                  </View>
+                </>
+              ) : null}
             </>
-          ) : null}
-          {p.seenAt && p.seenAt.stamps.length ? (
-            <>
-              <SecHead title={L.seenAt} hint={L.seenAtHint(p.seenAt.events)} />
-              <View style={styles.seen} testID="profile-seen">
-                {p.seenAt.stamps.slice(0, 3).map((s) => (
-                  <Stamp key={s.id} stamp={s} size={stampSize} paper={c.ground} />
-                ))}
-              </View>
-            </>
-          ) : null}
+          )}
         </>
       )}
     </View>
@@ -523,15 +545,6 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   shrink: { flexShrink: 1 },
   hd: { flexDirection: "row", alignItems: "center", gap: space3 + 2 },
-  face: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  faceText: { fontSize: 28, lineHeight: 30 },
   hdText: { flex: 1, minWidth: 0, gap: 6 },
   // Le pseudo passe à la ligne plutôt que de se couper (identifiants longs sans espace : coupure du système).
   pseudo: { fontSize: 24, lineHeight: 25 },
@@ -567,6 +580,9 @@ const styles = StyleSheet.create({
   n4Label: { fontSize: 11.5, lineHeight: 14, textAlign: "center" },
   // Lot R6b (`.r6acts`) : un seul bouton pleine largeur ; son libellé passe à la ligne ou réduit son corps, jamais coupé.
   acts: { gap: space2 },
+  // Lot R7b1 : « Suivre » et « Message » côte à côte ; chaque cellule fait au moins 150 px, sinon la rangée passe à la ligne.
+  actsRow: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  actCell: { flexGrow: 1, flexBasis: 150, minWidth: 0 },
   // `.r6tag` : petite pastille majuscule, fond de surface secondaire, texte atténué.
   // Tour 2 (relecture Opus 9) : jetons seulement ; le style « label » (11/14) et 4 px dessus et dessous font 22 px.
   followsYou: {
