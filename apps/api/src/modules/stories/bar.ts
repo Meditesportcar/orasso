@@ -13,7 +13,7 @@ import {
   storyDenial,
   storyRing,
 } from "@orasso/shared";
-import { and, eq, inArray, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, eq, or, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { stories, storyMutes, storyViews } from "../../db/schema";
@@ -41,22 +41,29 @@ const ringStories = (rows: readonly StoryRow[]) =>
 
 const newest = (rows: readonly StoryRow[]) => rows.reduce((a, b) => (a.story.createdAt >= b.story.createdAt ? a : b));
 
-async function seenSet(userId: string, rows: readonly StoryRow[]): Promise<Set<string>> {
-  if (!rows.length) return new Set();
+/**
+ * Les stories vivantes que j'ai vues, lues par jointure avec `story_views` : aucun identifiant de story n'est envoyé
+ * en paramètre (une longue liste de suivis ne fait pas dépasser la limite de paramètres de PostgreSQL).
+ */
+async function seenSet(userId: string, at: Date): Promise<Set<string>> {
   const seen = await db
     .select({ id: storyViews.storyId })
     .from(storyViews)
-    .where(
-      and(
-        eq(storyViews.viewerId, userId),
-        inArray(
-          storyViews.storyId,
-          rows.map((r) => r.story.id),
-        ),
-      ),
-    );
+    .innerJoin(stories, eq(stories.id, storyViews.storyId))
+    .where(and(eq(storyViews.viewerId, userId), liveStory(at)));
   return new Set(seen.map((r) => r.id));
 }
+
+/** Une liste d'identifiants en UN seul paramètre (tableau PostgreSQL), jamais un paramètre par identifiant. */
+const anyOf = (column: SQL | AnyColumn, ids: Iterable<string>, type: "text" | "uuid") =>
+  sql`${column} = any(${sql.param([...ids])}::${sql.raw(type)}[])`;
+
+/** Clé d'auteur affiché d'une story, en SQL (même règle que `authorKeyOf`). */
+const authorKeySql = sql`case ${stories.persona} when 'organizer' then 's:' || ${stories.structureId}::text when 'pro' then 'p:' || ${stories.proId}::text else 'u:' || ${stories.authorId} end`;
+
+/** Au plus `PER_AUTHOR_MAX` stories par auteur, les plus récentes, choisies dans le SQL (`row_number`). */
+const newestPerAuthor = (where: SQL) =>
+  sql`${stories.id} in (select r.id from (select ${stories.id} as id, row_number() over (partition by ${authorKeySql} order by ${stories.createdAt} desc, ${stories.id} desc) as rn from stories where ${where}) r where r.rn <= ${PER_AUTHOR_MAX})`;
 
 /** Stories signées d'une personne (ni casquette organisateur, ni casquette pro). */
 const personal = sql`${stories.persona} not in ('organizer','pro')`;
@@ -76,15 +83,17 @@ export const storiesBar = {
     const muted = new Set(mutedRows.map((m) => storyAuthorKeyOf(m.authorKind, m.authorId)));
 
     const ors: (SQL | undefined)[] = [];
-    if (sets.users.size) ors.push(and(personal, inArray(stories.authorId, [...sets.users])));
-    if (sets.crews.size) ors.push(inArray(stories.crewId, [...sets.crews.keys()]));
+    if (sets.users.size) ors.push(and(personal, anyOf(stories.authorId, sets.users, "text")));
+    if (sets.crews.size) ors.push(anyOf(stories.crewId, sets.crews.keys(), "uuid"));
     if (sets.structures.size)
-      ors.push(and(eq(stories.persona, "organizer"), inArray(stories.structureId, [...sets.structures])));
-    if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), inArray(stories.proId, [...sets.pros])));
-    // Tour 2 : on filtre (auteurs masqués, audiences) AVANT de limiter, puis on limite par auteur : des stories masquées
+      ors.push(and(eq(stories.persona, "organizer"), anyOf(stories.structureId, sets.structures, "uuid")));
+    if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), anyOf(stories.proId, sets.pros, "uuid")));
+    // Tour 3 : les 50 plus récentes de chaque auteur sont choisies dans le SQL (le plafond de publication est le même, rien
+    // de visible n'est perdu) ; puis on filtre (auteurs masqués, audiences) : des stories masquées
     // ou refusées ne chassent plus des stories visibles hors de la barre.
-    const candidates = ors.length
-      ? (await selectStories(and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors)))).sort(
+    const pool = ors.length ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors)) as SQL) : null;
+    const candidates = pool
+      ? (await selectStories(and(pool, newestPerAuthor(pool)))).sort(
           (a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime(),
         )
       : [];
@@ -95,7 +104,7 @@ export const storiesBar = {
       if (!key || muted.has(key.key)) return false;
       return storyDenial(viewer, audienceStoryOf(r, at), relationOf(sets, r)) === null;
     });
-    const seen = await seenSet(me, visible);
+    const seen = await seenSet(me, at);
 
     const byAuthor = new Map<string, StoryRow[]>();
     for (const r of visible) {
@@ -158,7 +167,7 @@ export const storiesBar = {
     const viewer = viewerOf(v);
     const visible = rows.filter((r) => storyDenial(viewer, audienceStoryOf(r, at), relationOf(sets, r)) === null);
     if (!visible.length) return { count: 0, hasUnseen: false, ring: null };
-    const seen = await seenSet(v.user.id, visible);
+    const seen = await seenSet(v.user.id, at);
     const self = kind === "user" && id === v.user.id;
     return {
       count: visible.length,

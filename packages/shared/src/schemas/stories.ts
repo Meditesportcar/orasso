@@ -58,14 +58,14 @@ export const storyCreateSchema = z
     plateRects: z.array(plateRectSchema).max(MAX_PLATE_RECTS).nullish(),
     noPlateConfirmed: z.boolean().optional(),
     audience: z.enum(storyAudiences),
-    crewId: uuid.optional(),
+    crewId: uuidLower.optional(),
     persona: z.enum(storyPersonas).default("fan"),
-    structureId: uuid.optional(),
-    proId: uuid.optional(),
+    structureId: uuidLower.optional(),
+    proId: uuidLower.optional(),
     caption: z.string().trim().max(STORY_CAPTION_MAX).nullish(),
     placeLabel: z.string().trim().max(STORY_PLACE_MAX).nullish(),
-    vehicleId: uuid.optional(),
-    eventId: uuid.optional(),
+    vehicleId: uuidLower.optional(),
+    eventId: uuidLower.optional(),
     tags: z.array(storyTagInputSchema).max(STORY_TAGS_MAX).default([]),
     linked: z.object({ type: z.enum(storyLinkTypes), id: uuidLower }).optional(),
   })
@@ -84,19 +84,20 @@ export const storyReportSchema = z.object({
   reason: z.enum(["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"]),
   details: z.string().trim().max(1000).nullish(),
 });
-export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuid }).optional();
+export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuidLower }).optional();
 
 /** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>` (UUID strict pour les deux dernières). */
 export const storyAuthorKeyRe =
-  /^(?:(u):([A-Za-z0-9_-]{1,64})|([sp]):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
+  /^(?:(u):([A-Za-z0-9_-]{1,64})|([sp]):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))$/;
 export type StoryAuthorKey = { kind: StoryTagKind; id: string; key: string };
 export function parseStoryAuthorKey(raw: string): StoryAuthorKey | null {
   const m = storyAuthorKeyRe.exec(raw);
   if (!m) return null;
   const letter = m[1] ?? m[3];
   const kind: StoryTagKind = letter === "u" ? "user" : letter === "s" ? "structure" : "pro";
-  const id = m[2] ?? m[4] ?? "";
-  return { kind, id, key: raw };
+  // Les UUID sont ramenés en minuscules : la clé, les verrous et les comparaisons ne dépendent jamais de la casse reçue.
+  const id = m[2] ?? (m[4] ?? "").toLowerCase();
+  return { kind, id, key: kind === "user" ? raw : storyAuthorKeyOf(kind, id) };
 }
 export const storyAuthorKeyOf = (kind: StoryTagKind, id: string): string =>
   `${kind === "user" ? "u" : kind === "structure" ? "s" : "p"}:${id}`;

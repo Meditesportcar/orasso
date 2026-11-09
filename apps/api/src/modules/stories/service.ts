@@ -32,6 +32,7 @@ import {
   crews,
   events as events_,
   mediaProfiles,
+  messages,
   notifications,
   proFollows,
   profiles,
@@ -258,7 +259,8 @@ async function notifyPublished(
   name: string,
   /** Les personnes à prévenir d'une identification (elles-mêmes ou, pour une structure ou un pro, ses responsables). */
   mentions: { userId: string; body: string }[],
-  actor: { userId: string; pseudo: string; avatarUrl: string | null },
+  /** L'auteur affiché : pour une structure ou un pro, son nom et son logo, jamais le compte personnel de qui publie. */
+  actor: { userId?: string; pseudo: string; avatarUrl: string | null },
 ) {
   const link = `/app/story/${authorKey.key}`;
   const data = { actor, storyId: story.id, authorKey: authorKey.key, link };
@@ -504,18 +506,34 @@ export const storiesService = {
             : input.persona === "pro" && ctx.proId
               ? { kind: "pro" as const, id: ctx.proId, key: storyAuthorKeyOf("pro", ctx.proId) }
               : { kind: "user" as const, id: v.user.id, key: storyAuthorKeyOf("user", v.user.id) };
-        const name =
+        // Auteur affiché : la structure ou le pro (nom + logo), sans `userId` ; la personne (pseudo + avatar) sinon.
+        // Le compte personnel d'un co-organisateur n'apparaît jamais dans ce que reçoivent les abonnés.
+        const shown =
           authorKey.kind === "structure"
-            ? ((await tx.select({ n: structures.name }).from(structures).where(eq(structures.id, authorKey.id)))[0]
-                ?.n ?? v.profile.pseudo)
+            ? (
+                await tx
+                  .select({ n: structures.name, l: structures.logoKey })
+                  .from(structures)
+                  .where(eq(structures.id, authorKey.id))
+              )[0]
             : authorKey.kind === "pro"
-              ? ((await tx.select({ n: proProfiles.name }).from(proProfiles).where(eq(proProfiles.id, authorKey.id)))[0]
-                  ?.n ?? v.profile.pseudo)
-              : v.profile.pseudo;
+              ? (
+                  await tx
+                    .select({ n: proProfiles.name, l: proProfiles.logoKey })
+                    .from(proProfiles)
+                    .where(eq(proProfiles.id, authorKey.id))
+                )[0]
+              : undefined;
+        if (authorKey.kind !== "user" && !shown) throw notFound("Auteur introuvable");
+        const name = shown ? shown.n : v.profile.pseudo;
+        const actor =
+          authorKey.kind === "user"
+            ? { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) }
+            : { pseudo: name, avatarUrl: storage.url(shown?.l ?? null) };
         // Identifiés : la personne elle-même ; une structure ou un pro, ses responsables (propriétaire et co-organisateurs
         // actifs, propriétaire de la fiche). Une personne n'est prévenue qu'une fois.
         const mentions = new Map<string, string>();
-        const pseudo = v.profile.pseudo;
+        const pseudo = name;
         for (const t of tags) {
           if (t.kind === "user") mentions.set(t.id, storyLabels.mention(pseudo));
         }
@@ -550,7 +568,7 @@ export const storiesService = {
           authorKey,
           name,
           [...mentions].map(([userId, body]) => ({ userId, body })),
-          { userId: v.user.id, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
+          actor,
         );
         after(() => notificationsService.kick());
       });
@@ -720,6 +738,38 @@ export const storiesService = {
     const context = { storyId: id };
 
     if (story.persona === "pro") throw unavailable();
+    // Reprise réseau : un message ou une demande portant déjà ce `clientId` (pour cette story) est rendu tel quel, avant
+    // tout choix entre message direct et demande de contact (la relation a pu changer entre deux envois).
+    const [sent] = await db
+      .select({ id: messages.id, conversationId: messages.conversationId })
+      .from(messages)
+      .where(and(eq(messages.senderId, v.user.id), eq(messages.clientId, clientId), eq(messages.storyId, id)));
+    if (sent) return { mode: "message", conversationId: sent.conversationId, messageId: sent.id };
+    const [asked] = await db
+      .select({
+        id: contactRequests.id,
+        status: contactRequests.status,
+        conversationId: contactRequests.conversationId,
+      })
+      .from(contactRequests)
+      .where(and(eq(contactRequests.fromUserId, v.user.id), eq(contactRequests.clientId, clientId)));
+    if (asked) {
+      if (asked.status === "accepted" && asked.conversationId) {
+        // Acceptée : le premier message de la conversation porte le même `clientId` (plus de `story_id` si elle a expiré).
+        const [first] = await db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, asked.conversationId),
+              eq(messages.senderId, v.user.id),
+              eq(messages.clientId, clientId),
+            ),
+          );
+        if (first) return { mode: "message", conversationId: asked.conversationId, messageId: first.id };
+      }
+      return { mode: "contact_request", requestId: asked.id };
+    }
     if (story.persona === "organizer") {
       if (!story.structureId || row.structure.verification !== "verified") throw unavailable();
       if (await isStructureOrganizer(db, v.user.id, story.structureId)) throw validation(storyLabels.notYours);
@@ -750,10 +800,15 @@ export const storiesService = {
           eq(contactRequests.toUserId, authorId),
           eq(contactRequests.message, input.text),
           eq(contactRequests.storyId, id),
+          eq(contactRequests.status, "pending"),
         ),
       );
     if (sameRequest) return { mode: "contact_request", requestId: sameRequest.id };
-    const request = await contactsService.create(v, { pseudo: author.pseudo, message: input.text }, context);
+    const request = await contactsService.create(
+      v,
+      { pseudo: author.pseudo, message: input.text },
+      { ...context, clientId },
+    );
     return { mode: "contact_request", requestId: request.id };
   },
 

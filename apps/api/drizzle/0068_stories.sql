@@ -80,6 +80,7 @@ CREATE TABLE "story_views" (
 );
 --> statement-breakpoint
 ALTER TABLE "contact_requests" ADD COLUMN "story_id" uuid;--> statement-breakpoint
+ALTER TABLE "contact_requests" ADD COLUMN "client_id" uuid;--> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "story_id" uuid;--> statement-breakpoint
 ALTER TABLE "stories" ADD CONSTRAINT "stories_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "stories" ADD CONSTRAINT "stories_structure_id_structures_id_fk" FOREIGN KEY ("structure_id") REFERENCES "public"."structures"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint

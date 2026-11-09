@@ -143,6 +143,8 @@ export const contactRequests = pgTable(
     conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
     /** Lot R7f1 (tour 2) : demande née d'une réponse à une story ; le contexte suit le premier message à l'acceptation. */
     storyId: uuid("story_id").references(() => stories.id, { onDelete: "set null" }),
+    /** Lot R7f1 (tour 3) : identifiant de l'appareil, repris dans le message créé à l'acceptation (reprise après l'acceptation = ce message). */
+    clientId: uuid("client_id"),
     ...timestamps,
   },
   (t) => [

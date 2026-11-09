@@ -38,10 +38,15 @@ export async function purgeStoryFiles(ids?: string[]): Promise<number> {
   }
   const done = rows.map((r) => r.id);
   await db.update(stories).set({ filesRemovedAt: now() }).where(inArray(stories.id, done));
-  // La vignette d'une réponse n'est servie que tant que la story existe.
-  await db.update(messages).set({ storyId: null }).where(inArray(messages.storyId, done));
-  await db.update(contactRequests).set({ storyId: null }).where(inArray(contactRequests.storyId, done));
+  await detachReplies(db, done);
   return rows.length;
+}
+
+/** Détache les réponses (messages et demandes de contact) des stories données : plus de vignette pour elles. */
+export async function detachReplies(ex: Pick<typeof db, "update">, ids: string[]) {
+  if (!ids.length) return;
+  await ex.update(messages).set({ storyId: null }).where(inArray(messages.storyId, ids));
+  await ex.update(contactRequests).set({ storyId: null }).where(inArray(contactRequests.storyId, ids));
 }
 
 export const storiesExpire = {
@@ -54,10 +59,16 @@ export const storiesExpire = {
       .where(and(isNull(stories.deletedAt), lt(stories.expiresAt, at)))
       .returning({ id: stories.id });
     // Une copie dont l'originale est supprimée part avec elle (cascade logique de la suppression douce).
-    await db.execute(sql`
+    const copies = await db.execute<{ id: string }>(sql`
       update stories c set deleted_at = ${at}
       from stories o
-      where c.shared_from_story_id = o.id and o.deleted_at is not null and c.deleted_at is null`);
+      where c.shared_from_story_id = o.id and o.deleted_at is not null and c.deleted_at is null
+      returning c.id`);
+    // La vignette d'une réponse disparaît dès que la story l'est, même si son fichier est gardé (signalement ouvert).
+    await detachReplies(db, [
+      ...marked.map((m) => m.id),
+      ...(copies as unknown as { rows: { id: string }[] }).rows.map((c) => c.id),
+    ]);
     // 2. Les fichiers (ceux d'une story supprimée à la main ou par la modération, aussi).
     const files = await purgeStoryFiles();
     // 3. Les lignes, 7 jours après, une fois les fichiers partis.

@@ -1,5 +1,5 @@
 {
-  "id": "1bad81e4-ae08-4690-a7d5-ccb293db2fb8",
+  "id": "69d3dd8f-4ce1-458e-9fff-a335bd4509d1",
   "prevId": "b4d30d2f-ca07-457f-af41-abca5e4b574c",
   "version": "7",
   "dialect": "postgresql",
@@ -7719,6 +7719,12 @@
         },
         "story_id": {
           "name": "story_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_id": {
+          "name": "client_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false

@@ -66,7 +66,7 @@ export const contactsService = {
     v: Viewer,
     input: ContactRequestCreate,
     /** Lot R7f1 : demande née d'une réponse à une story ; le contexte suit le premier message à l'acceptation. */
-    context: { storyId?: string } = {},
+    context: { storyId?: string; clientId?: string } = {},
   ): Promise<ContactRequestResult> {
     if (actorOf(v).suspended) throw forbidden("Ton compte est suspendu : lecture seule.");
     const target = await profilesRepo.byPseudo(input.pseudo);
@@ -124,6 +124,7 @@ export const contactsService = {
           toUserId: target.userId,
           message: input.message,
           storyId: context.storyId ?? null,
+          clientId: context.clientId ?? null,
           createdAt: now(),
         })
         .returning({ id: contactRequests.id });
@@ -220,6 +221,13 @@ export const contactsService = {
       await ensureParticipant(tx, conversation.id, me, "member");
       await ensureParticipant(tx, conversation.id, row.fromUserId, "member");
       const at = nextMessageAt(locked?.lastMessageAt ?? null);
+      // L'identifiant de l'appareil de la demande est repris dans le premier message (une reprise après l'acceptation le retrouve).
+      const [clash] = row.clientId
+        ? await tx
+            .select({ id: messages.id })
+            .from(messages)
+            .where(and(eq(messages.conversationId, conversation.id), eq(messages.clientId, row.clientId)))
+        : [];
       const [message] = await tx
         .insert(messages)
         .values({
@@ -228,6 +236,7 @@ export const contactsService = {
           kind: "text",
           body: row.message,
           storyId: row.storyId,
+          clientId: clash ? null : row.clientId,
           createdAt: at,
         })
         .returning();

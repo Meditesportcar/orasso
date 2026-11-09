@@ -8,7 +8,7 @@ import type { db } from "../../db/client";
 import { stories } from "../../db/schema";
 import { now } from "../../lib/deps";
 import type { Tx } from "../../lib/tx";
-import { purgeStoryFiles } from "./expire";
+import { detachReplies, purgeStoryFiles } from "./expire";
 
 type After = (cb: () => unknown) => void;
 
@@ -25,7 +25,9 @@ export async function softDeleteWithCopies(ex: Tx | typeof db, ids: string[]): P
     update stories set deleted_at = coalesce(deleted_at, ${at}), updated_at = ${at}
     where id in (select id from tree)
     returning id`);
-  return (rows as unknown as { rows: { id: string }[] }).rows.map((r) => r.id);
+  const all = (rows as unknown as { rows: { id: string }[] }).rows.map((r) => r.id);
+  await detachReplies(ex, all);
+  return all;
 }
 
 /** Marque supprimées les stories d'un auteur ou d'un crew (et leurs copies), puis efface leurs fichiers après la validation. */

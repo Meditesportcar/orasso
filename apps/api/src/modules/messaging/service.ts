@@ -45,6 +45,7 @@ import {
   imageNameOf,
   isMySide,
   lastMessageOf,
+  liveStoriesOf,
   type MessageRow,
   publishToConversation,
   refreshPreview,
@@ -299,6 +300,7 @@ export const messagingService = {
     const readBy = q.before ? null : await this.readByOf(access, page);
     // Tour 2 : « À propos de » filtré pour la personne qui lit (événement privé : ses ayants droit seulement).
     const abouts = await aboutsOf(db, page, v);
+    const liveStories = await liveStoriesOf(db, page);
     return {
       items: page.map((m) =>
         serializeMessage(
@@ -307,6 +309,7 @@ export const messagingService = {
           v.user.id,
           readBy?.get(m.id) ?? null,
           abouts,
+          liveStories,
         ),
       ),
       nextCursor: rows.length > q.limit ? (page.at(-1)?.id ?? null) : null,
@@ -367,7 +370,14 @@ export const messagingService = {
     const replay = async (row: MessageRow) => {
       if (row.senderId !== v.user.id) throw conflict("conflict", "Identifiant de message déjà utilisé");
       return {
-        message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row], v)),
+        message: serializeMessage(
+          row,
+          senderOf(v),
+          v.user.id,
+          null,
+          await aboutsOf(db, [row], v),
+          await liveStoriesOf(db, [row]),
+        ),
         created: false,
       };
     };
