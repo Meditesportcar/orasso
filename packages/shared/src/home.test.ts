@@ -5,6 +5,7 @@ import {
   defaultHomeWidgets,
   HOME_FIXED_WIDGET,
   homeWidgetIds,
+  homeWidgetOffered,
   moveHomeWidget,
   normalizeHomeWidgets,
   toggleHomeWidget,
@@ -26,8 +27,18 @@ describe("réglage des widgets de l'accueil", () => {
       hidden: ["fuel", "nope"],
     });
     expect(c.order[0]).toBe(HOME_FIXED_WIDGET);
-    // « En cours » (lot R7d1) manque au réglage enregistré : il se place juste après « Prochain accès ».
-    expect(c.order.slice(1, 4)).toEqual(["live", "fuel", "weather"]);
+    // Les blocs qui manquent au réglage enregistré (« En cours », lot R7d1 ; Mes sorties… Souvenirs, lot R7a2) prennent leur
+    // place par défaut : juste après « Prochaine sortie », avant « Autour de moi » et avant les blocs du réglage.
+    expect(c.order.slice(1, 8)).toEqual([
+      "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
+      "nearby",
+    ]);
+    expect(c.order.slice(8, 10)).toEqual(["fuel", "weather"]);
     expect([...c.order].sort()).toEqual([...homeWidgetIds].sort());
     expect(c.hidden).toEqual(["fuel"]);
   });
@@ -58,13 +69,33 @@ describe("réglage des widgets de l'accueil", () => {
   it("lot R1, tour 2 : stations retirées, on ne déplace qu'entre widgets proposés ; les stations gardent leur place", () => {
     // Un ancien ordre personnalisé : une station entre deux widgets proposés.
     const old = normalizeHomeWidgets({
-      order: ["next_access", "live", "pending", "wash", "agenda", "fuel", "nearby", "weather", "favorite_garage"],
+      order: [
+        "next_access",
+        "live",
+        "my_outings",
+        "my_crew",
+        "friends_news",
+        "spot_meetup",
+        "memories",
+        "pending",
+        "wash",
+        "agenda",
+        "fuel",
+        "nearby",
+        "weather",
+        "favorite_garage",
+      ],
       hidden: [],
     });
     const down = moveHomeWidget(old, "pending", 1);
     expect(down.order).toEqual([
       "next_access",
       "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
       "agenda",
       "wash",
       "pending",
@@ -77,6 +108,11 @@ describe("réglage des widgets de l'accueil", () => {
     expect(up.order).toEqual([
       "next_access",
       "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
       "agenda",
       "wash",
       "nearby",
@@ -89,8 +125,71 @@ describe("réglage des widgets de l'accueil", () => {
     expect(moveHomeWidget(old, "wash", 1)).toBe(old);
     expect(moveHomeWidget(down, "live", -1)).toBe(down);
     // Le dernier proposé ne descend pas (les stations derrière lui ne comptent pas).
-    expect(defaultHomeWidgets.order.slice(-3)).toEqual(["favorite_garage", "wash", "fuel"]);
-    expect(moveHomeWidget(defaultHomeWidgets, "favorite_garage", 1)).toBe(defaultHomeWidgets);
+    expect(defaultHomeWidgets.order.slice(-3)).toEqual(["pending", "wash", "fuel"]);
+    expect(moveHomeWidget(defaultHomeWidgets, "pending", 1)).toBe(defaultHomeWidgets);
+  });
+
+  it("lot R7a2 : ordre par défaut validé, blocs masqués par défaut, nouveaux blocs proposés", () => {
+    expect(defaultHomeWidgets.order).toEqual([
+      "next_access",
+      "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
+      "nearby",
+      "weather",
+      "agenda",
+      "favorite_garage",
+      "pending",
+      "wash",
+      "fuel",
+    ]);
+    // Les blocs par défaut sont ceux que Damien a validés ; les trois autres se retrouvent dans « Ajouter ».
+    expect(defaultHomeWidgets.hidden).toEqual(["agenda", "favorite_garage", "pending"]);
+    expect(visibleHomeWidgets(defaultHomeWidgets).slice(0, 4)).toEqual([
+      "next_access",
+      "live",
+      "my_outings",
+      "my_crew",
+    ]);
+    // Au spot et Souvenirs sont proposés (vides tant que R7i et R7j n'existent pas), les stations non.
+    for (const id of ["my_outings", "my_crew", "friends_news", "spot_meetup", "memories"] as const) {
+      expect(homeWidgetOffered(id)).toBe(true);
+      expect(homeWidgetsSchema.safeParse({ order: [id], hidden: [id] }).success).toBe(true);
+    }
+    expect(homeWidgetOffered("wash")).toBe(false);
+  });
+
+  it("lot R7a2 : un réglage d'avant (R7d1, ou l'ancien) reçoit les nouveaux blocs à leur place, sans rien perdre", () => {
+    // Réglage enregistré avant R7a2 : l'ordre et les masqués de la personne sont gardés, les nouveaux blocs apparaissent.
+    const before = normalizeHomeWidgets({
+      order: ["next_access", "live", "weather", "pending", "nearby", "agenda", "favorite_garage", "wash", "fuel"],
+      hidden: ["agenda"],
+    });
+    expect(before.order).toEqual([
+      "next_access",
+      "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
+      "weather",
+      "pending",
+      "nearby",
+      "agenda",
+      "favorite_garage",
+      "wash",
+      "fuel",
+    ]);
+    expect(before.hidden).toEqual(["agenda"]);
+    // Une liste de masqués enregistrée, même vide, est respectée ; absente, ce sont les masqués par défaut.
+    expect(normalizeHomeWidgets({ order: [], hidden: [] }).hidden).toEqual([]);
+    expect(normalizeHomeWidgets({ order: ["weather"] }).hidden).toEqual(["agenda", "favorite_garage", "pending"]);
+    // Normaliser deux fois ne change rien.
+    expect(normalizeHomeWidgets(before)).toEqual(before);
   });
 
   it("valide strictement ce qui s'enregistre", () => {

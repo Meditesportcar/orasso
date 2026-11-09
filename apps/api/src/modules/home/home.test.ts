@@ -250,10 +250,31 @@ describe("GET /me/home : agrégation", () => {
         fuel: [],
         agenda: [],
         live: null,
+        // Lot R7a2 : aucun bloc réglable sans donnée ; ordre par défaut et blocs masqués par défaut.
+        myOutings: null,
+        myCrew: null,
+        friendsNews: null,
+        spotMeetup: null,
+        memories: null,
         sponsored: null,
         widgets: {
-          order: ["next_access", "live", "pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"],
-          hidden: [],
+          order: [
+            "next_access",
+            "live",
+            "my_outings",
+            "my_crew",
+            "friends_news",
+            "spot_meetup",
+            "memories",
+            "nearby",
+            "weather",
+            "agenda",
+            "favorite_garage",
+            "pending",
+            "wash",
+            "fuel",
+          ],
+          hidden: ["agenda", "favorite_garage", "pending"],
         },
       });
       expect(r.json.nudge).toBe("verify_email");
@@ -471,10 +492,19 @@ describe("widgets réglables", () => {
     const put = await req(u, "PUT", "/me/home/widgets", { order: ["fuel", "weather"], hidden: ["wash"] }, mode);
     expect(put.status).toBe(200);
     expect(put.json.order[0]).toBe("next_access");
-    // Lot R7d1 : « En cours » manque au réglage envoyé : il se place juste après « Prochain accès ».
-    expect(put.json.order[1]).toBe("live");
-    expect(put.json.order.slice(2, 4)).toEqual(["fuel", "weather"]);
-    expect(put.json.order).toHaveLength(9);
+    // Lots R7d1 et R7a2 : « En cours », Mes sorties… Souvenirs manquent au réglage envoyé : ils se placent juste après
+    // « Prochaine sortie », avant « Autour de moi » et avant les blocs réglés.
+    expect(put.json.order.slice(1, 8)).toEqual([
+      "live",
+      "my_outings",
+      "my_crew",
+      "friends_news",
+      "spot_meetup",
+      "memories",
+      "nearby",
+    ]);
+    expect(put.json.order.slice(8, 10)).toEqual(["fuel", "weather"]);
+    expect(put.json.order).toHaveLength(14);
     expect(put.json.hidden).toEqual(["wash"]);
     const home = await req(u, "GET", "/me/home", undefined, mode);
     expect(home.json.widgets).toEqual(put.json);
@@ -535,7 +565,7 @@ describe("widgets réglables", () => {
       .update(profiles)
       .set({ homeWidgets: [{ id: "meteo", visible: false }] })
       .where(eq(profiles.userId, u.id));
-    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(9);
+    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(14);
   });
 
   it("compte suspendu : lecture seule, écriture refusée", async () => {
@@ -558,6 +588,11 @@ describe("garage favori", () => {
     const owner = await signUp("Pro_Garage");
     const pro = await createPro(owner.id, { name: "Garage Kenji", phone: "0468000000", lat: 42.7, lng: 2.9 });
     const u = await user("Fan_Garage");
+    // Lot R7a2 : « Garage favori » est masqué par défaut (il se retrouve dans « Ajouter ») ; ici il est affiché.
+    await db
+      .update(profiles)
+      .set({ homeWidgets: { order: [], hidden: [] } })
+      .where(eq(profiles.userId, u.id));
     return { owner, pro, u };
   }
 
@@ -988,7 +1023,7 @@ describe("corrections de la relecture", () => {
       .where(eq(profiles.userId, u.id));
     const r = await req(u, "GET", "/me/settings");
     expect(r.json.homeWidgets.order[0]).toBe("next_access");
-    expect(r.json.homeWidgets.order).toHaveLength(9);
+    expect(r.json.homeWidgets.order).toHaveLength(14);
     resetRateLimits();
     let last = 204;
     for (let i = 0; i < 61; i++)

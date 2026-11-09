@@ -54,6 +54,11 @@ import { proOwnerActive } from "../pros/explore";
 import { weatherService } from "../weather/service";
 import { enrichNextAccess, mediaBlock, nextTicketOf, proBlock, providerBlock, stampsThisSeason } from "./profiles";
 import { sponsoredService } from "./sponsored";
+import { friendsNewsWidget } from "./widgets/friends_news";
+import { memoriesWidget } from "./widgets/memories";
+import { myCrewWidget } from "./widgets/my_crew";
+import { myOutingsWidget } from "./widgets/my_outings";
+import { spotMeetupWidget } from "./widgets/spot_meetup";
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -127,7 +132,25 @@ export const homeService = {
       .from(profileInterests)
       .where(eq(profileInterests.userId, v.user.id));
 
-    const [upcoming, interests, nearby, weatherMine, favoriteGarage, wash, fuel, nudge] = await Promise.all([
+    // Lot R7a2 : les blocs réglables de l'Accueil ne sont calculés que s'ils sont affichés (un bloc masqué n'est pas
+    // calculé), et seulement pour l'Accueil complet (ni `light`, ni `blocks=v2`, ni `blocks=places`).
+    const dashboard = full && !q.blocks;
+    const want = (id: HomeWidgetId) => dashboard && shown.has(id);
+    const [
+      upcoming,
+      interests,
+      nearby,
+      weatherMine,
+      favoriteGarage,
+      wash,
+      fuel,
+      nudge,
+      myOutings,
+      myCrew,
+      friendsNews,
+      spotMeetup,
+      memories,
+    ] = await Promise.all([
       upcomingPromise,
       interestsPromise,
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
@@ -141,6 +164,11 @@ export const homeService = {
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
       extras ? this.nudge(v) : Promise.resolve(null),
+      want("my_outings") ? upcomingPromise.then((u) => myOutingsWidget(v, u)) : Promise.resolve(null),
+      want("my_crew") ? myCrewWidget(v) : Promise.resolve(null),
+      want("friends_news") ? friendsNewsWidget(v) : Promise.resolve(null),
+      want("spot_meetup") ? spotMeetupWidget(v) : Promise.resolve(null),
+      want("memories") ? memoriesWidget(v) : Promise.resolve(null),
     ]);
     const live = wantLive ? await presenceService.homeLive(v) : null;
     // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
@@ -192,6 +220,11 @@ export const homeService = {
       sponsored,
       widgets,
       live,
+      myOutings,
+      myCrew,
+      friendsNews,
+      spotMeetup,
+      memories,
     };
   },
 
