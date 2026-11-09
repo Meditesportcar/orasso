@@ -27,8 +27,10 @@ import {
   SponsoredBlock,
   WeatherBlock,
 } from "../components/HomeWidgets";
+import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
+import { whatsNewSeen } from "../lib/whatsnew.server";
 import type { Route } from "./+types/app-home";
 import "../styles/home.css";
 
@@ -60,6 +62,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const res = await api<HomeData>(request, `/me/home${params.size ? `?${params}` : ""}`);
   return {
     pseudo: me.profile.pseudo,
+    // Bandeau « où sont passées les choses » (lot R7a1) : une seule fois par compte (cookie `whatsnew_r7`, HMAC du compte) ;
+    // le visiteur (sans véhicule) n'a pas de garage, sa variante n'en parle pas.
+    whatsNew: whatsNewSeen(request, me.user.id)
+      ? null
+      : me.personas.some((p) => p.kind === "visitor")
+        ? ("visitor" as const)
+        : ("exhibitor" as const),
     grade: me.profile.grade,
     points: me.profile.pointsSeason,
     device: lat !== undefined && lng !== undefined ? { lat, lng } : null,
@@ -103,7 +112,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AppHome({ loaderData, actionData }: Route.ComponentProps) {
-  const { pseudo, grade, points, device, home, failed } = loaderData;
+  const { pseudo, grade, points, device, home, failed, whatsNew } = loaderData;
   const widgets = home?.widgets ?? defaultHomeWidgets;
   const next = home?.nextAccess ?? null;
   const nudge = home?.nudge ?? null;
@@ -124,6 +133,8 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
   return (
     <div className="s-stack">
       <h1 className="s-title">Salut {pseudo}</h1>
+
+      {whatsNew ? <WhatsNewBanner variant={whatsNew} /> : null}
 
       {failed && (
         <p className="s-notice" role="status">

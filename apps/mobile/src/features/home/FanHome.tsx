@@ -269,11 +269,12 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         await Promise.all([reload(), home.reload(), staff.reload(), passport.reload(), myTickets.reload()]);
       }}
     >
-      {/* Lot R7a1 : « où sont passées les choses », une seule fois après la mise à jour. */}
-      <WhatsNewBanner />
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
 
       <Greet line={todayLine(now, department ? `Dép. ${department}` : null)} name={name} />
+
+      {/* Lot R7a1 : « où sont passées les choses », une seule fois après la mise à jour, sous le bonjour (maquette R7.1). */}
+      <WhatsNewBanner variant={variant} />
 
       {shown.length > 0 ? (
         <NextOutings

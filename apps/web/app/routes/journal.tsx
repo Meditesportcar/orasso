@@ -46,7 +46,11 @@ type JournalItem = {
   readAt: string | null;
 };
 
-export async function loader({ request }: Route.LoaderArgs) {
+/**
+ * `notificationsOnly` (tour 2 du lot R7a1) : l'onglet Le Fil (`/app/fil`) ne montre que les notifications, comme l'appli ;
+ * ni messages ni demandes, donc rien d'autre n'est lu.
+ */
+export async function loadJournal(request: Request, notificationsOnly: boolean) {
   const cursor = new URL(request.url).searchParams.get("suite");
   const [page, summary, conversations, follows, contacts] = await Promise.all([
     apiOrThrow<{ items: JournalItem[]; nextCursor: string | null }>(
@@ -56,11 +60,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
     // « Tout » réunit messages, demandes et notifications (`sh-inbox`) : les plus récents de chaque sorte, sur la
     // première page seulement (« Plus ancien » ne pagine que les notifications).
-    cursor ? null : api<ConversationPage>(request, "/me/conversations?limit=10"),
-    cursor ? null : api<FollowRequestsPage>(request, "/me/follow-requests"),
-    cursor ? null : api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
+    cursor || notificationsOnly ? null : api<ConversationPage>(request, "/me/conversations?limit=10"),
+    cursor || notificationsOnly ? null : api<FollowRequestsPage>(request, "/me/follow-requests"),
+    cursor || notificationsOnly ? null : api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
   ]);
   return { ...page, summary, ...inboxSources(conversations, follows, contacts) };
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  return loadJournal(request, false);
 }
 
 export async function action({ request }: Route.ActionArgs) {

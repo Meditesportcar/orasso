@@ -225,7 +225,7 @@ export function ProfilScreen() {
           lead={<RowIcon name="vehicle" />}
           title={navLabels.garageRow.title}
           caption={navLabels.garageRow.caption}
-          onPress={() => router.push("/garage")}
+          onPress={() => router.dismissTo("/garage")}
           testID="profil-garage"
         />
       ) : null}

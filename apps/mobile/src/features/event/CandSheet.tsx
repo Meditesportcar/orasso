@@ -336,7 +336,7 @@ export function CandSheet({
             icon="ticket"
             onPress={() => {
               closeAll();
-              router.navigate("/sorties");
+              router.dismissTo("/sorties");
             }}
             testID="cand-sorties"
           >

@@ -1,9 +1,9 @@
 // Bandeau « où sont passées les choses » du site (lot R7a1, D38) : montré une seule fois après la mise à jour, en haut de
-// l'Accueil (`/app`), puis plus jamais. Le « Compris » écrit un cookie de préférence `whatsnew_r7` ; comme celui de
-// l'Explorer, il porte un identifiant opaque du compte (un haché, jamais l'identifiant lui-même). Plusieurs comptes sur
-// le même navigateur : le cookie garde les derniers, pour qu'un compte qui a dit « Compris » ne revoie pas le bandeau
-// parce qu'un autre s'est connecté entre-temps.
-import { createHash } from "node:crypto";
+// l'Accueil (`/app`), puis plus jamais. Le ✕ écrit un cookie de préférence `whatsnew_r7` ; il porte un identifiant
+// opaque du compte : un HMAC-SHA-256 de l'identifiant, clé secrète du serveur (un simple haché serait un identifiant
+// stable et recalculable de l'extérieur). Plusieurs comptes sur le même navigateur : le cookie garde les derniers, pour
+// qu'un compte qui a dit « Compris » ne revoie pas le bandeau parce qu'un autre s'est connecté entre-temps.
+import { createHmac, randomBytes } from "node:crypto";
 
 export const WHATSNEW_COOKIE = "whatsnew_r7";
 const MAX_AGE = 400 * 24 * 3600;
@@ -11,9 +11,23 @@ const OWNER = /^[0-9a-f]{16}$/;
 /** Comptes gardés dans le cookie (le plus ancien tombe). */
 const MAX_OWNERS = 8;
 
+let fallbackKey: Buffer | null = null;
+
+/**
+ * Clé du HMAC : `WHATSNEW_SECRET`, sinon le secret d'authentification (`BETTER_AUTH_SECRET`, que le site voit en local par
+ * le même `.env`). Sans aucun des deux (conteneur du site sans secret), une clé tirée au hasard pour la vie du
+ * processus : le cookie ne se laisse jamais recalculer, au prix de revoir le bandeau après un redémarrage.
+ */
+function key(): string | Buffer {
+  const secret = process.env.WHATSNEW_SECRET || process.env.BETTER_AUTH_SECRET;
+  if (secret) return secret;
+  fallbackKey ??= randomBytes(32);
+  return fallbackKey;
+}
+
 /** Identifiant opaque du compte dans le cookie (16 caractères hexadécimaux). */
 export function whatsNewOwner(userId: string): string {
-  return createHash("sha256").update(`orasso-whatsnew-r7:${userId}`).digest("hex").slice(0, 16);
+  return createHmac("sha256", key()).update(`orasso-whatsnew-r7:${userId}`).digest("hex").slice(0, 16);
 }
 
 /** Les comptes du cookie (valeurs illisibles ignorées). */

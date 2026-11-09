@@ -397,7 +397,7 @@ export default function EventPage() {
           : action === "myApplication"
             ? place?.status === "accepted" && !usedNow(place, placeNow, multiDay)
               ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
-              : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.navigate("/sorties") }
+              : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.dismissTo("/sorties") }
             : action === "myProviderApplication"
               ? {
                   label: L.myApplication,

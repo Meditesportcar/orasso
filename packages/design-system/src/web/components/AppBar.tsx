@@ -1,3 +1,4 @@
+import { navLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
 import type { IconName } from "../../icons";
 import { initialsOf } from "../../initials";
@@ -174,12 +175,12 @@ export function AppBar({
           </span>
         )}
         <span className="o-appbar__spacer" />
-        <AppBarAction icon="search" label="Rechercher" onClick={onSearch} href={searchHref} on={searchOn} />
+        <AppBarAction icon="search" label={navLabels.top.search} onClick={onSearch} href={searchHref} on={searchOn} />
         {onActivity || activityHref || onMessages || messagesHref ? (
           <>
             <AppBarAction
               icon="bell"
-              label="Activité"
+              label={navLabels.topCounted.activity(activityOn ? 0 : (activityCount ?? 0))}
               onClick={onActivity}
               href={activityHref}
               on={activityOn}
@@ -187,7 +188,7 @@ export function AppBar({
             />
             <AppBarAction
               icon="bubble"
-              label="Messages"
+              label={navLabels.topCounted.messages(messagesOn ? 0 : (messagesCount ?? 0))}
               onClick={onMessages}
               href={messagesHref}
               on={messagesOn}

@@ -1,20 +1,20 @@
-// Bandeau « où sont passées les choses » (lot R7a1, décision D38) : une seule fois après la mise à jour (Sorties dans
-// l'Accueil, Garage dans le Profil, un onglet Crew). Posé en haut de l'Accueil de l'exposant et du visiteur ; « Compris »
-// le range pour de bon. Clé `whatsnew:r7` **par compte** (`cacheScope`) : un autre compte sur le même téléphone le voit
-// à son tour ; rien n'est lu ni écrit sans compte lié. Tant que la clé n'est pas lue, rien ne s'affiche (pas de saut).
-import { Plate, Text, useTheme } from "@orasso/design-system/native";
+// Bandeau « où sont passées les choses » (lot R7a1, décision D38 ; tour 2 : texte et place de la maquette R7.1) : une
+// seule fois après la mise à jour. Posé sous le bonjour de l'Accueil de l'exposant et du visiteur (le visiteur n'a pas de
+// garage : sa variante n'en parle pas) ; le ✕ le range pour de bon. Clé `whatsnew:r7` **par compte** (`cacheScope`) : un
+// autre compte sur le même téléphone le voit à son tour ; rien n'est lu ni écrit sans compte lié. Tant que la clé n'est
+// pas lue, rien ne s'affiche (pas de saut).
+import { Icon, Plate, Text, useTheme } from "@orasso/design-system/native";
 import { navLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { cacheScope, kvGet, kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
-import { SmButton } from "@/ui/Kit";
 
 const KEY = "whatsnew:r7";
 const keyOf = (account: string) => `${KEY}.${account}`;
 
-export function WhatsNewBanner() {
+export function WhatsNewBanner({ variant }: { variant: "exhibitor" | "visitor" }) {
   const { t } = useTheme();
   const { me } = useSession();
   const accountId = me?.user.id ?? null;
@@ -42,19 +42,30 @@ export function WhatsNewBanner() {
   };
   return (
     <Plate kind="note" style={styles.box} testID="whatsnew-banner">
-      <Text variant="body" color={t.color.plateInk}>
-        {navLabels.whatsNew.text}
-      </Text>
-      <View style={styles.row}>
-        <SmButton kind="s" icon="check" onPress={dismiss} testID="whatsnew-dismiss">
-          {navLabels.whatsNew.dismiss}
-        </SmButton>
+      <View style={styles.text}>
+        <Text variant="bodyStrong" color={t.color.plateInk}>
+          {navLabels.whatsNew.title}
+        </Text>
+        <Text variant="body" color={t.color.plateMuted}>
+          {navLabels.whatsNew[variant]}
+        </Text>
       </View>
+      <Pressable
+        onPress={dismiss}
+        accessibilityRole="button"
+        accessibilityLabel={navLabels.whatsNew.dismiss}
+        hitSlop={4}
+        style={styles.close}
+        testID="whatsnew-dismiss"
+      >
+        <Icon name="close" size={20} color={t.color.plateInk} />
+      </Pressable>
     </Plate>
   );
 }
 
 const styles = StyleSheet.create({
-  box: { gap: 10 },
-  row: { flexDirection: "row" },
+  box: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  text: { flex: 1, gap: 4 },
+  close: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginTop: -8, marginRight: -8 },
 });

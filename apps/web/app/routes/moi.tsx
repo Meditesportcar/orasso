@@ -124,6 +124,8 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
+  // Lot R7a1, tour 2 : « Mon garage » seulement pour l'exposant, comme dans l'appli (le visiteur n'a pas de véhicule).
+  const isVisitor = me.personas.some((p) => p.kind === "visitor");
   const hats = [
     ...me.memberships
       .filter((m) => m.status === "active")
@@ -274,24 +276,30 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </section>
       )}
 
-      {/* Lot R7a1 : le Garage n'est plus un onglet pour personne (exposant comme visiteur) ; en attendant l'onglet interne du
-          lot R7b1, ce lien l'ouvre. */}
-      <section
-        className={hats.length ? "s-section" : "s-section s-section--first"}
-        aria-labelledby="garage-titre"
-        data-testid="garage-link"
-      >
-        <h2 id="garage-titre" className="s-h2">
-          Mon garage
-        </h2>
-        <p className="s-muted">Tes véhicules archivés, l'ajout d'un véhicule et ton QR de compte.</p>
-        <Button href="/app/garage" variant="secondary" icon="vehicle">
-          Ouvrir mon garage
-        </Button>
-      </section>
+      {/* Lot R7a1 : le Garage n'est plus un onglet ; en attendant l'onglet interne du lot R7b1, ce lien l'ouvre (exposant). */}
+      {!isVisitor && (
+        <section
+          className={hats.length ? "s-section" : "s-section s-section--first"}
+          aria-labelledby="garage-titre"
+          data-testid="garage-link"
+        >
+          <h2 id="garage-titre" className="s-h2">
+            Mon garage
+          </h2>
+          <p className="s-muted">Tes véhicules archivés, l'ajout d'un véhicule et ton QR de compte.</p>
+          <Button href="/app/garage" variant="secondary" icon="vehicle">
+            Ouvrir mon garage
+          </Button>
+        </section>
+      )}
 
       {/* Lot R5b (maquette R5.4) : « Réglages », une liste de lignes comme l'appli ; les sections détaillées suivent. */}
-      <section className="s-section" id="reglages" aria-labelledby="reglages-titre" data-testid="settings-hub">
+      <section
+        className={hats.length || !isVisitor ? "s-section" : "s-section s-section--first"}
+        id="reglages"
+        aria-labelledby="reglages-titre"
+        data-testid="settings-hub"
+      >
         <h2 id="reglages-titre" className="s-h2">
           {S.title}
         </h2>
