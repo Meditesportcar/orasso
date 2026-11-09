@@ -3,19 +3,11 @@
 // derrière `sponsored.external_enabled` (coupé par défaut : avis juridique), affichages et clics par surface, administration
 // réservée au super administrateur.
 import { randomBytes, randomUUID } from "node:crypto";
-import { type FeedCard, FEED_SPONSORED_REASON } from "@orasso/shared";
+import { FEED_SPONSORED_REASON, type FeedCard } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  call,
-  createPro,
-  resetDb,
-  seedReference,
-  signUp,
-  type TestUser,
-  useClock,
-} from "../../../test/helpers";
+import { call, createPro, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
   feedPostPhotos,
@@ -27,7 +19,6 @@ import {
   sponsoredPlacements,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
-import { settingsStore } from "../../lib/settings";
 import { parisDay } from "../pros/service";
 import { feedPhotoKey } from "./posts";
 
@@ -58,9 +49,12 @@ async function person(pseudo: string, departments: string[] = ["66"]) {
 async function posts(author: TestUser, n: number) {
   for (let i = 0; i < n; i++) {
     const id = randomUUID();
-    await db
-      .insert(feedPosts)
-      .values({ id, authorId: author.id, department: "66", createdAt: new Date(clock.now.getTime() - (i + 1) * 60_000) });
+    await db.insert(feedPosts).values({
+      id,
+      authorId: author.id,
+      department: "66",
+      createdAt: new Date(clock.now.getTime() - (i + 1) * 60_000),
+    });
     await db.insert(feedPostPhotos).values({
       postId: id,
       storageKey: feedPhotoKey(id, randomBytes(16).toString("hex")),
@@ -122,10 +116,7 @@ async function walk(u: TestUser, filter = "for_you") {
   const pages: FeedCard[][] = [];
   let cursor: string | null = null;
   for (let i = 0; i < 12; i++) {
-    const r: Awaited<ReturnType<typeof fil>> = await fil(
-      u,
-      `?filter=${filter}${cursor ? `&cursor=${cursor}` : ""}`,
-    );
+    const r: Awaited<ReturnType<typeof fil>> = await fil(u, `?filter=${filter}${cursor ? `&cursor=${cursor}` : ""}`);
     expect(r.status).toBe(200);
     pages.push(r.items);
     all.push(...r.items);
@@ -300,7 +291,14 @@ describe("ciblage : le département seulement", () => {
 
   it("le poids vaut 1 + les départements touchés : l'emplacement ciblé sur deux départements de la personne passe plus souvent", async () => {
     const { feedPlacementMatch } = await import("@orasso/shared");
-    const base = { id: "p", status: "active" as const, startsOn: "2026-01-01", endsOn: "2026-12-31", categoryIds: [], dailyCap: null };
+    const base = {
+      id: "p",
+      status: "active" as const,
+      startsOn: "2026-01-01",
+      endsOn: "2026-12-31",
+      categoryIds: [],
+      dailyCap: null,
+    };
     const ctx = { today: "2026-06-01", sector: ["66", "11"], impressionsToday: 0 };
     expect(feedPlacementMatch({ ...base, departments: [] }, ctx).weight).toBe(1);
     expect(feedPlacementMatch({ ...base, departments: ["66"] }, ctx).weight).toBe(2);
@@ -356,7 +354,9 @@ describe("affichages, clics et plafond par surface", () => {
     const viewer = await person("Viewer_Refus");
     const homeOnly = await proPlacement({ surfaces: ["home"] });
     expect((await call(viewer, "POST", `/sponsored/${homeOnly.id}/impression`, { surface: "feed" })).status).toBe(404);
-    expect((await call(viewer, "POST", `/sponsored/${homeOnly.id}/impression`, { surface: "stories" })).status).toBe(400);
+    expect((await call(viewer, "POST", `/sponsored/${homeOnly.id}/impression`, { surface: "stories" })).status).toBe(
+      400,
+    );
     const feedOnly = await proPlacement({ surfaces: ["feed"] });
     expect((await call(viewer, "POST", `/sponsored/${feedOnly.id}/impression`)).status).toBe(404);
     expect((await call(null, "POST", `/sponsored/${feedOnly.id}/impression`, { surface: "feed" })).status).toBe(401);
@@ -460,7 +460,8 @@ describe("administration", () => {
     const root = await admin();
     const owner = await signUp("Pro_AdminSp");
     const pro = await createPro(owner.id);
-    const post = (over: Record<string, unknown>) => call(root, "POST", "/admin/sponsored-placements", { ...external, ...over });
+    const post = (over: Record<string, unknown>) =>
+      call(root, "POST", "/admin/sponsored-placements", { ...external, ...over });
     expect((await post({ advertiserName: undefined })).status).toBe(400);
     expect((await post({ proProfileId: pro.id })).status).toBe(400);
     expect((await post({ surfaces: ["home"] })).status).toBe(400);
@@ -473,9 +474,9 @@ describe("administration", () => {
     expect(ok.status).toBe(201);
     const id = ok.json.id as string;
     expect((await call(root, "PATCH", `/admin/sponsored-placements/${id}`, { surfaces: ["home"] })).status).toBe(400);
-    expect(
-      (await call(root, "PATCH", `/admin/sponsored-placements/${id}`, { categoryIds: [ref.jdm.id] })).status,
-    ).toBe(400);
+    expect((await call(root, "PATCH", `/admin/sponsored-placements/${id}`, { categoryIds: [ref.jdm.id] })).status).toBe(
+      400,
+    );
     expect((await call(root, "PATCH", `/admin/sponsored-placements/${id}`, { advertiserName: "  " })).status).toBe(400);
   });
 
@@ -490,7 +491,9 @@ describe("administration", () => {
       startsOn: "2026-11-01",
       endsOn: "2026-11-30",
     };
-    expect((await call(root, "POST", "/admin/sponsored-placements", { ...base, advertiserKind: "pro" })).status).toBe(400);
+    expect((await call(root, "POST", "/admin/sponsored-placements", { ...base, advertiserKind: "pro" })).status).toBe(
+      400,
+    );
     // Corps de l'ancien écran : un pro, rien d'autre → Accueil seulement, nom de la fiche.
     const legacy = await call(root, "POST", "/admin/sponsored-placements", { ...base, proProfileId: pro.id });
     expect(legacy.status).toBe(201);
@@ -516,10 +519,11 @@ describe("administration", () => {
     const list = await call(root, "GET", "/admin/sponsored-placements");
     expect(list.status).toBe(200);
     expect(list.json.map((r: { advertiserKind: string }) => r.advertiserKind).sort()).toEqual(["external", "pro"]);
-    for (const row of list.json) expect(row.bySurface).toEqual({
-      home: { impressions: 0, clicks: 0 },
-      feed: { impressions: 0, clicks: 0 },
-    });
+    for (const row of list.json)
+      expect(row.bySurface).toEqual({
+        home: { impressions: 0, clicks: 0 },
+        feed: { impressions: 0, clicks: 0 },
+      });
   });
 });
 

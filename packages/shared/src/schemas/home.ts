@@ -131,7 +131,12 @@ export type SponsoredEventInput = z.infer<typeof sponsoredEventSchema>;
  */
 export function placementAdvertiserProblem(
   kind: AdvertiserKind,
-  p: { proProfileId: string | null; advertiserName: string | null; surfaces: readonly SponsoredSurface[]; categoryIds: readonly string[] },
+  p: {
+    proProfileId: string | null;
+    advertiserName: string | null;
+    surfaces: readonly SponsoredSurface[];
+    categoryIds: readonly string[];
+  },
 ): string | null {
   if (kind === "pro") return p.proProfileId ? null : "Choisis la fiche du pro";
   if (p.proProfileId) return "Un annonceur externe n'a pas de fiche pro";

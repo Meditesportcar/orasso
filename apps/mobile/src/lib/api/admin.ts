@@ -77,7 +77,12 @@ export type AdminAuditQuery = {
 export type NewsletterDraft = { subject: string; bodyMd: string };
 
 export type PlacementCreate = {
-  proProfileId: string;
+  /** Lot R7k1 : un pro d'Orasso (`proProfileId`) ou un annonceur externe (`advertiserName`, Fil seulement). */
+  advertiserKind: "pro" | "external";
+  proProfileId?: string;
+  advertiserName?: string;
+  disclosure: string | null;
+  surfaces: ("home" | "feed")[];
   title: string;
   body: string;
   linkUrl: string;

@@ -1,14 +1,30 @@
-// Casquette Administration, emplacements sponsorisés de l'Accueil (lot 35d, routes du lot 30) : création, période,
-// ciblage par département, plafond quotidien, statut (brouillon, actif, en pause, terminé), image, affichages et clics.
-// Tarif informatif seulement (aucune facturation avant juin 2027). Les dates se saisissent JJ/MM/AAAA. Activer, mettre en
-// pause, terminer et supprimer passent par une feuille de confirmation (ils changent ce que voient les passionnés).
-import { Button, Chip, Plate, SelectField, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+// Casquette Administration, emplacements sponsorisés de l'Accueil et du Fil (lot 35d, routes du lot 30, lot R7k1) :
+// annonceur (un pro d'Orasso ou un annonceur externe, ce dernier derrière `sponsored.external_enabled`), endroits (Accueil,
+// Le Fil), mention libre, création, période, ciblage par département, plafond quotidien, statut (brouillon, actif, en
+// pause, terminé), image, affichages et clics par endroit, aperçu de la carte 4:5. Tarif informatif seulement (aucune
+// facturation avant juin 2027). Les dates se saisissent JJ/MM/AAAA. Activer, mettre en pause, terminer et supprimer
+// passent par une feuille de confirmation (ils changent ce que voient les passionnés).
+import {
+  Button,
+  CheckboxField,
+  Chip,
+  Plate,
+  SelectField,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import {
   adminTexts,
+  displayDomain,
   adminAppLabels as L,
   placementStatuses,
   placementStatusLabels,
+  placementSurfaceLabels,
   type SponsoredPlacementAdmin,
+  type SponsoredSurface,
+  sponsoredSurfaces,
 } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -22,6 +38,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
 import { AdminFailure, AdminGate, AdminPage, EmptyOrLoading, useGesture } from "./kit";
+import { SponsoredPreview } from "./SponsoredPreview";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -31,12 +48,19 @@ function SponsoredBody() {
   const { t } = useTheme();
   const placements = useApi(() => api.sponsoredPlacements(), []);
   const pros = useApi(() => api.adminPros("all", ""), []);
+  const settings = useApi(() => api.adminSettings(), []);
+  // Réglage `sponsored.external_enabled` : tant qu'il est coupé, aucun annonceur externe n'est diffusé.
+  const externalEnabled = settings.data?.entries.find((e) => e.key === "sponsored.external_enabled")?.value === true;
   const gesture = useGesture();
   const [change, setChange] = useState<Change | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const today = dayToFr(new Date().toISOString().slice(0, 10));
   const [form, setForm] = useState({
+    kind: "pro" as "pro" | "external",
     proProfileId: "",
+    advertiserName: "",
+    disclosure: "",
+    surfaces: ["home"] as SponsoredSurface[],
     title: "",
     body: "",
     linkUrl: "",
@@ -48,6 +72,9 @@ function SponsoredBody() {
   });
   const [issue, setIssue] = useState<string | null>(null);
   const published = (pros.data ?? []).filter((p) => p.published);
+  const external = form.kind === "external";
+  const draftName = external ? form.advertiserName : (published.find((p) => p.id === form.proProfileId)?.name ?? "");
+  const hasExternal = (placements.data ?? []).some((p) => p.advertiserKind === "external");
 
   async function confirm() {
     if (!change) return;
@@ -74,7 +101,10 @@ function SponsoredBody() {
     const cap = form.dailyCap.trim() === "" ? null : Number(form.dailyCap);
     const ok = await gesture.run(() =>
       api.createPlacement({
-        proProfileId: form.proProfileId,
+        advertiserKind: form.kind,
+        ...(external ? { advertiserName: form.advertiserName.trim() } : { proProfileId: form.proProfileId }),
+        disclosure: form.disclosure.trim() || null,
+        surfaces: external ? ["feed"] : form.surfaces,
         title: form.title.trim(),
         body: form.body.trim(),
         linkUrl: form.linkUrl.trim(),
@@ -167,6 +197,9 @@ function SponsoredBody() {
     >
       <AdminFailure error={placements.error} />
       <Muted variant="caption">{L.sponsoredHint}</Muted>
+      {!externalEnabled && (hasExternal || external) ? (
+        <Notice testID="external-warning">{L.sponsoredExternalWarning}</Notice>
+      ) : null}
       {notice ? <Notice>{notice}</Notice> : null}
       {gesture.error && change === null ? <Notice tone="error">{gesture.error}</Notice> : null}
       {!placements.data ? (
@@ -179,11 +212,19 @@ function SponsoredBody() {
           <Text variant="title" color={t.color.plateInk}>
             {p.title}
           </Text>
-          <Chip surface="plate" variant={p.status === "active" ? "accent" : "default"}>
-            {placementStatusLabels[p.status]}
-          </Chip>
+          <View style={styles.chips}>
+            <Chip surface="plate" variant={p.status === "active" ? "accent" : "default"}>
+              {placementStatusLabels[p.status]}
+            </Chip>
+            {p.advertiserKind === "external" && !externalEnabled ? (
+              <Chip surface="plate">{L.sponsoredExternalCut}</Chip>
+            ) : null}
+          </View>
           <Text variant="caption" color={t.color.plateMuted}>
-            {p.proName} · {L.sponsoredPeriod(formatDay(p.startsOn), formatDay(p.endsOn))}
+            {p.advertiserName}
+            {p.advertiserKind === "external" ? ` · ${L.sponsoredAdvertiserExternal.toLowerCase()}` : ""}
+            {` · ${p.surfaces.map((x) => placementSurfaceLabels[x]).join(" + ")}`}
+            {` · ${L.sponsoredPeriod(formatDay(p.startsOn), formatDay(p.endsOn))}`}
             {p.departments.length ? ` · ${p.departments.join(", ")}` : ` · ${L.sponsoredEverywhere}`}
             {p.dailyCap ? ` · ${L.sponsoredCapText(p.dailyCap)}` : ""}
           </Text>
@@ -193,6 +234,21 @@ function SponsoredBody() {
           <Text variant="caption" color={t.color.plateMuted}>
             {L.sponsoredStats(p.impressions, p.clicks)}
           </Text>
+          {sponsoredSurfaces
+            .filter((x) => p.surfaces.includes(x))
+            .map((x) => (
+              <Text key={x} variant="caption" color={t.color.plateMuted} testID={`placement-stats-${x}`}>
+                {L.sponsoredSurfaceStats(placementSurfaceLabels[x], p.bySurface[x].impressions, p.bySurface[x].clicks)}
+              </Text>
+            ))}
+          <SponsoredPreview
+            advertiserName={p.advertiserName}
+            title={p.title}
+            body={p.body}
+            imageUrl={p.imageUrl}
+            disclosure={p.disclosure}
+            domain={p.advertiserKind === "external" ? p.externalUrlDomain : null}
+          />
           <View style={styles.stack}>
             {p.status !== "active" && p.status !== "ended" ? (
               <Button
@@ -269,11 +325,61 @@ function SponsoredBody() {
       <SectionTitle>{L.sponsoredNew}</SectionTitle>
       <Plate style={styles.block} testID="placement-form">
         <SelectField
-          label={L.sponsoredPro}
-          value={form.proProfileId}
-          onValueChange={(v) => setForm((f) => ({ ...f, proProfileId: v }))}
-          placeholder={L.sponsoredProPlaceholder}
-          options={published.map((p) => ({ value: p.id, label: p.name }))}
+          label={L.sponsoredAdvertiser}
+          value={form.kind}
+          onValueChange={(v) =>
+            setForm((f) => ({
+              ...f,
+              kind: v === "external" ? "external" : "pro",
+              surfaces: v === "external" ? ["feed"] : ["home"],
+            }))
+          }
+          options={[
+            { value: "pro", label: L.sponsoredAdvertiserPro },
+            { value: "external", label: L.sponsoredAdvertiserExternal },
+          ]}
+        />
+        {external ? (
+          <>
+            <TextField
+              label={L.sponsoredAdvertiserName}
+              value={form.advertiserName}
+              onChangeText={(v) => setForm((f) => ({ ...f, advertiserName: v }))}
+              maxLength={80}
+              testID="placement-advertiser"
+            />
+            <Muted variant="caption">{L.sponsoredExternalOnly}</Muted>
+          </>
+        ) : (
+          <SelectField
+            label={L.sponsoredPro}
+            value={form.proProfileId}
+            onValueChange={(v) => setForm((f) => ({ ...f, proProfileId: v }))}
+            placeholder={L.sponsoredProPlaceholder}
+            options={published.map((p) => ({ value: p.id, label: p.name }))}
+          />
+        )}
+        <Text variant="label" color={t.color.plateMuted}>
+          {L.sponsoredSurfacesField}
+        </Text>
+        {sponsoredSurfaces.map((x) => (
+          <CheckboxField
+            key={x}
+            label={placementSurfaceLabels[x]}
+            checked={form.surfaces.includes(x)}
+            disabled={external}
+            onChange={(on) =>
+              setForm((f) => ({ ...f, surfaces: on ? [...f.surfaces, x] : f.surfaces.filter((y) => y !== x) }))
+            }
+          />
+        ))}
+        <TextField
+          label={L.sponsoredDisclosureField}
+          value={form.disclosure}
+          onChangeText={(v) => setForm((f) => ({ ...f, disclosure: v }))}
+          maxLength={40}
+          placeholder="Publicité"
+          testID="placement-disclosure"
         />
         <TextField
           label={L.sponsoredTitleField}
@@ -331,6 +437,14 @@ function SponsoredBody() {
             .filter((s) => s !== "ended")
             .map((s) => ({ value: s, label: placementStatusLabels[s] }))}
         />
+        <SponsoredPreview
+          advertiserName={draftName}
+          title={form.title}
+          body={form.body}
+          imageUrl={null}
+          disclosure={form.disclosure.trim() || null}
+          domain={external ? displayDomain(form.linkUrl) : null}
+        />
         <Button
           variant="plate"
           icon="add"
@@ -357,4 +471,5 @@ export function SponsoredScreen() {
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
   stack: { gap: space2 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
 });

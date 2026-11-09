@@ -34,8 +34,12 @@ describe("feedPlacementMatch (Fil : le département seulement)", () => {
     expect(feedPlacementMatch({ ...base, status: "paused", departments: [] }, ctx).eligible).toBe(false);
     expect(feedPlacementMatch({ ...base, departments: [] }, { ...ctx, today: "2026-10-31" }).eligible).toBe(false);
     expect(feedPlacementMatch({ ...base, departments: [] }, { ...ctx, today: "2026-12-01" }).eligible).toBe(false);
-    expect(feedPlacementMatch({ ...base, dailyCap: 2, departments: [] }, { ...ctx, impressionsToday: 2 }).eligible).toBe(false);
-    expect(feedPlacementMatch({ ...base, dailyCap: 2, departments: [] }, { ...ctx, impressionsToday: 1 }).eligible).toBe(true);
+    expect(
+      feedPlacementMatch({ ...base, dailyCap: 2, departments: [] }, { ...ctx, impressionsToday: 2 }).eligible,
+    ).toBe(false);
+    expect(
+      feedPlacementMatch({ ...base, dailyCap: 2, departments: [] }, { ...ctx, impressionsToday: 1 }).eligible,
+    ).toBe(true);
   });
 });
 

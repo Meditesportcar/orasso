@@ -7,9 +7,9 @@ import { Button, CheckboxField, Chip, SelectField, TextField } from "@orasso/des
 import {
   type AdminProRow,
   type AdminSettingEntry,
-  adminAppLabels as L,
   adminTexts,
   displayDomain,
+  adminAppLabels as L,
   placementStatuses,
   placementStatusLabels,
   placementSurfaceLabels,

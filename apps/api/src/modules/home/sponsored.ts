@@ -4,11 +4,11 @@
 import { createHmac, randomBytes } from "node:crypto";
 import {
   type AdvertiserKind,
+  displayDomain,
   type FeedPayloads,
+  feedPlacementMatch,
   type HomeSponsored,
   type PlacementTarget,
-  displayDomain,
-  feedPlacementMatch,
   pickWeighted,
   placementAdvertiserProblem,
   placementMatch,
@@ -318,7 +318,10 @@ export const sponsoredService = {
     const externalOn = Boolean(await settingsStore.get("sponsored.external_enabled"));
     const proOn = !proVisibility(null, null, t).hidden.promotion;
     const today = parisDay(t);
-    const kinds: AdvertiserKind[] = [...(proOn ? (["pro"] as const) : []), ...(externalOn ? (["external"] as const) : [])];
+    const kinds: AdvertiserKind[] = [
+      ...(proOn ? (["pro"] as const) : []),
+      ...(externalOn ? (["external"] as const) : []),
+    ];
     if (!kinds.length) return [];
     const rows = await db
       .select({ placement: sponsoredPlacements, pro: proProfiles })
