@@ -9,8 +9,9 @@ import { feedPostPhotos, feedPosts, profiles } from "../../../db/schema";
 import { now } from "../../../lib/deps";
 import { notFound } from "../../../lib/errors";
 import { storage } from "../../../lib/storage";
-import { requireVisiblePost, UUID_RE } from "../../feed/access";
-import { softDeletePost } from "../../feed/posts";
+import type { Tx } from "../../../lib/tx";
+import { hasOpenReport, requireVisiblePost, UUID_RE } from "../../feed/access";
+import { FEED_PHOTO_FOLDER, softDeletePost } from "../../feed/posts";
 import { registerReportMedia, reportMediaUrl } from "../media";
 import { goneView, type TargetRules } from "./types";
 
@@ -19,8 +20,9 @@ const nameOf = (storageKey: string) => storageKey.slice(storageKey.lastIndexOf("
 
 registerReportMedia("feed_post", async (report, name) => {
   if (!UUID_RE.test(report.targetId)) return null;
-  // Seules les photos de cette publication : la clé se reconstruit, le nom ne désigne jamais un autre dossier.
-  const key = `feed/${report.targetId}/${name}`;
+  // Seules les photos de cette publication : la clé se reconstruit, le nom ne désigne jamais un autre dossier. Les
+  // photos d'une publication retirée par son auteur restent lisibles ici tant qu'un signalement attend sa décision.
+  const key = `${FEED_PHOTO_FOLDER}${report.targetId}/${name}`;
   const [known] = await db
     .select({ id: feedPostPhotos.id })
     .from(feedPostPhotos)
@@ -29,6 +31,15 @@ registerReportMedia("feed_post", async (report, name) => {
   const data = await storage.get(key);
   return data ? { data, contentType: "image/webp" } : null;
 });
+
+/** Efface les lignes de photos gardées d'une publication retirée ; rend les fichiers à effacer après la validation. */
+async function purgeHeldPhotos(tx: Tx, postId: string): Promise<string[]> {
+  const gone = await tx
+    .delete(feedPostPhotos)
+    .where(eq(feedPostPhotos.postId, postId))
+    .returning({ key: feedPostPhotos.storageKey });
+  return gone.map((p) => p.key);
+}
 
 async function pseudoOf(userId: string) {
   const [p] = await db
@@ -67,8 +78,22 @@ export const feedPostTarget: TargetRules = {
   async remove(tx, v, report) {
     if (!UUID_RE.test(report.targetId)) return [];
     const [post] = await tx.select().from(feedPosts).where(eq(feedPosts.id, report.targetId)).for("update");
-    if (!post || post.deletedAt) return [];
+    if (!post) return [];
+    // Déjà retirée par son auteur (photos gardées pour la preuve) : la décision les efface.
+    if (post.deletedAt) return purgeHeldPhotos(tx, post.id);
     return softDeletePost(tx, post.id, v.user.id, now());
+  },
+  // Retirée par son auteur pendant que le signalement attendait : les photos étaient gardées pour la preuve. Une fois
+  // la dernière décision prise sur ce contenu, elles partent.
+  async afterDecision(tx, report) {
+    if (!UUID_RE.test(report.targetId)) return [];
+    const [post] = await tx
+      .select({ deletedAt: feedPosts.deletedAt })
+      .from(feedPosts)
+      .where(eq(feedPosts.id, report.targetId));
+    if (!post?.deletedAt) return [];
+    if (await hasOpenReport(tx, report.targetId)) return [];
+    return purgeHeldPhotos(tx, report.targetId);
   },
 };
 

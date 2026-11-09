@@ -2,14 +2,30 @@
 // seulement des abonnés acceptés (`canSeeFeedPost`, règle commune dans `packages/shared`). Les rubriques du Fil lisent
 // leurs lignes avec les mêmes conditions en SQL (`authorVisibleSql`) ; les deux sont testées ensemble.
 import { type AudienceRel, canSeeFeedPost, type FeedPostFacts } from "@orasso/shared";
-import { and, eq, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { feedPosts, profiles, userFollows } from "../../db/schema";
+import { feedPosts, profiles, reports, userFollows } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
+
+/** Un signalement est-il encore en attente de décision sur cette publication ? */
+export async function hasOpenReport(ex: Executor, postId: string): Promise<boolean> {
+  const [open] = await ex
+    .select({ id: reports.id })
+    .from(reports)
+    .where(
+      and(
+        eq(reports.targetType, "feed_post"),
+        eq(reports.targetId, postId),
+        inArray(reports.status, ["pending", "reviewing"]),
+      ),
+    )
+    .limit(1);
+  return Boolean(open);
+}
 
 export type FeedPostRow = typeof feedPosts.$inferSelect;
 

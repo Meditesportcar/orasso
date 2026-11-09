@@ -7,15 +7,25 @@ import { and, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { db } from "../../../db/client";
 import { events, structures } from "../../../db/schema";
 import { summaryOf } from "../summary";
-import { atBounds, type FeedSource, inDepartments, type LoadedCard, type SourceInput, tsParam } from "./types";
+import {
+  atBounds,
+  atMs,
+  type FeedSource,
+  inDepartments,
+  type SourceInput,
+  type SourceResult,
+  sliceRows,
+  tsParam,
+} from "./types";
 
 export const source: FeedSource<"event_recommended"> = {
   kind: "event_recommended",
-  async load(input: SourceInput): Promise<LoadedCard<"event_recommended">[]> {
+  async load(input: SourceInput): Promise<SourceResult<"event_recommended">> {
     const published = sql`coalesce(${events.publishedAt}, ${events.createdAt})`;
     // Un événement qui commence dans les 48 h est « chaud » : date de la carte = l'instant du parcours.
-    const atExpr = sql`(case when ${events.startsAt} <= ${tsParam(input.ref)} + interval '48 hours' then ${tsParam(input.ref)}
-      else least(${tsParam(input.ref)}, greatest(${published}, ${events.startsAt} - interval '7 days')) end)`;
+    const atExpr =
+      atMs(sql`(case when ${events.startsAt} <= ${tsParam(input.ref)} + interval '48 hours' then ${tsParam(input.ref)}
+      else least(${tsParam(input.ref)}, greatest(${published}, ${events.startsAt} - interval '7 days')) end)`);
     const filters: (SQL | undefined)[] = [
       eq(events.status, "published"),
       ne(events.admission, "invite_only"),
@@ -24,7 +34,7 @@ export const source: FeedSource<"event_recommended"> = {
       sql`${events.endsAt} >= ${tsParam(input.ref)}`,
       sql`${events.startsAt} <= ${tsParam(input.ref)} + interval '60 days'`,
       sql`${published} <= ${tsParam(input.ref)}`,
-      ...atBounds(atExpr, input),
+      ...atBounds(atExpr, sql`${events.id}`, "event_recommended", input),
     ];
     if (input.filter === "following") {
       filters.push(
@@ -32,14 +42,18 @@ export const source: FeedSource<"event_recommended"> = {
       );
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${events.department}`, input.nearby));
-    const rows = await db
+    const raw = await db
       .select({ e: events, s: structures, at: sql<Date>`${atExpr}` })
       .from(events)
       .innerJoin(structures, eq(structures.id, events.structureId))
       .where(and(...filters))
       .orderBy(desc(atExpr), desc(events.id))
-      .limit(input.limit);
-    return rows.map((r) => ({
+      .limit(input.limit + 1);
+    const { rows, more, tail } = sliceRows(raw, input.limit, (r) => ({
+      at: new Date(r.at),
+      id: `event_recommended:${r.e.id}`,
+    }));
+    const cards = rows.map((r) => ({
       id: `event_recommended:${r.e.id}`,
       kind: "event_recommended" as const satisfies FeedCardKind,
       at: new Date(r.at),
@@ -50,5 +64,6 @@ export const source: FeedSource<"event_recommended"> = {
       categoryIds: r.e.criteria?.categoryIds ?? [],
       payload: { event: summaryOf(r.e, r.s) },
     }));
+    return { cards, more, tail };
   },
 };

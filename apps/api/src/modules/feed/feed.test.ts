@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { type FeedCard, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 import { eq, inArray } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   blurPlatesOf,
@@ -17,6 +17,7 @@ import {
   resetDb,
   seedReference,
   signUp,
+  signUpExtras,
   type TestUser,
   useClock,
 } from "../../../test/helpers";
@@ -37,7 +38,9 @@ import {
 } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { retryRemove } from "../vehicles/photos-blur";
 import { anonymizeFeedForDeletedAccount } from "./anonymize";
+import { feedPhotoKey } from "./posts";
 
 afterAll(async () => {
   await pool.end();
@@ -86,7 +89,7 @@ async function dbPost(
   for (const [position, p] of (photos ?? [{ noPlate: true }]).entries()) {
     await db.insert(feedPostPhotos).values({
       postId: id,
-      storageKey: `feed/${id}/${randomBytes(16).toString("hex")}.webp`,
+      storageKey: feedPhotoKey(id, randomBytes(16).toString("hex")),
       width: 1080,
       height: 1350,
       position,
@@ -126,6 +129,18 @@ async function upload(u: TestUser, data: Buffer, purpose = "feed_post") {
     body: form,
   });
   return { status: res.status, json: (await res.json()) as { key: string; width: number; height: number } };
+}
+
+/** Clé de stockage (privée) d'une photo, d'après son adresse protégée `/api/feed-posts/<id>/photos/<nom>`. */
+const keyOfUrl = (url: string) => {
+  const m = /^\/api\/feed-posts\/([0-9a-f-]{36})\/photos\/([0-9a-f]{32}\.webp)$/.exec(url);
+  if (!m) throw new Error(`Adresse de photo inattendue : ${url}`);
+  return `private/feed/${m[1]}/${m[2]}`;
+};
+
+/** Lecture brute d'une photo (route protégée), avec la session de `u` (ou sans). */
+async function getPhoto(u: TestUser | null, url: string, headers: Record<string, string> = {}) {
+  return app.request(url, { headers: { origin: ORIGIN, ...(u ? { cookie: u.cookie } : {}), ...headers } });
 }
 
 async function publish(u: TestUser, body: Record<string, unknown>) {
@@ -472,7 +487,9 @@ describe("filtres, diversité, « moins de ce genre »", () => {
 
   it("le compte officiel Orasso : raison « Proposé par Orasso » ; un abonné voit « Tu suis … »", async () => {
     const viewer = await person("Viewer_Raison");
-    const official = await person("Orasso");
+    // Le compte officiel se reconnaît à `profiles.official` (posé par le seed), jamais à son pseudo.
+    const official = await person("Compte_Officiel");
+    await db.update(profiles).set({ pseudo: "Orasso", official: true }).where(eq(profiles.userId, official.id));
     const kenji = await person("Kenji_Raison");
     await follow(viewer, kenji);
     const o = await dbPost(official);
@@ -556,7 +573,7 @@ describe("publier", () => {
     expect(res.json.error.details.photoIndex).toBe(1);
   });
 
-  it("4:5 : publication créée, photo sous feed/<id>/, envoi privé effacé, réponse en liste blanche", async () => {
+  it("4:5 : publication créée, photo sous private/feed/<id>/, envoi privé effacé, réponse en liste blanche", async () => {
     const u = await person("Pub_Ok");
     const v = await createVehicle(u.id, ref);
     const sent = await upload(u, await jpeg(1080, 1350));
@@ -590,15 +607,16 @@ describe("publier", () => {
     expect(post.vehicle.id).toBe(v.id);
     expect(JSON.stringify(post)).not.toContain(v.plate as string);
     expect(post.photos).toHaveLength(1);
-    expect(post.photos[0].url).toMatch(new RegExp(`^/api/files/feed/${post.id}/[0-9a-f]{32}\\.webp$`));
-    // la photo publique existe, l'envoi privé non
-    const file = await storage.get(post.photos[0].url.replace("/api/files/", ""));
-    expect(file).not.toBeNull();
+    expect(post.photos[0].url).toMatch(new RegExp(`^/api/feed-posts/${post.id}/photos/[0-9a-f]{32}.webp$`));
+    // la photo est privée (route protégée), l'envoi privé a été effacé
+    expect(keyOfUrl(post.photos[0].url)).toMatch(/^private\/feed\//);
+    expect(await storage.get(keyOfUrl(post.photos[0].url))).not.toBeNull();
     expect(await storage.get(sent.json.key)).toBeNull();
     const [row] = await db.select().from(feedPostPhotos);
     expect(row).toMatchObject({ plateBlurred: false, noPlateConfirmed: true, position: 0 });
-    const served = await app.request(post.photos[0].url);
-    expect(served.status).toBe(200);
+    expect((await getPhoto(u, post.photos[0].url)).status).toBe(200);
+    // jamais par l'adresse publique des fichiers
+    expect((await app.request(`/api/files/${keyOfUrl(post.photos[0].url)}`)).status).toBe(404);
     // servie dans le Fil de la personne
     expect(postIdsOf((await fil(u)).items)).toContain(post.id);
     // la clé d'envoi ne se réutilise pas
@@ -772,7 +790,7 @@ describe("lire, retirer, flamme", () => {
     const other = await person("Retrait_Autre");
     const sent = await upload(u, await jpeg(1080, 1350));
     const res = await publish(u, { photos: [{ uploadKey: sent.json.key, noPlateConfirmed: true }] });
-    const key = (res.json.photos[0].url as string).replace("/api/files/", "");
+    const key = keyOfUrl(res.json.photos[0].url);
     expect(await storage.get(key)).not.toBeNull();
     expect((await call(other, "DELETE", `/me/feed-posts/${res.json.id}`)).status).toBe(404);
     expect((await call(u, "DELETE", `/me/feed-posts/${res.json.id}`)).status).toBe(204);
@@ -868,7 +886,7 @@ describe("signalement et modération", () => {
   it("retrait par le super administrateur : publication retirée du Fil, photos effacées", async () => {
     const { reporter, post, report } = await reported();
     const admin = await person("Mod_Admin", { role: "super_admin" });
-    const key = (post.photos[0].url as string).replace("/api/files/", "");
+    const key = keyOfUrl(post.photos[0].url);
     const done = await call(admin, "POST", `/admin/reports/${report.json.id}/sanction`, { hideContent: true });
     expect(done.status).toBe(200);
     expect(await storage.get(key)).toBeNull();
@@ -938,5 +956,586 @@ describe("compte supprimé, forme des cartes", () => {
       ["avatarUrl", "grade", "official", "pseudo"].sort(),
     );
     for (const c of res.items) expect(Object.keys(c).sort()).toEqual(["at", "id", "kind", "payload", "reason"]);
+  });
+});
+
+// --- Tour 2 (09/11) : corrections des relectures Opus et Codex ---------------------------------------------------------
+
+/** Publications en nombre, insérées d'un coup (photos « aucune plaque » confirmées). */
+async function bulkPosts(author: TestUser, dates: Date[]) {
+  const rows = dates.map((createdAt) => ({ id: randomUUID(), authorId: author.id, department: "66", createdAt }));
+  if (!rows.length) return [];
+  await db.insert(feedPosts).values(rows);
+  await db.insert(feedPostPhotos).values(
+    rows.map((r) => ({
+      postId: r.id,
+      storageKey: feedPhotoKey(r.id, randomBytes(16).toString("hex")),
+      width: 1080,
+      height: 1350,
+      position: 0,
+      plateBlurred: false,
+      noPlateConfirmed: true,
+    })),
+  );
+  return rows.map((r) => r.id);
+}
+
+/** Parcourt tout le Fil (filtre donné) : les cartes de chaque page, dans l'ordre. */
+async function walk(viewer: TestUser, filter = "", between?: (page: number, next: string) => Promise<void>) {
+  const pages: FeedCard[][] = [];
+  let cursor: string | null = null;
+  do {
+    const query: string = [filter && `filter=${filter}`, cursor && `cursor=${encodeURIComponent(cursor)}`]
+      .filter(Boolean)
+      .join("&");
+    const res: Awaited<ReturnType<typeof fil>> = await fil(viewer, query ? `?${query}` : "");
+    expect(res.status).toBe(200);
+    expect(res.items.length).toBeLessThanOrEqual(20);
+    pages.push(res.items);
+    cursor = res.next;
+    if (cursor && between) await between(pages.length, cursor);
+    expect(pages.length).toBeLessThan(40);
+  } while (cursor);
+  return pages;
+}
+
+const allIds = (pages: FeedCard[][]) => pages.flat().map((c) => c.id);
+const postCardId = (id: string) => `feed_post:${id}`;
+const expectComplete = (pages: FeedCard[][], expected: string[]) => {
+  const seen = allIds(pages);
+  expect(new Set(seen).size).toBe(seen.length);
+  expect([...seen].sort()).toEqual(expected.map(postCardId).sort());
+};
+
+async function freshWorld() {
+  await resetDb();
+  clock = useClock(new Date(Date.now() + 10 * 60_000));
+  ref = await seedReference();
+}
+
+describe("curseur par clé (tour 2)", () => {
+  it("une fenêtre de 48 h pleine à un multiple de 20 n'interdit pas les archives (20 et 40 cartes récentes)", async () => {
+    for (const recent of [20, 40]) {
+      await freshWorld();
+      const viewer = await person(`Viewer_Mult${recent}`);
+      const author = await person(`Auteur_Mult${recent}`);
+      const fresh = await bulkPosts(
+        author,
+        Array.from({ length: recent }, (_, i) => hoursAgo(1 + i * 0.5)),
+      );
+      const archives = await bulkPosts(
+        author,
+        Array.from({ length: 7 }, (_, i) => hoursAgo(60 + i * 24)),
+      );
+      const pages = await walk(viewer);
+      expectComplete(pages, [...fresh, ...archives]);
+      // les archives viennent après toute la fenêtre
+      const order = allIds(pages);
+      expect(Math.min(...archives.map((id) => order.indexOf(postCardId(id))))).toBeGreaterThanOrEqual(recent);
+    }
+  });
+
+  it("plus de 60 cartes d'une même source dans la fenêtre : toutes servies (61, puis plus que le plafond de 300)", async () => {
+    const viewer = await person("Viewer_Beaucoup");
+    const author = await person("Auteur_Beaucoup");
+    const sixty1 = await bulkPosts(
+      author,
+      Array.from({ length: 61 }, (_, i) => hoursAgo(0.1 + i * 0.7)),
+    );
+    expectComplete(await walk(viewer), sixty1);
+    // 305 cartes dans la fenêtre : 300 classées, les 5 plus anciennes passent en phase 2 sans être perdues
+    const more = await bulkPosts(
+      author,
+      Array.from({ length: 244 }, (_, i) => hoursAgo(0.05 + i * 0.15)),
+    );
+    const total = [...sixty1, ...more];
+    expect(total.length).toBe(305);
+    const pages = await walk(viewer);
+    expectComplete(pages, total);
+    expect(pages.length).toBe(16);
+  }, 120_000);
+
+  it("22 cartes au même instant : aucune n'est cachée ni répétée, dans la fenêtre comme dans les archives", async () => {
+    const viewer = await person("Viewer_Memes");
+    const author = await person("Auteur_Memes");
+    const recent = await bulkPosts(author, Array(22).fill(hoursAgo(5)));
+    const old = await bulkPosts(author, Array(22).fill(hoursAgo(100)));
+    expectComplete(await walk(viewer), [...recent, ...old]);
+  });
+
+  it("une carte retirée entre deux pages (la clé du curseur) ne fait sauter aucune autre carte", async () => {
+    for (const [label, base] of [
+      ["fenêtre", 1],
+      ["archives", 60],
+    ] as const) {
+      await freshWorld();
+      const viewer = await person(`Viewer_Retrait${label.length}`);
+      const author = await person(`Auteur_Retrait${label.length}`);
+      const posts = await bulkPosts(
+        author,
+        Array.from({ length: 50 }, (_, i) => hoursAgo(base + i * 0.5)),
+      );
+      const removed: string[] = [];
+      const pages = await walk(viewer, "", async (page, next) => {
+        if (page !== 1) return;
+        // la clé du curseur est la dernière carte de la tranche (phase 1) ou de la page (phase 2) : on la retire
+        const cursor = JSON.parse(Buffer.from(next, "base64url").toString()) as { i: string };
+        const id = cursor.i.replace("feed_post:", "");
+        removed.push(id);
+        await db.update(feedPosts).set({ deletedAt: new Date(), deletedBy: author.id }).where(eq(feedPosts.id, id));
+      });
+      expect(removed, label).toHaveLength(1);
+      const seen = allIds(pages);
+      expect(new Set(seen).size, label).toBe(seen.length);
+      // seule la carte retirée peut manquer : aucune autre n'est sautée
+      const missing = posts.filter((id) => !seen.includes(postCardId(id)));
+      expect(
+        missing.filter((id) => !removed.includes(id)),
+        label,
+      ).toEqual([]);
+    }
+  }, 120_000);
+
+  it("deux sources mêlées (événements et publications) à cheval sur la fenêtre : parcours complet, sans doublon ni trou", async () => {
+    const viewer = await person("Viewer_Mixte");
+    const orga = await person("Orga_Mixte");
+    const author = await person("Auteur_Mixte");
+    const structure = await createStructure(orga.id);
+    // événements publiés il y a longtemps, qui commencent dans 4 à 6 jours : datés 7 jours avant leur début
+    const eventIds: string[] = [];
+    for (let i = 0; i < 24; i++) {
+      const e = await createEvent(structure.id, {
+        department: "66",
+        publishedAt: hoursAgo(500),
+        startsAt: new Date(clock.now.getTime() + (4 + i * 0.09) * 24 * HOUR),
+      });
+      eventIds.push(e.id);
+    }
+    const posts = await bulkPosts(
+      author,
+      Array.from({ length: 30 }, (_, i) => hoursAgo(2 + i * 4.5)),
+    );
+    const pages = await walk(viewer);
+    const seen = allIds(pages);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect([...seen].sort()).toEqual(
+      [...posts.map(postCardId), ...eventIds.map((id) => `event_recommended:${id}`)].sort(),
+    );
+  }, 120_000);
+
+  it("un curseur trafiqué ou incomplet : 400", async () => {
+    const viewer = await person("Viewer_Trafic");
+    const encode = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const bad = encode({ r: new Date().toISOString(), p: 2, a: "pas-une-date", x: [], o: 0 });
+    expect((await fil(viewer, `?cursor=${bad}`)).status).toBe(400);
+    expect((await fil(viewer, `?cursor=${encode({ r: new Date().toISOString(), p: 1 })}`)).status).toBe(400);
+  });
+});
+
+describe("photos du Fil : accès revérifié à chaque lecture (tour 2)", () => {
+  async function withPhoto(author: TestUser) {
+    const sent = await upload(author, await jpeg(1080, 1350));
+    const res = await publish(author, { photos: [{ uploadKey: sent.json.key, noPlateConfirmed: true }] });
+    expect(res.status).toBe(201);
+    return { id: res.json.id as string, url: res.json.photos[0].url as string };
+  }
+
+  it("sans session : 401 ; un membre voit la photo d'un compte public, avec ses en-têtes ; ETag : 304 léger", async () => {
+    const author = await person("Photo_Auteur");
+    const member = await person("Photo_Membre");
+    const { url } = await withPhoto(author);
+    expect((await getPhoto(null, url)).status).toBe(401);
+    const ok = await getPhoto(member, url);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toBe("image/webp");
+    expect(ok.headers.get("cache-control")).toBe("private, no-cache");
+    const etag = ok.headers.get("etag") as string;
+    expect(etag).toMatch(/^"[0-9a-f]{32}"$/);
+    expect((await ok.arrayBuffer()).byteLength).toBeGreaterThan(100);
+    // revalidation : l'accès est revérifié, le contenu n'est pas renvoyé
+    const again = await getPhoto(member, url, { "if-none-match": etag });
+    expect(again.status).toBe(304);
+    expect(again.headers.get("cache-control")).toBe("private, no-cache");
+    expect((await again.arrayBuffer()).byteLength).toBe(0);
+    // un 304 ne s'obtient pas sans accès
+    expect((await getPhoto(null, url, { "if-none-match": etag })).status).toBe(401);
+  });
+
+  it("compte privé : non abonné et demande en attente 404, abonné accepté 200, désabonnement : 404 aussitôt", async () => {
+    const author = await person("Photo_Prive", { visibility: "private" });
+    const fan = await person("Photo_Abonne");
+    const stranger = await person("Photo_Inconnu");
+    const pending = await person("Photo_Attente");
+    const { url } = await withPhoto(author);
+    await follow(fan, author);
+    await follow(pending, author, "pending");
+    expect((await getPhoto(author, url)).status).toBe(200);
+    expect((await getPhoto(fan, url)).status).toBe(200);
+    expect((await getPhoto(stranger, url)).status).toBe(404);
+    expect((await getPhoto(pending, url)).status).toBe(404);
+    // revalidation d'un abonné encore autorisé, puis il se désabonne : le 304 ne passe plus
+    const etag = (await getPhoto(fan, url)).headers.get("etag") as string;
+    expect((await getPhoto(fan, url, { "if-none-match": etag })).status).toBe(304);
+    await db.delete(userFollows).where(eq(userFollows.followerId, fan.id));
+    expect((await getPhoto(fan, url)).status).toBe(404);
+    expect((await getPhoto(fan, url, { "if-none-match": etag })).status).toBe(404);
+  });
+
+  it("l'auteur passe son compte en privé : le Fil, la lecture et la photo se ferment aux non abonnés", async () => {
+    const author = await person("Photo_Bascule");
+    const fan = await person("Photo_Fan");
+    const stranger = await person("Photo_Etranger");
+    const { id, url } = await withPhoto(author);
+    await follow(fan, author);
+    expect((await getPhoto(stranger, url)).status).toBe(200);
+    expect(postIdsOf((await fil(stranger)).items)).toContain(id);
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, author.id));
+    expect((await getPhoto(stranger, url)).status).toBe(404);
+    expect((await call(stranger, "GET", `/feed-posts/${id}`)).status).toBe(404);
+    expect(postIdsOf((await fil(stranger)).items)).not.toContain(id);
+    expect((await call(stranger, "PUT", `/feed-posts/${id}/reaction`)).status).toBe(404);
+    expect((await getPhoto(fan, url)).status).toBe(200);
+    expect(postIdsOf((await fil(fan)).items)).toContain(id);
+    expect((await getPhoto(author, url)).status).toBe(200);
+  });
+
+  it("auteur suspendu ou banni, publication retirée : 404 pour les autres", async () => {
+    const author = await person("Photo_Sanction");
+    const member = await person("Photo_Lecteur");
+    const { id, url } = await withPhoto(author);
+    expect((await getPhoto(member, url)).status).toBe(200);
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 24 * HOUR) })
+      .where(eq(profiles.userId, author.id));
+    expect((await getPhoto(member, url)).status).toBe(404);
+    await db.update(profiles).set({ suspendedUntil: null, bannedAt: new Date() }).where(eq(profiles.userId, author.id));
+    expect((await getPhoto(member, url)).status).toBe(404);
+    await db.update(profiles).set({ bannedAt: null }).where(eq(profiles.userId, author.id));
+    expect((await getPhoto(member, url)).status).toBe(200);
+    // publication retirée par son auteur
+    expect((await call(author, "DELETE", `/me/feed-posts/${id}`)).status).toBe(204);
+    expect((await getPhoto(member, url)).status).toBe(404);
+    expect((await getPhoto(author, url)).status).toBe(404);
+  });
+
+  it("noms mal formés, photo d'une autre publication, adresse publique des fichiers : 404", async () => {
+    const author = await person("Photo_Noms");
+    const member = await person("Photo_Noms_Lecteur");
+    const a = await withPhoto(author);
+    const b = await withPhoto(author);
+    const nameA = a.url.slice(a.url.lastIndexOf("/") + 1);
+    expect((await getPhoto(member, `/api/feed-posts/${b.id}/photos/${nameA}`)).status).toBe(404);
+    expect((await getPhoto(member, `/api/feed-posts/${a.id}/photos/${"a".repeat(32)}.webp`)).status).toBe(404);
+    expect((await getPhoto(member, `/api/feed-posts/${a.id}/photos/..%2F${nameA}`)).status).toBe(404);
+    expect((await getPhoto(member, `/api/feed-posts/${a.id}/photos/${nameA.replace(".webp", ".png")}`)).status).toBe(
+      404,
+    );
+    expect((await getPhoto(member, `/api/feed-posts/pas-un-uuid/photos/${nameA}`)).status).toBeGreaterThanOrEqual(400);
+    expect((await app.request(`/api/files/private/feed/${a.id}/${nameA}`)).status).toBe(404);
+    expect((await app.request(`/api/files/feed/${a.id}/${nameA}`)).status).toBe(404);
+  });
+});
+
+const profileBody = (pseudo: string, bio?: string) => ({ pseudo, ...(bio ? { bio } : {}) });
+
+describe("compte officiel et pseudos réservés (tour 2)", () => {
+  it("un compte ordinaire qui se nomme « Orasso » n'est ni officiel, ni « Proposé par Orasso »", async () => {
+    const viewer = await person("Viewer_Usurpe");
+    const fake = await person("Faux_Compte");
+    await db.update(profiles).set({ pseudo: "Orasso" }).where(eq(profiles.userId, fake.id));
+    const id = await dbPost(fake);
+    const card = (await fil(viewer)).items.find((c) => c.id === postCardId(id));
+    expect(card).toBeTruthy();
+    expect((card as FeedCard).reason.code).not.toBe("from_orasso");
+    const post = ((card as FeedCard).payload as { post: { author: { official: boolean } } }).post;
+    expect(post.author.official).toBe(false);
+    expect((await call(viewer, "GET", `/feed-posts/${id}`)).json.author.official).toBe(false);
+  });
+
+  it("l'inscription et le changement de pseudo refusent « orasso », sans tenir compte de la casse ni des séparateurs", async () => {
+    const u = await person("Pseudo_Normal");
+    for (const bad of ["Orasso", "ORASSO", "orasso_fan", "Le.Orasso", "0rasso", "Mon_0RASSO_66", "o.r.a.s.s.o"]) {
+      const res = await call(u, "PATCH", "/me/profile", profileBody(bad));
+      expect(res.status, bad).toBe(400);
+      expect(res.json.error.code, bad).toBe("pseudo_reserved");
+      expect(res.json.error.message).toBe("Ce pseudo est réservé : choisis-en un autre.");
+      const signup = await app.request("/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: ORIGIN },
+        body: JSON.stringify({
+          email: `${randomBytes(4).toString("hex")}@orasso.test`,
+          password: "motdepasse-test-123",
+          name: bad,
+          termsAccepted: true,
+          ...signUpExtras,
+        }),
+      });
+      expect(signup.status, bad).toBe(400);
+      expect(((await signup.json()) as { error: { code: string } }).error.code).toBe("pseudo_reserved");
+      const available = await app.request(`/api/pseudo-available?pseudo=${encodeURIComponent(bad)}`);
+      expect(((await available.json()) as { available: boolean }).available, bad).toBe(false);
+    }
+    // un pseudo ordinaire passe toujours ; un pseudo déjà porté avant la règle n'est pas touché par un autre changement
+    expect((await call(u, "PATCH", "/me/profile", profileBody("Pilote_Rassemblement"))).status).toBe(200);
+    await db.update(profiles).set({ pseudo: "Ancien_Orasso" }).where(eq(profiles.userId, u.id));
+    expect((await call(u, "PATCH", "/me/profile", profileBody("Ancien_Orasso", "Un mot"))).status).toBe(200);
+  });
+
+  it("le compte officiel garde son pseudo à la modification de son profil", async () => {
+    const official = await person("Officiel_Test");
+    await db.update(profiles).set({ official: true, pseudo: "Orasso" }).where(eq(profiles.userId, official.id));
+    expect((await call(official, "PATCH", "/me/profile", profileBody("Orasso", "Le compte officiel"))).status).toBe(
+      200,
+    );
+  });
+
+  it("le seed refuse de rattacher le statut officiel à un compte ordinaire nommé « Orasso »", async () => {
+    const fake = await person("Faux_Seed");
+    await db.update(profiles).set({ pseudo: "Orasso" }).where(eq(profiles.userId, fake.id));
+    const { seedFeed } = await import("../../../scripts/seed/feed");
+    await expect(seedFeed()).rejects.toThrow(/compte ordinaire/);
+    const [after] = await db.select().from(profiles).where(eq(profiles.userId, fake.id));
+    expect(after?.official).toBe(false);
+  });
+});
+
+describe("podium d'un compte privé, pros mobiles, flamme d'un compte suspendu (tour 2)", () => {
+  async function voteResult(exhibitor: TestUser, orgaName: string, endedHoursAgo = 26) {
+    const orga = await person(orgaName);
+    const structure = await createStructure(orga.id);
+    const car = await createVehicle(exhibitor.id, ref);
+    await db.update(vehiclePhotos).set({ plateBlurred: true }).where(eq(vehiclePhotos.vehicleId, car.id));
+    const past = await createEvent(structure.id, {
+      department: "66",
+      startsAt: hoursAgo(endedHoursAgo + 4),
+      endsAt: hoursAgo(endedHoursAgo),
+    });
+    const [win] = await db
+      .insert(applications)
+      .values({
+        eventId: past.id,
+        userId: exhibitor.id,
+        vehicleId: car.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+        decidedAt: hoursAgo(endedHoursAgo + 10),
+      })
+      .returning();
+    await db.insert(audiencePrizeResults).values({
+      eventId: past.id,
+      applicationId: win!.id,
+      rank: 1,
+      votes: 9,
+      winner: true,
+      createdAt: hoursAgo(24),
+    });
+    return past.id;
+  }
+  type Podium = { podium: { pseudo: string | null; photoUrl: string | null }[] };
+  const podiumOf = (items: FeedCard[]) => {
+    const card = items.find((c) => c.kind === "vote_result");
+    expect(card).toBeTruthy();
+    return ((card as FeedCard).payload as Podium).podium;
+  };
+
+  it("compte privé non suivi : le podium montre la voiture seule (pseudo nul) ; public, soi ou abonné : le pseudo", async () => {
+    const priv = await person("Podium_Prive", { visibility: "private" });
+    await voteResult(priv, "Orga_Podium");
+    const stranger = await person("Podium_Inconnu");
+    const fan = await person("Podium_Abonne");
+    await follow(fan, priv);
+    const pending = await person("Podium_Attente");
+    await follow(pending, priv, "pending");
+    const seen = await fil(stranger);
+    const first = podiumOf(seen.items);
+    expect(first[0]?.pseudo).toBeNull();
+    expect(JSON.stringify(seen.json)).not.toContain("Podium_Prive");
+    expect(podiumOf((await fil(pending)).items)[0]?.pseudo).toBeNull();
+    expect(podiumOf((await fil(fan)).items)[0]?.pseudo).toBe("Podium_Prive");
+    expect(podiumOf((await fil(priv)).items)[0]?.pseudo).toBe("Podium_Prive");
+    // la voiture reste affichée avec sa photo masquée
+    expect(first[0]?.photoUrl).toBeTruthy();
+    // compte public : le pseudo
+    await db.update(profiles).set({ visibility: "public" }).where(eq(profiles.userId, priv.id));
+    expect(podiumOf((await fil(stranger)).items)[0]?.pseudo).toBe("Podium_Prive");
+  });
+
+  it("l'événement terminé depuis plus de 16 jours n'entre pas dans la source (coût borné)", async () => {
+    const exhibitor = await person("Podium_Ancien");
+    await voteResult(exhibitor, "Orga_Ancien", 24 * 18);
+    const viewer = await person("Viewer_Ancien");
+    expect(kinds((await fil(viewer)).items).has("vote_result")).toBe(false);
+  });
+
+  it("« Autour de moi » : un pro sans atelier qui intervient dans le département de la personne est proposé", async () => {
+    const owner = await person("Pro_Mobile");
+    const owner2 = await person("Pro_Lointain");
+    const owner3 = await person("Pro_Double");
+    const viewer = await person("Viewer_ProMobile", { departments: ["66"] });
+    const mobile = await createPro(owner.id, {
+      name: "Dépannage mobile",
+      department: null,
+      interventionDepartments: ["66"],
+      publishedAt: hoursAgo(3),
+    });
+    const elsewhere = await createPro(owner2.id, {
+      name: "Atelier lointain",
+      department: "75",
+      interventionDepartments: ["75"],
+      publishedAt: hoursAgo(3),
+    });
+    const proIds = (items: FeedCard[]) => items.filter((c) => c.kind === "pro").map((c) => c.id);
+    const nearby = await fil(viewer, "?filter=nearby");
+    expect(proIds(nearby.items)).toContain(`pro:${mobile.id}`);
+    expect(proIds(nearby.items)).not.toContain(`pro:${elsewhere.id}`);
+    expect(proIds((await fil(viewer)).items)).toContain(`pro:${mobile.id}`);
+    // un atelier à Paris qui intervient aussi dans le 66 : proposé « autour de moi »
+    const both = await createPro(owner3.id, {
+      name: "Atelier Paris + 66",
+      department: "75",
+      interventionDepartments: ["75", "66"],
+      publishedAt: hoursAgo(3),
+    });
+    expect(proIds((await fil(viewer, "?filter=nearby")).items)).toContain(`pro:${both.id}`);
+  });
+
+  it("un compte suspendu ne met pas de flamme et ne règle pas « moins de ce genre » (lecture seule)", async () => {
+    const author = await person("Susp_Auteur");
+    const u = await person("Susp_Lecteur");
+    const id = await dbPost(author);
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 24 * HOUR) })
+      .where(eq(profiles.userId, u.id));
+    expect((await call(u, "PUT", `/feed-posts/${id}/reaction`)).status).toBe(403);
+    expect((await call(u, "DELETE", `/feed-posts/${id}/reaction`)).status).toBe(403);
+    expect((await call(u, "POST", "/me/feed/less", { kind: "pro" })).status).toBe(403);
+    expect((await call(u, "DELETE", "/me/feed/less/pro")).status).toBe(403);
+    expect(await db.select().from(feedPostReactions)).toHaveLength(0);
+    expect((await call(u, "GET", "/me/fil/less")).json.kinds).toEqual([]);
+  });
+});
+
+describe("suppressions reprises et preuve d'une publication signalée (tour 2)", () => {
+  async function postWithReport() {
+    const author = await person("Preuve_Auteur");
+    const reporter = await person("Preuve_Signaleur");
+    const mod = await person("Preuve_Moderateur", { role: "moderator" });
+    const sent = await upload(author, await jpeg(1080, 1350));
+    const post = await publish(author, { photos: [{ uploadKey: sent.json.key, noPlateConfirmed: true }] });
+    const report = await call(reporter, "POST", `/feed-posts/${post.json.id}/report`, { reason: "plate_or_face" });
+    expect(report.status).toBe(201);
+    return { author, reporter, mod, post: post.json, report: report.json };
+  }
+  const decide = (mod: TestUser, reportId: string, status: string) =>
+    call(mod, "POST", `/admin/reports/${reportId}/status`, { status, note: null });
+
+  it("signalement en attente : le retrait par l'auteur cache la publication mais garde les photos jusqu'à la décision", async () => {
+    const { author, reporter, mod, post, report } = await postWithReport();
+    const key = keyOfUrl(post.photos[0].url);
+    expect((await call(author, "DELETE", `/me/feed-posts/${post.id}`)).status).toBe(204);
+    // disparue pour tous, mais le fichier et sa ligne restent
+    expect((await call(reporter, "GET", `/feed-posts/${post.id}`)).status).toBe(404);
+    expect((await getPhoto(reporter, post.photos[0].url)).status).toBe(404);
+    expect(postIdsOf((await fil(reporter)).items)).toEqual([]);
+    expect(await storage.get(key)).not.toBeNull();
+    expect(await db.select().from(feedPostPhotos)).toHaveLength(1);
+    // le modérateur voit toujours la photo, dans le dossier du signalement
+    const detail = await call(mod, "GET", `/admin/reports/${report.id}`);
+    expect(detail.json.target.removed).toBe(true);
+    const url = detail.json.target.imageUrl as string;
+    const served = await app.request(url, { headers: { cookie: mod.cookie, origin: ORIGIN } });
+    expect(served.status).toBe(200);
+    // la prise en charge ne décide rien : les fichiers restent
+    expect((await decide(mod, report.id, "reviewing")).status).toBe(200);
+    expect(await storage.get(key)).not.toBeNull();
+    // la décision efface les fichiers et les lignes
+    expect((await decide(mod, report.id, "resolved_no_action")).status).toBe(200);
+    expect(await storage.get(key)).toBeNull();
+    expect(await db.select().from(feedPostPhotos)).toHaveLength(0);
+    const gone = await app.request(url, { headers: { cookie: mod.cookie, origin: ORIGIN } });
+    expect(gone.status).toBe(404);
+  });
+
+  it("sans signalement, ou une fois décidé : le retrait par l'auteur efface tout tout de suite", async () => {
+    const author = await person("Preuve_Sans");
+    const reporter = await person("Preuve_Sans_Signaleur");
+    const mod = await person("Preuve_Sans_Mod", { role: "moderator" });
+    const a = await upload(author, await jpeg(1080, 1350));
+    const p1 = await publish(author, { photos: [{ uploadKey: a.json.key, noPlateConfirmed: true }] });
+    expect((await call(author, "DELETE", `/me/feed-posts/${p1.json.id}`)).status).toBe(204);
+    expect(await storage.get(keyOfUrl(p1.json.photos[0].url))).toBeNull();
+    // signalement déjà décidé, puis retrait : effacement immédiat
+    const b = await upload(author, await jpeg(1080, 1350));
+    const p2 = await publish(author, { photos: [{ uploadKey: b.json.key, noPlateConfirmed: true }] });
+    const r = await call(reporter, "POST", `/feed-posts/${p2.json.id}/report`, { reason: "spam" });
+    await decide(mod, r.json.id, "resolved_no_action");
+    expect((await call(author, "DELETE", `/me/feed-posts/${p2.json.id}`)).status).toBe(204);
+    expect(await storage.get(keyOfUrl(p2.json.photos[0].url))).toBeNull();
+  });
+
+  it("deux signalements : les photos attendent la dernière décision ; un rejet pour abus d'un seul ne suffit pas", async () => {
+    const { author, mod, post, report } = await postWithReport();
+    const second = await person("Preuve_Second");
+    const r2 = await call(second, "POST", `/feed-posts/${post.id}/report`, { reason: "spam" });
+    expect(r2.status).toBe(201);
+    const key = keyOfUrl(post.photos[0].url);
+    expect((await call(author, "DELETE", `/me/feed-posts/${post.id}`)).status).toBe(204);
+    const admin = await person("Preuve_Admin", { role: "super_admin" });
+    // rejet pour abus du second : le premier attend toujours
+    expect((await decide(admin, r2.json.id, "dismissed_abusive")).status).toBe(200);
+    expect(await storage.get(key)).not.toBeNull();
+    expect((await decide(mod, report.id, "resolved_no_action")).status).toBe(200);
+    expect(await storage.get(key)).toBeNull();
+  });
+
+  it("le retrait par le super administrateur d'une publication déjà retirée par son auteur efface les photos gardées", async () => {
+    const { author, post, report } = await postWithReport();
+    const key = keyOfUrl(post.photos[0].url);
+    await call(author, "DELETE", `/me/feed-posts/${post.id}`);
+    expect(await storage.get(key)).not.toBeNull();
+    const admin = await person("Preuve_Retrait_Admin", { role: "super_admin" });
+    const done = await call(admin, "POST", `/admin/reports/${report.id}/sanction`, { hideContent: true });
+    expect(done.status).toBe(200);
+    expect(await storage.get(key)).toBeNull();
+    expect(await db.select().from(feedPostPhotos)).toHaveLength(0);
+  });
+
+  it("un stockage en panne au retrait : la suppression est reprise par la tâche, qui accepte les clés du Fil", async () => {
+    const author = await person("Reprise_Auteur");
+    const sent = await upload(author, await jpeg(1080, 1350));
+    const post = await publish(author, { photos: [{ uploadKey: sent.json.key, noPlateConfirmed: true }] });
+    const key = keyOfUrl(post.json.photos[0].url);
+    const spy = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    expect((await call(author, "DELETE", `/me/feed-posts/${post.json.id}`)).status).toBe(204);
+    spy.mockRestore();
+    expect(await storage.get(key)).not.toBeNull();
+    expect(clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === key)).toBeTruthy();
+    await retryRemove(key);
+    expect(await storage.get(key)).toBeNull();
+    // l'envoi en attente (clé privée d'upload) est repris aussi
+    const pendingKey = `private/feed-posts/${randomUUID()}.webp`;
+    await storage.put(pendingKey, Buffer.from("x"));
+    await retryRemove(pendingKey);
+    expect(await storage.get(pendingKey)).toBeNull();
+    // une clé d'un autre dossier n'est jamais effacée par la tâche
+    await storage.put("private/crew-posts/intrus.webp", Buffer.from("x"));
+    await retryRemove("private/crew-posts/intrus.webp");
+    expect(await storage.get("private/crew-posts/intrus.webp")).not.toBeNull();
+    await storage.remove("private/crew-posts/intrus.webp");
+  });
+
+  it("le retrait administratif passe aussi par la reprise (panne du stockage au retrait du contenu)", async () => {
+    const { post, report } = await postWithReport();
+    const key = keyOfUrl(post.photos[0].url);
+    const admin = await person("Reprise_Admin", { role: "super_admin" });
+    const spy = vi.spyOn(storage, "remove").mockRejectedValueOnce(new Error("stockage indisponible"));
+    expect((await call(admin, "POST", `/admin/reports/${report.id}/sanction`, { hideContent: true })).status).toBe(200);
+    spy.mockRestore();
+    expect(clock.jobs.jobs.find((j) => j.name === "storage.remove" && j.data.key === key)).toBeTruthy();
+    await retryRemove(key);
+    expect(await storage.get(key)).toBeNull();
   });
 });

@@ -47,6 +47,24 @@ export const feedRoutes = new Hono<AppEnv>()
     return c.body(null, 204);
   })
   .get("/feed-posts/:id", async (c) => c.json(await feedPostsService.get(await requireUser(c), uuidParam(c, "id"))))
+  .get("/feed-posts/:id/photos/:name", async (c) => {
+    const v = await requireUser(c);
+    const photo = await feedPostsService.photo(
+      v,
+      uuidParam(c, "id"),
+      c.req.param("name"),
+      c.req.header("if-none-match"),
+    );
+    // Jamais gardée sans revalidation (un abonné qui part, un compte qui passe en privé, une publication retirée) ;
+    // `ETag` : le navigateur redemande à chaque affichage et reçoit un 304 léger tant que l'accès tient.
+    const headers = {
+      "cache-control": "private, no-cache",
+      etag: photo.etag,
+      vary: "Cookie, Authorization",
+    };
+    if (photo.status === 304) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(photo.data), 200, { ...headers, "content-type": "image/webp" });
+  })
   .put("/feed-posts/:id/reaction", async (c) =>
     c.json(await feedPostsService.react(await requireUser(c), uuidParam(c, "id"), true)),
   )

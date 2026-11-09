@@ -81,6 +81,7 @@ import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 import { assertInterests } from "../vehicles/categories";
+import { removeOrRetry } from "../vehicles/photos-blur";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -528,9 +529,7 @@ export const accountService = {
         ip,
       });
     });
-    for (const key of photoKeys) {
-      await storage.remove(key).catch(() => undefined);
-    }
+    for (const key of photoKeys) await removeOrRetry(key);
     if (oldEmail && opts.confirm) {
       // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
       // anonymisée et la copie du transport journal supprimée.

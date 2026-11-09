@@ -32,6 +32,11 @@ export type TargetRules = {
    * le propriétaire).
    */
   remove?: (tx: Tx, v: Viewer, report: ReportRow, after: (cb: () => unknown) => void) => Promise<string[]>;
+  /**
+   * Une décision vient de clore des signalements sur ce contenu (dans la transaction de la décision) : rend les fichiers
+   * gardés pour la preuve et devenus inutiles, à effacer après la validation. Absent : rien n'est gardé.
+   */
+  afterDecision?: (tx: Tx, report: ReportRow) => Promise<string[]>;
   /** Retrait qui passe par un service complet hors transaction (annulation d'un événement). */
   removeOutside?: (v: Viewer, report: ReportRow) => Promise<void>;
 };

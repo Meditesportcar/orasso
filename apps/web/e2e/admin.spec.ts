@@ -156,7 +156,7 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
     "/admin/audit?action=structure.assist&limit=1",
   );
   expect(assist.data.items[0]?.assistanceRequestId).toBeTruthy();
-  expect(assist.data.items[0]?.actorPseudo).toBe("Equipe_Orasso");
+  expect(assist.data.items[0]?.actorPseudo).toBe("Equipe_Plateforme");
   // La structure ferme sa demande : la recette reste rejouable.
   await pageD.goto("/orga/meditesportcar/structure");
   await pageD.getByTestId("assistance").getByRole("button", { name: "Fermer la demande" }).click();

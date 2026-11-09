@@ -15,6 +15,7 @@ import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { repoRoot } from "../../src/env";
 import { storage } from "../../src/lib/storage";
+import { feedPhotoKey } from "../../src/modules/feed/posts";
 import { createAccount, HOUR } from "./helpers";
 import { reviewedNoPlateCar } from "./photos";
 
@@ -173,12 +174,18 @@ const PLAN: Planned[] = [
 export async function seedFeed() {
   // Le compte officiel : jamais de connexion possible (mot de passe aléatoire, e-mail non distribuable).
   let orasso = await byPseudo(ORASSO);
+  // Le statut officiel ne se rattache jamais à un compte ordinaire qui porterait déjà ce nom : on s'arrête, sans rien changer.
+  if (orasso && !orasso.official) {
+    throw new Error(
+      `Seed du Fil : un compte ordinaire nommé « ${ORASSO} » existe déjà (${orasso.userId}). Le statut officiel ne lui est pas rattaché : renomme ou supprime ce compte, puis relance le seed.`,
+    );
+  }
   if (!orasso) {
-    const person = await createAccount(await hashPassword(randomBytes(24).toString("hex")), {
-      pseudo: ORASSO,
-      email: "orasso@orasso.local",
-      departments: ["66"],
-    });
+    const person = await createAccount(
+      await hashPassword(randomBytes(24).toString("hex")),
+      { pseudo: ORASSO, email: "orasso@orasso.local", departments: ["66"] },
+      { official: true },
+    );
     const avatar = await monogram();
     await storage.put(AVATAR_KEY, avatar);
     await db
@@ -210,7 +217,7 @@ export async function seedFeed() {
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
     const postId = randomUUID();
-    const key = `feed/${postId}/${randomBytes(16).toString("hex")}.webp`;
+    const key = feedPhotoKey(postId, randomBytes(16).toString("hex"));
     await storage.put(key, out.data);
     const createdAt = new Date(at - plan.hoursAgo * HOUR);
     await db.insert(t.feedPosts).values({

@@ -1,5 +1,5 @@
 // Lot 33 : administration de démonstration. Réglages par défaut écrits (rien n'est changé s'ils existent), un second
-// super admin « Equipe_Orasso » (sans structure : il voit le mode assistance), une newsletter en brouillon, deux
+// super admin « Equipe_Plateforme » (sans structure : il voit le mode assistance), une newsletter en brouillon, deux
 // abonnés à la newsletter, une demande d'aide ouverte (« Roues Libres 66 »), trois véhicules « Autre » dans la file.
 // Idempotent, et sans règle de date qui échoue sur une base de plusieurs jours (une demande d'aide échue est close et
 // remplacée).
@@ -22,10 +22,11 @@ export async function seedAdmin(hash: string) {
     await db.insert(t.platformSettings).values({ key, value: adminSettingDefaults[key] }).onConflictDoNothing();
   }
 
-  if (!(await byPseudo("Equipe_Orasso"))) {
+  // « Equipe_Orasso » : ancien nom (les pseudos contenant « orasso » sont réservés depuis le lot R7e1, tour 2).
+  if (!(await byPseudo("Equipe_Plateforme")) && !(await byPseudo("Equipe_Orasso"))) {
     await createAccount(
       hash,
-      { pseudo: "Equipe_Orasso", email: "equipe@orasso.local", firstName: "Équipe", departments: ["66"] },
+      { pseudo: "Equipe_Plateforme", email: "equipe@orasso.local", firstName: "Équipe", departments: ["66"] },
       { platformRole: "super_admin" },
     );
   }

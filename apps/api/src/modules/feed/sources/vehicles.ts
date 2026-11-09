@@ -10,14 +10,24 @@ import { vehiclesRepo } from "../../vehicles/repo";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { authorVisibleSql } from "../access";
 import { personOf } from "../posts";
-import { atBounds, type FeedSource, inDepartments, type LoadedCard, type SourceInput, tsParam } from "./types";
+import {
+  atBounds,
+  atMs,
+  type FeedSource,
+  inDepartments,
+  type LoadedCard,
+  type SourceInput,
+  type SourceResult,
+  sliceRows,
+  tsParam,
+} from "./types";
 
 /* Une voiture ajoutée il y a plus de 60 jours n'est plus une nouveauté du Fil. */
 
 export const source: FeedSource<"vehicle_public"> = {
   kind: "vehicle_public",
-  async load(input: SourceInput): Promise<LoadedCard<"vehicle_public">[]> {
-    const atExpr = sql`${vehicles.createdAt}`;
+  async load(input: SourceInput): Promise<SourceResult<"vehicle_public">> {
+    const atExpr = atMs(sql`${vehicles.createdAt}`);
     const photoKey = sql<string | null>`(select vp.storage_key from vehicle_photos vp
       where vp.vehicle_id = ${vehicles.id} and (vp.plate_blurred or vp.no_plate_confirmed or ${vehicles.unregistered})
       order by vp.position limit 1)`;
@@ -28,7 +38,7 @@ export const source: FeedSource<"vehicle_public"> = {
       sql`${photoKey} is not null`,
       sql`${vehicles.createdAt} <= ${tsParam(input.ref)}`,
       sql`${vehicles.createdAt} >= ${tsParam(input.ref)} - interval '60 days'`,
-      ...atBounds(atExpr, input),
+      ...atBounds(atExpr, sql`${vehicles.id}`, "vehicle_public", input),
     ];
     if (input.filter === "following") {
       filters.push(
@@ -36,10 +46,11 @@ export const source: FeedSource<"vehicle_public"> = {
       );
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${profiles.departments}[1]`, input.nearby));
-    const rows = await db
+    const raw = await db
       .select({
         v: vehicles,
         owner: profiles,
+        at: sql<Date>`${atExpr}`,
         photoKey,
         categoryIds: sql<
           string[]
@@ -48,10 +59,14 @@ export const source: FeedSource<"vehicle_public"> = {
       .from(vehicles)
       .innerJoin(profiles, eq(profiles.userId, vehicles.ownerId))
       .where(and(...filters))
-      .orderBy(desc(vehicles.createdAt), desc(vehicles.id))
-      .limit(input.limit);
+      .orderBy(desc(atExpr), desc(vehicles.id))
+      .limit(input.limit + 1);
+    const { rows, more, tail } = sliceRows(raw, input.limit, (r) => ({
+      at: new Date(r.at),
+      id: `vehicle_public:${r.v.id}`,
+    }));
     const full = new Map((await vehiclesRepo.findFullByIds(rows.map((r) => r.v.id))).map((v) => [v.id, v]));
-    return rows.flatMap((r): LoadedCard<"vehicle_public">[] => {
+    const cards = rows.flatMap((r): LoadedCard<"vehicle_public">[] => {
       const v = full.get(r.v.id);
       const url = storage.url(r.photoKey);
       if (!v || !url) return [];
@@ -73,5 +88,6 @@ export const source: FeedSource<"vehicle_public"> = {
         },
       ];
     });
+    return { cards, more, tail };
   },
 };

@@ -1,6 +1,6 @@
 // Le Fil (lot R7e1) : lecture des publications (liste blanche des champs de `FeedPostView`), retrait. Toute lecture
 // repasse par `canSeeFeedPost` : une publication qu'on ne peut pas voir est omise, quel que soit l'appelant.
-import { canSeeFeedPost, type FeedPerson, type FeedPostView, isOfficialPseudo } from "@orasso/shared";
+import { canSeeFeedPost, type FeedPerson, type FeedPostView } from "@orasso/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
@@ -12,15 +12,29 @@ import { vehicleLabel } from "../vehicles/serializers";
 import { factsOf } from "./access";
 import { eventSummariesByIds } from "./summary";
 
-export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade">): FeedPerson => ({
+export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">): FeedPerson => ({
   pseudo: p.pseudo,
   avatarUrl: storage.url(p.avatarKey),
   grade: p.grade,
-  official: isOfficialPseudo(p.pseudo),
+  // Donnée administrée (seed, puis l'administration), jamais déduite du pseudo.
+  official: p.official,
 });
 
-/** Clé publique d'une photo du Fil (jamais de nom de personne dans la clé). */
-export const feedPhotoKey = (postId: string, hex: string) => `feed/${postId}/${hex}.webp`;
+/** Dossier des photos du Fil : clés privées, servies seulement par `GET /feed-posts/:id/photos/:nom` (jamais `/api/files`). */
+export const FEED_PHOTO_FOLDER = "private/feed/";
+
+/** Clé privée d'une photo du Fil (jamais de nom de personne dans la clé). */
+export const feedPhotoKey = (postId: string, hex: string) => `${FEED_PHOTO_FOLDER}${postId}/${hex}.webp`;
+
+/** Nom d'une photo dans l'adresse : la fin de sa clé (`<32 hex>.webp`). */
+export const feedPhotoName = (storageKey: string) => storageKey.slice(storageKey.lastIndexOf("/") + 1);
+
+/** Adresse protégée d'une photo : la route revérifie, à chaque lecture, que la personne peut voir la publication. */
+export const feedPhotoUrl = (postId: string, storageKey: string) =>
+  `/api/feed-posts/${postId}/photos/${feedPhotoName(storageKey)}`;
+
+/** Nom de fichier accepté dans l'adresse d'une photo. */
+export const FEED_PHOTO_NAME_RE = /^[0-9a-f]{32}\.webp$/;
 
 /**
  * Publications visibles de `viewerId` parmi `ids`, dans l'ordre de `ids`. Les publications absentes, retirées, d'un
@@ -93,7 +107,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
         aspect: r.post.aspect,
         photos: photos
           .filter((p) => p.postId === r.post.id)
-          .map((p) => ({ url: storage.url(p.storageKey) ?? "", width: p.width, height: p.height })),
+          .map((p) => ({ url: feedPhotoUrl(r.post.id, p.storageKey), width: p.width, height: p.height })),
         vehicle: vehicle ? { id: vehicle.id, label: vehicleLabel(vehicle) } : null,
         event: event ? { slug: event.slug, title: event.title } : null,
         reactionsCount: r.post.reactionsCount,
@@ -108,19 +122,28 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
 /**
  * Retrait d'une publication (par son auteur ou la modération), dans la transaction de l'appelant : suppression douce,
  * photos et flammes effacées. Rend les clés des fichiers à effacer après la validation.
+ * `keepPhotos` : un signalement attend sa décision, les photos restent (la modération les lit) ; elles partent à la
+ * décision (`afterDecision` de la cible `feed_post`).
  */
-export async function softDeletePost(tx: Tx, postId: string, deletedBy: string, at: Date): Promise<string[]> {
+export async function softDeletePost(
+  tx: Tx,
+  postId: string,
+  deletedBy: string,
+  at: Date,
+  opts: { keepPhotos?: boolean } = {},
+): Promise<string[]> {
   const [done] = await tx
     .update(feedPosts)
     .set({ deletedAt: at, deletedBy })
     .where(and(eq(feedPosts.id, postId), isNull(feedPosts.deletedAt)))
     .returning({ id: feedPosts.id });
   if (!done) return [];
+  await tx.delete(feedPostReactions).where(eq(feedPostReactions.postId, postId));
+  if (opts.keepPhotos) return [];
   const photos = await tx
     .delete(feedPostPhotos)
     .where(eq(feedPostPhotos.postId, postId))
     .returning({ key: feedPostPhotos.storageKey });
-  await tx.delete(feedPostReactions).where(eq(feedPostReactions.postId, postId));
   return photos.map((p) => p.key);
 }
 

@@ -28,8 +28,8 @@ import { withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
-import { requireVisiblePost } from "./access";
-import { feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
+import { hasOpenReport, requireVisiblePost } from "./access";
+import { FEED_PHOTO_NAME_RE, feedPhotoKey, loadPostViews, ownActiveVehicle, softDeletePost } from "./posts";
 import { eventSummariesByIds } from "./summary";
 
 const PAGE = 20;
@@ -181,7 +181,7 @@ export const feedPostsService = {
         );
       });
     } catch (error) {
-      for (const key of written) await storage.remove(key).catch(() => undefined);
+      for (const key of written) await removeOrRetry(key);
       // Deux envois simultanés du même `clientId` : le second rend la publication du premier.
       if (input.clientId && sqlState(error) === "23505") {
         const [again] = await db
@@ -205,6 +205,34 @@ export const feedPostsService = {
     rateLimit("feedRead", v.user.id);
     await requireVisiblePost(v, id);
     return ownView(v, id);
+  },
+
+  /**
+   * `GET /feed-posts/:id/photos/:nom` : une photo, à qui peut voir la publication **à cet instant** (session, auteur en
+   * règle, compte privé suivi, publication non retirée), vérifié à chaque lecture. La clé est privée (jamais servie par
+   * `/api/files`). Le navigateur revalide à chaque affichage (`ETag`) : une révocation prend effet, un 304 reste léger.
+   */
+  async photo(
+    v: Viewer,
+    id: string,
+    name: string,
+    ifNoneMatch: string | undefined,
+  ): Promise<{ status: 304; etag: string } | { status: 200; etag: string; data: Buffer }> {
+    if (!FEED_PHOTO_NAME_RE.test(name)) throw notFound("Photo introuvable");
+    await requireVisiblePost(v, id);
+    const key = feedPhotoKey(id, name.slice(0, -".webp".length));
+    const [known] = await db
+      .select({ id: feedPostPhotos.id })
+      .from(feedPostPhotos)
+      .where(and(eq(feedPostPhotos.postId, id), eq(feedPostPhotos.storageKey, key)));
+    if (!known) throw notFound("Photo introuvable");
+    // Le fichier ne change jamais sous une même clé : son nom suffit comme empreinte (pas de lecture pour un 304).
+    const etag = `"${name.slice(0, -".webp".length)}"`;
+    const sent = (ifNoneMatch ?? "").split(",").map((t) => t.trim().replace(/^W\//, ""));
+    if (sent.includes(etag)) return { status: 304, etag };
+    const data = await storage.get(key);
+    if (!data) throw notFound("Photo introuvable");
+    return { status: 200, etag, data };
   },
 
   /** `GET /me/feed-posts?cursor=` : mes publications, les plus récentes d'abord. */
@@ -238,7 +266,7 @@ export const feedPostsService = {
     };
   },
 
-  /** `DELETE /me/feed-posts/:id` : l'auteur retire sa publication (photos effacées). */
+  /** `DELETE /me/feed-posts/:id` : l'auteur retire sa publication (photos effacées, sauf signalement en attente). */
   async remove(v: Viewer, id: string): Promise<void> {
     rateLimit("feedWrite", v.user.id);
     const keys = await withTx(async (tx) => {
@@ -248,7 +276,9 @@ export const feedPostsService = {
         .where(and(eq(feedPosts.id, id), eq(feedPosts.authorId, v.user.id)))
         .for("update");
       if (!post || post.deletedAt) throw notFound("Publication introuvable");
-      return softDeletePost(tx, id, v.user.id, now());
+      // Un signalement attend sa décision : l'auteur retire sa publication (elle disparaît du Fil), mais les photos restent
+      // pour la modération, qui les efface à sa décision.
+      return softDeletePost(tx, id, v.user.id, now(), { keepPhotos: await hasOpenReport(tx, id) });
     });
     for (const key of keys) await removeOrRetry(key);
   },

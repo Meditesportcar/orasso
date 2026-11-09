@@ -7,12 +7,22 @@ import { db } from "../../../db/client";
 import { events, structures } from "../../../db/schema";
 import { lineupService } from "../../events/lineup";
 import { summaryOf } from "../summary";
-import { atBounds, type FeedSource, inDepartments, type LoadedCard, type SourceInput, tsParam } from "./types";
+import {
+  atBounds,
+  atMs,
+  type FeedSource,
+  inDepartments,
+  type LoadedCard,
+  type SourceInput,
+  type SourceResult,
+  sliceRows,
+  tsParam,
+} from "./types";
 
 export const source: FeedSource<"lineup"> = {
   kind: "lineup",
-  async load(input: SourceInput): Promise<LoadedCard<"lineup">[]> {
-    const atExpr = sql`least(${tsParam(input.ref)}, ${events.startsAt})`;
+  async load(input: SourceInput): Promise<SourceResult<"lineup">> {
+    const atExpr = atMs(sql`least(${tsParam(input.ref)}, ${events.startsAt})`);
     const filters: (SQL | undefined)[] = [
       eq(events.status, "published"),
       ne(events.admission, "invite_only"),
@@ -20,7 +30,7 @@ export const source: FeedSource<"lineup"> = {
       sql`${structures.deletedAt} is null`,
       sql`${events.startsAt} - interval '12 hours' <= ${tsParam(input.ref)}`,
       sql`${events.endsAt} + interval '24 hours' > ${tsParam(input.ref)}`,
-      ...atBounds(atExpr, input),
+      ...atBounds(atExpr, sql`${events.id}`, "lineup", input),
     ];
     if (input.filter === "following") {
       filters.push(
@@ -28,18 +38,19 @@ export const source: FeedSource<"lineup"> = {
       );
     }
     if (input.filter === "nearby") filters.push(inDepartments(sql`${events.department}`, input.nearby));
-    const rows = await db
+    const raw = await db
       .select({ e: events, s: structures, at: sql<Date>`${atExpr}` })
       .from(events)
       .innerJoin(structures, eq(structures.id, events.structureId))
       .where(and(...filters))
       .orderBy(desc(atExpr), desc(events.id))
-      .limit(input.limit);
+      .limit(input.limit + 1);
+    const { rows, more, tail } = sliceRows(raw, input.limit, (r) => ({ at: new Date(r.at), id: `lineup:${r.e.id}` }));
     const previews = await lineupService.previews(
       rows.map((r) => r.e.id),
       input.userId,
     );
-    return rows.flatMap((r): LoadedCard<"lineup">[] => {
+    const cards = rows.flatMap((r): LoadedCard<"lineup">[] => {
       const p = previews.get(r.e.id);
       if (!p || p.count < 1) return [];
       return [
@@ -56,5 +67,6 @@ export const source: FeedSource<"lineup"> = {
         },
       ];
     });
+    return { cards, more, tail };
   },
 };

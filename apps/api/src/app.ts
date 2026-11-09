@@ -1,4 +1,4 @@
-import { CLOCK_OFFSET_HEADER, signUpRequiredSchema } from "@orasso/shared";
+import { CLOCK_OFFSET_HEADER, feedLabels, isReservedPseudo, signUpRequiredSchema } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -148,6 +148,12 @@ app.post("/auth/sign-up/email", async (c, next) => {
     const fields: Record<string, string> = {};
     for (const issue of result.error.issues) fields[issue.path.join(".") || "_"] ??= issue.message;
     throw new AppError(400, "validation_error", Object.values(fields)[0] ?? "Données invalides", { fields });
+  }
+  // Lot R7e1 (tour 2) : le pseudo (champ `name`) ne contient pas « orasso » : réservé au compte officiel.
+  if (typeof raw?.name === "string" && isReservedPseudo(raw.name)) {
+    throw new AppError(400, "pseudo_reserved", feedLabels.pseudoReserved, {
+      fields: { pseudo: feedLabels.pseudoReserved },
+    });
   }
   await next();
 });

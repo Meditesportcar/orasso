@@ -78,6 +78,7 @@ async function reset() {
   }
   await rm(join(storageDir, "seed"), { recursive: true, force: true });
   await rm(join(storageDir, "feed"), { recursive: true, force: true });
+  await rm(join(storageDir, "private", "feed"), { recursive: true, force: true });
   console.log("Données vidées.");
 }
 
