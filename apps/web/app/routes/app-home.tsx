@@ -3,19 +3,14 @@ import {
   defaultHomeWidgets,
   gradeLabels,
   type HomeData,
-  type HomeWidgetId,
-  type HomeWidgetsConfig,
+  homeBlockLabels,
   homeLabels,
-  homeWidgetIds,
   homeWidgetOffered,
-  homeWidgetTitles,
-  moveHomeWidget,
   normalizeHomeWidgets,
-  toggleHomeWidget,
   visibleHomeWidgets,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
-import { data, Form, redirect } from "react-router";
+import { redirect } from "react-router";
 
 import {
   AgendaBlock,
@@ -27,12 +22,14 @@ import {
   SponsoredBlock,
   WeatherBlock,
 } from "../components/HomeWidgets";
+import { FriendsNewsBlock, LiveBlock, LiveLine, MyCrewBlock, MyOutingsBlock } from "../components/home/DashboardBlocks";
 import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { whatsNewSeen } from "../lib/whatsnew.server";
 import type { Route } from "./+types/app-home";
 import "../styles/home.css";
+import "../styles/home-r7a2.css";
 
 // Accueil du compte (docs/02, lot 30) : « Prochain accès » en tête, puis les blocs réglables dans l'ordre choisi (mêmes
 // que dans l'appli), un emplacement sponsorisé et une seule incitation. Rayon, position et réglages sont dans l'adresse
@@ -91,40 +88,28 @@ export async function action({ request }: Route.ActionArgs) {
     }
     throw redirect(`/app?${params}`);
   }
-  let current: HomeWidgetsConfig = defaultHomeWidgets;
-  try {
-    current = normalizeHomeWidgets(JSON.parse(String(form.get("config") ?? "null")));
-  } catch {
-    // Réglage illisible : on repart de l'ordre par défaut.
-  }
-  const id = String(form.get("id") ?? "") as HomeWidgetId;
-  if (!homeWidgetIds.includes(id)) return data({ error: homeLabels.saveFailed }, { status: 400 });
-  const op = String(form.get("op") ?? "");
-  const next =
-    op === "up"
-      ? moveHomeWidget(current, id, -1)
-      : op === "down"
-        ? moveHomeWidget(current, id, 1)
-        : toggleHomeWidget(current, id);
-  const res = await api(request, "/me/home/widgets", { method: "PUT", json: next });
-  if (!res.ok) return data({ error: res.error.message }, { status: res.status });
-  return data({ error: null });
+  throw redirect("/app");
 }
 
-export default function AppHome({ loaderData, actionData }: Route.ComponentProps) {
+export default function AppHome({ loaderData }: Route.ComponentProps) {
   const { pseudo, grade, points, device, home, failed, whatsNew } = loaderData;
-  const widgets = home?.widgets ?? defaultHomeWidgets;
+  const widgets = normalizeHomeWidgets(home?.widgets ?? defaultHomeWidgets);
+  const live = home?.live ?? null;
   const next = home?.nextAccess ?? null;
   const nudge = home?.nudge ?? null;
   const nudgeLeads = !next && nudge === "add_vehicle";
 
   const blocks: Record<string, ReactNode> = home
     ? {
-        pending: <PendingBlock items={home.pendingStatuses} />,
+        live: live ? <LiveBlock live={live} /> : null,
+        my_outings: home.myOutings ? <MyOutingsBlock data={home.myOutings} /> : null,
+        my_crew: home.myCrew ? <MyCrewBlock data={home.myCrew} /> : null,
+        friends_news: home.friendsNews ? <FriendsNewsBlock data={home.friendsNews} /> : null,
+        pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
         weather: <WeatherBlock weather={home.weather} />,
-        agenda: <AgendaBlock items={home.agenda} />,
-        favorite_garage: <GarageBlock garage={home.favoriteGarage} />,
+        agenda: home.agenda.length ? <AgendaBlock items={home.agenda} /> : null,
+        favorite_garage: home.favoriteGarage ? <GarageBlock garage={home.favoriteGarage} /> : null,
         wash: <PlacesBlock kind="wash" places={home.wash} />,
         fuel: <PlacesBlock kind="fuel" places={home.fuel} />,
       }
@@ -132,7 +117,12 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
 
   return (
     <div className="s-stack">
-      <h1 className="s-title">Salut {pseudo}</h1>
+      <div className="hm-head">
+        <h1 className="s-title">Salut {pseudo}</h1>
+        <Button variant="plate" icon="edit" href="/app/accueil/personnaliser" data-testid="home-personalize">
+          {homeBlockLabels.personalizeShort}
+        </Button>
+      </div>
 
       {whatsNew ? <WhatsNewBanner variant={whatsNew} /> : null}
 
@@ -142,7 +132,9 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
         </p>
       )}
 
-      {next ? (
+      {live ? (
+        <LiveLine live={live} accessHref="/app/sorties" />
+      ) : next ? (
         <PosterCard
           label={`${homeLabels.nextAccess} · ${formatDay(next.event.startsAt)}`}
           title={next.event.title}
@@ -187,9 +179,7 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
           {visibleHomeWidgets(widgets)
             // Lot R1 : stations de lavage et de carburant retirées pour l'instant (`NEARBY_STATIONS_ENABLED`).
             .filter((id) => id !== "next_access" && homeWidgetOffered(id))
-            .map((id) => (
-              <div key={id}>{blocks[id] ?? null}</div>
-            ))}
+            .map((id) => (blocks[id] ? <div key={id}>{blocks[id]}</div> : null))}
           {home.sponsored && (
             <div>
               <SponsoredBlock sponsored={home.sponsored} />
@@ -198,73 +188,13 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
         </div>
       )}
 
-      {home && <Reorder widgets={widgets} error={actionData?.error ?? null} />}
-    </div>
-  );
-}
-
-/** Réorganiser (par boutons, sans glisser-déposer) : monter, descendre, masquer ; chaque geste est enregistré. */
-function Reorder({ widgets, error }: { widgets: HomeWidgetsConfig; error: string | null }) {
-  const config = JSON.stringify(widgets);
-  // Lot R1 : les widgets retirés pour l'instant (stations) ne se règlent pas.
-  const offered = widgets.order.filter((id) => homeWidgetOffered(id));
-  return (
-    <details className="hm-reorder" data-testid="reorder">
-      <summary className="o-t-button">{homeLabels.reorder}</summary>
-      <p className="s-muted">{homeLabels.reorderHint}</p>
-      {error && (
-        <p className="s-error" role="alert">
-          {error}
+      {home && (
+        <p>
+          <Button variant="plate" icon="edit" href="/app/accueil/personnaliser" data-testid="home-personalize-bottom">
+            {homeBlockLabels.personalize}
+          </Button>
         </p>
       )}
-      <ul className="hm-reorder" style={{ listStyle: "none", padding: 0 }}>
-        {offered.map((id, i) => {
-          const hidden = widgets.hidden.includes(id);
-          const fixed = id === "next_access";
-          return (
-            <li key={id} className="hm-reorder__item" data-testid={`reorder-${id}`}>
-              <strong>
-                {homeWidgetTitles[id]}
-                {hidden ? ` · ${homeLabels.hiddenTag}` : ""}
-              </strong>
-              {!fixed && (
-                <div className="hm-reorder__actions">
-                  <Form method="post">
-                    <input type="hidden" name="config" value={config} />
-                    <input type="hidden" name="id" value={id} />
-                    <input type="hidden" name="op" value="up" />
-                    <Button type="submit" variant="plate" icon="up" disabled={i <= 1} data-testid={`up-${id}`}>
-                      {homeLabels.moveUp}
-                    </Button>
-                  </Form>
-                  <Form method="post">
-                    <input type="hidden" name="config" value={config} />
-                    <input type="hidden" name="id" value={id} />
-                    <input type="hidden" name="op" value="down" />
-                    <Button
-                      type="submit"
-                      variant="plate"
-                      icon="down"
-                      disabled={i === offered.length - 1}
-                      data-testid={`down-${id}`}
-                    >
-                      {homeLabels.moveDown}
-                    </Button>
-                  </Form>
-                  <Form method="post">
-                    <input type="hidden" name="config" value={config} />
-                    <input type="hidden" name="id" value={id} />
-                    <input type="hidden" name="op" value="toggle" />
-                    <Button type="submit" variant="plate" icon={hidden ? "eye" : "eyeOff"} data-testid={`toggle-${id}`}>
-                      {hidden ? homeLabels.show : homeLabels.hide}
-                    </Button>
-                  </Form>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </details>
+    </div>
   );
 }

@@ -32,7 +32,7 @@ export const RADIUS_FORM = "home-radius";
 
 const directionsUrl = (lat: number, lng: number) => `https://www.openstreetmap.org/directions?to=${lat}%2C${lng}`;
 
-function Block({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+export function Block({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section className="hm-block" data-testid={`widget-${id}`} aria-labelledby={`hm-${id}`}>
       <h2 className="o-t-label hm-block__title" id={`hm-${id}`}>

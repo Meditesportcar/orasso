@@ -11,6 +11,8 @@ import { RELAIS } from "./relais";
 // vérifient dans `appli-lotr7a2` et `lotr7a2-site`.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r7a2-captures/apres`;
+// QUICK=1 : un seul réglage (appli 384 px, police 1, Béton ; site 390 px Béton), pour vérifier vite pendant le lot.
+const QUICK = process.env.QUICK === "1";
 const AFTER = !(process.env.CAPTURES_DIR ?? "").includes("avant");
 test.use({ actionTimeout: 30_000 });
 
@@ -71,12 +73,14 @@ test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ bro
   mkdirSync(DIR, { recursive: true });
 
   if (APP) {
-    for (const theme of ["beton", "sable"] as const) {
-      for (const [width, scale] of [
-        [384, 1],
-        [384, 1.3],
-        [390, 1],
-      ] as const) {
+    for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
+      for (const [width, scale] of QUICK
+        ? ([[384, 1]] as const)
+        : ([
+            [384, 1],
+            [384, 1.3],
+            [390, 1],
+          ] as const)) {
         for (const [demo, email] of DEMOS) {
           const tag = `${demo}-${width}-x${scale}-${theme}`;
           for (const [kind, height] of [
@@ -98,8 +102,8 @@ test("R7a2 : captures avant / après de l'Accueil (appli et site)", async ({ bro
     }
   }
 
-  for (const theme of ["beton", "sable"] as const) {
-    for (const width of [390, 1280]) {
+  for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
+    for (const width of QUICK ? [390] : [390, 1280]) {
       for (const [demo, email] of DEMOS) {
         const tag = `${demo}-${width}-${theme}`;
         const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
