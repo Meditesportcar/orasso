@@ -69,10 +69,11 @@ export function ExplorerMap({
   children,
   reveal: revealOnPress = true,
   fill = false,
+  zoom: singleZoom,
 }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const [zoom, setZoom] = useState<number>(() => {
-    const v = viewFor(pins);
+    const v = viewFor(pins, singleZoom);
     return "zoom" in v ? v.zoom : 8;
   });
   // Repli décidé par la demande du TileJSON : `onDidFailLoadingMap` ne part que si le style échoue, pas quand la source
@@ -113,7 +114,7 @@ export function ExplorerMap({
   const ids = (e: GestureResponderEvent) => e.nativeEvent.changedTouches.map((t) => t.identifier);
   // Lot 40 : la carte garde le geste horizontal (pas de glissement vers l'onglet voisin).
   useTabSwipeDisabled();
-  const view = useMemo(() => viewFor(pins), [pins]);
+  const view = useMemo(() => viewFor(pins, singleZoom), [pins, singleZoom]);
   const style = useMemo(
     () =>
       fellBack
@@ -148,6 +149,7 @@ export function ExplorerMap({
             mapStyle={style as never}
             logo={false}
             attribution
+            attributionPosition={singleZoom ? { bottom: 4, right: 4 } : undefined}
             touchRotate={false}
             touchPitch={false}
             onRegionDidChange={(e: { nativeEvent: ViewStateChangeEvent }) => {

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { useSpotAnswer } from "@/features/spot/useSpotAnswer";
+import { useSpotOver } from "@/features/spot/useSpotOver";
 import { Avatar } from "@/ui/Avatar";
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
@@ -26,7 +27,7 @@ export function SpotMeetupCard({ card, onMenu, faded }: CardProps<"spot_meetup">
   const [meetup, setMeetup] = useState<SpotMeetupView>(card.payload.meetup);
   useEffect(() => setMeetup(card.payload.meetup), [card.payload.meetup]);
   const answer = useSpotAnswer(meetup, setMeetup);
-  const over = meetup.phase === "ended";
+  const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
   const open = () => router.push({ pathname: "/spot/[id]", params: { id: meetup.id } });
   const who = L.whoCome(
@@ -77,7 +78,8 @@ export function SpotMeetupCard({ card, onMenu, faded }: CardProps<"spot_meetup">
             {(["yes", "maybe"] as SpotAnswer[]).map((which) => (
               <View key={which} style={styles.fill}>
                 <SmButton
-                  kind={meetup.myAnswer === which ? "p" : "s"}
+                  kind="s"
+                  style={meetup.myAnswer === which ? { borderWidth: 2, borderColor: c.accent } : undefined}
                   icon={which === "yes" ? "check" : "help"}
                   wide
                   disabled={answer.busy}

@@ -5,6 +5,7 @@
 // seul le point visé est envoyé. L'heure vient du navigateur (rendu après l'hydratation seulement).
 import { Button, Chip, Icon, TextField } from "@orasso/design-system/web";
 import {
+  afterRecentre,
   clampStart,
   coarsePosition,
   customEndsAt,
@@ -23,7 +24,7 @@ import {
   spotUntilLabel,
   startOptions,
 } from "@orasso/shared";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 import { now as siteNow } from "../../lib/clock";
@@ -43,6 +44,9 @@ export function SpotNewForm({ audiences, crewParam }: { audiences: SpotAudiences
   const [placeName, setPlaceName] = useState("");
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [pinHidden, setPinHidden] = useState(false);
+  const pointRef = useRef(point);
+  pointRef.current = point;
   const [status, setStatus] = useState<string | null>(null);
   const [finding, setFinding] = useState(false);
 
@@ -86,6 +90,7 @@ export function SpotNewForm({ audiences, crewParam }: { audiences: SpotAudiences
     const match = res.data.match;
     if (!match) return setStatus(L.whereNotFound);
     setPoint({ lat: match.lat, lng: match.lng });
+    setPinHidden(false);
     setCenter({ lat: match.lat, lng: match.lng });
     setPlaceName((p) => p || match.label.slice(0, SPOT_PLACE_MAX));
     setStatus(L.whereFound(match.label));
@@ -98,6 +103,10 @@ export function SpotNewForm({ audiences, crewParam }: { audiences: SpotAudiences
       (fix) => {
         const rough = coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude });
         setCenter({ lat: rough.lat, lng: rough.lng });
+        // L'épingle montrée est toujours le point envoyé : recentrée ailleurs, le point est effacé jusqu'à une nouvelle sélection.
+        const out = afterRecentre(pointRef.current, rough, true);
+        setPoint(out.point);
+        setPinHidden(out.pinHidden);
         setStatus(null);
       },
       () => setStatus(L.whereMineDenied),
@@ -189,7 +198,11 @@ export function SpotNewForm({ audiences, crewParam }: { audiences: SpotAudiences
         lng={point?.lng ?? center?.lng ?? null}
         label={L.where}
         draggablePin
-        onPinMove={(lat, lng) => setPoint({ lat, lng })}
+        onPinMove={(lat, lng) => {
+          setPoint({ lat, lng });
+          setPinHidden(false);
+        }}
+        pinHidden={pinHidden && !point}
       />
       <p className="o-t-caption s-muted" data-testid="spot-point">
         {status ?? (point ? L.whereTouch : `${L.whereTouch} ${L.whereHint}`)}

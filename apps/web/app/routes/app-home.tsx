@@ -45,6 +45,13 @@ const num = (v: string | null): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+// Lot R7i, tour 2 : l'Accueil porte le bloc « Au spot » (lieu exact d'un rendez-vous) : ni le navigateur ni un relais ne le gardent.
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const url = new URL(request.url);

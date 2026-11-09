@@ -18,6 +18,7 @@ import {
   type HomeNudgeKind,
   type HomeOuting,
   type HomeSponsored,
+  type HomeSpotMeetup,
   type HomeWidgetId,
   homeBlockLabels,
   homeLabels,
@@ -29,7 +30,7 @@ import {
   withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/features/home/HomeWidgets";
@@ -39,7 +40,7 @@ import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sor
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDay, formatHour } from "@/lib/format";
-import { kvGet, kvSet } from "@/lib/kv";
+import { cacheSetJson, kvGet, kvSet } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
@@ -52,7 +53,7 @@ import { autoOpenKey, isDayJ } from "./autoOpen";
 import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
 import { liveAccessHref, showsLocalCopy } from "./liveAccess";
 import { NextOutings, type Outing } from "./NextOutings";
-import { homeRail, splitSponsored } from "./rail";
+import { homeRail, scrubSpot, splitSponsored } from "./rail";
 import { todayLine } from "./today";
 import { WhatsNewBanner } from "./WhatsNewBanner";
 import { FriendsNews } from "./widgets/FriendsNews";
@@ -95,6 +96,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // Le sponsorisé ne vient que de la réponse fraîche de l'API (celle qui l'a compté) ; la réponse gardée dans le cache
   // n'en porte jamais (`splitSponsored`).
   const [sponsored, setSponsored] = useState<HomeSponsored | null>(null);
+  // Lot R7i, tour 2 : idem pour le bloc « Au spot » (son lieu n'est jamais écrit dans le cache du téléphone).
+  const [spot, setSpot] = useState<HomeSpotMeetup | null>(null);
   const [liveOn, setLiveOn] = useState(false);
   const home = useApi(
     async () => {
@@ -108,13 +111,21 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       });
       const parts = splitSponsored(fresh);
       setSponsored(parts.sponsored);
+      setSpot(parts.spotMeetup);
       return parts.cacheable;
     },
     [position.position?.lat, position.position?.lng, variant],
     // Tour 3 : tant que « En cours » est affiché, l'Accueil se rafraîchit lui-même (option de `useApi` : suit l'écran affiché).
     { cacheKey: `home-${variant}`, refreshMs: liveOn ? LIVE_REFRESH_MS : undefined },
   );
-  const data: HomeData | null = home.data;
+  // Une copie enregistrée avant le correctif peut porter un lieu : jamais affichée, et réécrite sans lui.
+  const scrubbed = useMemo(() => (home.data ? scrubSpot(home.data) : null), [home.data]);
+  const data: HomeData | null = scrubbed ?? home.data;
+  const cacheKeyNow = `home-${variant}`;
+  useEffect(() => {
+    if (!scrubbed) return;
+    void cacheSetJson(cacheKeyNow, scrubbed);
+  }, [scrubbed, cacheKeyNow]);
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport-home" });
 
@@ -393,7 +404,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     friends_news: data?.friendsNews ? (
       <FriendsNews data={data.friendsNews} now={now} onOpen={openNews} onFeed={() => goTab("fil")} />
     ) : null,
-    spot_meetup: data?.spotMeetup ? <SpotMeetup data={data.spotMeetup} onOthers={() => goTab("fil")} /> : null,
+    spot_meetup: spot ? <SpotMeetup data={spot} onOthers={() => goTab("fil")} /> : null,
     memories: data?.memories ? <Memories data={data.memories} /> : null,
     nearby: rail.visible ? (
       <>

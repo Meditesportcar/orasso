@@ -18,7 +18,7 @@ import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { now as orassoNow } from "@/lib/clock";
-import { errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Card, SmButton } from "@/ui/Kit";
@@ -28,22 +28,36 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { SpotPlaceMap } from "./SpotPlaceMap";
 import { useSpotAnswer } from "./useSpotAnswer";
+import { useSpotOver } from "./useSpotOver";
 
 const { space2, space3 } = tokens.spacing;
+
+/** Refus définitif de l'API : annulé, plus invité, compte écarté (404), ou accès refusé (403). Pas une panne. */
+export const isRefused = (e: { status?: number } | null | undefined) => e?.status === 404 || e?.status === 403;
 
 export function SpotScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const loaded = useApi(() => api.spot(id), [id], { refreshMs: 30_000 });
   const [meetup, setMeetup] = useState<SpotMeetupView | null>(null);
-  useEffect(() => setMeetup(loaded.data), [loaded.data]);
+  // Refus appris ailleurs que dans la lecture de la fiche (liste de ceux qui viennent, réponse).
+  const [refused, setRefused] = useState(false);
+  useEffect(() => {
+    setMeetup(loaded.data);
+    setRefused(false);
+  }, [loaded.data]);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/accueil"));
-  const gone = loaded.error?.status === 404;
+  // Annulé ou retiré pendant que la fiche est ouverte : le rendez-vous et les réponses sont vidés, jamais l'ancienne donnée
+  // devant l'erreur (le lieu ne reste pas à l'écran).
+  const gone = isRefused(loaded.error) || refused;
+  useEffect(() => {
+    if (gone) setMeetup(null);
+  }, [gone]);
 
   return (
     <FlowScreen title={L.title} facts={L.subtitle} onClose={close} closeLabel="Fermer">
-      {meetup ? (
-        <Meetup meetup={meetup} onChange={setMeetup} onGone={close} />
+      {meetup && !gone ? (
+        <Meetup meetup={meetup} onChange={setMeetup} onGone={close} onRefused={() => setRefused(true)} />
       ) : gone ? (
         <View style={styles.gap} testID="spot-gone">
           <Notice>{L.unavailable}</Notice>
@@ -64,24 +78,53 @@ function Meetup({
   meetup,
   onChange,
   onGone,
+  onRefused,
 }: {
   meetup: SpotMeetupView;
   onChange: (v: SpotMeetupView) => void;
   onGone: () => void;
+  onRefused: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const answer = useSpotAnswer(meetup, onChange);
-  const over = meetup.phase === "ended";
+  const answer = useSpotAnswer(meetup, onChange, onRefused);
+  // Fini pour l'heure d'Orasso, même sans réseau : lieu, liste et réponses disparaissent à `endsAt`.
+  const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
   const end = new Date(meetup.endsAt);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const replies = useApi(() => api.spotReplies(meetup.id), [meetup.id, meetup.yesCount, meetup.maybeCount, over], {
-    enabled: !over,
-  });
+  // La liste se relit à chaque nouvelle vue du rendez-vous (rafraîchissement, réponse), pas seulement quand les compteurs
+  // changent : Alice qui part et Bob qui arrive laissent le total inchangé.
+  const replies = useApi(() => api.spotReplies(meetup.id), [meetup, over], { enabled: !over });
+  useEffect(() => {
+    if (isRefused(replies.error)) onRefused();
+  }, [replies.error, onRefused]);
+  // « Voir plus » : les pages suivantes de « Qui vient ? » (50 par page), repartant de zéro à chaque relecture.
+  const [more, setMore] = useState<{ items: SpotReplies["items"]; cursor: string | null }>({ items: [], cursor: null });
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  useEffect(() => {
+    setMore({ items: [], cursor: replies.data?.nextCursor ?? null });
+    setMoreError(null);
+  }, [replies.data]);
+  async function loadMore() {
+    if (!more.cursor || moreBusy) return;
+    setMoreBusy(true);
+    setMoreError(null);
+    try {
+      const page = await api.spotReplies(meetup.id, more.cursor);
+      setMore((m) => ({ items: [...m.items, ...page.items], cursor: page.nextCursor }));
+    } catch (e) {
+      if (isRefused(e instanceof ApiRequestError ? e : null)) onRefused();
+      else setMoreError(errorMessage(e));
+    } finally {
+      setMoreBusy(false);
+    }
+  }
+  const items = replies.data ? [...replies.data.items, ...more.items] : null;
 
   async function cancel() {
     setBusy(true);
@@ -157,7 +200,20 @@ function Meetup({
             <Text variant="body" color={c.ink} testID="spot-note-text">{`« ${meetup.note} »`}</Text>
           </View>
         ) : null}
-        <WhoList replies={replies.data} meetup={meetup} />
+        <WhoList items={items} meetup={meetup} />
+        {more.cursor ? (
+          <SmButton
+            kind="s"
+            icon="down"
+            wide
+            disabled={moreBusy}
+            onPress={() => void loadMore()}
+            testID="spot-who-more"
+          >
+            Voir plus
+          </SmButton>
+        ) : null}
+        {moreError ? <LoadError message={moreError} onRetry={() => void loadMore()} /> : null}
         {replies.error ? <LoadError message={replies.error.message} onRetry={() => void replies.reload()} /> : null}
         {meetup.mine ? null : (
           <View style={styles.two}>
@@ -228,11 +284,11 @@ function Meetup({
 }
 
 /** « Qui vient ? » : ceux qui viennent, puis ceux qui hésitent ; le nombre d'abord, les pseudos dessous. */
-function WhoList({ replies, meetup }: { replies: SpotReplies | null; meetup: SpotMeetupView }) {
+function WhoList({ items, meetup }: { items: SpotReplies["items"] | null; meetup: SpotMeetupView }) {
   const { t } = useTheme();
   const c = t.color;
-  const yes = replies?.items.filter((i) => i.answer === "yes") ?? [];
-  const maybe = replies?.items.filter((i) => i.answer === "maybe") ?? [];
+  const yes = items?.filter((i) => i.answer === "yes") ?? [];
+  const maybe = items?.filter((i) => i.answer === "maybe") ?? [];
   return (
     <View style={styles.who} testID="spot-who">
       <Text variant="label" color={c.inkMuted}>

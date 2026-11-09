@@ -21,6 +21,8 @@ export function EventMap({
   startsAt,
   draggablePin,
   onPinMove,
+  pinHidden,
+  zoom,
 }: {
   lat: number | null;
   lng: number | null;
@@ -28,6 +30,10 @@ export function EventMap({
   startsAt?: string;
   draggablePin?: boolean;
   onPinMove?: PinMove;
+  /** Épingle déplaçable non montrée (rendez-vous au spot : la carte vient d'être recentrée, aucun point n'est choisi). */
+  pinHidden?: boolean;
+  /** Zoom de la carte quand elle montre un lieu (15 par défaut) : un zoom de rue pour le lieu d'un rendez-vous. */
+  zoom?: number;
 }) {
   const container = useRef<HTMLElement>(null);
   const marker = useRef<import("maplibre-gl").Marker | null>(null);
@@ -37,7 +43,7 @@ export function EventMap({
   const center = { lat: lat ?? DEFAULT_CENTER.lat, lng: lng ?? DEFAULT_CENTER.lng };
   const failed = useOrassoMap(
     container,
-    { center: [center.lng, center.lat], zoom: lat === null ? 9 : 15 },
+    { center: [center.lng, center.lat], zoom: lat === null ? 9 : (zoom ?? 15) },
     (maplibre, { map }) => {
       if (!draggablePin) {
         const pins = placePins(maplibre, map, [
@@ -78,6 +84,12 @@ export function EventMap({
     },
     draggablePin ? "draggable" : `${lat}|${lng}|${label}|${startsAt ?? ""}`,
   );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le marqueur est créé plus tard, la position le déplace : on réapplique.
+  useEffect(() => {
+    const el = marker.current?.getElement();
+    if (el) el.style.display = pinHidden ? "none" : "";
+  }, [pinHidden, lat, lng]);
 
   // Épingle déplaçable : une position venue d'ailleurs (adresse trouvée) déplace l'épingle et la vue.
   useEffect(() => {

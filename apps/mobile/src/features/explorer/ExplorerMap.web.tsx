@@ -28,6 +28,7 @@ export function ExplorerMap({
   children,
   reveal = true,
   fill = false,
+  zoom,
 }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
@@ -40,8 +41,8 @@ export function ExplorerMap({
   const onGroupRef = useRef(onSelectGroup);
   onGroupRef.current = onSelectGroup;
   const byId = useRef(new Map<string, MapPin>());
-  const latest = useRef({ pins, me });
-  latest.current = { pins, me };
+  const latest = useRef({ pins, me, zoom });
+  latest.current = { pins, me, zoom };
   const { height: screenHeight } = useWindowDimensions();
   const below = useRef<View>(null);
   const assist = useScrollAssist();
@@ -67,7 +68,7 @@ export function ExplorerMap({
         maplibre.setWorkerUrl(
           `https://cdn.jsdelivr.net/npm/maplibre-gl@${maplibre.getVersion()}/dist/maplibre-gl-worker.mjs`,
         );
-      const view = viewFor(latest.current.pins);
+      const view = viewFor(latest.current.pins, latest.current.zoom);
       const created = createOrassoMap(maplibre, box.current, {
         theme: themeRef.current,
         glyphsOrigin: mapGlyphsOrigin(),

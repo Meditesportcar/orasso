@@ -9,6 +9,8 @@ export type PinMapProps = {
   /** Nouvelle position de l'épingle (glissée, ou carte touchée / déplacée sous l'épingle). */
   onMove: (lat: number, lng: number) => void;
   label: string;
+  /** L'épingle n'est pas montrée (lot R7i : la carte vient d'être recentrée, aucun point n'est choisi). */
+  hidePin?: boolean;
 };
 
 /** Ce que la carte native dit d'un mouvement (`onRegionWillChange` / `onRegionDidChange` de MapLibre). */

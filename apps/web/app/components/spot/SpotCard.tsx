@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { now } from "../../lib/clock";
 import { PersonAvatar } from "../People";
 import { useSpotAnswer } from "./useSpotAnswer";
+import { useSpotOver } from "./useSpotOver";
 import "../../styles/spot.css";
 
 export function SpotCard({
@@ -28,7 +29,8 @@ export function SpotCard({
     setMeetup(view);
     onChange?.(view);
   });
-  const over = meetup.phase === "ended";
+  // Fini pour l'heure du site (même hors réseau) : plus de lieu, de mot, de liste ni de réponse.
+  const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
   const end = new Date(meetup.endsAt);
   const href = `/app/spot/${meetup.id}`;
@@ -48,13 +50,13 @@ export function SpotCard({
         </span>
         {over ? null : <span className="spot-tag o-t-meta">{spotTimeLabel(start)}</span>}
       </a>
-      {meetup.place ? (
+      {!over && meetup.place ? (
         <p className="spot-card__place" data-testid={`${testid}-place`}>
           <Icon name="place" size={18} />
           <strong>{meetup.place.label}</strong>
         </p>
       ) : null}
-      {meetup.note ? <p className="spot-card__quote">{`« ${meetup.note} »`}</p> : null}
+      {!over && meetup.note ? <p className="spot-card__quote">{`« ${meetup.note} »`}</p> : null}
       {over ? (
         <p className="o-t-caption spot-card__muted">{L.endedHint}</p>
       ) : (
@@ -72,7 +74,8 @@ export function SpotCard({
               {(["yes", "maybe"] as const).map((which) => (
                 <Button
                   key={which}
-                  variant={meetup.myAnswer === which ? "primary" : "secondary"}
+                  variant="secondary"
+                  className={meetup.myAnswer === which ? "spot-answer spot-answer--chosen" : "spot-answer"}
                   icon={which === "yes" ? "check" : "help"}
                   disabled={answer.busy}
                   aria-pressed={meetup.myAnswer === which}

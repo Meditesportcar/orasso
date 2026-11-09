@@ -19,22 +19,56 @@ import { now } from "../../lib/clock";
 import { EventMap } from "../EventMap";
 import { PersonAvatar } from "../People";
 import { useSpotAnswer } from "./useSpotAnswer";
+import { useSpotOver } from "./useSpotOver";
 import "../../styles/spot.css";
 
+/** Refus définitif de l'API : annulé, plus invité, compte écarté (404), ou accès refusé (403). Pas une panne. */
+const refusedStatus = (status: number) => status === 404 || status === 403;
+
 export function SpotDetail({ initial }: { initial: SpotMeetupView }) {
-  const [meetup, setMeetup] = useState(initial);
-  useEffect(() => setMeetup(initial), [initial]);
-  const answer = useSpotAnswer(meetup, setMeetup);
-  const over = meetup.phase === "ended";
+  // `null` : refus définitif appris pendant que la page est ouverte (annulé, plus invité). Le rendez-vous et les réponses sont
+  // vidés, jamais l'ancienne donnée devant l'erreur : le lieu ne reste pas à l'écran.
+  const [state, setState] = useState<SpotMeetupView | null>(initial);
+  useEffect(() => setState(initial), [initial]);
+  if (state === null) {
+    return (
+      <div className="spot-page" data-testid="spot-gone">
+        <p role="alert">{L.unavailable}</p>
+        <Button variant="secondary" icon="add" href="/app/spot/nouveau" data-testid="spot-gone-launch">
+          {L.launch}
+        </Button>
+      </div>
+    );
+  }
+  return <Meetup meetup={state} onChange={setState} onRefused={() => setState(null)} />;
+}
+
+function Meetup({
+  meetup,
+  onChange: setMeetup,
+  onRefused,
+}: {
+  meetup: SpotMeetupView;
+  onChange: (v: SpotMeetupView) => void;
+  onRefused: () => void;
+}) {
+  const answer = useSpotAnswer(meetup, setMeetup, onRefused);
+  // Fini pour l'heure du site, même sans réseau : lieu, liste et réponses disparaissent à `endsAt`.
+  const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
   const end = new Date(meetup.endsAt);
   const [replies, setReplies] = useState<SpotReplies | null>(null);
+  const [more, setMore] = useState<SpotReplies["items"]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
   const [repliesError, setRepliesError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: relue quand les compteurs bougent.
+  // La liste se relit à chaque nouvelle vue du rendez-vous (relecture, réponse), pas seulement quand les compteurs changent :
+  // Alice qui part et Bob qui arrive laissent le total inchangé.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `meetup` (la vue) est la révision à suivre.
   useEffect(() => {
     if (over) return;
     let alive = true;
@@ -42,20 +76,45 @@ export function SpotDetail({ initial }: { initial: SpotMeetupView }) {
       if (!alive) return;
       if (res.ok) {
         setReplies(res.data);
+        setMore([]);
+        setCursor(res.data.nextCursor);
         setRepliesError(null);
-      } else setRepliesError(res.error.message);
+      } else if (refusedStatus(res.status)) onRefused();
+      else setRepliesError(res.error.message);
     });
     return () => {
       alive = false;
     };
-  }, [meetup.id, meetup.yesCount, meetup.maybeCount, over]);
+  }, [meetup, over]);
 
-  // Relu toutes les 30 s tant qu'il dure (comme l'appli) : la fin efface le lieu à l'écran.
+  // Fini : la liste n'existe plus, ni à l'écran ni en mémoire.
+  useEffect(() => {
+    if (!over) return;
+    setReplies(null);
+    setMore([]);
+    setCursor(null);
+  }, [over]);
+
+  async function loadMore() {
+    if (!cursor || moreBusy) return;
+    setMoreBusy(true);
+    const res = await apiFetch<SpotReplies>(`/spot-meetups/${meetup.id}/replies?cursor=${encodeURIComponent(cursor)}`);
+    if (res.ok) {
+      setMore((m) => [...m, ...res.data.items]);
+      setCursor(res.data.nextCursor);
+    } else if (refusedStatus(res.status)) onRefused();
+    else setRepliesError(res.error.message);
+    setMoreBusy(false);
+  }
+
+  // Relu toutes les 30 s tant qu'il dure (comme l'appli) : la fin efface le lieu à l'écran, un refus vide la page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `onRefused` et `setMeetup` sont stables pour cette page.
   useEffect(() => {
     if (over) return;
     const timer = window.setInterval(() => {
       void apiFetch<SpotMeetupView>(`/spot-meetups/${meetup.id}`).then((res) => {
         if (res.ok) setMeetup(res.data);
+        else if (refusedStatus(res.status)) onRefused();
       });
     }, 30_000);
     return () => window.clearInterval(timer);
@@ -97,8 +156,9 @@ export function SpotDetail({ initial }: { initial: SpotMeetupView }) {
     );
   }
 
-  const yes = replies?.items.filter((i) => i.answer === "yes") ?? [];
-  const maybe = replies?.items.filter((i) => i.answer === "maybe") ?? [];
+  const items = replies ? [...replies.items, ...more] : [];
+  const yes = items.filter((i) => i.answer === "yes");
+  const maybe = items.filter((i) => i.answer === "maybe");
   return (
     <div className="spot-page" data-testid="spot-detail">
       <div className="spot-card">
@@ -116,7 +176,7 @@ export function SpotDetail({ initial }: { initial: SpotMeetupView }) {
         </div>
         {meetup.place ? (
           <>
-            <EventMap lat={meetup.place.lat} lng={meetup.place.lng} label={meetup.place.label} />
+            <EventMap lat={meetup.place.lat} lng={meetup.place.lng} label={meetup.place.label} zoom={16} />
             <p className="spot-card__place">
               <Icon name="place" size={18} />
               <strong data-testid="spot-place">{meetup.place.label}</strong>
@@ -149,6 +209,17 @@ export function SpotDetail({ initial }: { initial: SpotMeetupView }) {
                   </li>
                 ))}
               </ul>
+              {cursor ? (
+                <Button
+                  variant="secondary"
+                  icon="down"
+                  disabled={moreBusy}
+                  onClick={() => void loadMore()}
+                  data-testid="spot-who-more"
+                >
+                  Voir plus
+                </Button>
+              ) : null}
             </>
           )}
           {repliesError ? (

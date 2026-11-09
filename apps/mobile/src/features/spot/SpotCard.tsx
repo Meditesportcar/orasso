@@ -18,6 +18,7 @@ import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { useSpotAnswer } from "./useSpotAnswer";
+import { useSpotOver } from "./useSpotOver";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -39,7 +40,8 @@ export function SpotCard({
   const { t } = useTheme();
   const c = t.color;
   const answer = useSpotAnswer(meetup, onChange);
-  const over = meetup.phase === "ended";
+  // Fini pour l'heure d'Orasso (même hors réseau, même fiche restée ouverte) : plus de lieu, de mot, de liste ni de réponse.
+  const over = useSpotOver(meetup);
   const start = new Date(meetup.startsAt);
   const end = new Date(meetup.endsAt);
   const sub = over ? L.ended : `${agoLabel(meetup.createdAt, now)} · ${spotUntilLabel(start, end)}`;
@@ -68,7 +70,7 @@ export function SpotCard({
         </View>
         {over ? null : <Tag tone="acc">{spotTimeLabel(start)}</Tag>}
       </Pressable>
-      {meetup.place ? (
+      {!over && meetup.place ? (
         <View style={styles.place} testID={`${testID}-place`}>
           <Icon name="place" size={18} color={c.accentText} />
           <Text variant="bodyStrong" color={c.ink} style={[styles.fill, styles.placeText]}>
@@ -76,7 +78,7 @@ export function SpotCard({
           </Text>
         </View>
       ) : null}
-      {meetup.note ? (
+      {!over && meetup.note ? (
         <View style={[styles.quote, { borderColor: c.line }]}>
           <Text variant="body" color={c.ink} style={styles.quoteText}>
             {`« ${meetup.note} »`}
@@ -145,11 +147,15 @@ function AnswerButton({
   onPress: (a: SpotAnswer) => void;
   testID: string;
 }) {
+  const { t } = useTheme();
   const chosen = meetup.myAnswer === which;
+  // Dans une liste, jamais de bouton principal (le seul est sur l'écran du rendez-vous) : la réponse choisie se marque d'un
+  // liseré d'accent.
   return (
     <View style={styles.fill}>
       <SmButton
-        kind={chosen ? "p" : "s"}
+        kind="s"
+        style={chosen ? { borderWidth: 2, borderColor: t.color.accent } : undefined}
         icon={icon}
         wide
         disabled={busy}

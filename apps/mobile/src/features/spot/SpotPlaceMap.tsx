@@ -9,6 +9,9 @@ import { StyleSheet, View } from "react-native";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import type { MapPin } from "@/features/explorer/mapPins";
 
+/** Zoom de rue : le point exact, pas la ville. */
+const SPOT_MAP_ZOOM = 16;
+
 export function SpotPlaceMap({
   id,
   label,
@@ -33,7 +36,7 @@ export function SpotPlaceMap({
       accessibilityLabel={`${L.feature} : ${label}`}
       testID="spot-map"
     >
-      <ExplorerMap pins={pins} onSelect={() => undefined} reveal={false} fill />
+      <ExplorerMap pins={pins} onSelect={() => undefined} reveal={false} fill zoom={SPOT_MAP_ZOOM} />
     </View>
   );
 }

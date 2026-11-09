@@ -5,6 +5,7 @@
 // seul le point que la personne vise est envoyé.
 import { Chip, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  afterRecentre,
   clampStart,
   customEndsAt,
   defaultDuration,
@@ -56,6 +57,12 @@ export function SpotNewScreen() {
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [finding, setFinding] = useState(false);
+  // L'épingle montrée est toujours le point envoyé : « Autour de moi » recentre la carte sans toucher au point choisi... en
+  // l'effaçant (et en masquant l'épingle) jusqu'à une nouvelle sélection.
+  const [pinHidden, setPinHidden] = useState(false);
+  const pointRef = useRef(point);
+  pointRef.current = point;
+  const askedAround = useRef(false);
   const geo = useRef(0);
 
   // Heure et durée : on retient le choix, les dates se calculent au lancement (« Maintenant » = l'instant du toucher).
@@ -94,7 +101,16 @@ export function SpotNewScreen() {
 
   // La position de l'appareil (arrondie) centre la carte, jamais le point envoyé.
   useEffect(() => {
-    if (position.position) setCenter({ lat: position.position.lat, lng: position.position.lng });
+    if (!position.position) return;
+    const next = { lat: position.position.lat, lng: position.position.lng };
+    setCenter(next);
+    const out = afterRecentre(pointRef.current, next, askedAround.current);
+    askedAround.current = false;
+    if (out.pinHidden) {
+      setPoint(out.point);
+      setPinHidden(true);
+      setStatus(null);
+    }
   }, [position.position]);
 
   const existing = activeId ?? audiences.data?.activeMeetupId ?? null;
@@ -112,6 +128,7 @@ export function SpotNewScreen() {
       if (mine !== geo.current) return;
       if (match) {
         setPoint({ lat: match.lat, lng: match.lng });
+        setPinHidden(false);
         setCenter({ lat: match.lat, lng: match.lng });
         setPlaceName((p) => p || match.label.slice(0, SPOT_PLACE_MAX));
         setStatus(L.whereFound(match.label));
@@ -240,7 +257,10 @@ export function SpotNewScreen() {
             icon="target"
             wide
             disabled={position.status === "asking"}
-            onPress={() => void position.request()}
+            onPress={() => {
+              askedAround.current = true;
+              void position.request();
+            }}
             testID="spot-around-me"
           >
             {L.whereMine}
@@ -250,7 +270,11 @@ export function SpotNewScreen() {
       <PinMap
         lat={center?.lat ?? point?.lat ?? null}
         lng={center?.lng ?? point?.lng ?? null}
-        onMove={(lat, lng) => setPoint({ lat, lng })}
+        onMove={(lat, lng) => {
+          setPoint({ lat, lng });
+          setPinHidden(false);
+        }}
+        hidePin={pinHidden && !point}
         label={L.where}
       />
       <Muted variant="caption" testID="spot-point">

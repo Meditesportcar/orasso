@@ -16,6 +16,13 @@ export function meta() {
   return [{ title: `${L.launch} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
+// Lot R7i, tour 2 : comme la page d'un rendez-vous, jamais gardée par le navigateur ni par un relais.
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
   const res = await api<SpotAudiences>(request, "/me/spot-meetups/audiences");

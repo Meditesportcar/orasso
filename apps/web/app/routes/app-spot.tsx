@@ -16,6 +16,13 @@ export function meta() {
   return [{ title: `${L.title} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
+// Lot R7i, tour 2 : la page (et ses données `.data`) porte le lieu exact du rendez-vous : ni le navigateur ni un relais ne la gardent.
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireMe(request);
   const res = await api<SpotMeetupView>(request, `/spot-meetups/${params.id}`);

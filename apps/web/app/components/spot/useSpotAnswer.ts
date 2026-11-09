@@ -4,7 +4,12 @@ import { useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
 
-export function useSpotAnswer(meetup: SpotMeetupView, onChange?: (view: SpotMeetupView) => void) {
+export function useSpotAnswer(
+  meetup: SpotMeetupView,
+  onChange?: (view: SpotMeetupView) => void,
+  /** Refus définitif (annulé, plus invité) : la page qui porte le rendez-vous le vide. */
+  onRefused?: () => void,
+) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(meetup);
@@ -20,7 +25,10 @@ export function useSpotAnswer(meetup: SpotMeetupView, onChange?: (view: SpotMeet
         ? await apiFetch<SpotMeetupView>(`/spot-meetups/${current.id}/reply`, { method: "DELETE" })
         : await apiFetch<SpotMeetupView>(`/spot-meetups/${current.id}/reply`, { method: "PUT", json: { answer } });
     if (res.ok) onChange?.(res.data);
-    else setError(res.error.message);
+    else {
+      if (res.status === 404 || res.status === 403) onRefused?.();
+      setError(res.error.message);
+    }
     setBusy(false);
   }
 
