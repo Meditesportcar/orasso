@@ -140,6 +140,8 @@ export function presenceGate(
   const entry = entryRefusal(ctx);
   if (entry) return entry;
   if (ctx.alreadyPresent) return "already_present";
+  // Un lieu sans coordonnées n'a pas de zone : le bouton n'est pas proposé et la validation répond `no_zone`.
+  if (ctx.event.lat === null || ctx.event.lng === null) return "no_zone";
   return null;
 }
 
@@ -154,7 +156,6 @@ export function presenceRefusal(ctx: PresenceContext): PresenceRefusal | null {
   if (ctx.accuracyM !== null && ctx.accuracyM !== undefined && ctx.accuracyM > PRESENCE_MAX_ACCURACY_M) {
     return "gps_imprecise";
   }
-  if (ctx.event.lat === null || ctx.event.lng === null) return "no_zone";
   if (!inZone(ctx.point, ctx.accuracyM, ctx.event)) return "out_of_zone";
   return null;
 }

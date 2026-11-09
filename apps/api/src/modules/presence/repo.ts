@@ -110,7 +110,7 @@ export async function onSiteCount(
           and not exists (select 1 from tickets t where t.event_id = g.event_id and t.user_id = g.user_id
             and t.used_at is not null)
           and not exists (select 1 from checkins c join applications a on a.id = c.application_id
-            where c.event_id = g.event_id and a.user_id = g.user_id and a.kind = 'vehicle'))
+            where c.event_id = g.event_id and a.user_id = g.user_id and a.kind = 'vehicle' ${vehicleDay}))
     )::int as n`);
   return Number(rows.rows[0]?.n ?? 0);
 }

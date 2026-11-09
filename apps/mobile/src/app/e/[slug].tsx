@@ -76,7 +76,7 @@ import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { openStandalone } from "@/lib/standalone";
-import { useNowUntil, useReloadOnForeground } from "@/lib/useAfter";
+import { useReloadOnForeground, useServerClock } from "@/lib/useAfter";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
@@ -202,7 +202,7 @@ export default function EventPage() {
   // Lot R7d2 : la feuille « Je suis sur place » (présence par la position du téléphone, pendant l'événement).
   const [presenceOpen, setPresenceOpen] = useState(false);
   // Tour 2 : garde d'heure. La fiche restée ouverte au-delà de la fin se re-rend à `endsAt` et retire le direct.
-  const liveClock = useNowUntil(event.data?.endsAt, () => void event.reload());
+  const liveClock = useServerClock(event.data, () => void event.reload());
   useReloadOnForeground(Boolean(event.data?.live), () => void event.reload());
   const applications = useApplications();
   // Lot R6c (R6.3, R6.4, R6.6) : « Qui y va », la feuille « Inviter du monde », le bandeau et le menu d'une invitation.
@@ -399,7 +399,7 @@ export default function EventPage() {
 
   // Lot R7d2 (B2 de Damien : « sur la fiche de l'événement en cours, le vote n'apparaît pas ») : une fois entré (`myPresence`
   // non nul) et au moins un vote ouvert, « Votes · N ouverts » est le bouton principal de la fiche pendant l'événement.
-  const live = liveAt(e.live, e.endsAt, liveClock);
+  const live = liveAt(e.live, e, liveClock);
   const votesLabel = action === "triage" ? null : liveVotesLabel(live);
   const heldVehicleSlot = (e.myApplications ?? []).some((a) => a.status === "accepted");
   const offerPresence = canOfferPresence(live, {

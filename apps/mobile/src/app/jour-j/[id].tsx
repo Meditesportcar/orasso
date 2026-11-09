@@ -46,7 +46,7 @@ import { formatDayHour } from "@/lib/format";
 import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
-import { useNowUntil, useReloadOnForeground } from "@/lib/useAfter";
+import { useReloadOnForeground, useServerClock } from "@/lib/useAfter";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AppSheet } from "@/ui/AppSheet";
@@ -116,9 +116,9 @@ function JourJScreen() {
   });
   // Tour 2 : garde d'heure. Resté ouvert au-delà de la fin, l'écran n'affiche plus « Sur place · N » (re-rendu à `endsAt`).
   const endsAtIso = app?.event.endsAt ?? kit?.event.endsAt;
-  const liveClock = useNowUntil(endsAtIso, () => void liveNow.reload());
+  const liveClock = useServerClock(endsAtIso ? { endsAt: endsAtIso } : null, () => void liveNow.reload());
   useReloadOnForeground(online && Boolean(slug), () => void liveNow.reload());
-  const liveGuarded = endsAtIso ? liveAt(liveNow.data, endsAtIso, liveClock) : (liveNow.data ?? null);
+  const liveGuarded = endsAtIso ? liveAt(liveNow.data, { endsAt: endsAtIso }, liveClock) : (liveNow.data ?? null);
   const onSiteNow = liveGuarded?.phase === "running" ? (liveGuarded.onSiteCount ?? null) : null;
   const lastAnnouncement =
     [...(feed.data?.items ?? [])]

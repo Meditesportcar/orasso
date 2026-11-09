@@ -141,7 +141,13 @@ export function PresenceSheet({
     const guard = attemptGuard(getSessionToken);
     attempt.current = guard;
     const outcome = await measureAndSend(eventId, guard);
-    if (!mounted.current || outcome.kind === "cancelled") return;
+    if (!mounted.current) return;
+    if (outcome.kind === "cancelled") {
+      // Tentative annulée (session changée, feuille fermée) : si c'est encore la tentative courante, retour à l'état
+      // initial (jamais bloqué sur « Position en cours… »). Une ancienne tentative ne touche pas à la nouvelle.
+      if (attempt.current === guard) setPhase("idle");
+      return;
+    }
     if (outcome.kind === "validated") {
       setPhase("validated");
       setVoteOk(outcome.canVote);

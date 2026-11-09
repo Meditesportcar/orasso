@@ -3,23 +3,61 @@
 // (règle des absents : après la fin, ni retenues ni présents). Même règle pour l'appli et le site.
 import { presenceLabels } from "../labels/presence.fr";
 import type { EventLive } from "../schemas/presence";
+import { inPresenceWindow, PRESENCE_OPENS_BEFORE_MS } from "./presence";
+
+export type LiveSpan = {
+  endsAt: string | Date;
+  startsAt?: string | Date;
+  /** Jours déclarés (`days`) : la présence ne se valide que dans la plage d'UN jour. */
+  days?: readonly { startsAt: string | Date; endsAt: string | Date }[];
+};
+
+const asDates = (event: LiveSpan) => ({
+  startsAt: new Date(event.startsAt ?? event.endsAt),
+  endsAt: new Date(event.endsAt),
+  days: event.days?.map((d) => ({ startsAt: new Date(d.startsAt), endsAt: new Date(d.endsAt) })),
+});
 
 /**
- * Garde d'heure à l'écran : un écran resté ouvert au-delà de la fin garde le bloc `live` lu avant. À l'heure de fin
- * (fin exclue) ou après, il passe en phase « after » sans retenues, présents, votes ni bouton GPS (règle des absents),
- * sans attendre une relecture. Les autres phases ne changent pas ; ne sert qu'à retirer, jamais à ouvrir.
+ * Garde d'heure à l'écran : un écran resté ouvert garde le bloc `live` lu avant. À l'heure de fin de l'événement (fin
+ * exclue) il passe en phase « after » sans retenues, présents, votes ni bouton GPS (règle des absents) ; à la fermeture
+ * d'un jour déclaré (entre deux jours), le bouton GPS seul disparaît, sans attendre une relecture. Ne sert qu'à retirer,
+ * jamais à ouvrir.
  */
-export function liveAt(live: EventLive | null | undefined, endsAt: string | Date, nowMs: number): EventLive | null {
+export function liveAt(
+  live: EventLive | null | undefined,
+  event: LiveSpan | string | Date,
+  nowMs: number,
+): EventLive | null {
   if (!live) return null;
-  if (live.phase !== "running" || nowMs < new Date(endsAt).getTime()) return live;
-  return {
-    ...live,
-    phase: "after",
-    onSiteCount: null,
-    acceptedCount: null,
-    canValidatePresence: false,
-    votesOpen: 0,
-  };
+  const span: LiveSpan = typeof event === "string" || event instanceof Date ? { endsAt: event } : event;
+  if (live.phase !== "running") return live;
+  if (nowMs >= new Date(span.endsAt).getTime()) {
+    return {
+      ...live,
+      phase: "after",
+      onSiteCount: null,
+      acceptedCount: null,
+      canValidatePresence: false,
+      votesOpen: 0,
+    };
+  }
+  if (live.canValidatePresence && span.days?.length && !inPresenceWindow(asDates(span), new Date(nowMs))) {
+    return { ...live, canValidatePresence: false };
+  }
+  return live;
+}
+
+/**
+ * Prochaine heure où l'autorisation GPS change (fermeture d'une journée, ouverture de la suivante 30 minutes avant son
+ * début, fin de l'événement) après `nowMs` : l'écran se relit alors. `null` si plus rien ne change.
+ */
+export function nextPresenceBoundary(event: LiveSpan, nowMs: number): number | null {
+  const e = asDates(event);
+  const edges: number[] = [e.endsAt.getTime()];
+  for (const d of e.days ?? []) edges.push(d.endsAt.getTime(), d.startsAt.getTime() - PRESENCE_OPENS_BEFORE_MS);
+  const next = edges.filter((t) => t > nowMs).sort((x, y) => x - y)[0];
+  return next ?? null;
 }
 
 /** La fiche d'un événement en cours (`phase = running`) : les lignes du direct existent seulement alors. */

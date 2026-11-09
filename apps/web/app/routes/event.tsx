@@ -152,13 +152,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ended: new Date(event.endsAt).getTime() <= nowMs(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
-    // Lot R7d2, tour 2 : la ligne « Depuis l'appli, valide ta présence » ne s'adresse qu'aux profils de l'appli qui ont le
-    // bouton (visiteur, exposant) : pas à qui a une casquette pro, prestataire, média ou organisateur.
-    gpsProfile: Boolean(me?.personas.every((p) => p.kind === "fan" || p.kind === "visitor")),
+    // Lot R7d2, tour 3 : la ligne « Depuis l'appli, valide ta présence » suit la casquette COURANTE, comme le bouton de
+    // l'appli. Le site n'a pas de casquette mémorisée : la casquette est l'espace d'où l'on vient (`/orga`, `/pro`) ; sur
+    // une page publique ouverte d'ailleurs, c'est la casquette de base (visiteur ou exposant), comme dans l'appli au
+    // premier lancement.
+    gpsProfile: Boolean(me) && !comesFromHatSpace(request),
     origin: originOf(request),
     state: registrationState(event, nowMs()),
     block: registrationBlock(event, nowMs()),
   };
+}
+
+/** La personne arrive d'un espace de casquette autre que la base (organisateur ou pro) : sa casquette courante n'est pas le passionné. */
+function comesFromHatSpace(request: Request): boolean {
+  const from = request.headers.get("referer");
+  if (!from) return false;
+  try {
+    return /^\/(orga|pro)(\/|$)/.test(new URL(from).pathname);
+  } catch {
+    return false;
+  }
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -482,9 +495,9 @@ function EventPage({
   // GPS est réservée à l'appli (la position du téléphone) : le site le dit.
   const revalidator = useRevalidator();
   const reloadPage = () => void revalidator.revalidate();
-  const liveClock = useNowUntil(event.endsAt, reloadPage);
+  const liveClock = useNowUntil(event, reloadPage);
   useReloadOnReturn(Boolean(event.live), reloadPage);
-  const live = liveAt(event.live ?? null, event.endsAt, liveClock);
+  const live = liveAt(event.live ?? null, event, liveClock);
   const running = liveRunning(live);
   const onSiteLine = liveOnSiteLine(live);
   const votesLabel = liveVotesLabel(live);

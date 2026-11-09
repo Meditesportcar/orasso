@@ -123,7 +123,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   const [alerts, setAlerts] = useState<StaffAlertView[]>(loaderData.alerts);
   const [incidents, setIncidents] = useState<IncidentView[]>(loaderData.incidents);
   const [presents, setPresents] = useState<PresenceSummary | null>(loaderData.presents);
-  const liveClock = useNowUntil(event.endsAt);
+  const liveClock = useNowUntil({ endsAt: event.endsAt });
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);

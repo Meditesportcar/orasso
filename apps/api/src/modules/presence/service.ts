@@ -114,6 +114,12 @@ function currentDay<D extends { startsAt: Date }>(days: readonly D[], t: Date): 
   return found;
 }
 
+/** Le jour en cours sous la forme qu'attend `onSiteCount` (`null` : événement d'un jour). Une seule règle pour la fiche, l'Accueil et le signal. */
+async function dayFilterOf(e: EventRow, t: Date, ex: Executor) {
+  const day = currentDay(await daysRepo.list(e.id, ex), t);
+  return day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null;
+}
+
 export const presenceService = {
   /**
    * `POST /events/:id/presence` : « Je suis sur place ». Dans l'ordre : limite de débit (5 essais en 10 minutes par
@@ -160,17 +166,18 @@ export const presenceService = {
         const fresh = await passportService.safely(tx, "présence", (sp) =>
           passportService.stamp(sp, v.user.id, event, "visit", { ticketId, at: t }),
         );
-        await notificationsService.notify(tx, v.user.id, "presence_validated", {
-          title: presenceLabels.notificationTitle,
-          body: presenceLabels.notificationBody(event.title),
-          eventId,
-          data: { eventId },
-          link: { label: "Voir l'événement", path: `/e/${event.slug}` },
-        });
         const stampId = await visitStampId(tx, eventId, v.user.id);
         // La règle effective du vote : la présence est écrite, restent la fenêtre et les deux véhicules pointés.
         // Protégé : un échec de cette lecture ne défait jamais une présence validée (faux, erreur sans la position).
         const canVote = await canVoteSafely(tx, event, v.user.id);
+        // La notification ne promet que ce qui est vrai : le vote seulement si `canVote`, le tampon seulement s'il est posé.
+        await notificationsService.notify(tx, v.user.id, "presence_validated", {
+          title: presenceLabels.notificationTitle,
+          body: presenceLabels.notificationBody(event.title, { canVote, stamped: Boolean(stampId) }),
+          eventId,
+          data: { eventId },
+          link: { label: "Voir l'événement", path: `/e/${event.slug}` },
+        });
         // Le tampon tombe à l'écran (comme au contrôle d'un billet), seulement s'il vient d'être posé.
         if (fresh) after(() => passportService.publish(v.user.id, fresh));
         after(() => presenceService.announce(eventId));
@@ -185,7 +192,12 @@ export const presenceService = {
 
   /** Signal « quelque chose a changé » pour l'organisation (canal `event:{id}:live`) : le nombre sur place, rien d'autre. */
   async announce(eventId: string) {
-    realtime.publish(`event:${eventId}:live`, "presence.changed", { onSiteCount: await onSiteCount(db, eventId) });
+    // Le total tient compte du jour, comme la fiche (même règle : `dayFilterOf`).
+    const event = await eventsRepo.byId(eventId);
+    const dayFilter = await dayFilterOf(event, now(), db);
+    realtime.publish(`event:${eventId}:live`, "presence.changed", {
+      onSiteCount: await onSiteCount(db, eventId, dayFilter),
+    });
   },
 
   /**
@@ -226,7 +238,7 @@ export const presenceService = {
     // Plusieurs jours : « jour N » et ses nombres vont ensemble (retenues et sur place de ce jour, comme le direct de
     // l'organisateur) ; un jour sans date de jour (`dayDate`) ne peut pas arriver, la base la rend obligatoire.
     const day = currentDay(days, t);
-    const dayFilter = day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null;
+    const dayFilter = day ? { id: day.id, dayDate: day.dayDate, timezone: e.timezone } : null; // même règle que `dayFilterOf`
     const [onSite, accepted, entered, proofs] = await Promise.all([
       running ? onSiteCount(ex, e.id, dayFilter) : Promise.resolve(0),
       running ? eventsRepo.statusCounts(e.id, ex, day?.id).then((c) => c.accepted) : Promise.resolve(0),

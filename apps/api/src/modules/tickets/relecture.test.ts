@@ -10,7 +10,7 @@ import {
   verifyTicketPayload,
 } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -25,6 +25,7 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { adminAuditLog, notifications, orders, platformSettings, signingKeys, tickets } from "../../db/schema";
+import { realtime } from "../../lib/realtime";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { setStripeConfig, setStripeFetch, signWebhookPayload } from "../../lib/stripe";
 import { accessService } from "../access/service";
@@ -290,5 +291,22 @@ describe("I5 et I6 : paiements de démonstration, webhook", () => {
     const order = await db.query.orders.findFirst();
     expect(order?.status).toBe("pending");
     expect(order?.stripeSessionId).toBe("cs_test_1");
+  });
+});
+
+describe("R7d2 tour 3 : le contrôle d'un billet prévient l'organisation", () => {
+  it("un abonné au canal du direct reçoit « live » après un contrôle réussi, rien après un refus", async () => {
+    const e = await freeEvent();
+    await open(e.id);
+    const t = await reserve(fan, e.id);
+    const messages: { type: string }[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`event:${e.id}:live`, socket);
+    expect((await check(staff, e.id, t.payload)).json.result).toBe("ok");
+    await vi.waitFor(() => expect(messages.map((m) => m.type)).toContain("live"));
+    const before = messages.length;
+    expect((await check(staff, e.id, t.payload)).json.result).toBe("already");
+    expect(messages).toHaveLength(before);
+    realtime.unsubscribeAll(socket);
   });
 });

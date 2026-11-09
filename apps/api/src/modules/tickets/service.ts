@@ -649,6 +649,9 @@ export const ticketsService = {
     // Lot 49 : tampon de visite au titulaire du billet, à son écran.
     const visit = await passportService.stampVisit(db, updated.id);
     if (visit) passportService.publish(visit.userId, visit.stamp);
+    // Tour 3 : un billet contrôlé change « sur place » : l'organisation (présents, compteurs) se relit.
+    const { publishLive } = await import("../staff/shop");
+    await publishLive(row.t.eventId);
     return { result: "ok", pseudo, ticketName: row.type.name, usedAt: updated.usedAt?.toISOString() ?? "" };
   },
 

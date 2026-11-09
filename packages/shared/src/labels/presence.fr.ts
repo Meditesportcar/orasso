@@ -15,7 +15,16 @@ export const presenceLabels = {
   validatedNoVote: "Présence validée : tu es sur place.",
   /** Notification `presence_validated` (Journal). */
   notificationTitle: "Présence validée",
-  notificationBody: (title: string) => `Tu es sur place à « ${title} » : ton tampon est posé et tu peux voter.`,
+  notificationBody: (title: string, done: { canVote: boolean; stamped: boolean } = { canVote: true, stamped: true }) =>
+    `Tu es sur place à « ${title} »${
+      done.stamped && done.canVote
+        ? " : ton tampon est posé et tu peux voter."
+        : done.stamped
+          ? " : ton tampon est posé."
+          : done.canVote
+            ? " : tu peux voter."
+            : " : ta présence est validée."
+    }`,
   /** Zone de présence de l'éditeur (étape « Lieu », écran en R7d2). */
   radiusLabel: "Zone de présence (m)",
   radiusHelp: `${PRESENCE_DEFAULT_RADIUS_M} m si vide`,

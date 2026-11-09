@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { presenceLabels } from "../labels/presence.fr";
 import type { EventLive } from "../schemas/presence";
-import { canOfferPresence, liveAt, liveOnSiteLine, liveRunning, liveVotesLabel } from "./liveFiche";
+import {
+  canOfferPresence,
+  liveAt,
+  liveOnSiteLine,
+  liveRunning,
+  liveVotesLabel,
+  nextPresenceBoundary,
+} from "./liveFiche";
 
 const running: EventLive = {
   phase: "running",
@@ -71,5 +78,31 @@ describe("la fiche pendant l'événement (lot R7d2)", () => {
     expect(canOfferPresence(liveAt(running, end, end.getTime() + 5_000), ok)).toBe(false);
     expect(liveAt(before, end, end.getTime() + 1)).toBe(before);
     expect(liveAt(null, end, 0)).toBeNull();
+  });
+
+  it("fermeture d'une journée : le bouton GPS seul disparaît à la fin du jour déclaré, les compteurs restent", () => {
+    const day = (d: number) => ({
+      startsAt: new Date(`2026-11-0${d}T08:00:00Z`),
+      endsAt: new Date(`2026-11-0${d}T17:00:00Z`),
+    });
+    const event = { endsAt: day(8).endsAt, startsAt: day(7).startsAt, days: [day(7), day(8)] };
+    const mid = new Date("2026-11-07T12:00:00Z").getTime();
+    expect(liveAt(running, event, mid)).toBe(running);
+    const night = liveAt(running, event, new Date("2026-11-07T22:00:00Z").getTime());
+    expect(night).toMatchObject({ phase: "running", canValidatePresence: false, onSiteCount: 11 });
+    // 30 minutes avant le jour 2 la fenêtre est ouverte : la valeur lue est gardée.
+    const early = new Date("2026-11-08T07:45:00Z").getTime();
+    expect(liveAt(running, event, early)).toBe(running);
+  });
+
+  it("prochaine frontière : fermeture du jour, ouverture du suivant (30 min avant), fin", () => {
+    const d1 = { startsAt: new Date("2026-11-07T08:00:00Z"), endsAt: new Date("2026-11-07T17:00:00Z") };
+    const d2 = { startsAt: new Date("2026-11-08T08:00:00Z"), endsAt: new Date("2026-11-08T17:00:00Z") };
+    const event = { endsAt: d2.endsAt, days: [d1, d2] };
+    const at = (iso: string) => new Date(iso).getTime();
+    expect(nextPresenceBoundary(event, at("2026-11-07T12:00:00Z"))).toBe(at("2026-11-07T17:00:00Z"));
+    expect(nextPresenceBoundary(event, at("2026-11-07T18:00:00Z"))).toBe(at("2026-11-08T07:30:00Z"));
+    expect(nextPresenceBoundary(event, at("2026-11-08T12:00:00Z"))).toBe(at("2026-11-08T17:00:00Z"));
+    expect(nextPresenceBoundary(event, at("2026-11-08T18:00:00Z"))).toBeNull();
   });
 });
