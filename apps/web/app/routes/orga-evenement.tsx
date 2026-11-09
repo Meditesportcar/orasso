@@ -33,6 +33,7 @@ import {
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
   recurrenceOccurrences,
+  voteOrgaLabels,
   wallTime,
   weatherTexts,
   weekdayNames,
@@ -521,6 +522,15 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
             </Button>
             <Button variant="secondary" icon="live" href={`${base}/e/${event.id}/jour-j`}>
               Jour J et après
+            </Button>
+            {/* Lot R7l2 : les votes du public. */}
+            <Button
+              variant="secondary"
+              icon="trophy"
+              href={`${base}/e/${event.id}/votes`}
+              data-testid="orga-votes-link"
+            >
+              {voteOrgaLabels.linkVotes}
             </Button>
             {/* Invitations nominatives (lot 25). */}
             <Button

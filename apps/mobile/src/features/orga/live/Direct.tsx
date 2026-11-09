@@ -13,6 +13,7 @@ import {
   orgaLabels,
   orgaV2Labels,
   presenceLabels,
+  voteOrgaLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -352,6 +353,16 @@ function DirectEvent({
               </Plate>
             </>
           ) : null}
+          {/* Lot R7l2 : les votes du public (Lancer, Clore, candidats). */}
+          <Button
+            variant="secondary"
+            icon="trophy"
+            onPress={() => router.push(`/evenement/${eventId}/votes`)}
+            fullWidth
+            testID="orga-direct-votes"
+          >
+            {voteOrgaLabels.linkVotesDirect}
+          </Button>
           <SectionTitle>{orgaLabels.directAlertsTitle}</SectionTitle>
           {open.length === 0 ? (
             <Muted variant="body">{orgaLabels.directAlertsNone}</Muted>

@@ -30,17 +30,21 @@ export const voteCandidateModeOptions: readonly {
 ];
 
 /** Les trois manières d'ouvrir un vote (« Quand il ouvre »). */
-export const voteOpenModeOptions: readonly { mode: VoteOpenMode; label: string; hint: string; icon: "check" | "wait" | "spark" }[] =
-  [
-    { mode: "first_entry", label: "Dès les premières entrées", hint: "Comme le vote d'aujourd'hui", icon: "check" },
-    { mode: "at", label: "À une heure fixée", hint: "Il s'ouvre tout seul à l'heure choisie", icon: "wait" },
-    {
-      mode: "manual",
-      label: "Je le lance moi-même",
-      hint: "Bouton « Lancer le vote », dans l'espace organisateur",
-      icon: "spark",
-    },
-  ];
+export const voteOpenModeOptions: readonly {
+  mode: VoteOpenMode;
+  label: string;
+  hint: string;
+  icon: "check" | "wait" | "spark";
+}[] = [
+  { mode: "first_entry", label: "Dès les premières entrées", hint: "Comme le vote d'aujourd'hui", icon: "check" },
+  { mode: "at", label: "À une heure fixée", hint: "Il s'ouvre tout seul à l'heure choisie", icon: "wait" },
+  {
+    mode: "manual",
+    label: "Je le lance moi-même",
+    hint: "Bouton « Lancer le vote », dans l'espace organisateur",
+    icon: "spark",
+  },
+];
 
 /** Les durées proposées (« Combien de temps ») ; `null` : jusqu'à la fin de l'événement, `"custom"` : au choix. */
 export const voteDurationOptions: readonly { value: number | null | "custom"; label: string }[] = [
@@ -78,7 +82,8 @@ export const voteOrgaLabels = {
   candidatesAll: "Tous les véhicules entrés",
   candidatesOrigins: (what: string) => what,
   candidatesZone: (name: string) => `Zone ${name}`,
-  candidatesHand: (n: number) => (n === 0 ? "Aucune voiture choisie" : n === 1 ? "1 voiture choisie à la main" : `${n} voitures choisies à la main`),
+  candidatesHand: (n: number) =>
+    n === 0 ? "Aucune voiture choisie" : n === 1 ? "1 voiture choisie à la main" : `${n} voitures choisies à la main`,
   openFirstEntry: "dès les premières entrées",
   openManual: "je le lance moi-même",
   openAt: (when: string) => when,
@@ -125,7 +130,11 @@ export const voteOrgaLabels = {
   screenTitle: "Votes",
   screenTitleStaff: "Votes",
   linkVotes: "Votes",
-  staffReadOnly: "Propriétaire et co-organisateurs de la structure lancent et closent les votes. Le staff les voit en lecture seule.",
+  linkVotesDirect: "Les votes du public",
+  staffTile: "Votes",
+  staffTileHint: "L'état des votes, en lecture seule",
+  staffReadOnly:
+    "Propriétaire et co-organisateurs de la structure lancent et closent les votes. Le staff les voit en lecture seule.",
   launch: "Lancer le vote",
   launchFor: (duration: string) => `Lancer · ${duration}`,
   closeNow: "Clore maintenant",
@@ -141,8 +150,7 @@ export const voteOrgaLabels = {
   closed: "Vote clos : le classement est public.",
   notEnough: "Il faut deux candidats entrés au moins pour ouvrir ce vote.",
   notPublished: "Le vote se lancera après la publication de l'événement.",
-  bell:
-    "Un vote lancé pendant l'événement envoie une notification aux présents. Un vote prévu n'en envoie pas : l'onglet « Votes » s'allume à l'heure. Chacun peut couper cette notification dans ses réglages.",
+  bell: "Un vote lancé pendant l'événement envoie une notification aux présents. Un vote prévu n'en envoie pas : l'onglet « Votes » s'allume à l'heure. Chacun peut couper cette notification dans ses réglages.",
   rankingTitle: "Classement",
   rankingLive: "en direct, pour l'équipe",
   rankingEmpty: "Pas encore de voix.",
@@ -154,7 +162,9 @@ export const voteOrgaLabels = {
   candidatesTitle: "Candidats",
   candidatesButton: "Candidats",
   candidatesCount: (entered: number, total: number) =>
-    total === entered ? `${total} ${total > 1 ? "voitures" : "voiture"}, ${total > 1 ? "toutes entrées" : "entrée"}` : `${entered} entrées sur ${total}`,
+    total === entered
+      ? `${total} ${total > 1 ? "voitures" : "voiture"}, ${total > 1 ? "toutes entrées" : "entrée"}`
+      : `${entered} entrées sur ${total}`,
   candidatesNone: "Aucune voiture choisie pour l'instant.",
   retained: "retenue",
   notEntered: "pas encore entrée",
@@ -174,6 +184,7 @@ export const voteOrgaLabels = {
     "La file du concours passe : tu scannes, les voitures sont candidates. Le scan ne vaut pas entrée : seule une voiture déjà entrée est ajoutée, les autres sont refusées.",
   scanDone: (n: number) => `Terminé · ${n} ${n > 1 ? "voitures" : "voiture"}`,
   scanAdded: (label: string, count: number) => `${label} · ajoutée · ${count} au total`,
+  scanSiteNote: "Le scan du QR des voitures se fait dans l'appli, avec l'appareil photo du téléphone.",
   scanNoCamera: "Pas de caméra dans le navigateur : saisis la charge utile du QR.",
   scanCameraOff: "Caméra non autorisée",
   scanAllow: "Autoriser la caméra",
