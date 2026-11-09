@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
-import { dropStory, publishStory, sql } from "./lotr7f2-setup";
+import { dropManyMentions, dropStory, publishStory, seedManyMentions, sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
 
 // Lot R7h (la story de l'organisateur « En cours »), côté appli (version compilée de recette) : Kenji identifie Roues Libres
@@ -75,6 +75,21 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
 }) => {
   const { kenji, structure, id } = await setup();
   try {
+    // Sarah, casquette de base (passionné) : la ligne d'Activité offre « Ajouter à ma story » pour SA structure ; elle bascule
+    // sur la casquette organisateur de cette structure et ouvre la mention avec cette cible. « Ignorer » revient à la liste.
+    const base = await open(browser, "sarah@orasso.local", "beton");
+    await base.page.goto("/activite");
+    await afterOpening(base.page);
+    const lineAdd = base.page.getByTestId("story-mention-add").first();
+    await expect(lineAdd).toBeVisible({ timeout: 40_000 });
+    await shot(base.page, "activite-mention-structure-beton", true);
+    await lineAdd.click();
+    await expect(base.page.getByTestId("mention-add")).toBeVisible({ timeout: 60_000 });
+    await shot(base.page, "mention-depuis-activite-beton");
+    await base.page.getByTestId("mention-ignore").click();
+    await expect(base.page.getByTestId("mentions-list")).toBeVisible({ timeout: 30_000 });
+    await base.ctx.close();
+
     // Sarah, casquette organisateur : le Direct annonce les mentions.
     const sarah = await open(browser, "sarah@orasso.local", "beton");
     await toDirect(sarah.page);
@@ -116,6 +131,9 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
         "Story de Kenji_66, ajoutée par Roues Libres 66",
         { timeout: 30_000 },
       );
+      // Le crédit est celui de l'originale (la personne, nom en gras) ; l'en-tête porte l'étiquette EN COURS.
+      await expect(damien.page.getByTestId("story-shared-by-author")).toContainText("Kenji_66");
+      await expect(damien.page.getByTestId("story-live-badge")).toBeVisible();
       await shot(damien.page, `visionneuse-credit-${theme}`);
       await damien.page.goto("/accueil");
       await afterOpening(damien.page);
@@ -166,6 +184,31 @@ test("Mentions → Ajouter à ma story → anneau EN COURS et crédit chez Damie
   } finally {
     await dropStory(kenji, id);
     await sql("delete from stories where shared_from_story_id is not null");
+  }
+});
+
+test("Pagination des mentions (22 de plus) : 20 par page, « Voir plus » ajoute la suite sans doublon", async ({
+  browser,
+}) => {
+  await sql("delete from stories where shared_from_story_id is not null");
+  const structure =
+    (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
+  await seedManyMentions(22, structure);
+  try {
+    const sarah = await open(browser, "sarah@orasso.local", "sable");
+    await toDirect(sarah.page);
+    await sarah.page.getByTestId("orga-direct-mentions").click();
+    await expect(sarah.page.getByTestId("mention-row")).toHaveCount(20, { timeout: 40_000 });
+    await shot(sarah.page, "mentions-page-1-sable");
+    await sarah.page.getByTestId("mentions-more").scrollIntoViewIfNeeded();
+    await sarah.page.getByTestId("mentions-more").click();
+    await expect
+      .poll(async () => sarah.page.getByTestId("mention-row").count(), { timeout: 30_000 })
+      .toBeGreaterThan(21);
+    await shot(sarah.page, "mentions-page-2-sable", true);
+    await sarah.ctx.close();
+  } finally {
+    await dropManyMentions();
   }
 });
 

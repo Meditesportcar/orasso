@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
-import { dropStory, publishStory, sql } from "./lotr7f2-setup";
+import { dropManyMentions, dropStory, publishStory, seedManyMentions, sql } from "./lotr7f2-setup";
 import { RELAIS } from "./relais";
 
 // Lot R7h, côté site : la page de l'événement de l'organisateur (Mentions, Ajouter à ma story, Ma story, Retirer), la
@@ -77,6 +77,9 @@ test("organisateur : Mentions, Ajouter à ma story, Ma story, Retirer ; Damien v
         },
       );
       await expect(damien.getByTestId("story-shared-by-author")).toHaveAttribute("href", "/u/Kenji_66");
+      // Le crédit est celui de l'originale (la personne), avec son avatar ; l'en-tête porte l'étiquette EN COURS.
+      await expect(damien.locator(".story-view__shared-av")).toBeVisible();
+      await expect(damien.getByTestId("story-live-badge")).toBeVisible();
       await shot(damien, `visionneuse-credit-${theme}-${width}`);
       await damien.goto("/app");
       await damien.waitForLoadState("networkidle");
@@ -154,5 +157,67 @@ test("Activité de Damien : « Repartager » (copie pour ses abonnés) ; vie pri
     const res = await apiCall(damienCookie, "POST", `/stories/${crewStory}/share-to-mine`, {});
     expect([403, 404]).toContain(res.status);
     await sql("delete from story_tags where story_id = $1 and target_id = $2", [crewStory, damien]);
+  }
+});
+
+test("Sarah (structure) : « Ajouter à ma story » depuis l'Activité, seulement pour sa structure ; pagination des mentions", async ({
+  browser,
+}) => {
+  await reset();
+  const kenji = await login("kenji@orasso.local");
+  const structure =
+    (await sql<{ id: string }>("select id from structures where slug = 'roues-libres-66'"))[0]?.id ?? "";
+  const event = (await sql<{ id: string }>("select id from events where slug = 'rassemblement-du-lydia'"))[0];
+  const id = await publishStory(kenji, {
+    audience: "public",
+    caption: "Recette activité structure",
+    tags: [{ kind: "structure", id: structure }],
+  });
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await loginInBrowser(page, "sarah@orasso.local", SEED_PASSWORD, "/app");
+    await page.goto("/app/activite");
+    await page.waitForLoadState("networkidle");
+    const add = page.getByTestId("story-mention-add").first();
+    await expect(add).toBeVisible({ timeout: 40_000 });
+    await shot(page, "activite-mention-structure-390", true);
+    await add.click();
+    await expect(page.getByTestId("story-mention-done").first()).toContainText("Ajoutée");
+    expect(
+      (await sql("select 1 from stories where shared_from_story_id = $1 and deleted_at is null", [id])).length,
+    ).toBe(1);
+    // Un compte qui ne gère pas la structure n'a pas le bouton (Damien : ses lignes d'identification personnelles seulement).
+    const dctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const damien = await dctx.newPage();
+    await loginInBrowser(damien, "damien@orasso.local", SEED_PASSWORD, "/app");
+    await damien.goto("/app/activite");
+    await damien.waitForLoadState("networkidle");
+    await expect(damien.getByTestId("story-mention-add")).toHaveCount(0);
+    await dctx.close();
+
+    // Pagination : 22 mentions de plus, 20 par page, « Voir plus » ajoute la suite sans doublon.
+    await reset();
+    await seedManyMentions(22, structure);
+    await page.goto(`/orga/roues-libres-66/e/${event?.id}`);
+    await page.waitForLoadState("networkidle");
+    const story = page.getByTestId("orga-story");
+    await expect(story.getByRole("heading").first()).toContainText(/Mentions · 2\d/);
+    await expect(story.getByTestId("orga-mention")).toHaveCount(20);
+    await shot(page, "orga-mentions-page-1-390", true);
+    await story.getByTestId("orga-mentions-more").click();
+    await expect.poll(async () => story.getByTestId("orga-mention").count(), { timeout: 20_000 }).toBeGreaterThan(21);
+    const captions = await story.getByTestId("orga-mention").allInnerTexts();
+    expect(new Set(captions).size).toBe(captions.length);
+    await shot(page, "orga-mentions-page-2-390", true);
+    // « Ignorer » laisse une mention de côté le temps de la page.
+    const before = await story.getByTestId("orga-mention").count();
+    await story.getByTestId("orga-mention-ignore").first().click();
+    await expect(story.getByTestId("orga-mention")).toHaveCount(before - 1);
+    await ctx.close();
+  } finally {
+    await dropManyMentions();
+    await dropStory(kenji, id);
+    await reset();
   }
 });

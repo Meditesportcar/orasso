@@ -1,9 +1,10 @@
-// Lot R7f1 : six stories de démonstration, publiées par le vrai service (composition 9:16, floutage, notifications) à
+// Lot R7f1 : sept stories de démonstration (six, plus celle du Lydia de R7h), publiées par le vrai service (composition 9:16, floutage, notifications) à
 // partir des photos du seed relues « aucune plaque lisible » (`NO_PLATE_REVIEWED`) : jamais une plaque lisible.
 // Quatre auteurs : Kenji_66 (une « Mon abonnés » qui identifie Damien_66, une « Mon crew » de Roussillon Drift), Léa_11
 // (publique), Marc_66 (compte privé), Théo_66, et Roues Libres 66 (casquette organisateur de Sarah_66, avec
 // l'autocollant du Rassemblement du Lydia) ; lot R7h : une story publique de Kenji_66 avec ce même autocollant, qui
-// identifie Roues Libres 66. Elles finissent dans 20 h. Idempotent : rien si des stories existent déjà.
+// identifie Roues Libres 66 et date d'il y a 3 h (les six autres : il y a 4 h, donc la sienne se lit en dernier). Les six autres
+// finissent dans 20 h, celle-ci dans 21 h. Idempotent : rien si des stories existent déjà.
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -108,6 +109,12 @@ export async function seedStories() {
   // « Dans 20 h » : créées il y a 4 h.
   await db.execute(
     sql`update stories set created_at = now() - interval '4 hours', expires_at = now() + interval '20 hours', updated_at = now()`,
+  );
+  // Lot R7h, tour 2 : la story de Kenji_66 ajoutée par R7h a sa propre date (il y a 3 h), distincte des autres : l'ordre de
+  // lecture des trois stories de Kenji_66 est écrit (abonnés et crew à égalité, puis le Lydia).
+  await db.execute(
+    sql`update stories set created_at = now() - interval '3 hours', expires_at = now() + interval '21 hours', updated_at = now()
+      where author_id = ${kenji.user.id} and caption = ${"Le Lydia, c'est parti !"}`,
   );
   await notificationsService.flush();
   console.log(`Stories : ${i} stories de démonstration (finissent dans 20 h).`);

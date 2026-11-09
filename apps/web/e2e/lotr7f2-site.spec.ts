@@ -162,7 +162,8 @@ test("la barre du Fil, la visionneuse, l'anneau du profil : un parcours complet 
   await expect(page.getByTestId("stories-mine")).toContainText("Ta story");
   await expect(page.locator(".o-avring--crew")).toHaveCount(1);
   expect(await page.locator(".o-avring--followers").count()).toBeGreaterThanOrEqual(3);
-  await expect(page.getByTestId("stories-live-label")).toHaveCount(0);
+  // Lot R7h : le Lydia est en cours et sa structure a une story vivante : son entrée (et elle seule) porte « EN COURS ».
+  await expect(page.getByTestId("stories-live-label")).toHaveCount(1);
   await shot(page, "barre-1280");
 
   // Ouvrir Léa : la superposition 9:16 centrée à 1 280 px, la barre de progression, la vue enregistrée.
@@ -194,7 +195,8 @@ test("la barre du Fil, la visionneuse, l'anneau du profil : un parcours complet 
   // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
   await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   await playing(page);
-  // Les deux stories de Kenji ont la même date dans le seed : l'ordre n'est pas écrit, l'une des deux porte le bandeau.
+  // Les deux premières stories de Kenji (abonnés, crew) ont la même date dans le seed : leur ordre n'est pas écrit, l'une des
+  // deux porte le bandeau ; la troisième (le Lydia, il y a 3 h) vient toujours après.
   const badge = page.getByTestId("story-crew-badge");
   const crewFirst = (await badge.count()) > 0;
   await page.keyboard.press("ArrowRight");

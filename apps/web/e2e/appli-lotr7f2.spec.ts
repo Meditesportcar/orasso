@@ -97,7 +97,8 @@ test("la barre : Ta story, anneaux clair et brique, anneau fin une fois vue ; la
   expect(await page.getByTestId("stories-ring-crew").count()).toBe(1);
   expect(await page.getByTestId("stories-ring-followers").count()).toBeGreaterThanOrEqual(3);
   // Un seul néon moutarde : aucun direct dans le seed (R7h), donc aucune étiquette « EN COURS » ici.
-  await expect(page.getByTestId("stories-live-label")).toHaveCount(0);
+  // Lot R7h : le Lydia est en cours et sa structure a une story vivante : son entrée (et elle seule) porte « EN COURS ».
+  await expect(page.getByTestId("stories-live-label")).toHaveCount(1);
   await shot(page, "barre-fil");
 
   // Ouvrir la story de Léa : en-tête, une barre, légende ; la vue est enregistrée quand l'image est lue.
@@ -146,7 +147,8 @@ test("visionneuse : toucher à droite et à gauche, bandeau « Mon crew », paus
   await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   await playing(page);
   const badge = page.getByTestId("story-crew-badge");
-  // Les deux stories de Kenji ont la même date dans le seed : l'ordre n'est pas écrit. L'une des deux porte le bandeau.
+  // Les deux premières stories de Kenji (abonnés, crew) ont la même date dans le seed : leur ordre n'est pas écrit, l'une des
+  // deux porte le bandeau ; la troisième (le Lydia, il y a 3 h) vient toujours après.
   const first = (await badge.count()) > 0;
   await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
   await expect(page.getByTestId("story-bar-done")).toHaveCount(1);

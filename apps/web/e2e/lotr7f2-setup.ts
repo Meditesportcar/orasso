@@ -60,3 +60,36 @@ export async function dropMyStories(cookie: Cookie): Promise<void> {
   const mine = await apiCall<{ stories: { id: string }[] }>(cookie, "GET", "/me/stories");
   for (const s of mine.data?.stories ?? []) await dropStory(cookie, s.id);
 }
+
+/**
+ * Lot R7h, tour 2 : `n` stories publiques de Kenji_66 qui identifient la structure (clones d'une story existante, même
+ * fichier du seed), datées d'une minute d'écart, pour exercer la pagination des mentions (20 par page). Légendes
+ * « Recette pagination N » ; retirées par `dropManyMentions`.
+ */
+export async function seedManyMentions(n: number, structureId: string): Promise<void> {
+  const [src] = await sql<{ storage_key: string }>(
+    "select storage_key from stories where deleted_at is null and media_kind = 'photo' order by created_at limit 1",
+  );
+  if (!src) throw new Error("Aucune story de départ pour cloner");
+  const kenji = await userIdOf("Kenji_66");
+  const rows = await sql<{ id: string }>(
+    `insert into stories (author_id, persona, audience, storage_key, status, plate_state, caption, expires_at, created_at, updated_at)
+     select $1, 'fan', 'public', $2, 'ready', 'none_confirmed', 'Recette pagination ' || g,
+       now() + interval '20 hours', now() - g * interval '1 minute', now()
+     from generate_series(1, $3::int) g returning id`,
+    [kenji, src.storage_key, n],
+  );
+  for (const r of rows) {
+    await sql("insert into story_tags (story_id, target_kind, target_id) values ($1, 'structure', $2)", [
+      r.id,
+      structureId,
+    ]);
+  }
+}
+
+export async function dropManyMentions(): Promise<void> {
+  await sql(
+    "delete from story_tags where story_id in (select id from stories where caption like 'Recette pagination %')",
+  );
+  await sql("delete from stories where caption like 'Recette pagination %'");
+}
