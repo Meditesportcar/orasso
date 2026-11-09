@@ -23,7 +23,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, checkins, events, passportStamps, seasons, tickets } from "../../db/schema";
+import { applications, checkins, eventPresences, events, passportStamps, seasons, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -264,6 +264,12 @@ export const passportService = {
       .from(tickets)
       .where(and(eq(tickets.eventId, event.id), isNotNull(tickets.usedAt)));
     for (const t of visitors) await stamp(ex, t.userId, event, "visit", { ticketId: t.id, at: t.at ?? undefined });
+    // Présences validées par GPS (lot R7d1) : le tampon de visite, s'il n'a pas pu être posé à la validation.
+    const present = await ex
+      .select({ userId: eventPresences.userId, ticketId: eventPresences.ticketId, at: eventPresences.validatedAt })
+      .from(eventPresences)
+      .where(eq(eventPresences.eventId, event.id));
+    for (const g of present) await stamp(ex, g.userId, event, "visit", { ticketId: g.ticketId, at: g.at });
     const staff = await verifiedStaffIds(ex, event.id);
     await ex
       .delete(passportStamps)
@@ -274,7 +280,8 @@ export const passportService = {
           staff.size ? notInArray(passportStamps.userId, [...staff]) : undefined,
         ),
       );
-    for (const userId of staff) await stamp(ex, userId, event, "staff");
+    // Rattrapage : la présence n'a pas d'heure connue, le tampon prend le début de l'événement (pas l'heure du règlement).
+    for (const userId of staff) await stamp(ex, userId, event, "staff", { at: event.startsAt });
 
     // Rares : toutes les personnes qui ont un tampon ordinaire de cet événement.
     const holders = await ex

@@ -209,7 +209,7 @@ export function upcomingDetail(app: ProviderApplicationView): string | null {
 }
 
 /** « J-6 » devant la date de l'événement (retenue à venir). */
-export const countdown = (app: ProviderApplicationView, now: Date) => dayCountdown(app.event.startsAt, now);
+export const countdown = (app: ProviderApplicationView, now: Date) => dayCountdown(app.event, now);
 
 /** Avis d'une candidature passée : « Avis · 5/5 » et son commentaire. */
 export function reviewTag(app: ProviderApplicationView): string | null {

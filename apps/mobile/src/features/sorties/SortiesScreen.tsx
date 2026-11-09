@@ -510,7 +510,7 @@ function ApplicationTicket({
   const lead = offered
     ? sortiesLabels.offerLead(formatDuration(remaining))
     : app.status === "accepted"
-      ? dayCountdown(app.event.startsAt, now)
+      ? dayCountdown(app.event, now)
       : undefined;
   return (
     <Ticket
@@ -603,7 +603,7 @@ function TicketOfPublic({
         </SkewTag>
       }
       highlight={primary}
-      lead={dayCountdown(ticket.event.startsAt, now)}
+      lead={dayCountdown(ticket.event, now)}
       title={ticket.event.title}
       detail={upperFirst(detail)}
       onPressTitle={onOpen}

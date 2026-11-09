@@ -45,6 +45,12 @@ const SIZE: Record<UploadPurpose, number> = {
   event_poster_photo: 2000,
   // Lot R5c1 (D36) : côté le plus long, format d'origine gardé (jamais de carré).
   crew_post: 2048,
+  // Lot R7e1 : photo du Fil, 1080 × 1350 en 4:5 (côté le plus long 1350 ; le 1:1 et le paysage tiennent dans la boîte).
+  feed_post: 1350,
+
+  // Lot R7f1 : photo de story, côté le plus long 2048, aucun recadrage (la composition 9:16 se fait dans `stories/compose.ts`).
+  story: 2048,
+  story_video: 0,
 };
 const FOLDER: Record<UploadPurpose, string> = {
   message: "messages",
@@ -57,6 +63,10 @@ const FOLDER: Record<UploadPurpose, string> = {
   media_content: "media-contents",
   event_poster_photo: "event-poster-photos",
   crew_post: "crew-posts",
+  feed_post: "feed-posts",
+
+  story: "story-uploads",
+  story_video: "story-videos",
 };
 
 export const isPrivatePurpose = (purpose: UploadPurpose) => privateUploadPurposes.includes(purpose);
@@ -101,9 +111,17 @@ export const uploadsService = {
       throw forbidden("Ton compte est suspendu : lecture seule.");
     }
     rateLimit(
-      purpose === "media_content" ? "mediaFileUpload" : purpose === "crew_post" ? "crewPhotoUpload" : "fileUpload",
+      purpose === "media_content"
+        ? "mediaFileUpload"
+        : purpose === "crew_post"
+          ? "crewPhotoUpload"
+          : purpose === "feed_post"
+            ? "feedPhotoUpload"
+            : "fileUpload",
       v.user.id,
     );
+    // Lot R7f1 : la vidéo vient avec le lot R7g1.
+    if (purpose === "story_video") throw new AppError(501, "not_implemented", "Vidéo bientôt");
     // Photo d'annonce (lot 20) : seulement un organisateur qui peut publier.
     if (purpose === "announcement") await requireAnnouncementUploader(v);
     if (file.size === 0) throw validation("Fichier vide");

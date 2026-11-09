@@ -2,7 +2,7 @@
 // prestataire, entrée et billet, accès presse et badge), le QR, l'anneau qui se vide en 20 s, « Nouveau code dans N s ·
 // n° 4 821 », « Orasso » signé en bas comme les affiches. Sans `rotating`, le QR est statique (billet du public).
 // Lot M4 (maquette 5.1) : un seul texte sous le QR (`say`, « Présente le QR code ») et le O au centre (`logo`).
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Text, ThemeScope, tokens, useTheme } from "@orasso/design-system/native";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming } from "react-native-reanimated";
@@ -79,7 +79,19 @@ function Ring({ box, secondsLeft }: { box: number; secondsLeft: number }) {
   );
 }
 
-export function QrPoster({ holder, value, rotating, size, label, say, logo = false }: QrPosterProps) {
+/**
+ * Lot R7-0 (B1 de Damien) : l'écran « Mon accès » suit le thème choisi ; la carte du QR, elle, reste crème dans les deux
+ * (le QR se scanne noir sur crème, au soleil comme de nuit) : on la rend toujours avec les jetons de Béton.
+ */
+export function QrPoster(props: QrPosterProps) {
+  return (
+    <ThemeScope theme="beton">
+      <QrPosterCard {...props} />
+    </ThemeScope>
+  );
+}
+
+function QrPosterCard({ holder, value, rotating, size, label, say, logo = false }: QrPosterProps) {
   const { t } = useTheme();
   const c = t.color;
   const box = size + 2 * space3;

@@ -68,6 +68,7 @@ import { ApiRequestError, errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
+import { openStandalone } from "@/lib/standalone";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
@@ -98,7 +99,7 @@ function Countdown({ event }: { event: Pick<EventCard, "startsAt" | "endsAt"> })
     <View style={[styles.cd, { backgroundColor: t.color.accent }]} testID="event-countdown">
       <View style={styles.cdIn}>
         <Text variant="numberNarrow" color={t.color.accentInk} style={styles.cdBig}>
-          {live ? L.live : nearCountdown(event.startsAt, now)}
+          {live ? L.live : nearCountdown(event, now)}
         </Text>
         <Text variant="label" color={t.color.accentInk} style={styles.cdSmall}>
           {live ? `Jusqu'à ${formatHour(event.endsAt)}` : `${day} · ${formatHour(event.startsAt)}`}
@@ -336,7 +337,7 @@ export default function EventPage() {
   // Tour 2 (relecture Codex) : l'accès qui sert maintenant d'abord (jour en cours, pas encore pointé), les autres au choix.
   const multiDay = (e.days?.length ?? 0) > 1;
   const placeNow = new Date(nowMs());
-  const places = orderPlaces(applications.upcoming ?? [], e.id, placeNow, multiDay);
+  const places = orderPlaces(applications.upcoming ?? [], e.id, placeNow);
   const place = places.find((a) => a.id === placeId) ?? places[0] ?? null;
   const placeLabel = (a: MyApplication) =>
     multiDay ? (a.day ? formatDayDate(a.day.date) : eventDaysLabels.wholeEvent) : (a.vehicle?.label ?? L.myPlace);
@@ -395,9 +396,9 @@ export default function EventPage() {
         : action === "applyGuest"
           ? { label: L.apply, icon: "send" as const, onPress: apply }
           : action === "myApplication"
-            ? place?.status === "accepted" && !usedNow(place, placeNow, multiDay)
+            ? place?.status === "accepted" && !usedNow(place, placeNow)
               ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
-              : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.navigate("/sorties") }
+              : { label: L.myApplication, icon: "ticket" as const, onPress: () => openStandalone(router, "/sorties") }
             : action === "myProviderApplication"
               ? {
                   label: L.myApplication,

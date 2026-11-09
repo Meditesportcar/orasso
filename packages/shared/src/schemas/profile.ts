@@ -165,7 +165,15 @@ export type Me = {
   twoFactorRequired: boolean;
   /** Lot 15 : que faire quand la 2FA est exigée — l'activer, ou se reconnecter avec sa clé d'accès (la session doit la prouver). */
   twoFactorHint: "setup" | "passkey_sign_in" | "totp_sign_in" | null;
-  counts: { vehicles: number; upcomingApplications: number; unreadNotifications: number };
+  counts: {
+    vehicles: number;
+    upcomingApplications: number;
+    unreadNotifications: number;
+    /** Lot R7c1 : les trois pastilles (bulle, cloche, Demandes) ; les anciens champs restent pour l'APK en ligne. */
+    unreadMessages: number;
+    unseenActivity: number;
+    pendingRequests: number;
+  };
   /** Lot 16 : les casquettes du compte, le passionné en premier. */
   personas: PersonaEntry[];
   /** Lot 16 : messages non lus de la Boîte (0 jusqu'au lot 18). */

@@ -16,11 +16,11 @@ import {
 } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, withYear } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
-import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { mediaSource } from "@/lib/media";
-import { fitWordSize, NARROW_EM, WIDE_EM } from "./fit";
+import { fitTitle, fitWordSize, NARROW_EM } from "./fit";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -30,8 +30,10 @@ export type Outing = {
   key: string;
   title: string;
   startsAt: string;
-  /** « J-6 », « Demain », « Aujourd'hui ». */
+  /** « J-6 », « Demain », « Aujourd'hui », « En cours » (lot R7-0 : jamais « J+1 » pour un événement en cours). */
   countdown: string;
+  /** « Jour 2 sur 4 » sous « En cours » ; sans lui, le petit libellé est la date de début. */
+  countdownDetail?: string | null;
   posterUrl: string | null;
   /** Étiquettes de statut (Retenue, Zone JDM, Billet…). */
   tags: ReactNode;
@@ -98,10 +100,25 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
   const c = t.color;
   const [infoW, setInfoW] = useState(0);
   const onInfo = (e: LayoutChangeEvent) => setInfoW(e.nativeEvent.layout.width);
-  const titleSize = fitWordSize(outing.title, infoW, 19, 12, WIDE_EM);
+  const { fontScale } = useWindowDimensions();
+  // Le titre ne se coupe qu'entre deux mots : son mot le plus large tient dans la colonne, police du système comprise.
+  // Lot R7-0, tour 3 : jamais sous 11 ; si le mot le plus long ne tient pas à 11 dans la colonne, le titre passe sur toute
+  // la largeur de la carte, sous l'affiche.
+  const { size: titleSize, full: titleFull } = fitTitle(outing.title, infoW, width - 2 * space3, fontScale, 19);
   const cdSize = fitWordSize(outing.countdown, infoW * 0.62, 48, 24, NARROW_EM);
   const source = mediaSource(outing.posterUrl);
   const a = outing.action;
+  const titleText = (
+    <Text
+      variant="posterM"
+      color={c.posterInk}
+      accessibilityRole="header"
+      style={{ fontSize: titleSize, lineHeight: Math.round(titleSize * 1.02) }}
+      testID="home-outing-title"
+    >
+      {outing.title}
+    </Text>
+  );
   return (
     <View
       style={[styles.nx, { width, backgroundColor: c.poster, boxShadow: t.shadow.shadowPoster }]}
@@ -110,7 +127,7 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
       <Pressable
         onPress={outing.onOpen}
         accessibilityRole="link"
-        accessibilityLabel={`${outing.title}, ${outing.countdown}. Voir la fiche`}
+        accessibilityLabel={`${outing.title}, ${outing.countdown}${outing.countdownDetail ? ` · ${outing.countdownDetail}` : ""}. Voir la fiche`}
         style={({ pressed }) => [styles.top, pressed && styles.pressed]}
         testID="home-outing-open"
       >
@@ -133,18 +150,10 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
               {outing.countdown}
             </Text>
             <Text variant="label" color={c.posterMuted} style={styles.cdSmall}>
-              {dayLabel(outing.startsAt)}
+              {outing.countdownDetail ?? dayLabel(outing.startsAt)}
             </Text>
           </View>
-          <Text
-            variant="posterM"
-            color={c.posterInk}
-            accessibilityRole="header"
-            style={{ fontSize: titleSize, lineHeight: Math.round(titleSize * 1.02) }}
-            testID="home-outing-title"
-          >
-            {outing.title}
-          </Text>
+          {titleFull ? null : titleText}
           {outing.lines.map((l) => (
             <View key={`${l.icon}-${l.text}`} style={styles.line}>
               <Icon name={l.icon} size={14} color={c.posterMuted} />
@@ -161,6 +170,16 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
           </View>
         </View>
       </Pressable>
+      {titleFull ? (
+        <Pressable
+          onPress={outing.onOpen}
+          accessibilityRole="link"
+          accessibilityLabel={`${outing.title} : voir la fiche`}
+          testID="home-outing-title-wide"
+        >
+          {titleText}
+        </Pressable>
+      ) : null}
       {a || outing.onMap ? (
         <View style={styles.actions}>
           {a && a.kind === "access" && primary ? (

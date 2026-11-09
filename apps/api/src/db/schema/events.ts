@@ -67,6 +67,8 @@ export const events = pgTable(
     department: text("department"),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
+    /** Lot R7d1 : zone de présence par GPS, en mètres autour du lieu ; `null` = 300 m (`rules/presence.ts`). */
+    presenceRadiusM: integer("presence_radius_m"),
     admittedVehicleTypes: text("admitted_vehicle_types").array().notNull(),
     /** `null` = sans limite. */
     capacity: integer("capacity"),
@@ -144,6 +146,10 @@ export const events = pgTable(
     index("events_city_fold_trgm_idx").using("gin", sql`orasso_fold(${t.city}) gin_trgm_ops`),
     index("events_address_fold_trgm_idx").using("gin", sql`orasso_fold(${t.addressLine}) gin_trgm_ops`),
     check("events_dates_check", sql`${t.endsAt} > ${t.startsAt}`),
+    check(
+      "events_presence_radius_check",
+      sql`${t.presenceRadiusM} is null or ${t.presenceRadiusM} between 50 and 2000`,
+    ),
     check("events_capacity_check", sql`${t.capacity} is null or ${t.capacity} > 0`),
     check("events_lock_offset_check", sql`${t.lockOffsetMinutes} between 0 and 1440`),
     check("events_max_vehicles_check", sql`${t.maxVehiclesPerUser} >= 1`),

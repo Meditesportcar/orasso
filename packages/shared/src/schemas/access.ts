@@ -283,6 +283,8 @@ export type CheckinListItem = {
    * entré ou lu ce jour-là). Même règle que le direct.
    */
   arrivedOnDay?: boolean;
+  /** Lot R7-0 (tour 2) : liste d'un jour : sur place ce jour-là (tout l'événement entré ce jour-là ou avant). */
+  presentOnDay?: boolean;
 };
 
 export type CheckinResult = CheckinListItem & { created: boolean };
@@ -342,6 +344,11 @@ export type LiveCounters = {
    */
   dayId?: string | null;
   arrived: number;
+  /**
+   * Lot R7-0 (tour 2) : avec `dayId`, les arrivées de ce jour-là seulement (entrées du jour ; `arrived` est alors « sur
+   * place » : une entrée « tout l'événement » vaut les jours suivants). Absent sans jour.
+   */
+  arrivedToday?: number;
   expected: number;
   byCategory: { categoryId: string; slug: string; label: string; arrived: number; expected: number }[];
   byZone: { zoneId: string | null; code: string | null; name: string | null; arrived: number; expected: number }[];

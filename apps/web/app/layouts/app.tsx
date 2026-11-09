@@ -1,10 +1,12 @@
 import { AppBar, Ground, Icon, TabBar, type TabItem, tabSets, useTheme } from "@orasso/design-system/web";
 import {
+  type InboxSummary,
   type MyApplication,
   type MyStaffEvent,
   type MyTicket,
   moderationLabels,
   reportReasonLabels,
+  topBarCounts,
 } from "@orasso/shared";
 import { useEffect } from "react";
 import { Form, Outlet, useLocation, useMatches, useRevalidator } from "react-router";
@@ -16,10 +18,8 @@ import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
 import { useChannel } from "../lib/useChannel";
-import { whatsNewSeen } from "../lib/whatsnew.server";
 import "../styles/moderation.css";
 import { AnnounceBanner, announcementOf, useAnnouncements } from "../components/AnnounceBanner";
-import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import type { Route } from "./+types/app";
 
 // Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base, la recherche et
@@ -36,22 +36,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   // Accès flottant : l'accès le plus proche (J-7 à J+1) parmi mes places retenues (à venir et finies depuis moins d'un
   // jour), mes billets et mes missions staff, comme l'appli. Une lecture qui échoue ne bloque pas l'espace.
-  const [upcoming, past, tickets, staff] = await Promise.all([
+  const [upcoming, past, tickets, staff, summary] = await Promise.all([
     api<MyApplication[]>(request, "/me/applications?scope=upcoming"),
     api<MyApplication[]>(request, "/me/applications?scope=past"),
     api<MyTicket[]>(request, "/me/tickets"),
     api<MyStaffEvent[]>(request, "/me/staff-events"),
+    api<InboxSummary>(request, "/me/inbox/summary"),
   ]);
+  const counts = topBarCounts(me.counts.unreadNotifications, summary.ok ? summary.data : null);
   return {
     userId: me.user.id,
     // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
     base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
-    // Pastilles (lots 18, C5 et R7a1) : la cloche « Activité » compte les notifications non lues, la bulle « Messages »
-    // les conversations avec du non lu et les demandes en attente (la Boîte, jusqu'au lot R7c2).
-    unreadNotifications: me.counts.unreadNotifications,
-    unreadMessages: me.unreadInbox,
-    // Bandeau « où sont passées les choses » : une seule fois par compte (cookie haché `whatsnew_r7`).
-    whatsNew: !whatsNewSeen(request, me.user.id),
+    // Pastilles (lots 18, C5 et R7a1) : la cloche « Activité » compte les notifications non lues et les demandes en
+    // attente (le lot R7c2 les y affichera), la bulle « Messages » les conversations avec du non lu seulement (tour 2 :
+    // `unreadMessages` du résumé de la Boîte, `GET /me` n'en porte que le total avec les demandes).
+    unreadNotifications: counts.activity,
+    unreadMessages: counts.messages,
     near: nearAccessOf(
       {
         applications: [...(upcoming.ok ? upcoming.data : []), ...(past.ok ? past.data : [])],
@@ -140,8 +141,6 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         )}
         <AnnounceBanner item={announcements.current} onDone={announcements.drop} />
         <div className={fiche ? "app__body app__body--fiche" : near ? "app__body app__body--near" : "app__body"}>
-          {" "}
-          {loaderData.whatsNew && pathname === "/app" && !fiche ? <WhatsNewBanner /> : null}
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
               <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>

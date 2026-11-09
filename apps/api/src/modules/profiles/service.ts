@@ -3,6 +3,8 @@ import {
   type DeviceRegister,
   type DeviceUnregister,
   defaultNotificationPrefs,
+  feedLabels,
+  isReservedPseudo,
   type Me,
   type ProfileUpdate,
 } from "@orasso/shared";
@@ -21,7 +23,7 @@ import {
 } from "../../db/schema";
 import { hasPasskey, twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
-import { conflict, notFound } from "../../lib/errors";
+import { AppError, conflict, notFound } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
@@ -35,16 +37,19 @@ import { mainVehicleIdOf } from "../vehicles/main";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
 
-/** Pseudo proposé à partir du nom saisi à l'inscription ; complété de chiffres s'il est pris ou trop court. */
-async function derivePseudo(name: string): Promise<string> {
+/**
+ * Pseudo proposé à partir du nom saisi à l'inscription ; complété de chiffres s'il est pris, trop court ou réservé
+ * (« orasso » : seul le compte officiel le porte, `official`).
+ */
+async function derivePseudo(name: string, official = false): Promise<string> {
   const base = name
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/\s+/g, "_")
     .replace(/[^A-Za-z0-9_.]/g, "")
     .slice(0, 24);
-  if (base.length >= 3 && !(await profilesRepo.pseudoTaken(base))) return base;
-  const stem = (base.length >= 3 ? base : "pilote").slice(0, 19);
+  if (base.length >= 3 && (official || !isReservedPseudo(base)) && !(await profilesRepo.pseudoTaken(base))) return base;
+  const stem = (base.length >= 3 && !isReservedPseudo(base) ? base : "pilote").slice(0, 19);
   for (;;) {
     const candidate = `${stem}_${randomInt(1000, 10000)}`;
     if (!(await profilesRepo.pseudoTaken(candidate))) return candidate;
@@ -60,13 +65,18 @@ export function accountQrShortId(userId: string): Buffer {
  * Crée le profil d'un compte (appelé par Better Auth à l'inscription). Le pseudo vient du champ `name`
  * de l'inscription s'il est valide et libre ; il se change ensuite dans le profil.
  */
-export async function ensureProfile(user: Pick<AuthUser, "id" | "name">): Promise<Profile> {
+export async function ensureProfile(
+  user: Pick<AuthUser, "id" | "name">,
+  /** Compte officiel d'Orasso : posé par le seed seulement (jamais par une route), il garde le pseudo réservé. */
+  opts: { official?: boolean } = {},
+): Promise<Profile> {
   const existing = await profilesRepo.byUserId(user.id);
   if (existing) return existing;
   for (let attempt = 0; attempt < 5; attempt++) {
     const created = await profilesRepo.insert({
       userId: user.id,
-      pseudo: await derivePseudo(user.name),
+      pseudo: await derivePseudo(user.name, opts.official === true),
+      ...(opts.official === true ? { official: true } : {}),
       accountQrSecret: randomBytes(32),
       accountQrShortId: accountQrShortId(user.id),
       inviteToken: randomBytes(12).toString("base64url"),
@@ -121,6 +131,7 @@ export const profilesService = {
       );
     // Pastille de la cloche (lot 17) : éléments du Journal non lus, un push seul (message reçu) n'en fait pas partie.
     const unread = await notificationsService.unreadCount(v.user.id);
+    const inbox = await inboxService.summary(v.user.id, { includeStructure: twoFactorOk(v.session?.secondFactor) });
     const required = await twoFactorRequired(v);
     return {
       user: {
@@ -177,14 +188,22 @@ export const profilesService = {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,
         unreadNotifications: unread,
+        // Lot R7c1 : les trois pastilles (bulle, cloche, Demandes), en plus des anciens champs.
+        unreadMessages: inbox.unreadMessages,
+        unseenActivity: inbox.unseenActivity,
+        pendingRequests: inbox.pendingRequests,
       },
       personas: await personasOf(v),
       // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente.
-      unreadInbox: await inboxService.total(v.user.id, { includeStructure: twoFactorOk(v.session?.secondFactor) }),
+      unreadInbox: inbox.unreadMessages + Object.values(inbox.requests).reduce((a, b) => a + b, 0),
     };
   },
 
   async update(v: Viewer, input: ProfileUpdate): Promise<Profile> {
+    // Pseudos réservés : refusés au changement (un pseudo déjà porté reste, il n'est pas touché), sauf au compte officiel.
+    if (input.pseudo && input.pseudo !== v.profile.pseudo && !v.profile.official && isReservedPseudo(input.pseudo)) {
+      throw new AppError(400, "pseudo_reserved", feedLabels.pseudoReserved, { field: "pseudo" });
+    }
     if (input.pseudo && (await profilesRepo.pseudoTaken(input.pseudo, v.user.id))) {
       throw conflict("conflict", "Ce pseudo est déjà pris", { field: "pseudo" });
     }

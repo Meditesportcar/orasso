@@ -27,6 +27,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  adminAuditLog,
   applications,
   audiencePrizeResults,
   audienceVotes,
@@ -40,10 +41,13 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
+import { env } from "../../env";
+import { activeMembership, hasSecondFactor, isSuperAdmin, openAssistanceRequest } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
+import { requestContext } from "../../lib/request-context";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
@@ -52,6 +56,7 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { isVerifiedStaff } from "../passport/presence";
+import { gpsPresentAt } from "../presence/repo";
 
 type Award = (entry: {
   userId: string;
@@ -94,7 +99,7 @@ function windowOf(event: EventRow, entered: { checkedInAt: Date }[]): AudienceVo
   };
 }
 
-/** Ce qui fait de la personne un votant : un véhicule pointé, un billet scanné, une présence au staff. */
+/** Ce qui fait de la personne un votant : un véhicule pointé, un billet scanné, une présence au staff ou par GPS. */
 async function voterOf(
   ex: Executor,
   eventId: string,
@@ -112,7 +117,19 @@ async function voterOf(
     ticketScannedAt,
     // Staff présent vérifiable : une trace du jour J (relecture du lot 49).
     staffPresent: await isVerifiedStaff(ex, eventId, userId),
+    // Lot R7d1 : la présence validée par GPS (visiteur sans voiture) donne aussi le droit de vote.
+    gpsPresentAt: await gpsPresentAt(ex, eventId, userId),
   } satisfies AudienceVoter;
+}
+
+/**
+ * La personne peut-elle voter maintenant ? La règle effective du vote (preuve de présence, fenêtre, deux véhicules
+ * pointés au moins), pour que d'autres modules (présence par GPS) n'annoncent pas un droit que le vote refuserait.
+ */
+export async function canVoteNow(ex: Executor, event: EventRow, userId: string): Promise<boolean> {
+  const entered = await enteredVehicles(ex, event.id);
+  const voter = await voterOf(ex, event.id, userId, entered);
+  return canVote(voter, windowOf(event, entered), now()) === null;
 }
 
 async function ranking(ex: Executor, eventId: string) {
@@ -205,14 +222,69 @@ const refusal = {
   not_checked_in: () => new AppError(403, "not_checked_in", audiencePrizeTexts.errors.not_checked_in),
 };
 
-/** Classement réduit diffusé (`votes.changed`). */
+/**
+ * Voix comptées au classement : celles données à un véhicule pointé (même périmètre que `ranking`, sans calculer ni
+ * classer quoi que ce soit).
+ */
+async function countVotes(ex: Executor, eventId: string): Promise<number> {
+  const enteredIds = ex
+    .select({ id: checkins.applicationId })
+    .from(checkins)
+    .innerJoin(applications, eq(applications.id, checkins.applicationId))
+    .innerJoin(profiles, eq(profiles.userId, applications.userId))
+    .where(and(eq(checkins.eventId, eventId), eq(applications.kind, "vehicle"), isNull(profiles.deletedAt)));
+  const [row] = await ex
+    .select({ n: sql<number>`count(*)::int` })
+    .from(audienceVotes)
+    .where(and(eq(audienceVotes.eventId, eventId), inArray(audienceVotes.applicationId, enteredIds)));
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Message diffusé (`votes.changed`) : le total de voix, et `top3` **toujours vide** (aucun classement sur le canal ;
+ * lot R7-0). Le tableau n'est gardé que pour l'APK R6-police, dont l'écran du vote applique `top3` sans le tester :
+ * à retirer en R8, quand l'ancien APK ne tourne plus. Les clients relisent la route du classement.
+ */
 async function publishNow(eventId: string) {
-  const { ranked, total } = await ranking(db, eventId);
-  const payload: AudienceVotesChanged = {
-    total,
-    top3: ranked.slice(0, 3).map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
-  };
+  const payload: AudienceVotesChanged = { total: await countVotes(db, eventId), top3: [] };
   realtime.publish(`event:${eventId}:votes`, "votes.changed", payload);
+}
+
+/**
+ * Qui voit le classement (lot R7-0, D38 de Damien) : pendant le vote, l'équipe de l'événement (propriétaire et
+ * co-organisateurs de la structure, staff affecté à cet événement, super admin en assistance), puis qui a voté ; à la
+ * clôture (fin de l'événement) ou au règlement, tout le monde, y compris qui n'a pas pu voter (pas entré).
+ */
+async function canSeeRanking(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
+  if (event.settledAt || now() >= event.endsAt) return true;
+  if (await isEventTeam(ex, event, v)) return true;
+  const vote = await ex.query.audienceVotes.findFirst({
+    where: and(eq(audienceVotes.eventId, event.id), eq(audienceVotes.voterUserId, v.user.id)),
+    columns: { applicationId: true },
+  });
+  return Boolean(vote);
+}
+
+async function isEventTeam(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
+  const member = await activeMembership(v.user.id, event.structureId);
+  // Règle C25 : le staff actif de la structure est le staff de ses événements (`event_staff` en reprend une ligne par
+  // événement publié) ; il suit le classement en direct comme les organisateurs. Personne hors structure n'en fait partie.
+  if (member && (member.role === "owner" || member.role === "co_organizer" || member.role === "staff")) return true;
+  if (!isSuperAdmin(v)) return false;
+  // Super admin : seulement en assistance, avec le même contrôle que l'espace organisateur (`requireOrganizer`) :
+  // second facteur prouvé par la session, puis consultation tracée.
+  if (!(env.DEV_SKIP_2FA || hasSecondFactor(v))) return false;
+  if (!(await openAssistanceRequest(event.structureId))) return false;
+  await ex.insert(adminAuditLog).values({
+    actorUserId: v.user.id,
+    action: "structure.view_as",
+    targetType: "structure",
+    targetId: event.structureId,
+    structureId: event.structureId,
+    reason: "audience_prize.ranking",
+    ip: requestContext.get()?.ip ?? null,
+  });
+  return true;
 }
 
 /** Diffusions regroupées : au plus une par seconde et par événement (la dernière part en fin de seconde). */
@@ -333,18 +405,21 @@ export const audiencePrizeService = {
   async board(v: Viewer, eventId: string): Promise<AudiencePrizeBoard> {
     const event = await visibleEvent(eventId, v);
     const { entered, ranked, total } = await ranking(db, eventId);
+    const visible = await canSeeRanking(db, event, v);
     const winnerPoints = pointsForWinner({ "points.audience_prize": await settingsStore.get("points.audience_prize") });
     const results = await db.query.audiencePrizeResults.findMany({
       where: eq(audiencePrizeResults.eventId, eventId),
       orderBy: [asc(audiencePrizeResults.rank)],
     });
     const settled = Boolean(event.settledAt) && results.length > 0;
-    const list = settled
-      ? await entries(
-          db,
-          results.map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
-        )
-      : await entries(db, ranked.slice(0, BOARD_LIMIT));
+    const list = !visible
+      ? []
+      : settled
+        ? await entries(
+            db,
+            results.map((r) => ({ applicationId: r.applicationId, votes: r.votes, rank: r.rank })),
+          )
+        : await entries(db, ranked.slice(0, BOARD_LIMIT));
     const winnerRow = results.find((r) => r.winner);
     return {
       eventId,
@@ -354,6 +429,7 @@ export const audiencePrizeService = {
       total,
       vehicles: entered.length,
       winnerPoints,
+      rankingHidden: !visible,
       entries: list,
       winner: winnerRow ? (list.find((e) => e.applicationId === winnerRow.applicationId) ?? null) : null,
     };

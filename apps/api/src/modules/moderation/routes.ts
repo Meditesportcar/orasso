@@ -14,6 +14,7 @@ import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { reportMedia } from "./media";
 import { moderationService } from "./service";
 
 /** Adresse du client pour le journal d'administration (première de `x-forwarded-for`, posée par nginx). */
@@ -53,6 +54,14 @@ export const moderationRoutes = new Hono<AppEnv>()
       clientIp(c.req.header("x-forwarded-for")),
     );
     return c.body(new Uint8Array(data), 200, { "content-type": "image/webp", "cache-control": "private, no-store" });
+  })
+  // Lot R7e1 : média (photo) du contenu signalé d'une publication du Fil ou d'une story, pour la modération seulement.
+  .get("/admin/reports/:id/media/:name", async (c) => {
+    const media = await reportMedia(await requireUser(c), uuidParam(c, "id"), c.req.param("name"));
+    return c.body(new Uint8Array(media.data), 200, {
+      "content-type": media.contentType,
+      "cache-control": "private, no-store",
+    });
   })
   .post("/admin/reports/:id/status", async (c) => {
     const v = await requireUser(c);

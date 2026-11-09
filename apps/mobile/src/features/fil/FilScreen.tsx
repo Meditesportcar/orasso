@@ -1,18 +1,38 @@
 // Onglet Le Fil (lot R7a1, D38) : la place est prise, le contenu viendra du lot R7e2 (publications des personnes
-// suivies, filtres, « ⋯ »). En attendant, la page montre le Journal actuel (notifications) sous le titre « Le Fil », avec
-// la bande ORASSO et la barre d'onglets comme tout onglet (mode A).
+// suivies, filtres, « ⋯ »). En attendant, la page montre les notifications sous le titre « Le Fil », avec la bande
+// ORASSO et la barre d'onglets comme tout onglet (mode A). Elle ne marque rien comme lu (c'est le rôle de la cloche,
+// tour 2) ; elle se relit au retour sur l'onglet (`useApi`), au glissement, au retour du réseau (même signal que
+// l'Explorer : `useNetworkState`) et à chaque notification reçue.
 import { navLabels } from "@orasso/shared";
+import { useNetworkState } from "expo-network";
 import { useIsFocused } from "expo-router";
-import { JournalList } from "@/ui/JournalSheet";
+import { useEffect, useRef } from "react";
+import { useChannel } from "@/lib/realtime";
+import { useSession } from "@/lib/session";
+import { JournalList, useJournalFeed } from "@/ui/JournalSheet";
 import { Muted } from "@/ui/Muted";
 import { TabScreen } from "@/ui/Screens";
 
 export function FilScreen() {
   const focused = useIsFocused();
+  const { me } = useSession();
+  const feed = useJournalFeed(focused);
+  const { reload } = feed;
+  // Retour du réseau (hors ligne puis en ligne) : la liste est relue, comme l'Explorer.
+  const network = useNetworkState();
+  const online = network.isConnected !== false && network.isInternetReachable !== false;
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnline.current) void reload();
+    wasOnline.current = online;
+  }, [online, reload]);
+  useChannel(me ? `user:${me.user.id}` : null, (event) => {
+    if (event.type === "notification") void reload();
+  });
   return (
-    <TabScreen title={navLabels.fil.title}>
+    <TabScreen title={navLabels.fil.title} onRefresh={reload}>
       <Muted variant="body">{navLabels.fil.note}</Muted>
-      <JournalList active={focused} />
+      <JournalList active={focused} feed={feed} markRead={false} />
     </TabScreen>
   );
 }

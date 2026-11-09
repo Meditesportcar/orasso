@@ -14,6 +14,7 @@
 // de la zone qui glisse (`TabScreen`, `TabStage`), sous ses feuilles (règle du socle C1 : une feuille couvre les deux
 // bandes). Hors d'un groupe d'onglets, pas de bande : l'écran est en mode B (en-tête de fiche, `FicheHeader`).
 import { AppBar, type AppBarProps } from "@orasso/design-system/native";
+import { topBarCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +23,7 @@ import { api } from "@/lib/api";
 import { mutationCount } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { homeOf, isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
+import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 
@@ -63,20 +65,37 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
   // dernière lecture (demande de staff acceptée, message lu) : une seule requête par changement, pas une par onglet.
   const seen = useRef(mutationCount());
   const reloadInbox = orgInbox.reload;
+  // Lot R7a1, tour 2 : la bulle « Messages » compte les conversations non lues seulement (`unreadMessages` du résumé de
+  // la Boîte : `GET /me` ne porte que le total conversations + demandes) ; les demandes restent comptées à la cloche.
+  // Le résumé se relit quand le total du profil change (message lu, demande traitée), au retour sur le groupe d'onglets
+  // et à chaque événement du compte.
+  const passionate = isBaseKind(persona.kind);
+  const userId = me?.user.id ?? null;
+  const summary = useApi(() => api.inboxSummary(), [userId, me?.unreadInbox], {
+    enabled: passionate && userId !== null,
+  });
+  const reloadSummary = summary.reload;
+  useChannel(passionate && userId ? `user:${userId}` : null, (event) => {
+    if (event.type === "inbox.changed" || event.type === "conversation.updated") void reloadSummary();
+  });
   const refresh = useCallback(() => {
     const now = mutationCount();
     if (now === seen.current) return;
     seen.current = now;
     void reloadInbox();
-  }, [reloadInbox]);
+    void reloadSummary();
+  }, [reloadInbox, reloadSummary]);
   const orgCount = orgInbox.data
     ? orgInbox.data.participantMessages + orgInbox.data.staffDiscussions + orgInbox.data.staffRequests
     : 0;
   const inboxCount = structureId ? orgCount : (me?.unreadInbox ?? 0) + (me?.counts.unreadNotifications ?? 0);
   // Lot R7a1 (D38) : le passionné (exposant ou visiteur) a la loupe, la cloche « Activité » et la bulle « Messages »,
-  // chacune avec sa pastille ; les autres casquettes gardent la Boîte. Les deux compteurs sont déjà séparés dans
-  // `GET /me` : `unreadNotifications` (la cloche) et `unreadInbox` (conversations non lues et demandes : la bulle).
-  const passionate = isBaseKind(persona.kind);
+  // chacune avec sa pastille ; les autres casquettes gardent la Boîte. Cloche : notifications non lues et demandes en
+  // attente ; bulle : conversations non lues.
+  const { activity: activityCount, messages: messagesCount } = topBarCounts(
+    me?.counts.unreadNotifications ?? 0,
+    summary.data,
+  );
   const baseLabel = personaKindLabels[base.kind];
 
   const band = useMemo<Band>(
@@ -100,9 +119,9 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
       ...(passionate
         ? {
             onActivity: () => router.push("/boite"),
-            activityCount: me?.counts.unreadNotifications ?? 0,
+            activityCount,
             onMessages: () => router.push({ pathname: "/boite", params: { onglet: "messages" } }),
-            messagesCount: me?.unreadInbox ?? 0,
+            messagesCount,
           }
         : null),
     }),
@@ -118,8 +137,8 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
       router,
       inboxCount,
       passionate,
-      me?.counts.unreadNotifications,
-      me?.unreadInbox,
+      activityCount,
+      messagesCount,
     ],
   );
 

@@ -378,7 +378,10 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
     const { ctx, page } = await open(browser, theme);
     await signIn(page, ACCOUNTS.fan);
     // La Boîte, ouverte par la bande : une feuille par-dessus l'écran.
-    await page.getByRole("button", { name: "Activité", exact: true }).first().click();
+    await page
+      .getByRole("button", { name: /^Activité/ })
+      .first()
+      .click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
     await expect(page.getByTestId("inbox-all")).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(600);

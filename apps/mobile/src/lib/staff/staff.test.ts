@@ -25,6 +25,7 @@ import { DEMO_PUBLIC_KEY, ed25519Verify, plateHashOf } from "./crypto";
 import {
   applyResults,
   arrivedOn,
+  arrivedTodayOn,
   backoffMs,
   buildState,
   checkinAction,
@@ -36,6 +37,7 @@ import {
   markSeen,
   mergeSync,
   type PendingAction,
+  placesLeft,
   quickPlateMatch,
   ScanGate,
   type StaffState,
@@ -435,7 +437,7 @@ describe("événement sur plusieurs jours", () => {
     expect(decideLocal(s, p1, keys, ed25519Verify, day2)).toMatchObject({ decision: "already" });
   });
 
-  it("arrivé du jour : un « tout l'événement » entré la veille est attendu, puis arrivé une fois lu aujourd'hui", () => {
+  it("présent : un « tout l'événement » entré la veille l'est toujours, sans rescan ; arrivée du jour à part", () => {
     const s = multi();
     const whole = s.entries.get(uuid(1));
     if (!whole) throw new Error("entrée");
@@ -443,14 +445,70 @@ describe("événement sur plusieurs jours", () => {
     const now = s.entries.get(uuid(1));
     if (!now) throw new Error("entrée");
     expect(arrivedOn(s, now, day1)).toBe(true);
-    expect(arrivedOn(s, now, day2)).toBe(false);
-    expect(counters(s, day2).arrived).toBe(0);
-    markSeen(s, uuid(1), day2);
+    expect(arrivedTodayOn(s, now, day1)).toBe(true);
+    // Le lendemain : présent (entré la veille), mais pas une arrivée du jour.
     expect(arrivedOn(s, now, day2)).toBe(true);
+    expect(arrivedTodayOn(s, now, day2)).toBe(false);
+    expect(counters(s, day2)).toMatchObject({ arrived: 1, arrivedToday: 0 });
+    // Relu aujourd'hui sur cet appareil : arrivée du jour aussi.
+    markSeen(s, uuid(1), day2);
+    expect(arrivedTodayOn(s, now, day2)).toBe(true);
     // Lecture reçue par le serveur depuis un autre appareil (`lastSeenAt` de la synchro).
     s.seen?.clear();
     s.entries.set(uuid(1), { ...now, lastSeenAt: "2026-10-16T07:30:00.000Z" });
-    expect(counters(s, day2).arrived).toBe(1);
+    expect(counters(s, day2)).toMatchObject({ arrived: 1, arrivedToday: 1 });
+  });
+
+  it("trois jours sans rescan : liste, compteurs et zones suivent l'entrée du premier jour", () => {
+    const days3 = [
+      ...days,
+      { id: uuid(8003), date: "2026-10-17", startsAt: "2026-10-17T07:00:00.000Z", endsAt: "2026-10-17T16:00:00.000Z" },
+    ];
+    const day3 = new Date("2026-10-17T08:00:00Z");
+    // 1 et 3 : « tout l'événement » (zone JDM), 1 entré le jour 1 ; 2 : « tout l'événement » (zone LIB), entré le jour 2 ;
+    // 5 : accès du jour 3 seulement (JDM), entré le jour 3.
+    const body = syncBody([
+      entry(1, { checkedInAt: "2026-10-15T08:00:00.000Z" }),
+      entry(2, { checkedInAt: "2026-10-16T08:00:00.000Z" }),
+      entry(3),
+      entry(5, { dayDate: "2026-10-17", checkedInAt: "2026-10-17T08:05:00.000Z" }),
+    ]);
+    const merged = mergeSync(
+      null,
+      { ...body, event: { ...body.event, days: days3 } } as StaffSync,
+      "user-julie",
+      new Date("2026-10-15T07:01:00Z"),
+    );
+    if (!merged.ok) throw new Error("fusion");
+    const s = buildState(merged.meta, merged.entries, []);
+    const zone = (c: ReturnType<typeof counters>, code: string) => c.zones.find((z) => z.code === code);
+
+    const c1 = counters(s, day1);
+    expect([c1.arrived, c1.arrivedToday, c1.expected]).toEqual([1, 1, 3]);
+    const c2 = counters(s, day2);
+    expect([c2.arrived, c2.arrivedToday, c2.expected]).toEqual([2, 1, 3]);
+    const c3 = counters(s, day3);
+    // Jour 3 : 1 et 2 sont encore là (sans rescan), 3 jamais entré, 5 vient d'arriver.
+    expect([c3.arrived, c3.arrivedToday, c3.expected]).toEqual([3, 1, 4]);
+    expect(zone(c3, "JDM")).toMatchObject({ arrived: 2, expected: 3, capacity: 30 });
+    expect(zone(c3, "LIB")).toMatchObject({ arrived: 1, expected: 1 });
+    // La liste « Arrivés » / « Attendus » du jour 3 : les présents d'un jour précédent y sont, 3 reste attendu.
+    const entries = [...s.entries.values()];
+    expect(
+      entries
+        .filter((e) => arrivedOn(s, e, day3))
+        .map((e) => e.passId)
+        .sort(),
+    ).toEqual([uuid(1), uuid(2), uuid(5)].sort());
+    expect(entries.filter((e) => !arrivedOn(s, e, day3)).map((e) => e.passId)).toEqual([uuid(3)]);
+    // Le placement ne compte jamais plus de places prises que la capacité (zone pleine : 0 restante).
+    const full = {
+      ...s,
+      meta: { ...s.meta, zones: s.meta.zones.map((z) => (z.code === "JDM" ? { ...z, capacity: 1 } : z)) },
+    };
+    const jdm = zone(counters(full, day3), "JDM");
+    expect(jdm?.arrived).toBe(2);
+    expect(placesLeft({ arrived: jdm?.arrived ?? 0, capacity: jdm?.capacity ?? null })).toBe(0);
   });
 
   it("pointage rapide par plaque : seulement les attendus du jour", () => {

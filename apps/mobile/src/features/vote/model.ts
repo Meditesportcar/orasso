@@ -54,17 +54,3 @@ export function reloadDelay(lastReloadAt: number | null, now: number, minMs = BO
   if (lastReloadAt === null) return 0;
   return Math.max(0, lastReloadAt + minMs - now);
 }
-
-/** Reporte le top 3 d'un message en direct sur le classement affiché (voix et rang), sans rien recharger. */
-export function applyTop3(
-  entries: readonly AudiencePrizeEntry[],
-  top3: readonly { applicationId: string; votes: number; rank: number }[],
-): AudiencePrizeEntry[] {
-  const by = new Map(top3.map((t) => [t.applicationId, t]));
-  return entries
-    .map((e) => {
-      const t = by.get(e.applicationId);
-      return t ? { ...e, votes: t.votes, rank: t.rank } : e;
-    })
-    .sort((a, b) => b.votes - a.votes || a.rank - b.rank);
-}
