@@ -23,6 +23,8 @@ import { serverNow } from "@/lib/clock";
 import { useChannel } from "@/lib/realtime";
 import { useApi } from "@/lib/useApi";
 
+import { createLatestRead } from "./latestRead";
+
 /** Les messages du canal qui changent ce que montre un écran de vote (`VotesChangedMessage`, R7l1 tours 2 et 3). */
 const VOTE_MESSAGES = new Set([
   "votes.changed",
@@ -40,7 +42,8 @@ export function messageConcerns(payload: unknown, voteId: string | null): boolea
 
 /**
  * Relectures limitées sur un message du canal (au moins 10 s entre deux, grille seulement quand le message la change), et au
- * retour au premier plan ou à la reconnexion (des messages ont pu être manqués : même délai minimal, grille comprise).
+ * retour au premier plan ou à la reconnexion (des messages ont pu être manqués : même délai minimal, grille comprise ; la
+ * reconnexion garde la gigue, le premier plan non : tour 4).
  */
 function useVoteChannel(
   eventId: string | null,
@@ -60,7 +63,7 @@ function useVoteChannel(
         reloader.message(message.type).catch(() => undefined); // l'échec est gardé par le relecteur (grille à relire)
     },
     () => {
-      if (subscribedOnce.current) reloader.refresh().catch(() => undefined);
+      if (subscribedOnce.current) reloader.reconnect().catch(() => undefined);
       subscribedOnce.current = true;
     },
   );
@@ -68,7 +71,10 @@ function useVoteChannel(
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") reloader.refresh().catch(() => undefined);
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      reloader.cancel(); // plus de minuterie après le démontage (tour 4)
+    };
   }, [reloader]);
 }
 
@@ -106,16 +112,18 @@ export function useVote(eventId: string | null, voteId: string | null) {
     refreshMs: 60_000,
   });
   // `useApi.reload` ne rejette jamais : l'échec de la dernière lecture de la grille est noté ici pour que le relecteur du canal
-  // la garde « à relire » (tour 3).
-  const gridFailed = useRef(false);
+  // la garde « à relire » (tour 3). Le résultat suit la lecture acceptée par `useApi` (la dernière partie) : une ancienne
+  // réponse arrivée après ne le modifie pas (tour 4).
+  const gridRead = useRef(createLatestRead()).current;
   const grid = useApi<VoteCandidate[]>(
     async () => {
+      const read = gridRead.start();
       try {
         const items = await loadGrid(eventId as string, voteId as string);
-        gridFailed.current = false;
+        read.settle(true);
         return items;
       } catch (error) {
-        gridFailed.current = true;
+        read.settle(false);
         throw error;
       }
     },
@@ -131,7 +139,7 @@ export function useVote(eventId: string | null, voteId: string | null) {
   // Le canal relit le détail (classement compris) ; la grille seulement quand les candidats changent (ouverture, clôture…).
   useVoteChannel(eventId, voteId, async (withGrid) => {
     await Promise.all([view.reload(), withGrid ? grid.reload() : null]);
-    if (withGrid && gridFailed.current) throw new Error("grid_reload_failed"); // la grille reste à relire
+    if (withGrid && gridRead.failed()) throw new Error("grid_reload_failed"); // la grille reste à relire
   });
   // Le geste de l'utilisateur (« Réessayer ») relit tout, tout de suite.
   const reload = () => reloadAll.current();

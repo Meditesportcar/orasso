@@ -172,6 +172,47 @@ describe("relectures d'un vote (charge du jour J)", () => {
     expect(gridReads).toEqual(["ok"]);
   });
 
+  it("reconnexion du canal : départ décalé dans [0, 2 s] avec la grille ; le premier plan reste immédiat (tour 4)", async () => {
+    const reads: Array<[number, boolean]> = [];
+    const reloader = createVoteReloader(async (g) => void reads.push([Date.now(), g]), { random: () => 0.75 });
+    void reloader.reconnect();
+    await vi.advanceTimersByTimeAsync(1_499);
+    expect(reads).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reads).toEqual([[1_500, true]]); // 0,75 × 2 s, grille comprise
+    const other = createVoteReloader(async (g) => void reads.push([Date.now(), g]), { random: () => 0.75 });
+    void other.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads[1]).toEqual([1_500, true]); // premier plan : immédiat
+    for (const r of [0, 0.5, 0.999]) {
+      const t0 = Date.now();
+      const at: number[] = [];
+      const x = createVoteReloader(async () => void at.push(Date.now() - t0), { random: () => r });
+      void x.reconnect();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(at).toHaveLength(1);
+      expect(at[0]).toBeLessThan(2_000);
+    }
+  });
+
+  it("démontage : une demande en attente puis cancel() ne lance aucune lecture, même après le délai (tour 4)", async () => {
+    const reads: number[] = [];
+    const reloader = createVoteReloader(async () => void reads.push(Date.now()), { random: () => 0.5 });
+    void reloader.message("votes.changed"); // part à 1 s
+    await vi.advanceTimersByTimeAsync(1_000);
+    void reloader.message("votes.changed"); // en attente derrière le délai de 10 s
+    const waiting = reloader.message("votes.changed");
+    reloader.cancel();
+    await expect(waiting).rejects.toThrow("vote_reload_cancelled");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reads).toEqual([1_000]);
+    expect(vi.getTimerCount()).toBe(0);
+    // Le relecteur reste utilisable (remontage).
+    void reloader.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads.length).toBe(2);
+  });
+
   it("createPacedRun : le premier appel part tout de suite, les suivants n'en font qu'un", async () => {
     const run = vi.fn(async () => "ok");
     const paced = createPacedRun(run, 10_000);

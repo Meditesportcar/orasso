@@ -29,7 +29,7 @@ export function createPacedRun<T>(
   run: () => Promise<T>,
   minIntervalMs: number,
   now: () => number = Date.now,
-): { request(jitterMs?: number): Promise<T> } {
+): { request(jitterMs?: number): Promise<T>; cancel(): void } {
   interface Group {
     promise: Promise<T>;
     resolve: (value: T) => void;
@@ -100,14 +100,26 @@ export function createPacedRun<T>(
       schedule();
       return promise;
     },
+    /** Démontage : plus de minuterie, le groupe en attente est réglé (rejeté `vote_reload_cancelled`) ; une lecture en cours finit seule. */
+    cancel() {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      const g = group;
+      group = null;
+      g?.reject(new Error("vote_reload_cancelled"));
+    },
   };
 }
 
 export interface VoteReloader {
   /** Un message du canal : relecture limitée, avec gigue ; la grille seulement si le message la change. */
   message(type: string): Promise<unknown>;
-  /** Retour au premier plan ou reconnexion (messages manquables) : relecture limitée, sans gigue, grille comprise. */
+  /** Retour au premier plan ou « Réessayer » (messages manquables) : relecture limitée, sans gigue, grille comprise. */
   refresh(): Promise<unknown>;
+  /** Reconnexion du canal (tour 4) : comme `refresh`, grille comprise, mais **avec** la gigue d'un message (le réseau revient pour tous en même temps). */
+  reconnect(): Promise<unknown>;
+  /** Démontage de l'écran : annule la relecture en attente (tour 4). */
+  cancel(): void;
 }
 
 /** `reload(withGrid)` relit le vote (et sa grille quand `withGrid`) ; l'appelant l'enveloppe, jamais de relecture en double. */
@@ -141,5 +153,10 @@ export function createVoteReloader(
       wantGrid = true;
       return paced.request(0);
     },
+    reconnect() {
+      wantGrid = true;
+      return paced.request(random() * jitterMs);
+    },
+    cancel: () => paced.cancel(),
   };
 }

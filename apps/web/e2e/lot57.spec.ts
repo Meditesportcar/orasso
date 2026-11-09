@@ -271,15 +271,25 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
     // Au passage Sable, Kenji a déjà voté : la grille ne revient que par « Changer mon vote » (comme `lotr7-0-site`).
     const change = page.getByTestId("vote-change");
     await expect(change.or(page.getByTestId("vote-candidate").first())).toBeVisible();
-    if (await change.isVisible()) await change.click();
-    await expect(page.getByTestId("vote-candidate")).toHaveCount(candidatesCount);
-    await page
+    // Un toucher avant l'hydratation est perdu (« Changer mon vote », puis la carte) : on le répète jusqu'à ce qu'il compte
+    // (même boucle que `pickCard` de `lotr7l3-site`, tour 4).
+    await expect(async () => {
+      if (await change.isVisible()) await change.click();
+      await expect(page.getByTestId("vote-candidate")).toHaveCount(candidatesCount, { timeout: 1_500 });
+    }).toPass({ timeout: 30_000 });
+    const pilotCard = page
       .getByTestId("vote-candidate")
-      .filter({ hasText: pilots[theme === "beton" ? 0 : 1]?.pseudo ?? "" })
-      .click();
+      .filter({ hasText: pilots[theme === "beton" ? 0 : 1]?.pseudo ?? "" });
+    await expect(async () => {
+      await pilotCard.click();
+      await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/, { timeout: 1_500 });
+    }).toPass({ timeout: 30_000 });
     await page.getByTestId("vote-cta").click(); // R7l3, tour 2 : on choisit, puis « Voter pour … » (parité avec l'appli)
     await expect(page.getByTestId("vote-saved")).toContainText(/Vote enregistré · tu peux le changer jusqu'(à|au)/);
-    await page.getByTestId("vote-change").click(); // la grille ne revient que par « Changer mon vote »
+    await expect(async () => {
+      if (await page.getByTestId("vote-change").isVisible()) await page.getByTestId("vote-change").click(); // la grille ne revient que par « Changer mon vote »
+      await expect(page.locator('[data-testid="vote-candidate"][data-own="true"]')).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 30_000 });
     await expect(page.locator('[data-testid="vote-candidate"][data-own="true"]')).toBeDisabled();
     // Relecture : un pointage sans aucun vote entre-temps ajoute le véhicule à la grille ouverte (rechargement en direct).
     if (theme === "beton") {
