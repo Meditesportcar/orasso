@@ -1,5 +1,5 @@
 // Source « Rendez-vous au spot » du Fil (lot R7i) : les rendez-vous en cours ou à venir dont la personne est **invitée**
-// (abonnés acceptés de l'auteur, ou membres actifs du crew), jamais ceux de tout le monde, jamais le sien, jamais d'un
+// (abonnés acceptés de l'auteur ; jamais un rendez-vous de crew : rien d'un crew dans le Fil), jamais ceux de tout le monde, jamais le sien, jamais d'un
 // compte hors règle. La carte est datée de la création : fraîche, elle arrive en tête (auteur suivi : affinité 1,5). Le lieu
 // est servi aux invités seuls (même vue que l'API des rendez-vous) ; fini, il n'y a plus de carte.
 import { and, desc, eq, type SQL, sql } from "drizzle-orm";
@@ -8,7 +8,7 @@ import { db } from "../../../db/client";
 import { profiles, spotMeetups } from "../../../db/schema";
 import { now } from "../../../lib/deps";
 import { buildViews, invitedSql } from "../../spot-meetups/views";
-import { profileOkSql } from "../access";
+import { profileOkSql, unavailable } from "../access";
 import {
   atBounds,
   atMs,
@@ -24,8 +24,12 @@ import {
 export const source: FeedSource<"spot_meetup"> = {
   kind: "spot_meetup",
   async load(input: SourceInput): Promise<SourceResult<"spot_meetup">> {
+    // Un compte écarté (suspendu, banni, supprimé) ne reçoit aucune carte : même règle que les lectures du rendez-vous.
+    if (unavailable(input.viewer.profile, now())) return { cards: [], more: false, tail: null };
     const atExpr = atMs(sql`${spotMeetups.createdAt}`);
     const filters: (SQL | undefined)[] = [
+      // Rien d'un crew dans le Fil (invariant) : un rendez-vous de crew reste dans l'onglet Spots, l'Accueil et la notification.
+      sql`${spotMeetups.audience} = 'followers'`,
       sql`${spotMeetups.cancelledAt} is null`,
       sql`${spotMeetups.purgedAt} is null`,
       sql`${spotMeetups.endsAt} > ${tsParam(input.ref)}`,

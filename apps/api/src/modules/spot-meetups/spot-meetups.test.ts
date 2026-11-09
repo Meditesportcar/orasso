@@ -5,7 +5,7 @@ import { fromWallTime, HOUR, MINUTE, SPOT_MAX_DURATION_MS } from "@orasso/shared
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { resetDb, signUp, type TestUser, useClock, viewerOf } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
@@ -20,6 +20,7 @@ import {
 import { resetRateLimits } from "../../lib/rateLimit";
 import { notificationsService } from "../notifications/service";
 import { spotMeetupsPurge } from "./purge";
+import { spotMeetupsService } from "./service";
 
 afterAll(async () => {
   await pool.end();
@@ -748,5 +749,194 @@ describe("migration 0074 : les garde-fous en base", () => {
       expect([201, 409, 429]).toContain(res.status);
     }
     expect(last).toBe(429);
+  });
+});
+
+describe("tour 2 : le lieu ne sort jamais à qui n'a pas droit, ni après la fin", () => {
+  const suspend = (u: TestUser) =>
+    db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 24 * HOUR) })
+      .where(eq(profiles.userId, u.id));
+  const spotCards = async (u: TestUser) =>
+    ((await req(u, "GET", "/fil?filter=for_you")).json.items as { kind: string }[]).filter(
+      (c) => c.kind === "spot_meetup",
+    );
+
+  it("compte suspendu : ni Fil, ni Accueil, ni « mon rendez-vous », ni onglet Spots du crew", async () => {
+    const { kenji, lea, nina } = await world();
+    await follow(lea, kenji);
+    const crew = await newCrew(nina, [lea]);
+    await launch(kenji);
+    await launch(nina, { audience: "crew", crewId: crew.id });
+    // Avant la suspension, Léa voit tout.
+    expect(await spotCards(lea)).toHaveLength(1);
+    expect((await req(lea, "GET", `/crews/${crew.id}/spot-meetups`)).json.active).toHaveLength(1);
+    expect((await req(nina, "GET", "/me/home")).json.spotMeetup).not.toBeNull();
+    await suspend(lea);
+    await suspend(nina);
+    expect(await spotCards(lea)).toHaveLength(0);
+    const crewList = await req(lea, "GET", `/crews/${crew.id}/spot-meetups`);
+    expect(crewList.json).toMatchObject({ active: [], past: [], nextCursor: null });
+    expect(crewList.text).not.toMatch(/Saint-Cyprien|42\.62/);
+    expect((await req(lea, "GET", "/me/spot-meetups/incoming")).json.items).toHaveLength(0);
+    // Nina suspendue : son propre rendez-vous n'est servi ni à l'Accueil ni par « mon rendez-vous ».
+    const home = await req(nina, "GET", "/me/home");
+    expect(home.json.spotMeetup).toBeNull();
+    expect(home.text).not.toMatch(/Saint-Cyprien/);
+    expect((await req(nina, "GET", "/me/spot-meetups/active")).json.meetup).toBeNull();
+  });
+
+  it("le mot disparaît avec le lieu : plus servi dès la fin, effacé à la purge et à l'annulation", async () => {
+    const { kenji, lea } = await world();
+    await follow(lea, kenji);
+    const m = await launch(kenji, { note: "Devant le garage Dupont" });
+    expect((await req(lea, "GET", `/spot-meetups/${m.id}`)).json.note).toBe("Devant le garage Dupont");
+    clock.advance(2 * HOUR + MINUTE);
+    for (const u of [kenji, lea]) {
+      const r = await req(u, "GET", `/spot-meetups/${m.id}`);
+      expect(r.json).toMatchObject({ note: null, place: null });
+      expect(r.text).not.toMatch(/Dupont/);
+    }
+    await spotMeetupsPurge.run();
+    const [row] = await db.select().from(spotMeetups).where(eq(spotMeetups.id, m.id));
+    expect(row?.note).toBeNull();
+    const n = await launch(kenji, {
+      startsAt: clock.now.toISOString(),
+      endsAt: new Date(clock.now.getTime() + HOUR).toISOString(),
+      note: "Au fond du parking",
+    });
+    await req(kenji, "DELETE", `/me/spot-meetups/${n.id}`);
+    const [gone] = await db.select().from(spotMeetups).where(eq(spotMeetups.id, n.id));
+    expect(gone?.note).toBeNull();
+  });
+
+  it("livraison : un destinataire suspendu pendant la nuit ne reçoit rien, les autres oui", async () => {
+    const { kenji, lea, nina } = await world();
+    await follow(lea, kenji);
+    await follow(nina, kenji);
+    clock.set(at(23));
+    await launch(kenji, { startsAt: at(9, 0, 11).toISOString(), endsAt: at(12, 0, 11).toISOString() });
+    const rows = () => db.select().from(notifications).where(eq(notifications.type, "spot_meetup_new"));
+    expect(await rows()).toHaveLength(2);
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: at(23, 0, 12) })
+      .where(eq(profiles.userId, lea.id));
+    clock.set(at(8, 5, 11));
+    await notificationsService.deliverDue();
+    const left = await rows();
+    expect(left.map((r) => r.userId)).toEqual([nina.id]);
+    expect(left[0]?.deliveredAt).not.toBeNull();
+  });
+
+  it("livraison : l'auteur suspendu pendant la nuit, aucune notification ne part", async () => {
+    const { kenji, lea } = await world();
+    await follow(lea, kenji);
+    clock.set(at(23));
+    await launch(kenji, { startsAt: at(9, 0, 11).toISOString(), endsAt: at(12, 0, 11).toISOString() });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: at(23, 0, 12) })
+      .where(eq(profiles.userId, kenji.id));
+    clock.set(at(8, 5, 11));
+    await notificationsService.deliverDue();
+    expect(await db.select().from(notifications).where(eq(notifications.type, "spot_meetup_new"))).toHaveLength(0);
+  });
+
+  it("la purge et l'annulation effacent aussi « X vient » de l'Activité de l'auteur", async () => {
+    const { kenji, lea } = await world();
+    await follow(lea, kenji);
+    const m = await launch(kenji);
+    await req(lea, "PUT", `/spot-meetups/${m.id}/reply`, { answer: "yes" });
+    const replyRows = () => db.select().from(notifications).where(eq(notifications.type, "spot_meetup_reply"));
+    expect(await replyRows()).toHaveLength(1);
+    clock.advance(2 * HOUR + MINUTE);
+    await spotMeetupsPurge.run();
+    expect(await replyRows()).toHaveLength(0);
+    const n = await launch(kenji);
+    await req(lea, "PUT", `/spot-meetups/${n.id}/reply`, { answer: "maybe" });
+    expect(await replyRows()).toHaveLength(1);
+    await req(kenji, "DELETE", `/me/spot-meetups/${n.id}`);
+    expect(await replyRows()).toHaveLength(0);
+  });
+
+  it("une insertion qui échoue ne relance ni le nom du lieu ni ses coordonnées", async () => {
+    const { kenji } = await world();
+    const real = await viewerOf(kenji);
+    // Un auteur sans compte en base : la clé étrangère refuse l'insertion, dont les paramètres portent le lieu.
+    const ghost = { ...real, user: { ...real.user, id: "compte-fantome" } } as typeof real;
+    let error: Error | null = null;
+    try {
+      await spotMeetupsService.create(
+        ghost,
+        body({ placeLabel: "Garage secret Dupont", lat: 42.123456, lng: 3.654321 }),
+      );
+    } catch (e) {
+      error = e as Error;
+    }
+    expect(error?.message).toMatch(/Rendez-vous non enregistré/);
+    const everything = JSON.stringify(error, Object.getOwnPropertyNames(error ?? {})) + String(error?.cause ?? "");
+    expect(everything).not.toMatch(/Dupont|42\.123456|3\.654321/);
+    expect(error?.cause).toBeUndefined();
+  });
+
+  it("rien d'un crew dans le Fil ; le rendez-vous de crew reste dans l'onglet Spots, l'Accueil et la notification", async () => {
+    const { kenji, lea } = await world();
+    const crew = await newCrew(kenji, [lea]);
+    await follow(lea, kenji);
+    const m = await launch(kenji, { audience: "crew", crewId: crew.id });
+    expect(await spotCards(lea)).toHaveLength(0);
+    expect((await req(lea, "GET", `/crews/${crew.id}/spot-meetups`)).json.active).toHaveLength(1);
+    expect((await req(lea, "GET", "/me/home")).json.spotMeetup).toMatchObject({ meetup: { audience: "crew" } });
+    expect(await db.select().from(notifications).where(eq(notifications.type, "spot_meetup_new"))).toHaveLength(1);
+    // Un rendez-vous pour « mes abonnés » arrive bien dans le Fil.
+    await req(kenji, "DELETE", `/me/spot-meetups/${m.id}`);
+    await launch(kenji);
+    expect(await spotCards(lea)).toHaveLength(1);
+  });
+
+  it("« Qui vient ? » au-delà de 50 : pages par curseur, identifiants de compte non UUID, sans trou ni doublon", async () => {
+    const { kenji } = await world();
+    const m = await launch(kenji);
+    const fans: TestUser[] = [];
+    for (let i = 0; i < 53; i += 10) {
+      fans.push(
+        ...(await Promise.all(
+          Array.from({ length: Math.min(10, 53 - i) }, (_, j) => signUp(`Fan${String(i + j).padStart(2, "0")}`)),
+        )),
+      );
+    }
+    expect(fans[0]?.id).not.toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/);
+    for (const [i, f] of fans.entries()) {
+      await db.insert(spotMeetupReplies).values({
+        meetupId: m.id,
+        userId: f.id,
+        answer: i % 3 === 0 ? "maybe" : "yes",
+        answeredAt: new Date(clock.now.getTime() + i * 1000),
+      });
+    }
+    const first = await req(kenji, "GET", `/spot-meetups/${m.id}/replies`);
+    expect(first.status).toBe(200);
+    expect(first.json.items).toHaveLength(50);
+    expect(first.json.nextCursor).toEqual(expect.any(String));
+    const second = await req(
+      kenji,
+      "GET",
+      `/spot-meetups/${m.id}/replies?cursor=${encodeURIComponent(first.json.nextCursor)}`,
+    );
+    expect(second.status, second.text).toBe(200);
+    expect(second.json.items).toHaveLength(3);
+    expect(second.json.nextCursor).toBeNull();
+    const pseudos = [...first.json.items, ...second.json.items].map(
+      (i: { person: { pseudo: string } }) => i.person.pseudo,
+    );
+    expect(new Set(pseudos).size).toBe(53);
+    // Un curseur de liste de rendez-vous n'ouvre pas la liste des réponses, et inversement.
+    const other = Buffer.from(`m|${clock.now.toISOString()}|${m.id}`).toString("base64url");
+    expect((await req(kenji, "GET", `/spot-meetups/${m.id}/replies?cursor=${other}`)).status).toBe(400);
+    expect(
+      (await req(kenji, "GET", `/me/spot-meetups/incoming?cursor=${encodeURIComponent(first.json.nextCursor)}`)).status,
+    ).toBe(400);
   });
 });

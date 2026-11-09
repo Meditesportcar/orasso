@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  afterRecentre,
   clampStart,
   customEndsAt,
   defaultDuration,
@@ -9,6 +10,7 @@ import {
   meetupPhase,
   meetupVisibleTo,
   SPOT_MAX_DURATION_MS,
+  spotEnded,
   spotEndLabel,
   spotStartLabel,
   spotTimeLabel,
@@ -175,5 +177,30 @@ describe("phase et actif", () => {
     expect(meetupActive(base, at(22))).toBe(false);
     expect(meetupActive({ ...base, cancelledAt: at(20) }, at(21))).toBe(false);
     expect(meetupActive({ ...base, purgedAt: at(20) }, at(21))).toBe(false);
+  });
+});
+
+describe("épingle et point envoyé", () => {
+  const found = { lat: 42.62, lng: 3.03 };
+  it("recentrée sur le point lui-même : rien ne change", () => {
+    expect(afterRecentre(found, { lat: 42.62, lng: 3.03 }, true)).toEqual({ point: found, pinHidden: false });
+  });
+  it("recentrée ailleurs (« Autour de moi ») : le point est effacé et l'épingle masquée", () => {
+    expect(afterRecentre(found, { lat: 42.7, lng: 2.9 }, true)).toEqual({ point: null, pinHidden: true });
+    expect(afterRecentre(found, { lat: 42.7, lng: 2.9 }, false)).toEqual({ point: null, pinHidden: true });
+  });
+  it("sans point : masquée seulement après un geste voulu de la personne", () => {
+    expect(afterRecentre(null, found, true)).toEqual({ point: null, pinHidden: true });
+    expect(afterRecentre(null, found, false)).toEqual({ point: null, pinHidden: false });
+  });
+});
+
+describe("fini pour l'appareil", () => {
+  const m = { phase: "live" as const, endsAt: "2026-11-10T21:00:00.000Z" };
+  it("avant la fin : en cours ; à la fin et après, même hors réseau : fini", () => {
+    expect(spotEnded(m, Date.parse("2026-11-10T20:59:59.999Z"))).toBe(false);
+    expect(spotEnded(m, Date.parse("2026-11-10T21:00:00.000Z"))).toBe(true);
+    expect(spotEnded(m, Date.parse("2026-11-11T09:00:00.000Z"))).toBe(true);
+    expect(spotEnded({ ...m, phase: "ended" }, 0)).toBe(true);
   });
 });

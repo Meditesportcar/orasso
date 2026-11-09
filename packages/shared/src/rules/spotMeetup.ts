@@ -189,3 +189,30 @@ export function spotStartLabel(startsAt: Date, now: Date): string {
   const tomorrow = w.day !== n.day || w.month !== n.month || w.year !== n.year;
   return `${tomorrow ? "demain " : ""}à ${spotTimeLabel(startsAt)}`;
 }
+
+/**
+ * L'épingle et le point envoyé (lot R7i, tour 2) : l'épingle montrée est toujours le point qui sera envoyé. Quand la carte se
+ * recentre ailleurs que sur ce point (« Autour de moi » : la position de l'appareil ne sert qu'à centrer la carte, elle n'est
+ * jamais envoyée), le point est effacé et l'épingle masquée jusqu'à une nouvelle sélection ; « Lancer » attend. Recentrée sur
+ * le point lui-même (adresse trouvée), rien ne change.
+ */
+export type SpotPoint = { lat: number; lng: number };
+export function afterRecentre(
+  point: SpotPoint | null,
+  center: SpotPoint,
+  explicit: boolean,
+): { point: SpotPoint | null; pinHidden: boolean } {
+  if (point && Math.abs(point.lat - center.lat) < 1e-6 && Math.abs(point.lng - center.lng) < 1e-6) {
+    return { point, pinHidden: false };
+  }
+  if (point || explicit) return { point: null, pinHidden: true };
+  return { point: null, pinHidden: false };
+}
+
+/**
+ * Fini pour l'appareil : la phase reçue le dit, ou l'heure d'Orasso a atteint `endsAt`. Décidé localement, sans réseau : lieu,
+ * mot, « Qui vient ? » et réponses sont masqués à cet instant, une fiche restée ouverte ou passée hors ligne comprise.
+ */
+export function spotEnded(meetup: { phase: SpotPhase; endsAt: string }, atMs: number): boolean {
+  return meetup.phase === "ended" || atMs >= Date.parse(meetup.endsAt);
+}

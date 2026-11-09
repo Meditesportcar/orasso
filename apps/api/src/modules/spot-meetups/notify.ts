@@ -1,7 +1,7 @@
 // Rendez-vous au spot (lot R7i) : la notification `spot_meetup_new` aux invités (push seul, jamais le lieu dedans), et sa
 // vérification à la livraison. Les heures calmes (22 h – 8 h) la retiennent, sauf si le rendez-vous commence dans les
 // 2 heures (règle de la table R7 : `quiet: { within: 2 h }`). Si le rendez-vous est annulé ou fini, ou si la personne n'est
-// plus invitée, avant la livraison, elle ne part pas.
+// plus invitée, ou si l'auteur ou elle n'est plus en règle (suspendu, banni, supprimé), avant la livraison, elle ne part pas.
 import { r7DefaultContent } from "@orasso/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
@@ -74,11 +74,21 @@ async function guard(n: NotificationRow): Promise<boolean> {
     .select()
     .from(spotMeetups)
     .where(and(eq(spotMeetups.id, meetupId), sql`${spotMeetups.cancelledAt} is null`));
-  if (!row || isOver(row, now())) return false;
+  const at = now();
+  if (!row || isOver(row, at)) return false;
+  // L'auteur et le destinataire doivent être en règle au moment de livrer (suspendu pendant la nuit : rien ne part).
   const [invited] = await db
     .select({ id: spotMeetups.id })
     .from(spotMeetups)
-    .where(and(eq(spotMeetups.id, meetupId), invitedSql(n.userId)));
+    .innerJoin(profiles, eq(profiles.userId, spotMeetups.authorId))
+    .where(
+      and(
+        eq(spotMeetups.id, meetupId),
+        invitedSql(n.userId),
+        profileOkSql("profiles", at),
+        sql`exists (select 1 from profiles rp where rp.user_id = ${n.userId} and ${profileOkSql("rp", at)})`,
+      ),
+    );
   return Boolean(invited);
 }
 

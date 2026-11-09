@@ -40,18 +40,42 @@ export const SPOT_PAGE = 20;
 export const SPOT_REPLIES_PAGE = 50;
 const SPOT_ACTIVE_CAP = 100;
 
+/**
+ * Curseurs : « m » pour une liste de rendez-vous (l'identifiant est un uuid), « a » pour la liste « Qui vient ? » (l'identifiant
+ * est celui d'un compte, un texte quelconque : Better Auth ne donne pas d'uuid). Un curseur d'une liste refusé par l'autre.
+ */
 type Cursor = { at: Date; id: string };
-const encodeCursor = (c: Cursor) => Buffer.from(`${c.at.toISOString()}|${c.id}`).toString("base64url");
-function decodeCursor(raw: string | undefined): Cursor | null {
+type CursorKind = "m" | "a";
+const encodeCursor = (kind: CursorKind, c: Cursor) =>
+  Buffer.from(`${kind}|${c.at.toISOString()}|${c.id}`).toString("base64url");
+function decodeCursor(kind: CursorKind, raw: string | undefined): Cursor | null {
   if (!raw) return null;
   try {
-    const [iso, id] = Buffer.from(raw, "base64url").toString().split("|");
-    const at = new Date(iso ?? "");
-    if (Number.isNaN(at.getTime()) || !id || !/^[0-9a-f-]{36}$/.test(id)) throw new Error("bad");
+    const text = Buffer.from(raw, "base64url").toString();
+    const first = text.indexOf("|");
+    const second = text.indexOf("|", first + 1);
+    if (first < 0 || second < 0 || text.slice(0, first) !== kind) throw new Error("bad");
+    const at = new Date(text.slice(first + 1, second));
+    const id = text.slice(second + 1);
+    const goodId =
+      kind === "m"
+        ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
+        : id.length > 0 && id.length <= 200;
+    if (Number.isNaN(at.getTime()) || !goodId) throw new Error("bad");
     return { at, id };
   } catch {
     throw validation("Curseur invalide");
   }
+}
+
+/**
+ * Une erreur de base sans ses paramètres : le message d'origine de la base cite la requête et ses valeurs, donc le nom du lieu et
+ * ses coordonnées, qui n'ont rien à faire dans les journaux ni dans Sentry (lot R7i, tour 2). Ne reste que le code SQL.
+ */
+function withoutPlace(error: unknown): Error {
+  const code =
+    (error as { code?: unknown } | null)?.code ?? (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return new Error(`Rendez-vous non enregistré${typeof code === "string" ? ` (code SQL ${code})` : ""}`);
 }
 
 const viewerOf = (v: Viewer, at: Date) => ({ id: v.user.id, active: !unavailable(v.profile, at) });
@@ -206,21 +230,27 @@ export const spotMeetupsService = {
         const access = await requireCrewMember(tx, v, data.crewId ?? "", "write");
         crewId = access.crew.id;
       }
-      const [created] = await tx
-        .insert(spotMeetups)
-        .values({
-          authorId: v.user.id,
-          audience: data.audience,
-          crewId,
-          placeLabel: data.placeLabel,
-          lat: data.lat,
-          lng: data.lng,
-          startsAt: data.startsAt,
-          endsAt: data.endsAt,
-          note: data.note,
-          createdAt: at,
-        })
-        .returning();
+      let created: SpotRow | undefined;
+      try {
+        [created] = await tx
+          .insert(spotMeetups)
+          .values({
+            authorId: v.user.id,
+            audience: data.audience,
+            crewId,
+            placeLabel: data.placeLabel,
+            lat: data.lat,
+            lng: data.lng,
+            startsAt: data.startsAt,
+            endsAt: data.endsAt,
+            note: data.note,
+            createdAt: at,
+          })
+          .returning();
+      } catch (error) {
+        // Le lieu est dans les paramètres de la requête : l'erreur d'origine ne sort pas (journaux, Sentry).
+        throw withoutPlace(error);
+      }
       if (!created) throw new Error("Rendez-vous non enregistré");
       await notifyInvitees(tx, after, v, created);
       return created;
@@ -298,7 +328,7 @@ export const spotMeetupsService = {
     const at = now();
     const row = await visibleRow(v, id, at);
     if (isOver(row, at)) return { items: [], yesCount: 0, maybeCount: 0, nextCursor: null };
-    const cursor = decodeCursor(cursorRaw);
+    const cursor = decodeCursor("a", cursorRaw);
     const rows = await db
       .select({
         userId: spotMeetupReplies.userId,
@@ -332,7 +362,7 @@ export const spotMeetupsService = {
       yesCount: view?.yesCount ?? 0,
       maybeCount: view?.maybeCount ?? 0,
       nextCursor:
-        rows.length > SPOT_REPLIES_PAGE && last ? encodeCursor({ at: last.answeredAt, id: last.userId }) : null,
+        rows.length > SPOT_REPLIES_PAGE && last ? encodeCursor("a", { at: last.answeredAt, id: last.userId }) : null,
     };
   },
 
@@ -340,18 +370,19 @@ export const spotMeetupsService = {
   async incoming(v: Viewer, cursorRaw?: string): Promise<SpotIncoming> {
     rateLimit("spotRead", v.user.id);
     const at = now();
-    const rows = await incomingRows(v, at, decodeCursor(cursorRaw), SPOT_PAGE + 1);
+    const rows = await incomingRows(v, at, decodeCursor("m", cursorRaw), SPOT_PAGE + 1);
     const page = rows.slice(0, SPOT_PAGE);
     const last = page.at(-1);
     return {
       items: await buildViews(db, page, v.user.id, at),
-      nextCursor: rows.length > SPOT_PAGE && last ? encodeCursor({ at: last.startsAt, id: last.id }) : null,
+      nextCursor: rows.length > SPOT_PAGE && last ? encodeCursor("m", { at: last.startsAt, id: last.id }) : null,
     };
   },
 
   /** Bloc « Au spot » de l’Accueil : le prochain rendez-vous reçu, sinon le mien (la limite de débit est celle de l’Accueil). */
   async homeBlock(v: Viewer): Promise<HomeSpotMeetup | null> {
     const at = now();
+    if (unavailable(v.profile, at)) return null;
     const rows = await incomingRows(v, at, null, SPOT_PAGE);
     const first = rows[0];
     if (first) {
@@ -367,6 +398,7 @@ export const spotMeetupsService = {
   async mine(v: Viewer): Promise<SpotMeetupView | null> {
     rateLimit("spotRead", v.user.id);
     const at = now();
+    if (unavailable(v.profile, at)) return null;
     const row = await activeOf(db, v.user.id, at);
     return row ? viewOf(row, v.user.id, at) : null;
   },
@@ -375,8 +407,10 @@ export const spotMeetupsService = {
   async crewList(v: Viewer, crewId: string, cursorRaw?: string): Promise<SpotCrewList> {
     rateLimit("spotRead", v.user.id);
     const at = now();
+    // Un compte écarté (suspendu, banni, supprimé) ne lit rien, comme sur les autres lectures.
+    if (unavailable(v.profile, at)) return { active: [], past: [], nextCursor: null };
     const access = await requireCrewMember(db, v, crewId);
-    const cursor = decodeCursor(cursorRaw);
+    const cursor = decodeCursor("m", cursorRaw);
     const base = and(
       eq(spotMeetups.crewId, access.crew.id),
       eq(spotMeetups.audience, "crew"),
@@ -417,7 +451,7 @@ export const spotMeetupsService = {
     return {
       active: await buildViews(db, active, v.user.id, at),
       past: await buildViews(db, past, v.user.id, at),
-      nextCursor: pastRows.length > SPOT_PAGE && last ? encodeCursor({ at: last.endsAt, id: last.id }) : null,
+      nextCursor: pastRows.length > SPOT_PAGE && last ? encodeCursor("m", { at: last.endsAt, id: last.id }) : null,
     };
   },
 

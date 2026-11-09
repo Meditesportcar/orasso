@@ -1,6 +1,6 @@
 // Rendez-vous au spot (lot R7i) : effacement du lieu et de la liste. À `ends_at` (tâche `spot.purge`, toutes les 5 minutes,
 // et jamais en retard pour les lectures : le lieu n'est plus servi dès `ends_at`) ou à l'annulation, le nom du lieu, les
-// coordonnées et les réponses disparaissent ; il ne reste qu'un nombre (`came_count`). Les lignes effacées restent
+// coordonnées, le mot et les réponses disparaissent ; il ne reste qu'un nombre (`came_count`). Les lignes effacées restent
 // 30 jours (onglet Spots du crew, sans lieu ; modération), puis sont supprimées.
 import { SPOT_PAST_MS } from "@orasso/shared";
 import { and, inArray, isNotNull, isNull, lt, lte, type SQL, sql } from "drizzle-orm";
@@ -18,6 +18,8 @@ export async function purgeWhere(ex: Executor, where: SQL, at: Date): Promise<st
       placeLabel: "",
       lat: 0,
       lng: 0,
+      // Le mot peut nommer le lieu (« devant le garage Dupont ») : il disparaît avec lui.
+      note: null,
       purgedAt: at,
       cameCount: sql`(select count(*)::int from spot_meetup_replies r where r.meetup_id = ${spotMeetups.id} and r.answer = 'yes')`,
     })
@@ -26,17 +28,16 @@ export async function purgeWhere(ex: Executor, where: SQL, at: Date): Promise<st
   const ids = rows.map((r) => r.id);
   if (ids.length) {
     await ex.delete(spotMeetupReplies).where(inArray(spotMeetupReplies.meetupId, ids));
+    const ofThese = sql`${notifications.data} ->> 'meetupId' in (${sql.join(
+      ids.map((i) => sql`${i}`),
+      sql`, `,
+    )})`;
     // Une notification « te donne rendez-vous » pas encore livrée (heures calmes) ne part plus.
-    await ex.delete(notifications).where(
-      and(
-        sql`${notifications.type} = 'spot_meetup_new'`,
-        isNull(notifications.deliveredAt),
-        sql`${notifications.data} ->> 'meetupId' in (${sql.join(
-          ids.map((i) => sql`${i}`),
-          sql`, `,
-        )})`,
-      ),
-    );
+    await ex
+      .delete(notifications)
+      .where(and(sql`${notifications.type} = 'spot_meetup_new'`, isNull(notifications.deliveredAt), ofThese));
+    // « Qui vient » dans l'Activité (« X vient ») disparaît avec la liste : la liste n'existe plus nulle part.
+    await ex.delete(notifications).where(and(sql`${notifications.type} = 'spot_meetup_reply'`, ofThese));
   }
   return ids;
 }

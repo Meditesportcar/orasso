@@ -1,7 +1,7 @@
 // Rendez-vous au spot (lot R7i) : les vues servies (liste blanche de champs) et les règles de visibilité en SQL. Une vue
 // n'est jamais construite que pour l'auteur ou un invité : l'appelant a déjà décidé (`meetupVisibleTo`, ou le filtre
 // SQL de `invitedSql`). Le lieu n'est servi que tant que le rendez-vous est en cours : dès `ends_at` (même avant que la
-// tâche `spot.purge` ne passe), annulé ou effacé, `place` vaut `null`.
+// tâche `spot.purge` ne passe), annulé ou effacé, `place` et `note` valent `null`.
 import { meetupPhase, SPOT_WHO_PREVIEW, type SpotAnswer, type SpotMeetupView, type SpotPerson } from "@orasso/shared";
 import { and, eq, inArray, lte, type SQL, sql } from "drizzle-orm";
 
@@ -117,7 +117,8 @@ export async function buildViews(ex: Executor, rows: SpotRow[], viewerId: string
         audience: r.audience,
         crew,
         place: over ? null : { label: r.placeLabel, lat: r.lat, lng: r.lng },
-        note: r.note,
+        // Le mot disparaît avec le lieu : plus servi dès la fin (comme le lieu), et effacé à la purge.
+        note: over ? null : r.note,
         startsAt: r.startsAt.toISOString(),
         endsAt: r.endsAt.toISOString(),
         createdAt: r.createdAt.toISOString(),
