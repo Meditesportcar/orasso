@@ -228,7 +228,8 @@ describe("le nombre « Sorties » compte les événements attestés par un tampo
       .returning();
     const seasonId =
       season?.id ?? (await db.query.seasons.findFirst({ where: eq(seasons.startsOn, "2026-01-01") }))!.id;
-    const past = (days: number) => new Date(Date.now() - days * 86_400_000);
+    const clock = useClock(fromWallTime({ year: 2026, month: 11, day: 9, hour: 15, minute: 0 }));
+    const past = (days: number) => new Date(clock.now.getTime() - days * 86_400_000);
     const stamp = (eventId: string, kind: "participation" | "visit") =>
       db.insert(passportStamps).values({
         userId: me.id,
@@ -274,5 +275,58 @@ describe("le nombre « Sorties » compte les événements attestés par un tampo
     expect((await call(viewer, "GET", "/users/Sorties_R7b1")).json.outingsCount).toBe(3);
     expect((await call(me, "GET", "/users/Sorties_R7b1")).json.outingsCount).toBe(3);
     expect((await call(me, "GET", "/me/network")).json.outings).toBe(3);
+  });
+
+  // Tour 3 (vie privée) : le tampon est posé pendant l'événement ; le nombre, visible de tout membre, ne doit jamais
+  // révéler une arrivée en direct. Seuls les événements finis comptent (publiés, ni sur invitation ni annulés).
+  it("ne compte que les événements finis : pas celui en cours, ni l'invitation, ni l'annulé ; le même événement compte après sa fin", async () => {
+    const me = await person("Direct_R7b1");
+    const viewer = await person("Lecteur3_R7b1");
+    const orga = await person("OrgaD_R7b1");
+    const structure = await createStructure(orga.id);
+    const [season] = await db
+      .insert(seasons)
+      .values({ name: "Saison 2026", startsOn: "2026-01-01", endsOn: "2026-12-31" })
+      .onConflictDoNothing()
+      .returning();
+    const seasonId =
+      season?.id ?? (await db.query.seasons.findFirst({ where: eq(seasons.startsOn, "2026-01-01") }))!.id;
+    const clock = useClock(fromWallTime({ year: 2026, month: 11, day: 9, hour: 15, minute: 0 }));
+    const at = (hours: number) => new Date(clock.now.getTime() + hours * 3_600_000);
+    const stamp = (eventId: string) =>
+      db.insert(passportStamps).values({
+        userId: me.id,
+        eventId,
+        seasonId,
+        kind: "participation",
+        shape: "round",
+        ink: "default",
+        seed: 1,
+        stampedAt: clock.now,
+      });
+    const counts = async () => [
+      (await call(viewer, "GET", "/users/Direct_R7b1")).json.outingsCount,
+      (await call(me, "GET", "/users/Direct_R7b1")).json.outingsCount,
+      (await call(me, "GET", "/me/network")).json.outings,
+    ];
+
+    // En cours (commencé il y a 1 h, finit dans 3 h), tampon déjà posé : pas compté.
+    const live = await createEvent(structure.id, { startsAt: at(-1), endsAt: at(3) });
+    await stamp(live.id);
+    // Fini mais sur invitation : pas compté.
+    const invite = await createEvent(structure.id, { startsAt: at(-30), endsAt: at(-26), admission: "invite_only" });
+    await stamp(invite.id);
+    // Fini mais annulé : pas compté.
+    const cancelled = await createEvent(structure.id, {
+      startsAt: at(-30),
+      endsAt: at(-26),
+      status: "cancelled" as const,
+    });
+    await stamp(cancelled.id);
+    expect(await counts()).toEqual([0, 0, 0]);
+
+    // L'événement en cours est fini : il compte (les deux autres, toujours non).
+    clock.set(at(3.5));
+    expect(await counts()).toEqual([1, 1, 1]);
   });
 });

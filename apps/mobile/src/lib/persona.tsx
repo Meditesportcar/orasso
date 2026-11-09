@@ -132,8 +132,17 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
   const openProfile = useCallback(
     (onglet: ProfileTab) => {
       const href = profileHref(base.kind, onglet);
-      if (persona.kind === base.kind) router.navigate(href as never);
-      else choose(base, href);
+      // Tour 3 : on ferme d'abord les écrans posés par-dessus la barre (assistant d'ajout, fiche véhicule) : `dismissTo`
+      // revient à l'onglet Profil déjà dans la pile, au lieu d'en empiler une seconde barre ; hors pile, `navigate`.
+      // Autre casquette active : tout est fermé (`dismissAll`) avant que `choose` remplace la racine, sinon l'ancienne
+      // barre reste sous la nouvelle.
+      if (persona.kind === base.kind) {
+        if (router.canDismiss()) router.dismissTo(href as never);
+        else router.navigate(href as never);
+      } else {
+        if (router.canDismiss()) router.dismissAll();
+        choose(base, href);
+      }
     },
     [persona, base, router, choose],
   );

@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { addVehicleApi, apiCall, login, randomPlate, SEED_PASSWORD, seeStepEnd, signUpApi, unique } from "./helpers";
+import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot R7b1 (D38), côté appli (version web compilée de recette) : le Profil porte le Garage. Garage par défaut partout,
@@ -280,4 +281,94 @@ test("le profil d'un inconnu : « Message » ouvre la feuille à l'écran (jamai
     }
     await ctx.close();
   }
+});
+
+// Tour 3, point 2 : une seule barre d'onglets, écrans cachés compris (`[role=tablist]` en CSS compte aussi ceux qui sont
+// `display: none`), et le retour arrière ne ramène ni à l'assistant ni à la fiche supprimée.
+const allBars = (page: Page) =>
+  page.locator('[role="tablist"]').filter({ has: page.locator('[role="tab"]', { hasText: "Accueil" }) });
+
+test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, le retour ne rouvre pas l'assistant", async ({
+  browser,
+}) => {
+  test.setTimeout(360_000);
+  const pseudo = `Barre_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  await addVehicleApi(cookie, randomPlate().replace(/[IOUSW]/g, "A"));
+  const { ctx, page } = await open(browser);
+  await signIn(page, email);
+  await go(page, "/profil");
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await page.getByTestId("garage-add").click();
+  await page.waitForURL(/vehicule\/nouveau/, { timeout: 30_000 });
+  const next = async () => {
+    await seeStepEnd(page);
+    await page.getByTestId("vehicle-step-next").click();
+  };
+  const row = (name: string) => page.getByRole("radio", { name, exact: false }).first();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("vehicle-photo-add").click();
+  await (await chooser).setFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+  await page.getByTestId("crop-validate").click();
+  await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
+  await next();
+  await page.getByTestId("vehicle-plate").fill(randomPlate().replace(/[IOUSW]/g, "A"));
+  await next();
+  await page.getByTestId("plate-frame-add").click();
+  await next();
+  await page.getByLabel("Marque ou modèle").fill("toyota");
+  await row("Toyota").click();
+  await row("Supra").click();
+  await row("Mk5").click();
+  await next();
+  await page.getByTestId("vehicle-engine").fill("3.0 L6 turbo");
+  await page.getByTestId("vehicle-year-2021").click();
+  await page.getByTestId("vehicle-color-family-white").click();
+  await page.getByTestId("vehicle-color-Blanc").click();
+  await next();
+  await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
+  await next();
+  await expect(page.getByTestId("vehicle-done-title")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("vehicle-done-garage").click();
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/vehicule\/nouveau/);
+  await expect(allBars(page)).toHaveCount(1);
+  await shot(page, "09-apres-ajout-garage");
+  await page.goBack();
+  await expect(page).not.toHaveURL(/vehicule\/nouveau/);
+  await expect(page.getByTestId("vehicle-done-title")).toHaveCount(0);
+  await expect(allBars(page)).toHaveCount(1);
+  await ctx.close();
+});
+
+test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, le retour ne rouvre pas la fiche", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const pseudo = `Suppr_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  await addVehicleApi(cookie, randomPlate().replace(/[IOUSW]/g, "A"));
+  await addVehicleApi(cookie, randomPlate().replace(/[IOUSW]/g, "A"));
+  const { ctx, page } = await open(browser);
+  await signIn(page, email);
+  await go(page, "/profil");
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  // Depuis la carte du Garage (la fiche s'empile sur la barre), pas à froid.
+  await page.getByTestId("garage-card").first().click();
+  await page.waitForURL(/\/vehicule\//, { timeout: 30_000 });
+  const gone = page.url().split("/vehicule/")[1]?.split(/[?#/]/)[0] ?? "";
+  expect(gone).not.toBe("");
+  await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
+  await page.getByTestId("vehicle-delete").click();
+  await page.getByTestId("orga-confirm").click();
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(allBars(page)).toHaveCount(1);
+  await page.goBack();
+  await expect(page).not.toHaveURL(new RegExp(`vehicule/${gone}`));
+  await expect(allBars(page)).toHaveCount(1);
+  const left = await apiCall<{ id: string }[]>(cookie, "GET", "/me/vehicles");
+  expect(left.data.map((v) => v.id)).not.toContain(gone);
+  await ctx.close();
 });

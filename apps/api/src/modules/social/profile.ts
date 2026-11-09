@@ -259,8 +259,10 @@ async function seenAtOf(userId: string, at: Date): Promise<{ events: number; sta
  * participation ou de visite (billet scanné, GPS) à un événement publié, hors invitation. Une candidature retenue sans
  * tampon (à venir, ou jamais venu) ne compte pas ; deux véhicules au même événement font une seule sortie. Même règle pour
  * `/me/network` et les profils : ce nombre ouvre le panneau des tampons.
+ * Tour 3 (vie privée) : seuls les événements **finis** (`endsAt < at`) comptent. Le tampon est posé pendant l'événement ;
+ * compter l'événement en cours ferait voir, à tout membre, une arrivée en direct.
  */
-export async function outingsCount(userId: string): Promise<number> {
+export async function outingsCount(userId: string, at: Date = now()): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(distinct ${passportStamps.eventId})::int` })
     .from(passportStamps)
@@ -271,6 +273,7 @@ export async function outingsCount(userId: string): Promise<number> {
         inArray(passportStamps.kind, ["participation", "visit"]),
         eq(events.status, "published"),
         ne(events.admission, "invite_only"),
+        lt(events.endsAt, at),
       ),
     );
   return row?.n ?? 0;
@@ -363,7 +366,7 @@ export const socialProfile = {
       visibility: target.visibility,
       bio: fields.bio ? target.bio : null,
       departments: fields.departments ? target.departments : null,
-      outingsCount: showCounts ? await outingsCount(target.userId) : null,
+      outingsCount: showCounts ? await outingsCount(target.userId, at) : null,
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
       pastEvents: fields.pastEvents && ev ? ev.past : null,

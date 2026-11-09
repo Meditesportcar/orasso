@@ -202,7 +202,9 @@ test("R3b appli : année des dates, un seul lieu, sorties passées, rejoindre un
     const n = await open(browser, theme);
     await signIn(n.page, newcomer);
     await goto(n.page, "/profil");
-    await n.page.getByTestId("profil-crew").click();
+    // Lot R7b1 : « Mon crew » a quitté le Profil ; l'onglet Crew (sans crew) mène à « Rejoindre un crew ».
+    await n.page.getByRole("tab", { name: "Crew", exact: true }).click();
+    await n.page.getByTestId("crew-tab-join").click();
     await expect(n.page).toHaveURL(/\/rejoindre-crew/, { timeout: 30_000 });
     await expect(n.page.getByTestId("suggest-crews")).toBeVisible({ timeout: 30_000 });
     // « Créer un crew » vient après les crews, en secondaire.
