@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, loginInBrowser, setTheme } from "./helpers";
+import { apiCall, login, loginInBrowser, setTheme } from "./helpers";
 import { follow, who } from "./lotr7f3-setup";
-import { brokenClip, CAPTURES, clip, hevcClip, landscapeClip, longClip } from "./lotr7g-setup";
+import { brokenClip, CAPTURES, clip, hevcClip, landscapeClip, longClip, reportedVideoStory } from "./lotr7g-setup";
 
 // Lot R7g (D38, décision de Damien du 09/11 : pas de floutage de plaque pour les vidéos), côté site : `/app/story/publier` accepte
 // une vidéo (30 s, 60 Mo, H.264 : vérifiés avant l'envoi), l'étape plaque n'existe pas, l'aperçu la joue muette en boucle,
@@ -227,4 +227,40 @@ test("captures Béton et Sable, 390 et 1280 px : choix, aperçu de la vidéo, le
       await ctx.close();
     }
   }
+});
+
+test("modération : une vidéo signalée qui ne se lit pas le dit, « Réessayer » la relit une fois le réseau revenu", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { author } = await reportedVideoStory("SvModo");
+  // Connexion par l'API puis cookies dans le navigateur (comme moderation.spec : la double authentification est coupée en recette).
+  const modo = await login("moderatrice@orasso.local");
+  const web = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+  await page.context().addCookies(
+    modo
+      .split("; ")
+      .filter(Boolean)
+      .map((pair) => ({ name: pair.slice(0, pair.indexOf("=")), value: pair.slice(pair.indexOf("=") + 1), url: web })),
+  );
+  await page.goto("/admin/signalements");
+  // Coupure du réseau pour la vidéo seule (le dossier, lui, se charge).
+  const MEDIA = "**/api/admin/reports/*/media/*.mp4";
+  await page.route(MEDIA, (route) => route.abort("connectionfailed"));
+  await page.getByTestId("report-item").filter({ hasText: author.pseudo }).first().click();
+  await expect(page.getByTestId("report-detail")).toBeVisible();
+  await expect(page.getByTestId("report-video-failed")).toContainText("La vidéo n'a pas pu être lue", {
+    timeout: 20_000,
+  });
+  await shot(page, "modo-video-echec");
+  // Le réseau revient : « Réessayer » relit la vidéo (métadonnées chargées), le message disparaît.
+  await page.unroute(MEDIA);
+  await page.getByTestId("report-video-retry").click();
+  await expect(page.getByTestId("report-video-failed")).toHaveCount(0);
+  await expect
+    .poll(() => page.getByTestId("report-video").evaluate((v) => (v as HTMLVideoElement).readyState), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThanOrEqual(1);
+  await shot(page, "modo-video-relue");
 });

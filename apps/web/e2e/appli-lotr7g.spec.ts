@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { follow, who } from "./lotr7f3-setup";
-import { brokenClip, CAPTURES, clip, hevcClip, landscapeClip, longClip } from "./lotr7g-setup";
+import { brokenClip, CAPTURES, clip, hevcClip, landscapeClip, longClip, reportedVideoStory } from "./lotr7g-setup";
 
 // Lot R7g (D38, décision de Damien du 09/11 : pas de floutage de plaque pour les vidéos), côté appli (version web compilée de
 // recette, `APP_URL`) : une vidéo de la galerie saute « Ajuster » et la plaque, l'aperçu la joue muette, l'envoi dit sa
@@ -232,4 +232,52 @@ test("captures Béton et Sable (384 px police 1 et 1,3, 390 px) : choix, aperçu
       await b.ctx.close();
     }
   }
+});
+
+test("modération : une vidéo signalée qui ne se lit pas le dit, « Réessayer » la relit une fois le réseau revenu", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const { author, storyId } = await reportedVideoStory("SvModo");
+  const modo = await login("moderatrice@orasso.local");
+  const list = await apiCall<{ items: { id: string; targetId: string }[] }>(
+    modo,
+    "GET",
+    "/admin/reports?status=pending",
+  );
+  expect(list.status).toBe(200);
+  const report = list.data.items.find((r) => r.targetId === storyId);
+  expect(report, `signalement de ${author.pseudo}`).toBeDefined();
+
+  const ctx = await browser.newContext({ viewport: { width: 384, height: 860 }, baseURL: APP });
+  await ctx.addInitScript(() => {
+    localStorage.setItem("orasso.onboarded", "1");
+    localStorage.setItem("orasso.theme", "beton");
+  });
+  const page = await ctx.newPage();
+  await page.goto("/auth");
+  await afterOpening(page);
+  await page.getByLabel("E-mail").fill("moderatrice@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/auth"), { timeout: 60_000 });
+
+  // Casquette Administration (elle survit au rechargement), puis le dossier du signalement.
+  await go(page, "/moi");
+  await page.getByTestId("casquette-admin").click();
+  await page.waitForURL(/administration/, { timeout: 20_000 });
+  const MEDIA = "**/api/admin/reports/*/media/*.mp4";
+  await page.route(MEDIA, (route) => route.abort("connectionfailed"));
+  await go(page, `/signalement/${report?.id}`);
+  await expect(page.getByTestId("report-video-failed")).toContainText("La vidéo n'a pas pu être lue", {
+    timeout: 30_000,
+  });
+  await shot(page, "modo-video-echec");
+  // Le réseau revient : « Réessayer » relit la vidéo, le message disparaît et le lecteur est là.
+  await page.unroute(MEDIA);
+  await page.getByTestId("report-video-retry").click();
+  await expect(page.getByTestId("report-video-failed")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("report-video")).toBeVisible({ timeout: 30_000 });
+  await shot(page, "modo-video-relue");
+  await ctx.close();
 });
