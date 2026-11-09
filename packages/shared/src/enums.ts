@@ -26,7 +26,7 @@ import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notif
 import { passportJournalOnlyTypes, passportNoEmailTypes, passportNotificationTypes } from "./notifications/passport";
 import { pointsNotificationTypes } from "./notifications/points";
 import { providersV2NotificationTypes } from "./notifications/providers-v2";
-import { r7JournalOnlyTypes, r7NoEmailTypes, r7NotificationTypes } from "./notifications/r7";
+import { r7EmailAlwaysTypes, r7JournalOnlyTypes, r7NoEmailTypes, r7NotificationTypes } from "./notifications/r7";
 import {
   journalOnlyNotificationTypes as socialJournalOnly,
   socialNoEmailTypes,
@@ -199,6 +199,7 @@ export const emailAlwaysTypes: readonly NotificationType[] = [
   ...moderationEmailAlwaysTypes,
   ...afterEventEmailAlwaysTypes,
   ...adminEmailAlwaysTypes,
+  ...r7EmailAlwaysTypes,
 ];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */

@@ -2,7 +2,6 @@
 // personne suivie va à un événement, publie une story…) vont au Fil, pas ici. Lecture seule sur `notifications`, plus la
 // date de dernière ouverture de la cloche (`profiles.activity_seen_at`).
 import {
-  type ActivityActor,
   type ActivityItem,
   type ActivityPage,
   type ActivityRow,
@@ -15,11 +14,12 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, notInArray, or, sql 
 import { db } from "../../db/client";
 import { applications, events, notifications, profiles, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
+import { validation } from "../../lib/errors";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
-import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
 import { inboxService } from "../messaging/inbox";
+import { citedPeopleRemain, citedViews } from "../notifications/grouped";
 
 type NotificationRow = typeof notifications.$inferSelect;
 
@@ -27,13 +27,12 @@ type NotificationRow = typeof notifications.$inferSelect;
 export const ACTIVITY_PAGE_SIZE = 30;
 /** L'Activité remonte 30 jours en arrière (« Plus tôt » au-delà de 7 jours). */
 export const ACTIVITY_WINDOW_DAYS = 30;
-/** Personnes vérifiées (compte en règle) par ligne : au-delà, le total est celui qui est enregistré. */
-const ACTORS_CHECKED = 100;
 /** Types d'horaire modifié mis « à la une » (bandeau moutarde) tant qu'ils ne sont pas lus. */
 const HIGHLIGHT_TYPES = ["event_updated", "schedule_change"];
 const HIGHLIGHT_MAX = 3;
 const HIGHLIGHT_DAYS = 7;
 const DAY = 86_400_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Clés de `data` qui ne sortent jamais vers un client (identifiants et listes de personnes). */
 const HIDDEN_DATA_KEYS = new Set(["actor", "actorIds", "actors", "pseudos", "count", "notes"]);
@@ -41,52 +40,22 @@ const HIDDEN_DATA_KEYS = new Set(["actor", "actorIds", "actors", "pseudos", "cou
 const sanitize = (data: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith("_") && !HIDDEN_DATA_KEYS.has(k)));
 
-type Shape = { _actorIds?: unknown; actorIds?: unknown; actor?: { userId?: unknown }; count?: unknown };
-
-/** Identifiants des personnes citées par une notification, la plus récente d'abord. */
-function actorIdsOf(data: Record<string, unknown>): string[] {
-  const d = data as Shape;
-  const ids = Array.isArray(d._actorIds) ? d._actorIds : Array.isArray(d.actorIds) ? d.actorIds : null;
-  if (ids) return ids.filter((x): x is string => typeof x === "string");
-  const one = d.actor?.userId;
-  return typeof one === "string" ? [one] : [];
-}
-
-const visibleProfile = (at: Date) =>
-  sql`${profiles.deletedAt} is null and ${profiles.bannedAt} is null and (${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at})`;
-
 const windowStart = () => new Date(now().getTime() - ACTIVITY_WINDOW_DAYS * DAY);
 
 const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes]);
 
 /**
  * Notifications en lignes d'activité : les personnes citées sont relues (pseudo et avatar d'aujourd'hui) et seules les
- * personnes au compte en règle comptent ; une ligne dont toutes les personnes ont disparu n'est pas montrée.
+ * personnes au compte en règle comptent ; une ligne dont toutes les personnes ont disparu n'est pas montrée. Le titre et
+ * le corps d'une ligne regroupée sont recomposés avec les personnes restantes.
  */
 async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<ActivityRow[]> {
-  const at = now();
-  const wanted = rows.map((n) => actorIdsOf(n.data).slice(0, ACTORS_CHECKED));
-  const all = [...new Set(wanted.flat())];
-  const people = all.length
-    ? await ex
-        .select({ userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey })
-        .from(profiles)
-        .where(and(inArray(profiles.userId, all), visibleProfile(at)))
-    : [];
-  const byId = new Map(people.map((p) => [p.userId, p]));
-  return rows.flatMap((n, i): ActivityRow[] => {
-    const ids = actorIdsOf(n.data);
-    const checked = wanted[i] ?? [];
-    const visible = checked.flatMap((id) => {
-      const p = byId.get(id);
-      return p ? [p] : [];
-    });
+  const views = await citedViews(rows, ex);
+  return rows.flatMap((n): ActivityRow[] => {
+    const view = views.get(n.id);
     // Personnes citées mais plus aucune en règle : rien à montrer.
-    if (ids.length > 0 && visible.length === 0 && ids.length <= ACTORS_CHECKED) return [];
-    const storedCount = typeof (n.data as Shape).count === "number" ? ((n.data as Shape).count as number) : null;
-    const actors: ActivityActor[] = visible
-      .slice(0, 3)
-      .map((p) => ({ pseudo: p.pseudo, avatarUrl: storage.url(p.avatarKey) }));
+    if (view === null) return [];
+    const storedCount = (n.data as { count?: unknown }).count;
     return [
       {
         id: n.id,
@@ -94,12 +63,11 @@ async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<Activ
         groupKey: n.groupKey,
         at: n.deliveredAt ?? n.createdAt,
         readAt: n.readAt,
-        title: n.title,
-        body: n.body,
-        count: ids.length
-          ? Math.max(1, visible.length + Math.max(0, (storedCount ?? ids.length) - checked.length))
-          : (storedCount ?? 1),
-        actors,
+        title: view?.title ?? n.title,
+        body: view?.body ?? n.body,
+        count: view ? view.count : typeof storedCount === "number" ? storedCount : 1,
+        actors: view?.actors ?? [],
+        people: view?.people,
         data: sanitize(n.data),
         eventId: n.eventId,
       },
@@ -112,6 +80,8 @@ export const activityService = {
   async list(v: Viewer, cursor?: string): Promise<ActivityPage> {
     const me = v.user.id;
     const c = decodeCursor(cursor);
+    // Tour 2 : un curseur illisible ou dont l'identifiant n'est pas un uuid est une erreur de requête, pas une erreur du serveur.
+    if (cursor && (!c || !UUID.test(c.id))) throw validation("Curseur invalide.");
     const delivered = notifications.deliveredAt;
     const rows = await db
       .select()
@@ -123,6 +93,7 @@ export const activityService = {
           isNotNull(delivered),
           feedFilter,
           gt(delivered, windowStart()),
+          citedPeopleRemain(now()),
           c ? or(lt(delivered, c.createdAt), and(eq(delivered, c.createdAt), lt(notifications.id, c.id))) : undefined,
         ),
       )
@@ -195,6 +166,8 @@ export const activityService = {
           isNull(notifications.readAt),
           feedFilter,
           gt(notifications.deliveredAt, since),
+          // Mêmes critères de visibilité que la liste : ni pastille pour une ligne qui ne s'affiche pas.
+          citedPeopleRemain(now()),
         ),
       );
     return row?.n ?? 0;

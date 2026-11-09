@@ -2,12 +2,13 @@
 // propres règles de regard (les services d'origine) ; les actions restent sur leurs routes (`/me/follow-requests/:userId/
 // accept`, `/contact-requests/:id/accept`, `/me/crew-invitations/:crewId/accept`…). Rien d'autre que la liste blanche
 // ci-dessous ne sort : pas de plaque, pas d'e-mail, pas d'identifiant de plus que celui qu'utilise l'action.
-import type { InboxRequestCounts, RequestFrom, RequestItem } from "@orasso/shared";
+import type { InboxRequestCounts, RequestFrom, RequestItem, RequestsPage } from "@orasso/shared";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, plateTransferRequests, profiles, userFollows, vehicles } from "../../db/schema";
 import { now } from "../../lib/deps";
+import { validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
@@ -16,13 +17,15 @@ import { crewsService } from "../crews/service";
 import { eventInvitesService } from "../event-invites/service";
 import { invitationsService } from "../invitations/service";
 import { contactsService } from "../messaging/contacts";
-import { registerInboxExtras } from "../messaging/inbox";
+import { inboxService, registerInboxExtras } from "../messaging/inbox";
 import { staffRequestsService } from "../staff/requests";
 import { plateTransferService } from "../vehicles/plate-transfer";
 import { activityService } from "./service";
 
-/** Au plus ce nombre de demandes par sorte (la liste n'est pas un annuaire). */
-const PER_KIND = 50;
+/** Demandes par page de `GET /me/requests` (tour 2 : la suite se charge par `nextCursor`). */
+export const REQUESTS_PAGE_SIZE = 50;
+/** Demandes lues au plus par sorte pour composer la liste (le total, lui, vient des compteurs et n'est pas plafonné). */
+const PER_KIND = 500;
 
 const person = (pseudo: string, avatarKey: string | null): RequestFrom => ({
   type: "person",
@@ -234,9 +237,44 @@ async function pendingPlateTransfers(userId: string, ex: Executor): Promise<numb
   return row?.n ?? 0;
 }
 
+/** Ordre de la liste : la plus récente d'abord, puis par sorte et identifiant (stable d'une page à l'autre). */
+const compare = (a: RequestItem, b: RequestItem) =>
+  a.at < b.at
+    ? 1
+    : a.at > b.at
+      ? -1
+      : a.kind === b.kind
+        ? a.id < b.id
+          ? 1
+          : a.id > b.id
+            ? -1
+            : 0
+        : a.kind < b.kind
+          ? 1
+          : -1;
+
+/** Curseur : la position (date, sorte, identifiant) du dernier élément servi. Illisible ou faux : 400. */
+const encodeRequestCursor = (i: RequestItem) => Buffer.from(JSON.stringify([i.at, i.kind, i.id])).toString("base64url");
+function decodeRequestCursor(cursor: string): RequestItem {
+  try {
+    const [at, kind, id] = JSON.parse(Buffer.from(cursor, "base64url").toString()) as unknown[];
+    if (typeof at === "string" && typeof kind === "string" && typeof id === "string" && !Number.isNaN(Date.parse(at))) {
+      return { at, kind, id } as RequestItem;
+    }
+  } catch {
+    // curseur illisible : même réponse que faux
+  }
+  throw validation("Curseur invalide.");
+}
+
 export const requestsService = {
-  /** `GET /me/requests` : `{ total, items }`, la plus récente d'abord. `partnership` est prévu, vide jusqu'au lot R7m1. */
-  async list(v: Viewer): Promise<{ total: number; items: RequestItem[] }> {
+  /**
+   * `GET /me/requests?cursor=` : `{ total, items, nextCursor }`, la plus récente d'abord, 50 par page. `total` est le
+   * nombre de toutes les demandes en attente (celui de la pastille), pas la longueur de la page. `partnership` est prévu,
+   * vide jusqu'au lot R7m1.
+   */
+  async list(v: Viewer, cursor?: string): Promise<RequestsPage> {
+    const after = cursor ? decodeRequestCursor(cursor) : null;
     const sources = await Promise.all([
       followItems(v.user.id),
       crewItems(v),
@@ -245,8 +283,16 @@ export const requestsService = {
       plateTransferItems(v),
       contactItems(v),
     ]);
-    const items = sources.flat().sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-    return { total: items.length, items };
+    const all = sources.flat().sort(compare);
+    const rest = after ? all.filter((i) => compare(after, i) < 0) : all;
+    const items = rest.slice(0, REQUESTS_PAGE_SIZE);
+    const last = items.at(-1);
+    const { pendingRequests } = await inboxService.summary(v.user.id, { includeStructure: false });
+    return {
+      total: Math.max(pendingRequests, all.length),
+      items,
+      nextCursor: rest.length > REQUESTS_PAGE_SIZE && last ? encodeRequestCursor(last) : null,
+    };
   },
 };
 

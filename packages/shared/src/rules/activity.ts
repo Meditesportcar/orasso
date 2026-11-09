@@ -27,6 +27,11 @@ export type ActivityRow = {
   body: string;
   count: number;
   actors: ActivityActor[];
+  /**
+   * Tour 2 : les pseudos de toutes les personnes en règle de la ligne (pas seulement les trois montrées). Sert à ne compter
+   * qu'une fois une personne qui figure dans deux lignes du même groupe ; absent : `count` est pris tel quel.
+   */
+  people?: string[];
   data: Record<string, unknown>;
   eventId: string | null;
 };
@@ -40,6 +45,19 @@ export function activityDay(at: Date, now: Date, timeZone = BUSINESS_TIMEZONE): 
 
 const dayKey = (at: Date, timeZone: string) =>
   new Intl.DateTimeFormat("fr-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+
+/** Personnes distinctes des lignes rassemblées ; ce que `count` compte au-delà des personnes connues s'ajoute tel quel. */
+function countOf(rows: readonly ActivityRow[]): number {
+  const people = new Set<string>();
+  let extra = 0;
+  for (const r of rows) {
+    if (r.people) {
+      for (const p of r.people) people.add(p);
+      extra += Math.max(0, r.count - r.people.length);
+    } else extra += Math.max(1, r.count);
+  }
+  return people.size + extra;
+}
 
 function merge(rows: readonly ActivityRow[]): ActivityItem {
   const sorted = [...rows].sort((a, b) => b.at.getTime() - a.at.getTime() || (a.id < b.id ? 1 : -1));
@@ -59,7 +77,7 @@ function merge(rows: readonly ActivityRow[]): ActivityItem {
     ids: sorted.map((r) => r.id),
     type: latest.type,
     groupKey: latest.groupKey,
-    count: sorted.reduce((sum, r) => sum + Math.max(1, r.count), 0),
+    count: countOf(sorted),
     actors: actors.slice(0, ACTIVITY_MAX_ACTORS),
     title: latest.title,
     body: latest.body,

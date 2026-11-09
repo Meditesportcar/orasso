@@ -45,6 +45,31 @@ describe("regroupement de l'Activité", () => {
     expect(groups[0]?.items[0]).toMatchObject({ count: 1, read: false, actors: [{ pseudo: "Kenji_66" }] });
   });
 
+  it("tour 2 : une même personne dans une ligne lue et une nouvelle le même jour ne compte qu'une fois", () => {
+    const [group] = groupActivity(
+      [
+        row({
+          groupKey: "story_like:s1",
+          at: ago(5),
+          readAt: ago(4),
+          count: 2,
+          actors: [actor("Kenji_66"), actor("Julie_66")],
+          people: ["Kenji_66", "Julie_66"],
+        }),
+        row({
+          groupKey: "story_like:s1",
+          at: ago(1),
+          count: 2,
+          actors: [actor("Kenji_66"), actor("Marc_66")],
+          people: ["Kenji_66", "Marc_66"],
+        }),
+      ],
+      NOW,
+    );
+    expect(group?.items[0]?.count).toBe(3);
+    expect(group?.items[0]?.read).toBe(false);
+  });
+
   it("rien : aucun groupe", () => {
     expect(groupActivity([], NOW)).toEqual([]);
   });

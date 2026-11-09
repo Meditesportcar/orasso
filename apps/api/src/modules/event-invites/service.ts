@@ -594,6 +594,14 @@ export const eventInvitesService = {
         and not exists (
           select 1 from invitation_mutes m where m.user_id = ${viewerId} and m.muted_user_id = i.inviter_id
         )
+        -- Tour 2 : les événements où j'ai déjà ma place sont écartés avant toute limite (sinon vingt invitations déjà
+        -- honorées cachaient la vingt-et-unième, liste et pastille).
+        and not exists (
+          select 1 from applications a where a.event_id = i.event_id and a.user_id = ${viewerId} and a.status in (${goingStatuses})
+        )
+        and not exists (
+          select 1 from tickets t where t.event_id = i.event_id and t.user_id = ${viewerId} and t.status in ('valid', 'used')
+        )
       order by i.created_at desc, i.id
       limit 400`);
     const rows = result.rows as {
@@ -618,7 +626,6 @@ export const eventInvitesService = {
       const list = byEvent.get(id) ?? [];
       const first = list[0];
       if (!e || !first || !shareable(e, at)) continue;
-      if ((await goingInfo(ex, e.id, [viewerId])).size > 0) continue;
       out.push({
         event: e,
         at: new Date(first.created_at),

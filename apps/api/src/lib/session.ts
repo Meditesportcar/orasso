@@ -55,6 +55,8 @@ const WRITES_WHILE_SUSPENDED: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/sanctions\/[^/]+\/contest$/],
   ["DELETE", /^\/api\/me$/],
   ["POST", /^\/api\/me\/notifications\/read$/],
+  // Lot R7c1 : ouvrir la cloche (acquitter la pastille) est de la lecture.
+  ["POST", /^\/api\/me\/activity\/seen$/],
   ["POST", /^\/api\/conversations\/[^/]+\/read$/],
   ["POST", /^\/api\/me\/devices$/],
   ["POST", /^\/api\/me\/devices\/unregister$/],

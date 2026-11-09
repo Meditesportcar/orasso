@@ -75,4 +75,8 @@ export type RequestItem = {
   payload: Record<string, unknown>;
 };
 
-export type RequestsPage = { total: number; items: RequestItem[] };
+/** `GET /me/requests?cursor=` : 50 demandes par page, la plus récente d'abord. */
+export const requestsQuery = z.object({ cursor: z.string().max(300).optional() });
+
+/** `total` = toutes les demandes en attente (la pastille), pas seulement celles de la page ; `nextCursor` charge la suite. */
+export type RequestsPage = { total: number; items: RequestItem[]; nextCursor: string | null };

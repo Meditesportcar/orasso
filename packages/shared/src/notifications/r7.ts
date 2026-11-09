@@ -194,6 +194,9 @@ export const r7JournalOnlyTypes: readonly string[] = typesWhere((s) => !s.push);
 /** Push et Journal, sans e-mail de repli. */
 export const r7NoEmailTypes: readonly string[] = typesWhere((s) => s.push && !s.email);
 
+/** Types envoyés par e-mail même quand un appareil reçoit le push (la victoire d'un vote : on la garde par écrit). */
+export const r7EmailAlwaysTypes = ["vote_won"] as const satisfies readonly (keyof R7Table)[];
+
 /** Levée des heures calmes d'un type (`undefined` : le type suit les heures calmes). */
 export function r7QuietOverride(type: string): QuietOverride | undefined {
   return (r7NotificationTable as Record<string, R7NotificationSpec>)[type]?.quiet;

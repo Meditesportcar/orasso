@@ -29,7 +29,12 @@ describe("préférences de notification (lot 15)", () => {
     expect(notificationTypes.security_new_login).toBe("account");
     expect(notificationTypes.referral_confirmed).toBe("grade");
     expect(emailAlwaysTypes).toEqual(
-      expect.arrayContaining(["event_reminder_week", "staff_presence_reminder", "security_password_changed"]),
+      expect.arrayContaining([
+        "event_reminder_week",
+        "staff_presence_reminder",
+        "security_password_changed",
+        "vote_won",
+      ]),
     );
   });
 });

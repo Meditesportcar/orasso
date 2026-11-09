@@ -460,7 +460,7 @@ describe("GET /me/requests", () => {
     const { damien, holder } = await everyKind();
     const res = await call(damien, "GET", "/me/requests");
     expect(res.status).toBe(200);
-    expect(Object.keys(res.json).sort()).toEqual(["items", "total"]);
+    expect(Object.keys(res.json).sort()).toEqual(["items", "nextCursor", "total"]);
     const kinds = res.json.items.map((i: { kind: string }) => i.kind).sort();
     expect(kinds).toEqual(
       [
@@ -548,7 +548,7 @@ describe("GET /me/requests", () => {
   it("chacun ne voit que les siennes ; une demande traitée disparaît", async () => {
     const { damien, k } = await everyKind();
     const lea = k("Lea_66");
-    expect((await call(lea, "GET", "/me/requests")).json).toEqual({ total: 0, items: [] });
+    expect((await call(lea, "GET", "/me/requests")).json).toEqual({ total: 0, items: [], nextCursor: null });
     expect((await call(lea, "GET", "/me/inbox/summary")).json.pendingRequests).toBe(0);
     const follow = (await call(damien, "GET", "/me/requests")).json.items.find(
       (i: { kind: string }) => i.kind === "follow",

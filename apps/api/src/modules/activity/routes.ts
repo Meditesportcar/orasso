@@ -1,4 +1,4 @@
-import { activityQuery } from "@orasso/shared";
+import { activityQuery, requestsQuery } from "@orasso/shared";
 import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../lib/session";
@@ -27,5 +27,5 @@ export const activityRoutes = new Hono<AppEnv>()
   .get("/me/requests", async (c) => {
     const v = await requireUser(c);
     c.header("cache-control", "private, no-store");
-    return c.json(await requestsService.list(v));
+    return c.json(await requestsService.list(v, query(c, requestsQuery).cursor));
   });

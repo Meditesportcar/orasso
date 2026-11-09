@@ -24,7 +24,8 @@ import { type MailContent, mail, renderMail } from "../../lib/mail";
 import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
-import type { Executor } from "../../lib/tx";
+import { type Executor, withTx } from "../../lib/tx";
+import { citedPeopleRemain, citedViews, textTemplate } from "./grouped";
 
 export type NotificationRow = typeof notifications.$inferSelect;
 
@@ -58,16 +59,31 @@ export type NotifyInput = {
   urgent?: QuietOverride;
 };
 
-/** Champs internes de `data` jamais renvoyés aux clients. */
-const stripInternal = (data: Record<string, unknown>) => {
-  const { _email, _actorIds, ...rest } = data;
-  return rest;
-};
+/** Champs internes de `data` (clés commençant par `_`) jamais renvoyés aux clients. */
+const stripInternal = (data: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith("_")));
+
+/**
+ * Lot R7c1, tour 2 : comptes dont la Boîte a changé sans nouvelle livraison (occurrence ajoutée à une ligne regroupée déjà
+ * livrée). Leurs appareils sont prévenus (`inbox.changed`) après la validation : par `kick()`, que les appelants lancent
+ * une fois leur transaction validée, ou tout de suite quand `notify` ouvre sa propre transaction.
+ */
+const staleInboxes = new Set<string>();
+function flushStaleInboxes() {
+  for (const userId of staleInboxes) realtime.publish(`user:${userId}`, "inbox.changed", {});
+  staleInboxes.clear();
+}
 
 /** Personnes gardées au plus dans une notification regroupée (de quoi compter, pas de quoi tenir une liste). */
 const MAX_GROUPED_ACTORS = 500;
 
 type GroupedData = { _actorIds?: string[]; actors?: { pseudo: string; avatarUrl: string | null }[]; count?: number };
+
+/** Modèle des textes d'une notification regroupée : le pseudo de la personne remplacé par `{name}` (voir `grouped.ts`). */
+const groupText = (input: NotifyInput, pseudo: string) => ({
+  title: textTemplate(input.title, pseudo),
+  body: textTemplate(input.body, pseudo),
+});
 
 let inflight: Promise<void> = Promise.resolve();
 
@@ -100,6 +116,13 @@ export const notificationsService = {
         ? at
         : deliverAfter(at, input.eventStartsAt ?? null, undefined, input.urgent ?? r7QuietOverride(type));
     const grouped = input.groupKey && !input.silent ? input.groupKey : null;
+    // Le verrou du regroupement ne vaut que dans une transaction : appelée sur la base, `notify` ouvre la sienne.
+    if (grouped && ex === db) {
+      return withTx(async (tx, after) => {
+        after(flushStaleInboxes);
+        return notificationsService.notify(tx, userId, type, input);
+      });
+    }
     if (grouped) {
       // Deux occurrences simultanées de la même clé ne créent pas deux lignes (lecture puis écriture sérialisées).
       await ex.execute(sql`select pg_advisory_xact_lock(hashtext(${`notif-group:${userId}:${grouped}`}))`);
@@ -140,6 +163,7 @@ export const notificationsService = {
               ...open.data,
               ...input.data,
               ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
+              ...(input.actor ? { _text: groupText(input, input.actor.pseudo) } : {}),
               _actorIds: ids,
               actors,
               count: input.actor ? Math.max(ids.length, 1) : (previous.count ?? 1) + 1,
@@ -151,6 +175,9 @@ export const notificationsService = {
           .where(eq(notifications.id, open.id))
           .returning();
         if (!merged) throw new Error("Notification non mise à jour");
+        // Déjà livrée : pas de nouvelle livraison (donc pas de nouveau push, règle des émetteurs) ; la cloche et la liste
+        // ouvertes sont prévenues après la validation pour se recharger.
+        if (open.deliveredAt) staleInboxes.add(userId);
         return merged;
       }
     }
@@ -168,6 +195,7 @@ export const notificationsService = {
           ...(input.email ? { _email: input.email } : {}),
           ...(grouped && input.actor
             ? {
+                _text: groupText(input, input.actor.pseudo),
                 _actorIds: [input.actor.userId],
                 actors: [{ pseudo: input.actor.pseudo, avatarUrl: input.actor.avatarUrl }],
                 count: 1,
@@ -264,6 +292,7 @@ export const notificationsService = {
 
   /** Lance une livraison sans la faire attendre à la requête (les envois s'enchaînent, jamais en parallèle). */
   kick(): void {
+    flushStaleInboxes();
     inflight = inflight
       .then(() => this.deliverDue())
       .then(
@@ -290,6 +319,9 @@ export const notificationsService = {
           isNotNull(notifications.deliveredAt),
           // Fenêtre du Journal (lot 17) : 7 jours en arrière, sauf les éléments non lus.
           or(isNull(notifications.readAt), gte(notifications.createdAt, journalWindowStart(now()))),
+          // Lot R7c1, tour 2 : une ligne regroupée dont toutes les personnes sont parties (compte supprimé, suspendu ou banni)
+          // ne s'affiche pas.
+          citedPeopleRemain(now(), true),
           c
             ? or(
                 lt(notifications.createdAt, c.createdAt),
@@ -300,17 +332,25 @@ export const notificationsService = {
       )
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(limit + 1);
-    return toPage(rows, limit, (n) => ({
-      id: n.id,
-      type: n.type,
-      family: n.family,
-      title: n.title,
-      body: n.body,
-      data: stripInternal(n.data),
-      eventId: n.eventId,
-      createdAt: n.createdAt.toISOString(),
-      readAt: n.readAt?.toISOString() ?? null,
-    }));
+    // Personnes d'une ligne regroupée relues à l'instant : pseudos, avatars, total et textes sans les comptes partis.
+    const views = await citedViews(
+      rows.filter((n) => Array.isArray((n.data as { _actorIds?: unknown })._actorIds)),
+      db,
+    );
+    return toPage(rows, limit, (n) => {
+      const view = views.get(n.id);
+      return {
+        id: n.id,
+        type: n.type,
+        family: n.family,
+        title: view?.title ?? n.title,
+        body: view?.body ?? n.body,
+        data: view ? { ...stripInternal(n.data), actors: view.actors, count: view.count } : stripInternal(n.data),
+        eventId: n.eventId,
+        createdAt: n.createdAt.toISOString(),
+        readAt: n.readAt?.toISOString() ?? null,
+      };
+    });
   },
 
   /** Pastille de la cloche : éléments non lus du Journal (livrés, hors push seul). */
@@ -324,6 +364,7 @@ export const notificationsService = {
           eq(notifications.inJournal, true),
           isNotNull(notifications.deliveredAt),
           isNull(notifications.readAt),
+          citedPeopleRemain(now(), true),
         ),
       );
     return row?.n ?? 0;
