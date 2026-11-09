@@ -114,7 +114,7 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   expect(res === null || [200, 301, 302, 303, 307, 308].includes(res.status())).toBe(true);
 });
 
-test("Le Fil ne marque rien comme lu ; les notifications se lisent dans l'Activité", async ({ page }) => {
+test("Le Fil (R7e2) : ni notifications, ni conversations, ni demandes, et rien marqué comme lu", async ({ page }) => {
   const compte = await creerComptePastilles();
   await compte.ajouterNotificationNonLue();
   await loginInBrowser(page, compte.email, undefined, "/app");
@@ -125,8 +125,8 @@ test("Le Fil ne marque rien comme lu ; les notifications se lisent dans l'Activi
   expect(before).toBeGreaterThan(0);
   await page.goto("/app/fil");
   await expect(page.getByRole("heading", { name: "Le Fil", exact: true })).toBeVisible();
-  // Tour 2 : le Journal a cédé la place au Fil (R7e2) ; les notifications se lisent dans l'Activité. Le Fil n'en montre
-  // aucune (ni conversations ni demandes), et la page ne marque rien comme lu.
+  // Tour 2 : le Journal a cédé la place au Fil (R7e2), qui ne montre aucune notification (elles sont dans l'Activité), ni
+  // conversations ni demandes, et la page ne marque rien comme lu.
   await expect(page.getByTestId("fil")).toBeVisible();
   await expect(page.getByTestId("activity-row")).toHaveCount(0);
   await expect(page.locator(".s-convo")).toHaveCount(0);
@@ -137,10 +137,6 @@ test("Le Fil ne marque rien comme lu ; les notifications se lisent dans l'Activi
   await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
-  await page.goto("/app/activite");
-  await expect(page.getByTestId("activity-row").first()).toBeVisible();
-  expect(await unread()).toBe(before);
-  await page.goto("/app/fil");
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Activité" }).click();
   await page.waitForURL((url) => url.pathname === "/app/activite");
   await expect(page.getByRole("heading", { name: "Activité", exact: true })).toBeVisible();

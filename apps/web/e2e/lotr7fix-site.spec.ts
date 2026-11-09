@@ -99,7 +99,9 @@ for (const theme of ["beton", "sable"] as const) {
         await expect(card.getByTestId("invite-muted")).toBeInViewport();
         await expect(card.getByTestId("invite-menu")).toBeHidden();
         await expect(card).toContainText(`${nina.pseudo} t'invite`);
-        await expect(card).not.toContainText(kenji.pseudo);
+        // Kenji n'est plus parmi les inviteurs (son nom reste seulement dans la confirmation).
+        await expect(card.locator(".s-label")).not.toContainText(kenji.pseudo);
+        await expect(card.getByTestId("invite-mute")).toHaveCount(1);
         const mutes = await apiCall<{ userId: string }[]>(julie.cookie, "GET", "/me/invitation-mutes");
         expect(mutes.data.map((m) => m.userId)).toEqual([kenji.id]);
         await shot(page, `demandes-invitation-coupee-${theme}-${size}`);

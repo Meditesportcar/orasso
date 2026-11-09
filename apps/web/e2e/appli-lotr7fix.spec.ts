@@ -144,7 +144,7 @@ test("R7-fix-invite appli : la coupure qui répond après la fermeture de la feu
     return route.continue();
   });
   await page.getByTestId("invite-mute").filter({ hasText: kenji.pseudo }).click();
-  await page.getByTestId("sheet-close").click();
+  await page.getByLabel("Fermer", { exact: true }).last().click({ position: { x: 20, y: 20 } });
   await expect(page.getByTestId("invite-menu")).toHaveCount(0);
   // La carte se met à jour toute seule, sans rouvrir ni refermer la feuille.
   await expect(card).not.toContainText(kenji.pseudo, { timeout: 20_000 });
