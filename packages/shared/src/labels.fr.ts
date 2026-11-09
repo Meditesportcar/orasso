@@ -40,6 +40,7 @@ export * from "./labels/orga-manage.fr";
 export * from "./labels/orga-site-v2.fr";
 export * from "./labels/orga-v2.fr";
 export * from "./labels/parity.fr";
+export * from "./labels/partnerships.fr";
 export * from "./labels/passport.fr";
 export * from "./labels/plural.fr";
 export * from "./labels/points.fr";

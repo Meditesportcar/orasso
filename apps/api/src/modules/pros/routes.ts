@@ -17,6 +17,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { partnershipsService } from "../partnerships/service";
 import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
 import { prosService } from "./service";
@@ -46,7 +47,12 @@ export const prosRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     const view = await prosService.getPublic(c.req.param("slug"), viewer);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
-    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "pro", view.id) });
+    // Lot R7m1 : « Ses partenaires » (passionnés), vus selon le regard ; `partners` reste les organisateurs partenaires.
+    return c.json({
+      ...view,
+      stories: await storiesSummaryFor(viewer, "pro", view.id),
+      memberPartners: await partnershipsService.partnersOfPro(view.id, viewer),
+    });
   })
   .post("/pros/by-slug/:slug/track", async (c) => {
     const viewer = await optionalUser(c);

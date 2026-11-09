@@ -55,6 +55,12 @@ export const rateRules = {
   accountQrDaily: { max: 500, windowMs: 86_400_000, message: "Limite quotidienne de vérifications atteinte." },
   /** Compteurs de la fiche pro (vues, appels, itinéraires) : par visiteur et par fiche. */
   proTrack: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur cette fiche." },
+  /** Lot R7m1 : proposer, accepter, refuser, mettre fin à un partenariat (protège le passionné d'une rafale de propositions). */
+  partnershipWrite: {
+    max: 30,
+    windowMs: 3_600_000,
+    message: "Trop d'actions sur les partenariats : réessaie plus tard.",
+  },
   /** Création et modification de fiche pro, photos, publications. */
   proWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Réservation de billets gratuits ou ouverture d'un paiement. */

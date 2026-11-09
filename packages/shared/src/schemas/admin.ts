@@ -15,6 +15,7 @@ import {
 } from "../rules/admin";
 import { proActivities } from "../rules/pro";
 import { isoDate } from "./common";
+import { partnershipSubscriptionFromSchema } from "./partnerships";
 
 // --- Réglages ---------------------------------------------------------------------------------------------------------
 
@@ -50,6 +51,7 @@ export const adminSettingSchemas: { [K in AdminSettingKey]: z.ZodType<AdminSetti
   "points.vote_first": points(0, 500),
   "points.vote_second": points(0, 500),
   "points.vote_third": points(0, 500),
+  "partnerships.subscription_from": partnershipSubscriptionFromSchema,
   "grades.thresholds": thresholdsSchema as unknown as z.ZodType<Record<Grade, number>>,
   "lists.refusal_reasons": codeList("lists.refusal_reasons", refusalReasons),
   "lists.vendor_types": codeList("lists.vendor_types", vendorTypeCodes),

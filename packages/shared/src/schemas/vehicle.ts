@@ -3,6 +3,7 @@ import { type VehicleStatus, type VehicleType, vehicleStatuses, vehicleTypes } f
 import type { CategoryFamily, CategoryIcon } from "../rules/styles";
 import { optionalText } from "./common";
 import type { PlateTransferInfo, VehicleCertification } from "./garage";
+import type { VehiclePartner } from "./partnerships";
 
 const currentYear = new Date().getUTCFullYear();
 
@@ -184,6 +185,8 @@ export type VehicleFull = VehiclePublic & {
    */
   proposedMake: string | null;
   proposedModel: string | null;
+  /** Lot R7m1 : « Partenaire : … » (pro à partenariat actif cité sur cette voiture), servi par `/me/vehicles` et `/me/vehicles/:id`. */
+  partner?: VehiclePartner | null;
 };
 
 /** Page du véhicule (propriétaire) : fiche, plus l'état de la certification. */
