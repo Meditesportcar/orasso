@@ -328,3 +328,18 @@ for (const retour of ["le bouton Réessayer", "le retour du réseau"] as const) 
     await ctx.close();
   });
 }
+
+test("tour 2 : captures des feuilles sur un fil long (Béton et Sable, 384 px, police 1 et 1,3)", async ({
+  browser,
+}) => {
+  test.setTimeout(900_000);
+  const { crew } = await longFeedCrews(12);
+  for (const theme of ["beton", "sable"] as const) {
+    for (const scale of [1, 1.3]) {
+      const { ctx, page } = await open(browser, crew.chef.email, theme, { height: 844, scale });
+      await go(page, `/crew?crew=${crew.slug}`);
+      await openSheets(page, crew, `384-x${scale}-${theme}`, true);
+      await ctx.close();
+    }
+  }
+});
