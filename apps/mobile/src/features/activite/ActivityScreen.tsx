@@ -12,7 +12,10 @@ import {
   type ActivityItem,
   type ActivityPage,
   type RequestItem,
+  requestCountSpoken,
+  requestCountText,
   requestRowCounts,
+  requestRowShown,
   SET_OUTLOOK_UNCERTAIN_ACTION,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
@@ -127,8 +130,12 @@ export function ActivityScreen() {
   const nextCursor = tail.nextCursor;
   const isRead = (i: ActivityItem) => i.read || i.ids.every((id) => readIds.has(id));
 
-  // Compteur inconnu (résumé en panne et liste en panne) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer ».
-  const { activityRequests } = requestRowCounts(summary.data, requests.data);
+  // Compteur inconnu (résumé et liste en échec **tous les deux**) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer ».
+  // Avant la première réponse, la ligne attend, sans erreur (tour 3).
+  const { activityRequests, atLeast, status } = requestRowCounts(summary.data, requests.data, {
+    summary: Boolean(summary.error),
+    list: Boolean(requests.error),
+  });
   const requestItems = (requests.data?.items ?? []).filter((r) => r.kind !== "contact");
 
   async function open(item: ActivityItem) {
@@ -150,7 +157,8 @@ export function ActivityScreen() {
     Boolean(teamRequestTarget(item.data) || adminLinkOf(item.data.link) || appLinkOf(item.data.link));
 
   const empty = page && groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
-  const countUnknown = activityRequests === null;
+  const countFailed = status === "failed";
+  const rowShown = requestRowShown(activityRequests, status);
 
   return (
     <FlowScreen title="Activité" facts="Ce qui te concerne" onClose={close} onRefresh={reloadAll} closeLabel="Retour">
@@ -159,17 +167,19 @@ export function ActivityScreen() {
       ) : null}
       {activity.offline ? <Notice>Hors ligne : dernière liste connue.</Notice> : null}
 
-      {countUnknown ? (
+      {countFailed ? (
         <LoadError
           message="Le nombre de demandes n'a pas pu être lu."
           onRetry={() => void Promise.all([summary.reload(), requests.reload()])}
         />
       ) : null}
-      {countUnknown || (activityRequests ?? 0) > 0 ? (
+      {rowShown ? (
         <Pressable
           onPress={() => router.push("/activite/demandes")}
           accessibilityRole="link"
-          accessibilityLabel={activityRequests === null ? "Demandes" : `Demandes, ${activityRequests} en attente`}
+          accessibilityLabel={
+            activityRequests === null ? "Demandes" : `Demandes, ${requestCountSpoken(activityRequests, atLeast)}`
+          }
           style={[styles.requestsRow, { backgroundColor: c.surface }]}
           testID="activity-requests-row"
         >
@@ -191,7 +201,7 @@ export function ActivityScreen() {
           </View>
           <View style={styles.text}>
             <Text variant="bodyStrong" color={c.ink}>
-              {activityRequests === null ? "Demandes" : `Demandes · ${activityRequests}`}
+              {activityRequests === null ? "Demandes" : `Demandes · ${requestCountText(activityRequests, atLeast)}`}
             </Text>
             {requestItems[0] && activityRequests !== null ? (
               <Text variant="caption" color={c.inkMuted} numberOfLines={2}>

@@ -7,7 +7,10 @@ import {
   type InboxSummary,
   type RequestItem,
   type RequestsPage,
+  requestCountSpoken,
+  requestCountText,
   requestRowCounts,
+  requestRowShown,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRevalidator } from "react-router";
@@ -39,12 +42,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     // La ligne « Demandes » ne montre que les premières personnes : une panne ne cache pas la liste.
     api<RequestsPage>(request, "/me/requests"),
   ]);
+  // Compteur **inconnu** (résumé et liste en échec tous les deux) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer ».
+  // Liste incomplète sans résumé : « au moins N » (tour 3). Le chargeur attend ses lectures : pas d'état « en cours ».
+  const counts = requestRowCounts(summary.ok ? summary.data : null, requests.ok ? requests.data : null, {
+    summary: !summary.ok,
+    list: !requests.ok,
+  });
   return {
     userId: me.user.id,
     page,
-    // Compteur **inconnu** (résumé et liste en panne) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer » (tour 2).
-    activityRequests: requestRowCounts(summary.ok ? summary.data : null, requests.ok ? requests.data : null)
-      .activityRequests,
+    activityRequests: counts.activityRequests,
+    atLeast: counts.atLeast,
+    countFailed: counts.status === "failed",
+    rowShown: requestRowShown(counts.activityRequests, counts.status),
     requestItems: (requests.ok ? requests.data.items : []).filter((r) => r.kind !== "contact").slice(0, 3),
     isFirstPage: cursor === null,
   };
@@ -59,7 +69,7 @@ function requestSummary(first: RequestItem, total: number): string {
 }
 
 export default function Activite({ loaderData }: Route.ComponentProps) {
-  const { userId, page, activityRequests, requestItems, isFirstPage } = loaderData;
+  const { userId, page, activityRequests, atLeast, countFailed, rowShown, requestItems, isFirstPage } = loaderData;
   const revalidator = useRevalidator();
   const here = useLocation().pathname;
   // Lignes touchées : lues tout de suite à l'écran, sans attendre la relecture.
@@ -104,14 +114,13 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
     revalidator.revalidate();
   };
   const empty = groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
-  const countUnknown = activityRequests === null;
 
   return (
     <div className="s-narrow s-stack" data-testid="activity">
       <h1 className="s-title">Activité</h1>
       <p className="o-t-caption s-muted">Ce qui te concerne</p>
 
-      {countUnknown && isFirstPage ? (
+      {countFailed && isFirstPage ? (
         <div className="s-notice" role="alert" data-testid="activity-requests-unknown">
           <p>Le nombre de demandes n'a pas pu être lu.</p>
           <Button variant="secondary" icon="undo" onClick={() => revalidator.revalidate()} data-testid="activity-retry">
@@ -119,12 +128,14 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
           </Button>
         </div>
       ) : null}
-      {(countUnknown || (activityRequests ?? 0) > 0) && isFirstPage ? (
+      {rowShown && isFirstPage ? (
         <a
           className="act-requests"
           href="/app/activite/demandes"
           data-testid="activity-requests-row"
-          aria-label={activityRequests === null ? "Demandes" : `Demandes, ${activityRequests} en attente`}
+          aria-label={
+            activityRequests === null ? "Demandes" : `Demandes, ${requestCountSpoken(activityRequests, atLeast)}`
+          }
         >
           <span className="act-avs" aria-hidden="true">
             {requestItems.map((r) => {
@@ -136,7 +147,9 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
             })}
           </span>
           <span className="act-requests__text">
-            <strong>{activityRequests === null ? "Demandes" : `Demandes · ${activityRequests}`}</strong>
+            <strong>
+              {activityRequests === null ? "Demandes" : `Demandes · ${requestCountText(activityRequests, atLeast)}`}
+            </strong>
             {requestItems[0] && activityRequests !== null ? (
               <span className="o-t-caption s-muted">{requestSummary(requestItems[0], activityRequests)}</span>
             ) : null}

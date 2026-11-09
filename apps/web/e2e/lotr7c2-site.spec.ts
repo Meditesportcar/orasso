@@ -3,7 +3,10 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   addVehicleApi,
   apiCall,
+  applyApi,
   createEvent,
+  decideApi,
+  deliverNow,
   login,
   loginInBrowser,
   MOBILE,
@@ -45,18 +48,7 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
     const page = await ctx.newPage();
     await setTheme(page, theme);
     await loginInBrowser(page, "damien@orasso.local", undefined, "/app");
-    // Premier passage seulement : ouvrir la cloche vide les non vus (le deuxième thème repart de zéro). Un nouvel abonné
-    // pose une notification « non vue » même si une recette précédente a déjà ouvert la cloche de Damien_66.
-    if (theme === "beton") {
-      const fan = await signUpApi(`Sw7F${unique()}`);
-      await apiCall(fan, "POST", "/users/Damien_66/follow");
-      // Elle se regroupe avec une notification « te suit » ouverte depuis moins de 24 h (sans nouvelle pastille) : le seed neuf
-      // en a une ; sans pastille au départ, la recette vérifie quand même que la cloche ouverte laisse 0.
-      await expect
-        .poll(async () => (await summaryOf(page)).unseenActivity, { timeout: 8_000 })
-        .toBeGreaterThan(0)
-        .catch(() => undefined);
-    }
+    // La pastille 0 → 1 → 0 se vérifie avec des comptes neufs (test suivant) : celle de Damien_66 dépend des recettes passées.
     await page
       .locator("header.o-appbar--tab")
       .getByRole("link", { name: /^Activité/ })
@@ -88,6 +80,36 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
     await shot(page, `demandes-${theme}-390`);
     await ctx.close();
   }
+});
+
+test("la pastille de la cloche : 0 pour un compte neuf, 1 après un premier abonné, 0 une fois l'Activité ouverte", async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  // Comptes **neufs** tous les deux : un abonné qui suit un compte ayant déjà une notification « te suit » encore ouverte
+  // (moins de 24 h) ne fait que la regrouper, et ce regroupement remet `deliveredAt` à jour (notifications/service.ts:177) :
+  // la pastille ne passerait pas par 0 → 1. Avec un compte neuf, elle passe bien de 0 à 1.
+  const s = unique();
+  const target = `Sw7P${s}`;
+  const recv = await signUpApi(target);
+  expect((await apiCall<Summary>(recv, "GET", "/me/inbox/summary")).data.unseenActivity).toBe(0);
+  const fan = await signUpApi(`Sw7F${s}`);
+  expect((await apiCall(fan, "POST", `/users/${target}/follow`)).status).toBe(200);
+  await expect
+    .poll(async () => (await apiCall<Summary>(recv, "GET", "/me/inbox/summary")).data.unseenActivity, {
+      timeout: 30_000,
+    })
+    .toBe(1);
+
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, `${target.toLowerCase()}@e2e.orasso.test`, undefined, "/app");
+  const bell = page.locator("header.o-appbar--tab").getByRole("link", { name: /^Activité/ });
+  await expect(bell.locator(".o-appbar__count")).toHaveText("1");
+  await bell.click();
+  await page.waitForURL((url) => url.pathname === "/app/activite");
+  await expect.poll(async () => (await summaryOf(page)).unseenActivity, { timeout: 20_000 }).toBe(0);
+  await ctx.close();
 });
 
 test("la bulle : conversations seulement, « Demandes de message », étiquette « Organisateur », demande acceptée", async ({
@@ -222,6 +244,24 @@ test("Demandes du site (tour 2) : toutes les sortes, invitation de passionné et
   expect(
     (await apiCall(other, "POST", "/contact-requests", { pseudo: meP, message: "Bonjour, belle voiture !" })).status,
   ).toBeLessThan(300);
+  // Tour 3, ce que l'ancienne page montrait : le véhicule d'un demandeur d'abonnement (compte privé) et les fonctions d'une
+  // invitation de staff.
+  const veP = `Sw7E${s}`;
+  const ve = await signUpApi(veP);
+  await addVehicleApi(ve, randomPlate());
+  expect((await apiCall(me, "PATCH", "/me/profile", { departments: ["66"], visibility: "private" })).status).toBe(200);
+  expect((await apiCall(ve, "POST", `/users/${meP}/follow`)).status).toBe(200);
+  const orgaMe = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(orga, "GET", "/me");
+  const sid = orgaMe.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
+  expect(
+    (
+      await apiCall(orga, "POST", `/structures/${sid}/members`, {
+        pseudo: meP,
+        role: "staff",
+        staffRoles: ["scan", "placement"],
+      })
+    ).status,
+  ).toBeLessThan(300);
 
   for (const theme of ["beton", "sable"] as const) {
     const ctx = await browser.newContext({ viewport: MOBILE });
@@ -235,6 +275,11 @@ test("Demandes du site (tour 2) : toutes les sortes, invitation de passionné et
     await expect(peer).toContainText("Viens, on y va ensemble !");
     const transfer = page.getByTestId("request-plate-transfer");
     await expect(transfer).toContainText("Demande de transfert de plaque");
+    // Le véhicule principal du demandeur (marque et modèle, jamais la plaque) et les fonctions proposées au staff.
+    const follow = page.getByTestId("request-follow").filter({ hasText: veP });
+    await expect(follow).toContainText("BMW");
+    await expect(follow).not.toContainText(/[A-Z]{2}-d{3}-[A-Z]{2}/);
+    await expect(page.getByTestId("request-staff-invitation")).toContainText("Accueil et scan · Placement");
     // Le compteur de l'en-tête est le nombre de cartes (et celui du résumé, hors demande de message).
     const sum = await summaryOf(page);
     expect(sum.requests.contact).toBe(1);
@@ -283,14 +328,34 @@ test("Kenji_66 t'invite : la page Demandes de Damien_66 (seed) montre l'invitati
 test("« Voir la fiche » et les lignes : « lu » est posé avant de naviguer (le bandeau disparaît au retour)", async ({
   browser,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
+  // Rejouable (tour 3) : un compte neuf avec **son propre** bandeau d'horaire (candidature retenue, puis nouvelle heure de
+  // l'événement), pour ne plus consommer celui de Damien_66.
+  const s = unique();
+  const who = `Sw7V${s}`;
+  const email = `${who.toLowerCase()}@e2e.orasso.test`;
+  const orga = await login("damien@orasso.local");
+  const event = await createEvent(orga, { title: `Rasso Horaire ${s}`.slice(0, 40) });
+  const guest = await signUpApi(who);
+  const applicationId = await applyApi(guest, event.id, await addVehicleApi(guest, randomPlate()));
+  await decideApi(orga, event.id, applicationId, "accept");
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  start.setHours(19, 0, 0, 0);
+  const moved = await apiCall(orga, "PATCH", `/events/${event.id}`, {
+    startsAt: start.toISOString(),
+    endsAt: new Date(start.getTime() + 5 * 3600 * 1000).toISOString(),
+  });
+  expect(moved.status).toBe(200);
+  deliverNow(email);
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
-  await loginInBrowser(page, "damien@orasso.local", undefined, "/app/activite");
+  await loginInBrowser(page, email, undefined, "/app/activite");
   await page.goto("/app/activite");
   const unreadBefore = await page.getByTestId("activity-unread").count();
   const band = page.getByTestId("activity-highlight");
-  await expect(band.first()).toBeVisible();
+  await expect(band).toHaveCount(1);
+  await expect(band.first()).toContainText(event.title);
   // Tour 2 : le clic marque d'abord les identifiants du bandeau lus, puis suit le lien.
   await page.getByTestId("activity-highlight-open").first().click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app/activite"));

@@ -13,8 +13,14 @@ import {
   plateTransferLabels,
   type RequestItem,
   type RequestsPage,
+  requestCountSpoken,
+  requestCountText,
   requestRowCounts,
+  type StaffRole,
+  staffRoleLabels,
+  widestWordEm,
 } from "@orasso/shared";
+import type { CSSProperties } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
@@ -52,6 +58,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     after: cursor !== "",
     activityRequests: counts.activityRequests,
     messageRequests: counts.messageRequests ?? 0,
+    // Résumé en panne et liste en plusieurs pages : les nombres sont des minimums (« 12+ »).
+    atLeast: counts.atLeast,
   };
 }
 
@@ -179,11 +187,14 @@ function Decide({
 function FollowCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   const { name, imageUrl } = fromOf(r);
   const grade = r.payload.grade as FollowPerson["grade"];
+  // Le véhicule principal du demandeur (marque et modèle seulement), comme avant le lot (tour 3).
+  const vehicle = str(r.payload, "vehicle");
   return (
     <li className="s-person" data-testid="request-follow">
       <Person p={{ pseudo: name, avatarUrl: imageUrl, grade }} />
       <div className="s-person__main">
         <span className="s-label o-t-label">{followRequestNotificationTitle}</span>
+        {vehicle && <span className="o-t-caption s-muted o-never-truncate">{vehicle}</span>}
       </div>
       <DecideFollow userId={r.id} pseudo={name} busy={busy} />
     </li>
@@ -202,9 +213,13 @@ function CrewCard({ r, busy }: { r: RequestItem; busy: boolean }) {
     return (
       <li className="s-person" data-testid="request-crew-confirmation">
         <CrewLogo url={imageUrl} name={crewName || name} size={44} />
-        <div className="s-person__main">
+        <div className="s-person__main s-fit">
           <span className="s-label o-t-label">{crewLabels.confirmTitle(crewName || name)}</span>
-          <a href={`/e/${str(event, "slug") ?? ""}`} className="o-t-title">
+          <a
+            href={`/e/${str(event, "slug") ?? ""}`}
+            className="o-t-title s-req-title"
+            style={{ "--em": widestWordEm(str(event, "title") ?? "") } as CSSProperties}
+          >
             {str(event, "title")}
           </a>
           {vehicle && <span className="o-never-truncate">{vehicle}</span>}
@@ -291,6 +306,10 @@ function StaffCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   const { name, imageUrl } = fromOf(r);
   const role = str(r.payload, "role");
   const invitedBy = str(r.payload, "invitedBy");
+  // Les fonctions proposées (« Scan · Placement »), comme avant le lot (tour 3).
+  const staffRoles = Array.isArray(r.payload.staffRoles)
+    ? (r.payload.staffRoles as StaffRole[]).filter((x) => x in staffRoleLabels)
+    : [];
   return (
     <li className="s-person" data-testid="request-staff-invitation">
       <CrewLogo url={imageUrl} name={name} size={44} />
@@ -301,6 +320,9 @@ function StaffCard({ r, busy }: { r: RequestItem; busy: boolean }) {
         <a className="o-t-title o-never-truncate" href={`/o/${str(r.payload, "structureSlug") ?? ""}`}>
           {name}
         </a>
+        {staffRoles.length > 0 && (
+          <span className="o-t-caption s-muted">{staffRoles.map((x) => staffRoleLabels[x]).join(" · ")}</span>
+        )}
         {invitedBy && <span className="o-t-caption s-muted">Proposé par {invitedBy}</span>}
       </div>
       <Decide
@@ -341,9 +363,13 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
       ) : (
         <CrewLogo url={imageUrl} name={name} size={44} />
       )}
-      <div className="s-person__main">
+      <div className="s-person__main s-fit">
         <span className="s-label o-t-label">{heading}</span>
-        <a href={slug ? `/e/${slug}` : "/app/sorties"} className="o-t-title">
+        <a
+          href={slug ? `/e/${slug}` : "/app/sorties"}
+          className="o-t-title s-req-title"
+          style={{ "--em": widestWordEm(str(event, "title") ?? "") } as CSSProperties}
+        >
           {str(event, "title")}
         </a>
         <span className="o-t-caption s-muted">
@@ -425,7 +451,7 @@ function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
 }
 
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const { items, nextCursor, after, activityRequests, messageRequests } = loaderData;
+  const { items, nextCursor, after, activityRequests, messageRequests, atLeast } = loaderData;
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
@@ -437,7 +463,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
         {activityRequests === null
           ? ""
           : activityRequests > 0
-            ? `${activityRequests} en attente de ta réponse`
+            ? `${requestCountText(activityRequests, atLeast)} en attente de ta réponse`
             : "Rien n'attend ta réponse"}
       </p>
       <div>
@@ -460,10 +486,10 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
           className="act-requests"
           href="/app/messages"
           data-testid="requests-messages-row"
-          aria-label={`${messagingLabels.messageRequests}, ${messageRequests} en attente`}
+          aria-label={`${messagingLabels.messageRequests}, ${requestCountSpoken(messageRequests, atLeast)}`}
         >
           <span className="act-requests__text">
-            <strong>{`${messagingLabels.messageRequests} · ${messageRequests}`}</strong>
+            <strong>{`${messagingLabels.messageRequests} · ${requestCountText(messageRequests, atLeast)}`}</strong>
           </span>
           <Icon name="next" size={20} />
         </a>

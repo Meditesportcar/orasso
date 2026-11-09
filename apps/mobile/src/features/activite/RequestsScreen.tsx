@@ -3,7 +3,7 @@
 // demandes de message ne sont pas ici : elles sont dans Messages. Tour 2 : d'anciens liens (e-mails et notifications déjà
 // envoyés) mènent encore ici pour une demande de contact, d'où la ligne « Demandes de message · N » vers Messages.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { messagingLabels, requestRowCounts } from "@orasso/shared";
+import { messagingLabels, requestCountSpoken, requestCountText, requestRowCounts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -32,12 +32,15 @@ export function RequestsScreen() {
     if (event.type === "inbox.changed" || event.type === "notification") void reloadAll();
   });
   // Résumé en panne : les nombres se lisent dans la liste (jamais « 0 » parce que le résumé manque).
-  const { activityRequests, messageRequests } = requestRowCounts(summary.data, list.first.data);
+  const { activityRequests, messageRequests, atLeast } = requestRowCounts(summary.data, list.first.data, {
+    summary: Boolean(summary.error),
+    list: Boolean(list.first.error),
+  });
   const close = () => (router.canGoBack() ? router.back() : router.replace("/activite"));
   return (
     <FlowScreen
       title="Demandes"
-      facts={activityRequests ? `${activityRequests} en attente de ta réponse` : undefined}
+      facts={activityRequests ? `${requestCountText(activityRequests, atLeast)} en attente de ta réponse` : undefined}
       onClose={close}
       closeLabel="Retour à l'Activité"
       onRefresh={reloadAll}
@@ -46,7 +49,7 @@ export function RequestsScreen() {
         <Pressable
           onPress={() => router.push("/messages")}
           accessibilityRole="link"
-          accessibilityLabel={`${messagingLabels.messageRequests}, ${messageRequests} en attente`}
+          accessibilityLabel={`${messagingLabels.messageRequests}, ${requestCountSpoken(messageRequests, atLeast)}`}
           style={[styles.row, { backgroundColor: c.surface }]}
           testID="requests-messages-row"
         >
@@ -54,7 +57,7 @@ export function RequestsScreen() {
             <Icon name="chat" size={20} color={c.ink} />
           </View>
           <Text variant="bodyStrong" color={c.ink} style={styles.text}>
-            {`${messagingLabels.messageRequests} · ${messageRequests}`}
+            {`${messagingLabels.messageRequests} · ${requestCountText(messageRequests, atLeast)}`}
           </Text>
           <Icon name="next" size={20} color={c.ink} />
         </Pressable>

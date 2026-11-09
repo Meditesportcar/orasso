@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { addVehicleApi, apiCall, login, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7c2 (D38), côté appli : l'Activité (la cloche) et les Messages (la bulle) remplacent la Boîte. Appli en version web
@@ -52,19 +52,7 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
   const damien = await login("damien@orasso.local");
   for (const theme of ["beton", "sable"] as const) {
     const { ctx, page } = await appLogin(browser, "damien@orasso.local", theme);
-    if (theme === "beton") {
-      // Un nouvel abonné tente de poser une notification « non vue » (au tour 2 : elle se regroupe avec une notification
-      // « te suit » encore ouverte depuis moins de 24 h, sans nouvelle pastille ; le seed neuf en a déjà). Sans pastille au
-      // départ, la recette vérifie quand même que la cloche ouverte laisse 0.
-      const fan = await signUpApi(`Aw7F${unique()}`);
-      await apiCall(fan, "POST", "/users/Damien_66/follow");
-      await expect
-        .poll(async () => (await apiCall<Summary>(damien, "GET", "/me/inbox/summary")).data.unseenActivity, {
-          timeout: 8_000,
-        })
-        .toBeGreaterThan(0)
-        .catch(() => undefined);
-    }
+    // La pastille 0 → 1 → 0 se vérifie avec des comptes neufs (test suivant) : celle de Damien_66 dépend des recettes passées.
     await page
       .getByRole("button", { name: /^Activité/ })
       .first()
@@ -94,6 +82,38 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
     await shot(page, `demandes-${theme}-384`);
     await ctx.close();
   }
+});
+
+test("la pastille de la cloche : 0 pour un compte neuf, 1 après un premier abonné, 0 une fois l'Activité ouverte", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  // Comptes **neufs** tous les deux : un abonné qui suit un compte ayant déjà une notification « te suit » encore ouverte
+  // (moins de 24 h) ne fait que la regrouper, et ce regroupement remet `deliveredAt` à jour (notifications/service.ts:177) :
+  // la pastille ne passerait pas par 0 → 1. Avec un compte neuf, elle passe bien de 0 à 1.
+  const s = unique();
+  const target = `Aw7P${s}`;
+  const recv = await signUpApi(target);
+  expect((await apiCall<Summary>(recv, "GET", "/me/inbox/summary")).data.unseenActivity).toBe(0);
+  const fan = await signUpApi(`Aw7F${s}`);
+  expect((await apiCall(fan, "POST", `/users/${target}/follow`)).status).toBe(200);
+  await expect
+    .poll(async () => (await apiCall<Summary>(recv, "GET", "/me/inbox/summary")).data.unseenActivity, {
+      timeout: 30_000,
+    })
+    .toBe(1);
+  const { ctx, page } = await appLogin(browser, `${target.toLowerCase()}@e2e.orasso.test`, "beton");
+  await page
+    .getByRole("button", { name: /^Activité/ })
+    .first()
+    .click();
+  await page.waitForURL(/\/activite$/, { timeout: 30_000 });
+  await expect
+    .poll(async () => (await apiCall<Summary>(recv, "GET", "/me/inbox/summary")).data.unseenActivity, {
+      timeout: 20_000,
+    })
+    .toBe(0);
+  await ctx.close();
 });
 
 test("la bulle : « Demandes de message », demande acceptée, étiquette « Organisateur », une demande compte une fois", async ({
@@ -181,7 +201,21 @@ test("Demandes (tour 2) : ligne « Demandes de message » vers Messages, demande
   // C demande le contact de A (demande de message) ; A demande celui de D (demande envoyée) ; B suit A (la demande
   // d'abonnement n'existe que pour un compte privé : A devient privé).
   await apiCall(aCookie, "PATCH", "/me/profile", { departments: ["66"], visibility: "private" });
+  await addVehicleApi(bCookie, randomPlate());
   expect((await apiCall(bCookie, "POST", `/users/${a}/follow`)).status).toBe(200);
+  // Tour 3, ce que l'ancienne page montrait : le véhicule du demandeur, les fonctions d'une invitation de staff.
+  const orga = await login("damien@orasso.local");
+  const orgaMe = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(orga, "GET", "/me");
+  const sid = orgaMe.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
+  expect(
+    (
+      await apiCall(orga, "POST", `/structures/${sid}/members`, {
+        pseudo: a,
+        role: "staff",
+        staffRoles: ["scan", "placement"],
+      })
+    ).status,
+  ).toBeLessThan(300);
   expect(
     (await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, belle voiture !" })).status,
   ).toBeLessThan(300);
@@ -193,6 +227,8 @@ test("Demandes (tour 2) : ligne « Demandes de message » vers Messages, demande
   await page.goto("/activite/demandes");
   await skipOpening(page);
   await expect(page.getByTestId("request-follow").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("request-follow").first()).toContainText("BMW");
+  await expect(page.getByTestId("request-staff-invitation").first()).toContainText("Accueil et scan · Placement");
   const row = page.getByTestId("requests-messages-row");
   await expect(row).toContainText("Demandes de message · 1", { timeout: 30_000 });
   await shot(page, "demandes-ligne-messages-384");

@@ -119,20 +119,80 @@ export function inboxRowCounts(summary: InboxCountsInput | null): {
 }
 
 /**
- * Les deux lignes « Demandes · N » et « Demandes de message · N » (lot R7c2, tour 2). Un compteur **inconnu** (`null`) n'est
- * pas zéro : si `GET /me/inbox/summary` échoue, on se rabat sur la liste des demandes (`GET /me/requests`, première page :
- * `total` et les sortes de ses éléments) ; sans l'un ni l'autre, `null` et l'écran garde l'accès à la page, sans nombre,
- * avec une erreur « Réessayer » (jamais « Rien de neuf » quand il y a peut-être des demandes).
+ * Les deux lignes « Demandes · N » et « Demandes de message · N » (lot R7c2, tours 2 et 3). Un compteur **inconnu** n'est
+ * pas zéro. Si `GET /me/inbox/summary` ne répond pas (encore, ou plus), on se rabat sur la liste des demandes
+ * (`GET /me/requests`, première page) :
+ * - liste complète (`items.length >= total`) : les nombres sont exacts ;
+ * - liste incomplète (plus d'une page) : les nombres de la page sont des **minimums** (`atLeast`), jamais « total moins ce
+ *   qu'on a vu » (les demandes de message d'une page suivante fausseraient la soustraction) ; un minimum de 0 devient
+ *   `null` (ligne sans nombre : il y a sûrement quelque chose plus loin).
+ * `status` : `loading` tant que rien n'a répondu et qu'aucun des deux n'a échoué (pas d'erreur à montrer : la ligne
+ * attend) ; `failed` seulement quand le résumé **et** la liste ont échoué (ligne sans nombre, avec « Réessayer ») ;
+ * `ready` dès qu'un des deux a répondu. `failed` = ce qu'ont signalé les écrans (`error` de chaque lecture).
  */
+export type RequestRowCounts = {
+  activityRequests: number | null;
+  messageRequests: number | null;
+  atLeast: boolean;
+  status: "loading" | "ready" | "failed";
+};
+
 export function requestRowCounts(
   summary: InboxCountsInput | null,
   requests: { total: number; items: readonly { kind: string }[] } | null = null,
-): { activityRequests: number | null; messageRequests: number | null } {
-  if (summary) return inboxRowCounts(summary);
-  if (!requests) return { activityRequests: null, messageRequests: null };
+  failed: { summary: boolean; list: boolean } = { summary: false, list: false },
+): RequestRowCounts {
+  if (summary) return { ...inboxRowCounts(summary), atLeast: false, status: "ready" };
+  if (!requests) {
+    return {
+      activityRequests: null,
+      messageRequests: null,
+      atLeast: false,
+      status: failed.summary && failed.list ? "failed" : "loading",
+    };
+  }
   const contact = requests.items.filter((i) => i.kind === "contact").length;
-  return { activityRequests: Math.max(0, requests.total - contact), messageRequests: contact };
+  const others = requests.items.length - contact;
+  if (requests.items.length >= requests.total) {
+    return {
+      activityRequests: Math.max(0, requests.total - contact),
+      messageRequests: contact,
+      atLeast: false,
+      status: "ready",
+    };
+  }
+  return {
+    activityRequests: others > 0 ? others : null,
+    messageRequests: contact > 0 ? contact : null,
+    atLeast: true,
+    status: "ready",
+  };
 }
+
+/**
+ * La ligne « Demandes de message · N » de Messages (tour 3) : même règle que `requestRowCounts`. Le résumé prime ; sans lui,
+ * la liste complète des demandes de message reçues (`incoming`, `null` tant qu'elle n'a pas répondu) ; l'erreur n'est
+ * montrée (`failed`) qu'après l'échec des deux lectures, jamais pendant le premier chargement (`loading`).
+ */
+export function messageRowCount(
+  summary: InboxCountsInput | null,
+  incoming: number | null,
+  failed: { summary: boolean; list: boolean },
+): { count: number | null; status: RequestRowCounts["status"] } {
+  if (summary) return { count: inboxRowCounts(summary).messageRequests, status: "ready" };
+  if (incoming !== null) return { count: incoming, status: "ready" };
+  return { count: null, status: failed.summary && failed.list ? "failed" : "loading" };
+}
+
+/** La ligne « Demandes » (ou « Demandes de message ») se montre : en échec, sans nombre connu, ou avec au moins une demande. */
+export function requestRowShown(count: number | null, status: RequestRowCounts["status"]): boolean {
+  return status === "failed" || (status === "ready" && (count === null || count > 0));
+}
+
+/** « 3 » ou, quand la liste est incomplète, « 3+ » ; la phrase lue à voix haute dit « au moins 3 ». */
+export const requestCountText = (n: number, atLeast: boolean): string => (atLeast ? `${n}+` : String(n));
+export const requestCountSpoken = (n: number, atLeast: boolean): string =>
+  atLeast ? `au moins ${n} en attente` : `${n} en attente`;
 
 export function topBarCounts(summary: InboxCountsInput | null): { activity: number; messages: number } {
   const { activityRequests, messageRequests } = inboxRowCounts(summary);

@@ -5,7 +5,13 @@
 // (l'API ne la sert que tant que la story existe ; elle est rendue par `PrivateImage`). Mise à jour en direct par le
 // canal `user:{id}`. Une panne n'est pas une liste vide.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type ConversationSummary, conversationTag, inboxRowCounts, messagingLabels } from "@orasso/shared";
+import {
+  type ConversationSummary,
+  conversationTag,
+  messageRowCount,
+  messagingLabels,
+  requestRowShown,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -116,12 +122,14 @@ export function MessagesScreen() {
     : all;
   const incoming = (contacts.data?.items ?? []).filter((r) => r.direction === "in");
   // Résumé en panne : le nombre se lit dans la liste des demandes ; sans l'un ni l'autre il est **inconnu** (ni zéro, ni
-  // « Rien ») : la ligne reste, sans nombre, avec « Réessayer » (tour 2).
-  const messageRequests: number | null = summary.data
-    ? inboxRowCounts(summary.data).messageRequests
-    : contacts.data
-      ? incoming.length
-      : null;
+  // « Rien ») : la ligne reste, sans nombre, avec « Réessayer » (tour 2), mais **seulement après l'échec des deux lectures** ;
+  // avant la première réponse la ligne attend, sans message d'erreur (tour 3).
+  const { count: messageRequests, status: requestsStatus } = messageRowCount(
+    summary.data,
+    contacts.data ? incoming.length : null,
+    { summary: Boolean(summary.error), list: Boolean(contacts.error) },
+  );
+  const countFailed = requestsStatus === "failed";
 
   return (
     <FlowScreen title="Messages" facts="Tes conversations" onClose={close} closeLabel="Retour" onRefresh={reloadAll}>
@@ -143,13 +151,13 @@ export function MessagesScreen() {
         />
       </View>
 
-      {messageRequests === null ? (
+      {countFailed ? (
         <LoadError
           message="Le nombre de demandes de message n'a pas pu être lu."
           onRetry={() => void Promise.all([summary.reload(), contacts.reload()])}
         />
       ) : null}
-      {messageRequests === null || messageRequests > 0 ? (
+      {requestRowShown(messageRequests, requestsStatus) ? (
         <Pressable
           onPress={() => router.push("/messages/demandes")}
           accessibilityRole="link"
