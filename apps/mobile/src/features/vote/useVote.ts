@@ -1,9 +1,10 @@
 // Les données d'un vote et de la liste des votes (lot R7l3) : lectures de l'API des votes à thème (R7l1), mises à jour par le
 // canal `event:{id}:votes` (un message dit seulement « quelque chose a changé » : le classement n'y est plus, chaque client
-// le relit par la route, qui applique la règle de visibilité), relectures regroupées (`createCoalescedRun`, une à la fois, au
-// plus une en attente) et surveillance de la clôture.
+// le relit par la route, qui applique la règle de visibilité), relectures limitées (au moins 10 s entre deux, puis regroupées :
+// `createVoteReloader`, la grille des candidats seulement sur les messages qui la changent : charge du serveur le jour J) et
+// surveillance de la clôture.
 import {
-  createCoalescedRun,
+  createVoteReloader,
   type VoteCandidate,
   type VoteList,
   type VoteView,
@@ -12,7 +13,7 @@ import {
   watchClosing,
 } from "@orasso/shared";
 import { useIsFocused } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { api } from "@/lib/api";
@@ -36,31 +37,38 @@ export function messageConcerns(payload: unknown, voteId: string | null): boolea
   return voteId === null || typeof id !== "string" || id === voteId;
 }
 
-/** Relectures regroupées sur un message du canal, et au retour au premier plan (des messages ont pu être manqués). */
-function useVoteChannel(eventId: string | null, voteId: string | null, reload: () => Promise<unknown>) {
+/**
+ * Relectures limitées sur un message du canal (au moins 10 s entre deux, grille seulement quand le message la change), et au
+ * retour au premier plan ou à la reconnexion (des messages ont pu être manqués : même délai minimal, grille comprise).
+ */
+function useVoteChannel(
+  eventId: string | null,
+  voteId: string | null,
+  reload: (withGrid: boolean) => Promise<unknown>,
+) {
   const focused = useIsFocused();
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
-  const coalesced = useRef(createCoalescedRun(() => reloadRef.current())).current;
+  const reloader = useRef(createVoteReloader((withGrid) => reloadRef.current(withGrid))).current;
   // Le premier abonnement ne relit pas (la lecture du montage est partie) ; une reconnexion relit (messages manqués).
   const subscribedOnce = useRef(false);
   useChannel(
     focused && eventId ? `event:${eventId}:votes` : null,
     (message) => {
-      if (VOTE_MESSAGES.has(message.type) && messageConcerns(message.payload, voteId)) void coalesced();
+      if (VOTE_MESSAGES.has(message.type) && messageConcerns(message.payload, voteId))
+        void reloader.message(message.type);
     },
     () => {
-      if (subscribedOnce.current) void coalesced();
+      if (subscribedOnce.current) void reloader.refresh();
       subscribedOnce.current = true;
     },
   );
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void coalesced();
+      if (state === "active") void reloader.refresh();
     });
     return () => sub.remove();
-  }, [coalesced]);
-  return coalesced;
+  }, [reloader]);
 }
 
 /** La liste des votes d'un événement (ligne par vote, mon droit, mon vote, podium des clos). */
@@ -69,8 +77,9 @@ export function useVotesList(eventId: string | null) {
     enabled: Boolean(eventId),
     refreshMs: 60_000,
   });
-  const coalesced = useVoteChannel(eventId, null, list.reload);
-  return useMemo(() => ({ ...list, reload: coalesced as () => Promise<VoteList | null> }), [list, coalesced]);
+  // La liste n'a pas de grille : chaque message utile la relit, au plus une fois toutes les 10 s ; `reload` reste direct.
+  useVoteChannel(eventId, null, () => list.reload());
+  return list;
 }
 
 /** Toutes les pages de la grille d'un vote (100 par page, ordre stable de l'API). */
@@ -105,7 +114,12 @@ export function useVote(eventId: string | null, voteId: string | null) {
     const [fresh] = await Promise.all([view.reload(), grid.reload()]);
     return voteIsOver(fresh);
   };
-  const reload = useVoteChannel(eventId, voteId, () => reloadAll.current());
+  // Le canal relit le détail (classement compris) ; la grille seulement quand les candidats changent (ouverture, clôture…).
+  useVoteChannel(eventId, voteId, async (withGrid) => {
+    await Promise.all([view.reload(), withGrid ? grid.reload() : null]);
+  });
+  // Le geste de l'utilisateur (« Réessayer ») relit tout, tout de suite.
+  const reload = () => reloadAll.current();
 
   // Surveillance de la clôture : à l'échéance **du serveur**, relit puis réessaie (2, 4, 8, 15, 30, 60 s) jusqu'à ce que
   // l'API dise « clos » ou « réglé ». L'échéance vient de `closesAt` de la dernière réponse ; elle change quand le vote

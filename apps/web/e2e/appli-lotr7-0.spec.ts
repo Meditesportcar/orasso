@@ -94,7 +94,21 @@ test("Accueil, Sorties, fiche, passeport et vote de Damien pendant le Lydia", as
       timeout: 30_000,
     });
 
-    // Vote : « jusqu'au <jour> », classement caché avant le vote.
+    // Vote : « jusqu'au <jour> ». Le classement caché avant la voix se vérifie sur un compte sans rôle (test suivant) :
+    // Damien est super admin en assistance sur la structure du Lydia (seed), donc équipe, et l'API le lui sert (R7l3, tour 2).
+    await page.goto(`/vote/${place.event.id}`);
+    await afterOpening(page);
+    await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible({ timeout: 30_000 });
+    await ctx.close();
+  }
+});
+
+// Compte sans rôle, entré au Lydia, qui n'a pas voté (Pilote_006 : jamais d'autre voix dans les recettes).
+test("Pilote_006 (sans rôle, entré, pas encore voté) : le classement est caché avant sa voix", async ({ browser }) => {
+  const place = await myPlace("pilote6@orasso.local");
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await open(browser, theme);
+    await signIn(page, "pilote6@orasso.local");
     await page.goto(`/vote/${place.event.id}`);
     await afterOpening(page);
     await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible({ timeout: 30_000 });

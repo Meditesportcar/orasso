@@ -1,5 +1,6 @@
 // Un vote (lots 57, R7-0 et R7l3, parité de l'appli `/vote/<événement>?vote=`) : la grille des candidats d'un vote à thème ou de
-// « Toutes catégories » (toucher une voiture = voter : une voix, modifiable jusqu'à la clôture, jamais pour soi), un candidat
+// « Toutes catégories » (comme dans l'appli : on **choisit** une voiture, puis « Voter pour … » ; une voix, modifiable jusqu'à
+// la clôture par le même geste en deux temps, jamais pour soi), un candidat
 // pas encore entré grisé, puis le classement, **montré seulement après la voix** (à tous après la clôture, à l'équipe
 // toujours). Les règles sont toutes dans l'API : la page affiche ce qu'elle a servi (`ranking: null` + raison), elle n'en
 // déduit rien. Sans `vote` dans l'adresse : « Toutes catégories » (anciens liens et notifications).
@@ -15,6 +16,7 @@ import {
   voteScreenMode,
   voteScreenTexts,
 } from "@orasso/shared";
+import { useEffect, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -54,6 +56,16 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // relecture n'est pas revenue.
   const justVoted = actionData?.ok ? actionData.vote : null;
   const vote = loaderData.vote ?? justVoted;
+  // Le geste en deux temps (parité avec l'appli) : la voiture choisie dans la grille, et la grille rouverte pour changer sa voix.
+  const [pick, setPick] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+  // Une voix qui réussit referme le choix : on revoit le classement, la grille ne revient que par « Changer mon vote ».
+  useEffect(() => {
+    if (actionData?.ok) {
+      setPick(null);
+      setChanging(false);
+    }
+  }, [actionData]);
   // La relecture a échoué après ma voix : la réponse à la voix reste affichée, avec « Réessayer ».
   const stale = !loaderData.vote && Boolean(justVoted);
   // Clôture : à l'échéance du serveur, la page se relit (et réessaie jusqu'à la clôture confirmée) ; surveillée tant que le
@@ -100,12 +112,14 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   }
 
   const now = new Date(nowMs());
-  const mode = voteScreenMode(vote, false);
+  const mode = voteScreenMode(vote, changing);
   const closesAt = new Date(vote.closesAt);
   const left = vote.state === "open" ? voteMinutesLeft(vote.closesAt, now) : null;
   const until = vote.state === "open" ? audiencePrizeTexts.openUntil(closesAt, now) : null;
   const podium = voteResultCard(vote);
-  const showGrid = mode !== "closed";
+  // Grille : pour choisir, ou (désactivée) pour voir pourquoi on ne peut pas voter ; une fois voté, seulement via « Changer mon vote ».
+  const showGrid = mode === "choose" || mode === "blocked" || mode === "upcoming";
+  const pickedCandidate = candidates.find((c) => c.applicationId === pick) ?? null;
 
   return (
     <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
@@ -143,7 +157,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           {actionData.error}
         </p>
       )}
-      {vote.myVote && vote.state === "open" && (
+      {vote.myVote && vote.state === "open" && !changing && (
         <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
           {voteScreenTexts.saved(closesAt, now)}
         </p>
@@ -162,6 +176,28 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         <p className="s-notice" data-testid="vote-reason">
           {T.closedNote}
         </p>
+      )}
+      {mode === "voted" && (
+        <div className="s-row">
+          <Button variant="secondary" icon="undo" onClick={() => setChanging(true)} data-testid="vote-change">
+            {T.change}
+          </Button>
+        </div>
+      )}
+      {mode === "choose" && changing && (
+        <div className="s-row">
+          <Button
+            variant="secondary"
+            icon="back"
+            onClick={() => {
+              setPick(null);
+              setChanging(false);
+            }}
+            data-testid="vote-back"
+          >
+            {T.backToRanking}
+          </Button>
+        </div>
       )}
 
       {mode === "closed" && podium?.[0] && vote.ranking?.[0] && (
@@ -192,13 +228,29 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           <Form method="post">
             <input type="hidden" name="eventId" value={event.id} />
             <input type="hidden" name="voteId" value={vote.id} />
+            <input type="hidden" name="applicationId" value={pick ?? ""} />
             <VoteGrid
               candidates={candidates}
               ownIds={vote.ownApplicationIds}
               myVote={vote.myVote}
               canVote={vote.canVote}
               busy={busy}
+              pick={pick}
+              onPick={setPick}
             />
+            {mode === "choose" && (
+              <div className="vp-cta" data-testid="vote-cta-bar">
+                <Button
+                  type="submit"
+                  icon="trophy"
+                  fullWidth
+                  disabled={!pickedCandidate || busy}
+                  data-testid="vote-cta"
+                >
+                  {pickedCandidate ? T.pickCta(pickedCandidate.vehicleLabel) : T.chooseCta}
+                </Button>
+              </div>
+            )}
           </Form>
         </section>
       )}
@@ -209,7 +261,9 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           {rankingHiddenLine(vote)}
         </p>
       )}
-      {vote.ranking && <VoteRanking vote={vote} entries={vote.ranking} closed={mode === "closed"} />}
+      {vote.ranking && !(mode === "choose" && changing) && (
+        <VoteRanking vote={vote} entries={vote.ranking} closed={mode === "closed"} />
+      )}
 
       <div className="s-row">
         <Button variant="secondary" icon="flag" href={`/app/votes/${event.slug}?retour=${encodeURIComponent(back)}`}>

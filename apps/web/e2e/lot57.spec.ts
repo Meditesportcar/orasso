@@ -273,7 +273,9 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
       .getByTestId("vote-candidate")
       .filter({ hasText: pilots[theme === "beton" ? 0 : 1]?.pseudo ?? "" })
       .click();
+    await page.getByTestId("vote-cta").click(); // R7l3, tour 2 : on choisit, puis « Voter pour … » (parité avec l'appli)
     await expect(page.getByTestId("vote-saved")).toContainText(/Vote enregistré · tu peux le changer jusqu'(à|au)/);
+    await page.getByTestId("vote-change").click(); // la grille ne revient que par « Changer mon vote »
     await expect(page.locator('[data-testid="vote-candidate"][data-own="true"]')).toBeDisabled();
     // Relecture : un pointage sans aucun vote entre-temps ajoute le véhicule à la grille ouverte (rechargement en direct).
     if (theme === "beton") {

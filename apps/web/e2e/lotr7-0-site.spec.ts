@@ -43,6 +43,19 @@ for (const theme of ["beton", "sable"] as const) {
 
     await page.goto(`/app/vote/${SLUG}`);
     await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible();
+    // Le classement caché avant la voix se vérifie sur un compte sans rôle (test suivant) : Damien est super admin en
+    // assistance sur la structure du Lydia (seed), donc équipe, et l'API le lui sert (R7l3, tour 2).
+  });
+}
+
+// Compte sans rôle, entré au Lydia, qui n'a pas voté (Pilote_006 : jamais d'autre voix dans les recettes).
+for (const theme of ["beton", "sable"] as const) {
+  test(`Pilote_006 (sans rôle, entré, pas encore voté) : classement caché avant sa voix, site (${theme})`, async ({
+    page,
+  }) => {
+    await signIn(page, "pilote6@orasso.local", theme);
+    await page.goto(`/app/vote/${SLUG}`);
+    await expect(page.getByText(/vote ouvert jusqu'au \w+ \d+ \S+, \d+ h/i)).toBeVisible();
     await expect(page.getByTestId("vote-ranking-hidden")).toContainText("Le classement s'affiche après ton vote");
     await expect(page.getByTestId("vote-board-row")).toHaveCount(0);
   });
@@ -62,10 +75,14 @@ test("Nina_34 : le classement apparaît après son vote ; si sa relecture échou
 }) => {
   await signIn(page, "nina@orasso.local", "beton");
   await page.goto(`/app/vote/${SLUG}`);
-  await expect(page.getByTestId("vote-candidate").first()).toBeVisible();
+  // Déjà voté (seed, ou relance de la recette) : on rouvre la grille par « Changer mon vote » (parité avec l'appli).
+  const change = page.getByTestId("vote-change");
+  await expect(change.or(page.getByTestId("vote-candidate").first())).toBeVisible();
+  if (await change.isVisible()) await change.click();
   // Le chargeur du site relit le classement côté serveur : on ne peut pas l'intercepter ici, on vérifie le chemin nominal
-  // (vote, puis classement visible) ; l'échec de la relecture est couvert par la recette de l'appli et les tests de `shared`.
+  // (vote en deux temps, puis classement visible) ; l'échec de la relecture est couvert par la recette de l'appli et les tests de `shared`.
   await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
+  await page.getByTestId("vote-cta").click();
   await expect(page.getByTestId("vote-saved")).toBeVisible();
   await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
   await expect(page.getByTestId("vote-board-row").first()).toBeVisible();

@@ -21,6 +21,9 @@ const wanted = <T extends { name: string }>(shots: T[]) => (ONLY ? shots.filter(
 type Theme = "beton" | "sable";
 const DAMIEN = "damien@orasso.local";
 const KENJI = "kenji@orasso.local";
+// « Avant la voix » : un compte sans rôle, entré au Lydia, qui n'a pas voté (Damien est équipe par l'assistance du seed : il voit le
+// classement avant sa voix, règle de l'API ; tour 2 de R7l3).
+const PILOTE = "pilote6@orasso.local";
 
 async function ids() {
   const kenji = await login(KENJI);
@@ -83,12 +86,12 @@ test("appli : captures du vote, du garage, de la fiche, du Jour J, Béton et Sab
   test.setTimeout(1_500_000);
   const k = await ids();
   const shots: { name: string; who: string; path: string }[] = [
-    { name: "vote", who: DAMIEN, path: `/vote/${k.eventId}` },
+    { name: "vote", who: PILOTE, path: `/vote/${k.eventId}` },
     ...(AFTER
       ? [
           { name: "votes-liste", who: DAMIEN, path: `/votes/${k.eventId}` },
           ...(k.rupteurId
-            ? [{ name: "vote-rupteur", who: DAMIEN, path: `/vote/${k.eventId}?vote=${k.rupteurId}` }]
+            ? [{ name: "vote-rupteur", who: PILOTE, path: `/vote/${k.eventId}?vote=${k.rupteurId}` }]
             : []),
         ]
       : []),
@@ -101,7 +104,7 @@ test("appli : captures du vote, du garage, de la fiche, du Jour J, Béton et Sab
   ];
   for (const theme of ["beton", "sable"] as const) {
     for (const [width, fs] of VARIANTS) {
-      for (const who of [DAMIEN, KENJI]) {
+      for (const who of [DAMIEN, KENJI, PILOTE]) {
         const { ctx, page } = await openApp(browser, theme, width, fs);
         await signIn(page, who);
         await afterOpening(page);
@@ -121,10 +124,10 @@ test("site : captures du vote, du garage, de la fiche, Béton et Sable, 390 et 1
   test.setTimeout(1_200_000);
   const k = await ids();
   const shots: { name: string; who: string; path: string }[] = [
-    { name: "vote", who: DAMIEN, path: `/app/vote/${SLUG}` },
+    { name: "vote", who: PILOTE, path: `/app/vote/${SLUG}` },
     ...(AFTER ? [{ name: "votes-liste", who: DAMIEN, path: `/app/votes/${SLUG}` }] : []),
     ...(AFTER && k.rupteurId
-      ? [{ name: "vote-rupteur", who: DAMIEN, path: `/app/vote/${SLUG}?vote=${k.rupteurId}` }]
+      ? [{ name: "vote-rupteur", who: PILOTE, path: `/app/vote/${SLUG}?vote=${k.rupteurId}` }]
       : []),
     { name: "fiche-evenement", who: DAMIEN, path: `/e/${SLUG}` },
     { name: "garage-vehicule", who: KENJI, path: `/app/garage/${k.vehicleId}` },
@@ -132,7 +135,7 @@ test("site : captures du vote, du garage, de la fiche, Béton et Sable, 390 et 1
   ];
   for (const theme of ["beton", "sable"] as const) {
     for (const width of [390, 1280]) {
-      for (const who of [DAMIEN, KENJI]) {
+      for (const who of [DAMIEN, KENJI, PILOTE]) {
         const ctx = await browser.newContext({
           viewport: { width, height: 900 },
           locale: "fr-FR",

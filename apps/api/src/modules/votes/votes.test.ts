@@ -930,6 +930,34 @@ describe("voter", () => {
     expect(audit.some((a) => a.action === "structure.view_as" && a.reason === "audience_prize.ranking")).toBe(true);
   });
 
+  it("la consultation d'un super admin en assistance n'est tracée qu'une fois par heure et par structure", async () => {
+    await enterAll();
+    const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });
+    await api(orga, "POST", `/${id}/open`);
+    const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
+    const traces = async () =>
+      (await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.actorUserId, admin.id) })).filter(
+        (a) => a.action === "structure.view_as" && a.structureId === structureId,
+      );
+    // Dix relectures du classement et de la liste : une seule trace.
+    for (let i = 0; i < 5; i++) {
+      expect((await api(admin, "GET", `/${id}`)).json.ranking).not.toBeNull();
+      expect((await api(admin, "GET")).status).toBe(200);
+    }
+    expect(await traces()).toHaveLength(1);
+    // La console (lecture) : une trace de plus pour son motif, pas une par relecture.
+    for (let i = 0; i < 3; i++) expect((await api(admin, "GET", "/manage")).status).toBe(200);
+    expect(await traces()).toHaveLength(2);
+    // Plus d'une heure après, la consultation est tracée de nouveau.
+    await db
+      .update(adminAuditLog)
+      .set({ createdAt: new Date(Date.now() - 61 * 60_000) })
+      .where(eq(adminAuditLog.actorUserId, admin.id));
+    expect((await api(admin, "GET", `/${id}`)).json.ranking).not.toBeNull();
+    expect(await traces()).toHaveLength(3);
+  });
+
   it("le canal ne porte jamais de classement : « Toutes catégories » garde `votes.changed`, un vote à thème émet `theme_votes.changed`", async () => {
     await enterAll();
     const id = await createTheme({ ...japanese, candidateMode: "all", candidateFilter: null, title: "Tous" });

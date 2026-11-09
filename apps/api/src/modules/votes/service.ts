@@ -39,7 +39,6 @@ import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
   accessPasses,
-  adminAuditLog,
   applications,
   audiencePrizeResults,
   audienceVotes,
@@ -59,6 +58,7 @@ import {
   openAssistanceRequest,
   requireOrganizer,
   requireOrganizerWrite,
+  traceViewAs,
 } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -124,11 +124,9 @@ export async function isEventTeam(ex: Executor, event: EventRow, v: Viewer): Pro
   if (!isSuperAdmin(v)) return false;
   if (!(env.DEV_SKIP_2FA || hasSecondFactor(v))) return false;
   if (!(await openAssistanceRequest(event.structureId))) return false;
-  await ex.insert(adminAuditLog).values({
+  // Tracée une fois par heure (le canal provoque une relecture toutes les 10 s par écran ouvert).
+  await traceViewAs(ex, {
     actorUserId: v.user.id,
-    action: "structure.view_as",
-    targetType: "structure",
-    targetId: event.structureId,
     structureId: event.structureId,
     reason: "audience_prize.ranking",
     ip: requestContext.get()?.ip ?? null,

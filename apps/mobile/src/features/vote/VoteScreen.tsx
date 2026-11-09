@@ -487,8 +487,15 @@ const styles = StyleSheet.create({
   winnerText: { flex: 1, minWidth: 0, gap: 2 },
   winnerName: { fontSize: 16, lineHeight: 17 },
   ranking: { gap: space2 },
-  rankHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
-  live: { flexDirection: "row", alignItems: "center", gap: space1 + 2 },
+  // flexWrap : à 384 px et police 1,3, « En direct · N voix » passe sous le titre au lieu de sortir de l'écran (tour 2).
+  rankHead: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space2,
+  },
+  live: { flexDirection: "row", alignItems: "center", flexShrink: 1, gap: space1 + 2 },
   liveText: { fontSize: 12 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   row: {

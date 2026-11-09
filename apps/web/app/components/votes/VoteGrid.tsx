@@ -14,12 +14,17 @@ export function VoteGrid({
   myVote,
   canVote,
   busy,
+  pick,
+  onPick,
 }: {
   candidates: readonly VoteCandidate[];
   ownIds: readonly string[];
   myVote: string | null;
   canVote: boolean;
   busy: boolean;
+  /** La voiture choisie, pas encore votée. */
+  pick: string | null;
+  onPick: (applicationId: string) => void;
 }) {
   if (candidates.length === 0) return <p className="s-muted">{T.empty}</p>;
   return (
@@ -27,21 +32,16 @@ export function VoteGrid({
       {candidates.map((c, i) => {
         const own = ownIds.includes(c.applicationId);
         const waiting = !c.eligible;
-        const chosen = myVote === c.applicationId;
+        const chosen = pick === c.applicationId || (pick === null && myVote === c.applicationId);
         return (
           <li key={c.applicationId}>
             <button
-              type="submit"
-              name="applicationId"
-              value={c.applicationId}
+              type="button"
+              onClick={() => onPick(c.applicationId)}
               className="vote-card"
               aria-pressed={chosen}
               aria-label={
-                own
-                  ? `${c.vehicleLabel}. ${T.you}`
-                  : waiting
-                    ? `${c.vehicleLabel}. ${T.notYetEntered}`
-                    : T.pickCta(c.vehicleLabel)
+                own ? `${c.vehicleLabel}. ${T.you}` : waiting ? `${c.vehicleLabel}. ${T.notYetEntered}` : c.vehicleLabel
               }
               disabled={!canVote || own || waiting || busy}
               data-own={own ? "true" : undefined}
@@ -53,7 +53,7 @@ export function VoteGrid({
               <span className="o-t-caption">{c.pseudo}</span>
               {own && <Chip>{T.you}</Chip>}
               {waiting && <Chip>{T.notYetEntered}</Chip>}
-              {chosen && <Chip variant="accent">{T.yourVote}</Chip>}
+              {myVote === c.applicationId && <Chip variant="accent">{T.yourVote}</Chip>}
             </button>
           </li>
         );

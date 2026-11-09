@@ -53,8 +53,13 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
     await expect(page.getByTestId("vote-ranking")).toHaveCount(0);
     await shot(page, "vote-avant");
 
-    // Toucher une voiture = voter : la voix est enregistrée et le classement apparaît.
+    // Le geste en deux temps (parité avec l'appli) : toucher une voiture la choisit sans voter ; « Voter pour … » vote.
+    await expect(page.getByTestId("vote-cta")).toBeDisabled();
     await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
+    await expect(page.getByTestId("vote-saved")).toHaveCount(0);
+    await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/);
+    expect((await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId)).myVote).toBeFalsy();
+    await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("vote-ranking")).toBeVisible();
     await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
@@ -63,8 +68,12 @@ test("la liste, le vote dans le concours, classement absent avant la voix et pr�
     expect(after.ranking).not.toBeNull();
     await shot(page, "vote-apres");
 
-    // Une voix modifiable : une autre voiture.
+    // Une voix modifiable, par le même geste en deux temps : « Changer mon vote » rouvre la grille.
+    await expect(page.getByTestId("vote-candidate")).toHaveCount(0);
+    await page.getByTestId("vote-change").click();
     await page.locator('[data-testid="vote-candidate"]:not([disabled])').last().click();
+    await expect(page.getByTestId("vote-cta")).toContainText(/Voter pour/);
+    await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
     const changed = await voteSeenBy("kenji@orasso.local", v.eventId, v.voteId);
     expect(changed.myVote).not.toBe(after.myVote);

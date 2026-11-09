@@ -195,3 +195,11 @@
   background: var(--surface-sunken);
   color: var(--accent);
 }
+
+/* Le bouton « Voter pour … » (parité avec l'appli) : reste visible au bas de l'écran pendant qu'on parcourt la grille. */
+.vp-cta {
+  position: sticky;
+  bottom: var(--space-3);
+  z-index: 2;
+  margin-top: var(--space-4);
+}
