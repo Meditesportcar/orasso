@@ -135,7 +135,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
             size="xl"
             src={p.avatarUrl}
             name={p.pseudo}
-            href={p.stories.count > 0 ? `/app/story/${encodeURIComponent(`u:${p.userId}`)}` : undefined}
+            href={!preview && p.stories.count > 0 ? `/app/story/${encodeURIComponent(`u:${p.userId}`)}` : undefined}
             label={storyViewerLabels.openStories(p.pseudo)}
           />
           <div className="pr5-hd__id">

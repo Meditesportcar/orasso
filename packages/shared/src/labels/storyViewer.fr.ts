@@ -57,6 +57,7 @@ export const storyViewerLabels = {
   deleteDone: "Story supprimée.",
   views: (n: number) => `Vues · ${n}`,
   viewsTitle: "Vues",
+  viewsPartial: (shown: number) => `La liste montre les ${shown} dernières personnes.`,
   viewsEmpty: "Personne n'a encore vu cette story.",
   viewsError: "La liste des vues n'a pas pu être lue.",
   tags: "Identifiés",

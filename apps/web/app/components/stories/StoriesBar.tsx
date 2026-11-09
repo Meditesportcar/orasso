@@ -1,6 +1,6 @@
 // La barre de stories du Fil sur le site (lot R7f2, maquette R7.6 `.r7stories`) : « Ta story » d'abord (« + » sans story, ton
 // anneau sinon), puis un rond par auteur (`GET /stories/bar`, déjà trié par l'API : non vues d'abord) : anneau clair (abonnés),
-// rouge brique (crew), moutarde « EN COURS » (un seul néon par écran : `barDisplay`), anneau fin quand tout est vu. Le nom
+// rouge brique (crew), moutarde « EN COURS » (sans néon : un seul néon par écran, celui du bouton principal), anneau fin quand tout est vu. Le nom
 // dessous ne se coupe jamais. Lue dans le navigateur (cookie de session, rien dans le HTML rendu par le serveur) : au retour
 // sur l'onglet et quand `story.ready` arrive sur `user:{id}`. Une panne n'est jamais une barre vide : « Réessayer ».
 // Mêmes règles et mêmes mots que l'appli (`@orasso/shared`).
@@ -12,9 +12,8 @@ import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
 import { useChannel } from "../../lib/useChannel";
 
-/** La route « Publier une story » est créée par le lot R7f3 : tant qu'elle n'existe pas, le « + » ne mène nulle part. */
-const PUBLISH_HREF =
-  Object.keys(import.meta.glob("../../routes/app-story-publier.tsx")).length > 0 ? "/app/story/publier" : null;
+/** La route « Publier une story » est créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours. */
+const PUBLISH_HREF = "/app/story/publier";
 
 export const storyHref = (key: string) => `/app/story/${encodeURIComponent(key)}`;
 
@@ -76,25 +75,19 @@ export function StoriesBar({
               >
                 <AvatarRing ring={mineState} size="lg" src={avatarUrl} name={pseudo} />
               </a>
-              {PUBLISH_HREF ? (
-                <a
-                  href={PUBLISH_HREF}
-                  className="stories-bar__plus"
-                  aria-label={L.addStoryHint}
-                  data-testid="stories-add"
-                >
-                  <Icon name="add" size={12} />
-                </a>
-              ) : null}
+              <a
+                href={PUBLISH_HREF}
+                className="stories-bar__plus"
+                aria-label={L.addStoryHint}
+                data-testid="stories-add"
+              >
+                <Icon name="add" size={12} />
+              </a>
             </>
-          ) : PUBLISH_HREF ? (
+          ) : (
             <a href={PUBLISH_HREF} className="stories-bar__add" aria-label={L.addStoryHint} data-testid="stories-add">
               <Icon name="add" size={24} />
             </a>
-          ) : (
-            <span className="stories-bar__add" role="img" aria-label={L.addStory} data-testid="stories-add">
-              <Icon name="add" size={24} />
-            </span>
           )}
           <span className="stories-bar__name">{L.addStory}</span>
         </li>
@@ -108,12 +101,9 @@ export function StoriesBar({
                 className="stories-bar__link"
                 aria-label={`${L.openStories(a.pseudoOrName)}${a.crewName ? `, ${a.crewName}` : ""}`}
               >
-                <AvatarRing ring={d.state} neon={d.neon} size="lg" src={a.avatarUrl} name={a.pseudoOrName} />
+                <AvatarRing ring={d.state} neon={false} size="lg" src={a.avatarUrl} name={a.pseudoOrName} />
                 {d.liveLabel ? (
-                  <span
-                    className={d.neon ? "stories-bar__live is-neon" : "stories-bar__live"}
-                    data-testid="stories-live-label"
-                  >
+                  <span className="stories-bar__live" data-testid="stories-live-label">
                     {L.live}
                   </span>
                 ) : null}

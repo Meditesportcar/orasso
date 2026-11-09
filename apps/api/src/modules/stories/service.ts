@@ -11,6 +11,7 @@ import {
   directKey,
   type Frame,
   STORY_LIVE_MAX,
+  STORY_VIEWERS_MAX,
   type StoryCreate,
   type StoryCreated,
   type StoryDenial,
@@ -633,7 +634,7 @@ export const storiesService = {
       .innerJoin(profiles, eq(profiles.userId, storyViews.viewerId))
       .where(eq(storyViews.storyId, id))
       .orderBy(sql`${storyViews.viewedAt} desc`)
-      .limit(200);
+      .limit(STORY_VIEWERS_MAX);
     const at = now();
     return {
       viewers: rows

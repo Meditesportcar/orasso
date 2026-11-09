@@ -1,6 +1,6 @@
 // La barre de stories, en tête du Fil (lot R7f2, maquette R7.6 `p-fil` `.r7stories`) : « Ta story » d'abord (« + » sans story,
 // ton anneau sinon), puis un rond par auteur (`GET /stories/bar`, déjà trié par l'API : non vues d'abord) : anneau clair
-// (abonnés), rouge brique (crew), moutarde « EN COURS » (un seul néon par écran : `barDisplay`), anneau fin quand tout est
+// (abonnés), rouge brique (crew), moutarde « EN COURS » (sans néon : un seul néon par écran, celui du bouton principal), anneau fin quand tout est
 // vu. Le nom dessous ne se coupe jamais (`WordSafeText`). Défilement horizontal. Relue au retour sur l'écran (`useApi`) et
 // quand `story.ready` arrive sur le canal `user:{id}`. Aucune règle de visibilité ici : l'API a déjà filtré. Une panne n'est
 // jamais une barre vide : « Réessayer ». Rien n'est gardé dans le trousseau (vie privée).
@@ -8,17 +8,18 @@ import { AvatarRing, Icon, Text, tokens, useTheme, WordSafeText } from "@orasso/
 import { barDisplay, storyViewerLabels as L, mineRingState } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-
+import { useTabSwipeScrollGuard } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
-import { storyPublishRoute } from "./publishRoute";
 
 const { space2, space3, space4 } = tokens.spacing;
 const ITEM_W = 68;
+/** Route créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours (Metro ne sait pas la détecter). */
+const PUBLISH = "/story/publier" as never;
 
 /** Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). */
 export function useOpenStories() {
@@ -29,6 +30,8 @@ export function useOpenStories() {
 export function StoriesBar() {
   const { t } = useTheme();
   const { me } = useSession();
+  // La barre défile à l'horizontale : le glissement d'onglet se tait pendant son défilement (comme les carrousels).
+  const scrollGuard = useTabSwipeScrollGuard();
   const open = useOpenStories();
   const router = useRouter();
   const bar = useApi(() => api.storiesBar(), []);
@@ -41,7 +44,6 @@ export function StoriesBar() {
   const mine = data?.mine ?? null;
   const mineState = mineRingState(mine);
   const display = barDisplay(data?.authors ?? []);
-  const publish = storyPublishRoute();
   const myId = me?.user.id;
 
   return (
@@ -51,6 +53,7 @@ export function StoriesBar() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
         accessibilityLabel={L.barTitle}
+        {...scrollGuard}
       >
         {/* Ta story : « + » (publier, si la route existe) sans story ; ton anneau (ouvre ta story) avec. */}
         <View style={styles.item} testID="stories-mine">
@@ -65,25 +68,22 @@ export function StoriesBar() {
                 accessibilityLabel={L.openMine}
                 testID="stories-mine-ring"
               />
-              {publish ? (
-                <Pressable
-                  onPress={() => router.push(publish)}
-                  accessibilityRole="button"
-                  accessibilityLabel={L.addStoryHint}
-                  hitSlop={6}
-                  style={[styles.plus, { backgroundColor: t.color.accent, borderColor: t.color.ground }]}
-                  testID="stories-add"
-                >
-                  <Icon name="add" size={12} color={t.color.accentInk} strokeWidth={3} />
-                </Pressable>
-              ) : null}
+              <Pressable
+                onPress={() => router.push(PUBLISH)}
+                accessibilityRole="button"
+                accessibilityLabel={L.addStoryHint}
+                hitSlop={6}
+                style={[styles.plus, { backgroundColor: t.color.accent, borderColor: t.color.ground }]}
+                testID="stories-add"
+              >
+                <Icon name="add" size={12} color={t.color.accentInk} strokeWidth={3} />
+              </Pressable>
             </View>
           ) : (
             <Pressable
-              onPress={publish ? () => router.push(publish) : undefined}
-              disabled={!publish}
-              accessibilityRole={publish ? "button" : "image"}
-              accessibilityLabel={publish ? L.addStoryHint : L.addStory}
+              onPress={() => router.push(PUBLISH)}
+              accessibilityRole="button"
+              accessibilityLabel={L.addStoryHint}
               style={[styles.add, { borderColor: t.color.line }]}
               testID="stories-add"
             >
@@ -103,7 +103,7 @@ export function StoriesBar() {
               <View>
                 <AvatarRing
                   ring={d.state}
-                  neon={d.neon}
+                  neon={false}
                   size="lg"
                   source={mediaSource(a.avatarUrl)}
                   name={a.pseudoOrName}
@@ -113,14 +113,7 @@ export function StoriesBar() {
                 />
                 {d.liveLabel ? (
                   <View pointerEvents="none" style={styles.liveWrap}>
-                    <View
-                      style={[
-                        styles.live,
-                        { backgroundColor: t.color.accent },
-                        d.neon && { boxShadow: t.shadow.neonAccentSoft },
-                      ]}
-                      testID="stories-live-label"
-                    >
+                    <View style={[styles.live, { backgroundColor: t.color.accent }]} testID="stories-live-label">
                       <Text variant="meta" color={t.color.accentInk} style={styles.liveText}>
                         {L.live}
                       </Text>

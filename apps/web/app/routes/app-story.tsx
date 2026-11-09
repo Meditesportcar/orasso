@@ -22,5 +22,7 @@ export function meta() {
 }
 
 export default function AppStory({ loaderData, params }: Route.ComponentProps) {
-  return <Viewer authorKey={decodeURIComponent(params.authorKey)} userId={loaderData.userId} />;
+  // `key` = le compte : un autre compte (déconnexion puis connexion, retour arrière) remonte une visionneuse neuve, rien de
+  // l'ancien (stories, feuilles, brouillon) ne reste affiché.
+  return <Viewer key={loaderData.userId} authorKey={decodeURIComponent(params.authorKey)} userId={loaderData.userId} />;
 }

@@ -468,6 +468,23 @@ describe("barre", () => {
     expect((await req(me, "PUT", `/me/story-mutes/${keyOf(me)}`)).status).toBe(400);
     expect((await req(me, "PUT", "/me/story-mutes/zz:1")).status).toBe(404);
   });
+
+  it("« Ta story » ne compte que mes stories personnelles : celles au nom d'une structure ou d'un pro n'y sont pas", async () => {
+    const orga = await signUp("OrgaMine");
+    const structure = await createStructure(orga.id);
+    const pro = await createPro(orga.id);
+    await ok(orga, { persona: "organizer", structureId: structure.id, audience: "followers" });
+    await ok(orga, { persona: "pro", proId: pro.id, audience: "followers" });
+    // Que des stories au nom d'une structure ou d'un pro : « Ta story » reste vide (sinon elle ouvrirait `u:<moi>`, vide).
+    let bar = (await req(orga, "GET", "/stories/bar")).json;
+    expect(bar.mine).toBeNull();
+    expect((await byAuthor(orga, keyOf(orga))).json.stories).toEqual([]);
+    // Une story personnelle s'ajoute : elle seule compte, et c'est bien ce que la visionneuse sert.
+    await ok(orga, { audience: "followers" });
+    bar = (await req(orga, "GET", "/stories/bar")).json;
+    expect(bar.mine).toMatchObject({ count: 1, ring: "followers" });
+    expect((await byAuthor(orga, keyOf(orga))).json.stories).toHaveLength(1);
+  });
 });
 
 describe("fichiers et expiration", () => {

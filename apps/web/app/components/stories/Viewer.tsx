@@ -7,10 +7,13 @@
 // la route protégée (`/api/stories/:id/media/:nom`). Fichier PARTAGÉ avec R7g2 (branche vidéo), R7f4, R7h et R7m2 (une ligne chacun).
 import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
+  createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
   progressOf,
+  replyStillShown,
   STORY_HOLD_MS,
+  STORY_VIEWERS_MAX,
   type StoriesByAuthor,
   type StoryReplyResult,
   type StoryTagView,
@@ -22,6 +25,7 @@ import {
   storyPrev,
   storyStartIndex,
   tapTarget,
+  viewersListPartial,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -102,14 +106,20 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const [viewers, setViewers] = useState<{ story: StoryView; data: Viewers | null; error: string | null } | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
+  // Envoi en cours : l'identifiant de la story concernée (on peut répondre à la suivante pendant qu'une réponse part).
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [visible, setVisible] = useState(true);
+  const [replay, setReplay] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const menuRef = useRef<HTMLDialogElement>(null);
   const viewersRef = useRef<HTMLDialogElement>(null);
   const seq = useRef(0);
   const viewed = useRef(new Set<string>());
-  const clientId = useRef<string>(typeof crypto !== "undefined" ? crypto.randomUUID() : "");
+  const viewersSeq = useRef(0);
+  const replyKeys = useRef(createReplyKeys(() => crypto.randomUUID())).current;
+  const closing = useRef(false);
+  const muteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Lecture ------------------------------------------------------------------------------------------------------
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer).
@@ -138,7 +148,19 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const canReply = Boolean(author && author.persona !== "pro");
 
   // --- Fermer, avancer, reculer ---------------------------------------------------------------------------------------
+  // Un seul `close()`, et la minuterie de « Ne plus voir ses stories » est annulée au démontage (sinon, sortie pendant les
+  // 1,5 s = un second recul, hors de la visionneuse).
+  useEffect(() => {
+    closing.current = false;
+    return () => {
+      closing.current = true;
+      if (muteTimer.current) clearTimeout(muteTimer.current);
+    };
+  }, []);
   const close = useCallback(() => {
+    if (closing.current) return;
+    closing.current = true;
+    if (muteTimer.current) clearTimeout(muteTimer.current);
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (idx > 0) void navigate(-1);
     else void navigate("/app/fil", { replace: true });
@@ -149,24 +171,34 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (step.kind === "close") close();
     else setIndex(step.index);
   }, [at, count, close]);
+  // Reculer sur la première story la rejoue depuis le début : l'index ne change pas, `replay` relance la minuterie.
   const goPrev = useCallback(() => {
     const step = storyPrev(at);
-    if (step.kind === "story") setIndex(step.index);
+    if (step.kind !== "story") return;
+    if (step.index === at) setReplay((n) => n + 1);
+    else setIndex(step.index);
   }, [at]);
 
   // --- Pauses et minuterie ---------------------------------------------------------------------------------------------
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
-  const running = ready && !held && !menu && !viewers && !replyFocused;
+  // Onglet masqué (changement d'onglet, écran verrouillé) : pause, le temps restant est gardé.
+  const running = ready && visible && !held && !menu && !viewers && !replyFocused;
   const total = story ? storyDurationMs(story) : 5000;
   const storyId = story?.id ?? null;
   const elapsed = useRef(0);
   const onDone = useRef(goNext);
   onDone.current = goNext;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: un autre story repart de zéro.
+  useEffect(() => {
+    const sync = () => setVisible(document.visibilityState !== "hidden");
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une autre story (ou la première rejouée) repart de zéro.
   useEffect(() => {
     elapsed.current = 0;
     setProgress(0);
-  }, [storyId]);
+  }, [storyId, replay]);
   useEffect(() => {
     if (!running) return;
     let last = performance.now();
@@ -183,14 +215,15 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     return () => clearInterval(timer);
   }, [running, total]);
 
-  // Vue : une fois par story, quand l'image est lue.
+  // Vue : une fois par story, quand l'image est lue ET affichée (onglet visible).
+  const shown = ready && visible;
   useEffect(() => {
-    if (!storyId || !ready || mine || viewed.current.has(storyId)) return;
+    if (!storyId || !shown || mine || viewed.current.has(storyId)) return;
     viewed.current.add(storyId);
     void apiFetch(`/stories/${storyId}/view`, { method: "POST" }).then((res) => {
       if (!res.ok) viewed.current.delete(storyId);
     });
-  }, [storyId, ready, mine]);
+  }, [storyId, shown, mine]);
 
   useEffect(() => {
     if (!notice) return;
@@ -296,21 +329,29 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
       setNotice(res.error.message || L.actionError);
     }
   };
+  const shownDraft = useRef({ storyId: storyId as string | null, text });
+  shownDraft.current = { storyId, text };
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
     const body = text.trim();
-    if (!story || !body || sending) return;
-    setSending(true);
-    const res = await apiFetch<StoryReplyResult>(`/stories/${story.id}/reply`, {
+    if (!story || !body || sendingId === story.id) return;
+    const sent = { storyId: story.id, text: body };
+    setSendingId(sent.storyId);
+    // Identifiant lié à la soumission (story + texte) : une réponse perdue renvoyée à l'identique n'est pas doublée ; un
+    // texte modifié est une autre soumission, donc un autre identifiant.
+    const res = await apiFetch<StoryReplyResult>(`/stories/${sent.storyId}/reply`, {
       method: "POST",
-      json: { text: body, clientId: clientId.current },
+      json: { text: body, clientId: replyKeys.idFor(sent.storyId, body) },
     });
-    setSending(false);
+    setSendingId((cur) => (cur === sent.storyId ? null : cur));
     if (!res.ok) return setNotice(res.error.message || L.actionError);
-    clientId.current = crypto.randomUUID();
-    setText("");
-    setReplyFocused(false);
-    (document.activeElement as HTMLElement | null)?.blur();
+    replyKeys.done(sent.storyId, body);
+    // La fin de l'envoi ne touche au champ que si cette soumission est encore celle qui s'affiche.
+    if (replyStillShown(sent, shownDraft.current)) {
+      setText("");
+      setReplyFocused(false);
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
     setNotice(res.data.mode === "message" ? L.replySentMessage : L.replySentRequest);
   };
   const mute = async () => {
@@ -318,7 +359,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     const res = await apiFetch(`/me/story-mutes/${encodeURIComponent(authorKey)}`, { method: "PUT" });
     if (!res.ok) return setNotice(res.error.message || L.actionError);
     setNotice(L.muted);
-    setTimeout(close, 1500);
+    if (!closing.current) muteTimer.current = setTimeout(close, 1500);
   };
   const removeTag = async () => {
     if (!story) return;
@@ -340,8 +381,10 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   };
   const openViewers = async (s: StoryView) => {
     setMenu(false);
+    const mineSeq = ++viewersSeq.current;
     setViewers({ story: s, data: null, error: null });
     const res = await apiFetch<Viewers>(`/me/stories/${s.id}/viewers`);
+    if (mineSeq !== viewersSeq.current) return;
     setViewers({ story: s, data: res.ok ? res.data : null, error: res.ok ? null : res.error.message || L.viewsError });
   };
   // L'image n'a pas pu être lue : 403 / 404 = la story n'est plus disponible ; sinon une panne, « Réessayer ».
@@ -466,7 +509,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
 
         {/* Les zones de geste : tout le cadre ; l'en-tête, les autocollants et le bas sont au-dessus. */}
         <div
-          className="story-view__surface"
+          className={imageError === story.id ? "story-view__surface is-off" : "story-view__surface"}
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}
@@ -626,8 +669,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                     <button
                       type="submit"
                       className="story-view__send"
-                      disabled={sending}
-                      aria-label={sending ? L.replySending : L.replySend}
+                      disabled={sendingId === story.id}
+                      aria-label={sendingId === story.id ? L.replySending : L.replySend}
                       data-testid="story-reply-send"
                     >
                       <Icon name="send" size={20} />
@@ -733,12 +776,20 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         ref={viewersRef}
         className="mod-dialog"
         aria-label={L.viewsTitle}
-        onClose={() => setViewers(null)}
+        onClose={() => {
+          viewersSeq.current++;
+          setViewers(null);
+        }}
         data-testid="story-viewers-dialog"
       >
         {viewers ? (
           <div className="s-stack">
-            <h2 className="s-h2">{L.views(viewers.data?.viewers.length ?? viewers.story.viewsCount ?? 0)}</h2>
+            <h2 className="s-h2">{L.views(viewers.story.viewsCount ?? viewers.data?.viewers.length ?? 0)}</h2>
+            {viewersListPartial(viewers.story.viewsCount) ? (
+              <p className="o-t-caption" data-testid="story-viewers-partial">
+                {L.viewsPartial(STORY_VIEWERS_MAX)}
+              </p>
+            ) : null}
             {viewers.error ? (
               <p className="o-t-body" role="alert" data-testid="story-viewers-error">
                 {viewers.error}

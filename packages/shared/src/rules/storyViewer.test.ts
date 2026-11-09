@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   barDisplay,
   barRingState,
+  createReplyKeys,
   mineRingState,
   profileRingState,
   progressOf,
   remainingMs,
+  replyStillShown,
   STORY_PHOTO_MS,
+  STORY_VIEWERS_MAX,
   shouldCloseOnDrag,
   storyDurationMs,
   storyNext,
@@ -15,6 +18,7 @@ import {
   storyPrev,
   storyStartIndex,
   tapTarget,
+  viewersListPartial,
 } from "./storyViewer";
 
 describe("anneaux de la barre", () => {
@@ -25,25 +29,25 @@ describe("anneaux de la barre", () => {
     expect(barRingState({ ring: "live", hasUnseen: false })).toBe("seen");
   });
 
-  it("un seul néon par écran : la première entrée en direct non vue, les autres sans néon", () => {
+  it("aucun néon dans la barre : l'étiquette « EN COURS » suit l'audience « live », même pour plusieurs auteurs", () => {
     const d = barDisplay([
       { ring: "followers", hasUnseen: true },
       { ring: "live", hasUnseen: true },
       { ring: "crew", hasUnseen: true },
       { ring: "live", hasUnseen: true },
     ]);
-    expect(d.map((x) => x.neon)).toEqual([false, true, false, false]);
     expect(d.map((x) => x.liveLabel)).toEqual([false, true, false, true]);
-    expect(d.filter((x) => x.neon)).toHaveLength(1);
+    expect(d.map((x) => x.state)).toEqual(["followers", "live", "crew", "live"]);
+    expect(d.every((x) => !("neon" in x))).toBe(true);
   });
 
-  it("un direct déjà vu ne prend pas le néon : le suivant le garde", () => {
+  it("un direct déjà vu : anneau fin, l'étiquette reste", () => {
     const d = barDisplay([
       { ring: "live", hasUnseen: false },
       { ring: "live", hasUnseen: true },
     ]);
-    expect(d.map((x) => x.neon)).toEqual([false, true]);
     expect(d[0]?.state).toBe("seen");
+    expect(d.map((x) => x.liveLabel)).toEqual([true, true]);
   });
 
   it("ma story : anneau clair ou brique, « + » sans story", () => {
@@ -112,5 +116,64 @@ describe("navigation et minuterie", () => {
     expect(storyPlayable({ status: "ready" })).toBe(true);
     expect(storyPlayable({ status: "processing" })).toBe(false);
     expect(storyPlayable({ status: "failed" })).toBe(false);
+  });
+});
+
+describe("réponse à une story : identifiant d'idempotence lié à la soumission", () => {
+  const keys = () => {
+    let n = 0;
+    return createReplyKeys(() => `id-${++n}`);
+  };
+
+  it("même story, même texte (renvoi après une réponse perdue) : même identifiant", () => {
+    const k = keys();
+    const first = k.idFor("s1", "Belle auto");
+    expect(k.idFor("s1", "Belle auto")).toBe(first);
+  });
+
+  it("succès serveur dont la réponse est perdue, puis texte modifié : nouvel identifiant", () => {
+    const k = keys();
+    const lost = k.idFor("s1", "Belle auto");
+    const edited = k.idFor("s1", "Belle auto !");
+    expect(edited).not.toBe(lost);
+    // Revenir au premier texte ne ressuscite pas l'ancien identifiant : une soumission = un identifiant.
+    expect(k.idFor("s1", "Belle auto")).not.toBe(lost);
+  });
+
+  it("une autre story = un nouvel identifiant ; un succès oublie l'identifiant", () => {
+    const k = keys();
+    const a = k.idFor("s1", "Salut");
+    expect(k.idFor("s2", "Salut")).not.toBe(a);
+    const b = k.idFor("s2", "Salut");
+    k.done("s2", "Salut");
+    expect(k.idFor("s2", "Salut")).not.toBe(b);
+  });
+
+  it("`done` d'une autre soumission ne touche pas l'identifiant courant", () => {
+    const k = keys();
+    const a = k.idFor("s1", "Salut");
+    k.done("s1", "Autre");
+    expect(k.idFor("s1", "Salut")).toBe(a);
+  });
+});
+
+describe("fin d'un envoi tardif", () => {
+  it("s'applique seulement à la soumission encore affichée", () => {
+    expect(replyStillShown({ storyId: "s1", text: "Salut" }, { storyId: "s1", text: "Salut" })).toBe(true);
+    expect(replyStillShown({ storyId: "s1", text: "Salut" }, { storyId: "s1", text: "  Salut " })).toBe(true);
+    // Navigation vers la story suivante pendant l'envoi : le brouillon de la suivante reste.
+    expect(replyStillShown({ storyId: "s1", text: "Salut" }, { storyId: "s2", text: "Autre brouillon" })).toBe(false);
+    expect(replyStillShown({ storyId: "s1", text: "Salut" }, { storyId: null, text: "" })).toBe(false);
+    // Texte retapé pendant l'envoi.
+    expect(replyStillShown({ storyId: "s1", text: "Salut" }, { storyId: "s1", text: "Salut les gars" })).toBe(false);
+  });
+});
+
+describe("liste des vues", () => {
+  it("partielle au-delà de 200 : le total reste celui de viewsCount", () => {
+    expect(STORY_VIEWERS_MAX).toBe(200);
+    expect(viewersListPartial(200)).toBe(false);
+    expect(viewersListPartial(201)).toBe(true);
+    expect(viewersListPartial(null)).toBe(false);
   });
 });

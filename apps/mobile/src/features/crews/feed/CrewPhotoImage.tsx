@@ -56,6 +56,7 @@ export function CrewPhotoImage({
   resizeMode = "contain",
   onLoaded,
   onFailed,
+  onLoading,
 }: {
   url: string;
   style: StyleProp<ImageStyle>;
@@ -66,6 +67,8 @@ export function CrewPhotoImage({
   onLoaded?: () => void;
   /** Lot R7f2 : lecture refusée ou perdue (`status` de l'API, 0 sans réponse) ; l'écran dit « plus disponible » pour 403/404. */
   onFailed?: (status: number) => void;
+  /** Lot R7f2 : une lecture (re)part (« Réessayer » compris) : l'écran lève l'état « en panne ». */
+  onLoading?: () => void;
 }) {
   const token = getSessionToken();
   const [uri, setUri] = useState<string | null>(null);
@@ -73,8 +76,8 @@ export function CrewPhotoImage({
   // Chaque « Réessayer » (ou retour du réseau) relance la lecture.
   const [attempt, setAttempt] = useState(0);
   const retry = useRef(() => setAttempt((n) => n + 1)).current;
-  const events = useRef({ onLoaded, onFailed });
-  events.current = { onLoaded, onFailed };
+  const events = useRef({ onLoaded, onFailed, onLoading });
+  events.current = { onLoaded, onFailed, onLoading };
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer, retour du réseau).
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -82,6 +85,7 @@ export function CrewPhotoImage({
     let status = 0;
     setUri(null);
     setFailed(false);
+    events.current.onLoading?.();
     void fetch(apiUrl(url), {
       headers: token ? { authorization: `Bearer ${token}` } : {},
       cache: "no-store",

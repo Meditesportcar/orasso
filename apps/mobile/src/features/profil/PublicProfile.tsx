@@ -361,7 +361,7 @@ export function PublicProfile({
           source={mediaSource(p.avatarUrl)}
           name={p.pseudo}
           onPress={
-            p.stories.count > 0
+            mode !== "preview" && p.stories.count > 0
               ? () => router.push({ pathname: "/story/[authorKey]", params: { authorKey: `u:${p.userId}` } })
               : undefined
           }

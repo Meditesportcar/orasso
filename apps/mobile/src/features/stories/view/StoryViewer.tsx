@@ -6,13 +6,16 @@
 //     des styles animés, donc des worklets, sans travail JS pendant le geste) ;
 //   - en-tête (avatar, nom, « il y a 3 h », bandeau « Mon crew · … »), légende, lieu, voiture, événement, identifiés ;
 //   - en bas : flamme, « Répondre » (message privé) et « ⋯ » (signaler, ne plus voir, supprimer, vues) ;
-//   - `POST /stories/:id/view` une fois par story, quand l'image est lue.
-// Pause automatique : menu ou feuille ouverts, champ de réponse en saisie, signalement ouvert, écran quitté, image pas lue.
+//   - `POST /stories/:id/view` une fois par story, quand l'image est lue ET affichée (écran au premier plan).
+// Pause automatique : menu ou feuille ouverts, champ de réponse en saisie, signalement ouvert, écran quitté, appli en
+// arrière-plan (`AppState`), image pas lue, média en panne.
 // Mouvement réduit : pas de glissement, fondu de 120 ms. Une story absente (expirée, retirée) : « Cette story n'est plus
 // disponible ». Aucune règle de visibilité ici : tout ce qui arrive a déjà été filtré par l'API.
 import { GradientFill, Icon, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import {
+  createReplyKeys,
   storyViewerLabels as L,
+  replyStillShown,
   STORY_HOLD_MS,
   type StoriesByAuthor,
   type StoryTagView,
@@ -40,6 +43,7 @@ import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { createRequestGate } from "@/lib/requestGate";
 import { useSession } from "@/lib/session";
+import { useAppActive } from "@/lib/useAppActive";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { SmButton } from "@/ui/Kit";
 import { Bottom } from "./Bottom";
@@ -70,6 +74,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const { me } = useSession();
   const focused = useIsFocused();
   const reportOpen = useReportOpen();
+  const appActive = useAppActive();
 
   // --- Lecture ------------------------------------------------------------------------------------------------------
   const [load, setLoad] = useState<Load>({ status: "loading" });
@@ -110,27 +115,42 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
 
   // --- Pauses -------------------------------------------------------------------------------------------------------
   const [loadedId, setLoadedId] = useState<string | null>(null);
+  // Média en panne (réseau) : la surface de gestes est désactivée, sinon elle couvre le « Réessayer » de la photo.
+  const [mediaFailedId, setMediaFailedId] = useState<string | null>(null);
   const [held, setHeld] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewersFor, setViewersFor] = useState<StoryView | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
-  const running = focused && ready && !held && !menuOpen && !viewersFor && !replyFocused && !reportOpen;
+  const running = focused && appActive && ready && !held && !menuOpen && !viewersFor && !replyFocused && !reportOpen;
 
   // --- Fermer, avancer, reculer ---------------------------------------------------------------------------------------
   const ty = useSharedValue(0);
   const fade = useSharedValue(1);
   const closing = useRef(false);
+  // Les minuteries de sortie sont gardées : au démontage elles sont annulées et `closing` est posé, donc rien ne ferme
+  // (ne recule) une seconde fois, ni un autre écran, après que la visionneuse a déjà quitté.
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const muteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    closing.current = false;
+    return () => {
+      closing.current = true;
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      if (muteTimer.current) clearTimeout(muteTimer.current);
+    };
+  }, []);
   const close = useCallback(() => {
     if (closing.current) return;
     closing.current = true;
+    if (muteTimer.current) clearTimeout(muteTimer.current);
     const leave = () => (router.canGoBack() ? router.back() : router.replace("/fil"));
     if (reducedMotion) {
       fade.value = withTiming(0, { duration: REDUCED_FADE_MS });
-      setTimeout(leave, REDUCED_FADE_MS);
+      leaveTimer.current = setTimeout(leave, REDUCED_FADE_MS);
     } else {
       ty.value = withTiming(height, { duration: CLOSE_MS });
-      setTimeout(leave, CLOSE_MS - 10);
+      leaveTimer.current = setTimeout(leave, CLOSE_MS - 10);
     }
   }, [router, reducedMotion, fade, ty, height]);
 
@@ -140,22 +160,28 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     if (step.kind === "close") close();
     else setIndex(step.index);
   }, [at, count, close]);
+  // Reculer sur la première story la rejoue depuis le début : l'index ne change pas, `replay` change la clé de la minuterie.
+  const [replay, setReplay] = useState(0);
   const goPrev = useCallback(() => {
     const step = storyPrev(at);
-    if (step.kind === "story") setIndex(step.index);
+    if (step.kind !== "story") return;
+    if (step.index === at) setReplay((n) => n + 1);
+    else setIndex(step.index);
   }, [at]);
 
   const total = story ? storyDurationMs(story) : 5000;
-  const progress = useStoryClock(story?.id ?? "none", total, running, goNext);
+  const progress = useStoryClock(`${story?.id ?? "none"}:${replay}`, total, running, goNext);
 
   // --- Vue (une fois par story, quand l'image est lue) ----------------------------------------------------------------
   const viewed = useRef(new Set<string>());
   const storyId = story?.id ?? null;
+  // Une story n'est comptée vue que réellement affichée : image lue, écran au premier plan.
+  const shown = ready && focused && appActive;
   useEffect(() => {
-    if (!storyId || !ready || mine || viewed.current.has(storyId)) return;
+    if (!storyId || !shown || mine || viewed.current.has(storyId)) return;
     viewed.current.add(storyId);
     api.storyView(storyId).catch(() => viewed.current.delete(storyId));
-  }, [storyId, ready, mine]);
+  }, [storyId, shown, mine]);
 
   // --- Message d'état ---------------------------------------------------------------------------------------------------
   const [notice, setNotice] = useState<string | null>(null);
@@ -256,8 +282,11 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   };
 
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const clientId = useRef(randomUUID());
+  // Envoi en cours : l'identifiant de la story concernée (on peut répondre à la suivante pendant qu'une réponse part).
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const replyKeys = useRef(createReplyKeys(randomUUID)).current;
+  const shownDraft = useRef({ storyId: storyId as string | null, text });
+  shownDraft.current = { storyId, text };
   // Un autre story : le brouillon d'une réponse ne passe pas à la suivante.
   // biome-ignore lint/correctness/useExhaustiveDependencies: le brouillon est propre à chaque story.
   useEffect(() => {
@@ -265,19 +294,25 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   }, [storyId]);
   const send = async () => {
     const body = text.trim();
-    if (!story || !body || sending) return;
-    setSending(true);
+    if (!story || !body || sendingId === story.id) return;
+    const sent = { storyId: story.id, text: body };
+    setSendingId(sent.storyId);
     try {
-      const r = await api.storyReply(story.id, body, clientId.current);
-      clientId.current = randomUUID();
-      setText("");
-      Keyboard.dismiss();
-      setReplyFocused(false);
+      // Identifiant lié à la soumission (story + texte) : une réponse perdue renvoyée à l'identique n'est pas doublée ;
+      // un texte modifié est une autre soumission, donc un autre identifiant.
+      const r = await api.storyReply(sent.storyId, body, replyKeys.idFor(sent.storyId, body));
+      replyKeys.done(sent.storyId, body);
+      // La fin de l'envoi ne touche au champ que si cette soumission est encore celle qui s'affiche.
+      if (replyStillShown(sent, shownDraft.current)) {
+        setText("");
+        Keyboard.dismiss();
+        setReplyFocused(false);
+      }
       setNotice(r.mode === "message" ? L.replySentMessage : L.replySentRequest);
     } catch (e) {
       setNotice(errorMessage(e));
     } finally {
-      setSending(false);
+      setSendingId((cur) => (cur === sent.storyId ? null : cur));
     }
   };
 
@@ -286,7 +321,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     try {
       await api.storyMute(authorKey, true);
       setNotice(L.muted);
-      setTimeout(close, 1500);
+      if (!closing.current) muteTimer.current = setTimeout(close, 1500);
     } catch (e) {
       setNotice(errorMessage(e));
     }
@@ -376,6 +411,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const processing = !storyPlayable(story);
   const markGone = (status: number) => {
     if (status === 403 || status === 404) setGone((g) => new Set(g).add(story.id));
+    else setMediaFailedId(story.id);
   };
 
   return (
@@ -397,7 +433,11 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
               authorName={authorName}
               width={width}
               height={height}
-              onLoaded={() => setLoadedId(story.id)}
+              onLoaded={() => {
+                setLoadedId(story.id);
+                setMediaFailedId(null);
+              }}
+              onLoading={() => setMediaFailedId(null)}
               onFailed={markGone}
             />
           )}
@@ -408,6 +448,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         {/* Les zones de geste : tout l'écran ; l'en-tête, les autocollants et le bas sont au-dessus. */}
         <View
           style={StyleSheet.absoluteFill}
+          pointerEvents={mediaFailedId === story.id ? "none" : "auto"}
           {...pan.panHandlers}
           accessibilityLabel={L.viewer}
           testID="story-surface"
@@ -452,7 +493,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             canReply={canReply}
             text={text}
             onText={setText}
-            sending={sending}
+            sending={sendingId === story.id}
             onSend={() => void send()}
             onFocusChange={setReplyFocused}
             onFlame={() => void flame()}

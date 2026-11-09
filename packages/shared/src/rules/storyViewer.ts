@@ -27,19 +27,15 @@ export type BarDisplay = {
   state: BarRingState;
   /** Étiquette « EN COURS » sous l'avatar (auteur en direct). */
   liveLabel: boolean;
-  /** Le seul néon moutarde de l'écran : la première entrée en direct non vue ; les autres, bordure pleine sans néon. */
-  neon: boolean;
 };
 
-/** Affichage de chaque entrée, dans l'ordre reçu : un seul néon par écran, même si plusieurs auteurs sont en direct. */
+/**
+ * Affichage de chaque entrée, dans l'ordre reçu. Aucun néon dans la barre (un seul néon moutarde par écran : le bouton
+ * principal du Fil) : l'anneau « en direct » est une bordure moutarde pleine et l'étiquette n'a pas de halo, comme
+ * `.r7ring.rlive` de la maquette.
+ */
 export function barDisplay(entries: readonly BarRingInput[]): BarDisplay[] {
-  let neonTaken = false;
-  return entries.map((e) => {
-    const state = barRingState(e);
-    const neon = state === "live" && !neonTaken;
-    if (neon) neonTaken = true;
-    return { state, liveLabel: e.ring === "live", neon };
-  });
+  return entries.map((e) => ({ state: barRingState(e), liveLabel: e.ring === "live" }));
 }
 
 /** « Ta story » : mon anneau, ou « + » sans story. Je connais mes stories : jamais « non vue ». */
@@ -104,4 +100,42 @@ export function shouldCloseOnDrag(dy: number, vy: number): boolean {
 /** Une story a un fichier lisible maintenant ? (une vidéo en préparation ou en échec n'est pas servie). */
 export function storyPlayable(s: { status: "processing" | "ready" | "failed" }): boolean {
   return s.status === "ready";
+}
+
+/** Au plus ce nombre de noms dans la liste « Vues » (les plus récents) ; le total reste celui de `viewsCount`. */
+export const STORY_VIEWERS_MAX = 200;
+
+/** Le titre « Vues · N » garde le total ; la liste, elle, est partielle au-delà de `STORY_VIEWERS_MAX`. */
+export function viewersListPartial(total: number | null | undefined): boolean {
+  return (total ?? 0) > STORY_VIEWERS_MAX;
+}
+
+/**
+ * Identifiant d'idempotence d'une réponse (`POST /stories/:id/reply`, `clientId`) lié à une soumission immuable : la même
+ * story et le même texte reprennent le même identifiant (une réponse perdue, renvoyée, n'est pas envoyée deux fois) ; un
+ * texte modifié ou une autre story = un nouvel identifiant (sinon le serveur rejouerait l'ancienne réponse sans envoyer
+ * le nouveau texte). `done` oublie l'identifiant d'une soumission réussie.
+ */
+export function createReplyKeys(newId: () => string) {
+  let last: { storyId: string; text: string; id: string } | null = null;
+  return {
+    idFor(storyId: string, text: string): string {
+      if (!last || last.storyId !== storyId || last.text !== text) last = { storyId, text, id: newId() };
+      return last.id;
+    },
+    done(storyId: string, text: string) {
+      if (last && last.storyId === storyId && last.text === text) last = null;
+    },
+  };
+}
+
+/**
+ * La fin d'un envoi (succès ou erreur) ne touche au champ de réponse que si la soumission est encore celle qui s'affiche :
+ * même story, même texte. Sinon (navigation vers une autre story, texte retapé pendant l'envoi) le brouillon présent reste.
+ */
+export function replyStillShown(
+  sent: { storyId: string; text: string },
+  shown: { storyId: string | null; text: string },
+): boolean {
+  return shown.storyId === sent.storyId && shown.text.trim() === sent.text;
 }

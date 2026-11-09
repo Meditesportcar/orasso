@@ -87,3 +87,22 @@ export function useTabSwipeDisabled(disabled = true) {
     }, [control, disabled]),
   );
 }
+
+/**
+ * Coupe le glissement entre onglets seulement PENDANT le défilement d'une liste horizontale (la barre de stories du Fil) :
+ * à poser sur le `ScrollView` (`{...guard}`). Hors défilement, le glissement d'onglet reste disponible. La coupure est
+ * levée à la fin du geste (doigt levé), à la fin de l'élan, et au démontage.
+ */
+export function useTabSwipeScrollGuard() {
+  const control = useContext(TabSwipeContext);
+  const release = useRef<(() => void) | null>(null);
+  const end = useCallback(() => {
+    release.current?.();
+    release.current = null;
+  }, []);
+  const begin = useCallback(() => {
+    if (control && !release.current) release.current = control.disable();
+  }, [control]);
+  useFocusEffect(useCallback(() => end, [end]));
+  return { onScrollBeginDrag: begin, onScrollEndDrag: end, onMomentumScrollEnd: end } as const;
+}

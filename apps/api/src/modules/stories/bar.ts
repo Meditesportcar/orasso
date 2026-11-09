@@ -139,7 +139,9 @@ export const storiesBar = {
       latestAt: e.latestAt.toISOString(),
     }));
 
-    const mineRows = await selectStories(and(liveStory(at), eq(stories.authorId, me)));
+    // « Ta story » ne compte que mes stories personnelles : celles que `by-author u:<moi>` sert. Celles au nom d'une
+    // structure ou d'un pro ont leur propre clé (`s:`, `p:`) ; les compter ici ouvrirait une visionneuse vide.
+    const mineRows = await selectStories(and(liveStory(at), eq(stories.authorId, me), personal));
     const mine = mineRows.length
       ? {
           count: mineRows.length,

@@ -18,6 +18,7 @@ export function Viewer({
   height,
   onLoaded,
   onFailed,
+  onLoading,
 }: {
   story: StoryView;
   authorName: string;
@@ -25,6 +26,7 @@ export function Viewer({
   height: number;
   onLoaded: () => void;
   onFailed: (status: number) => void;
+  onLoading: () => void;
 }) {
   const { t } = useTheme();
   // R7g2 : `if (story.mediaKind === "video") return <VideoSlide … />;` ici.
@@ -48,6 +50,7 @@ export function Viewer({
       accessibilityLabel={L.photoAlt(authorName)}
       onLoaded={onLoaded}
       onFailed={onFailed}
+      onLoading={onLoading}
     />
   );
 }

@@ -1,7 +1,7 @@
 // « Vues · 12 » : la liste de ceux qui ont vu ma story (`GET /me/stories/:id/viewers`), pour moi seul, avec ceux que j'ai
 // identifiés. Une panne n'est jamais une liste vide : message et « Réessayer ». Les avatars viennent de l'API (publics).
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { feedAgo, storyViewerLabels as L, type StoryView } from "@orasso/shared";
+import { feedAgo, storyViewerLabels as L, STORY_VIEWERS_MAX, type StoryView, viewersListPartial } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -53,7 +53,7 @@ export function ViewersSheet({
     <AppSheet visible={Boolean(story)} onClose={onClose} accessibilityLabel={L.viewsTitle}>
       <View style={styles.head}>
         <Text variant="posterM" color={t.color.ink} style={styles.title} accessibilityRole="header">
-          {L.views(data?.viewers.length ?? story?.viewsCount ?? 0)}
+          {L.views(story?.viewsCount ?? data?.viewers.length ?? 0)}
         </Text>
         <Pressable
           onPress={onClose}
@@ -66,6 +66,11 @@ export function ViewersSheet({
           <Icon name="close" size={20} color={t.color.ink} />
         </Pressable>
       </View>
+      {viewersListPartial(story?.viewsCount) ? (
+        <Text variant="caption" color={t.color.inkMuted} testID="story-viewers-partial">
+          {L.viewsPartial(STORY_VIEWERS_MAX)}
+        </Text>
+      ) : null}
       {error ? (
         <View style={styles.state} testID="story-viewers-error">
           <Text variant="body" color={t.color.ink}>
