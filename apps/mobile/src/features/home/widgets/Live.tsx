@@ -7,7 +7,7 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, type HomeLive, homeBlockLabels } from "@orasso/shared";
 import { useState } from "react";
-import { type LayoutChangeEvent, StyleSheet, View } from "react-native";
+import { type LayoutChangeEvent, StyleSheet, useWindowDimensions, View } from "react-native";
 import { SkewTag } from "@/features/sorties/bits";
 import { formatHour } from "@/lib/format";
 import { Num, SmButton } from "@/ui/Kit";
@@ -43,7 +43,9 @@ export function LiveLine({
   const { t } = useTheme();
   const c = t.color;
   const [width, setWidth] = useState(0);
-  const size = fitWordSize(live.event.title, width, 26, 15, WIDE_EM);
+  // La police système agrandie élargit les lettres : le plus long mot doit tenir quand même (un nom ne se coupe jamais).
+  const { fontScale } = useWindowDimensions();
+  const size = Math.max(12, Math.floor(fitWordSize(live.event.title, width, 26, 15, WIDE_EM) / Math.max(1, fontScale)));
   const primaryAccess = !hasOpenVote(live);
   return (
     <View

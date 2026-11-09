@@ -16,10 +16,12 @@ const QUICK = process.env.QUICK === "1";
 const AFTER = !(process.env.CAPTURES_DIR ?? "").includes("avant");
 test.use({ actionTimeout: 30_000 });
 
-const DEMOS = [
+const DEMOS: readonly (readonly [string, string])[] = [
   ["normal", "kenji@orasso.local"],
   ["live", "damien@orasso.local"],
-] as const;
+  // Après seulement : un compte hors événement (le « jour normal » de la maquette), Paul_Photo.
+  ...(AFTER ? ([["horsevent", "paul.photo@orasso.local"]] as const) : []),
+];
 
 async function shot(page: Page, name: string) {
   mkdirSync(DIR, { recursive: true });
