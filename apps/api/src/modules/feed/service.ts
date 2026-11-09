@@ -1,21 +1,26 @@
 // Le Fil (lot R7e1, ARCHITECTURE-R7 § 2.4) : `GET /fil`. Les sources rendent des candidats ; ici on les note
 // (`scoreCard`), on les mélange (`diversify`) et on pagine.
 //
-// Curseur par clé, jamais par position. Le premier appel fixe `ref` (l'instant du parcours) ; rien de plus récent
-// n'entre ensuite.
-// - Phase 1 : toutes les cartes des 48 h avant `ref` (plafond de sécurité `CAP` par source), classées par
-//   (score décroissant, identifiant). Le curseur porte la clé de la dernière carte de la tranche (`s`, `i`) : la page
-//   suivante reprend strictement après elle. La diversité s'applique dans la page, à la suite des deux genres de la
-//   page précédente (`k`).
-// - Phase 2 : tout le reste, par (date décroissante, identifiant). Le curseur porte la dernière clé (`a`, `i`), posée
-//   dans le SQL de chaque source avant son LIMIT. Une source qui a dépassé le plafond en phase 1 y reprend là où elle
-//   s'est arrêtée (`x`) : ce qui dépasse passe en phase 2, rien n'est perdu.
-// Aucun doublon ni trou, même si une carte est retirée entre deux pages.
+// Un parcours est stable du début à la fin : le curseur (`cursor.ts`) fige à la première page l'instant `ref`, les
+// genres « Moins de ce genre », une empreinte du contexte de la personne et, pour chaque source qui dépasse `WINDOW_CAP`
+// candidats, la borne de coupure (`x`). Si l'empreinte change (nouvel abonnement…), l'API repart de la première page et
+// répond `reset: true`.
+// - Phase 1 : les cartes des 48 h avant `ref` (au plus `WINDOW_CAP` par source), classées par (score décroissant,
+//   identifiant). La page se choisit parmi `FEED_POOL` cartes (les « différées » des pages précédentes, 20 au plus, puis
+//   les suivantes du classement après la frontière), mélangées par `diversify` : les 20 premières sont servies, les
+//   autres sont différées au curseur. Une carte d'un genre qui domine n'est donc pas coupée avant le mélange.
+// - Phase 2 : tout le reste, par (date décroissante, identifiant). Le curseur porte la dernière clé (`anchor`), posée
+//   dans le SQL de chaque source avant son LIMIT. Une source qui a dépassé le plafond reprend là où la première page
+//   l'a coupée (`x`) : ce qui est au-delà de la borne y passe, même si des cartes ont disparu entre-temps.
+// Aucun doublon ni trou, même si une carte est retirée entre deux pages ; jamais de page vide avec une suite.
+
+import { createHash } from "node:crypto";
 import {
   compareByDate,
   compareByScore,
   diversify,
   FEED_PAGE,
+  FEED_POOL,
   FEED_SCORE_WINDOW_MS,
   type FeedCandidate,
   type FeedCard,
@@ -32,7 +37,6 @@ import {
   scoreCard,
 } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { z } from "zod";
 
 import { db } from "../../db/client";
 import {
@@ -45,49 +49,30 @@ import {
   userFollows,
 } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
+import { type Cursor, decodeCursor, encodeCursor } from "./cursor";
 import { rankedSources } from "./sources";
 import type { FeedSource, Key, LoadedCard, SourceInput } from "./sources/types";
 
 /** Plafond de sécurité par source pour la fenêtre classée (phase 1) ; ce qui dépasse passe en phase 2. */
 export const WINDOW_CAP = 300;
 
-const isoSchema = z.iso.datetime();
-const cursorSchema = z.union([
-  z.object({
-    r: isoSchema,
-    p: z.literal(1),
-    /** Score et identifiant de la dernière carte de la tranche servie. */
-    s: z.number().finite(),
-    i: z.string().max(100),
-    /** Genres des deux dernières cartes affichées (diversité d'une page à l'autre). */
-    k: z.array(z.string().max(40)).max(2),
-    /** Cartes déjà servies avant cette page (positions du Sponsorisé). */
-    o: z.number().int().min(0).max(100_000),
-  }),
-  z.object({
-    r: isoSchema,
-    p: z.literal(2),
-    /** Dernière clé servie ; absente tant que la phase 2 n'a rien servi. */
-    a: isoSchema.optional(),
-    i: z.string().max(100).optional(),
-    /** Sources qui ont dépassé le plafond en phase 1 : [date, identifiant de carte] de leur dernière ligne lue. */
-    x: z.array(z.tuple([isoSchema, z.string().max(100)])).max(16),
-    o: z.number().int().min(0).max(100_000),
-  }),
-]);
-type Cursor = z.infer<typeof cursorSchema>;
-
-const encode = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString("base64url");
-function decode(raw: string | undefined): Cursor | null {
-  if (!raw) return null;
-  try {
-    return cursorSchema.parse(JSON.parse(Buffer.from(raw, "base64url").toString()));
-  } catch {
-    throw validation("Curseur invalide : recharge le Fil.");
-  }
+/**
+ * Empreinte (6 octets, hexadécimal) de ce qui change le classement ou ce que les sources laissent entrer : abonnements,
+ * crews, centres d'intérêt, départements. « Moins de ce genre » n'en fait pas partie : il est figé dans le curseur.
+ */
+export function contextFingerprint(ctx: FeedViewerContext): string {
+  const list = (it: Iterable<string>) => [...it].sort();
+  const json = JSON.stringify([
+    list(ctx.departments),
+    list(ctx.followedUsers),
+    list(ctx.followedStructures),
+    list(ctx.followedPros),
+    list(ctx.crewmates),
+    list(ctx.interests),
+  ]);
+  return createHash("sha1").update(json).digest().subarray(0, 6).toString("hex");
 }
 
 /** Ce que le classement sait de la personne (ses liens), calculé pour elle seule. */
@@ -131,13 +116,14 @@ type Loaded = { source: FeedSource; cards: LoadedCard[]; more: boolean; tail: Ke
 
 /** Toutes les sources, en parallèle (`before` : les clés exclusives de chacune, phase 2). */
 async function loadAll(
-  input: Omit<SourceInput, "before">,
+  input: Omit<SourceInput, "before" | "floor">,
   before: (kind: FeedCardKind) => Key[] = () => [],
+  floor: (kind: FeedCardKind) => Key | null = () => null,
 ): Promise<Loaded[]> {
   return Promise.all(
     rankedSources.map(async (source) => ({
       source,
-      ...(await source.load({ ...input, before: before(source.kind) })),
+      ...(await source.load({ ...input, before: before(source.kind), floor: floor(source.kind) })),
     })),
   );
 }
@@ -182,14 +168,17 @@ function toCard(c: LoadedCard, ctx: FeedViewerContext): FeedCard {
 /** Point d'insertion du Sponsorisé (positions 4, 10, 16…) : le lot R7k1 branche ici son choix ; `null` = rien. */
 const sponsoredPicker: ((position: number) => FeedCard | null) | null = null;
 
+/** Tours de lecture au plus pour remplir une page de la phase 2 (garde-fou : chaque tour avance strictement). */
+const MAX_ROUNDS = 50;
+
 /**
- * Phase 2 : jusqu'à `need` cartes plus anciennes que les clés données, par date. Une source qui a rempli sa lecture
- * (`more`) peut cacher des cartes plus anciennes que sa dernière ligne lue : on ne sert que ce qui est au moins aussi
- * récent que la plus récente de ces dernières lignes (`safe`), et on relit plus large tant que la page n'est pas pleine.
- * `next` : la clé après laquelle reprendre, ou `null` s'il ne reste rien.
+ * Une lecture de la phase 2 : jusqu'à `need` cartes plus anciennes que les clés données, par date. Une source qui a
+ * rempli sa lecture (`more`) peut cacher des cartes plus anciennes que sa dernière ligne lue : on ne sert que ce qui est
+ * au moins aussi récent que la plus récente de ces dernières lignes (`safe`), et on relit plus large tant que la page
+ * n'est pas pleine. `next` : la clé après laquelle reprendre, ou `null` s'il ne reste rien.
  */
-async function olderPage(
-  base: Omit<SourceInput, "before" | "limit" | "since">,
+async function olderRound(
+  base: Omit<SourceInput, "before" | "limit" | "since" | "floor">,
   before: (kind: FeedCardKind) => Key[],
   keep: (c: LoadedCard) => boolean,
   need: number,
@@ -207,70 +196,115 @@ async function olderPage(
       if (eligible.length > need && last) return { page, next: keyOf(last) };
       if (!safe) return { page, next: null };
       // Il reste des lignes non lues sous `safe` : tout ce qui est au-dessus est servi, on reprend à la dernière clé.
-      return { page, next: last && !olderThan(keyOf(last), safe) ? keyOf(last) : safe };
+      return { page, next: last ? keyOf(last) : safe };
     }
     limit *= 4;
   }
 }
 
+/**
+ * Phase 2 : `need` cartes plus anciennes que les clés données, par date. Elle continue à lire jusqu'à remplir la page ou
+ * épuiser le Fil : jamais de page vide (ni incomplète sans fin) avec une suite.
+ */
+async function olderPage(
+  base: Omit<SourceInput, "before" | "limit" | "since" | "floor">,
+  before: (kind: FeedCardKind) => Key[],
+  keep: (c: LoadedCard) => boolean,
+  need: number,
+): Promise<{ page: LoadedCard[]; next: Key | null }> {
+  const page: LoadedCard[] = [];
+  let from: Key | null = null;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const start = from;
+    const r = await olderRound(base, (kind) => [...before(kind), ...(start ? [start] : [])], keep, need - page.length);
+    page.push(...r.page);
+    if (!r.next) return { page, next: null };
+    if (page.length >= need) return { page, next: r.next };
+    from = r.next;
+  }
+  // Garde-fou (des dizaines de milliers de lignes écartées d'affilée) : on s'arrête là, la suite reprend à `from`.
+  return { page, next: page.length ? from : null };
+}
+
+const kindOfId = (id: string) => id.slice(0, id.indexOf(":"));
+
 export const feedService = {
   async feed(v: Viewer, q: { filter: FeedFilter; cursor?: string | undefined }): Promise<FeedPage> {
     rateLimit("feedRead", v.user.id);
     const t = now();
-    const cursor = decode(q.cursor);
-    const refMs = cursor ? Math.min(Date.parse(cursor.r), t.getTime()) : t.getTime();
+    const viewerCtx = await viewerContext(v);
+    const fp = contextFingerprint(viewerCtx);
+    let cursor = decodeCursor(q.cursor);
+    // Le contexte a changé en plein parcours (nouvel abonnement, nouveau département…) : le parcours repart de la
+    // première page, et le client remplace sa liste (`reset`).
+    const reset = cursor !== null && cursor.fp !== fp;
+    if (reset) cursor = null;
+    // « Moins de ce genre » : lu à la première page, figé dans le curseur pour tout le parcours.
+    const less = cursor ? cursor.less : new Set(feedCardKinds.filter((k) => viewerCtx.lessKinds.has(k)));
+    const ctx: FeedViewerContext = { ...viewerCtx, lessKinds: less };
+    const refMs = cursor ? Math.min(cursor.ref.getTime(), t.getTime()) : t.getTime();
     const ref = new Date(refMs);
     const boundary = new Date(refMs - FEED_SCORE_WINDOW_MS);
-    const ctx = await viewerContext(v);
     const nearby = nearbyDepartments(ctx.departments);
     const base = { viewer: v, userId: v.user.id, ref, filter: q.filter, ctx, nearby, until: ref } as const;
     const keep = (c: LoadedCard) => allowed(c, q.filter, ctx, nearby, v.user.id);
-    const offset = cursor?.o ?? 0;
+    const offset = cursor?.offset ?? 0;
+    const phase1 = cursor?.phase === 1 ? cursor : null;
 
     const items: FeedCard[] = [];
     let next: Cursor | null = null;
-    /** Dernières lignes lues des sources qui ont dépassé le plafond : la phase 2 reprend là. */
-    let overflow: Key[] = [];
-    let anchor: Key | null = null;
+    /** Dernières lignes lues des sources qui ont dépassé le plafond (première page) : la phase 2 reprend là. */
+    let x: Key[] = cursor?.x ?? [];
+    const anchor: Key | null = cursor?.phase === 2 ? cursor.anchor : null;
     let phase2 = false;
+    const head = () => ({ ref, fp, less, offset: offset + items.length, x });
 
-    if (!cursor || cursor.p === 1) {
-      // Phase 1 : la fenêtre de 48 h, classée par score. Page = la tranche qui suit la clé du curseur, mélangée.
-      const lists = await loadAll({ ...base, since: boundary, limit: WINDOW_CAP });
-      overflow = lists.flatMap((l) => (l.more && l.tail ? [l.tail] : []));
+    if (!cursor || phase1) {
+      // Phase 1 : la fenêtre de 48 h, classée par score. Les sources qui dépassaient le plafond à la première page
+      // restent bornées à la même clé (`floor`) : une carte retirée n'en fait pas entrer une autre.
+      const floors = new Map(x.map((k) => [kindOfId(k.id), k]));
+      const lists = await loadAll(
+        { ...base, since: boundary, limit: WINDOW_CAP },
+        undefined,
+        (k) => floors.get(k) ?? null,
+      );
+      if (!cursor) x = lists.flatMap((l) => (l.more && l.tail ? [l.tail] : []));
       const ranked = merge(lists)
         .filter(keep)
         .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
         .sort(compareByScore);
-      const after = cursor
-        ? ranked.filter((c) => c.score < cursor.s || (c.score === cursor.s && c.id < cursor.i))
+      // Les cartes après la frontière (la dernière consommée), puis celles qui ont été vues sans être servies.
+      const rest = phase1
+        ? ranked.filter((c) => c.score < phase1.score || (c.score === phase1.score && c.id < phase1.frontier))
         : ranked;
-      const slice = after.slice(0, FEED_PAGE);
-      const shown = diversify(slice, cursor?.k ?? []);
+      const restIds = new Set(rest.map((c) => c.id));
+      const deferredIds = new Set(phase1?.deferred ?? []);
+      const carried = ranked.filter((c) => deferredIds.has(c.id) && !restIds.has(c.id));
+      const fresh = rest.slice(0, FEED_POOL - carried.length);
+      // Le mélange se fait pendant la sélection : la page prend les 20 premières du mélange, les autres sont différées.
+      const ordered = diversify([...carried, ...fresh], phase1?.kinds ?? []);
+      const shown = ordered.slice(0, FEED_PAGE);
+      const deferred = ordered.slice(FEED_PAGE);
       for (const c of shown) items.push(toCard(c, ctx));
-      const last = slice.at(-1);
-      if (after.length > FEED_PAGE && last) {
+      const edge = fresh.at(-1) ?? (phase1 ? { score: phase1.score, id: phase1.frontier } : null);
+      if (edge && (deferred.length > 0 || rest.length > fresh.length)) {
         next = {
-          r: ref.toISOString(),
-          p: 1,
-          s: last.score,
-          i: last.id,
-          k: shown.slice(-2).map((c) => c.kind),
-          o: offset + items.length,
+          ...head(),
+          phase: 1,
+          score: edge.score,
+          frontier: edge.id,
+          kinds: [...(phase1?.kinds ?? []), ...shown.map((c) => c.kind)].slice(-2),
+          deferred: deferred.map((c) => c.id),
         };
       } else phase2 = true;
-    } else {
-      phase2 = true;
-      anchor = cursor.a && cursor.i ? { at: new Date(cursor.a), id: cursor.i } : null;
-      overflow = cursor.x.map(([at, id]) => ({ at: new Date(at), id }));
-    }
+    } else phase2 = true;
 
     // Phase 2 : tout ce que la phase 1 n'a pas servi, par date. Elle complète une première phase épuisée (même quand sa
     // dernière page est pleine : on regarde s'il reste quelque chose), ou continue son curseur.
     if (phase2) {
       const need = FEED_PAGE - items.length;
       const sinceBoundary: Key = { at: boundary, id: "" };
-      const cutoffs = new Map(overflow.map((k) => [k.id.slice(0, k.id.indexOf(":")), k]));
+      const cutoffs = new Map(x.map((k) => [kindOfId(k.id), k]));
       const before = (kind: FeedCardKind): Key[] => [...(anchor ? [anchor] : []), cutoffs.get(kind) ?? sinceBoundary];
       const { page, next: from } = await olderPage(base, before, keep, Math.max(need, 1));
       if (need > 0) {
@@ -278,21 +312,14 @@ export const feedService = {
       }
       // Page de la phase 1 pleine : la phase 2 commence sans clé, si elle a quelque chose à servir.
       const key = need > 0 ? from : null;
-      if (need > 0 ? from !== null : page.length > 0) {
-        next = {
-          r: ref.toISOString(),
-          p: 2,
-          ...(key ? { a: key.at.toISOString(), i: key.id } : {}),
-          x: overflow.map((k) => [k.at.toISOString(), k.id] as [string, string]),
-          o: offset + items.length,
-        };
-      }
+      if (need > 0 ? from !== null : page.length > 0) next = { ...head(), phase: 2, anchor: key };
     }
 
     return {
       items: insertSponsored(items, sponsoredPicker, offset),
-      nextCursor: next ? encode(next) : null,
+      nextCursor: next ? encodeCursor(next) : null,
       filter: q.filter,
+      ...(reset ? { reset: true as const } : {}),
     };
   },
 

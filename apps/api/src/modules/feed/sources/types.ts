@@ -19,6 +19,12 @@ export type SourceInput = {
    * dans l'ordre (date décroissante, identifiant décroissant), **dans le SQL, avant le LIMIT**. Vide en phase 1.
    */
   before: Key[];
+  /**
+   * Borne figée à la première page (phase 1) : la source dépassait le plafond, et ne rend que les cartes au moins aussi
+   * « récentes » que cette clé (elle comprise), **dans le SQL**. Ce qui est au-delà passe en phase 2 pour tout le parcours,
+   * même si des cartes disparaissent entre deux pages. `null` : pas de borne.
+   */
+  floor: Key | null;
   /** Nombre de cartes demandées ; la source lit `limit + 1` lignes pour savoir s'il y en a d'autres (`more`). */
   limit: number;
   filter: FeedFilter;
@@ -98,9 +104,11 @@ export function atBounds(
   atExpr: SQL,
   idExpr: SQL,
   kind: FeedCardKind,
-  input: Pick<SourceInput, "since" | "until" | "before">,
+  input: Pick<SourceInput, "since" | "until" | "before" | "floor">,
 ): SQL[] {
   const out = [sql`${atExpr} <= ${ts(input.until)}`, ...beforeKeys(atExpr, idExpr, kind, input.before)];
+  // La borne figée est incluse : tout sauf « strictement après elle ».
+  for (const c of input.floor ? beforeKeys(atExpr, idExpr, kind, [input.floor]) : []) out.push(sql`not (${c})`);
   if (input.since) out.push(sql`${atExpr} >= ${ts(input.since)}`);
   return out;
 }

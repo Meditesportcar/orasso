@@ -6,6 +6,7 @@ import { reportReasonAllowed, reportReasons } from "../moderation";
 import {
   DEFAULT_FEED_ASPECT,
   FEED_CAPTION_MAX,
+  FEED_CURSOR_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
   type FeedCardKind,
@@ -22,7 +23,7 @@ import { plateRectsSchema } from "./vehicle";
 
 export const feedQuery = z.object({
   filter: z.enum(feedFilters).default("for_you"),
-  cursor: z.string().max(400).optional(),
+  cursor: z.string().max(FEED_CURSOR_MAX).optional(),
 });
 
 /** Clé rendue par `POST /me/uploads` avec `purpose=feed_post` (privée jusqu'à la publication). */
@@ -157,4 +158,13 @@ export type FeedCard<K extends FeedCardKind = FeedCardKind> = {
   };
 }[K];
 
-export type FeedPage = { items: FeedCard[]; nextCursor: string | null; filter: FeedFilter };
+export type FeedPage = {
+  items: FeedCard[];
+  nextCursor: string | null;
+  filter: FeedFilter;
+  /**
+   * `true` quand le contexte de la personne a changé en plein parcours (nouvel abonnement, nouveau département…) : le
+   * curseur est abandonné, cette page est la première d'un nouveau parcours, et le client **remplace** sa liste.
+   */
+  reset?: true;
+};

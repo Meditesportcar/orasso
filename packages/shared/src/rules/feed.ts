@@ -48,6 +48,16 @@ export function isReservedPseudo(pseudo: string): boolean {
 
 /** Cartes par page. */
 export const FEED_PAGE = 20;
+/**
+ * Cartes que la page choisit parmi, avant de les mélanger : celles de la page (20) et au plus 20 « différées » (vues
+ * dans la fenêtre précédente mais non servies, gardées pour celle-ci). Borne aussi la liste du curseur.
+ */
+export const FEED_POOL = 2 * FEED_PAGE;
+/**
+ * Longueur maximale (caractères) d'un curseur du Fil, calculée sur le format le plus grand que l'API produise : 16
+ * sources au plafond, 20 cartes différées (voir `apps/api/src/modules/feed/cursor.ts`, 1011 caractères).
+ */
+export const FEED_CURSOR_MAX = 1100;
 export const FEED_POST_PHOTOS_MAX = 6;
 export const FEED_CAPTION_MAX = 500;
 
