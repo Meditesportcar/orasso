@@ -67,7 +67,7 @@ const SIZES: readonly (readonly [number, number])[] = QUICK
       [390, 1],
     ];
 
-for (const theme of QUICK ? ["beton"] : ["beton", "sable"]) {
+for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
   test(`R7j appli ${theme}`, async ({ browser }) => {
     test.skip(!APP, "Appli : lancer avec APP_URL");
     test.setTimeout(1_800_000);

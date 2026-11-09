@@ -5,15 +5,14 @@ import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { formatDayDate, localDate, type MemoryDetail, memoryLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-
+import { Stamp } from "@/features/passport/Stamp";
+import { MemoryShareButton } from "@/features/share/MemoryShareButton";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { PosterSurface, SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { PosterSurface, SmButton } from "@/ui/Kit";
 import { FlowScreen } from "@/ui/Screens";
-import { MemoryShareButton } from "@/features/share/MemoryShareButton";
-import { Stamp } from "@/features/passport/Stamp";
 import { MemoryPhoto } from "./MemoryPhoto";
 
 const { space2, space3, space4 } = tokens.spacing;

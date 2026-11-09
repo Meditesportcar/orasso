@@ -4046,3 +4046,15 @@ Même migration `0072_sponsored-feed`, régénérée (point 10) ; la reprise des
 - **Statistiques d'un endroit décoché (4)** : règle commune `statsSurfaces` dans `packages/shared` (test unitaire) : le détail montre les endroits diffusés **et** ceux qui ont des affichages ou des clics passés, pour que la somme reste lisible endroit par endroit. Site et appli l'utilisent.
 - **Recettes (5)** : l'appli attend la fermeture du panneau, recharge l'écran et relit la mention (et en base par l'API) ; échec réseau simulé (brouillon gardé) ; réponse retardée (« Modifier » des autres inactif, seul le bon panneau se ferme), sur l'appli et sur le site ; le site relit aussi la valeur après rechargement.
 - **Choix de détail** : le test de la règle des statistiques est unitaire (règle pure) plutôt que par la recette : fabriquer des affichages passés sur un endroit décoché par l'interface demanderait de faire jouer des vues de passionnés dans la cible.
+
+## Lot R7j : les souvenirs « il y a un an… » (API, appli et site, D38, 09/11/2026)
+
+- **Règle du jour** (`packages/shared/src/rules/memories.ts`) : un tampon `participation` ou `visit` compte le même jour et le même mois, 1, 2, 3… ans plus tôt, dans le fuseau Europe/Paris (le tampon posé la veille à 23 h 50 compte pour son jour local ; le 29 février vaut le 28 février les années non bissextiles). Règle pure, testée (13 tests).
+- **Routes** : `GET /me/memories/today` (liste) et `GET /me/memories/:eventId` (page). La liste ne renvoie que ce que la liste blanche permet : jamais de plaque (la photo est celle de la règle du plateau, masquée, sinon l'affiche), jamais l'identifiant d'une autre personne.
+- **Tâche `memories.daily`** (9 h, Europe/Paris) : une notification `memory` par personne et par jour avec livraison à 10 h ; plusieurs souvenirs le même jour donnent « + N autre(s) » plutôt que N notifications. Dédoublonnée sur type + événement + personne + jour (deux passages = une notification) ; seulement si la famille social est active.
+- **Carte du Fil** : personnelle (visible de moi seul, « Pour toi » seulement), datée du début du jour, score ×3 (`boost`) pour être en tête le jour même ; raison « Un souvenir pour toi ».
+- **Page du souvenir** : 404 avant un an et pour un tampon qui n'est pas le mien, sans détail ; l'écran dit « Ce souvenir n'est pas disponible ». Elle montre l'affiche ou la photo masquée, la date, mon tampon (« Posé le … » seulement) et « Voir le récap » si `recapAvailable`.
+- **Pas de tampon sur la carte d'Accueil** : `MemoryItem` ne porte que `stampId`, le tampon complet est sur la page seulement.
+- **« En story »** : `MemoryShareButton` (appli) rend `null` et la page du site garde un commentaire à sa place ; R7f4 les remplit. La photo a déjà passé la règle des plaques côté API.
+- **Seed** : un événement et un tampon d'il y a exactement un an pour Damien_66, pour essayer le bloc le jour même (`DEV_CLOCK` dans les recettes).
+- **Site** : bloc `MemoriesBlock` branché sur `memories` dans l'Accueil, carte du Fil, route `/app/souvenir/:eventId` (cible de la notification), styles dans `souvenirs.css`, jetons seulement.

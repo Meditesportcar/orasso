@@ -33,6 +33,8 @@ export default [
     route("app/passeport", "routes/passeport.tsx"),
     route("app/vote/:slug", "routes/vote.tsx"),
     route("app/recap/:eventId", "routes/recap.tsx"),
+    // Lot R7j : la page d'un souvenir (« il y a un an… »), cible de la notification `memory`.
+    route("app/souvenir/:eventId", "routes/app-souvenir.tsx"),
     route("app/media", "routes/media.tsx"),
     route("app/media/nouveau", "routes/media-nouveau.tsx"),
     route("m/:id", "routes/m.tsx"),

@@ -26,7 +26,12 @@ export function MemoriesBlock({ data }: { data: HomeMemory }) {
               <span className="o-t-label sv-poster__eyebrow">{memoryLabels.eyebrow(m.yearsAgo)}</span>
               <h3 className="o-t-poster-m o-never-truncate">{memoryLabels.headline(m.title)}</h3>
               <div className="sv-actions">
-                <Button variant="secondary" icon="stamp" href={`/app/souvenir/${m.eventId}`} data-testid="home-memory-open">
+                <Button
+                  variant="secondary"
+                  icon="stamp"
+                  href={`/app/souvenir/${m.eventId}`}
+                  data-testid="home-memory-open"
+                >
                   {memoryLabels.see}
                 </Button>
               </div>
