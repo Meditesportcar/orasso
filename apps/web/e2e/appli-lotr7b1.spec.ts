@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot R7b1 (D38), côté appli (version web compilée de recette) : le Profil porte le Garage. Garage par défaut partout,
@@ -128,6 +128,9 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await expect(a.page.getByTestId("public-counts")).toBeVisible({ timeout: 30_000 });
   await expect(a.page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
   await expect(a.page.getByTestId("profil-tabs")).toHaveCount(0);
+  // Tour 2 (maquette R7.12) : plus de liste « Ses véhicules · marque et modèle » pour un inconnu.
+  await expect(a.page.getByTestId("profile-vehicles-private")).toHaveCount(0);
+  await expect(a.page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
   await expect(a.page.getByTestId("profile-car")).toHaveCount(0);
   await expect(a.page.getByTestId("profile-garage")).toHaveCount(0);
   await expect(a.page.getByTestId("profile-outings")).toHaveCount(0);
@@ -158,5 +161,97 @@ test("police 1,3 à 384 px : les onglets, les boutons et le pseudo tiennent, san
     expect(overflow, path).toBe(false);
   }
   await shot(page, "05-police-13");
+  await ctx.close();
+});
+
+// Tour 2, point 1 : à police 1,3, le pseudo rapetisse ; jamais de mot coupé (une seule ligne), pseudo court comme long.
+test("police 1,3 à 384 px : le pseudo ne se coupe jamais (Mon profil), court comme long", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const oneLine = async (page: Page) => {
+    const m = await page.getByTestId("profil-pseudo").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { h: el.getBoundingClientRect().height, fs: Number.parseFloat(cs.fontSize), text: el.textContent ?? "" };
+    });
+    await shot(page, `pseudo-${m.text.length}`);
+    expect(m.h, `${m.text} tient sur une ligne (${m.fs}px)`).toBeLessThan(m.fs * 1.6);
+  };
+  const a = await open(browser, 1.3);
+  await signIn(a.page, "kenji@orasso.local");
+  await go(a.page, "/profil");
+  await expect(a.page.getByTestId("profil-pseudo")).toBeVisible({ timeout: 30_000 });
+  await a.page.waitForTimeout(1_500);
+  await oneLine(a.page);
+  await shot(a.page, "06-pseudo-court-police-13");
+  await a.ctx.close();
+  const pseudo = `Visiteur_${unique()}`;
+  await signUpApi(pseudo);
+  const b = await open(browser, 1.3);
+  await signIn(b.page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await go(b.page, "/profil");
+  await expect(b.page.getByTestId("profil-pseudo")).toHaveText(pseudo, { timeout: 30_000 });
+  await b.page.waitForTimeout(1_500);
+  await oneLine(b.page);
+  await shot(b.page, "07-pseudo-long-police-13");
+  await b.ctx.close();
+});
+
+// Tour 2, point 5 : « ?onglet= » s'applique à chaque navigation, même avec la valeur déjà lue : Accueil → passeport
+// (Sorties) → toucher Garage → retour à l'Accueil → passeport : Sorties de nouveau.
+test("?onglet= rebascule à chaque navigation (passeport de l'Accueil → Sorties, deux fois)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  for (let i = 0; i < 2; i++) {
+    await expect(page.getByTestId("home-passport")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("home-passport").click();
+    await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+    await page.getByTestId("profil-tab-garage").click();
+    await expect(selected(page)).toHaveAccessibleName("Garage");
+    await page.getByRole("tab", { name: "Accueil" }).last().click();
+  }
+  await ctx.close();
+});
+
+// Tour 2, point 3 : casquette organisateur active, les anciennes adresses et les retours ouvrent Profil › Garage / Sorties
+// de la casquette de base (passionné), sans seconde barre d'onglets empilée.
+test("casquette organisateur active : /garage, /mon-passeport et le retour d'un véhicule mènent au Profil de la base", async ({
+  browser,
+}) => {
+  test.setTimeout(360_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "damien@orasso.local");
+  await page.goto("/moi");
+  await afterOpening(page);
+  await page.getByTestId("casquette-organizer").first().click();
+  await page.waitForURL(/direct/, { timeout: 30_000 });
+  const bars = () => page.getByRole("tablist").filter({ has: page.getByRole("tab", { name: "Accueil" }) });
+  // /garage : on bascule sur le passionné, onglet Garage ; /mon-passeport : onglet Sorties.
+  await go(page, "/garage");
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(page.getByTestId("casquette-fan").getByTestId("casquette-active")).toBeVisible();
+  await shot(page, "08-organisateur-garage");
+  await page.goto("/moi");
+  await afterOpening(page);
+  await page.getByTestId("casquette-organizer").first().click();
+  await page.waitForURL(/direct/, { timeout: 30_000 });
+  await go(page, "/mon-passeport");
+  await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+  await expect(page.getByTestId("casquette-fan").getByTestId("casquette-active")).toBeVisible();
+  // Retour d'une fiche véhicule (ouverte à froid, casquette organisateur) : directement au Profil › Garage.
+  const cookie = await login("damien@orasso.local");
+  const mine = await apiCall<{ id: string; status: string }[]>(cookie, "GET", "/me/vehicles");
+  const vehicle = mine.data.find((v) => v.status === "active");
+  expect(vehicle, "un véhicule actif pour Damien").toBeTruthy();
+  await page.goto("/moi");
+  await afterOpening(page);
+  await page.getByTestId("casquette-organizer").first().click();
+  await page.waitForURL(/direct/, { timeout: 30_000 });
+  await go(page, `/vehicule/${vehicle?.id}`);
+  await page
+    .getByRole("button", { name: /Fermer/ })
+    .first()
+    .click();
+  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(bars()).toHaveCount(1);
   await ctx.close();
 });

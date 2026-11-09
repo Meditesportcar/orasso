@@ -322,18 +322,18 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await labelWhole(page, "follow-button", /^Suivre$/i);
     await shot(page, `membre-${theme}-390`);
 
-    // Compte privé : la tête, les nombres, « Demander à suivre », ses véhicules en marque et modèle, la ligne.
+    // Compte privé : la tête, les nombres, « Demander à suivre », la ligne (R7b1, tour 2 : plus de liste de véhicules).
     await goto(page, `/u/${cPseudo}`);
     await expect(page.getByTestId("profile-private-note")).toContainText(
       "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
       { timeout: 30_000 },
     );
-    await expect(page.getByTestId("profile-vehicles-private")).toBeVisible();
+    await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);
+    await expect(page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("follow-button")).toContainText("Demander à suivre");
     await expect(page.getByTestId("profile-car")).toHaveCount(0);
     await expect(page.getByTestId("profile-socials")).toHaveCount(0);
     await audit(page);
-    await titlesKeepTheirWords(page, ["Ses véhicules"]);
     await shot(page, `membre-prive-${theme}-390`);
     await ctx.close();
 

@@ -224,9 +224,10 @@ test("Sorties → événement → « Ma candidature » → Sorties : pas d'empil
   const { ctx, page } = await open(browser);
   await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
   await afterOpening(page);
-  // Origine : le Profil, par le nombre « sorties ».
+  // Origine : le Profil, onglet Sorties (le nombre « sorties »), puis « Voir mes places » (R7b1).
   await go(page, "/profil");
   await page.getByTestId("profil-count-sorties").click();
+  await page.getByTestId("profil-places").click();
   await page.waitForURL(/\/sorties/, { timeout: 15_000 });
   // Sorties → l'événement (le titre du ticket) → « Ma candidature » → retour à Sorties, une seule fois dans la pile.
   await page.getByTestId("ticket-application").first().getByText(event.title).first().click();

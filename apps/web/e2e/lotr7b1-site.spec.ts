@@ -3,25 +3,25 @@ import { auditPage } from "./audit";
 import { loginInBrowser, setTheme } from "./helpers";
 
 // Lot R7b1 (D38), côté site : « Mon compte » porte le Garage (par défaut) et les Sorties (`?onglet=`), `/app/garage` et
-// `/app/passeport` répondent 301 vers lui, le profil d'un autre a les mêmes onglets, compte privé vu d'un inconnu : les
+// `/app/passeport` répondent 302 vers lui, le profil d'un autre a les mêmes onglets, compte privé vu d'un inconnu : les
 // nombres seulement, abonné accepté : tout. Comptes du seed ; site et API lancés sur la base seedée.
 test.use({ actionTimeout: 30_000 });
 
-test("les anciennes adresses répondent 301 vers le Profil, la recherche gardée", async ({ page, baseURL }) => {
+test("les anciennes adresses répondent 302 vers le Profil, la recherche gardée", async ({ page, baseURL }) => {
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
   const cookies = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join("; ");
   const hit = async (path: string) => {
     const res = await fetch(`${baseURL}${path}`, { redirect: "manual", headers: { cookie: cookies } });
     return { status: res.status, location: res.headers.get("location") };
   };
-  expect(await hit("/app/garage")).toEqual({ status: 301, location: "/app/moi?onglet=garage" });
+  expect(await hit("/app/garage")).toEqual({ status: 302, location: "/app/moi?onglet=garage" });
   expect(await hit("/app/garage?photo=refusee")).toEqual({
-    status: 301,
+    status: 302,
     location: "/app/moi?onglet=garage&photo=refusee",
   });
-  expect(await hit("/app/passeport")).toEqual({ status: 301, location: "/app/moi?onglet=sorties" });
+  expect(await hit("/app/passeport")).toEqual({ status: 302, location: "/app/moi?onglet=sorties" });
   expect(await hit("/app/passeport?saison=2025")).toEqual({
-    status: 301,
+    status: 302,
     location: "/app/moi?onglet=sorties&saison=2025",
   });
 });
@@ -70,6 +70,9 @@ test("profil d'un autre : onglets Garage et Sorties ; compte privé : nombres se
   await expect(page.getByTestId("public-counts")).toBeVisible();
   await expect(page.getByTestId("profile-private-note")).toContainText("Réservé à ses abonnés");
   await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  // Tour 2 (maquette R7.12) : plus de liste « Ses véhicules · marque et modèle » pour un inconnu.
+  await expect(page.getByTestId("profile-vehicles-private")).toHaveCount(0);
+  await expect(page.getByText("Ses véhicules", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("profile-car")).toHaveCount(0);
   await expect(page.getByTestId("profile-garage")).toHaveCount(0);
   await expect(page.getByTestId("profile-outings")).toHaveCount(0);

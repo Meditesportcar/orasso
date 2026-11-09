@@ -10,7 +10,7 @@ import { RELAIS } from "./relais";
 const PHASE = process.env.CAP_PHASE ?? "apres";
 const OUT = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r7b1-captures/${PHASE}`;
 const APP = process.env.APP_URL;
-const AFTER = PHASE === "apres";
+const AFTER = PHASE.startsWith("apres");
 test.use({ actionTimeout: 30_000 });
 
 type Theme = "beton" | "sable";
