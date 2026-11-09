@@ -15,6 +15,8 @@ import { profiles, sanctions } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { realtime } from "../../lib/realtime";
 import type { Executor, Tx } from "../../lib/tx";
+import { purgeStoryFiles } from "../stories/expire";
+import { dropCopiesOfAuthor } from "../stories/purge";
 
 export type SanctionRow = typeof sanctions.$inferSelect;
 
@@ -53,7 +55,13 @@ export async function recomputeSuspension(
     .update(profiles)
     .set({ suspendedUntil: until, bannedAt: banned ? (current?.bannedAt ?? at) : null })
     .where(eq(profiles.userId, userId));
-  if (until && until > at) after(() => realtime.revokeUser(CREW_CHANNEL_PREFIX, userId));
+  if (until && until > at) {
+    after(() => realtime.revokeUser(CREW_CHANNEL_PREFIX, userId));
+    // Lot R7h, tour 2 : ce que ce compte a publié n'est plus servi, les copies qu'on en a faites non plus (le profil
+    // vient d'être mis à jour ci-dessus : un partage en cours est terminé, il ne laisse pas de copie derrière).
+    const copies = await dropCopiesOfAuthor(tx, userId, "all");
+    if (copies.length) after(() => purgeStoryFiles(copies).catch(() => undefined));
+  }
   return { until, banned };
 }
 

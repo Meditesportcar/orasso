@@ -112,8 +112,8 @@ async function follow(a: TestUser, b: TestUser) {
 
 /** Une structure (propriétaire, co-organisateur, staff, étranger) et un participant public qui l'identifie. */
 async function world() {
-  const owner = await signUp("Sarah_66");
-  const co = await signUp("Coorga_66");
+  const owner = await signUp("Sarah_66", { twoFactor: true });
+  const co = await signUp("Coorga_66", { twoFactor: true });
   const staff = await signUp("Staff_66");
   const stranger = await signUp("Etranger_66");
   const kenji = await signUp("Kenji_66");
@@ -307,7 +307,7 @@ describe("« Ajouter à ma story »", () => {
     const view = (await byAuthor(w.stranger, `s:${w.structure.id}`)).json;
     expect(view.author.pseudoOrName).toBe("Club de test");
     expect(view.stories).toHaveLength(1);
-    expect(view.stories[0].sharedFrom).toEqual({ authorPseudo: "Kenji_66" });
+    expect(view.stories[0].sharedFrom).toMatchObject({ kind: "user", name: "Kenji_66", slug: "Kenji_66" });
     expect(view.stories[0].tags).toEqual([]);
     expect(view.stories[0].sharing).toBeNull();
     // L'auteur est prévenu, sans image, sans le compte personnel de qui a ajouté.
@@ -326,7 +326,8 @@ describe("« Ajouter à ma story »", () => {
     const withBody = { asStructureId: w.structure.id };
     expect((await share(w.staff, s.id, withBody)).status).toBe(403);
     expect((await share(w.stranger, s.id, withBody)).status).toBe(403);
-    expect((await share(w.kenji, s.id, withBody)).status).toBe(400);
+    // Kenji n'est pas membre de la structure : refusé avant même de regarder la story (403).
+    expect((await share(w.kenji, s.id, withBody)).status).toBe(403);
     // Une structure non identifiée.
     const otherOwner = await signUp("Autre_66");
     const other = await createStructure(otherOwner.id);

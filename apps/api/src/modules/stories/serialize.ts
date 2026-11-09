@@ -21,7 +21,7 @@ import { storage } from "../../lib/storage";
 import { canSeeEvent } from "../invitations/access";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
-import { accountActive, type StoryRow } from "./common";
+import { accountActive, creditOf, type StoryRow } from "./common";
 import { sharingOf } from "./sharing";
 
 export const fileNameOf = (key: string) => key.slice(key.lastIndexOf("/") + 1);
@@ -146,18 +146,6 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     eventBy.set(e.id, { id: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString() });
   }
 
-  // Crédit d'une copie : le pseudo de l'auteur de l'originale.
-  const originals = [...new Set(rows.flatMap((r) => (r.story.sharedFromStoryId ? [r.story.sharedFromStoryId] : [])))];
-  const creditBy = new Map<string, string>();
-  if (originals.length) {
-    const credits = await db
-      .select({ id: stories.id, pseudo: profiles.pseudo })
-      .from(stories)
-      .innerJoin(profiles, eq(profiles.userId, stories.authorId))
-      .where(inArray(stories.id, originals));
-    for (const c of credits) creditBy.set(c.id, c.pseudo);
-  }
-
   return rows.map((r) => {
     const s = r.story;
     const mine = s.authorId === v.user.id;
@@ -191,7 +179,8 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       commercialPartner: null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
-      sharedFrom: s.sharedFromStoryId ? { authorPseudo: creditBy.get(s.sharedFromStoryId) ?? "" } : null,
+      // Le crédit d'une copie : l'identité PUBLIQUE de l'originale selon sa casquette (lot R7h, tour 2).
+      sharedFrom: creditOf(r, storage.url),
       sharing: sharing.get(s.id) ?? null,
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),

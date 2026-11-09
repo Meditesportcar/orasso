@@ -70,7 +70,7 @@ const newestPerAuthor = (where: SQL) =>
 const personal = sql`${stories.persona} not in ('organizer','pro')`;
 
 /** Les structures qui ont un événement publié en cours (du début à la fin) : l'anneau « EN COURS ». */
-async function liveStructureIds(at: Date): Promise<Set<string>> {
+export async function liveStructureIds(at: Date): Promise<Set<string>> {
   const res = await db.execute<{ id: string }>(
     sql`select distinct e.structure_id::text as id from events e
       where e.status = 'published' and e.starts_at <= ${at} and e.ends_at > ${at}`,

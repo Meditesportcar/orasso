@@ -7,9 +7,11 @@ import {
   type AudienceViewer,
   isStoryLive,
   type StoryTagKind,
+  type StoryTagView,
   storyAuthorKeyOf,
 } from "@orasso/shared";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../../db/client";
 import {
@@ -28,6 +30,38 @@ import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
 
 export type StoryRecord = typeof stories.$inferSelect;
+
+// L'originale d'une copie (lot R7h, tour 2) : de quoi dire si elle existe encore, si son auteur est disponible, et qui
+// créditer (l'identité PUBLIQUE de l'originale selon sa casquette, jamais le compte personnel derrière une structure).
+const originStory = alias(stories, "origin_story");
+const originAuthor = alias(profiles, "origin_author");
+const originStructure = alias(structures, "origin_structure");
+const originPro = alias(proProfiles, "origin_pro");
+
+export type StoryOrigin = {
+  id: string | null;
+  deletedAt: Date | null;
+  status: string | null;
+  persona: string | null;
+  authorId: string | null;
+  authorPseudo: string | null;
+  authorAvatarKey: string | null;
+  authorVisibility: "public" | "private" | null;
+  authorDeletedAt: Date | null;
+  authorBannedAt: Date | null;
+  authorSuspendedUntil: Date | null;
+  structureId: string | null;
+  structureName: string | null;
+  structureSlug: string | null;
+  structureLogoKey: string | null;
+  structureDeletedAt: Date | null;
+  structureVerification: string | null;
+  proId: string | null;
+  proName: string | null;
+  proSlug: string | null;
+  proLogoKey: string | null;
+  proDeletedAt: Date | null;
+};
 
 export type StoryRow = {
   story: StoryRecord;
@@ -49,11 +83,16 @@ export type StoryRow = {
   };
   pro: { id: string | null; name: string | null; slug: string | null; logoKey: string | null; deletedAt: Date | null };
   crewName: string | null;
+  /** Les champs de l'originale quand la story est une copie (tous `null` sinon). */
+  origin: StoryOrigin;
 };
 
-/** Stories avec leur auteur, leur structure, leur pro et leur crew. `where` à l'appelant. */
-export function selectStories(where: SQL | undefined, ex: Executor = db) {
-  return ex
+/**
+ * Stories avec leur auteur, leur structure, leur pro et leur crew. `where` à l'appelant. Une copie dont l'originale a disparu
+ * ou dont l'auteur n'est plus disponible n'est jamais rendue, quel que soit le chemin de lecture (lot R7h, tour 2).
+ */
+export function selectStories(where: SQL | undefined, ex: Executor = db): Promise<StoryRow[]> {
+  const query = ex
     .select({
       story: stories,
       author: {
@@ -80,13 +119,45 @@ export function selectStories(where: SQL | undefined, ex: Executor = db) {
         deletedAt: proProfiles.deletedAt,
       },
       crewName: crews.name,
+      origin: {
+        id: originStory.id,
+        deletedAt: originStory.deletedAt,
+        status: originStory.status,
+        persona: originStory.persona,
+        authorId: originStory.authorId,
+        authorPseudo: originAuthor.pseudo,
+        authorAvatarKey: originAuthor.avatarKey,
+        authorVisibility: originAuthor.visibility,
+        authorDeletedAt: originAuthor.deletedAt,
+        authorBannedAt: originAuthor.bannedAt,
+        authorSuspendedUntil: originAuthor.suspendedUntil,
+        structureId: originStructure.id,
+        structureName: originStructure.name,
+        structureSlug: originStructure.slug,
+        structureLogoKey: originStructure.logoKey,
+        structureDeletedAt: originStructure.deletedAt,
+        structureVerification: originStructure.verification,
+        proId: originPro.id,
+        proName: originPro.name,
+        proSlug: originPro.slug,
+        proLogoKey: originPro.logoKey,
+        proDeletedAt: originPro.deletedAt,
+      },
     })
     .from(stories)
     .innerJoin(profiles, eq(profiles.userId, stories.authorId))
     .leftJoin(structures, eq(structures.id, stories.structureId))
     .leftJoin(proProfiles, eq(proProfiles.id, stories.proId))
     .leftJoin(crews, eq(crews.id, stories.crewId))
+    .leftJoin(originStory, eq(originStory.id, stories.sharedFromStoryId))
+    .leftJoin(originAuthor, eq(originAuthor.userId, originStory.authorId))
+    .leftJoin(originStructure, eq(originStructure.id, originStory.structureId))
+    .leftJoin(originPro, eq(originPro.id, originStory.proId))
     .where(where) as unknown as Promise<StoryRow[]>;
+  return query.then((rows) => {
+    const at = now();
+    return rows.filter((r) => originAvailable(r, at));
+  });
 }
 
 /** Condition SQL d'une story encore vivante : prête, non supprimée, non expirée. */
@@ -111,9 +182,27 @@ export function authorKeyOf(row: StoryRow): { kind: StoryTagKind; id: string; ke
   return { kind: "user", id: story.authorId, key: storyAuthorKeyOf("user", story.authorId) };
 }
 
-/** L'auteur est-il disponible ? Compte actif, et pour une casquette, structure ou pro non supprimé ni suspendu. */
+/**
+ * L'originale d'une copie est-elle encore servable ? Elle existe (non supprimée), son auteur est actif (ni supprimé, ni
+ * banni, ni suspendu), sa structure ou sa fiche pro aussi, et un compte personnel n'est pas passé en privé (une copie ne
+ * doit jamais survivre à la disparition de ce qu'elle reprend). Vrai pour une story qui n'est pas une copie.
+ */
+export function originAvailable(row: StoryRow, at: Date): boolean {
+  if (!row.story.sharedFromStoryId) return true;
+  const o = row.origin;
+  if (!o || !o.id || o.deletedAt || o.status !== "ready") return false;
+  if (o.authorDeletedAt || o.authorBannedAt || (o.authorSuspendedUntil && o.authorSuspendedUntil > at)) return false;
+  if (o.persona === "organizer") {
+    return Boolean(o.structureId && !o.structureDeletedAt && o.structureVerification !== "suspended");
+  }
+  if (o.persona === "pro") return Boolean(o.proId && !o.proDeletedAt);
+  return o.authorVisibility === "public";
+}
+
+/** L'auteur est-il disponible ? Compte actif, et pour une casquette, structure ou pro non supprimé ni suspendu ; pour une copie, l'originale aussi. */
 export function authorActive(row: StoryRow, at: Date): boolean {
   if (!accountActive(row.author, at)) return false;
+  if (!originAvailable(row, at)) return false;
   const { story } = row;
   if (story.persona === "organizer") {
     return Boolean(row.structure.id && !row.structure.deletedAt && row.structure.verification !== "suspended");
@@ -283,4 +372,36 @@ export function authorDisplay(row: StoryRow, urlOf: (key: string | null) => stri
   if (story.persona === "organizer") return { name: row.structure.name ?? "", avatarUrl: urlOf(row.structure.logoKey) };
   if (story.persona === "pro") return { name: row.pro.name ?? "", avatarUrl: urlOf(row.pro.logoKey) };
   return { name: row.author.pseudo, avatarUrl: urlOf(row.author.avatarKey) };
+}
+
+/** Le crédit d'une copie : l'identité publique de l'originale selon sa casquette (la personne, la structure ou le pro). */
+export function creditOf(row: StoryRow, urlOf: (key: string | null) => string | null): StoryTagView | null {
+  if (!row.story.sharedFromStoryId) return null;
+  const o = row.origin;
+  if (!o?.id) return null;
+  if (o.persona === "organizer") {
+    return o.structureId
+      ? {
+          kind: "structure",
+          id: o.structureId,
+          name: o.structureName ?? "",
+          slug: o.structureSlug,
+          avatarUrl: urlOf(o.structureLogoKey),
+        }
+      : null;
+  }
+  if (o.persona === "pro") {
+    return o.proId
+      ? { kind: "pro", id: o.proId, name: o.proName ?? "", slug: o.proSlug, avatarUrl: urlOf(o.proLogoKey) }
+      : null;
+  }
+  return o.authorId
+    ? {
+        kind: "user",
+        id: o.authorId,
+        name: o.authorPseudo ?? "",
+        slug: o.authorPseudo,
+        avatarUrl: urlOf(o.authorAvatarKey),
+      }
+    : null;
 }

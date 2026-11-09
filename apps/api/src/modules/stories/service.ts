@@ -52,6 +52,7 @@ import {
   uploads,
   userFollows,
 } from "../../db/schema";
+import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -669,7 +670,12 @@ export const storiesService = {
           found.structureId !== null &&
           (await managedStructures(v.user.id)).has(found.structureId)));
     if (!mine) throw notFound("Story introuvable");
-    const ids = await softDeleteWithCopies(db, [id]);
+    // Une story au nom d'une structure se retire par la garde centralisée de l'organisateur (double authentification
+    // obligatoire), y compris la sienne : c'est un geste fait au nom de la structure.
+    if (found.persona === "organizer" && found.structureId) await requireOrganizer(v, found.structureId);
+    // Dans une transaction : l'originale est verrouillée avant la recherche des copies (un partage en cours ne laisse
+    // pas de copie derrière), puis les fichiers partent après la validation.
+    const ids = await withTx((tx) => softDeleteWithCopies(tx, [id]));
     await purgeStoryFiles(ids);
   },
 
@@ -944,6 +950,8 @@ export const storiesService = {
           ),
         );
       if (!m) throw notFound("Identification introuvable");
+      // Retirer au nom d'une structure : garde centralisée (double authentification obligatoire).
+      await requireOrganizer(v, target.id);
     } else if (target?.kind === "pro") {
       const [p] = await db
         .select({ id: proProfiles.id })
@@ -956,21 +964,25 @@ export const storiesService = {
       .from(stories)
       .where(and(eq(stories.id, storyId), isNull(stories.deletedAt), sql`${stories.expiresAt} > ${now()}`));
     if (!story) throw notFound("Identification introuvable");
-    const done = await db
-      .update(storyTags)
-      .set({ removedAt: now() })
-      .where(
-        and(
-          eq(storyTags.storyId, storyId),
-          eq(storyTags.targetKind, kind),
-          eq(storyTags.targetId, targetId),
-          isNull(storyTags.removedAt),
-        ),
-      )
-      .returning({ id: storyTags.id });
-    if (!done.length) throw notFound("Identification introuvable");
-    // Lot R7h : les copies fondées sur cette identification tombent avec elle (la story, elle, reste).
-    const dropped = await dropCopiesOfTag(db, storyId, kind, targetId);
+    // Lot R7h, tour 2 : une seule transaction. La ligne de l'identification est verrouillée par la mise à jour ; un partage
+    // en cours (qui la tient en `FOR SHARE`) se termine avant, et la recherche des copies qui suit voit sa copie.
+    const dropped = await withTx(async (tx) => {
+      const done = await tx
+        .update(storyTags)
+        .set({ removedAt: now() })
+        .where(
+          and(
+            eq(storyTags.storyId, storyId),
+            eq(storyTags.targetKind, kind),
+            eq(storyTags.targetId, targetId),
+            isNull(storyTags.removedAt),
+          ),
+        )
+        .returning({ id: storyTags.id });
+      if (!done.length) throw notFound("Identification introuvable");
+      // Les copies fondées sur cette identification tombent avec elle (la story, elle, reste).
+      return dropCopiesOfTag(tx, storyId, kind, targetId);
+    });
     if (dropped.length) await purgeStoryFiles(dropped);
   },
 };

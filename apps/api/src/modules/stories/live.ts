@@ -24,8 +24,11 @@ export async function organizerStoryOf(
   if (!last) return null;
   return {
     structureKey: storyAuthorKeyOf("structure", structureId),
+    // Une photo est son propre aperçu ; une vidéo sans affiche n'a pas d'aperçu : jamais l'adresse de la vidéo.
     posterUrl: last.story.posterKey
       ? posterUrlOf(last.story.id, last.story.posterKey)
-      : mediaUrlOf(last.story.id, last.story.storageKey),
+      : last.story.mediaKind === "photo"
+        ? mediaUrlOf(last.story.id, last.story.storageKey)
+        : null,
   };
 }

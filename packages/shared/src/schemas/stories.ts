@@ -164,7 +164,8 @@ export type StoryView = {
   commercialPartner: { id: string; name: string; slug: string } | null;
   audience: StoryAudience;
   crewName: string | null;
-  sharedFrom: { authorPseudo: string } | null;
+  /** Lot R7h : le crédit d'une copie = l'identité publique de l'originale (personne, structure ou pro), avec son lien. */
+  sharedFrom: StoryTagView | null;
   /**
    * Lot R7h : ce que je peux faire d'une story où je suis identifié (moi, ou une structure / un pro que je gère) ;
    * `null` si je ne suis pas identifié, pour ma propre story et pour une copie. Décidé par l'API, jamais par l'écran.
@@ -184,6 +185,8 @@ export type StoryAuthorView = {
   pseudoOrName: string;
   avatarUrl: string | null;
   persona: StoryPersona;
+  /** Lot R7h : une structure dont un événement est en cours (le badge « EN COURS » de l'en-tête). */
+  live: boolean;
 };
 
 /** Une mention de la structure (lot R7h) : une story où elle ou un de ses événements est identifié. */

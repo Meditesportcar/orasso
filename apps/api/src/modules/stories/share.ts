@@ -19,6 +19,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { stories, structureMembers, structures } from "../../db/schema";
+import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -32,14 +33,13 @@ import {
   audienceStoryOf,
   authorDisplay,
   authorKeyOf,
-  liveStory,
   relationOf,
   selectStories,
   setsFor,
   viewerOf,
 } from "./common";
 import { purgeStoryFiles } from "./expire";
-import { softDeleteWithCopies } from "./purge";
+import { dropCopiesOfAuthor, softDeleteWithCopies } from "./purge";
 import { mediaUrlOf } from "./serialize";
 import { ownedPros } from "./sharing";
 
@@ -101,19 +101,9 @@ export async function dropCopiesOfTag(
   );
 }
 
-/** Retire les copies de toutes les stories d'une personne dont le compte passe en privé (une copie n'élargit jamais le public). */
-export async function dropCopiesOfAuthor(ex: Tx | typeof db, authorId: string): Promise<string[]> {
-  const res = await ex.execute<{ id: string }>(sql`
-    select c.id from stories c join stories o on o.id = c.shared_from_story_id
-    where o.author_id = ${authorId} and o.persona not in ('organizer', 'pro') and c.deleted_at is null`);
-  const ids = res.rows.map((r) => r.id);
-  if (!ids.length) return [];
-  return softDeleteWithCopies(ex, ids);
-}
-
 /** Un compte passe en privé : ses stories ne peuvent plus être reprises, les copies faites jusque-là tombent (fichiers effacés après la validation). */
 export async function retireCopiesOfPrivateAccount(tx: Tx, after: (cb: () => unknown) => void, authorId: string) {
-  const ids = await dropCopiesOfAuthor(tx, authorId);
+  const ids = await dropCopiesOfAuthor(tx, authorId, "personal");
   if (ids.length) after(() => purgeStoryFiles(ids).catch(() => undefined));
 }
 
@@ -122,13 +112,6 @@ export const storiesShare = {
   async shareToMine(v: Viewer, id: string, input: StoryShareInput): Promise<StoryShared> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     rateLimit("storyWrite", v.user.id);
-    const at = now();
-    const [row] = await selectStories(eq(stories.id, id));
-    if (!row || row.story.deletedAt || row.story.status !== "ready" || row.story.expiresAt <= at) {
-      throw notFound("Story introuvable");
-    }
-    const source = row.story;
-    if (source.authorId === v.user.id) throw validation(storyShareLabels.refusals.own_story);
     // 1. Au nom de qui ? Une casquette que je gère, sinon moi.
     const persona = input.asStructureId ? "organizer" : input.asProId ? "pro" : "fan";
     const structureId = input.asStructureId ?? null;
@@ -150,6 +133,8 @@ export const storiesShare = {
           ),
         );
       if (!s || s.ver === "suspended") throw forbidden(storyLabels.notOrganizer);
+      // Garde centralisée de l'espace organisateur (double authentification obligatoire), comme partout ailleurs.
+      await requireOrganizer(v, structureId);
       sharerName = s.name;
       sharerLogo = s.logo;
     } else if (proId) {
@@ -158,16 +143,27 @@ export const storiesShare = {
       sharerName = name;
       sharerLogo = null;
     }
-    // 2. Je vois la story, et elle peut être reprise : crew et compte privé refusés (la copie garde les droits de l'originale).
-    const rel = relationOf(await setsFor(v.user.id, [row]), row);
-    const denied = shareRefusal(viewerOf(v), audienceStoryOf(row, at), rel);
-    if (denied) throw refusal(denied);
-    // 3. Je suis bien identifié : moi, ou la structure / le pro au nom de qui je reprends.
+    // 2. Je suis bien identifié : moi, ou la structure / le pro au nom de qui je reprends.
     const tagKind: TagKind = structureId ? "structure" : proId ? "pro" : "user";
     const tagTarget = structureId ?? proId ?? v.user.id;
-    if (!(await hasActiveTag(db, id, tagKind, tagTarget))) {
-      throw new AppError(403, "not_tagged", storyShareLabels.refusals.not_tagged);
-    }
+    // Les droits, relus chaque fois qu'on les tient : la story est vivante, je la vois, elle peut être reprise (crew et
+    // compte privé refusés : la copie garde les droits de l'originale), l'originale a son auteur, l'identification est là.
+    const checkRights = async (ex: Tx | typeof db) => {
+      const at = now();
+      const [row] = await selectStories(eq(stories.id, id), ex);
+      if (!row || row.story.deletedAt || row.story.status !== "ready" || row.story.expiresAt <= at) {
+        throw notFound("Story introuvable");
+      }
+      if (row.story.authorId === v.user.id) throw validation(storyShareLabels.refusals.own_story);
+      const rel = relationOf(await setsFor(v.user.id, [row], ex), row);
+      const denied = shareRefusal(viewerOf(v), audienceStoryOf(row, at), rel);
+      if (denied) throw refusal(denied);
+      if (!(await hasActiveTag(ex, id, tagKind, tagTarget))) {
+        throw new AppError(403, "not_tagged", storyShareLabels.refusals.not_tagged);
+      }
+      return row.story;
+    };
+    const source = await checkRights(db);
 
     const copyId = randomUUID();
     const files: string[] = [];
@@ -177,9 +173,19 @@ export const storiesShare = {
       const posterKey = source.posterKey ? await copyFile(source.posterKey, copyId) : null;
       if (posterKey) files.push(posterKey);
       await withTx(async (tx, afterCommit) => {
+        const at = now();
         const capKey = structureId ? `s:${structureId}` : proId ? `p:${proId}` : `u:${v.user.id}`;
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`story-share:${id}:${capKey}`}))`);
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`story-cap:${capKey}`}))`);
+        // Verrous partagés, toujours dans cet ordre (compte de l'auteur, originale, identification). Le passage en privé,
+        // la suspension, le bannissement, la suppression et le retrait de l'identification prennent le verrou
+        // correspondant AVANT de chercher les copies à retirer : soit ils passent d'abord et les droits revérifiés
+        // ci-dessous refusent le partage, soit nous passons d'abord et ils trouvent la copie et la retirent dans leur transaction.
+        await tx.execute(sql`select 1 from profiles where user_id = ${source.authorId} for share`);
+        await tx.execute(sql`select 1 from stories where id = ${id} and deleted_at is null for share`);
+        await tx.execute(sql`select 1 from story_tags
+          where story_id = ${id} and target_kind = ${tagKind} and target_id = ${tagTarget} and removed_at is null for share`);
+        await checkRights(tx);
         const sharer = structureId
           ? and(eq(stories.persona, "organizer"), eq(stories.structureId, structureId))
           : proId
@@ -195,12 +201,6 @@ export const storiesShare = {
           .from(stories)
           .where(and(sql`${stories.deletedAt} is null`, sql`${stories.expiresAt} > ${at}`, sharer));
         if ((live?.n ?? 0) >= STORY_LIVE_MAX) throw new AppError(409, "too_many_stories", storyLabels.tooManyStories);
-        // L'originale a pu être supprimée ou l'identification retirée depuis le début : on relit sous verrou.
-        const [still] = await tx
-          .select({ id: stories.id })
-          .from(stories)
-          .where(and(eq(stories.id, id), liveStory(at)));
-        if (!still || !(await hasActiveTag(tx, id, tagKind, tagTarget))) throw notFound("Story introuvable");
         await tx.insert(stories).values({
           id: copyId,
           authorId: v.user.id,
@@ -279,7 +279,7 @@ export const storiesShare = {
     }
     // Les mentions : identification active de la structure, ou autocollant d'un de ses événements publiés (sauf
     // identification retirée). Jamais une copie, jamais une story de crew, jamais celle de la structure elle-même, jamais
-    // un auteur indisponible. Un compte privé ne peut pas identifier un organisateur (règle `canTag`) : s'il l'a fait avant
+    // un auteur indisponible (compte, structure ou pro : le nombre et la liste partent de la même condition). Un compte privé ne peut pas identifier un organisateur (règle `canTag`) : s'il l'a fait avant
     // de passer en privé, la mention n'est plus servie.
     const base = sql`
       s.deleted_at is null and s.status = 'ready' and s.expires_at > ${at}
@@ -287,6 +287,9 @@ export const storiesShare = {
       and not (s.persona = 'organizer' and s.structure_id = ${structureId})
       and p.deleted_at is null and p.banned_at is null and (p.suspended_until is null or p.suspended_until <= ${at})
       and (s.persona in ('organizer', 'pro') or p.visibility = 'public')
+      and (s.persona <> 'organizer' or exists (select 1 from structures st where st.id = s.structure_id
+        and st.deleted_at is null and st.verification <> 'suspended'))
+      and (s.persona <> 'pro' or exists (select 1 from pro_profiles pp where pp.id = s.pro_id and pp.deleted_at is null))
       and (
         exists (select 1 from story_tags t where t.story_id = s.id and t.target_kind = 'structure'
           and t.target_id = ${structureId} and t.removed_at is null)
