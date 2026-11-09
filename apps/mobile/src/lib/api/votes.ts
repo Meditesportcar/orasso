@@ -5,6 +5,7 @@ import type {
   ApplicationForTriage,
   Page,
   VoteCandidateAdd,
+  VoteCandidateAdded,
   VoteManage,
   VoteManageItem,
   VoteTemplates,
@@ -35,7 +36,7 @@ export const votesApi = {
   voteClose: (eventId: string, voteId: string) =>
     request<VoteManageItem>(`/api/events/${eventId}/votes/${voteId}/close`, { method: "POST" }),
   voteAddCandidate: (eventId: string, voteId: string, body: VoteCandidateAdd) =>
-    request<VoteManageItem>(`/api/events/${eventId}/votes/${voteId}/candidates`, { method: "POST", body }),
+    request<VoteCandidateAdded>(`/api/events/${eventId}/votes/${voteId}/candidates`, { method: "POST", body }),
   voteRemoveCandidate: (eventId: string, voteId: string, applicationId: string) =>
     request<VoteManageItem>(`/api/events/${eventId}/votes/${voteId}/candidates/${applicationId}`, {
       method: "DELETE",

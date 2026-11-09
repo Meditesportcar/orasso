@@ -223,6 +223,7 @@ export function OrgaVotesLive({
                   eventId={eventId}
                   vote={v}
                   editable={canWrite && v.state === "upcoming"}
+                  enteredIds={new Set(manage?.enteredApplicationIds ?? [])}
                   onChanged={reload}
                 />
               ) : null}
@@ -266,6 +267,7 @@ export function OrgaVotesLive({
           makes={makes}
           editing={form.editing}
           allCategoriesMissing={manage !== null && !items.some((v) => v.kind === "all_categories")}
+          podium={manage?.podium}
           onCancel={() => setForm(null)}
           onSaved={() => {
             setForm(null);

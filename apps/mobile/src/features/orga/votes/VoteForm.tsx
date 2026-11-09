@@ -327,7 +327,7 @@ export function VoteForm({ eventId }: { eventId: string }) {
               />
             ) : null}
           </Group>
-          <Muted variant="caption">{L.pointsNote}</Muted>
+          <Muted variant="caption">{L.pointsNote(manage.data?.podium)}</Muted>
         </>
       )}
     </FlowScreen>

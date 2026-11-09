@@ -79,7 +79,7 @@ export function VotesTemps({ event }: StepContext) {
             <Text variant="bodyStrong" testID="wizard-votes-count">
               {L.count(items.length)}
             </Text>
-            <Muted variant="caption">{L.podiumLine}</Muted>
+            <Muted variant="caption">{L.podiumLine(manage.data?.podium)}</Muted>
           </View>
           {items.length === 0 ? <Muted variant="body">{L.empty}</Muted> : null}
           <View style={styles.list}>
@@ -202,7 +202,7 @@ export function VotesTemps({ event }: StepContext) {
           ) : null}
         </>
       ) : null}
-      <Muted variant="caption">{L.pointsNote}</Muted>
+      <Muted variant="caption">{L.pointsNote(manage.data?.podium)}</Muted>
       <Muted variant="caption">{L.stampNote}</Muted>
       <Muted variant="caption">{L.teamNote}</Muted>
       <Muted variant="caption">{L.stepNotBlocking}</Muted>

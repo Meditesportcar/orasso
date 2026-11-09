@@ -11,12 +11,15 @@ export function OrgaVoteCandidates({
   eventId,
   vote,
   editable,
+  enteredIds,
   onChanged,
 }: {
   eventId: string;
   vote: VoteManageItem;
   /** Vote encore « prévu » et droit d'écrire. */
   editable: boolean;
+  /** Candidatures dont la voiture est entrée (`VoteManage.enteredApplicationIds`). */
+  enteredIds: ReadonlySet<string>;
   onChanged: () => Promise<void> | void;
 }) {
   const candidates = vote.handCandidates ?? [];
@@ -127,7 +130,7 @@ export function OrgaVoteCandidates({
               <li key={h.id} data-testid={`vote-hit-${h.id}`}>
                 <span className="ov-card__text">
                   <b className="o-never-truncate">{h.vehicle?.label ?? "Voiture"}</b>
-                  <small className="s-muted">{`${h.applicant.pseudo} · ${L.retained}`}</small>
+                  <small className="s-muted">{`${h.applicant.pseudo} · ${enteredIds.has(h.id) ? L.retained : L.retainedNotEntered}`}</small>
                 </span>
                 <Button
                   variant="secondary"

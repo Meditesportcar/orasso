@@ -8,12 +8,14 @@ import {
   decodeRotatingPayload,
   type EventVote,
   isOwnVehicle,
+  podiumPoints,
   rankingHiddenReason,
   VOTE_BOARD_LIMIT,
   VOTE_CANDIDATES_PAGE,
   VOTE_LIST_PREVIEW,
   VOTES_PER_EVENT_MAX,
   type VoteCandidateAdd,
+  type VoteCandidateAdded,
   type VoteCandidates,
   type VoteCreate,
   type VoteList,
@@ -92,6 +94,7 @@ import {
 } from "./context";
 import { markOpened, scheduleVoteJobs, votesLifecycle } from "./lifecycle";
 import { publishVotes, votesRealtime } from "./realtime";
+import { podiumSettings } from "./settle";
 
 const refusal = {
   vote_closed: () => new AppError(409, "vote_closed", voteTexts.errors.vote_closed),
@@ -303,6 +306,8 @@ export const votesService = {
       items: await manageItems(l),
       canWrite: access === "organizer",
       vehiclesEntered: l.entered.length,
+      enteredApplicationIds: l.entered.map((e) => e.applicationId),
+      podium: await podiumOf(),
     };
   },
 
@@ -442,11 +447,22 @@ export const votesService = {
       }
       if (row.deletedAt) {
         const active = await activeVotes(tx, eventId);
+        // Le plafond vaut aussi pour un vote remis (tour 2) : il compte parmi les votes actifs dès son retour.
+        if (active.length >= VOTES_PER_EVENT_MAX) {
+          throw conflict("too_many_votes", voteTexts.errors.too_many_votes);
+        }
+        // Un vote retiré n'avait aucune voix. Si des voix existent malgré tout, il ne revient pas ; sinon, même déjà ouvert
+        // ou clos, il revient remis à zéro (ni ouverture, ni clôture, ni candidats figés) : il n'est pas rouvert à moitié.
+        const [voices] = await tx.select({ n: count() }).from(audienceVotes).where(eq(audienceVotes.voteId, row.id));
+        if (Number(voices?.n ?? 0) > 0) throw conflict("restore_has_voices", voteTexts.errors.restore_has_voices);
         const first = active.reduce((m, x) => Math.min(m, x.position), 1);
         await tx
           .update(eventVotes)
-          .set({ deletedAt: null, position: first - 1, updatedAt: now() })
+          .set({ deletedAt: null, openedAt: null, closedAt: null, position: first - 1, updatedAt: now() })
           .where(eq(eventVotes.id, row.id));
+        await tx
+          .delete(eventVoteCandidates)
+          .where(and(eq(eventVoteCandidates.voteId, row.id), eq(eventVoteCandidates.source, "frozen")));
       }
       return row.id;
     });
@@ -518,7 +534,7 @@ export const votesService = {
   },
 
   /** `POST /events/:id/votes/:voteId/candidates` : un candidat à la main, par candidature ou par le QR lu sur la voiture. */
-  async addCandidate(v: Viewer, eventId: string, voteId: string, input: VoteCandidateAdd): Promise<VoteManageItem> {
+  async addCandidate(v: Viewer, eventId: string, voteId: string, input: VoteCandidateAdd): Promise<VoteCandidateAdded> {
     const event = await eventsRepo.byId(eventId);
     await teamAccess(v, event, true);
     const vote = await ownVote(event.id, voteId);
@@ -566,17 +582,20 @@ export const votesService = {
       const entered = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, app.id) });
       if (!entered) throw validation(voteTexts.errors.not_retained);
     }
-    await withTx(async (tx) => {
+    const added = await withTx(async (tx) => {
       const locked = await lockedState(tx, event, voteId);
       if (locked.vote.candidateMode !== "hand") throw conflict("not_hand", voteTexts.errors.not_hand);
       assertUnlocked(event, locked.vote, locked.state);
-      await tx
+      const inserted = await tx
         .insert(eventVoteCandidates)
         .values({ voteId, applicationId: app.id, source, addedBy: v.user.id, addedAt: now() })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ applicationId: eventVoteCandidates.applicationId });
+      return inserted.length > 0;
     });
     votesRealtime.candidatesChanged(eventId, voteId);
-    return this.afterWrite(eventId, voteId);
+    // La voiture nommée par l'écriture : celle du QR lu, pas « la dernière scannée de la liste ». `added: false` = déjà candidate.
+    return { ...(await this.afterWrite(eventId, voteId)), addedApplicationId: app.id, added };
   },
 
   /** `DELETE /events/:id/votes/:voteId/candidates/:applicationId` : retire un candidat choisi, avant l'ouverture. */
@@ -657,6 +676,12 @@ export const votesService = {
     };
   },
 };
+
+/** Points du podium (1er, 2e, 3e) tels que le réglage de l'administration les donne : ce que l'écran affiche. */
+async function podiumOf(): Promise<[number, number, number]> {
+  const settings = await podiumSettings();
+  return [podiumPoints(settings, 1), podiumPoints(settings, 2), podiumPoints(settings, 3)];
+}
 
 // --- Aides --------------------------------------------------------------------------------------------------------------
 
@@ -844,7 +869,10 @@ async function manageItems(l: LoadedVotes): Promise<VoteManageItem[]> {
   );
   const out: VoteManageItem[] = [];
   for (const vote of l.votes) {
-    const { candidates, ctx, rv, state } = ruleOfVote(l, vote);
+    const { candidates, ctx, rv, state: ruleState } = ruleOfVote(l, vote);
+    // Côté gestion, un brouillon montre ses votes « prévus » (comme `lockedState`) : on les modifie, on y ajoute des
+    // candidats. La règle des passionnés ne change pas : un brouillon n'ouvre jamais, `voteState` le dit « clos » à qui vote.
+    const state: VoteState = l.event.status === "draft" ? "upcoming" : ruleState;
     const { ranked, total } = rankVote(
       rows.filter((r) => r.voteId === vote.id),
       candidates,

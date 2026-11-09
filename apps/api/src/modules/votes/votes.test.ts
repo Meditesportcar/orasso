@@ -318,6 +318,66 @@ describe("création et droits", () => {
     expect(over.json.error.code).toBe("event_over");
   });
 
+  it("« Toutes catégories » remis (tour 2) : un vote clos sans voix revient remis à zéro ; avec des voix, il ne revient pas", async () => {
+    await enterAll();
+    const id = await allCategoriesId();
+    // Ouvert de lui-même (premiers pointages) puis clos à la main : clos, sans voix, il peut être retiré.
+    expect((await api(orga, "POST", `/${id}/close`)).status).toBe(200);
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    const back = await api(orga, "POST", "/all-categories");
+    expect(back.status).toBe(201);
+    // Plus clos, et pas de candidats figés d'avant : un vote neuf, que les premiers pointages ouvrent de nouveau (state `open`).
+    expect(back.json).toMatchObject({ id, state: "open", closedAt: null });
+    const row = await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) });
+    expect(row).toMatchObject({ deletedAt: null, closedAt: null });
+    expect(await db.query.eventVoteCandidates.findMany({ where: eq(eventVoteCandidates.voteId, id) })).toHaveLength(0);
+    // Retiré à nouveau, puis des voix existent malgré tout : il ne revient pas, avec un libellé clair.
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    await db.insert(audienceVotes).values({
+      eventId,
+      voteId: id,
+      voterUserId: p.nina.u.id,
+      applicationId: p.kenji.applicationId,
+    });
+    const refused = await api(orga, "POST", "/all-categories");
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("restore_has_voices");
+    expect(refused.json.error.message).toMatch(/déjà reçu des voix/);
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.deletedAt).not.toBeNull();
+  });
+
+  it("« Toutes catégories » remis (tour 2) : le plafond de votes par événement vaut aussi pour lui", async () => {
+    const id = await allCategoriesId();
+    expect((await api(orga, "DELETE", `/${id}`)).status).toBe(200);
+    await db.insert(eventVotes).values(
+      Array.from({ length: 50 }, (_, i) => ({
+        eventId,
+        title: `Vote ${i}`,
+        kind: "theme" as const,
+        candidateMode: "all" as const,
+        openMode: "manual" as const,
+        position: 20 + i,
+      })),
+    );
+    const over = await api(orga, "POST", "/all-categories");
+    expect(over.status).toBe(409);
+    expect(over.json.error.code).toBe("too_many_votes");
+    expect((await db.query.eventVotes.findFirst({ where: eq(eventVotes.id, id) }))?.deletedAt).not.toBeNull();
+  });
+
+  it("la console sert les points du podium du réglage de l'administration (15 / 10 / 5 par défaut), au staff aussi", async () => {
+    expect((await api(orga, "GET", "/manage")).json.podium).toEqual([15, 10, 5]);
+    await db.insert(platformSettings).values([
+      { key: "points.vote_first", value: 40 },
+      { key: "points.vote_second", value: 0 },
+      { key: "points.vote_third", value: 3 },
+    ]);
+    settingsStore.invalidate();
+    expect((await api(orga, "GET", "/manage")).json.podium).toEqual([40, 0, 3]);
+    expect((await api(staff, "GET", "/manage")).json.podium).toEqual([40, 0, 3]);
+    settingsStore.invalidate();
+  });
+
   it("autant de votes qu'on veut (au-delà de 9), plafond technique à 50", async () => {
     for (let i = 0; i < 12; i++) await createTheme({ ...japanese, title: `Concours ${i + 1}` });
     expect((await api(orga, "GET", "/manage")).json.items).toHaveLength(13);
@@ -530,6 +590,34 @@ describe("candidats", () => {
     });
     expect(wrong.status).toBe(409);
     expect(wrong.json.error.code).toBe("other_event");
+  });
+
+  it("par QR (tour 2) : la réponse nomme la voiture ajoutée, et dit si elle l'était déjà", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 5));
+    const id = await createTheme({ title: "Concours de rupteur", candidateMode: "hand", openMode: "manual" });
+    const passOf = async (x: Person) =>
+      (await call(x.u, "GET", `/applications/${x.applicationId}/pass`)).json.payload as string;
+    const first = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.kenji) });
+    expect(first.json).toMatchObject({ addedApplicationId: p.kenji.applicationId, added: true });
+    // Deuxième scan : la voiture annoncée est la sienne, pas la précédente.
+    const second = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.lea) });
+    expect(second.json).toMatchObject({ addedApplicationId: p.lea.applicationId, added: true });
+    expect(second.json.handCandidates).toHaveLength(2);
+    // Un doublon : aucune ligne de plus, `added: false`, la voiture nommée est celle du QR.
+    const again = await api(orga, "POST", `/${id}/candidates`, { qr: await passOf(p.kenji) });
+    expect(again.status).toBe(200);
+    expect(again.json).toMatchObject({ addedApplicationId: p.kenji.applicationId, added: false });
+    expect(again.json.handCandidates).toHaveLength(2);
+    // Même contrat par candidature.
+    const byApp = await api(orga, "POST", `/${id}/candidates`, { applicationId: p.lea.applicationId });
+    expect(byApp.json).toMatchObject({ addedApplicationId: p.lea.applicationId, added: false });
+  });
+
+  it("la console liste les candidatures entrées (la recherche dit « pas encore entrée » pour les autres)", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    const manage = await api(orga, "GET", "/manage");
+    expect(manage.json.enteredApplicationIds).toEqual([p.kenji.applicationId]);
   });
 });
 
@@ -1373,7 +1461,10 @@ describe("tour 3 : dernière retouche", () => {
     expect(res.status).toBe(201);
     const patched = await api(orga, "PATCH", `/${res.json.id}`, { title: "Renommé" }, draft.id);
     expect(patched.status).toBe(200);
-    expect(patched.json).toMatchObject({ title: "Renommé", state: "closed" });
+    expect(patched.json).toMatchObject({ title: "Renommé", state: "upcoming" });
+    // Côté passionné, la règle ne change pas : un brouillon n'ouvre jamais, et la console le montre « prévu ».
+    const manage = await api(orga, "GET", "/manage", undefined, draft.id);
+    expect(manage.json.items.find((x: { id: string }) => x.id === res.json.id)).toMatchObject({ state: "upcoming" });
     const open = await api(orga, "POST", `/${res.json.id}/open`, undefined, draft.id);
     expect(open.status).toBe(409);
     expect(open.json.error.code).toBe("event_not_published");

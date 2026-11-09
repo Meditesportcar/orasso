@@ -91,7 +91,7 @@ export function OrgaVoteList({
             <b className="o-t-number" data-testid="wizard-votes-count">
               {L.count(items.length)}
             </b>
-            <span className="o-t-caption s-muted">{L.podiumLine}</span>
+            <span className="o-t-caption s-muted">{L.podiumLine(manage?.podium)}</span>
           </p>
           {items.length === 0 ? <p className="s-muted">{L.empty}</p> : null}
           <ul className="ov-list">
@@ -218,6 +218,7 @@ export function OrgaVoteList({
           makes={makes}
           editing={form.editing}
           allCategoriesMissing={manage !== null && !items.some((v) => v.kind === "all_categories")}
+          podium={manage?.podium}
           onCancel={() => setForm(null)}
           onSaved={() => {
             setForm(null);
@@ -227,7 +228,7 @@ export function OrgaVoteList({
         />
       ) : null}
 
-      <p className="o-t-caption s-muted">{L.pointsNote}</p>
+      <p className="o-t-caption s-muted">{L.pointsNote(manage?.podium)}</p>
       <p className="o-t-caption s-muted">{L.stampNote}</p>
       <p className="o-t-caption s-muted">{L.teamNote}</p>
       <p className="o-t-caption s-muted">{L.stepNotBlocking}</p>

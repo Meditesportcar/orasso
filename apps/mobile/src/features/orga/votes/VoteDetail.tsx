@@ -8,6 +8,7 @@ import {
   voteOrgaLabels as L,
   type VoteManageItem,
   voteDurationOptions,
+  voteScanOutcome,
   voteStatus,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -118,10 +119,10 @@ export function VoteDetail({ eventId }: { eventId: string }) {
     if (!vote) throw new Error("Vote introuvable");
     const updated = await api.voteAddCandidate(eventId, vote.id, { qr: payload });
     await manage.reload();
-    const added = updated.handCandidates?.find((x) => x.source === "scan") ?? null;
-    return { label: added?.vehicleLabel ?? "Voiture", count: updated.handCandidates?.length ?? 0 };
+    return voteScanOutcome(updated);
   }
 
+  const enteredIds = new Set(manage.data?.enteredApplicationIds ?? []);
   const taken = new Set(candidates.map((x) => x.applicationId));
   const results = (hits ?? []).filter((h) => !taken.has(h.id));
 
@@ -306,7 +307,7 @@ export function VoteDetail({ eventId }: { eventId: string }) {
                             {h.vehicle?.label ?? "Voiture"}
                           </Text>
                           <Text variant="caption" color={c.plateMuted}>
-                            {`${h.applicant.pseudo} · ${L.retained}`}
+                            {`${h.applicant.pseudo} · ${enteredIds.has(h.id) ? L.retained : L.retainedNotEntered}`}
                           </Text>
                         </View>
                         <Button

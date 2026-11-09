@@ -38,6 +38,7 @@ export function OrgaVoteForm({
   makes,
   editing,
   allCategoriesMissing,
+  podium,
   onSaved,
   onCancel,
 }: {
@@ -50,6 +51,8 @@ export function OrgaVoteForm({
   editing?: VoteManageItem | null;
   /** « Toutes catégories » a été retiré : il revient avec « Ajouter » (modèle en tête des modèles). */
   allCategoriesMissing: boolean;
+  /** Points du podium lus du réglage (`VoteManage.podium`). */
+  podium?: readonly number[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -282,7 +285,7 @@ export function OrgaVoteForm({
               />
             ) : null}
           </fieldset>
-          <p className="o-t-caption s-muted">{L.pointsNote}</p>
+          <p className="o-t-caption s-muted">{L.pointsNote(podium)}</p>
         </>
       )}
 

@@ -6,7 +6,7 @@ import { fromWallInput, toWallInput } from "../eventWizard";
 import { criteriaOrigins } from "../labels/event-editor.fr";
 import { keepUnits } from "../labels/units.fr";
 import { voteOrgaLabels as L } from "../labels/votes-orga.fr";
-import type { VoteCreate, VoteManageItem } from "../schemas/votes";
+import type { VoteCandidateAdded, VoteCreate, VoteManageItem } from "../schemas/votes";
 import { withYear } from "./dateYear";
 import { calendarDaysBetween, wallTime } from "./time";
 import {
@@ -91,9 +91,11 @@ export function voteStatus(v: VoteManageItem, ctx: VoteStatusContext): VoteStatu
   const blocked = !ctx.published ? L.notPublished : v.candidatesCount < 2 ? L.notEnough : null;
   const canLaunch = ctx.canWrite;
   if (v.openMode === "at" && v.opensAt) {
+    // L'heure prévue est passée et le vote ne s'est pas ouvert : il lui manque des candidats entrés, pas une date.
+    const overdue = new Date(v.opensAt) <= ctx.now && ctx.published && v.candidatesCount < 2;
     return {
       tone: "plan",
-      text: `Prévu · ${voteWhen(new Date(v.opensAt), ctx.now)}`,
+      text: overdue ? `À lancer · ${L.notEnoughShort}` : `Prévu · ${voteWhen(new Date(v.opensAt), ctx.now)}`,
       ...none,
       canLaunch,
       launchBlocked: canLaunch ? blocked : null,
@@ -287,4 +289,19 @@ export function voteConfigLine(
           : L.openManual;
   const duration = v.durationMinutes === null ? "jusqu'à la fin de l'événement" : voteDurationLabel(v.durationMinutes);
   return [voteCandidatesSummary(v, zoneName, makeNames), open, duration].join(" · ");
+}
+
+/** La phrase affichée après un scan : « Honda S2000 · ajoutée · 2 au total », ou « Honda S2000 · déjà candidate ». */
+export function voteScanMessage(outcome: { label: string; count: number; already: boolean }): string {
+  return outcome.already ? L.scanAlready(outcome.label) : L.scanAdded(outcome.label, outcome.count);
+}
+
+/**
+ * Ce que l'écran annonce après un scan : la voiture que le QR nomme (celle que l'API vient d'ajouter, pas la dernière
+ * scannée de la liste), le total des candidats, et `already` quand elle l'était déjà (« déjà candidate »).
+ */
+export function voteScanOutcome(res: VoteCandidateAdded): { label: string; count: number; already: boolean } {
+  const candidates = res.handCandidates ?? [];
+  const named = candidates.find((x) => x.applicationId === res.addedApplicationId);
+  return { label: named?.vehicleLabel ?? "Voiture", count: candidates.length, already: !res.added };
 }

@@ -73,7 +73,7 @@ export function bestPodiums(plan: readonly PlanVote[]) {
   return bestRankPerVehicle(flat);
 }
 
-async function podiumSettings() {
+export async function podiumSettings() {
   return {
     "points.vote_first": await settingsStore.get("points.vote_first"),
     "points.vote_second": await settingsStore.get("points.vote_second"),

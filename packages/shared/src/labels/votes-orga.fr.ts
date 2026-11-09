@@ -69,8 +69,11 @@ export const voteOrgaLabels = {
   loading: "Chargement…",
   needsEvent: "Les votes se préparent une fois l'événement enregistré : continue, puis reviens à cette étape.",
   stepNotBlocking: "Cette étape n'empêche pas de publier : les votes se préparent aussi pendant l'événement.",
-  pointsNote: `Chaque vote donne des points à son podium : ${first} au 1er, ${second} au 2e, ${third} au 3e (réglage de l'administration). Le 1er reçoit un trophée sur la carte de sa voiture.`,
-  podiumLine: `${first} / ${second} / ${third} au podium`,
+  /** Les points viennent du réglage de l'administration (`VoteManage.podium`) ; à défaut, les valeurs provisoires. */
+  pointsNote: (podium: readonly number[] = [first, second, third]) =>
+    `Chaque vote donne des points à son podium : ${podium[0]} au 1er, ${podium[1]} au 2e, ${podium[2]} au 3e (réglage de l'administration). Le 1er reçoit un trophée sur la carte de sa voiture.`,
+  podiumLine: (podium: readonly number[] = [first, second, third]) =>
+    `${podium[0]} / ${podium[1]} / ${podium[2]} au podium`,
   stampNote: "« Toutes catégories » donne en plus le tampon rare au 1er.",
   teamNote:
     "Les votes sont prévus ici, ou lancés pendant l'événement. Seuls les organisateurs de la structure (propriétaire, co-organisateurs) les créent et les lancent.",
@@ -148,6 +151,7 @@ export const voteOrgaLabels = {
   cancel: "Annuler",
   launched: "Vote lancé : une notification part aux présents.",
   closed: "Vote clos : le classement est public.",
+  notEnoughShort: "moins de deux candidats entrés",
   notEnough: "Il faut deux candidats entrés au moins pour ouvrir ce vote.",
   notPublished: "Le vote se lancera après la publication de l'événement.",
   bell: "Un vote lancé pendant l'événement envoie une notification aux présents. Un vote prévu n'en envoie pas : l'onglet « Votes » s'allume à l'heure. Chacun peut couper cette notification dans ses réglages.",
@@ -167,6 +171,7 @@ export const voteOrgaLabels = {
       : `${entered} entrées sur ${total}`,
   candidatesNone: "Aucune voiture choisie pour l'instant.",
   retained: "retenue",
+  retainedNotEntered: "Retenue · pas encore entrée",
   notEntered: "pas encore entrée",
   entered: "entrée",
   removeCandidate: "Retirer",
@@ -184,6 +189,7 @@ export const voteOrgaLabels = {
     "La file du concours passe : tu scannes, les voitures sont candidates. Le scan ne vaut pas entrée : seule une voiture déjà entrée est ajoutée, les autres sont refusées.",
   scanDone: (n: number) => `Terminé · ${n} ${n > 1 ? "voitures" : "voiture"}`,
   scanAdded: (label: string, count: number) => `${label} · ajoutée · ${count} au total`,
+  scanAlready: (label: string) => `${label} · déjà candidate`,
   scanSiteNote: "Le scan du QR des voitures se fait dans l'appli, avec l'appareil photo du téléphone.",
   scanNoCamera: "Pas de caméra dans le navigateur : saisis la charge utile du QR.",
   scanCameraOff: "Caméra non autorisée",

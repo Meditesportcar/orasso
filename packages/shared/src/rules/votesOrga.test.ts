@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { VoteManageItem } from "../schemas/votes";
+import type { VoteCandidateAdded, VoteManageItem } from "../schemas/votes";
 import {
   emptyVoteDraft,
   voteCandidatesSummary,
@@ -12,6 +12,8 @@ import {
   voteDraftWithMode,
   voteDraftWithTemplate,
   voteDurationLabel,
+  voteScanMessage,
+  voteScanOutcome,
   voteStatus,
   voteWhen,
 } from "./votesOrga";
@@ -83,6 +85,15 @@ describe("voteStatus (écran « Votes »)", () => {
     });
     expect(voteStatus(planned, ctx)).toMatchObject({ tone: "plan", canLaunch: true, launchBlocked: null });
     expect(voteStatus(planned, ctx).text).toBe("Prévu · samedi 16 h");
+  });
+
+  it("l'heure prévue est passée sans assez de candidats : « À lancer · moins de deux candidats entrés »", () => {
+    const late = item({ openMode: "at", opensAt: "2026-11-10T11:00:00Z", candidatesCount: 1 });
+    expect(voteStatus(late, ctx)).toMatchObject({ tone: "plan", canLaunch: true });
+    expect(voteStatus(late, ctx).text).toBe("À lancer · moins de deux candidats entrés");
+    // Heure à venir, ou événement non publié : la date reste dite.
+    expect(voteStatus({ ...late, opensAt: "2026-11-10T15:00:00Z" }, ctx).text).toBe("Prévu · aujourd'hui 16 h");
+    expect(voteStatus(late, { ...ctx, published: false }).text).toMatch(/^Prévu · /);
   });
 
   it("prêt à lancer avec deux candidats entrés ; sinon la raison est dite, jamais un bouton muet", () => {
@@ -237,5 +248,56 @@ describe("lignes de l'étape", () => {
     });
     expect(voteConfigLine(v, NOW, none, names)).toBe("Japonaises · samedi 12 h · jusqu'à la fin de l'événement");
     expect(voteConfigLine(item(), NOW, none, names)).toBe("Aucune voiture choisie · je le lance moi-même · 10 min");
+  });
+});
+
+describe("voteScanOutcome (annonce après un scan)", () => {
+  const candidate = (applicationId: string, vehicleLabel: string) => ({
+    applicationId,
+    vehicleLabel,
+    pseudo: "x",
+    photoUrl: null,
+    eligible: true,
+    entered: true,
+    source: "scan" as const,
+  });
+  const added = (over: Partial<VoteCandidateAdded>): VoteCandidateAdded => ({
+    ...item(),
+    handCandidates: [candidate("a1", "Honda S2000"), candidate("a2", "Alfa Romeo 147")],
+    addedApplicationId: "a1",
+    added: true,
+    ...over,
+  });
+
+  it("nomme la voiture du QR lu, pas la dernière scannée de la liste", () => {
+    expect(voteScanOutcome(added({ addedApplicationId: "a1" }))).toEqual({
+      label: "Honda S2000",
+      count: 2,
+      already: false,
+    });
+    expect(voteScanOutcome(added({ addedApplicationId: "a2" }))).toEqual({
+      label: "Alfa Romeo 147",
+      count: 2,
+      already: false,
+    });
+  });
+
+  it("un doublon est annoncé « déjà candidate » avec la bonne voiture", () => {
+    expect(voteScanOutcome(added({ addedApplicationId: "a1", added: false }))).toEqual({
+      label: "Honda S2000",
+      count: 2,
+      already: true,
+    });
+  });
+
+  it("l'écran du scan : deux voitures de suite, puis un doublon, chacune annoncée sous son nom", () => {
+    const first = added({ addedApplicationId: "a1", handCandidates: [candidate("a1", "Honda S2000")] });
+    const second = added({ addedApplicationId: "a2" });
+    const dup = added({ addedApplicationId: "a1", added: false });
+    expect([first, second, dup].map((r) => voteScanMessage(voteScanOutcome(r)))).toEqual([
+      "Honda S2000 · ajoutée · 1 au total",
+      "Alfa Romeo 147 · ajoutée · 2 au total",
+      "Honda S2000 · déjà candidate",
+    ]);
   });
 });

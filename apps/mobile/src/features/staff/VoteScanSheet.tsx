@@ -5,7 +5,7 @@
 // pas entrée : une voiture pas encore entrée est refusée (« Pas encore entrée : scanne-la à l'entrée d'abord »).
 // Dans le navigateur (recette), pas de caméra : un champ « charge utile » et `__orassoVoteScan(payload)`.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { voteOrgaLabels as L } from "@orasso/shared";
+import { voteOrgaLabels as L, voteScanMessage } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -18,7 +18,7 @@ import { plateText } from "@/ui/plateText";
 const { space2, space3 } = tokens.spacing;
 
 /** Ce que l'écran répond à un QR : la voiture ajoutée (et le total des candidats), ou le refus de l'API. */
-export type VoteScanOutcome = { label: string; count: number };
+export type VoteScanOutcome = { label: string; count: number; already: boolean };
 
 /** Le message d'un refus de l'API, avec les mots de la maquette pour « pas encore entrée » et les QR invalides. */
 export function voteScanRefusal(error: unknown): string {
@@ -61,7 +61,7 @@ export function VoteScanSheet({
     busy.current = true;
     try {
       const outcome = await handler.current(payload);
-      setLast({ ok: true, text: L.scanAdded(outcome.label, outcome.count) });
+      setLast({ ok: true, text: voteScanMessage(outcome) });
     } catch (err) {
       setLast({ ok: false, text: voteScanRefusal(err) });
     } finally {
