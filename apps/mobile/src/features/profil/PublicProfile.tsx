@@ -521,7 +521,7 @@ export function PublicProfile({
                   </View>
                 </>
               ) : null}
-              {p.seenAt && p.seenAt.stamps.length ? (
+              {p.seenAt?.stamps.length ? (
                 <>
                   <SecHead title={L.seenAt} hint={L.seenAtHint(p.seenAt.events)} />
                   <View style={styles.seen} testID="profile-seen">
