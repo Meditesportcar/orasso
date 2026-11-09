@@ -40,6 +40,8 @@ export const storyVideoLabels = {
   sending: "Envoi de la vidéo…",
   sendingPercent: (percent: number) => `Envoi de la vidéo · ${percent} %`,
   offline: "Impossible d'envoyer une vidéo sans réseau.",
+  doneText: (audience: string) => `${audience} la voit pendant 24 h. Publiée telle quelle, sans floutage.`,
+  readingVideo: "Lecture de la vidéo…",
   // API.
   apiTooLong: `Une story vidéo dure ${SECONDS} secondes au plus.`,
   apiCodec: "Cette vidéo n'est pas en H.264 : envoie-la depuis l'appli, elle la compresse.",

@@ -134,6 +134,9 @@ export type StoryView = {
   mediaUrl: string;
   posterUrl: string | null;
   durationMs: number | null;
+  /** Dimensions du fichier (lot R7g : une vidéo hors 9:16 se pose sur sa vignette floutée, à l'affichage). */
+  width: number;
+  height: number;
   status: StoryStatus;
   caption: string | null;
   placeLabel: string | null;

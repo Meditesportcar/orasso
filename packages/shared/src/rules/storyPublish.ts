@@ -161,7 +161,8 @@ export function storyPlateIssue(p: StoryPlateDraft): string | null {
 export function storyPublishIssue(draft: {
   hasPhoto: boolean;
   preparing?: boolean;
-  plate: StoryPlateDraft;
+  /** `null` : une vidéo, publiée telle quelle, sans décision de plaque (lot R7g). */
+  plate: StoryPlateDraft | null;
   caption: string;
   needsCrew?: boolean;
   /** Le public choisi n'existe plus (crew quitté ou supprimé, casquette changée) : rien ne part avant un nouveau choix. */
@@ -169,7 +170,7 @@ export function storyPublishIssue(draft: {
 }): string | null {
   if (draft.preparing) return L.preparing;
   if (!draft.hasPhoto) return L.missingPhoto;
-  const plate = storyPlateIssue(draft.plate);
+  const plate = draft.plate ? storyPlateIssue(draft.plate) : null;
   if (plate) return plate;
   if (draft.audienceLost) return L.audienceLost;
   if (draft.needsCrew) return L.missingCrew;
@@ -221,6 +222,27 @@ export function storyBody(draft: {
     ...(draft.eventId && draft.audience !== "crew" ? { eventId: draft.eventId } : {}),
     tags: draft.tags.map((t) => ({ kind: "user" as const, id: t.id })),
   };
+}
+
+/**
+ * Le corps de `POST /me/stories` d'une **vidéo** (lot R7g) : `uploadKey` est l'envoi `story_video`, `posterKey` la vignette.
+ * Ni cadre ni décision de plaque : la vidéo est publiée telle quelle.
+ */
+export function storyVideoBody(
+  draft: Omit<Parameters<typeof storyBody>[0], "frame" | "rects" | "noPlate"> & { posterKey: string },
+) {
+  const {
+    frame: _f,
+    plateRects: _p,
+    noPlateConfirmed: _n,
+    ...rest
+  } = storyBody({
+    ...draft,
+    frame: { scale: 1, offsetX: 0, offsetY: 0 },
+    rects: [],
+    noPlate: false,
+  });
+  return { ...rest, posterKey: draft.posterKey };
 }
 
 /**

@@ -4,8 +4,9 @@
 // (légende, @identification, événement, lieu, voiture, public) ; 5 l'aperçu 9:16 tel que les autres le verront, et « Publier
 // pour 24 h ». Envoi : `POST /me/uploads` (photo d'origine, 2048 px au plus) puis `POST /me/stories` ; ta story arrive en tête
 // de la barre (`markStoryPublished`). Les JPEG non floutés de l'appli sont effacés dès qu'ils ne servent plus (`tempPhotos`).
-// La vidéo vient avec le lot R7g (`VideoSlot`). Casquette active : l'écran publie au nom de la structure ou de la fiche.
-import { Icon, SendProgress, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot R7g : la vidéo (appareil 30 s ou galerie) saute « Ajuster » et la plaque (publiée telle quelle), se compresse sur le
+// téléphone, part avec sa progression réelle puis sa vignette. Casquette active : l'écran publie au nom de la structure ou de la fiche.
+import { Icon, SendProgress, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import {
   eventsWithPlace,
   storyPublishLabels as L,
@@ -16,9 +17,12 @@ import {
   storyAudienceOptions,
   storyBody,
   storyPublishIssue,
+  storyVideoBody,
+  storyVideoLabels as V,
 } from "@orasso/shared";
 import { useCameraPermissions } from "expo-camera";
 import { randomUUID } from "expo-crypto";
+import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, BackHandler, Platform, StyleSheet, View } from "react-native";
@@ -30,6 +34,7 @@ import type { Persona } from "@/lib/personaModel";
 import { fitStory, type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
+import { type PickedVideo, pickGalleryVideo, prepareStoryVideo, VideoRefused, type VideoStage } from "@/lib/storyVideo";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
@@ -49,6 +54,7 @@ import {
   type StoryStep,
   stepAfterMedia,
   stepBefore,
+  videoStepBefore,
 } from "./model";
 import { Pick } from "./Pick";
 import { Plate } from "./Plate";
@@ -87,6 +93,16 @@ async function uploadStoryPhoto(photo: PickedPhoto): Promise<string> {
   return (await api.upload(form)).key;
 }
 
+/** Un fichier local (vidéo ou vignette) dans un formulaire d'envoi : fichier du téléphone, ou objet en mémoire du navigateur. */
+async function fileField(form: FormData, uri: string, name: string, type: string) {
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(uri)).blob();
+    form.append("file", new File([blob], name, { type }));
+  } else {
+    form.append("file", { uri, name, type } as unknown as Blob);
+  }
+}
+
 function confirmLeave(): Promise<boolean> {
   if (Platform.OS === "web") return Promise.resolve(window.confirm(`${L.leaveTitle} ${L.leaveBody}`));
   return new Promise((resolve) =>
@@ -114,6 +130,13 @@ export function PublishStoryScreen() {
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<StoryCreated | null>(null);
+  // Lot R7g : la vidéo choisie ou filmée (jamais en même temps qu'une photo), la phase de préparation, la progression d'envoi.
+  const [video, setVideo] = useState<PickedVideo | null>(null);
+  const [stage, setStage] = useState<{ stage: VideoStage; ratio: number } | null>(null);
+  const [videoRatio, setVideoRatio] = useState<number | null>(null);
+  const videoKeys = useRef<{ video?: string; poster?: string }>({});
+  const network = useNetworkState();
+  const offline = network.isConnected === false;
   const [permission, requestPermission] = useCameraPermissions();
   // Photo déjà envoyée (adresse locale → clé) : un nouvel essai ne la renvoie pas. Un clic « Publier » = une seule story.
   const keys = useRef<Record<string, string>>({});
@@ -164,7 +187,11 @@ export function PublishStoryScreen() {
 
   const close = useCallback(() => (router.canGoBack() ? router.back() : router.replace("/fil")), [router]);
   const dirty =
-    draft !== null || details.caption.trim() !== "" || details.tags.length > 0 || details.place.trim() !== "";
+    draft !== null ||
+    video !== null ||
+    details.caption.trim() !== "" ||
+    details.tags.length > 0 ||
+    details.place.trim() !== "";
   const leave = useCallback(async () => {
     // Pendant l'envoi, la croix et le retour du téléphone sont inactifs : quitter ne doit pas laisser une story partir seule.
     if (busy) return;
@@ -183,19 +210,21 @@ export function PublishStoryScreen() {
   }, []);
 
   const goBack = useCallback(() => {
-    const before = stepBefore(step, draft?.plate.photo ?? null);
+    const before = video ? videoStepBefore(step) : stepBefore(step, draft?.plate.photo ?? null);
     if (!before) return false;
     if (before === "media") {
-      // Retour au choix de la photo : l'ancienne photo (non floutée) est effacée.
+      // Retour au choix du média : l'ancienne photo (non floutée) ou vidéo est effacée.
       generation.current++;
       discardTempPhotos();
       setDraft(null);
+      setVideo(null);
       keys.current = {};
+      videoKeys.current = {};
     }
     setError(null);
     setStep(before);
     return true;
-  }, [step, draft]);
+  }, [step, draft, video]);
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -265,6 +294,43 @@ export function PublishStoryScreen() {
     }
   }
 
+  /** Une vidéo choisie (galerie) ou filmée : compressée si besoin, vérifiée, vignette prise ; saute « Ajuster » et la plaque. */
+  async function takeVideo(source: (alive: () => boolean) => Promise<PickedVideo | null>, raw?: string) {
+    if (working || busy || !mounted.current) {
+      if (raw) discardTempPhotos([raw]);
+      return;
+    }
+    setError(null);
+    setWorking(true);
+    const gen = ++generation.current;
+    const alive = aliveFor(gen);
+    if (raw) rememberTempPhotos(raw);
+    try {
+      const got = await source(alive);
+      if (!got) return;
+      if (!alive()) return discardTempPhotos([got.uri, got.posterUri]);
+      // La vidéo remplace la précédente (ou une photo en cours) : tout ce qui n'a plus d'usage est effacé.
+      if (video) discardTempPhotos([video.uri, video.posterUri]);
+      if (draft) discardTempPhotos([draft.plate.photo.uri, draft.upload.uri, draft.display.uri]);
+      keys.current = {};
+      videoKeys.current = {};
+      // L'aperçu et les détails dessinent la vignette : un brouillon de photo d'après elle, sans plaque ni cadre à régler.
+      const poster = { uri: got.posterUri, width: got.width, height: got.height };
+      setDraft(newStoryDraft(randomUUID(), poster, poster, poster));
+      setVideo(got);
+      setStep("details");
+    } catch (e) {
+      if (alive()) setError(e instanceof VideoRefused ? e.message : V.unreadable);
+    } finally {
+      if (raw) discardTempPhotos([raw]);
+      setStage(null);
+      setWorking(false);
+    }
+  }
+  const onStage = (s: VideoStage, ratio = 0) => setStage({ stage: s, ratio });
+  const videoFromGallery = () => takeVideo((alive) => pickGalleryVideo(onStage, alive));
+  const videoFromCamera = (uri: string) => takeVideo((alive) => prepareStoryVideo(uri, {}, onStage, alive), uri);
+
   const fromGallery = () =>
     take(async () => {
       const [picked] = await pickPhotos(1, undefined, 4096);
@@ -283,17 +349,87 @@ export function PublishStoryScreen() {
   };
 
   const issue = draft
-    ? storyPublishIssue({
+    ? (video && offline ? V.offline : null) ||
+      storyPublishIssue({
         hasPhoto: true,
         preparing: working,
-        plate: plateOf(draft),
+        plate: video ? null : plateOf(draft),
         caption: details.caption,
         needsCrew: chosen?.audience === "crew" && !chosen.crewId,
         audienceLost: lost,
       })
     : L.missingPhoto;
 
+  /** Vidéo : envoi (progression réelle), vignette, création. Rien n'est gardé hors ligne : on le dit, on ne met rien en file. */
+  async function publishVideo(clip: PickedVideo) {
+    if (!draft || busy || issue) return;
+    const alive = aliveFor(generation.current);
+    setBusy(true);
+    setError(null);
+    setVideoRatio(0);
+    try {
+      const body = (uploadKey: string, posterKey: string) =>
+        storyVideoBody({
+          uploadKey,
+          posterKey,
+          audience: chosen?.audience ?? "followers",
+          crewId: chosen?.crewId ?? null,
+          author,
+          caption: details.caption,
+          place: details.place,
+          vehicleId: details.vehicleId,
+          eventId: details.eventId,
+          tags: details.tags,
+        });
+      const result = await sendIfAlive(
+        alive,
+        async () => {
+          if (!videoKeys.current.video) {
+            const form = new FormData();
+            form.append("purpose", "story_video");
+            await fileField(form, clip.uri, "story.mp4", "video/mp4");
+            videoKeys.current.video = (await api.uploadStoryVideo(form, (r) => alive() && setVideoRatio(r * 0.97))).key;
+          }
+          if (!videoKeys.current.poster) {
+            const form = new FormData();
+            form.append("purpose", "story_poster");
+            await fileField(form, clip.posterUri, "poster.jpg", "image/jpeg");
+            videoKeys.current.poster = (await api.uploadStoryPoster(form)).key;
+          }
+          setVideoRatio(0.99);
+        },
+        async () => {
+          const send = () => api.createStory(body(videoKeys.current.video ?? "", videoKeys.current.poster ?? ""));
+          try {
+            return await send();
+          } catch (e) {
+            if (e instanceof ApiRequestError && e.status === 400 && e.code === "validation_error") return send();
+            throw e;
+          }
+        },
+      );
+      if (!result.sent) return;
+      videoKeys.current = {};
+      markStoryPublished(result.value);
+      discardTempPhotos();
+      setCreated(result.value);
+      setStep("done");
+    } catch (e) {
+      if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
+      else if (e instanceof ApiRequestError && e.isNetwork) setError(V.offline);
+      else {
+        // Un envoi refusé (format, durée, fichier inconnu) : au nouvel essai, tout repart.
+        if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) videoKeys.current = {};
+        setError(errorMessage(e));
+      }
+    } finally {
+      setBusy(false);
+      setVideoRatio(null);
+    }
+  }
+
   async function publish() {
+    if (video) return publishVideo(video);
     if (!draft || busy || issue) return;
     // L'écran peut être fermé malgré tout (appli tuée, route quittée) : rien ne part après son démontage.
     const alive = aliveFor(generation.current);
@@ -365,12 +501,16 @@ export function PublishStoryScreen() {
   // --- Étapes plein écran : l'appareil et « Ajuster » ----------------------------------------------------------------
   if (step === "media" && access === "granted") {
     return (
-      <Capture
-        busy={working}
-        onShot={(shot) => void fromCamera(shot)}
-        onGallery={() => void fromGallery()}
-        onClose={() => void leave()}
-      />
+      <View style={styles.root}>
+        <Capture
+          busy={working}
+          onShot={(shot) => void fromCamera(shot)}
+          onVideo={(uri) => void videoFromCamera(uri)}
+          onGallery={(mode) => void (mode === "video" ? videoFromGallery() : fromGallery())}
+          onClose={() => void leave()}
+        />
+        {stage ? <VideoStageOverlay stage={stage} /> : null}
+      </View>
     );
   }
   if (step === "fit" && draft) {
@@ -403,7 +543,7 @@ export function PublishStoryScreen() {
             {L.done}
           </Text>
           <Text variant="body" color={c.inkMuted}>
-            {L.doneText(who)}
+            {video ? V.doneText(who) : L.doneText(who)}
           </Text>
           {created.replayed ? (
             <Muted variant="caption">{L.doneReplayed}</Muted>
@@ -451,7 +591,14 @@ export function PublishStoryScreen() {
       footer={
         primary ? (
           <View style={styles.footer}>
-            {busy && sent !== null ? (
+            {busy && videoRatio !== null ? (
+              <View style={styles.progress}>
+                <SendProgress size={44} ring={false} progress={videoRatio} />
+                <Muted variant="caption" testID="story-progress">
+                  {videoRatio < 0.97 ? V.sendingPercent(Math.round((videoRatio / 0.97) * 100)) : L.publishing}
+                </Muted>
+              </View>
+            ) : busy && sent !== null ? (
               <View style={styles.progress}>
                 <SendProgress size={44} ring={false} progress={sent / 2} />
                 <Muted variant="caption" testID="story-progress">
@@ -499,6 +646,14 @@ export function PublishStoryScreen() {
           error={error}
           onGallery={() => void fromGallery()}
           onCamera={() => void requestPermission()}
+          onVideo={() => void videoFromGallery()}
+          status={
+            stage
+              ? stage.stage === "compressing"
+                ? `${V.compressing} ${Math.round(stage.ratio * 100)} %`
+                : V.readingVideo
+              : null
+          }
         />
       ) : null}
       {draft && onPlateStep ? (
@@ -517,14 +672,30 @@ export function PublishStoryScreen() {
           locked={busy}
         />
       ) : null}
-      {draft && step === "preview" ? <Preview draft={draft} overlays={overlays} /> : null}
+      {draft && video && step === "details" ? <Muted variant="caption">{V.asIsLine}</Muted> : null}
+      {draft && step === "preview" ? <Preview draft={draft} overlays={overlays} video={video} /> : null}
       {step !== "media" && error ? <Notice tone="error">{error}</Notice> : null}
       {draft ? null : step !== "media" ? <Muted variant="caption">{L.missingPhoto}</Muted> : null}
     </FlowScreen>
   );
 }
 
+/** Pendant la lecture ou la compression d'une vidéo sur l'appareil photo : un voile qui dit où on en est. */
+function VideoStageOverlay({ stage }: { stage: { stage: VideoStage; ratio: number } }) {
+  const { t } = useTheme();
+  return (
+    <View style={[styles.veil, { backgroundColor: withAlpha(t.color.night, 0.8) }]} testID="story-video-stage">
+      <SendProgress size={64} ring={false} progress={stage.stage === "compressing" ? stage.ratio : 0} />
+      <Text variant="bodyStrong" color={t.color.nightInk}>
+        {stage.stage === "compressing" ? `${V.compressing} ${Math.round(stage.ratio * 100)} %` : V.readingVideo}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  veil: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", gap: space3 },
   footer: { gap: space2 },
   progress: { flexDirection: "row", alignItems: "center", gap: space2 },
   done: { gap: space2, padding: space3, borderRadius: tokens.radius.radiusLg, alignItems: "flex-start" },

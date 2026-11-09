@@ -63,3 +63,16 @@ export function videoProgress(currentSeconds: number, durationSeconds: number): 
 export function storyVideoNeedsCompression(v: { sizeBytes: number | null; h264: boolean | null }): boolean {
   return v.h264 !== true || v.sizeBytes === null || v.sizeBytes > STORY_VIDEO_MAX_BYTES / 2;
 }
+
+/**
+ * Ce qui sort d'Orasso quand on partage une story (préparation de R7f4) : une photo est rendue par le serveur (9:16, plaques
+ * floutées, signature) ; une vidéo sort **telle qu'elle a été publiée** (ni signature ni floutage) ; une story de crew ne sort
+ * jamais.
+ */
+export function storyExportKind(s: {
+  mediaKind: "photo" | "video";
+  audience: "followers" | "crew" | "public";
+}): "render" | "as_published" | "refused" {
+  if (s.audience === "crew") return "refused";
+  return s.mediaKind === "video" ? "as_published" : "render";
+}
