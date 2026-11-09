@@ -1136,7 +1136,7 @@ function PeopleList({
       {nothing ? <PeopleEmpty>{R.noSuggestions}</PeopleEmpty> : null}
       {privacy}
       <p>
-        <Button variant="secondary" icon="add" href="/app/crews" data-testid="crew-new">
+        <Button variant="secondary" icon="add" href="/app/crews/nouveau" data-testid="crew-new">
           {R.createCrew}
         </Button>
       </p>

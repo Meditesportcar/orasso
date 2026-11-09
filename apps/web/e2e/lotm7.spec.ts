@@ -66,7 +66,7 @@ function fiches(id: Ids): [string, string][] {
     ["sanctions", "/app/sanctions"],
     ["billets", "/app/billets"],
     ["reseau", "/app/reseau"], // Lot R6b : « Mes amis » est devenu « Ton réseau »
-    ["crews", "/app/crews"],
+    ["crews", "/app/crews/nouveau"],
     ["creer-structure", "/app/structure/nouvelle"],
     ["creer-fiche-pro", "/app/pro/nouvelle"],
     ["profil-prestataire", "/app/prestataire"],

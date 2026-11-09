@@ -74,7 +74,8 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await expect(k.getByTestId("crew-tabs")).toBeVisible();
     await expect(k.getByTestId("crew-feed")).toBeVisible();
     await expect(k.getByTestId("crew-instagram")).toContainText("roussillondrift");
-    await expect(k.getByText("Tu es le chef")).toBeVisible();
+    // Lot R7b2 : l'en-tête dit aussi « N membres · tu es le chef » ; on vise l'étiquette exacte.
+    await expect(k.getByText("Tu es le chef", { exact: true })).toBeVisible();
     await shot(k, `01-chef-fil-${theme}`);
     await k.getByTestId("crew-tab-outings").click();
     await expect(k.getByTestId("crew-propose-outing")).toBeVisible();
@@ -90,15 +91,20 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     await expect(k.getByTestId("outing-when")).toBeVisible();
     await shot(k, `02-proposer-sortie-${theme}`);
     await k.getByTestId("outing-send").click();
-    await k.waitForURL(new RegExp(`/crew/${crew.slug}`), { timeout: 30_000 });
+    // Lot R7b2 : la page du crew d'un membre est l'onglet Crew (`/crew?crew=<adresse>`).
+    await k.waitForURL(/\/crew(\/|\?)/, { timeout: 30_000 });
     const card = k.getByTestId("crew-outing").filter({ hasText: "Balade des Aspres" });
     await expect(card).toBeVisible({ timeout: 30_000 });
     await card.getByTestId("outing-rsvp-yes").click();
     await expect(card.getByTestId("outing-count")).toHaveText("1 vient", { timeout: 20_000 });
     await shot(k, `03-chef-sorties-${theme}`);
-    await k.getByTestId("crew-tab-garage").click();
-    await expect(k.getByTestId("crew-garage-vehicle")).toHaveCount(2);
-    await shot(k, `04-chef-garage-${theme}`);
+    // Lot R7b2 : plus d'onglet Garage ; les voitures sont dans la fiche de chaque membre (Membres).
+    await expect(k.getByTestId("crew-tab-garage")).toHaveCount(0);
+    await k.getByTestId("crew-tab-members").click();
+    await k.getByTestId("crew-member").filter({ hasText: crew.chef.pseudo }).click();
+    await expect(k.getByTestId("crew-garage-vehicle")).toHaveCount(1);
+    await shot(k, `04-chef-voitures-membre-${theme}`);
+    await openCrew(k, crew.slug);
     await k.getByTestId("crew-tab-members").click();
     const request = k.getByTestId("crew-pending-request");
     await expect(request).toContainText(crew.nina.pseudo);
@@ -196,8 +202,10 @@ test("appli : page du crew, sorties, réglages, vitrine et demande avec message"
     );
     const k3 = await appLogin(browser, crew.chef, theme);
     await openCrew(k3, crew.slug);
-    await k3.getByTestId("crew-tab-garage").click();
-    await expect(k3.getByTestId("crew-garage-vehicle")).toHaveCount(2);
+    // Lot R7b2 : les voitures d'un membre (compte privé, non ami) sont dans sa fiche de membre.
+    await k3.getByTestId("crew-tab-members").click();
+    await k3.getByTestId("crew-member").filter({ hasText: crew.lea.pseudo }).click();
+    await expect(k3.getByTestId("crew-garage-vehicle")).toHaveCount(1);
     await shot(k3, `14-garage-prive-non-ami-${theme}`);
     await k3.context().close();
   }
