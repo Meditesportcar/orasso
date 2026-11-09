@@ -10,13 +10,20 @@ import { ApiRequestError, mutationCount } from "./http";
 import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "./kv";
 import { createRequestGate } from "./requestGate";
 
-type Options = {
+type Options<T> = {
   /** Mémorise la réponse dans le trousseau (profil, candidatures) : visible hors ligne. */
   cacheKey?: string;
   /** Ne charge pas tant que c'est faux (donnée qui dépend d'un identifiant pas encore connu). */
   enabled?: boolean;
   /** Recharge à intervalle régulier tant que l'écran est affiché (ms). */
   refreshMs?: number;
+  /**
+   * Lot R7i, tour 4 : reçoit la réponse brute, seulement si elle passe les mêmes contrôles que `data` (écran vivant, même
+   * compte, dernière lecture). Pour ce qui ne doit pas entrer dans la valeur gardée (lieu d'un rendez-vous, sponsorisé).
+   */
+  onFresh?: (fresh: T) => void;
+  /** Ce qui est gardé (état et cache) à partir de la réponse brute ; par défaut, la réponse telle quelle. */
+  keep?: (fresh: T) => T;
 };
 
 export type ApiState<T> = {
@@ -37,8 +44,17 @@ export function shouldReloadOnFocus(inFlight: number | null, mutations: number):
   return inFlight === null || inFlight !== mutations;
 }
 
-export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], options: Options = {}): ApiState<T> {
+/** Une réponse n'est appliquée que si l'écran est vivant, que le compte n'a pas changé et qu'aucune lecture plus récente n'est partie. */
+export function acceptRead(alive: boolean, accountSame: boolean, latest: boolean): boolean {
+  return alive && accountSame && latest;
+}
+
+export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], options: Options<T> = {}): ApiState<T> {
   const { cacheKey, enabled = true, refreshMs } = options;
+  const onFreshRef = useRef(options.onFresh);
+  onFreshRef.current = options.onFresh;
+  const keepRef = useRef(options.keep);
+  keepRef.current = options.keep;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiRequestError | null>(null);
   const [loading, setLoading] = useState(enabled);
@@ -93,12 +109,14 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     try {
       const fresh = await fetcherRef.current();
       if (!alive.current) return fresh;
-      if (!guard.current() || !ticket.latest()) return null;
-      setData(fresh);
+      if (!acceptRead(alive.current, guard.current(), ticket.latest())) return null;
+      const kept = keepRef.current ? keepRef.current(fresh) : fresh;
+      onFreshRef.current?.(fresh);
+      setData(kept);
       setError(null);
       setOffline(false);
-      if (cacheKey) void cacheSetJson(cacheKey, fresh, guard.scope);
-      return fresh;
+      if (cacheKey) void cacheSetJson(cacheKey, kept, guard.scope);
+      return kept;
     } catch (e) {
       if (!alive.current || !guard.current() || !ticket.latest()) return null;
       const err = e instanceof ApiRequestError ? e : new ApiRequestError(0, "network", "Pas de connexion");

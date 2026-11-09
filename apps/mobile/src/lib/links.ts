@@ -37,6 +37,8 @@ const NETWORK_LINK = "/app/reseau";
 /**
  * Lot R5c2 : la page d'un crew (`/c/<adresse>` du site, `?onglet=sorties` pour une sortie du crew) → `/crew/<adresse>`.
  */
+/** Lot R7i : un rendez-vous au spot (`/app/spot/<id>` du site, notification `spot_meetup_new` et `spot_meetup_reply`) → `/spot/<id>`. */
+const SPOT_LINK = /^\/app\/spot\/([0-9a-f-]{36})$/;
 const CREW_LINK = /^\/c\/([a-z0-9-]{1,80})(\?onglet=sorties)?$/;
 
 export function appLinkOf(value: unknown): string | null {
@@ -46,6 +48,8 @@ export function appLinkOf(value: unknown): string | null {
   if (recap) return `/recap/${recap[1]}`;
   if (value === PASSPORT_LINK) return "/mon-passeport";
   if (value === NETWORK_LINK) return "/reseau";
+  const spot = SPOT_LINK.exec(value);
+  if (spot) return `/spot/${spot[1]}`;
   const crew = CREW_LINK.exec(value);
   if (crew) return `/crew/${crew[1]}${crew[2] ?? ""}`;
   const review = REVIEW_LINK.exec(value);

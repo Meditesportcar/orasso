@@ -352,7 +352,7 @@ export function SponsoredCard({ sponsored }: { sponsored: HomeSponsored }) {
           variant="plate"
           icon="next"
           onPress={() => {
-            void api.sponsoredClick(sponsored.id).catch(() => undefined);
+            void api.sponsoredClick(sponsored.id, "home").catch(() => undefined);
             openWeb(sponsored.linkUrl);
           }}
           testID="sponsored-open"

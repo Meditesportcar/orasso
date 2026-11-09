@@ -59,6 +59,7 @@ import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { readSessionOrNull } from "./modules/security/session-life";
 import { socialRoutes } from "./modules/social/routes";
+import { spotMeetupsRoutes } from "./modules/spot-meetups/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { storiesRoutes } from "./modules/stories/routes";
 import { structuresRoutes } from "./modules/structures/routes";
@@ -250,6 +251,8 @@ app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);
 // Lot R7l1 : votes à thème (le prix du public devient « Toutes catégories »).
 app.route("/", votesRoutes);
+// Lot R7i : rendez-vous au spot (lancer, recevoir, répondre ; le lieu n est servi qu aux invités).
+app.route("/", spotMeetupsRoutes);
 app.route("/", presenceRoutes);
 // Lot R7m1 : partenariats pro ↔ passionné.
 app.route("/", partnershipsRoutes);
