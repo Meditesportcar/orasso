@@ -133,5 +133,12 @@ const styles = StyleSheet.create({
   text: { fontSize: 14, lineHeight: 20 },
   photo: { aspectRatio: 4 / 5, borderRadius: tokens.radius.radiusMd + 2, overflow: "hidden" },
   img: { width: "100%", height: "100%" },
-  block: { padding: space3, borderRadius: tokens.radius.radiusMd + 2, gap: space2 },
+  // La maquette (`.r7adb`) : un bloc de 150 px, le titre en bas.
+  block: {
+    minHeight: 150,
+    justifyContent: "flex-end",
+    padding: space3,
+    borderRadius: tokens.radius.radiusMd + 2,
+    gap: space2,
+  },
 });
