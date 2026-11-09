@@ -94,6 +94,20 @@ test("éditeur : étape Votes (neuf étapes), Toutes catégories retiré puis re
     expect(refused.data.error.code).toBe("event_not_published");
     await expect(page.getByTestId("votes-screen")).toHaveCount(0);
     await page.screenshot({ path: "test-results/r7l2-site-etape-votes.png", fullPage: true });
+
+    // Tour 2 : le même brouillon, vu depuis l'écran « Votes », n'est pas « Clos » : prévu, modifiable, candidats ouverts,
+    // « Lancer » inactif et expliqué (événement pas publié).
+    await page.goto(`${edit.replace("/modifier", "")}/votes`);
+    await expect(page.getByTestId("votes-screen")).toBeVisible();
+    const status = page.getByTestId(`vote-status-${hand?.id}`);
+    await expect(status).toContainText(/Prévu|À lancer|Prêt à lancer/);
+    await expect(status).not.toContainText("Clos");
+    await expect(page.getByTestId(`vote-edit-${hand?.id}`)).toBeVisible();
+    await expect(page.getByTestId(`vote-launch-${hand?.id}`)).toBeDisabled();
+    await expect(page.getByTestId(`vote-card-${hand?.id}`)).toContainText("publication");
+    await page.getByTestId(`vote-open-${hand?.id}`).click();
+    await expect(page.getByTestId("vote-search")).toBeVisible();
+    await page.screenshot({ path: "test-results/r7l2-site-brouillon-votes.png", fullPage: true });
   } finally {
     await dropDraft(draft.id);
   }

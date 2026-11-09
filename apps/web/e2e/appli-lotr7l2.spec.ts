@@ -128,6 +128,19 @@ test("éditeur : étape Votes, Toutes catégories retiré puis remis, vote à la
     );
     expect(refused.status).toBe(409);
     expect(refused.data.error.code).toBe("event_not_published");
+
+    // Tour 2 : le même brouillon, vu depuis l'écran « Votes », n'est pas « Clos » : prévu, candidats ouverts, « Lancer »
+    // inactif et expliqué (événement pas publié).
+    await go(page, `/evenement/${draft.id}/votes`, "votes-screen");
+    const status = page.getByTestId(`vote-status-${hand?.id}`);
+    await expect(status).toContainText(/Prévu|À lancer|Prêt à lancer/);
+    await expect(status).not.toContainText("Clos");
+    await expect(page.getByTestId(`vote-launch-${hand?.id}`)).toBeDisabled();
+    await expect(page.getByTestId(`vote-card-${hand?.id}`)).toContainText("publication");
+    await shot(page, "brouillon-votes");
+    await page.getByTestId(`vote-open-${hand?.id}`).click();
+    await expect(page.getByTestId("vote-search")).toBeVisible({ timeout: 30_000 });
+    await shot(page, "brouillon-candidats");
   } finally {
     await ctx.close();
     await dropDraft(draft.id);
@@ -198,6 +211,18 @@ test("Votes : Lancer inactif et expliqué, candidats par recherche et par QR, La
       const sources = (await manage(ev.id)).items.find((v) => v.id === voteId)?.handCandidates ?? [];
       expect(sources.find((c) => c.applicationId === scan.item.applicationId)?.source).toBe("scan");
       expect(sources.find((c) => c.applicationId === first.applicationId)?.source).toBe("hand");
+      // Tour 2 : un deuxième scan annonce SA voiture (pas la première scannée), un doublon dit « déjà candidate ».
+      const second = scannable[1];
+      if (second?.item.vehicleLabel) {
+        await page.getByTestId("vote-scan-payload").fill(second.payload);
+        await page.getByTestId("vote-scan-payload").press("Enter");
+        await expect(page.getByTestId("vote-scan-ok")).toContainText(second.item.vehicleLabel);
+        await expect(page.getByTestId("vote-scan-ok")).toContainText("ajoutée");
+      }
+      await page.getByTestId("vote-scan-payload").fill(scan.payload);
+      await page.getByTestId("vote-scan-payload").press("Enter");
+      await expect(page.getByTestId("vote-scan-ok")).toContainText("déjà candidate");
+      await shot(page, "vote-scan-doublon");
     }
     await page.getByTestId("vote-scan-done").click();
 
