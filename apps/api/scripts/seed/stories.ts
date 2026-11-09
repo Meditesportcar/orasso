@@ -2,7 +2,8 @@
 // partir des photos du seed relues « aucune plaque lisible » (`NO_PLATE_REVIEWED`) : jamais une plaque lisible.
 // Quatre auteurs : Kenji_66 (une « Mon abonnés » qui identifie Damien_66, une « Mon crew » de Roussillon Drift), Léa_11
 // (publique), Marc_66 (compte privé), Théo_66, et Roues Libres 66 (casquette organisateur de Sarah_66, avec
-// l'autocollant du Rassemblement du Lydia). Elles finissent dans 20 h. Idempotent : rien si des stories existent déjà.
+// l'autocollant du Rassemblement du Lydia) ; lot R7h : une story publique de Kenji_66 avec ce même autocollant, qui
+// identifie Roues Libres 66. Elles finissent dans 20 h. Idempotent : rien si des stories existent déjà.
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -80,6 +81,11 @@ export async function seedStories() {
             },
           },
         ]
+      : []),
+    // Lot R7h : Kenji colle l'événement du Lydia sur une story publique, ce qui identifie Roues Libres 66 (l'organisateur
+    // la retrouve dans « Mentions » et peut l'ajouter à sa story). Ajoutée en dernier pour ne pas décaler les photos.
+    ...(event
+      ? [{ who: kenji, over: { audience: "public", eventId: event.id, caption: "Le Lydia, c'est parti !" } }]
       : []),
   ];
   let i = 0;

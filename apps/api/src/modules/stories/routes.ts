@@ -5,6 +5,7 @@ import {
   storyCreateSchema,
   storyReplySchema,
   storyReportSchema,
+  storyShareSchema,
   storyTagRemoveSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
@@ -15,6 +16,7 @@ import { body, parse, uuidParam } from "../../lib/validate";
 import { storiesAccess } from "./access";
 import { storiesBar } from "./bar";
 import { storiesService } from "./service";
+import { storiesShare } from "./share";
 
 const fileHeaders = (type: string) => ({
   "content-type": type,
@@ -74,6 +76,18 @@ export const storiesRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const input = await body(c, storyReplySchema);
     return c.json(await storiesService.reply(v, uuidParam(c, "id"), input), 201);
+  })
+  .post("/stories/:id/share-to-mine", async (c) => {
+    const v = await requireUser(c);
+    // Le corps est facultatif : sans corps, la story est reprise en mon nom (un identifié qui repartage).
+    const raw = await c.req.text();
+    let json: unknown = {};
+    try {
+      json = raw.trim() ? JSON.parse(raw) : {};
+    } catch {
+      throw validation("JSON attendu");
+    }
+    return c.json(await storiesShare.shareToMine(v, uuidParam(c, "id"), parse(storyShareSchema, json)), 201);
   })
   .post("/stories/:id/report", async (c) => {
     const v = await requireUser(c);

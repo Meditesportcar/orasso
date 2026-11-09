@@ -144,7 +144,31 @@ export type ViewerSets = {
   structures: Set<string>;
   pros: Set<string>;
   crews: Map<string, string>;
+  /** Les stories (parmi celles lues) où je suis identifié : moi, une structure ou un pro que je gère (lot R7h). */
+  tagged?: Set<string>;
 };
+
+/**
+ * Parmi ces stories, celles où le regard est identifié et où l'identification n'est pas retirée : lui-même, une structure
+ * dont il est propriétaire ou co-organisateur actif, une fiche pro qui est à lui (lot R7h). Une seule requête.
+ */
+export async function taggedStoryIds(
+  userId: string,
+  storyIds: readonly string[],
+  ex: Executor = db,
+): Promise<Set<string>> {
+  if (!storyIds.length) return new Set();
+  const res = await ex.execute<{ story_id: string }>(sql`
+    select distinct t.story_id from story_tags t
+    where t.story_id = any(${sql.param([...storyIds])}::uuid[]) and t.removed_at is null and (
+      (t.target_kind = 'user' and t.target_id = ${userId})
+      or (t.target_kind = 'structure' and t.target_id in (
+        select m.structure_id::text from structure_members m join structures s on s.id = m.structure_id
+        where m.user_id = ${userId} and m.status = 'active' and m.role in ('owner', 'co_organizer') and s.deleted_at is null))
+      or (t.target_kind = 'pro' and t.target_id in (
+        select p.id::text from pro_profiles p where p.owner_user_id = ${userId} and p.deleted_at is null)))`);
+  return new Set((res as unknown as { rows: { story_id: string }[] }).rows.map((r) => r.story_id));
+}
 
 /** Tous les liens du regard (barre : il faut découvrir les auteurs). */
 export async function loadViewerSets(userId: string, ex: Executor = db): Promise<ViewerSets> {
@@ -179,7 +203,7 @@ export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Exe
   const structureIds = [...new Set(rows.flatMap((r) => (r.story.structureId ? [r.story.structureId] : [])))];
   const proIds = [...new Set(rows.flatMap((r) => (r.story.proId ? [r.story.proId] : [])))];
   const crewIds = [...new Set(rows.flatMap((r) => (r.story.crewId ? [r.story.crewId] : [])))];
-  const [u, s, p, c] = await Promise.all([
+  const [u, s, p, c, tagged] = await Promise.all([
     users.length
       ? ex
           .select({ id: userFollows.followedId })
@@ -218,12 +242,18 @@ export async function setsFor(userId: string, rows: readonly StoryRow[], ex: Exe
             ),
           )
       : [],
+    taggedStoryIds(
+      userId,
+      rows.map((r) => r.story.id),
+      ex,
+    ),
   ]);
   return {
     users: new Set(u.map((r) => r.id)),
     structures: new Set(s.map((r) => r.id)),
     pros: new Set(p.map((r) => r.id)),
     crews: new Map(c.map((r) => [r.id, r.name])),
+    tagged,
   };
 }
 
@@ -236,7 +266,11 @@ export function relationOf(sets: ViewerSets, row: StoryRow): AudienceRelation {
       : story.persona === "pro" && story.proId
         ? sets.pros.has(story.proId)
         : sets.users.has(story.authorId);
-  return { followAccepted, crewMemberActive: (crewId) => sets.crews.has(crewId) };
+  return {
+    followAccepted,
+    crewMemberActive: (crewId) => sets.crews.has(crewId),
+    tagged: sets.tagged?.has(story.id) ?? false,
+  };
 }
 
 /** Vivante à `at` (prête, non supprimée, non expirée) : même règle que la requête, pour une ligne déjà lue. */

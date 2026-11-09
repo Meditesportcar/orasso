@@ -39,6 +39,12 @@ export type AudienceRelation = {
   followAccepted: boolean;
   /** Le regard est membre actif de ce crew (un ancien membre ne l'est plus). */
   crewMemberActive: (crewId: string) => boolean;
+  /**
+   * Le regard est **identifié** dans cette story (lui-même, ou une structure / un pro qu'il gère), identification non
+   * retirée (lot R7h). Il peut la voir, même sans suivre l'auteur : sinon l'organisateur identifié ne verrait pas ce
+   * qu'on lui demande de reprendre. Jamais pour une story de crew (elle ne sort pas du crew).
+   */
+  tagged?: boolean;
 };
 
 export type StoryDenial = "no_session" | "unavailable" | "crew_only" | "followers_only";
@@ -52,6 +58,8 @@ export function storyDenial(viewer: AudienceViewer, story: AudienceStory, rel: A
   if (!viewer.active) return "unavailable";
   if (viewer.id === story.authorId) return null;
   if (!story.authorActive) return "unavailable";
+  // Lot R7h : le regard « identifié » voit une story d'abonnés ou publique, jamais celle d'un crew.
+  if (rel.tagged && story.audience !== "crew") return null;
   switch (story.audience) {
     // Tour 2 : une story « publique » d'un compte privé se lit comme « abonnés », quel que soit le moment où le compte
     // est passé en privé (ou la casquette `provider` / `media` qui l'a publiée). Une structure et un pro (casquettes
@@ -70,6 +78,21 @@ export function storyDenial(viewer: AudienceViewer, story: AudienceStory, rel: A
 /** Le regard peut-il voir cette story ? (Mineurs : aucune règle écrite dans les docs, rien n'est codé.) */
 export function canSeeStory(viewer: AudienceViewer, story: AudienceStory, rel: AudienceRelation): boolean {
   return storyDenial(viewer, story, rel) === null;
+}
+
+export type ShareRefusal = "crew_story" | "not_visible" | "private_author";
+
+/**
+ * Une story peut-elle être reprise dans « ma story » (lot R7h) ? `null` = oui. Une copie garde le public et les droits de
+ * l'originale, sans jamais les élargir : refusée pour un crew (elle ne sort pas du crew), pour une story que le regard ne
+ * voit pas, et pour une story d'un compte **privé** (la copie, visible de mes abonnés ou de tous, ouvrirait la story à des
+ * gens que l'auteur n'a pas choisis).
+ */
+export function shareRefusal(viewer: AudienceViewer, story: AudienceStory, rel: AudienceRelation): ShareRefusal | null {
+  if (story.audience === "crew") return "crew_story";
+  if (storyDenial(viewer, story, rel) !== null) return "not_visible";
+  if (story.authorVisibility === "private") return "private_author";
+  return null;
 }
 
 /** Une story vit 24 h. */

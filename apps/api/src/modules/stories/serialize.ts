@@ -22,6 +22,7 @@ import { canSeeEvent } from "../invitations/access";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 import { accountActive, type StoryRow } from "./common";
+import { sharingOf } from "./sharing";
 
 export const fileNameOf = (key: string) => key.slice(key.lastIndexOf("/") + 1);
 
@@ -96,7 +97,7 @@ async function tagsOf(ids: string[]): Promise<Map<string, StoryTagView[]>> {
 export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Promise<StoryView[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.story.id);
-  const [seen, liked, tags] = await Promise.all([
+  const [seen, liked, tags, sharing] = await Promise.all([
     db
       .select({ id: storyViews.storyId })
       .from(storyViews)
@@ -106,6 +107,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       .from(storyReactions)
       .where(and(eq(storyReactions.userId, v.user.id), inArray(storyReactions.storyId, ids))),
     tagsOf(ids),
+    sharingOf(v, rows, now()),
   ]);
   const seenIds = new Set(seen.map((r) => r.id));
   const likedIds = new Set(liked.map((r) => r.id));
@@ -190,6 +192,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
       sharedFrom: s.sharedFromStoryId ? { authorPseudo: creditBy.get(s.sharedFromStoryId) ?? "" } : null,
+      sharing: sharing.get(s.id) ?? null,
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),
       viewsCount: mine ? s.viewsCount : null,

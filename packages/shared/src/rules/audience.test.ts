@@ -9,6 +9,7 @@ import {
   isStoryLive,
   isStoryPublishable,
   STORY_TTL_MS,
+  shareRefusal,
   storyBarOrder,
   storyDenial,
   storyExpiresAt,
@@ -23,9 +24,10 @@ const base: AudienceStory = {
   authorVisibility: "public",
   authorActive: true,
 };
-const rel = (over: Partial<{ followAccepted: boolean; crews: string[] }> = {}): AudienceRelation => ({
+const rel = (over: Partial<{ followAccepted: boolean; crews: string[]; tagged: boolean }> = {}): AudienceRelation => ({
   followAccepted: over.followAccepted ?? false,
   crewMemberActive: (id) => (over.crews ?? []).includes(id),
+  tagged: over.tagged,
 });
 
 describe("canSeeStory", () => {
@@ -69,6 +71,50 @@ describe("canSeeStory", () => {
   it("un auteur suspendu, banni ou supprimé disparaît, même pour ses abonnés", () => {
     expect(canSeeStory(me, { ...base, authorActive: false }, rel({ followAccepted: true }))).toBe(false);
     expect(canSeeStory(me, { ...base, audience: "public", authorActive: false }, rel())).toBe(false);
+  });
+});
+
+describe("regard « identifié » (lot R7h)", () => {
+  it("un identifié voit une story d'abonnés ou publique d'un compte privé qu'il ne suit pas", () => {
+    for (const audience of ["followers", "public"] as const) {
+      const priv = { ...base, audience, authorVisibility: "private" as const };
+      expect(canSeeStory(me, priv, rel())).toBe(false);
+      expect(canSeeStory(me, priv, rel({ tagged: true }))).toBe(true);
+    }
+  });
+
+  it("jamais une story de crew, même identifié", () => {
+    const crew = { ...base, audience: "crew" as const, crewId: "c1" };
+    expect(canSeeStory(me, crew, rel({ tagged: true }))).toBe(false);
+    expect(storyDenial(me, crew, rel({ tagged: true }))).toBe("crew_only");
+  });
+
+  it("ni sans session, ni compte indisponible, ni auteur indisponible", () => {
+    expect(canSeeStory(null, base, rel({ tagged: true }))).toBe(false);
+    expect(canSeeStory({ id: "me", active: false }, base, rel({ tagged: true }))).toBe(false);
+    expect(canSeeStory(me, { ...base, authorActive: false }, rel({ tagged: true }))).toBe(false);
+  });
+});
+
+describe("shareRefusal (copie liée, lot R7h)", () => {
+  it("accorde une story visible d'un compte public", () => {
+    expect(shareRefusal(me, base, rel())).toBeNull();
+    expect(shareRefusal(me, { ...base, audience: "public" }, rel())).toBeNull();
+  });
+  it("refuse un crew, avant tout", () => {
+    const crew = { ...base, audience: "crew" as const, crewId: "c1" };
+    expect(shareRefusal(me, crew, rel({ crews: ["c1"] }))).toBe("crew_story");
+    expect(shareRefusal(me, crew, rel({ tagged: true }))).toBe("crew_story");
+  });
+  it("refuse ce que le regard ne voit pas", () => {
+    expect(shareRefusal(null, base, rel())).toBe("not_visible");
+    expect(shareRefusal(me, { ...base, authorActive: false }, rel())).toBe("not_visible");
+  });
+  it("refuse un compte privé, même vu par un abonné ou un identifié (pas d'élargissement du public)", () => {
+    const priv = { ...base, authorVisibility: "private" as const };
+    expect(shareRefusal(me, priv, rel())).toBe("not_visible");
+    expect(shareRefusal(me, priv, rel({ followAccepted: true }))).toBe("private_author");
+    expect(shareRefusal(me, priv, rel({ tagged: true }))).toBe("private_author");
   });
 });
 

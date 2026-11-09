@@ -32,6 +32,7 @@ import { inboxService } from "../messaging/inbox";
 import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
 import { followsService } from "../social/follows";
+import { retireCopiesOfPrivateAccount } from "../stories/share";
 import { assertInterests } from "../vehicles/categories";
 import { mainVehicleIdOf } from "../vehicles/main";
 import { personasOf } from "./personas";
@@ -210,7 +211,7 @@ export const profilesService = {
     // Lot R5a : un centre d'intérêt mis en pause depuis (« Moto ») reste permis s'il était déjà choisi.
     await assertInterests(db, v.user.id, input.interests);
     const { interests, notificationPrefs, ...rest } = input;
-    return withTx(async (tx) => {
+    return withTx(async (tx, after) => {
       const values = {
         ...rest,
         ...(notificationPrefs ? { notificationPrefs: { ...v.profile.notificationPrefs, ...notificationPrefs } } : {}),
@@ -220,6 +221,8 @@ export const profilesService = {
       if (!updated) throw notFound();
       // Lot R6b : un compte qui passe public accepte toutes ses demandes d'abonnement en attente (comme /me/settings).
       if (rest.visibility === "public") await followsService.acceptAllPending(tx, v.user.id);
+      // Lot R7h : un compte qui passe en privé ne laisse plus reprendre ses stories (les copies faites tombent).
+      if (rest.visibility === "private") await retireCopiesOfPrivateAccount(tx, after, v.user.id);
       return updated;
     });
   },

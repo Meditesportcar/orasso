@@ -40,6 +40,7 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
+import { organizerStoryOf } from "../stories/live";
 import { structureById } from "../structures/service";
 import { openVotesCount } from "../votes/service";
 import { entryOf, holdsVehicleSlot, myProofs, onSiteCount, summaryCounts, ticketOf, vehiclesEntered } from "./repo";
@@ -270,7 +271,7 @@ export const presenceService = {
       myPresence,
       canValidatePresence,
       votesOpen: entered ? await openVotesCount(ex, e) : 0,
-      organizerStoryAvailable: false,
+      organizerStoryAvailable: viewerId ? (await organizerStoryOf(e.structureId, t, ex)) !== null : false,
     };
   },
 
@@ -348,7 +349,7 @@ export const presenceService = {
         endsAt: (today?.endsAt ?? e.endsAt).toISOString(),
         instructions: hit.retained ? e.instructions : null,
       },
-      organizerStory: null,
+      organizerStory: await organizerStoryOf(e.structureId, t, db),
     };
   },
 };

@@ -89,6 +89,9 @@ export const errorCodes = [
   // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.
   "too_many_stories",
   "reply_unavailable",
+  "share_private",
+  "not_tagged",
+  "already_shared",
 
   // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
   "closed",
