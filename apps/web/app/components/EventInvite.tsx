@@ -9,7 +9,8 @@ import {
   eventInviteLabels as L,
   type ReceivedEventInvitation,
 } from "@orasso/shared";
-import { Form, useNavigation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Form, useActionData, useNavigation } from "react-router";
 
 import { PersonAvatar } from "./People";
 import { ReportDialog } from "./ReportDialog";
@@ -28,27 +29,60 @@ export const INVITE_SETTINGS_HREF = "/app/moi#notifications";
 export function InviteMenu({
   inviters,
   testId,
+  eventId,
 }: {
   inviters: { userId: string; pseudo: string }[];
   /** Identifiant de test du bouton « ⋯ ». */
   testId: string;
+  /** L'événement de l'invitation : renvoyé par l'action pour que la confirmation s'affiche dans la bonne carte. */
+  eventId?: string;
 }) {
-  const busy = useNavigation().state !== "idle";
+  const nav = useNavigation();
+  const busy = nav.state !== "idle";
+  const result = useActionData() as { inviteNotice?: string; inviteError?: string } | undefined;
+  const details = useRef<HTMLDetailsElement>(null);
+  const sent = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  // Tour 2 : un geste réussi referme le menu (la confirmation se lit à côté) ; un geste raté le laisse ouvert avec
+  // l'erreur dedans, la ligne reste cliquable pour un nouvel essai.
+  useEffect(() => {
+    if (nav.state !== "idle" || !sent.current) return;
+    sent.current = false;
+    if (result?.inviteError) setError(result.inviteError);
+    else if (result?.inviteNotice) {
+      setError(null);
+      if (details.current) details.current.open = false;
+    }
+  }, [nav.state, result]);
   if (inviters.length === 0) return null;
   const names = inviterNames(
     inviters.map((p) => p.pseudo),
     inviters.length,
   );
   return (
-    <details className="ri-menu">
+    <details className="ri-menu" ref={details}>
       <summary className="ri-menu__dots" aria-label={L.moreA11y} data-testid={testId}>
         <Icon name="more" size={20} />
       </summary>
       <div className="ri-menu__sheet" data-testid="invite-menu">
         <strong className="ri-menu__title">{L.menuTitle(names)}</strong>
+        {error && (
+          <p className="s-error ri-menu__error" role="alert" data-testid="invite-menu-error">
+            {error}
+          </p>
+        )}
         {inviters.map((inviter) => (
-          <Form key={inviter.userId} method="post" preventScrollReset>
+          <Form
+            key={inviter.userId}
+            method="post"
+            preventScrollReset
+            onSubmit={() => {
+              sent.current = true;
+              setError(null);
+            }}
+          >
             <input type="hidden" name="intent" value="invite_mute" />
+            {eventId && <input type="hidden" name="eventId" value={eventId} />}
             <input type="hidden" name="userId" value={inviter.userId} />
             <input type="hidden" name="pseudo" value={inviter.pseudo} />
             <button type="submit" className="ri-menu__row" disabled={busy} data-testid="invite-mute">

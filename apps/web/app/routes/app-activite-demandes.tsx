@@ -22,7 +22,7 @@ import {
   staffRoleLabels,
   widestWordEm,
 } from "@orasso/shared";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
@@ -352,15 +352,28 @@ function StaffCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
-function EventInvitationCard({ r }: { r: RequestItem }) {
+/** Confirmation d'une coupure d'invitations ; se met en vue (la carte peut être loin du haut de la page). */
+function InviteNotice({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest" });
+  }, []);
+  return (
+    <p className="s-notice s-notice--ok" role="status" data-testid="invite-muted" ref={ref}>
+      {text}
+    </p>
+  );
+}
+
+function EventInvitationCard({ r, notice }: { r: RequestItem; notice: string | null }) {
   const { name, imageUrl } = fromOf(r);
   const event = obj(r.payload, "event");
   const slug = str(event, "slug");
   const peer = r.payload.source === "peer";
   const inviterRows = list(r.payload, "inviters");
   const inviters = inviterRows.map((x) => str(x, "pseudo")).filter((x): x is string => Boolean(x));
-  // Le « ⋯ » coupe chacun des inviteurs montrés (au plus trois, comme la carte) ; il faut leur identifiant.
-  const mutable = inviterRows.flatMap((x) => {
+  // Le « ⋯ » coupe chacun des inviteurs (tous, 20 au plus, pas seulement les trois du résumé) ; il faut leur identifiant.
+  const mutable = list(r.payload, "menuInviters").flatMap((x) => {
     const userId = str(x, "userId");
     const pseudo = str(x, "pseudo");
     return userId && pseudo ? [{ userId, pseudo }] : [];
@@ -407,6 +420,7 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
           </span>
         ))}
         {lockAt && <span className="o-t-caption s-muted">{invitationLabels.validUntil(formatDateTime(lockAt))}</span>}
+        {notice && <InviteNotice key={notice} text={notice} />}
       </div>
       <div className="s-row">
         {peer ? null : (
@@ -419,7 +433,7 @@ function EventInvitationCard({ r }: { r: RequestItem }) {
             {peer ? eventInviteLabels.seeEvent : invitationLabels.openEvent}
           </Button>
         )}
-        {peer && <InviteMenu inviters={mutable} testId="request-invite-more" />}
+        {peer && <InviteMenu inviters={mutable} testId="request-invite-more" eventId={r.id} />}
       </div>
     </li>
   );
@@ -504,7 +518,7 @@ function PartnershipCard({ r, busy }: { r: RequestItem; busy: boolean }) {
   );
 }
 
-function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
+function Card({ r, busy, notice }: { r: RequestItem; busy: boolean; notice: string | null }) {
   switch (r.kind) {
     case "follow":
       return <FollowCard r={r} busy={busy} />;
@@ -515,7 +529,7 @@ function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
     case "staff":
       return <StaffCard r={r} busy={busy} />;
     case "event_invitation":
-      return <EventInvitationCard r={r} />;
+      return <EventInvitationCard r={r} notice={notice} />;
     case "plate_transfer":
       return <PlateTransferCard r={r} busy={busy} />;
     case "partnership":
@@ -533,7 +547,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
   const invite = actionData as InviteNoticeData | undefined;
   const message = {
-    error: done?.formError ?? done?.followError ?? invite?.inviteError ?? null,
+    error: done?.formError ?? done?.followError ?? null,
     notice: done?.followNotice ?? null,
   };
   return (
@@ -556,10 +570,10 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
           {message.error}
         </p>
       )}
-      {invite?.inviteNotice && (
-        <p className="s-notice s-notice--ok" role="status" data-testid="invite-muted">
-          {invite.inviteNotice}
-        </p>
+      {/* Tour 2 : la confirmation d'une coupure s'affiche dans la carte d'où elle part ; si la carte a disparu (dernier
+          inviteur coupé), elle reste ici, en tête de liste. */}
+      {invite?.inviteNotice && !items.some((r) => r.kind === "event_invitation" && r.id === invite.inviteFor) && (
+        <InviteNotice key={invite.inviteNotice} text={invite.inviteNotice} />
       )}
       {message.notice && (
         <p className="s-notice s-notice--ok" role="status" data-testid="request-notice">
@@ -587,6 +601,9 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
               key={`${r.kind}:${r.id}:${r.kind === "crew" ? String(r.payload.requesterId ?? "") : ""}`}
               r={r}
               busy={busy}
+              notice={
+                r.kind === "event_invitation" && invite?.inviteFor === r.id ? (invite.inviteNotice ?? null) : null
+              }
             />
           ))}
         </ul>

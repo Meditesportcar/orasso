@@ -67,6 +67,10 @@
   padding: var(--space-3);
   font-weight: 800;
 }
+.ri-menu__error {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
 .ri-menu__row {
   display: grid;
   grid-template-columns: auto 1fr;
