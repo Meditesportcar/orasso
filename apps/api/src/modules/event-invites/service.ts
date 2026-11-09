@@ -580,9 +580,10 @@ export const eventInvitesService = {
   /**
    * Lot R7c1 (`GET /me/requests`) : mes invitations entre passionnés en attente, une par événement (« Kenji_66 et Julie_66
    * t'invitent »). Mêmes règles que le bandeau de la fiche : auteurs en règle et non coupés, événement qui se partage
-   * encore, et je n'y vais pas déjà. 20 événements au plus, le plus récemment invité d'abord.
+   * encore, et je n'y vais pas déjà. 20 événements au plus (sans plafond avec `all` : les Demandes, dont le curseur borne ce qui sort), le plus récemment invité
+   * d'abord.
    */
-  async receivedAll(viewerId: string, ex: Executor = db) {
+  async receivedAll(viewerId: string, ex: Executor = db, opts: { all?: boolean } = {}) {
     const at = now();
     const result = await ex.execute(sql`
       select i.event_id, p.pseudo, p.avatar_key, i.note, i.created_at
@@ -603,7 +604,7 @@ export const eventInvitesService = {
           select 1 from tickets t where t.event_id = i.event_id and t.user_id = ${viewerId} and t.status in ('valid', 'used')
         )
       order by i.created_at desc, i.id
-      limit 400`);
+      ${opts.all ? sql`` : sql`limit 400`}`);
     const rows = result.rows as {
       event_id: string;
       pseudo: string;
@@ -613,7 +614,7 @@ export const eventInvitesService = {
     }[];
     const byEvent = new Map<string, typeof rows>();
     for (const r of rows) byEvent.set(r.event_id, [...(byEvent.get(r.event_id) ?? []), r]);
-    const eventIds = [...byEvent.keys()].slice(0, 20);
+    const eventIds = opts.all ? [...byEvent.keys()] : [...byEvent.keys()].slice(0, 20);
     if (!eventIds.length) return [];
     const evRows = await ex.select().from(events).where(inArray(events.id, eventIds));
     const out: {

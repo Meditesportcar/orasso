@@ -700,9 +700,9 @@ export const invitationsService = {
   },
 
   /** `GET /me/event-invitations` (Accès > Invitations reçues) : en attente, événement publié pas encore verrouillé. */
-  async mine(v: Viewer): Promise<ReceivedInvitation[]> {
+  async mine(v: Viewer, opts: { all?: boolean } = {}): Promise<ReceivedInvitation[]> {
     const t = now();
-    const rows = await db
+    const query = db
       .select({ i: eventInvitations })
       .from(eventInvitations)
       .innerJoin(events, eq(events.id, eventInvitations.eventId))
@@ -720,7 +720,9 @@ export const invitationsService = {
         ),
       )
       .orderBy(asc(events.startsAt))
-      .limit(100);
+      .$dynamic();
+    // 100 au plus pour l'écran Accès ; sans plafond (`all`) pour les Demandes, dont le curseur borne ce qui sort.
+    const rows = await (opts.all ? query : query.limit(100));
     const views = await receivedView(rows.map((r) => r.i));
     return views.filter((x) => x.status === "pending");
   },

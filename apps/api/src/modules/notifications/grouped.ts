@@ -1,7 +1,8 @@
 // Notifications qui citent des personnes (lot R7c1, tour 2) : lecture des personnes citées, visibilité (compte supprimé,
 // suspendu ou banni), recomposition du titre et du corps, anonymisation d'un compte supprimé. Une notification regroupée
 // garde ses personnes dans `data._actorIds` (jamais renvoyé) et un résumé dans `data.actors` / `data.count` ; ses textes
-// sont gardés en modèle (`data._text`, le pseudo remplacé par `{name}`) pour être recomposés sans la personne partie.
+// sont gardés en modèle (`data._text`, écrit par l'émetteur avec `{name}` à la place du pseudo) pour être recomposés sans
+// la personne partie. Une ligne sans modèle (R6, seed, tour 1) est recomposée d'après le libellé de son type, ou masquée.
 import { ACTIVITY_MAX_ACTORS, type ActivityActor, r7DefaultContent, r7NotificationTable } from "@orasso/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
@@ -11,6 +12,8 @@ import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
 
 type NotificationRow = typeof notifications.$inferSelect;
+
+const R7_TYPES = Object.keys(r7NotificationTable);
 
 /** Personnes vérifiées par ligne (le maximum gardé par `notify`) : toutes, pour que la liste et la pastille s'accordent. */
 export const ACTORS_CHECKED = 500;
@@ -37,16 +40,34 @@ export const visibleProfile = (at: Date) =>
   sql`${profiles.deletedAt} is null and ${profiles.bannedAt} is null and (${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at})`;
 
 /**
- * Reste-t-il au moins une personne en règle parmi celles que cite la notification ? (vrai sans personne citée). C'est le
- * critère de la liste de l'Activité ; la pastille et l'ancien Journal l'appliquent aussi, pour ne pas compter ce qui ne
- * s'affiche pas. `onlyGrouped` : seulement les notifications regroupées (`_actorIds`), pour ne pas changer l'ancien Journal.
+ * La notification est-elle montrable d'après les personnes qu'elle cite ? Vrai sans personne citée ; sinon il faut au moins
+ * une personne en règle, et si l'une d'elles est partie, une façon de recomposer le texte : un modèle (`_text`) ou le
+ * libellé de son type (table R7). Sans l'un ni l'autre la ligne est masquée (le texte enregistré nommerait la personne
+ * partie). C'est le critère de la liste de l'Activité ; la pastille et l'ancien Journal l'appliquent aussi, pour ne pas
+ * compter ce qui ne s'affiche pas. `onlyGrouped` : seulement les notifications regroupées (`_actorIds`), pour ne pas
+ * changer l'ancien Journal.
  */
 export const citedPeopleRemain = (at: Date, onlyGrouped = false) => sql`(
   coalesce((
-    select jsonb_array_length(x.ids) = 0 or exists (
-      select 1 from jsonb_array_elements_text(x.ids) as a(id)
-      join ${profiles} on ${profiles.userId} = a.id
-      where ${visibleProfile(at)}
+    select jsonb_array_length(x.ids) = 0 or (
+      exists (
+        select 1 from jsonb_array_elements_text(x.ids) as a(id)
+        join ${profiles} on ${profiles.userId} = a.id
+        where ${visibleProfile(at)}
+      )
+      and (
+        coalesce(jsonb_typeof(${notifications.data} #> '{_text,title}') = 'string', false)
+        or ${notifications.type} in (${sql.join(
+          R7_TYPES.map((t) => sql`${t}`),
+          sql`, `,
+        )})
+        or not exists (
+          select 1 from jsonb_array_elements_text(x.ids) as b(id)
+          where not exists (
+            select 1 from ${profiles} where ${profiles.userId} = b.id and ${visibleProfile(at)}
+          )
+        )
+      )
     )
     from (
       select case
@@ -64,10 +85,8 @@ export const citedPeopleRemain = (at: Date, onlyGrouped = false) => sql`(
   ), true)
 )`;
 
-/** Modèle d'un texte : le pseudo de la personne remplacé par `{name}`. */
-export const textTemplate = (text: string, pseudo: string): string => text.replaceAll(pseudo, "{name}");
-
-const fillTemplate = (template: string, pseudo: string): string => template.replaceAll("{name}", pseudo);
+/** Un modèle de texte (`{name}` à la place du pseudo) rempli avec le pseudo de la personne. */
+export const fillTemplate = (template: string, pseudo: string): string => template.replaceAll("{name}", () => pseudo);
 
 /** Vue d'une notification qui cite des personnes : seules celles dont le compte est en règle, textes recomposés. */
 export type CitedView = {
@@ -111,8 +130,25 @@ export async function citedViews(
       continue;
     }
     const stored = (n.data as Shape).count;
-    const tpl = (n.data as Shape)._text;
     const first = visible[0];
+    const tpl = (n.data as Shape)._text;
+    const hasTemplate = typeof tpl?.title === "string" && typeof tpl?.body === "string";
+    // Une personne citée est partie : sans modèle, le texte se recompose d'après le type, ou la ligne est masquée.
+    const lost = visible.length < checked.length;
+    const generic = !hasTemplate && lost && first && n.type in r7NotificationTable;
+    if (!hasTemplate && lost && !generic) {
+      result.set(n.id, null);
+      continue;
+    }
+    const text =
+      first && hasTemplate
+        ? {
+            title: fillTemplate(tpl.title as string, first.pseudo),
+            body: fillTemplate(tpl.body as string, first.pseudo),
+          }
+        : generic
+          ? r7DefaultContent(n.type as Parameters<typeof r7DefaultContent>[0], first.pseudo)
+          : { title: n.title, body: n.body };
     result.set(n.id, {
       actors: visible
         .slice(0, ACTIVITY_MAX_ACTORS)
@@ -123,9 +159,9 @@ export async function citedViews(
         1,
         visible.length + Math.max(0, (typeof stored === "number" ? stored : ids.length) - checked.length),
       ),
-      // Texte recomposé avec la personne la plus récente restée en règle ; sans modèle, le texte enregistré.
-      title: first && typeof tpl?.title === "string" ? fillTemplate(tpl.title, first.pseudo) : n.title,
-      body: first && typeof tpl?.body === "string" ? fillTemplate(tpl.body, first.pseudo) : n.body,
+      // Texte recomposé avec la personne la plus récente restée en règle (modèle, sinon libellé du type).
+      title: text.title,
+      body: text.body,
     });
   }
   return result;
@@ -140,7 +176,8 @@ export async function anonymizeGroupedNotificationsForDeletedAccount(tx: Tx, use
   const cited = await tx
     .select()
     .from(notifications)
-    .where(sql`${notifications.data} -> '_actorIds' ? ${userId}`)
+    // `group_key is not null` : le prédicat de l'index partiel (`notifications_actor_ids_idx`), pas de lecture de toute la table.
+    .where(sql`${notifications.groupKey} is not null and ${notifications.data} -> '_actorIds' ? ${userId}`)
     .for("update");
   for (const n of cited) {
     const data = n.data as Shape & Record<string, unknown>;

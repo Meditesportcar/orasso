@@ -25,7 +25,7 @@ import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
 import { type Executor, withTx } from "../../lib/tx";
-import { citedPeopleRemain, citedViews, textTemplate } from "./grouped";
+import { citedPeopleRemain, citedViews, fillTemplate } from "./grouped";
 
 export type NotificationRow = typeof notifications.$inferSelect;
 
@@ -53,8 +53,20 @@ export type NotifyInput = {
    * de moins de 24 h, est complétée (`data.actors`, `data.count`, heure de livraison) au lieu d'en créer une autre.
    */
   groupKey?: string;
-  /** Lot R7c1 : la personne à l'origine, citée dans `data.actors` d'une notification regroupée. */
+  /**
+   * Lot R7c1 : la personne à l'origine, citée dans `data.actors` d'une notification regroupée. Avec elle, `title` et `body`
+   * sont des **modèles** où `{name}` marque la place du pseudo (« {name} a aimé ta story ») : ils sont gardés tels quels
+   * (`data._text`) pour être recomposés sans la personne si son compte disparaît, et la ligne reçoit le texte rempli.
+   */
   actor?: { userId: string; pseudo: string; avatarUrl: string | null };
+  /**
+   * Lot R7c1, tour 3 : le `after` de la transaction de l'appelant (`withTx((tx, after) => …)`). Quand l'occurrence est
+   * ajoutée à une ligne déjà livrée, les appareils du compte sont prévenus (`inbox.changed`) dans ce `after`, donc après
+   * la validation de **cette** transaction et jamais si elle est annulée. Appelée sur la base, `notify` ouvre sa
+   * transaction et publie elle-même. Sans `after` dans une transaction, rien n'est publié : l'appelant lit
+   * `mergedIntoDelivered` du résultat.
+   */
+  after?: (cb: () => unknown) => void;
   /** Lot R7c1 : levée des heures calmes ; par défaut, celle de la table du type (`r7QuietOverride`). */
   urgent?: QuietOverride;
 };
@@ -63,27 +75,19 @@ export type NotifyInput = {
 const stripInternal = (data: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(data).filter(([k]) => !k.startsWith("_")));
 
-/**
- * Lot R7c1, tour 2 : comptes dont la Boîte a changé sans nouvelle livraison (occurrence ajoutée à une ligne regroupée déjà
- * livrée). Leurs appareils sont prévenus (`inbox.changed`) après la validation : par `kick()`, que les appelants lancent
- * une fois leur transaction validée, ou tout de suite quand `notify` ouvre sa propre transaction.
- */
-const staleInboxes = new Set<string>();
-function flushStaleInboxes() {
-  for (const userId of staleInboxes) realtime.publish(`user:${userId}`, "inbox.changed", {});
-  staleInboxes.clear();
-}
+/** Prévient les appareils d'un compte que sa Boîte a changé (la cloche et les listes ouvertes se rechargent). */
+const publishInboxChanged = (userId: string) => realtime.publish(`user:${userId}`, "inbox.changed", {});
+
+/** Résultat de `notify` : la ligne, et si l'occurrence a été ajoutée à une ligne regroupée déjà livrée (sans nouvelle livraison). */
+export type NotifyResult = NotificationRow & { mergedIntoDelivered: boolean };
 
 /** Personnes gardées au plus dans une notification regroupée (de quoi compter, pas de quoi tenir une liste). */
 const MAX_GROUPED_ACTORS = 500;
 
 type GroupedData = { _actorIds?: string[]; actors?: { pseudo: string; avatarUrl: string | null }[]; count?: number };
 
-/** Modèle des textes d'une notification regroupée : le pseudo de la personne remplacé par `{name}` (voir `grouped.ts`). */
-const groupText = (input: NotifyInput, pseudo: string) => ({
-  title: textTemplate(input.title, pseudo),
-  body: textTemplate(input.body, pseudo),
-});
+/** Modèles des textes d'une notification regroupée, gardés tels quels (voir `grouped.ts`). */
+const groupText = (input: NotifyInput) => ({ title: input.title, body: input.body });
 
 let inflight: Promise<void> = Promise.resolve();
 
@@ -105,7 +109,7 @@ export const notificationsService = {
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
    * `kick()` (sans attendre, dans `after` côté services) et la tâche de chaque minute appellent `deliverDue()`.
    */
-  async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotificationRow> {
+  async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotifyResult> {
     const at = now();
     // Alertes du staff et sécurité du compte (nouvelle connexion, mot de passe changé…) : jamais différées la nuit.
     // Items d'actualité du Journal (lot 17) : ni push ni heures calmes, visibles tout de suite.
@@ -118,10 +122,7 @@ export const notificationsService = {
     const grouped = input.groupKey && !input.silent ? input.groupKey : null;
     // Le verrou du regroupement ne vaut que dans une transaction : appelée sur la base, `notify` ouvre la sienne.
     if (grouped && ex === db) {
-      return withTx(async (tx, after) => {
-        after(flushStaleInboxes);
-        return notificationsService.notify(tx, userId, type, input);
-      });
+      return withTx((tx, after) => notificationsService.notify(tx, userId, type, { ...input, after }));
     }
     if (grouped) {
       // Deux occurrences simultanées de la même clé ne créent pas deux lignes (lecture puis écriture sérialisées).
@@ -154,16 +155,19 @@ export const notificationsService = {
               ...(previous.actors ?? []).filter((a) => a.pseudo !== input.actor?.pseudo),
             ].slice(0, ACTIVITY_MAX_ACTORS)
           : (previous.actors ?? []);
+        const text = input.actor
+          ? { title: fillTemplate(input.title, input.actor.pseudo), body: fillTemplate(input.body, input.actor.pseudo) }
+          : { title: input.title, body: input.body };
         const [merged] = await ex
           .update(notifications)
           .set({
-            title: input.title,
-            body: input.body,
+            title: text.title,
+            body: text.body,
             data: {
               ...open.data,
               ...input.data,
               ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
-              ...(input.actor ? { _text: groupText(input, input.actor.pseudo) } : {}),
+              ...(input.actor ? { _text: groupText(input) } : {}),
               _actorIds: ids,
               actors,
               count: input.actor ? Math.max(ids.length, 1) : (previous.count ?? 1) + 1,
@@ -177,25 +181,30 @@ export const notificationsService = {
         if (!merged) throw new Error("Notification non mise à jour");
         // Déjà livrée : pas de nouvelle livraison (donc pas de nouveau push, règle des émetteurs) ; la cloche et la liste
         // ouvertes sont prévenues après la validation pour se recharger.
-        if (open.deliveredAt) staleInboxes.add(userId);
-        return merged;
+        const mergedIntoDelivered = open.deliveredAt !== null;
+        if (mergedIntoDelivered) input.after?.(() => publishInboxChanged(userId));
+        return { ...merged, mergedIntoDelivered };
       }
     }
+    const text =
+      grouped && input.actor
+        ? { title: fillTemplate(input.title, input.actor.pseudo), body: fillTemplate(input.body, input.actor.pseudo) }
+        : { title: input.title, body: input.body };
     const [row] = await ex
       .insert(notifications)
       .values({
         userId,
         type,
         family: notificationTypes[type],
-        title: input.title,
-        body: input.body,
+        title: text.title,
+        body: text.body,
         data: {
           ...input.data,
           ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
           ...(input.email ? { _email: input.email } : {}),
           ...(grouped && input.actor
             ? {
-                _text: groupText(input, input.actor.pseudo),
+                _text: groupText(input),
                 _actorIds: [input.actor.userId],
                 actors: [{ pseudo: input.actor.pseudo, avatarUrl: input.actor.avatarUrl }],
                 count: 1,
@@ -211,7 +220,7 @@ export const notificationsService = {
       })
       .returning();
     if (!row) throw new Error("Notification non enregistrée");
-    return row;
+    return { ...row, mergedIntoDelivered: false };
   },
 
   /**
@@ -292,7 +301,6 @@ export const notificationsService = {
 
   /** Lance une livraison sans la faire attendre à la requête (les envois s'enchaînent, jamais en parallèle). */
   kick(): void {
-    flushStaleInboxes();
     inflight = inflight
       .then(() => this.deliverDue())
       .then(
@@ -337,8 +345,10 @@ export const notificationsService = {
       rows.filter((n) => Array.isArray((n.data as { _actorIds?: unknown })._actorIds)),
       db,
     );
-    return toPage(rows, limit, (n) => {
+    const page = toPage(rows, limit, (n) => {
       const view = views.get(n.id);
+      // Ligne regroupée dont le texte ne se recompose pas sans la personne partie : masquée (la page peut être plus courte).
+      if (view === null) return null;
       return {
         id: n.id,
         type: n.type,
@@ -351,6 +361,7 @@ export const notificationsService = {
         readAt: n.readAt?.toISOString() ?? null,
       };
     });
+    return { ...page, items: page.items.filter((i) => i !== null) };
   },
 
   /** Pastille de la cloche : éléments non lus du Journal (livrés, hors push seul). */

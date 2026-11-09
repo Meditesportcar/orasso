@@ -51,6 +51,10 @@ export const notifications = pgTable(
       .where(sql`${t.type} in ('event_nearby_interest')`),
     index("notifications_user_created_idx").on(t.userId, t.createdAt.desc()),
     index("notifications_user_group_idx").on(t.userId, t.groupKey),
+    // Lot R7c1, tour 3 : retrouver les lignes regroupées qui citent un compte (anonymisation) sans lire toute la table.
+    index("notifications_actor_ids_idx")
+      .using("gin", sql`(${t.data} -> '_actorIds')`)
+      .where(sql`${t.groupKey} is not null`),
     index("notifications_undelivered_idx").on(t.deliverAfter).where(sql`${t.deliveredAt} is null`),
   ],
 );

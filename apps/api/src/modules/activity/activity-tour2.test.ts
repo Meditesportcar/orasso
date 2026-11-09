@@ -64,8 +64,8 @@ const actorOf = (u: TestUser) => ({ userId: u.id, pseudo: u.pseudo, avatarUrl: n
 async function like(to: TestUser, from: TestUser, story = "s1") {
   await withTx((tx) =>
     notificationsService.notify(tx, to.id, "story_like", {
-      title: `${from.pseudo} a aimé ta story`,
-      body: `${from.pseudo} a aimé ta story.`,
+      title: "{name} a aimé ta story",
+      body: "{name} a aimé ta story.",
       groupKey: `story_like:${story}`,
       actor: actorOf(from),
     }),
@@ -184,25 +184,27 @@ describe("occurrence ajoutée à une ligne regroupée", () => {
     const spy = vi.spyOn(push, "send").mockResolvedValue(1);
     const live = listen(damien);
     try {
-      await withTx((tx) =>
-        notificationsService.notify(tx, damien.id, "story_like", {
-          title: "Marc_66 a aimé ta story",
-          body: "Marc_66 a aimé ta story.",
+      let during = -1;
+      await withTx(async (tx, after) => {
+        await notificationsService.notify(tx, damien.id, "story_like", {
+          title: "{name} a aimé ta story",
+          body: "{name} a aimé ta story.",
           groupKey: "story_like:s1",
           actor: actorOf(marc),
-        }),
-      );
-      // Rien n'est annoncé tant que la transaction de l'appelant n'a pas lancé la livraison (`kick`, après validation).
-      expect(live.got.filter((m) => m.type === "inbox.changed")).toHaveLength(0);
-      notificationsService.kick();
-      await notificationsService.flush();
+          after,
+        });
+        // Rien n'est annoncé tant que la transaction n'est pas validée.
+        during = live.got.filter((m) => m.type === "inbox.changed").length;
+      });
+      expect(during).toBe(0);
+      // Annoncé dès la validation, sans attendre de `kick`, une seule fois.
       expect(live.got.filter((m) => m.type === "inbox.changed")).toHaveLength(1);
-      // Une seule annonce, pas de nouvelle livraison « notification » ni de push.
+      // Pas de nouvelle livraison « notification » ni de push.
       expect(live.got.filter((m) => m.type === "notification")).toHaveLength(0);
-      expect(spy).not.toHaveBeenCalled();
       notificationsService.kick();
       await notificationsService.flush();
       expect(live.got.filter((m) => m.type === "inbox.changed")).toHaveLength(1);
+      expect(spy).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
       live.stop();
@@ -219,8 +221,8 @@ describe("occurrence ajoutée à une ligne regroupée", () => {
     const live = listen(damien);
     try {
       await notificationsService.notify(db, damien.id, "story_like", {
-        title: "Marc_66 a aimé ta story",
-        body: "Marc_66 a aimé ta story.",
+        title: "{name} a aimé ta story",
+        body: "{name} a aimé ta story.",
         groupKey: "story_like:s1",
         actor: actorOf(marc),
       });
@@ -236,7 +238,7 @@ describe("occurrence ajoutée à une ligne regroupée", () => {
     await Promise.all(
       fans.map((f) =>
         notificationsService.notify(db, damien.id, "story_like", {
-          title: `${f.pseudo} a aimé ta story`,
+          title: "{name} a aimé ta story",
           body: "Flamme",
           groupKey: "story_like:s1",
           actor: actorOf(f),
@@ -257,7 +259,7 @@ describe("occurrence ajoutée à une ligne regroupée", () => {
         ...fans.map((f) =>
           withTx((tx) =>
             notificationsService.notify(tx, damien.id, "story_like", {
-              title: `${f.pseudo} a aimé ta story`,
+              title: "{name} a aimé ta story",
               body: "Flamme",
               groupKey: "story_like:s1",
               actor: actorOf(f),
@@ -562,7 +564,7 @@ describe("migration sur une base qui a déjà des données", () => {
       .split("--> statement-breakpoint")
       .map((x) => x.trim())
       .filter(Boolean);
-    expect(statements).toHaveLength(3);
+    expect(statements).toHaveLength(4);
     // Schéma d'avant la migration, puis la migration jouée sur les lignes existantes ; tout est annulé à la fin.
     class Rollback extends Error {}
     await expect(
@@ -579,6 +581,10 @@ describe("migration sur une base qui a déjà des données", () => {
         for (const p of people.rows as { activity_seen_at: unknown }[]) expect(p.activity_seen_at).toBeNull();
         const idx = await tx.execute(sql`select 1 from pg_indexes where indexname = 'notifications_user_group_idx'`);
         expect(idx.rows).toHaveLength(1);
+        const actorIdx = await tx.execute(
+          sql`select 1 from pg_indexes where indexname = 'notifications_actor_ids_idx'`,
+        );
+        expect(actorIdx.rows).toHaveLength(1);
         throw new Rollback();
       }),
     ).rejects.toBeInstanceOf(Rollback);

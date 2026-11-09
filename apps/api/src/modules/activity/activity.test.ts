@@ -82,7 +82,7 @@ describe("notifications regroupées (group_key)", () => {
     const fans = [] as TestUser[];
     for (const p of ["Kenji_66", "Julie_66", "Lea_66", "Marc_66", "Nina_66"]) fans.push(await signUp(p));
     for (const f of fans) {
-      await send(damien.id, "story_like", { groupKey: "story_like:s1", actor: actorOf(f), title: `${f.pseudo} aime` });
+      await send(damien.id, "story_like", { groupKey: "story_like:s1", actor: actorOf(f), title: "{name} aime" });
     }
     const rows = await db.select().from(notifications).where(eq(notifications.userId, damien.id));
     expect(rows).toHaveLength(1);
@@ -687,6 +687,16 @@ describe("heures calmes : horaire modifié et notifications R7", () => {
     expect(soon.deliverAfter).toEqual(night());
     const late = await send(damien.id, "spot_meetup_new", { eventStartsAt: new Date(clock.now.getTime() + 5 * HOUR) });
     expect(late.deliverAfter).toEqual(morning);
+  });
+
+  it("rendez-vous à 0 h 30 annoncé à 23 h 00 : part tout de suite (moins de 2 heures, en pleine nuit)", async () => {
+    const damien = await signUp("Damien_66");
+    const at2300 = fromWallTime({ year: 2026, month: 11, day: 9, hour: 23, minute: 0 });
+    clock.set(at2300);
+    const startsAt = fromWallTime({ year: 2026, month: 11, day: 10, hour: 0, minute: 30 });
+    const row = await send(damien.id, "spot_meetup_new", { eventStartsAt: startsAt });
+    expect(row.deliverAfter).toEqual(at2300);
+    expect(row.deliveredAt).not.toBeNull();
   });
 
   it("les types « Journal seul » sont livrés tout de suite, sans push", async () => {

@@ -72,6 +72,8 @@ export async function seedActivity() {
       data: {
         count: likers.length,
         _actorIds: likers.map((a) => a.userId),
+        // Modèle du texte (`{name}` à la place du pseudo), comme `notify` l'écrit : recomposé si une personne disparaît.
+        _text: r7DefaultContent("story_like", "{name}"),
         actors: likers.slice(0, 3).map((a) => ({ pseudo: a.pseudo, avatarUrl: a.avatarUrl })),
       },
     },
