@@ -101,7 +101,11 @@ export function VoteScreen() {
     else router.replace(eventId ? (`/votes/${eventId}` as never) : "/acces");
   };
   const failed = Boolean(view.error || fallback.error || event.error) && !data;
-  const retry = () => void Promise.all([reload(), fallback.reload()]);
+  // « Réessayer » : d'abord l'événement (adresse d'une notification ouverte hors ligne), puis ce qui en dépend.
+  const retry = async () => {
+    if (event.error) await event.reload();
+    await Promise.all([reload(), fallback.reload()]);
+  };
 
   const closesAt = data ? new Date(data.closesAt) : null;
   const left = data && data.state === "open" ? voteMinutesLeft(data.closesAt, at) : null;
@@ -212,7 +216,16 @@ export function VoteScreen() {
         </PosterSurface>
       ) : null}
 
-      {data && (mode === "choose" || mode === "blocked" || mode === "upcoming") ? (
+      {data && (mode === "choose" || mode === "blocked" || mode === "upcoming") && grid.error && !grid.data ? (
+        <>
+          <Notice tone="error" testID="vote-grid-failed">
+            {T.gridLoadFailed}
+          </Notice>
+          <SmButton kind="s" icon="undo" onPress={() => void grid.reload()} testID="vote-grid-retry">
+            {T.retry}
+          </SmButton>
+        </>
+      ) : data && (mode === "choose" || mode === "blocked" || mode === "upcoming") ? (
         <Grid
           entries={gridOrder(grid.data ?? [])}
           ownIds={data.ownApplicationIds}

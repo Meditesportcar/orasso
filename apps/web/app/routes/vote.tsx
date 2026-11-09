@@ -20,10 +20,10 @@ import { useEffect, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { FicheBar, ficheHandle } from "../components/FicheBar";
-import { useClosingWatch } from "../components/votes/useVoteClock";
+import { useClosingWatch, useOrassoNow } from "../components/votes/useVoteClock";
 import { VoteGrid } from "../components/votes/VoteGrid";
 import { VoteRanking } from "../components/votes/VoteRanking";
-import { nowMs } from "../lib/clock";
+import { confirmationIsStale, eventAfterVote } from "../components/votes/voteFallback";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import { loadVote, voteAction } from "../lib/vote.server";
 import type { Route } from "./+types/vote";
@@ -49,13 +49,17 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, candidates, back } = loaderData;
+  const { candidates, candidatesComplete, back } = loaderData;
   const busy = useNavigation().state !== "idle";
   const revalidator = useRevalidator();
   // La voix qui vient de réussir (réponse de l'API, avec le classement que j'ai maintenant le droit de voir) sert tant que la
   // relecture n'est pas revenue.
   const justVoted = actionData?.ok ? actionData.vote : null;
   const vote = loaderData.vote ?? justVoted;
+  // L'événement ne s'est pas relu (panne passagère) mais la voix a réussi : la confirmation reste, avec « Réessayer ».
+  const event = eventAfterVote(loaderData.event, actionData, loaderData.slug, justVoted);
+  // Le compte à rebours avance seul (rendu toutes les 30 s), sans attendre un message du canal.
+  const now = useOrassoNow();
   // Le geste en deux temps (parité avec l'appli) : la voiture choisie dans la grille, et la grille rouverte pour changer sa voix.
   const [pick, setPick] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
@@ -67,7 +71,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
     }
   }, [actionData]);
   // La relecture a échoué après ma voix : la réponse à la voix reste affichée, avec « Réessayer ».
-  const stale = !loaderData.vote && Boolean(justVoted);
+  const stale = confirmationIsStale(loaderData, justVoted);
   // Clôture : à l'échéance du serveur, la page se relit (et réessaie jusqu'à la clôture confirmée) ; surveillée tant que le
   // vote n'est pas fini, ouvert ou pas encore.
   useClosingWatch(vote, loaderData.serverAt);
@@ -111,7 +115,6 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
     );
   }
 
-  const now = new Date(nowMs());
   const mode = voteScreenMode(vote, changing);
   const closesAt = new Date(vote.closesAt);
   const left = vote.state === "open" ? voteMinutesLeft(vote.closesAt, now) : null;
@@ -225,12 +228,28 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
             {T.oneVote}
           </h2>
           <p className="o-t-caption s-muted">{T.rulesLine}</p>
+          {!candidatesComplete && (
+            <>
+              <p className="s-error" role="alert" data-testid="vote-grid-failed">
+                {T.gridLoadFailed}
+              </p>
+              <Button
+                variant="secondary"
+                icon="undo"
+                onClick={() => void revalidator.revalidate()}
+                data-testid="vote-grid-retry"
+              >
+                {T.retry}
+              </Button>
+            </>
+          )}
           <Form method="post">
             <input type="hidden" name="eventId" value={event.id} />
             <input type="hidden" name="voteId" value={vote.id} />
             <input type="hidden" name="applicationId" value={pick ?? ""} />
             <VoteGrid
               candidates={candidates}
+              failed={!candidatesComplete}
               ownIds={vote.ownApplicationIds}
               myVote={vote.myVote}
               canVote={vote.canVote}

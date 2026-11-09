@@ -234,3 +234,42 @@ test("la fiche de l'événement et le Jour J mènent à la liste des votes", asy
     await ctx.close();
   }
 });
+
+// Tour 2 (relecture Codex) : une notification ouverte hors ligne (adresse de l'événement qui ne se résout pas) puis la reprise,
+// et une grille dont la lecture échoue (jamais « aucune voiture »).
+test("notification ouverte hors ligne : « Réessayer » résout l'événement puis relit la liste ; grille en échec ≠ grille vide", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, "nina@orasso.local");
+  try {
+    let offline = true;
+    const bySlug = /\/events\/by-slug\//;
+    await page.route(bySlug, (route) => (offline ? route.abort("failed") : route.fallback()));
+    await page.goto("/votes/rassemblement-du-lydia");
+    await afterOpening(page).catch(() => undefined);
+    await expect(page.getByTestId("votes-failed")).toBeVisible({ timeout: 45_000 });
+    offline = false;
+    await page.getByTestId("votes-retry").click();
+    await expect(page.getByTestId("votes-list")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("votes-failed")).toHaveCount(0);
+    await page.unroute(bySlug);
+
+    // La lecture de la grille échoue : le message et « Réessayer », pas « aucune voiture » ; la reprise relit la grille.
+    let broken = true;
+    const cands = /\/votes\/[^/]+\/candidates/;
+    await page.route(cands, (route) => (broken ? route.fulfill({ status: 500, body: "{}" }) : route.fallback()));
+    await page.goto("/vote/rassemblement-du-lydia");
+    await afterOpening(page).catch(() => undefined);
+    const change = page.getByTestId("vote-change");
+    await expect(page.getByTestId("vote-grid-failed").or(change)).toBeVisible({ timeout: 45_000 });
+    if (await change.isVisible()) await change.click();
+    await expect(page.getByTestId("vote-grid-failed")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("Aucune voiture")).toHaveCount(0);
+    broken = false;
+    await page.getByTestId("vote-grid-retry").click();
+    await expect(page.getByTestId("vote-grid")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("vote-grid-failed")).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});

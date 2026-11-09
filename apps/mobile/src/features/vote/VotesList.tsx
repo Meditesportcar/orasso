@@ -30,6 +30,11 @@ export function VotesList() {
   const title = titre || event.title || null;
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
   const failed = (list.error || event.error) && !list.data;
+  // « Réessayer » relance d'abord la résolution de l'événement (adresse d'une notification ouverte hors ligne), puis la liste.
+  const retry = async () => {
+    if (event.error) await event.reload();
+    await list.reload();
+  };
   const openVote = (vote: VoteView) =>
     router.push(`/vote/${event.eventId}?vote=${vote.id}${title ? `&titre=${encodeURIComponent(title)}` : ""}` as never);
 
@@ -47,7 +52,7 @@ export function VotesList() {
           <Notice tone="error" testID="votes-failed">
             {event.error ? T.listLoadFailed : errorMessage(list.error)}
           </Notice>
-          <SmButton kind="s" icon="undo" onPress={() => void list.reload()} testID="votes-retry">
+          <SmButton kind="s" icon="undo" onPress={() => void retry()} testID="votes-retry">
             {T.retry}
           </SmButton>
         </>

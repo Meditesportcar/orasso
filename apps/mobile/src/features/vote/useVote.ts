@@ -4,6 +4,7 @@
 // `createVoteReloader`, la grille des candidats seulement sur les messages qui la changent : charge du serveur le jour J) et
 // surveillance de la clôture.
 import {
+  collectPages,
   createVoteReloader,
   type VoteCandidate,
   type VoteList,
@@ -82,16 +83,15 @@ export function useVotesList(eventId: string | null) {
   return list;
 }
 
-/** Toutes les pages de la grille d'un vote (100 par page, ordre stable de l'API). */
-async function loadGrid(eventId: string, voteId: string): Promise<VoteCandidate[]> {
-  const all: VoteCandidate[] = [];
-  let cursor: number | null = 0;
-  for (let guard = 0; cursor !== null && guard < 50; guard++) {
-    const page = await api.voteCandidates(eventId, voteId, cursor);
-    all.push(...page.items);
-    cursor = page.next;
-  }
-  return all;
+/**
+ * Toutes les pages de la grille d'un vote (100 par page, ordre stable de l'API), sans plafond de 5 000 candidats. Une page qui
+ * échoue ou une pagination qui ne finit pas est une **erreur** (l'écran dit l'échec et propose « Réessayer ») : jamais une
+ * grille tronquée ou vide présentée comme complète (tour 2).
+ */
+export async function loadGrid(eventId: string, voteId: string): Promise<VoteCandidate[]> {
+  const r = await collectPages((cursor) => api.voteCandidates(eventId, voteId, cursor));
+  if (!r.complete) throw new Error("grid_incomplete");
+  return r.items;
 }
 
 /**
@@ -152,6 +152,8 @@ export function useEventRef(ref: string | undefined): {
   title: string | null;
   slug: string | null;
   error: boolean;
+  /** Relit l'événement (adresse d'une notification ouverte hors ligne) : « Réessayer » commence par là. */
+  reload: () => Promise<unknown>;
 } {
   const { upcoming, past } = useApplications();
   const isId = Boolean(ref && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref));
@@ -162,11 +164,19 @@ export function useEventRef(ref: string | undefined): {
   }, [resolved.data]);
   // Un identifiant sans titre dans l'adresse : le titre vient des candidatures déjà lues (comme l'ancien écran du vote).
   const known = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.event.id === ref)?.event;
-  if (isId) return { eventId: ref as string, title: known?.title ?? null, slug: known?.slug ?? null, error: false };
+  if (isId)
+    return {
+      eventId: ref as string,
+      title: known?.title ?? null,
+      slug: known?.slug ?? null,
+      error: false,
+      reload: async () => null,
+    };
   return {
     eventId: stable?.id ?? null,
     title: stable?.title ?? null,
     slug: stable?.slug ?? null,
     error: Boolean(resolved.error) && !stable,
+    reload: () => resolved.reload(),
   };
 }

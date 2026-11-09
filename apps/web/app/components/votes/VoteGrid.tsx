@@ -16,6 +16,7 @@ export function VoteGrid({
   busy,
   pick,
   onPick,
+  failed = false,
 }: {
   candidates: readonly VoteCandidate[];
   ownIds: readonly string[];
@@ -25,7 +26,10 @@ export function VoteGrid({
   /** La voiture choisie, pas encore votée. */
   pick: string | null;
   onPick: (applicationId: string) => void;
+  /** Une page de la grille n'a pas pu être lue : « aucune voiture » serait faux, la page le dit à part. */
+  failed?: boolean;
 }) {
+  if (candidates.length === 0 && failed) return null;
   if (candidates.length === 0) return <p className="s-muted">{T.empty}</p>;
   return (
     <ul className="vote-grid vote-grid--four" data-testid="vote-grid">

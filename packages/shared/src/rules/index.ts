@@ -38,6 +38,7 @@ export * from "./moderation";
 export * from "./moon";
 export * from "./nearAccess";
 export * from "./notifications";
+export * from "./pages";
 export * from "./password";
 export * from "./plateFrame";
 export * from "./plateNumber";

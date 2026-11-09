@@ -3,7 +3,14 @@
 // voix réussie, la page garde la confirmation et propose « Réessayer ». Seuls un 401 (session perdue) renvoie à la
 // connexion, et un 4xx de l'API (événement ou vote introuvable, hors de portée) aux écrans d'erreur habituels. Les règles
 // (qui vote, quand le classement est servi) sont celles de l'API : la page affiche ce qu'elle répond.
-import type { EventPublic, VoteCandidate, VoteCandidates, VoteList, VoteView } from "@orasso/shared";
+import {
+  collectPages,
+  type EventPublic,
+  type VoteCandidate,
+  type VoteCandidates,
+  type VoteList,
+  type VoteView,
+} from "@orasso/shared";
 import { data, redirect } from "react-router";
 
 import { type ApiResult, api, loginUrl, safeReturn } from "./api.server";
@@ -19,6 +26,8 @@ export type VotePage = {
   /** `null` : le vote ne s'est pas relu (panne passagère) ; la voix qui vient d'être donnée reste affichée. */
   vote: VoteView | null;
   candidates: VoteCandidate[];
+  /** Faux : une page de la grille n'a pas pu être lue (la grille est partielle ou vide **par panne**, pas par nature). */
+  candidatesComplete: boolean;
   /** Heure d'Orasso du serveur quand la page a été lue : le navigateur en déduit son écart (clôture du vote). */
   serverAt: number;
 };
@@ -72,7 +81,15 @@ export async function loadVotes(request: Request, slug: string): Promise<VotesPa
  */
 export async function loadVote(request: Request, slug: string): Promise<VotePage> {
   const back = backOf(request, "/app/sorties");
-  const unavailable: VotePage = { back, slug, event: null, vote: null, candidates: [], serverAt: nowMs() };
+  const unavailable: VotePage = {
+    back,
+    slug,
+    event: null,
+    vote: null,
+    candidates: [],
+    candidatesComplete: true,
+    serverAt: nowMs(),
+  };
   const event = await eventOf(request, slug);
   if (!event) return unavailable;
   let voteId = new URL(request.url).searchParams.get("vote");
@@ -86,19 +103,17 @@ export async function loadVote(request: Request, slug: string): Promise<VotePage
   const voteRes = await api<VoteView>(request, `/events/${event.id}/votes/${encodeURIComponent(voteId)}`);
   const vote = settle(request, voteRes) ? voteRes.data : null;
   // La grille : les candidats (pages de l'API), dans un ordre stable sans rapport avec le classement.
-  const candidates: VoteCandidate[] = [];
-  let cursor: number | null = 0;
-  for (let guard = 0; cursor !== null && guard < 20; guard++) {
+  // Toutes les pages, sans plafond de 2 000 candidats ; une page en échec rend la grille partielle et le dit (jamais « vide »).
+  const { items: candidates, complete: candidatesComplete } = await collectPages<VoteCandidate>(async (cursor) => {
     const res: ApiResult<VoteCandidates> = await api<VoteCandidates>(
       request,
       `/events/${event.id}/votes/${encodeURIComponent(voteId)}/candidates?cursor=${cursor}`,
     );
-    if (!res.ok) break;
-    candidates.push(...res.data.items);
-    cursor = res.data.next;
-  }
+    if (!res.ok) throw new Error("page");
+    return res.data;
+  });
   candidates.sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.applicationId.localeCompare(b.applicationId));
-  return { back, slug, event, vote, candidates, serverAt: nowMs() };
+  return { back, slug, event, vote, candidates, candidatesComplete, serverAt: nowMs() };
 }
 
 /** La voix : la réponse de l'API (le vote, avec le classement que j'ai maintenant le droit de voir) revient à la page. */
@@ -111,6 +126,7 @@ export async function voteAction(request: Request) {
     `/events/${encodeURIComponent(eventId)}/votes/${encodeURIComponent(voteId)}/vote`,
     { method: "PUT", json: { applicationId: String(form.get("applicationId") ?? "") } },
   );
-  if (!res.ok) return data({ error: res.error.message, ok: false, vote: null }, { status: res.status });
-  return data({ error: null, ok: true, vote: res.data });
+  if (!res.ok) return data({ error: res.error.message, ok: false, vote: null, eventId }, { status: res.status });
+  // `eventId` : la confirmation reste affichée même si la relecture de l'événement échoue ensuite.
+  return data({ error: null, ok: true, vote: res.data, eventId });
 }

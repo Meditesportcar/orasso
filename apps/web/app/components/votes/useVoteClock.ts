@@ -8,13 +8,16 @@ import { useRevalidator } from "react-router";
 
 import { nowMs } from "../../lib/clock";
 
+/** Appelle `onTick` avec l'heure d'Orasso toutes les `intervalMs` ; renvoie l'arrêt. Pur, testé sans écran. */
+export function tickClock(intervalMs: number, now: () => number, onTick: (at: Date) => void): () => void {
+  const timer = setInterval(() => onTick(new Date(now())), intervalMs);
+  return () => clearInterval(timer);
+}
+
 /** L'heure d'Orasso, rendue à nouveau toutes les `intervalMs`. */
 export function useOrassoNow(intervalMs = 30_000): Date {
   const [now, setNow] = useState(() => new Date(nowMs()));
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date(nowMs())), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
+  useEffect(() => tickClock(intervalMs, nowMs, setNow), [intervalMs]);
   return now;
 }
 
