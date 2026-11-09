@@ -14,15 +14,16 @@ import {
   crewPageLabels as L,
   crewTabLabels as T,
 } from "@orasso/shared";
+import { useNetworkState } from "expo-network";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-
 import { CrewInviteSheet } from "@/features/crews/CrewInviteSheet";
 import { CrewFeed, type CrewFeedScroller } from "@/features/crews/feed/CrewFeed";
 import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { useCrewLive } from "@/features/crews/feed/useCrewLive";
 import { CrewSecHead, CrewTabs, MemberRow, vitrineCaption } from "@/features/crews/page/parts";
+import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
@@ -31,6 +32,7 @@ import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { Overlay } from "@/ui/Overlay";
 import { ask } from "./ask";
 import { type CrewTabId, tabOfParam } from "./crewTabModel";
 import { CrewMembers } from "./Members";
@@ -41,18 +43,18 @@ const { space2, space3 } = tokens.spacing;
 
 export function CrewSpace({
   slug,
-  initialTab,
+  linkTab,
   scroller,
   onLost,
   onLoaded,
   refreshKey = 0,
 }: {
   slug: string;
-  /** L'onglet interne d'un lien (`?onglet=sorties`). */
-  initialTab?: string | null;
+  /** L'onglet interne d'un lien (`?onglet=sorties`) ; un lien reçu alors que le crew est déjà affiché change l'onglet (`n`). */
+  linkTab?: { value: string | null | undefined; n: number };
   scroller?: CrewFeedScroller;
-  /** Je ne suis plus membre de ce crew (retiré, parti, dissous) : la liste de mes crews se relit. */
-  onLost: () => void;
+  /** Je ne suis plus membre de ce crew (retiré, parti, dissous) : la liste de mes crews se relit (`false` : panne). */
+  onLost: () => Promise<boolean>;
   /** Le crew est lu : ses non-lus servent à la feuille du sélecteur. */
   onLoaded?: (view: CrewView) => void;
   /** Glisser pour recharger : le numéro change, la page se relit. */
@@ -73,7 +75,14 @@ export function CrewSpace({
   const pending = useApi(() => api.crewPending(v?.id ?? ""), [v?.id, leader], {
     enabled: Boolean(v && leader && live),
   });
-  const [tab, setTab] = useState<CrewTabId>(tabOfParam(initialTab));
+  const [tab, setTab] = useState<CrewTabId>(() => tabOfParam(linkTab?.value));
+  // Un lien reçu alors que le crew est déjà affiché (notification, `?onglet=sorties`) change l'onglet.
+  const seenLink = useRef(linkTab?.n ?? 0);
+  useEffect(() => {
+    if (!linkTab || linkTab.n === seenLink.current) return;
+    seenLink.current = linkTab.n;
+    if (linkTab.value) setTab(tabOfParam(linkTab.value));
+  }, [linkTab]);
   const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +100,7 @@ export function CrewSpace({
     {
       onRevoked: () => {
         void crew.reload();
-        onLost();
+        void onLost();
       },
     },
   );
@@ -101,9 +110,26 @@ export function CrewSpace({
   lost.current = onLost;
   const loaded = useRef(onLoaded);
   loaded.current = onLoaded;
+  // Perte d'appartenance suivie d'une panne : « Réessayer » au lieu d'un « Chargement… » sans fin, et reprise au retour du
+  // réseau.
+  const [lostFailed, setLostFailed] = useState(false);
+  const network = useNetworkState();
+  const retryLost = useCallback(async () => {
+    setLostFailed(false);
+    if (!(await lost.current())) setLostFailed(true);
+  }, []);
   useEffect(() => {
-    if (gone) lost.current();
-  }, [gone]);
+    if (gone) void retryLost();
+  }, [gone, retryLost]);
+  // Au retour du réseau seulement (pas à chaque échec : la panne ne doit pas tourner en boucle).
+  const online = network.isConnected !== false;
+  const wasOnline = useRef(online);
+  const needsRetry = useRef(false);
+  needsRetry.current = gone && lostFailed;
+  useEffect(() => {
+    if (online && !wasOnline.current && needsRetry.current) void retryLost();
+    wasOnline.current = online;
+  }, [online, retryLost]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: seul le numéro de rechargement relance la lecture.
   useEffect(() => {
     if (refreshKey > 0) void reloadAll();
@@ -134,7 +160,13 @@ export function CrewSpace({
       <Muted variant="body">Chargement…</Muted>
     );
   }
-  if (gone) return <Muted variant="body">Chargement…</Muted>;
+  if (gone) {
+    return lostFailed ? (
+      <LoadError message={T.loadError} onRetry={() => void retryLost()} />
+    ) : (
+      <Muted variant="body">Chargement…</Muted>
+    );
+  }
 
   const space = v.space;
   /** Une sortie mise à jour (réponse) remplace l'ancienne sans recharger la page. */
@@ -315,7 +347,7 @@ export function CrewSpace({
                 void (async () => {
                   if (!me || !(await ask(crewLabels.leaveConfirm))) return;
                   await run(() => api.removeCrewMember(v.id, me.user.id));
-                  onLost();
+                  void onLost();
                 })()
               }
             />
@@ -338,7 +370,10 @@ export function CrewSpace({
           ))}
         </View>
       )}
-      {member && live ? inviteSheet : null}
+      {/* Dans la zone des feuilles de l'écran (voir `Overlay`) : l'invitation couvre l'écran, pas le bas du contenu. */}
+      {member && live ? <Overlay>{inviteSheet}</Overlay> : null}
+      {/* Signaler (lot 32) : un crew dont on n'est pas le chef, depuis son espace comme avant. */}
+      {member && !leader && live ? <ReportButton look="link" type="crew" id={v.id} /> : null}
     </View>
   );
 }

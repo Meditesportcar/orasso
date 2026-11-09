@@ -9,6 +9,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { mediaSource } from "@/lib/media";
 import { AppSheet } from "@/ui/AppSheet";
 import { CrewDot } from "@/ui/Kit";
+import { Overlay } from "@/ui/Overlay";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -75,59 +76,62 @@ export function CrewSelector({
       >
         {head}
       </Pressable>
-      <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.selectorTitle}>
-        <Text variant="posterM" color={c.ink} accessibilityRole="header">
-          {L.selectorTitle}
-        </Text>
-        <View style={styles.list} testID="crew-selector-list">
-          {crews.map((crew) => {
-            const on = crew.id === current.id;
-            return (
-              <Pressable
-                key={crew.id}
-                onPress={() => {
-                  setOpen(false);
-                  if (!on) onChoose(crew.slug);
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                accessibilityLabel={crew.name}
-                testID={`crew-choice-${crew.slug}`}
-                style={[styles.row, { backgroundColor: on ? c.surfaceRaised : c.surface, borderColor: c.line }]}
-              >
-                <CrewBadge crew={crew} size={36} />
-                <View style={styles.text}>
-                  <Text variant="bodyStrong" color={c.ink}>
-                    {crew.name}
-                  </Text>
-                  <Text variant="caption" color={c.inkMuted}>
-                    {on && unread > 0
-                      ? `${crewLabels.membersCount(crew.membersCount)} · ${L.unreadMessages(unread)}`
-                      : crewLabels.membersCount(crew.membersCount)}
-                  </Text>
-                </View>
-                {on ? <Icon name="check" size={20} color={c.accent} /> : null}
-              </Pressable>
-            );
-          })}
-          <Pressable
-            onPress={() => {
-              setOpen(false);
-              router.push("/rejoindre-crew");
-            }}
-            accessibilityRole="link"
-            testID="crew-choice-more"
-            style={[styles.row, { backgroundColor: c.surface, borderColor: c.line }]}
-          >
-            <Icon name="add" size={22} color={c.ink} />
-            <View style={styles.text}>
-              <Text variant="bodyStrong" color={c.ink}>
-                {L.joinOrCreate}
-              </Text>
-            </View>
-          </Pressable>
-        </View>
-      </AppSheet>
+      {/* Dans la zone des feuilles de l'écran : rendue dans la zone qui défile, la feuille se caserait en bas du contenu. */}
+      <Overlay>
+        <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.selectorTitle}>
+          <Text variant="posterM" color={c.ink} accessibilityRole="header">
+            {L.selectorTitle}
+          </Text>
+          <View style={styles.list} testID="crew-selector-list">
+            {crews.map((crew) => {
+              const on = crew.id === current.id;
+              return (
+                <Pressable
+                  key={crew.id}
+                  onPress={() => {
+                    setOpen(false);
+                    if (!on) onChoose(crew.slug);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={crew.name}
+                  testID={`crew-choice-${crew.slug}`}
+                  style={[styles.row, { backgroundColor: on ? c.surfaceRaised : c.surface, borderColor: c.line }]}
+                >
+                  <CrewBadge crew={crew} size={36} />
+                  <View style={styles.text}>
+                    <Text variant="bodyStrong" color={c.ink}>
+                      {crew.name}
+                    </Text>
+                    <Text variant="caption" color={c.inkMuted}>
+                      {on && unread > 0
+                        ? `${crewLabels.membersCount(crew.membersCount)} · ${L.unreadMessages(unread)}`
+                        : crewLabels.membersCount(crew.membersCount)}
+                    </Text>
+                  </View>
+                  {on ? <Icon name="check" size={20} color={c.accent} /> : null}
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={() => {
+                setOpen(false);
+                router.push("/rejoindre-crew");
+              }}
+              accessibilityRole="link"
+              testID="crew-choice-more"
+              style={[styles.row, { backgroundColor: c.surface, borderColor: c.line }]}
+            >
+              <Icon name="add" size={22} color={c.ink} />
+              <View style={styles.text}>
+                <Text variant="bodyStrong" color={c.ink}>
+                  {L.joinOrCreate}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </AppSheet>
+      </Overlay>
     </>
   );
 }

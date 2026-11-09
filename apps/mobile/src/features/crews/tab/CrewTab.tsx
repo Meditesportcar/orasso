@@ -2,10 +2,12 @@
 // dernier ouvert revient, rangé par compte), puis le crew affiché (`CrewSpace` : Fil · Sorties · Membres · Spots et la
 // Discussion) ; sans crew, « Rejoindre un crew » ou « Créer un crew » (`NoCrew`). Mode A : bande ORASSO et barre d'onglets.
 // Un lien peut cibler un crew et un onglet (`/crew?crew=<adresse>&onglet=sorties`) : la page d'un crew dont je suis membre
-// y renvoie.
+// y renvoie. Reçu alors que l'onglet est déjà monté, un lien l'emporte sur le choix manuel (et le lien est consommé : les
+// paramètres sont retirés, l'adresse redevient `/crew`, pour qu'un même lien relu agisse encore) ; le crew d'un lien qui n'est pas le mien mène à
+// sa vitrine.
 import { tokens, useTheme } from "@orasso/design-system/native";
 import { crewTabLabels as T } from "@orasso/shared";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -33,12 +35,20 @@ export function CrewTab() {
   const insets = useSafeAreaInsets();
   const { me } = useSession();
   const userId = me?.user.id ?? null;
+  const router = useRouter();
   const params = useLocalSearchParams<{ crew?: string; onglet?: string }>();
   const crews = useApi(() => api.myCrews(), [], { cacheKey: "my-crews" });
   const list = crews.data;
+  const reloadCrews = crews.reload;
   // Le dernier crew ouvert, relu à l'arrivée (`undefined` : pas encore lu) ; le choix est rangé sous le compte.
   const [last, setLast] = useState<string | null | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null>(null);
+  // Le crew et l'onglet d'un lien, en attente d'être appliqués (lus des paramètres, qui sont ensuite retirés).
+  const [wanted, setWanted] = useState<string | null>(params.crew ?? null);
+  const [tabLink, setTabLink] = useState<{ value: string | null; n: number }>({
+    value: params.onglet ?? null,
+    n: params.onglet ? 1 : 0,
+  });
   const [unread, setUnread] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,9 +63,45 @@ export function CrewTab() {
     };
   }, [userId]);
 
+  // Un lien reçu (onglet déjà monté) l'emporte sur le choix manuel ; puis on retire les paramètres.
+  useEffect(() => {
+    if (!params.crew && !params.onglet) return;
+    if (params.crew) {
+      setWanted(params.crew);
+      setChosen(null);
+    }
+    setTabLink((l) => ({ value: params.onglet ?? null, n: l.n + 1 }));
+    // `setParams` ne retire rien ici (essayé : `undefined`, chaîne vide, `useNavigation`) ; remplacer l'adresse par `/crew` retire
+    // les paramètres, sans démonter l'onglet.
+    router.replace("/crew");
+  }, [params.crew, params.onglet, router]);
+  // Le crew du lien : un des miens, il devient le choix ; sinon la liste est relue une fois (crew qui vient d'être créé ou
+  // accepté), et s'il n'y est toujours pas, c'est la vitrine du crew qui s'ouvre (jamais un autre de mes crews en silence).
+  const checking = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wanted || !list) return;
+    if (list.some((c) => c.slug === wanted)) {
+      setChosen(wanted);
+      setUnread(0);
+      setWanted(null);
+      return;
+    }
+    if (checking.current === wanted) return;
+    checking.current = wanted;
+    void reloadCrews().then((fresh) => {
+      checking.current = null;
+      setWanted((w) => (w === wanted ? null : w));
+      if (!fresh) return;
+      if (fresh.some((c) => c.slug === wanted)) {
+        setChosen(wanted);
+        setUnread(0);
+      } else router.replace(`/crew/${encodeURIComponent(wanted)}`);
+    });
+  }, [wanted, list, reloadCrews, router]);
+
   const current = useMemo(
-    () => (list && last !== undefined ? pickCrew(list, chosen ?? params.crew, last) : null),
-    [list, last, chosen, params.crew],
+    () => (list && last !== undefined ? pickCrew(list, chosen ?? wanted, last) : null),
+    [list, last, chosen, wanted],
   );
   const slug = current?.slug ?? null;
   // Un crew montré (même choisi par un lien) devient « le dernier ouvert ».
@@ -64,6 +110,8 @@ export function CrewTab() {
   }, [userId, slug]);
   const choose = useCallback((next: string) => {
     setChosen(next);
+    setWanted(null);
+    setTabLink((l) => ({ value: null, n: l.n }));
     setUnread(0);
   }, []);
 
@@ -117,10 +165,10 @@ export function CrewTab() {
             <CrewSpace
               key={current.slug}
               slug={current.slug}
-              initialTab={chosen ? null : params.onglet}
+              linkTab={tabLink}
               scroller={scroller}
               refreshKey={refreshKey}
-              onLost={() => void crews.reload()}
+              onLost={async () => (await crews.reload()) !== null}
               onLoaded={(view) => setUnread(view.space?.unreadCount ?? 0)}
             />
           </View>

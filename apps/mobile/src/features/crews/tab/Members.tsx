@@ -18,6 +18,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
+import { Overlay } from "@/ui/Overlay";
 import { CrewSecHead, GarageTile, MemberRow, memberCaption, RequestCard } from "../page/parts";
 import { carsOf } from "./crewTabModel";
 
@@ -161,7 +162,10 @@ export function CrewMembers({
           {crewLabels.leave}
         </SmButton>
       ) : null}
-      <MemberSheet member={open} cars={open ? carsOf(garage, open.pseudo) : []} onClose={() => setOpen(null)} />
+      {/* Dans la zone des feuilles de l'écran (voir `Overlay`) : la fiche couvre l'écran, pas le bas du contenu. */}
+      <Overlay>
+        <MemberSheet member={open} cars={open ? carsOf(garage, open.pseudo) : []} onClose={() => setOpen(null)} />
+      </Overlay>
     </View>
   );
 }
