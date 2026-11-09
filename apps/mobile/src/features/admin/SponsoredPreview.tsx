@@ -65,8 +65,17 @@ export function SponsoredPreview({ advertiserName, title, body, imageUrl, disclo
 }
 
 const styles = StyleSheet.create({
-  card: { width: "100%", maxWidth: 260, aspectRatio: 4 / 5, overflow: "hidden", borderRadius: tokens.radius.radiusLg },
-  media: { flex: 1, alignItems: "center", justifyContent: "center", padding: space3 },
+  card: { width: "100%", maxWidth: 260, aspectRatio: 4 / 5, borderRadius: tokens.radius.radiusLg },
+  media: {
+    flex: 1,
+    minHeight: 72,
+    overflow: "hidden",
+    borderTopLeftRadius: tokens.radius.radiusLg,
+    borderTopRightRadius: tokens.radius.radiusLg,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: space3,
+  },
   noImage: { textAlign: "center" },
   body: { gap: 4, padding: space3 },
   tags: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },

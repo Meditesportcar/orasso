@@ -403,7 +403,8 @@
   width: 100%;
   max-width: 15rem;
   aspect-ratio: 4 / 5;
-  overflow: hidden;
+  /* Visible : si le texte dépasse le cadre 4:5, la carte s'allonge au lieu de couper. */
+  overflow: visible;
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--ink);
@@ -411,7 +412,9 @@
 }
 .adm-ad__media {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 4.5rem;
+  overflow: hidden;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   display: grid;
   place-items: center;
   padding: var(--space-3);
@@ -451,7 +454,7 @@
 }
 .adm-sponso__preview {
   flex: 0 0 auto;
-  width: 11rem;
+  width: 13rem;
 }
 .adm-form-split {
   display: grid;
