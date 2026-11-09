@@ -61,7 +61,7 @@ for (const [theme, desktop] of [
     const recurrent = theme === "sable" && !desktop;
 
     // (1) Type.
-    await expect(step).toContainText("Étape 1 sur 8 · Type");
+    await expect(step).toContainText("Étape 1 sur 9 · Type");
     await expect(page.getByRole("heading", { name: "C'est quel genre ?" })).toBeVisible();
     await page.getByRole("button", { name: "Nocturne", exact: true }).click();
     if (recurrent) {
@@ -128,6 +128,7 @@ for (const [theme, desktop] of [
     await page.getByRole("button", { name: "Modèle Nocturne" }).click();
     await expect(page.getByText(/4 lignes · \d+ caractères/)).toBeVisible();
     await shot(page, "06-reglement", theme, desktop);
+    await next(page, "Votes");
     await next(page, "Affiche");
 
     // (7) Affiche : photo, style, titre, aperçu rendu par l'API.

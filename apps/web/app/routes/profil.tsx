@@ -10,8 +10,9 @@ import {
   personaKindLabels,
   type UserProfileView,
 } from "@orasso/shared";
-import { Form, useNavigation } from "react-router";
+import { Form, redirect, useNavigation } from "react-router";
 
+import { ProposeForm } from "../components/partnerships/ProposeForm";
 import { PublicProfile } from "../components/profile/PublicProfile";
 import { api, apiOrThrow, getMe, safeReturn } from "../lib/api.server";
 import { followAction, isFollowIntent } from "../lib/follow.server";
@@ -78,6 +79,17 @@ export async function action({ request }: Route.ActionArgs) {
   if (isMessageIntent(intent)) return messageAction(request, form);
   // Lot R6b : suivre (ou demander à suivre), ne plus suivre, annuler une demande.
   if (isFollowIntent(intent)) return followAction(request, form);
+  // Lot R7m1 : « Proposer un partenariat » (pro vérifié) ; la page se recharge sur « Proposition envoyée ».
+  if (intent === "partnership_propose") {
+    const pseudo = String(form.get("pseudo") ?? "");
+    const vehicleId = String(form.get("vehicleId") ?? "");
+    const res = await api(request, `/pros/${encodeURIComponent(String(form.get("proId") ?? ""))}/partnerships`, {
+      method: "POST",
+      json: { userPseudo: pseudo, vehicleId: vehicleId || null, message: String(form.get("message") ?? "") },
+    });
+    if (!res.ok) return { partnershipError: res.error.message };
+    return redirect(`/u/${encodeURIComponent(pseudo)}`);
+  }
   return { followError: "Action inconnue." };
 }
 
@@ -145,7 +157,9 @@ function ProfileHub({ hub }: { hub: Hub }) {
 
 export default function Profil({ loaderData, actionData: rawAction }: Route.ComponentProps) {
   const p = loaderData.profile;
-  const actionData = rawAction as ({ followError?: string | null } & Partial<MessageActionData>) | undefined;
+  const actionData = rawAction as
+    | ({ followError?: string | null; partnershipError?: string | null } & Partial<MessageActionData>)
+    | undefined;
   const busy = useNavigation().state !== "idle";
   const isSelf = p.audience === "self";
   // Lot R5b : le profil est le composant commun (comme l'aperçu) ; les coordonnées de l'organisateur et le hub restent ici.
@@ -216,7 +230,23 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
     <>
       <FicheBar heading={false} title="Profil" back={loaderData.back} />
       <div data-testid="profil" data-audience={p.audience}>
-        <PublicProfile profile={p} mode={isSelf ? "self" : "live"} notices={notices} after={after} />
+        <PublicProfile
+          profile={p}
+          mode={isSelf ? "self" : "live"}
+          notices={notices}
+          after={after}
+          offer={
+            p.partnershipOffer ? (
+              <ProposeForm
+                offer={p.partnershipOffer}
+                pseudo={p.pseudo}
+                vehicles={p.vehicles}
+                busy={busy}
+                error={actionData?.partnershipError}
+              />
+            ) : null
+          }
+        />
       </div>
     </>
   );

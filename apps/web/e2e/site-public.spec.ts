@@ -108,7 +108,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await owner.getByRole("link", { name: "Nouvel événement" }).click();
   const step = owner.getByTestId("wizard-step");
   // Lot 53 : huit temps (type, lieu, arrivées, critères, avant-première, règlement, affiche, tout est prêt).
-  await expect(step).toContainText("Étape 1 sur 8 · Type");
+  await expect(step).toContainText("Étape 1 sur 9 · Type");
   await owner.waitForLoadState("networkidle"); // hydratation : l'assistant est un composant du navigateur
   // Validation du temps : un titre est exigé.
   await owner.getByRole("button", { name: "Continuer" }).click();
@@ -164,6 +164,9 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await expect(step).toContainText("Règlement");
   await expect(owner.getByRole("textbox", { name: "Règlement" })).toHaveValue(/Règlement de l'événement/);
   await owner.getByLabel("Consignes aux retenus").fill("Entrée par le parking nord, arrivée dès 17 h 30.");
+  await owner.getByRole("button", { name: "Continuer" }).click();
+
+  await expect(step).toContainText("Votes");
   await owner.getByRole("button", { name: "Continuer" }).click();
 
   await expect(step).toContainText("Affiche");

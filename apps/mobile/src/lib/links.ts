@@ -1,6 +1,7 @@
 // Liens des éléments du Journal et des notifications (lot 17) : seulement des écrans de l'appli connus (événement,
 // profil, véhicule d'un autre). Jamais un chemin du site (`/app/acces`…) ni une adresse externe.
-const APP_LINK = /^\/(e|u|v)\/[^/?#\s]+$/;
+// Lot R7m1 : `p` (fiche d'un pro) : « Ton partenariat est terminé » mène à la fiche du pro.
+const APP_LINK = /^\/(e|u|v|p)\/[^/?#\s]+$/;
 /**
  * Activité et Messages (lot R7c2, la Boîte a disparu) : `/app/activite[/demandes]` et `/app/messages[/demandes|/<id>]` du
  * site → `/activite…` et `/messages…`. Les anciennes adresses de la Boîte (`/app/boite[/demandes|/<id>]`, `/app/journal`),

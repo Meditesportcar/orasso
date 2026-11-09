@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
+import { PartnersSection } from "@/features/partnerships/PartnersSection";
 import { ReportButton } from "@/features/ReportSheet";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
@@ -208,6 +209,9 @@ export default function ProPage() {
           ) : null}
         </View>
       </View>
+
+      {/* Lot R7m1 : « Ses partenaires » (les passionnés à partenariat actif ; l'API ne sert rien sans compte connecté). */}
+      <PartnersSection items={p.memberPartners ?? []} total={p.memberPartnersTotal} slug={p.slug} onPlate />
 
       {/* Lot 36 : les photos de réalisations, comme sur le site (elles n'étaient montrées qu'au pro). */}
       {p.photos.length > 0 ? (

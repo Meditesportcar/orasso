@@ -12,6 +12,7 @@ import {
   presenceLabels,
   type StaffRole,
   staffRoleLabels,
+  voteOrgaLabels,
   wallTime,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
@@ -315,6 +316,14 @@ export default function StaffHome() {
               testID="staff-shop-tile"
             />
           ) : null}
+          {/* Lot R7l2 : les votes du public, en lecture seule pour le staff. */}
+          <StaffTile
+            icon="trophy"
+            title={voteOrgaLabels.staffTile}
+            hint={voteOrgaLabels.staffTileHint}
+            onPress={() => router.push(`/staff/${id}/votes`)}
+            testID="staff-tile-votes"
+          />
         </View>
       ) : null}
 

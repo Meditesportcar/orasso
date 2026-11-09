@@ -5,6 +5,7 @@ import { type EventFormat, eventFormats, type RefusalReason, refusalReasons } fr
 import { type Grade, grades } from "../grades";
 import { type VendorTypeCode, vendorTypeCodes } from "../provider";
 import { GRADE_THRESHOLDS } from "./misc";
+import { PARTNERSHIP_SUBSCRIPTION_FROM_DEFAULT } from "./partnerships";
 import { POINTS } from "./points";
 import { type ProActivity, proActivities } from "./pro";
 import { DAY } from "./time";
@@ -26,6 +27,8 @@ export const adminSettingKeys = [
   "points.vote_first",
   "points.vote_second",
   "points.vote_third",
+  // Lot R7m1 : jour (Paris) à partir duquel proposer un partenariat demande l'abonnement pro (avant : tout pro vérifié).
+  "partnerships.subscription_from",
   "grades.thresholds",
   "lists.refusal_reasons",
   "lists.vendor_types",
@@ -46,6 +49,7 @@ export type AdminSettingValues = {
   "points.vote_first": number;
   "points.vote_second": number;
   "points.vote_third": number;
+  "partnerships.subscription_from": string;
   "grades.thresholds": Record<Grade, number>;
   "lists.refusal_reasons": RefusalReason[];
   "lists.vendor_types": VendorTypeCode[];
@@ -65,6 +69,7 @@ export const adminSettingDefaults: AdminSettingValues = {
   "points.vote_first": VOTE_PODIUM_POINTS_DEFAULT.first,
   "points.vote_second": VOTE_PODIUM_POINTS_DEFAULT.second,
   "points.vote_third": VOTE_PODIUM_POINTS_DEFAULT.third,
+  "partnerships.subscription_from": PARTNERSHIP_SUBSCRIPTION_FROM_DEFAULT,
   "grades.thresholds": { ...GRADE_THRESHOLDS },
   "lists.refusal_reasons": [...refusalReasons],
   "lists.vendor_types": [...vendorTypeCodes],

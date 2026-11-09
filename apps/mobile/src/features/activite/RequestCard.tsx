@@ -1,7 +1,7 @@
 // Carte d'une demande de l'Activité (prototype « Demandes ») : photo, titre, détail, Accepter / Refuser sur la plaque.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { messagingLabels } from "@orasso/shared";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { errorMessage } from "@/lib/http";
@@ -20,6 +20,7 @@ export function RequestCard({
   onDecline,
   acceptLabel = messagingLabels.accept,
   declineLabel = messagingLabels.decline,
+  children,
   testID,
 }: {
   avatarUrl: string | null;
@@ -33,6 +34,8 @@ export function RequestCard({
   /** Lot R7c2 : « Confirmer » / « Pas moi » d'un transfert de plaque. */
   acceptLabel?: string;
   declineLabel?: string;
+  /** Lot R7m1 : un bloc entre le texte et les boutons (la voiture concernée d'un partenariat). */
+  children?: ReactNode;
   testID?: string;
 }) {
   const { t } = useTheme();
@@ -74,6 +77,7 @@ export function RequestCard({
           {message}
         </Text>
       ) : null}
+      {children}
       {error ? (
         <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
           {error}

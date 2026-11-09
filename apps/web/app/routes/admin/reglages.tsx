@@ -90,6 +90,11 @@ export async function action({ request }: Route.ActionArgs) {
     const res = await put(request, "grades.thresholds", thresholds);
     return res.ok ? redirect("/admin/reglages?fait=1") : fail("points", res);
   }
+  // Lot R7m1 : le jour à partir duquel proposer un partenariat demande l'abonnement pro.
+  if (intent === "partnerships") {
+    const res = await put(request, "partnerships.subscription_from", text("partnerships.subscription_from"));
+    return res.ok ? redirect("/admin/reglages?fait=1") : fail("partnerships", res);
+  }
   if (intent === "list") {
     const key = text("key") as ListKey;
     const codes = (adminListCodes[key] ?? []) as readonly string[];
@@ -260,6 +265,32 @@ export default function AdminSettings({ loaderData, actionData }: Route.Componen
             Dernière modification : {formatDateTime(entry("points.malus")?.updatedAt ?? "")}
           </p>
         )}
+      </Form>
+
+      <Form
+        method="post"
+        className="orga__panel s-stack"
+        aria-labelledby="partnerships"
+        data-testid="admin-partnerships"
+      >
+        <input type="hidden" name="intent" value="partnerships" />
+        <h2 id="partnerships" className="s-h2">
+          {adminTexts.partnershipsTitle}
+        </h2>
+        <p className="s-muted">{adminTexts.partnershipsHint}</p>
+        <TextField
+          label={adminSettingLabels["partnerships.subscription_from"]}
+          name="partnerships.subscription_from"
+          defaultValue={String(entry("partnerships.subscription_from")?.value ?? "")}
+          placeholder={adminTexts.partnershipsDayHint}
+          required
+        />
+        {error("partnerships")}
+        <div className="s-row">
+          <Button type="submit" variant="secondary" icon="check" loading={busy}>
+            {adminTexts.partnershipsSave}
+          </Button>
+        </div>
       </Form>
 
       <section className="orga__panel s-stack" aria-labelledby="lists">

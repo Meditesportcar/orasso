@@ -45,6 +45,7 @@ import { mediaRoutes } from "./modules/media/routes";
 import { messagingRoutes } from "./modules/messaging/routes";
 import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
+import { partnershipsRoutes } from "./modules/partnerships/routes";
 import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { presenceRoutes } from "./modules/presence/routes";
@@ -253,6 +254,8 @@ app.route("/", votesRoutes);
 // Lot R7i : rendez-vous au spot (lancer, recevoir, répondre ; le lieu n est servi qu aux invités).
 app.route("/", spotMeetupsRoutes);
 app.route("/", presenceRoutes);
+// Lot R7m1 : partenariats pro ↔ passionné.
+app.route("/", partnershipsRoutes);
 app.route("/", recapRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);

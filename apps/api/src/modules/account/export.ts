@@ -9,6 +9,7 @@ import {
   events,
   followTraces,
   friendships,
+  partnerships,
   pointEntries,
   proFollows,
   profiles,
@@ -40,6 +41,15 @@ export type AccountExport = {
   tickets: Record<string, unknown>[];
   points: { season: string; kind: string; points: number; event: string | null; note: string | null; at: string }[];
   structures: { name: string; role: string; status: string }[];
+  /** Lot R7m1 : tes partenariats avec des pros (proposés, acceptés, refusés, terminés) : le pro, le texte, les dates. */
+  partnerships: {
+    pro: string;
+    status: string;
+    message: string;
+    proposedAt: string;
+    respondedAt: string | null;
+    endedAt: string | null;
+  }[];
   /**
    * Lot R4c, tour 2 : abonnements (personnes, organisateurs, pros) et abonnés, par pseudo ou nom ; lot R6b : le statut
    * de chaque abonnement entre personnes (accepté, ou demande en attente) et la date d'acceptation.
@@ -154,6 +164,12 @@ export const accountExportService = {
       .from(followTraces)
       .innerJoin(profiles, eq(profiles.userId, followTraces.followerId))
       .where(and(eq(followTraces.followedId, userId), isNotNull(followTraces.declinedAt)));
+    const partnershipRows = await db
+      .select({ p: partnerships, pro: proProfiles.name })
+      .from(partnerships)
+      .innerJoin(proProfiles, eq(proProfiles.id, partnerships.proId))
+      .where(eq(partnerships.userId, userId))
+      .orderBy(desc(partnerships.proposedAt));
     const friendRows = await db
       .select({ f: friendships, pseudo: profiles.pseudo })
       .from(friendships)
@@ -237,6 +253,14 @@ export const accountExportService = {
         at: e.createdAt.toISOString(),
       })),
       structures: memberRows,
+      partnerships: partnershipRows.map(({ p: row, pro: name }) => ({
+        pro: name,
+        status: row.status,
+        message: row.message,
+        proposedAt: row.proposedAt.toISOString(),
+        respondedAt: row.respondedAt?.toISOString() ?? null,
+        endedAt: row.endedAt?.toISOString() ?? null,
+      })),
       network: {
         following: following.map(followOut),
         followers: followers.map(followOut),

@@ -523,8 +523,15 @@
     {
       "idx": 74,
       "version": "7",
-      "when": 1794228407892,
-      "tag": "0074_spot-meetups",
+      "when": 1794237121669,
+      "tag": "0074_partnerships",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1794240965057,
+      "tag": "0075_spot-meetups",
       "breakpoints": true
     }
   ]

@@ -1,5 +1,5 @@
 {
-  "id": "c74fe096-6e9f-4d4e-832e-29c71a472b1c",
+  "id": "6905a168-fa7c-443e-8049-04528729b608",
   "prevId": "cbe6b6e6-f831-4015-9e9e-e87b3fff02c7",
   "version": "7",
   "dialect": "postgresql",
@@ -10014,6 +10014,235 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.partnerships": {
+      "name": "partnerships",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pro_id": {
+          "name": "pro_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "partnership_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "proposed_at": {
+          "name": "proposed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "responded_at": {
+          "name": "responded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ended_by": {
+          "name": "ended_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "partnerships_open_key": {
+          "name": "partnerships_open_key",
+          "columns": [
+            {
+              "expression": "pro_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"partnerships\".\"status\" in ('pending', 'active')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "partnerships_user_status_idx": {
+          "name": "partnerships_user_status_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "partnerships_pro_status_idx": {
+          "name": "partnerships_pro_status_idx",
+          "columns": [
+            {
+              "expression": "pro_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "partnerships_vehicle_idx": {
+          "name": "partnerships_vehicle_idx",
+          "columns": [
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "partnerships_pro_id_pro_profiles_id_fk": {
+          "name": "partnerships_pro_id_pro_profiles_id_fk",
+          "tableFrom": "partnerships",
+          "tableTo": "pro_profiles",
+          "columnsFrom": [
+            "pro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "partnerships_user_id_user_id_fk": {
+          "name": "partnerships_user_id_user_id_fk",
+          "tableFrom": "partnerships",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "partnerships_vehicle_id_vehicles_id_fk": {
+          "name": "partnerships_vehicle_id_vehicles_id_fk",
+          "tableFrom": "partnerships",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "partnerships_ended_by_user_id_fk": {
+          "name": "partnerships_ended_by_user_id_fk",
+          "tableFrom": "partnerships",
+          "tableTo": "user",
+          "columnsFrom": [
+            "ended_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "partnerships_message_check": {
+          "name": "partnerships_message_check",
+          "value": "char_length(\"partnerships\".\"message\") between 1 and 200"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.audience_prize_results": {
       "name": "audience_prize_results",
       "schema": "",
@@ -14859,323 +15088,6 @@
         "user_follows_not_self_check": {
           "name": "user_follows_not_self_check",
           "value": "\"user_follows\".\"follower_id\" <> \"user_follows\".\"followed_id\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.spot_meetup_replies": {
-      "name": "spot_meetup_replies",
-      "schema": "",
-      "columns": {
-        "meetup_id": {
-          "name": "meetup_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "answer": {
-          "name": "answer",
-          "type": "spot_rsvp",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "answered_at": {
-          "name": "answered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "spot_meetup_replies_user_idx": {
-          "name": "spot_meetup_replies_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "spot_meetup_replies_meetup_id_spot_meetups_id_fk": {
-          "name": "spot_meetup_replies_meetup_id_spot_meetups_id_fk",
-          "tableFrom": "spot_meetup_replies",
-          "tableTo": "spot_meetups",
-          "columnsFrom": [
-            "meetup_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "spot_meetup_replies_user_id_user_id_fk": {
-          "name": "spot_meetup_replies_user_id_user_id_fk",
-          "tableFrom": "spot_meetup_replies",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "spot_meetup_replies_pkey": {
-          "name": "spot_meetup_replies_pkey",
-          "columns": [
-            "meetup_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.spot_meetups": {
-      "name": "spot_meetups",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "audience": {
-          "name": "audience",
-          "type": "spot_audience",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "crew_id": {
-          "name": "crew_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "place_label": {
-          "name": "place_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lat": {
-          "name": "lat",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lng": {
-          "name": "lng",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_at": {
-          "name": "cancelled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "purged_at": {
-          "name": "purged_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "came_count": {
-          "name": "came_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "spot_meetups_one_active_key": {
-          "name": "spot_meetups_one_active_key",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"spot_meetups\".\"cancelled_at\" is null and \"spot_meetups\".\"purged_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_ends_idx": {
-          "name": "spot_meetups_ends_idx",
-          "columns": [
-            {
-              "expression": "ends_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"spot_meetups\".\"purged_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_crew_idx": {
-          "name": "spot_meetups_crew_idx",
-          "columns": [
-            {
-              "expression": "crew_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "ends_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"spot_meetups\".\"crew_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "spot_meetups_author_idx": {
-          "name": "spot_meetups_author_idx",
-          "columns": [
-            {
-              "expression": "author_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "spot_meetups_author_id_user_id_fk": {
-          "name": "spot_meetups_author_id_user_id_fk",
-          "tableFrom": "spot_meetups",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "spot_meetups_crew_id_crews_id_fk": {
-          "name": "spot_meetups_crew_id_crews_id_fk",
-          "tableFrom": "spot_meetups",
-          "tableTo": "crews",
-          "columnsFrom": [
-            "crew_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "spot_meetups_times_check": {
-          "name": "spot_meetups_times_check",
-          "value": "\"spot_meetups\".\"ends_at\" > \"spot_meetups\".\"starts_at\" and \"spot_meetups\".\"ends_at\" <= \"spot_meetups\".\"starts_at\" + interval '12 hours'"
-        },
-        "spot_meetups_crew_check": {
-          "name": "spot_meetups_crew_check",
-          "value": "(\"spot_meetups\".\"audience\" = 'crew') = (\"spot_meetups\".\"crew_id\" is not null)"
-        },
-        "spot_meetups_place_check": {
-          "name": "spot_meetups_place_check",
-          "value": "char_length(\"spot_meetups\".\"place_label\") <= 80"
-        },
-        "spot_meetups_note_check": {
-          "name": "spot_meetups_note_check",
-          "value": "\"spot_meetups\".\"note\" is null or char_length(\"spot_meetups\".\"note\") <= 140"
         }
       },
       "isRLSEnabled": false
@@ -20359,6 +20271,16 @@
         "account"
       ]
     },
+    "public.partnership_status": {
+      "name": "partnership_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "active",
+        "declined",
+        "ended"
+      ]
+    },
     "public.stamp_kind": {
       "name": "stamp_kind",
       "schema": "public",
@@ -20518,22 +20440,6 @@
         "pending",
         "accepted",
         "declined"
-      ]
-    },
-    "public.spot_audience": {
-      "name": "spot_audience",
-      "schema": "public",
-      "values": [
-        "followers",
-        "crew"
-      ]
-    },
-    "public.spot_rsvp": {
-      "name": "spot_rsvp",
-      "schema": "public",
-      "values": [
-        "yes",
-        "maybe"
       ]
     },
     "public.staff_presence": {

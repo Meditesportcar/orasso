@@ -25,6 +25,7 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
@@ -39,6 +40,7 @@ import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
 import { ticketsApi } from "./tickets";
 import { triageApi } from "./triage";
+import { votesApi } from "./votes";
 import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
@@ -79,11 +81,13 @@ export const api = {
   ...afterEventApi,
   ...passportApi,
   ...presenceApi,
+  ...partnershipsApi,
   ...adminApi,
 
   ...orgaApi,
   ...structureApi,
   ...triageApi,
+  ...votesApi,
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,

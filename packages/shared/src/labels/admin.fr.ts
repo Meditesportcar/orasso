@@ -54,6 +54,7 @@ export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "points.vote_first": "Points · 1er d'un vote",
   "points.vote_second": "Points · 2e d'un vote",
   "points.vote_third": "Points · 3e d'un vote",
+  "partnerships.subscription_from": "Partenariats : réservés à l'abonnement pro à partir du",
   "grades.thresholds": "Seuils des grades",
   "lists.refusal_reasons": "Motifs de refus proposés au tri",
   "lists.vendor_types": "Types de prestataires proposés",
@@ -68,6 +69,11 @@ export const adminTexts = {
   pointsTitle: "Points et grades",
   pointsWarning:
     "Modifie les futurs calculs : les points déjà attribués ne changent pas. Le prochain règlement (J+2) applique le nouveau barème ; un changement de seuils recalcule le grade de tous les comptes (en arrière-plan, sans notification).",
+  partnershipsTitle: "Partenariats",
+  partnershipsHint:
+    "Jusqu'à cette date (minuit, heure de Paris), tout pro vérifié peut proposer un partenariat à un passionné ; ensuite, il faut l'abonnement pro.",
+  partnershipsSave: "Enregistrer la date",
+  partnershipsDayHint: "AAAA-MM-JJ",
   listsTitle: "Listes",
   listsHint:
     "Coche ce qui est proposé et choisis l'ordre. Les éléments décochés restent valables pour ce qui a déjà été enregistré.",
