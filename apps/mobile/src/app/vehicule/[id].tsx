@@ -42,6 +42,7 @@ import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
 import { BlurSheet, type BlurTarget } from "@/features/vehicle/add/BlurSheet";
 import { EditSheet } from "@/features/vehicle/EditSheet";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
+import { VehicleTrophies } from "@/features/vehicle/VehicleTrophies";
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -417,6 +418,8 @@ export default function VehiculeFiche() {
       ) : null}
       {busy ? <Muted variant="meta">{busy}</Muted> : null}
       {error && !certOpen ? <Notice tone="error">{error}</Notice> : null}
+
+      <VehicleTrophies vehicle={v} />
 
       <SecHead title="Fiche" />
       <Card style={styles.factsCard}>

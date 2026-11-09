@@ -25,9 +25,9 @@ import {
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { type LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
-
 import { fitWordSize, WIDE_EM } from "@/features/home/fit";
 import { Num, SmButton } from "@/features/passionne/kit";
+import { VehicleTrophies } from "@/features/vehicle/VehicleTrophies";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
@@ -253,6 +253,9 @@ export function GarageCard({
           {facts}
         </Text>
       ) : null}
+
+      {/* Lot R7l3 : les podiums de vote (et le partenaire quand l'API le renvoie). */}
+      <VehicleTrophies vehicle={vehicle} compact max={3} />
 
       {cert ? <CertificationRow cert={cert} photoCount={certPhotos} onPress={() => setCertOpen(true)} /> : null}
 

@@ -28,6 +28,13 @@ export function inboxPathOf(pathname: string): string | null {
  */
 const REVIEW_LINK = /^\/app\/acces\?avis=([0-9a-f-]{36})$/;
 
+/**
+ * Votes (lot R7l3, notifications `vote_opened` et `vote_won`) : la liste d'un événement (`/app/votes/<adresse>` du site →
+ * `/votes/<adresse>`) et un vote, avec son résultat (`/app/vote/<adresse>?vote=<id>` → `/vote/<adresse>?vote=<id>`).
+ */
+const VOTES_LINK = /^\/app\/votes\/([a-z0-9-]{1,80})$/;
+const VOTE_LINK = /^\/app\/vote\/([a-z0-9-]{1,80})\?vote=([0-9a-f-]{36})$/;
+
 /** Récap (lot 50, notifications `event_recap_ready` et `audience_prize_won`) et passeport (`stamp_received`). */
 const RECAP_LINK = /^\/app\/recap\/([0-9a-f-]{36})$/;
 const PASSPORT_LINK = "/app/passeport";
@@ -41,6 +48,10 @@ const CREW_LINK = /^\/c\/([a-z0-9-]{1,80})(\?onglet=sorties)?$/;
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (APP_LINK.test(value)) return value;
+  const votes = VOTES_LINK.exec(value);
+  if (votes) return `/votes/${votes[1]}`;
+  const vote = VOTE_LINK.exec(value);
+  if (vote) return `/vote/${vote[1]}?vote=${vote[2]}`;
   const recap = RECAP_LINK.exec(value);
   if (recap) return `/recap/${recap[1]}`;
   if (value === PASSPORT_LINK) return "/mon-passeport";

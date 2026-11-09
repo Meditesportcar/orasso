@@ -375,7 +375,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         live={liveNow}
         offline={homeCopy}
         onVote={() =>
-          router.push(`/vote/${liveNow.event.id}?titre=${encodeURIComponent(liveNow.event.title)}` as never)
+          router.push(`/votes/${liveNow.event.id}?titre=${encodeURIComponent(liveNow.event.title)}` as never)
         }
       />
     ) : null,
