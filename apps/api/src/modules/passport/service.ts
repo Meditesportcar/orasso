@@ -274,7 +274,8 @@ export const passportService = {
           staff.size ? notInArray(passportStamps.userId, [...staff]) : undefined,
         ),
       );
-    for (const userId of staff) await stamp(ex, userId, event, "staff");
+    // Rattrapage : la présence n'a pas d'heure connue, le tampon prend le début de l'événement (pas l'heure du règlement).
+    for (const userId of staff) await stamp(ex, userId, event, "staff", { at: event.startsAt });
 
     // Rares : toutes les personnes qui ont un tampon ordinaire de cet événement.
     const holders = await ex

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventCountdown, eventCountdownParts, eventDayCount, eventPhase } from "./eventProgress";
+import { eventCountdown, eventCountdownParts, eventDayCount, eventLastDayInstant, eventPhase } from "./eventProgress";
 import { fromWallTime } from "./time";
 
 const at = (month: number, day: number, hour = 10, minute = 0) =>
@@ -21,7 +21,9 @@ describe("repère de temps d'un événement : en cours, jour N sur M", () => {
     expect(eventCountdown(span, at(11, 11, 22, 59))).toBe("En cours · jour 4 sur 4");
   });
   it("fini : « J+1 » compté depuis la fin, jamais pour un événement en cours", () => {
-    expect(eventCountdown(span, at(11, 11, 23))).toBe("Aujourd'hui");
+    // Plusieurs jours, fini aujourd'hui : « Terminé » (« Aujourd'hui » dirait qu'il a lieu).
+    expect(eventCountdown(span, at(11, 11, 23))).toBe("Terminé");
+    expect(eventCountdownParts(span, at(11, 11, 23, 30)).tight).toEqual({ big: "Fini", small: null });
     expect(eventCountdown(span, at(11, 12, 8))).toBe("J+1");
     expect(eventCountdown(span, at(11, 14, 8))).toBe("J+3");
     expect(eventCountdown(span, at(11, 9, 10))).not.toMatch(/J\+/);
@@ -52,6 +54,28 @@ describe("repère de temps d'un événement : en cours, jour N sur M", () => {
     const s = { startsAt: at(10, 24, 9), endsAt: at(10, 26, 20) };
     expect(eventDayCount(s)).toBe(3);
     expect(eventCountdown(s, at(10, 26, 10))).toBe("En cours · jour 3 sur 3");
+  });
+});
+
+describe("changement d'heure : les jours se comptent en dates, pas en millisecondes (lot R7-0, tour 2)", () => {
+  it("nocturne du 24 au 25 octobre 2026 (retour à l'heure d'hiver à 3 h) : un seul jour, toute la nuit", () => {
+    const night = { startsAt: at(10, 24, 20), endsAt: at(10, 25, 3, 30) };
+    expect(eventDayCount(night)).toBe(1);
+    expect(eventCountdown(night, at(10, 24, 22))).toBe("En cours");
+    expect(eventCountdown(night, new Date("2026-10-25T00:10:00Z"))).toBe("En cours"); // 2 h 10 à Paris (heure d'été)
+    expect(eventCountdown(night, new Date("2026-10-25T02:10:00Z"))).toBe("En cours"); // 3 h 10 à Paris (heure d'hiver)
+    expect(eventPhase(night, new Date("2026-10-25T02:10:00Z"))).toEqual({ phase: "ongoing", day: 1, of: 1 });
+    expect(eventLastDayInstant(night.startsAt, night.endsAt)).toEqual(at(10, 24, 12));
+  });
+  it("nocturne du 28 au 29 mars 2026 (passage à l'heure d'été à 2 h) : un seul jour", () => {
+    const night = { startsAt: at(3, 28, 20), endsAt: at(3, 29, 3, 30) };
+    expect(eventDayCount(night)).toBe(1);
+    expect(eventPhase(night, at(3, 29, 3, 10))).toEqual({ phase: "ongoing", day: 1, of: 1 });
+  });
+  it("deux nuits de suite autour du retour à l'heure d'hiver : deux jours", () => {
+    const two = { startsAt: at(10, 24, 20), endsAt: at(10, 26, 3, 30) };
+    expect(eventDayCount(two)).toBe(2);
+    expect(eventCountdown(two, at(10, 26, 1))).toBe("En cours · jour 2 sur 2");
   });
 });
 

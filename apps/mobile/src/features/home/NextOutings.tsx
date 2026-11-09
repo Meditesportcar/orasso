@@ -16,11 +16,11 @@ import {
 } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, withYear } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
-import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { mediaSource } from "@/lib/media";
-import { fitWordSize, NARROW_EM, WIDE_EM } from "./fit";
+import { fitWideTitleSize, fitWordSize, NARROW_EM } from "./fit";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -100,7 +100,9 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
   const c = t.color;
   const [infoW, setInfoW] = useState(0);
   const onInfo = (e: LayoutChangeEvent) => setInfoW(e.nativeEvent.layout.width);
-  const titleSize = fitWordSize(outing.title, infoW, 19, 12, WIDE_EM);
+  const { fontScale } = useWindowDimensions();
+  // Le titre ne se coupe qu'entre deux mots : son mot le plus large tient dans la colonne, police du système comprise.
+  const titleSize = fitWideTitleSize(outing.title, infoW, fontScale, 19, 8);
   const cdSize = fitWordSize(outing.countdown, infoW * 0.62, 48, 24, NARROW_EM);
   const source = mediaSource(outing.posterUrl);
   const a = outing.action;

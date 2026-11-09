@@ -31,6 +31,7 @@ import {
   audiencePrizeResults,
   audienceVotes,
   checkins,
+  eventStaff,
   profiles,
   tickets,
   user,
@@ -40,7 +41,7 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
-import { activeMembership } from "../../lib/access";
+import { activeMembership, isSuperAdmin, openAssistanceRequest } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -206,26 +207,61 @@ const refusal = {
   not_checked_in: () => new AppError(403, "not_checked_in", audiencePrizeTexts.errors.not_checked_in),
 };
 
-/** Total diffusé (`votes.changed`) : aucun classement sur le canal (lot R7-0), les clients relisent la route du classement. */
+/**
+ * Voix comptées au classement : celles données à un véhicule pointé (même périmètre que `ranking`, sans calculer ni
+ * classer quoi que ce soit).
+ */
+async function countVotes(ex: Executor, eventId: string): Promise<number> {
+  const enteredIds = ex
+    .select({ id: checkins.applicationId })
+    .from(checkins)
+    .innerJoin(applications, eq(applications.id, checkins.applicationId))
+    .innerJoin(profiles, eq(profiles.userId, applications.userId))
+    .where(and(eq(checkins.eventId, eventId), eq(applications.kind, "vehicle"), isNull(profiles.deletedAt)));
+  const [row] = await ex
+    .select({ n: sql<number>`count(*)::int` })
+    .from(audienceVotes)
+    .where(and(eq(audienceVotes.eventId, eventId), inArray(audienceVotes.applicationId, enteredIds)));
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Message diffusé (`votes.changed`) : le total de voix, et `top3` **toujours vide** (aucun classement sur le canal ;
+ * lot R7-0). Le tableau n'est gardé que pour l'APK R6-police, dont l'écran du vote applique `top3` sans le tester :
+ * à retirer en R8, quand l'ancien APK ne tourne plus. Les clients relisent la route du classement.
+ */
 async function publishNow(eventId: string) {
-  const { total } = await ranking(db, eventId);
-  const payload: AudienceVotesChanged = { total };
+  const payload: AudienceVotesChanged = { total: await countVotes(db, eventId), top3: [] };
   realtime.publish(`event:${eventId}:votes`, "votes.changed", payload);
 }
 
 /**
- * Qui voit le classement (lot R7-0, D38 de Damien) : pendant le vote, seulement qui a voté (et l'équipe organisatrice,
- * qui le suit dans sa console) ; à la clôture (fin de l'événement) ou au règlement, tout le monde, y compris qui n'a pas
- * pu voter (pas entré).
+ * Qui voit le classement (lot R7-0, D38 de Damien) : pendant le vote, l'équipe de l'événement (propriétaire et
+ * co-organisateurs de la structure, staff affecté à cet événement, super admin en assistance), puis qui a voté ; à la
+ * clôture (fin de l'événement) ou au règlement, tout le monde, y compris qui n'a pas pu voter (pas entré).
  */
 async function canSeeRanking(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
   if (event.settledAt || now() >= event.endsAt) return true;
+  if (await isEventTeam(ex, event, v)) return true;
   const vote = await ex.query.audienceVotes.findFirst({
     where: and(eq(audienceVotes.eventId, event.id), eq(audienceVotes.voterUserId, v.user.id)),
     columns: { applicationId: true },
   });
-  if (vote) return true;
-  return Boolean(await activeMembership(v.user.id, event.structureId));
+  return Boolean(vote);
+}
+
+async function isEventTeam(ex: Executor, event: EventRow, v: Viewer): Promise<boolean> {
+  const member = await activeMembership(v.user.id, event.structureId);
+  if (member && (member.role === "owner" || member.role === "co_organizer")) return true;
+  if (member?.role === "staff") {
+    // Le staff d'un autre événement de la structure ne voit pas le classement de celui-ci.
+    const assigned = await ex.query.eventStaff.findFirst({
+      where: and(eq(eventStaff.eventId, event.id), eq(eventStaff.userId, v.user.id)),
+      columns: { id: true },
+    });
+    return Boolean(assigned);
+  }
+  return isSuperAdmin(v) && Boolean(await openAssistanceRequest(event.structureId));
 }
 
 /** Diffusions regroupées : au plus une par seconde et par événement (la dernière part en fin de seconde). */

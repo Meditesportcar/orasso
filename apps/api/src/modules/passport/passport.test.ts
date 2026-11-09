@@ -1,6 +1,6 @@
 // Lot 49 : passeport et tampons, prix du public, récap (ARCHITECTURE-DA-V2 § 5.5), avec l'horloge simulée.
 import { randomUUID } from "node:crypto";
-import { type Decide, fromWallTime, nearestFullMoon, stampSeed } from "@orasso/shared";
+import { type Decide, fromWallTime, nearestFullMoon, type PassportStamp, stampSeed, stampText } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,9 +22,11 @@ import { db, pool } from "../../db/client";
 import {
   applications,
   audiencePrizeResults,
+  assistanceRequests,
   audienceVotes,
   checkins,
   devices,
+  eventStaff,
   events,
   notifications,
   passportStamps,
@@ -324,6 +326,31 @@ describe("passeport : tampons", () => {
     const passport = (await call(p.marc.u, "GET", "/me/passport")).json;
     expect(passport).toMatchObject({ total: 3, rare: 2 });
   });
+
+  it("dates affichées : du pointage au règlement, le tampon de présence dit le jour d'entrée, les rares le début de l'événement (lot R7-0)", async () => {
+    // Événement sur trois jours à la pleine lune ; entré le deuxième jour, réglé à J+2 de la fin.
+    const moon = nearestFullMoon(paris(10, 17, 19));
+    const camp = await createEvent(structureId, {
+      format: "gathering",
+      department: "66",
+      startsAt: moon,
+      endsAt: new Date(moon.getTime() + 3 * 86_400_000),
+    });
+    clock.set(new Date(moon.getTime() - 7 * 86_400_000));
+    const marc = await enroll(camp.id, p.marc.u, p.marc.v);
+    const entry = new Date(moon.getTime() + 30 * 3_600_000);
+    await checkin({ ...p.marc, ...marc }, entry, camp.id);
+    clock.set(new Date(moon.getTime() + 3 * 86_400_000 + 48 * 3_600_000));
+    await pointsService.settleEvent(camp.id);
+    const view = (await call(p.marc.u, "GET", "/me/passport")).json as { pages: { stamps: PassportStamp[] }[] };
+    const mine = view.pages.flatMap((pg) => pg.stamps).filter((s) => s.event.id === camp.id);
+    expect(mine.map((s) => s.kind).sort()).toEqual(["first_outing", "full_moon", "participation"]);
+    const day = (d: Date) => stampText({ kind: "participation", rare: false, event: mine[0]!.event, stampedAt: d.toISOString() }).date;
+    for (const s of mine) {
+      expect(stampText(s).date).toBe(day(s.kind === "participation" ? entry : moon));
+    }
+    expect(day(entry)).not.toBe(day(moon));
+  });
 });
 
 describe("passeport : contestation", () => {
@@ -397,11 +424,11 @@ describe("prix du public", () => {
     const ok = await vote(p.kenji.u, p.lea.applicationId);
     expect(ok.status).toBe(200);
     expect(ok.json).toMatchObject({ canVote: true, votedFor: p.lea.applicationId, open: true });
-    // Lot R7-0 : le canal ne porte que le total, jamais de classement (ni top 3).
+    // Lot R7-0 : le canal ne porte que le total ; `top3` reste un tableau vide (APK R6-police), jamais un classement.
     expect(ws.messages.at(-1)).toEqual({
       channel: `event:${eventId}:votes`,
       type: "votes.changed",
-      payload: { total: 1 },
+      payload: { total: 1, top3: [] },
     });
     ws.stop();
     // Une voix, une seule : elle se déplace (Lea vote pour Kenji, puis Julie aussi).
@@ -447,6 +474,84 @@ describe("prix du public", () => {
     const closed = await vote(p.kenji.u, p.lea.applicationId);
     expect(closed.status).toBe(409);
     expect(closed.json.error.code).toBe("vote_closed");
+  });
+
+  it("canal des votes : `top3` toujours vide, compatible avec l'écran de l'APK R6-police (lot R7-0)", async () => {
+    // `applyTop3` tel qu'il est dans l'APK en ligne (base 46ec3f8c) : il lit `top3` sans le tester.
+    const applyTop3 = (
+      entries: { applicationId: string; votes: number; rank: number }[],
+      top3: readonly { applicationId: string; votes: number; rank: number }[],
+    ) => {
+      const by = new Map(top3.map((t) => [t.applicationId, t]));
+      return entries
+        .map((e) => {
+          const t = by.get(e.applicationId);
+          return t ? { ...e, votes: t.votes, rank: t.rank } : e;
+        })
+        .sort((a, b) => b.votes - a.votes || a.rank - b.rank);
+    };
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    clock.set(paris(10, 17, 20));
+    const ws = listen(`event:${eventId}:votes`);
+    // Après une voix, après plusieurs : toujours le même format, jamais de classement.
+    expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
+    expect((await vote(p.lea.u, p.kenji.applicationId)).status).toBe(200);
+    await vi.waitFor(() => expect(ws.messages.at(-1)?.payload.total).toBe(2), { timeout: 4000 });
+    for (const m of ws.messages) {
+      expect(m.type).toBe("votes.changed");
+      expect(Object.keys(m.payload).sort()).toEqual(["top3", "total"]);
+      expect(m.payload.top3).toEqual([]);
+      const rows = [{ applicationId: p.kenji.applicationId, votes: 0, rank: 1 }];
+      expect(() => applyTop3(rows, m.payload.top3 as [])).not.toThrow();
+      expect(applyTop3(rows, m.payload.top3 as [])).toEqual(rows);
+    }
+    expect(ws.messages.at(-1)!.payload.total).toBe(2);
+    ws.stop();
+  });
+
+  it("classement pendant le vote : équipe de l'événement, votants, jamais un autre staff ni un non-votant (lot R7-0)", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    clock.set(paris(10, 17, 20));
+    const coOrga = await signUp("CoOrga_66", { twoFactor: true });
+    await addMember(structureId, coOrga.id, "co_organizer");
+    // Julie est affectée à cet événement ; Tom est du staff de la structure, mais pas de cet événement-ci.
+    await db.insert(eventStaff).values({ eventId, userId: julie.id }).onConflictDoNothing();
+    const tom = await signUp("Tom_66");
+    await addMember(structureId, tom.id, "staff", ["scan"]);
+    await db.delete(eventStaff).where(and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, tom.id)));
+    const admin = await signUp("Admin_66", { twoFactor: true, role: "super_admin" });
+    expect((await vote(p.kenji.u, p.lea.applicationId)).status).toBe(200);
+
+    const hidden = async (u: TestUser) => (await call(u, "GET", `/events/${eventId}/audience-prize`)).json;
+    const shown = async (u: TestUser) => {
+      const b = await hidden(u);
+      expect(b.rankingHidden).toBe(false);
+      expect(b.entries).toHaveLength(2);
+    };
+    const covered = async (u: TestUser) => {
+      const b = await hidden(u);
+      expect(b).toMatchObject({ rankingHidden: true, entries: [], winner: null, total: 1, vehicles: 2 });
+    };
+    await shown(p.kenji.u); // a voté
+    await shown(orga); // propriétaire
+    await shown(coOrga); // co-organisateur qui n'a pas voté
+    await shown(julie); // staff affecté à cet événement
+    await covered(p.marc.u); // n'a pas voté (ni pu)
+    await covered(tom); // staff d'un autre événement de la structure
+    await covered(admin); // super admin sans demande d'aide ouverte
+    await db.insert(assistanceRequests).values({ structureId, requestedBy: orga.id, message: "Besoin d'aide" });
+    await shown(admin); // super admin en assistance
+    // Nina est pointée puis vote : elle le voit à son tour ; Marc, jamais entré, ne le voit pas.
+    await checkin(p.nina, paris(10, 17, 20, 5));
+    expect((await vote(p.nina.u, p.lea.applicationId)).status).toBe(200);
+    expect((await hidden(p.nina.u)).rankingHidden).toBe(false);
+    expect((await hidden(p.marc.u)).rankingHidden).toBe(true);
+    expect((await hidden(tom)).rankingHidden).toBe(true);
+    // Clôture : tout le monde, y compris le staff d'un autre événement.
+    clock.set(ENDS);
+    for (const u of [tom, p.nina.u]) expect((await hidden(u)).rankingHidden).toBe(false);
   });
 
   it("150 pointés (cas terrain) : la grille du vote les liste tous, par pages, sans voix ; le classement reste limité à 100", async () => {

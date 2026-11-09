@@ -13,6 +13,8 @@ import {
   type AudiencePrizeMine,
   type AudienceVotesChanged,
   audiencePrizeTexts,
+  rankingZoneState,
+  runAtDeadline,
   voteScreenTexts,
 } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
@@ -165,6 +167,20 @@ export function VoteScreen() {
     });
     return () => sub.remove();
   }, [scheduleReload, scheduleListReload]);
+  // Clôture du vote (lot R7-0, tour 2) : à l'échéance, le classement et mon droit de voter changent ; on les relit sans
+  // attendre un message du serveur (personne n'a peut-être voté à ce moment-là).
+  const deadline = board.data?.closesAt ?? mine.data?.closesAt ?? null;
+  useEffect(
+    () =>
+      runAtDeadline(
+        deadline ? new Date(deadline) : null,
+        () => {
+          void Promise.all([reloaders.current.board(), reloaders.current.mine(), reloaders.current.candidates()]);
+        },
+        orassoNow,
+      ),
+    [deadline],
+  );
   useEffect(
     () => () => {
       gates.current?.board.dispose();
@@ -180,6 +196,11 @@ export function VoteScreen() {
     : null;
 
   const view = voteView(board.data, mine.data);
+  const zone = rankingZoneState({
+    voted: Boolean(mine.data?.votedFor),
+    rankingHidden: Boolean(board.data?.rankingHidden),
+    loadFailed: Boolean(board.error),
+  });
   const closesAt = mine.data ? new Date(mine.data.closesAt) : null;
   // Lot R7-0 : avec la date, « vote ouvert jusqu'au mercredi 11 novembre, 23 h » ne tient plus sur la ligne de faits de
   // l'en-tête (une ligne, jamais coupée) : l'en-tête ne garde que le titre, la fin du vote passe dans l'affiche.
@@ -245,6 +266,12 @@ export function VoteScreen() {
       {view === "not_checked_in" ? (
         <EmptyState title={audiencePrizeTexts.title} text={audiencePrizeTexts.errors.not_checked_in} />
       ) : null}
+      {/* Qui ne peut pas voter (ou vote pas ouvert) : le classement se montre à la clôture. */}
+      {(view === "not_open" || view === "not_checked_in") && board.data?.rankingHidden ? (
+        <Muted variant="body" testID="vote-ranking-hidden">
+          {voteScreenTexts.rankingHidden(false)}
+        </Muted>
+      ) : null}
 
       {view === "vote" && board.data && mine.data && (!mine.data.votedFor || changing) ? (
         <>
@@ -289,7 +316,7 @@ export function VoteScreen() {
           />
           {board.data.rankingHidden ? (
             <Muted variant="body" testID="vote-ranking-hidden">
-              {voteScreenTexts.rankingAfterVote}
+              {voteScreenTexts.rankingHidden(mine.data.canVote)}
             </Muted>
           ) : null}
         </>
@@ -302,6 +329,22 @@ export function VoteScreen() {
           <SmButton kind="s" icon="undo" onPress={() => setChanging(true)} testID="vote-change">
             Changer mon vote
           </SmButton>
+          {/* Vote réussi, classement pas (encore) relu : jamais un écran sans explication. */}
+          {zone === "loading" ? (
+            <Muted variant="body" testID="vote-ranking-loading">
+              {voteScreenTexts.rankingLoading}
+            </Muted>
+          ) : null}
+          {zone === "failed" ? (
+            <>
+              <Notice tone="error" testID="vote-ranking-failed">
+                {voteScreenTexts.rankingFailed}
+              </Notice>
+              <SmButton kind="s" icon="undo" onPress={() => void board.reload()} testID="vote-ranking-retry">
+                {voteScreenTexts.retry}
+              </SmButton>
+            </>
+          ) : null}
         </>
       ) : null}
 

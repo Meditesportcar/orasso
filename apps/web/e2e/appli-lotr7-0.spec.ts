@@ -122,7 +122,7 @@ test("Mon accès suit le thème, la carte du QR reste crème ; entré la veille,
     expect(await poster.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(243, 235, 221)");
     // L'écran suit le thème : le fond n'est pas le même en Béton et en Sable.
     bg[theme] = await edge(page);
-    // Entrée de la veille : « Entrée enregistrée », « Entré … · accès jusqu'au … », et le QR en second.
+    // Entrée de la veille : « Entrée enregistrée », « Entrée … · accès jusqu'au … », et le QR en second.
     await expect(page.getByTestId("jourj-entered")).toContainText("Entrée enregistrée");
     await expect(page.getByTestId("jourj-entered")).toContainText(
       /Entré \S+ à \d+ h(?: \d+)? · accès jusqu'au \S+ \d+ \S+/,
@@ -132,4 +132,44 @@ test("Mon accès suit le thème, la carte du QR reste crème ; entré la veille,
     await ctx.close();
   }
   expect(bg.beton).not.toBe(bg.sable);
+});
+
+test("Nina_34, entrée la veille : sur la fiche, le bouton principal ne redevient pas « Mon QR » (tour 2)", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser, "beton");
+  await signIn(page, "nina@orasso.local");
+  await page.goto(`/e/${SLUG}`);
+  await afterOpening(page);
+  await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Voir ma candidature" }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Mon QR" })).toHaveCount(0);
+  await ctx.close();
+});
+
+test("Vote réussi puis classement qui ne se relit pas : la raison et « Réessayer », puis le classement (tour 2)", async ({
+  browser,
+}) => {
+  const place = await myPlace("nina@orasso.local");
+  const { ctx, page } = await open(browser, "beton");
+  await signIn(page, "nina@orasso.local");
+  // La relecture du classement (GET, sans suffixe) échoue tant que la route est posée ; le vote (PUT) passe.
+  const board = //events/[^/]+/audience-prize$/;
+  const failing = (route: import("@playwright/test").Route) =>
+    route.request().method() === "GET" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback();
+  await page.goto(`/vote/${place.event.id}`);
+  await afterOpening(page);
+  await expect(page.getByTestId("vote-grid")).toBeVisible({ timeout: 45_000 });
+  await page.route(board, failing);
+  // Une voiture qui n'est pas la sienne (la grille grise la sienne).
+  await page.getByTestId("vote-card").first().click();
+  await page.getByTestId("vote-cta").click();
+  await expect(page.getByTestId("vote-saved")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("vote-ranking-failed")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("vote-board")).toHaveCount(0);
+  await page.unroute(board, failing);
+  await page.getByTestId("vote-ranking-retry").click();
+  await expect(page.getByTestId("vote-board")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("vote-ranking-failed")).toHaveCount(0);
+  await ctx.close();
 });

@@ -10,7 +10,7 @@
 //               faible). React Native n'a pas `feTurbulence` : pas de filtre, mêmes effets par des formes.
 import { stampKindLabels } from "../labels/passport.fr";
 import type { PassportStamp } from "../schemas/passport";
-import { type StampInk, type StampShape, stampWear } from "./stamps";
+import { type StampInk, type StampKind, type StampShape, stampWear } from "./stamps";
 import { wallTime } from "./time";
 
 /** Dorure des rares : dégradé or (écart 6 du README du système de design, couleurs du prototype). */
@@ -202,15 +202,24 @@ export type StampText = {
 };
 
 /**
- * Les mots d'un tampon : le titre de l'événement, la date et le département. Lot R7-0 (Damien, 08/11) : la date est celle
- * de l'entrée (le pointage, `stampedAt`), pas celle du début de l'événement : entré le deuxième jour, le tampon dit ce jour-là.
+ * Jour affiché sur un tampon (lot R7-0, tour 2). `stampedAt` n'est la date d'une présence que pour le tampon de
+ * participation (heure du pointage), de visite (heure du contrôle du billet) et du staff (heure de « Je suis là » ou de
+ * l'action du jour J ; rattrapé au règlement, il prend le début de l'événement) ; les rares (première sortie, 10e
+ * événement, pleine lune, prix du public) sont posés au règlement de J+2, `stampedAt` y est l'heure du règlement : ils
+ * portent le jour du début de l'événement.
  */
+export function stampDate(stamp: Pick<PassportStamp, "kind" | "event" | "stampedAt">): Date {
+  const onSite: readonly StampKind[] = ["participation", "visit", "staff"];
+  return new Date(onSite.includes(stamp.kind) ? stamp.stampedAt : stamp.event.startsAt);
+}
+
+/** Les mots d'un tampon : le titre de l'événement, la date (`stampDate`) et le département. */
 export function stampText(
   stamp: Pick<PassportStamp, "kind" | "rare" | "event" | "stampedAt">,
   timeZone?: string,
 ): StampText {
   const title = upper(stamp.rare ? stampKindLabels[stamp.kind] : stamp.event.title);
-  const w = wallTime(new Date(stamp.stampedAt), timeZone);
+  const w = wallTime(stampDate(stamp), timeZone);
   const dd = String(w.day).padStart(2, "0");
   const mm = String(w.month).padStart(2, "0");
   const dept = stamp.event.department ?? "";

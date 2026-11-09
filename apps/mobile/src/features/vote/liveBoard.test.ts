@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createLatest, createLiveBoard, createLoadTracker, createVoteSubscription } from "./liveBoard";
 import { createRefreshGate } from "./refreshGate";
 
-const msg = (total: number) => ({ total });
+const msg = (total: number) => ({ total, top3: [] as [] });
 const http = (total: number) => ({ total });
 
 /** Total affiché par l'écran : celui du message en direct s'il en reste un, sinon celui du classement HTTP. */

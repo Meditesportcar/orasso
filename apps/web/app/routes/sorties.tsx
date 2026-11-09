@@ -14,7 +14,6 @@ import {
   crewLabels,
   type EventPublic,
   type EventWeather,
-  eventDayCount,
   eventFormatLabels,
   eventInviteLabels,
   eventLastDayInstant,
@@ -40,6 +39,7 @@ import {
   type VehicleFull,
   voteScreenTexts,
   wholeEventEntered,
+  wholeEventEntryHolds,
   wholeEventReentry,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
@@ -371,7 +371,7 @@ function ApplicationCard({
               <Qr payload={pass.payload} label={`QR d'inscription : ${app.event.title}`} />
             )}
           </div>
-          {app.checkedInAt && !app.day && eventDayCount(app.event) > 1 ? (
+          {app.checkedInAt && wholeEventEntryHolds(app, app.event, new Date(serverTime)) ? (
             // Lot R7-0 : accès « tout l'événement » déjà pointé : l'entrée vaut jusqu'à la fin, le QR reste pour un contrôle.
             <p className="o-t-caption s-muted s-center" data-testid="pass-entered">
               {wholeEventEntered(

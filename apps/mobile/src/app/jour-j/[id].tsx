@@ -26,6 +26,7 @@ import {
   formatDayDate,
   voteScreenTexts,
   wholeEventEntered,
+  wholeEventEntryHolds,
   wholeEventReentry,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
@@ -40,7 +41,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
-import { jourJClosesAt, jourJState } from "@/lib/jourj";
+import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -149,9 +150,9 @@ function JourJScreen() {
   // Lot R7-0 (accès sur plusieurs jours) : une entrée enregistrée vaut ce qu'elle couvre. « Par jour » (le jour de la
   // candidature) : ce jour-là ; « tout l'événement » : jusqu'à la fin, le QR ne revient pas chaque matin à faire scanner.
   const entered = Boolean(kit?.checkedInAt);
-  const wholeEntered = Boolean(entered && kit?.multiDay && !kit.day);
-  // Entré pour tout l'événement et pas fini : l'écran dit « Entré … » et garde le QR, en second, pour un contrôle.
-  const reentry = wholeEntered && span ? now < jourJClosesAt(span, tz) : false;
+  // Entré pour tout l'événement et pas fini (règle partagée avec la fiche et le site) : l'écran dit « Entrée … » et garde
+  // le QR, en second, pour un contrôle.
+  const reentry = kit ? wholeEventEntryHolds(kit, kit.event, now, tz) : false;
   const state = kit && span ? (reentry ? "open" : jourJState(span, now, entered, tz)) : null;
   // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
   const showing = state !== null && state !== "closed";

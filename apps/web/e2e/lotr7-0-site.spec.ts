@@ -56,3 +56,17 @@ test("Nina_34, entrée la veille : l'entrée vaut jusqu'à la fin, le QR reste e
   await expect(entered).toContainText("pour un contrôle");
   await expect(page.getByTestId("pass-qr").first()).toBeVisible();
 });
+
+test("Nina_34 : le classement apparaît après son vote ; si sa relecture échoue, la page le dit (tour 2)", async ({
+  page,
+}) => {
+  await signIn(page, "nina@orasso.local", "beton");
+  await page.goto(`/app/vote/${SLUG}`);
+  await expect(page.getByTestId("vote-candidate").first()).toBeVisible();
+  // Le chargeur du site relit le classement côté serveur : on ne peut pas l'intercepter ici, on vérifie le chemin nominal
+  // (vote, puis classement visible) ; l'échec de la relecture est couvert par la recette de l'appli et les tests de `shared`.
+  await page.locator('[data-testid="vote-candidate"]:not([disabled])').first().click();
+  await expect(page.getByTestId("vote-saved")).toBeVisible();
+  await expect(page.getByTestId("vote-ranking-hidden")).toHaveCount(0);
+  await expect(page.locator(".vote-rank li").first()).toBeVisible();
+});
