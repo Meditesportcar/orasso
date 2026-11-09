@@ -1,12 +1,33 @@
-// Page de vote du site (lot R7-0, tour 3) : une panne passagère après une voix réussie n'est jamais une session expirée
-// (pas de redirection vers la connexion) ni un écran d'erreur ; seul un 401 renvoie à la connexion.
+// Pages « Votes » et « Vote » du site (lots R7-0 tour 3 et R7l3) : une panne passagère après une voix réussie n'est jamais une
+// session expirée (pas de redirection vers la connexion) ni un écran d'erreur ; seul un 401 renvoie à la connexion ; sans
+// `vote` dans l'adresse, « Toutes catégories » (ou la liste s'il a été retiré).
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadVote, voteAction } from "./vote.server";
+import { loadVote, loadVotes, voteAction } from "./vote.server";
 
 const EVENT = { id: "ev-1", slug: "lydia", title: "Rassemblement du Lydia" };
-const MINE = { canVote: true, votedFor: "app-2", closesAt: "2026-11-11T22:00:00.000Z", ownApplicationIds: [] };
-const BOARD = { total: 3, entries: [], rankingHidden: false, closesAt: MINE.closesAt, settled: false, open: true };
+const VOTE = {
+  id: "vote-1",
+  eventId: "ev-1",
+  title: "Plus belle japonaise",
+  kind: "theme",
+  state: "open",
+  opensAt: null,
+  closesAt: "2026-11-11T22:00:00.000Z",
+  candidatesCount: 2,
+  total: 3,
+  myVote: "app-2",
+  votedAt: null,
+  canVote: true,
+  reason: null,
+  ranking: [],
+  rankingHiddenReason: null,
+  rareStamp: false,
+  ownApplicationIds: [],
+  checkedInAt: null,
+  settled: false,
+};
+const ALL = { ...VOTE, id: "vote-all", title: "Toutes catégories", kind: "all_categories" };
 
 type Answers = Record<string, Response | (() => Response)>;
 /** Une API qui répond selon la fin de l'adresse ; une adresse absente = 404. */
@@ -23,36 +44,64 @@ function stubApi(answers: Answers) {
 }
 const ok = (body: unknown) => Response.json(body);
 const fail = (status: number) => Response.json({ error: { code: "internal", message: "Panne" } }, { status });
-const request = () => new Request("http://site.test/vote/lydia", { headers: { cookie: "s=1" } });
+const request = (query = "?vote=vote-1") =>
+  new Request(`http://site.test/app/vote/lydia${query}`, { headers: { cookie: "s=1" } });
 const healthy: Answers = {
   "/me": ok({ user: { id: "u1" } }),
   "/events/by-slug/lydia": ok(EVENT),
-  "/audience-prize": ok(BOARD),
-  "/audience-prize/mine": ok(MINE),
-  "/audience-prize/candidates?cursor=0": ok({ items: [], next: null }),
+  "/events/ev-1/votes": ok({ items: [ALL, VOTE] }),
+  "/events/ev-1/votes/vote-1": ok(VOTE),
+  "/events/ev-1/votes/vote-1/candidates?cursor=0": ok({ items: [], next: null }),
+  "/events/ev-1/votes/vote-all": ok(ALL),
+  "/events/ev-1/votes/vote-all/candidates?cursor=0": ok({ items: [], next: null }),
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("chargeur de la page de vote", () => {
-  it("nominal : événement, classement, voix et grille", async () => {
+describe("chargeur de la page d'un vote", () => {
+  it("nominal : événement, vote (avec le classement servi) et grille", async () => {
     stubApi(healthy);
     const page = await loadVote(request(), "lydia");
-    expect(page).toMatchObject({ event: EVENT, board: BOARD, mine: MINE, candidates: [] });
+    expect(page).toMatchObject({ event: EVENT, vote: VOTE, candidates: [] });
   });
 
-  it("le classement qui ne se relit pas (500) : la voix reste connue, pas d'erreur", async () => {
-    stubApi({ ...healthy, "/audience-prize": fail(500) });
+  it("sans `vote` dans l'adresse : « Toutes catégories »", async () => {
+    stubApi(healthy);
+    const page = await loadVote(request(""), "lydia");
+    expect(page.vote).toMatchObject({ id: "vote-all", kind: "all_categories" });
+  });
+
+  it("sans `vote`, et « Toutes catégories » retiré : la liste", async () => {
+    stubApi({ ...healthy, "/events/ev-1/votes": ok({ items: [VOTE] }) });
+    const res = await loadVote(request(""), "lydia").catch((e) => e as Response);
+    expect((res as Response).status).toBe(302);
+    expect((res as Response).headers.get("location")).toBe("/app/votes/lydia");
+  });
+
+  it("la grille : les candidats entrés d'abord, dans un ordre stable", async () => {
+    const c = (applicationId: string, eligible: boolean) => ({
+      applicationId,
+      vehicleLabel: applicationId,
+      pseudo: "p",
+      photoUrl: null,
+      eligible,
+    });
+    stubApi({
+      ...healthy,
+      "/events/ev-1/votes/vote-1/candidates?cursor=0": ok({
+        items: [c("c", false), c("b", true), c("a", true)],
+        next: null,
+      }),
+    });
     const page = await loadVote(request(), "lydia");
-    expect(page.board).toBeNull();
-    expect(page.mine).toMatchObject({ votedFor: "app-2" });
+    expect(page.candidates.map((x) => x.applicationId)).toEqual(["a", "b", "c"]);
   });
 
-  it("la voix qui ne se relit pas (503, 429) : la page se charge quand même", async () => {
-    for (const status of [503, 429]) {
-      stubApi({ ...healthy, "/audience-prize/mine": fail(status) });
+  it("le vote qui ne se relit pas (500, 503, 429) : la page se charge quand même, sans erreur", async () => {
+    for (const status of [500, 503, 429]) {
+      stubApi({ ...healthy, "/events/ev-1/votes/vote-1": fail(status) });
       const page = await loadVote(request(), "lydia");
-      expect(page.mine).toBeNull();
+      expect(page.vote).toBeNull();
       expect(page.event).toEqual(EVENT);
     }
   });
@@ -64,7 +113,7 @@ describe("chargeur de la page de vote", () => {
     ]) {
       stubApi(answers);
       const page = await loadVote(request(), "lydia");
-      expect(page).toMatchObject({ event: null, board: null, mine: null, slug: "lydia" });
+      expect(page).toMatchObject({ event: null, vote: null, slug: "lydia" });
     }
     vi.stubGlobal(
       "fetch",
@@ -72,7 +121,7 @@ describe("chargeur de la page de vote", () => {
         throw new TypeError("fetch failed");
       }),
     );
-    expect(await loadVote(request(), "lydia")).toMatchObject({ event: null, mine: null });
+    expect(await loadVote(request(), "lydia")).toMatchObject({ event: null, vote: null });
   });
 
   it("session perdue (401) : la connexion, avec le retour à cette page", async () => {
@@ -83,10 +132,30 @@ describe("chargeur de la page de vote", () => {
     expect((res as Response).headers.get("location")).toContain("/connexion?retour=");
   });
 
-  it("événement introuvable (404) : l'écran d'erreur habituel, pas une panne", async () => {
+  it("événement ou vote introuvable (404) : l'écran d'erreur habituel, pas une panne", async () => {
     stubApi({ ...healthy, "/events/by-slug/lydia": fail(404) });
-    const res = await loadVote(request(), "lydia").catch((e) => e as Response);
-    expect((res as Response).status).toBe(404);
+    expect(((await loadVote(request(), "lydia").catch((e) => e)) as Response).status).toBe(404);
+    stubApi({ ...healthy, "/events/ev-1/votes/vote-1": fail(404) });
+    expect(((await loadVote(request(), "lydia").catch((e) => e)) as Response).status).toBe(404);
+  });
+});
+
+describe("chargeur de la liste des votes", () => {
+  const listRequest = () => new Request("http://site.test/app/votes/lydia", { headers: { cookie: "s=1" } });
+
+  it("nominal : l'événement et la liste", async () => {
+    stubApi(healthy);
+    const page = await loadVotes(listRequest(), "lydia");
+    expect(page.event).toEqual(EVENT);
+    expect(page.list?.items.map((v) => v.id)).toEqual(["vote-all", "vote-1"]);
+  });
+
+  it("la liste qui ne se relit pas (503) : la page le dit, pas une erreur ; 401 : la connexion", async () => {
+    stubApi({ ...healthy, "/events/ev-1/votes": fail(503) });
+    expect(await loadVotes(listRequest(), "lydia")).toMatchObject({ event: EVENT, list: null });
+    stubApi({ ...healthy, "/me": fail(401) });
+    const res = await loadVotes(listRequest(), "lydia").catch((e) => e as Response);
+    expect((res as Response).status).toBe(302);
   });
 });
 
@@ -94,21 +163,25 @@ describe("action de vote", () => {
   const formRequest = () => {
     const form = new FormData();
     form.set("eventId", "ev-1");
+    form.set("voteId", "vote-1");
     form.set("applicationId", "app-2");
-    return new Request("http://site.test/vote/lydia", { method: "POST", body: form, headers: { cookie: "s=1" } });
+    return new Request("http://site.test/app/vote/lydia", { method: "POST", body: form, headers: { cookie: "s=1" } });
   };
 
-  it("voix enregistrée : la réponse de l'API revient à la page", async () => {
-    stubApi({ "/audience-prize/vote": ok(MINE) });
-    const res = (await voteAction(formRequest())) as unknown as { data: { ok: boolean; mine: unknown } };
-    expect(res.data).toMatchObject({ ok: true, mine: MINE });
+  it("voix enregistrée : la réponse de l'API (avec le classement servi) revient à la page", async () => {
+    stubApi({ "/events/ev-1/votes/vote-1/vote": ok(VOTE) });
+    const res = (await voteAction(formRequest())) as unknown as { data: { ok: boolean; vote: unknown } };
+    expect(res.data).toMatchObject({ ok: true, vote: VOTE });
   });
 
   it("voix refusée : le message de l'API, sans voix", async () => {
     stubApi({
-      "/audience-prize/vote": Response.json({ error: { code: "vote_closed", message: "Vote clos" } }, { status: 409 }),
+      "/events/ev-1/votes/vote-1/vote": Response.json(
+        { error: { code: "vote_closed", message: "Vote clos" } },
+        { status: 409 },
+      ),
     });
-    const res = (await voteAction(formRequest())) as unknown as { data: { ok: boolean; error: string; mine: unknown } };
-    expect(res.data).toMatchObject({ ok: false, error: "Vote clos", mine: null });
+    const res = (await voteAction(formRequest())) as unknown as { data: { ok: boolean; error: string; vote: unknown } };
+    expect(res.data).toMatchObject({ ok: false, error: "Vote clos", vote: null });
   });
 });

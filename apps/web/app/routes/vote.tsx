@@ -1,24 +1,39 @@
-// Prix du public (lot 57, parité de l'appli du lot 50, prototype DA v2 `s-vote`) : une voix par personne pointée, pas
-// pour soi, modifiable jusqu'à la fin de l'événement ; le classement bouge en direct (canal `event:{id}:votes`). Les
-// règles sont toutes dans l'API (lot 49) : ici, la grille des véhicules pointés, le vote et le classement.
-import { Button, Chip, Plate } from "@orasso/design-system/web";
-import { audiencePrizeTexts, type ClosingWatch, voteScreenTexts, watchClosing } from "@orasso/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+// Un vote (lots 57, R7-0 et R7l3, parité de l'appli `/vote/<événement>?vote=`) : la grille des candidats d'un vote à thème ou de
+// « Toutes catégories » (toucher une voiture = voter : une voix, modifiable jusqu'à la clôture, jamais pour soi), un candidat
+// pas encore entré grisé, puis le classement, **montré seulement après la voix** (à tous après la clôture, à l'équipe
+// toujours). Les règles sont toutes dans l'API : la page affiche ce qu'elle a servi (`ranking: null` + raison), elle n'en
+// déduit rien. Sans `vote` dans l'adresse : « Toutes catégories » (anciens liens et notifications).
+import { Button, Plate } from "@orasso/design-system/web";
+import {
+  audiencePrizeTexts,
+  rankingHiddenLine,
+  votePassTexts as T,
+  VOTE_CLOSING_SOON_MIN,
+  voteBlockedLine,
+  voteMinutesLeft,
+  voteResultCard,
+  voteScreenMode,
+  voteScreenTexts,
+} from "@orasso/shared";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+import { useClosingWatch } from "../components/votes/useVoteClock";
+import { VoteGrid } from "../components/votes/VoteGrid";
+import { VoteRanking } from "../components/votes/VoteRanking";
 import { nowMs } from "../lib/clock";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import { loadVote, voteAction } from "../lib/vote.server";
-import "../styles/passport.css";
-import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/vote";
+import "../styles/passport.css";
+import "../styles/votes-pass.css";
 
 // Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
 export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [
-    { title: `${audiencePrizeTexts.title}${d?.event ? ` · ${d.event.title}` : ""} · Orasso` },
+    { title: `${d?.vote?.title ?? T.voteScreenTitle}${d?.event ? ` · ${d.event.title}` : ""} · Orasso` },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -32,73 +47,40 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, board, candidates } = loaderData;
-  const mine = loaderData.mine;
+  const { event, candidates, back } = loaderData;
   const busy = useNavigation().state !== "idle";
   const revalidator = useRevalidator();
-  const [liveTotal, setLiveTotal] = useState(board?.total ?? 0);
-  useEffect(() => setLiveTotal(board?.total ?? 0), [board?.total]);
-  // Clôture du vote (lot R7-0, tours 2 et 3) : à l'échéance **du serveur** (écart calculé à partir de sa réponse, jamais
-  // l'horloge brute du navigateur), la page se relit, puis se relit encore (délais croissants, bornés) jusqu'à ce que
-  // l'API confirme la clôture. Lot R7-0, tour 3 : la voix qui vient de réussir (réponse de l'API) sert tant que la
+  // La voix qui vient de réussir (réponse de l'API, avec le classement que j'ai maintenant le droit de voir) sert tant que la
   // relecture n'est pas revenue.
-  const justVoted = actionData?.ok ? actionData.mine : null;
-  const closesAt = board?.closesAt ?? mine?.closesAt ?? justVoted?.closesAt ?? null;
-  const stillOpen = board ? board.open && !board.settled : true;
-  const skew = useRef(0);
-  useMemo(() => {
-    skew.current = loaderData.serverAt - nowMs();
-  }, [loaderData.serverAt]);
-  const latest = useRef({ board, revalidate: revalidator.revalidate });
-  latest.current = { board, revalidate: revalidator.revalidate };
-  const closing = useRef<ClosingWatch | null>(null);
-  useEffect(() => {
-    if (!closesAt || !stillOpen) return undefined;
-    const watch = watchClosing({
-      deadline: new Date(closesAt),
-      now: () => new Date(nowMs() + skew.current),
-      reload: async () => {
-        await latest.current.revalidate();
-        await new Promise((resolve) => setTimeout(resolve, 0)); // laisse la page prendre les données relues
-        const fresh = latest.current.board;
-        return fresh !== null && (!fresh.open || fresh.settled);
-      },
-    });
-    closing.current = watch;
-    return () => {
-      watch.stop();
-      if (closing.current === watch) closing.current = null;
-    };
-  }, [closesAt, stillOpen]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque lecture de la page est l'occasion de revoir l'heure du serveur
-  useEffect(() => closing.current?.check(), [loaderData.serverAt]);
-  // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
-  // qui revient après une coupure la recharge aussi (relecture du lot 57).
-  const { connected } = useLiveRevalidate(
-    event ? `event:${event.id}:votes` : null,
-    (m) => m.type === "votes.changed" || m.type === "votes.candidates.changed",
-    {
-      onMessage: (m) => {
-        const total = (m.payload as { total?: number } | null)?.total;
-        if (m.type === "votes.changed" && typeof total === "number") setLiveTotal(total);
-      },
-    },
-  );
+  const justVoted = actionData?.ok ? actionData.vote : null;
+  const vote = loaderData.vote ?? justVoted;
+  // Clôture : à l'échéance du serveur, la page se relit (et réessaie jusqu'à la clôture confirmée) ; surveillée tant que le
+  // vote n'est pas fini, ouvert ou pas encore.
+  useClosingWatch(vote, loaderData.serverAt);
+  // Grille et classement en direct : un message utile de CE vote recharge la page, au plus une fois toutes les 10 s, et le canal
+  // qui revient après une coupure la recharge aussi.
+  const voteId = vote?.id ?? null;
+  const { connected } = useLiveRevalidate(event ? `event:${event.id}:votes` : null, (m) => {
+    if (
+      m.type !== "votes.changed" &&
+      m.type !== "theme_votes.changed" &&
+      m.type !== "votes.opened" &&
+      m.type !== "votes.closed" &&
+      m.type !== "votes.candidates.changed"
+    )
+      return false;
+    const id = (m.payload as { voteId?: unknown } | null)?.voteId;
+    return voteId === null || typeof id !== "string" || id === voteId;
+  });
 
   // Relecture impossible (panne passagère) : la confirmation de la voix reste affichée avec « Réessayer » ; jamais un
   // retour à la connexion ni un écran d'erreur pour une panne.
-  if (!board || !mine || !event) {
-    const voted = mine?.votedFor ? mine : justVoted;
+  if (!vote || !event) {
     return (
       <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-        <FicheBar title={audiencePrizeTexts.title} facts={event?.title} back={loaderData.back} />
-        {voted?.votedFor && (
-          <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-            {voteScreenTexts.saved(new Date(voted.closesAt), new Date(nowMs()))}
-          </p>
-        )}
+        <FicheBar title={T.voteScreenTitle} facts={event?.title} back={back} />
         <p className="s-error" role="alert" data-testid="vote-ranking-failed">
-          {voted?.votedFor ? voteScreenTexts.rankingFailed : voteScreenTexts.loadFailed}
+          {T.loadFailed}
         </p>
         <Button
           variant="secondary"
@@ -106,37 +88,37 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           onClick={() => void revalidator.revalidate()}
           data-testid="vote-ranking-retry"
         >
-          {voteScreenTexts.retry}
+          {T.retry}
         </Button>
         <Button variant="secondary" icon="calendar" href={`/e/${event?.slug ?? loaderData.slug}`}>
-          Voir l'événement
+          {T.seeEvent}
         </Button>
       </div>
     );
   }
-  const own = new Set(mine.ownApplicationIds);
-  const myEntry = board.entries.find((e) => own.has(e.applicationId));
-  const reason = board.settled
-    ? null
-    : mine.canVote
-      ? null
-      : mine.reason === "vote_closed" || (!board.open && board.total > 0)
-        ? voteScreenTexts.closedNote
-        : mine.reason === "not_checked_in"
-          ? audiencePrizeTexts.errors.not_checked_in
-          : audiencePrizeTexts.notOpen;
-  const top = board.entries[0]?.votes ?? 0;
+
+  const now = new Date(nowMs());
+  const mode = voteScreenMode(vote, false);
+  const closesAt = new Date(vote.closesAt);
+  const left = vote.state === "open" ? voteMinutesLeft(vote.closesAt, now) : null;
+  const until = vote.state === "open" ? audiencePrizeTexts.openUntil(closesAt, now) : null;
+  const podium = voteResultCard(vote);
+  const showGrid = mode !== "closed";
 
   return (
     <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-      <FicheBar title={audiencePrizeTexts.title} facts={event.title} back={loaderData.back} />
-      <p className="s-lead">
-        {board.settled
-          ? voteScreenTexts.results
-          : board.open
-            ? audiencePrizeTexts.openUntil(new Date(board.closesAt), new Date(nowMs()))
-            : audiencePrizeTexts.closed}
-        {mine.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(mine.checkedInAt))}` : ""}
+      <FicheBar title={vote.title} facts={event.title} back={back} />
+      <p className="s-lead" data-testid="vote-lead">
+        {mode === "closed"
+          ? vote.settled
+            ? voteScreenTexts.results
+            : audiencePrizeTexts.closed
+          : until
+            ? left !== null && left <= VOTE_CLOSING_SOON_MIN
+              ? `${T.minutesLeft(left)} · ${until}`
+              : until
+            : T.notOpen}
+        {vote.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(vote.checkedInAt))}` : ""}
       </p>
 
       {actionData?.error && (
@@ -144,108 +126,82 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
           {actionData.error}
         </p>
       )}
-      {mine.votedFor && !board.settled && (
+      {vote.myVote && vote.state === "open" && (
         <p className="s-notice s-notice--ok" role="status" data-testid="vote-saved">
-          {voteScreenTexts.saved(new Date(board.closesAt), new Date(nowMs()))}
+          {voteScreenTexts.saved(closesAt, now)}
         </p>
       )}
-      {reason && (
+      {mode === "blocked" && (
         <p className="s-notice" data-testid="vote-reason">
-          {reason}
+          {voteBlockedLine(vote)}
+        </p>
+      )}
+      {mode === "upcoming" && (
+        <p className="s-notice" data-testid="vote-reason">
+          {T.notOpen}
+        </p>
+      )}
+      {mode === "closed" && (
+        <p className="s-notice" data-testid="vote-reason">
+          {T.closedNote}
         </p>
       )}
 
-      {board.settled && (
+      {mode === "closed" && podium?.[0] && vote.ranking?.[0] && (
         <Plate className="s-stack s-stack--tight" data-testid="vote-winner">
-          <div className="o-t-label">{voteScreenTexts.winner}</div>
-          {board.winner ? (
-            <strong className="o-never-truncate">
-              {board.winner.vehicleLabel} · {board.winner.pseudo}
-            </strong>
-          ) : (
-            <p>{voteScreenTexts.noWinner}</p>
-          )}
+          <div className="o-t-label">{T.winnerLine(vote.ranking[0].votes, vote.total).toUpperCase()}</div>
+          <div className="vp-winner">
+            {vote.ranking[0].photoUrl ? <img src={vote.ranking[0].photoUrl} alt="" /> : null}
+            <span>
+              <strong className="o-never-truncate">{vote.ranking[0].vehicleLabel}</strong>
+              <br />
+              <small>{vote.ranking[0].pseudo}</small>
+            </span>
+          </div>
         </Plate>
       )}
+      {mode === "closed" && !podium && vote.ranking && (
+        <p className="o-t-caption s-muted" data-testid="vote-no-podium">
+          {T.noPodium}
+        </p>
+      )}
 
-      {!board.settled && (
+      {showGrid && (
         <section className="s-stack s-stack--tight" aria-labelledby="vote-grid">
           <h2 id="vote-grid" className="s-h2">
-            {audiencePrizeTexts.oneVote}
+            {T.oneVote}
           </h2>
-          <p className="o-t-caption s-muted">{audiencePrizeTexts.rules(board.winnerPoints)}</p>
-          {candidates.length === 0 ? (
-            <p className="s-muted">{voteScreenTexts.empty}</p>
-          ) : (
-            <Form method="post">
-              <input type="hidden" name="eventId" value={event.id} />
-              <ul className="vote-grid" data-testid="vote-grid">
-                {candidates.map((c, i) => {
-                  const mineOwn = own.has(c.applicationId);
-                  const chosen = mine.votedFor === c.applicationId;
-                  return (
-                    <li key={c.applicationId}>
-                      <button
-                        type="submit"
-                        name="applicationId"
-                        value={c.applicationId}
-                        className="vote-card"
-                        aria-pressed={chosen}
-                        aria-label={mineOwn ? voteScreenTexts.you : voteScreenTexts.pick(c.vehicleLabel)}
-                        disabled={!mine.canVote || mineOwn || busy}
-                        data-testid="vote-candidate"
-                      >
-                        {c.photoUrl ? <img className="vote-card__photo" src={c.photoUrl} alt="" /> : null}
-                        <span className="o-t-caption s-muted">{voteScreenTexts.number(i + 1)}</span>
-                        <strong className="o-never-truncate">{c.vehicleLabel}</strong>
-                        <span className="o-t-caption">{c.pseudo}</span>
-                        {mineOwn && <Chip>{voteScreenTexts.you}</Chip>}
-                        {chosen && <Chip variant="accent">{voteScreenTexts.yourVote}</Chip>}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Form>
-          )}
+          <p className="o-t-caption s-muted">{T.rulesLine}</p>
+          <Form method="post">
+            <input type="hidden" name="eventId" value={event.id} />
+            <input type="hidden" name="voteId" value={vote.id} />
+            <VoteGrid
+              candidates={candidates}
+              ownIds={vote.ownApplicationIds}
+              myVote={vote.myVote}
+              canVote={vote.canVote}
+              busy={busy}
+            />
+          </Form>
         </section>
       )}
 
-      <section className="s-stack s-stack--tight" aria-labelledby="vote-ranking" data-testid="vote-ranking">
-        <div className="s-row s-row--between">
-          <h2 id="vote-ranking" className="s-h2">
-            {audiencePrizeTexts.ranking}
-          </h2>
-          {!board.settled && board.open && <Chip>{audiencePrizeTexts.live}</Chip>}
-        </div>
-        {board.rankingHidden && (
-          <p className="s-notice" data-testid="vote-ranking-hidden">
-            {voteScreenTexts.rankingHidden(mine.canVote)}
-          </p>
-        )}
-        <p className="o-t-caption s-muted" data-testid="vote-total">
-          {audiencePrizeTexts.votes(liveTotal)}
-          {myEntry ? ` · ${audiencePrizeTexts.rank(myEntry.rank, board.vehicles)}` : ""}
+      {/* Le classement n'est pas servi : la phrase qui dit quand il le sera (raison de l'API, jamais déduite ici). */}
+      {vote.ranking === null && mode !== "closed" && (
+        <p className="s-notice" data-testid="vote-ranking-hidden">
+          {rankingHiddenLine(vote)}
         </p>
-        <ol className="vote-rank">
-          {board.entries.slice(0, 10).map((e) => (
-            <li key={e.applicationId}>
-              <span className="o-t-number-narrow">{e.rank}</span>
-              <span className="o-never-truncate">
-                {e.vehicleLabel} <span className="s-muted">· {e.pseudo}</span>
-                <span
-                  className="vote-bar"
-                  style={{ width: `${top && e.votes ? Math.max(4, (e.votes / top) * 100) : 0}%` }}
-                />
-              </span>
-              <span className="o-t-caption">{audiencePrizeTexts.votes(e.votes)}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
-        Voir l'événement
-      </Button>
+      )}
+      {vote.ranking && <VoteRanking vote={vote} entries={vote.ranking} closed={mode === "closed"} />}
+
+      <div className="s-row">
+        <Button variant="secondary" icon="flag" href={`/app/votes/${event.slug}?retour=${encodeURIComponent(back)}`}>
+          {T.seeAllVotes}
+        </Button>
+        <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
+          {T.seeEvent}
+        </Button>
+      </div>
     </div>
   );
 }

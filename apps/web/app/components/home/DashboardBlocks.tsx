@@ -71,7 +71,7 @@ export function LiveBlock({ live }: { live: HomeLive }) {
             <Icon name="trophy" size={18} /> {homeBlockLabels.liveVotes(live.votes.open)}
           </span>
           {canVoteNow(live) && (
-            <Button variant="primary" icon="trophy" href={`/app/vote/${live.event.slug}`} data-testid="home-live-vote">
+            <Button variant="primary" icon="trophy" href={`/app/votes/${live.event.slug}`} data-testid="home-live-vote">
               {homeBlockLabels.liveVote}
             </Button>
           )}

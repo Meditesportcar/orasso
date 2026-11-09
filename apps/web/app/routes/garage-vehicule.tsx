@@ -36,6 +36,7 @@ import { StyleProposal } from "../components/StylePicker";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import { plateFields } from "../lib/vehicle-add";
+import { VehicleTrophies } from "../components/VehicleTrophies";
 import type { Route } from "./+types/garage-vehicule";
 import "../styles/garage.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -335,6 +336,9 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
           </Button>
         </Form>
       )}
+
+      {/* Lot R7l3 : les podiums de vote (et le partenaire quand l'API le renvoie). */}
+      <VehicleTrophies vehicle={v} />
 
       <section className="s-stack s-stack--tight" aria-labelledby="fiche">
         <h2 id="fiche" className="s-h2">
