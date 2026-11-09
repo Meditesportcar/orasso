@@ -195,7 +195,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   // --- Pauses et minuterie ---------------------------------------------------------------------------------------------
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
   // Onglet masqué (changement d'onglet, écran verrouillé) : pause, le temps restant est gardé.
-  const running = ready && visible && !held && !menu && !viewers && !replyFocused;
+  // Pendant la vérification du compte (retour d'onglet ou de fenêtre), rien ne défile : la story ne finit pas sous « Réessayer ».
+  const running = ready && visible && check === "ok" && !held && !menu && !viewers && !replyFocused;
   const total = story ? storyDurationMs(story) : 5000;
   const storyId = story?.id ?? null;
   const elapsed = useRef(0);
@@ -239,9 +240,36 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         void verifySession();
       }
     };
+    // Deux fenêtres côte à côte : la visionneuse reste visible quand l'autre fenêtre change de compte ; le retour du focus
+    // dans cette fenêtre (après l'avoir quittée) et le retour par l'historique (`pageshow` d'une page gardée) revérifient
+    // aussi le compte, masqué d'abord.
+    let blurred = false;
+    const onBlur = () => {
+      blurred = true;
+    };
+    const recheck = () => {
+      flushSync(() => setCheck("checking"));
+      void verifySession();
+    };
+    const onFocus = () => {
+      if (!blurred || document.visibilityState === "hidden") return;
+      blurred = false;
+      recheck();
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) recheck();
+    };
     sync();
     document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+    };
   }, [verifySession]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: une autre story (ou la première rejouée) repart de zéro.
   useEffect(() => {
@@ -265,7 +293,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   }, [running, total]);
 
   // Vue : une fois par story, quand l'image est lue ET affichée (onglet visible).
-  const shown = ready && visible;
+  const shown = ready && visible && check === "ok";
   useEffect(() => {
     if (!storyId || !shown || mine || viewed.current.has(storyId)) return;
     viewed.current.add(storyId);
