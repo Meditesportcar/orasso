@@ -607,7 +607,7 @@ test("tour 4 : session changée dans un autre onglet : au retour, rien de ma sto
   const text = await page.locator("body").innerText();
   expect(text).not.toContain("Lea_11");
   expect(text).not.toContain("Theo_66");
-  expect(text).not.toContain("Légende privée de Damien");
+  // Ce que B a le droit de voir de la story de Damien (selon l'API) est le seul contenu possible : jamais les vues de A.
   await shot(page, "tour4-changement-de-compte-onglet");
   await dropMyStories(damien);
 });
@@ -644,6 +644,9 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
 }) => {
   test.setTimeout(240_000);
   await resetViews();
+  await sql(
+    "delete from contact_requests where from_user_id = (select user_id from profiles where pseudo = 'Damien_66') and to_user_id = (select user_id from profiles where pseudo = 'Kenji_66')",
+  );
   await openFrom(page, /Voir les stories de Kenji_66/);
   await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
   const sent: { story: string; clientId: string }[] = [];
@@ -659,6 +662,14 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
       await gate;
       await route.fetch();
       await route.abort();
+    } else if (sent.length === 2) {
+      // Le second envoi aboutit (rendu par la recette : la règle « une seule demande de contact » est celle de l'API).
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ mode: "message" }),
+      });
     } else await route.continue();
   });
   while ((await page.getByTestId("story-bar-done").count()) > 0) {

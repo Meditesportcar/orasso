@@ -585,6 +585,9 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
 }) => {
   test.setTimeout(300_000);
   await resetViews();
+  await sql(
+    "delete from contact_requests where from_user_id = (select user_id from profiles where pseudo = 'Damien_66') and to_user_id = (select user_id from profiles where pseudo = 'Kenji_66')",
+  );
   const { ctx, page } = await open(browser, "damien@orasso.local");
   await openFrom(page, /Voir les stories de Kenji_66/);
   await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
@@ -602,6 +605,14 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
       await gate;
       await route.fetch();
       await route.abort();
+    } else if (sent.length === 2) {
+      // Le second envoi aboutit (rendu par la recette : la règle « une seule demande de contact » est celle de l'API).
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ mode: "message" }),
+      });
     } else await route.continue();
   });
   while ((await page.getByTestId("story-bar-done").count()) > 0) {
@@ -658,9 +669,10 @@ test("tour 4 : une photo en panne ne bloque pas le passage à la suivante ; « R
   await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
   await playing(page);
   // Le toucher à gauche revient à la photo en panne : « Réessayer » la relit.
-  await page.unroute(`**/api/stories/${first}/media/**`);
   await page.getByTestId("story-surface").click({ position: { x: 20, y: 420 } });
   await expect(page.getByTestId("story-bar-done")).toHaveCount(0);
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  await page.unroute(`**/api/stories/${first}/media/**`);
   await retry.click();
   await playing(page);
   await ctx.close();

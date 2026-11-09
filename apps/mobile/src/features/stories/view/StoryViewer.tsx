@@ -462,17 +462,19 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         />
         {mediaFailedId === story.id && !failed && !processing ? (
           <View style={styles.retryBox} pointerEvents="box-none">
-            <SmButton
-              kind="s"
-              icon="undo"
-              onPress={() => {
-                setMediaFailedId(null);
-                setMediaRetries((n) => n + 1);
-              }}
-              testID="photo-retry"
-            >
-              {L.retry}
-            </SmButton>
+            <View>
+              <SmButton
+                kind="s"
+                icon="undo"
+                onPress={() => {
+                  setMediaFailedId(null);
+                  setMediaRetries((n) => n + 1);
+                }}
+                testID="photo-retry"
+              >
+                {L.retry}
+              </SmButton>
+            </View>
           </View>
         ) : null}
         <View style={[styles.top, { paddingTop: insets.top + space2 }]} pointerEvents="box-none">
