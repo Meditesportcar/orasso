@@ -54,12 +54,18 @@ export function CrewPhotoImage({
   style,
   accessibilityLabel,
   resizeMode = "contain",
+  onLoaded,
+  onFailed,
 }: {
   url: string;
   style: StyleProp<ImageStyle>;
   accessibilityLabel?: string;
   /** Lot R5c2 : la bannière du crew (même lecture protégée) remplit son cadre. */
   resizeMode?: "contain" | "cover";
+  /** Lot R7f2 (visionneuse de stories) : l'image est lue et prête à s'afficher (la minuterie ne part qu'alors). */
+  onLoaded?: () => void;
+  /** Lot R7f2 : lecture refusée ou perdue (`status` de l'API, 0 sans réponse) ; l'écran dit « plus disponible » pour 403/404. */
+  onFailed?: (status: number) => void;
 }) {
   const token = getSessionToken();
   const [uri, setUri] = useState<string | null>(null);
@@ -67,20 +73,30 @@ export function CrewPhotoImage({
   // Chaque « Réessayer » (ou retour du réseau) relance la lecture.
   const [attempt, setAttempt] = useState(0);
   const retry = useRef(() => setAttempt((n) => n + 1)).current;
+  const events = useRef({ onLoaded, onFailed });
+  events.current = { onLoaded, onFailed };
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer, retour du réseau).
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
+    let status = 0;
     setUri(null);
     setFailed(false);
     void fetch(apiUrl(url), {
       headers: token ? { authorization: `Bearer ${token}` } : {},
       cache: "no-store",
     })
-      .then((res) => (res.ok ? res.blob() : null))
+      .then((res) => {
+        status = res.status;
+        return res.ok ? res.blob() : null;
+      })
       .then(async (blob) => {
         if (cancelled) return;
-        if (!blob) return setFailed(true);
+        if (!blob) {
+          setFailed(true);
+          events.current.onFailed?.(status);
+          return;
+        }
         if (Platform.OS === "web") {
           objectUrl = URL.createObjectURL(blob);
           setUri(objectUrl);
@@ -88,9 +104,12 @@ export function CrewPhotoImage({
           const data = await asDataUrl(blob);
           if (!cancelled) setUri(data);
         }
+        if (!cancelled) events.current.onLoaded?.();
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (cancelled) return;
+        setFailed(true);
+        events.current.onFailed?.(0);
       });
     return () => {
       cancelled = true;

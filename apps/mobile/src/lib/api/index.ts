@@ -33,6 +33,7 @@ import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
+import { storiesApi } from "./stories";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
@@ -90,4 +91,5 @@ export const api = {
   ...eventInvitesApi,
   ...stylesApi,
   ...feedApi,
+  ...storiesApi,
 };
