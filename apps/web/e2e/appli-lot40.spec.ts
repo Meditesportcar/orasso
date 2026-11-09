@@ -24,18 +24,19 @@ type Theme = "beton" | "sable";
 // Un nom peut passer sur deux lignes à côté du logo (comme « Atelier Têt Detailing » dans l'artefact), jamais coupé.
 const OWN_NAME = "nom de la fiche";
 const BARS = {
+  // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur (Sorties et Garage sont des pages hors barre).
   fan: [
     ["Explorer", "explorer", null], // Lot C2a : pas de grand titre (artefact).
-    ["Sorties", "sorties", "Mes sorties"],
+    ["Le Fil", "fil", "Le Fil"],
     ["Accueil", "accueil", null], // Lot C2a : la salutation en tient lieu.
-    ["Garage", "garage", "Mon garage"],
+    ["Crew", "crew", "Crew"],
     ["Profil", "profil", null],
   ],
   visitor: [
     ["Explorer", "explorer", null],
-    ["Sorties", "sorties", "Mes sorties"],
+    ["Le Fil", "fil", "Le Fil"],
     ["Accueil", "accueil", null],
-    ["Passeport", "passeport", "Passeport"],
+    ["Crew", "crew", "Crew"],
     ["Profil", "profil", null],
   ],
   organizer: [
@@ -130,7 +131,13 @@ async function choose(page: Page, kind: Kind) {
 async function checkTab(page: Page, title: string | null, oneLine = true) {
   await expect(page.getByRole("tablist").last().getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
   await expect(page.getByTestId("topbar-logo").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Boîte", exact: true }).first()).toBeVisible();
+  // Lot R7a1 : le passionné a la cloche « Activité » et la bulle « Messages » ; les autres casquettes gardent la Boîte.
+  await expect(
+    page
+      .getByRole("button", { name: "Boîte", exact: true })
+      .or(page.getByRole("button", { name: "Activité", exact: true }))
+      .first(),
+  ).toBeVisible();
   if (title) {
     const heading = page.getByRole("heading", { name: title, exact: true }).first();
     await expect(heading).toBeVisible({ timeout: 30_000 });
@@ -250,7 +257,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     // La Boîte, en haut à droite : hors de la barre, notifications dedans, ✕ pour revenir.
     await page.goto("/accueil");
     await afterOpening(page);
-    await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
+    await page.getByRole("button", { name: "Activité", exact: true }).first().click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
     await expect(page.getByTestId("inbox-all")).toBeVisible();
     // Pas de barre d'onglets ici : seuls les trois segments de la feuille Boîte (Tout, Messages, Demandes, lot C2a).
@@ -278,7 +285,7 @@ test("glissement entre onglets : à gauche l'onglet de droite, à droite celui d
     await page.mouse.up();
   };
   await drag(320, 60);
-  await page.waitForURL(/\/garage/, { timeout: 15_000 });
+  await page.waitForURL(/\/crew/, { timeout: 15_000 });
   await drag(60, 330);
   await page.waitForURL(/\/accueil/, { timeout: 15_000 });
   // Un petit geste ne change rien.
@@ -295,19 +302,22 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   const cookie = await signUpApi(pseudo, email);
   const { ctx, page } = await open(browser, "sable");
   await signIn(page, email);
-  await expect(page.getByRole("tab", { name: "Passeport", exact: true })).toBeVisible({ timeout: 30_000 });
+  // Lot R7a1 : la même barre pour le visiteur et l'exposant ; ce qui les distingue est dans le Profil (la ligne « Mon garage »).
+  await expect(page.getByRole("tab", { name: "Crew", exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("tab", { name: "Garage", exact: true })).toHaveCount(0);
   await shot(page, "visiteur-accueil-sable");
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
   await expect(page.getByTestId("casquette-visitor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("casquette-quick-vehicle")).toBeVisible();
+  await expect(page.getByTestId("profil-garage")).toHaveCount(0);
   await shot(page, "visiteur-profil-sable");
 
   await addVehicleApi(cookie, randomPlate());
-  // Retour sur un onglet : `GET /me` relu, la casquette de base devient l'exposant, la barre change.
+  // Retour sur un onglet : `GET /me` relu, la casquette de base devient l'exposant (la ligne « Mon garage » du Profil).
   await page.getByRole("tab", { name: "Explorer", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("tab", { name: "Passeport", exact: true })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Profil", exact: true }).click();
+  await expect(page.getByTestId("profil-garage")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("tab", { name: "Crew", exact: true })).toBeVisible();
   await shot(page, "visiteur-devenu-exposant-sable");
   await ctx.close();
 });
