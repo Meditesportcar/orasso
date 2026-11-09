@@ -620,6 +620,9 @@ export const moderationService = {
     if (input.hideContent && rules.removeOutside) await rules.removeOutside(v, current);
     const removedKeys: string[] = [];
     await withTx(async (tx, after) => {
+      // Ordre unique des verrous (compte, puis signalement, puis contenu) : `autoSuspend` tient le compte avant de toucher
+      // aux signalements ; prendre le signalement d'abord ici rouvrirait un interblocage avec un nouveau signalement.
+      if (input.kind && subjectId) await lockAccount(tx, subjectId);
       const report = await lockReport(tx, id);
       if (input.subject === "owner" && isTerminal(report.status)) {
         throw conflict("already_handled", "Ce signalement a déjà été traité.");

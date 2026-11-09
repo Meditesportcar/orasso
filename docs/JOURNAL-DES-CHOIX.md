@@ -4311,3 +4311,7 @@ Lot **sensible** (le lieu d'un rendez-vous). Branche `lot-r7i-spot` (de `vague-r
 ### À revoir avec Damien (Tour 2, lot R7-dettes)
 
 - **Suppression de compte et dissolution d'un crew** : elles effacent encore les photos d'une publication même si un signalement est ouvert (effacement voulu par le RGPD contre conservation d'une preuve) : à trancher. Non modifié ici.
+
+### Retouche du coordinateur (09/11/2026, re-relecture Opus du tour 2 : fusionnable)
+- **Sanction : compte d'abord** (`apps/api/src/modules/moderation/service.ts`, `sanction`) : quand une sanction vise un compte, ce compte est verrouillé **avant** la ligne du signalement (ordre unique : compte, signalement, contenu), comme `autoSuspend` qui tient le compte avant de modifier les signalements ; un nouveau signalement pendant une sanction ne peut plus provoquer d'interblocage. Tests de modération, crews et Fil verts (248).
+- **Site, passeport vide** : changement de JSX sans recette ni capture à 390 px ; la vérification d'ensemble (R7-V) le couvrira.
