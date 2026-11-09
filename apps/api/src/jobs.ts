@@ -19,6 +19,7 @@ import { nearbyService } from "./modules/events/nearby";
 import { posterService } from "./modules/events/poster/service";
 import { fieldService } from "./modules/field/service";
 import { sponsoredService } from "./modules/home/sponsored";
+import { memoriesService } from "./modules/memories/service";
 import { moderationService } from "./modules/moderation/service";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
@@ -99,6 +100,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "votes.open": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
   "votes.close": (d) => votesLifecycle.syncEvent(d.eventId ?? ""),
   "votes.sweep": () => votesLifecycle.sweep(),
+  // Lot R7j : une notification « souvenir » par personne concernée (livrée à 10 h), rejouable sans doublon.
+  "memories.daily": () => memoriesService.daily(),
 };
 
 /**
@@ -155,6 +158,8 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("newsletter.send", "* * * * *", null, { tz: "Europe/Paris" });
     // Lot R7l1 : votes à l'heure fixée ou à clore, rattrapés chaque minute.
     await boss.schedule("votes.sweep", "* * * * *", null, { tz: "Europe/Paris" });
+    // Lot R7j : souvenirs du jour à 9 h (la notification part à 10 h).
+    await boss.schedule("memories.daily", "0 9 * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {

@@ -69,6 +69,8 @@ export const FEED_PROXIMITY = { sameDepartment: 1, sameRegion: 0.7, elsewhere: 0
 export const FEED_AFFINITY = { followed: 1.5, crew: 1.3, interest: 1.2, none: 1 } as const;
 /** « Moins de ce genre » (menu ⋯). */
 export const FEED_LESS_FACTOR = 0.3;
+/** Le souvenir du jour (carte personnelle, lot R7j) : il passe devant, même devant un abonnement (1,5) tout neuf. */
+export const FEED_MEMORY_BOOST = 3;
 /** Deux cartes consécutives du même genre. */
 export const FEED_REPEAT_PENALTY = 0.6;
 /** Départements « voisins » : le centre du département est à cette distance (km) ou moins. */
@@ -138,6 +140,8 @@ export type FeedCandidate<K extends string = FeedCardKind> = {
   proId: string | null;
   /** Centres d'intérêt de la carte (catégories de l'événement ou du véhicule). */
   categoryIds: readonly string[];
+  /** Coefficient propre au genre (R7j : le souvenir du jour passe devant) ; absent = 1. */
+  boost?: number;
 };
 
 /** Ce que le classement sait de la personne qui regarde (calculé par l'API pour elle seule). */
@@ -189,7 +193,8 @@ export function scoreCard(card: FeedCandidate, ctx: FeedViewerContext, now: Date
     freshness(card.at, now) *
     proximityFactor(card.department, ctx.departments) *
     affinityFactor(card, ctx) *
-    (ctx.lessKinds.has(card.kind) ? FEED_LESS_FACTOR : 1)
+    (ctx.lessKinds.has(card.kind) ? FEED_LESS_FACTOR : 1) *
+    (card.boost ?? 1)
   );
 }
 
@@ -207,6 +212,7 @@ export const feedReasonCodes = [
   "vote_result",
   "pro_near",
   "from_orasso",
+  "your_memory",
   "new_here",
   "sponsored",
 ] as const;
@@ -215,6 +221,8 @@ export type FeedReasonCode = (typeof feedReasonCodes)[number];
 /** Le code de la raison, par priorité : lien direct, puis goûts, puis proximité, puis le genre de la carte. */
 export function reasonCode(c: FeedCandidate, ctx: FeedViewerContext, official = false): FeedReasonCode {
   if (official) return "from_orasso";
+  // Le souvenir est une carte personnelle : sa raison est toujours celle-là, quel que soit le département de l'événement.
+  if (c.kind === "memory") return "your_memory";
   if (c.authorId !== null && ctx.followedUsers.has(c.authorId)) return "following_author";
   if (c.structureId !== null && ctx.followedStructures.has(c.structureId)) return "following_structure";
   if (c.proId !== null && ctx.followedPros.has(c.proId)) return "following_pro";

@@ -17,6 +17,7 @@ export * from "./home";
 export * from "./invitations";
 export * from "./lineup";
 export * from "./media";
+export * from "./memories";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./passport";

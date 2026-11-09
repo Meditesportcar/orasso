@@ -4,6 +4,7 @@ import { BUSINESS_TIMEZONE } from "./enums";
 import type { ArrivalSlot } from "./rules/arrival";
 import type { MyApplication } from "./schemas/application";
 import type { EventCard } from "./schemas/event";
+import type { HomeMemoryBlock } from "./schemas/memories";
 import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
 import type { MyWeather } from "./weather";
@@ -385,7 +386,7 @@ export type HomeData = {
   myOutings: HomeMyOutings | null;
   myCrew: HomeMyCrew | null;
   friendsNews: HomeFriendsNews | null;
-  /** Réservés : R7i (rendez-vous au spot) et R7j (souvenirs) les rempliront ; `null` d'ici là. */
+  /** `spotMeetup` : réservé à R7i, `null` d'ici là. `memories` (R7j) : les souvenirs du jour, `null` hors de ces jours. */
   spotMeetup: HomeSpotMeetup | null;
   memories: HomeMemory | null;
 };
@@ -488,5 +489,5 @@ export const HOME_OUTINGS_LIMIT = 3;
 
 /** Rendez-vous au spot (lot R7i) : vide tant que ce lot n'existe pas (le bloc ne s'affiche que s'il y a quelque chose). */
 export type HomeSpotMeetup = never;
-/** Souvenir du jour (lot R7j) : vide tant que ce lot n'existe pas. */
-export type HomeMemory = never;
+/** Souvenirs du jour (lot R7j) : au moins un, sinon `memories` vaut `null` et le bloc ne s'affiche pas. */
+export type HomeMemory = HomeMemoryBlock;

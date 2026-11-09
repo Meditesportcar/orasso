@@ -18,6 +18,7 @@ import {
 } from "../rules/feed";
 import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
+import type { MemoryCardPayload } from "./memories";
 import { plateRectsSchema } from "./vehicle";
 
 // Le Fil (lot R7e1) : `GET /fil`, publications, « Moins de ce genre », signalement.
@@ -145,7 +146,7 @@ export type FeedPayloads = {
   };
   feed_post: { post: FeedPostView };
   spot_meetup: Record<string, unknown>;
-  memory: Record<string, unknown>;
+  memory: MemoryCardPayload;
   /**
    * Carte « Sponsorisé » (lot R7k1). `id` = l'emplacement (à envoyer à `POST /sponsored/:id/impression|click` avec
    * `{ surface: "feed" }`). `domain` : le domaine du lien, affiché pour un annonceur externe. `disclosure` : la mention

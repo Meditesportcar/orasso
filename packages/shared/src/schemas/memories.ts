@@ -1,0 +1,35 @@
+// Les souvenirs (lot R7j) : « il y a un an, tu étais à… ». Réponses de `GET /me/memories/today` et `GET /me/memories/:eventId`,
+// contenu du bloc de l'Accueil (`memories`) et de la carte du Fil (`memory`). Liste blanche : jamais de plaque (la photo est
+// celle de la règle du plateau, plaque floutée ou absente), jamais d'identifiant d'une autre personne.
+import type { PassportStamp } from "./passport";
+
+export type MemoryItem = {
+  eventId: string;
+  slug: string;
+  title: string;
+  city: string | null;
+  /** Début de l'événement (ISO). */
+  startsAt: string;
+  /** Années pleines depuis le tampon (1, 2, 3…). */
+  yearsAgo: number;
+  posterUrl: string | null;
+  /** Une photo masquée de ma voiture sur le plateau ; `null` sans voiture montrable (on retombe sur l'affiche). */
+  photoUrl: string | null;
+  /** Le tampon du souvenir (participation avant visite). */
+  stampId: string;
+  /** Le récap de l'événement est ouvert (je l'ai vécu : pointé ou billet contrôlé, et l'événement est fini). */
+  recapAvailable: boolean;
+};
+
+/** `GET /me/memories/:eventId` : la page du souvenir. */
+export type MemoryDetail = MemoryItem & {
+  stamp: PassportStamp;
+  /** « Toyota GR Supra » : la voiture que j'avais ce jour-là, seulement si elle est montrable. */
+  vehicleLabel: string | null;
+};
+
+/** Bloc « Souvenirs » de l'Accueil : les souvenirs du jour (au moins un, sinon le bloc n'existe pas). */
+export type HomeMemoryBlock = { items: MemoryItem[] };
+
+/** Charge utile de la carte du Fil `memory`. */
+export type MemoryCardPayload = { memory: MemoryItem };
