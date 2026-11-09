@@ -4,6 +4,7 @@
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { formatDayDate, localDate, type MemoryDetail, memoryLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Stamp } from "@/features/passport/Stamp";
 import { MemoryShareButton } from "@/features/share/MemoryShareButton";
@@ -14,6 +15,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { MemoryPhoto } from "./MemoryPhoto";
+import { forgetMemory, memoryCacheKey, memoryView } from "./memoryView";
 import { useTitleFit } from "./useTitleFit";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -23,9 +25,17 @@ export function MemoryScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const memory = useApi(() => api.memoryDetail(eventId), [eventId], {
     enabled: Boolean(eventId),
-    cacheKey: `memory.${eventId}`,
+    cacheKey: memoryCacheKey(eventId),
   });
-  const m = memory.data;
+  const view = memoryView(memory);
+  const m = view.kind === "ready" ? memory.data : null;
+  // Refus définitif (404/403) : on efface ce qui était affiché et la copie du téléphone (`useApi` les garderait).
+  const { setData } = memory;
+  useEffect(() => {
+    if (view.kind !== "unavailable") return;
+    setData(null);
+    if (eventId) void forgetMemory(eventId);
+  }, [view.kind, eventId, setData]);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   return (
     <FlowScreen
@@ -35,12 +45,15 @@ export function MemoryScreen() {
         await memory.reload();
       }}
     >
-      {memory.error && !m ? (
+      {view.kind === "unavailable" || view.kind === "error" ? (
         <Notice tone="error" testID="memory-error">
-          {memory.error.status === 404 ? memoryLabels.unavailable : memoryLabels.loadError}
+          {view.kind === "unavailable" ? memoryLabels.unavailable : memoryLabels.loadError}
         </Notice>
       ) : null}
-      {!m && !memory.error ? <Muted variant="body">Chargement…</Muted> : null}
+      {view.kind === "ready" && view.offline ? (
+        <Notice testID="memory-offline">Hors ligne : ce souvenir tel que ton téléphone l'a gardé.</Notice>
+      ) : null}
+      {view.kind === "loading" ? <Muted variant="body">Chargement…</Muted> : null}
       {m ? <MemoryBody m={m} /> : null}
     </FlowScreen>
   );
@@ -58,7 +71,8 @@ function MemoryBody({ m }: { m: MemoryDetail }) {
   const date = memoryLabels.dateLine(day.charAt(0).toUpperCase() + day.slice(1), m.city);
   const fit = useTitleFit(memoryLabels.headline(m.title), 26, space4);
   // « Jour pour jour » seulement le jour anniversaire ; la page ouverte plus tard donne la date du souvenir.
-  const eyebrow = m.anniversary ? memoryLabels.eyebrow(m.yearsAgo) : memoryLabels.eyebrowOn(m.yearsAgo, day);
+  // Le « le … » est le jour du tampon (celui qui fait le souvenir), pas le début de l'événement (un événement sur plusieurs jours).
+  const eyebrow = m.anniversary ? memoryLabels.eyebrow(m.yearsAgo) : memoryLabels.eyebrowOn(m.yearsAgo, stampDay);
   return (
     <>
       <PosterSurface style={styles.hero} testID="memory-hero">

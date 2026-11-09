@@ -4,7 +4,7 @@
 // du souvenir (404 pour qui n'a pas le tampon) et les plaques (photo du plateau seulement, véhicule cédé jamais).
 import { type FeedCard, seasonDates, seasonYear } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   blurPlatesOf,
@@ -23,7 +23,7 @@ import { db, pool } from "../../db/client";
 import {
   applications,
   checkins,
-  type events,
+  events,
   notifications,
   passportStamps,
   profiles,
@@ -32,6 +32,7 @@ import {
   vehiclePhotos,
   vehicles,
 } from "../../db/schema";
+import { env } from "../../env";
 import { memoriesWidget } from "../home/widgets/memories";
 import { notificationsService } from "../notifications/service";
 import { memoriesService } from "./service";
@@ -620,5 +621,187 @@ describe("carte du Fil : personnelle", () => {
     await blurPlatesOf(u.id);
     const blurred = (await fil(u)).find((c) => c.kind === "memory");
     expect(memoryOf(blurred).photoUrl).not.toBeNull();
+  });
+});
+
+// --- Tour 3 : un seul choix de tampon, la bonne voiture, la livraison revérifiée, la reprise ------------------------------------
+
+/** Un deuxième tampon (autre genre) de la même personne sur un événement déjà créé par `memory()`. */
+async function secondStamp(u: TestUser, eventId: string, kind: "participation" | "visit", stampedAt: Date) {
+  const [row] = await db
+    .insert(passportStamps)
+    .values({
+      userId: u.id,
+      eventId,
+      seasonId: await seasonFor(stampedAt),
+      kind,
+      shape: "round",
+      ink: "default",
+      seed: 7,
+      stampedAt,
+    })
+    .returning();
+  return row!;
+}
+
+describe("même tampon pour la liste du jour et pour la page", () => {
+  it("visite le 9/11/2025 et participation le 10/11/2025 : le 9/11/2026 la liste et la page montrent la visite (pas de 404)", async () => {
+    const u = await person("DeuxJours_66");
+    const { event, stamp: visit } = await memory(u, {
+      kind: "visit",
+      startsAt: new Date("2025-11-09T09:00:00Z"),
+      stampedAt: new Date("2025-11-09T10:00:00Z"),
+    });
+    const part = await secondStamp(u, event.id, "participation", new Date("2025-11-10T10:00:00Z"));
+    const day9 = new Date("2026-11-09T08:00:00Z");
+    clock.set(day9);
+    const [listed] = await memoriesService.todayFor(u.id, day9);
+    expect(listed?.stampId).toBe(visit.id);
+    const page = await call(u, "GET", `/me/memories/${event.id}`);
+    expect(page.status).toBe(200);
+    expect(page.json.stampId).toBe(visit.id);
+    expect(page.json.anniversary).toBe(true);
+    // Le 10/11/2026 : l'anniversaire est celui de la participation, la liste et la page la montrent toutes les deux.
+    const day10 = new Date("2026-11-10T08:00:00Z");
+    clock.set(day10);
+    expect((await memoriesService.todayFor(u.id, day10))[0]?.stampId).toBe(part.id);
+    expect((await call(u, "GET", `/me/memories/${event.id}`)).json.stampId).toBe(part.id);
+    // Un autre jour : la page prend le plus ancien tampon d'au moins un an, sans prétendre à l'anniversaire.
+    clock.set(new Date("2026-11-12T08:00:00Z"));
+    const later = await call(u, "GET", `/me/memories/${event.id}`);
+    expect(later.json.stampId).toBe(visit.id);
+    expect(later.json.anniversary).toBe(false);
+  });
+
+  it("un tampon de moins d'un an ne masque pas l'ancien : l'ancien fait le souvenir, la page reste ouverte", async () => {
+    const u = await person("Recent_66");
+    const { event, stamp: old } = await memory(u);
+    await secondStamp(u, event.id, "visit", new Date("2026-11-10T07:00:00Z"));
+    expect((await memoriesService.todayFor(u.id, NOW))[0]?.stampId).toBe(old.id);
+    expect((await call(u, "GET", `/me/memories/${event.id}`)).json.stampId).toBe(old.id);
+  });
+});
+
+describe("la voiture du souvenir est celle qui est entrée", () => {
+  it("deux voitures retenues, A absente et B entrée : la photo, le nom et le numéro du plateau sont ceux de B", async () => {
+    const u = await person("DeuxVoitures_66");
+    const { event } = await memory(u);
+    const a = await withCar(u, event.id);
+    await db.delete(checkins).where(eq(checkins.applicationId, a.app.id));
+    await db
+      .update(applications)
+      .set({ decidedAt: new Date(YEAR_AGO.getTime() - 30 * DAY) })
+      .where(eq(applications.id, a.app.id));
+    const b = await withCar(u, event.id);
+    const [item] = await memoriesService.todayFor(u.id, NOW);
+    expect(item?.photoUrl).toContain(b.car.id);
+    expect(item?.photoUrl).not.toContain(a.car.id);
+    expect(item?.car).toMatchObject({ rank: 1, total: 1 });
+    const page = await memoriesService.detail(u.id, event.id, NOW);
+    expect(page.vehicleLabel).toBe(item?.car?.label);
+  });
+
+  it("deux voitures entrées : celle que le tampon désigne", async () => {
+    const u = await person("Pointee_66");
+    const { event, stamp } = await memory(u);
+    const a = await withCar(u, event.id);
+    const b = await withCar(u, event.id);
+    await db
+      .update(applications)
+      .set({ decidedAt: new Date(YEAR_AGO.getTime() - 30 * DAY) })
+      .where(eq(applications.id, a.app.id));
+    expect((await memoriesService.todayFor(u.id, NOW))[0]?.photoUrl).toContain(a.car.id);
+    await db.update(passportStamps).set({ applicationId: b.app.id }).where(eq(passportStamps.id, stamp.id));
+    expect((await memoriesService.todayFor(u.id, NOW))[0]?.photoUrl).toContain(b.car.id);
+  });
+
+  it("une visite sans voiture entrée : ni photo de voiture, ni ligne du plateau, ni nom de voiture", async () => {
+    const u = await person("VisiteSansVoiture_66");
+    const { event } = await memory(u, { kind: "visit" });
+    const car = await withCar(u, event.id);
+    await db.delete(checkins).where(eq(checkins.applicationId, car.app.id));
+    const [item] = await memoriesService.todayFor(u.id, NOW);
+    expect(item?.photoUrl).toBeNull();
+    expect(item?.car).toBeNull();
+    expect((await memoriesService.detail(u.id, event.id, NOW)).vehicleLabel).toBeNull();
+  });
+});
+
+describe("livraison de la notification : revérifiée à l'envoi", () => {
+  const quiet = env.NOTIFY_QUIET_HOURS;
+
+  it("reprise le jour même, en journée : elle part", async () => {
+    const u = await person("Reprise_Jour");
+    await memory(u);
+    await memoriesService.daily(NOW);
+    clock.set(new Date("2026-11-10T18:00:00Z"));
+    await notificationsService.deliverDue();
+    expect((await memoryNotifications(u.id))[0]?.deliveredAt).not.toBeNull();
+  });
+
+  it.skipIf(!quiet)("reprise à 23 h 30 (Paris) le jour même : abandonnée, pas reportée", async () => {
+    const u = await person("Reprise_Nuit");
+    await memory(u);
+    await memoriesService.daily(NOW);
+    clock.set(new Date("2026-11-10T22:30:00Z"));
+    await notificationsService.deliverDue();
+    expect(await memoryNotifications(u.id)).toEqual([]);
+  });
+
+  it("reprise le lendemain : abandonnée (l'anniversaire est passé)", async () => {
+    const u = await person("Reprise_Lendemain");
+    await memory(u);
+    await memoriesService.daily(NOW);
+    clock.set(new Date("2026-11-11T09:30:00Z"));
+    await notificationsService.deliverDue();
+    expect(await memoryNotifications(u.id)).toEqual([]);
+  });
+
+  it("événement devenu sur invitation, tampon disparu ou compte suspendu entre-temps : abandonnée", async () => {
+    const a = await person("Devenu_Invite");
+    const b = await person("Tampon_Parti");
+    const c = await person("Suspendu_Entre");
+    const ea = await memory(a);
+    const eb = await memory(b);
+    await memory(c);
+    await memoriesService.daily(NOW);
+    expect(await memoryNotifications(a.id)).toHaveLength(1);
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, ea.event.id));
+    await db.delete(passportStamps).where(eq(passportStamps.id, eb.stamp.id));
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(NOW.getTime() + 10 * DAY) })
+      .where(eq(profiles.userId, c.id));
+    clock.set(new Date("2026-11-10T09:30:00Z"));
+    await notificationsService.deliverDue();
+    for (const u of [a, b, c]) expect(await memoryNotifications(u.id)).toEqual([]);
+  });
+});
+
+describe("memories.daily : les erreurs par personne sont rattrapées", () => {
+  it("un échec pour une personne : les autres sont prévenues, la tâche échoue ; la reprise la prévient, sans doublon", async () => {
+    const people = [await person("Reprise_1"), await person("Reprise_2"), await person("Reprise_3")];
+    for (const u of people) await memory(u);
+    const failing = people[1]!;
+    let broken = true;
+    const real = notificationsService.notify.bind(notificationsService);
+    const spy = vi.spyOn(notificationsService, "notify").mockImplementation(async (ex, userId, ...rest) => {
+      if (broken && userId === failing.id) throw new Error("panne passagère");
+      return real(ex, userId, ...rest);
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await expect(memoriesService.daily(NOW)).rejects.toThrow(/1 personne/);
+      expect(await memoryNotifications(people[0]!.id)).toHaveLength(1);
+      expect(await memoryNotifications(failing.id)).toHaveLength(0);
+      expect(await memoryNotifications(people[2]!.id)).toHaveLength(1);
+      broken = false;
+      // La reprise ne prévient que la personne manquée.
+      expect(await memoriesService.daily(NOW)).toBe(1);
+      for (const u of people) expect(await memoryNotifications(u.id)).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+      log.mockRestore();
+    }
   });
 });

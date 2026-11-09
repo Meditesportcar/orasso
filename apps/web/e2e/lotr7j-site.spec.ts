@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { cutWords, expectCutWordsDetected } from "./cutWords";
 import { apiCall, login, loginInBrowser } from "./helpers";
 
 // Lot R7j (D38), côté site : les souvenirs « il y a un an… ». Le seed `memories` pose, le jour où on le lance, un événement
@@ -14,28 +15,6 @@ type Today = {
   posterUrl: string | null;
   car: { label: string; rank: number; total: number } | null;
 }[];
-
-/** Les mots d'un élément coupés entre deux lignes (un mot dont les rectangles n'ont pas le même haut) : doit rester vide. */
-async function cutWords(page: Page, testId: string): Promise<string[]> {
-  return page
-    .getByTestId(testId)
-    .first()
-    .evaluate((el) => {
-      const out: string[] = [];
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        const text = n.textContent ?? "";
-        for (const m of text.matchAll(/S+/g)) {
-          const r = document.createRange();
-          r.setStart(n, m.index ?? 0);
-          r.setEnd(n, (m.index ?? 0) + m[0].length);
-          const tops = new Set([...r.getClientRects()].map((q) => Math.round(q.top)));
-          if (tops.size > 1) out.push(m[0]);
-        }
-      }
-      return out;
-    });
-}
 
 type Home = { memories: { items: Today } | null };
 
@@ -66,6 +45,8 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien pour un co
     if (memory.car) {
       await expect(block.getByTestId("home-memory-car")).toContainText(`n° ${memory.car.rank} du plateau`);
     }
+    // Le contrôle voit-il un mot coupé ? (témoin volontaire), puis les vrais titres.
+    await expectCutWordsDetected(page);
     expect(await cutWords(page, "home-memory-title")).toEqual([]);
     await expect(page.getByText("En story")).toHaveCount(0);
 

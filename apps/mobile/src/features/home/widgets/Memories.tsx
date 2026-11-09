@@ -4,7 +4,7 @@
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type HomeMemory, type MemoryItem, memoryLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { MemoryPhoto } from "@/features/memories/MemoryPhoto";
 import { useTitleFit } from "@/features/memories/useTitleFit";
@@ -29,6 +29,9 @@ function MemoryPoster({ m }: { m: MemoryItem }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
+  const { fontScale } = useWindowDimensions();
+  // Police du système agrandie : les boutons passent l'un sous l'autre, comme sur la page (aucun libellé sur deux lignes).
+  const stacked = fontScale >= 1.15;
   const fit = useTitleFit(memoryLabels.headline(m.title), 24, space3 + 4);
   const open = () => router.push({ pathname: "/souvenir/[eventId]", params: { eventId: m.eventId } });
   return (
@@ -52,17 +55,23 @@ function MemoryPoster({ m }: { m: MemoryItem }) {
             {memoryLabels.plateauLine(m.car.label, m.car.rank, m.car.total)}
           </Text>
         ) : null}
-        <View style={styles.actions}>
+        <View style={[styles.actions, stacked && styles.actionsStacked]} testID="home-memory-actions">
           {/* Place du bouton « En story » (lot R7f4) : il passe en premier, ce composant ne rend rien d'ici là. */}
           <MemoryShareButton memory={m} />
-          <SmButton kind="s" icon="stamp" onPress={open} style={styles.grow} testID="home-memory-open">
+          <SmButton
+            kind="s"
+            icon="stamp"
+            onPress={open}
+            style={stacked ? styles.stretch : styles.grow}
+            testID="home-memory-open"
+          >
             {memoryLabels.see}
           </SmButton>
           <SmButton
             kind="s"
             icon="grid"
             onPress={() => router.push({ pathname: "/e/[slug]/plateau", params: { slug: m.slug } })}
-            style={styles.grow}
+            style={stacked ? styles.stretch : styles.grow}
             testID="home-memory-plateau"
           >
             {memoryLabels.seePlateau}
@@ -78,5 +87,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 24, overflow: "hidden" },
   body: { marginTop: -8, paddingHorizontal: space3 + 4, paddingBottom: space3 + 4, gap: space2 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: space2 + 2 },
+  actionsStacked: { flexDirection: "column", flexWrap: "nowrap" },
   grow: { flex: 1, minWidth: 120 },
+  stretch: { alignSelf: "stretch" },
 });

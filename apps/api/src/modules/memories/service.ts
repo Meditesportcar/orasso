@@ -6,6 +6,7 @@
 // (`maskedPhoto`), sinon l'affiche. La tâche `memories.daily` prévient à 10 h, au plus une fois par personne et par jour.
 import {
   BUSINESS_TIMEZONE,
+  isQuietHour,
   type MemoryDetail,
   type MemoryItem,
   maskedPhoto,
@@ -32,12 +33,13 @@ import {
   tickets,
   vehicles,
 } from "../../db/schema";
+import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
 import { eventPosterUrl } from "../events/card";
-import { notificationsService } from "../notifications/service";
+import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 import { serialize as serializeStamp } from "../passport/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -61,57 +63,88 @@ const accountOk = (t: Date) =>
 /** « MM-JJ » du jour local d'un tampon, lu par la base (préfiltre : `memoryYearsAgo` tranche ensuite). */
 const stampDayKey = sql<string>`to_char(${passportStamps.stampedAt} at time zone ${BUSINESS_TIMEZONE}, 'MM-DD')`;
 
-/** Un tampon par événement : la participation d'abord, puis la visite. */
-function pickOne(hits: Hit[]): Hit[] {
-  const byEvent = new Map<string, Hit>();
-  for (const h of hits) {
-    const kept = byEvent.get(h.event.id);
-    if (!kept || (kept.kind === "visit" && h.kind === "participation")) byEvent.set(h.event.id, h);
-  }
-  return [...byEvent.values()];
-}
+type StampRow = {
+  s: typeof passportStamps.$inferSelect;
+  e: typeof events.$inferSelect;
+};
 
-const toHits = (rows: { s: typeof passportStamps.$inferSelect; e: typeof events.$inferSelect }[]): Hit[] =>
-  pickOne(
-    rows.map((r) => ({
-      stamp: r.s,
-      stampId: r.s.id,
-      kind: r.s.kind as Hit["kind"],
-      stampedAt: r.s.stampedAt,
-      event: r.e,
-    })),
-  );
+/**
+ * LE choix du tampon d'un événement, pour la liste du jour (Accueil, Fil, notification) comme pour la page : le tampon
+ * **anniversaire** d'abord (la participation avant la visite s'il y en a deux le même jour), sinon le plus ancien tampon
+ * d'au moins un an (page ouverte un autre jour). `anniversary` dit si c'est le jour ; sans tampon d'au moins un an : rien.
+ */
+function pickStamp(rows: StampRow[], at: Date): (Hit & { years: number; anniversary: boolean }) | null {
+  const part = (r: StampRow) => Number(r.s.kind === "participation");
+  const oldest = (a: StampRow, b: StampRow) => a.s.stampedAt.getTime() - b.s.stampedAt.getTime() || part(b) - part(a);
+  const old = rows.filter((r) => memoryYearsSince(r.s.stampedAt, at) >= 1).sort(oldest);
+  // Le jour anniversaire, la participation avant la visite ; sinon le plus ancien.
+  const today = old.filter((r) => memoryYearsAgo(r.s.stampedAt, at) !== null).sort((a, b) => part(b) - part(a))[0];
+  const r = today ?? old[0];
+  if (!r) return null;
+  return {
+    stamp: r.s,
+    stampId: r.s.id,
+    kind: r.s.kind as Hit["kind"],
+    stampedAt: r.s.stampedAt,
+    event: r.e,
+    years: memoryYearsSince(r.s.stampedAt, at),
+    anniversary: today !== undefined,
+  };
+}
 
 /** Les tampons de souvenir de la personne dont le jour local est celui de `at`, avec leur nombre d'années. */
 async function hitsToday(ex: Executor, userId: string, at: Date): Promise<(Hit & { years: number })[]> {
+  const eligible = and(
+    eq(passportStamps.userId, userId),
+    inArray(passportStamps.kind, [...memoryStampKinds]),
+    eq(events.status, "published"),
+    ne(events.admission, "invite_only"),
+  );
+  // Les événements dont un tampon tombe un jour anniversaire (préfiltre), puis tous les tampons de la personne sur ces
+  // événements : le choix (`pickStamp`) est le même que pour la page.
+  const days = await ex
+    .selectDistinct({ id: passportStamps.eventId })
+    .from(passportStamps)
+    .innerJoin(events, eq(events.id, passportStamps.eventId))
+    .where(and(eligible, inArray(stampDayKey, memoryDayKeys(at))));
+  if (!days.length) return [];
   const rows = await ex
     .select({ s: passportStamps, e: events })
     .from(passportStamps)
     .innerJoin(events, eq(events.id, passportStamps.eventId))
     .where(
       and(
-        eq(passportStamps.userId, userId),
-        inArray(passportStamps.kind, [...memoryStampKinds]),
-        eq(events.status, "published"),
-        ne(events.admission, "invite_only"),
-        inArray(stampDayKey, memoryDayKeys(at)),
+        eligible,
+        inArray(
+          passportStamps.eventId,
+          days.map((d) => d.id),
+        ),
       ),
     );
-  return toHits(rows).flatMap((h) => {
-    const years = memoryYearsAgo(h.stampedAt, at);
-    return years === null ? [] : [{ ...h, years }];
+  const byEvent = new Map<string, StampRow[]>();
+  for (const r of rows) byEvent.set(r.e.id, [...(byEvent.get(r.e.id) ?? []), r]);
+  return [...byEvent.values()].flatMap((list) => {
+    const hit = pickStamp(list, at);
+    return hit?.anniversary ? [hit] : [];
   });
 }
 
 /**
- * Photo de ma voiture à l'événement, par événement : ma candidature de véhicule retenue, mon véhicule encore à moi et actif
- * (un véhicule archivé ou cédé n'est plus montré, comme sur le plateau), une photo montrable seulement (`maskedPhoto`).
+ * Photo de ma voiture à l'événement, par événement : une candidature de véhicule retenue **et effectivement pointée**
+ * (de préférence celle que le tampon désigne), mon véhicule encore à moi et actif (un véhicule archivé ou cédé n'est plus
+ * montré, comme sur le plateau), une photo montrable seulement (`maskedPhoto`). Un visiteur, ou un exposant dont la voiture
+ * n'est pas entrée, n'a pas de voiture : ni photo ni ligne du plateau.
  */
-async function carsOf(ex: Executor, userId: string, eventIds: string[]) {
+async function carsOf(ex: Executor, userId: string, hits: { eventId: string; applicationId: string | null }[]) {
   const out = new Map<string, { photoUrl: string | null; label: string | null; vehicleId: string }>();
+  const eventIds = hits.map((h) => h.eventId);
   if (!eventIds.length) return out;
   const apps = await ex
-    .select({ eventId: applications.eventId, vehicleId: applications.vehicleId })
+    .select({
+      id: applications.id,
+      eventId: applications.eventId,
+      vehicleId: applications.vehicleId,
+    })
     .from(applications)
     .innerJoin(vehicles, eq(vehicles.id, applications.vehicleId))
     .where(
@@ -122,11 +155,16 @@ async function carsOf(ex: Executor, userId: string, eventIds: string[]) {
         inArray(applications.eventId, eventIds),
         eq(vehicles.ownerId, userId),
         eq(vehicles.status, "active"),
+        exists(ex.select({ one: sql`1` }).from(checkins).where(eq(checkins.applicationId, applications.id))),
       ),
     )
     .orderBy(applications.decidedAt, applications.createdAt);
   const firstByEvent = new Map<string, string>();
-  for (const a of apps) if (a.vehicleId && !firstByEvent.has(a.eventId)) firstByEvent.set(a.eventId, a.vehicleId);
+  for (const h of hits) {
+    const mine = apps.filter((a) => a.eventId === h.eventId && a.vehicleId);
+    const chosen = mine.find((a) => a.id === h.applicationId) ?? mine[0];
+    if (chosen?.vehicleId) firstByEvent.set(h.eventId, chosen.vehicleId);
+  }
   const full = new Map(
     (await vehiclesRepo.findFullByIds([...new Set(firstByEvent.values())], ex)).map((v) => [v.id, v]),
   );
@@ -135,7 +173,11 @@ async function carsOf(ex: Executor, userId: string, eventIds: string[]) {
     if (!v) continue;
     const photo = maskedPhoto(v.photos, v.unregistered);
     // Sans photo montrable, pas de photo (l'affiche prend le relais) ; le nom de la voiture, lui, reste dit.
-    out.set(eventId, { photoUrl: storage.url(photo?.storageKey ?? null), label: vehicleLabel(v), vehicleId });
+    out.set(eventId, {
+      photoUrl: storage.url(photo?.storageKey ?? null),
+      label: vehicleLabel(v),
+      vehicleId,
+    });
   }
   return out;
 }
@@ -211,7 +253,17 @@ async function recapsOf(ex: Executor, userId: string, eventIds: string[], at: Da
 
 async function toItems(ex: Executor, userId: string, hits: (Hit & { years: number })[], at: Date) {
   const ids = hits.map((h) => h.event.id);
-  const [cars, recaps] = await Promise.all([carsOf(ex, userId, ids), recapsOf(ex, userId, ids, at)]);
+  const [cars, recaps] = await Promise.all([
+    carsOf(
+      ex,
+      userId,
+      hits.map((h) => ({
+        eventId: h.event.id,
+        applicationId: h.stamp.applicationId,
+      })),
+    ),
+    recapsOf(ex, userId, ids, at),
+  ]);
   const ranks = await plateauRanks(ex, ids, new Map([...cars].map(([id, c]) => [id, c.vehicleId])), at);
   const items = hits.map(
     (h): MemoryItem => ({
@@ -233,7 +285,10 @@ async function toItems(ex: Executor, userId: string, hits: (Hit & { years: numbe
       recapAvailable: recaps.has(h.event.id),
     }),
   );
-  return { items, labels: new Map(ids.map((id) => [id, cars.get(id)?.label ?? null])) };
+  return {
+    items,
+    labels: new Map(ids.map((id) => [id, cars.get(id)?.label ?? null])),
+  };
 }
 
 /** Les souvenirs du jour : le plus récent d'abord (1 an avant 2 ans), puis par titre : l'ordre est le même partout. */
@@ -250,7 +305,8 @@ export const memoriesService = {
 
   /**
    * La page d'un souvenir : seulement pour qui a un tampon `participation` / `visit` de cet événement, publié, vieux d'au
-   * moins un an (avant, ce n'est pas un souvenir). Sinon 404, comme un événement inconnu.
+   * moins un an (avant, ce n'est pas un souvenir). Le tampon est celui que la liste du jour a choisi (`pickStamp`). Sinon
+   * 404, comme un événement inconnu.
    */
   async detail(userId: string, eventId: string, at: Date = now()): Promise<MemoryDetail> {
     const rows = await db
@@ -266,15 +322,14 @@ export const memoriesService = {
           ne(events.admission, "invite_only"),
         ),
       );
-    const [hit] = toHits(rows);
-    const years = hit ? memoryYearsSince(hit.stampedAt, at) : 0;
-    if (!hit || years < 1) throw notFound(memoryLabels.unavailable);
-    const { items, labels } = await toItems(db, userId, [{ ...hit, years }], at);
+    const hit = pickStamp(rows, at);
+    if (!hit) throw notFound(memoryLabels.unavailable);
+    const { items, labels } = await toItems(db, userId, [hit], at);
     const item = items[0];
     if (!item) throw notFound(memoryLabels.unavailable);
     return {
       ...item,
-      anniversary: memoryYearsAgo(hit.stampedAt, at) !== null,
+      anniversary: hit.anniversary,
       vehicleLabel: labels.get(eventId) ?? null,
     };
   },
@@ -305,6 +360,7 @@ export const memoriesService = {
       );
     const day = memoryDayStamp(at);
     let created = 0;
+    let failed = 0;
     for (const { userId } of candidates) {
       try {
         const made = await withTx(async (tx, after) => {
@@ -337,7 +393,10 @@ export const memoriesService = {
             body: memoryLabels.notificationBody(first.yearsAgo, first.title) + more,
             eventId: first.eventId,
             data: { eventId: first.eventId, day, screen: "memory" },
-            link: { label: memoryLabels.see, path: `/app/souvenir/${first.eventId}` },
+            link: {
+              label: memoryLabels.see,
+              path: `/app/souvenir/${first.eventId}`,
+            },
           });
           // 10 h locales : jamais avant, et jamais avant l'échéance que les heures calmes imposent déjà.
           const target = memoryDeliverAt(at);
@@ -349,10 +408,34 @@ export const memoriesService = {
         });
         if (made) created++;
       } catch (error) {
-        // Une personne en échec ne bloque pas les autres ; la tâche du lendemain reprend la suivante.
+        // Une personne en échec ne bloque pas les autres : on continue, puis la tâche échoue (ci-dessous).
+        failed++;
         console.error("Souvenir non notifié :", error);
       }
     }
+    // pg-boss reprend la tâche le jour même (le lendemain, l'anniversaire serait passé) : le verrou par personne et la
+    // notification unique par jour font que les personnes déjà prévenues ne le sont pas deux fois.
+    if (failed > 0) throw new Error(`Souvenirs non notifiés : ${failed} personne(s) en échec sur ${candidates.length}`);
     return created;
   },
 };
+
+/**
+ * Garde de livraison (la notification est créée à 9 h et part à 10 h, ou plus tard après une panne) : un souvenir ne vaut
+ * que le jour de l'anniversaire. À l'envoi, c'est encore ce jour-là à Paris et hors heures calmes (sinon elle est abandonnée,
+ * jamais reportée au lendemain), le compte est en règle et n'a pas coupé ce type, et le souvenir est toujours éligible
+ * (événement publié et pas sur invitation, tampon toujours là).
+ */
+registerDeliveryGuard(["memory"], async (n) => {
+  const at = now();
+  const day = (n.data as { day?: unknown }).day;
+  if (!n.eventId || typeof day !== "string" || day !== memoryDayStamp(at)) return false;
+  if (env.NOTIFY_QUIET_HOURS && isQuietHour(at)) return false;
+  const [profile] = await db
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.userId, n.userId), accountOk(at)));
+  if (!profile || !shouldDeliver(profile.notificationPrefs, profile.mutedTypes, "memory")) return false;
+  const items = await memoriesService.todayFor(n.userId, at);
+  return items.some((i) => i.eventId === n.eventId);
+});

@@ -52,11 +52,11 @@ export default function Souvenir({ loaderData }: Route.ComponentProps) {
         <article className="sv-poster" data-testid="memory-hero">
           <div className="sv-poster__photo">{image ? <img src={image} alt="" /> : null}</div>
           <div className="sv-poster__body">
-            {/* « Jour pour jour » seulement le jour anniversaire ; la page ouverte plus tard donne la date. */}
+            {/* « Jour pour jour » seulement le jour anniversaire ; la page ouverte plus tard donne le jour du tampon (pas le début de l'événement). */}
             <span className="o-t-label sv-poster__eyebrow" data-testid="memory-eyebrow">
               {m.anniversary
                 ? memoryLabels.eyebrow(m.yearsAgo)
-                : memoryLabels.eyebrowOn(m.yearsAgo, formatDay(m.startsAt))}
+                : memoryLabels.eyebrowOn(m.yearsAgo, formatDay(m.stamp.stampedAt))}
             </span>
             <h1
               className="o-t-poster-xl o-never-truncate"

@@ -1,4 +1,5 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import { cutWords, expectCutWordsDetected, textLines } from "./cutWords";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
 
 // Lot R7j (D38), côté appli (version web compilée de recette, `APP_URL`) : les souvenirs « il y a un an… ». Le seed `memories`
@@ -15,28 +16,6 @@ type Today = {
   photoUrl: string | null;
   car: { label: string; rank: number; total: number } | null;
 }[];
-
-/** Les mots d'un élément coupés entre deux lignes (un mot dont les rectangles n'ont pas le même haut) : doit rester vide. */
-async function cutWords(page: Page, testId: string): Promise<string[]> {
-  return page
-    .getByTestId(testId)
-    .first()
-    .evaluate((el) => {
-      const out: string[] = [];
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        const text = n.textContent ?? "";
-        for (const m of text.matchAll(/S+/g)) {
-          const r = document.createRange();
-          r.setStart(n, m.index ?? 0);
-          r.setEnd(n, (m.index ?? 0) + m[0].length);
-          const tops = new Set([...r.getClientRects()].map((q) => Math.round(q.top)));
-          if (tops.size > 1) out.push(m[0]);
-        }
-      }
-      return out;
-    });
-}
 
 /** Le bouton tient dans l'écran (rien ne déborde à droite). */
 async function insideViewport(page: Page, testId: string) {
@@ -100,9 +79,19 @@ test("souvenir du jour : bloc de l'Accueil, page, carte du Fil ; rien sans tampo
       if (memory.car) {
         await expect(home.getByTestId("home-memory-car")).toContainText(`n° ${memory.car.rank} du plateau`);
       }
-      // Titre : aucun mot coupé au milieu, police 1 comme 1,3.
+      // Titre : aucun mot coupé au milieu, police 1 comme 1,3 (le témoin coupé volontairement prouve que le contrôle voit).
+      await expectCutWordsDetected(page);
       expect(await cutWords(page, "home-memory-title"), `titre de l'Accueil à la police ${scale}`).toEqual([]);
       await insideViewport(page, "home-memory-plateau");
+      // Les libellés des boutons de la carte tiennent sur une ligne ; police agrandie, ils passent l'un sous l'autre.
+      for (const id of ["home-memory-open", "home-memory-plateau"]) {
+        expect(await textLines(page, id), `${id} à la police ${scale}`).toBe(1);
+      }
+      if (scale >= 1.15) {
+        const open = await page.getByTestId("home-memory-open").first().boundingBox();
+        const plateau = await page.getByTestId("home-memory-plateau").first().boundingBox();
+        expect((plateau?.y ?? 0) >= (open?.y ?? 0) + (open?.height ?? 0) - 1, "boutons empilés").toBe(true);
+      }
       await page.getByTestId("home-memory-open").click();
       await expect(page.getByTestId("memory-title")).toHaveText(`Tu étais là : ${memory.title}`, { timeout: 30_000 });
       await expect(page.getByTestId("memory-stamp")).toBeVisible();
