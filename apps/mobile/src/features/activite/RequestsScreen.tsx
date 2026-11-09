@@ -26,6 +26,8 @@ export function RequestsScreen() {
   const { me, refreshMe } = useSession();
   const [menuFrom, setMenuFrom] = useState<{ userId: string; pseudo: string }[] | null>(null);
   const changed = useRef(false);
+  // La feuille est-elle encore ouverte ? (la coupure répond parfois après sa fermeture : alors on relit tout de suite)
+  const sheetOpen = useRef(false);
   const list = useRequestList((r) => r.kind !== "contact");
   const summary = useApi(() => api.inboxSummary(), []);
   const reloadAll = useCallback(async () => {
@@ -49,10 +51,12 @@ export function RequestsScreen() {
       onRefresh={reloadAll}
       overlays={
         // Lot R7-fix-invite : « ⋯ » d'une invitation de passionnés. La liste se relit à la fermeture du menu (la carte
-        // peut disparaître : plus aucune invitation).
+        // peut disparaître : plus aucune invitation) ; si la coupure n'aboutit qu'après la fermeture (tour 2), elle se
+        // relit dès le succès.
         <InvitationMenu
           from={menuFrom}
           onClose={() => {
+            sheetOpen.current = false;
             setMenuFrom(null);
             if (changed.current) {
               changed.current = false;
@@ -60,7 +64,8 @@ export function RequestsScreen() {
             }
           }}
           onChanged={() => {
-            changed.current = true;
+            if (sheetOpen.current) changed.current = true;
+            else void reloadAll();
           }}
         />
       }
@@ -86,7 +91,10 @@ export function RequestsScreen() {
         list={list}
         empty={messagingLabels.noRequests}
         onChanged={() => void reloadAll()}
-        onInviteMenu={setMenuFrom}
+        onInviteMenu={(from) => {
+          sheetOpen.current = true;
+          setMenuFrom(from);
+        }}
       />
     </FlowScreen>
   );

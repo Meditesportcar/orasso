@@ -13,7 +13,7 @@ import {
   type ReceivedEventInvitation,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { openReport } from "@/features/ReportSheet";
@@ -155,6 +155,9 @@ export function InvitationMenu({
   const isMuted = (userId: string) => Boolean(mutes.data?.some((m) => m.userId === userId));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // La réponse peut arriver après la fermeture de la feuille : le message ne doit pas réapparaître à la réouverture.
+  const live = useRef(open);
+  live.current = open;
   const close = () => {
     setMessage(null);
     onClose();
@@ -167,10 +170,10 @@ export function InvitationMenu({
       if (muted) await api.unmuteInvitations(who.userId);
       else await api.muteInvitations(who.userId);
       await mutes.reload();
-      setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
+      if (live.current) setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
       onChanged?.(!muted);
     } catch (e) {
-      setMessage(errorMessage(e));
+      if (live.current) setMessage(errorMessage(e));
     } finally {
       setBusy(false);
     }

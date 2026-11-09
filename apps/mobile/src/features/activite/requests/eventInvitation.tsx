@@ -40,7 +40,7 @@ export function EventInvitationRequest({ item, onInviteMenu }: RequestCardProps)
   const lockAt = payloadString(item, "lockAt");
   const notes = listOf(item, "notes");
   // Lot R7-fix-invite : le « ⋯ » coupe les invitations de chacun des inviteurs (`InvitationMenu`, posée en surcouche par l'écran des Demandes : une feuille se pose sur l'écran, pas dans une carte).
-  const mutable = listOf(item, "inviters").flatMap((x) => {
+  const mutable = listOf(item, "menuInviters").flatMap((x) => {
     const userId = textOf(x, "userId");
     const pseudo = textOf(x, "pseudo");
     return userId && pseudo ? [{ userId, pseudo }] : [];
