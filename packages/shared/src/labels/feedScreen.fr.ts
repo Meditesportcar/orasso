@@ -11,7 +11,8 @@ export const feedScreenFilters: { value: FeedFilter; label: string }[] = [
 ];
 
 /** « Pourquoi je vois ça » : la raison détaillée, en clair (texte fixe pour `sponsored`, posé par le lot R7k2). */
-export function feedWhyText(code: FeedReasonCode, who?: string | null): string {
+export function feedWhyText(code: FeedReasonCode, who?: string | null, mine = false): string {
+  if (mine) return "C'est ta publication : les personnes qui te suivent la voient dans leur Fil.";
   switch (code) {
     case "following_author":
       return who ? `Tu suis ${who} : ce qu'il ou elle publie arrive dans ton Fil.` : "Tu suis cette personne.";
@@ -146,6 +147,8 @@ export const feedScreenLabels = {
   // Ce qui bloque « Publier » (une ligne qui dit quoi, jamais un bouton grisé sans raison).
   missingPhoto: "Ajoute au moins une photo.",
   missingPlate: (n: number) => `Photo ${n} : floute la plaque ou confirme qu'aucune plaque n'est visible.`,
+  placeFrame: (n: number) => `Photo ${n} : place le cadre sur la plaque.`,
+  publishedReason: "Ta publication",
   captionTooLong: "Un mot de 500 caractères au plus.",
   preparing: "Préparation des photos…",
   mineTitle: "Mes publications",

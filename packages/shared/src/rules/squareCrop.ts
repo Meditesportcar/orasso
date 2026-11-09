@@ -13,19 +13,54 @@ export const ZOOM_STEP = 0.25;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-/** Échelle de la photo à l'écran pour un cadre de `frame` px et un zoom donné (photo en couverture du carré). */
-export function displayScale(w: number, h: number, frame: number, zoom: number): number {
-  const short = Math.max(1, Math.min(w, h));
-  return (frame / short) * zoom;
+/**
+ * Lot R7e2 : le même recadreur sert aux photos du Fil (4:5, 1:1, paysage). `ratio` est largeur / hauteur du cadre
+ * (1 : le carré, et le comportement de toujours) ; `frame` reste la mesure du **plus grand côté** du cadre.
+ */
+export function frameSize(frame: number, ratio = 1): { width: number; height: number } {
+  return ratio >= 1 ? { width: frame, height: frame / ratio } : { width: frame * ratio, height: frame };
+}
+
+/** Échelle de la photo à l'écran pour un cadre de `frame` px et un zoom donné (photo en couverture du cadre). */
+export function displayScale(w: number, h: number, frame: number, zoom: number, ratio = 1): number {
+  if (ratio === 1) {
+    const short = Math.max(1, Math.min(w, h));
+    return (frame / short) * zoom;
+  }
+  const f = frameSize(frame, ratio);
+  return Math.max(f.width / Math.max(1, w), f.height / Math.max(1, h)) * zoom;
 }
 
 /** Décalage permis (px, depuis le centre du cadre) : le cadre reste dans la photo. */
-export function clampView(w: number, h: number, frame: number, view: CropView): CropView {
+export function clampView(w: number, h: number, frame: number, view: CropView, ratio = 1): CropView {
   const zoom = clamp(view.zoom, MIN_ZOOM, MAX_ZOOM);
-  const s = displayScale(w, h, frame, zoom);
-  const mx = Math.max(0, (w * s - frame) / 2);
-  const my = Math.max(0, (h * s - frame) / 2);
+  const s = displayScale(w, h, frame, zoom, ratio);
+  const f = frameSize(frame, ratio);
+  const mx = Math.max(0, (w * s - f.width) / 2);
+  const my = Math.max(0, (h * s - f.height) / 2);
   return { zoom, tx: clamp(view.tx, -mx, mx) || 0, ty: clamp(view.ty, -my, my) || 0 };
+}
+
+/**
+ * Le centre (0 à 1 de la photo) du cadre pour cette vue : ce que le recadrage d'une publication du Fil reçoit
+ * (`feedCropPlan`, `cropAspect`). Le zoom n'y est pas utilisé : le cadre est toujours le plus grand de son format.
+ */
+export function focusFromView(w: number, h: number, frame: number, view: CropView, ratio = 1): { x: number; y: number } {
+  const v = clampView(w, h, frame, view, ratio);
+  const s = displayScale(w, h, frame, v.zoom, ratio);
+  return { x: clamp((w / 2 - v.tx / s) / w, 0, 1), y: clamp((h / 2 - v.ty / s) / h, 0, 1) };
+}
+
+/** La vue (zoom 1) qui centre le cadre sur ce point de la photo : pour rouvrir le recadrage où on l'avait laissé. */
+export function viewFromFocus(
+  w: number,
+  h: number,
+  frame: number,
+  focus: { x: number; y: number },
+  ratio = 1,
+): CropView {
+  const s = displayScale(w, h, frame, 1, ratio);
+  return clampView(w, h, frame, { zoom: 1, tx: (w / 2 - focus.x * w) * s, ty: (h / 2 - focus.y * h) * s }, ratio);
 }
 
 /** Le carré découpé dans la photo d'origine pour cette vue. */

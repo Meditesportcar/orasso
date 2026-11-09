@@ -1,7 +1,7 @@
 // « Publier au Fil » : le brouillon d'une photo et ses décisions de plaque, sans React ni réseau (testé par
 // `model.test.ts`). Une photo est recadrée au format de la publication, la plaque est cherchée sur la photo recadrée ;
 // la personne règle les cadres ou confirme « aucune plaque visible » : jamais l'un ni l'autre = pas d'envoi.
-import { MAX_PLATE_RECTS, nextPlateFrame, type PlateRect } from "@orasso/shared";
+import { framesPlaced, MAX_PLATE_RECTS, mergeDetectedFrames, nextPlateFrame, type PlateRect } from "@orasso/shared";
 
 import type { PickedPhoto } from "@/lib/photos";
 
@@ -18,6 +18,8 @@ export type FeedDraftPhoto = {
   detected: PlateRect[];
   noPlate: boolean;
   detection: DetectionState;
+  /** Le centre choisi au doigt (0 à 1, « Glisse pour recadrer ») ; absent : le centre de la photo. */
+  focus?: { x: number; y: number };
 };
 
 export const newDraftPhoto = (key: string, source: PickedPhoto, photo: PickedPhoto): FeedDraftPhoto => ({
@@ -30,16 +32,32 @@ export const newDraftPhoto = (key: string, source: PickedPhoto, photo: PickedPho
   detection: "pending",
 });
 
-/** Ce que la détection a rendu (`null` : pas de détection possible ici, tableau vide : aucune plaque repérée). */
+/**
+ * Ce que la détection a rendu (`null` : pas de détection possible ici, tableau vide : aucune plaque repérée). Elle
+ * s'ajoute à ce que la personne a déjà fait, jamais à sa place : les cadres posés restent (union avec les cadres repérés),
+ * et un « Aucune plaque visible » confirmé reste tel quel (les cadres repérés sont gardés pour « Finalement, flouter »).
+ */
 export function withDetection(p: FeedDraftPhoto, found: readonly PlateRect[] | null): FeedDraftPhoto {
-  const rects = found ? [...found] : [];
+  const detected = found ? [...found] : [];
   return {
     ...p,
-    detected: rects,
-    rects,
-    noPlate: false,
-    detection: found === null ? "unavailable" : rects.length ? "found" : "none",
+    detected,
+    rects: p.noPlate ? [] : mergeDetectedFrames(p.rects, detected),
+    detection: found === null ? "unavailable" : detected.length ? "found" : "none",
   };
+}
+
+/**
+ * Ce que les boutons de la plaque permettent : tant que la détection tourne, « Ajouter un cadre » et « Aucune plaque
+ * visible » sont grisés (le résultat de la recherche pourrait contredire ce qu'on poserait maintenant).
+ */
+export function plateControls(p: Pick<FeedDraftPhoto, "rects" | "detection">): {
+  searching: boolean;
+  canAdd: boolean;
+  canNone: boolean;
+} {
+  const searching = p.detection === "pending";
+  return { searching, canAdd: !searching && p.rects.length < MAX_PLATE_RECTS, canNone: !searching };
 }
 
 /** « Aucune plaque n'est visible », confirmé : les cadres tombent, la décision est prise. */
@@ -59,10 +77,18 @@ export const removeFrame = (p: FeedDraftPhoto): FeedDraftPhoto => ({ ...p, rects
 
 export const setFrames = (p: FeedDraftPhoto, rects: PlateRect[]): FeedDraftPhoto => ({ ...p, noPlate: false, rects });
 
-/** Le format change : la photo recadrée est refaite, la décision de plaque repart de zéro (les cadres ne vaudraient plus). */
-export const recropped = (p: FeedDraftPhoto, photo: PickedPhoto): FeedDraftPhoto => ({
+/**
+ * Le format ou le cadrage change : la photo recadrée est refaite, la décision de plaque repart de zéro (les cadres ne
+ * vaudraient plus) et la détection est relancée. `focus` : le centre choisi au doigt.
+ */
+export const recropped = (
+  p: FeedDraftPhoto,
+  photo: PickedPhoto,
+  focus: { x: number; y: number } | undefined = undefined,
+): FeedDraftPhoto => ({
   ...p,
   photo,
+  focus,
   rects: [],
   detected: [],
   noPlate: false,
@@ -72,7 +98,7 @@ export const recropped = (p: FeedDraftPhoto, photo: PickedPhoto): FeedDraftPhoto
 /** État affiché sur la vignette. */
 export type PlateBadge = "pending" | "blurred" | "none" | "todo";
 export function plateBadge(p: Pick<FeedDraftPhoto, "rects" | "noPlate" | "detection">): PlateBadge {
-  if (p.rects.length) return "blurred";
+  if (framesPlaced(p.rects)) return "blurred";
   if (p.noPlate) return "none";
   return p.detection === "pending" ? "pending" : "todo";
 }

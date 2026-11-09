@@ -35,7 +35,7 @@ export function WhyThisSheet({ card, onClose }: { card: FeedCard | null; onClose
             </Pressable>
           </View>
           <Text variant="bodyStrong" color={t.color.ink} style={styles.why} testID="feed-why-text">
-            {feedWhyText(card.reason.code, whoOf(card))}
+            {feedWhyText(card.reason.code, whoOf(card), card.kind === "feed_post" && card.payload.post.mine)}
           </Text>
           <View style={styles.note}>
             <Icon name="info" size={16} color={t.color.accentText} />

@@ -320,7 +320,7 @@ export function Fil() {
           <div className="s-stack">
             <h2 className="s-h2">{L.whyTitle}</h2>
             <p className="o-t-body" data-testid="feed-why-text">
-              <strong>{feedWhyText(why.reason.code, whoOf(why))}</strong>
+              <strong>{feedWhyText(why.reason.code, whoOf(why), why.kind === "feed_post" && why.payload.post.mine)}</strong>
             </p>
             <p className="o-t-caption">{L.whyNote}</p>
             <Button variant="secondary" icon="check" fullWidth onClick={() => setWhy(null)} data-testid="feed-why-ok">

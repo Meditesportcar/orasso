@@ -12,10 +12,17 @@ import {
   feedAgo,
   feedCropPlan,
   feedPostBody,
+  feedRetryAction,
   firstUndecidedPhoto,
+  framesPlaced,
   isFeedKindReserved,
+  isUntouchedFrame,
+  mergeDetectedFrames,
+  publishedCard,
   publishIssue,
+  withMyPublished,
 } from "./feedList";
+import { DEFAULT_PLATE_FRAME, movePlateFrame, nextPlateFrame } from "./plateFrame";
 
 const card = (id: string): FeedCard =>
   ({
@@ -187,5 +194,92 @@ describe("ligne de temps d'une carte", () => {
     expect(feedAgo("2026-11-08T10:00:00Z", now)).toBe("hier");
     expect(feedAgo("2026-11-05T10:00:00Z", now)).toBe("il y a 4 j");
     expect(feedAgo("2026-10-02T10:00:00Z", now)).toBe("2 oct.");
+  });
+});
+
+describe("décision de plaque : le cadre posé à la main", () => {
+  it("un cadre qui n'a pas bougé de là où il est né n'est pas une décision ; déplacé, il en est une", () => {
+    const born = nextPlateFrame([]);
+    expect(born).toEqual(DEFAULT_PLATE_FRAME);
+    expect(isUntouchedFrame(born)).toBe(true);
+    expect(isUntouchedFrame(nextPlateFrame([RECT, RECT]))).toBe(true);
+    expect(isUntouchedFrame(movePlateFrame(born, 0.01, 0))).toBe(false);
+    expect(isUntouchedFrame(RECT)).toBe(false);
+    expect(framesPlaced([born])).toBe(false);
+    expect(framesPlaced([movePlateFrame(born, 0.1, -0.2)])).toBe(true);
+    expect(framesPlaced([])).toBe(false);
+  });
+  it("la ligne dit « place le cadre » (et non « floute la plaque ») pour une photo au cadre resté en place", () => {
+    const photos = [{ rects: [nextPlateFrame([])], noPlate: false }];
+    expect(publishIssue({ photos, caption: "" })).toBe(L.placeFrame(1));
+    expect(L.placeFrame(1)).toContain("place le cadre sur la plaque");
+    expect(firstUndecidedPhoto(photos)).toBe(0);
+    expect(publishIssue({ photos: [{ rects: [nextPlateFrame([])], noPlate: true }], caption: "" })).toBeNull();
+  });
+  it("l'union des cadres repérés : aucun cadre existant n'est retiré, pas de doublon, quatre au plus", () => {
+    const other = { x: 0.05, y: 0.1, w: 0.2, h: 0.06 };
+    expect(mergeDetectedFrames([RECT], [other])).toEqual([RECT, other]);
+    expect(mergeDetectedFrames([RECT], [{ ...RECT, x: RECT.x + 0.01 }])).toEqual([RECT]);
+    expect(mergeDetectedFrames([], [RECT])).toEqual([RECT]);
+    expect(mergeDetectedFrames([RECT], [])).toEqual([RECT]);
+    const many = [0.0, 0.1, 0.2, 0.3, 0.4].map((y) => ({ x: 0.7, y, w: 0.1, h: 0.05 }));
+    expect(mergeDetectedFrames([], many)).toHaveLength(4);
+  });
+  it("événements proposés : ceux que l'API accepte (publié, pas sur invitation)", () => {
+    const ev = (id: string, admission?: string) => ({
+      id,
+      title: id,
+      startsAt: "2026-12-01T10:00:00Z",
+      status: "published",
+      admission,
+    });
+    const out = eventsWithPlace([
+      { status: "accepted", event: ev("open", "open") },
+      { status: "accepted", event: ev("filtered", "filtered") },
+      { status: "accepted", event: ev("invite", "invite_only") },
+      { status: "accepted", event: ev("old") },
+    ]);
+    expect(out.map((e) => e.id).sort()).toEqual(["filtered", "old", "open"]);
+  });
+});
+
+describe("ma publication après l'envoi", () => {
+  const post = {
+    id: "p1",
+    author: { id: "u", pseudo: "Moi", avatarUrl: null, grade: "rodage" },
+    caption: null,
+    aspect: "portrait_4_5",
+    photos: [],
+    vehicle: null,
+    event: null,
+    reactionsCount: 0,
+    reactedByMe: false,
+    createdAt: "2026-11-09T10:00:00.000Z",
+    mine: false,
+  } as unknown as Parameters<typeof publishedCard>[0];
+  it("la carte a l'identifiant de l'API : une relecture qui la rend ne la double pas", () => {
+    const mine = publishedCard(post);
+    expect(mine.id).toBe("feed_post:p1");
+    expect(mine.payload.post.mine).toBe(true);
+    expect(mine.reason.label).toBe(L.publishedReason);
+    const fromApi = { ...mine, reason: { code: "following_author", label: "Tu suis Moi" } } as FeedCard;
+    const list = withMyPublished([card("a"), fromApi], [mine]);
+    expect(list.map((c) => c.id)).toEqual(["a", "feed_post:p1"]);
+    expect(list[1]?.reason.label).toBe("Tu suis Moi");
+  });
+  it("sans doublon dans la liste, en tête, et la liste de l'API n'est pas modifiée", () => {
+    const items = [card("a"), card("b")];
+    const out = withMyPublished(items, [publishedCard(post)]);
+    expect(out.map((c) => c.id)).toEqual(["feed_post:p1", "a", "b"]);
+    expect(items).toHaveLength(2);
+    expect(withMyPublished(items, []).map((c) => c.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("« Réessayer »", () => {
+  it("après un échec d'actualisation : on relit (première page) ; après un échec de « Voir plus » : page suivante", () => {
+    expect(feedRetryAction("reload")).toBe("reload");
+    expect(feedRetryAction(null)).toBe("reload");
+    expect(feedRetryAction("more")).toBe("loadMore");
   });
 });

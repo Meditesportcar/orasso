@@ -1,8 +1,9 @@
 // L'écran du Fil, sans React ni réseau (lot R7e2, testé par `feedList.test.ts`) : l'état de la liste (pages au curseur,
 // `reset` de l'API), les genres de carte qu'on sait dessiner, et ce qui bloque « Publier au Fil ».
 import { feedScreenLabels as L } from "../labels/feedScreen.fr";
-import type { FeedCard, FeedPage } from "../schemas/feed";
-import type { PlateRect } from "../schemas/vehicle";
+import type { FeedCard, FeedPage, FeedPostView } from "../schemas/feed";
+import { MAX_PLATE_RECTS, type PlateRect } from "../schemas/vehicle";
+import { nextPlateFrame } from "./plateFrame";
 import {
   FEED_ASPECT_RATIOS,
   FEED_CAPTION_MAX,
@@ -76,7 +77,45 @@ export type DraftFeedPhoto = {
   noPlate: boolean;
 };
 
-export const feedPhotoDecided = (p: DraftFeedPhoto): boolean => p.rects.length > 0 || p.noPlate;
+const sameRect = (a: PlateRect, b: PlateRect) =>
+  a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h && (a.angle ?? 0) === (b.angle ?? 0);
+
+/**
+ * Un cadre ajouté à la main (« Ajouter un cadre ») naît à une place connue (`nextPlateFrame`) : tant qu'il y est encore,
+ * il n'a pas été placé sur la plaque et ne compte pas comme une décision. Déplacé, agrandi ou tourné, il compte. Un cadre
+ * posé par la détection compte tel quel (il ne tombe jamais sur ces places). Pas d'état à garder : l'appli et le site
+ * jugent le même tableau de cadres.
+ */
+export function isUntouchedFrame(r: PlateRect): boolean {
+  for (let k = 0; k < MAX_PLATE_RECTS; k++) {
+    if (sameRect(r, nextPlateFrame(new Array<PlateRect>(k)))) return true;
+  }
+  return false;
+}
+
+/** Des cadres posés, tous placés (aucun cadre ajouté à la main et resté où il est né). */
+export const framesPlaced = (rects: readonly PlateRect[]): boolean => rects.length > 0 && !rects.some(isUntouchedFrame);
+
+export const feedPhotoDecided = (p: DraftFeedPhoto): boolean => p.noPlate || framesPlaced(p.rects);
+
+/**
+ * Ajoute les cadres repérés par la détection à ceux déjà posés : l'union, sans doublon (deux cadres qui se recouvrent à
+ * plus de moitié sont le même), `MAX_PLATE_RECTS` au plus. Un cadre existant n'est jamais retiré ni déplacé.
+ */
+export function mergeDetectedFrames(current: readonly PlateRect[], found: readonly PlateRect[]): PlateRect[] {
+  const out = [...current];
+  const overlap = (a: PlateRect, b: PlateRect) => {
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / (a.w * a.h + b.w * b.h - w * h);
+  };
+  for (const f of found) {
+    if (out.length >= MAX_PLATE_RECTS) break;
+    if (!out.some((r) => overlap(r, f) > 0.5)) out.push(f);
+  }
+  return out;
+}
 
 /** Index (0…) de la première photo sans décision de plaque, ou -1. */
 export const firstUndecidedPhoto = (photos: readonly DraftFeedPhoto[]): number =>
@@ -95,7 +134,10 @@ export function publishIssue(draft: {
   if (draft.photos.length === 0) return L.missingPhoto;
   if (draft.photos.length > FEED_POST_PHOTOS_MAX) return "Six photos au plus.";
   const open = firstUndecidedPhoto(draft.photos);
-  if (open >= 0) return L.missingPlate(open + 1);
+  if (open >= 0) {
+    const p = draft.photos[open] as DraftFeedPhoto;
+    return p.rects.length > 0 ? L.placeFrame(open + 1) : L.missingPlate(open + 1);
+  }
   if (draft.caption.trim().length > FEED_CAPTION_MAX) return L.captionTooLong;
   return null;
 }
@@ -123,14 +165,21 @@ export function feedPostBody(draft: {
   };
 }
 
-/** Événements où j'ai une place (candidature retenue, événement publié), sans doublon, du plus proche au plus lointain. */
+/**
+ * Événements où j'ai une place (candidature retenue, événement publié et pas « sur invitation » : l'API refuse les autres,
+ * `eventSummariesByIds`), sans doublon, du plus proche au plus lointain.
+ */
 export function eventsWithPlace(
-  applications: readonly { status: string; event: { id: string; title: string; startsAt: string; status: string } }[],
+  applications: readonly {
+    status: string;
+    event: { id: string; title: string; startsAt: string; status: string; admission?: string };
+  }[],
 ): { id: string; title: string; startsAt: string }[] {
   const seen = new Set<string>();
   const out: { id: string; title: string; startsAt: string }[] = [];
   for (const a of applications) {
-    if (a.status !== "accepted" || a.event.status !== "published" || seen.has(a.event.id)) continue;
+    if (a.status !== "accepted" || a.event.status !== "published" || a.event.admission === "invite_only") continue;
+    if (seen.has(a.event.id)) continue;
     seen.add(a.event.id);
     out.push({ id: a.event.id, title: a.event.title, startsAt: a.event.startsAt });
   }
@@ -174,3 +223,36 @@ export function feedAgo(at: string | Date, now: Date): string {
   if (days < 7) return `il y a ${days} j`;
   return new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" });
 }
+
+// --- Ma publication, juste après l'envoi ------------------------------------------------------------------------------
+
+/**
+ * La carte de ma publication, faite de la réponse de `POST /me/feed-posts` (l'API ne met jamais mes propres publications
+ * dans « Abonnements » : l'écran la garde en tête de la liste affichée). Même identifiant que celui de l'API
+ * (`feed_post:<id>`) : si une relecture la rend (« Pour toi »), elle ne s'affiche qu'une fois.
+ */
+export function publishedCard(post: FeedPostView): FeedCard<"feed_post"> {
+  return {
+    id: `feed_post:${post.id}`,
+    kind: "feed_post",
+    reason: { code: "following_author", label: L.publishedReason },
+    at: post.createdAt,
+    payload: { post: { ...post, mine: true } },
+  };
+}
+
+/** La liste affichée : mes publications récentes en tête, puis la page de l'API, sans doublon (la carte de l'API l'emporte). */
+export function withMyPublished(items: readonly FeedCard[], mine: readonly FeedCard[]): FeedCard[] {
+  if (!mine.length) return [...items];
+  const seen = new Set(items.map((c) => c.id));
+  return [...mine.filter((c) => !seen.has(c.id)), ...items];
+}
+
+// --- Réessayer ----------------------------------------------------------------------------------------------------------
+
+/** D'où vient l'erreur affichée : l'actualisation (première page) ou « Voir plus » (page suivante). */
+export type FeedErrorSource = "reload" | "more";
+
+/** Ce que « Réessayer » relance : l'actualisation qui a échoué se relit depuis la première page, jamais `loadMore`. */
+export const feedRetryAction = (source: FeedErrorSource | null): "reload" | "loadMore" =>
+  source === "more" ? "loadMore" : "reload";
