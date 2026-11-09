@@ -5,14 +5,14 @@ import {
   type ActivityItem,
   type ActivityPage,
   type InboxSummary,
-  inboxRowCounts,
   type RequestItem,
   type RequestsPage,
+  requestRowCounts,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRevalidator } from "react-router";
 
-import { ActivityRow, pathOfItem } from "../components/activity/ActivityRow";
+import { ActivityRow, openAfterRead, pathOfItem } from "../components/activity/ActivityRow";
 import { PersonAvatar } from "../components/People";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -42,7 +42,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     userId: me.user.id,
     page,
-    activityRequests: inboxRowCounts(summary.ok ? summary.data : null).activityRequests,
+    // Compteur **inconnu** (résumé et liste en panne) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer » (tour 2).
+    activityRequests: requestRowCounts(summary.ok ? summary.data : null, requests.ok ? requests.data : null)
+      .activityRequests,
     requestItems: (requests.ok ? requests.data.items : []).filter((r) => r.kind !== "contact").slice(0, 3),
     isFirstPage: cursor === null,
   };
@@ -90,26 +92,39 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
     .map((g) => ({ ...g, items: g.items.filter((i) => !i.ids.some((id) => highlightedIds.has(id))) }))
     .filter((g) => g.items.length > 0);
   const isRead = (i: ActivityItem) => i.read || i.ids.every((id) => readIds.has(id));
-  const open = (item: ActivityItem) => () => {
+  // Marque des identifiants lus (à l'écran tout de suite, puis côté API). La requête attend la réponse : le lien n'est suivi
+  // qu'après (`openAfterRead`), et `keepalive` la garde en vie si la page se ferme malgré tout.
+  const markRead = async (ids: string[]) => {
+    setReadIds((s) => new Set([...s, ...ids]));
+    await apiFetch("/me/notifications/read", { method: "POST", json: { ids }, keepalive: true });
+  };
+  const open = (item: ActivityItem) => async () => {
     if (isRead(item)) return;
-    setReadIds((s) => new Set([...s, ...item.ids]));
-    void apiFetch("/me/notifications/read", { method: "POST", json: { ids: item.ids } }).then(() =>
-      revalidator.revalidate(),
-    );
+    await markRead(item.ids);
+    revalidator.revalidate();
   };
   const empty = groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
+  const countUnknown = activityRequests === null;
 
   return (
     <div className="s-narrow s-stack" data-testid="activity">
       <h1 className="s-title">Activité</h1>
       <p className="o-t-caption s-muted">Ce qui te concerne</p>
 
-      {activityRequests > 0 && isFirstPage ? (
+      {countUnknown && isFirstPage ? (
+        <div className="s-notice" role="alert" data-testid="activity-requests-unknown">
+          <p>Le nombre de demandes n'a pas pu être lu.</p>
+          <Button variant="secondary" icon="undo" onClick={() => revalidator.revalidate()} data-testid="activity-retry">
+            Réessayer
+          </Button>
+        </div>
+      ) : null}
+      {(countUnknown || (activityRequests ?? 0) > 0) && isFirstPage ? (
         <a
           className="act-requests"
           href="/app/activite/demandes"
           data-testid="activity-requests-row"
-          aria-label={`Demandes, ${activityRequests} en attente`}
+          aria-label={activityRequests === null ? "Demandes" : `Demandes, ${activityRequests} en attente`}
         >
           <span className="act-avs" aria-hidden="true">
             {requestItems.map((r) => {
@@ -121,8 +136,8 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
             })}
           </span>
           <span className="act-requests__text">
-            <strong>{`Demandes · ${activityRequests}`}</strong>
-            {requestItems[0] ? (
+            <strong>{activityRequests === null ? "Demandes" : `Demandes · ${activityRequests}`}</strong>
+            {requestItems[0] && activityRequests !== null ? (
               <span className="o-t-caption s-muted">{requestSummary(requestItems[0], activityRequests)}</span>
             ) : null}
           </span>
@@ -141,7 +156,13 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
               {h.body ? <span className="o-t-caption s-muted">{h.body}</span> : null}
               {path ? (
                 <div>
-                  <Button variant="secondary" icon="next" href={path} data-testid="activity-highlight-open">
+                  <Button
+                    variant="secondary"
+                    icon="next"
+                    href={path}
+                    onClick={(e) => openAfterRead(e, path, () => markRead(h.ids))}
+                    data-testid="activity-highlight-open"
+                  >
                     Voir la fiche
                   </Button>
                 </div>

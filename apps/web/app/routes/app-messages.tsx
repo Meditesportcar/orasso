@@ -1,6 +1,13 @@
-import { Icon } from "@orasso/design-system/web";
-import { type ConversationPage, type InboxSummary, inboxRowCounts, messagingLabels } from "@orasso/shared";
+import { Button, Icon } from "@orasso/design-system/web";
+import {
+  type ContactRequestView,
+  type ConversationPage,
+  type InboxSummary,
+  inboxRowCounts,
+  messagingLabels,
+} from "@orasso/shared";
 import { useState } from "react";
+import { useRevalidator } from "react-router";
 
 import { ConversationRow } from "../components/Messaging";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -24,12 +31,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     ),
     api<InboxSummary>(request, "/me/inbox/summary"),
   ]);
-  return { page, messageRequests: inboxRowCounts(summary.ok ? summary.data : null).messageRequests };
+  // Compteur **inconnu** ≠ zéro (tour 2) : résumé en panne, on le lit dans les demandes de contact ; sans l'un ni l'autre,
+  // `null` : la ligne reste, sans nombre, avec « Réessayer ».
+  let messageRequests: number | null = summary.ok ? inboxRowCounts(summary.data).messageRequests : null;
+  if (messageRequests === null) {
+    const contacts = await api<{ items: ContactRequestView[] }>(request, "/me/contact-requests");
+    if (contacts.ok) messageRequests = contacts.data.items.filter((c) => c.direction === "in").length;
+  }
+  return { page, messageRequests };
 }
 
 export default function Messages({ loaderData }: Route.ComponentProps) {
   const { page, messageRequests } = loaderData;
   const [query, setQuery] = useState("");
+  const revalidator = useRevalidator();
   const needle = query.trim().toLowerCase();
   const items = needle
     ? page.items.filter((x) =>
@@ -41,15 +56,31 @@ export default function Messages({ loaderData }: Route.ComponentProps) {
   return (
     <div className="s-narrow s-stack" data-testid="messages">
       <h1 className="s-title">{messagingLabels.messages}</h1>
-      {messageRequests > 0 ? (
+      {messageRequests === null ? (
+        <div className="s-notice" role="alert" data-testid="message-requests-unknown">
+          <p>Le nombre de demandes de message n'a pas pu être lu.</p>
+          <Button variant="secondary" icon="undo" onClick={() => revalidator.revalidate()} data-testid="messages-retry">
+            Réessayer
+          </Button>
+        </div>
+      ) : null}
+      {messageRequests === null || messageRequests > 0 ? (
         <a
           className="act-requests"
           href="/app/messages/demandes"
           data-testid="message-requests-row"
-          aria-label={`${messagingLabels.messageRequests}, ${messageRequests} en attente`}
+          aria-label={
+            messageRequests === null
+              ? messagingLabels.messageRequests
+              : `${messagingLabels.messageRequests}, ${messageRequests} en attente`
+          }
         >
           <span className="act-requests__text">
-            <strong>{`${messagingLabels.messageRequests} · ${messageRequests}`}</strong>
+            <strong>
+              {messageRequests === null
+                ? messagingLabels.messageRequests
+                : `${messagingLabels.messageRequests} · ${messageRequests}`}
+            </strong>
             <span className="o-t-caption s-muted">De personnes qui ne te suivent pas</span>
           </span>
           <Icon name="next" size={20} />

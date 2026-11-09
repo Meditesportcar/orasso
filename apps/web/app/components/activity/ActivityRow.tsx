@@ -1,5 +1,6 @@
 import { Icon, type IconName } from "@orasso/design-system/web";
 import { type ActivityDay, type ActivityItem, activityWhen, groupedTitle } from "@orasso/shared";
+import type { MouseEvent } from "react";
 
 import { now } from "../../lib/clock";
 import { PersonAvatar } from "../People";
@@ -18,6 +19,31 @@ export function iconOfType(type: string): IconName {
   if (type.includes("stamp")) return "stamp";
   if (type === "memory") return "spark";
   return "bell";
+}
+
+/** Attente maximale de l'écriture « lu » avant de suivre le lien (une API lente ne retient pas la navigation). */
+const READ_WAIT_MS = 1500;
+
+/**
+ * Toucher un lien de l'Activité (tour 2) : « lu » est posé **d'abord**, puis on navigue (sinon la navigation coupe la
+ * requête et la ligne reste non lue). Clic avec ctrl, cmd, maj ou bouton du milieu : nouvel onglet, la page reste, le
+ * navigateur suit le lien tout seul.
+ */
+export function openAfterRead(
+  event: MouseEvent<HTMLElement>,
+  path: string | null,
+  markRead: () => Promise<void> | void,
+) {
+  const modified = event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+  if (!path || modified || event.defaultPrevented) {
+    void markRead();
+    return;
+  }
+  event.preventDefault();
+  const wait = new Promise<void>((resolve) => setTimeout(resolve, READ_WAIT_MS));
+  void Promise.race([Promise.resolve(markRead()).catch(() => undefined), wait]).then(() => {
+    window.location.assign(path);
+  });
 }
 
 /** Le lien d'une ligne : un chemin du site seulement (jamais une adresse extérieure). */
@@ -48,7 +74,15 @@ function Avatars({ item }: { item: ActivityItem }) {
   );
 }
 
-export function ActivityRow({ item, day, onOpen }: { item: ActivityItem; day: ActivityDay; onOpen: () => void }) {
+export function ActivityRow({
+  item,
+  day,
+  onOpen,
+}: {
+  item: ActivityItem;
+  day: ActivityDay;
+  onOpen: () => Promise<void> | void;
+}) {
   const { names, rest } = groupedTitle(item.title, item.actors, item.count);
   const when = activityWhen(new Date(item.latestAt), now(), day);
   const path = pathOfItem(item);
@@ -79,11 +113,11 @@ export function ActivityRow({ item, day, onOpen }: { item: ActivityItem; day: Ac
   return (
     <li className="act-row" data-testid="activity-row" data-type={item.type} data-read={item.read}>
       {path ? (
-        <a className="act-row__link" href={path} onClick={onOpen}>
+        <a className="act-row__link" href={path} onClick={(e) => openAfterRead(e, path, onOpen)}>
           {content}
         </a>
       ) : (
-        <button type="button" className="act-row__link act-row__link--button" onClick={onOpen}>
+        <button type="button" className="act-row__link act-row__link--button" onClick={() => void onOpen()}>
           {content}
         </button>
       )}

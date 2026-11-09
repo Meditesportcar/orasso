@@ -118,6 +118,22 @@ export function inboxRowCounts(summary: InboxCountsInput | null): {
   return { activityRequests: Math.max(0, (summary?.pendingRequests ?? 0) - contact), messageRequests: contact };
 }
 
+/**
+ * Les deux lignes « Demandes · N » et « Demandes de message · N » (lot R7c2, tour 2). Un compteur **inconnu** (`null`) n'est
+ * pas zéro : si `GET /me/inbox/summary` échoue, on se rabat sur la liste des demandes (`GET /me/requests`, première page :
+ * `total` et les sortes de ses éléments) ; sans l'un ni l'autre, `null` et l'écran garde l'accès à la page, sans nombre,
+ * avec une erreur « Réessayer » (jamais « Rien de neuf » quand il y a peut-être des demandes).
+ */
+export function requestRowCounts(
+  summary: InboxCountsInput | null,
+  requests: { total: number; items: readonly { kind: string }[] } | null = null,
+): { activityRequests: number | null; messageRequests: number | null } {
+  if (summary) return inboxRowCounts(summary);
+  if (!requests) return { activityRequests: null, messageRequests: null };
+  const contact = requests.items.filter((i) => i.kind === "contact").length;
+  return { activityRequests: Math.max(0, requests.total - contact), messageRequests: contact };
+}
+
 export function topBarCounts(summary: InboxCountsInput | null): { activity: number; messages: number } {
   const { activityRequests, messageRequests } = inboxRowCounts(summary);
   return {

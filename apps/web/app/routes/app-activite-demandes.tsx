@@ -1,22 +1,19 @@
-import { Button, Chip } from "@orasso/design-system/web";
+import { Button, Chip, Icon } from "@orasso/design-system/web";
 import {
-  type CrewConfirmationRequest,
-  type CrewInboxRequest,
   crewInviteLabels,
   crewLabels,
+  eventInviteLabels,
   type FollowPerson,
-  type FollowRequestsPage,
   followRequestNotificationTitle,
   gradeLabels,
   type InboxSummary,
-  inboxRowCounts,
   invitationLabels,
   messagingLabels,
   networkLabels,
-  type ReceivedInvitation,
-  type StaffInvitationView,
-  staffRequestLabels,
-  staffRoleLabels,
+  plateTransferLabels,
+  type RequestItem,
+  type RequestsPage,
+  requestRowCounts,
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
@@ -28,10 +25,11 @@ import { type FollowActionData, followAction, isFollowIntent } from "../lib/foll
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/app-activite-demandes";
 
-// Activité > Demandes (lot 18, repris au lot R7c2 : la Boîte a disparu) : tout ce qui attend ta réponse — demandes d'abonnement
-// (lot R6b), crews, invitations à un événement, staff. Les demandes de message (contacts) sont dans Messages
-// (`/app/messages/demandes`). Les actions restent celles du lot 18 (routes de chaque domaine). Lot R6b, tour 2 (relecture Codex 4) : les demandes d'abonnement vont par 30,
-// « Suivants » (`?apres=`) ouvre la page suivante : aucune n'est cachée.
+// Activité > Demandes (lot 18, refait au lot R7c2, tour 2) : tout ce qui attend ta réponse, lu sur `GET /me/requests` comme
+// l'appli (50 par page, curseur `nextCursor` : « Suivants » ouvre la page d'après, `?apres=`). Toutes les sortes y sont :
+// abonnement (lot R6b), crew (demande, invitation, venue à confirmer), invitations à un événement (d'un organisateur, de
+// passionnés), staff, transferts de plaque. Les actions restent celles de chaque domaine. Les demandes de message sont dans
+// Messages (`/app/messages/demandes`) : une ligne y mène quand il y en a (d'anciens liens d'e-mails mènent encore ici).
 /** Lot R6c : libellé court local (pas dans `crewInviteLabels`) d'une invitation reçue d'un membre. */
 const LEADER_CONFIRMS = "Si tu acceptes, le chef confirme ton arrivée.";
 
@@ -42,29 +40,18 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
   const cursor = new URL(request.url).searchParams.get("apres") ?? "";
-  const [follows, summary, crews, confirmations, staffInvitations] = await Promise.all([
-    apiOrThrow<FollowRequestsPage>(
-      request,
-      `/me/follow-requests${cursor ? `?${new URLSearchParams({ cursor }).toString()}` : ""}`,
-    ),
-    apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
-    // Crews (lot 19) : demandes reçues par un chef, invitations reçues, venues en crew à confirmer.
-    apiOrThrow<CrewInboxRequest[]>(request, "/me/crew-requests"),
-    apiOrThrow<CrewConfirmationRequest[]>(request, "/me/crew-confirmations"),
-    // Invitations à rejoindre une structure (lot 24).
-    apiOrThrow<StaffInvitationView[]>(request, "/me/staff-invitations"),
+  const [page, summary] = await Promise.all([
+    apiOrThrow<RequestsPage>(request, `/me/requests${cursor ? `?${new URLSearchParams({ cursor }).toString()}` : ""}`),
+    api<InboxSummary>(request, "/me/inbox/summary"),
   ]);
-  // Invitations à un événement (lot 25) : la réponse (avec le choix du véhicule) se fait dans Accès.
-  const invitations = await api<ReceivedInvitation[]>(request, "/me/event-invitations");
+  // Résumé en panne : les nombres se lisent dans la première page (jamais « 0 » parce que le résumé manque).
+  const counts = requestRowCounts(summary.ok ? summary.data : null, cursor ? null : page);
   return {
-    follows: follows.items,
-    followsNext: follows.nextCursor,
-    followsAfter: cursor !== "",
-    summary,
-    crews,
-    confirmations,
-    staffInvitations,
-    invitations: invitations.ok ? invitations.data : [],
+    items: page.items.filter((r) => r.kind !== "contact"),
+    nextCursor: page.nextCursor,
+    after: cursor !== "",
+    activityRequests: counts.activityRequests,
+    messageRequests: counts.messageRequests ?? 0,
   };
 }
 
@@ -84,8 +71,33 @@ export async function action({ request }: Route.ActionArgs) {
     if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
     return data({ formError: null as string | null });
   }
+  // Transfert de plaque reçu (lot 31) : mêmes routes que le Garage (confirmer, « ce n'est pas le cas »).
+  if (intent === "transfer-accept" || intent === "transfer-decline") {
+    const id = encodeURIComponent(String(form.get("transferId") ?? ""));
+    const res = await api(request, `/plate-transfers/${id}/${intent.slice(9)}`, { method: "POST" });
+    if (!res.ok) return data({ formError: res.error.message }, { status: res.status });
+    return data({ formError: null as string | null });
+  }
   return data({ formError: "Action inconnue." }, { status: 400 });
 }
+
+// --- lecture sûre du `payload` (liste blanche de l'API, propre à chaque sorte) -------------------------------------------
+const str = (o: Record<string, unknown> | null | undefined, key: string): string | null => {
+  const v = o?.[key];
+  return typeof v === "string" && v ? v : null;
+};
+const obj = (o: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | null => {
+  const v = o?.[key];
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+};
+const list = (o: Record<string, unknown>, key: string): Record<string, unknown>[] => {
+  const v = o[key];
+  return Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object") : [];
+};
+const fromOf = (r: RequestItem): { name: string; imageUrl: string | null } =>
+  r.from.type === "person"
+    ? { name: r.from.pseudo, imageUrl: r.from.avatarUrl }
+    : { name: r.from.name, imageUrl: r.from.logoUrl };
 
 function Person({ p }: { p: Pick<FollowPerson, "pseudo" | "avatarUrl" | "grade"> }) {
   return (
@@ -101,11 +113,11 @@ function Person({ p }: { p: Pick<FollowPerson, "pseudo" | "avatarUrl" | "grade">
   );
 }
 
-function DecideFollow({ p, busy }: { p: FollowPerson; busy: boolean }) {
+function DecideFollow({ userId, pseudo, busy }: { userId: string; pseudo: string; busy: boolean }) {
   return (
     <Form method="post" className="r6row__acts">
-      <input type="hidden" name="userId" value={p.userId} />
-      <input type="hidden" name="pseudo" value={p.pseudo} />
+      <input type="hidden" name="userId" value={userId} />
+      <input type="hidden" name="pseudo" value={pseudo} />
       <Button
         type="submit"
         name="intent"
@@ -122,7 +134,7 @@ function DecideFollow({ p, busy }: { p: FollowPerson; busy: boolean }) {
         name="intent"
         value="follow_decline"
         variant="close"
-        label={networkLabels.decline(p.pseudo)}
+        label={networkLabels.decline(pseudo)}
         className="fl-x"
         disabled={busy}
         data-testid="net-request-decline"
@@ -131,33 +143,302 @@ function DecideFollow({ p, busy }: { p: FollowPerson; busy: boolean }) {
   );
 }
 
+/** Deux boutons, chacun son formulaire : `accept` et `decline` portent leur `intent` ; `fields` les identifiants de l'action. */
+function Decide({
+  fields,
+  accept,
+  decline,
+  acceptLabel,
+  declineLabel,
+  busy,
+}: {
+  fields: Record<string, string>;
+  accept: string;
+  decline: string;
+  acceptLabel: string;
+  declineLabel: string;
+  busy: boolean;
+}) {
+  return (
+    <div className="s-row">
+      {([accept, decline] as const).map((intent, i) => (
+        <Form method="post" key={intent}>
+          <input type="hidden" name="intent" value={intent} />
+          {Object.entries(fields).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+          <Button type="submit" variant="secondary" icon={i === 0 ? "check" : "close"} loading={busy}>
+            {i === 0 ? acceptLabel : declineLabel}
+          </Button>
+        </Form>
+      ))}
+    </div>
+  );
+}
+
+function FollowCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const { name, imageUrl } = fromOf(r);
+  const grade = r.payload.grade as FollowPerson["grade"];
+  return (
+    <li className="s-person" data-testid="request-follow">
+      <Person p={{ pseudo: name, avatarUrl: imageUrl, grade }} />
+      <div className="s-person__main">
+        <span className="s-label o-t-label">{followRequestNotificationTitle}</span>
+      </div>
+      <DecideFollow userId={r.id} pseudo={name} busy={busy} />
+    </li>
+  );
+}
+
+function CrewCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const crew = obj(r.payload, "crew");
+  const crewName = str(crew, "name") ?? "";
+  const slug = str(crew, "slug");
+  const { name, imageUrl } = fromOf(r);
+  if (r.payload.variant === "confirmation") {
+    const event = obj(r.payload, "event");
+    const vehicle = str(r.payload, "vehicleLabel");
+    const before = str(r.payload, "confirmBefore");
+    return (
+      <li className="s-person" data-testid="request-crew-confirmation">
+        <CrewLogo url={imageUrl} name={crewName || name} size={44} />
+        <div className="s-person__main">
+          <span className="s-label o-t-label">{crewLabels.confirmTitle(crewName || name)}</span>
+          <a href={`/e/${str(event, "slug") ?? ""}`} className="o-t-title">
+            {str(event, "title")}
+          </a>
+          {vehicle && <span className="o-never-truncate">{vehicle}</span>}
+          {before && <span className="o-t-caption s-muted">{crewLabels.confirmBefore(formatDateTime(before))}</span>}
+        </div>
+        <div className="s-row">
+          <Button variant="secondary" icon="qr" href="/app/sorties">
+            {crewLabels.confirmVenue}
+          </Button>
+          <Form method="post">
+            <input type="hidden" name="intent" value="crew_not_coming" />
+            <input type="hidden" name="applicationId" value={r.id} />
+            <Button type="submit" variant="secondary" icon="close" loading={busy}>
+              {crewLabels.notComing}
+            </Button>
+          </Form>
+        </div>
+      </li>
+    );
+  }
+  const invitedBy = str(r.payload, "invitedBy");
+  const message = str(r.payload, "message");
+  return (
+    <li className="s-person" data-testid="request-crew-request">
+      <CrewLogo url={str(crew, "logoUrl")} name={crewName} size={44} />
+      <div className="s-person__main">
+        <span className="s-label o-t-label">{crewLabels.requestFrom(name, crewName)}</span>
+        <a className="o-t-title o-never-truncate" href={`/c/${slug ?? ""}`}>
+          {crewName}
+        </a>
+        {/* Lot R6c (R6.7) : demande née de l'invitation d'un membre. */}
+        {invitedBy && (
+          <span className="o-t-caption s-muted" data-testid="request-invited-by">
+            {crewInviteLabels.invitedBy(invitedBy)}
+          </span>
+        )}
+        {message && <p className="o-t-caption s-muted s-prewrap">{message}</p>}
+      </div>
+      <Decide
+        fields={{ crewId: r.id, userId: str(r.payload, "requesterId") ?? "" }}
+        accept="crew_request_accept"
+        decline="crew_request_decline"
+        acceptLabel={crewLabels.accept}
+        declineLabel={crewLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
+function CrewInvitationCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const crew = obj(r.payload, "crew");
+  const crewName = str(crew, "name") ?? "";
+  const { name: inviter } = fromOf(r);
+  return (
+    <li className="s-person" data-testid="request-crew-invitation">
+      <CrewLogo url={str(crew, "logoUrl")} name={crewName} size={44} />
+      <div className="s-person__main">
+        <span className="s-label o-t-label">{crewLabels.invitationFrom(crewName)}</span>
+        <a className="o-t-title o-never-truncate" href={`/c/${str(crew, "slug") ?? ""}`}>
+          {crewName}
+        </a>
+        <span className="o-t-caption s-muted">{crewLabels.leaderOf(inviter)}</span>
+        {/* Lot R6c (R6.7) : invitation d'un membre (le chef confirme). */}
+        {r.payload.leaderConfirms === true && (
+          <span className="o-t-caption s-muted" data-testid="request-leader-confirms">
+            {LEADER_CONFIRMS}
+          </span>
+        )}
+      </div>
+      <Decide
+        fields={{ crewId: r.id, userId: "" }}
+        accept="crew_invitation_accept"
+        decline="crew_invitation_decline"
+        acceptLabel={crewLabels.accept}
+        declineLabel={crewLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
+function StaffCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const { name, imageUrl } = fromOf(r);
+  const role = str(r.payload, "role");
+  const invitedBy = str(r.payload, "invitedBy");
+  return (
+    <li className="s-person" data-testid="request-staff-invitation">
+      <CrewLogo url={imageUrl} name={name} size={44} />
+      <div className="s-person__main">
+        <span className="s-label o-t-label">
+          {role === "co_organizer" ? "Invitation comme co-organisateur" : "Invitation dans le staff"}
+        </span>
+        <a className="o-t-title o-never-truncate" href={`/o/${str(r.payload, "structureSlug") ?? ""}`}>
+          {name}
+        </a>
+        {invitedBy && <span className="o-t-caption s-muted">Proposé par {invitedBy}</span>}
+      </div>
+      <Decide
+        fields={{ structureId: r.id }}
+        accept="staff_accept"
+        decline="staff_decline"
+        acceptLabel={messagingLabels.accept}
+        declineLabel={messagingLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
+function EventInvitationCard({ r }: { r: RequestItem }) {
+  const { name, imageUrl } = fromOf(r);
+  const event = obj(r.payload, "event");
+  const slug = str(event, "slug");
+  const peer = r.payload.source === "peer";
+  const inviters = list(r.payload, "inviters")
+    .map((x) => str(x, "pseudo"))
+    .filter((x): x is string => Boolean(x));
+  const total = typeof r.payload.invitersCount === "number" ? r.payload.invitersCount : inviters.length;
+  const who = inviters.length ? inviters : [name];
+  const more = Math.max(0, total - who.length);
+  const heading = peer
+    ? `${who.join(" et ")}${more > 0 ? ` et ${more} autre${more > 1 ? "s" : ""}` : ""} ${total > 1 ? "t'invitent" : "t'invite"}`
+    : invitationLabels.invitedBy(name);
+  const vehicle = str(r.payload, "vehicleLabel");
+  const message = str(r.payload, "message");
+  const lockAt = str(r.payload, "lockAt");
+  const startsAt = str(event, "startsAt");
+  const city = str(event, "city");
+  return (
+    <li className="s-person" data-testid={peer ? "request-event-invitation-peer" : "request-event-invitation"}>
+      {r.from.type === "person" ? (
+        <PersonAvatar url={imageUrl} pseudo={name} size={44} />
+      ) : (
+        <CrewLogo url={imageUrl} name={name} size={44} />
+      )}
+      <div className="s-person__main">
+        <span className="s-label o-t-label">{heading}</span>
+        <a href={slug ? `/e/${slug}` : "/app/sorties"} className="o-t-title">
+          {str(event, "title")}
+        </a>
+        <span className="o-t-caption s-muted">
+          {startsAt ? formatDateTime(startsAt) : ""}
+          {city ? ` · ${city}` : ""}
+        </span>
+        {vehicle && <span className="o-never-truncate">{invitationLabels.invitedVehicle(vehicle)}</span>}
+        {message && <span className="o-t-caption s-muted">{message}</span>}
+        {list(r.payload, "notes").map((n) => (
+          <span key={str(n, "pseudo")} className="o-t-caption s-muted">
+            {`${str(n, "pseudo")} : « ${str(n, "note")} »`}
+          </span>
+        ))}
+        {lockAt && <span className="o-t-caption s-muted">{invitationLabels.validUntil(formatDateTime(lockAt))}</span>}
+      </div>
+      <div className="s-row">
+        {peer ? null : (
+          <Button variant="secondary" icon="entry" href="/app/sorties">
+            {invitationLabels.answer}
+          </Button>
+        )}
+        {slug && (
+          <Button variant="secondary" icon="explore" href={`/e/${slug}`}>
+            {peer ? eventInviteLabels.seeEvent : invitationLabels.openEvent}
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function PlateTransferCard({ r, busy }: { r: RequestItem; busy: boolean }) {
+  const { name, imageUrl } = fromOf(r);
+  const vehicle = str(r.payload, "vehicleLabel");
+  const answerBy = str(r.payload, "answerBy");
+  return (
+    <li className="s-person" data-testid="request-plate-transfer">
+      <PersonAvatar url={imageUrl} pseudo={name} size={44} />
+      <div className="s-person__main">
+        <span className="s-label o-t-label">
+          {plateTransferLabels.requestTitle}
+          {vehicle ? ` · ${vehicle}` : ""}
+        </span>
+        {answerBy && <span className="o-t-caption s-muted">Réponse attendue avant le {formatDateTime(answerBy)}.</span>}
+        <p className="o-t-caption s-muted">
+          {`${name} a saisi la plaque de ${vehicle ?? "ton véhicule"} pour son véhicule. Si tu l'as vendu, confirme : ton véhicule passe « Vendu » et la plaque change de main. Sinon, l'équipe Orasso tranchera.`}
+        </p>
+      </div>
+      <Decide
+        fields={{ transferId: r.id }}
+        accept="transfer-accept"
+        decline="transfer-decline"
+        acceptLabel={plateTransferLabels.accept}
+        declineLabel={plateTransferLabels.decline}
+        busy={busy}
+      />
+    </li>
+  );
+}
+
+function Card({ r, busy }: { r: RequestItem; busy: boolean }) {
+  switch (r.kind) {
+    case "follow":
+      return <FollowCard r={r} busy={busy} />;
+    case "crew":
+      return <CrewCard r={r} busy={busy} />;
+    case "crew_invitation":
+      return <CrewInvitationCard r={r} busy={busy} />;
+    case "staff":
+      return <StaffCard r={r} busy={busy} />;
+    case "event_invitation":
+      return <EventInvitationCard r={r} />;
+    case "plate_transfer":
+      return <PlateTransferCard r={r} busy={busy} />;
+    default:
+      // Une sorte sans carte sur le site (jamais d'écran cassé pour une sorte que cette version ne connaît pas).
+      return null;
+  }
+}
+
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const {
-    follows,
-    followsNext,
-    followsAfter,
-    summary,
-    crews,
-    confirmations,
-    staffInvitations,
-    invitations,
-  } = loaderData;
+  const { items, nextCursor, after, activityRequests, messageRequests } = loaderData;
   const busy = useNavigation().state !== "idle";
   // Deux sortes de retours d'action : le suivi (`followError`, `followNotice`) et les autres demandes (`formError`).
   const done = actionData as (Partial<FollowActionData> & { formError?: string | null }) | undefined;
   const message = { error: done?.formError ?? done?.followError ?? null, notice: done?.followNotice ?? null };
-  const { activityRequests } = inboxRowCounts(summary);
-  const empty =
-    follows.length === 0 &&
-    crews.length === 0 &&
-    confirmations.length === 0 &&
-    staffInvitations.length === 0 &&
-    invitations.length === 0;
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.requests}</h1>
-      <p className="o-t-caption s-muted">
-        {activityRequests > 0 ? `${activityRequests} en attente de ta réponse` : "Rien n'attend ta réponse"}
+      <p className="o-t-caption s-muted" data-testid="requests-count">
+        {activityRequests === null
+          ? ""
+          : activityRequests > 0
+            ? `${activityRequests} en attente de ta réponse`
+            : "Rien n'attend ta réponse"}
       </p>
       <div>
         <Button variant="secondary" icon="back" href="/app/activite" data-testid="requests-back">
@@ -174,205 +455,49 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
           {message.notice}
         </p>
       )}
-      {empty && <p className="s-notice">{messagingLabels.noRequests}</p>}
-      {follows.length > 0 && (
-        <ul className="s-people">
-          {follows.map((r) => (
-            <li key={r.userId} className="s-person" data-testid="request-follow">
-              <Person p={r} />
-              <div className="s-person__main">
-                <span className="s-label o-t-label">{followRequestNotificationTitle}</span>
-                {r.vehicle && <p className="o-t-caption s-muted">{r.vehicle}</p>}
-              </div>
-              <DecideFollow p={r} busy={busy} />
-            </li>
+      {messageRequests > 0 && !after ? (
+        <a
+          className="act-requests"
+          href="/app/messages"
+          data-testid="requests-messages-row"
+          aria-label={`${messagingLabels.messageRequests}, ${messageRequests} en attente`}
+        >
+          <span className="act-requests__text">
+            <strong>{`${messagingLabels.messageRequests} · ${messageRequests}`}</strong>
+          </span>
+          <Icon name="next" size={20} />
+        </a>
+      ) : null}
+      {items.length === 0 && <p className="s-notice">{messagingLabels.noRequests}</p>}
+      {items.length > 0 && (
+        <ul className="s-people" data-testid="request-list">
+          {items.map((r) => (
+            <Card
+              key={`${r.kind}:${r.id}:${r.kind === "crew" ? String(r.payload.requesterId ?? "") : ""}`}
+              r={r}
+              busy={busy}
+            />
           ))}
         </ul>
       )}
-      {(followsNext || followsAfter) && (
-        <div className="s-row" data-testid="request-follow-pages">
-          {followsAfter && (
+      {(nextCursor || after) && (
+        <div className="s-row" data-testid="request-pages">
+          {after && (
             <Button variant="secondary" icon="back" href="/app/activite/demandes">
               {networkLabels.firstPage}
             </Button>
           )}
-          {followsNext && (
+          {nextCursor && (
             <Button
               variant="secondary"
               icon="down"
-              href={`/app/activite/demandes?${new URLSearchParams({ apres: followsNext }).toString()}`}
-              data-testid="request-follow-more"
+              href={`/app/activite/demandes?${new URLSearchParams({ apres: nextCursor }).toString()}`}
+              data-testid="request-more"
             >
               {networkLabels.next}
             </Button>
           )}
         </div>
-      )}
-      {invitations.length > 0 && (
-        <section className="s-section" aria-labelledby="invitations-titre">
-          <h2 id="invitations-titre" className="s-h2">
-            {invitationLabels.notifTitle}
-          </h2>
-          <ul className="s-people">
-            {invitations.map((i) => (
-              <li key={i.id} className="s-person" data-testid="request-event-invitation">
-                <div className="s-person__main">
-                  <span className="s-label o-t-label">{invitationLabels.invitedBy(i.event.structure.name)}</span>
-                  <a href={`/e/${i.event.slug}`} className="o-t-title">
-                    {i.event.title}
-                  </a>
-                  {i.vehicle && <span className="o-never-truncate">{i.vehicle.label}</span>}
-                  <span className="o-t-caption s-muted">
-                    {invitationLabels.validUntil(formatDateTime(i.event.lockAt))}
-                  </span>
-                </div>
-                <Button variant="secondary" icon="entry" href="/app/sorties">
-                  {invitationLabels.openAccess}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {confirmations.length > 0 && (
-        <section className="s-section" aria-labelledby="venues-titre">
-          <h2 id="venues-titre" className="s-h2">
-            {crewLabels.crewConfirmations}
-          </h2>
-          <ul className="s-people">
-            {confirmations.map((c) => (
-              <li key={c.applicationId} className="s-person" data-testid="request-crew-confirmation">
-                <CrewLogo url={c.crew.logoUrl} name={c.crew.name} size={44} />
-                <div className="s-person__main">
-                  <span className="s-label o-t-label">{crewLabels.confirmTitle(c.crew.name)}</span>
-                  <a href={`/e/${c.event.slug}`} className="o-t-title">
-                    {c.event.title}
-                  </a>
-                  {c.vehicleLabel && <span className="o-never-truncate">{c.vehicleLabel}</span>}
-                  <span className="o-t-caption s-muted">
-                    {crewLabels.confirmBefore(formatDateTime(c.confirmBefore))}
-                  </span>
-                </div>
-                <Button variant="secondary" icon="qr" href="/app/sorties">
-                  {crewLabels.confirmVenue}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {staffInvitations.length > 0 && (
-        <section className="s-section" aria-labelledby="staff-titre">
-          <h2 id="staff-titre" className="s-h2">
-            {staffRequestLabels.invited}
-          </h2>
-          <ul className="s-people">
-            {staffInvitations.map((i) => (
-              <li key={i.structureId} className="s-person" data-testid="request-staff-invitation">
-                <CrewLogo url={i.logoUrl} name={i.structureName} size={44} />
-                <div className="s-person__main">
-                  <span className="s-label o-t-label">
-                    {i.role === "co_organizer" ? "Invitation comme co-organisateur" : "Invitation dans le staff"}
-                  </span>
-                  <a className="o-t-title o-never-truncate" href={`/o/${i.structureSlug}`}>
-                    {i.structureName}
-                  </a>
-                  {i.staffRoles.length > 0 && (
-                    <span className="o-t-caption s-muted">
-                      {i.staffRoles.map((r) => staffRoleLabels[r]).join(" · ")}
-                    </span>
-                  )}
-                  {i.invitedBy && <span className="o-t-caption s-muted">Proposé par {i.invitedBy}</span>}
-                </div>
-                <div className="s-row">
-                  {(["staff_accept", "staff_decline"] as const).map((intent) => (
-                    <Form method="post" key={intent}>
-                      <input type="hidden" name="intent" value={intent} />
-                      <input type="hidden" name="structureId" value={i.structureId} />
-                      <Button
-                        type="submit"
-                        variant="secondary"
-                        icon={intent === "staff_accept" ? "check" : "close"}
-                        loading={busy}
-                      >
-                        {intent === "staff_accept" ? messagingLabels.accept : messagingLabels.decline}
-                      </Button>
-                    </Form>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {crews.length > 0 && (
-        <section className="s-section" aria-labelledby="crews-titre">
-          <h2 id="crews-titre" className="s-h2">
-            {crewLabels.crewRequests}
-          </h2>
-          <ul className="s-people">
-            {crews.map((r) => (
-              <li
-                key={`${r.kind}-${r.crew.id}-${r.person.userId}`}
-                className="s-person"
-                data-testid={`request-crew-${r.kind}`}
-              >
-                <CrewLogo url={r.crew.logoUrl} name={r.crew.name} size={44} />
-                <div className="s-person__main">
-                  <span className="s-label o-t-label">
-                    {r.kind === "request"
-                      ? crewLabels.requestFrom(r.person.pseudo, r.crew.name)
-                      : crewLabels.invitationFrom(r.crew.name)}
-                  </span>
-                  <a className="o-t-title o-never-truncate" href={`/c/${r.crew.slug}`}>
-                    {r.crew.name}
-                  </a>
-                  {r.kind === "invitation" && (
-                    <span className="o-t-caption s-muted">{crewLabels.leaderOf(r.person.pseudo)}</span>
-                  )}
-                  {/* Lot R6c (R6.7) : demande née de l'invitation d'un membre ; invitation d'un membre (le chef confirme). */}
-                  {r.kind === "request" && r.invitedBy && (
-                    <span className="o-t-caption s-muted" data-testid="request-invited-by">
-                      {crewInviteLabels.invitedBy(r.invitedBy)}
-                    </span>
-                  )}
-                  {r.kind === "invitation" && r.leaderConfirms && (
-                    <span className="o-t-caption s-muted" data-testid="request-leader-confirms">
-                      {LEADER_CONFIRMS}
-                    </span>
-                  )}
-                  {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
-                </div>
-                <div className="s-row">
-                  <Form method="post">
-                    <input
-                      type="hidden"
-                      name="intent"
-                      value={r.kind === "request" ? "crew_request_accept" : "crew_invitation_accept"}
-                    />
-                    <input type="hidden" name="crewId" value={r.crew.id} />
-                    <input type="hidden" name="userId" value={r.person.userId} />
-                    <Button type="submit" variant="secondary" icon="check" loading={busy}>
-                      {crewLabels.accept}
-                    </Button>
-                  </Form>
-                  <Form method="post">
-                    <input
-                      type="hidden"
-                      name="intent"
-                      value={r.kind === "request" ? "crew_request_decline" : "crew_invitation_decline"}
-                    />
-                    <input type="hidden" name="crewId" value={r.crew.id} />
-                    <input type="hidden" name="userId" value={r.person.userId} />
-                    <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                      {crewLabels.decline}
-                    </Button>
-                  </Form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
     </div>
   );

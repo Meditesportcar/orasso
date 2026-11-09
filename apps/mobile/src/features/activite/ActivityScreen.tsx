@@ -11,11 +11,11 @@ import {
   type ActivityGroup,
   type ActivityItem,
   type ActivityPage,
-  inboxRowCounts,
   type RequestItem,
+  requestRowCounts,
   SET_OUTLOOK_UNCERTAIN_ACTION,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -26,7 +26,9 @@ import { errorMessage } from "@/lib/http";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { usePersona } from "@/lib/persona";
 import { useChannel } from "@/lib/realtime";
+import { createSeenGate } from "@/lib/seenGate";
 import { useSession } from "@/lib/session";
+import { useTail } from "@/lib/tailPages";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
@@ -58,79 +60,75 @@ export function ActivityScreen() {
   const router = useRouter();
   const { me, refreshMe } = useSession();
   const { choose } = usePersona();
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
   const activity = useApi<ActivityPage>(() => api.activity(), []);
   const summary = useApi(() => api.inboxSummary(), []);
   const requests = useApi(() => api.requests(), []);
-  const [more, setMore] = useState<{ groups: ActivityGroup[]; nextCursor: string | null } | null>(null);
-  const [moreBusy, setMoreBusy] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
   // Lignes touchées : lues tout de suite à l'écran, sans attendre la relecture.
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
   const page = activity.data;
-  const generation = useRef(0);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
-  // Une première page relue oublie les suivantes (une page ne se cumule pas avec une lecture dépassée).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle première page oublie les suivantes
-  useEffect(() => {
-    generation.current += 1;
-    setMore(null);
-    setMoreError(null);
-  }, [page]);
+  // Les pages suivantes : une première page relue les oublie, une réponse dépassée est rejetée (tour 2).
+  const fetchMore = useCallback(async (cursor: string) => {
+    const next = await api.activity(cursor);
+    return { items: next.groups, nextCursor: next.nextCursor };
+  }, []);
+  const tail = useTail<ActivityGroup>(page, page?.nextCursor ?? null, fetchMore, errorMessage);
 
-  // La cloche vient d'être ouverte : « vu » dès que la liste est là (une panne ne compte pas pour vue).
-  const seenOnce = useRef(false);
+  // « Vu » (tour 2) : seulement avec le focus et après une lecture réussie ; une notification reçue pendant qu'une fiche est
+  // ouverte par-dessus reste due jusqu'au retour sur l'Activité.
+  const gate = useRef(createSeenGate()).current;
   const markSeen = useCallback(() => {
     void api
       .markActivitySeen()
       .then(() => Promise.all([refreshMe(), summary.reload()]))
-      .catch(() => undefined);
-  }, [refreshMe, summary.reload]);
+      .catch(() => gate.owe());
+  }, [refreshMe, summary.reload, gate]);
+  const settleSeen = useCallback(
+    (ok: boolean) => {
+      if (gate.settle({ ok, focused: focusedRef.current })) markSeen();
+    },
+    [gate, markSeen],
+  );
+  // Une liste lue (ouverture, relecture) : « vu » si l'écran est devant.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une lecture réussie = une nouvelle première page
   useEffect(() => {
-    if (!page || seenOnce.current) return;
-    seenOnce.current = true;
-    markSeen();
-  }, [page, markSeen]);
+    if (page) settleSeen(true);
+  }, [page]);
+  // Retour sur l'Activité avec un « vu » dû : la liste est relue d'abord.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: au changement de focus seulement
+  useEffect(() => {
+    if (focused && page && gate.owed()) void activity.reload().then((r) => settleSeen(r !== null));
+  }, [focused]);
 
   const reloadAll = useCallback(async () => {
-    await Promise.all([activity.reload(), summary.reload(), requests.reload(), refreshMe()]);
+    const [list] = await Promise.all([activity.reload(), summary.reload(), requests.reload(), refreshMe()]);
+    return list;
   }, [activity.reload, summary.reload, requests.reload, refreshMe]);
 
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
     if (event.type === "inbox.changed") void reloadAll();
-    // Une notification arrive pendant que l'écran est ouvert : elle est vue tout de suite.
+    // Une notification arrive : elle est vue si l'écran est devant et la liste relue, sinon au retour.
     if (event.type === "notification") {
-      void reloadAll().then(markSeen);
+      gate.owe();
+      void reloadAll().then((list) => settleSeen(list !== null));
     }
   });
-
-  async function loadMore() {
-    const cursor = more ? more.nextCursor : (page?.nextCursor ?? null);
-    if (!cursor) return;
-    const mine = generation.current;
-    setMoreBusy(true);
-    setMoreError(null);
-    try {
-      const next = await api.activity(cursor);
-      if (mine !== generation.current) return;
-      setMore((m) => ({ groups: mergeGroups(m?.groups ?? [], next.groups), nextCursor: next.nextCursor }));
-    } catch (e) {
-      if (mine === generation.current) setMoreError(errorMessage(e));
-    } finally {
-      if (mine === generation.current) setMoreBusy(false);
-    }
-  }
 
   // Les horaires modifiés sont en tête (bandeau) : ils ne reviennent pas dans les groupes.
   const highlighted = page?.highlighted ?? [];
   const highlightedIds = new Set(highlighted.flatMap((h) => h.ids));
-  const groups = mergeGroups(page?.groups ?? [], more?.groups ?? [])
+  const groups = mergeGroups(page?.groups ?? [], tail.items)
     .map((g) => ({ ...g, items: g.items.filter((i) => !i.ids.some((id) => highlightedIds.has(id))) }))
     .filter((g) => g.items.length > 0);
-  const nextCursor = more ? more.nextCursor : (page?.nextCursor ?? null);
+  const nextCursor = tail.nextCursor;
   const isRead = (i: ActivityItem) => i.read || i.ids.every((id) => readIds.has(id));
 
-  const { activityRequests } = inboxRowCounts(summary.data);
+  // Compteur inconnu (résumé en panne et liste en panne) ≠ zéro : la ligne reste, sans nombre, avec « Réessayer ».
+  const { activityRequests } = requestRowCounts(summary.data, requests.data);
   const requestItems = (requests.data?.items ?? []).filter((r) => r.kind !== "contact");
 
   async function open(item: ActivityItem) {
@@ -152,6 +150,7 @@ export function ActivityScreen() {
     Boolean(teamRequestTarget(item.data) || adminLinkOf(item.data.link) || appLinkOf(item.data.link));
 
   const empty = page && groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
+  const countUnknown = activityRequests === null;
 
   return (
     <FlowScreen title="Activité" facts="Ce qui te concerne" onClose={close} onRefresh={reloadAll} closeLabel="Retour">
@@ -160,11 +159,17 @@ export function ActivityScreen() {
       ) : null}
       {activity.offline ? <Notice>Hors ligne : dernière liste connue.</Notice> : null}
 
-      {activityRequests > 0 ? (
+      {countUnknown ? (
+        <LoadError
+          message="Le nombre de demandes n'a pas pu être lu."
+          onRetry={() => void Promise.all([summary.reload(), requests.reload()])}
+        />
+      ) : null}
+      {countUnknown || (activityRequests ?? 0) > 0 ? (
         <Pressable
           onPress={() => router.push("/activite/demandes")}
           accessibilityRole="link"
-          accessibilityLabel={`Demandes, ${activityRequests} en attente`}
+          accessibilityLabel={activityRequests === null ? "Demandes" : `Demandes, ${activityRequests} en attente`}
           style={[styles.requestsRow, { backgroundColor: c.surface }]}
           testID="activity-requests-row"
         >
@@ -186,9 +191,9 @@ export function ActivityScreen() {
           </View>
           <View style={styles.text}>
             <Text variant="bodyStrong" color={c.ink}>
-              {`Demandes · ${activityRequests}`}
+              {activityRequests === null ? "Demandes" : `Demandes · ${activityRequests}`}
             </Text>
-            {requestItems[0] ? (
+            {requestItems[0] && activityRequests !== null ? (
               <Text variant="caption" color={c.inkMuted} numberOfLines={2}>
                 {requestSummary(requestItems[0], activityRequests)}
               </Text>
@@ -259,9 +264,9 @@ export function ActivityScreen() {
         </View>
       ))}
 
-      {moreError ? <Notice tone="error">{moreError}</Notice> : null}
+      {tail.error ? <Notice tone="error">{tail.error}</Notice> : null}
       {nextCursor ? (
-        <SmallButton icon="down" disabled={moreBusy} onPress={() => void loadMore()} testID="activity-more">
+        <SmallButton icon="down" disabled={tail.busy} onPress={() => void tail.more()} testID="activity-more">
           Voir plus
         </SmallButton>
       ) : null}

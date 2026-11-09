@@ -2,12 +2,13 @@
 // `requests/index.ts`). Elle sert deux écrans : « Demandes » de l'Activité (tout sauf les demandes de message) et « Demandes
 // de message » de Messages (seulement elles). Une panne n'est pas une liste vide (« Réessayer »).
 import type { RequestItem, RequestsPage } from "@orasso/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { View } from "react-native";
 
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { useTail } from "@/lib/tailPages";
 import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -15,45 +16,27 @@ import { Notice } from "@/ui/Notice";
 
 import { requestCards } from "./requests";
 
-/** Ce que l'écran garde : la première page relue, plus les pages suivantes qu'on a chargées. */
+/** Ce que l'écran garde : la première page relue, plus les pages suivantes qu'on a chargées (oubliées à chaque relecture). */
 export function useRequestList(match: (item: RequestItem) => boolean) {
   const first = useApi<RequestsPage>(() => api.requests(), []);
-  const [extra, setExtra] = useState<{ items: RequestItem[]; nextCursor: string | null } | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
-  // Une première page relue (décision, retour) oublie les suivantes ; une réponse d'une lecture dépassée est ignorée.
-  const generation = useRef(0);
   const page = first.data;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque nouvelle première page oublie les suivantes
-  useEffect(() => {
-    generation.current += 1;
-    setExtra(null);
-    setMoreError(null);
-  }, [page]);
-  const nextCursor = extra ? extra.nextCursor : (page?.nextCursor ?? null);
-  const more = useCallback(async () => {
-    if (!nextCursor) return;
-    const mine = generation.current;
-    setLoadingMore(true);
-    setMoreError(null);
-    try {
-      const next = await api.requests(nextCursor);
-      if (mine !== generation.current) return;
-      setExtra((e) => ({ items: [...(e?.items ?? []), ...next.items], nextCursor: next.nextCursor }));
-    } catch (e) {
-      if (mine === generation.current) setMoreError(errorMessage(e));
-    } finally {
-      if (mine === generation.current) setLoadingMore(false);
-    }
-  }, [nextCursor]);
+  const fetchMore = useCallback((cursor: string) => api.requests(cursor), []);
+  const tail = useTail<RequestItem>(page, page?.nextCursor ?? null, fetchMore, errorMessage);
   const seen = new Set<string>();
-  const items = [...(page?.items ?? []), ...(extra?.items ?? [])].filter((i) => {
+  const items = [...(page?.items ?? []), ...tail.items].filter((i) => {
     const key = `${i.kind}:${i.id}:${i.kind === "crew" ? String(i.payload.requesterId ?? "") : ""}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return match(i);
   });
-  return { first, items, nextCursor, more, loadingMore, moreError };
+  return {
+    first,
+    items,
+    nextCursor: tail.nextCursor,
+    more: tail.more,
+    loadingMore: tail.busy,
+    moreError: tail.error,
+  };
 }
 
 export function RequestList({

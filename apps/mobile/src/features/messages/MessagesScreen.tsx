@@ -16,6 +16,7 @@ import { formatDay, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
+import { useTail } from "@/lib/tailPages";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
@@ -87,14 +88,10 @@ export function MessagesScreen() {
   const conversations = useApi(() => api.conversations(), []);
   const summary = useApi(() => api.inboxSummary(), []);
   const contacts = useApi(() => api.contactRequests(), []);
-  const [more, setMore] = useState<{ items: ConversationSummary[]; nextCursor: string | null } | null>(null);
-  const [moreBusy, setMoreBusy] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   const reloadAll = useCallback(async () => {
-    setMore(null);
     await Promise.all([conversations.reload(), summary.reload(), contacts.reload(), refreshMe()]);
   }, [conversations.reload, summary.reload, contacts.reload, refreshMe]);
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
@@ -104,8 +101,11 @@ export function MessagesScreen() {
   });
 
   const page = conversations.data;
-  const nextCursor = more ? more.nextCursor : (page?.nextCursor ?? null);
-  const all = useMemo(() => [...(page?.items ?? []), ...(more?.items ?? [])], [page, more]);
+  // Les pages suivantes : chaque première page relue les oublie, une réponse dépassée est rejetée (tour 2).
+  const fetchMore = useCallback((cursor: string) => api.conversations(cursor), []);
+  const tail = useTail<ConversationSummary>(page, page?.nextCursor ?? null, fetchMore, errorMessage);
+  const nextCursor = tail.nextCursor;
+  const all = useMemo(() => [...(page?.items ?? []), ...tail.items], [page, tail.items]);
   const needle = query.trim().toLowerCase();
   const items = needle
     ? all.filter((x) =>
@@ -114,22 +114,14 @@ export function MessagesScreen() {
         ),
       )
     : all;
-  const { messageRequests } = inboxRowCounts(summary.data);
   const incoming = (contacts.data?.items ?? []).filter((r) => r.direction === "in");
-
-  async function loadMore() {
-    if (!nextCursor) return;
-    setMoreBusy(true);
-    setMoreError(null);
-    try {
-      const next = await api.conversations(nextCursor);
-      setMore((m) => ({ items: [...(m?.items ?? []), ...next.items], nextCursor: next.nextCursor }));
-    } catch (e) {
-      setMoreError(errorMessage(e));
-    } finally {
-      setMoreBusy(false);
-    }
-  }
+  // Résumé en panne : le nombre se lit dans la liste des demandes ; sans l'un ni l'autre il est **inconnu** (ni zéro, ni
+  // « Rien ») : la ligne reste, sans nombre, avec « Réessayer » (tour 2).
+  const messageRequests: number | null = summary.data
+    ? inboxRowCounts(summary.data).messageRequests
+    : contacts.data
+      ? incoming.length
+      : null;
 
   return (
     <FlowScreen title="Messages" facts="Tes conversations" onClose={close} closeLabel="Retour" onRefresh={reloadAll}>
@@ -151,11 +143,21 @@ export function MessagesScreen() {
         />
       </View>
 
-      {messageRequests > 0 ? (
+      {messageRequests === null ? (
+        <LoadError
+          message="Le nombre de demandes de message n'a pas pu être lu."
+          onRetry={() => void Promise.all([summary.reload(), contacts.reload()])}
+        />
+      ) : null}
+      {messageRequests === null || messageRequests > 0 ? (
         <Pressable
           onPress={() => router.push("/messages/demandes")}
           accessibilityRole="link"
-          accessibilityLabel={`Demandes de message, ${messageRequests} en attente`}
+          accessibilityLabel={
+            messageRequests === null
+              ? messagingLabels.messageRequests
+              : `${messagingLabels.messageRequests}, ${messageRequests} en attente`
+          }
           style={[styles.requestsRow, { backgroundColor: c.surface }]}
           testID="messages-requests-row"
         >
@@ -164,7 +166,9 @@ export function MessagesScreen() {
           </View>
           <View style={styles.text}>
             <Text variant="bodyStrong" color={c.ink}>
-              {`${messagingLabels.messageRequests} · ${messageRequests}`}
+              {messageRequests === null
+                ? messagingLabels.messageRequests
+                : `${messagingLabels.messageRequests} · ${messageRequests}`}
             </Text>
             {incoming.length > 0 ? (
               <Text variant="caption" color={c.inkMuted} numberOfLines={2}>
@@ -192,9 +196,9 @@ export function MessagesScreen() {
       ) : conversations.loading ? (
         <Muted variant="body">Chargement…</Muted>
       ) : null}
-      {moreError ? <Notice tone="error">{moreError}</Notice> : null}
+      {tail.error ? <Notice tone="error">{tail.error}</Notice> : null}
       {nextCursor ? (
-        <SmallButton icon="down" disabled={moreBusy} onPress={() => void loadMore()} testID="messages-more">
+        <SmallButton icon="down" disabled={tail.busy} onPress={() => void tail.more()} testID="messages-more">
           Voir plus
         </SmallButton>
       ) : null}
