@@ -13,7 +13,7 @@ import {
   type ReceivedEventInvitation,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { openReport } from "@/features/ReportSheet";
@@ -155,6 +155,9 @@ export function InvitationMenu({
   const isMuted = (userId: string) => Boolean(mutes.data?.some((m) => m.userId === userId));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // La réponse peut arriver après la fermeture de la feuille : le message ne doit pas réapparaître à la réouverture.
+  const live = useRef(open);
+  live.current = open;
   const close = () => {
     setMessage(null);
     onClose();
@@ -166,11 +169,12 @@ export function InvitationMenu({
     try {
       if (muted) await api.unmuteInvitations(who.userId);
       else await api.muteInvitations(who.userId);
-      await mutes.reload();
-      setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
+      // Le geste a réussi : la liste se relit et la confirmation s'affiche, même si la relecture des coupures échoue ensuite.
       onChanged?.(!muted);
+      if (live.current) setMessage(muted ? L.unmuted(who.pseudo) : L.muted(who.pseudo));
+      await Promise.resolve(mutes.reload()).catch(() => undefined);
     } catch (e) {
-      setMessage(errorMessage(e));
+      if (live.current) setMessage(errorMessage(e));
     } finally {
       setBusy(false);
     }

@@ -159,7 +159,11 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(notif).toContainText(`${kenji.pseudo} : « On y va avec le crew, viens ! »`);
     await expect(notif).toContainText(`${nina.pseudo} : « Viens aussi ! »`);
     await shot(j.page, `05-demandes-invitation-${theme}`);
-    // Le « ⋯ » qui coupe chaque auteur est sur le bandeau de la fiche (ci-dessous) : la demande ne porte pas d'identifiant de personne.
+    // R7-fix-invite : la carte porte aussi le « ⋯ » qui coupe chaque auteur (le bandeau de la fiche l'a toujours).
+    await notif.getByTestId("request-invite-more").click();
+    await expect(j.page.getByTestId("invite-mute")).toHaveCount(2);
+    await shot(j.page, `05b-demandes-menu-${theme}`);
+    await j.page.keyboard.press("Escape");
     await goto(j.page, `/e/${event.slug}`);
     const banner = j.page.getByTestId("invite-banner");
     await expect(banner).toContainText(`${nina.pseudo} et ${kenji.pseudo} t'invitent`);

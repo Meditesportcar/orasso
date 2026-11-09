@@ -15,7 +15,8 @@ const MAX_AGE = 180 * 24 * 3600;
 const MAX_KEPT = 30;
 const TOKEN = /^[0-9a-f]{12}$/;
 
-export type InviteNoticeData = { inviteNotice?: string; inviteError?: string };
+/** `inviteFor` : l'événement de la carte d'où part le geste (Demandes), pour y afficher la confirmation. */
+export type InviteNoticeData = { inviteNotice?: string; inviteError?: string; inviteFor?: string };
 
 /** Identifiant opaque d'une carte fermée : un haché du compte et de l'événement. */
 export function inviteCardToken(userId: string, eventId: string): string {
@@ -61,10 +62,11 @@ export function isShareable(event: Pick<EventPublic, "status" | "admission" | "e
 export async function muteInviterAction(request: Request, form: FormData) {
   const userId = String(form.get("userId") ?? "").trim();
   const pseudo = String(form.get("pseudo") ?? "").trim();
+  const inviteFor = String(form.get("eventId") ?? "").trim() || undefined;
   if (!userId) return data<InviteNoticeData>({ inviteError: "Personne inconnue." }, { status: 400 });
   const res = await api(request, "/me/invitation-mutes", { method: "POST", json: { userId } });
   if (!res.ok) return data<InviteNoticeData>({ inviteError: res.error.message }, { status: res.status });
-  return data<InviteNoticeData>({ inviteNotice: eventInviteLabels.muted(pseudo || "cette personne") });
+  return data<InviteNoticeData>({ inviteNotice: eventInviteLabels.muted(pseudo || "cette personne"), inviteFor });
 }
 
 export type AfterInviteCard = {
