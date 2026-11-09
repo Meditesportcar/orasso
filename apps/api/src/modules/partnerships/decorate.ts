@@ -14,7 +14,7 @@ import type { Viewer } from "../../lib/session";
 import { partnershipsService } from "./service";
 
 export type ProfileWithPartners = Omit<UserProfileView, "vehicles"> & {
-  vehicles: (ProfileVehicle & { partner: VehiclePartner | null })[];
+  vehicles: ProfileVehicle[];
   partners: PartnerLogo[];
   partnershipOffer: PartnershipOffer | null;
 };
@@ -32,16 +32,20 @@ export async function decorateProfile(v: Viewer, view: UserProfileView): Promise
       ? Promise.resolve(new Map<string, VehiclePartner>())
       : partnershipsService.partnersOfVehicles(view.vehicles.map((x) => x.id)),
   ]);
-  // Le partenaire d'une voiture ne sort que pour les regards qui voient le détail de la voiture (liste blanche).
-  const vehicles = view.vehicles.map((x) => ({ ...x, partner: x.detailed ? (onCars.get(x.id) ?? null) : null }));
+  // Le partenaire d'une voiture ne sort que pour les regards qui voient le détail de la voiture (liste blanche : sans ce
+  // détail, la voiture ne gagne aucun champ).
+  const vehicles = view.vehicles.map((x) => {
+    const partner = x.detailed ? onCars.get(x.id) : undefined;
+    return partner ? { ...x, partner } : x;
+  });
   return { ...view, vehicles, partners, partnershipOffer };
 }
 
 /** `GET /vehicles/:id` : le partenaire actif de la voiture, seulement quand la fiche complète est visible. */
-export async function decorateOtherVehicle(
-  vehicle: OtherVehicle,
-): Promise<OtherVehicle & { partner: VehiclePartner | null }> {
-  return { ...vehicle, partner: vehicle.detailed ? await partnershipsService.partnerOfVehicle(vehicle.id) : null };
+export async function decorateOtherVehicle(vehicle: OtherVehicle): Promise<OtherVehicle> {
+  // Liste blanche : la fiche réduite d'un compte privé ne gagne aucun champ (`privateVehicleFields`).
+  if (!vehicle.detailed) return vehicle;
+  return { ...vehicle, partner: await partnershipsService.partnerOfVehicle(vehicle.id) };
 }
 
 /** `GET /me/vehicles/:id` : le partenaire de ma voiture. */

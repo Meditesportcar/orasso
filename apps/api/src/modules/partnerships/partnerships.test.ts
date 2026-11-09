@@ -489,7 +489,8 @@ describe("« Partenaires » d'un profil et « Partenaire : … » sur la voiture
     await partner(marc, mine.id);
     const stranger = await person("Inconnu_66");
     const seen = await call(stranger, "GET", `/vehicles/${mine.id}`);
-    expect(seen.json).toMatchObject({ detailed: false, partner: null });
+    expect(seen.json).toMatchObject({ detailed: false });
+    expect(seen.json).not.toHaveProperty("partner");
     const follower = await person("Abonne_66");
     await follow(follower, marc);
     expect((await call(follower, "GET", `/vehicles/${mine.id}`)).json).toMatchObject({
@@ -497,7 +498,7 @@ describe("« Partenaires » d'un profil et « Partenaire : … » sur la voiture
       partner: { name: "Wrap 66" },
     });
     const brief = (await call(stranger, "GET", `/users/${marc.pseudo}`)).json.vehicles as { partner: unknown }[];
-    expect(brief.every((v) => v.partner === null)).toBe(true);
+    expect(brief.every((v) => !("partner" in v))).toBe(true);
     await db.update(vehicles).set({ ownerId: kenji.id }).where(eq(vehicles.id, mine.id));
     expect((await call(kenji, "GET", `/me/vehicles/${mine.id}`)).json.partner).toBeNull();
   });
