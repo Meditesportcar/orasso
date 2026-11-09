@@ -167,7 +167,7 @@ describe("profil média", () => {
 
   it("administration : liste à vérifier, vérification tracée ; refusée aux autres", async () => {
     const p = (await putProfile(leo)).json;
-    const admin = await signUp("Admin_Orasso", { role: "super_admin", twoFactor: true });
+    const admin = await signUp("Admin_Plateforme", { role: "super_admin", twoFactor: true });
     expect((await call(leo, "POST", `/admin/media/${p.id}/verify`, { verified: true })).status).toBe(403);
     const pending = await call(admin, "GET", "/admin/media?pending=1");
     expect(pending.json.map((m: { id: string }) => m.id)).toContain(p.id);

@@ -38,6 +38,7 @@ import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
+import { removeOrRetry } from "../vehicles/photos-blur";
 import { activeSanctions, lockAccount, recomputeSuspension, type SanctionRow } from "./suspension";
 import { type ReportRow, targetOf } from "./targets";
 
@@ -102,8 +103,12 @@ async function closeReports(
   report: ReportRow,
   status: ReportStatus,
   sanctionId: string | null,
+  after: After,
 ): Promise<string[]> {
   const at = now();
+  const rules = targetOf(report.targetType);
+  // Le contenu est verrouillé avant tout : un retrait par son auteur, en même temps, lit l'état des signalements après.
+  await rules.lock?.(tx, report.targetId);
   const set = {
     status,
     handledBy: v.user.id,
@@ -138,6 +143,15 @@ async function closeReports(
       .update(reports)
       .set({ sanctionId })
       .where(and(inArray(reports.id, ids), isNull(reports.sanctionId)));
+  }
+  // Fichiers gardés pour la preuve (publication retirée par son auteur) : ils partent avec la dernière décision.
+  if (closed.length && rules.afterDecision) {
+    const keys = await rules.afterDecision(tx, report);
+    if (keys.length) {
+      after(async () => {
+        for (const key of keys) await removeOrRetry(key);
+      });
+    }
   }
   return closed.map((r) => r.reporterId);
 }
@@ -209,6 +223,12 @@ export const moderationService = {
     return withTx(async (tx, after) => {
       const at = now();
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`report:${v.user.id}`}, 0))`);
+      // Sérialisé avec le retrait par l'auteur : sous le verrou du contenu, on revérifie qu'il est toujours visible (404
+      // s'il vient d'être retiré), et un retrait qui suit verra ce signalement.
+      if (rules.lock) {
+        await rules.lock(tx, input.targetId);
+        await rules.resolve(v, input.targetId);
+      }
       const [existing] = await tx
         .select({ id: reports.id })
         .from(reports)
@@ -553,7 +573,7 @@ export const moderationService = {
           .set({ status: "reviewing", handledBy: v.user.id, updatedAt: now() })
           .where(eq(reports.id, id));
       } else {
-        await notifyReporters(tx, await closeReports(tx, v, report, input.status, null));
+        await notifyReporters(tx, await closeReports(tx, v, report, input.status, null, after));
       }
       await audit(tx, v, `moderation.report_${input.status}`, "report", id, input.note, ip);
       after(() => notificationsService.kick());
@@ -660,7 +680,7 @@ export const moderationService = {
       }
       if (input.subject === "owner") {
         if (admin) {
-          await notifyReporters(tx, await closeReports(tx, v, report, "resolved_action", sanction?.id ?? null));
+          await notifyReporters(tx, await closeReports(tx, v, report, "resolved_action", sanction?.id ?? null, after));
         } else {
           await tx
             .update(reports)
@@ -675,7 +695,7 @@ export const moderationService = {
       }
       after(() => notificationsService.kick());
     });
-    for (const key of removedKeys) await storage.remove(key).catch(() => undefined);
+    for (const key of removedKeys) await removeOrRetry(key);
     return this.adminDetail(v, id, ip);
   },
 

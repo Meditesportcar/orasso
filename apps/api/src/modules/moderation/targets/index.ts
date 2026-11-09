@@ -4,6 +4,7 @@ import { storyTarget } from "../../stories/moderation";
 import { crewTarget, proTarget, providerTarget } from "./community";
 import { crewCommentTarget, crewPostTarget } from "./crewFeed";
 import { announcementTarget, eventTarget, reviewTarget } from "./event";
+import { feedPostTarget } from "./feedPost";
 import { messageTarget } from "./message";
 import { profileTarget } from "./profile";
 import type { TargetRules } from "./types";
@@ -22,6 +23,7 @@ const registry: Record<ReportTarget, TargetRules> = {
   announcement: announcementTarget,
   crew_post: crewPostTarget,
   crew_comment: crewCommentTarget,
+  feed_post: feedPostTarget,
   story: storyTarget,
 };
 

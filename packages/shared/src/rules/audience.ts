@@ -156,3 +156,36 @@ export function canTag(
   if (author.visibility === "private") return "private_account";
   return null;
 }
+
+// --- Le Fil (lot R7e1) : une publication du Fil. Regard propre au Fil (`FeedViewer`), distinct du regard des stories.
+
+/** Qui regarde le Fil : `null` = visiteur sans compte (jamais de Fil). */
+export type FeedViewer = { userId: string } | null;
+
+/** Le lien entre le lecteur et l'auteur, décidé par l'API (jamais par l'écran). */
+export type AudienceRel = {
+  /** Le lecteur suit l'auteur, demande acceptée (`user_follows.status = accepted`). */
+  followAccepted: boolean;
+};
+
+export type FeedPostFacts = {
+  authorId: string;
+  authorVisibility: ProfileVisibility;
+  /** Auteur supprimé, banni ou suspendu en ce moment. */
+  authorUnavailable: boolean;
+  /** Publication retirée (par l'auteur ou la modération). */
+  deleted: boolean;
+};
+
+/**
+ * Une publication du Fil se voit : avec une session, jamais retirée, d'un auteur en règle ; compte public → tout
+ * membre connecté ; compte privé → ses abonnés acceptés et lui-même (un abonnement en attente ne voit rien). Rien d'un
+ * crew : les publications de crew (`crew_posts`) ne sont pas des publications du Fil (D36).
+ */
+export function canSeeFeedPost(viewer: FeedViewer, post: FeedPostFacts, rel: AudienceRel): boolean {
+  if (!viewer || post.deleted) return false;
+  if (viewer.userId === post.authorId) return true;
+  if (post.authorUnavailable) return false;
+  if (post.authorVisibility === "public") return true;
+  return rel.followAccepted;
+}

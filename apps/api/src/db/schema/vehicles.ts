@@ -158,6 +158,8 @@ export const vehicles = pgTable(
   (t) => [
     index("vehicles_owner_id_idx").on(t.ownerId),
     index("vehicles_model_id_idx").on(t.modelId),
+    // Lot R7e1 (tour 2) : la source « Voiture » du Fil lit les ajouts récents.
+    index("vehicles_created_at_idx").on(t.createdAt.desc()),
     // Plaque unique parmi les véhicules actifs (docs/01).
     uniqueIndex("vehicles_active_plate_key")
       .on(t.plateNormalized)

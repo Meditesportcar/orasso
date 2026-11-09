@@ -160,6 +160,12 @@ export const rateRules = {
   categoryAdmin: { max: 120, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   // Lot R5c2, tour 2 : vitrines de crew ouvertes par un non-membre (pas d'annuaire reconstruit par les vitrines).
   crewVitrine: { max: 120, windowMs: 3_600_000, message: "Trop de crews ouverts : réessaie plus tard." },
+  // Lot R7e1 : le Fil. Lecture (pages de 20), publications, photos envoyées (6 par publication), flammes, « Moins de ce genre ».
+  feedRead: { max: 120, windowMs: 60_000, message: "Trop de chargements du Fil : réessaie dans une minute." },
+  feedPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
+  feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
+  feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
+  feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

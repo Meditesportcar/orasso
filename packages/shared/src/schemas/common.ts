@@ -61,8 +61,13 @@ export const errorCodes = [
   "vote_not_open",
   "not_checked_in",
   "own_vehicle",
-  // Lot R7f1 : stories (plaque non décidée, story réservée au crew).
+  // Lot R7e1 : publication du Fil sans décision de plaque pour une photo.
   "plate_decision_required",
+  // Lot R7e1 (tour 2) : pseudo réservé au compte officiel d'Orasso.
+  "pseudo_reserved",
+
+  // Lot R7f1 : stories (plaque non décidée, story réservée au crew).
+  
   "crew_only",
   "not_implemented",
   // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.

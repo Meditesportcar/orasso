@@ -58,7 +58,7 @@ export async function createAccount(
   await db
     .insert(t.account)
     .values({ id: randomUUID(), userId: id, accountId: id, providerId: "credential", password: hash });
-  await ensureProfile({ id, name: p.pseudo });
+  await ensureProfile({ id, name: p.pseudo }, { official: extra.official === true });
   await db
     .update(t.profiles)
     .set({
