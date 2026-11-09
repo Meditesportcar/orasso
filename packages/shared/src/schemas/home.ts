@@ -47,9 +47,10 @@ export const homeQuerySchema = z
      * Lot C2a (Accueil de l'appli d'après l'artefact DA v2) : `v2` = l'Accueil sans blocs réglables (météo et événements
      * autour, toujours, quelles que soient les anciennes préférences masquées ; l'emplacement sponsorisé, affiché dans le
      * rail) ; `places` = les lieux pratiques seulement (garage favori, lavage, carburant ; Explorer › Pros), sans
-     * sponsorisé ni incitation.
+     * sponsorisé ni incitation. Lot R7a2 : `app` = l'Accueil de l'appli selon le réglage de la personne (blocs choisis,
+     * ordonnés, masqués ; l'emplacement sponsorisé n'est rendu que si « Autour de moi » est affiché, car il y est montré).
      */
-    blocks: z.enum(["v2", "places"]).optional(),
+    blocks: z.enum(["v2", "places", "app"]).optional(),
   })
   .refine((q) => (q.lat === undefined) === (q.lng === undefined), "lat et lng vont ensemble");
 export type HomeQuery = z.infer<typeof homeQuerySchema>;

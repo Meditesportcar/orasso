@@ -161,7 +161,7 @@ test("événement privé : invitations par pseudo et par e-mail, acceptation ave
   const shots: { name: string; cookie: string; path: string }[] = [
     { name: "01-orga-invitations", cookie: organizer, path: `/orga/meditesportcar/e/${event.id}/invitations` },
     { name: "02-acces-invitation", cookie: nina, path: "/app/acces" },
-    { name: "03-demandes", cookie: nina, path: "/app/boite/demandes" },
+    { name: "03-demandes", cookie: nina, path: "/app/activite/demandes" },
     { name: "04-evenement-prive", cookie: outsider, path: `/e/${event.slug}` },
     { name: "05-lien-invitation", cookie: "", path: pendingLink },
     { name: "06-evenement-invite", cookie: nina, path: `/e/${event.slug}` },

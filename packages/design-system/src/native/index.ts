@@ -19,6 +19,13 @@ export {
   type AppBarPersona,
   type AppBarProps,
 } from "./AppBar";
+export {
+  AvatarRing,
+  type AvatarRingProps,
+  type AvatarRingSize,
+  type AvatarRingState,
+  avatarRingSizes,
+} from "./AvatarRing";
 export { BigTitle, type BigTitleProps, bigTitleSize } from "./BigTitle";
 export {
   type BrandTone,

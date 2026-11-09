@@ -354,3 +354,78 @@ export async function seeStepEnd(page: Page): Promise<void> {
   // Le bas doit rester visible un instant pour compter comme vu.
   await page.waitForTimeout(400);
 }
+
+/**
+ * Lot R7a2, tour 3 : une SECONDE place de Damien_66 au « Rassemblement du Lydia », sur son autre véhicule et « en attente »
+ * (copie de sa place retenue). Rend de quoi la retirer ; sans autre véhicule, ne fait rien et rend `null`.
+ */
+export async function addPendingSecondPlace(): Promise<(() => Promise<void>) | null> {
+  const id = crypto.randomUUID();
+  const run = async <T>(fn: (c: pg.Client) => Promise<T>): Promise<T> => {
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      return await fn(client);
+    } finally {
+      await client.end();
+    }
+  };
+  const remove = () => run(async (c) => void (await c.query("delete from applications where id = $1", [id])));
+  await remove();
+  const inserted = await run(async (c) => {
+    const res = await c.query(
+      `create temp table tmp_app as
+         select a.* from applications a
+           join events e on e.id = a.event_id
+           join profiles p on p.user_id = a.user_id
+         where e.slug = 'rassemblement-du-lydia' and p.pseudo = 'Damien_66' and a.status = 'accepted'
+         order by a.created_at limit 1;
+       update tmp_app set id = '${id}', status = 'pending',
+         vehicle_id = (select v.id from vehicles v, tmp_app t
+                       where v.owner_id = t.user_id and v.id <> t.vehicle_id and v.status = 'active' limit 1);
+       insert into applications select * from tmp_app where vehicle_id is not null;`,
+    );
+    const last = Array.isArray(res) ? res[res.length - 1] : res;
+    return last?.rowCount ?? 0;
+  });
+  return inserted > 0 ? remove : null;
+}
+
+/**
+ * Lot R7a2, tour 3 : pour qu'un compte du seed ne vive que le « Rassemblement du Lydia » (le « Salon Argelès » du seed, en cours
+ * lui aussi une partie de la journée, passerait devant), met de côté ses places retenues ailleurs. Rend de quoi les remettre.
+ */
+export async function sidelineOtherEvents(
+  pseudo: string,
+  keepSlug = "rassemblement-du-lydia",
+): Promise<() => Promise<void>> {
+  const run = async <T>(fn: (c: pg.Client) => Promise<T>): Promise<T> => {
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    try {
+      return await fn(client);
+    } finally {
+      await client.end();
+    }
+  };
+  const saved = await run(
+    async (c) =>
+      (
+        await c.query<{ id: string; status: string }>(
+          `select a.id, a.status from applications a
+             join events e on e.id = a.event_id
+             join profiles p on p.user_id = a.user_id
+           where p.pseudo = $1 and e.slug <> $2 and a.status in ('accepted', 'pending', 'waitlisted', 'offered')`,
+          [pseudo, keepSlug],
+        )
+      ).rows,
+  );
+  if (saved.length)
+    await run((c) =>
+      c.query("update applications set status = 'cancelled' where id = any($1::uuid[])", [saved.map((r) => r.id)]),
+    );
+  return async () => {
+    for (const r of saved)
+      await run((c) => c.query("update applications set status = $2 where id = $1", [r.id, r.status]));
+  };
+}

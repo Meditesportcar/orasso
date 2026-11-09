@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  allCategoriesId,
   blurPlatesOf,
   call,
   createEvent,
@@ -203,6 +204,7 @@ describe("sources du Fil", () => {
       .returning();
     await db.insert(audiencePrizeResults).values({
       eventId: past.id,
+      voteId: await allCategoriesId(past.id),
       applicationId: winApp!.id,
       rank: 1,
       votes: 7,
@@ -1600,6 +1602,7 @@ describe("podium d'un compte privé, pros mobiles, flamme d'un compte suspendu (
       .returning();
     await db.insert(audiencePrizeResults).values({
       eventId: past.id,
+      voteId: await allCategoriesId(past.id),
       applicationId: win!.id,
       rank: 1,
       votes: 9,

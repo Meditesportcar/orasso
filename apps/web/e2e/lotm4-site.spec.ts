@@ -143,7 +143,7 @@ test("Lot M4, site : fiche, « Ta place », écrire avec le contexte, candidatur
         if (theme === "beton" && size === "1280") {
           await mine.locator("#write-body").fill("Je peux venir avec une remorque ?");
           await mine.getByTestId("write-organizer").getByTestId("contact-organizer").click();
-          await mine.waitForURL(/\/app\/boite\/[0-9a-f-]{36}$/);
+          await mine.waitForURL(/\/app\/messages\/[0-9a-f-]{36}$/);
           await expect(mine.getByTestId("message-about")).toContainText(ev.title);
           await shot(mine, `conversation-${theme}-${size}`);
         }

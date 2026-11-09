@@ -104,7 +104,7 @@ test("accueil d'arrivée : battle en tandem autour du O, traces et fumée ; mouv
   await ctx.close();
 });
 
-test("administration : la Boîte de l'en-tête reste dans l'écran à 390 px", async ({ browser }) => {
+test("administration : la cloche de l'en-tête reste dans l'écran à 390 px", async ({ browser }) => {
   test.setTimeout(240_000);
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
@@ -114,7 +114,8 @@ test("administration : la Boîte de l'en-tête reste dans l'écran à 390 px", a
     await page.waitForURL(/administration/, { timeout: 30_000 });
     await page.goto("/signalements");
     await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 15_000 });
-    const inbox = page.getByRole("button", { name: "Boîte", exact: true }).first();
+    // Lot R7c2 : la Boîte a disparu ; l'icône la plus à droite de la bande est la bulle « Messages ».
+    const inbox = page.getByRole("button", { name: /^Messages/ }).first();
     await expect(inbox).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-admin-signalements-${theme}`);
     const box = await inbox.boundingBox();

@@ -36,4 +36,5 @@ export * from "./structures";
 export * from "./styles";
 export * from "./ticketing";
 export * from "./vehicles";
+export * from "./votes";
 export * from "./weather";

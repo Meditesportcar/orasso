@@ -107,7 +107,7 @@ for (const theme of ["beton", "sable"] as const) {
     await goto(mine.page, `/u/${priv.pseudo}`);
     await expect(followButton(mine.page)).toHaveText(/Demander à suivre/i);
     await expect(mine.page.getByTestId("profile-private-note")).toContainText(
-      "Ses photos, ses sorties, son crew et ses réseaux sont pour ses abonnés.",
+      "Réservé à ses abonnés. Ses véhicules, ses sorties et son crew sont visibles de ses abonnés.",
     );
     await shot(mine.page, `04-prive-demander-${theme}`);
     await followButton(mine.page).click();
@@ -237,7 +237,7 @@ for (const theme of ["beton", "sable"] as const) {
   });
 }
 
-test("R6b appli (beton) : Boîte, 31 demandes d'abonnement, « Voir plus » montre la plus ancienne", async ({
+test("R6b appli (beton) : Activité > Demandes, 31 demandes d'abonnement sur une seule page (50 par page depuis R7c1)", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
@@ -245,17 +245,12 @@ test("R6b appli (beton) : Boîte, 31 demandes d'abonnement, « Voir plus » mont
   const target = await privateWithRequests("R6bBoite", 31);
   const mine = await open(browser, "beton");
   await signIn(mine.page, target.email);
-  await goto(mine.page, "/boite?segment=demandes");
+  await goto(mine.page, "/activite/demandes");
   const cards = mine.page.getByTestId("request-follow");
-  await expect(cards).toHaveCount(30);
-  await expect(mine.page.getByText(target.askers[0] as string)).toHaveCount(0);
-  const more = mine.page.getByTestId("request-follow-more");
-  await expect(more).toContainText("(1)");
-  await more.scrollIntoViewIfNeeded();
-  await shot(mine.page, "16-boite-31-demandes-beton");
-  await more.click();
-  await expect(cards).toHaveCount(31);
+  // Lot R7c2 : la page des Demandes en porte 50 (le curseur est testé côté API) : les 31 sont là, sans « Voir plus ».
+  await expect(cards).toHaveCount(31, { timeout: 30_000 });
   await expect(mine.page.getByText(target.askers[0] as string)).toBeVisible();
-  await expect(more).toHaveCount(0);
+  await expect(mine.page.getByTestId("request-more")).toHaveCount(0);
+  await shot(mine.page, "16-demandes-31-beton");
   await mine.ctx.close();
 });

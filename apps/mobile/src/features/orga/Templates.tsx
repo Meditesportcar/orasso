@@ -203,7 +203,7 @@ export function TemplatesScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
-  const close = useCloseTo("/boite/orga");
+  const close = useCloseTo("/messages/orga");
   const all = templates.data?.items ?? [];
   const orasso = all.filter((x) => x.orasso);
   const mine = all.filter((x) => !x.orasso);

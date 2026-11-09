@@ -444,9 +444,9 @@ export const structuresService = {
       else await tx.insert(structureMembers).values({ structureId: id, userId: target.userId, ...values });
       await notificationsService.notify(tx, target.userId, "staff_invitation", {
         title: `Invitation de « ${s.name} »`,
-        body: `${v.profile.pseudo} t'invite à rejoindre l'équipe de « ${s.name} » (${input.role === "co_organizer" ? "co-organisateur" : "staff"}). Accepte ou refuse depuis ta Boîte.`,
+        body: `${v.profile.pseudo} t'invite à rejoindre l'équipe de « ${s.name} » (${input.role === "co_organizer" ? "co-organisateur" : "staff"}). Accepte ou refuse depuis ton Activité (Demandes).`,
         data: { structureId: id, screen: "boite" },
-        link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
+        link: { label: "Voir l'invitation", path: "/app/activite/demandes" },
       });
       after(() => {
         inboxService.publish(target.userId);

@@ -40,23 +40,27 @@ test("la barre : cinq onglets dans l'ordre, la loupe, la cloche et la bulle, plu
 
     const header = page.locator("header.o-appbar--tab");
     await expect(header.getByRole("link", { name: "Rechercher" })).toBeVisible();
-    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/journal");
-    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/boite");
+    await expect(header.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/app/activite");
+    await expect(header.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/app/messages");
     await expect(header.getByRole("link", { name: "Boîte" })).toHaveCount(0);
 
     // Tour 2 : la cloche compte les notifications non lues et les demandes en attente, la bulle les conversations non lues
     // seulement. (La lecture passe par la session du navigateur : une nouvelle connexion ajouterait elle-même une notification.)
-    const me = (await (await page.request.get("/api/me")).json()) as { counts: { unreadNotifications: number } };
+    // Lot R7c2 : cloche = nouveautés depuis la dernière ouverture + demandes hors demandes de message ; bulle = conversations
+    // non lues + demandes de message (une demande ne compte qu'une fois).
     const summary = (await (await page.request.get("/api/me/inbox/summary")).json()) as {
       unreadMessages: number;
-      requests: Record<string, number>;
+      unseenActivity: number;
+      pendingRequests: number;
+      requests: { contact: number };
     };
-    const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
+    const contact = summary.requests.contact;
     const bell = (await header.getByRole("link", { name: "Activité" }).innerText()).trim();
     const bubble = (await header.getByRole("link", { name: "Messages" }).innerText()).trim();
-    const wantBell = me.counts.unreadNotifications + requests;
+    const wantBell = summary.unseenActivity + Math.max(0, summary.pendingRequests - contact);
+    const wantBubble = summary.unreadMessages + contact;
     expect(bell).toBe(wantBell ? String(wantBell) : "");
-    expect(bubble).toBe(summary.unreadMessages ? String(summary.unreadMessages) : "");
+    expect(bubble).toBe(wantBubble ? String(wantBubble) : "");
     // Les noms accessibles annoncent le nombre.
     if (wantBell) {
       await expect(
@@ -90,10 +94,7 @@ test("la barre à 1 280 px : même ordre", async ({ browser }) => {
 
 test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans barre d'onglets", async ({ page }) => {
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
-  for (const [path, title] of [
-    ["/app/sorties", "Mes sorties"],
-    ["/app/garage", "Garage"],
-  ] as const) {
+  for (const [path, title] of [["/app/sorties", "Mes sorties"]] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Mon compte" })).toHaveCount(0);
@@ -105,10 +106,9 @@ test("Sorties et Garage : joignables par leur adresse, en-tête de fiche, sans b
   await page.locator("header.fiche-bar").getByRole("link", { name: "Fermer" }).click();
   await page.waitForURL((url) => url.pathname === "/app");
   await page.goto("/app/garage");
-  await page.locator("header.fiche-bar").getByRole("link", { name: "Fermer" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/moi");
-  // Le Profil garde son lien vers le Garage.
-  await expect(page.getByTestId("garage-link")).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/app/moi" && url.searchParams.get("onglet") === "garage");
+  // Lot R7b1 : le Garage est l'onglet interne du Profil (`/app/garage` répond 301 vers lui).
+  await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
   // Les anciennes adresses d'onglet (`/app/acces`, `/app/passeport`) restent valables.
   const res = await page.request.get("/app/acces", { maxRedirects: 0 }).catch(() => null);
   expect(res === null || [200, 301, 302, 303, 307, 308].includes(res.status())).toBe(true);
@@ -139,10 +139,10 @@ test("Le Fil (coquille) : les notifications seules, rien marqué comme lu ; la c
   await expect(page.getByRole("navigation", { name: "Mon compte" })).toBeVisible();
   await shot(page, "fil-390");
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Activité" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/journal");
-  await expect(page.getByRole("heading", { name: "Boîte", exact: true })).toBeVisible();
+  await page.waitForURL((url) => url.pathname === "/app/activite");
+  await expect(page.getByRole("heading", { name: "Activité", exact: true })).toBeVisible();
   await page.locator("header.o-appbar--tab").getByRole("link", { name: "Messages" }).click();
-  await page.waitForURL((url) => url.pathname === "/app/boite");
+  await page.waitForURL((url) => url.pathname === "/app/messages");
 });
 
 test("Crew : avec un crew (onglet du lot R7b2), sans crew", async ({ browser }) => {
@@ -213,7 +213,7 @@ test("le bandeau « où sont passées les choses » : vu une fois par navigateur
   await ctx.close();
 });
 
-test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par un lien du Profil (l'exposant a la ligne « Mon garage »)", async ({
+test("le visiteur : bandeau sans le Garage ; son QR de compte et ses archives sont dans l'onglet Garage du Profil (R7b1)", async ({
   browser,
 }) => {
   const ctx = await browser.newContext({ viewport: MOBILE });
@@ -227,23 +227,22 @@ test("le visiteur : bandeau sans le Garage, ses archives et son QR de compte par
   await expect(banner(page)).not.toContainText("garage");
   await shot(page, "bandeau-visiteur-390");
   await page.goto("/app/moi");
-  // Tour 3 : le visiteur garde ses archives et son QR de compte, comme dans l'appli.
-  await expect(page.getByTestId("garage-archives-link")).toHaveText("Mes véhicules archivés et mon QR de compte");
-  await expect(page.getByTestId("garage-archives-link")).toHaveAttribute("href", "/app/garage");
+  // R7b1 : le Garage est un onglet du Profil (par défaut) ; le visiteur y garde son QR de compte (et ses archives).
+  await expect(page.getByTestId("garage-archives-link")).toHaveCount(0);
+  await expect(page.getByTestId("profil-panel").getByTestId("account-qr")).toBeVisible();
   await shot(page, "profil-visiteur-390");
   await ctx.close();
-  // L'exposant (Kenji) : la ligne est là, comme dans l'appli.
+  // L'exposant (Kenji) : plus de ligne « Mon garage », l'onglet Garage du Profil porte ses véhicules (R7b1).
   const k = await browser.newContext({ viewport: MOBILE });
   const kp = await k.newPage();
   await loginInBrowser(kp, "kenji@orasso.local", undefined, "/app/moi");
   await kp.goto("/app/moi");
-  await expect(kp.getByTestId("garage-link")).toBeVisible();
-  await expect(kp.getByTestId("garage-link")).toContainText("Tes véhicules et leurs photos");
-  await expect(kp.getByTestId("garage-archives-link")).toHaveCount(0);
+  await expect(kp.getByTestId("garage-link")).toHaveCount(0);
+  await expect(kp.getByTestId("profil-panel")).toBeVisible();
   await k.close();
 });
 
-test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; une conversation non lue, la bulle", async ({
+test("les pastilles (lot R7c2) : une demande de message seule fait monter la bulle, pas la cloche ; une conversation non lue s'y ajoute", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -256,17 +255,17 @@ test("les pastilles : une demande seule fait monter la cloche, pas la bulle ; un
   await loginInBrowser(page, compte.email, undefined, "/app");
   await page.goto("/app");
   const header = page.locator("header.o-appbar--tab");
-  // Demande seule : la bulle est sans pastille, la cloche en a une (au moins la demande).
-  await expect(header.getByRole("link", { name: "Messages" })).toHaveAccessibleName("Messages");
-  await expect(header.getByRole("link", { name: "Messages" }).locator(".o-appbar__count")).toHaveCount(0);
-  await expect(header.getByRole("link", { name: /^Activité, \d+ non lues?$/ })).toBeVisible();
+  // Demande de message seule : la bulle affiche 1 (la ligne « Demandes de message »), la cloche rien (une demande ne compte
+  // qu'une fois : sa notification n'est pas dans les « non vus »).
+  await expect(header.getByRole("link", { name: "Messages, 1 non lu" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Activité", exact: true })).toBeVisible();
   await shot(page, "pastilles-demande-seule-390");
-  // Une conversation non lue : la bulle affiche 1.
+  // Une conversation non lue de plus : la bulle affiche 2 (la demande de message et la conversation).
   await compte.ajouterConversationNonLue();
   await page.reload();
-  const bubble = header.getByRole("link", { name: "Messages, 1 non lu" });
+  const bubble = header.getByRole("link", { name: /^Messages, 2 non lus?$/ });
   await expect(bubble).toBeVisible();
-  await expect(bubble.locator(".o-appbar__count")).toHaveText("1");
+  await expect(bubble.locator(".o-appbar__count")).toHaveText("2");
   await shot(page, "pastilles-conversation-390");
   await ctx.close();
 });

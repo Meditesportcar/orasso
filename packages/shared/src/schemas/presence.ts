@@ -47,6 +47,12 @@ export type EventLive = {
   acceptedCount: number | null;
   /** Connecté seulement : comment je suis sur place, `null` sinon. */
   myPresence: MyPresence | null;
+  /**
+   * « Je suis sur place » est proposable : l'API ne refuserait pas avant la mesure (ouvert, pas de place de véhicule,
+   * accès et billet, pas déjà présent). Calculé par la même règle que la validation (`presenceGate`) ; faux sans
+   * connexion. L'écran lit ce booléen, il ne devine rien.
+   */
+  canValidatePresence: boolean;
   /** Votes ouverts maintenant (0 ou 1 aujourd'hui : le prix du public ; R7l1 y branche les votes à thème). */
   votesOpen: number;
   /** Story « En cours » de l'organisateur (R7h) ; faux tant qu'elle n'existe pas. */
@@ -67,8 +73,11 @@ export type HomeLive = {
   };
   dayIndex: number;
   dayCount: number;
+  /** Une place retenue ou un billet pour cet événement : sans elle (présence seule), pas de « Mon accès ». */
+  hasPlace: boolean;
   onSiteCount: number | null;
-  votes: { open: number; voted: number };
+  /** `canVote` : le droit personnel de voter maintenant (calculé par la règle des votes, jamais déduit de `open`). */
+  votes: { open: number; voted: number; canVote: boolean };
   /** Horaires du jour et consignes (aux retenus seulement) ; ce qui existe, rien d'inventé. */
   programToday: { dayDate: string; startsAt: string; endsAt: string; instructions: string | null } | null;
   /** Story de l'organisateur (R7h) : `null` tant qu'elle n'existe pas. */

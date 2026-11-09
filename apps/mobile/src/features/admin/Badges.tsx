@@ -19,7 +19,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { PrivateImage } from "@/features/boite/PrivateImage";
+import { PrivateImage } from "@/features/messages/PrivateImage";
 import { parseQuota } from "@/lib/adminModel";
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";

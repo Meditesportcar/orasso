@@ -1,8 +1,7 @@
 // Passeport (lot 50, prototype DA v2 `s-passport`) : les tampons de la saison, huit par page, des pages qui ne se
 // ressemblent jamais (forme selon le format, encre selon le département, usure tirée de la `seed`, dorure pour les
-// rares). Onglet du visiteur (`(visitor)/passeport.tsx`) ; pour les autres profils, écran ouvert par la tuile « Mon
-// passeport » de Mon profil (`app/passeport.tsx`). Quand un tampon arrive (`passport.stamped`), il tombe en plein écran
-// puis rejoint sa page.
+// rares). Lot R7b1 (D38) : panneau de l'onglet « Sorties » du Profil (plus d'écran ni d'onglet à lui). Quand un tampon
+// arrive (`passport.stamped`), il tombe en plein écran puis rejoint sa page.
 
 import { Chip, ChipRow, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -13,8 +12,7 @@ import {
   passportTexts,
   stampPlacement,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -29,7 +27,6 @@ import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, TabScreen } from "@/ui/Screens";
 import { PassportLinks } from "./PassportLinks";
 import { Stamp } from "./Stamp";
 import { useStampedListener } from "./stampBus";
@@ -44,14 +41,19 @@ const LEGEND: { lead: string; text: string }[] = [
   { lead: "Les rares", text: passportTexts.legendRare },
 ];
 
-export function PassportScreen({ tab }: { tab: boolean }) {
-  const router = useRouter();
+/**
+ * Le passeport en panneau (lot R7b1, D38) : il vit dans l'onglet « Sorties » du Profil (le visiteur n'a plus d'onglet
+ * Passeport) ; plus d'écran à lui. Quand un tampon arrive, il tombe en plein écran puis rejoint sa page.
+ */
+export function PassportPanel({
+  reloadKey = 0,
+}: {
+  /** Change à chaque « tirer pour actualiser » du Profil. */ reloadKey?: number;
+}) {
   const [season, setSeason] = useState<number | undefined>(undefined);
   const passport = useApi(() => api.passport(season), [season], { cacheKey: `passport.${season ?? "now"}` });
   const [arrivedId, setArrivedId] = useState<string | null>(null);
   const view = passport.data;
-  const title = passportTexts.title;
-  const facts = view ? passportTexts.summary(view.total, view.rare) : undefined;
 
   const onStamped = useCallback(
     (stamp: PassportStamp) => {
@@ -61,8 +63,14 @@ export function PassportScreen({ tab }: { tab: boolean }) {
     },
     [passport.reload],
   );
+  useStampedListener(onStamped);
+  // Le Profil relit tout au « tirer pour actualiser » : le passeport aussi.
+  const reload = passport.reload;
+  useEffect(() => {
+    if (reloadKey > 0) void reload();
+  }, [reloadKey, reload]);
 
-  const body = (
+  return (
     <PassportBody
       view={view}
       loading={passport.loading}
@@ -72,27 +80,6 @@ export function PassportScreen({ tab }: { tab: boolean }) {
       onSeason={setSeason}
       arrivedId={arrivedId}
     />
-  );
-  useStampedListener(onStamped);
-  const refresh = async () => {
-    await passport.reload();
-  };
-  if (tab) {
-    return (
-      <TabScreen title={title} facts={facts} onRefresh={refresh}>
-        {body}
-      </TabScreen>
-    );
-  }
-  return (
-    <FlowScreen
-      title={title}
-      facts={facts}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/profil"))}
-      onRefresh={refresh}
-    >
-      {body}
-    </FlowScreen>
   );
 }
 

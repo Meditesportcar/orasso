@@ -26,7 +26,7 @@ export async function messageAction(request: Request, form: FormData) {
       json: { userId: String(form.get("userId") ?? "") },
     });
     if (res.status === 401) throw redirect(loginUrl(request));
-    if (res.ok) throw redirect(`/app/boite/${res.data.id}`);
+    if (res.ok) throw redirect(`/app/messages/${res.data.id}`);
     if (res.error.code === "not_friends") return data({ contact: true, messageError: null, contactSent: null });
     return data({ contact: false, messageError: res.error.message, contactSent: null }, { status: res.status });
   }
@@ -57,7 +57,7 @@ export async function messageAction(request: Request, form: FormData) {
         );
       }
     }
-    if (res.ok) throw redirect(`/app/boite/${res.data.id}`);
+    if (res.ok) throw redirect(`/app/messages/${res.data.id}`);
     return data({ contact: false, messageError: res.error.message, contactSent: null }, { status: res.status });
   }
   if (intent === "contact_request") {
@@ -69,7 +69,7 @@ export async function messageAction(request: Request, form: FormData) {
     if (res.status === 401) throw redirect(loginUrl(request));
     if (res.ok) return data({ contact: false, messageError: null, contactSent: res.data.pseudo });
     const conversationId = (res.error.details as { conversationId?: string } | undefined)?.conversationId;
-    if (res.error.code === "use_direct" && conversationId) throw redirect(`/app/boite/${conversationId}`);
+    if (res.error.code === "use_direct" && conversationId) throw redirect(`/app/messages/${conversationId}`);
     return data({ contact: true, messageError: res.error.message, contactSent: null }, { status: res.status });
   }
   return data({ contact: false, messageError: "Action inconnue.", contactSent: null }, { status: 400 });

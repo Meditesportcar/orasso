@@ -38,7 +38,8 @@ test("appli : Accueil du passionné (artefact DA v2), sans le fourre-tout", asyn
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
   const cookie = await login("kenji@orasso.local");
-  await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
+  await // Lot R7a2 : le réglage par défaut (les blocs validés ; Agenda, Garage favori, En attente masqués).
+  await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["agenda", "favorite_garage", "pending"] });
   await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 50 });
   const errors: string[] = [];
 
@@ -51,7 +52,8 @@ test("appli : Accueil du passionné (artefact DA v2), sans le fourre-tout", asyn
     // autres sorties en mini-tickets, « Tu es staff », le rail « Autour du 66 ce mois-ci » et le Passeport.
     await expect(page.getByTestId("home-greeting")).toContainText(/Salut Kenji/i, { timeout: 30_000 });
     // Lot M5 (maquette 6.1) : « Ta prochaine sortie » en tickets qui glissent ; « mois‑ci » à trait d'union insécable.
-    await expect(page.getByTestId("home-outing").first()).toBeVisible();
+    // Lot R7a2 : pendant un événement où j'ai ma place (le Lydia du seed), la ligne « En cours » prend sa place.
+    await expect(page.getByTestId("home-outing").or(page.getByTestId("home-live-line")).first()).toBeVisible();
     await expect(page.getByTestId("home-rail-item").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/^Autour du 66 ce mois.ci$/)).toBeVisible();
     await expect(page.getByTestId("home-passport")).toContainText("Passeport Orasso");

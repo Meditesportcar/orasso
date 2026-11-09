@@ -1,5 +1,5 @@
 {
-  "id": "1c6627c6-da5a-47c5-aaf5-1695f23b7298",
+  "id": "31aebb32-96ae-426b-be91-f86b4f5d5d45",
   "prevId": "705cb517-f563-4be3-96e5-f0fee374861f",
   "version": "7",
   "dialect": "postgresql",
@@ -7113,13 +7113,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "surface": {
-          "name": "surface",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'home'"
-        },
         "clicked": {
           "name": "clicked",
           "type": "boolean",
@@ -7166,8 +7159,7 @@
           "columns": [
             "placement_id",
             "user_hash",
-            "day",
-            "surface"
+            "day"
           ]
         }
       },
@@ -7191,13 +7183,6 @@
           "type": "date",
           "primaryKey": false,
           "notNull": true
-        },
-        "surface": {
-          "name": "surface",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'home'"
         },
         "impressions": {
           "name": "impressions",
@@ -7235,8 +7220,7 @@
           "name": "sponsored_daily_stats_pkey",
           "columns": [
             "placement_id",
-            "day",
-            "surface"
+            "day"
           ]
         }
       },
@@ -7260,41 +7244,7 @@
           "name": "pro_profile_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
-        },
-        "advertiser_name": {
-          "name": "advertiser_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "advertiser_kind": {
-          "name": "advertiser_kind",
-          "type": "advertiser_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pro'"
-        },
-        "surfaces": {
-          "name": "surfaces",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{home}'::text[]"
-        },
-        "disclosure": {
-          "name": "disclosure",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "external_url_domain": {
-          "name": "external_url_domain",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "title": {
           "name": "title",
@@ -7443,12 +7393,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "sponsored_placements_advertiser_check": {
-          "name": "sponsored_placements_advertiser_check",
-          "value": "(\"sponsored_placements\".\"advertiser_kind\" = 'external' and \"sponsored_placements\".\"pro_profile_id\" is null) or (\"sponsored_placements\".\"advertiser_kind\" = 'pro' and \"sponsored_placements\".\"pro_profile_id\" is not null)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.event_invitations": {
@@ -10031,6 +9976,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "vote_id": {
+          "name": "vote_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "application_id": {
           "name": "application_id",
           "type": "uuid",
@@ -10071,7 +10022,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "audience_prize_results_event_idx": {
+          "name": "audience_prize_results_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "audience_prize_results_event_id_events_id_fk": {
           "name": "audience_prize_results_event_id_events_id_fk",
@@ -10079,6 +10046,19 @@
           "tableTo": "events",
           "columnsFrom": [
             "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "audience_prize_results_vote_id_event_votes_id_fk": {
+          "name": "audience_prize_results_vote_id_event_votes_id_fk",
+          "tableFrom": "audience_prize_results",
+          "tableTo": "event_votes",
+          "columnsFrom": [
+            "vote_id"
           ],
           "columnsTo": [
             "id"
@@ -10102,19 +10082,19 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "audience_prize_results_event_rank_key": {
-          "name": "audience_prize_results_event_rank_key",
+        "audience_prize_results_vote_rank_key": {
+          "name": "audience_prize_results_vote_rank_key",
           "nullsNotDistinct": false,
           "columns": [
-            "event_id",
+            "vote_id",
             "rank"
           ]
         },
-        "audience_prize_results_event_application_key": {
-          "name": "audience_prize_results_event_application_key",
+        "audience_prize_results_vote_application_key": {
+          "name": "audience_prize_results_vote_application_key",
           "nullsNotDistinct": false,
           "columns": [
-            "event_id",
+            "vote_id",
             "application_id"
           ]
         }
@@ -10136,6 +10116,12 @@
         },
         "event_id": {
           "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_id": {
+          "name": "vote_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -10188,6 +10174,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "audience_votes_vote_application_idx": {
+          "name": "audience_votes_vote_application_idx",
+          "columns": [
+            {
+              "expression": "vote_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -10197,6 +10204,19 @@
           "tableTo": "events",
           "columnsFrom": [
             "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "audience_votes_vote_id_event_votes_id_fk": {
+          "name": "audience_votes_vote_id_event_votes_id_fk",
+          "tableFrom": "audience_votes",
+          "tableTo": "event_votes",
+          "columnsFrom": [
+            "vote_id"
           ],
           "columnsTo": [
             "id"
@@ -10233,11 +10253,11 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "audience_votes_event_voter_key": {
-          "name": "audience_votes_event_voter_key",
+        "audience_votes_vote_voter_key": {
+          "name": "audience_votes_vote_voter_key",
           "nullsNotDistinct": false,
           "columns": [
-            "event_id",
+            "vote_id",
             "voter_user_id"
           ]
         }
@@ -18928,6 +18948,444 @@
       },
       "isRLSEnabled": false
     },
+    "public.event_vote_candidates": {
+      "name": "event_vote_candidates",
+      "schema": "",
+      "columns": {
+        "vote_id": {
+          "name": "vote_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "vote_candidate_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'hand'"
+        },
+        "added_by": {
+          "name": "added_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "event_vote_candidates_vote_id_event_votes_id_fk": {
+          "name": "event_vote_candidates_vote_id_event_votes_id_fk",
+          "tableFrom": "event_vote_candidates",
+          "tableTo": "event_votes",
+          "columnsFrom": [
+            "vote_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_vote_candidates_application_id_applications_id_fk": {
+          "name": "event_vote_candidates_application_id_applications_id_fk",
+          "tableFrom": "event_vote_candidates",
+          "tableTo": "applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_vote_candidates_added_by_user_id_fk": {
+          "name": "event_vote_candidates_added_by_user_id_fk",
+          "tableFrom": "event_vote_candidates",
+          "tableTo": "user",
+          "columnsFrom": [
+            "added_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_vote_candidates_vote_application_key": {
+          "name": "event_vote_candidates_vote_application_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "vote_id",
+            "application_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_votes": {
+      "name": "event_votes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "vote_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_mode": {
+          "name": "candidate_mode",
+          "type": "vote_candidate_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'all'"
+        },
+        "candidate_filter": {
+          "name": "candidate_filter",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "open_mode": {
+          "name": "open_mode",
+          "type": "vote_open_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'first_entry'"
+        },
+        "opens_at": {
+          "name": "opens_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_minutes": {
+          "name": "duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closes_at": {
+          "name": "closes_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rare_stamp": {
+          "name": "rare_stamp",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_votes_event_position_idx": {
+          "name": "event_votes_event_position_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_votes_all_categories_key": {
+          "name": "event_votes_all_categories_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_votes\".\"kind\" = 'all_categories'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_votes_event_id_events_id_fk": {
+          "name": "event_votes_event_id_events_id_fk",
+          "tableFrom": "event_votes",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_votes_created_by_user_id_fk": {
+          "name": "event_votes_created_by_user_id_fk",
+          "tableFrom": "event_votes",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "event_votes_title_check": {
+          "name": "event_votes_title_check",
+          "value": "char_length(\"event_votes\".\"title\") between 1 and 60"
+        },
+        "event_votes_duration_check": {
+          "name": "event_votes_duration_check",
+          "value": "\"event_votes\".\"duration_minutes\" is null or \"event_votes\".\"duration_minutes\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.vehicle_trophies": {
+      "name": "vehicle_trophies",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_id": {
+          "name": "vote_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_title": {
+          "name": "event_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_title": {
+          "name": "vote_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rank": {
+          "name": "rank",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "awarded_at": {
+          "name": "awarded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "vehicle_trophies_vehicle_idx": {
+          "name": "vehicle_trophies_vehicle_idx",
+          "columns": [
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "awarded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "vehicle_trophies_vehicle_id_vehicles_id_fk": {
+          "name": "vehicle_trophies_vehicle_id_vehicles_id_fk",
+          "tableFrom": "vehicle_trophies",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "vehicle_trophies_vote_id_event_votes_id_fk": {
+          "name": "vehicle_trophies_vote_id_event_votes_id_fk",
+          "tableFrom": "vehicle_trophies",
+          "tableTo": "event_votes",
+          "columnsFrom": [
+            "vote_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "vehicle_trophies_event_id_events_id_fk": {
+          "name": "vehicle_trophies_event_id_events_id_fk",
+          "tableFrom": "vehicle_trophies",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "vehicle_trophies_vote_vehicle_key": {
+          "name": "vehicle_trophies_vote_vehicle_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "vote_id",
+            "vehicle_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "vehicle_trophies_rank_check": {
+          "name": "vehicle_trophies_rank_check",
+          "value": "\"vehicle_trophies\".\"rank\" between 1 and 3"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.event_weather": {
       "name": "event_weather",
       "schema": "",
@@ -19332,14 +19790,6 @@
         "landscape"
       ]
     },
-    "public.advertiser_kind": {
-      "name": "advertiser_kind",
-      "schema": "public",
-      "values": [
-        "pro",
-        "external"
-      ]
-    },
     "public.placement_status": {
       "name": "placement_status",
       "schema": "public",
@@ -19573,7 +20023,8 @@
         "malus_reversal",
         "season_carryover",
         "admin_adjustment",
-        "audience_prize"
+        "audience_prize",
+        "vote_podium"
       ]
     },
     "public.presence_kind": {
@@ -19907,6 +20358,42 @@
         "car",
         "moto",
         "truck"
+      ]
+    },
+    "public.vote_candidate_mode": {
+      "name": "vote_candidate_mode",
+      "schema": "public",
+      "values": [
+        "all",
+        "origins",
+        "zone",
+        "hand"
+      ]
+    },
+    "public.vote_candidate_source": {
+      "name": "vote_candidate_source",
+      "schema": "public",
+      "values": [
+        "frozen",
+        "hand",
+        "scan"
+      ]
+    },
+    "public.vote_kind": {
+      "name": "vote_kind",
+      "schema": "public",
+      "values": [
+        "all_categories",
+        "theme"
+      ]
+    },
+    "public.vote_open_mode": {
+      "name": "vote_open_mode",
+      "schema": "public",
+      "values": [
+        "first_entry",
+        "at",
+        "manual"
       ]
     }
   },

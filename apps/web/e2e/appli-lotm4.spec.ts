@@ -279,7 +279,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     }
 
     // 4. La conversation : l'étiquette « À propos de » l'événement, des deux côtés.
-    await goto(page, `/boite/${conv.data.id}`);
+    await goto(page, `/messages/${conv.data.id}`);
     await expect(page.getByText("Bonjour, je peux venir avec une remorque ?")).toBeVisible({ timeout: 30_000 });
     await shot(page, `conversation-${theme}`);
     if (AFTER) {

@@ -1,5 +1,5 @@
 // Casquette Organisateur (DA v2, lot 40, prototype `s-plan`) : Événements · Tri · Direct (le O, au centre) · Équipe ·
-// Structure. La barre vient de `tabSets.organizer` ; la Boîte de la structure est en haut à droite (`/boite/orga`).
+// Structure. La barre vient de `tabSets.organizer` ; la Boîte de la structure est en haut à droite (`/messages/orga`).
 // Les bannissements, les modèles et les notes
 // internes (lot 35a) sont des pages masquées qui gardent la barre, rangées sous l'onglet qui les ouvre.
 import type { TabItem } from "@orasso/design-system/native";

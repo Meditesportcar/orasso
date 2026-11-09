@@ -364,7 +364,8 @@ describe("passeport : contestation", () => {
     const ws = listen(`event:${eventId}:votes`);
     try {
       await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
-      expect(ws.messages).toEqual([
+      // Une entrée accordée après coup : la grille se recharge ; le vote d'un événement fini est constaté clos (lot R7l1).
+      expect(ws.messages.filter((m) => m.type === "votes.candidates.changed" && !m.payload.voteId)).toEqual([
         { channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} },
       ]);
     } finally {
@@ -380,21 +381,24 @@ describe("prix du public", () => {
     const channel = `event:${eventId}:votes`;
     expect(await realtime.canSubscribe(julie.id, channel)).toBe(true);
     const ws = listen(channel);
+    // Lot R7l1 : l'ouverture de « Toutes catégories » (deux véhicules) s'annonce aussi (`votes.opened`) ; la grille a ses messages.
+    const changed = () => ws.messages.filter((m) => m.type === "votes.candidates.changed");
     try {
       await checkin(p.kenji, paris(10, 17, 19, 2));
-      expect(ws.messages).toEqual([{ type: "votes.candidates.changed", channel, payload: {} }]);
+      expect(changed()).toEqual([{ type: "votes.candidates.changed", channel, payload: {} }]);
       await checkin(p.lea, paris(10, 17, 19, 10));
-      expect(ws.messages).toHaveLength(2);
+      expect(changed()).toHaveLength(2);
+      expect(ws.messages.filter((m) => m.type === "votes.opened")).toHaveLength(1);
       expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(2);
       await checkin(p.lea, paris(10, 17, 19, 11));
-      expect(ws.messages).toHaveLength(2); // Pointage idempotent : aucun changement de liste.
+      expect(changed()).toHaveLength(2); // Pointage idempotent : aucun changement de liste.
       // Aucun parcours d'annulation API aujourd'hui : contrat réutilisable après une suppression validée.
       await withTx(async (tx, after) => {
         await tx.delete(checkins).where(eq(checkins.applicationId, p.lea.applicationId));
         after(() => announceCandidatesChanged(eventId));
       });
-      expect(ws.messages).toHaveLength(3);
-      expect(ws.messages.at(-1)).toMatchObject({ type: "votes.candidates.changed", payload: {} });
+      expect(changed()).toHaveLength(3);
+      expect(changed().at(-1)).toMatchObject({ type: "votes.candidates.changed", payload: {} });
       expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(1);
     } finally {
       ws.stop();
@@ -430,7 +434,7 @@ describe("prix du public", () => {
     expect(ws.messages.at(-1)).toEqual({
       channel: `event:${eventId}:votes`,
       type: "votes.changed",
-      payload: { total: 1, top3: [] },
+      payload: { voteId: expect.any(String), total: 1, state: "open", top3: [] },
     });
     ws.stop();
     // Une voix, une seule : elle se déplace (Lea vote pour Kenji, puis Julie aussi).
@@ -453,7 +457,7 @@ describe("prix du public", () => {
     expect(hidden).toMatchObject({ open: true, rankingHidden: true, entries: [], winner: null, total: 3, vehicles: 2 });
     const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
     expect(board.rankingHidden).toBe(false);
-    expect(board).toMatchObject({ open: true, settled: false, total: 3, vehicles: 2, winnerPoints: 50, winner: null });
+    expect(board).toMatchObject({ open: true, settled: false, total: 3, vehicles: 2, winnerPoints: 15, winner: null });
     expect(board.entries).toMatchObject([
       { applicationId: p.kenji.applicationId, votes: 2, rank: 1, vehicleLabel: "BMW Série 3 E36", pseudo: "Kenji_66" },
       { applicationId: p.lea.applicationId, votes: 1, rank: 2 },
@@ -502,7 +506,7 @@ describe("prix du public", () => {
     await vi.waitFor(() => expect(ws.messages.at(-1)?.payload.total).toBe(2), { timeout: 4000 });
     for (const m of ws.messages) {
       expect(m.type).toBe("votes.changed");
-      expect(Object.keys(m.payload).sort()).toEqual(["top3", "total"]);
+      expect(Object.keys(m.payload).sort()).toEqual(["state", "top3", "total", "voteId"]);
       expect(m.payload.top3).toEqual([]);
       const rows = [{ applicationId: p.kenji.applicationId, votes: 0, rank: 1 }];
       expect(() => applyTop3(rows, m.payload.top3 as [])).not.toThrow();
@@ -634,18 +638,18 @@ describe("prix du public", () => {
     clock.set(SETTLE);
     expect(await pointsService.settleEvent(eventId)).toBe(true);
     const prize = await db.query.pointEntries.findFirst({
-      where: and(eq(pointEntries.userId, p.lea.u.id), eq(pointEntries.kind, "audience_prize")),
+      where: and(eq(pointEntries.userId, p.lea.u.id), eq(pointEntries.kind, "vote_podium")),
     });
-    expect(prize).toMatchObject({ points: 50, eventId, applicationId: p.lea.applicationId });
+    expect(prize).toMatchObject({ points: 15, eventId, applicationId: p.lea.applicationId });
     const lea = await db.query.profiles.findFirst({ where: eq(profiles.userId, p.lea.u.id) });
-    expect(lea?.pointsSeason).toBe(70); // participation 20 + prix 50
+    expect(lea?.pointsSeason).toBe(35); // participation 20 + podium du vote 15 (lot R7l1)
     const vehicle = await db.query.vehicles.findFirst({ where: eq(vehicles.id, p.lea.vehicleId) });
     expect(vehicle?.audiencePrizes).toBe(1);
     expect((await stampsOf(p.lea.u.id)).find((s) => s.kind === "audience_prize")).toMatchObject({ rare: true });
     const won = await db.query.notifications.findFirst({
-      where: and(eq(notifications.userId, p.lea.u.id), eq(notifications.type, "audience_prize_won")),
+      where: and(eq(notifications.userId, p.lea.u.id), eq(notifications.type, "vote_won")),
     });
-    expect(won?.body).toContain("+50 points");
+    expect(won?.body).toContain("+15 points");
     const results = await db.query.audiencePrizeResults.findMany({
       where: eq(audiencePrizeResults.eventId, eventId),
     });
@@ -661,9 +665,9 @@ describe("prix du public", () => {
     expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, p.lea.vehicleId) }))?.audiencePrizes).toBe(1);
     expect(
       await db.query.pointEntries.findMany({
-        where: and(eq(pointEntries.eventId, eventId), eq(pointEntries.kind, "audience_prize")),
+        where: and(eq(pointEntries.eventId, eventId), eq(pointEntries.kind, "vote_podium")),
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(2); // Une ligne par voiture du podium : Lea (15) et Kenji (10).
   });
 
   it("pas de prix sous trois voix ; points réglables par l'administration", async () => {
@@ -674,15 +678,15 @@ describe("prix du public", () => {
     await vote(p.lea.u, p.kenji.applicationId);
     clock.set(SETTLE);
     await pointsService.settleEvent(eventId);
-    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "audience_prize") })).toHaveLength(0);
+    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "vote_podium") })).toHaveLength(0);
     expect(
       (await db.query.audiencePrizeResults.findMany({ where: eq(audiencePrizeResults.eventId, eventId) })).some(
         (r) => r.winner,
       ),
     ).toBe(false);
 
-    // Réglage à 80 points (lot 33, `points.audience_prize`).
-    await db.insert(platformSettings).values({ key: "points.audience_prize", value: 80 });
+    // Réglage du 1er d'un vote à 80 points (lot 33, `points.vote_first`, lot R7l1).
+    await db.insert(platformSettings).values({ key: "points.vote_first", value: 80 });
     settingsStore.invalidate();
     const other = await createEvent(structureId, { startsAt: paris(11, 7, 19), endsAt: paris(11, 7, 23) });
     clock.set(paris(10, 20, 12));
@@ -702,7 +706,11 @@ describe("prix du public", () => {
     clock.set(paris(11, 9, 23));
     await pointsService.settleEvent(other.id);
     const prize = await db.query.pointEntries.findFirst({
-      where: and(eq(pointEntries.eventId, other.id), eq(pointEntries.kind, "audience_prize")),
+      where: and(
+        eq(pointEntries.eventId, other.id),
+        eq(pointEntries.kind, "vote_podium"),
+        eq(pointEntries.userId, p.kenji.u.id),
+      ),
     });
     expect(prize).toMatchObject({ userId: p.kenji.u.id, points: 80 });
   });
@@ -758,10 +766,8 @@ describe("récap", () => {
     expect(board).toMatchObject({ total: 1, vehicles: 2 });
     clock.set(SETTLE);
     await pointsService.settleEvent(eventId);
-    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "audience_prize") })).toHaveLength(0);
-    expect(await db.query.notifications.findMany({ where: eq(notifications.type, "audience_prize_won") })).toHaveLength(
-      0,
-    );
+    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "vote_podium") })).toHaveLength(0);
+    expect(await db.query.notifications.findMany({ where: eq(notifications.type, "vote_won") })).toHaveLength(0);
   });
 });
 
@@ -917,13 +923,13 @@ describe("scénario avec l'horloge simulée", () => {
       audienceRank: { rank: 1, of: 3, votes: 2, winner: true },
       points: {
         status: "projected",
-        total: 70,
+        total: 35,
         detail: [
           { kind: "participation", points: 20, label: "Présent à un événement" },
-          { kind: "audience_prize", points: 50, label: "Prix du public" },
+          { kind: "vote_podium", points: 15, label: "Podium d'un vote" },
         ],
       },
-      nextGradeIn: { grade: "route", points: 30 },
+      nextGradeIn: { grade: "route", points: 65 },
       stamp: {
         kind: "participation",
         shape: "octagon",
@@ -940,12 +946,9 @@ describe("scénario avec l'horloge simulée", () => {
     expect(await pointsService.settleEvent(eventId)).toBe(true);
     const settled = (await call(p.lea.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(settled.points.status).toBe("settled");
-    expect(settled.points.total).toBe(70);
-    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual([
-      "audience_prize",
-      "participation",
-    ]);
-    expect(settled.nextGradeIn).toEqual({ grade: "route", points: 30 });
+    expect(settled.points.total).toBe(35);
+    expect(settled.points.detail.map((d: { kind: string }) => d.kind).sort()).toEqual(["participation", "vote_podium"]);
+    expect(settled.nextGradeIn).toEqual({ grade: "route", points: 65 });
     expect(settled.stamp).toMatchObject({ rare: true });
     const kenji = (await call(p.kenji.u, "GET", `/me/recaps/${eventId}`)).json;
     expect(kenji.audienceRank).toMatchObject({ rank: 3, of: 3, votes: 0, winner: false });

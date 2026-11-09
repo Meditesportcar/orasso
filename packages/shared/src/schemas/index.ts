@@ -34,3 +34,4 @@ export * from "./styles";
 export * from "./team";
 export * from "./ticketing";
 export * from "./vehicle";
+export * from "./votes";

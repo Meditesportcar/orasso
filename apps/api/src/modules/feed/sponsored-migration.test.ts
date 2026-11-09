@@ -1,5 +1,5 @@
-// Migration 0072 (Sponsorisé dans le Fil) sur une base qui a déjà des emplacements (lot R7k1, tour 2) : on migre jusqu'à
-// 0071, on y met un pro et deux anciens emplacements (avec leurs statistiques), puis on applique 0072 et on vérifie la
+// Migration 0073 (Sponsorisé dans le Fil) sur une base qui a déjà des emplacements (lot R7k1, tour 2) : on migre jusqu'à
+// 0072, on y met un pro et deux anciens emplacements (avec leurs statistiques), puis on applique 0073 et on vérifie la
 // reprise des données (nom du pro, Accueil seulement, type « pro », statistiques de l'Accueil) et la contrainte de
 // cohérence entre le type d'annonceur et la fiche pro.
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -19,7 +19,7 @@ function urlOfDatabase(name: string) {
   return url.toString();
 }
 
-describe("migration 0072 sur une base avec des emplacements existants", () => {
+describe("migration 0073 sur une base avec des emplacements existants", () => {
   it("reprend le nom du pro, l'Accueil, le type « pro » et les statistiques ; la contrainte de cohérence tient", async () => {
     const current = decodeURIComponent(new URL(process.env.DATABASE_URL ?? "").pathname.slice(1));
     const name = `${current}_m72`;
@@ -78,7 +78,7 @@ describe("migration 0072 sur une base avec des emplacements existants", () => {
         [ids[0]],
       );
 
-      // 0072 s'applique sur ces données.
+      // 0073 s'applique sur ces données.
       await migrate(drizzle(pool), { migrationsFolder: full });
 
       const placements = await pool.query(

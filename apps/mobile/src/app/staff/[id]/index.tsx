@@ -9,6 +9,7 @@ import {
   communicationLabels,
   staffHomeLabels as L,
   type MyStaffEvent,
+  presenceLabels,
   type StaffRole,
   staffRoleLabels,
   wallTime,
@@ -53,6 +54,10 @@ export default function StaffHome() {
   const online = network.isConnected !== false && network.isInternetReachable !== false;
   const { userId, state, error } = useStaffEvent(id);
   const staffEvents = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
+  // Lot R7d2 : la même ligne totale que le Direct de l'organisateur, en lecture (« 23 utilisateurs d'Orasso présents »).
+  // Avec du réseau seulement et seulement ce que l'API accorde (staff affecté, pendant l'événement) : sans réponse, rien
+  // n'est dit (jamais un zéro à la place d'une erreur). Un nombre, jamais une liste.
+  const presents = useApi(() => api.presenceSummary(id), [id, online], { enabled: online, refreshMs: 60_000 });
   const mine: MyStaffEvent | null = staffEvents.data?.find((s) => s.event.id === id) ?? null;
   // Les événements du staff sont chargés et celui-ci n'y est pas : c'est un organisateur (ou l'administration) qui l'ouvre.
   const organizerView = staffEvents.data !== null && mine === null;
@@ -343,6 +348,12 @@ export default function StaffHome() {
             </View>
           ))}
         </View>
+      ) : null}
+
+      {presents.data && !presents.error ? (
+        <Muted variant="caption" testID="staff-presents">
+          {presenceLabels.summaryTotal(presents.data.total)}
+        </Muted>
       ) : null}
 
       <Muted variant="caption">{L.closesNote}</Muted>
