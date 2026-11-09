@@ -130,6 +130,18 @@ test("vidéo paysage : posée sur sa vignette floutée, à l'affichage seulement
   await expect(viewer.getByTestId("story-video")).toHaveAttribute("data-layout", "blurred", { timeout: 30_000 });
   await expect(viewer.getByTestId("story-video-poster")).toBeVisible();
   await shot(viewer, "06-lecture-paysage-390", false);
+  // Tour 2 : reculer sur la première (et seule) vidéo la rejoue depuis le début — le lecteur est remonté, pas seulement la barre.
+  await viewer.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) {
+      v.pause();
+      v.currentTime = 1;
+    }
+  });
+  await viewer.getByTestId("story-prev").click({ force: true });
+  await expect
+    .poll(() => viewer.evaluate(() => document.querySelector("video")?.currentTime ?? 99), { timeout: 15_000 })
+    .toBeLessThan(0.8);
   await ctx.close();
 });
 

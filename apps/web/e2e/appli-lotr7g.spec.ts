@@ -113,6 +113,15 @@ test("galerie → détails (ni « Ajuster » ni plaque) → aperçu muet → pub
   await viewer.page.getByLabel(`Voir les stories de ${author.pseudo}`).click();
   await expect(viewer.page.getByTestId("story-video")).toBeVisible({ timeout: 40_000 });
   await expect(viewer.page.getByTestId("story-video-bar")).toBeVisible();
+  await viewer.page.waitForSelector("video", { timeout: 40_000 });
+  // Tour 2 : la vidéo est mise en pause à 1 s (elle ne finit pas pendant la recette) pour essayer le pas en arrière plus bas.
+  await viewer.page.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) {
+      v.pause();
+      v.currentTime = 1;
+    }
+  });
   const sound = viewer.page.getByTestId("story-video-sound");
   await expect(sound).toHaveAttribute("aria-label", "Couper le son");
   await sound.click();
@@ -121,6 +130,11 @@ test("galerie → détails (ni « Ajuster » ni plaque) → aperçu muet → pub
   await sound.click();
   await expect(sound).toHaveAttribute("aria-label", "Couper le son");
   await expect(viewer.page.getByTestId("story-video-time")).toContainText("/ 0:0");
+  // Tour 2 : reculer sur la première (et seule) vidéo la rejoue depuis le début — le lecteur est remonté, pas seulement la barre.
+  await viewer.page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(() => viewer.page.evaluate(() => document.querySelector("video")?.currentTime ?? 99), { timeout: 15_000 })
+    .toBeLessThan(0.8);
   await viewer.ctx.close();
 });
 
