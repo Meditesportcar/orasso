@@ -17,7 +17,7 @@ import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
-import { appendChild, bareTrack, mebxKeys, withLocation } from "../../../test/mp4-builders";
+import { appendChild, bareTrack, mebxKeys, metaEntry, withLocation } from "../../../test/mp4-builders";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { adminAuditLog, crewMembers, profiles, reports, stories, uploads, userFollows } from "../../db/schema";
@@ -771,7 +771,7 @@ describe("pistes de position et fichiers fragmentés : refus à l'envoi", () => 
       o += size;
     }
     const moovLast = Buffer.concat([...parts, ...tail]);
-    const gpmd = appendChild(moovLast, ["moov"], bareTrack("gpmd"));
+    const gpmd = appendChild(moovLast, ["moov"], bareTrack("meta", metaEntry("gpmd")));
     const located = appendChild(
       moovLast,
       ["moov"],
@@ -832,16 +832,28 @@ describe("modération d'une story vidéo signalée", () => {
     await req(modo, "GET", url, undefined, { range: "bytes=500-1500" });
     await req(modo, "GET", url, undefined, { range: "bytes=-300" });
     expect(await videoLines()).toHaveLength(1);
-    // Une consultation plus tard (la ligne a plus d'une minute) : une seconde ligne, un premier morceau seul.
-    await db
-      .update(adminAuditLog)
-      .set({ createdAt: new Date(Date.now() - 5 * 60_000) })
-      .where(eq(adminAuditLog.action, "moderation.media_view"));
-    await req(modo, "GET", url, undefined, { range: "bytes=1000-1999" });
-    expect(await videoLines()).toHaveLength(1);
-    await req(modo, "GET", url, undefined, { range: "bytes=0-1" });
-    await req(modo, "GET", url, undefined, { range: "bytes=0-" });
-    expect(await videoLines()).toHaveLength(2);
+    // Une consultation plus tard (la ligne a plus d'une minute) : une nouvelle ligne, quel que soit l'en-tête du premier morceau
+    // (intervalle non nul, suffixe, invalide, absent : l'audit ne dépend jamais de la façon dont le fichier est servi), puis les
+    // morceaux suivants n'en ajoutent pas.
+    const age = () =>
+      db
+        .update(adminAuditLog)
+        .set({ createdAt: new Date(Date.now() - 5 * 60_000) })
+        .where(eq(adminAuditLog.action, "moderation.media_view"));
+    let expected = 1;
+    for (const range of ["bytes=1000-1999", "bytes=-300", "invalid", "bytes=-999999999", "bytes=1-", undefined]) {
+      await age();
+      await req(modo, "GET", url, undefined, range ? { range } : undefined);
+      expected++;
+      expect(await videoLines(), String(range)).toHaveLength(expected);
+      await req(modo, "GET", url, undefined, { range: "bytes=0-1" });
+      await req(modo, "GET", url, undefined, { range: "bytes=0-" });
+      expect(await videoLines(), `${range} puis morceaux`).toHaveLength(expected);
+    }
+    // Des demandes simultanées du même modérateur pour le même dossier : une seule ligne (contrôle et écriture atomiques).
+    await age();
+    await Promise.all([1, 2, 3, 4, 5].map((n) => req(modo, "GET", url, undefined, { range: `bytes=${n * 100}-` })));
+    expect(await videoLines()).toHaveLength(expected + 1);
 
     // Mêmes droits que la modération seule : un membre, même l'auteur, ne passe pas par ici.
     expect((await req(nina, "GET", url)).status).toBe(403);

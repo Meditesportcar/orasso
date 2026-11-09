@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { appendChild, bareTrack, box, FAKE_PLACE, mebxKeys, shrinkBox, withLocation } from "../../test/mp4-builders";
+import {
+  appendChild,
+  bareTrack,
+  box,
+  FAKE_PLACE,
+  mebxKeys,
+  metaEntry,
+  shrinkBox,
+  withLocation,
+} from "../../test/mp4-builders";
 import { Mp4Error, readMp4Buffer, readMp4File, stripMp4Metadata } from "./mp4";
 
 // Lecteur de conteneur du lot R7g. Fixtures : `story-2s.mp4` (2 s, 720 × 1280, H.264 + AAC, moov en tête) et
@@ -370,6 +379,41 @@ describe("lecteur mp4 : durée de la piste vidéo par les échantillons (stts)",
   });
 });
 
+describe("lecteur mp4 : champs temporels exigés, durée de la piste son", () => {
+  it("refuse une vidéo sans stts, sans mdhd, ou à échelle de temps nulle, ou dont stts ne compte pas les échantillons de stsz", async () => {
+    const base = Buffer.from(await fixture("story-2s.mp4"));
+    // Les boîtes retirées sont renommées `free` (même taille : les décalages ne bougent pas).
+    const renamed = (type: string, nth = 0) => {
+      const out = Buffer.from(base);
+      let at = -1;
+      for (let i = 0; i <= nth; i++) at = out.indexOf(type, at + 1);
+      out.write("free", at, "latin1");
+      return out;
+    };
+    expect(await kind(readMp4Buffer(renamed("stts")))).toBe("unreadable");
+    expect(await kind(readMp4Buffer(renamed("mdhd")))).toBe("unreadable");
+    const zero = Buffer.from(base);
+    zero.writeUInt32BE(0, zero.indexOf("mdhd") + 16);
+    expect(await kind(readMp4Buffer(zero))).toBe("unreadable");
+    const count = Buffer.from(base);
+    const stts = count.indexOf("stts");
+    count.writeUInt32BE(count.readUInt32BE(stts + 12) + 1, stts + 12);
+    expect(await kind(readMp4Buffer(count))).toBe("unreadable");
+    expect((await readMp4Buffer(base)).h264).toBe(true);
+  });
+
+  it("refuse une piste son dont la somme des échantillons dépasse 31 s, même si mdhd annonce 2 s", async () => {
+    const base = Buffer.from(await fixture("story-2s.mp4"));
+    const firstStts = base.indexOf("stts");
+    const audioStts = base.indexOf("stts", firstStts + 1);
+    expect(audioStts).toBeGreaterThan(firstStts);
+    const hidden = Buffer.from(base);
+    hidden.writeUInt32BE(hidden.readUInt32BE(audioStts + 16) * 40, audioStts + 16);
+    expect(await kind(readMp4Buffer(hidden))).toBe("unreadable");
+    expect((await readMp4Buffer(base)).hasAudio).toBe(true);
+  });
+});
+
 describe("lecteur mp4 : pistes de position", () => {
   // moov placé à la fin : ajouter une piste ne décale pas les données (les décalages de `stco` sont absolus).
   const withTrack = async (track: Buffer) => {
@@ -391,6 +435,18 @@ describe("lecteur mp4 : pistes de position", () => {
     expect(await kind(readMp4Buffer(await withTrack(box("trak", box("mdia", box("mdhd", Buffer.alloc(24)))))))).toBe(
       "location_track",
     );
+  });
+
+  it("refuse la télémétrie réelle (gestionnaire meta, entrée gpmd, djmd, camm ou inconnue), accepte mett et mebx", async () => {
+    for (const format of ["gpmd", "djmd", "camm", "zzzz"]) {
+      expect(await kind(readMp4Buffer(await withTrack(bareTrack("meta", metaEntry(format))))), format).toBe(
+        "location_track",
+      );
+    }
+    // Une piste de métadonnées sans description du tout n'est pas une piste connue.
+    expect(await kind(readMp4Buffer(await withTrack(bareTrack("meta"))))).toBe("location_track");
+    // Photo animée (`mett`) : acceptée.
+    expect((await readMp4Buffer(await withTrack(bareTrack("meta", metaEntry("mett"))))).h264).toBe(true);
   });
 
   it("accepte le code temporel (tmcd)", async () => {

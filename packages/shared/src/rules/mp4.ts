@@ -245,6 +245,44 @@ function avcConfigured(data: Uint8Array, dv: DataView, box: Box): boolean {
   return true;
 }
 
+/** Somme des durées (en ticks) et nombre d'échantillons déclarés par `stts` ; `null` si la boîte manque. */
+function sttsTotals(moov: Uint8Array, dv: DataView, stbl: Box): { ticks: number; count: number } | null {
+  const stts = find(moov, dv, stbl, "stts");
+  if (!stts) return null;
+  need(stts, 8);
+  const entries = u32(dv, stts.start + stts.header + 4);
+  need(stts, 8 + entries * 8);
+  let ticks = 0;
+  let count = 0;
+  for (let i = 0, o = stts.start + stts.header + 8; i < entries; i++, o += 8) {
+    count += u32(dv, o);
+    ticks += u32(dv, o) * u32(dv, o + 4);
+  }
+  return { ticks, count };
+}
+
+/** Durée maximale d'une piste par la somme de ses échantillons, avec une seconde de marge sur les 30 s d'une story. */
+const TRACK_MAX_SECONDS = 31;
+
+/** Entrées de description (`stsd`) acceptées pour une piste de métadonnées : sans lieu (`mebx`, vérifié par ses clés) ou photo animée (`mett`). */
+const SAFE_META_ENTRIES = new Set(["mebx", "mett"]);
+
+/** Une piste de métadonnées ne passe que si toutes ses entrées de `stsd` sont connues et sans lieu : `gpmd` (GoPro), `djmd` (DJI), `camm`… sont refusées. */
+function metaEntriesSafe(moov: Uint8Array, dv: DataView, mdia: Box): boolean {
+  const minf = find(moov, dv, mdia, "minf");
+  const stbl = minf ? find(moov, dv, minf, "stbl") : null;
+  const stsd = stbl ? find(moov, dv, stbl, "stsd") : null;
+  if (!stsd) return false;
+  // Version/indicateurs (4) et nombre d'entrées (4), puis les entrées (des boîtes).
+  const entries = children(moov, dv, stsd.start + stsd.header + 8, stsd.end);
+  let seen = 0;
+  for (const entry of entries) {
+    if (!SAFE_META_ENTRIES.has(entry.type)) return false;
+    seen++;
+  }
+  return seen > 0;
+}
+
 function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
   const other: TrackInfo = {
     kind: "other",
@@ -275,12 +313,26 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
   if (!hdlr) throw new Mp4Error("location_track", "Piste sans gestionnaire");
   need(hdlr, 12);
   const handler = text(moov, hdlr.start + hdlr.header + 8, hdlr.start + hdlr.header + 12);
-  if (handler === "soun") return { ...other, kind: "audio" };
+  if (handler === "soun") {
+    // Piste son : la somme des échantillons ne cache pas une durée plus longue que celle annoncée (refus au-delà de 31 s).
+    const audioMinf = find(moov, dv, mdia, "minf");
+    const audioStbl = audioMinf ? find(moov, dv, audioMinf, "stbl") : null;
+    const totals = audioStbl ? sttsTotals(moov, dv, audioStbl) : null;
+    if (totals && mediaTimescale > 0) {
+      const fromSamples = totals.ticks / mediaTimescale;
+      if (fromSamples > TRACK_MAX_SECONDS) throw bad("durée de la piste son incohérente");
+      other.durationSeconds = Math.max(other.durationSeconds, fromSamples);
+    }
+    return { ...other, kind: "audio" };
+  }
   // Code temporel (`tmcd`) : sans position. Pistes de métadonnées (`meta`, `mebx`) : acceptées seulement si leurs clés
   // ne parlent ni de lieu (« location ») ni de position (« ISO6709 »). Toute autre piste (`gpmd`, texte…) est refusée.
   if (handler === "tmcd") return other;
   if (handler === "meta" || handler === "mebx") {
     if (mentionsLocation(moov, trak)) throw new Mp4Error("location_track", "Piste de métadonnées avec un lieu");
+    // Les vraies télémétries (GoPro `gpmd`, DJI `djmd`, `camm`) se déclarent en `meta` : c'est l'entrée de `stsd` qui les trahit.
+    if (!metaEntriesSafe(moov, dv, mdia))
+      throw new Mp4Error("location_track", "Piste de métadonnées d'un type inconnu");
     return other;
   }
   if (handler !== "vide") throw new Mp4Error("location_track", `Piste de type « ${handler} »`);
@@ -337,19 +389,15 @@ function parseTrak(moov: Uint8Array, dv: DataView, trak: Box): TrackInfo {
     if (sizes === stsz && u32(dv, sizes.start + sizes.header + 4) === 0) need(sizes, 12 + samples * 4);
   }
   // Durée de la piste vidéo par la somme des durées d'échantillon (`stts`) : elle doit concorder avec `mdhd` (à 1 s près), sinon
-  // le fichier annonce une durée et en cache une autre. La plus longue des deux est retenue.
-  let durationSeconds = other.durationSeconds;
-  const stts = find(moov, dv, stbl, "stts");
-  if (stts && mediaTimescale > 0) {
-    need(stts, 8);
-    const entries = u32(dv, stts.start + stts.header + 4);
-    need(stts, 8 + entries * 8);
-    let ticks = 0;
-    for (let i = 0, o = stts.start + stts.header + 8; i < entries; i++, o += 8) ticks += u32(dv, o) * u32(dv, o + 4);
-    const fromSamples = ticks / mediaTimescale;
-    if (Math.abs(fromSamples - durationSeconds) > 1) throw bad("durée de la piste incohérente");
-    durationSeconds = Math.max(durationSeconds, fromSamples);
-  }
+  // le fichier annonce une durée et en cache une autre. La plus longue des deux est retenue. Un fichier non fragmenté sans
+  // `mdhd` (échelle de temps nulle) ou sans `stts` n'a pas les informations de temps nécessaires à la lecture : refusé.
+  if (!mdhd || mediaTimescale <= 0) throw bad("échelle de temps absente");
+  const totals = sttsTotals(moov, dv, stbl);
+  if (!totals) throw bad("table des durées absente");
+  if (samples !== null && totals.count !== samples) throw bad("durées et échantillons incohérents");
+  const fromSamples = totals.ticks / mediaTimescale;
+  if (Math.abs(fromSamples - other.durationSeconds) > 1) throw bad("durée de la piste incohérente");
+  const durationSeconds = Math.max(other.durationSeconds, fromSamples);
   const stco = find(moov, dv, stbl, "stco");
   const co64 = stco ? null : find(moov, dv, stbl, "co64");
   const chunks: Chunks | null = stco ? { box: stco, wide: false } : co64 ? { box: co64, wide: true } : null;

@@ -97,3 +97,10 @@ export function mebxKeys(...names: string[]): Buffer {
   count.writeUInt32BE(entries.length, 4);
   return box("minf", box("stbl", box("stsd", count, box("mebx", Buffer.alloc(8), box("keys", ...entries)))));
 }
+
+/** `minf/stbl/stsd` d'une piste de métadonnées avec une seule entrée de ce format (`gpmd`, `djmd`, `camm`, `mett`…), sans aucune clé. */
+export function metaEntry(format: string): Buffer {
+  const count = Buffer.alloc(8);
+  count.writeUInt32BE(1, 4);
+  return box("minf", box("stbl", box("stsd", count, box(format, Buffer.alloc(8)))));
+}
