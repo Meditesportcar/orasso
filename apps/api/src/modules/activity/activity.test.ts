@@ -547,6 +547,32 @@ describe("GET /me/requests", () => {
     expect(k("Marc_66").pseudo).toBe("Marc_66");
   });
 
+  it("le « ⋯ » propose tous les inviteurs : le résumé en garde trois, mais le quatrième est dans menuInviters", async () => {
+    const { damien, k, peerEvent } = await everyKind();
+    // Quatre auteurs en plus de Marc : seul le dernier (Theo) laisse un mot.
+    await db.insert(eventPeerInvitations).values([
+      { eventId: peerEvent.id, inviterId: k("Kenji_66").id, inviteeId: damien.id },
+      { eventId: peerEvent.id, inviterId: k("Julie_66").id, inviteeId: damien.id },
+      { eventId: peerEvent.id, inviterId: k("Lea_66").id, inviteeId: damien.id },
+      { eventId: peerEvent.id, inviterId: k("Theo_66").id, inviteeId: damien.id, note: "Dernier mot" },
+    ]);
+    const res = await call(damien, "GET", "/me/requests");
+    const peer = res.json.items.find(
+      (i: { kind: string; payload: { source?: string } }) =>
+        i.kind === "event_invitation" && i.payload.source === "peer",
+    );
+    expect(peer.payload.inviters).toHaveLength(3);
+    expect(peer.payload.invitersCount).toBe(5);
+    expect(peer.payload.menuInviters).toHaveLength(5);
+    expect(peer.payload.menuInviters.map((x: { pseudo: string }) => x.pseudo)).toContain("Theo_66");
+    for (const x of peer.payload.menuInviters) expect(Object.keys(x).sort()).toEqual(["pseudo", "userId"]);
+    expect(peer.payload.menuInviters.find((x: { pseudo: string }) => x.pseudo === "Theo_66").userId).toBe(
+      k("Theo_66").id,
+    );
+    // Le mot du quatrième auteur est lisible, donc son auteur doit être dans le menu.
+    expect(peer.payload.notes.map((n: { pseudo: string }) => n.pseudo)).toContain("Theo_66");
+  });
+
   it("chacun ne voit que les siennes ; une demande traitée disparaît", async () => {
     const { damien, k } = await everyKind();
     const lea = k("Lea_66");
