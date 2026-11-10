@@ -84,6 +84,8 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   const pageC = await ctxC.newPage();
   await pageC.goto(`/u/Xav_${s}`);
   await pageC.waitForLoadState("networkidle"); // fenêtre ouverte par React : attendre l'hydratation
+  // Lot R8b1 : « Signaler ce profil » est dans la feuille « Plus » du profil d'un autre.
+  await pageC.getByTestId("profile-more").locator("summary").click();
   await pageC.getByTestId("report-open").first().click();
   const dialog = pageC.getByTestId("report-dialog");
   await expect(dialog).toBeVisible();
@@ -195,6 +197,7 @@ test("captures du lot 32 dans les deux thèmes et à 390 px", async ({ browser }
       await shot(page, "admin-sanctions");
       await page.goto("/u/Kenji_66");
       await page.waitForLoadState("networkidle");
+      await page.getByTestId("profile-more").locator("summary").click(); // Lot R8b1 : « Signaler » dans « Plus »
       await page.getByTestId("report-open").first().click();
       await shot(page, "dialog-signaler");
       await ctx.close();
