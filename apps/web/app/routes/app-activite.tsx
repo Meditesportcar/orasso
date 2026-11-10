@@ -50,6 +50,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
   return {
     userId: me.user.id,
+    // Les structures que je gère (propriétaire ou co-organisateur) : « Ajouter à ma story » ne s'offre que pour celles-ci.
+    organizerIds: me.personas.flatMap((p) => (p.kind === "organizer" ? [p.id] : [])),
     page,
     activityRequests: counts.activityRequests,
     atLeast: counts.atLeast,
@@ -69,7 +71,8 @@ function requestSummary(first: RequestItem, total: number): string {
 }
 
 export default function Activite({ loaderData }: Route.ComponentProps) {
-  const { userId, page, activityRequests, atLeast, countFailed, rowShown, requestItems, isFirstPage } = loaderData;
+  const { userId, organizerIds, page, activityRequests, atLeast, countFailed, rowShown, requestItems, isFirstPage } =
+    loaderData;
   const revalidator = useRevalidator();
   const here = useLocation().pathname;
   // Lignes touchées : lues tout de suite à l'écran, sans attendre la relecture.
@@ -192,7 +195,9 @@ export default function Activite({ loaderData }: Route.ComponentProps) {
             {g.items.map((item) => {
               const read = isRead(item);
               const shown = read === item.read ? item : { ...item, read };
-              return <ActivityRow key={item.id} item={shown} day={g.day} onOpen={open(item)} />;
+              return (
+                <ActivityRow key={item.id} item={shown} day={g.day} onOpen={open(item)} organizerIds={organizerIds} />
+              );
             })}
           </ul>
         </section>

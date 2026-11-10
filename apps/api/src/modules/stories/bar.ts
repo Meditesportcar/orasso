@@ -1,7 +1,8 @@
 // Barre des stories et résumé d'un auteur (lot R7f1, ARCHITECTURE-R7 § 2.5). Une entrée par auteur (personne,
 // structure ou pro), seulement ceux que je suis (abonnement accepté) et mes crews ; les mutes sont exclus ; les non vues
 // d'abord. Un compte privé que je ne suis pas (ou dont la demande est en attente) n'apparaît pas, et rien ne dit qu'il a
-// une story. `live` (organisateur « En cours ») est faux partout : lot R7h.
+// une story. Lot R7h : `live` (organisateur « En cours ») = la structure a un événement publié qui tourne (du début à la fin)
+// et une story vivante ; une structure dont j'ai une place à un événement en cours est dans ma barre sans que je la suive.
 import {
   STORY_LIVE_MAX,
   type StoriesSummary,
@@ -26,6 +27,7 @@ import {
   authorKeyOf,
   liveStory,
   loadViewerSets,
+  notMaskedCopy,
   relationOf,
   type StoryRow,
   selectStories,
@@ -58,15 +60,30 @@ async function seenSet(userId: string, at: Date): Promise<Set<string>> {
 const anyOf = (column: SQL | AnyColumn, ids: Iterable<string>, type: "text" | "uuid") =>
   sql`${column} = any(${sql.param([...ids])}::${sql.raw(type)}[])`;
 
-/** Clé d'auteur affiché d'une story, en SQL (même règle que `authorKeyOf`). */
-const authorKeySql = sql`case ${stories.persona} when 'organizer' then 's:' || ${stories.structureId}::text when 'pro' then 'p:' || ${stories.proId}::text else 'u:' || ${stories.authorId} end`;
-
-/** Au plus `PER_AUTHOR_MAX` stories par auteur, les plus récentes, choisies dans le SQL (`row_number`). */
-const newestPerAuthor = (where: SQL) =>
-  sql`${stories.id} in (select r.id from (select ${stories.id} as id, row_number() over (partition by ${authorKeySql} order by ${stories.createdAt} desc, ${stories.id} desc) as rn from stories where ${where}) r where r.rn <= ${PER_AUTHOR_MAX})`;
-
 /** Stories signées d'une personne (ni casquette organisateur, ni casquette pro). */
 const personal = sql`${stories.persona} not in ('organizer','pro')`;
+
+/** Les structures qui ont un événement publié en cours (du début à la fin) : l'anneau « EN COURS ». */
+export async function liveStructureIds(at: Date): Promise<Set<string>> {
+  const res = await db.execute<{ id: string }>(
+    sql`select distinct e.structure_id::text as id from events e
+      where e.status = 'published' and e.starts_at <= ${at} and e.ends_at > ${at}`,
+  );
+  return new Set(res.rows.map((r) => r.id));
+}
+
+/** Les structures dont j'ai une place (candidature retenue, billet, présence) à un événement en cours. */
+async function structuresWithPlace(userId: string, at: Date): Promise<Set<string>> {
+  const res = await db.execute<{ id: string }>(
+    sql`select distinct e.structure_id::text as id from events e
+      where e.status = 'published' and e.starts_at <= ${at} and e.ends_at > ${at}
+        and (exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${userId}
+              and a.kind = 'vehicle' and a.status = 'accepted')
+          or exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${userId} and k.status in ('valid', 'used'))
+          or exists (select 1 from event_presences g where g.event_id = e.id and g.user_id = ${userId}))`,
+  );
+  return new Set(res.rows.map((r) => r.id));
+}
 
 /** Pour une page publique (structure, pro) : zéro sans session (aucune story n'est servie sans session). */
 export async function storiesSummaryFor(v: Viewer | null, kind: StoryTagKind, id: string): Promise<StoriesSummary> {
@@ -79,23 +96,27 @@ export const storiesBar = {
     const at = now();
     const me = v.user.id;
     const sets = await loadViewerSets(me);
+    // Lot R7h : l'organisateur d'un événement où j'ai ma place apparaît « EN COURS » même si je ne le suis pas.
+    const [liveStructures, placeStructures] = await Promise.all([liveStructureIds(at), structuresWithPlace(me, at)]);
+    const poolStructures = new Set([...sets.structures, ...placeStructures]);
     const mutedRows = await db.select().from(storyMutes).where(eq(storyMutes.userId, me));
     const muted = new Set(mutedRows.map((m) => storyAuthorKeyOf(m.authorKind, m.authorId)));
 
     const ors: (SQL | undefined)[] = [];
     if (sets.users.size) ors.push(and(personal, anyOf(stories.authorId, sets.users, "text")));
     if (sets.crews.size) ors.push(anyOf(stories.crewId, sets.crews.keys(), "uuid"));
-    if (sets.structures.size)
-      ors.push(and(eq(stories.persona, "organizer"), anyOf(stories.structureId, sets.structures, "uuid")));
+    if (poolStructures.size)
+      ors.push(and(eq(stories.persona, "organizer"), anyOf(stories.structureId, poolStructures, "uuid")));
     if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), anyOf(stories.proId, sets.pros, "uuid")));
-    // Tour 3 : les 50 plus récentes de chaque auteur sont choisies dans le SQL (le plafond de publication est le même, rien
-    // de visible n'est perdu) ; puis on filtre (auteurs masqués, audiences) : des stories masquées
-    // ou refusées ne chassent plus des stories visibles hors de la barre.
-    const pool = ors.length ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors)) as SQL) : null;
+    // Tour 5 : les copies masquées (originale indisponible) sont exclues dans le SQL, avant toute sélection ; aucune limite
+    // de lignes par auteur n'est supposée ici : le plafond de publication ne compte que les copies non masquées, et à la
+    // levée d'une suspension un auteur peut avoir plus de 50 stories vivantes. `hasUnseen` se lit donc sur toutes les
+    // stories visibles ; seuls l'anneau et l'affichage se limitent aux `PER_AUTHOR_MAX` plus récentes (plus bas).
+    const pool = ors.length
+      ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, notMaskedCopy(at), or(...ors)) as SQL)
+      : null;
     const candidates = pool
-      ? (await selectStories(and(pool, newestPerAuthor(pool)))).sort(
-          (a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime(),
-        )
+      ? (await selectStories(pool)).sort((a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime())
       : [];
 
     const viewer = viewerOf(v);
@@ -116,7 +137,7 @@ export const storiesBar = {
       // `hasUnseen` se lit sur toutes les stories visibles de l'auteur ; l'anneau et l'affichage sur les plus récentes.
       const hasUnseen = all.some((r) => !seen.has(r.story.id));
       const rows = all.slice(0, PER_AUTHOR_MAX);
-      const ring = storyRing({ live: false }, ringStories(rows), at);
+      const ring = storyRing({ live: key.startsWith("s:") && liveStructures.has(key.slice(2)) }, ringStories(rows), at);
       if (!ring) continue;
       const latest = newest(rows);
       const display = authorDisplay(latest, storage.url);
@@ -174,7 +195,7 @@ export const storiesBar = {
     return {
       count: visible.length,
       hasUnseen: self ? false : visible.some((r) => !seen.has(r.story.id)),
-      ring: storyRing({ live: false }, ringStories(visible), at),
+      ring: storyRing({ live: kind === "structure" && (await liveStructureIds(at)).has(id) }, ringStories(visible), at),
     };
   },
 };

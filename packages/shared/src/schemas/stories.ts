@@ -95,6 +95,16 @@ export const storyReportSchema = z.object({
   reason: z.enum(["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"]),
   details: z.string().trim().max(1000).nullish(),
 });
+/**
+ * `POST /stories/:id/share-to-mine` (lot R7h) : reprendre une story dans la mienne. `asStructureId` = au nom d'une
+ * structure que je gère, `asProId` = au nom de ma fiche pro (lot R7m2), aucun des deux = en mon nom (un identifié qui
+ * repartage). Jamais les deux.
+ */
+export const storyShareSchema = z
+  .object({ asStructureId: uuidLower.optional(), asProId: uuidLower.optional() })
+  .refine((v) => !(v.asStructureId && v.asProId), "Une seule casquette à la fois");
+export type StoryShareInput = z.infer<typeof storyShareSchema>;
+
 export const storyTagRemoveSchema = z.object({ kind: z.enum(["structure", "pro"]), id: uuidLower }).optional();
 
 /** Clé d'un auteur dans la barre : `u:<compte>`, `s:<structure>` ou `p:<pro>` (UUID strict pour les deux dernières). */
@@ -133,6 +143,20 @@ export type StoryTagView = {
   avatarUrl: string | null;
 };
 
+/** Une façon de reprendre la story dans la mienne ; `copyId` = la copie que j'ai déjà faite (« Retirer »). */
+export type StoryShareOption = {
+  as: "structure" | "pro" | "fan";
+  id: string | null;
+  name: string;
+  copyId: string | null;
+};
+
+export type StorySharing = {
+  /** Je suis moi-même identifié (pas seulement une structure que je gère) : « Me retirer » et « Repartager » sont à moi. */
+  taggedMe: boolean;
+  options: StoryShareOption[];
+};
+
 /** Le contenu lié d'une story : de quoi ouvrir sa page (`slug` de l'événement, `eventId` d'un vote ou d'un souvenir). */
 export type StoryLinkedView = {
   type: StoryLinkType;
@@ -165,7 +189,13 @@ export type StoryView = {
   commercialPartner: { id: string; name: string; slug: string } | null;
   audience: StoryAudience;
   crewName: string | null;
-  sharedFrom: { authorPseudo: string } | null;
+  /** Lot R7h : le crédit d'une copie = l'identité publique de l'originale (personne, structure ou pro), avec son lien. */
+  sharedFrom: StoryTagView | null;
+  /**
+   * Lot R7h : ce que je peux faire d'une story où je suis identifié (moi, ou une structure / un pro que je gère) ;
+   * `null` si je ne suis pas identifié, pour ma propre story et pour une copie. Décidé par l'API, jamais par l'écran.
+   */
+  sharing: StorySharing | null;
   /**
    * « Vers l'extérieur » du menu de la story (l'auteur seul) : la même règle que `GET /stories/:id/export` (ni crew, ni copie,
    * ni story en traitement, ni contenu lié disparu ou d'un autre). Faux pour tout autre lecteur.
@@ -185,7 +215,32 @@ export type StoryAuthorView = {
   pseudoOrName: string;
   avatarUrl: string | null;
   persona: StoryPersona;
+  /** Lot R7h : une structure dont un événement est en cours (le badge « EN COURS » de l'en-tête). */
+  live: boolean;
 };
+
+/** Une mention de la structure (lot R7h) : une story où elle ou un de ses événements est identifié. */
+export type StoryMentionItem = {
+  storyId: string;
+  authorKey: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  /** Route protégée de l'image : l'aperçu 9:16 réduit de la liste. */
+  mediaUrl: string;
+  caption: string | null;
+  createdAt: string;
+  expiresAt: string;
+  /** La copie déjà ajoutée à la story de cette structure (« Retirer »), sinon `null` (« Ajouter à ma story »). */
+  copyId: string | null;
+};
+
+/** `count` : toutes les mentions vivantes (pas seulement la page), pour « Mentions · 3 » ; calculé à la première page seulement (0 ensuite). */
+export type StoryMentions = { items: StoryMentionItem[]; nextCursor: string | null; count: number };
+
+export const storyMentionsQuery = z.object({ cursor: z.string().max(80).optional() });
+
+/** Réponse de `share-to-mine`. */
+export type StoryShared = { id: string; expiresAt: string };
 
 export type StoriesByAuthor = { author: StoryAuthorView | null; stories: StoryView[] };
 

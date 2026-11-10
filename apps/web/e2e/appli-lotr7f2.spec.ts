@@ -97,7 +97,8 @@ test("la barre : Ta story, anneaux clair et brique, anneau fin une fois vue ; la
   expect(await page.getByTestId("stories-ring-crew").count()).toBe(1);
   expect(await page.getByTestId("stories-ring-followers").count()).toBeGreaterThanOrEqual(3);
   // Un seul néon moutarde : aucun direct dans le seed (R7h), donc aucune étiquette « EN COURS » ici.
-  await expect(page.getByTestId("stories-live-label")).toHaveCount(0);
+  // Lot R7h : le Lydia est en cours et sa structure a une story vivante : son entrée (et elle seule) porte « EN COURS ».
+  await expect(page.getByTestId("stories-live-label")).toHaveCount(1);
   await shot(page, "barre-fil");
 
   // Ouvrir la story de Léa : en-tête, une barre, légende ; la vue est enregistrée quand l'image est lue.
@@ -142,10 +143,12 @@ test("visionneuse : toucher à droite et à gauche, bandeau « Mon crew », paus
   const { ctx, page } = await open(browser, "damien@orasso.local");
   await openFrom(page, /Voir les stories de Kenji_66/);
   // Deux stories de Kenji (abonnés, crew) : deux barres, la première est la courante.
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   await playing(page);
   const badge = page.getByTestId("story-crew-badge");
-  // Les deux stories de Kenji ont la même date dans le seed : l'ordre n'est pas écrit. L'une des deux porte le bandeau.
+  // Le seed écrit l'ordre des trois stories de Kenji : abonnés (il y a 4 h), crew (3 h 30), Lydia (3 h). La première n'a pas le
+  // bandeau « Mon crew » ; on lit l'ordre sans le supposer.
   const first = (await badge.count()) > 0;
   await page.getByTestId("story-surface").click({ position: { x: 300, y: 420 } });
   await expect(page.getByTestId("story-bar-done")).toHaveCount(1);
@@ -364,7 +367,8 @@ test("tour 2 : réponse perdue puis texte modifié = autre identifiant ; envoi t
   await resetViews();
   const { ctx, page } = await open(browser, "damien@orasso.local");
   await openFrom(page, /Voir les stories de Kenji_66/);
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   const ids: string[] = [];
   let mode: "lost" | "pass" | "slow" = "lost";
   await page.route("**/api/stories/*/reply", async (route) => {
@@ -590,7 +594,8 @@ test("tour 4 : deux réponses en parallèle : un identifiant par soumission, bou
   );
   const { ctx, page } = await open(browser, "damien@orasso.local");
   await openFrom(page, /Voir les stories de Kenji_66/);
-  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(2);
+  // Lot R7h : Kenji_66 a une troisième story (celle du Lydia qui identifie Roues Libres 66).
+  await expect(page.getByTestId("story-bars").locator("> *")).toHaveCount(3);
   const sent: { story: string; clientId: string }[] = [];
   let release: () => void = () => undefined;
   const gate = new Promise<void>((r) => {

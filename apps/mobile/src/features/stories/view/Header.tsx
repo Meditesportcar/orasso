@@ -15,6 +15,7 @@ export function Header({
   name,
   avatarUrl,
   mine,
+  live = false,
   onProfile,
   onMore,
   onClose,
@@ -23,6 +24,8 @@ export function Header({
   name: string;
   avatarUrl: string | null;
   mine: boolean;
+  /** Lot R7h : l'organisateur d'un événement en cours porte l'étiquette « EN COURS » (maquette `.r7lvs`). */
+  live?: boolean;
   /** Ouvre le profil de l'auteur (une personne) ; absent pour une structure ou un pro. */
   onProfile?: () => void;
   onMore: () => void;
@@ -52,6 +55,13 @@ export function Header({
           {name}
         </Text>
         <View style={styles.sub}>
+          {live ? (
+            <View style={[styles.live, { backgroundColor: c.accent }]} testID="story-live-badge">
+              <Text variant="meta" color={c.accentInk} style={styles.liveText}>
+                {L.live}
+              </Text>
+            </View>
+          ) : null}
           {crew ? (
             <View style={[styles.crew, { backgroundColor: c.win }]} testID="story-crew-badge">
               <Icon name="shield" size={13} color={c.winInk} />
@@ -125,6 +135,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     borderRadius: 6,
   },
+  live: { height: 17, paddingHorizontal: 6, borderRadius: 4, justifyContent: "center" },
+  liveText: { fontSize: 9.5, lineHeight: 11, letterSpacing: 0.6, textTransform: "uppercase" },
   crewText: { fontFamily: "Archivo-ExtraBold", fontSize: 11.5, lineHeight: 14 },
   btn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });

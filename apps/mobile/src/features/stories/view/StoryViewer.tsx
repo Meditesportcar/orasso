@@ -491,11 +491,12 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             name={authorName}
             avatarUrl={author.avatarUrl}
             mine={mine}
+            live={author.live}
             onProfile={authorKey.startsWith("u:") && !mine ? () => openProfile(authorName) : undefined}
             onMore={() => setMenuOpen(true)}
             onClose={close}
           />
-          <SharedByLine story={story} authorName={authorName} />
+          <SharedByLine story={story} authorName={authorName} onOpen={openTag} />
           <CommercialBadge story={story} />
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 22 }]} pointerEvents="box-none">

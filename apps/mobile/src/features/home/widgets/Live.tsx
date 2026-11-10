@@ -1,14 +1,17 @@
 // L'Accueil pendant un événement (lot R7a2, maquette R7.4 « Pendant un événement » et R7.13) : la ligne « En cours · jour 2
 // sur 4 » prend la place de « Prochaine sortie » (l'événement où j'ai ma place, qui a commencé), puis le bloc « En cours ».
-//  - La story de l'organisateur est un EMPLACEMENT VIDE jusqu'au lot R7h (`organizerStory: null` : aucune vignette).
+//  - La story de l'organisateur (lot R7h) paraît en tête du bloc quand `organizerStory` existe : vignette 9:16 et « Story de
+//    l'organisateur », qui ouvre la visionneuse de sa structure (`s:<id>`).
 //  - Le bouton principal de l'écran est « Voter » quand un vote est ouvert ET que la personne peut voter (droit personnel
 //    calculé par l'API : `votes.canVote`, jamais déduit de `votes.open`) ; sinon « Mon accès » (de la ligne). Un seul
 //    néon : la ligne passe son « Mon accès » en bouton au trait dès que « Voter » est le bouton principal.
 //  - Rien ici n'invente de donnée : « N sur place » n'est servi que pendant l'événement, le programme est celui du jour.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE, type HomeLive, homeBlockLabels } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, type HomeLive, homeBlockLabels, storyShareLabels } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { type LayoutChangeEvent, StyleSheet, useWindowDimensions, View } from "react-native";
+import { type LayoutChangeEvent, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { SkewTag } from "@/features/sorties/bits";
 import { formatHour } from "@/lib/format";
 import { Num, SmButton } from "@/ui/Kit";
@@ -114,6 +117,7 @@ export function LiveBlock({
   offline?: boolean;
 }) {
   const { t } = useTheme();
+  const router = useRouter();
   const c = t.color;
   const open = live.votes.open;
   const day = live.programToday;
@@ -140,7 +144,31 @@ export function LiveBlock({
         </Text>
       ) : null}
 
-      {/* La story de l'organisateur (lot R7h) : emplacement vide, aucune vignette tant que `organizerStory` est `null`. */}
+      {/* La story de l'organisateur (lot R7h) : tête du bloc, touchable. */}
+      {live.organizerStory ? (
+        <Pressable
+          onPress={() => router.push(`/story/${encodeURIComponent(live.organizerStory?.structureKey ?? "")}` as never)}
+          accessibilityRole="button"
+          accessibilityLabel={`${storyShareLabels.organizerStoryOpen}, ${live.event.structure.name}`}
+          style={[styles.story, { backgroundColor: c.surfaceRaised }]}
+          testID="home-live-organizer-story"
+        >
+          {live.organizerStory.posterUrl ? (
+            <View style={[styles.storyThumb, { borderColor: c.accent }]}>
+              <CrewPhotoImage url={live.organizerStory.posterUrl} style={styles.storyImg} resizeMode="cover" />
+            </View>
+          ) : null}
+          <View style={styles.storyText}>
+            <Text variant="bodyStrong" color={c.ink}>
+              {storyShareLabels.organizerStory}
+            </Text>
+            <Text variant="caption" color={c.inkMuted}>
+              {storyShareLabels.organizerStoryHint(live.event.structure.name)}
+            </Text>
+          </View>
+          <Icon name="next" size={18} color={c.inkMuted} />
+        </Pressable>
+      ) : null}
 
       {live.onSiteCount !== null ? (
         <View style={styles.onSite} testID="home-live-onsite">
@@ -196,6 +224,10 @@ function SmKindVote({ onPress }: { onPress: () => void }) {
 
 const styles = StyleSheet.create({
   line: { padding: space3, borderRadius: 22, gap: 8 },
+  story: { flexDirection: "row", alignItems: "center", gap: space3, padding: space2, borderRadius: 16 },
+  storyThumb: { width: 36, height: 64, borderRadius: 8, overflow: "hidden", borderWidth: 2 },
+  storyImg: { width: 32, height: 60 },
+  storyText: { flex: 1, gap: 2 },
   tag: { flexDirection: "row" },
   info: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 17 },

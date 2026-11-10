@@ -80,6 +80,9 @@ export type HomeLive = {
   votes: { open: number; voted: number; canVote: boolean };
   /** Horaires du jour et consignes (aux retenus seulement) ; ce qui existe, rien d'inventé. */
   programToday: { dayDate: string; startsAt: string; endsAt: string; instructions: string | null } | null;
-  /** Story de l'organisateur (R7h) : `null` tant qu'elle n'existe pas. */
-  organizerStory: null;
+  /**
+   * Story de l'organisateur « En cours » (R7h) : la clé de l'auteur (`s:<structure>`) et l'image de sa dernière story
+   * (route protégée), `null` s'il n'a pas de story vivante.
+   */
+  organizerStory: { structureKey: string; posterUrl: string | null } | null;
 };

@@ -15,6 +15,7 @@ import {
   isTwoFactorError,
   mapUrl,
   missingVehicles,
+  myStoriesRead,
   openAlerts,
   otherOutlook,
   pickCurrentEvent,
@@ -23,6 +24,7 @@ import {
   sortAlerts,
   staffRequests,
   staffSummary,
+  storySection,
   toggleRole,
 } from "./orga";
 
@@ -220,5 +222,49 @@ describe("Boîte et accès", () => {
     expect(isTwoFactorError({ code: "two_factor_required" })).toBe(true);
     expect(isTwoFactorError({ code: "forbidden" })).toBe(false);
     expect(isTwoFactorError(null)).toBe(false);
+  });
+});
+
+describe("story de la structure dans le Direct (lot R7h, tour 4)", () => {
+  const past = [event("hier", "2026-10-16T08:00:00Z", "2026-10-16T16:00:00Z")];
+  const dayAfter = new Date("2026-10-17T10:00:00Z"); // J+1 du dernier événement, aucun événement futur
+
+  it("J+1 sans événement futur : pas d'événement courant, mais « Ma story » reste accessible si une story est en ligne", () => {
+    expect(pickCurrentEvent(past, dayAfter)).toBeNull();
+    expect(storySection(null, true)).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("J+1, lecture de « Ma story » en 503 : l'accès reste (message et « Réessayer »), ce n'est pas « aucune story »", () => {
+    expect(pickCurrentEvent(past, dayAfter)).toBeNull();
+    const err = new Error("503");
+    const state = myStoriesRead(null, err);
+    expect(state).toEqual({ has: false, failed: true, loading: false });
+    expect(storySection(null, state.has, state.failed)).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("chargement, absence confirmée, présence et erreur restent distincts", () => {
+    expect(myStoriesRead(null, null)).toEqual({ has: false, failed: false, loading: true });
+    expect(myStoriesRead({ stories: [] }, null)).toEqual({ has: false, failed: false, loading: false });
+    expect(myStoriesRead({ stories: [{}] }, null)).toEqual({ has: true, failed: false, loading: false });
+    expect(myStoriesRead(null, new Error("x"))).toEqual({ has: false, failed: true, loading: false });
+    // Chargement et absence confirmée ne montrent rien hors événement.
+    expect(storySection(null, false, false).show).toBe(false);
+  });
+
+  it("réponse vide, publication distante, puis 503 : l'échec reste signalé et « Ma story » reste accessible", () => {
+    const state = myStoriesRead({ stories: [] }, new Error("503"));
+    expect(state).toEqual({ has: false, failed: true, loading: false });
+    expect(storySection(null, state.has, state.failed)).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("sans événement courant ni story en ligne : rien", () => {
+    expect(storySection(null, false)).toEqual({ mentions: false, mine: false, show: false });
+  });
+
+  it("les mentions ne se montrent que pendant l'événement (jour J ou en cours), pas avant", () => {
+    expect(storySection({ phase: "live" }, false)).toEqual({ mentions: true, mine: true, show: true });
+    expect(storySection({ phase: "today" }, false).mentions).toBe(true);
+    expect(storySection({ phase: "next" }, false).show).toBe(false);
+    expect(storySection({ phase: "next" }, true)).toEqual({ mentions: false, mine: true, show: true });
   });
 });

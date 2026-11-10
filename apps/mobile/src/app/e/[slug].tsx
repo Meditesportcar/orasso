@@ -649,6 +649,7 @@ export default function EventPage() {
           showPhase={!place}
           offerPresence={offerPresence}
           onPresence={() => setPresenceOpen(true)}
+          onOrganizerStory={() => router.push(`/story/${encodeURIComponent(`s:${e.structure.id}`)}` as never)}
         />
       ) : null}
       <EventRows event={e} />

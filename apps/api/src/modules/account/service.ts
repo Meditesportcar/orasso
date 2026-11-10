@@ -82,6 +82,7 @@ import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeStoriesForDeletedAccount } from "../stories/anonymize";
+import { retireCopiesOfPrivateAccount } from "../stories/share";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 import { assertInterests } from "../vehicles/categories";
 import { removeOrRetry } from "../vehicles/photos-blur";
@@ -277,7 +278,7 @@ export const accountService = {
     // Lot R5a : un centre d'intérêt mis en pause depuis (« Moto ») reste permis s'il était déjà choisi.
     await assertInterests(db, v.user.id, input.interests);
     const { interests, notificationPrefs, mutedTypes, homeWidgets, ...rest } = input;
-    const updated = await withTx(async (tx) => {
+    const updated = await withTx(async (tx, after) => {
       const values = {
         ...rest,
         ...(notificationPrefs ? { notificationPrefs: { ...v.profile.notificationPrefs, ...notificationPrefs } } : {}),
@@ -290,6 +291,8 @@ export const accountService = {
       if (rest.visibility === "public") {
         await followsService.acceptAllPending(tx, v.user.id);
       }
+      // Lot R7h : un compte qui passe en privé ne laisse plus reprendre ses stories (les copies faites tombent).
+      if (rest.visibility === "private") await retireCopiesOfPrivateAccount(tx, after, v.user.id);
       if (interests) await profilesRepo.setInterests(v.user.id, [...new Set(interests)], tx);
       if (!row) throw notFound();
       return row;

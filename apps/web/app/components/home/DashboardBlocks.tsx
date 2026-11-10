@@ -13,6 +13,7 @@ import {
   type HomeOuting,
   homeBlockLabels,
   outingDetail,
+  storyShareLabels,
 } from "@orasso/shared";
 
 import { formatDayShort, formatTime } from "../../lib/format";
@@ -59,6 +60,16 @@ export function LiveBlock({ live }: { live: HomeLive }) {
   return (
     <Block id="live" title={homeBlockLabels.liveTitle}>
       <p className="hm-block__muted">{live.event.title}</p>
+      {/* Lot R7h : la story de l'organisateur en tête du bloc (la visionneuse lit l'image dans le navigateur). */}
+      {live.organizerStory && (
+        <p data-testid="home-live-organizer-story">
+          <Icon name="live" size={18} />{" "}
+          <a href={`/app/story/${encodeURIComponent(live.organizerStory.structureKey)}`}>
+            <strong>{storyShareLabels.organizerStory}</strong>
+          </a>
+          <span className="hm-block__muted"> · {storyShareLabels.organizerStoryHint(live.event.structure.name)}</span>
+        </p>
+      )}
       {live.onSiteCount !== null && (
         <p data-testid="home-live-onsite">
           {live.onSiteCount > 0 && <strong className="o-t-poster-m">{live.onSiteCount} </strong>}

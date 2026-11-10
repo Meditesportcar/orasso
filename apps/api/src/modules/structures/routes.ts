@@ -4,6 +4,7 @@ import {
   memberInviteSchema,
   memberUpdateSchema,
   registryCheckInputSchema,
+  storyMentionsQuery,
   structureCreateSchema,
   structureListQuery,
   structureUpdateSchema,
@@ -17,6 +18,7 @@ import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
 import { storiesSummaryFor } from "../stories/bar";
+import { storiesShare } from "../stories/share";
 import { structuresService } from "./service";
 import { verificationService } from "./verification";
 
@@ -71,6 +73,11 @@ export const structuresRoutes = new Hono<AppEnv>()
     const view = await structuresService.getPublic(c.req.param("slug"), viewer);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
     return c.json({ ...view, stories: await storiesSummaryFor(viewer, "structure", view.id) });
+  })
+  // Lot R7h : les stories qui identifient la structure ou un de ses événements (organisation et staff, lecture).
+  .get("/structures/:id/story-mentions", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await storiesShare.mentions(v, uuidParam(c, "id"), query(c, storyMentionsQuery).cursor));
   })
   .get("/structures/:id", async (c) =>
     c.json(await structuresService.getForOrganizer(await requireUser(c), uuidParam(c, "id"))),

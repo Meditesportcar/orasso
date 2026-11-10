@@ -351,7 +351,7 @@ describe("audiences × regards", () => {
   });
 
   it("crew : seul un passionné membre actif peut publier pour son crew", async () => {
-    const kenji = await signUp("Kenji");
+    const kenji = await signUp("Kenji", { twoFactor: true });
     const paul = await signUp("Paul");
     const crew = await newCrew(kenji);
     expect((await publish(paul, { audience: "crew", crewId: crew.id })).status).toBe(403);
@@ -368,8 +368,8 @@ describe("audiences × regards", () => {
   });
 
   it("casquette organisateur : un non-membre de la structure est refusé (403), le propriétaire passe et la story paraît sous la structure", async () => {
-    const orga = await signUp("Orga");
-    const co = await signUp("Coorga");
+    const orga = await signUp("Orga", { twoFactor: true });
+    const co = await signUp("Coorga", { twoFactor: true });
     const stranger = await signUp("Intrus");
     const fan = await signUp("Fan");
     const structure = await createStructure(orga.id);
@@ -470,7 +470,7 @@ describe("barre", () => {
   });
 
   it("« Ta story » ne compte que mes stories personnelles : celles au nom d'une structure ou d'un pro n'y sont pas", async () => {
-    const orga = await signUp("OrgaMine");
+    const orga = await signUp("OrgaMine", { twoFactor: true });
     const structure = await createStructure(orga.id);
     const pro = await createPro(orga.id);
     await ok(orga, { persona: "organizer", structureId: structure.id, audience: "followers" });
@@ -747,7 +747,7 @@ describe("identification, notifications, voiture, événement", () => {
   });
 
   it("un compte privé ne peut identifier ni structure, ni pro, ni événement ; un compte public le peut", async () => {
-    const orga = await signUp("Orga");
+    const orga = await signUp("Orga", { twoFactor: true });
     const owner = await signUp("Pro");
     const structure = await createStructure(orga.id);
     const pro = await createPro(owner.id);
@@ -778,7 +778,7 @@ describe("identification, notifications, voiture, événement", () => {
   it("une story de crew n'identifie ni structure ni pro, seulement des membres du crew", async () => {
     const kenji = await signUp("Kenji");
     const nina = await signUp("Nina");
-    const paul = await signUp("Paul");
+    const paul = await signUp("Paul", { twoFactor: true });
     const structure = await createStructure(paul.id);
     const crew = await newCrew(kenji);
     await addToCrew(crew.id, kenji, nina);
@@ -1010,7 +1010,7 @@ describe("tour 2 : cache, comptes privés, plaques", () => {
 
 describe("tour 2 : contenu lié, résumé du profil, identifications, flammes", () => {
   it("le contenu lié est refiltré pour chaque lecteur avec les droits actuels", async () => {
-    const orga = await signUp("Orga");
+    const orga = await signUp("Orga", { twoFactor: true });
     const kenji = await signUp("Kenji");
     const nina = await signUp("Nina");
     const structure = await createStructure(orga.id);
@@ -1062,8 +1062,8 @@ describe("tour 2 : contenu lié, résumé du profil, identifications, flammes", 
   });
 
   it("identifier une structure ou un pro prévient ses responsables (propriétaire, co-organisateurs actifs, propriétaire de la fiche)", async () => {
-    const orga = await signUp("Orga");
-    const co = await signUp("Co");
+    const orga = await signUp("Orga", { twoFactor: true });
+    const co = await signUp("Co", { twoFactor: true });
     const staff = await signUp("Staff");
     const owner = await signUp("Pro");
     const kenji = await signUp("Kenji");
@@ -1094,7 +1094,7 @@ describe("tour 2 : contenu lié, résumé du profil, identifications, flammes", 
   });
 
   it("la flamme renvoie vers l'auteur affiché : personne, structure ou pro", async () => {
-    const orga = await signUp("Orga");
+    const orga = await signUp("Orga", { twoFactor: true });
     const owner = await signUp("Pro");
     const kenji = await signUp("Kenji");
     const nina = await signUp("Nina");
@@ -1121,8 +1121,8 @@ describe("tour 2 : contenu lié, résumé du profil, identifications, flammes", 
 
 describe("tour 2 : réponses aux stories", () => {
   it("story d'une structure : la réponse va dans la conversation de la structure, jamais au compte du co-organisateur", async () => {
-    const orga = await signUp("Orga");
-    const co = await signUp("Co");
+    const orga = await signUp("Orga", { twoFactor: true });
+    const co = await signUp("Co", { twoFactor: true });
     const fan = await signUp("Fan");
     const structure = await createStructure(orga.id);
     await addMember(structure.id, co.id, "co_organizer");
@@ -1267,14 +1267,17 @@ describe("tour 2 : barre, identifiants, plafond, suppressions", () => {
       )
       .returning({ id: stories.id, createdAt: stories.createdAt });
     inserted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    // Tour 3 : les 50 plus récentes de chaque auteur sont choisies dans le SQL (plafond de publication). Elle en a vu 49 :
-    // une des 50 reste non vue, les 3 plus anciennes (hors plafond) ne comptent plus.
+    // Tour 5 : plus de limite de lignes supposée (le plafond de publication ne compte que les copies non masquées, un auteur peut
+    // dépasser 50 stories vivantes à la levée d'une suspension) : toutes les stories visibles comptent pour `hasUnseen`.
     await db.insert(storyViews).values(inserted.slice(4).map((r) => ({ storyId: r.id, viewerId: nina.id })));
     const bar = (await req(nina, "GET", "/stories/bar")).json;
     expect(bar.authors).toHaveLength(1);
     expect(bar.authors[0].hasUnseen).toBe(true);
-    // Les 50 plus récentes toutes vues : les 3 plus anciennes (hors plafond) ne comptent pas.
+    // Les 50 plus récentes et la 4e plus ancienne vues : les 3 plus anciennes, non vues, comptent encore.
     await db.insert(storyViews).values({ storyId: inserted[3]!.id, viewerId: nina.id });
+    expect((await req(nina, "GET", "/stories/bar")).json.authors[0].hasUnseen).toBe(true);
+    // Tout vu : plus d'anneau « non vu ».
+    await db.insert(storyViews).values(inserted.slice(0, 3).map((r) => ({ storyId: r.id, viewerId: nina.id })));
     expect((await req(nina, "GET", "/stories/bar")).json.authors[0].hasUnseen).toBe(false);
   });
 
@@ -1301,7 +1304,7 @@ describe("tour 2 : barre, identifiants, plafond, suppressions", () => {
   });
 
   it("50 stories vivantes au plus par auteur : la 51e est refusée (409 too_many_stories), une expirée ne compte pas", async () => {
-    const kenji = await signUp("Kenji");
+    const kenji = await signUp("Kenji", { twoFactor: true });
     const nina = await signUp("Nina");
     await db.insert(stories).values([
       ...rows(48, () => ({ authorId: kenji.id })),
@@ -1375,8 +1378,8 @@ describe("tour 2 : barre, identifiants, plafond, suppressions", () => {
 
 describe("tour 3 : identité de l'auteur affiché, réponses rejouées, barre, casse, vignette", () => {
   it("publier au nom d'une structure ou d'un pro n'expose jamais le compte personnel de qui publie", async () => {
-    const orga = await signUp("Orga");
-    const co = await signUp("Co");
+    const orga = await signUp("Orga", { twoFactor: true });
+    const co = await signUp("Co", { twoFactor: true });
     const owner = await signUp("Pro");
     const fan = await signUp("Fan");
     const tagged = await signUp("Tagged");
@@ -1525,7 +1528,7 @@ describe("tour 3 : identité de l'auteur affiché, réponses rejouées, barre, c
   });
 
   it("des UUID de structure, de pro et de clé d'auteur en majuscules sont ramenés en minuscules", async () => {
-    const orga = await signUp("Orga");
+    const orga = await signUp("Orga", { twoFactor: true });
     const owner = await signUp("Pro");
     const fan = await signUp("Fan");
     const structure = await createStructure(orga.id);

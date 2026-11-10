@@ -4,6 +4,7 @@ import type { MouseEvent } from "react";
 
 import { now } from "../../lib/clock";
 import { PersonAvatar } from "../People";
+import { StoryMentionActions } from "./StoryMentionActions";
 
 // Une ligne de l'Activité du site (lot R7c2, maquette R7.2 `.r7act`) : mêmes mots que l'appli (`groupedTitle`,
 // `activityWhen`). À gauche les avatars (un grand, ou trois empilés pour une ligne regroupée), sinon une pastille d'icône ;
@@ -78,10 +79,13 @@ export function ActivityRow({
   item,
   day,
   onOpen,
+  organizerIds,
 }: {
   item: ActivityItem;
   day: ActivityDay;
   onOpen: () => Promise<void> | void;
+  /** Les structures que je gère (lot R7h) : seules celles-là offrent « Ajouter à ma story ». */
+  organizerIds?: readonly string[];
 }) {
   const { names, rest } = groupedTitle(item.title, item.actors, item.count);
   const when = activityWhen(new Date(item.latestAt), now(), day);
@@ -121,6 +125,7 @@ export function ActivityRow({
           {content}
         </button>
       )}
+      {item.type === "story_mention" ? <StoryMentionActions item={item} organizerIds={organizerIds} /> : null}
     </li>
   );
 }

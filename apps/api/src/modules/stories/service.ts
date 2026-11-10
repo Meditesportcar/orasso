@@ -53,6 +53,7 @@ import {
   uploads,
   userFollows,
 } from "../../db/schema";
+import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -74,6 +75,7 @@ import {
   accountActive,
   audienceStoryOf,
   authorKeyOf,
+  notMaskedCopy,
   relationOf,
   type StoryRow,
   selectStories,
@@ -84,6 +86,8 @@ import { composeStoryPhoto } from "./compose";
 import { purgeStoryFiles } from "./expire";
 import { composeLinkedStory, inspect, type LinkedContent, loadLinked } from "./linked";
 import { softDeleteWithCopies } from "./purge";
+import { dropCopiesOfTag } from "./share";
+import { managedStructures } from "./sharing";
 
 export { softDeleteWithCopies };
 
@@ -221,6 +225,8 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
         ),
       );
     if (!m) throw forbidden(storyLabels.notOrganizer);
+    // Lot R7h, tour 3 : publier au nom d'une structure exige le second facteur, comme le repartage et le retrait.
+    await requireOrganizer(v, input.structureId);
     return;
   }
   if (persona === "pro") {
@@ -263,7 +269,7 @@ async function notifyPublished(
   authorKey: { kind: StoryTagKind; id: string; key: string },
   name: string,
   /** Les personnes à prévenir d'une identification (elles-mêmes ou, pour une structure ou un pro, ses responsables). */
-  mentions: { userId: string; body: string }[],
+  mentions: { userId: string; body: string; target: Record<string, string> }[],
   /** L'auteur affiché : pour une structure ou un pro, son nom et son logo, jamais le compte personnel de qui publie. */
   actor: { userId?: string; pseudo: string; avatarUrl: string | null },
 ) {
@@ -272,10 +278,11 @@ async function notifyPublished(
   // Identifiés : une notification chacun, jamais de vignette (invariant des stories de crew).
   for (const m of mentions) {
     if (m.userId === story.authorId) continue;
+    // Lot R7h : `target` dit qui est identifié (moi, ma structure, ma fiche pro) : la ligne d'Activité en tire ses boutons.
     await notificationsService.notify(tx, m.userId, "story_mention", {
       title: storyLabels.mentionTitle(actor.pseudo),
       body: m.body,
-      data,
+      data: { ...data, ...m.target },
     });
   }
   const tagged = mentions.map((m) => m.userId);
@@ -540,6 +547,7 @@ export const storiesService = {
             and(
               sql`${stories.deletedAt} is null`,
               sql`${stories.expiresAt} > ${at}`,
+              notMaskedCopy(at),
               ctx.structureId
                 ? and(eq(stories.persona, "organizer"), eq(stories.structureId, ctx.structureId))
                 : ctx.proId
@@ -617,10 +625,10 @@ export const storiesService = {
             : { pseudo: name, avatarUrl: storage.url(shown?.l ?? null) };
         // Identifiés : la personne elle-même ; une structure ou un pro, ses responsables (propriétaire et co-organisateurs
         // actifs, propriétaire de la fiche). Une personne n'est prévenue qu'une fois.
-        const mentions = new Map<string, string>();
+        const mentions = new Map<string, { body: string; target: Record<string, string> }>();
         const pseudo = name;
         for (const t of tags) {
-          if (t.kind === "user") mentions.set(t.id, storyLabels.mention(pseudo));
+          if (t.kind === "user") mentions.set(t.id, { body: storyLabels.mention(pseudo), target: { target: "user" } });
         }
         for (const t of tags) {
           if (t.kind === "structure") {
@@ -637,14 +645,21 @@ export const storiesService = {
               );
             for (const o of owners) {
               if (!mentions.has(o.id))
-                mentions.set(o.id, storyLabels.mentionStructure(pseudo, named?.n ?? "ta structure"));
+                mentions.set(o.id, {
+                  body: storyLabels.mentionStructure(pseudo, named?.n ?? "ta structure"),
+                  target: { target: "structure", structureId: t.id },
+                });
             }
           } else if (t.kind === "pro") {
             const [pro] = await tx
               .select({ owner: proProfiles.ownerUserId, n: proProfiles.name })
               .from(proProfiles)
               .where(eq(proProfiles.id, t.id));
-            if (pro && !mentions.has(pro.owner)) mentions.set(pro.owner, storyLabels.mentionStructure(pseudo, pro.n));
+            if (pro && !mentions.has(pro.owner))
+              mentions.set(pro.owner, {
+                body: storyLabels.mentionStructure(pseudo, pro.n),
+                target: { target: "pro", proId: t.id },
+              });
           }
         }
         await notifyPublished(
@@ -652,7 +667,7 @@ export const storiesService = {
           row,
           authorKey,
           name,
-          [...mentions].map(([userId, body]) => ({ userId, body })),
+          [...mentions].map(([userId, m]) => ({ userId, body: m.body, target: m.target })),
           actor,
         );
         after(() => notificationsService.kick());
@@ -669,15 +684,35 @@ export const storiesService = {
     return { id, status: "ready", expiresAt: storyExpiresAt(at).toISOString(), skipped };
   },
 
-  /** `DELETE /me/stories/:id` : l'auteur retire sa story ; ses copies partent avec elle, les fichiers aussi. */
+  /**
+   * `DELETE /me/stories/:id` : l'auteur retire sa story ; ses copies partent avec elle, les fichiers aussi. Sur une copie,
+   * c'est « Retirer » (l'originale reste). Lot R7h : une story au nom d'une structure se retire aussi par ses responsables
+   * (propriétaire, co-organisateurs), pas seulement par la personne qui l'a publiée.
+   */
   async remove(v: Viewer, id: string): Promise<void> {
     rateLimit("storyWrite", v.user.id);
-    const [mine] = await db
-      .select({ id: stories.id })
+    const [found] = await db
+      .select({
+        id: stories.id,
+        authorId: stories.authorId,
+        persona: stories.persona,
+        structureId: stories.structureId,
+      })
       .from(stories)
-      .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id), isNull(stories.deletedAt)));
+      .where(and(eq(stories.id, id), isNull(stories.deletedAt)));
+    const mine =
+      found &&
+      (found.authorId === v.user.id ||
+        (found.persona === "organizer" &&
+          found.structureId !== null &&
+          (await managedStructures(v.user.id)).has(found.structureId)));
     if (!mine) throw notFound("Story introuvable");
-    const ids = await softDeleteWithCopies(db, [id]);
+    // Une story au nom d'une structure se retire par la garde centralisée de l'organisateur (double authentification
+    // obligatoire), y compris la sienne : c'est un geste fait au nom de la structure.
+    if (found.persona === "organizer" && found.structureId) await requireOrganizer(v, found.structureId);
+    // Dans une transaction : l'originale est verrouillée avant la recherche des copies (un partage en cours ne laisse
+    // pas de copie derrière), puis les fichiers partent après la validation.
+    const ids = await withTx((tx) => softDeleteWithCopies(tx, [id]));
     await purgeStoryFiles(ids);
   },
 
@@ -952,6 +987,8 @@ export const storiesService = {
           ),
         );
       if (!m) throw notFound("Identification introuvable");
+      // Retirer au nom d'une structure : garde centralisée (double authentification obligatoire).
+      await requireOrganizer(v, target.id);
     } else if (target?.kind === "pro") {
       const [p] = await db
         .select({ id: proProfiles.id })
@@ -964,18 +1001,25 @@ export const storiesService = {
       .from(stories)
       .where(and(eq(stories.id, storyId), isNull(stories.deletedAt), sql`${stories.expiresAt} > ${now()}`));
     if (!story) throw notFound("Identification introuvable");
-    const done = await db
-      .update(storyTags)
-      .set({ removedAt: now() })
-      .where(
-        and(
-          eq(storyTags.storyId, storyId),
-          eq(storyTags.targetKind, kind),
-          eq(storyTags.targetId, targetId),
-          isNull(storyTags.removedAt),
-        ),
-      )
-      .returning({ id: storyTags.id });
-    if (!done.length) throw notFound("Identification introuvable");
+    // Lot R7h, tour 2 : une seule transaction. La ligne de l'identification est verrouillée par la mise à jour ; un partage
+    // en cours (qui la tient en `FOR SHARE`) se termine avant, et la recherche des copies qui suit voit sa copie.
+    const dropped = await withTx(async (tx) => {
+      const done = await tx
+        .update(storyTags)
+        .set({ removedAt: now() })
+        .where(
+          and(
+            eq(storyTags.storyId, storyId),
+            eq(storyTags.targetKind, kind),
+            eq(storyTags.targetId, targetId),
+            isNull(storyTags.removedAt),
+          ),
+        )
+        .returning({ id: storyTags.id });
+      if (!done.length) throw notFound("Identification introuvable");
+      // Les copies fondées sur cette identification tombent avec elle (la story, elle, reste).
+      return dropCopiesOfTag(tx, storyId, kind, targetId);
+    });
+    if (dropped.length) await purgeStoryFiles(dropped);
   },
 };
