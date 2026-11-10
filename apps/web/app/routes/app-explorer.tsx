@@ -46,6 +46,7 @@ import { ChipGroup, ChoiceList, deptLong, Hidden, PillSheet, WhereForm } from ".
 import { cardVisibility, FollowAction, PersonAvatar, PersonRow } from "../components/People";
 import { ProsMap } from "../components/ProsMap";
 import { ProTile } from "../components/ProTile";
+import { UnderTabs } from "../components/UnderTabs";
 import { api, apiOrThrow, getMe } from "../lib/api.server";
 import { now } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
@@ -541,9 +542,53 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   );
 
   let pills: React.ReactNode = null;
+  // Lot R8x : « Filtres » est un bouton icône à droite du champ de recherche (événements et personnes).
+  let filterSheet: React.ReactNode = null;
   if (segment === "evenements" && events) {
     const f = events.filters;
     const nFilters = activeFilters(f);
+    filterSheet = (
+      <PillSheet
+        icon="filter"
+        iconOnly
+        value={R.filters}
+        count={nFilters || undefined}
+        set={nFilters > 0 || (!events.prefOn && events.hasPrefs)}
+        title={R.filtersSheet}
+        testId="filters-toggle"
+        sheetId="filters-sheet"
+      >
+        <form method="get" action="/app/explorer" className="ex-filters" data-testid="explorer-filters">
+          <Hidden entries={hiddenFor(["format", "quand", "affinites", "suivis"])} />
+          <ChipGroup
+            label={L.groupFormat}
+            name="format"
+            value={f.format || (events.prefOn && events.hasPrefs ? "prefs" : "all")}
+            options={[
+              ...(events.hasPrefs ? [{ value: "prefs", label: R.formatPrefs }] : []),
+              { value: "all", label: L.formatAll },
+              ...eventFormats.map((x) => ({ value: x, label: eventFormatLabels[x] })),
+            ]}
+          />
+          <ChipGroup label={L.groupWhen} name="quand" value={f.when} options={WHEN_OPTIONS} />
+          {signedIn ? (
+            <ChipGroup
+              label={L.groupTaste}
+              name="affinites"
+              kind="checkbox"
+              value=""
+              options={[
+                { value: "1", name: "affinites", label: L.tasteAffinity, checked: f.affinity },
+                { value: "1", name: "suivis", label: L.tasteFollowed, checked: f.followed },
+              ]}
+            />
+          ) : null}
+          <Button type="submit" icon="check" fullWidth data-testid="filters-apply">
+            {R.seeEvents(null)}
+          </Button>
+        </form>
+      </PillSheet>
+    );
     pills = (
       <>
         {whereSheet(events.place, R.seeEvents(null))}
@@ -571,45 +616,6 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             <p className="o-t-caption s-muted">{R.sortHint}</p>
           </PillSheet>
         )}
-        <PillSheet
-          icon="filter"
-          value={R.filters}
-          count={nFilters || undefined}
-          set={nFilters > 0 || (!events.prefOn && events.hasPrefs)}
-          title={R.filtersSheet}
-          testId="filters-toggle"
-          sheetId="filters-sheet"
-        >
-          <form method="get" action="/app/explorer" className="ex-filters" data-testid="explorer-filters">
-            <Hidden entries={hiddenFor(["format", "quand", "affinites", "suivis"])} />
-            <ChipGroup
-              label={L.groupFormat}
-              name="format"
-              value={f.format || (events.prefOn && events.hasPrefs ? "prefs" : "all")}
-              options={[
-                ...(events.hasPrefs ? [{ value: "prefs", label: R.formatPrefs }] : []),
-                { value: "all", label: L.formatAll },
-                ...eventFormats.map((x) => ({ value: x, label: eventFormatLabels[x] })),
-              ]}
-            />
-            <ChipGroup label={L.groupWhen} name="quand" value={f.when} options={WHEN_OPTIONS} />
-            {signedIn ? (
-              <ChipGroup
-                label={L.groupTaste}
-                name="affinites"
-                kind="checkbox"
-                value=""
-                options={[
-                  { value: "1", name: "affinites", label: L.tasteAffinity, checked: f.affinity },
-                  { value: "1", name: "suivis", label: L.tasteFollowed, checked: f.followed },
-                ]}
-              />
-            ) : null}
-            <Button type="submit" icon="check" fullWidth data-testid="filters-apply">
-              {R.seeEvents(null)}
-            </Button>
-          </form>
-        </PillSheet>
       </>
     );
   } else if (segment === "pros" && pros) {
@@ -685,6 +691,41 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   } else if (segment === "personnes" && people) {
     const w = people.where;
     const nFilters = (people.interet ? 1 : 0) + (people.grade ? 1 : 0);
+    filterSheet = (
+      <PillSheet
+        icon="filter"
+        iconOnly
+        value={R.filters}
+        count={nFilters || undefined}
+        set={nFilters > 0}
+        title={R.filtersSheet}
+        testId="people-filters"
+        sheetId="people-filters-sheet"
+      >
+        <form method="get" action="/app/explorer" className="ex-filters" data-testid="people-filters-panel">
+          <Hidden entries={hiddenFor(["interet", "grade"])} />
+          <ChipGroup
+            label="Centre d'intérêt"
+            name="interet"
+            value={people.interet}
+            options={[
+              { value: "", label: L.formatAll },
+              ...people.categories.map((c) => ({ value: c.id, label: c.label })),
+            ]}
+          />
+          <ChipGroup
+            label="Grade, au moins"
+            name="grade"
+            value={people.grade}
+            options={[{ value: "", label: L.formatAll }, ...grades.map((g) => ({ value: g, label: gradeLabels[g] }))]}
+          />
+          <p className="o-t-caption s-muted">{R.peopleFiltersHint}</p>
+          <Button type="submit" icon="check" fullWidth data-testid="people-filters-apply">
+            {R.seeResults}
+          </Button>
+        </form>
+      </PillSheet>
+    );
     // Rien de choisi : contour. Les suggestions viennent de mon coin ; une recherche s'élargit d'elle-même à la France.
     const wherePillValue =
       w === null
@@ -754,38 +795,6 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             }))}
           />
         </PillSheet>
-        <PillSheet
-          icon="filter"
-          value={R.filters}
-          count={nFilters || undefined}
-          set={nFilters > 0}
-          title={R.filtersSheet}
-          testId="people-filters"
-          sheetId="people-filters-sheet"
-        >
-          <form method="get" action="/app/explorer" className="ex-filters" data-testid="people-filters-panel">
-            <Hidden entries={hiddenFor(["interet", "grade"])} />
-            <ChipGroup
-              label="Centre d'intérêt"
-              name="interet"
-              value={people.interet}
-              options={[
-                { value: "", label: L.formatAll },
-                ...people.categories.map((c) => ({ value: c.id, label: c.label })),
-              ]}
-            />
-            <ChipGroup
-              label="Grade, au moins"
-              name="grade"
-              value={people.grade}
-              options={[{ value: "", label: L.formatAll }, ...grades.map((g) => ({ value: g, label: gradeLabels[g] }))]}
-            />
-            <p className="o-t-caption s-muted">{R.peopleFiltersHint}</p>
-            <Button type="submit" icon="check" fullWidth data-testid="people-filters-apply">
-              {R.seeResults}
-            </Button>
-          </form>
-        </PillSheet>
       </>
     );
   }
@@ -805,60 +814,69 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
     <div className="s-stack" data-testid="explorer">
       <h1 className="s-title">{explorerLabels.title}</h1>
       <div className="ex-head" data-testid="explorer-head">
-        <nav className="s-row" aria-label={R.segments}>
-          {segments.map((s) => (
-            <a
-              key={s.id}
-              href={href({ segment: s.id, q, ...(s.id === "personnes" ? {} : carry) })}
-              aria-current={segment === s.id ? "page" : undefined}
-              data-testid={`segment-${s.id}`}
-            >
-              <Chip selected={segment === s.id}>{s.label}</Chip>
-            </a>
-          ))}
-        </nav>
-        <Form
-          method="get"
-          action="/app/explorer"
-          role="search"
-          id="explorer-form"
-          className="ex-search"
-          data-testid="explorer-search"
-        >
-          {segment === "resultats" ? <input type="hidden" name="segment" value="resultats" /> : null}
-          {segment === "resultats" ? null : <Hidden entries={hiddenFor(["q"])} />}
-          <label className="ex-search__field">
-            <Icon name="search" size={18} />
-            <span className="o-visually-hidden">{R.searchLabel}</span>
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              maxLength={SEARCH_MAX_LENGTH}
-              placeholder={
-                segment === "pros"
-                  ? R.searchPros
-                  : segment === "personnes"
-                    ? R.searchPeople
-                    : segment === "resultats"
-                      ? explorerLabels.searchPlaceholder
-                      : R.searchEvents
-              }
-              data-testid={segment === "personnes" ? "people-q" : "events-q"}
-            />
-            {/* `.exsearch .xclr` : ✕ dans le champ ; la loupe envoie la recherche (le site marche sans JavaScript). */}
-            {q && segment !== "resultats" ? (
-              <a className="ex-search__btn" href={href({ ...cur, q: null })} data-testid="search-clear">
-                <Icon name="close" size={16} />
-                <span className="o-visually-hidden">{R.clearSearch}</span>
-              </a>
-            ) : null}
-            <button type="submit" className="ex-search__btn" data-testid="search-submit">
-              <Icon name="search" size={16} />
+        <UnderTabs
+          value={segment}
+          label={R.segments}
+          testId="explorer-segments"
+          itemTestId={(id) => `segment-${id}`}
+          spread
+          items={segments.map((x) => ({
+            ...x,
+            href: href({ segment: x.id, q, ...(x.id === "personnes" ? {} : carry) }),
+            count:
+              x.id === "evenements" &&
+              segment === "evenements" &&
+              events &&
+              !(events.page.total === undefined && events.page.nextCursor !== null)
+                ? (events.page.total ?? events.items.length)
+                : null,
+          }))}
+        />
+        <div className="ex-searchline">
+          <Form
+            method="get"
+            action="/app/explorer"
+            role="search"
+            id="explorer-form"
+            className="ex-search"
+            data-testid="explorer-search"
+          >
+            {segment === "resultats" ? <input type="hidden" name="segment" value="resultats" /> : null}
+            {segment === "resultats" ? null : <Hidden entries={hiddenFor(["q"])} />}
+            <label className="ex-search__field">
+              <Icon name="search" size={18} />
               <span className="o-visually-hidden">{R.searchLabel}</span>
-            </button>
-          </label>
-        </Form>
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                maxLength={SEARCH_MAX_LENGTH}
+                placeholder={
+                  segment === "pros"
+                    ? R.searchPros
+                    : segment === "personnes"
+                      ? R.searchPeople
+                      : segment === "resultats"
+                        ? explorerLabels.searchPlaceholder
+                        : R.searchEvents
+                }
+                data-testid={segment === "personnes" ? "people-q" : "events-q"}
+              />
+              {/* `.exsearch .xclr` : ✕ dans le champ ; la loupe envoie la recherche (le site marche sans JavaScript). */}
+              {q && segment !== "resultats" ? (
+                <a className="ex-search__btn" href={href({ ...cur, q: null })} data-testid="search-clear">
+                  <Icon name="close" size={16} />
+                  <span className="o-visually-hidden">{R.clearSearch}</span>
+                </a>
+              ) : null}
+              <button type="submit" className="ex-search__btn" data-testid="search-submit">
+                <Icon name="search" size={16} />
+                <span className="o-visually-hidden">{R.searchLabel}</span>
+              </button>
+            </label>
+          </Form>
+          {filterSheet}
+        </div>
         {pills ? (
           <fieldset className="ex-pills">
             <legend className="o-visually-hidden">{R.pills}</legend>
@@ -895,18 +913,6 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
         <div className="s-stack" data-testid="events-segment">
           {placeNote(events.place)}
           {viewLinks}
-          <p className="ex-line o-t-caption" data-testid="sort-line">
-            {[
-              R.eventsLine(
-                events.page.total ?? events.items.length,
-                events.page.total === undefined && events.page.nextCursor !== null,
-              ),
-              placeLine(events.place.where, coin),
-              events.filters.affinity ? L.sortAffinity : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
           {events.items.length === 0 && !failed ? (
             <p className="s-notice" data-testid="events-empty">
               {explorerLabels.eventsEmpty}

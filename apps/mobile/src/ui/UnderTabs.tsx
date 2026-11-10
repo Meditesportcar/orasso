@@ -7,6 +7,8 @@
 import { archivoAt, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { underTabLabel } from "./underTabLabel";
+
 const { space1, space2 } = tokens.spacing;
 const TAB_HEIGHT = 40;
 /** Le plafond de police des libellés (`data-fsmax="1.12"` de la maquette). */
@@ -16,11 +18,6 @@ const BAR = 3;
 const HIT = Math.max(0, (tokens.spacing.touch - TAB_HEIGHT) / 2);
 
 export type UnderTab<T extends string> = { id: T; label: string; icon?: IconName; count?: number | null };
-
-/** Le libellé affiché : « Événements · 7 » quand le nombre est connu (jamais « · 0 » pour un nombre inconnu). */
-export function underTabLabel(label: string, count?: number | null): string {
-  return typeof count === "number" && Number.isFinite(count) ? `${label} · ${count}` : label;
-}
 
 export function UnderTabs<T extends string>({
   value,
