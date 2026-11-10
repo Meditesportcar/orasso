@@ -10,16 +10,18 @@ import {
   aspectMatches,
   FEED_ASPECT_RATIOS,
   type FeedPostCreate,
+  type FeedPostPatch,
   type FeedPostView,
   feedLabels,
   type PlateRect,
+  partnershipLabels,
   type ReportReason,
 } from "@orasso/shared";
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPostReactions, feedPosts, uploads } from "../../db/schema";
+import { feedPostPhotos, feedPostReactions, feedPosts, uploads, userFollows } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -27,6 +29,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
+import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
 import { composeLinkedPost, loadLinked } from "../stories/linked";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
@@ -97,6 +100,17 @@ export const feedPostsService = {
     if (eventId && !(await eventSummariesByIds(db, [eventId])).has(eventId)) {
       throw validation("Événement introuvable");
     }
+
+    // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite.
+    const commercialPartnerId =
+      (
+        await commercialPartnerFor(db, {
+          authorId: userId,
+          tagProIds: [],
+          caption: input.caption,
+          explicit: input.commercialPartnerId,
+        })
+      )?.proId ?? null;
 
     // 3. Les fichiers envoyés : à moi, pour cet usage, pas encore rattachés, au bon format.
     const keys = input.photos.map((p) => p.uploadKey);
@@ -190,6 +204,7 @@ export const feedPostsService = {
           aspect: linkedContent ? "portrait_4_5" : input.aspect,
           department: v.profile.departments[0] ?? "",
           clientId: input.clientId ?? null,
+          commercialPartnerId,
         });
         await tx.insert(feedPostPhotos).values(
           photos.map((p, position) => ({
@@ -202,6 +217,33 @@ export const feedPostsService = {
             noPlateConfirmed: p.confirmed,
           })),
         );
+        if (commercialPartnerId) {
+          await notifyPartnerMention(tx, {
+            proId: commercialPartnerId,
+            authorUserId: userId,
+            kind: "post",
+            // Le titulaire ne voit la publication que d'un compte public, ou qu'il suit (règle du Fil).
+            sees: async (ownerId) =>
+              v.profile.visibility !== "private" ||
+              Boolean(
+                (
+                  await tx
+                    .select({ id: userFollows.followerId })
+                    .from(userFollows)
+                    .where(
+                      and(
+                        eq(userFollows.followerId, ownerId),
+                        eq(userFollows.followedId, userId),
+                        eq(userFollows.status, "accepted"),
+                      ),
+                    )
+                )[0],
+              ),
+            actor: { userId, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
+            // Aucune page ne montre une seule publication : le lien ouvre le Fil, la publication est dans `postId`.
+            data: { postId, link: "/app/fil" },
+          });
+        }
       });
     } catch (error) {
       for (const key of written) await removeOrRetry(key);
@@ -221,6 +263,28 @@ export const feedPostsService = {
     // Les envois (privés) ont été copiés : on les efface (leurs lignes restent, rattachées).
     for (const p of photos) if (p.uploadKey) await removeOrRetry(p.uploadKey);
     return ownView(v, postId);
+  },
+
+  /**
+   * `PATCH /me/feed-posts/:id` `{ commercialPartnerId: null }` : retirer la mention « Collaboration commerciale ». Une
+   * publication qui la porte la garde TOUJOURS (partenariat actif ou fini : un contenu publié garde sa mention) : 409
+   * `commercial_locked`. Sans mention, rien à retirer : la publication est rendue telle quelle.
+   */
+  async patch(v: Viewer, id: string, _input: FeedPostPatch): Promise<FeedPostView> {
+    rateLimit("feedWrite", v.user.id);
+    const [post] = await db
+      .select({
+        authorId: feedPosts.authorId,
+        deletedAt: feedPosts.deletedAt,
+        commercial: feedPosts.commercialPartnerId,
+      })
+      .from(feedPosts)
+      .where(eq(feedPosts.id, id));
+    if (!post || post.deletedAt || post.authorId !== v.user.id) throw notFound("Publication introuvable");
+    if (post.commercial) {
+      throw new AppError(409, "commercial_locked", partnershipLabels.errors.commercial_locked);
+    }
+    return ownView(v, id);
   },
 
   /** `GET /feed-posts/:id` : le regard de la personne (404 si elle ne peut pas la voir). */

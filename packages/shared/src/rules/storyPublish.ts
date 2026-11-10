@@ -202,6 +202,8 @@ export function storyBody(draft: {
   vehicleId: string | null;
   eventId: string | null;
   tags: readonly { id: string }[];
+  /** Mention « Collaboration commerciale » posée à la main (R7m2) ; un partenaire actif cité est posé par l'API. */
+  commercialPartnerId?: string | null;
 }) {
   const blurred = draft.rects.length > 0;
   return {
@@ -221,6 +223,7 @@ export function storyBody(draft: {
     ...(draft.vehicleId ? { vehicleId: draft.vehicleId } : {}),
     ...(draft.eventId && draft.audience !== "crew" ? { eventId: draft.eventId } : {}),
     tags: draft.tags.map((t) => ({ kind: "user" as const, id: t.id })),
+    ...(draft.commercialPartnerId ? { commercialPartnerId: draft.commercialPartnerId } : {}),
   };
 }
 

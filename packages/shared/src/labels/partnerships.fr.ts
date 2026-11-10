@@ -1,8 +1,32 @@
 // Partenariats pro ↔ passionné (lot R7m1, maquettes R7.19 et R7.20) : libellés de l'API, du site et de l'appli, mêmes mots
-// partout. « Collaboration commerciale » n'est pas ici : il est posé par le lot R7m2, seulement quand le partenaire est
-// mentionné. Aucune somme, aucune « rémunération » : Orasso ne touche à aucun paiement entre un pro et un passionné.
+// partout. Le libellé « Collaboration commerciale » (lot R7m2) est ici, À UN SEUL ENDROIT : formulation et place à faire
+// relire par un juriste (loi du 9 juin 2023, décision D38). Aucune somme, aucune « rémunération » : Orasso ne touche à aucun paiement entre un pro et un passionné.
 
 export const partnershipLabels = {
+  /** Mention légale (lot R7m2) : posée par l'API sur une story ou une publication qui désigne un pro partenaire. */
+  commercialCollaboration: "Collaboration commerciale",
+  /** « Collaboration commerciale · Wrap 66 » : le bandeau, la ligne de publication et le fichier qui sort d'Orasso. */
+  commercialLine: (pro: string) => `Collaboration commerciale · ${pro}`,
+  /** Sous la ligne non décochable, quand un partenaire actif est identifié ou cité. */
+  commercialRequired: "Obligatoire pour un contenu fait avec ton partenaire",
+  /** « Poser la mention moi-même » (maquette R7.21) : un contenu fait avec une marque ou un pro qui n'est pas ton partenaire. */
+  commercialSelf: "Poser « Collaboration commerciale » moi-même",
+  commercialSelfHint: "Pour un contenu fait avec une marque, sans l'identifier",
+  /** Prévenu : le pro cité (story : il peut aussi la repartager). */
+  commercialNotifiedStory: (pro: string) => `${pro} est prévenu et peut repartager ta story.`,
+  commercialNotifiedPost: (pro: string) => `${pro} est prévenu.`,
+  /** Note de la loi sur l'influence commerciale (à faire relire par un juriste avec le reste). */
+  commercialLaw:
+    "En France, la loi du 9 juin 2023 sur l'influence commerciale impose d'indiquer clairement « Publicité » ou « Collaboration commerciale » sur un contenu fait dans le cadre d'un partenariat.",
+  commercialPick: "Choisis le pro de la collaboration.",
+  commercialPickPlaceholder: "Nom du pro",
+  commercialPickEmpty: "Aucun pro trouvé.",
+  commercialPickError: "La recherche ne répond pas. Réessaie.",
+  commercialPicked: (pro: string) => `Avec ${pro}`,
+  commercialChange: "Changer",
+  commercialOpenPro: (pro: string) => `Voir la fiche de ${pro}`,
+  /** Visionneuse, côté pro cité : reprendre la story dans la sienne (bouton principal). */
+  commercialReshare: "Repartager dans ma story",
   /** Bouton du profil d'un passionné, vu par un pro vérifié. */
   propose: "Proposer un partenariat",
   proposed: "Proposition envoyée",
@@ -65,6 +89,11 @@ export const partnershipLabels = {
   vehiclePartner: (pro: string) => `Partenaire : ${pro}`,
   /** Erreurs de l'API. */
   errors: {
+    commercial_locked: "La mention « Collaboration commerciale » ne se retire pas d'un contenu publié.",
+    commercial_conflict: "Un contenu ne porte qu'une collaboration commerciale : retire l'autre pro.",
+    commercial_video:
+      "Cette story vidéo est une collaboration commerciale : elle ne peut pas encore sortir d'Orasso, la mention ne peut pas y être imprimée.",
+    commercial_unknown: "Ce pro n'est pas disponible pour une collaboration commerciale.",
     not_verified: "Seul un pro dont la fiche est vérifiée peut proposer un partenariat.",
     not_published: "Seule une fiche publiée peut proposer un partenariat.",
     subscription_required: "Proposer un partenariat est réservé à l'abonnement pro.",
@@ -86,5 +115,9 @@ export const partnershipLabels = {
     declinedBody: (pseudo: string) => `${pseudo} a décliné ton partenariat.`,
     endedTitle: "Partenariat terminé",
     endedBody: (name: string) => `Ton partenariat avec ${name} est terminé.`,
+    /** Au pro cité dans une story ou une publication de son partenaire (`partner_mention`, Journal). */
+    mentionedTitle: (pseudo: string) => `${pseudo} te cite`,
+    mentionedStoryBody: (pseudo: string) => `${pseudo} t'a cité dans une story, en collaboration commerciale.`,
+    mentionedPostBody: (pseudo: string) => `${pseudo} t'a cité dans une publication, en collaboration commerciale.`,
   },
 } as const;

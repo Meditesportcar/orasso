@@ -297,7 +297,12 @@ export async function placeOnGround(
  * Signature « orasso.fr » d'un fichier qui sort d'Orasso : une pastille sombre en bas à droite (en story, au-dessus de la
  * zone que l'application de destination recouvre). Rend un JPEG : lu partout (Instagram, WhatsApp, TikTok…).
  */
-export async function signFile(image: Buffer, size: { width: number; height: number }): Promise<Buffer> {
+export async function signFile(
+  image: Buffer,
+  size: { width: number; height: number },
+  /** « Collaboration commerciale · <pro> » (R7m2) : imprimée sur le fichier, au-dessus de la signature. Jamais coupée. */
+  mention?: string | null,
+): Promise<Buffer> {
   const label = await textLine(shareLabels.signature, { font: "bold", size: 38, color: CREAM, keepCase: true });
   const padX = 26;
   const padY = 16;
@@ -307,19 +312,47 @@ export async function signFile(image: Buffer, size: { width: number; height: num
   const bottom = size.height >= STORY_H ? 250 : 44;
   const left = size.width - right - w;
   const top = size.height - bottom - h;
-  return sharp(image)
-    .composite([
+  const layers: OverlayOptions[] = [
+    {
+      input: svg(
+        w,
+        h,
+        `<rect width="${w}" height="${h}" rx="${Math.round(h / 2.4)}" fill="#0b0c0e" fill-opacity=".62"/>`,
+      ),
+      left,
+      top,
+    },
+    { input: label.data, left: left + padX, top: Math.round(top + padY - label.capTop) },
+  ];
+  if (mention) {
+    // Même pastille que la signature, juste au-dessus : le texte est réduit (jamais coupé) pour tenir dans la largeur.
+    const line = await textLine(mention, {
+      font: "bold",
+      size: 36,
+      color: CREAM,
+      keepCase: true,
+      maxWidth: size.width - right * 2 - padX * 2,
+    });
+    // Réduit pour tenir : les mesures peuvent être fractionnaires, sharp veut des entiers.
+    const mw = Math.ceil(line.width + padX * 2);
+    const mh = Math.ceil(line.cap + padY * 2);
+    const mLeft = Math.round(size.width - right - mw);
+    const mTop = Math.round(top - 16 - mh);
+    layers.push(
       {
         input: svg(
-          w,
-          h,
-          `<rect width="${w}" height="${h}" rx="${Math.round(h / 2.4)}" fill="#0b0c0e" fill-opacity=".62"/>`,
+          mw,
+          mh,
+          `<rect width="${mw}" height="${mh}" rx="${Math.round(mh / 2.4)}" fill="#0b0c0e" fill-opacity=".72"/>`,
         ),
-        left,
-        top,
+        left: mLeft,
+        top: mTop,
       },
-      { input: label.data, left: left + padX, top: Math.round(top + padY - label.capTop) },
-    ])
+      { input: line.data, left: mLeft + padX, top: Math.round(mTop + padY - line.capTop) },
+    );
+  }
+  return sharp(image)
+    .composite(layers)
     .flatten({ background: "#0b0c0e" })
     .jpeg({ quality: 90, mozjpeg: true })
     .toBuffer();

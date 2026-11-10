@@ -97,6 +97,14 @@ export async function dropCopiesOfTag(
       : kind === "pro"
         ? and(eq(stories.persona, "pro"), eq(stories.proId, targetId))
         : and(eq(stories.persona, "fan"), eq(stories.authorId, targetId));
+  // Lot R7m2 : un pro cité en « Collaboration commerciale » garde le droit de reprendre la story, identifié ou non.
+  if (kind === "pro") {
+    const [cited] = await ex
+      .select({ id: stories.id })
+      .from(stories)
+      .where(and(eq(stories.id, storyId), eq(stories.commercialPartnerId, targetId)));
+    if (cited) return [];
+  }
   const copies = await ex
     .select({ id: stories.id })
     .from(stories)
@@ -165,7 +173,9 @@ export const storiesShare = {
       const rel = relationOf(await setsFor(v.user.id, [row], ex), row);
       const denied = shareRefusal(viewerOf(v), audienceStoryOf(row, at), rel);
       if (denied) throw refusal(denied);
-      if (!(await hasActiveTag(ex, id, tagKind, tagTarget))) {
+      // Lot R7m2 : le pro cité en « Collaboration commerciale » reprend la story comme s'il était identifié.
+      const citedAsPartner = tagKind === "pro" && row.story.commercialPartnerId === tagTarget;
+      if (!citedAsPartner && !(await hasActiveTag(ex, id, tagKind, tagTarget))) {
         throw new AppError(403, "not_tagged", storyShareLabels.refusals.not_tagged);
       }
       return row.story;
@@ -232,6 +242,8 @@ export const storiesShare = {
           eventId: source.eventId,
           sharedFromStoryId: id,
           sharedByUserId: v.user.id,
+          // « Collaboration commerciale » : la copie garde la mention de l'originale (R7m2).
+          commercialPartnerId: source.commercialPartnerId,
           // Même expiration que l'originale : la copie ne la prolonge jamais.
           expiresAt: source.expiresAt,
           createdAt: at,

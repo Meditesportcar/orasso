@@ -128,6 +128,11 @@ export const proListQuery = z.object({
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().min(1).max(500).optional(),
+  /**
+   * Lot R7m2, tour 3 : seulement les fiches qu'une « Collaboration commerciale » peut viser (`proShown` : publiée, vérifiée,
+   * titulaire en règle). Les sélecteurs du site et de l'appli le demandent : un choix proposé n'est plus refusé (400).
+   */
+  eligible: z.enum(["1", "true"]).optional(),
 });
 export type ProListQuery = z.infer<typeof proListQuery>;
 

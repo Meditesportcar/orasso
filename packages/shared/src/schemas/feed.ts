@@ -20,6 +20,7 @@ import type { AdvertiserKind } from "../rules/sponsored";
 import { optionalText } from "./common";
 import type { MemoryCardPayload } from "./memories";
 import type { SpotFeedPayload } from "./spotMeetup";
+import type { CommercialPartnerView } from "./stories";
 import { plateRectsSchema } from "./vehicle";
 
 // Le Fil (lot R7e1) : `GET /fil`, publications, « Moins de ce genre », signalement.
@@ -73,6 +74,8 @@ export const feedPostCreateSchema = z
       .nullish(),
     /** Identifiant tiré par l'appareil : un nouvel essai après une réponse perdue rend la même publication. */
     clientId: z.uuid().nullish(),
+    /** Mention « Collaboration commerciale » posée à la main (R7m2) : une fiche pro publiée, partenaire ou non. */
+    commercialPartnerId: z.uuid().nullish(),
   })
   .refine((v) => v.photos.length > 0 || Boolean(v.linked), {
     message: "Au moins une photo est attendue",
@@ -83,6 +86,10 @@ export const feedPostCreateSchema = z
     path: ["photos"],
   });
 export type FeedPostCreate = z.infer<typeof feedPostCreateSchema>;
+
+/** `PATCH /me/feed-posts/:id` (R7m2) : le seul champ est la mention commerciale, et seulement pour la retirer (refusé si elle est posée). */
+export const feedPostPatchSchema = z.object({ commercialPartnerId: z.null() }).strict();
+export type FeedPostPatch = z.infer<typeof feedPostPatchSchema>;
 
 export const feedLessSchema = z.object({ kind: z.enum(feedCardKinds) });
 export const feedMineQuery = z.object({ cursor: z.string().max(200).optional() });
@@ -132,6 +139,8 @@ export type FeedPostView = {
   reactedByMe: boolean;
   createdAt: string;
   mine: boolean;
+  /** « Collaboration commerciale » (R7m2) : posée par l'API, jamais retirée ; `null` sans collaboration. */
+  commercialPartner: CommercialPartnerView | null;
 };
 
 export type FeedPodiumEntry = {

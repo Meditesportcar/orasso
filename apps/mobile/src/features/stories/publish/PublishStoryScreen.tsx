@@ -8,8 +8,11 @@
 // téléphone, part avec sa progression réelle puis sa vignette. Casquette active : l'écran publie au nom de la structure ou de la fiche.
 import { Icon, SendProgress, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import {
+  commercialField,
+  commercialIssue,
   eventsWithPlace,
   storyPublishLabels as L,
+  partnershipLabels,
   type StoryAudienceOption,
   type StoryAuthor,
   type StoryCreated,
@@ -44,6 +47,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { withDetection } from "../../fil/publish/model";
 import { Capture } from "./Capture";
+import { commercialText, useCommercialLine } from "./CommercialLine";
 import { Details } from "./Details";
 import { audienceLost, audienceOption, type DetailsState, initialDetails, settleAudience } from "./detailsModel";
 import { Fit } from "./Fit";
@@ -126,6 +130,8 @@ export function PublishStoryScreen() {
   const [step, setStep] = useState<StoryStep>("media");
   const [draft, setDraft] = useState<StoryDraft | null>(null);
   const [details, setDetails] = useState<DetailsState>(() => initialDetails([]));
+  // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
+  const commercialLine = useCommercialLine(details.caption, details.commercial);
   const [working, setWorking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
@@ -360,14 +366,15 @@ export function PublishStoryScreen() {
 
   const issue = draft
     ? (video && offline ? V.offline : null) ||
-      storyPublishIssue({
+      (storyPublishIssue({
         hasPhoto: true,
         preparing: working,
         plate: video ? null : plateOf(draft),
         caption: details.caption,
         needsCrew: chosen?.audience === "crew" && !chosen.crewId,
         audienceLost: lost,
-      })
+      }) ??
+        commercialIssue(commercialLine, partnershipLabels.commercialPick))
     : L.missingPhoto;
 
   /** Vidéo : envoi (progression réelle), vignette, création. Rien n'est gardé hors ligne : on le dit, on ne met rien en file. */
@@ -392,6 +399,7 @@ export function PublishStoryScreen() {
           vehicleId: details.vehicleId,
           eventId: details.eventId,
           tags: details.tags,
+          ...commercialField(commercialLine),
         });
       const result = await sendIfAlive(
         alive,
@@ -466,6 +474,7 @@ export function PublishStoryScreen() {
           vehicleId: details.vehicleId,
           eventId: details.eventId,
           tags: details.tags,
+          ...commercialField(commercialLine),
         });
       // La photo est envoyée une seule fois (clé gardée) ; ensuite, vérification juste avant la création : un écran démonté
       // (ou un compte purgé) ne publie rien. La création est idempotente côté API : le même envoi repris rend la même story.
@@ -547,6 +556,7 @@ export function PublishStoryScreen() {
     place: details.place.trim() || null,
     vehicle: activeVehicles.find((v) => v.id === details.vehicleId)?.label ?? null,
     tags: details.tags.map((x) => `@${x.pseudo}`),
+    commercial: commercialText(commercialLine),
   };
 
   if (step === "done" && created) {
@@ -686,6 +696,7 @@ export function PublishStoryScreen() {
           vehicles={activeVehicles.map((v) => ({ id: v.id, label: v.label }))}
           events={events}
           locked={busy}
+          commercialLine={commercialLine}
         />
       ) : null}
       {draft && video && step === "details" ? <Muted variant="caption">{V.asIsLine}</Muted> : null}

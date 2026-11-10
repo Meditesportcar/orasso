@@ -35,12 +35,12 @@ import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
-import { proOwnerActive } from "../pros/explore";
 import { proOfUser } from "../pros/service";
 import { followsService } from "../social/follows";
 import { socialProfile } from "../social/profile";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
+import { proShown } from "./shown";
 
 type PartnershipRow = typeof partnerships.$inferSelect;
 type ProRow = typeof proProfiles.$inferSelect;
@@ -57,18 +57,6 @@ const err = (
 /** Compte en règle : ni supprimé, ni banni, ni suspendu. */
 const profileActive = (at: Date) =>
   sql`${profiles.deletedAt} is null and ${profiles.bannedAt} is null and (${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${at})`;
-
-/**
- * Fiche pro avec laquelle un partenariat existe aux yeux des autres : non supprimée, **publiée, vérifiée** et titulaire en
- * règle. Une seule règle pour l'afficher comme partenaire, lire une demande, accepter et proposer (lot R7m1, tour 2).
- */
-const proShown = (at: Date): SQL =>
-  and(
-    isNull(proProfiles.deletedAt),
-    isNotNull(proProfiles.publishedAt),
-    isNotNull(proProfiles.verifiedAt),
-    proOwnerActive(at),
-  ) as SQL;
 
 const toResult = (p: PartnershipRow, userPseudo: string): PartnershipResult => ({
   id: p.id,

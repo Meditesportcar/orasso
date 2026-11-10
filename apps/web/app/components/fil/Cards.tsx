@@ -247,7 +247,6 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
     () => setFire({ count: post.reactionsCount, on: post.reactedByMe }),
     [post.reactionsCount, post.reactedByMe],
   );
-  const commercialPartner = (post as { commercialPartner?: { name: string } | null }).commercialPartner ?? null;
 
   async function toggle() {
     if (busy) return;
@@ -270,6 +269,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       href={post.mine ? undefined : `/u/${encodeURIComponent(post.author.pseudo)}`}
       onMenu={onMenu}
       faded={faded}
+      banner={<CommercialBadge partner={post.commercialPartner} />}
       actions={
         <>
           <button
@@ -288,7 +288,6 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
         </>
       }
     >
-      <CommercialBadge partner={commercialPartner} />
       <FeedPhotos post={post} />
       {post.caption ? (
         <p className="o-t-body" data-testid="feed-post-caption">

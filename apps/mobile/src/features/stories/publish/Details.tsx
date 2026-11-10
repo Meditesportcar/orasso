@@ -1,10 +1,11 @@
 // Les détails de la story (lot R7f3, maquette R7.8 étape 3) : la légende (200 au plus), l'@identification (parmi ceux qui
 // peuvent voir la story), l'autocollant d'événement (grisé, avec la raison, pour un compte privé ou une story de crew), le
 // lieu (texte libre ou « Ma ville », jamais des coordonnées), la voiture du garage, puis « Qui la voit ». Organisateur, pro,
-// prestataire, média : « Public » seul, au nom de la structure ou de la fiche. La ligne « Collaboration commerciale » est
-// réservée au lot R7m2 (`CommercialLine`).
+// prestataire, média : « Public » seul, au nom de la structure ou de la fiche. La ligne « Collaboration commerciale »
+// (lot R7m2, `CommercialLine`) est sous les outils.
 import { Chip, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type CommercialLineState,
   storyPublishLabels as L,
   STORY_CAPTION_MAX,
   STORY_PLACE_MAX,
@@ -19,7 +20,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { SmButton } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { CommercialLine } from "./CommercialLine";
+import { CommercialLine, commercialText } from "./CommercialLine";
 import {
   audienceLost,
   audienceOption,
@@ -48,6 +49,7 @@ export function Details({
   vehicles,
   events,
   locked,
+  commercialLine,
 }: {
   draft: StoryDraft;
   details: DetailsState;
@@ -59,6 +61,8 @@ export function Details({
   vehicles: { id: string; label: string }[];
   events: { id: string; title: string }[];
   locked: boolean;
+  /** « Collaboration commerciale » : obligatoire (partenaire cité) ou posée à la main (lot R7m2). */
+  commercialLine: CommercialLineState;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -128,6 +132,7 @@ export function Details({
               place: details.place.trim() || null,
               vehicle: vehicle?.label ?? null,
               tags: details.tags.map((x) => `@${x.pseudo}`),
+              commercial: commercialText(commercialLine),
             }}
           />
         </StoryCanvas>
@@ -244,7 +249,12 @@ export function Details({
         </View>
       ) : null}
 
-      <CommercialLine taggedProIds={[]} />
+      <CommercialLine
+        line={commercialLine}
+        onDraft={(commercial) => patch({ commercial })}
+        disabled={locked}
+        kind="story"
+      />
 
       <Label>{L.audienceTitle}</Label>
       <View style={styles.panel} testID="story-audience">

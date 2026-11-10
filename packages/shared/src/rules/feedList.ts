@@ -175,6 +175,8 @@ export function feedPostBody(draft: {
   vehicleId: string | null;
   eventId: string | null;
   clientId: string;
+  /** Mention « Collaboration commerciale » posée à la main (R7m2) ; un partenaire actif cité est posé par l'API. */
+  commercialPartnerId?: string | null;
 }) {
   return {
     caption: draft.caption.trim() || null,
@@ -182,6 +184,7 @@ export function feedPostBody(draft: {
     eventId: draft.eventId,
     aspect: draft.aspect,
     clientId: draft.clientId,
+    ...(draft.commercialPartnerId ? { commercialPartnerId: draft.commercialPartnerId } : {}),
     photos: draft.photos.map((p) =>
       p.rects.length
         ? { uploadKey: p.uploadKey, plateRects: [...p.rects], noPlateConfirmed: false }

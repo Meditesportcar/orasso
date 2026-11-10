@@ -35,6 +35,7 @@ import {
   crewMembers,
   crews,
   events as events_,
+  feedPosts,
   mediaProfiles,
   messages,
   notifications,
@@ -67,6 +68,7 @@ import { contactsService } from "../messaging/contacts";
 import { messagingService } from "../messaging/service";
 import { moderationService } from "../moderation/service";
 import { notificationsService } from "../notifications/service";
+import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
 import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
 import { removeOrRetry } from "../vehicles/photos-blur";
@@ -499,6 +501,24 @@ export const storiesService = {
       else tags.push(t);
     }
 
+    // « Collaboration commerciale » (R7m2) : posée par l'API d'après les identifications DEMANDÉES et la légende.
+    // Une story liée à une publication marquée en hérite, même d'un tiers (tour 2 : la carte montre un contenu commercial).
+    const linkedPost =
+      linked?.type === "feed_post"
+        ? (
+            await db.select({ pro: feedPosts.commercialPartnerId }).from(feedPosts).where(eq(feedPosts.id, linked.id))
+          )[0]
+        : undefined;
+    const commercial = await commercialPartnerFor(db, {
+      authorId: v.user.id,
+      ownProId: ctx.proId,
+      tagProIds: input.tags.flatMap((t) => (t.kind === "pro" ? [t.id] : [])),
+      caption: input.caption,
+      explicit: input.commercialPartnerId,
+      inherited: linkedPost?.pro ?? null,
+    });
+    const commercialPartnerId = commercial?.proId ?? null;
+
     // Le média : la vidéo (lot R7g) a sa préparation à part (`video.ts`) ; la photo, ou la carte liée sans fichier envoyé
     // (R7f4), est composée ici.
     const preparePhoto = async (): Promise<Prepared | { replayed: StoryCreated }> => {
@@ -611,6 +631,7 @@ export const storiesService = {
             eventId,
             linkedType: linked?.type ?? null,
             linkedId: linked?.id ?? null,
+            commercialPartnerId,
             expiresAt: storyExpiresAt(at),
             createdAt: at,
             updatedAt: at,
@@ -697,6 +718,18 @@ export const storiesService = {
           [...mentions].map(([userId, m]) => ({ userId, body: m.body, target: m.target })),
           actor,
         );
+        // Une mention héritée ne prévient pas le pro (il l'a déjà été à la publication d'origine).
+        if (commercialPartnerId && commercial?.source !== "inherited") {
+          await notifyPartnerMention(tx, {
+            proId: commercialPartnerId,
+            authorUserId: v.user.id,
+            already: [...mentions.keys()],
+            sees: (ownerId) => seesStory(ownerId, storyShape, ctx),
+            kind: "story",
+            actor,
+            data: { storyId: id, authorKey: authorKey.key, link: `/app/story/${authorKey.key}` },
+          });
+        }
         after(() => notificationsService.kick());
       });
     } catch (error) {

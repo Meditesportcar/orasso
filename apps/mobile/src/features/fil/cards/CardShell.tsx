@@ -17,6 +17,7 @@ export function CardShell({
   onMenu,
   onTitle,
   faded = false,
+  banner,
   children,
   actions,
   testID,
@@ -34,6 +35,8 @@ export function CardShell({
   onTitle?: () => void;
   /** « Moins de ce genre » pris : la carte s'estompe. */
   faded?: boolean;
+  /** Bandeau en tête de la carte, avant l'en-tête (« Collaboration commerciale », lot R7m2). */
+  banner?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   testID?: string;
@@ -46,6 +49,7 @@ export function CardShell({
       testID={testID ?? `feed-card-${card.kind}`}
       accessibilityLabel={title}
     >
+      {banner}
       <View style={styles.head}>
         {head}
         <View style={styles.grow}>

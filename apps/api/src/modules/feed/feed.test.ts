@@ -596,6 +596,7 @@ describe("publier", () => {
         "aspect",
         "author",
         "caption",
+        "commercialPartner",
         "createdAt",
         "event",
         "id",

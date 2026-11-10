@@ -119,7 +119,6 @@ export const feedScreenLabels = {
   photoAlt: (pseudo: string, i: number, n: number) =>
     n > 1 ? `Photo ${i} sur ${n} de ${pseudo}` : `Photo de ${pseudo}`,
   photoOf: (i: number, n: number) => `${i} / ${n}`,
-  collabBadge: "Collaboration commerciale",
   mine: "Toi",
   removePost: "Supprimer la publication",
   removeConfirm: "Supprimer cette publication ? Elle disparaît du Fil, pour tout le monde.",

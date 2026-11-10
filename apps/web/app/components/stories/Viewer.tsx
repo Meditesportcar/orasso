@@ -11,6 +11,7 @@ import {
   createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
+  partnershipLabels,
   progressOf,
   replyStillShown,
   STORY_HOLD_MS,
@@ -26,6 +27,7 @@ import {
   storyPlayable,
   storyPlayerKey,
   storyPrev,
+  storyShareLabels,
   storyStartIndex,
   tapTarget,
   storyVideoLabels as V,
@@ -494,6 +496,27 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (res && (res.status === 403 || res.status === 404)) setGone((g) => new Set(g).add(s.id));
     else setImageError(s.id);
   };
+  // Lot R7m2 : le pro cité en « Collaboration commerciale » reprend la story au nom de sa fiche (l'API dit s'il le peut).
+  const [resharing, setResharing] = useState(false);
+  const [resharedIds, setResharedIds] = useState<ReadonlySet<string>>(new Set());
+  const proOption = story?.sharing?.options.find((o) => o.as === "pro" && o.id);
+  const reshare = async () => {
+    if (!story || !proOption?.id || resharing) return;
+    setResharing(true);
+    const res = await apiFetch(`/stories/${story.id}/share-to-mine`, {
+      method: "POST",
+      json: { asProId: proOption.id },
+    });
+    setResharing(false);
+    if (res.ok || res.error.code === "already_shared") setResharedIds((ids) => new Set(ids).add(story.id));
+    setNotice(
+      res.ok
+        ? storyShareLabels.reshared
+        : res.error.code === "already_shared"
+          ? null
+          : res.error.message || L.actionError,
+    );
+  };
   const iAmTagged = Boolean(story?.tags.some((x) => x.kind === "user" && x.id === userId));
 
   // --- Rendu ----------------------------------------------------------------------------------------------------------------
@@ -748,6 +771,22 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
             </div>
           ) : null}
           <LinkedCard story={story} />
+          {proOption ? (
+            <div className="story-view__reshare" data-testid="story-reshare-box">
+              <Button
+                type="button"
+                icon={resharedIds.has(story.id) || proOption.copyId ? "check" : "share"}
+                fullWidth
+                disabled={resharing || resharedIds.has(story.id) || Boolean(proOption.copyId)}
+                onClick={() => void reshare()}
+                data-testid="story-reshare"
+              >
+                {resharedIds.has(story.id) || proOption.copyId
+                  ? storyShareLabels.resharedAlready
+                  : partnershipLabels.commercialReshare}
+              </Button>
+            </div>
+          ) : null}
           <div className="story-view__stickers" data-testid="story-stickers">
             {story.caption ? (
               <p className="story-view__caption" data-testid="story-caption">
@@ -897,6 +936,14 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                     <small>{shareLabels.externalStoryFile}</small>
                   </span>
                 </a>
+              ) : story.exportBlockedReason ? (
+                <div className="story-menu__row" aria-disabled="true" data-testid="story-menu-external-blocked">
+                  <Icon name="export" size={20} />
+                  <span>
+                    <strong>{shareLabels.menuExternal}</strong>
+                    <small>{story.exportBlockedReason}</small>
+                  </span>
+                </div>
               ) : null}
               <button
                 type="button"

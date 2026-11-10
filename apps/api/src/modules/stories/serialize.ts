@@ -1,7 +1,7 @@
 // Forme d'une story renvoyée au regard (lot R7f1) : liste blanche de champs, fichiers par la route protégée, voiture
 // par sa photo masquée seulement, événement seulement si le regard peut le voir, identifications visibles seulement
 // puisque la story l'est. Le nombre de vues et de flammes : l'auteur seul.
-import { maskedPhoto, type StoryTagView, type StoryView } from "@orasso/shared";
+import { maskedPhoto, partnershipLabels, type StoryTagView, type StoryView } from "@orasso/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -19,6 +19,7 @@ import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { canSeeEvent } from "../invitations/access";
+import { commercialViews } from "../partnerships/commercial";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 import { accountActive, creditOf, type StoryRow } from "./common";
@@ -110,6 +111,10 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     tagsOf(ids),
     sharingOf(v, rows, now()),
   ]);
+  const commercialBy = await commercialViews(
+    db,
+    rows.map((r) => r.story.commercialPartnerId),
+  );
   const seenIds = new Set(seen.map((r) => r.id));
   const likedIds = new Set(liked.map((r) => r.id));
 
@@ -180,7 +185,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
       linked: linkedBy.get(s.id) ?? null,
-      commercialPartner: null,
+      commercialPartner: s.commercialPartnerId ? (commercialBy.get(s.commercialPartnerId) ?? null) : null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
       // Le crédit d'une copie : l'identité PUBLIQUE de l'originale selon sa casquette (lot R7h, tour 2).
@@ -192,7 +197,19 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         s.audience !== "crew" &&
         s.status === "ready" &&
         !s.sharedFromStoryId &&
-        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)),
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)) &&
+        !(s.mediaKind === "video" && s.commercialPartnerId),
+      // « Vers l'extérieur » fermé avec sa raison : une vidéo commerciale ne peut pas porter la mention (R7m2, tour 2).
+      exportBlockedReason:
+        mine &&
+        s.audience !== "crew" &&
+        s.status === "ready" &&
+        !s.sharedFromStoryId &&
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)) &&
+        s.mediaKind === "video" &&
+        s.commercialPartnerId
+          ? partnershipLabels.errors.commercial_video
+          : null,
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),
       viewsCount: mine ? s.viewsCount : null,

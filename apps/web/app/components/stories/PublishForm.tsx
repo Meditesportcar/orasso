@@ -10,6 +10,9 @@
 import { Button, Icon } from "@orasso/design-system/web";
 import {
   addTag,
+  type CommercialDraft,
+  commercialField,
+  commercialIssue,
   eventsWithPlace,
   fillFrame,
   fitDefault,
@@ -18,8 +21,10 @@ import {
   storyPublishLabels as L,
   limitFrame,
   moveFrame,
+  noCommercialDraft,
   type PeopleSearchPage,
   type PlateRect,
+  partnershipLabels,
   removeTag,
   STORY_CAPTION_MAX,
   STORY_PLACE_MAX,
@@ -54,6 +59,7 @@ import { FicheBar } from "../FicheBar";
 import { PREPARE_FAILED } from "../fil/prepare";
 import { PlateFrame } from "../PlateFrame";
 import { Canvas } from "./Canvas";
+import { CommercialLine, commercialText, useCommercialLine } from "./CommercialLine";
 import { prepareStoryPhoto, type StoryPhoto } from "./prepare";
 import { ClipRefused, prepareStoryClip, releaseClip, type StoryClip } from "./prepareVideo";
 
@@ -157,6 +163,9 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [tags, setTags] = useState<StoryTagPick[]>([]);
+  // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
+  const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
+  const commercialLine = useCommercialLine(caption, commercial);
   const [panel, setPanel] = useState<"tag" | "event" | "place" | "vehicle" | null>(null);
   const [audienceKey, setAudienceKey] = useState("followers");
   const [dropped, setDropped] = useState(false);
@@ -283,13 +292,14 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   }
 
   const plate = { rects, noPlate, detection: "unavailable" as const };
-  const issue = storyPublishIssue({
-    hasPhoto: Boolean(photo || clip),
-    preparing,
-    plate: clip ? null : plate,
-    caption,
-    audienceLost: lost,
-  });
+  const issue =
+    storyPublishIssue({
+      hasPhoto: Boolean(photo || clip),
+      preparing,
+      plate: clip ? null : plate,
+      caption,
+      audienceLost: lost,
+    }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick);
   const needsFit = photo ? !isStoryRatio(photo.width, photo.height) : false;
   const event = events.find((e) => e.id === eventId) ?? null;
   const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
@@ -359,6 +369,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       vehicleId,
       eventId,
       tags,
+      ...commercialField(commercialLine),
     });
     const sent = await sendIfAlive(
       () => open.current,
@@ -415,6 +426,7 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       vehicleId,
       eventId,
       tags,
+      ...commercialField(commercialLine),
     });
     // La page peut avoir été quittée malgré tout : rien n'est créé après coup (`sendIfAlive`).
     // Un 400 « image déjà utilisée » après une réponse perdue : on refait la requête une fois avec la même clé (elle
@@ -474,8 +486,11 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
         : L.fitZoom(zoomPercent(frame, photo.width, photo.height));
   const overlays = (
     <>
-      {event || place.trim() || vehicle || tags.length ? (
+      {event || place.trim() || vehicle || tags.length || commercialText(commercialLine) ? (
         <div className="story-stickers">
+          {commercialText(commercialLine) ? (
+            <Sticker icon="briefcase" text={commercialText(commercialLine) ?? ""} testId="story-sticker-commercial" />
+          ) : null}
           {event ? <Sticker icon="ticket" text={event.title} testId="story-sticker-event" /> : null}
           {place.trim() ? <Sticker icon="place" text={place.trim()} testId="story-sticker-place" /> : null}
           {vehicle ? <Sticker icon="vehicle" text={vehicle.label} testId="story-sticker-vehicle" /> : null}
@@ -845,6 +860,8 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
             </p>
           ) : null}
 
+          <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={locked} kind="story" />
+
           <div className="o-t-label">{L.audienceTitle}</div>
           <fieldset className="story-group" data-testid="story-audience">
             <legend className="fil-sr">{L.audienceTitle}</legend>
@@ -950,7 +967,7 @@ function Sticker({
   text,
   testId,
 }: {
-  icon: "ticket" | "place" | "vehicle" | "profile";
+  icon: "ticket" | "place" | "vehicle" | "profile" | "briefcase";
   text: string;
   testId: string;
 }) {

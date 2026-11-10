@@ -76,6 +76,8 @@ export const storyCreateSchema = z
     eventId: uuidLower.optional(),
     tags: z.array(storyTagInputSchema).max(STORY_TAGS_MAX).default([]),
     linked: z.object({ type: z.enum(storyLinkTypes), id: uuidLower }).optional(),
+    /** Mention « Collaboration commerciale » posée à la main (R7m2) : une fiche pro publiée, partenaire ou non. */
+    commercialPartnerId: uuidLower.optional(),
   })
   .refine((v) => !(v.plateRects?.length && v.noPlateConfirmed), {
     message: "Choisis : plaque floutée ou aucune plaque visible, pas les deux",
@@ -180,6 +182,10 @@ export type StoryLinkedView = {
   exportable: boolean;
 };
 
+/** Le pro d'une « Collaboration commerciale » (R7m2) : nom, adresse de sa fiche et logo (liste blanche). */
+/** `slug` et `logoUrl` sont `null` quand la fiche n'est plus visible (dépubliée, supprimée, anonymisée) : le texte reste, sans lien. */
+export type CommercialPartnerView = { id: string; name: string; slug: string | null; logoUrl: string | null };
+
 export type StoryView = {
   id: string;
   mediaKind: StoryMediaKind;
@@ -198,8 +204,8 @@ export type StoryView = {
   tags: StoryTagView[];
   /** Carte touchable (R7f4) : refiltrée à chaque lecture ; `null` quand le contenu n'est plus visible (carte inerte). */
   linked: StoryLinkedView | null;
-  /** Posé par R7m2 ; `null` dans R7f1. */
-  commercialPartner: { id: string; name: string; slug: string } | null;
+  /** « Collaboration commerciale » (R7m2) : posée par l'API, jamais retirée ; `null` sans collaboration. */
+  commercialPartner: CommercialPartnerView | null;
   audience: StoryAudience;
   crewName: string | null;
   /** Lot R7h : le crédit d'une copie = l'identité publique de l'originale (personne, structure ou pro), avec son lien. */
@@ -214,6 +220,8 @@ export type StoryView = {
    * ni story en traitement, ni contenu lié disparu ou d'un autre). Faux pour tout autre lecteur.
    */
   exportable: boolean;
+  /** Pourquoi « Vers l'extérieur » est fermé alors que la story pourrait sortir (R7m2 : vidéo commerciale) ; `null` sinon. */
+  exportBlockedReason: string | null;
   viewed: boolean;
   reacted: boolean;
   /** L'auteur seul. */

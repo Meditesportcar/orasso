@@ -861,6 +861,53 @@ button.story-view__pill {
   gap: 2px;
   min-width: 140px;
 }
+/* « Collaboration commerciale · <pro> » sous l'en-tête de la visionneuse (lot R7m2), même pastille que le crédit. */
+.story-view__commercial {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: start;
+  max-width: 100%;
+  padding: calc(var(--space-1) + 2px) calc(var(--space-2) + 2px);
+  border: 1px solid color-mix(in srgb, var(--night-ink) 55%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--night) 60%, transparent);
+  color: var(--night-ink);
+  text-decoration: none;
+}
+.story-view__commercial:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--space-1);
+}
+.story-view__commercial[aria-disabled="true"] {
+  cursor: default;
+}
+.story-view__commercial-logo {
+  display: grid;
+  flex: none;
+  width: calc(var(--space-4) + var(--space-1));
+  height: calc(var(--space-4) + var(--space-1));
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.story-view__commercial-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Ligne « Collaboration commerciale » des formulaires de publication (lot R7m2). */
+.story-commercial {
+  display: grid;
+  gap: var(--space-2);
+}
+.story-option.is-required {
+  border-color: var(--accent);
+  cursor: default;
+}
+.story-view__reshare {
+  width: 100%;
+}
 .story-view__shared-link {
   color: inherit;
   text-underline-offset: 2px;

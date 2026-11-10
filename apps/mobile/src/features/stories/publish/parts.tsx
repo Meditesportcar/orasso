@@ -72,6 +72,8 @@ export type OverlayData = {
   place: string | null;
   vehicle: string | null;
   tags: readonly string[];
+  /** « Collaboration commerciale · Wrap 66 » (lot R7m2) : en tête des autocollants, comme sur la story publiée. */
+  commercial?: string | null;
 };
 
 /**
@@ -85,6 +87,7 @@ export function StoryOverlays({ width, data }: { width: number; data: OverlayDat
   const fs = Math.max(10, Math.round(width * 0.036));
   const pad = Math.round(width * 0.04);
   const chips: { icon: IconName; text: string; testID: string }[] = [];
+  if (data.commercial) chips.push({ icon: "briefcase", text: data.commercial, testID: "story-sticker-commercial" });
   if (data.eventTitle) chips.push({ icon: "ticket", text: data.eventTitle, testID: "story-sticker-event" });
   if (data.place) chips.push({ icon: "place", text: data.place, testID: "story-sticker-place" });
   if (data.vehicle) chips.push({ icon: "vehicle", text: data.vehicle, testID: "story-sticker-vehicle" });

@@ -5,6 +5,9 @@
 // `feed_post`), puis `POST /api/me/feed-posts`. Pas de détection automatique de plaque sur le site (elle vit dans l'appli).
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  type CommercialDraft,
+  commercialField,
+  commercialIssue,
   DEFAULT_FEED_ASPECT,
   eventsWithPlace,
   FEED_ASPECT_RATIOS,
@@ -16,7 +19,9 @@ import {
   feedCropPlan,
   feedPostBody,
   feedScreenLabels as L,
+  noCommercialDraft,
   type PlateRect,
+  partnershipLabels,
   publishIssue,
   type UploadResult,
   vehicleWizardLabels as V,
@@ -24,6 +29,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import "../../styles/fil.css";
+import { CommercialLine, useCommercialLine } from "../stories/CommercialLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
 import { FicheBar } from "../FicheBar";
@@ -99,6 +105,9 @@ export function PublishForm({
   const [caption, setCaption] = useState("");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
+  // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
+  const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
+  const commercialLine = useCommercialLine(caption, commercial);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +223,9 @@ export function PublishForm({
       setError,
     );
   }
-  const issue = publishIssue({ photos: items, caption, preparing });
+  const issue =
+    publishIssue({ photos: items, caption, preparing }) ??
+    commercialIssue(commercialLine, partnershipLabels.commercialPick);
 
   async function publish() {
     if (busy || issue) return;
@@ -245,6 +256,7 @@ export function PublishForm({
       vehicleId,
       eventId,
       clientId,
+      ...commercialField(commercialLine),
     });
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
@@ -546,6 +558,8 @@ export function PublishForm({
           </div>
         </div>
       ) : null}
+
+      <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" />
 
       {error ? (
         <p className="s-error" role="alert">

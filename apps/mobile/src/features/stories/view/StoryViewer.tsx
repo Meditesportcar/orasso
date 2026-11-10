@@ -26,6 +26,7 @@ import {
   storyPlayable,
   storyPlayerKey,
   storyPrev,
+  storyShareLabels,
   storyStartIndex,
   tapTarget,
 } from "@orasso/shared";
@@ -55,6 +56,7 @@ import { Header } from "./Header";
 import { LinkedCard } from "./LinkedCard";
 import { MenuSheet } from "./MenuSheet";
 import { ProgressBars } from "./ProgressBars";
+import { proShareOption, ReshareButton } from "./ReshareButton";
 import { SharedByLine } from "./SharedByLine";
 import { Stickers } from "./Stickers";
 import { useStoryClock } from "./useStoryClock";
@@ -387,6 +389,26 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     }
   };
 
+  // Lot R7m2 : le pro cité en « Collaboration commerciale » reprend la story au nom de sa fiche.
+  const [resharing, setResharing] = useState(false);
+  const [resharedIds, setResharedIds] = useState<ReadonlySet<string>>(new Set());
+  const reshare = async () => {
+    const option = story ? proShareOption(story) : undefined;
+    if (!story || !option?.id || resharing) return;
+    setResharing(true);
+    try {
+      await api.storyShare(story.id, undefined, option.id);
+      setResharedIds((ids) => new Set(ids).add(story.id));
+      setNotice(storyShareLabels.reshared);
+    } catch (e) {
+      if (e instanceof ApiRequestError && e.code === "already_shared")
+        setResharedIds((ids) => new Set(ids).add(story.id));
+      else setNotice(errorMessage(e));
+    } finally {
+      setResharing(false);
+    }
+  };
+
   const openProfile = (pseudo: string) => router.push(`/u/${encodeURIComponent(pseudo)}`);
   const openTag = (tag: StoryTagView) => {
     if (!tag.slug) return;
@@ -524,6 +546,12 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             <VideoTime seconds={videoSeconds} durationMs={story.durationMs ?? 0} />
           ) : null}
           <LinkedCard story={story} />
+          <ReshareButton
+            story={story}
+            done={resharedIds.has(story.id)}
+            busy={resharing}
+            onPress={() => void reshare()}
+          />
           <Stickers
             story={story}
             onVehicle={(id) => router.push(mine ? `/vehicule/${id}` : `/v/${id}`)}
@@ -581,6 +609,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
               }
             : undefined
         }
+        externalBlocked={story.exportBlockedReason}
       />
       <ShareSheet
         visible={externalOpen}

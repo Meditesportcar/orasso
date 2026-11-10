@@ -21,7 +21,15 @@ const options = storyAudienceOptions({ persona: "fan" }, "public", crews);
 describe("détails d'une story", () => {
   it("par défaut : « Mes abonnés », rien d'autre", () => {
     const d = initialDetails(options);
-    expect(d).toEqual({ caption: "", place: "", vehicleId: null, eventId: null, tags: [], audienceKey: "followers" });
+    expect(d).toEqual({
+      caption: "",
+      place: "",
+      vehicleId: null,
+      eventId: null,
+      tags: [],
+      audienceKey: "followers",
+      commercial: { on: false, pick: null },
+    });
   });
 
   it("un public disparu (crew quitté ou supprimé) reste invalide : jamais de bascule d'office vers « Mes abonnés »", () => {

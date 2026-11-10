@@ -6,6 +6,9 @@
 // parties ; l'identifiant de la publication est gardé (une réponse perdue ne crée pas de doublon).
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type CommercialDraft,
+  commercialField,
+  commercialIssue,
   DEFAULT_FEED_ASPECT,
   eventsWithPlace,
   FEED_ASPECT_RATIOS,
@@ -15,6 +18,8 @@ import {
   feedAspectLabels,
   feedPostBody,
   feedScreenLabels as L,
+  noCommercialDraft,
+  partnershipLabels,
   publishIssue,
   vehicleWizardLabels as V,
 } from "@orasso/shared";
@@ -23,6 +28,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 
+import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -87,6 +93,9 @@ export function PublishScreen() {
   const [caption, setCaption] = useState("");
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
+  // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
+  const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
+  const commercialLine = useCommercialLine(caption, commercial);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -250,7 +259,8 @@ export function PublishScreen() {
   const controls = photo ? plateControls(photo) : null;
   const preparing = working || photos.some((p) => p.detection === "pending");
   const locked = busy || working;
-  const issue = publishIssue({ photos, caption, preparing });
+  const issue =
+    publishIssue({ photos, caption, preparing }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick);
 
   async function publish() {
     if (busy || working || issue) return;
@@ -275,6 +285,7 @@ export function PublishScreen() {
         vehicleId,
         eventId,
         clientId,
+        ...commercialField(commercialLine),
       });
       const post = await api.createFeedPost(body);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
@@ -615,6 +626,7 @@ export function PublishScreen() {
           </View>
         </View>
       ) : null}
+      <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {vehicles.error ? <LoadError message={vehicles.error.message} onRetry={() => void vehicles.reload()} /> : null}
     </FlowScreen>
