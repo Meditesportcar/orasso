@@ -4798,3 +4798,7 @@ Lot sensible. Aucune migration.
 - **`spot.test` (appli)** : horloge figée par `vi.useFakeTimers({ toFake: ["Date"] })` + `vi.setSystemTime` au lieu d'un `Date.now` simulé ; passe à trois fuseaux (jour, soir, nuit).
 - **Seed, affiche du brouillon « Expo de printemps »** : `seedPosters(onlyEventIds?)` accepte une liste d'événements ; le seed des souvenirs (R7j) ne génère plus que l'affiche de son événement au lieu de repasser sur tous (ce qui rendait son affiche au brouillon vidé par `seedOrgaV2`).
 - **Seed, météo du Rassemblement du Lydia** : profil ajouté à `weather.ts` et `seedWeather()` rappelé juste après `seedLiveEvent()` (le Lydia est créé, ou recréé, après le premier passage).
+
+### Relecture Opus (10/11, coordinateur)
+- **Annonce aux autres fenêtres** : la retenue de `clientAction` est sans effet en pratique, car `/connexion` (mise en page publique, `useAnnounceSession`) annonce `null` dès l'arrivée. Sans gravité : le cookie de session est effacé pour toutes les fenêtres du navigateur ; la décision de la dette § 8 (« ne pas annoncer tant que ce n'est pas confirmé ») n'est donc pas tenue à la lettre, écart accepté.
+- **À revoir avec Damien** : Better Auth 1.7.9 répond 200 à `/sign-out` même si la suppression de la session échoue en base (`deleteSession` en erreur, seulement journalisée) ; la session reste alors valable sans message. Hors de ce lot (comportement de la bibliothèque).
