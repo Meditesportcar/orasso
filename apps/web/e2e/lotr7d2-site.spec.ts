@@ -39,7 +39,9 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("presence-app-only")).toHaveCount(0);
 
     const v = await lydia(VISITORS.far);
-    if (v.live.myPresence === null) {
+    // La ligne GPS n’est offerte que dans la fenêtre de présence (30 min avant l’ouverture du jour, 09 h au seed) : hors de
+    // ces heures l’API répond canValidatePresence = false et la fiche ne montre rien (voulu).
+    if (v.live.myPresence === null && v.live.canValidatePresence) {
       await page.context().clearCookies();
       await setTheme(page, theme);
       await loginInBrowser(page, VISITORS.far, undefined, `/e/${SLUG}`);
@@ -52,7 +54,10 @@ for (const theme of ["beton", "sable"] as const) {
 
 test("fiche : la ligne GPS suit l'accès (fermé au public, billetterie externe : aucune ligne)", async ({ page }) => {
   const ev = await lydia(VISITORS.far);
-  test.skip(ev.live.phase !== "running" || ev.live.myPresence !== null, "Lydia hors des heures ou déjà présent.");
+  test.skip(
+    ev.live.phase !== "running" || ev.live.myPresence !== null || !ev.live.canValidatePresence,
+    "Lydia hors des heures, hors de la fenêtre de présence ou déjà présent.",
+  );
   await loginInBrowser(page, VISITORS.far, undefined, `/e/${SLUG}`);
   for (const access of ["closed", "paid_external"]) {
     await withAccess(access, async () => {

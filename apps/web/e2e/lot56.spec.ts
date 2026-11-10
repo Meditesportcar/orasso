@@ -355,7 +355,10 @@ test("en-tête de l'espace connecté : ni défilement horizontal ni recouvrement
     const page = await ctx.newPage();
     await setTheme(page, "beton");
     await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/acces");
-    await page.waitForLoadState("networkidle");
+    // Pendant le Rassemblement du Lydia (seed), Kenji est « Sur place » : le QR se renouvelle toutes les quelques secondes
+    // et le réseau n'est jamais au repos (networkidle ne revenait pas).
+    await expect(page.getByTestId("access-qr").or(page.locator("h1").first())).toBeVisible();
+    await page.waitForTimeout(500);
     await noHorizontalScroll(page, `/app/acces ${viewport.width}`);
     // La recherche reste cliquable : rien ne la recouvre.
     await page.getByRole("link", { name: "Rechercher", exact: true }).click({ trial: true });

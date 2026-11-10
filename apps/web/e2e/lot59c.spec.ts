@@ -65,7 +65,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await editor.screenshot({ path: `${DIR}/cadre-tourne-${theme}.png` });
 
     await page.getByRole("button", { name: "Envoyer", exact: true }).click();
-    await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
+    // Lot R7b1 : le garage vit dans le Profil ; `/app/garage` répond 302 vers `/app/moi?onglet=garage`.
+    await page.waitForURL(/\/app\/(garage|moi\?onglet=garage)$/, { timeout: 30_000 });
     const list = await apiCall<{ photos: { url: string; plateBlurred: boolean }[] }[]>(cookie, "GET", "/me/vehicles");
     const photo = list.data[0]?.photos[0];
     expect(photo?.plateBlurred).toBe(true);

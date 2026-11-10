@@ -106,7 +106,8 @@ test("un crew : Fil · Sorties · Membres · Spots, Discussion, voitures dans la
   await go(page, "/crew");
   await page.getByTestId("crew-tab-spots").click();
   await expect(page.getByTestId("crew-spots")).toContainText("Pas de rendez-vous");
-  await expect(page.getByTestId("crew-spots-soon")).toContainText("Disponible à la prochaine mise à jour");
+  // Lot R7i : les rendez-vous existent, le placeholder « Disponible à la prochaine mise à jour » (R7b2) a disparu.
+  await expect(page.getByTestId("crew-spots-soon")).toHaveCount(0);
   await expect(page.getByTestId("crew-spots-launch")).toBeVisible();
   // Discussion : la conversation du crew.
   await page.getByTestId("crew-tab-feed").click();
