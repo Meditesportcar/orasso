@@ -82,7 +82,7 @@ export function UnderTabs<T extends string>({
       accessibilityLabel={accessibilityLabel}
       testID={testID}
       style={styles.scroll}
-      contentContainerStyle={rowStyle}
+      contentContainerStyle={[rowStyle, styles.rowScroll]}
     >
       {tabs}
     </ScrollView>
@@ -92,6 +92,8 @@ export function UnderTabs<T extends string>({
 const styles = StyleSheet.create({
   scroll: { flexGrow: 0 },
   row: { flexDirection: "row", borderBottomWidth: LINE, alignItems: "stretch" },
+  // Rangée qui défile : elle remplit la largeur (`.r8tabs button{flex:1 0 auto}`), le trait va jusqu'au bout.
+  rowScroll: { flexGrow: 1 },
   rowSpread: { justifyContent: "space-between" },
   tab: {
     minHeight: TAB_HEIGHT,
@@ -103,7 +105,7 @@ const styles = StyleSheet.create({
   },
   // Rangée qui défile : chaque onglet garde sa largeur de texte. Rangée répartie : les onglets se partagent la place,
   // le libellé passe à la ligne entre deux mots plutôt que d'être coupé.
-  tabScroll: { flexShrink: 0 },
+  tabScroll: { flexGrow: 1, flexShrink: 0 },
   tabSpread: { flexGrow: 0, flexShrink: 1, paddingHorizontal: 6 },
   text: { fontSize: 13.5, lineHeight: 17, fontFamily: archivoAt(100, 750), flexShrink: 1, textAlign: "center" },
   textSpread: { paddingVertical: 2 },
