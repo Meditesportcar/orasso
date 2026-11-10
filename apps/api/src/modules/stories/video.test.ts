@@ -680,10 +680,14 @@ describe("envoi brut d'une vidéo (route dédiée)", () => {
     expect(stored.includes(Buffer.from([0xa9, 0x78, 0x79, 0x7a]))).toBe(false);
     const info = await readMp4Buffer(stored);
     expect([info.width, info.height, info.h264]).toEqual([720, 1280, true]);
-    // Les images (mdat) n'ont pas bougé d'un octet.
+    // Les images (mdat) n'ont pas bougé, sauf les SEI de x264 devenus du remplissage (tour 7) : moins de 4 Ko changés.
     const mdatAt = original.indexOf("mdat") - 4;
     const mdatSize = original.readUInt32BE(mdatAt);
-    expect(stored.subarray(mdatAt, mdatAt + mdatSize).equals(original.subarray(mdatAt, mdatAt + mdatSize))).toBe(true);
+    const was = original.subarray(mdatAt, mdatAt + mdatSize);
+    const now = stored.subarray(mdatAt, mdatAt + mdatSize);
+    expect(now.length).toBe(was.length);
+    expect(was.filter((b, i) => b !== now[i]).length).toBeLessThan(4000);
+    expect(stored.includes("x264 - core")).toBe(false);
   });
 
   it("nettoie par liste blanche : échantillons GPX d'une piste meta/mett à zéro, octets de fin coupés, images intactes", async () => {
