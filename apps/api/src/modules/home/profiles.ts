@@ -110,6 +110,7 @@ export async function nextTicketOf(v: Viewer): Promise<HomeNextTicket | null> {
     name: next.name,
     priceCents: next.priceCents,
     event: {
+      id: next.event.id,
       slug: next.event.slug,
       title: next.event.title,
       startsAt: next.event.startsAt,

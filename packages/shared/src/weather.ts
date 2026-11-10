@@ -82,3 +82,15 @@ export type MyWeather =
       attribution: string;
       summary: WeatherSummary;
     };
+
+/**
+ * Lot R8e1 : la météo d'une sortie, une ligne de sa carte dans « Prochaine sortie » (`GET /me/home`, `outingsWeather`).
+ * `day` : le jour de début, AAAA-MM-JJ à Paris ; `uncertain` : l'organisateur a passé l'événement en « Incertain ».
+ */
+export type OutingWeather = {
+  day: string;
+  summary: WeatherSummary;
+  provider: WeatherProviderName;
+  attribution: string;
+  uncertain: boolean;
+};

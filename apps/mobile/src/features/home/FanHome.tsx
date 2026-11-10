@@ -27,7 +27,6 @@ import {
   type MyApplication,
   normalizeHomeWidgets,
   visibleHomeWidgets,
-  withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -65,18 +64,6 @@ import { SpotMeetup } from "./widgets/SpotMeetup";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
-const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: "Europe/Paris",
-});
-const HOUR_FMT = new Intl.DateTimeFormat("fr-FR", { hour: "numeric", timeZone: "Europe/Paris" });
-/** « samedi 17 octobre à 19 h » ; lot R3b, tour 2 : « … 17 octobre 2027 à 19 h » hors de l'année en cours. */
-const weatherDay = (iso: string) => {
-  const at = new Date(iso);
-  return `${withYear(DAY_FMT.format(at), at)} à ${HOUR_FMT.format(at).replace(/\s*h$/, "")} h`;
-};
 /** Pendant un événement, l'Accueil relit ses chiffres (sur place, votes) à ce rythme, et au retour au premier plan. */
 const LIVE_REFRESH_MS = 180_000;
 /** Tickets dans le glissement, au plus. */
@@ -199,6 +186,12 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // homonymes possibles, et l'Explorer ne liste pas les événements sur invitation). L'API dit s'il est visible.
   const onMap = (slug: string) => () => router.push({ pathname: "/carte", params: { event: slug } } as never);
 
+  // Lot R8e1 : la météo de chaque sortie est une ligne de sa carte ; « Météo de l'événement » masqué : aucune ligne.
+  const outingWeather = (eventId: string | undefined) =>
+    eventId && visibleHomeWidgets(normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets)).includes("event_weather")
+      ? (data?.outingsWeather?.[eventId] ?? null)
+      : null;
+
   /** Une candidature en ticket : son affiche, son statut, son arrivée, son geste. */
   const appOuting = (a: MyApplication): Outing => {
     const fromApi = data?.nextAccess?.id === a.id ? data.nextAccess : null;
@@ -240,6 +233,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
               onPress: () => goTab("sorties"),
               testID: "home-outing-application",
             },
+      weather: accepted ? outingWeather(a.event.id) : null,
       onMap: accepted ? onMap(a.event.slug) : null,
       onOpen: () => openEvent(a.event.slug),
     };
@@ -257,6 +251,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     id: string;
     priceCents: number | null;
     event: {
+      id?: string;
       slug: string;
       title: string;
       startsAt: string;
@@ -292,6 +287,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       onPress: () => router.push(`/billet/${x.id}`),
       testID: "home-hero-action",
     },
+    weather: outingWeather(x.event.id),
     onMap: onMap(x.event.slug),
     onOpen: () => openEvent(x.event.slug),
   });
@@ -316,10 +312,10 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   if (next) outings.unshift(appOuting(next));
   const shown = outings.slice(0, MAX_OUTINGS);
 
-  // Météo : celle du jour J de la prochaine sortie (lieu, jour et heure), sinon celle du département.
-  const weather = data?.weather ?? null;
-  const weatherWhen = weather?.kind === "event" ? weatherDay(weather.event.startsAt) : null;
-  const weatherPlace = weather?.kind === "event" ? (heroEvent?.city ?? null) : department ? `Dép. ${department}` : null;
+  // Météo : celle du département (« Chez toi, aujourd'hui »). Celle de l'événement est une ligne de sa carte (lot R8e1) ; une
+  // copie gardée avant ce lot peut porter l'ancienne météo « jour J » : jamais affichée ici.
+  const weather = data?.weather?.kind === "place" ? data.weather : null;
+  const weatherPlace = department ? `Dép. ${department}` : null;
 
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
@@ -440,7 +436,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       </>
     ) : null,
-    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} when={weatherWhen} /> : null,
+    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} /> : null,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
     favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
     pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,

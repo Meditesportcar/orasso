@@ -11,6 +11,7 @@ import {
   forecastForEvent,
   isBadWeather,
   type MyWeather,
+  type OutingWeather,
   SET_OUTLOOK_UNCERTAIN_ACTION,
   type StoredForecast,
   shouldSuggestUncertain,
@@ -278,6 +279,15 @@ export const weatherService = {
         };
       }
     }
+    return this.mineAtHome(v);
+  },
+
+  /**
+   * Lot R8e1 : la météo du département du compte, sans jamais celle d'un événement (bloc « Météo » de l'Accueil : « Chez toi,
+   * aujourd'hui ») ; `GET /me/weather` garde sa réponse (`mine`).
+   */
+  async mineAtHome(v: Viewer): Promise<MyWeather | null> {
+    const t = now();
     const department = v.profile.departments[0];
     if (!department) return null;
     const row = await this.departmentWeather(department);
@@ -293,6 +303,39 @@ export const weatherService = {
       attribution: weatherAttributions[row.provider],
       summary,
     };
+  },
+
+  /**
+   * Lot R8e1 : la météo des sorties de « Prochaine sortie » (`GET /me/home`, `outingsWeather`), clé = identifiant de
+   * l'événement. Une lecture des événements et une des prévisions pour toute la liste ; seulement le stock, jamais le
+   * fournisseur. Un événement non publié, hors des 7 jours avant le début, fini ou sans prévision valable n'a pas d'entrée.
+   */
+  async forOutings(eventIds: string[]): Promise<Record<string, OutingWeather>> {
+    const ids = [...new Set(eventIds)];
+    if (ids.length === 0) return {};
+    const t = now();
+    const [rows, stored] = await Promise.all([
+      db.select().from(events).where(inArray(events.id, ids)),
+      db.select().from(eventWeather).where(inArray(eventWeather.eventId, ids)),
+    ]);
+    const byEvent = new Map(stored.map((r) => [r.eventId, r]));
+    const out: Record<string, OutingWeather> = {};
+    for (const e of rows) {
+      if (e.status !== "published" || !weatherVisible(e, t)) continue;
+      const row = byEvent.get(e.id);
+      if (!validFor(row, e)) continue;
+      const summary = forecastForEvent(row.forecast, e);
+      if (!summary) continue;
+      const w = wallTime(e.startsAt, "Europe/Paris");
+      out[e.id] = {
+        day: `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`,
+        summary,
+        provider: row.provider,
+        attribution: weatherAttributions[row.provider],
+        uncertain: e.outlook === "uncertain",
+      };
+    }
+    return out;
   },
 
   /**

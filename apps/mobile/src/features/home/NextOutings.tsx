@@ -13,13 +13,15 @@ import {
   Text,
   tokens,
   useTheme,
+  weatherIcons,
 } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE, withYear } from "@orasso/shared";
+import { BUSINESS_TIMEZONE, type OutingWeather, outingWeatherLine, withYear } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
 import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { mediaSource } from "@/lib/media";
+import { useNow } from "@/lib/useNow";
 import { fitTitle, fitWordSize, NARROW_EM } from "./fit";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -41,6 +43,8 @@ export type Outing = {
   lines: { icon: IconName; text: string }[];
   /** Le geste du ticket : « Mon accès », « Mon billet », « Ma candidature » ; aucun pour une liste d'attente. */
   action: (OutingAction & { kind: "access" | "secondary" }) | null;
+  /** Lot R8e1 : la météo de la sortie, une ligne de la carte au-dessus de « Mon accès » ; absente : la carte ne change pas. */
+  weather?: OutingWeather | null;
   /** « Sur la carte » (le plan), à côté de « Mon accès ». */
   onMap: (() => void) | null;
   /** Ouvre la fiche de l'événement. */
@@ -92,6 +96,49 @@ export function PosterButton({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+/**
+ * Lot R8e1 (maquette R8.8 `.r8wx`) : la météo de la sortie, séparée du reste de la carte par un trait en pointillés ; pour un
+ * événement « Incertain », le bandeau d'encre de l'affiche dessous.
+ */
+function WeatherLine({ weather }: { weather: OutingWeather }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const now = useNow();
+  const line = outingWeatherLine(weather, now);
+  return (
+    <View style={styles.wxWrap}>
+      <View
+        style={[styles.wx, { borderTopColor: c.posterMuted }]}
+        accessible
+        accessibilityLabel={line.aria}
+        testID="home-outing-weather"
+      >
+        <Icon name={weatherIcons[weather.summary.code]} size={26} color={c.posterInk} />
+        <View style={styles.wxText}>
+          <Text variant="bodyStrong" color={c.posterInk} style={styles.wxMain}>
+            {line.lead}
+            <Text variant="numberNarrow" color={c.posterInk} style={styles.wxMain}>
+              {line.temp}
+            </Text>
+            {line.tail}
+          </Text>
+          <Text variant="caption" color={c.posterMuted} style={styles.wxSub} testID="home-outing-weather-sub">
+            {line.sub}
+          </Text>
+        </View>
+      </View>
+      {line.banner ? (
+        <View style={[styles.wxBanner, { backgroundColor: c.posterInk }]} testID="home-outing-weather-banner">
+          <Icon name="info" size={14} color={c.poster} />
+          <Text variant="caption" color={c.poster} style={styles.wxBannerText}>
+            {line.banner}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -180,6 +227,7 @@ function Ticket({ outing, width, primary }: { outing: Outing; width: number; pri
           {titleText}
         </Pressable>
       ) : null}
+      {outing.weather ? <WeatherLine weather={outing.weather} /> : null}
       {a || outing.onMap ? (
         <View style={styles.actions}>
           {a && a.kind === "access" && primary ? (
@@ -279,6 +327,27 @@ const styles = StyleSheet.create({
   lineText: { flex: 1, fontSize: 12.5, lineHeight: 16 },
   go: { marginTop: "auto", flexDirection: "row", alignItems: "center", gap: 4 },
   goText: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
+  wxWrap: { gap: space2 },
+  wx: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 8,
+    borderTopWidth: 1.5,
+    borderStyle: "dashed",
+  },
+  wxText: { flex: 1, minWidth: 0 },
+  wxMain: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
+  wxSub: { fontSize: 12, lineHeight: 16 },
+  wxBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  wxBannerText: { flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 17, fontWeight: "700" },
   actions: { flexDirection: "row", gap: space2 },
   access: { flex: 1, minHeight: 46, paddingHorizontal: 8 },
   pb: {

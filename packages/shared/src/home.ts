@@ -8,16 +8,18 @@ import type { HomeMemoryBlock } from "./schemas/memories";
 import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
 import type { SpotMeetupView } from "./schemas/spotMeetup";
-import type { MyWeather } from "./weather";
+import type { MyWeather, OutingWeather } from "./weather";
 
 /**
  * Widgets de l'accueil dans l'ordre par défaut ; « Prochaine sortie » (`next_access`) reste toujours en tête. Lot R7d1 :
- * « En cours » (événement en cours où j'ai une place) juste après. Lot R7a2 (maquette R7.4, décision D38) : Mes sorties,
+ * « Météo de l'événement » (lot R8e1 : une ligne de la carte « Prochaine sortie », pas un bloc de l'écran) puis « En cours »
+ * (événement en cours où j'ai une place) juste après. Lot R7a2 (maquette R7.4, décision D38) : Mes sorties,
  * Mon crew, Du nouveau chez tes potes, Au spot, Souvenirs ; `spot_meetup` et `memories` sont proposés mais vides tant que
  * les lots R7i (rendez-vous au spot) et R7j (souvenirs) n'existent pas.
  */
 export const homeWidgetIds = [
   "next_access",
+  "event_weather",
   "live",
   "my_outings",
   "my_crew",
@@ -277,7 +279,7 @@ export type HomeNextTicket = {
   name: string;
   /** Prix unitaire en centimes, `null` = gratuit. */
   priceCents: number | null;
-  event: { slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
+  event: { id: string; slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
@@ -365,6 +367,12 @@ export type HomeData = {
   pendingStatuses: MyApplication[];
   nearby: { radiusKm: number | null; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
+  /**
+   * Lot R8e1 : la météo de chaque sortie de « Prochaine sortie » (clé = identifiant de l'événement) : mes places retenues et
+   * mes billets valables dont la météo est visible (7 jours avant le début, jusqu'à la fin) et stockée. `{}` sans sortie, ou
+   * quand « Météo de l'événement » est masqué (alors elle n'est pas calculée).
+   */
+  outingsWeather: Record<string, OutingWeather>;
   favoriteGarage: HomeFavoriteGarage | null;
   wash: NearbyPlace[];
   fuel: FuelStation[];

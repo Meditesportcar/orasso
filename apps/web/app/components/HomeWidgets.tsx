@@ -146,6 +146,11 @@ export function WeatherBlock({ weather }: { weather: HomeData["weather"] }) {
         <p className="hm-block__muted">{weatherTexts.unavailable}</p>
       )}
       {weather?.kind === "event" && <p className="o-t-caption">{weather.event.title}</p>}
+      {weather?.kind === "place" && (
+        <p className="o-t-caption" data-testid="weather-place">
+          Dép. {weather.department}
+        </p>
+      )}
     </Block>
   );
 }

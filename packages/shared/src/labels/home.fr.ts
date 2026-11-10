@@ -5,6 +5,7 @@ import { keepUnits } from "./units.fr";
 
 export const homeWidgetTitles: Record<HomeWidgetId, string> = {
   next_access: "Prochain accès",
+  event_weather: "Météo de l'événement",
   live: "En cours",
   my_outings: "Mes sorties",
   my_crew: "Mon crew",
@@ -242,6 +243,21 @@ export const homeBlockLabels = {
   personalizeShort: "Personnaliser",
 } as const;
 
+/** Lot R8e1 : la ligne météo de la carte « Prochaine sortie » (voir `rules/outingWeather.ts`). */
+export const outingWeatherLabels = {
+  /** Fond sombre de l'affiche : le bandeau de l'événement « Incertain ». */
+  uncertainBanner: "Météo incertaine : on la revérifie la veille et le matin.",
+  /** Seconde ligne d'un événement « Incertain » : le nombre de jours avant le début (jamais avant 1). */
+  uncertainIn: (days: number) => keepUnits(`Prévision peu sûre à ${days} ${days > 1 ? "jours" : "jour"}`),
+  headline: (weekday: string, temp: number, windKmh: number) => ({
+    lead: `${weekday} : `,
+    temp: `${temp}°`,
+    tail: keepUnits(`, vent ${windKmh} km/h`),
+  }),
+  aria: (weekday: string, sky: string, temp: number, windKmh: number) =>
+    keepUnits(`Météo de ${weekday} : ${sky}, ${temp} degrés, vent ${windKmh} km/h`),
+} as const;
+
 export const homePersonalizeLabels = {
   title: "Personnaliser",
   subtitle: "Ton Accueil, à ton goût",
@@ -269,6 +285,10 @@ export const homePersonalizeLabels = {
   /** Titre et phrase de chaque bloc. */
   widgets: {
     next_access: { title: "Prochaine sortie", hint: "Toujours en tête" },
+    event_weather: {
+      title: "Météo de l'événement",
+      hint: "Affiche ou masque la ligne météo de la carte « Prochaine sortie »",
+    },
     live: { title: "En cours", hint: "Seulement pendant un événement où tu as ta place" },
     my_outings: { title: "Mes sorties", hint: "Ton agenda : retenues, en attente, billets" },
     my_crew: { title: "Mon crew", hint: "Raccourci vers l'onglet Crew" },
@@ -276,7 +296,7 @@ export const homePersonalizeLabels = {
     spot_meetup: { title: "Au spot", hint: "Seulement quand quelqu'un lance un rendez-vous" },
     memories: { title: "Souvenirs", hint: "Seulement les jours où il y en a un" },
     nearby: { title: "Autour de moi", hint: "Les événements près de toi ce mois-ci" },
-    weather: { title: "Météo", hint: "Sur place le jour J, sinon chez toi" },
+    weather: { title: "Météo", hint: "Chez toi, aujourd'hui" },
     agenda: { title: "Agenda", hint: "Tes prochaines dates" },
     favorite_garage: { title: "Garage favori", hint: "Ton pro favori et son avantage" },
     pending: { title: "Candidatures en attente", hint: "Celles qui attendent une réponse" },

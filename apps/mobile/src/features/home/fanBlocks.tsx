@@ -121,11 +121,9 @@ export function SecH({
 export function WeatherCard({
   weather,
   place,
-  when,
 }: {
-  weather: MyWeather;
+  weather: Extract<MyWeather, { kind: "place" }>;
   place: string | null;
-  when: string | null;
 }) {
   const { t, theme } = useTheme();
   const c = t.color;
@@ -133,9 +131,9 @@ export function WeatherCard({
   // `--accent-soft` de l'artefact : moutarde à 16 % (Béton) ou 26 % (Sable).
   const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
   const label = weatherCodeLabels[s.code];
-  // Lot R6-police : le libellé commun, « jour J » insécable (« LE JOUR / J » avec la police agrandie).
-  const title = weather.kind === "event" ? homeProfileLabels.weatherDayJ : "Météo du jour";
-  const line = [place, when].filter(Boolean).join(", ");
+  // Lot R8e1 : seulement la météo du département ; celle de l'événement est une ligne de sa carte.
+  const title = "Météo du jour";
+  const line = place ?? "";
   return (
     <View
       style={[styles.card, styles.wx, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}

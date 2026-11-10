@@ -67,3 +67,56 @@
   flex: 1 1 200px;
   min-width: 0;
 }
+
+/* Lot R8e1 : la ligne météo de la carte « Prochaine sortie » (maquette R8.8 `.r8wx`, `.r8wxb`), jetons de l'affiche. */
+.hm-owx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Le bouton de la carte remonte de 14 px sur ce qui le précède : de quoi ne rien lui cacher. */
+  padding: 8px 0 20px;
+  color: var(--poster-ink);
+  text-align: left;
+  /* La ligne de faits de la carte est en capitales : la météo garde la casse de la maquette. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.hm-owx__line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1.5px dashed var(--poster-muted);
+}
+.hm-owx__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hm-owx__text b {
+  font-weight: 800;
+  font-size: 15px;
+}
+.hm-owx__temp {
+  font-family: var(--font-narrow);
+  font-variant-numeric: tabular-nums;
+}
+.hm-owx__text small {
+  font-size: 12px;
+  color: var(--poster-muted);
+}
+.hm-owx__banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--poster-ink);
+  color: var(--poster);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}

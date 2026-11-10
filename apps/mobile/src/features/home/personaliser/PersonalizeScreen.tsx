@@ -34,6 +34,7 @@ const { space2, space3 } = tokens.spacing;
 /** Le pictogramme de chaque bloc. */
 export const widgetIcons: Record<HomeWidgetId, IconName> = {
   next_access: "qr",
+  event_weather: "weatherClear",
   live: "live",
   my_outings: "ticket",
   my_crew: "crew",

@@ -41,6 +41,7 @@ export * from "./moon";
 export * from "./mp4";
 export * from "./nearAccess";
 export * from "./notifications";
+export * from "./outingWeather";
 export * from "./pages";
 export * from "./partnerships";
 export * from "./password";

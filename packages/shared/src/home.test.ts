@@ -42,7 +42,8 @@ describe("réglage des widgets de l'accueil", () => {
     expect(c.order[0]).toBe(HOME_FIXED_WIDGET);
     // Les blocs qui manquent au réglage enregistré (« En cours », lot R7d1 ; Mes sorties… Souvenirs, lot R7a2) prennent leur
     // place par défaut : juste après « Prochaine sortie », avant « Autour de moi » et avant les blocs du réglage.
-    expect(c.order.slice(1, 8)).toEqual([
+    expect(c.order.slice(1, 9)).toEqual([
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -51,9 +52,19 @@ describe("réglage des widgets de l'accueil", () => {
       "memories",
       "nearby",
     ]);
-    expect(c.order.slice(8, 10)).toEqual(["fuel", "weather"]);
+    expect(c.order.slice(9, 11)).toEqual(["fuel", "weather"]);
     expect([...c.order].sort()).toEqual([...homeWidgetIds].sort());
     expect(c.hidden).toEqual(["fuel"]);
+  });
+
+  it("lot R8e1 : un réglage R7 enregistré reçoit « Météo de l'événement » juste après « Prochaine sortie », visible", () => {
+    const c = normalizeHomeWidgets({ order: ["next_access", "live", "my_outings", "weather"], hidden: ["agenda"] });
+    expect(c.order.slice(0, 3)).toEqual(["next_access", "event_weather", "live"]);
+    expect(c.hidden).not.toContain("event_weather");
+    expect(visibleHomeWidgets(c)).toContain("event_weather");
+    // Par défaut : visible, juste après « Prochaine sortie ».
+    expect(defaultHomeWidgets.order.slice(0, 2)).toEqual(["next_access", "event_weather"]);
+    expect(defaultHomeWidgets.hidden).not.toContain("event_weather");
   });
 
   it("ne masque jamais « Prochain accès » et ne le déplace pas", () => {
@@ -61,7 +72,7 @@ describe("réglage des widgets de l'accueil", () => {
     expect(c.hidden).toEqual(["wash"]);
     expect(toggleHomeWidget(c, "next_access")).toBe(c);
     expect(moveHomeWidget(c, "next_access", 1)).toBe(c);
-    expect(moveHomeWidget(c, "live", -1)).toBe(c);
+    expect(moveHomeWidget(c, "event_weather", -1)).toBe(c);
   });
 
   it("monte, descend et masque", () => {
@@ -103,6 +114,7 @@ describe("réglage des widgets de l'accueil", () => {
     const down = moveHomeWidget(old, "pending", 1);
     expect(down.order).toEqual([
       "next_access",
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -120,6 +132,7 @@ describe("réglage des widgets de l'accueil", () => {
     const up = moveHomeWidget(down, "nearby", -1);
     expect(up.order).toEqual([
       "next_access",
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -136,7 +149,7 @@ describe("réglage des widgets de l'accueil", () => {
     ]);
     // Une station ne se déplace pas ; le premier proposé ne monte pas au-dessus de « Prochain accès ».
     expect(moveHomeWidget(old, "wash", 1)).toBe(old);
-    expect(moveHomeWidget(down, "live", -1)).toBe(down);
+    expect(moveHomeWidget(down, "event_weather", -1)).toBe(down);
     // Le dernier proposé ne descend pas (les stations derrière lui ne comptent pas).
     expect(defaultHomeWidgets.order.slice(-3)).toEqual(["pending", "wash", "fuel"]);
     expect(moveHomeWidget(defaultHomeWidgets, "pending", 1)).toBe(defaultHomeWidgets);
@@ -145,6 +158,7 @@ describe("réglage des widgets de l'accueil", () => {
   it("lot R7a2 : ordre par défaut validé, blocs masqués par défaut, nouveaux blocs proposés", () => {
     expect(defaultHomeWidgets.order).toEqual([
       "next_access",
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -161,8 +175,9 @@ describe("réglage des widgets de l'accueil", () => {
     ]);
     // Les blocs par défaut sont ceux que Damien a validés ; les trois autres se retrouvent dans « Ajouter ».
     expect(defaultHomeWidgets.hidden).toEqual(["agenda", "favorite_garage", "pending"]);
-    expect(visibleHomeWidgets(defaultHomeWidgets).slice(0, 4)).toEqual([
+    expect(visibleHomeWidgets(defaultHomeWidgets).slice(0, 5)).toEqual([
       "next_access",
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -183,6 +198,7 @@ describe("réglage des widgets de l'accueil", () => {
     });
     expect(before.order).toEqual([
       "next_access",
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -215,7 +231,7 @@ describe("réglage des widgets de l'accueil", () => {
     const down = moveVisibleHomeWidget(up, "weather", 1);
     expect(down.order).toEqual(c.order);
     // Le premier bloc affiché sous « Prochaine sortie » ne monte pas ; « Prochaine sortie » ne bouge pas.
-    expect(moveVisibleHomeWidget(c, "live", -1)).toBe(c);
+    expect(moveVisibleHomeWidget(c, "event_weather", -1)).toBe(c);
     expect(moveVisibleHomeWidget(c, "next_access", 1)).toBe(c);
     // Un bloc masqué ne se déplace pas ; un identifiant inconnu non plus.
     expect(moveVisibleHomeWidget(c, "agenda", -1)).toBe(c);

@@ -257,9 +257,12 @@ describe("GET /me/home : agrégation", () => {
         spotMeetup: null,
         memories: null,
         sponsored: null,
+        // Lot R8e1 : la ligne météo de la carte ('event_weather') : aucune sortie, aucune entrée.
+        outingsWeather: {},
         widgets: {
           order: [
             "next_access",
+            "event_weather",
             "live",
             "my_outings",
             "my_crew",
@@ -494,7 +497,8 @@ describe("widgets réglables", () => {
     expect(put.json.order[0]).toBe("next_access");
     // Lots R7d1 et R7a2 : « En cours », Mes sorties… Souvenirs manquent au réglage envoyé : ils se placent juste après
     // « Prochaine sortie », avant « Autour de moi » et avant les blocs réglés.
-    expect(put.json.order.slice(1, 8)).toEqual([
+    expect(put.json.order.slice(1, 9)).toEqual([
+      "event_weather",
       "live",
       "my_outings",
       "my_crew",
@@ -503,8 +507,8 @@ describe("widgets réglables", () => {
       "memories",
       "nearby",
     ]);
-    expect(put.json.order.slice(8, 10)).toEqual(["fuel", "weather"]);
-    expect(put.json.order).toHaveLength(14);
+    expect(put.json.order.slice(9, 11)).toEqual(["fuel", "weather"]);
+    expect(put.json.order).toHaveLength(15);
     expect(put.json.hidden).toEqual(["wash"]);
     const home = await req(u, "GET", "/me/home", undefined, mode);
     expect(home.json.widgets).toEqual(put.json);
@@ -565,7 +569,7 @@ describe("widgets réglables", () => {
       .update(profiles)
       .set({ homeWidgets: [{ id: "meteo", visible: false }] })
       .where(eq(profiles.userId, u.id));
-    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(14);
+    expect((await req(u, "GET", "/me/home")).json.widgets.order).toHaveLength(15);
   });
 
   it("compte suspendu : lecture seule, écriture refusée", async () => {
@@ -1055,7 +1059,7 @@ describe("corrections de la relecture", () => {
       .where(eq(profiles.userId, u.id));
     const r = await req(u, "GET", "/me/settings");
     expect(r.json.homeWidgets.order[0]).toBe("next_access");
-    expect(r.json.homeWidgets.order).toHaveLength(14);
+    expect(r.json.homeWidgets.order).toHaveLength(15);
     resetRateLimits();
     let last = 204;
     for (let i = 0; i < 61; i++)
