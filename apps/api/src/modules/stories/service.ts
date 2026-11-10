@@ -551,9 +551,9 @@ export const storiesService = {
         sent: pending ? [{ key: pending.key, purpose: "story" }] : [],
       };
     };
-    // Une vidéo a toujours son envoi (`posterKey` sans `uploadKey`, ou une vidéo avec une carte liée : 400 par le schéma).
+    // Une vidéo a toujours son envoi et ne porte pas de contenu lié (refusé par le schéma, et ici pour que l'API se suffise).
     const videoKey = video ? input.uploadKey : undefined;
-    if (video && (!videoKey || card)) throw validation(storyLabels.videoNotLinked, { field: "posterKey" });
+    if (video && (!videoKey || input.linked)) throw validation(storyLabels.videoNotLinked, { field: "posterKey" });
     const prepared = videoKey
       ? await prepareVideo(v, { uploadKey: videoKey, posterKey: input.posterKey ?? "" }, id, replay)
       : await preparePhoto();
