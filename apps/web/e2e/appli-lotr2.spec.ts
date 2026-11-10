@@ -80,9 +80,12 @@ async function dismissAsk(page: Page) {
 
 const pill = (page: Page, id: string) => page.getByTestId(id);
 const fond = (loc: Locator) => loc.evaluate((el) => getComputedStyle(el).backgroundColor);
-/** Pastille « choisie » (encre) ou « habituelle » (contour) : son fond est celui du segment actif (l'encre) ou non. */
-const selected = async (page: Page, id: string) =>
-  (await fond(pill(page, id))) === (await fond(page.locator('[data-testid^="segment-"][aria-selected="true"]')));
+/** Pastille « choisie » (encre) ou « habituelle » (contour) : choisie, son fond et son trait sont le même (R8x : le segment actif n'est plus plein). */
+const selected = (page: Page, id: string) =>
+  pill(page, id).evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return cs.backgroundColor === cs.borderTopColor;
+  });
 
 async function setWhere(page: Page, choice: "mine" | "all" | { dept: string }) {
   await pill(page, "around-open").click();
