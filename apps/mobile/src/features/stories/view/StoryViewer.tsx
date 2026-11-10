@@ -386,7 +386,8 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
       setResharedIds((ids) => new Set(ids).add(story.id));
       setNotice(storyShareLabels.reshared);
     } catch (e) {
-      if (e instanceof ApiRequestError && e.code === "already_shared") setResharedIds((ids) => new Set(ids).add(story.id));
+      if (e instanceof ApiRequestError && e.code === "already_shared")
+        setResharedIds((ids) => new Set(ids).add(story.id));
       else setNotice(errorMessage(e));
     } finally {
       setResharing(false);
@@ -522,7 +523,12 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 22 }]} pointerEvents="box-none">
           <LinkedCard story={story} />
-          <ReshareButton story={story} done={resharedIds.has(story.id)} busy={resharing} onPress={() => void reshare()} />
+          <ReshareButton
+            story={story}
+            done={resharedIds.has(story.id)}
+            busy={resharing}
+            onPress={() => void reshare()}
+          />
           <Stickers
             story={story}
             onVehicle={(id) => router.push(mine ? `/vehicule/${id}` : `/v/${id}`)}

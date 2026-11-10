@@ -12,8 +12,8 @@ import {
   type CommercialLineState,
   type CommercialPartnerNamed,
   commercialLineState,
-  type ProCard,
   partnershipLabels as L,
+  type ProCard,
 } from "@orasso/shared";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -87,12 +87,7 @@ export function CommercialLine({
         role="button"
       />
       {line.on ? (
-        <ProPicker
-          pick={line.pick}
-          onPick={(pick) => onDraft({ on: true, pick })}
-          disabled={disabled}
-          kind={kind}
-        />
+        <ProPicker pick={line.pick} onPick={(pick) => onDraft({ on: true, pick })} disabled={disabled} kind={kind} />
       ) : null}
       {line.on ? <Muted variant="caption">{L.commercialLaw}</Muted> : null}
     </View>
@@ -174,7 +169,9 @@ function ProPicker({
             </Text>
             <Icon name="close" size={14} color={c.surface} />
           </Pressable>
-          <Muted variant="caption">{kind === "story" ? L.commercialNotifiedStory(pick.name) : L.commercialNotifiedPost(pick.name)}</Muted>
+          <Muted variant="caption">
+            {kind === "story" ? L.commercialNotifiedStory(pick.name) : L.commercialNotifiedPost(pick.name)}
+          </Muted>
         </View>
       ) : (
         <>

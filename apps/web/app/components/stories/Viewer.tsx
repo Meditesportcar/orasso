@@ -9,9 +9,8 @@ import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
   createReplyKeys,
   feedAgo,
-  partnershipLabels,
-  storyShareLabels,
   storyViewerLabels as L,
+  partnershipLabels,
   progressOf,
   replyStillShown,
   STORY_HOLD_MS,
@@ -26,6 +25,7 @@ import {
   storyNext,
   storyPlayable,
   storyPrev,
+  storyShareLabels,
   storyStartIndex,
   tapTarget,
   viewersListPartial,
@@ -493,10 +493,19 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const reshare = async () => {
     if (!story || !proOption?.id || resharing) return;
     setResharing(true);
-    const res = await apiFetch(`/stories/${story.id}/share-to-mine`, { method: "POST", json: { asProId: proOption.id } });
+    const res = await apiFetch(`/stories/${story.id}/share-to-mine`, {
+      method: "POST",
+      json: { asProId: proOption.id },
+    });
     setResharing(false);
     if (res.ok || res.error.code === "already_shared") setResharedIds((ids) => new Set(ids).add(story.id));
-    setNotice(res.ok ? storyShareLabels.reshared : res.error.code === "already_shared" ? null : res.error.message || L.actionError);
+    setNotice(
+      res.ok
+        ? storyShareLabels.reshared
+        : res.error.code === "already_shared"
+          ? null
+          : res.error.message || L.actionError,
+    );
   };
   const iAmTagged = Boolean(story?.tags.some((x) => x.kind === "user" && x.id === userId));
 
@@ -728,7 +737,9 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                 onClick={() => void reshare()}
                 data-testid="story-reshare"
               >
-                {resharedIds.has(story.id) || proOption.copyId ? storyShareLabels.resharedAlready : partnershipLabels.commercialReshare}
+                {resharedIds.has(story.id) || proOption.copyId
+                  ? storyShareLabels.resharedAlready
+                  : partnershipLabels.commercialReshare}
               </Button>
             </div>
           ) : null}

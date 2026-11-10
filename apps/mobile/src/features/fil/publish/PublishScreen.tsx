@@ -6,6 +6,7 @@
 // parties ; l'identifiant de la publication est gardé (une réponse perdue ne crée pas de doublon).
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type CommercialDraft,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -17,7 +18,6 @@ import {
   feedAspectLabels,
   feedPostBody,
   feedScreenLabels as L,
-  type CommercialDraft,
   noCommercialDraft,
   partnershipLabels,
   publishIssue,

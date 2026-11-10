@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
-import { RELAIS } from "./relais";
-import { landscape } from "./lotr7f3-setup";
 import { dropMyStories, publishStory, sql, userIdOf } from "./lotr7f2-setup";
+import { landscape } from "./lotr7f3-setup";
+import { RELAIS } from "./relais";
 
 // Lot R7m2 : captures « avant » / « après » des écrans touchés par « Collaboration commerciale » : publier une story (étape
 // Détails) et une publication du Fil, la visionneuse (auteur partenaire et pro cité), la carte du Fil, l'Activité du pro, la
@@ -104,15 +104,15 @@ for (const theme of ["beton", "sable"] as const) {
       if (PHASE === "apres") await expect(k.page.getByTestId("commercial-self")).toBeVisible();
       await shot(k.page, `publier-details-manuel-${tag}`);
 
-      await k.page.goto("/fil");
-      await afterOpening(k.page);
-      const card = k.page.getByTestId("feed-card-feed_post").filter({ hasText: "garage-du-port" }).first();
-      await card.scrollIntoViewIfNeeded({ timeout: 30_000 });
-      await shot(k.page, `fil-carte-${tag}`);
       await k.ctx.close();
 
-      // Damien regarde la story de Kenji.
+      // Damien regarde la carte du Fil puis la story de Kenji.
       const d = await open(browser, "damien@orasso.local", theme, w, s);
+      await d.page.goto("/fil");
+      await afterOpening(d.page);
+      const card = d.page.getByTestId("feed-card-feed_post").filter({ hasText: "garage-du-port" }).first();
+      await card.scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await shot(d.page, `fil-carte-${tag}`);
       await d.page.goto(`/story/u:${kenjiId}`);
       await afterOpening(d.page);
       await expect(d.page.getByTestId("story-viewer")).toBeVisible({ timeout: 30_000 });
@@ -158,14 +158,14 @@ for (const theme of ["beton", "sable"] as const) {
       if (PHASE === "apres") await expect(page.getByTestId("commercial-self")).toBeVisible();
       await shot(page, `site-publier-details-manuel-${theme}-${width}`, true);
 
+      await apiCall(null, "POST", "/auth/sign-out");
+      await page.context().clearCookies();
+      await loginInBrowser(page, "damien@orasso.local", undefined, `/app/story/u:${kenjiId}`);
       await page.goto("/app/fil");
       const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "garage-du-port" }).first();
       await card.scrollIntoViewIfNeeded({ timeout: 30_000 });
       await shot(page, `site-fil-carte-${theme}-${width}`);
-
-      await apiCall(null, "POST", "/auth/sign-out");
-      await page.context().clearCookies();
-      await loginInBrowser(page, "damien@orasso.local", undefined, `/app/story/u:${kenjiId}`);
+      await page.goto(`/app/story/u:${kenjiId}`);
       await expect(page.getByTestId("story-viewer-root")).toBeVisible({ timeout: 30_000 });
       if (PHASE === "apres") await expect(page.getByTestId("story-commercial")).toBeVisible();
       await shot(page, `site-visionneuse-${theme}-${width}`);

@@ -9,11 +9,11 @@ import {
   type CommercialLineState,
   type CommercialPartnerNamed,
   commercialLineState,
+  partnershipLabels as L,
   type MyPartnerships,
   type Page,
   type ProCard,
   type ProPublic,
-  partnershipLabels as L,
 } from "@orasso/shared";
 import { useEffect, useMemo, useState } from "react";
 
@@ -53,7 +53,8 @@ export function CommercialLine({
   /** Une story se repartage (le pro est prévenu et peut la reprendre) ; une publication ne fait que prévenir. */
   kind: "story" | "post";
 }) {
-  const notified = (name: string) => (kind === "story" ? L.commercialNotifiedStory(name) : L.commercialNotifiedPost(name));
+  const notified = (name: string) =>
+    kind === "story" ? L.commercialNotifiedStory(name) : L.commercialNotifiedPost(name);
   if (line.kind === "required") {
     return (
       <div className="story-commercial" data-testid="commercial-line">
@@ -88,7 +89,12 @@ export function CommercialLine({
         </span>
       </button>
       {line.on ? (
-        <ProPicker pick={line.pick} onPick={(pick) => onDraft({ on: true, pick })} disabled={disabled} notified={notified} />
+        <ProPicker
+          pick={line.pick}
+          onPick={(pick) => onDraft({ on: true, pick })}
+          disabled={disabled}
+          notified={notified}
+        />
       ) : null}
       {line.on ? <p className="o-t-caption">{L.commercialLaw}</p> : null}
     </div>

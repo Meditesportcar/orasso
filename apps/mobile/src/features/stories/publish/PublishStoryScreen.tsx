@@ -7,6 +7,8 @@
 // La vidéo vient avec le lot R7g (`VideoSlot`). Casquette active : l'écran publie au nom de la structure ou de la fiche.
 import { Icon, SendProgress, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  commercialField,
+  commercialIssue,
   eventsWithPlace,
   storyPublishLabels as L,
   partnershipLabels,
@@ -15,8 +17,6 @@ import {
   type StoryCreated,
   sendIfAlive,
   storyAudienceOptions,
-  commercialField,
-  commercialIssue,
   storyBody,
   storyPublishIssue,
 } from "@orasso/shared";
@@ -289,14 +289,14 @@ export function PublishStoryScreen() {
   };
 
   const issue = draft
-    ? storyPublishIssue({
+    ? (storyPublishIssue({
         hasPhoto: true,
         preparing: working,
         plate: plateOf(draft),
         caption: details.caption,
         needsCrew: chosen?.audience === "crew" && !chosen.crewId,
         audienceLost: lost,
-      }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick)
+      }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick))
     : L.missingPhoto;
 
   async function publish() {
