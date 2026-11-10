@@ -110,6 +110,9 @@ test("« En cours » porte la météo de son événement ; Personnaliser : la li
   const line = live.getByTestId("home-outing-weather");
   await expect(line).toBeVisible();
   expect(((await line.innerText()).split("\n")[0] ?? "").trim()).toMatch(HEADLINE);
+  // Lot R8r : « En cours » (le Lydia, plusieurs jours) montre la journée d'aujourd'hui, pas celle du début de l'événement.
+  const today = new Date().toLocaleDateString("fr-FR", { weekday: "long", timeZone: "Europe/Paris" });
+  expect(((await line.innerText()).split("\n")[0] ?? "").trim().toLowerCase()).toMatch(new RegExp(`^${today} :`));
   const a = await line.boundingBox();
   const b = await live.getByTestId("home-live-sheet").boundingBox();
   expect(a && b && a.y + a.height <= b.y + 1).toBe(true);
