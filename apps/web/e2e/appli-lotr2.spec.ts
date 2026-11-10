@@ -121,7 +121,7 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
     await expect(page.getByTestId("segment-evenements")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("events-q")).toBeVisible();
     for (const id of ["around-open", "sort-open", "filters-toggle"]) await expect(pill(page, id)).toBeVisible();
-    await expect(page.getByTestId("sort-line")).toContainText("à venir", { timeout: 30_000 });
+    await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ", { timeout: 30_000 });
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
     // Réglages habituels : Mon coin, par date ; tous en contour.
     await expect(pill(page, "around-open")).toContainText("Mon coin");
@@ -157,15 +157,15 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
     await expect(page.getByTestId("around-sheet")).toHaveCount(0);
     await expect(pill(page, "around-open")).toContainText("(11)");
     expect(await selected(page, "around-open")).toBe(true);
-    await expect(page.getByTestId("sort-line")).toContainText("(11)", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText("(11)", { timeout: 30_000 });
     await setWhere(page, "all");
     await expect(pill(page, "around-open")).toContainText("Partout en France");
-    await expect(page.getByTestId("sort-line")).toContainText("partout en France", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText("Partout en France", { timeout: 30_000 });
     // Retour à Mon coin : la pastille repasse en contour.
     await setWhere(page, "mine");
     await expect(pill(page, "around-open")).toContainText("Mon coin");
     expect(await selected(page, "around-open")).toBe(false);
-    await expect(page.getByTestId("sort-line")).not.toContainText("partout en France");
+    await expect(page.getByTestId("around-open")).not.toContainText("Partout en France");
 
     // --- Trier : un toucher suffit, la feuille se ferme ------------------------------------------------------------
     await pill(page, "sort-open").click();
@@ -343,7 +343,7 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
     await page.getByTestId("map-day-all").click();
     await expect(page.getByTestId("map-day-all")).toHaveAttribute("aria-selected", "true");
     await page.getByTestId("list-toggle").click();
-    await expect(page.getByTestId("sort-line")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("explorer-body")).toBeVisible({ timeout: 30_000 });
     // Les Pros ont leur carte aussi (même bascule) ; Personnes et crews n'en ont pas.
     await page.getByTestId("segment-pros").click();
     await page.getByTestId("map-toggle").click();

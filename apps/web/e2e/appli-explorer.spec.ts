@@ -81,11 +81,11 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     const rows = page.getByTestId("event-row");
     // Lot R2 : « N événements à venir · <lieu> », par date. On cherche partout en France (les événements du Club
     // Audois Passion sont dans l'Aude, hors du coin de ce compte).
-    await expect(page.getByTestId("sort-line")).toContainText("à venir", { timeout: 30_000 });
+    await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ", { timeout: 30_000 });
     await page.getByTestId("around-open").click();
     await page.getByTestId("around-all").click();
     await page.getByTestId("where-apply").click();
-    await expect(page.getByTestId("sort-line")).toContainText("partout en France", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText("Partout en France", { timeout: 30_000 });
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-explorer-distance-${theme}`);
 

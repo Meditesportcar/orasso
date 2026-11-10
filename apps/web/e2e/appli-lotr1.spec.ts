@@ -156,7 +156,7 @@ test("Explorer : « Médite », événements terminés, plus de stations", async
     await expect(page.getByTestId("map-screen")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(over.title)).toHaveCount(0);
     await page.getByTestId("list-toggle").click();
-    await expect(page.getByTestId("sort-line")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("explorer-body")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("events-q").fill("");
 
     // Pros : ni lavage ni carburant (lot R2 : la liste des pros commence par la ligne « N pros · … »).
@@ -213,7 +213,7 @@ test("Explorer : les sélecteurs gardent le choix (onglets, redémarrage), jamai
       await expect(page.getByTestId("sort-open")).toContainText("Places restantes", { timeout: 30_000 });
       await expect(page.getByTestId("around-open")).toContainText("(11)");
       await expect(page.getByTestId("filters-toggle")).toHaveAttribute("aria-label", "Filtres · 1");
-      await expect(page.getByTestId("sort-line")).not.toContainText("à 50 km");
+      await expect(page.getByTestId("around-open")).not.toContainText(" km");
     };
     // Un autre onglet, puis retour.
     await tab(page, "Le Fil");
@@ -235,7 +235,7 @@ test("Explorer : les sélecteurs gardent le choix (onglets, redémarrage), jamai
     await page.getByTestId("around-open").click();
     await page.getByTestId("around-me").click();
     await page.getByTestId("where-apply").click();
-    await expect(page.getByTestId("around-open")).toContainText("de moi", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText(" km", { timeout: 30_000 });
     const stored = await page.evaluate(() =>
       Object.keys(localStorage)
         .filter((k) => k.includes("explorer-choice"))
@@ -245,7 +245,7 @@ test("Explorer : les sélecteurs gardent le choix (onglets, redémarrage), jamai
     expect(stored[0]).toContain('"kind":"me"');
     expect(stored[0]).not.toMatch(/lat|lng|42\.6|2\.89/);
     await goto(page, "/explorer");
-    await expect(page.getByTestId("around-open")).toContainText("de moi", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText(" km", { timeout: 30_000 });
 
     // « Mon coin » remet le point de départ habituel, et c'est ce qui reste.
     await page.getByTestId("around-open").click();

@@ -60,12 +60,12 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("sort-open")).toContainText("Par date");
       await expect(page.getByTestId("events-q")).toHaveAttribute(
         "placeholder",
-        "Un événement, un organisateur, une ville",
+        "Événement, organisateur, ville",
       );
       // Réglages habituels : pastilles en contour (rien de choisi).
       await expect(page.getByTestId("around-open")).not.toHaveAttribute("data-set", "true");
       await expect(page.getByTestId("sort-open")).not.toHaveAttribute("data-set", "true");
-      await expect(page.getByTestId("sort-line")).toContainText("à venir");
+      await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ");
       await shot(page, `evenements-liste-${tag}`);
       await audit(page);
 
@@ -88,7 +88,7 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await page.waitForURL(/autour=ailleurs/);
       await expect(page.getByTestId("around-open")).toContainText("(11)");
       await expect(page.getByTestId("around-open")).toHaveAttribute("data-set", "true");
-      await expect(page.getByTestId("sort-line")).toContainText("(11)");
+      await expect(page.getByTestId("around-open")).toContainText("(11)");
 
       // Trier : appliqué au clic.
       await openSheet(page, "sort-open", "sort-sheet");

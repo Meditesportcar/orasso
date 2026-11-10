@@ -297,7 +297,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     if (AFTER) {
       // Lot R2 : tri par date par défaut ; « Où chercher ? » (Mon coin, Ailleurs, Partout en France) remplace « Autour de ».
       await expect(page.getByTestId("sort-open")).toContainText("Par date");
-      await expect(page.getByTestId("sort-line")).toContainText("événement");
+      await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ");
       await expect(page.getByTestId("list-map-toggle")).toBeVisible();
       await audit(page);
       await page.getByTestId("sort-open").click();
@@ -319,7 +319,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await page.getByTestId("where-apply").click();
       await expect(page.getByTestId("around-sheet")).toHaveCount(0);
       await expect(page.getByTestId("around-open")).toContainText("(75)");
-      await expect(page.getByTestId("sort-line")).toContainText("(75)", { timeout: 30_000 });
+      await expect(page.getByTestId("around-open")).toContainText("(75)", { timeout: 30_000 });
       await shot(page, `explorer-ailleurs-${theme}`);
       await page.getByTestId("around-open").click();
       await page.getByTestId("around-mine").click();
@@ -328,7 +328,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       // Pastille en contour : son fond n'est plus celui de l'encre (celui du segment actif).
       const fond = (id: string) => page.getByTestId(id).evaluate((el) => getComputedStyle(el).backgroundColor);
       expect(await fond("around-open")).not.toBe(await fond("segment-evenements"));
-      await expect(page.getByTestId("sort-line")).not.toContainText("(75)");
+      await expect(page.getByTestId("around-open")).not.toContainText("(75)");
       // Gardé pour la prochaine visite.
       await goto(page, "/explorer");
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés", { timeout: 30_000 });
@@ -342,7 +342,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await page.waitForTimeout(2500);
       await shot(page, `carte-${theme}`);
       await page.getByTestId("list-toggle").click();
-      await expect(page.getByTestId("sort-line")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("explorer-body")).toBeVisible({ timeout: 30_000 });
     }
     await ctx.close();
   }
