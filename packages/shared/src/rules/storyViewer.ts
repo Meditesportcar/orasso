@@ -190,6 +190,12 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
   const UNCERTAIN_MS = 30 * 60 * 1000;
   const keys = new Map<string, { id: string; uncertainAt: number | null }>();
   const sending = new Map<string, string>();
+  // Abonnés au changement des envois en cours (lot R8s) : le parent persistant de la visionneuse garde ces identifiants d'un
+  // auteur à l'autre ; une requête qui finit après un aller-retour doit libérer le bouton du lecteur affiché, pas d'un démonté.
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const l of [...listeners]) l();
+  };
   const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
   const expire = () => {
     const t = now();
@@ -235,7 +241,9 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
       if (sending.has(storyId)) return null;
       if (isFull(storyId, text)) return null;
       sending.set(storyId, text);
-      return idFor(storyId, text);
+      const id = idFor(storyId, text);
+      notify();
+      return id;
     },
     /** Fin de l'envoi : l'identifiant n'est oublié que si la réponse est arrivée (`ok`) ; sinon il reste incertain, gardé 30 min ou jusqu'à un succès. */
     end(storyId: string, text: string, ok: boolean) {
@@ -246,6 +254,12 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
         const e = keys.get(k);
         if (e) e.uncertainAt = now();
       }
+      notify();
+    },
+    /** Appelé à chaque début ou fin d'envoi ; rend la fonction de désabonnement. */
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     isSending: (storyId: string) => sending.has(storyId),
     /** Les stories dont un envoi est en cours (pour l'affichage des boutons). */

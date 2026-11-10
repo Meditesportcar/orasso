@@ -259,3 +259,24 @@ test("tour 2 : la chaîne est figée sur la barre affichée, même si la barre n
   }
   await ctx.close();
 });
+
+test("tour 3 : sans barre en mémoire et barre lente, un état de chargement avec « Fermer » (jamais un écran noir)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const authors = await bar();
+  const { ctx, page } = await open(browser);
+  await page.route("**/api/stories/bar", async (route) => {
+    await new Promise((r) => setTimeout(r, 6_000));
+    await route.continue();
+  });
+  // Ouverture directe : la barre n'a jamais été affichée, rien en mémoire.
+  await page.goto(`/story/${encodeURIComponent(authors[0]?.key ?? "")}?suite=barre`);
+  await afterOpening(page);
+  await expect(page.getByTestId("story-loading")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("story-close")).toBeVisible();
+  // La chaîne est attendue : le lecteur se monte ensuite, sur le bon auteur.
+  await expect(author(page)).toHaveText(authors[0]?.pseudoOrName ?? "", { timeout: 30_000 });
+  await ctx.close();
+});

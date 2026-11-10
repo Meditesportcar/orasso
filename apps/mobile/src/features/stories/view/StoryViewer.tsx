@@ -86,6 +86,8 @@ export type AuthorNav = {
   onAuthor: (dir: "next" | "prev") => void;
   /** Identifiants d'idempotence des réponses : ils vivent dans le parent persistant, un aller-retour entre auteurs ne les perd pas. */
   replyKeys: ReturnType<typeof createReplyKeys>;
+  /** « Ne plus voir ses stories » : le parent retire l'auteur des déplacements de la chaîne. */
+  onMuted: () => void;
 };
 
 export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: AuthorNav }) {
@@ -361,6 +363,13 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
   const replyKeys = nav?.replyKeys ?? ownReplyKeys;
   const [sending, setSending] = useState<ReadonlySet<string>>(() => new Set(replyKeys.sendingStories()));
   const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
+  // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
+  // du lecteur affiché, pas celui d'un lecteur démonté.
+  useEffect(() => {
+    const sync = () => setSending(new Set(replyKeys.sendingStories()));
+    sync();
+    return replyKeys.subscribe(sync);
+  }, [replyKeys]);
   const shownDraft = useRef({ storyId: storyId as string | null, text });
   shownDraft.current = { storyId, text };
   // Un autre story : le brouillon d'une réponse ne passe pas à la suivante.
@@ -401,6 +410,8 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
     try {
       await api.storyMute(authorKey, true);
       setNotice(L.muted);
+      // Chaîne en cours : l'auteur masqué ne revient plus par « Auteur précédent ».
+      navRef.current?.onMuted();
       // Chaîne en cours : on passe à l'auteur suivant au lieu de fermer toute la lecture.
       if (!closing.current) muteTimer.current = setTimeout(() => (changeAuthor("next") ? undefined : close()), 1500);
     } catch (e) {

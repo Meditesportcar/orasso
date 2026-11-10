@@ -121,6 +121,8 @@ type AuthorNav = {
   fetchAuthor: (key: string) => Promise<Awaited<ReturnType<typeof apiFetch<StoriesByAuthor>>>>;
   /** Faux si le parent refuse (session non vérifiée) : rien ne change, la visionneuse reste où elle est. */
   onAuthor: (dir: "next" | "prev") => boolean;
+  /** « Ne plus voir ses stories » : le parent retire l'auteur des déplacements de la chaîne. */
+  onMuted: () => void;
 };
 
 /** La vérification du compte vit dans le parent persistant de la chaîne : un auteur remonté ne la remet jamais à « ok ». */
@@ -189,6 +191,13 @@ function AuthorViewer({
   const viewed = useRef(new Set<string>());
   const viewersSeq = useRef(0);
   const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
+  // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
+  // du lecteur affiché, pas celui d'un lecteur démonté.
+  useEffect(() => {
+    const sync = () => setSending(new Set(replyKeys.sendingStories()));
+    sync();
+    return replyKeys.subscribe(sync);
+  }, [replyKeys]);
   const closing = useRef(false);
   const muteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -301,6 +310,12 @@ function AuthorViewer({
     viewersSeq.current++;
     setViewers(null);
   }, [epoch]);
+  // Un auteur dont toutes les stories ont expiré, lu pendant une vérification du compte : on poursuit dans le sens de la lecture
+  // dès que le compte est vérifié (même comportement que hors vérification).
+  useEffect(() => {
+    if (check === "ok" && load.status === "ready" && load.data.stories.length === 0)
+      changeAuthorRef.current(navRef.current?.arrival === "prev" ? "prev" : "next");
+  }, [check, load]);
   // Onglet masqué (changement d'onglet, écran verrouillé) : pause, le temps restant est gardé.
   useEffect(() => {
     const sync = () => setVisible(document.visibilityState !== "hidden");
@@ -479,6 +494,8 @@ function AuthorViewer({
     const res = await apiFetch(`/me/story-mutes/${encodeURIComponent(authorKey)}`, { method: "PUT" });
     if (!res.ok) return setNotice(res.error.message || L.actionError);
     setNotice(L.muted);
+    // Chaîne en cours : l'auteur masqué ne revient plus par « Auteur précédent ».
+    navRef.current?.onMuted();
     if (!closing.current) muteTimer.current = setTimeout(() => (changeAuthor("next") ? undefined : close()), 1500);
   };
   const removeTag = async () => {
@@ -1096,6 +1113,16 @@ function AuthorViewer({
   );
 }
 
+/** Identifiants d'idempotence des réponses, gardés en mémoire pour le compte courant (jamais écrits sur le disque). */
+let heldReplyKeys: { userId: string; keys: ReturnType<typeof createReplyKeys> } | null = null;
+function replyKeysFor(userId: string) {
+  // Rendu serveur : le module est partagé entre visiteurs, rien n'y est gardé.
+  if (typeof window === "undefined") return createReplyKeys(() => crypto.randomUUID());
+  if (!heldReplyKeys || heldReplyKeys.userId !== userId)
+    heldReplyKeys = { userId, keys: createReplyKeys(() => crypto.randomUUID()) };
+  return heldReplyKeys.keys;
+}
+
 /** L'auteur suivant est lu d'avance après ce délai ; une lecture d'avance plus vieille que cela est relue (une story supprimée, échue ou sortie du crew ne reste pas affichée par sa légende). */
 const PREFETCH_DELAY_MS = 800;
 const PREFETCH_MAX_AGE_MS = 15_000;
@@ -1114,7 +1141,11 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
   const [current, setCurrent] = useState(authorKey);
   const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
   const chained = Boolean(chain);
-  const replyKeys = useRef(createReplyKeys(() => crypto.randomUUID())).current;
+  // Gardés en mémoire par compte : un aller-retour par un profil (la route est démontée) ne perd pas un texte d'issue incertaine.
+  const [replyKeys] = useState(() => replyKeysFor(userId));
+  // Auteurs masqués pendant la lecture : retirés des déplacements (le courant reste jusqu'à son départ).
+  const [muted, setMuted] = useState<ReadonlySet<string>>(new Set());
+  const walk = frozen.filter((k) => k === current || !muted.has(k));
 
   // Compte : `checking` masque tout (photo, métadonnées, listes) pendant qu'on revérifie la session au retour au premier plan ;
   // `unverified` = la vérification a échoué (réseau) : rien n'est montré, et on ne change pas d'auteur, sans elle. Le compte
@@ -1219,7 +1250,7 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
     },
     [read],
   );
-  const following = nextAuthor(frozen, current);
+  const following = nextAuthor(walk, current);
   useEffect(() => {
     if (!following || !chained || check !== "ok") return;
     const timer = setTimeout(() => {
@@ -1236,7 +1267,7 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
     (dir: "next" | "prev"): boolean => {
       // Rien ne change d'auteur tant que le compte n'est pas vérifié.
       if (checkRef.current !== "ok") return false;
-      const to = dir === "next" ? nextAuthor(frozen, current) : prevAuthor(frozen, current);
+      const to = dir === "next" ? nextAuthor(walk, current) : prevAuthor(walk, current);
       if (!to) return false;
       setArrival(dir);
       setCurrent(to);
@@ -1249,7 +1280,7 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
       }
       return true;
     },
-    [frozen, current],
+    [walk, current],
   );
 
   return (
@@ -1261,7 +1292,17 @@ export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId
       replyKeys={replyKeys}
       nav={
         chained
-          ? { prevKey: prevAuthor(frozen, current), nextKey: following, arrival, fetchAuthor, onAuthor: goAuthor }
+          ? {
+              prevKey: prevAuthor(walk, current),
+              nextKey: following,
+              arrival,
+              fetchAuthor,
+              onAuthor: goAuthor,
+              onMuted: () => {
+                ahead.current.delete(current);
+                setMuted((m) => new Set(m).add(current));
+              },
+            }
           : undefined
       }
     />

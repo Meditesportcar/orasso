@@ -4831,3 +4831,10 @@ Damien a validé le 10/11 au soir les deux maquettes (« r8 ok », « r9 ok ») 
 - **Préchargement** : 15 s au plus.
 - **Erreur de lecture d'un auteur** : l'écran propose « Auteur suivant » quand la chaîne en a un.
 - **Mineurs** : « Ne plus voir ses stories » et la suppression de ma dernière story passent à l'auteur suivant (fermeture seulement sans suivant). Site : l'adresse suit l'auteur courant (`history.replaceState`, sans nouvelle entrée) ; au retour d'un profil ouvert depuis la visionneuse, le chargeur recalcule la chaîne à partir de cet auteur (les non vus qui le suivent à ce moment-là). Limite connue : un envoi de réponse terminé après le remontage de son auteur n'actualise pas l'état « envoi » de l'instance suivante tant qu'on n'envoie pas autre chose.
+
+### Tour 3 (R8s, 10/11/2026)
+- **Envois de réponse réactifs** : `createReplyKeys` gagne `subscribe` (prévenu à chaque début et fin d'envoi) ; chaque lecteur (appli et site) s'y abonne : la fin d'une requête qui arrive après un aller-retour entre auteurs libère le bouton du lecteur affiché, en succès comme en échec (même identifiant au renvoi). Test unitaire de l'abonnement ; recettes site succès et échec avec requête retenue pendant l'aller-retour.
+- **Auteur masqué** : « Ne plus voir ses stories » prévient le parent (`onMuted`) qui retire l'auteur des déplacements (le courant reste jusqu'à son départ) et purge son préchargement. Recette : masquer, suivant, plus de « précédent ».
+- **Appli, chargement de la chaîne** : sans barre en mémoire, `StoryChain` affiche « Chargement de la story » avec la croix « Fermer » (pas de roue) tant que la barre est lue ; le lecteur se monte ensuite.
+- **Site, auteur expiré pendant une vérification du compte** : dès que la vérification rend « ok », un auteur sans story passe au suivant (même comportement que hors vérification).
+- **Site, aller-retour par un profil** : les identifiants de réponse sont gardés en mémoire du navigateur pour le compte courant (`replyKeysFor`, jamais sur le disque, rien gardé au rendu serveur) ; un texte d'issue incertaine repart donc avec le même identifiant après un détour par un profil.

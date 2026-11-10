@@ -417,3 +417,24 @@ describe("glisser pour changer d'auteur (R8s)", () => {
     expect(authorSwipe(0, 0)).toBeNull();
   });
 });
+
+describe("createReplyKeys : abonnement aux envois (R8s, tour 3)", () => {
+  it("prévient au début et à la fin d'un envoi, en succès comme en échec, et garde l'identifiant d'un échec", () => {
+    let n = 0;
+    const keys = createReplyKeys(() => `id${++n}`);
+    const seen: string[][] = [];
+    const stop = keys.subscribe(() => seen.push(keys.sendingStories()));
+    const id = keys.begin("s1", "texte");
+    expect(seen).toEqual([["s1"]]);
+    keys.end("s1", "texte", false);
+    expect(seen).toEqual([["s1"], []]);
+    // Échec : même soumission = même identifiant au renvoi.
+    expect(keys.begin("s1", "texte")).toBe(id);
+    keys.end("s1", "texte", true);
+    expect(seen.at(-1)).toEqual([]);
+    expect(keys.begin("s1", "texte")).not.toBe(id);
+    stop();
+    keys.end("s1", "texte", true);
+    expect(seen).toHaveLength(5);
+  });
+});

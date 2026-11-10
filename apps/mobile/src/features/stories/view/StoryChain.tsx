@@ -5,11 +5,19 @@
 // Sans `suite=barre` (anneau d'un profil, story de l'organisateur, mentions) : l'auteur seul, comme avant.
 // Changement d'auteur : glissement horizontal court et fondu (fondu de 120 ms en mouvement réduit), tout l'état propre à une story
 // (flamme, réponse en cours, feuilles, minuterie) repart de zéro (visionneuse remontée, `key`). L'auteur suivant est lu d'avance.
-import { useTheme } from "@orasso/design-system/native";
-import { createReplyKeys, nextAuthor, prevAuthor, type StoriesByAuthor, storyChain } from "@orasso/shared";
+import { Icon, Text, useTheme } from "@orasso/design-system/native";
+import {
+  createReplyKeys,
+  storyViewerLabels as L,
+  nextAuthor,
+  prevAuthor,
+  type StoriesByAuthor,
+  storyChain,
+} from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { api } from "@/lib/api";
@@ -40,6 +48,10 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
   const replyKeys = useRef(createReplyKeys(randomUUID)).current;
   const [current, setCurrent] = useState(authorKey);
   const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
+  const router = useRouter();
+  // Auteurs masqués pendant la lecture : retirés des déplacements (le courant reste jusqu'à son départ).
+  const [muted, setMuted] = useState<ReadonlySet<string>>(new Set());
+  const walk = chain.filter((k) => k === current || !muted.has(k));
 
   useEffect(() => {
     if (chainReady) return;
@@ -66,7 +78,7 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
     if (hit && Date.now() - hit.at < PREFETCH_MAX_AGE_MS) return hit.promise;
     return api.storiesByAuthor(key);
   }, []);
-  const following = nextAuthor(chain, current);
+  const following = nextAuthor(walk, current);
   useEffect(() => {
     if (!following) return;
     const timer = setTimeout(() => {
@@ -82,7 +94,7 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
   const opacity = useSharedValue(1);
   const goAuthor = useCallback(
     (dir: "next" | "prev") => {
-      const to = dir === "next" ? nextAuthor(chain, current) : prevAuthor(chain, current);
+      const to = dir === "next" ? nextAuthor(walk, current) : prevAuthor(walk, current);
       if (!to) return;
       tx.value = reducedMotion ? 0 : (dir === "next" ? 1 : -1) * width * SLIDE_SHARE;
       opacity.value = 0;
@@ -91,14 +103,14 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
       setArrival(dir);
       setCurrent(to);
     },
-    [chain, current, reducedMotion, tx, opacity, width],
+    [walk, current, reducedMotion, tx, opacity, width],
   );
   const style = useAnimatedStyle(() => {
     "worklet";
     return { opacity: opacity.value, transform: [{ translateX: tx.value }] };
   });
 
-  const prevKey = prevAuthor(chain, current);
+  const prevKey = prevAuthor(walk, current);
   return (
     <Animated.View style={[{ flex: 1, backgroundColor: t.color.night }, style]} testID="story-chain">
       {chainReady ? (
@@ -114,11 +126,45 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
                   fetchAuthor,
                   onAuthor: goAuthor,
                   replyKeys,
+                  onMuted: () => {
+                    ahead.current.delete(current);
+                    setMuted((m) => new Set(m).add(current));
+                  },
                 }
               : undefined
           }
         />
-      ) : null}
+      ) : (
+        // La barre est lue avant de monter le lecteur (la chaîne doit être figée avant la première vue) : le même état de
+        // chargement que la visionneuse (pas de roue), avec « Fermer ».
+        <View style={styles.loading} testID="story-loading">
+          <Text variant="caption" color={t.color.nightInk} accessibilityLiveRegion="polite">
+            {L.loading}
+          </Text>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/fil"))}
+            accessibilityRole="button"
+            accessibilityLabel={L.close}
+            style={styles.close}
+            testID="story-close"
+          >
+            <Icon name="close" size={22} color={t.color.nightInk} />
+          </Pressable>
+        </View>
+      )}
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  close: {
+    position: "absolute",
+    top: 48,
+    right: 12,
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

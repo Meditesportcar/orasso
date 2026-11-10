@@ -268,3 +268,87 @@ test("tour 2 : réponse perdue, aller-retour entre auteurs : le même texte repa
   await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(2);
   expect(ids[1]).toBe(ids[0]);
 });
+
+/** Un auteur-personne à une seule story, qui n'est pas le dernier de la barre : l'aller-retour revient sur la même story. */
+async function singleStoryAuthor(): Promise<string> {
+  const authors = await bar();
+  const cookie = await login("damien@orasso.local");
+  for (const a of authors.slice(0, -1)) {
+    if (!a.key.startsWith("u:")) continue;
+    const r = await apiCall<{ stories: unknown[] }>(cookie, "GET", `/stories/by-author/${encodeURIComponent(a.key)}`);
+    if (r.data.stories.length === 1) return a.pseudoOrName;
+  }
+  return "";
+}
+
+for (const outcome of ["succès", "échec"] as const) {
+  test(`tour 3 : la requête de réponse finit APRÈS l'aller-retour entre auteurs (${outcome}) : bouton libre${outcome === "échec" ? ", même identifiant au renvoi" : ""}`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    await resetViews();
+    const target = await singleStoryAuthor();
+    test.skip(!target, "aucun auteur à une seule story dans la barre");
+    await signedIn(page, "beton", 390, 844);
+    const ids: string[] = [];
+    let release: (() => void) | null = null;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    await page.route("**/api/stories/*/reply", async (route) => {
+      ids.push((route.request().postDataJSON() as { clientId: string }).clientId);
+      if (ids.length > 1) return route.continue();
+      await held;
+      return outcome === "succès" ? route.continue() : route.abort();
+    });
+    await page.getByLabel(new RegExp(`Voir les stories de ${target}`)).click();
+    await expect(author(page)).toHaveText(target, { timeout: 30_000 });
+    await playing(page);
+    await page.getByTestId("story-reply-input").fill("Belle auto");
+    await page.getByTestId("story-reply-send").click();
+    await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(1);
+    // Aller-retour pendant que la requête est en vol.
+    await page.getByRole("button", { name: "Auteur suivant" }).click();
+    await expect(author(page)).not.toHaveText(target, { timeout: 30_000 });
+    await page.getByRole("button", { name: "Auteur précédent" }).click();
+    await expect(author(page)).toHaveText(target, { timeout: 30_000 });
+    await page.getByTestId("story-reply-input").fill("Belle auto");
+    // Envoi encore en cours : le bouton est inactif.
+    await expect(page.getByTestId("story-reply-send")).toBeDisabled();
+    release?.();
+    // La requête finit : le bouton est libre sur le lecteur affiché.
+    await expect(page.getByTestId("story-reply-send")).toBeEnabled({ timeout: 15_000 });
+    if (outcome === "échec") {
+      await page.getByTestId("story-reply-send").click();
+      await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(2);
+      expect(ids[1]).toBe(ids[0]);
+    } else {
+      expect(ids).toHaveLength(1);
+    }
+  });
+}
+
+test("tour 3 : « Ne plus voir ses stories » en cours de chaîne : l'auteur masqué ne revient pas par « Auteur précédent »", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const authors = await bar();
+  const cookie = await login("damien@orasso.local");
+  await signedIn(page, "beton", 390, 844);
+  try {
+    await page.getByLabel(new RegExp(`Voir les stories de ${authors[0]?.pseudoOrName}`)).click();
+    await expect(author(page)).toHaveText(authors[0]?.pseudoOrName ?? "", { timeout: 30_000 });
+    await playing(page);
+    await page.getByTestId("story-more").click();
+    await page.getByTestId("story-menu-mute").click();
+    // Après le message, la lecture passe à l'auteur suivant ; le masqué n'est plus joignable par « précédent ».
+    await expect(author(page)).toHaveText(authors[1]?.pseudoOrName ?? "", { timeout: 30_000 });
+    await expect(page.getByRole("button", { name: "Auteur précédent" })).toHaveCount(0);
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForTimeout(500);
+    await expect(author(page)).toHaveText(authors[1]?.pseudoOrName ?? "");
+  } finally {
+    await apiCall(cookie, "DELETE", `/me/story-mutes/${encodeURIComponent(authors[0]?.key ?? "")}`);
+  }
+});
