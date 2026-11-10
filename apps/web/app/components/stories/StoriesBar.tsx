@@ -15,7 +15,8 @@ import { useChannel } from "../../lib/useChannel";
 /** La route « Publier une story » est créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours. */
 const PUBLISH_HREF = "/app/story/publier";
 
-export const storyHref = (key: string) => `/app/story/${encodeURIComponent(key)}`;
+/** Depuis la barre du Fil (lot R8s) : `?suite=barre`, la lecture enchaîne les auteurs suivants de la barre. */
+export const storyHref = (key: string) => `/app/story/${encodeURIComponent(key)}?suite=barre`;
 
 export function StoriesBar({
   userId,

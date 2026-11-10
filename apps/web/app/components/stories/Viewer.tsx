@@ -7,11 +7,14 @@
 // la route protégée (`/api/stories/:id/media/:nom`). Fichier PARTAGÉ avec R7f4, R7h et R7m2 (une ligne chacun) ; lot R7g : la branche vidéo (`VideoSlide`, `VideoBar`).
 import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
+  authorSwipe,
   clock,
   createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
+  nextAuthor,
   partnershipLabels,
+  prevAuthor,
   progressOf,
   replyStillShown,
   STORY_HOLD_MS,
@@ -105,8 +108,40 @@ const tagHref = (t: StoryTagView) =>
         ? `/o/${t.slug}`
         : `/p/${t.slug}`;
 
-export function Viewer({ authorKey, userId }: { authorKey: string; userId: string }) {
+/**
+ * Lecture enchaînée (lot R8s) : ce que la lecture d'un auteur sait de la chaîne. Sans `nav`, la visionneuse se ferme à la fin de
+ * l'auteur (profil, story de l'organisateur, mentions). `onAuthor` change d'auteur dans l'état du parent : le navigateur n'a
+ * qu'une entrée d'historique, un seul « retour » ramène au Fil.
+ */
+type AuthorNav = {
+  prevKey: string | null;
+  nextKey: string | null;
+  /** Le sens de l'arrivée : « prev » ouvre sur la dernière story de l'auteur ; sert aussi à l'entrée animée. */
+  arrival: "next" | "prev" | null;
+  fetchAuthor: (key: string) => Promise<Awaited<ReturnType<typeof apiFetch<StoriesByAuthor>>>>;
+  onAuthor: (dir: "next" | "prev") => void;
+};
+
+/** Chevron de part et d'autre du champ (maquette R8.10 `.r8aut2`) : auteur précédent / suivant. */
+function AuthorButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={dir === "next" ? "story-view__author story-view__author--next" : "story-view__author"}
+      onClick={onClick}
+      aria-label={dir === "prev" ? L.authorPrev : L.authorNext}
+      data-testid={dir === "prev" ? "story-author-prev" : "story-author-next"}
+    >
+      <Icon name="back" size={20} />
+    </button>
+  );
+}
+
+function AuthorViewer({ authorKey, userId, nav }: { authorKey: string; userId: string; nav?: AuthorNav }) {
   const navigate = useNavigate();
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const changeAuthorRef = useRef<(dir: "next" | "prev") => boolean>(() => false);
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
@@ -150,13 +185,26 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   useEffect(() => {
     const mine = ++seq.current;
     setLoad({ status: "loading" });
-    void apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(authorKey)}`).then((res) => {
+    const read = navRef.current
+      ? navRef.current.fetchAuthor(authorKey)
+      : apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(authorKey)}`);
+    void read.then((res) => {
       if (mine !== seq.current) return;
       if (!res.ok) {
         setLoad({ status: "error", message: res.status === 429 ? L.tooMany : res.error.message || L.loadError });
         return;
       }
-      setIndex(storyStartIndex(res.data.stories));
+      // Une story échue depuis la lecture de la barre : l'auteur n'a plus rien à montrer, on poursuit dans le sens de la lecture.
+      if (
+        res.data.stories.length === 0 &&
+        changeAuthorRef.current(navRef.current?.arrival === "prev" ? "prev" : "next")
+      )
+        return;
+      setIndex(
+        navRef.current?.arrival === "prev"
+          ? Math.max(0, res.data.stories.length - 1)
+          : storyStartIndex(res.data.stories),
+      );
       setLoad({ status: "ready", data: res.data });
     });
   }, [authorKey, attempt]);
@@ -189,19 +237,35 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (idx > 0) void navigate(-1);
     else void navigate("/app/fil", { replace: true });
   }, [navigate]);
+  // Changer d'auteur (fin de série, toucher à gauche sur la première story, glissement, boutons) : une seule fois par auteur lu.
+  const leaving = useRef(false);
+  const prevKey = nav?.prevKey ?? null;
+  const nextKey = nav?.nextKey ?? null;
+  const changeAuthor = useCallback((dir: "next" | "prev"): boolean => {
+    const n = navRef.current;
+    if (leaving.current || closing.current || !n) return false;
+    if ((dir === "next" ? n.nextKey : n.prevKey) === null) return false;
+    leaving.current = true;
+    n.onAuthor(dir);
+    return true;
+  }, []);
+  changeAuthorRef.current = changeAuthor;
   const count = list.length;
   const goNext = useCallback(() => {
     const step = storyNext(at, count);
-    if (step.kind === "close") close();
-    else setIndex(step.index);
-  }, [at, count, close]);
+    if (step.kind !== "close") return setIndex(step.index);
+    // Fin de l'auteur : le suivant de la chaîne, ou la fermeture après le dernier (et toujours sans chaîne).
+    if (navRef.current?.nextKey) changeAuthor("next");
+    else close();
+  }, [at, count, close, changeAuthor]);
   // Reculer sur la première story la rejoue depuis le début : l'index ne change pas, `replay` relance la minuterie.
   const goPrev = useCallback(() => {
     const step = storyPrev(at);
     if (step.kind !== "story") return;
-    if (step.index === at) setReplay((n) => n + 1);
-    else setIndex(step.index);
-  }, [at]);
+    if (step.index !== at) setIndex(step.index);
+    else if (navRef.current?.prevKey) changeAuthor("prev");
+    else setReplay((n) => n + 1);
+  }, [at, changeAuthor]);
 
   // --- Pauses et minuterie ---------------------------------------------------------------------------------------------
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
@@ -403,7 +467,10 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (p.moved) {
       const dy = e.clientY - p.y;
       const dt = Math.max(1, Date.now() - p.at);
-      if (shouldCloseOnDrag(dy, dy / dt)) close();
+      // Glisser à gauche ou à droite : auteur suivant ou précédent (sans effet s'il n'y en a pas).
+      const swipe = authorSwipe(e.clientX - p.x, dy);
+      if (swipe) changeAuthor(swipe);
+      else if (shouldCloseOnDrag(dy, dy / dt)) close();
       return;
     }
     const box = frame.current?.getBoundingClientRect();
@@ -609,8 +676,19 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   );
 
   return (
-    <div className="story-view" role="dialog" aria-modal="true" aria-label={L.viewer} data-testid="story-viewer-root">
-      <div className="story-view__frame" ref={frame} data-testid="story-viewer">
+    <div
+      className={nav?.arrival ? "story-view story-view--chained" : "story-view"}
+      role="dialog"
+      aria-modal="true"
+      aria-label={L.viewer}
+      data-testid="story-viewer-root"
+    >
+      <div
+        className="story-view__frame"
+        ref={frame}
+        data-arrival={nav?.arrival ?? undefined}
+        data-testid="story-viewer"
+      >
         {/* Le média. */}
         {failed ? (
           <p className="story-view__gone o-t-body" data-testid="story-unavailable">
@@ -832,6 +910,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           ) : null}
           {mine ? (
             <div className="story-view__row">
+              {prevKey ? <AuthorButton dir="prev" onClick={() => changeAuthor("prev")} /> : null}
               <button
                 type="button"
                 className="story-view__pill story-view__pill--grow"
@@ -841,6 +920,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                 <Icon name="eye" size={18} />
                 <span>{L.views(story.viewsCount ?? 0)}</span>
               </button>
+              {nextKey ? <AuthorButton dir="next" onClick={() => changeAuthor("next")} /> : null}
               <span
                 className="story-view__pill"
                 role="img"
@@ -853,6 +933,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
             </div>
           ) : (
             <form className="story-view__row" onSubmit={(e) => void send(e)}>
+              {prevKey ? <AuthorButton dir="prev" onClick={() => changeAuthor("prev")} /> : null}
               {canReply ? (
                 <label className="story-view__pill story-view__pill--grow">
                   <Icon name="bubble" size={18} />
@@ -882,6 +963,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
               ) : (
                 <span className="story-view__pill--grow" />
               )}
+              {nextKey ? <AuthorButton dir="next" onClick={() => changeAuthor("next")} /> : null}
               <button
                 type="button"
                 className={
@@ -1051,5 +1133,72 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         ) : null}
       </dialog>
     </div>
+  );
+}
+
+/** L'auteur suivant est lu d'avance après ce délai ; une lecture d'avance plus vieille que cela est relue. */
+const PREFETCH_DELAY_MS = 800;
+const PREFETCH_MAX_AGE_MS = 60_000;
+
+/**
+ * La visionneuse (lot R8s : lecture enchaînée). `chain` = les clés d'auteurs à lire, calculées par le chargeur de la route à
+ * l'ouverture depuis la barre (`storyChain`) et figées ici : elle ne se réordonne pas pendant la lecture. Sans `chain` (profil,
+ * story de l'organisateur, mentions), l'auteur seul, comme avant. L'auteur courant vit dans l'état de ce composant : un seul
+ * « retour » du navigateur ramène au Fil, même après trois auteurs. Tout l'état propre à une story repart de zéro (`key`).
+ */
+export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId: string; chain?: string[] }) {
+  const [frozen] = useState<string[]>(() => (chain && chain.length > 0 ? chain : [authorKey]));
+  const [current, setCurrent] = useState(authorKey);
+  const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
+  const chained = Boolean(chain);
+
+  // Lecture d'avance de l'auteur suivant (la vue n'est posée que par la story réellement affichée).
+  const ahead = useRef(new Map<string, { at: number; promise: ReturnType<typeof apiFetch<StoriesByAuthor>> }>());
+  const read = useCallback(
+    (key: string) => apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(key)}`),
+    [],
+  );
+  const fetchAuthor = useCallback(
+    (key: string) => {
+      const hit = ahead.current.get(key);
+      ahead.current.delete(key);
+      return hit && Date.now() - hit.at < PREFETCH_MAX_AGE_MS ? hit.promise : read(key);
+    },
+    [read],
+  );
+  const following = nextAuthor(frozen, current);
+  useEffect(() => {
+    if (!following || !chained) return;
+    const timer = setTimeout(() => {
+      const promise = read(following);
+      void promise.then((res) => {
+        if (!res.ok) ahead.current.delete(following);
+      });
+      ahead.current.set(following, { at: Date.now(), promise });
+    }, PREFETCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [following, chained, read]);
+
+  const goAuthor = useCallback(
+    (dir: "next" | "prev") => {
+      const to = dir === "next" ? nextAuthor(frozen, current) : prevAuthor(frozen, current);
+      if (!to) return;
+      setArrival(dir);
+      setCurrent(to);
+    },
+    [frozen, current],
+  );
+
+  return (
+    <AuthorViewer
+      key={current}
+      authorKey={current}
+      userId={userId}
+      nav={
+        chained
+          ? { prevKey: prevAuthor(frozen, current), nextKey: following, arrival, fetchAuthor, onAuthor: goAuthor }
+          : undefined
+      }
+    />
   );
 }
