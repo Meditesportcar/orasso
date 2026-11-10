@@ -70,6 +70,11 @@ export function stepBefore(step: StoryStep, photo: { width: number; height: numb
   }
 }
 
+/** Le pas en arrière d'une vidéo (lot R7g) : elle saute « Ajuster » et la plaque ; jamais plus loin que le choix du média. */
+export function videoStepBefore(step: StoryStep): StoryStep | null {
+  return step === "details" ? "media" : step === "preview" ? "details" : null;
+}
+
 /** Le cadrage change à la main (geste) : toujours dans ses bornes. Il ne touche pas à la décision de plaque. */
 export const withFrame = (d: StoryDraft, frame: Frame): StoryDraft => ({
   ...d,

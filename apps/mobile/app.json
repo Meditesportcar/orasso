@@ -76,7 +76,8 @@
         "expo-camera",
         {
           "cameraPermission": "Orasso utilise l’appareil photo pour photographier ton véhicule et, si tu fais partie du staff, lire les QR d’accès à l’entrée des événements.",
-          "recordAudioAndroid": false
+          "microphonePermission": "Orasso enregistre le son de tes vidéos de story, seulement pendant que tu filmes.",
+          "recordAudioAndroid": true
         }
       ],
       "@sentry/react-native/expo",

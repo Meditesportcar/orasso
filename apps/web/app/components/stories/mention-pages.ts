@@ -71,6 +71,12 @@ export class MentionPager {
   private rereadKey = "";
   private pending: StoryMentions | null = null;
   private pendingForce = false;
+  /** La dernière première page reçue (pour relire après un premier « Voir plus » devenu douteux). */
+  private last: StoryMentions | null = null;
+  /** Un geste de la personne est revenu pendant un premier « Voir plus » : sa réponse peut être périmée, à relire. */
+  private moreStale = false;
+  /** Un geste est revenu sans première page (lecture en échec) : la relecture forcée est due à la prochaine première page. */
+  private owedForce = false;
 
   constructor(
     private readonly fetchPage: FetchPage,
@@ -99,7 +105,14 @@ export class MentionPager {
     const changed = key !== this.key;
     this.key = key;
     this.firstNext = first?.nextCursor ?? null;
-    if (!first) return;
+    this.last = first;
+    if (!first) {
+      // Re-relecture Codex : l'invalidation d'un geste n'est pas perdue si la lecture des mentions échoue à ce moment-là.
+      this.owedForce ||= force;
+      return;
+    }
+    force ||= this.owedForce;
+    this.owedForce = false;
     if (this.state.depth > 0) {
       if (this.rereading) {
         this.pending = first;
@@ -111,7 +124,12 @@ export class MentionPager {
     } else if (changed && this.state.busy) {
       // Une lecture rattachée à l'ancienne première page : jetée, elle repartira du nouveau curseur.
       this.generation++;
+      this.moreStale = false;
       this.set({ ...this.state, busy: false });
+    } else if (force && this.state.busy) {
+      // Retour d'un geste pendant le premier « Voir plus » (première page identique) : sa réponse a pu être lue avant le
+      // geste ; elle est appliquée puis relue aussitôt (re-relecture Codex de la retouche R7h).
+      this.moreStale = true;
     }
   }
 
@@ -146,6 +164,7 @@ export class MentionPager {
     if (!cursor || this.state.busy) return;
     const mine = ++this.generation;
     this.rereadKey = this.key;
+    this.moreStale = false;
     const before = this.state;
     this.set({ ...before, busy: true, error: null });
     const res = await this.fetchPage(cursor);
@@ -164,5 +183,9 @@ export class MentionPager {
           }
         : { ...before, busy: false, error: res.error.message },
     );
+    if (this.moreStale) {
+      this.moreStale = false;
+      if (res.ok && this.last && this.state.depth > 0) this.reread(this.last);
+    }
   }
 }

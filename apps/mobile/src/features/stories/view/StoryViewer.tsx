@@ -24,6 +24,7 @@ import {
   storyDurationMs,
   storyNext,
   storyPlayable,
+  storyPlayerKey,
   storyPrev,
   storyShareLabels,
   storyStartIndex,
@@ -43,6 +44,7 @@ import { ShareSheet } from "@/features/share/ShareSheet";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
+import { loadPoster } from "@/lib/protectedMedia";
 import { createRequestGate } from "@/lib/requestGate";
 import { useSession } from "@/lib/session";
 import { useAppActive } from "@/lib/useAppActive";
@@ -58,6 +60,7 @@ import { proShareOption, ReshareButton } from "./ReshareButton";
 import { SharedByLine } from "./SharedByLine";
 import { Stickers } from "./Stickers";
 import { useStoryClock } from "./useStoryClock";
+import { VideoSound, VideoTime } from "./VideoBar";
 import { Viewer } from "./Viewer";
 import { ViewersSheet } from "./ViewersSheet";
 
@@ -181,7 +184,19 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   }, [at]);
 
   const total = story ? storyDurationMs(story) : 5000;
-  const progress = useStoryClock(`${story?.id ?? "none"}:${replay}`, total, running, goNext);
+  // Une vidéo (lot R7g) mène sa barre elle-même (`currentTime / duration`) et passe à la suivante à sa fin.
+  const isVideo = story?.mediaKind === "video";
+  const progress = useStoryClock(`${story?.id ?? "none"}:${replay}`, total, running && !isVideo, goNext);
+  const [videoSeconds, setVideoSeconds] = useState(0);
+  // La vignette de la vidéo suivante est lue d'avance (en mémoire) : elle s'ouvre sans trou.
+  const nextPoster = list[at + 1]?.mediaKind === "video" ? (list[at + 1]?.posterUrl ?? null) : null;
+  useEffect(() => {
+    if (nextPoster) void loadPoster(nextPoster);
+  }, [nextPoster]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le compteur repart de zéro à chaque story (ou rejeu).
+  useEffect(() => {
+    setVideoSeconds(0);
+  }, [story?.id, replay]);
 
   // --- Vue (une fois par story, quand l'image est lue) ----------------------------------------------------------------
   const viewed = useRef(new Set<string>());
@@ -465,7 +480,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             </View>
           ) : (
             <Viewer
-              key={`${story.id}:${mediaRetries}`}
+              key={storyPlayerKey(story.id, mediaRetries, replay, isVideo)}
               story={story}
               authorName={authorName}
               width={width}
@@ -476,6 +491,10 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
               }}
               onLoading={() => setMediaFailedId(null)}
               onFailed={markGone}
+              running={running}
+              progress={progress}
+              onTime={setVideoSeconds}
+              onEnded={goNext}
             />
           )}
         </View>
@@ -517,11 +536,15 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             onProfile={authorKey.startsWith("u:") && !mine ? () => openProfile(authorName) : undefined}
             onMore={() => setMenuOpen(true)}
             onClose={close}
+            sound={isVideo && !failed && !processing ? <VideoSound /> : undefined}
           />
           <SharedByLine story={story} authorName={authorName} onOpen={openTag} />
           <CommercialBadge story={story} />
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 22 }]} pointerEvents="box-none">
+          {isVideo && !failed && !processing ? (
+            <VideoTime seconds={videoSeconds} durationMs={story.durationMs ?? 0} />
+          ) : null}
           <LinkedCard story={story} />
           <ReshareButton
             story={story}

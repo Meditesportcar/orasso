@@ -4,9 +4,10 @@
 // bas ou Échap = fermer, ← → au clavier ; en-tête, légende, lieu, voiture, événement, identifiés ; flamme, « Répondre »
 // (message privé), « ⋯ » (signaler, ne plus voir, me retirer, supprimer, vues). Lue dans le navigateur (cookie de session) :
 // jamais d'adresse de fichier dans le HTML rendu par le serveur, qui n'a pas de session pour les stories. L'image passe par
-// la route protégée (`/api/stories/:id/media/:nom`). Fichier PARTAGÉ avec R7g2 (branche vidéo), R7f4, R7h et R7m2 (une ligne chacun).
+// la route protégée (`/api/stories/:id/media/:nom`). Fichier PARTAGÉ avec R7f4, R7h et R7m2 (une ligne chacun) ; lot R7g : la branche vidéo (`VideoSlide`, `VideoBar`).
 import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
+  clock,
   createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
@@ -24,10 +25,12 @@ import {
   storyDurationMs,
   storyNext,
   storyPlayable,
+  storyPlayerKey,
   storyPrev,
   storyShareLabels,
   storyStartIndex,
   tapTarget,
+  storyVideoLabels as V,
   viewersListPartial,
   viewersTotalFor,
 } from "@orasso/shared";
@@ -43,6 +46,7 @@ import { ReportDialog } from "../ReportDialog";
 import { CommercialBadge } from "./CommercialBadge";
 import { LinkedCard } from "./LinkedCard";
 import { SharedByLine } from "./SharedByLine";
+import { VideoSlide } from "./VideoSlide";
 
 type Viewers = {
   /** Compteur relu à cet appel : le titre « Vues · N » et la mention « liste partielle » partent de lui. */
@@ -128,6 +132,9 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const [replay, setReplay] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  // Vidéo (lot R7g) : muette au départ, le choix vaut pour toute la visionneuse ; la seconde atteinte pour « 0:11 / 0:24 ».
+  const [videoMuted, setVideoMuted] = useState(true);
+  const [videoSeconds, setVideoSeconds] = useState(0);
   const menuRef = useRef<HTMLDialogElement>(null);
   const viewersRef = useRef<HTMLDialogElement>(null);
   const seq = useRef(0);
@@ -203,6 +210,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const running = ready && visible && check === "ok" && !held && !menu && !viewers && !replyFocused;
   const total = story ? storyDurationMs(story) : 5000;
   const storyId = story?.id ?? null;
+  // Une vidéo mène sa barre elle-même (`currentTime / duration`) et passe à la suivante à sa fin.
+  const isVideo = story?.mediaKind === "video";
   const elapsed = useRef(0);
   const onDone = useRef(goNext);
   onDone.current = goNext;
@@ -289,9 +298,10 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   useEffect(() => {
     elapsed.current = 0;
     setProgress(0);
+    setVideoSeconds(0);
   }, [storyId, replay]);
   useEffect(() => {
-    if (!running) return;
+    if (!running || isVideo) return;
     let last = performance.now();
     const timer = setInterval(() => {
       const t = performance.now();
@@ -304,7 +314,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
       }
     }, TICK_MS);
     return () => clearInterval(timer);
-  }, [running, total]);
+  }, [running, total, isVideo]);
 
   // Vue : une fois par story, quand l'image est lue ET affichée (onglet visible).
   const shown = ready && visible && check === "ok";
@@ -610,15 +620,27 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           <p className="story-view__gone o-t-body" data-testid="story-unavailable">
             {L.processing}
           </p>
-        ) : // R7g2 : `story.mediaKind === "video"` → `<VideoSlide … />` ici.
-        story.mediaKind === "video" ? (
-          <p className="story-view__gone o-t-body" data-testid="story-video-soon">
-            {L.videoSoon}
-          </p>
         ) : imageError === story.id ? (
           <div className="story-view__gone">
-            <p className="o-t-body">{L.loadError}</p>
+            <p className="o-t-body">{story.mediaKind === "video" ? V.playFailed : L.loadError}</p>
           </div>
+        ) : story.mediaKind === "video" ? (
+          <VideoSlide
+            key={storyPlayerKey(story.id, retries, replay, true)}
+            story={story}
+            running={running}
+            muted={videoMuted}
+            onLoaded={() => setLoadedId(story.id)}
+            onError={() => void onImageError(story)}
+            onProgress={(ratio, seconds) => {
+              setProgress(ratio);
+              setVideoSeconds(seconds);
+            }}
+            onEnded={() => {
+              setProgress(1);
+              onDone.current();
+            }}
+          />
         ) : (
           <img
             key={`${story.id}:${retries}`}
@@ -643,7 +665,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           data-testid="story-surface"
         />
         {/* Photo en panne : « Réessayer » est posé AU-DESSUS de la surface ; les zones gauche / droite restent actives. */}
-        {imageError === story.id && !failed && storyPlayable(story) && story.mediaKind !== "video" ? (
+        {imageError === story.id && !failed && storyPlayable(story) ? (
           <div className="story-view__retry">
             <Button
               variant="secondary"
@@ -702,6 +724,18 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
             ) : (
               <div className="story-view__who">{who}</div>
             )}
+            {isVideo && !failed && storyPlayable(story) ? (
+              <button
+                type="button"
+                className="story-view__btn"
+                onClick={() => setVideoMuted((m) => !m)}
+                aria-label={videoMuted ? V.soundOn : V.soundOff}
+                aria-pressed={!videoMuted}
+                data-testid="story-video-sound"
+              >
+                <Icon name={videoMuted ? "soundOff" : "sound"} size={20} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="story-view__btn"
@@ -726,6 +760,16 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         </div>
 
         <div className="story-view__bottom">
+          {isVideo && !failed && storyPlayable(story) ? (
+            <div className="story-view__videobar" data-testid="story-video-bar">
+              <span className="story-view__vtime">
+                <Icon name="video" size={16} />
+                <span data-testid="story-video-time">
+                  {clock(videoSeconds * 1000)} / {clock(story.durationMs ?? 0)}
+                </span>
+              </span>
+            </div>
+          ) : null}
           <LinkedCard story={story} />
           {proOption ? (
             <div className="story-view__reshare" data-testid="story-reshare-box">

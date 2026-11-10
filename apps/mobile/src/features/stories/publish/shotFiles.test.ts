@@ -19,7 +19,7 @@ vi.mock("expo-file-system", () => ({
 vi.mock("../../../lib/kv", () => ({ onCacheScopeDropped: () => undefined }));
 
 import { discardTempPhotos, tempPhotoCount } from "../../../lib/tempPhotos";
-import { noteRawShot, withRawShot } from "./shotFiles";
+import { cameraMessage, noteRawShot, withRawShot } from "./shotFiles";
 
 const RAW = "file:///cache/Camera/raw.jpg";
 
@@ -57,5 +57,18 @@ describe("photo brute de l'appareil", () => {
     ).rejects.toThrow("recadrage impossible");
     expect(device.files.has(RAW)).toBe(false);
     expect(tempPhotoCount()).toBe(0);
+  });
+});
+
+describe("message de l'appareil", () => {
+  it("le refus d'une vidéo de la galerie s'affiche sur l'appareil, l'échec de la prise passe devant", () => {
+    expect(cameraMessage(null, "Une story vidéo dure 30 secondes au plus.")).toBe(
+      "Une story vidéo dure 30 secondes au plus.",
+    );
+    expect(cameraMessage("La vidéo n'a pas pu être enregistrée.", "autre")).toBe(
+      "La vidéo n'a pas pu être enregistrée.",
+    );
+    expect(cameraMessage(null, null)).toBeNull();
+    expect(cameraMessage(null, undefined)).toBeNull();
   });
 });

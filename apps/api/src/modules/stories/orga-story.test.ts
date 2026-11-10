@@ -310,6 +310,12 @@ describe("« Ajouter à ma story »", () => {
     expect(view.stories[0].sharedFrom).toMatchObject({ kind: "user", name: "Kenji_66", slug: "Kenji_66" });
     expect(view.stories[0].tags).toEqual([]);
     expect(view.stories[0].sharing).toBeNull();
+    // Une copie ne sort jamais d'Orasso (fusion R7h × R7f4) : ni « Vers l'extérieur » ni export, même pour qui l'a ajoutée.
+    expect(view.stories[0].exportable).toBe(false);
+    expect((await byAuthor(w.co, `s:${w.structure.id}`)).json.stories[0].exportable).toBe(false);
+    const exported = await req(w.co, "GET", `/stories/${res.json.id}/export`);
+    expect(exported.status).toBe(403);
+    expect(exported.json.error?.code ?? exported.json.code).toBe("author_only");
     // L'auteur est prévenu, sans image, sans le compte personnel de qui a ajouté.
     const [n] = await db
       .select()

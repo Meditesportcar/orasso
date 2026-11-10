@@ -47,7 +47,7 @@ export const storyTagInputSchema = z.discriminatedUnion("kind", [
 export type StoryTagInput = z.infer<typeof storyTagInputSchema>;
 
 /**
- * `POST /me/stories` (photo). `plateRects` : rectangles dans la photo d'origine (fractions 0–1), comme pour les
+ * `POST /me/stories` (photo, ou vidéo avec `posterKey`). `plateRects` : rectangles dans la photo d'origine (fractions 0–1), comme pour les
  * photos de véhicule ; sans rectangle, `noPlateConfirmed` doit être vrai (sinon 400 `plate_decision_required`,
  * quel que soit le public). L'un ou l'autre, pas les deux.
  */
@@ -55,6 +55,11 @@ export const storyCreateSchema = z
   .object({
     /** Absent pour une carte liée (R7f4) : le serveur rend lui-même le 9:16 (voir `linked` et `clientId`). */
     uploadKey: z.string().min(1).max(200).optional(),
+    /**
+     * Lot R7g : vignette (envoi `story_poster`) d'une story **vidéo** (`uploadKey` est alors l'envoi `story_video`). Une
+     * vidéo est publiée telle quelle : `frame`, `plateRects` et `noPlateConfirmed` ne servent à rien et sont ignorés.
+     */
+    posterKey: z.string().min(1).max(200).optional(),
     /** Carte liée sans média (R7f4) : identifiant tiré par l'appareil, une reprise rend la même story. */
     clientId: z.uuid().optional(),
     frame: storyFrameSchema.optional(),
@@ -85,6 +90,11 @@ export const storyCreateSchema = z
   .refine((v) => Boolean(v.uploadKey) || Boolean(v.clientId), {
     message: "Un identifiant d'envoi est attendu pour un contenu partagé",
     path: ["clientId"],
+  })
+  // Fusion R7g × R7f4 : une vidéo a toujours son envoi et ne porte pas de carte liée (rendue par le serveur en image).
+  .refine((v) => !v.posterKey || (Boolean(v.uploadKey) && !v.linked), {
+    message: "Une story vidéo ne peut pas porter un contenu partagé",
+    path: ["posterKey"],
   });
 export type StoryCreate = z.infer<typeof storyCreateSchema>;
 
@@ -183,6 +193,9 @@ export type StoryView = {
   mediaUrl: string;
   posterUrl: string | null;
   durationMs: number | null;
+  /** Dimensions du fichier (lot R7g : une vidéo hors 9:16 se pose sur sa vignette floutée, à l'affichage). */
+  width: number;
+  height: number;
   status: StoryStatus;
   caption: string | null;
   placeLabel: string | null;

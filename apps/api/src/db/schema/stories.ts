@@ -105,10 +105,11 @@ export const stories = pgTable(
     check("stories_crew_check", sql`(${t.audience} = 'crew') = (${t.crewId} is not null)`),
     // Prête = plaque traitée. Structurel : aucune story ne sort sans décision.
     check("stories_plate_check", sql`${t.status} <> 'ready' or ${t.plateState} is not null`),
-    // Une photo prête porte une vraie décision ; `not_required` est réservé aux vidéos (pas de floutage vidéo).
+    // Lot R7g : une vidéo est publiée telle quelle (`not_required`, jamais de décision de plaque) et seule une vidéo
+    // porte cette valeur ; une photo porte une vraie décision. Équivalence : dans les deux sens.
     check(
-      "stories_plate_photo_check",
-      sql`${t.mediaKind} = 'video' or ${t.plateState} is distinct from 'not_required'`,
+      "stories_plate_media_check",
+      sql`(${t.mediaKind} = 'video') = (${t.plateState} is not distinct from 'not_required')`,
     ),
     check("stories_caption_check", sql`${t.caption} is null or char_length(${t.caption}) <= 200`),
     check("stories_place_check", sql`${t.placeLabel} is null or char_length(${t.placeLabel}) <= 80`),

@@ -1,6 +1,14 @@
-import { CLOCK_OFFSET_HEADER, feedLabels, isReservedPseudo, signUpRequiredSchema } from "@orasso/shared";
+import {
+  CLOCK_OFFSET_HEADER,
+  feedLabels,
+  isReservedPseudo,
+  STORY_VIDEO_MAX_BYTES,
+  STORY_VIDEO_UPLOAD_PATH,
+  signUpRequiredSchema,
+  storyVideoLabels,
+} from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
@@ -194,15 +202,30 @@ app.get("/files/*", async (c) => {
   });
 });
 
-// Envois de fichiers : 16 Mo au plus par requête (photos de 15 Mo).
-app.use(
-  "*",
-  bodyLimit({
-    maxSize: 16 * 1024 * 1024,
-    onError: () => {
-      throw new AppError(413, "payload_too_large", "Requête trop lourde");
-    },
-  }),
+// Envois de fichiers : 16 Mo au plus par requête (photos de 15 Mo), partout. Lot R7g (tour 3) : `POST /me/uploads/story-video`
+// n'a **plus de `bodyLimit`** (il accumule le corps en mémoire quand `Content-Length` manque) ; à la place, `videoLengthGuard`
+// passe tout de suite, avant toute lecture du corps et avant la session : 411 sans `Content-Length` entier (ou avec
+// `Transfer-Encoding`), 413 au-delà de 60 Mo. Le service compte ensuite les octets en flux et les écrit sur le disque.
+const tooHeavy = () => {
+  throw new AppError(413, "payload_too_large", "Requête trop lourde");
+};
+const generalLimit = bodyLimit({ maxSize: 16 * 1024 * 1024, onError: tooHeavy });
+const videoLengthGuard: MiddlewareHandler = async (c, next) => {
+  const header = c.req.header("content-length")?.trim() ?? "";
+  if (c.req.header("transfer-encoding") !== undefined || !/^\d{1,12}$/.test(header)) {
+    throw new AppError(411, "validation_error", storyVideoLabels.apiLengthRequired);
+  }
+  if (Number(header) > STORY_VIDEO_MAX_BYTES) {
+    throw new AppError(
+      413,
+      "payload_too_large",
+      "Vidéo de 60 Mo au plus : envoie-la depuis l'appli, elle la compresse.",
+    );
+  }
+  await next();
+};
+app.use("*", (c, next) =>
+  c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoLengthGuard(c, next) : generalLimit(c, next),
 );
 app.use("*", loadSession);
 

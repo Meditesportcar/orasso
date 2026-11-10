@@ -721,6 +721,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           mine={storyMine}
           failed={storyFailed}
           mineFailed={storyMineFailed}
+          afterAction={storyNotice === "added" || storyNotice === "removed"}
           notice={
             storyMessage === "added"
               ? storyShareLabels.added

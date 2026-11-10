@@ -2,6 +2,7 @@
 import "./instrument";
 
 import { serve } from "@hono/node-server";
+import { STORY_VIDEO_UPLOAD_TIMEOUT_MS } from "@orasso/shared";
 import { WebSocketServer } from "ws";
 
 import { app } from "./app";
@@ -32,6 +33,10 @@ const server = serve(
   },
   (info) => console.log(`API Orasso sur http://localhost:${info.port}/api`),
 );
+
+// Lot R7g (tour 3) : délai d'un envoi vidéo (60 Mo en 4G), le même que l'appli, le site et Nginx (10 min). Fixé exprès : la valeur
+// par défaut de Node a changé d'une version à l'autre, et un envoi lent ne doit pas tenir un socket plus longtemps que ça.
+if ("requestTimeout" in server) server.requestTimeout = STORY_VIDEO_UPLOAD_TIMEOUT_MS;
 
 async function shutdown() {
   server.close();

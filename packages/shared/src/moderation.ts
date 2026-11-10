@@ -148,6 +148,8 @@ export type ReportTargetView = {
    * signalée, servies aux seuls modérateurs) ; la première est aussi `imageUrl`.
    */
   imageUrls?: string[];
+  /** Lot R7g, tour 2 : la vidéo de la cible (story vidéo signalée), lue par morceaux par les seuls modérateurs ; `imageUrl` en est la vignette. */
+  videoUrl?: string | null;
   /** Page publique de la cible (site), quand elle existe. */
   link: string | null;
   /** La cible n'existe plus (supprimée entre-temps). */
