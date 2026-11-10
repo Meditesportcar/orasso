@@ -119,6 +119,24 @@ describe("pager des mentions (hook)", () => {
     expect(pager.state.depth).toBe(1);
   });
 
+  it("son propre « Ajouter » en page 2, première page inchangée : la page est relue et la ligne passe à « Retirer »", async () => {
+    let copy: string | null = null;
+    const fetchPage: FetchPage = async () => page(["b1", "b2"], null, copy ? { b2: copy } : {});
+    const pager = new MentionPager(fetchPage, () => undefined);
+    const first = firstPage(["a1"], "c2");
+    pager.sync(first);
+    await pager.more(); // profondeur 1 : b1, b2 (b2 sans copie)
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
+    // L'organisateur ajoute b2 : la page revient avec la même première page (tri par date de publication).
+    copy = "copie-b2";
+    pager.sync(firstPage(["a1"], "c2")); // revalidation ordinaire : rien (première page identique)
+    await flush();
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
+    pager.sync(firstPage(["a1"], "c2"), true); // retour d'un geste : relecture forcée
+    await flush();
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBe("copie-b2");
+  });
+
   it("une première page qui change pendant le premier « Voir plus » (profondeur zéro) jette la réponse et reprend du nouveau curseur", async () => {
     const old = deferred();
     const calls: string[] = [];

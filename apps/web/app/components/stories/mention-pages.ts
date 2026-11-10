@@ -1,8 +1,8 @@
 import type { StoryMentionItem, StoryMentions } from "@orasso/shared";
 
-// Les pages « Voir plus » des mentions (lot R7h, tour 4) : à chaque revalidation de la page, les pages déjà chargées sont
-// relues à la même profondeur (une mention repartagée ailleurs ne propose plus « Ajouter »), sans vider ce qui est affiché
-// pendant la lecture.
+// Les pages « Voir plus » des mentions (lot R7h, tours 4 à 6) : quand la première page change (ou après un geste de la
+// personne, « Ajouter » ou « Retirer »), les pages déjà chargées sont relues à la même profondeur, sans vider ce qui est
+// affiché pendant la lecture ; une première page identique ne relance rien et les revalidations se regroupent.
 
 export type PageResult = { ok: true; data: StoryMentions } | { ok: false; error: { message: string } };
 export type FetchPage = (cursor: string) => Promise<PageResult>;
@@ -70,6 +70,7 @@ export class MentionPager {
   private rereading = false;
   private rereadKey = "";
   private pending: StoryMentions | null = null;
+  private pendingForce = false;
 
   constructor(
     private readonly fetchPage: FetchPage,
@@ -89,9 +90,11 @@ export class MentionPager {
   /**
    * À appeler à chaque nouvelle première page (chargement, revalidation, geste). Lot R7h, tour 6 : une première page identique
    * à celle déjà relue ne relance rien ; pendant une relecture, les revalidations se regroupent (une seule relecture de plus,
-   * sur la dernière première page) au lieu de redémarrer celle en cours.
+   * sur la dernière première page) au lieu de redémarrer celle en cours. `force` : la page revient d'un geste de la personne
+   * (« Ajouter », « Retirer ») : la ligne touchée peut être sur une page profonde alors que la première page n'a pas changé ;
+   * on relit quand même.
    */
-  sync(first: StoryMentions | null): void {
+  sync(first: StoryMentions | null, force = false): void {
     const key = firstKeyOf(first);
     const changed = key !== this.key;
     this.key = key;
@@ -100,9 +103,10 @@ export class MentionPager {
     if (this.state.depth > 0) {
       if (this.rereading) {
         this.pending = first;
+        this.pendingForce ||= force;
         return;
       }
-      if (key === this.rereadKey && !this.state.error) return;
+      if (key === this.rereadKey && !this.state.error && !force) return;
       this.reread(first);
     } else if (changed && this.state.busy) {
       // Une lecture rattachée à l'ancienne première page : jetée, elle repartira du nouveau curseur.
@@ -115,6 +119,7 @@ export class MentionPager {
     const mine = ++this.generation;
     this.rereading = true;
     this.pending = null;
+    this.pendingForce = false;
     this.rereadKey = firstKeyOf(first);
     this.set({ ...this.state, busy: true });
     void rereadPages(this.fetchPage, first.nextCursor, this.state.depth, () => this.generation === mine).then((out) => {
@@ -129,8 +134,10 @@ export class MentionPager {
       );
       this.rereading = false;
       const later = this.pending;
+      const forced = this.pendingForce;
       this.pending = null;
-      if (later && this.state.depth > 0 && firstKeyOf(later) !== this.rereadKey) this.reread(later);
+      this.pendingForce = false;
+      if (later && this.state.depth > 0 && (forced || firstKeyOf(later) !== this.rereadKey)) this.reread(later);
     });
   }
 

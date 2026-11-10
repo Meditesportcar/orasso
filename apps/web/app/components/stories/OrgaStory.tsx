@@ -37,12 +37,12 @@ const when = (iso: string) =>
   }).format(new Date(iso));
 
 /**
- * Les pages suivantes des mentions (« Voir plus »), tenues par `MentionPager` (tour 5). À chaque nouvelle première page
- * (revalidation, geste), les pages déjà chargées sont relues à la même profondeur : un repartage fait ailleurs sur la
- * deuxième page ne laisse plus « Ajouter ». Relecture et « Voir plus » sont sérialisés (« Voir plus » attend la relecture) ;
- * une lecture rattachée à une première page qui a changé est écartée, même à profondeur zéro, et reprend du nouveau curseur.
+ * Les pages suivantes des mentions (« Voir plus »), tenues par `MentionPager` (tours 5 et 6). Quand la première page change,
+ * ou au retour d'un geste de la personne (« Ajouter », « Retirer »), les pages déjà chargées sont relues à la même
+ * profondeur ; une première page identique ne relance rien et les revalidations se regroupent. Relecture et « Voir plus »
+ * sont sérialisés ; une lecture rattachée à une première page qui a changé est écartée et reprend du nouveau curseur.
  */
-function useMentionPages(structureId: string, first: StoryMentions | null) {
+function useMentionPages(structureId: string, first: StoryMentions | null, afterAction: boolean) {
   const [state, setState] = useState<PagerState>({ items: [], next: null, depth: 0, busy: false, error: null });
   const id = useRef(structureId);
   id.current = structureId;
@@ -54,9 +54,10 @@ function useMentionPages(structureId: string, first: StoryMentions | null) {
         setState,
       ),
   );
-  // Chaque nouvelle première page (revalidation, geste) : le pager relit les pages chargées et écarte les lectures dépassées.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la première page seulement
-  useEffect(() => pager.sync(first), [first]);
+  // Chaque nouvelle première page (revalidation, geste) : le pager relit les pages chargées et écarte les lectures dépassées ;
+  // au retour d'un geste de la personne (une confirmation est affichée), il relit même si la première page n'a pas changé.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la première page et par le retour d'un geste
+  useEffect(() => pager.sync(first, afterAction), [first, afterAction]);
   const next = state.depth > 0 ? state.next : (first?.nextCursor ?? null);
   return { items: state.items, next, busy: state.busy, error: state.error, more: () => pager.more() };
 }
@@ -84,7 +85,7 @@ export function OrgaStory({
   const busy = nav.state !== "idle";
   const revalidator = useRevalidator();
   const stories = mine?.stories ?? [];
-  const pages = useMentionPages(structureId, mentions);
+  const pages = useMentionPages(structureId, mentions, Boolean(notice));
   // « Ignorer » (comme dans l'appli) laisse la mention de côté le temps de la page ; rien n'est enregistré.
   const [ignored, setIgnored] = useState<ReadonlySet<string>>(new Set());
   const firstIds = new Set((mentions?.items ?? []).map((m) => m.storyId));
