@@ -15,6 +15,7 @@ import {
   isTwoFactorError,
   mapUrl,
   missingVehicles,
+  myStoriesRead,
   openAlerts,
   otherOutlook,
   pickCurrentEvent,
@@ -231,6 +232,25 @@ describe("story de la structure dans le Direct (lot R7h, tour 4)", () => {
   it("J+1 sans événement futur : pas d'événement courant, mais « Ma story » reste accessible si une story est en ligne", () => {
     expect(pickCurrentEvent(past, dayAfter)).toBeNull();
     expect(storySection(null, true)).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("J+1, lecture de « Ma story » en 503 : l'accès reste (message et « Réessayer »), ce n'est pas « aucune story »", () => {
+    expect(pickCurrentEvent(past, dayAfter)).toBeNull();
+    const err = new Error("503");
+    const state = myStoriesRead(null, err);
+    expect(state).toBe("error");
+    expect(storySection(null, state === "has", state === "error")).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("chargement, absence confirmée, présence et erreur sont quatre états distincts", () => {
+    expect(myStoriesRead(null, null)).toBe("loading");
+    expect(myStoriesRead({ stories: [] }, null)).toBe("none");
+    expect(myStoriesRead({ stories: [{}] }, null)).toBe("has");
+    expect(myStoriesRead(null, new Error("x"))).toBe("error");
+    // Une donnée déjà lue l'emporte sur une erreur de rafraîchissement.
+    expect(myStoriesRead({ stories: [] }, new Error("x"))).toBe("none");
+    // Chargement et absence confirmée ne montrent rien hors événement.
+    expect(storySection(null, false, false).show).toBe(false);
   });
 
   it("sans événement courant ni story en ligne : rien", () => {

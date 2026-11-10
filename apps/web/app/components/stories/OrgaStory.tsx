@@ -1,21 +1,21 @@
 import { Button } from "@orasso/design-system/web";
-import { storyShareLabels as L, type StoriesByAuthor, type StoryMentionItem, type StoryMentions } from "@orasso/shared";
+import { storyShareLabels as L, type StoriesByAuthor, type StoryMentions } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { apiFetch } from "../../lib/api.client";
-import { rereadPages } from "./mention-pages";
+import { MentionPager, type PagerState } from "./mention-pages";
 import "../../styles/stories.css";
 
-// Les stories de l'organisateur (lot R7h, maquette R7.14 `og_men`, `og_add`, `og_mine`) sur la page de l'événement : « Mentions
-// · N » (les stories qui identifient la structure ou un de ses événements) avec « Ajouter à ma story », puis « Ma story »
-// (celles de la structure, avec le crédit de l'auteur d'origine et « Retirer »). Tout vient de l'API, qui juge ce qui est
-// visible ; les aperçus sont lus dans le navigateur seulement (jamais d'adresse de média dans le HTML rendu par le serveur,
+// Les stories de l'organisateur (lot R7h, maquette R7.14 `og_men`, `og_add`, `og_mine`) sur la page de l'Ã©vÃ©nement : Â« Mentions
+// Â· N Â» (les stories qui identifient la structure ou un de ses Ã©vÃ©nements) avec Â« Ajouter Ã  ma story Â», puis Â« Ma story Â»
+// (celles de la structure, avec le crÃ©dit de l'auteur d'origine et Â« Retirer Â»). Tout vient de l'API, qui juge ce qui est
+// visible ; les aperÃ§us sont lus dans le navigateur seulement (jamais d'adresse de mÃ©dia dans le HTML rendu par le serveur,
 // comme la visionneuse).
 
 /**
- * Aperçu 9:16 réduit, posé après le chargement de la page (route protégée `/api/stories/:id/thumb`, cookie de session) :
- * ni les données du chargeur ni le HTML rendu par le serveur ne portent d'adresse de média, seulement l'identifiant.
+ * AperÃ§u 9:16 rÃ©duit, posÃ© aprÃ¨s le chargement de la page (route protÃ©gÃ©e `/api/stories/:id/thumb`, cookie de session) :
+ * ni les donnÃ©es du chargeur ni le HTML rendu par le serveur ne portent d'adresse de mÃ©dia, seulement l'identifiant.
  */
 function Thumb({ storyId, alt }: { storyId: string; alt: string }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -37,62 +37,28 @@ const when = (iso: string) =>
   }).format(new Date(iso));
 
 /**
- * Les pages suivantes des mentions (« Voir plus »). Elles gardent ce qui est affiché et, à chaque revalidation de la page (le
- * vote du public la revalide toutes les quelques secondes) (un geste en déclenche une), sont relues à la même
- * profondeur : un repartage fait ailleurs sur la deuxième page ne laisse plus « Ajouter ». Une lecture dépassée par une
- * plus récente est rejetée (même règle que l'appli).
+ * Les pages suivantes des mentions (Â« Voir plus Â»). Elles gardent ce qui est affichÃ© et, Ã  chaque revalidation de la page (le
+ * vote du public la revalide toutes les quelques secondes) (un geste en dÃ©clenche une), sont relues Ã  la mÃªme
+ * profondeur : un repartage fait ailleurs sur la deuxiÃ¨me page ne laisse plus Â« Ajouter Â». Une lecture dÃ©passÃ©e par une
+ * plus rÃ©cente est rejetÃ©e (mÃªme rÃ¨gle que l'appli).
  */
 function useMentionPages(structureId: string, first: StoryMentions | null) {
-  const [tail, setTail] = useState<{
-    items: StoryMentionItem[];
-    next: string | null;
-    depth: number;
-    busy: boolean;
-    error: string | null;
-  }>({ items: [], next: null, depth: 0, busy: false, error: null });
-  const latest = useRef(tail);
-  latest.current = tail;
-  const generation = useRef(0);
-  const fetchPage = (cursor: string) =>
-    apiFetch<StoryMentions>(`/structures/${structureId}/story-mentions?cursor=${encodeURIComponent(cursor)}`);
-
-  // Revalidation (après un geste aussi : l'action revalide la page) : relire les pages déjà chargées à la même profondeur.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la première page seulement
-  useEffect(() => {
-    const depth = latest.current.depth;
-    if (!first || depth === 0) return;
-    const mine = ++generation.current;
-    void rereadPages(fetchPage, first.nextCursor, depth, () => generation.current === mine).then((out) => {
-      if (!out) return;
-      setTail((t) =>
-        out.ok
-          ? { items: out.items, next: out.next, depth: out.depth, busy: false, error: null }
-          : { ...t, busy: false, error: out.error },
-      );
-    });
-  }, [first]);
-
-  const next = tail.depth > 0 ? tail.next : (first?.nextCursor ?? null);
-  const more = async () => {
-    if (!first || !next || tail.busy) return;
-    const mine = ++generation.current;
-    setTail({ ...tail, busy: true, error: null });
-    const res = await fetchPage(next);
-    // Une relecture plus récente a pris la main entre-temps : cette réponse est périmée.
-    if (generation.current !== mine) return;
-    setTail(
-      res.ok
-        ? {
-            items: [...tail.items, ...res.data.items.filter((m) => !tail.items.some((o) => o.storyId === m.storyId))],
-            next: res.data.nextCursor,
-            depth: tail.depth + 1,
-            busy: false,
-            error: null,
-          }
-        : { ...tail, busy: false, error: res.error.message },
-    );
-  };
-  return { items: tail.items, next, busy: tail.busy, error: tail.error, more };
+  const [state, setState] = useState<PagerState>({ items: [], next: null, depth: 0, busy: false, error: null });
+  const id = useRef(structureId);
+  id.current = structureId;
+  const [pager] = useState(
+    () =>
+      new MentionPager(
+        (cursor) =>
+          apiFetch<StoryMentions>(`/structures/${id.current}/story-mentions?cursor=${encodeURIComponent(cursor)}`),
+        setState,
+      ),
+  );
+  // Chaque nouvelle premiÃ¨re page (revalidation, geste) : le pager relit les pages chargÃ©es et Ã©carte les lectures dÃ©passÃ©es.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dÃ©clenchÃ©e par la premiÃ¨re page seulement
+  useEffect(() => pager.sync(first), [first]);
+  const next = state.depth > 0 ? state.next : (first?.nextCursor ?? null);
+  return { items: state.items, next, busy: state.busy, error: state.error, more: () => pager.more() };
 }
 
 export function OrgaStory({
@@ -108,10 +74,10 @@ export function OrgaStory({
   mentions: StoryMentions | null;
   mine: StoriesByAuthor | null;
   failed: boolean;
-  /** La lecture de « Ma story » a échoué : la section reste, avec l'erreur et « Réessayer ». */
+  /** La lecture de Â« Ma story Â» a Ã©chouÃ© : la section reste, avec l'erreur et Â« RÃ©essayer Â». */
   mineFailed: boolean;
   notice: string | null;
-  /** Les mentions seulement le jour de l'événement ; « Ma story » (et ses retraits) tant qu'une story est en ligne. */
+  /** Les mentions seulement le jour de l'Ã©vÃ©nement ; Â« Ma story Â» (et ses retraits) tant qu'une story est en ligne. */
   withMentions: boolean;
 }) {
   const nav = useNavigation();
@@ -119,7 +85,7 @@ export function OrgaStory({
   const revalidator = useRevalidator();
   const stories = mine?.stories ?? [];
   const pages = useMentionPages(structureId, mentions);
-  // « Ignorer » (comme dans l'appli) laisse la mention de côté le temps de la page ; rien n'est enregistré.
+  // Â« Ignorer Â» (comme dans l'appli) laisse la mention de cÃ´tÃ© le temps de la page ; rien n'est enregistrÃ©.
   const [ignored, setIgnored] = useState<ReadonlySet<string>>(new Set());
   const firstIds = new Set((mentions?.items ?? []).map((m) => m.storyId));
   const shown = [...(mentions?.items ?? []), ...pages.items.filter((m) => !firstIds.has(m.storyId))].filter(

@@ -30,6 +30,7 @@ import {
   categoryRows,
   mapUrl,
   missingVehicles,
+  myStoriesRead,
   openAlerts,
   pickCurrentEvent,
   scanSummary,
@@ -67,7 +68,9 @@ export function DirectScreen() {
   const myStories = useApi(() => api.storiesByAuthor(storyAuthorKeyOf("structure", structureId)), [structureId], {
     refreshMs: 60_000,
   });
-  const hasMyStories = Boolean(myStories.data && myStories.data.stories.length > 0);
+  const mineRead = myStoriesRead(myStories.data, myStories.error);
+  const hasMyStories = mineRead === "has";
+  const mineFailed = mineRead === "error";
   if (!current) {
     return (
       <TabScreen
@@ -79,7 +82,14 @@ export function DirectScreen() {
       >
         <OrgaFailure error={events.error} />
         {events.error ? null : <Muted variant="body">{events.loading ? "Chargement…" : orgaLabels.directEmpty}</Muted>}
-        {storySection(null, hasMyStories).show ? <StoryBlock mentionsCount={undefined} withMentions={false} /> : null}
+        {storySection(null, hasMyStories, mineFailed).show ? (
+          <StoryBlock
+            mentionsCount={undefined}
+            withMentions={false}
+            mineFailed={mineFailed}
+            onRetry={() => void myStories.reload()}
+          />
+        ) : null}
       </TabScreen>
     );
   }
@@ -91,13 +101,25 @@ export function DirectScreen() {
       structureName={structureName}
       reloadEvents={events.reload}
       hasMyStories={hasMyStories}
+      mineFailed={mineFailed}
       reloadMyStories={myStories.reload}
     />
   );
 }
 
 /** « Ma story » (et « Mentions » pendant l'événement) : deux lignes vers les écrans plein écran. */
-function StoryBlock({ mentionsCount, withMentions }: { mentionsCount: number | undefined; withMentions: boolean }) {
+function StoryBlock({
+  mentionsCount,
+  withMentions,
+  mineFailed,
+  onRetry,
+}: {
+  mentionsCount: number | undefined;
+  withMentions: boolean;
+  /** La lecture de « Ma story » a échoué : l'accès reste, avec le message et « Réessayer ». */
+  mineFailed: boolean;
+  onRetry: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -130,6 +152,16 @@ function StoryBlock({ mentionsCount, withMentions }: { mentionsCount: number | u
             {storyShareLabels.mine}
           </Text>
         </Pressable>
+        {mineFailed ? (
+          <>
+            <Notice tone="error" testID="orga-direct-mystory-error">
+              {storyShareLabels.mineError}
+            </Notice>
+            <Button variant="plate" icon="undo" onPress={onRetry} fullWidth testID="orga-direct-mystory-retry">
+              {storyShareLabels.retry}
+            </Button>
+          </>
+        ) : null}
       </Plate>
     </>
   );
@@ -140,12 +172,14 @@ function DirectEvent({
   structureName,
   reloadEvents,
   hasMyStories,
+  mineFailed,
   reloadMyStories,
 }: {
   current: CurrentEvent;
   structureName: string;
   reloadEvents: () => Promise<unknown>;
   hasMyStories: boolean;
+  mineFailed: boolean;
   reloadMyStories: () => Promise<unknown>;
 }) {
   const { t } = useTheme();
@@ -378,8 +412,13 @@ function DirectEvent({
         </>
       ) : null}
 
-      {storySection(current, hasMyStories).show ? (
-        <StoryBlock mentionsCount={mentions.data?.count} withMentions={storySection(current, hasMyStories).mentions} />
+      {storySection(current, hasMyStories, mineFailed).show ? (
+        <StoryBlock
+          mentionsCount={mentions.data?.count}
+          withMentions={storySection(current, hasMyStories, mineFailed).mentions}
+          mineFailed={mineFailed}
+          onRetry={() => void reloadMyStories()}
+        />
       ) : null}
 
       {field ? (

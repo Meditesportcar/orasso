@@ -278,12 +278,14 @@ export const storiesShare = {
         ),
       );
     if (!member) throw forbidden("Réservé à l'organisation et à son staff");
+    // Curseur « <millisecondes>_<uuid> », validé en entier avant toute requête (un curseur mal formé est un 400, jamais une
+    // erreur de PostgreSQL) : la date doit exister et l'identifiant être un UUID complet.
     let after: { at: Date; id: string } | null = null;
     if (cursor) {
-      const [ms, cid] = cursor.split("_");
-      const date = new Date(Number(ms));
-      if (!cid || Number.isNaN(date.getTime()) || !/^[0-9a-f-]{36}$/i.test(cid)) throw validation("Curseur invalide");
-      after = { at: date, id: cid };
+      const m = /^(\d{1,13})_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(cursor);
+      const date = m?.[1] ? new Date(Number(m[1])) : null;
+      if (!m?.[2] || !date || Number.isNaN(date.getTime())) throw validation("Curseur invalide");
+      after = { at: date, id: m[2] };
     }
     // Les mentions : identification active de la structure, ou autocollant d'un de ses événements publiés (sauf
     // identification retirée). Jamais une copie, jamais une story de crew, jamais celle de la structure elle-même, jamais
@@ -310,9 +312,13 @@ export const storiesShare = {
     // la requête (vingt lignes plus une pour savoir s'il y a une suite). `storyDenial` reste appliqué aux seules lignes de
     // la page, en filet de sécurité.
     if (!viewerOf(v)?.active) return { items: [], nextCursor: null, count: 0 };
-    const counted = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from stories s join profiles p on p.user_id = s.author_id where ${base}`);
-    const count = counted.rows[0]?.n ?? 0;
+    // Le nombre n'est calculé qu'à la première page (sans curseur) ; les pages suivantes rendent 0, le client garde le premier.
+    const count = after
+      ? 0
+      : ((
+          await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from stories s join profiles p on p.user_id = s.author_id where ${base}`)
+        ).rows[0]?.n ?? 0);
     const page = await db.execute<{ id: string; ms: string }>(sql`
       select s.id, (extract(epoch from date_trunc('milliseconds', s.created_at)) * 1000)::bigint::text as ms
       from stories s join profiles p on p.user_id = s.author_id

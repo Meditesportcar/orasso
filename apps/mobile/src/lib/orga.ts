@@ -71,9 +71,25 @@ export function pickCurrentEvent(events: readonly EventCard[], at: Date): Curren
 export function storySection(
   current: Pick<CurrentEvent, "phase"> | null,
   hasMyStories: boolean,
+  mineFailed = false,
 ): { mentions: boolean; mine: boolean; show: boolean } {
   const mentions = current !== null && current.phase !== "next";
-  return { mentions, mine: mentions || hasMyStories, show: mentions || hasMyStories };
+  // Tour 5 : une lecture de « Ma story » en échec garde l'accès (des stories peuvent être en ligne) avec un message.
+  const mine = mentions || hasMyStories || mineFailed;
+  return { mentions, mine, show: mine };
+}
+
+/**
+ * Lot R7h, tour 5 : l'état de la lecture de « Ma story » de la structure. Chargement, absence confirmée et erreur sont
+ * distincts : une erreur n'est jamais prise pour « aucune story » (une publication peut rester en ligne). Une donnée déjà
+ * lue (même ancienne) l'emporte sur une erreur de rafraîchissement.
+ */
+export function myStoriesRead(
+  data: { stories: readonly unknown[] } | null,
+  error: unknown,
+): "loading" | "none" | "has" | "error" {
+  if (data) return data.stories.length > 0 ? "has" : "none";
+  return error ? "error" : "loading";
 }
 
 /** Le statut qui sera demandé à l'API quand on bascule (Maintenu ↔ Incertain). */

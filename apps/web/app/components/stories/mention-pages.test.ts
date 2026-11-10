@@ -2,7 +2,7 @@
 import type { StoryMentionItem, StoryMentions } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { type FetchPage, rereadPages } from "./mention-pages";
+import { type FetchPage, MentionPager, type PageResult, type PagerState, rereadPages } from "./mention-pages";
 
 const item = (id: string, copyId: string | null = null): StoryMentionItem =>
   ({ storyId: id, copyId, authorName: id }) as StoryMentionItem;
@@ -66,5 +66,95 @@ describe("relecture des pages « Voir plus »", () => {
       () => true,
     );
     expect(out?.ok && out.items.map((m) => m.storyId)).toEqual(["a1", "a2", "b1"]);
+  });
+});
+
+// Lot R7h, tour 5 : le pager (le cœur du hook) sérialise relecture et « Voir plus », et jette les lectures périmées.
+const firstPage = (ids: string[], next: string | null): StoryMentions =>
+  ({ items: ids.map((i) => item(i)), nextCursor: next, count: 9 }) as StoryMentions;
+
+/** Une page dont la réponse est rendue à la main : permet d'ordonner les réponses. */
+function deferred() {
+  let resolve!: (r: PageResult) => void;
+  const promise = new Promise<PageResult>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+const page = (ids: string[], next: string | null, copies: Record<string, string> = {}): PageResult => ({
+  ok: true,
+  data: {
+    items: ids.map((i) => item(i, copies[i] ?? null)),
+    nextCursor: next,
+    count: 9,
+  } as StoryMentions,
+});
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe("pager des mentions (hook)", () => {
+  it("« Voir plus » pendant la relecture est ignoré : la relecture s'applique (plus d'« Ajouter » périmé)", async () => {
+    const reread = deferred();
+    const calls: string[] = [];
+    let mode: "more" | "reread" = "more";
+    const fetchPage: FetchPage = async (c) => {
+      calls.push(c);
+      if (mode === "reread") return reread.promise;
+      return page(["b1", "b2"], "c3");
+    };
+    const states: PagerState[] = [];
+    const pager = new MentionPager(fetchPage, (s) => states.push(s));
+    pager.sync(firstPage(["a1"], "c2"));
+    await pager.more(); // profondeur 1 : b1, b2
+    expect(pager.state.depth).toBe(1);
+    // Revalidation : relecture lancée (busy), puis clic sur « Voir plus » pendant la relecture.
+    mode = "reread";
+    pager.sync(firstPage(["a1"], "c2"));
+    expect(pager.state.busy).toBe(true);
+    await pager.more();
+    expect(calls).toEqual(["c2", "c2"]); // aucun nouvel appel pour le clic
+    reread.resolve(page(["b1", "b2"], "c3", { b2: "copie-b2" }));
+    await flush();
+    expect(pager.state.busy).toBe(false);
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBe("copie-b2");
+    expect(pager.state.depth).toBe(1);
+  });
+
+  it("une première page qui change pendant le premier « Voir plus » (profondeur zéro) jette la réponse et reprend du nouveau curseur", async () => {
+    const old = deferred();
+    const calls: string[] = [];
+    const fetchPage: FetchPage = async (c) => {
+      calls.push(c);
+      return c === "ancien" ? old.promise : page(["n3", "n4"], null);
+    };
+    const pager = new MentionPager(fetchPage, () => undefined);
+    pager.sync(firstPage(["a1", "a2"], "ancien"));
+    const pending = pager.more();
+    expect(pager.state.busy).toBe(true);
+    // De nouvelles mentions ont décalé les pages : nouvelle première page, nouveau curseur.
+    pager.sync(firstPage(["n1", "n2"], "nouveau"));
+    expect(pager.state.busy).toBe(false);
+    expect(pager.next).toBe("nouveau");
+    old.resolve(page(["vieille-page"], null));
+    await pending;
+    expect(pager.state.items).toEqual([]); // l'ancienne deuxième page n'est jamais acceptée
+    expect(pager.state.depth).toBe(0);
+    await pager.more();
+    expect(calls).toEqual(["ancien", "nouveau"]);
+    expect(pager.state.items.map((m) => m.storyId)).toEqual(["n3", "n4"]);
+  });
+
+  it("une revalidation sans changement ne jette pas un « Voir plus » en cours (profondeur zéro)", async () => {
+    const slow = deferred();
+    const pager = new MentionPager(
+      () => slow.promise,
+      () => undefined,
+    );
+    pager.sync(firstPage(["a1"], "c1"));
+    const pending = pager.more();
+    pager.sync(firstPage(["a1"], "c1")); // même contenu
+    expect(pager.state.busy).toBe(true);
+    slow.resolve(page(["b1"], null));
+    await pending;
+    expect(pager.state.items.map((m) => m.storyId)).toEqual(["b1"]);
   });
 });

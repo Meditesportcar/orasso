@@ -40,3 +40,96 @@ export async function rereadPages(
   }
   return { ok: true, items, next, depth: read };
 }
+
+export type PagerState = {
+  items: StoryMentionItem[];
+  /** Curseur suivant des pages lues ici (valable seulement quand `depth` > 0). */
+  next: string | null;
+  depth: number;
+  /** Une relecture ou un « Voir plus » est en cours : l'autre geste attend. */
+  busy: boolean;
+  error: string | null;
+};
+
+/** Ce qui fait changer les pages d'après : le curseur et les mentions de la première page, copie liée comprise. */
+const firstKeyOf = (first: StoryMentions | null) =>
+  first ? `${first.nextCursor ?? ""}|${first.items.map((m) => `${m.storyId}:${m.copyId ?? ""}`).join(",")}` : "";
+
+/**
+ * Lot R7h, tour 5 : les pages « Voir plus » et leur relecture, sérialisées. Le hook React n'est qu'une enveloppe.
+ * - Une relecture (nouvelle première page, profondeur > 0) pose `busy` : « Voir plus » attend qu'elle soit appliquée (un clic
+ *   ne la fait plus rejeter, donc plus de bouton « Ajouter » périmé).
+ * - Une lecture « Voir plus » est rattachée à la première page qui l'a lancée : si cette première page change (même à
+ *   profondeur zéro), la réponse est jetée et le bouton redevient actif, avec le nouveau curseur.
+ */
+export class MentionPager {
+  state: PagerState = { items: [], next: null, depth: 0, busy: false, error: null };
+  private generation = 0;
+  private key = "";
+  private firstNext: string | null = null;
+
+  constructor(
+    private readonly fetchPage: FetchPage,
+    private readonly onChange: (s: PagerState) => void,
+  ) {}
+
+  private set(s: PagerState) {
+    this.state = s;
+    this.onChange(s);
+  }
+
+  /** Le curseur de la prochaine page à lire. */
+  get next(): string | null {
+    return this.state.depth > 0 ? this.state.next : this.firstNext;
+  }
+
+  /** À appeler à chaque nouvelle première page (chargement, revalidation, geste). */
+  sync(first: StoryMentions | null): void {
+    const key = firstKeyOf(first);
+    const changed = key !== this.key;
+    this.key = key;
+    this.firstNext = first?.nextCursor ?? null;
+    if (!first) return;
+    const depth = this.state.depth;
+    if (depth > 0) {
+      const mine = ++this.generation;
+      this.set({ ...this.state, busy: true });
+      void rereadPages(this.fetchPage, first.nextCursor, depth, () => this.generation === mine).then((out) => {
+        if (!out) return;
+        this.set(
+          out.ok
+            ? { items: out.items, next: out.next, depth: out.depth, busy: false, error: null }
+            : { ...this.state, busy: false, error: out.error },
+        );
+      });
+    } else if (changed && this.state.busy) {
+      // Une lecture rattachée à l'ancienne première page : jetée, elle repartira du nouveau curseur.
+      this.generation++;
+      this.set({ ...this.state, busy: false });
+    }
+  }
+
+  async more(): Promise<void> {
+    const cursor = this.next;
+    if (!cursor || this.state.busy) return;
+    const mine = ++this.generation;
+    const before = this.state;
+    this.set({ ...before, busy: true, error: null });
+    const res = await this.fetchPage(cursor);
+    if (this.generation !== mine) return;
+    this.set(
+      res.ok
+        ? {
+            items: [
+              ...before.items,
+              ...res.data.items.filter((m) => !before.items.some((o) => o.storyId === m.storyId)),
+            ],
+            next: res.data.nextCursor,
+            depth: before.depth + 1,
+            busy: false,
+            error: null,
+          }
+        : { ...before, busy: false, error: res.error.message },
+    );
+  }
+}

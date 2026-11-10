@@ -27,6 +27,7 @@ import {
   authorKeyOf,
   liveStory,
   loadViewerSets,
+  notMaskedCopy,
   relationOf,
   type StoryRow,
   selectStories,
@@ -58,13 +59,6 @@ async function seenSet(userId: string, at: Date): Promise<Set<string>> {
 /** Une liste d'identifiants en UN seul paramètre (tableau PostgreSQL), jamais un paramètre par identifiant. */
 const anyOf = (column: SQL | AnyColumn, ids: Iterable<string>, type: "text" | "uuid") =>
   sql`${column} = any(${sql.param([...ids])}::${sql.raw(type)}[])`;
-
-/** Clé d'auteur affiché d'une story, en SQL (même règle que `authorKeyOf`). */
-const authorKeySql = sql`case ${stories.persona} when 'organizer' then 's:' || ${stories.structureId}::text when 'pro' then 'p:' || ${stories.proId}::text else 'u:' || ${stories.authorId} end`;
-
-/** Au plus `PER_AUTHOR_MAX` stories par auteur, les plus récentes, choisies dans le SQL (`row_number`). */
-const newestPerAuthor = (where: SQL) =>
-  sql`${stories.id} in (select r.id from (select ${stories.id} as id, row_number() over (partition by ${authorKeySql} order by ${stories.createdAt} desc, ${stories.id} desc) as rn from stories where ${where}) r where r.rn <= ${PER_AUTHOR_MAX})`;
 
 /** Stories signées d'une personne (ni casquette organisateur, ni casquette pro). */
 const personal = sql`${stories.persona} not in ('organizer','pro')`;
@@ -114,14 +108,15 @@ export const storiesBar = {
     if (poolStructures.size)
       ors.push(and(eq(stories.persona, "organizer"), anyOf(stories.structureId, poolStructures, "uuid")));
     if (sets.pros.size) ors.push(and(eq(stories.persona, "pro"), anyOf(stories.proId, sets.pros, "uuid")));
-    // Tour 3 : les 50 plus récentes de chaque auteur sont choisies dans le SQL (le plafond de publication est le même, rien
-    // de visible n'est perdu) ; puis on filtre (auteurs masqués, audiences) : des stories masquées
-    // ou refusées ne chassent plus des stories visibles hors de la barre.
-    const pool = ors.length ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, or(...ors)) as SQL) : null;
+    // Tour 5 : les copies masquées (originale indisponible) sont exclues dans le SQL, avant toute sélection ; aucune limite
+    // de lignes par auteur n'est supposée ici : le plafond de publication ne compte que les copies non masquées, et à la
+    // levée d'une suspension un auteur peut avoir plus de 50 stories vivantes. `hasUnseen` se lit donc sur toutes les
+    // stories visibles ; seuls l'anneau et l'affichage se limitent aux `PER_AUTHOR_MAX` plus récentes (plus bas).
+    const pool = ors.length
+      ? (and(liveStory(at), sql`${stories.authorId} <> ${me}`, notMaskedCopy(at), or(...ors)) as SQL)
+      : null;
     const candidates = pool
-      ? (await selectStories(and(pool, newestPerAuthor(pool)))).sort(
-          (a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime(),
-        )
+      ? (await selectStories(pool)).sort((a, b) => b.story.createdAt.getTime() - a.story.createdAt.getTime())
       : [];
 
     const viewer = viewerOf(v);

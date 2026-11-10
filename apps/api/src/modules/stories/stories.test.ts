@@ -1267,14 +1267,17 @@ describe("tour 2 : barre, identifiants, plafond, suppressions", () => {
       )
       .returning({ id: stories.id, createdAt: stories.createdAt });
     inserted.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    // Tour 3 : les 50 plus récentes de chaque auteur sont choisies dans le SQL (plafond de publication). Elle en a vu 49 :
-    // une des 50 reste non vue, les 3 plus anciennes (hors plafond) ne comptent plus.
+    // Tour 5 : plus de limite de lignes supposée (le plafond de publication ne compte que les copies non masquées, un auteur peut
+    // dépasser 50 stories vivantes à la levée d'une suspension) : toutes les stories visibles comptent pour `hasUnseen`.
     await db.insert(storyViews).values(inserted.slice(4).map((r) => ({ storyId: r.id, viewerId: nina.id })));
     const bar = (await req(nina, "GET", "/stories/bar")).json;
     expect(bar.authors).toHaveLength(1);
     expect(bar.authors[0].hasUnseen).toBe(true);
-    // Les 50 plus récentes toutes vues : les 3 plus anciennes (hors plafond) ne comptent pas.
+    // Les 50 plus récentes et la 4e plus ancienne vues : les 3 plus anciennes, non vues, comptent encore.
     await db.insert(storyViews).values({ storyId: inserted[3]!.id, viewerId: nina.id });
+    expect((await req(nina, "GET", "/stories/bar")).json.authors[0].hasUnseen).toBe(true);
+    // Tout vu : plus d'anneau « non vu ».
+    await db.insert(storyViews).values(inserted.slice(0, 3).map((r) => ({ storyId: r.id, viewerId: nina.id })));
     expect((await req(nina, "GET", "/stories/bar")).json.authors[0].hasUnseen).toBe(false);
   });
 

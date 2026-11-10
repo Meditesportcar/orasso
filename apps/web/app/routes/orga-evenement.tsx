@@ -43,7 +43,7 @@ import {
   weatherTexts,
   weekdayNames,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
 import { OrgaStory } from "../components/stories/OrgaStory";
@@ -520,7 +520,22 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
   const result = actionData as Result | undefined;
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
+  // Lot R7h, tour 5 : le message de la story (« ?story=added|removed ») est lu une fois, gardé ici, puis retiré de l'adresse :
+  // il ne revient plus aux revalidations ni au rechargement de la page.
+  const [storyMessage, setStoryMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (storyNotice !== "added" && storyNotice !== "removed") return;
+    setStoryMessage(storyNotice);
+    setSearch(
+      (cur) => {
+        const next = new URLSearchParams(cur);
+        next.delete("story");
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [storyNotice, setSearch]);
   const published = event.status === "published";
   const isDraft = event.status === "draft";
   const justPublished = search.get("publie") === "1";
@@ -686,7 +701,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         fieldDay: storyFieldDay,
         hasMine: storyHasMine,
         mineFailed: storyMineFailed,
-        notice: storyNotice,
+        notice: storyMessage ?? storyNotice,
       }) && (
         <OrgaStory
           structureId={structureId}
@@ -696,9 +711,9 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           failed={storyFailed}
           mineFailed={storyMineFailed}
           notice={
-            storyNotice === "added"
+            (storyMessage ?? storyNotice) === "added"
               ? storyShareLabels.added
-              : storyNotice === "removed"
+              : (storyMessage ?? storyNotice) === "removed"
                 ? storyShareLabels.removeDone
                 : null
           }

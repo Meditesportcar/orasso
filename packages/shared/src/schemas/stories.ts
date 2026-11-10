@@ -204,7 +204,7 @@ export type StoryMentionItem = {
   copyId: string | null;
 };
 
-/** `count` : toutes les mentions vivantes (pas seulement la page), pour « Mentions · 3 ». */
+/** `count` : toutes les mentions vivantes (pas seulement la page), pour « Mentions · 3 » ; calculé à la première page seulement (0 ensuite). */
 export type StoryMentions = { items: StoryMentionItem[]; nextCursor: string | null; count: number };
 
 export const storyMentionsQuery = z.object({ cursor: z.string().max(80).optional() });

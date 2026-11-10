@@ -17,7 +17,7 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { profiles, stories, storyTags } from "../../db/schema";
+import { profiles, stories, storyTags, storyViews, structureFollows } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 
 afterAll(async () => {
@@ -75,8 +75,9 @@ describe("mentions au-delà de 500", () => {
         `/structures/${structure.id}/story-mentions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
       );
       expect(res.status).toBe(200);
-      if (count >= 0) expect(res.json.count).toBe(count);
-      count = res.json.count;
+      // Tour 5 : le nombre n'est calculé qu'à la première page ; les suivantes rendent 0.
+      if (count >= 0) expect(res.json.count).toBe(0);
+      else count = res.json.count;
       for (const m of res.json.items) seen.push(m.storyId);
       cursor = res.json.nextCursor;
       pages++;
@@ -220,4 +221,108 @@ describe("plafond de 50 stories : les copies masquées ne comptent pas", () => {
     const res = await shareLea(w);
     expect(res.status, JSON.stringify(res.json)).toBe(201);
   });
+});
+
+describe("curseur des mentions : entrées malformées (tour 5)", () => {
+  it("un curseur incomplet, mal formé ou impossible est un 400, jamais un 500", async () => {
+    const owner = await signUp("Sarah_66", { twoFactor: true });
+    const structure = await createStructure(owner.id);
+    const uuid = "123e4567-e89b-42d3-a456-426614174000";
+    const bad = [
+      `1700000000000_${"-".repeat(36)}`, // 36 tirets
+      "1700000000000_123e4567-e89b-42d3-a456-42661417400", // UUID tronqué
+      `1700000000000_${uuid}x`, // UUID trop long
+      `abc_${uuid}`, // date non numérique
+      `99999999999999999999_${uuid}`, // date impossible
+      `-5_${uuid}`, // date négative
+      `1700000000000_${uuid}_extra`, // trois parties
+      "1700000000000", // sans identifiant
+      `_${uuid}`, // sans date
+    ];
+    for (const cursor of bad) {
+      const res = await get(
+        owner.cookie,
+        `/structures/${structure.id}/story-mentions?cursor=${encodeURIComponent(cursor)}`,
+      );
+      expect(res.status, cursor).toBe(400);
+    }
+    const ok = await get(owner.cookie, `/structures/${structure.id}/story-mentions?cursor=1700000000000_${uuid}`);
+    expect(ok.status).toBe(200);
+    expect(ok.json.count).toBe(0);
+  });
+});
+
+describe("barre des stories : copies masquées exclues avant la sélection (tour 5)", () => {
+  it("publication pendant une suspension, puis levée : l'anneau reste juste et la non-vue la plus ancienne compte", async () => {
+    const owner = await signUp("Sarah_66", { twoFactor: true });
+    const kenji = await signUp("Kenji_66");
+    const fan = await signUp("Fan_66");
+    const structure = await createStructure(owner.id);
+    await db.insert(structureFollows).values({ structureId: structure.id, userId: fan.id, source: "manual" });
+    const common = (authorId: string) => ({
+      authorId,
+      mediaKind: "photo" as const,
+      plateState: "none_confirmed" as const,
+      audience: "public" as const,
+      expiresAt: new Date(clock.now.getTime() + 20 * HOUR),
+    });
+    const base = clock.now.getTime() - 10 * HOUR;
+    const own = (i: number) => ({
+      ...common(owner.id),
+      persona: "organizer" as const,
+      structureId: structure.id,
+      storageKey: `private/stories/tour5/own-${i}.jpg`,
+      createdAt: new Date(base + i * 1000),
+    });
+    // Une story propre ancienne (la seule non vue), puis 48 propres, 55 copies de Kenji (masquées pendant sa suspension).
+    const ownRows = await db
+      .insert(stories)
+      .values(Array.from({ length: 49 }, (_, i) => own(i)))
+      .returning({ id: stories.id, createdAt: stories.createdAt });
+    const origins = await db
+      .insert(stories)
+      .values(
+        Array.from({ length: 55 }, (_, i) => ({
+          ...common(kenji.id),
+          persona: "fan" as const,
+          storageKey: `private/stories/tour5/k-${i}.jpg`,
+        })),
+      )
+      .returning({ id: stories.id });
+    const copies = await db
+      .insert(stories)
+      .values(
+        origins.map((o, i) => ({
+          ...own(100 + i),
+          sharedFromStoryId: o.id,
+          storageKey: `private/stories/tour5/copy-${i}.jpg`,
+        })),
+      )
+      .returning({ id: stories.id });
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + 7 * 24 * HOUR) })
+      .where(eq(profiles.userId, kenji.id));
+    // La nouvelle publication de la structure pendant la suspension (50 visibles).
+    const [fresh] = await db.insert(stories).values(own(500)).returning({ id: stories.id });
+    // Le fan a tout vu sauf la plus ancienne story propre.
+    const oldest = [...ownRows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]?.id;
+    await db
+      .insert(storyViews)
+      .values(
+        [...ownRows.map((r) => r.id), fresh?.id as string]
+          .filter((id) => id !== oldest)
+          .map((id) => ({ storyId: id, viewerId: fan.id })),
+      );
+    const barOf = async () => (await get(fan.cookie, "/stories/bar")).json;
+    const during = await barOf();
+    expect(during.authors).toHaveLength(1);
+    expect(during.authors[0]).toMatchObject({ key: `s:${structure.id}`, hasUnseen: true });
+    // Levée de la suspension : 55 copies reviennent (105 vivantes au total) ; la non-vue ancienne compte toujours.
+    await db.update(profiles).set({ suspendedUntil: null }).where(eq(profiles.userId, kenji.id));
+    const after = await barOf();
+    expect(after.authors).toHaveLength(1);
+    expect(after.authors[0]).toMatchObject({ key: `s:${structure.id}`, hasUnseen: true });
+    expect(copies).toHaveLength(55);
+  }, 60_000);
 });
