@@ -57,6 +57,9 @@ export function tapTarget(x: number, width: number): "prev" | "next" {
   return width > 0 && x < width * STORY_PREV_ZONE ? "prev" : "next";
 }
 
+/** Glisser à gauche ou à droite change d'auteur : au-delà de cette distance (px), et au moins deux fois plus large que haut. */
+export const STORY_AUTHOR_SWIPE_DISTANCE = 60;
+
 export type StoryStep = { kind: "story"; index: number } | { kind: "close" };
 
 /** Après la dernière story, la visionneuse se ferme. */
@@ -67,6 +70,48 @@ export function storyNext(index: number, count: number): StoryStep {
 /** Avant la première, on repart de son début (la même story, de zéro). */
 export function storyPrev(index: number): StoryStep {
   return { kind: "story", index: Math.max(0, index - 1) };
+}
+
+/**
+ * Lecture enchaînée (lot R8s) : les clés d'auteurs à lire, dans l'ordre, figées à l'ouverture (la barre est lue une fois).
+ * - auteur ouvert avec du non-vu : lui, puis les auteurs non vus qui le suivent dans la barre ;
+ * - auteur ouvert déjà vu, ou « Ta story » (`mineKey`, hors liste) : lui, puis les auteurs qui le suivent dans la barre
+ *   (toute la barre pour « Ta story »), non vus d'abord, dans l'ordre où la barre les donne ;
+ * - clé absente de la barre (et autre que « Ta story ») : lui seul.
+ * L'ordre de la barre est celui du serveur ; cette fonction ne trie rien d'autre.
+ */
+export function storyChain(
+  authors: readonly { key: string; hasUnseen: boolean }[],
+  openedKey: string,
+  mineKey: string | null = null,
+): string[] {
+  const at = authors.findIndex((a) => a.key === openedKey);
+  if (at < 0) return openedKey === mineKey ? [openedKey, ...unseenFirst(authors)] : [openedKey];
+  const rest = authors.slice(at + 1).filter((a) => a.key !== openedKey);
+  if (authors[at]?.hasUnseen) return [openedKey, ...rest.filter((a) => a.hasUnseen).map((a) => a.key)];
+  return [openedKey, ...unseenFirst(rest)];
+}
+
+function unseenFirst(list: readonly { key: string; hasUnseen: boolean }[]): string[] {
+  return [...list.filter((a) => a.hasUnseen), ...list.filter((a) => !a.hasUnseen)].map((a) => a.key);
+}
+
+/** L'auteur qui suit `key` dans la chaîne, `null` après le dernier (la visionneuse se ferme) ou si la clé n'y est pas. */
+export function nextAuthor(chain: readonly string[], key: string): string | null {
+  const i = chain.indexOf(key);
+  return i < 0 ? null : (chain[i + 1] ?? null);
+}
+
+/** L'auteur qui précède `key` dans la chaîne, `null` pour le premier ou si la clé n'y est pas. */
+export function prevAuthor(chain: readonly string[], key: string): string | null {
+  const i = chain.indexOf(key);
+  return i <= 0 ? null : (chain[i - 1] ?? null);
+}
+
+/** Glissement horizontal assez long et franc : à gauche, l'auteur suivant ; à droite, le précédent. Sinon `null`. */
+export function authorSwipe(dx: number, dy: number): "next" | "prev" | null {
+  if (Math.abs(dx) <= STORY_AUTHOR_SWIPE_DISTANCE || Math.abs(dx) < 2 * Math.abs(dy)) return null;
+  return dx < 0 ? "next" : "prev";
 }
 
 /** On ouvre sur la première story non vue, sinon sur la première (on reprend là où on s'était arrêté). */
@@ -139,12 +184,21 @@ export function viewersListPartial(total: number | null | undefined): boolean {
  * identifiant **jusqu'à sa résolution** (`end` avec succès), et chaque story garde son propre envoi en cours. Un envoi sur
  * une autre story n'efface donc ni l'identifiant ni le verrou de celle-ci ; une seule réponse à la fois par story.
  */
+/** L'issue d'un envoi de réponse, transmise au lecteur affiché : succès = son brouillon correspondant est vidé. */
+export type ReplyOutcome = { storyId: string; text: string; ok: boolean };
+
 export function createReplyKeys(newId: () => string, now: () => number = Date.now) {
   const MAX_KEYS = 50;
   // Une soumission d'issue incertaine (réponse perdue) est gardée jusqu'à un succès ou ce délai.
   const UNCERTAIN_MS = 30 * 60 * 1000;
   const keys = new Map<string, { id: string; uncertainAt: number | null }>();
   const sending = new Map<string, string>();
+  // Abonnés au changement des envois en cours (lot R8s) : le parent persistant de la visionneuse garde ces identifiants d'un
+  // auteur à l'autre ; une requête qui finit après un aller-retour doit libérer le bouton du lecteur affiché, pas d'un démonté.
+  const listeners = new Set<(outcome?: ReplyOutcome) => void>();
+  const notify = (outcome?: ReplyOutcome) => {
+    for (const l of [...listeners]) l(outcome);
+  };
   const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
   const expire = () => {
     const t = now();
@@ -190,7 +244,9 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
       if (sending.has(storyId)) return null;
       if (isFull(storyId, text)) return null;
       sending.set(storyId, text);
-      return idFor(storyId, text);
+      const id = idFor(storyId, text);
+      notify();
+      return id;
     },
     /** Fin de l'envoi : l'identifiant n'est oublié que si la réponse est arrivée (`ok`) ; sinon il reste incertain, gardé 30 min ou jusqu'à un succès. */
     end(storyId: string, text: string, ok: boolean) {
@@ -201,6 +257,12 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
         const e = keys.get(k);
         if (e) e.uncertainAt = now();
       }
+      notify({ storyId, text, ok });
+    },
+    /** Appelé à chaque début d'envoi, et à chaque fin avec son issue (story, texte, succès) ; rend la fonction de désabonnement. */
+    subscribe(listener: (outcome?: ReplyOutcome) => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     isSending: (storyId: string) => sending.has(storyId),
     /** Les stories dont un envoi est en cours (pour l'affichage des boutons). */

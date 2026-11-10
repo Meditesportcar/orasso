@@ -7,6 +7,7 @@
 import { AvatarRing, Icon, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import { barDisplay, storyViewerLabels as L, mineRingState } from "@orasso/shared";
 import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTabSwipeScrollGuard } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
@@ -15,16 +16,20 @@ import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
+import { rememberBar } from "./chainBar";
 
 const { space2, space3, space4 } = tokens.spacing;
 const ITEM_W = 68;
 /** Route créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours (Metro ne sait pas la détecter). */
 const PUBLISH = "/story/publier" as never;
 
-/** Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). */
+/**
+ * Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). Depuis la barre du Fil (lot R8s) : `suite=barre`,
+ * la lecture enchaîne les auteurs suivants de la barre.
+ */
 export function useOpenStories() {
   const router = useRouter();
-  return (authorKey: string) => router.push({ pathname: "/story/[authorKey]", params: { authorKey } });
+  return (authorKey: string) => router.push({ pathname: "/story/[authorKey]", params: { authorKey, suite: "barre" } });
 }
 
 export function StoriesBar() {
@@ -41,6 +46,10 @@ export function StoriesBar() {
   });
 
   const data = bar.data;
+  // La barre affichée est gardée en mémoire : la lecture enchaînée y fige sa chaîne avant la première vue.
+  useEffect(() => {
+    rememberBar(me?.user.id, data);
+  }, [me?.user.id, data]);
   const mine = data?.mine ?? null;
   const mineState = mineRingState(mine);
   const display = barDisplay(data?.authors ?? []);

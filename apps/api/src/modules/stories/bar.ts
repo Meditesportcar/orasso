@@ -3,7 +3,9 @@
 // d'abord. Un compte privé que je ne suis pas (ou dont la demande est en attente) n'apparaît pas, et rien ne dit qu'il a
 // une story. Lot R7h : `live` (organisateur « En cours ») = la structure a un événement publié qui tourne (du début à la fin)
 // et une story vivante ; une structure dont j'ai une place à un événement en cours est dans ma barre sans que je la suive.
+// Lot R8s : l'ordre est décidé ici (non vues d'abord, puis rang 2 / 3 / 4, puis la plus récente) ; le rang n'est pas servi.
 import {
+  type BarRank,
   STORY_LIVE_MAX,
   type StoriesSummary,
   type StoryBar,
@@ -85,6 +87,22 @@ async function structuresWithPlace(userId: string, at: Date): Promise<Set<string
   return new Set(res.rows.map((r) => r.id));
 }
 
+/**
+ * Les structures dont j'ai une place à un événement À VENIR (lot R8s, rang 3 de la barre) : événement publié qui n'a pas
+ * commencé, et ma candidature véhicule retenue ou un billet valable. Une candidature en attente, refusée ou retirée, un
+ * billet annulé ou déjà contrôlé, un événement fini, annulé ou non publié ne comptent pas.
+ */
+export async function structuresWithUpcomingPlace(userId: string, at: Date): Promise<Set<string>> {
+  const res = await db.execute<{ id: string }>(
+    sql`select distinct e.structure_id::text as id from events e
+      where e.status = 'published' and e.starts_at > ${at}
+        and (exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${userId}
+              and a.kind = 'vehicle' and a.status = 'accepted')
+          or exists (select 1 from tickets k where k.event_id = e.id and k.user_id = ${userId} and k.status = 'valid'))`,
+  );
+  return new Set(res.rows.map((r) => r.id));
+}
+
 /** Pour une page publique (structure, pro) : zéro sans session (aucune story n'est servie sans session). */
 export async function storiesSummaryFor(v: Viewer | null, kind: StoryTagKind, id: string): Promise<StoriesSummary> {
   if (!v) return { count: 0, hasUnseen: false, ring: null };
@@ -97,8 +115,19 @@ export const storiesBar = {
     const me = v.user.id;
     const sets = await loadViewerSets(me);
     // Lot R7h : l'organisateur d'un événement où j'ai ma place apparaît « EN COURS » même si je ne le suis pas.
-    const [liveStructures, placeStructures] = await Promise.all([liveStructureIds(at), structuresWithPlace(me, at)]);
-    const poolStructures = new Set([...sets.structures, ...placeStructures]);
+    // Lot R8s : de même la structure d'un événement à venir où je suis retenu ou porteur d'un billet valable (rang 3).
+    const [liveStructures, placeStructures, upcomingStructures] = await Promise.all([
+      liveStructureIds(at),
+      structuresWithPlace(me, at),
+      structuresWithUpcomingPlace(me, at),
+    ]);
+    const poolStructures = new Set([...sets.structures, ...placeStructures, ...upcomingStructures]);
+    // Rang dans la barre : 2 événement en cours où j'ai ma place, 3 événement à venir où j'ai ma place, 4 le reste.
+    const rankOf = (key: string): BarRank => {
+      if (!key.startsWith("s:")) return 4;
+      const id = key.slice(2);
+      return placeStructures.has(id) ? 2 : upcomingStructures.has(id) ? 3 : 4;
+    };
     const mutedRows = await db.select().from(storyMutes).where(eq(storyMutes.userId, me));
     const muted = new Set(mutedRows.map((m) => storyAuthorKeyOf(m.authorKind, m.authorId)));
 
@@ -132,7 +161,7 @@ export const storiesBar = {
       const key = authorKeyOf(r);
       if (key) byAuthor.set(key.key, [...(byAuthor.get(key.key) ?? []), r]);
     }
-    const entries: { entry: Omit<StoryBarEntry, "latestAt">; hasUnseen: boolean; latestAt: Date }[] = [];
+    const entries: { entry: Omit<StoryBarEntry, "latestAt">; hasUnseen: boolean; latestAt: Date; rank: BarRank }[] = [];
     for (const [key, all] of byAuthor) {
       // `hasUnseen` se lit sur toutes les stories visibles de l'auteur ; l'anneau et l'affichage sur les plus récentes.
       const hasUnseen = all.some((r) => !seen.has(r.story.id));
@@ -153,6 +182,7 @@ export const storiesBar = {
         },
         hasUnseen,
         latestAt: latest.story.createdAt,
+        rank: rankOf(key),
       });
     }
     const authors: StoryBarEntry[] = storyBarOrder(entries).map((e) => ({

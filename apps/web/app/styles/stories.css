@@ -128,6 +128,29 @@
     opacity: 0;
   }
 }
+/* Lecture enchaînée (lot R8s) : d'un auteur au suivant la superposition reste en place (pas de nouveau fondu sur le Fil) ; le cadre
+   entre par un glissement court depuis le côté d'où l'on vient. */
+.story-view--chained {
+  animation: none;
+}
+.story-view__frame[data-arrival="next"] {
+  animation: story-arrive-next 200ms ease-out;
+}
+.story-view__frame[data-arrival="prev"] {
+  animation: story-arrive-prev 200ms ease-out;
+}
+@keyframes story-arrive-next {
+  from {
+    opacity: 0;
+    transform: translateX(8%);
+  }
+}
+@keyframes story-arrive-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-8%);
+  }
+}
 /* Le cadre 9:16 : toute la hauteur de la fenêtre, jamais plus large qu'elle (téléphone : plein écran). */
 .story-view__frame {
   position: relative;
@@ -535,6 +558,24 @@
 button.story-view__pill {
   cursor: pointer;
 }
+/* Auteur précédent / suivant, de part et d'autre du champ de réponse (maquette R8.10 `.r8aut2`). */
+.story-view__author {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--night-ink) 55%, transparent);
+  border-radius: 50%;
+  background: none;
+  color: var(--night-ink);
+  cursor: pointer;
+}
+.story-view__author--next svg {
+  transform: scaleX(-1);
+}
 .story-view__pill--grow {
   flex: 1;
   min-width: 0;
@@ -631,6 +672,9 @@ button.story-view__pill {
 @media (prefers-reduced-motion: reduce) {
   .story-view {
     animation-duration: 120ms;
+  }
+  .story-view__frame[data-arrival] {
+    animation: story-fade 120ms linear;
   }
 }
 

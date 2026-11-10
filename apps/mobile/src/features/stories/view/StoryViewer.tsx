@@ -13,6 +13,7 @@
 // disponible ». Aucune règle de visibilité ici : tout ce qui arrive a déjà été filtré par l'API.
 import { GradientFill, Icon, Text, tokens, useTheme, withAlpha } from "@orasso/design-system/native";
 import {
+  authorSwipe,
   createReplyKeys,
   storyViewerLabels as L,
   replyStillShown,
@@ -71,7 +72,25 @@ const NOTICE_MS = 2600;
 
 type Load = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: StoriesByAuthor };
 
-export function StoryViewer({ authorKey }: { authorKey: string }) {
+/**
+ * Lecture enchaînée (lot R8s) : ce que la lecture d'un auteur sait de la chaîne. Sans `nav`, la visionneuse se ferme à la fin
+ * de l'auteur (anneau d'un profil, story de l'organisateur, mentions). `onAuthor` change d'auteur dans l'état du parent : un
+ * seul écran dans l'historique.
+ */
+export type AuthorNav = {
+  prevKey: string | null;
+  nextKey: string | null;
+  /** On arrive depuis l'auteur suivant (toucher à gauche) : on ouvre sur sa dernière story. */
+  startAtEnd: boolean;
+  fetchAuthor: (key: string) => Promise<StoriesByAuthor>;
+  onAuthor: (dir: "next" | "prev") => void;
+  /** Identifiants d'idempotence des réponses : ils vivent dans le parent persistant, un aller-retour entre auteurs ne les perd pas. */
+  replyKeys: ReturnType<typeof createReplyKeys>;
+  /** « Ne plus voir ses stories » : le parent retire l'auteur des déplacements de la chaîne. */
+  onMuted: () => void;
+};
+
+export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: AuthorNav }) {
   const { t, reducedMotion } = useTheme();
   const c = t.color;
   const router = useRouter();
@@ -87,15 +106,24 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
   const gate = useRef(createRequestGate(cacheScope)).current;
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const changeAuthorRef = useRef<(dir: "next" | "prev") => boolean>(() => false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` relance la lecture (Réessayer).
   useEffect(() => {
     const ticket = gate.start();
     setLoad({ status: "loading" });
-    api
-      .storiesByAuthor(authorKey)
+    (navRef.current ? navRef.current.fetchAuthor(authorKey) : api.storiesByAuthor(authorKey))
       .then((data) => {
         if (!ticket.current()) return;
-        setIndex(storyStartIndex(data.stories));
+        // Une story échue depuis la lecture de la barre : l'auteur n'a plus rien à montrer, on poursuit dans le sens de la lecture.
+        if (
+          data.stories.length === 0 &&
+          navRef.current &&
+          changeAuthorRef.current(navRef.current.startAtEnd ? "prev" : "next")
+        )
+          return;
+        setIndex(navRef.current?.startAtEnd ? Math.max(0, data.stories.length - 1) : storyStartIndex(data.stories));
         setLoad({ status: "ready", data });
       })
       .catch((e) => {
@@ -168,20 +196,36 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     }
   }, [router, reducedMotion, fade, ty, height]);
 
+  // Changer d'auteur (fin de série, toucher à gauche sur la première story, glissement, boutons) : une seule fois par auteur lu.
+  const leaving = useRef(false);
+  const prevKey = nav?.prevKey ?? null;
+  const nextKey = nav?.nextKey ?? null;
+  const changeAuthor = useCallback((dir: "next" | "prev"): boolean => {
+    const n = navRef.current;
+    if (leaving.current || closing.current || !n) return false;
+    if ((dir === "next" ? n.nextKey : n.prevKey) === null) return false;
+    leaving.current = true;
+    n.onAuthor(dir);
+    return true;
+  }, []);
+  changeAuthorRef.current = changeAuthor;
   const count = list.length;
   const goNext = useCallback(() => {
     const step = storyNext(at, count);
-    if (step.kind === "close") close();
-    else setIndex(step.index);
-  }, [at, count, close]);
+    if (step.kind !== "close") return setIndex(step.index);
+    // Fin de l'auteur : le suivant de la chaîne, ou la fermeture après le dernier (et toujours sans chaîne).
+    if (navRef.current?.nextKey) changeAuthor("next");
+    else close();
+  }, [at, count, close, changeAuthor]);
   // Reculer sur la première story la rejoue depuis le début : l'index ne change pas, `replay` change la clé de la minuterie.
   const [replay, setReplay] = useState(0);
   const goPrev = useCallback(() => {
     const step = storyPrev(at);
     if (step.kind !== "story") return;
-    if (step.index === at) setReplay((n) => n + 1);
-    else setIndex(step.index);
-  }, [at]);
+    if (step.index !== at) setIndex(step.index);
+    else if (navRef.current?.prevKey) changeAuthor("prev");
+    else setReplay((n) => n + 1);
+  }, [at, changeAuthor]);
 
   const total = story ? storyDurationMs(story) : 5000;
   // Une vidéo (lot R7g) mène sa barre elle-même (`currentTime / duration`) et passe à la suivante à sa fin.
@@ -218,8 +262,8 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   }, [notice]);
 
   // --- Gestes -----------------------------------------------------------------------------------------------------------
-  const live = useRef({ goNext, goPrev, close, width, reducedMotion, setHeld });
-  live.current = { goNext, goPrev, close, width, reducedMotion, setHeld };
+  const live = useRef({ goNext, goPrev, close, changeAuthor, width, reducedMotion, setHeld });
+  live.current = { goNext, goPrev, close, changeAuthor, width, reducedMotion, setHeld };
   const pan = useMemo(() => {
     let moved = false;
     let held = false;
@@ -259,7 +303,12 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         if (held) return settle();
         if (moved) {
           moved = false;
-          if (shouldCloseOnDrag(g.dy, g.vy)) live.current.close();
+          const swipe = authorSwipe(g.dx, g.dy);
+          if (swipe) {
+            // Glisser à gauche ou à droite : auteur suivant ou précédent (sans effet s'il n'y en a pas).
+            live.current.changeAuthor(swipe);
+            ty.value = withSpring(0);
+          } else if (shouldCloseOnDrag(g.dy, g.vy)) live.current.close();
           else ty.value = withSpring(0);
           return;
         }
@@ -310,9 +359,21 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const [text, setText] = useState("");
   // Envois en cours, par story : on peut répondre à la suivante pendant qu'une réponse part, et le bouton d'une story reste
   // inactif tant que son propre envoi n'est pas résolu. Les identifiants d'idempotence suivent chaque soumission.
-  const replyKeys = useRef(createReplyKeys(randomUUID)).current;
-  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
+  const ownReplyKeys = useRef(createReplyKeys(randomUUID)).current;
+  const replyKeys = nav?.replyKeys ?? ownReplyKeys;
+  const [sending, setSending] = useState<ReadonlySet<string>>(() => new Set(replyKeys.sendingStories()));
   const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
+  // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
+  // du lecteur affiché, pas celui d'un lecteur démonté.
+  useEffect(() => {
+    const sync = (outcome?: { storyId: string; text: string; ok: boolean }) => {
+      setSending(new Set(replyKeys.sendingStories()));
+      // Succès reçu pendant un aller-retour entre auteurs : le brouillon du lecteur affiché, s'il correspond à la soumission, est vidé.
+      if (outcome?.ok && replyStillShown(outcome, shownDraft.current)) setText("");
+    };
+    sync();
+    return replyKeys.subscribe(sync);
+  }, [replyKeys]);
   const shownDraft = useRef({ storyId: storyId as string | null, text });
   shownDraft.current = { storyId, text };
   // Un autre story : le brouillon d'une réponse ne passe pas à la suivante.
@@ -353,7 +414,10 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
     try {
       await api.storyMute(authorKey, true);
       setNotice(L.muted);
-      if (!closing.current) muteTimer.current = setTimeout(close, 1500);
+      // Chaîne en cours : l'auteur masqué ne revient plus par « Auteur précédent ».
+      navRef.current?.onMuted();
+      // Chaîne en cours : on passe à l'auteur suivant au lieu de fermer toute la lecture.
+      if (!closing.current) muteTimer.current = setTimeout(() => (changeAuthor("next") ? undefined : close()), 1500);
     } catch (e) {
       setNotice(errorMessage(e));
     }
@@ -381,7 +445,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
       await api.storyDelete(story.id);
       const left = list.filter((s) => s.id !== story.id).length;
       // La dernière story supprimée : on ferme tout de suite (l'écran « plus disponible » n'a rien à dire de plus).
-      if (left === 0) return close();
+      if (left === 0) return changeAuthor("next") ? undefined : close();
       setRemoved((r) => new Set(r).add(story.id));
       setNotice(L.deleteDone);
     } catch (e) {
@@ -429,6 +493,11 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
         {retry ? (
           <SmButton kind="s" icon="undo" onPress={retry} testID="story-retry">
             {L.retry}
+          </SmButton>
+        ) : null}
+        {retry && nextKey ? (
+          <SmButton kind="s" icon="next" onPress={() => changeAuthor("next")} testID="story-author-next">
+            {L.authorNext}
           </SmButton>
         ) : null}
         <SmButton kind="s" icon="close" onPress={close} testID="story-close">
@@ -574,6 +643,8 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
             mine={mine}
             name={authorName}
             canReply={canReply}
+            onPrevAuthor={prevKey ? () => changeAuthor("prev") : undefined}
+            onNextAuthor={nextKey ? () => changeAuthor("next") : undefined}
             text={text}
             onText={setText}
             sending={sending.has(story.id)}
