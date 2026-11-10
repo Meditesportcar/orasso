@@ -4850,3 +4850,14 @@ Référence : maquette R8.9 (`c-corr`), décisions R8-R9 § 0 et § 9. Aucune AP
 - **« Complet » sur le site** : complet = `remaining <= 0`, texte « Complet » seul (l'effectif n'est pas fiable avec des journées limitées) ; non complet « 58 places exposants sur 60 », ou « 3 places exposants » sans capacité générale. Logique dans `components/eventSeats.ts`, testée. L'appli garde « Complet · 14 exposants » (sa jauge exige la capacité générale ; écart connu, non traité ici).
 - **Recettes** : `tabMatchesList` (nombre de l'onglet égal au nombre de cartes) après chaque changement de lieu des recettes adaptées ; pastille « choisie » = fond et trait identiques ; nouvelles : liste, carte, recherche ; depuis les Pros ; 20 départements (390 px, x1,3, site 1280 px) ; « Complet » du site.
 - Rayons en dur de `ExplorerHead.tsx` remplacés par `tokens.radius.radiusMd` / `radiusSm` (le 9 de la maquette devient 8).
+
+### Lot R8b1 : Tour 2 (relectures Opus et Codex)
+
+Date : 10/11/2026.
+- **Véhicules archivés** : archiver le dernier véhicule actif rend « visiteur » ; l'appli garde alors l'onglet « Garage » tant qu'il existe un véhicule archivé (état vide et ligne « Véhicules archivés » : le seul lien). Sans archivé, un visiteur n'a toujours pas d'onglet « Garage ». Site : l'onglet est gardé pour tous, rien à changer.
+- **Collant** : `TabScreen` repère lui-même l'enfant `StickyHeader` (plus d'indice en dur) ; clés des enfants aplatis tirées du nom du type et de son rang.
+- **Partenaires en panne sur son propre profil** : la case reste (« – », feuille « Réessayer »), comme sur Mon profil.
+- **Garage** : une lecture échouée affiche « Réessayer » (jamais « Ton garage est vide ») et est relancée à l'ouverture de « Garage ». Une seule lecture des véhicules quand tout va bien (le double rechargement vient du rechargement au retour sur l'écran de `useApi`, laissé tel quel : hors périmètre).
+- **Site** : la confirmation de désabonnement est ancrée à la grille d'identité (largeur de la carte) ; le conteneur de requête du pseudo est un enfant dédié, la colonne ne crée plus de contexte d'empilement.
+- **Audit** : la bio n'est exclue que si « plus » existe. Arrondis de mes styles en jetons.
+- **À vérifier sur le Xiaomi** : le collant des onglets sur Android (`stickyHeaderIndices` de React Native) n'est prouvé ici que sur le web.
