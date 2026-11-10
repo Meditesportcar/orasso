@@ -91,11 +91,12 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   // Personnaliser (lot R7a2) : « Garage favori » remonte avant « Agenda », « Agenda » est masqué ; tout persiste après
   // rechargement. Lot R1 : les stations ne se règlent plus.
   await page.goto("/app/accueil/personnaliser");
+  // Lot R8e1 : « Météo de l'événement » prend la place juste après « Prochaine sortie » : un cran de plus dans l'ordre.
   await expect(page.getByTestId("personalize-row-wash")).toHaveCount(0);
   await page.getByTestId("up-favorite_garage").click();
   await expect
     .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("favorite_garage"))
-    .toBe(9);
+    .toBe(10);
   await page.getByTestId("hide-agenda").click();
   await expect
     .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden)
