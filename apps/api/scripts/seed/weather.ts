@@ -56,6 +56,9 @@ const demo: Record<string, Profile> = {
   "expo-rivesaltes-2026": { code: "partly_cloudy", tempMin: 13, tempMax: 22, probability: 10, mm: 0, wind: 18 },
   // Jour J : le Salon Argelès a lieu aujourd'hui (affichage sur la carte d'accès et dans le mode jour J).
   "salon-argeles": { code: "partly_cloudy", tempMin: 16, tempMax: 24, probability: 5, mm: 0, wind: 14 },
+  // Rassemblement du Lydia (en direct, R7-V) : l'Accueil du jour J affiche sa prévision. Il est créé après le premier passage
+  // de ce seed (et recréé quand il est fini) : `seed.ts` rappelle `seedWeather` juste après lui.
+  "rassemblement-du-lydia": { code: "partly_cloudy", tempMin: 15, tempMax: 23, probability: 10, mm: 0, wind: 16 },
 };
 
 export async function seedWeather() {
@@ -81,6 +84,6 @@ export async function seedWeather() {
     added += inserted.length;
   }
   console.log(
-    `Météo : prévisions factices ${added ? "ajoutées" : "déjà présentes"} (Nocturne de Canet mauvaise, Expo Rivesaltes et Salon Argelès bonnes).`,
+    `Météo : prévisions factices ${added ? "ajoutées" : "déjà présentes"} (Nocturne de Canet mauvaise, Expo Rivesaltes, Salon Argelès et Rassemblement du Lydia bonnes).`,
   );
 }

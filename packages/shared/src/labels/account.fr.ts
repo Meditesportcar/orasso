@@ -50,6 +50,9 @@ export const authErrorLabels: Record<string, string> = {
   // Lot 32 : compte banni (connexion refusée).
   BANNED: "Ce compte a été banni d'Orasso. Pour contester, réponds à l'e-mail qui t'a été envoyé.",
 };
+/** Déconnexion du site dont l'API n'a pas confirmé la révocation (panne) : le cookie du navigateur est effacé quand même. */
+export const signOutUnconfirmed = "La déconnexion n'a pas pu être confirmée";
+export const SIGN_OUT_FAILED_PARAM = "deconnexion-echec";
 export const authErrorFallback = "La connexion n'a pas abouti. Réessaie.";
 
 /** Ce qui vaut dans les deux cas (docs/01). */
