@@ -14,13 +14,13 @@ import { storiesService } from "../../src/modules/stories/service";
 import { uploadsService } from "../../src/modules/uploads/service";
 import { reviewedNoPlateCar } from "./photos";
 
-async function viewer(pseudo: string): Promise<Viewer | null> {
+async function viewer(pseudo: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({
     where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`,
   });
   if (!profile) return null;
   const [u] = await db.select().from(t.user).where(eq(t.user.id, profile.userId));
-  return u ? { user: u as AuthUser, profile, session: { secondFactor: null } } : null;
+  return u ? { user: u as AuthUser, profile, session: { secondFactor } } : null;
 }
 
 export async function seedStories() {
@@ -28,8 +28,12 @@ export async function seedStories() {
     console.log("Stories : déjà présentes.");
     return;
   }
+  // Sarah_66 publie au nom de Roues Libres 66 : organisateur connecté avec sa double authentification (comme
+  // `seed/invitations.ts`), sinon le seed s'arrête dès que `DEV_SKIP_2FA` est faux (le VPS le lance à chaque déploiement).
   const [damien, kenji, lea, marc, theo, sarah] = await Promise.all(
-    ["Damien_66", "Kenji_66", "Lea_11", "Marc_66", "Theo_66", "Sarah_66"].map(viewer),
+    ["Damien_66", "Kenji_66", "Lea_11", "Marc_66", "Theo_66", "Sarah_66"].map((pseudo) =>
+      viewer(pseudo, pseudo === "Sarah_66" ? "totp" : null),
+    ),
   );
   if (!damien || !kenji || !lea || !marc || !theo || !sarah) {
     console.log("Stories : comptes absents, rien.");

@@ -63,6 +63,19 @@ export function pickCurrentEvent(events: readonly EventCard[], at: Date): Curren
   return next ? { event: next, phase: "next" } : null;
 }
 
+/**
+ * Lot R7h, tour 4 : ce que le Direct montre de la story de la structure. « Mentions » pendant l'événement ; « Ma story »
+ * dès qu'une story de la structure est en ligne, avec ou sans événement courant ou à venir (le lendemain du dernier
+ * événement, un responsable doit pouvoir retirer la story publiée la veille).
+ */
+export function storySection(
+  current: Pick<CurrentEvent, "phase"> | null,
+  hasMyStories: boolean,
+): { mentions: boolean; mine: boolean; show: boolean } {
+  const mentions = current !== null && current.phase !== "next";
+  return { mentions, mine: mentions || hasMyStories, show: mentions || hasMyStories };
+}
+
 /** Le statut qui sera demandé à l'API quand on bascule (Maintenu ↔ Incertain). */
 export const otherOutlook = (current: EventOutlook): EventOutlook =>
   current === "maintained" ? "uncertain" : "maintained";

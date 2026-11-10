@@ -74,6 +74,7 @@ import {
   accountActive,
   audienceStoryOf,
   authorKeyOf,
+  notMaskedCopy,
   relationOf,
   type StoryRow,
   selectStories,
@@ -515,6 +516,7 @@ export const storiesService = {
             and(
               sql`${stories.deletedAt} is null`,
               sql`${stories.expiresAt} > ${at}`,
+              notMaskedCopy(at),
               ctx.structureId
                 ? and(eq(stories.persona, "organizer"), eq(stories.structureId, ctx.structureId))
                 : ctx.proId

@@ -47,6 +47,7 @@ import { useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
 import { OrgaStory } from "../components/stories/OrgaStory";
+import { mineFlags, showStorySection } from "../components/stories/orga-story-rules";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { now as clockNow } from "../lib/clock";
@@ -103,6 +104,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         )
       : null,
   ]);
+  const mineRead = mineFlags(mine ? (mine.ok ? mine : { ok: false }) : null);
   return {
     event,
     // Aucune adresse de média dans les données de la page (les aperçus se lisent par `/thumb`, dans le navigateur).
@@ -113,8 +115,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       ? { ...mine.data, stories: mine.data.stories.map((x) => ({ ...x, mediaUrl: "", posterUrl: null })) }
       : null,
     storyFailed: Boolean(mentions && !mentions.ok),
+    // Lot R7h, tour 4 : « aucune story » (lecture réussie, vide) n'est pas « lecture en échec » (des stories peuvent être en ligne).
+    storyMineFailed: mineRead.mineFailed,
     storyFieldDay: fieldDay,
-    storyHasMine: Boolean(mine?.ok && mine.data.stories.length > 0),
+    storyHasMine: mineRead.hasMine,
     structureId: membership.structureId,
     storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,
@@ -506,6 +510,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
     storyMentions,
     storyMine,
     storyFailed,
+    storyMineFailed,
     storyNotice,
     storyFieldDay,
     storyHasMine,
@@ -676,13 +681,20 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         </section>
       )}
 
-      {published && (storyFieldDay || storyHasMine) && (
+      {showStorySection({
+        published,
+        fieldDay: storyFieldDay,
+        hasMine: storyHasMine,
+        mineFailed: storyMineFailed,
+        notice: storyNotice,
+      }) && (
         <OrgaStory
           structureId={structureId}
           mentions={storyMentions}
           withMentions={storyFieldDay}
           mine={storyMine}
           failed={storyFailed}
+          mineFailed={storyMineFailed}
           notice={
             storyNotice === "added"
               ? storyShareLabels.added

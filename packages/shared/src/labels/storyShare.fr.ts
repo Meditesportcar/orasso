@@ -23,6 +23,8 @@ export const storyShareLabels = {
   mineTitle: "La story de ta structure",
   mineHint: "Ce que ta structure montre à ses abonnés pendant l'événement. Les ajouts gardent leur auteur en crédit.",
   mineEmpty: "Ta structure n'a pas de story pour le moment.",
+  mineError: "Ta story n'a pas pu être lue. Des stories peuvent être en ligne.",
+  retry: "Réessayer",
   mineAddedBy: (author: string) => `Story de ${author}`,
   remove: "Retirer",
   removeConfirm: "Retirer cette story de la tienne ? L'originale reste chez son auteur.",

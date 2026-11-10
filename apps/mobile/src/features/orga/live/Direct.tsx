@@ -33,6 +33,7 @@ import {
   openAlerts,
   pickCurrentEvent,
   scanSummary,
+  storySection,
 } from "@/lib/orga";
 import { useChannel } from "@/lib/realtime";
 import { useApi } from "@/lib/useApi";
@@ -60,17 +61,77 @@ export function DirectScreen() {
     refreshMs: 60_000,
   });
   const current = useMemo(() => pickCurrentEvent(events.data ?? [], at), [events.data, at]);
+  // Lot R7h, tour 4 : « Ma story » se lit au niveau de la structure, pas de l'événement. Elle reste accessible hors
+  // événement tant qu'une story de la structure est en ligne (une story publiée la veille au soir est servie 24 h, un
+  // autre responsable doit pouvoir la retirer le lendemain), même sans événement courant ni à venir.
+  const myStories = useApi(() => api.storiesByAuthor(storyAuthorKeyOf("structure", structureId)), [structureId], {
+    refreshMs: 60_000,
+  });
+  const hasMyStories = Boolean(myStories.data && myStories.data.stories.length > 0);
   if (!current) {
     return (
-      <TabScreen title={orgaLabels.directTitle} facts={structureName} onRefresh={events.reload}>
+      <TabScreen
+        title={orgaLabels.directTitle}
+        facts={structureName}
+        onRefresh={async () => {
+          await Promise.all([events.reload(), myStories.reload()]);
+        }}
+      >
         <OrgaFailure error={events.error} />
         {events.error ? null : <Muted variant="body">{events.loading ? "Chargement…" : orgaLabels.directEmpty}</Muted>}
+        {storySection(null, hasMyStories).show ? <StoryBlock mentionsCount={undefined} withMentions={false} /> : null}
       </TabScreen>
     );
   }
   // Une instance par événement : changer d'événement repart de zéro (aucun chiffre de l'ancien ne reste affiché).
   return (
-    <DirectEvent key={current.event.id} current={current} structureName={structureName} reloadEvents={events.reload} />
+    <DirectEvent
+      key={current.event.id}
+      current={current}
+      structureName={structureName}
+      reloadEvents={events.reload}
+      hasMyStories={hasMyStories}
+      reloadMyStories={myStories.reload}
+    />
+  );
+}
+
+/** « Ma story » (et « Mentions » pendant l'événement) : deux lignes vers les écrans plein écran. */
+function StoryBlock({ mentionsCount, withMentions }: { mentionsCount: number | undefined; withMentions: boolean }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const router = useRouter();
+  const mentionsLabel =
+    mentionsCount !== undefined ? storyShareLabels.mentionsCount(mentionsCount) : storyShareLabels.mentions;
+  return (
+    <>
+      <SectionTitle>{storyShareLabels.mine}</SectionTitle>
+      <Plate style={styles.block} testID="orga-direct-story">
+        {withMentions ? (
+          <Pressable
+            onPress={() => router.push("/story/mentions" as never)}
+            accessibilityRole="button"
+            accessibilityLabel={mentionsLabel}
+            style={styles.storyRow}
+            testID="orga-direct-mentions"
+          >
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {mentionsLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={() => router.push("/story/ma-story" as never)}
+          accessibilityRole="button"
+          style={styles.storyRow}
+          testID="orga-direct-mystory"
+        >
+          <Text variant="bodyStrong" color={c.plateInk}>
+            {storyShareLabels.mine}
+          </Text>
+        </Pressable>
+      </Plate>
+    </>
   );
 }
 
@@ -78,10 +139,14 @@ function DirectEvent({
   current,
   structureName,
   reloadEvents,
+  hasMyStories,
+  reloadMyStories,
 }: {
   current: CurrentEvent;
   structureName: string;
   reloadEvents: () => Promise<unknown>;
+  hasMyStories: boolean;
+  reloadMyStories: () => Promise<unknown>;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -107,12 +172,6 @@ function DirectEvent({
   // Lot R7h : les stories qui nous identifient (le nombre de « Mentions »), relues avec le reste du direct.
   const { structureId } = useOrga();
   const mentions = useApi(() => api.storyMentions(structureId), [structureId], { enabled: field, refreshMs: 60_000 });
-  // « Ma story » (et ses retraits) reste accessible hors événement tant qu'une story de la structure est en ligne : une
-  // story publiée la veille au soir est servie 24 h, un autre responsable doit pouvoir la retirer le lendemain.
-  const myStories = useApi(() => api.storiesByAuthor(storyAuthorKeyOf("structure", structureId)), [structureId], {
-    refreshMs: 60_000,
-  });
-  const hasMyStories = Boolean(myStories.data && myStories.data.stories.length > 0);
   const at = useNow(60_000);
   // Lot C4a, tour 2 : le mode staff s'ouvre dès J-1 (l'API l'ouvre dès J-1 0 h) pour synchroniser la liste la veille.
   const staffOpen = field || calendarDaysBetween(at, new Date(current.event.startsAt)) <= 1;
@@ -168,6 +227,7 @@ function DirectEvent({
       incidents.reload(),
       scans.reload(),
       field ? presents.reload() : null,
+      reloadMyStories(),
     ]);
   };
 
@@ -318,37 +378,8 @@ function DirectEvent({
         </>
       ) : null}
 
-      {field || hasMyStories ? (
-        <>
-          <SectionTitle>{storyShareLabels.mine}</SectionTitle>
-          <Plate style={styles.block} testID="orga-direct-story">
-            {field ? (
-              <Pressable
-                onPress={() => router.push("/story/mentions" as never)}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions
-                }
-                style={styles.storyRow}
-                testID="orga-direct-mentions"
-              >
-                <Text variant="bodyStrong" color={c.plateInk}>
-                  {mentions.data ? storyShareLabels.mentionsCount(mentions.data.count) : storyShareLabels.mentions}
-                </Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => router.push("/story/ma-story" as never)}
-              accessibilityRole="button"
-              style={styles.storyRow}
-              testID="orga-direct-mystory"
-            >
-              <Text variant="bodyStrong" color={c.plateInk}>
-                {storyShareLabels.mine}
-              </Text>
-            </Pressable>
-          </Plate>
-        </>
+      {storySection(current, hasMyStories).show ? (
+        <StoryBlock mentionsCount={mentions.data?.count} withMentions={storySection(current, hasMyStories).mentions} />
       ) : null}
 
       {field ? (

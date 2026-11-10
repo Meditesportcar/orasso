@@ -23,6 +23,7 @@ import {
   sortAlerts,
   staffRequests,
   staffSummary,
+  storySection,
   toggleRole,
 } from "./orga";
 
@@ -220,5 +221,26 @@ describe("Boîte et accès", () => {
     expect(isTwoFactorError({ code: "two_factor_required" })).toBe(true);
     expect(isTwoFactorError({ code: "forbidden" })).toBe(false);
     expect(isTwoFactorError(null)).toBe(false);
+  });
+});
+
+describe("story de la structure dans le Direct (lot R7h, tour 4)", () => {
+  const past = [event("hier", "2026-10-16T08:00:00Z", "2026-10-16T16:00:00Z")];
+  const dayAfter = new Date("2026-10-17T10:00:00Z"); // J+1 du dernier événement, aucun événement futur
+
+  it("J+1 sans événement futur : pas d'événement courant, mais « Ma story » reste accessible si une story est en ligne", () => {
+    expect(pickCurrentEvent(past, dayAfter)).toBeNull();
+    expect(storySection(null, true)).toEqual({ mentions: false, mine: true, show: true });
+  });
+
+  it("sans événement courant ni story en ligne : rien", () => {
+    expect(storySection(null, false)).toEqual({ mentions: false, mine: false, show: false });
+  });
+
+  it("les mentions ne se montrent que pendant l'événement (jour J ou en cours), pas avant", () => {
+    expect(storySection({ phase: "live" }, false)).toEqual({ mentions: true, mine: true, show: true });
+    expect(storySection({ phase: "today" }, false).mentions).toBe(true);
+    expect(storySection({ phase: "next" }, false).show).toBe(false);
+    expect(storySection({ phase: "next" }, true)).toEqual({ mentions: false, mine: true, show: true });
   });
 });

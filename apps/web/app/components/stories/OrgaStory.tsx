@@ -1,9 +1,10 @@
 import { Button } from "@orasso/design-system/web";
 import { storyShareLabels as L, type StoriesByAuthor, type StoryMentionItem, type StoryMentions } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { apiFetch } from "../../lib/api.client";
+import { rereadPages } from "./mention-pages";
 import "../../styles/stories.css";
 
 // Les stories de l'organisateur (lot R7h, maquette R7.14 `og_men`, `og_add`, `og_mine`) sur la page de l'événement : « Mentions
@@ -36,50 +37,62 @@ const when = (iso: string) =>
   }).format(new Date(iso));
 
 /**
- * Empreinte de la première page des mentions : change quand son contenu change (nouvelle mention, ajout, retrait), pas à
- * chaque rechargement identique (le vote du public revalide la page toutes les quelques secondes).
+ * Les pages suivantes des mentions (« Voir plus »). Elles gardent ce qui est affiché et, à chaque revalidation de la page (le
+ * vote du public la revalide toutes les quelques secondes) (un geste en déclenche une), sont relues à la même
+ * profondeur : un repartage fait ailleurs sur la deuxième page ne laisse plus « Ajouter ». Une lecture dépassée par une
+ * plus récente est rejetée (même règle que l'appli).
  */
-const firstPageKey = (first: StoryMentions | null) =>
-  first
-    ? `${first.count}|${first.nextCursor ?? ""}|${first.items.map((m) => `${m.storyId}:${m.copyId ?? ""}`).join(",")}`
-    : "";
-
-/**
- * Les pages suivantes des mentions (« Voir plus »). Elles se rattachent à l'empreinte de la première page courante et à
- * un compteur de gestes (ajout, retrait) : quand l'une des deux change, les pages suivantes sont vidées et la réponse d'une
- * page demandée pour une première page dépassée est rejetée (même règle que l'appli). Un rechargement qui rend la même
- * première page (vote du public) ne vide rien et n'abandonne pas une page en cours.
- */
-function useMentionPages(structureId: string, first: StoryMentions | null, epoch: number) {
-  const key = `${epoch}#${firstPageKey(first)}`;
+function useMentionPages(structureId: string, first: StoryMentions | null) {
   const [tail, setTail] = useState<{
-    base: string;
     items: StoryMentionItem[];
-    next: string | null | undefined;
+    next: string | null;
+    depth: number;
     busy: boolean;
     error: string | null;
-  } | null>(null);
-  const current = useRef(key);
-  current.current = key;
-  const mine = tail && tail.base === key ? tail : null;
-  const items = mine?.items ?? [];
-  const next = mine && mine.next !== undefined ? mine.next : (first?.nextCursor ?? null);
+  }>({ items: [], next: null, depth: 0, busy: false, error: null });
+  const latest = useRef(tail);
+  latest.current = tail;
+  const generation = useRef(0);
+  const fetchPage = (cursor: string) =>
+    apiFetch<StoryMentions>(`/structures/${structureId}/story-mentions?cursor=${encodeURIComponent(cursor)}`);
+
+  // Revalidation (après un geste aussi : l'action revalide la page) : relire les pages déjà chargées à la même profondeur.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la première page seulement
+  useEffect(() => {
+    const depth = latest.current.depth;
+    if (!first || depth === 0) return;
+    const mine = ++generation.current;
+    void rereadPages(fetchPage, first.nextCursor, depth, () => generation.current === mine).then((out) => {
+      if (!out) return;
+      setTail((t) =>
+        out.ok
+          ? { items: out.items, next: out.next, depth: out.depth, busy: false, error: null }
+          : { ...t, busy: false, error: out.error },
+      );
+    });
+  }, [first]);
+
+  const next = tail.depth > 0 ? tail.next : (first?.nextCursor ?? null);
   const more = async () => {
-    if (!first || !next || mine?.busy) return;
-    const base = key;
-    setTail({ base, items, next, busy: true, error: null });
-    const res = await apiFetch<StoryMentions>(
-      `/structures/${structureId}/story-mentions?cursor=${encodeURIComponent(next)}`,
-    );
-    // Première page remplacée entre-temps : cette réponse est périmée, elle ne s'ajoute à rien.
-    if (current.current !== base) return;
+    if (!first || !next || tail.busy) return;
+    const mine = ++generation.current;
+    setTail({ ...tail, busy: true, error: null });
+    const res = await fetchPage(next);
+    // Une relecture plus récente a pris la main entre-temps : cette réponse est périmée.
+    if (generation.current !== mine) return;
     setTail(
       res.ok
-        ? { base, items: [...items, ...res.data.items], next: res.data.nextCursor, busy: false, error: null }
-        : { base, items, next, busy: false, error: res.error.message },
+        ? {
+            items: [...tail.items, ...res.data.items.filter((m) => !tail.items.some((o) => o.storyId === m.storyId))],
+            next: res.data.nextCursor,
+            depth: tail.depth + 1,
+            busy: false,
+            error: null,
+          }
+        : { ...tail, busy: false, error: res.error.message },
     );
   };
-  return { items, next, busy: Boolean(mine?.busy), error: mine?.error ?? null, more };
+  return { items: tail.items, next, busy: tail.busy, error: tail.error, more };
 }
 
 export function OrgaStory({
@@ -87,6 +100,7 @@ export function OrgaStory({
   mentions,
   mine,
   failed,
+  mineFailed,
   notice,
   withMentions,
 }: {
@@ -94,23 +108,23 @@ export function OrgaStory({
   mentions: StoryMentions | null;
   mine: StoriesByAuthor | null;
   failed: boolean;
+  /** La lecture de « Ma story » a échoué : la section reste, avec l'erreur et « Réessayer ». */
+  mineFailed: boolean;
   notice: string | null;
   /** Les mentions seulement le jour de l'événement ; « Ma story » (et ses retraits) tant qu'une story est en ligne. */
   withMentions: boolean;
 }) {
   const nav = useNavigation();
   const busy = nav.state !== "idle";
+  const revalidator = useRevalidator();
   const stories = mine?.stories ?? [];
-  // Un geste (ajout, retrait) change ce que les pages suivantes montrent : on les vide, la première page est relue.
-  const [epoch, setEpoch] = useState(0);
-  const intent = nav.formData ? String(nav.formData.get("intent") ?? "") : "";
-  useEffect(() => {
-    if (intent === "story-share" || intent === "story-remove") setEpoch((n) => n + 1);
-  }, [intent]);
-  const pages = useMentionPages(structureId, mentions, epoch);
+  const pages = useMentionPages(structureId, mentions);
   // « Ignorer » (comme dans l'appli) laisse la mention de côté le temps de la page ; rien n'est enregistré.
   const [ignored, setIgnored] = useState<ReadonlySet<string>>(new Set());
-  const shown = [...(mentions?.items ?? []), ...pages.items].filter((m) => !ignored.has(m.storyId));
+  const firstIds = new Set((mentions?.items ?? []).map((m) => m.storyId));
+  const shown = [...(mentions?.items ?? []), ...pages.items.filter((m) => !firstIds.has(m.storyId))].filter(
+    (m) => !ignored.has(m.storyId),
+  );
   return (
     <section className="orga__panel s-stack" aria-labelledby="story-title" data-testid="orga-story">
       {withMentions ? (
@@ -207,6 +221,23 @@ export function OrgaStory({
       </h2>
       <p className="s-muted">{L.mineHint}</p>
       {mine && stories.length === 0 ? <p className="s-muted">{L.mineEmpty}</p> : null}
+      {mineFailed ? (
+        <p className="s-notice" role="alert" data-testid="orga-mystory-error">
+          {L.mineError}
+        </p>
+      ) : null}
+      {failed || mineFailed ? (
+        <Button
+          variant="secondary"
+          icon="undo"
+          type="button"
+          disabled={revalidator.state !== "idle"}
+          onClick={() => revalidator.revalidate()}
+          data-testid="orga-story-retry"
+        >
+          {L.retry}
+        </Button>
+      ) : null}
       <ul className="ostory" data-testid="orga-mystory">
         {stories.map((s) => (
           <li key={s.id} className="ostory__row" data-testid="orga-mystory-row">
