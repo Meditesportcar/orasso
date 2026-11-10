@@ -3,6 +3,7 @@ import { proActivityLabels } from "@orasso/shared";
 import { type Browser, expect, type Locator, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { MOBILE, SEED_PASSWORD } from "./helpers";
+import { tabMatchesList } from "./helpers/lotr8x";
 import { RELAIS } from "./relais";
 
 // Lot R2 (refonte de l'Explorer, maquette « Explorer R2 »), côté appli (version web compilée), connecté en Kenji (seed) :
@@ -161,14 +162,17 @@ test("Explorer R2 : segments, feuilles, mémorisation, Personnes et crews sans a
     await expect(pill(page, "around-open")).toContainText("(11)");
     expect(await selected(page, "around-open")).toBe(true);
     await expect(page.getByTestId("around-open")).toContainText("(11)", { timeout: 30_000 });
+    await tabMatchesList(page);
     await setWhere(page, "all");
     await expect(pill(page, "around-open")).toContainText("Partout en France");
     await expect(page.getByTestId("around-open")).toContainText("Partout en France", { timeout: 30_000 });
+    await tabMatchesList(page);
     // Retour à Mon coin : la pastille repasse en contour.
     await setWhere(page, "mine");
     await expect(pill(page, "around-open")).toContainText("Mon coin");
     expect(await selected(page, "around-open")).toBe(false);
     await expect(page.getByTestId("around-open")).not.toContainText("Partout en France");
+    await tabMatchesList(page);
 
     // --- Trier : un toucher suffit, la feuille se ferme ------------------------------------------------------------
     await pill(page, "sort-open").click();

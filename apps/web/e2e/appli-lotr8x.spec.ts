@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { SEED_PASSWORD } from "./helpers";
+import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { tabMatchesList } from "./helpers/lotr8x";
 
 // Lot R8x (maquette R8.9, variante A) : le haut compact de l'Explorer (onglets soulignés avec « Événements · N », champ et
 // bouton « Filtres » sur une ligne, puces serrées, plus de ligne de décompte) et la carte d'un événement sans vide ni
@@ -16,7 +17,7 @@ async function afterOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function openExplorer(page: Page, width: number, scale: number) {
+async function openExplorer(page: Page, width: number, scale: number, email = "kenji@orasso.local") {
   await page.setViewportSize({ width, height: 860 });
   await page.addInitScript(
     ([t, s]) => {
@@ -28,7 +29,7 @@ async function openExplorer(page: Page, width: number, scale: number) {
   );
   await page.goto(`${APP}/auth`);
   await afterOpening(page);
-  await page.getByLabel("E-mail").fill("kenji@orasso.local");
+  await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 60_000 });
@@ -151,11 +152,63 @@ test("appli Explorer R8x : Pros et Personnes et crews gardent leur contenu, sous
   await expect(page.getByTestId("job-open")).toBeVisible();
   await expect(page.getByTestId("pro-sort-open")).toBeVisible();
   await expect(page.getByTestId("events-q")).toHaveAttribute("placeholder", "Un pro, un métier, une ville");
-  // Le nombre d'événements reste dans son onglet quand on regarde les Pros.
-  await expect(page.getByTestId("segment-evenements")).toContainText(/Événements · \d+/);
   await page.getByTestId("segment-personnes").click();
   await expect(page.getByTestId("people-q")).toBeVisible();
   await page.getByRole("button", { name: "Filtres", exact: true }).click();
   await expect(page.getByTestId("people-filters-panel")).toBeVisible();
   await page.getByTestId("sheet-close").click();
 });
+
+test("appli Explorer R8x : le nombre de l'onglet suit la requête, en liste, en carte et depuis les Pros", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openExplorer(page, 390, 1);
+  const tab = page.getByTestId("segment-evenements");
+  await tabMatchesList(page);
+  // Liste -> carte -> recherche : le nombre et la carte parlent du même résultat.
+  await page.getByTestId("map-toggle").click();
+  await page.getByTestId("events-q").fill("Lydia");
+  await expect(tab).toContainText("Événements · 1", { timeout: 30_000 });
+  await expect(page.getByTestId("map-day-all")).toContainText("1 événement", { timeout: 30_000 });
+  await page.getByTestId("list-toggle").click();
+  await expect(page.getByTestId("event-row")).toHaveCount(1, { timeout: 30_000 });
+  await expect(tab).toContainText("Événements · 1");
+  await page.getByTestId("events-q").fill("");
+  await tabMatchesList(page);
+  const before = Number(/Événements · (\d+)/.exec(await tab.innerText())?.[1]);
+  // Depuis les Pros, un changement de lieu change le nombre de l'onglet (jamais l'ancien nombre).
+  await page.getByTestId("segment-pros").click();
+  await page.getByTestId("around-open").click();
+  await page.getByTestId("around-all").click();
+  await page.getByTestId("where-apply").click();
+  await expect
+    .poll(async () => Number(/Événements · (\d+)/.exec(await tab.innerText())?.[1] ?? "NaN"), { timeout: 30_000 })
+    .not.toBe(before);
+  await page.getByTestId("segment-evenements").click();
+  await tabMatchesList(page);
+});
+
+for (const [width, scale] of [
+  [390, 1],
+  [390, 1.3],
+] as const) {
+  test(`appli Explorer R8x : 20 départements, la pastille « Mon coin » tient dans l'écran (${width} px, x${scale})`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const pseudo = `Coin20_${unique()}`;
+    const cookie = await signUpApi(pseudo);
+    const depts = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));
+    await apiCall(cookie, "PATCH", "/me/profile", { departments: depts });
+    await openExplorer(page, width, scale, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+    const pill = page.getByTestId("around-open");
+    await expect(pill).toContainText("20 départements", { timeout: 30_000 });
+    const b = await pill.boundingBox();
+    if (!b) throw new Error("pastille sans boîte");
+    expect(b.x).toBeGreaterThanOrEqual(0);
+    expect(b.x + b.width).toBeLessThanOrEqual(width);
+    // Rien ne fait défiler la page à l'horizontale.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}

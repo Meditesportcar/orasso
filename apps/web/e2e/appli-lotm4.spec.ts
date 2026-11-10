@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { addVehicleApi, apiCall, decideApi, login, MOBILE, randomPlate, signUpApi, unique } from "./helpers";
+import { tabMatchesList } from "./helpers/lotr8x";
 import { RELAIS } from "./relais";
 
 // Lot M4, côté appli (version web de recette) : la feuille de candidature (« Avec quel véhicule ? », « Suivre » cochée
@@ -320,15 +321,21 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("around-sheet")).toHaveCount(0);
       await expect(page.getByTestId("around-open")).toContainText("(75)");
       await expect(page.getByTestId("around-open")).toContainText("(75)", { timeout: 30_000 });
+      await tabMatchesList(page);
       await shot(page, `explorer-ailleurs-${theme}`);
       await page.getByTestId("around-open").click();
       await page.getByTestId("around-mine").click();
       await page.getByTestId("where-apply").click();
       await expect(page.getByTestId("around-open")).toContainText("Mon coin");
       // Pastille en contour : son fond n'est plus celui de l'encre (celui du segment actif).
-      const fond = (id: string) => page.getByTestId(id).evaluate((el) => getComputedStyle(el).backgroundColor);
-      expect(await fond("around-open")).not.toBe(await fond("segment-evenements"));
+      // En contour : le fond n'est pas celui du trait (choisie, la pastille est pleine : fond et trait de l'encre).
+      const pleine = await page.getByTestId("around-open").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return cs.backgroundColor === cs.borderTopColor;
+      });
+      expect(pleine).toBe(false);
       await expect(page.getByTestId("around-open")).not.toContainText("(75)");
+      await tabMatchesList(page);
       // Gardé pour la prochaine visite.
       await goto(page, "/explorer");
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés", { timeout: 30_000 });

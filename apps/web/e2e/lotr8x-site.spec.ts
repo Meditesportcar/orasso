@@ -1,5 +1,5 @@
 import { expect, type Locator, test } from "@playwright/test";
-import { loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { apiCall, loginInBrowser, MOBILE, SEED_PASSWORD, setTheme, signUpApi, unique } from "./helpers";
 
 // Lot R8x (maquette R8.9, variante A), côté site : le haut compact de l'Explorer (onglets soulignés avec « Événements · N »,
 // champ et bouton « Filtres » sur une ligne, puces serrées, plus de ligne de décompte) et la carte d'un événement (jauge
@@ -70,7 +70,7 @@ for (const [size, viewport] of [
       const lydia = tiles.filter({ hasText: "Rassemblement du Lydia" }).first();
       await lydia.scrollIntoViewIfNeeded();
       await expect(lydia.getByTestId("event-waitlist")).toContainText("Liste d'attente");
-      await expect(lydia.getByTestId("event-seats")).toContainText("Complet ·");
+      await expect(lydia.getByTestId("event-seats")).toHaveText("Complet");
       const wait = await box(lydia.getByTestId("event-waitlist"));
       const seats = await box(lydia.getByTestId("event-seats"));
       const tile = await box(lydia);
@@ -101,4 +101,46 @@ test("site Explorer R8x : Pros et Personnes et crews gardent leur contenu sous l
   await expect(page.getByTestId("segment-personnes")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("people-filters")).toHaveAttribute("aria-label", "Filtres");
   await expect(page.getByTestId("people-q")).toBeVisible();
+});
+
+for (const [size, viewport] of [
+  ["390", MOBILE],
+  ["1280", DESKTOP],
+] as const) {
+  test(`site Explorer R8x : 20 départements, la pastille « Mon coin » ne fait pas déborder (${size} px)`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const pseudo = `Coin20_${unique()}`;
+    const cookie = await signUpApi(pseudo);
+    await apiCall(cookie, "PATCH", "/me/profile", {
+      departments: Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0")),
+    });
+    await page.setViewportSize(viewport);
+    await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, SEED_PASSWORD, "/app");
+    await page.goto("/app/explorer?segment=evenements");
+    const pill = page.getByTestId("around-open");
+    await expect(pill).toContainText("20 départements", { timeout: 30_000 });
+    const b = await box(pill);
+    expect(b.x + b.width).toBeLessThanOrEqual(viewport.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
+
+test("site Explorer R8x : le décompte « Complet » suit le reste de places (journées limitées, capacité générale absente)", async ({
+  page,
+}) => {
+  await page.setViewportSize(MOBILE);
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+  await page.goto("/app/explorer?segment=evenements&autour=partout");
+  const seats = page.getByTestId("event-seats");
+  await expect(seats.first()).toBeVisible({ timeout: 30_000 });
+  // Jamais « Complet · N exposants » sur le site (N n'est pas un effectif fiable) ; la puce suit « Complet ».
+  for (const text of await seats.allInnerTexts()) expect(text).not.toMatch(/Complet ·/);
+  const tiles = page.getByTestId("event-tile");
+  for (let i = 0; i < (await tiles.count()); i++) {
+    const t = tiles.nth(i);
+    const complet = (await t.getByTestId("event-seats").innerText()) === "Complet";
+    expect(await t.getByTestId("event-waitlist").count()).toBe(complet ? 1 : 0);
+  }
 });
