@@ -142,6 +142,36 @@ describe("pager des mentions (hook)", () => {
     expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
   });
 
+  it("un geste revenu pendant le premier « Voir plus » (première page identique) : la réponse est relue aussitôt", async () => {
+    const slow = deferred();
+    let copy: string | null = "copie-b2";
+    const calls: string[] = [];
+    let first = true;
+    const fetchPage: FetchPage = async (c) => {
+      calls.push(c);
+      if (first) {
+        first = false;
+        return slow.promise;
+      }
+      return page(["b1", "b2"], null, copy ? { b2: copy } : {});
+    };
+    const pager = new MentionPager(fetchPage, () => undefined);
+    pager.sync(firstPage(["a1"], "c2"));
+    const pending = pager.more(); // profondeur zéro, réponse retardée
+    // Pendant ce temps, l'organisateur retire la copie de b2 depuis « Ma story » : même première page, relecture forcée.
+    copy = null;
+    pager.sync(firstPage(["a1"], "c2"), true);
+    expect(pager.state.busy).toBe(true);
+    // La réponse lue avant le retrait arrive, avec la copie supprimée.
+    slow.resolve(page(["b1", "b2"], null, { b2: "copie-b2" }));
+    await pending;
+    await flush();
+    expect(calls).toEqual(["c2", "c2"]);
+    expect(pager.state.busy).toBe(false);
+    expect(pager.state.depth).toBe(1);
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
+  });
+
   it("une première page qui change pendant le premier « Voir plus » (profondeur zéro) jette la réponse et reprend du nouveau curseur", async () => {
     const old = deferred();
     const calls: string[] = [];

@@ -55,7 +55,7 @@ function useMentionPages(structureId: string, first: StoryMentions | null, after
       ),
   );
   // Chaque nouvelle première page (revalidation, geste) : le pager relit les pages chargées et écarte les lectures dépassées ;
-  // au retour d'un geste de la personne (une confirmation est affichée), il relit même si la première page n'a pas changé.
+  // au retour d'un geste de la personne (`afterAction`, une fois par geste), il relit même si la première page n'a pas changé.
   // biome-ignore lint/correctness/useExhaustiveDependencies: déclenchée par la première page et par le retour d'un geste
   useEffect(() => pager.sync(first, afterAction), [first, afterAction]);
   const next = state.depth > 0 ? state.next : (first?.nextCursor ?? null);
@@ -69,6 +69,7 @@ export function OrgaStory({
   failed,
   mineFailed,
   notice,
+  afterAction,
   withMentions,
 }: {
   structureId: string;
@@ -78,6 +79,12 @@ export function OrgaStory({
   /** La lecture de « Ma story » a échoué : la section reste, avec l'erreur et « Réessayer ». */
   mineFailed: boolean;
   notice: string | null;
+  /**
+   * Ce chargement revient d'un geste de la personne (« ?story=added|removed » dans l'adresse) : les pages « Voir plus » sont
+   * relues une fois, même si la première page n'a pas changé. Vient du chargeur, pas du message affiché (qui reste visible
+   * une revalidation de plus) : une seule relecture forcée par geste.
+   */
+  afterAction: boolean;
   /** Les mentions seulement le jour de l'événement ; « Ma story » (et ses retraits) tant qu'une story est en ligne. */
   withMentions: boolean;
 }) {
@@ -85,7 +92,7 @@ export function OrgaStory({
   const busy = nav.state !== "idle";
   const revalidator = useRevalidator();
   const stories = mine?.stories ?? [];
-  const pages = useMentionPages(structureId, mentions, Boolean(notice));
+  const pages = useMentionPages(structureId, mentions, afterAction);
   // « Ignorer » (comme dans l'appli) laisse la mention de côté le temps de la page ; rien n'est enregistré.
   const [ignored, setIgnored] = useState<ReadonlySet<string>>(new Set());
   const firstIds = new Set((mentions?.items ?? []).map((m) => m.storyId));
