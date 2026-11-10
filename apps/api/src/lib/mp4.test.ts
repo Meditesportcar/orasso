@@ -10,8 +10,11 @@ import {
   box,
   chunksTrack,
   FAKE_PLACE,
+  manyPcmTrack,
   mebxKeys,
   metaEntry,
+  nal,
+  nalTrack,
   pcmTrack,
   sampledTrack,
   shrinkBox,
@@ -19,6 +22,7 @@ import {
   withLocation,
   withMdatGap,
   withMdatTrack,
+  withStsdTail,
 } from "../../test/mp4-builders";
 import { Mp4Error, readMp4Buffer, readMp4File, stripMp4Metadata } from "./mp4";
 
@@ -558,6 +562,16 @@ const gpxPayload = Buffer.from(
   "latin1",
 );
 
+/** Octets qui diffèrent entre deux tampons de même longueur. */
+const changed = (a: Buffer, b: Buffer): number => {
+  expect(a.length).toBe(b.length);
+  let count = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) count++;
+  return count;
+};
+/** Les SEI de x264 (une ligne de réglages dans la première image) sont les seuls octets d'image changés (tour 7) : bien moins de 4 Ko. */
+const SEI_ONLY = 4000;
+
 const failure = (p: Promise<unknown>) =>
   p.then(
     () => null,
@@ -619,7 +633,8 @@ describe("effacement par liste blanche (stripMp4Metadata, tour 5)", () => {
       await writeFile(path, file);
       await stripMp4Metadata(path);
       const out = await readFile(path);
-      expect(mediaBytes(out).equals(mediaBytes(file))).toBe(true);
+      expect(changed(mediaBytes(out), mediaBytes(file))).toBeLessThan(SEI_ONLY);
+      expect(out.includes("x264 - core")).toBe(false);
       expect(mediaBytes(out).length).toBeGreaterThan(100_000);
       const at = file.indexOf(gpxPayload);
       expect(out.subarray(at, at + gpxPayload.length).every((b) => b === 0)).toBe(true);
@@ -817,7 +832,7 @@ describe("effacement de mdat hors des échantillons vidéo et son (tour 6)", () 
       const a = mdatOf(file);
       const b = mdatOf(out);
       const gapAt = at - a.at - 8;
-      expect(b.body.subarray(0, gapAt).equals(a.body.subarray(0, gapAt))).toBe(true);
+      expect(changed(b.body.subarray(0, gapAt), a.body.subarray(0, gapAt))).toBeLessThan(SEI_ONLY);
       expect(b.body.subarray(gapAt + freeGps.length).equals(a.body.subarray(gapAt + freeGps.length))).toBe(true);
       const after = await readMp4File(path);
       expect(after.durationMs).toBe(before.durationMs);
@@ -831,7 +846,7 @@ describe("effacement de mdat hors des échantillons vidéo et son (tour 6)", () 
       for (const name of ["story-2s.mp4", "story-hevc.mp4", "story-paysage-2s.mp4"]) {
         const original = await fixture(name);
         const { out } = await strip(dir, original, name);
-        expect(mdatOf(out).body.equals(mdatOf(original).body), name).toBe(true);
+        expect(changed(mdatOf(out).body, mdatOf(original).body), name).toBeLessThan(SEI_ONLY);
       }
     });
   });
@@ -852,7 +867,7 @@ describe("effacement de mdat hors des échantillons vidéo et son (tour 6)", () 
         expect(out.subarray(at + pcm.length).every((b) => b === 0)).toBe(true);
         // L'image et le son AAC d'origine aussi.
         const kept = mdatOf(original).body.length;
-        expect(mdatOf(out).body.subarray(0, kept).equals(mdatOf(file).body.subarray(0, kept))).toBe(true);
+        expect(changed(mdatOf(out).body.subarray(0, kept), mdatOf(file).body.subarray(0, kept))).toBeLessThan(SEI_ONLY);
       });
     }
   });
@@ -947,7 +962,7 @@ describe("extensions des descriptions, plages fusionnées, collision (tour 6, co
       for (const trace of [FAKE_PLACE, "42.6887", "uuid", "zzzz"]) expect(out.includes(trace), trace).toBe(false);
       expect(out.includes(avcC)).toBe(true);
       expect(out.includes(esds)).toBe(true);
-      expect(mdatOf(out).equals(mdatOf(file))).toBe(true);
+      expect(changed(mdatOf(out), mdatOf(file))).toBeLessThan(SEI_ONLY);
       const after = await readMp4File(path);
       expect([after.durationMs, after.h264, after.hasAudio, after.width]).toEqual([
         before.durationMs,
@@ -958,7 +973,7 @@ describe("extensions des descriptions, plages fusionnées, collision (tour 6, co
     });
   });
 
-  it("les descriptions des fixtures (avc1, mp4a, hvc1) gardent chacune de leurs boîtes : stsd identique avant et après", async () => {
+  it("les descriptions des fixtures (avc1, mp4a, hvc1) gardent chacune de leurs boîtes : stsd identique avant et après (hors nom du compresseur et SEI de la configuration hvcC)", async () => {
     await workDir(async (dir) => {
       for (const name of ["story-2s.mp4", "story-hevc.mp4", "story-paysage-2s.mp4"]) {
         const original = await fixture(name);
@@ -966,12 +981,22 @@ describe("extensions des descriptions, plages fusionnées, collision (tour 6, co
         await writeFile(path, original);
         await stripMp4Metadata(path);
         const out = await readFile(path);
+        // Seuls changent le nom du compresseur (32 octets) d'une description vidéo et un SEI de hvcC (ligne de x265).
+        const stsdAt = original.indexOf("stsd");
+        expect(
+          changed(out.subarray(stsdAt - 4, stsdAt + 400), original.subarray(stsdAt - 4, stsdAt + 400)),
+        ).toBeLessThan(name === "story-hevc.mp4" ? 400 : 33);
         for (let from = original.indexOf("stsd"); from >= 0; from = original.indexOf("stsd", from + 1)) {
           const size = original.readUInt32BE(from - 4);
-          expect(
-            out.subarray(from - 4, from - 4 + size).equals(original.subarray(from - 4, from - 4 + size)),
-            name,
-          ).toBe(true);
+          for (const type of ["avcC", "esds", "pasp", "colr"]) {
+            const box = original.indexOf(type, from);
+            if (box < 0 || box > from + size) continue;
+            const length = original.readUInt32BE(box - 4);
+            expect(
+              out.subarray(box - 4, box - 4 + length).equals(original.subarray(box - 4, box - 4 + length)),
+              name + type,
+            ).toBe(true);
+          }
         }
       }
     });
@@ -983,9 +1008,9 @@ describe("extensions des descriptions, plages fusionnées, collision (tour 6, co
     const probe = Buffer.alloc(100, 0x42);
     // Une piste vidéo supplémentaire dont 1 000 morceaux visent le même bloc (probe), au milieu du bruit.
     const payload = Buffer.concat([junk, probe, junk]);
-    const delta = chunksTrack("vide", "avc1", Array(1000).fill(0), 100).length;
+    const delta = chunksTrack("vide", "mp4v", Array(1000).fill(0), 100).length;
     const aimed = original.length + delta + junk.length;
-    const { file } = withMdatTrack(original, () => chunksTrack("vide", "avc1", Array(1000).fill(aimed), 100), payload);
+    const { file } = withMdatTrack(original, () => chunksTrack("vide", "mp4v", Array(1000).fill(aimed), 100), payload);
     await workDir(async (dir) => {
       const path = join(dir, "a.mp4");
       await writeFile(path, file);
@@ -1015,13 +1040,218 @@ describe("extensions des descriptions, plages fusionnées, collision (tour 6, co
       await stripMp4Metadata(path);
       const out = await readFile(path);
       const at = firstVideo + delta;
-      expect(out.subarray(at, at + 128).equals(file.subarray(at, at + 128))).toBe(true);
+      expect(changed(out.subarray(at, at + 128), file.subarray(at, at + 128))).toBeLessThan(128); // seul le SEI de x264 change
       expect(out.subarray(at, at + 128).some((b) => b !== 0)).toBe(true);
-      expect(
-        mdatOf(out)
-          .subarray(0, original.length - 3515)
-          .equals(mdatOf(file).subarray(0, original.length - 3515)),
-      ).toBe(true);
+      const kept = original.length - 3515;
+      expect(changed(mdatOf(out).subarray(0, kept), mdatOf(file).subarray(0, kept))).toBeLessThan(SEI_ONLY);
+    });
+  });
+});
+
+// ─── Tour 7 : coût du PCM, longues tables, restes de stsd, SEI des images, mineurs ─────────────────────────────────────
+
+describe("nettoyage borné et sans fuite (tour 7)", () => {
+  const workDir = async <T>(run: (dir: string) => Promise<T>): Promise<T> => {
+    const dir = await mkdtemp(join(tmpdir(), "orasso-strip7-"));
+    try {
+      return await run(dir);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  const stripFile = async (dir: string, file: Buffer, name = "a.mp4") => {
+    const path = join(dir, name);
+    await writeFile(path, file);
+    await stripMp4Metadata(path);
+    return { path, out: await readFile(path) };
+  };
+
+  it("4 000 descriptions de son et 40 000 morceaux : refusé tout de suite (plafond de 16 descriptions), pas 8 s de calcul", async () => {
+    const original = await fixture("story-2s.mp4");
+    const payload = Buffer.alloc(16, 7);
+    const zeros = Array.from({ length: 40_000 }, () => 0);
+    const aimed = original.length + manyPcmTrack(4000, zeros, 1, 4000).length;
+    const aimedAll = zeros.map(() => aimed);
+    const { file } = withMdatTrack(original, () => manyPcmTrack(4000, aimedAll, 1, 4000), payload);
+    await workDir(async (dir) => {
+      const path = join(dir, "a.mp4");
+      await writeFile(path, file);
+      const start = performance.now();
+      expect(await kind(stripMp4Metadata(path))).toBe("unreadable");
+      expect(performance.now() - start).toBeLessThan(200);
+    });
+  });
+
+  it("16 descriptions et 40 000 morceaux de son PCM : accepté en moins de 500 ms, le son visé est intact", async () => {
+    const original = await fixture("story-2s.mp4");
+    const payload = Buffer.alloc(16, 7);
+    const zeros = Array.from({ length: 40_000 }, () => 0);
+    const aimed = original.length + manyPcmTrack(16, zeros, 1, 16).length;
+    const aimedAll = zeros.map(() => aimed);
+    const { file } = withMdatTrack(original, () => manyPcmTrack(16, aimedAll, 1, 16), payload);
+    await workDir(async (dir) => {
+      const path = join(dir, "a.mp4");
+      await writeFile(path, file);
+      const start = performance.now();
+      await stripMp4Metadata(path);
+      expect(performance.now() - start).toBeLessThan(500);
+      expect((await readFile(path)).subarray(aimed, aimed + 4).equals(payload.subarray(0, 4))).toBe(true);
+    });
+  });
+
+  it("200 000 références au même bloc : pas d'erreur interne (RangeError), le bloc visé reste", async () => {
+    const original = await fixture("story-2s.mp4");
+    const probe = Buffer.alloc(100, 0x42);
+    const payload = Buffer.concat([Buffer.alloc(300, 0x41), probe, Buffer.alloc(300, 0x41)]);
+    const zeros = Array.from({ length: 200_000 }, () => 0);
+    const aimed = original.length + chunksTrack("vide", "mp4v", zeros, 100).length + 300;
+    const aimedAll = zeros.map(() => aimed);
+    const { file } = withMdatTrack(original, () => chunksTrack("vide", "mp4v", aimedAll, 100), payload);
+    await workDir(async (dir) => {
+      const { out } = await stripFile(dir, file);
+      expect(out.subarray(aimed, aimed + 100).equals(probe)).toBe(true);
+      expect(out.subarray(aimed - 300, aimed).every((b) => b === 0)).toBe(true);
+    });
+  });
+
+  it("20 000 trous dans mdat : effacés, les échantillons entre deux restent, en peu de temps", async () => {
+    const original = await fixture("story-2s.mp4");
+    const unit = Buffer.concat([Buffer.alloc(4, 0x42), Buffer.alloc(4, 0x41)]);
+    const payload = Buffer.concat(Array.from({ length: 20_000 }, () => unit));
+    const zeros = Array.from({ length: 20_000 }, () => 0);
+    const at = original.length + chunksTrack("vide", "mp4v", zeros, 4).length;
+    const offsets = zeros.map((_, i) => at + i * 8);
+    const { file } = withMdatTrack(original, () => chunksTrack("vide", "mp4v", offsets, 4), payload);
+    await workDir(async (dir) => {
+      const start = performance.now();
+      const { out } = await stripFile(dir, file);
+      expect(performance.now() - start).toBeLessThan(3000);
+      for (const i of [0, 1, 9_999, 19_999]) {
+        expect(out.subarray(at + i * 8, at + i * 8 + 4).equals(Buffer.alloc(4, 0x42))).toBe(true);
+        expect(out.subarray(at + i * 8 + 4, at + i * 8 + 8).every((b) => b === 0)).toBe(true);
+      }
+    });
+  });
+
+  it("une boîte tronquée après les descriptions de stsd, avec des coordonnées : lecteur puis nettoyage, absente du fichier enregistré", async () => {
+    const original = await fixture("story-2s.mp4");
+    const tail = Buffer.alloc(8 + 60);
+    tail.writeUInt32BE(0x4000, 0); // annonce bien plus que ce qui reste
+    tail.write("gps ", 4, "latin1");
+    tail.write(`${FAKE_PLACE} 42.6887,2.8948`, 8, "latin1");
+    const file = withStsdTail(original, tail);
+    expect(file.includes(FAKE_PLACE)).toBe(true);
+    const before = await readMp4Buffer(file); // 1. le lecteur accepte
+    await workDir(async (dir) => {
+      const { path, out } = await stripFile(dir, file); // 2. le nettoyage efface
+      expect(out.includes(FAKE_PLACE)).toBe(false);
+      expect(out.includes("42.6887")).toBe(false);
+      expect(out.length).toBe(file.length);
+      expect((await readMp4File(path)).durationMs).toBe(before.durationMs);
+    });
+  });
+
+  it("le PCM in24 / in32 / fl32 / fl64 en version 0 : les bits viennent du format, un champ en désaccord est refusé", async () => {
+    const original = await fixture("story-2s.mp4");
+    const frames = 480;
+    await workDir(async (dir) => {
+      for (const [format, bits] of [
+        ["in24", 24],
+        ["in32", 32],
+        ["fl32", 32],
+        ["fl64", 64],
+      ] as const) {
+        const pcm = Buffer.alloc(frames * 2 * (bits / 8), 5);
+        const ok = withMdatTrack(original, (o) => pcmTrack(0, o, frames, format, bits), pcm);
+        const { out } = await stripFile(dir, ok.file, `${format}.mp4`);
+        expect(out.subarray(ok.at, ok.at + pcm.length).equals(pcm), format).toBe(true);
+        const bad = withMdatTrack(original, (o) => pcmTrack(0, o, frames, format, 16), pcm);
+        const path = join(dir, `${format}-bad.mp4`);
+        await writeFile(path, bad.file);
+        expect(await kind(stripMp4Metadata(path)), format).toBe("unreadable");
+      }
+    });
+  });
+
+  describe("SEI des images", () => {
+    const place = Buffer.from(`${FAKE_PLACE} lat=42.6887 lon=2.8948`);
+    const slice = (n: number) => Buffer.alloc(n, 0x11);
+
+    it("HEVC (fixture x265) : le nom du compresseur de la description disparaît, les images sont intactes", async () => {
+      const original = await fixture("story-hevc.mp4");
+      expect(original.includes("libx265")).toBe(true);
+      await workDir(async (dir) => {
+        const { out } = await stripFile(dir, original);
+        expect(out.includes("libx265")).toBe(false);
+        expect(out.includes("x265")).toBe(false);
+      });
+    });
+
+    it("H.264 (fixture x264) : la ligne de réglages de x264 disparaît du fichier enregistré", async () => {
+      const original = await fixture("story-2s.mp4");
+      expect(original.includes("x264 - core")).toBe(true);
+      await workDir(async (dir) => {
+        const { out } = await stripFile(dir, original);
+        expect(out.includes("x264 - core")).toBe(false);
+        expect(out.length).toBe(original.length);
+      });
+    });
+
+    it("H.264 : un SEI avec des coordonnées devient un NAL de remplissage de même longueur, les autres NAL sont intacts (longueur sur 4 puis 2 octets)", async () => {
+      const original = await fixture("story-2s.mp4");
+      for (const lengthSize of [4, 2]) {
+        const sei = nal([0x06], Buffer.concat([Buffer.from([5, 40]), place]), lengthSize);
+        const first = nal([0x65], slice(30), lengthSize);
+        const sample = Buffer.concat([first, sei, nal([0x41], slice(20), lengthSize)]);
+        const { file, at } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length, lengthSize), sample);
+        expect(file.includes(FAKE_PLACE)).toBe(true);
+        await workDir(async (dir) => {
+          const { out } = await stripFile(dir, file);
+          expect(out.length).toBe(file.length);
+          expect(out.includes(FAKE_PLACE), `l${lengthSize}`).toBe(false);
+          expect(out.subarray(at, at + first.length).equals(first)).toBe(true);
+          const seiAt = at + first.length;
+          expect(out[seiAt + lengthSize]).toBe(0x0c);
+          expect(out.subarray(seiAt, seiAt + lengthSize).equals(sei.subarray(0, lengthSize))).toBe(true);
+          const body = out.subarray(seiAt + lengthSize + 1, seiAt + sei.length);
+          expect(body.subarray(0, -1).every((b) => b === 0xff)).toBe(true);
+          expect(body.at(-1)).toBe(0x80);
+          expect(
+            out.subarray(seiAt + sei.length, at + sample.length).equals(sample.subarray(first.length + sei.length)),
+          ).toBe(true);
+        });
+      }
+    });
+
+    it("HEVC : un SEI « user data unregistered » avec des coordonnées (préfixe 39 et suffixe 40) devient un NAL de remplissage (38, 0x4C)", async () => {
+      const original = await fixture("story-2s.mp4");
+      const prefix = nal([0x4e, 0x01], Buffer.concat([Buffer.from([5, 40]), place]));
+      const middle = nal([0x26, 0x01], slice(40));
+      const suffix = nal([0x50, 0x01], place);
+      const sample = Buffer.concat([prefix, middle, suffix]);
+      const { file, at } = withMdatTrack(original, (o) => nalTrack(true, o, sample.length), sample);
+      expect(file.includes(FAKE_PLACE)).toBe(true);
+      await workDir(async (dir) => {
+        const { out } = await stripFile(dir, file);
+        expect(out.length).toBe(file.length);
+        expect(out.includes(FAKE_PLACE)).toBe(false);
+        expect([...out.subarray(at + 4, at + 6)]).toEqual([0x4c, 0x01]);
+        expect(out.subarray(at + prefix.length, at + prefix.length + middle.length).equals(middle)).toBe(true);
+        const suffixAt = at + prefix.length + middle.length;
+        expect([...out.subarray(suffixAt + 4, suffixAt + 6)]).toEqual([0x4c, 0x01]);
+        expect(out[at + sample.length - 1]).toBe(0x80);
+      });
+    });
+
+    it("un NAL qui sort de son échantillon est refusé (415)", async () => {
+      const original = await fixture("story-2s.mp4");
+      const bad = Buffer.concat([nal([0x65], slice(30)), Buffer.from([0, 0, 1, 0, 0x06, 1, 2])]); // annonce 256 octets
+      const { file } = withMdatTrack(original, (o) => nalTrack(false, o, bad.length), bad);
+      await workDir(async (dir) => {
+        const path = join(dir, "a.mp4");
+        await writeFile(path, file);
+        expect(await kind(stripMp4Metadata(path))).toBe("unreadable");
+      });
     });
   });
 });

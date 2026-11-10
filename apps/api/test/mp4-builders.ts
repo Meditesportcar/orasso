@@ -105,6 +105,12 @@ export function metaEntry(format: string): Buffer {
   return box("minf", box("stbl", box("stsd", count, box(format, Buffer.alloc(8)))));
 }
 
+const u32Array = (values: number[]): Buffer => {
+  const out = Buffer.alloc(values.length * 4);
+  for (const [i, v] of values.entries()) out.writeUInt32BE(v, i * 4);
+  return out;
+};
+
 const u32 = (...values: number[]): Buffer => {
   const out = Buffer.alloc(values.length * 4);
   for (const [i, v] of values.entries()) out.writeUInt32BE(v, i * 4);
@@ -272,8 +278,82 @@ export function chunksTrack(handler: string, format: string, offsets: number[], 
   const stts = box("stts", u32(0, 1, offsets.length, 1));
   const stsc = box("stsc", u32(0, 1, 1, 1, 1));
   const stsz = box("stsz", u32(0, length, offsets.length));
-  const stco = box("stco", u32(0, offsets.length, ...offsets));
+  const stco = box("stco", u32(0, offsets.length), u32Array(offsets));
   const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from(handler, "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
   const mdhdBox = mdhd(1000, offsets.length);
   return box("trak", box("mdia", mdhdBox, hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))));
+}
+
+/** Entrée `stsd` d'un son PCM (`pcmTrack` en dérive) : version 0, 2 voies, `bits` bits. */
+export function pcmEntry0(bits = 16): Buffer {
+  const entry = Buffer.alloc(28);
+  entry.writeUInt16BE(1, 6);
+  entry.writeUInt16BE(2, 16);
+  entry.writeUInt16BE(bits, 18);
+  entry.writeUInt32BE(48000 * 65536, 24);
+  return entry;
+}
+
+/**
+ * Une piste son PCM (`stsz` à taille 1) de `offsets.length` morceaux d'`frames` trames, `entries` descriptions identiques dans `stsd`, tous les
+ * morceaux avec la description numéro `desc` : de quoi mesurer le coût de la lecture de `stsd`.
+ */
+export function manyPcmTrack(entries: number, offsets: number[], frames: number, desc: number): Buffer {
+  const stsd = box("stsd", u32(0, entries), ...Array.from({ length: entries }, () => box("sowt", pcmEntry0())));
+  const stts = box("stts", u32(0, 1, offsets.length * frames, 1));
+  const stsc = box("stsc", u32(0, 1, 1, frames, desc));
+  const stsz = box("stsz", u32(0, 1, offsets.length * frames));
+  const stco = box("stco", u32(0, offsets.length), u32Array(offsets));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from("soun", "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box(
+    "trak",
+    box("mdia", mdhd(48000, offsets.length * frames), hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))),
+  );
+}
+
+/**
+ * Une piste vidéo H.264 (`avc1` + `avcC`) ou HEVC (`hvc1` + `hvcC`) d'un seul échantillon de `length` octets à `offset`, NAL préfixés
+ * par `lengthSize` octets : de quoi tester le remplacement des SEI.
+ */
+export function nalTrack(hevc: boolean, offset: number, length: number, lengthSize = 4): Buffer {
+  const config = hevc
+    ? (() => {
+        const c = Buffer.alloc(23);
+        c[0] = 1;
+        c[21] = 0xfc | (lengthSize - 1);
+        return box("hvcC", c);
+      })()
+    : box("avcC", Buffer.from([1, 66, 0, 30, 0xfc | (lengthSize - 1), 0xe0, 0]));
+  const stsd = box("stsd", u32(0, 1), box(hevc ? "hvc1" : "avc1", Buffer.alloc(78), config));
+  const stts = box("stts", u32(0, 1, 1, 1000));
+  const stsc = box("stsc", u32(0, 1, 1, 1, 1));
+  const stsz = box("stsz", u32(0, length, 1));
+  const stco = box("stco", u32(0, 1, offset));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from("vide", "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box("trak", box("mdia", mdhd(1000, 1000), hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))));
+}
+
+/** Un NAL préfixé par sa longueur (`lengthSize` octets) : `header` (1 ou 2 octets) puis `payload`. */
+export function nal(header: number[], payload: Buffer, lengthSize = 4): Buffer {
+  const body = Buffer.concat([Buffer.from(header), payload]);
+  const prefix = Buffer.alloc(lengthSize);
+  prefix.writeUIntBE(body.length, 0, lengthSize);
+  return Buffer.concat([prefix, body]);
+}
+
+/** Ajoute `tail` à la fin du contenu de `stsd` de la première piste (après ses descriptions) ; les `stco` suivent. */
+export function withStsdTail(data: Buffer, tail: Buffer): Buffer {
+  const shifted = Buffer.from(data);
+  for (let from = shifted.indexOf("stco"); from >= 0; from = shifted.indexOf("stco", from + 1)) {
+    for (let i = 0; i < shifted.readUInt32BE(from + 8); i++) {
+      const o = from + 12 + i * 4;
+      shifted.writeUInt32BE(shifted.readUInt32BE(o) + tail.length, o);
+    }
+  }
+  const parents = locate(shifted, ["moov", "trak", "mdia", "minf", "stbl"]);
+  const stsd = shifted.indexOf("stsd", parents.at(-1) as number) - 4;
+  const end = stsd + shifted.readUInt32BE(stsd);
+  const out = Buffer.concat([shifted.subarray(0, end), tail, shifted.subarray(end)]);
+  for (const o of [...parents, stsd]) out.writeUInt32BE(out.readUInt32BE(o) + tail.length, o);
+  return out;
 }
