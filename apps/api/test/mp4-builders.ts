@@ -357,3 +357,28 @@ export function withStsdTail(data: Buffer, tail: Buffer): Buffer {
   for (const o of [...parents, stsd]) out.writeUInt32BE(out.readUInt32BE(o) + tail.length, o);
   return out;
 }
+
+/**
+ * Une piste vidéo H.264 (`avc1` + `avcC`, NAL sur 4 octets) de plusieurs échantillons contigus à partir de `offset`, de tailles
+ * `sizes` (table `stsz`), rangés `perChunk` par morceau : un seul morceau (`perChunk` = nombre d'échantillons) ou des morceaux
+ * contigus (`perChunk` = 1).
+ */
+export function nalSamplesTrack(offset: number, sizes: number[], perChunk: number): Buffer {
+  const config = box("avcC", Buffer.from([1, 66, 0, 30, 0xff, 0xe0, 0]));
+  const stsd = box("stsd", u32(0, 1), box("avc1", Buffer.alloc(78), config));
+  const stts = box("stts", u32(0, 1, sizes.length, 1));
+  const stsc = box("stsc", u32(0, 1, 1, perChunk, 1));
+  const stsz = box("stsz", u32(0, 0, sizes.length), u32Array(sizes));
+  const starts: number[] = [];
+  let o = offset;
+  for (const [i, size] of sizes.entries()) {
+    if (i % perChunk === 0) starts.push(o);
+    o += size;
+  }
+  const stco = box("stco", u32(0, starts.length), u32Array(starts));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from("vide", "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box(
+    "trak",
+    box("mdia", mdhd(1000, sizes.length), hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))),
+  );
+}

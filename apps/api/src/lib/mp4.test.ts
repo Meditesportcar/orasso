@@ -14,6 +14,7 @@ import {
   mebxKeys,
   metaEntry,
   nal,
+  nalSamplesTrack,
   nalTrack,
   pcmTrack,
   sampledTrack,
@@ -1353,6 +1354,34 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
         const s2 = s1 + straddle.length;
         expectFiller(out.subarray(s2 + 5, s2 + huge.length));
       });
+    });
+
+    it("deux images : le SEI de la seconde est nettoyé ; un NAL de la première qui annonce plus que son échantillon est refusé (même morceau ou morceaux contigus)", async () => {
+      const original = await fixture("story-2s.mp4");
+      const frame1 = Buffer.concat([nal([0x65], slice(30))]);
+      const gps = nal([0x06], Buffer.concat([Buffer.alloc(20, 0x5a), place]));
+      const frame2 = Buffer.concat([gps, nal([0x41], slice(20))]);
+      const sample = Buffer.concat([frame1, frame2]);
+      for (const perChunk of [2, 1]) {
+        // 1. NAL justes : le SEI de la seconde image est remplacé.
+        const sizes = [frame1.length, frame2.length];
+        const good = withMdatTrack(original, (o) => nalSamplesTrack(o, sizes, perChunk), sample);
+        await workDir(async (dir) => {
+          const { out } = await stripFile(dir, good.file, `good${perChunk}.mp4`);
+          expect(out.includes(FAKE_PLACE), `ok ${perChunk}`).toBe(false);
+          expect(out.subarray(good.at, good.at + frame1.length).equals(frame1)).toBe(true);
+        });
+        // 2. Le NAL de la première image annonce la taille des deux images : il englobe le SEI de la seconde. Refusé.
+        const greedy = Buffer.from(sample);
+        greedy.writeUInt32BE(sample.length - 4, 0);
+        const bad = withMdatTrack(original, (o) => nalSamplesTrack(o, sizes, perChunk), greedy);
+        expect(bad.file.includes(FAKE_PLACE)).toBe(true);
+        await workDir(async (dir) => {
+          const path = join(dir, `bad${perChunk}.mp4`);
+          await writeFile(path, bad.file);
+          expect(await kind(stripMp4Metadata(path)), `bad ${perChunk}`).toBe("unreadable");
+        });
+      }
     });
 
     it("un NAL qui sort de son échantillon est refusé (415)", async () => {
