@@ -217,7 +217,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await afterOpening(page);
     // Lot R7b1 : le Garage est l'onglet interne du Profil (plus de grand titre « Mon garage »).
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
-    await expect(page.getByText("1 véhicule").first()).toBeVisible();
+    // Lot R8b1 : le nombre de véhicules est porté par l'onglet souligné (« Garage » et son nombre), plus par une ligne « 1 véhicule ».
+    await expect(page.getByTestId("profil-tab-garage")).toContainText("1");
     await expect(page.getByTestId("garage-card-name")).toHaveText("Toyota Supra Mk5");
     await expect(page.getByText("3.0 L6 turbo · 2021 · blanc").first()).toBeVisible();
     // Lot M5 : vocabulaire de Damien (« carte » = le plan) ; la mini-fiche dit « Partager ».

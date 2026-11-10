@@ -222,12 +222,15 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
     // Lot R4c (maquette R4.6) : « Mon profil public » et les compteurs montent dans l'en-tête du profil. Lot R6b (D37) :
     // plus d'« amis », le troisième compteur est celui des sorties.
-    for (const id of ["profil-public", "profil-count-sorties"]) await expect(page.getByTestId(id)).toBeVisible();
+    // Lot R8b1 : « Mon profil public » quitte l'en-tête pour « Voir mon profil comme les autres », première ligne des Réglages.
+    await expect(page.getByTestId("profil-count-sorties")).toBeVisible();
+    await expect(page.getByTestId("profil-public")).toHaveCount(0);
     await page.screenshot({ path: `${DIR}/profil-hub-${theme}.png`, fullPage: true });
     // Lot M5 (maquette 7.2) : réglages en lignes groupées, « Compte » (e-mail, mot de passe, sanctions) à la place de
     // « Sécurité ». Lot R5b (remarque 6 de Damien) : ils sont derrière la roue dentée de la carte du profil.
     await page.getByTestId("profil-gear").click();
     for (const id of [
+      "reglage-profil-public",
       "reglage-notifications",
       "reglage-tes-preferences-tuile",
       "reglage-preferences",
@@ -313,8 +316,10 @@ test("un visiteur qui ajoute un véhicule devient exposant, sans redémarrer", a
   await page.getByRole("tab", { name: "Profil", exact: true }).click();
   await expect(page.getByTestId("casquette-visitor")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("casquette-quick-vehicle")).toBeVisible();
-  // Lot R7b1 : le Garage du visiteur est l'onglet par défaut du Profil, vide : il propose d'ajouter un véhicule.
-  await expect(page.getByTestId("garage-empty-add")).toBeVisible({ timeout: 30_000 });
+  // Lot R8b1 : un visiteur sans véhicule n'a pas d'onglet Garage, le Profil s'ouvre sur Sorties ; l'ajout d'un premier
+  // véhicule passe par la ligne de « Mes casquettes » (vérifiée juste au-dessus).
+  await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
+  await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await shot(page, "visiteur-profil-sable");
 
   await addVehicleApi(cookie, randomPlate());

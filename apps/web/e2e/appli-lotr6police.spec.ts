@@ -114,7 +114,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
 
     // La simulation tient : `fontScale` vaut 1,3 et les textes grossissent.
     await goto(page, "/profil");
-    const tabs = (await lines(page, TAB_LABELS)).filter((t) => !["GARAGE", "SORTIES"].includes(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes
+    const tabs = (await lines(page, TAB_LABELS)).filter((t) => !/^(GARAGE|SORTIES)\b/.test(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes ; R8b1 : « Garage · 1 »
     expect(tabs.map((t) => t.text.toUpperCase())).toEqual(["EXPLORER", "LE FIL", "ACCUEIL", "CREW", "PROFIL"]);
     for (const t of tabs) expect(t.lines, `onglet « ${t.text} » sur une ligne`).toBe(1);
     expect(new Set(tabs.map((t) => t.size)).size, "un seul corps pour la barre").toBe(1);
@@ -166,14 +166,15 @@ test("R6-police : à l'échelle 1, la barre garde son corps d'origine", async ({
   const { ctx, page } = await open(browser, "beton", 1);
   await signIn(page, "kenji@orasso.local");
   await goto(page, "/profil");
-  const tabs = (await lines(page, TAB_LABELS)).filter((t) => !["GARAGE", "SORTIES"].includes(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes
+  const tabs = (await lines(page, TAB_LABELS)).filter((t) => !/^(GARAGE|SORTIES)\b/.test(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes ; R8b1 : « Garage · 1 »
   expect(tabs).toHaveLength(5);
   for (const t of tabs) {
     expect(t.size).toBe(9.5);
     expect(t.lines).toBe(1);
   }
   const counters = (await lines(page, COUNTER_LABELS)).filter((c) => /[a-z]/i.test(c.text));
-  for (const c of counters) expect(c.size).toBe(12);
+  // Lot R8b1 : la bande de compteurs de la maquette R8.1 (`.r8cnt small`, 11,5 px) remplace les compteurs à 12 px.
+  for (const c of counters) expect(c.size).toBe(11.5);
   await ctx.close();
 });
 
