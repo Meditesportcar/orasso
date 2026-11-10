@@ -1,11 +1,10 @@
 // Explorer, segment Événements (lot 44, `s-explore`) : les cartes v2 (affiche à gauche, lot M4). Tri, filtres et lieu :
 // appliqués par l'API.
 // Lot R8x (maquette R8.9) : la ligne « 12 événements à venir · jusqu'à 100 km de toi » disparaît : le nombre est dans
-// l'onglet (« Événements · 12 », `onCount`), la distance dans la pastille. La carte vit dans `ExplorerMapView`.
+// l'onglet (« Événements · 12 », lu par `ExplorerScreen`), la distance dans la pastille. La carte vit dans `ExplorerMapView`.
 import { Button, EmptyState } from "@orasso/design-system/native";
 import { type EventCard, explorerLabels, explorerV2Labels as L, notOver } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
 
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
@@ -34,7 +33,6 @@ export function EventsSegment({
   sort,
   place,
   settled = true,
-  onCount,
 }: {
   q: string;
   filters: EventFilters;
@@ -43,8 +41,6 @@ export function EventsSegment({
   place: ExplorerPlace;
   /** Les réglages gardés (lot R1) et les préférences sont lus ; avant, ni requête ni cache. */
   settled?: boolean;
-  /** Lot R8x : le nombre de résultats pour l'onglet « Événements · 7 » (`null` : pas encore connu). */
-  onCount?: (count: number | null) => void;
 }) {
   const open = useOpenEvent();
   const ready = position.status !== "checking" && position.status !== "asking";
@@ -63,11 +59,6 @@ export function EventsSegment({
   );
   // Lot R1 : un événement terminé ne se montre plus, même lu du cache d'hier (l'API l'écarte déjà).
   const items = notOver(list.items ?? [], new Date(nowMs()));
-  const count = list.total ?? items.length;
-  const known = list.items !== null && !(list.total === null && list.hasMore);
-  useEffect(() => {
-    onCount?.(known ? count : null);
-  }, [onCount, known, count]);
 
   return (
     <>

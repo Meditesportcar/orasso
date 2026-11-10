@@ -252,6 +252,50 @@ export function ExplorerScreen() {
     [filters, prefFormatsKey],
   );
   const filterCount = activeFilters(listFilters) + (prefFormats.length ? 1 : 0);
+
+  // Lot R8x : le nombre de l'onglet « Événements · N » vient de la même requête que la liste (texte, filtres et lieu des
+  // événements), quelle que soit la vue (liste, carte) et le segment regardé : jamais un nombre périmé. Inconnu : aucun nombre.
+  const evQ = qs.evenements;
+  const evSearching = evQ.trim().length > 0;
+  const evWhere = effectiveWhere(where, habitual, { positionOn, hasCoin: coin.length > 0, searching: evSearching });
+  const evFormats = prefFormatsOn && !filters.format && !evSearching ? prefTypes : [];
+  const evKey = [evQ, JSON.stringify(filters), evFormats.join(","), whereId(evWhere), coinKey].join("|");
+  const countReady = choiceRead && prefsRead && position.status !== "checking" && position.status !== "asking";
+  const evLat = position.position?.lat ?? null;
+  const evLng = position.position?.lng ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la clé `evKey` résume le texte, les filtres et le lieu
+  useEffect(() => {
+    setEventsTotal(null);
+    if (!countReady || (evWhere.kind === "me" && !positionOn)) return;
+    let alive = true;
+    const timer = setTimeout(
+      () => {
+        const query = eventQuery(
+          evQ,
+          { ...filters, formats: evFormats },
+          position.position,
+          "list",
+          new Date(nowMs()),
+          undefined,
+          "date",
+          { where: evWhere, coin },
+        );
+        api
+          .exploreEvents({ ...query, limit: 1 })
+          .then((p) => {
+            if (alive) setEventsTotal(p.total ?? null);
+          })
+          .catch(() => {
+            if (alive) setEventsTotal(null);
+          });
+      },
+      evQ.trim() ? 300 : 0,
+    );
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [evKey, countReady, positionOn, evLat, evLng]);
   const settled = choiceRead && prefsRead;
   const grade = me ? me.profile.grade : null;
   const gradeLabel = grade ? gradeLabels[grade] : null;
@@ -570,15 +614,7 @@ export function ExplorerScreen() {
           <AskPosition position={position} dept={coin[0] ?? null} onEnable={enableMyPosition} />
         ) : null}
         {segment === "evenements" ? (
-          <EventsSegment
-            q={q}
-            filters={listFilters}
-            position={position}
-            sort={sort}
-            place={place}
-            settled={settled}
-            onCount={setEventsTotal}
-          />
+          <EventsSegment q={q} filters={listFilters} position={position} sort={sort} place={place} settled={settled} />
         ) : null}
         {segment === "pros" ? (
           <ProsSegment
