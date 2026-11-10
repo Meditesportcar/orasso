@@ -12,6 +12,9 @@ const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r8e1-captures/apres`;
 const QUICK = process.env.QUICK === "1";
 const ONLY = process.env.ONLY;
+// UNCERTAIN=1 : Nocturne de Canet passé en « Incertain » par le compte organisateur du seed pendant les captures (puis remis).
+const UNCERTAIN = process.env.UNCERTAIN === "1";
+const PREFIX = UNCERTAIN ? "incertain-" : "";
 const AFTER = !(process.env.CAPTURES_DIR ?? "").includes("avant");
 test.use({ actionTimeout: 30_000 });
 
@@ -79,54 +82,61 @@ test("R8e1 : captures avant / après de l'Accueil (appli et site)", async ({ bro
     order: [],
     hidden: ["live", "agenda", "favorite_garage", "pending"],
   });
-  if (APP) {
+  const damien = await login("damien@orasso.local");
+  const nocturne = (await apiCall<{ id: string }>(damien, "GET", "/events/by-slug/nocturne-de-canet-2026")).data.id;
+  await apiCall(damien, "PATCH", `/events/${nocturne}/outlook`, { outlook: UNCERTAIN ? "uncertain" : "maintained" });
+  try {
+    if (APP) {
+      for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
+        for (const [width, scale] of QUICK
+          ? ([[384, 1]] as const)
+          : ([
+              [384, 1],
+              [384, 1.3],
+              [390, 1],
+            ] as const)) {
+          for (const [demo, email] of DEMOS) {
+            if (ONLY && demo !== ONLY) continue;
+            const tag = `${demo}-${width}-x${scale}-${theme}`;
+            const page = await appLogin(browser, email, theme, width, scale);
+            await go(page, "/accueil");
+            await shot(page, `${PREFIX}appli-accueil-${tag}`);
+            if (demo === "proche") {
+              await go(page, "/accueil-personnaliser");
+              await shot(page, `${PREFIX}appli-personnaliser-${tag}`);
+            }
+            await page.context().close();
+          }
+        }
+      }
+    }
     for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
-      for (const [width, scale] of QUICK
-        ? ([[384, 1]] as const)
-        : ([
-            [384, 1],
-            [384, 1.3],
-            [390, 1],
-          ] as const)) {
+      for (const width of QUICK ? [390] : [390, 1280]) {
         for (const [demo, email] of DEMOS) {
           if (ONLY && demo !== ONLY) continue;
-          const tag = `${demo}-${width}-x${scale}-${theme}`;
-          const page = await appLogin(browser, email, theme, width, scale);
-          await go(page, "/accueil");
-          await shot(page, `appli-accueil-${tag}`);
-          if (demo === "proche") {
-            await go(page, "/accueil-personnaliser");
-            await shot(page, `appli-personnaliser-${tag}`);
+          const tag = `${demo}-${width}-${theme}`;
+          const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
+          const page = await ctx.newPage();
+          await setTheme(page, theme);
+          await loginInBrowser(page, email, undefined, "/app");
+          await page.goto("/app");
+          await page.waitForLoadState("networkidle");
+          if (await page.getByTestId("whatsnew-dismiss").count()) {
+            await page.getByTestId("whatsnew-dismiss").click();
+            await page.waitForLoadState("networkidle");
           }
-          await page.context().close();
+          await shot(page, `${PREFIX}site-accueil-${tag}`, true);
+          if (demo === "proche") {
+            await page.goto("/app/accueil/personnaliser");
+            await page.waitForLoadState("networkidle");
+            await shot(page, `${PREFIX}site-personnaliser-${tag}`, true);
+          }
+          await ctx.close();
         }
       }
     }
-  }
-  for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
-    for (const width of QUICK ? [390] : [390, 1280]) {
-      for (const [demo, email] of DEMOS) {
-        if (ONLY && demo !== ONLY) continue;
-        const tag = `${demo}-${width}-${theme}`;
-        const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
-        const page = await ctx.newPage();
-        await setTheme(page, theme);
-        await loginInBrowser(page, email, undefined, "/app");
-        await page.goto("/app");
-        await page.waitForLoadState("networkidle");
-        if (await page.getByTestId("whatsnew-dismiss").count()) {
-          await page.getByTestId("whatsnew-dismiss").click();
-          await page.waitForLoadState("networkidle");
-        }
-        await shot(page, `site-accueil-${tag}`, true);
-        if (demo === "proche") {
-          await page.goto("/app/accueil/personnaliser");
-          await page.waitForLoadState("networkidle");
-          await shot(page, `site-personnaliser-${tag}`, true);
-        }
-        await ctx.close();
-      }
-    }
+  } finally {
+    await apiCall(damien, "PATCH", `/events/${nocturne}/outlook`, { outlook: "maintained" });
   }
   expect(AFTER || true).toBe(true);
 });

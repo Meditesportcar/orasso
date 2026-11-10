@@ -738,7 +738,8 @@ describe("Accueil : le widget « En cours »", () => {
     const a = await signUp("Pilote_001");
     await exhibitor(a);
     const before = await home(a);
-    expect(before.json.widgets.order.slice(0, 2)).toEqual(["next_access", "live"]);
+    // Lot R8e1 : « Météo de l'événement » (la ligne de la carte) est juste après « Prochaine sortie », puis « En cours ».
+    expect(before.json.widgets.order.slice(0, 3)).toEqual(["next_access", "event_weather", "live"]);
     expect(before.json.live).not.toBeNull();
     const order = before.json.widgets.order as string[];
     const put = await call(a, "PUT", "/me/home/widgets", { order, hidden: ["live"] });
