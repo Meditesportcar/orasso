@@ -4,6 +4,7 @@
   background: var(--ground);
   box-shadow: inset 0 -1.5px 0 var(--line);
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 .utabs::-webkit-scrollbar {
@@ -11,7 +12,7 @@
 }
 .utabs--sticky {
   position: sticky;
-  top: 0;
+  top: var(--bar-top);
   z-index: 12;
 }
 .utabs__tab {
@@ -36,7 +37,12 @@
   position: absolute;
   inset: calc((40px - var(--touch)) / 2) 0;
 }
-.utabs__tab[data-on="true"] {
+.utabs .utabs__tab,
+.s-main .utabs .utabs__tab {
+  color: var(--ink-muted);
+}
+.utabs .utabs__tab[data-on="true"],
+.s-main .utabs .utabs__tab[data-on="true"] {
   color: var(--ink);
 }
 .utabs__tab[data-on="true"]::after {

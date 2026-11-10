@@ -7,11 +7,14 @@
 // la route protégée (`/api/stories/:id/media/:nom`). Fichier PARTAGÉ avec R7f4, R7h et R7m2 (une ligne chacun) ; lot R7g : la branche vidéo (`VideoSlide`, `VideoBar`).
 import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
+  authorSwipe,
   clock,
-  createReplyKeys,
+  type createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
+  nextAuthor,
   partnershipLabels,
+  prevAuthor,
   progressOf,
   replyStillShown,
   STORY_HOLD_MS,
@@ -41,6 +44,7 @@ import { useNavigate } from "react-router";
 import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
 import { now } from "../../lib/clock";
+import { replyKeysFor } from "../../lib/replyKeysStore";
 import { listenSession } from "../../lib/sessionChannel";
 import { ReportDialog } from "../ReportDialog";
 import { CommercialBadge } from "./CommercialBadge";
@@ -105,8 +109,59 @@ const tagHref = (t: StoryTagView) =>
         ? `/o/${t.slug}`
         : `/p/${t.slug}`;
 
-export function Viewer({ authorKey, userId }: { authorKey: string; userId: string }) {
+/**
+ * Lecture enchaînée (lot R8s) : ce que la lecture d'un auteur sait de la chaîne. Sans `nav`, la visionneuse se ferme à la fin de
+ * l'auteur (profil, story de l'organisateur, mentions). `onAuthor` change d'auteur dans l'état du parent : le navigateur n'a
+ * qu'une entrée d'historique, un seul « retour » ramène au Fil.
+ */
+type AuthorNav = {
+  prevKey: string | null;
+  nextKey: string | null;
+  /** Le sens de l'arrivée : « prev » ouvre sur la dernière story de l'auteur ; sert aussi à l'entrée animée. */
+  arrival: "next" | "prev" | null;
+  fetchAuthor: (key: string) => Promise<Awaited<ReturnType<typeof apiFetch<StoriesByAuthor>>>>;
+  /** Faux si le parent refuse (session non vérifiée) : rien ne change, la visionneuse reste où elle est. */
+  onAuthor: (dir: "next" | "prev") => boolean;
+  /** « Ne plus voir ses stories » : le parent retire l'auteur des déplacements de la chaîne. */
+  onMuted: () => void;
+};
+
+/** La vérification du compte vit dans le parent persistant de la chaîne : un auteur remonté ne la remet jamais à « ok ». */
+type SessionState = { check: "ok" | "checking" | "unverified"; epoch: number; verify: () => void };
+
+/** Chevron de part et d'autre du champ (maquette R8.10 `.r8aut2`) : auteur précédent / suivant. */
+function AuthorButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={dir === "next" ? "story-view__author story-view__author--next" : "story-view__author"}
+      onClick={onClick}
+      aria-label={dir === "prev" ? L.authorPrev : L.authorNext}
+      data-testid={dir === "prev" ? "story-author-prev" : "story-author-next"}
+    >
+      <Icon name="back" size={20} />
+    </button>
+  );
+}
+
+function AuthorViewer({
+  authorKey,
+  userId,
+  nav,
+  session,
+  replyKeys,
+}: {
+  authorKey: string;
+  userId: string;
+  nav?: AuthorNav;
+  session: SessionState;
+  replyKeys: ReturnType<typeof createReplyKeys>;
+}) {
+  const { check, epoch, verify: verifySession } = session;
   const navigate = useNavigate();
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const changeAuthorRef = useRef<(dir: "next" | "prev") => boolean>(() => false);
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
@@ -123,12 +178,8 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const [text, setText] = useState("");
   // Envois en cours, par story : on peut répondre à la suivante pendant qu'une réponse part, et le bouton d'une story reste
   // inactif tant que son propre envoi n'est pas résolu. Les identifiants d'idempotence suivent chaque soumission.
-  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
+  const [sending, setSending] = useState<ReadonlySet<string>>(() => new Set(replyKeys.sendingStories()));
   const [visible, setVisible] = useState(true);
-  // Compte : `checking` masque tout (photo, métadonnées, listes) pendant qu'on revérifie la session au retour au premier plan ;
-  // `unverified` = la vérification a échoué (réseau) : rien n'est montré sans elle.
-  const [check, setCheck] = useState<"ok" | "checking" | "unverified">("ok");
-  const checkSeq = useRef(0);
   const [replay, setReplay] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -140,8 +191,18 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const seq = useRef(0);
   const viewed = useRef(new Set<string>());
   const viewersSeq = useRef(0);
-  const replyKeys = useRef(createReplyKeys(() => crypto.randomUUID())).current;
   const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
+  // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
+  // du lecteur affiché, pas celui d'un lecteur démonté.
+  useEffect(() => {
+    const sync = (outcome?: { storyId: string; text: string; ok: boolean }) => {
+      setSending(new Set(replyKeys.sendingStories()));
+      // Succès reçu pendant un aller-retour entre auteurs : le brouillon du lecteur affiché, s'il correspond à la soumission, est vidé.
+      if (outcome?.ok && replyStillShown(outcome, shownDraft.current)) setText("");
+    };
+    sync();
+    return replyKeys.subscribe(sync);
+  }, [replyKeys]);
   const closing = useRef(false);
   const muteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -150,13 +211,26 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   useEffect(() => {
     const mine = ++seq.current;
     setLoad({ status: "loading" });
-    void apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(authorKey)}`).then((res) => {
+    const read = navRef.current
+      ? navRef.current.fetchAuthor(authorKey)
+      : apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(authorKey)}`);
+    void read.then((res) => {
       if (mine !== seq.current) return;
       if (!res.ok) {
         setLoad({ status: "error", message: res.status === 429 ? L.tooMany : res.error.message || L.loadError });
         return;
       }
-      setIndex(storyStartIndex(res.data.stories));
+      // Une story échue depuis la lecture de la barre : l'auteur n'a plus rien à montrer, on poursuit dans le sens de la lecture.
+      if (
+        res.data.stories.length === 0 &&
+        changeAuthorRef.current(navRef.current?.arrival === "prev" ? "prev" : "next")
+      )
+        return;
+      setIndex(
+        navRef.current?.arrival === "prev"
+          ? Math.max(0, res.data.stories.length - 1)
+          : storyStartIndex(res.data.stories),
+      );
       setLoad({ status: "ready", data: res.data });
     });
   }, [authorKey, attempt]);
@@ -189,19 +263,35 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (idx > 0) void navigate(-1);
     else void navigate("/app/fil", { replace: true });
   }, [navigate]);
+  // Changer d'auteur (fin de série, toucher à gauche sur la première story, glissement, boutons) : une seule fois par auteur lu.
+  const leaving = useRef(false);
+  const prevKey = nav?.prevKey ?? null;
+  const nextKey = nav?.nextKey ?? null;
+  const changeAuthor = useCallback((dir: "next" | "prev"): boolean => {
+    const n = navRef.current;
+    if (leaving.current || closing.current || !n) return false;
+    if ((dir === "next" ? n.nextKey : n.prevKey) === null) return false;
+    if (!n.onAuthor(dir)) return false;
+    leaving.current = true;
+    return true;
+  }, []);
+  changeAuthorRef.current = changeAuthor;
   const count = list.length;
   const goNext = useCallback(() => {
     const step = storyNext(at, count);
-    if (step.kind === "close") close();
-    else setIndex(step.index);
-  }, [at, count, close]);
+    if (step.kind !== "close") return setIndex(step.index);
+    // Fin de l'auteur : le suivant de la chaîne, ou la fermeture après le dernier (et toujours sans chaîne).
+    if (navRef.current?.nextKey) changeAuthor("next");
+    else close();
+  }, [at, count, close, changeAuthor]);
   // Reculer sur la première story la rejoue depuis le début : l'index ne change pas, `replay` relance la minuterie.
   const goPrev = useCallback(() => {
     const step = storyPrev(at);
     if (step.kind !== "story") return;
-    if (step.index === at) setReplay((n) => n + 1);
-    else setIndex(step.index);
-  }, [at]);
+    if (step.index !== at) setIndex(step.index);
+    else if (navRef.current?.prevKey) changeAuthor("prev");
+    else setReplay((n) => n + 1);
+  }, [at, changeAuthor]);
 
   // --- Pauses et minuterie ---------------------------------------------------------------------------------------------
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
@@ -215,85 +305,29 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   const elapsed = useRef(0);
   const onDone = useRef(goNext);
   onDone.current = goNext;
-  // Session changée dans un autre onglet (A se déconnecte, B se connecte) : au retour au premier plan, et avant toute reprise,
-  // la visionneuse masque ses données, relit le compte courant (`/me`) et, s'il n'est plus le même (ou plus de session), purge
-  // tout : l'état est vidé et la page rechargée (le chargeur de la route renvoie à la connexion ou monte une visionneuse neuve
-  // pour le compte courant). Le menu et la liste des vues sont fermés : ils sont recréés par l'utilisateur, jamais conservés.
-  const verifySession = useCallback(async () => {
-    const mineCheck = ++checkSeq.current;
-    setCheck("checking");
-    // Tour 6 : le média est démonté pendant la vérification ; la minuterie (temps écoulé gardé) ne reprend qu'au nouvel `onLoad`.
+  // Compte : la vérification (retour d'onglet ou de fenêtre, autre fenêtre qui change de compte) vit dans le parent persistant de
+  // la chaîne (`Viewer`) ; ici, à chaque nouvelle vérification (`epoch`), le média est démonté (la minuterie ne reprend qu'au
+  // nouvel `onLoad`), le menu et la liste des vues sont fermés : ils sont recréés par l'utilisateur, jamais conservés.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `epoch` est le seul déclencheur voulu.
+  useEffect(() => {
     setLoadedId(null);
     setMenu(false);
     viewersSeq.current++;
     setViewers(null);
-    const res = await apiFetch<{ user: { id: string } }>("/me");
-    if (mineCheck !== checkSeq.current) return;
-    if (res.ok && res.data.user.id === userId) return setCheck("ok");
-    if (res.ok || res.status === 401) {
-      seq.current++;
-      setLoad({ status: "loading" });
-      setRemoved(new Set());
-      setFlames({});
-      setText("");
-      setImageError(null);
-      window.location.reload();
-      return;
-    }
-    setCheck("unverified");
-  }, [userId]);
+  }, [epoch]);
+  // Un auteur dont toutes les stories ont expiré, lu pendant une vérification du compte : on poursuit dans le sens de la lecture
+  // dès que le compte est vérifié (même comportement que hors vérification).
   useEffect(() => {
-    let hiddenBefore = document.visibilityState === "hidden";
-    let blurred = false;
-    const sync = () => {
-      const hidden = document.visibilityState === "hidden";
-      setVisible(!hidden);
-      if (hidden) hiddenBefore = true;
-      else if (hiddenBefore) {
-        hiddenBefore = false;
-        // Tour 6 : un seul `/me` au retour d'onglet (le focus qui suit ne relance pas de seconde vérification).
-        blurred = false;
-        // Masqué tout de suite (avant la prochaine image affichée), puis le compte est relu.
-        flushSync(() => setCheck("checking"));
-        void verifySession();
-      }
-    };
-    // Deux fenêtres côte à côte : la visionneuse reste visible quand l'autre fenêtre change de compte ; le retour du focus
-    // dans cette fenêtre (après l'avoir quittée) et le retour par l'historique (`pageshow` d'une page gardée) revérifient
-    // aussi le compte, masqué d'abord.
-    const onBlur = () => {
-      blurred = true;
-    };
-    const recheck = () => {
-      flushSync(() => setCheck("checking"));
-      void verifySession();
-    };
-    const onFocus = () => {
-      if (!blurred || document.visibilityState === "hidden") return;
-      blurred = false;
-      recheck();
-    };
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) recheck();
-    };
-    // Une autre fenêtre (visible en même temps) annonce son compte : s'il diffère du nôtre (ou plus aucun), tout est masqué
-    // tout de suite, puis le compte est relu. Rien d'autre que l'identifiant du compte passe dans le canal.
-    const stopListening = listenSession((other) => {
-      if (other !== userId) recheck();
-    });
+    if (check === "ok" && load.status === "ready" && load.data.stories.length === 0)
+      changeAuthorRef.current(navRef.current?.arrival === "prev" ? "prev" : "next");
+  }, [check, load]);
+  // Onglet masqué (changement d'onglet, écran verrouillé) : pause, le temps restant est gardé.
+  useEffect(() => {
+    const sync = () => setVisible(document.visibilityState !== "hidden");
     sync();
     document.addEventListener("visibilitychange", sync);
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("pageshow", onPageShow);
-    return () => {
-      stopListening();
-      document.removeEventListener("visibilitychange", sync);
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("pageshow", onPageShow);
-    };
-  }, [verifySession, userId]);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: une autre story (ou la première rejouée) repart de zéro.
   useEffect(() => {
     elapsed.current = 0;
@@ -403,7 +437,10 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (p.moved) {
       const dy = e.clientY - p.y;
       const dt = Math.max(1, Date.now() - p.at);
-      if (shouldCloseOnDrag(dy, dy / dt)) close();
+      // Glisser à gauche ou à droite : auteur suivant ou précédent (sans effet s'il n'y en a pas).
+      const swipe = authorSwipe(e.clientX - p.x, dy);
+      if (swipe) changeAuthor(swipe);
+      else if (shouldCloseOnDrag(dy, dy / dt)) close();
       return;
     }
     const box = frame.current?.getBoundingClientRect();
@@ -462,7 +499,9 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     const res = await apiFetch(`/me/story-mutes/${encodeURIComponent(authorKey)}`, { method: "PUT" });
     if (!res.ok) return setNotice(res.error.message || L.actionError);
     setNotice(L.muted);
-    if (!closing.current) muteTimer.current = setTimeout(close, 1500);
+    // Chaîne en cours : l'auteur masqué ne revient plus par « Auteur précédent ».
+    navRef.current?.onMuted();
+    if (!closing.current) muteTimer.current = setTimeout(() => (changeAuthor("next") ? undefined : close()), 1500);
   };
   const removeTag = async () => {
     if (!story) return;
@@ -478,7 +517,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
     if (!res.ok) return setNotice(res.error.message || L.actionError);
     const left = list.filter((s) => s.id !== story.id).length;
     // La dernière story supprimée : on ferme tout de suite (l'écran « plus disponible » n'a rien à dire de plus).
-    if (left === 0) return close();
+    if (left === 0) return changeAuthor("next") ? undefined : close();
     setRemoved((r) => new Set(r).add(story.id));
     setNotice(L.deleteDone);
   };
@@ -556,6 +595,16 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           <Button variant="secondary" icon="undo" onClick={() => setAttempt((n) => n + 1)} data-testid="story-retry">
             {L.retry}
           </Button>
+          {nextKey ? (
+            <Button
+              variant="secondary"
+              icon="next"
+              onClick={() => changeAuthor("next")}
+              data-testid="story-author-next"
+            >
+              {L.authorNext}
+            </Button>
+          ) : null}
           <Button variant="plate" icon="close" onClick={close} data-testid="story-close">
             {L.close}
           </Button>
@@ -609,8 +658,19 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
   );
 
   return (
-    <div className="story-view" role="dialog" aria-modal="true" aria-label={L.viewer} data-testid="story-viewer-root">
-      <div className="story-view__frame" ref={frame} data-testid="story-viewer">
+    <div
+      className={nav?.arrival ? "story-view story-view--chained" : "story-view"}
+      role="dialog"
+      aria-modal="true"
+      aria-label={L.viewer}
+      data-testid="story-viewer-root"
+    >
+      <div
+        className="story-view__frame"
+        ref={frame}
+        data-arrival={nav?.arrival ?? undefined}
+        data-testid="story-viewer"
+      >
         {/* Le média. */}
         {failed ? (
           <p className="story-view__gone o-t-body" data-testid="story-unavailable">
@@ -832,6 +892,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
           ) : null}
           {mine ? (
             <div className="story-view__row">
+              {prevKey ? <AuthorButton dir="prev" onClick={() => changeAuthor("prev")} /> : null}
               <button
                 type="button"
                 className="story-view__pill story-view__pill--grow"
@@ -841,6 +902,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                 <Icon name="eye" size={18} />
                 <span>{L.views(story.viewsCount ?? 0)}</span>
               </button>
+              {nextKey ? <AuthorButton dir="next" onClick={() => changeAuthor("next")} /> : null}
               <span
                 className="story-view__pill"
                 role="img"
@@ -853,6 +915,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
             </div>
           ) : (
             <form className="story-view__row" onSubmit={(e) => void send(e)}>
+              {prevKey ? <AuthorButton dir="prev" onClick={() => changeAuthor("prev")} /> : null}
               {canReply ? (
                 <label className="story-view__pill story-view__pill--grow">
                   <Icon name="bubble" size={18} />
@@ -882,6 +945,7 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
               ) : (
                 <span className="story-view__pill--grow" />
               )}
+              {nextKey ? <AuthorButton dir="next" onClick={() => changeAuthor("next")} /> : null}
               <button
                 type="button"
                 className={
@@ -1051,5 +1115,191 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
         ) : null}
       </dialog>
     </div>
+  );
+}
+
+/** L'auteur suivant est lu d'avance après ce délai ; une lecture d'avance plus vieille que cela est relue (une story supprimée, échue ou sortie du crew ne reste pas affichée par sa légende). */
+const PREFETCH_DELAY_MS = 800;
+const PREFETCH_MAX_AGE_MS = 15_000;
+
+/**
+ * La visionneuse (lot R8s : lecture enchaînée). `chain` = les clés d'auteurs à lire, calculées par le chargeur de la route à
+ * l'ouverture depuis la barre (`storyChain`) et figées ici : elle ne se réordonne pas pendant la lecture. Sans `chain` (profil,
+ * story de l'organisateur, mentions), l'auteur seul, comme avant. L'auteur courant vit dans l'état de ce composant : un seul
+ * « retour » du navigateur ramène au Fil, même après trois auteurs. Tout l'état propre à une story repart de zéro (`key`).
+ * Ce parent persistant porte aussi : la vérification du compte (rien ne change d'auteur tant qu'elle n'est pas faite ; tout
+ * préchargement est purgé à chaque vérification), et les identifiants d'idempotence des réponses (un aller-retour entre auteurs
+ * ne permet pas de renvoyer un texte avec un nouvel identifiant).
+ */
+export function Viewer({ authorKey, userId, chain }: { authorKey: string; userId: string; chain?: string[] }) {
+  const [frozen] = useState<string[]>(() => (chain && chain.length > 0 ? chain : [authorKey]));
+  const [current, setCurrent] = useState(authorKey);
+  const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
+  const chained = Boolean(chain);
+  // Gardés en mémoire par compte : un aller-retour par un profil (la route est démontée) ne perd pas un texte d'issue incertaine.
+  const [replyKeys] = useState(() => replyKeysFor(userId));
+  // Auteurs masqués pendant la lecture : retirés des déplacements (le courant reste jusqu'à son départ).
+  const [muted, setMuted] = useState<ReadonlySet<string>>(new Set());
+  const walk = frozen.filter((k) => k === current || !muted.has(k));
+
+  // Compte : `checking` masque tout (photo, métadonnées, listes) pendant qu'on revérifie la session au retour au premier plan ;
+  // `unverified` = la vérification a échoué (réseau) : rien n'est montré, et on ne change pas d'auteur, sans elle. Le compte
+  // courant est relu (`/me`) ; s'il n'est plus le même (ou plus de session), la page est rechargée (le chargeur renvoie à la
+  // connexion ou monte une visionneuse neuve pour le compte courant).
+  const [check, setCheck] = useState<"ok" | "checking" | "unverified">("ok");
+  const [epoch, setEpoch] = useState(0);
+  const checkRef = useRef<"ok" | "checking" | "unverified">("ok");
+  const checkSeq = useRef(0);
+  const epochRef = useRef(0);
+  const ahead = useRef(
+    new Map<string, { at: number; epoch: number; promise: ReturnType<typeof apiFetch<StoriesByAuthor>> }>(),
+  );
+  const setCheckNow = useCallback((v: "ok" | "checking" | "unverified") => {
+    checkRef.current = v;
+    setCheck(v);
+  }, []);
+  const verifySession = useCallback(async () => {
+    const mineCheck = ++checkSeq.current;
+    checkRef.current = "checking";
+    // Tout préchargement est purgé : il peut venir d'un autre compte.
+    ahead.current.clear();
+    epochRef.current++;
+    setEpoch(epochRef.current);
+    setCheck("checking");
+    const res = await apiFetch<{ user: { id: string } }>("/me");
+    if (mineCheck !== checkSeq.current) return;
+    if (res.ok && res.data.user.id === userId) {
+      ahead.current.clear();
+      epochRef.current++;
+      return setCheckNow("ok");
+    }
+    if (res.ok || res.status === 401) {
+      window.location.reload();
+      return;
+    }
+    setCheckNow("unverified");
+  }, [userId, setCheckNow]);
+  useEffect(() => {
+    let hiddenBefore = document.visibilityState === "hidden";
+    let blurred = false;
+    const recheck = () => {
+      checkRef.current = "checking";
+      flushSync(() => setCheck("checking"));
+      void verifySession();
+    };
+    const sync = () => {
+      const hidden = document.visibilityState === "hidden";
+      if (hidden) hiddenBefore = true;
+      else if (hiddenBefore) {
+        hiddenBefore = false;
+        // Un seul `/me` au retour d'onglet (le focus qui suit ne relance pas de seconde vérification).
+        blurred = false;
+        recheck();
+      }
+    };
+    // Deux fenêtres côte à côte : la visionneuse reste visible quand l'autre fenêtre change de compte ; le retour du focus
+    // dans cette fenêtre et le retour par l'historique (`pageshow` d'une page gardée) revérifient aussi le compte.
+    const onBlur = () => {
+      blurred = true;
+    };
+    const onFocus = () => {
+      if (!blurred || document.visibilityState === "hidden") return;
+      blurred = false;
+      recheck();
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) recheck();
+    };
+    // Une autre fenêtre annonce son compte : s'il diffère du nôtre (ou plus aucun), tout est masqué tout de suite, puis le
+    // compte est relu. Rien d'autre que l'identifiant du compte passe dans le canal.
+    const stopListening = listenSession((other) => {
+      if (other !== userId) recheck();
+    });
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      stopListening();
+      document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [verifySession, userId]);
+
+  // Lecture d'avance de l'auteur suivant (la vue n'est posée que par la story réellement affichée) ; jamais pendant une
+  // vérification, jamais reprise d'une vérification précédente.
+  const read = useCallback(
+    (key: string) => apiFetch<StoriesByAuthor>(`/stories/by-author/${encodeURIComponent(key)}`),
+    [],
+  );
+  const fetchAuthor = useCallback(
+    (key: string) => {
+      const hit = ahead.current.get(key);
+      ahead.current.delete(key);
+      return hit && hit.epoch === epochRef.current && Date.now() - hit.at < PREFETCH_MAX_AGE_MS
+        ? hit.promise
+        : read(key);
+    },
+    [read],
+  );
+  const following = nextAuthor(walk, current);
+  useEffect(() => {
+    if (!following || !chained || check !== "ok") return;
+    const timer = setTimeout(() => {
+      const promise = read(following);
+      void promise.then((res) => {
+        if (!res.ok) ahead.current.delete(following);
+      });
+      ahead.current.set(following, { at: Date.now(), epoch: epochRef.current, promise });
+    }, PREFETCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [following, chained, read, check]);
+
+  const goAuthor = useCallback(
+    (dir: "next" | "prev"): boolean => {
+      // Rien ne change d'auteur tant que le compte n'est pas vérifié.
+      if (checkRef.current !== "ok") return false;
+      const to = dir === "next" ? nextAuthor(walk, current) : prevAuthor(walk, current);
+      if (!to) return false;
+      setArrival(dir);
+      setCurrent(to);
+      // L'adresse suit l'auteur courant (sans nouvelle entrée d'historique) : au retour d'un profil ouvert depuis la
+      // visionneuse, on reprend à cet auteur.
+      try {
+        window.history.replaceState(window.history.state, "", `/app/story/${encodeURIComponent(to)}?suite=barre`);
+      } catch {
+        // sans effet : l'adresse reste celle du premier auteur
+      }
+      return true;
+    },
+    [walk, current],
+  );
+
+  return (
+    <AuthorViewer
+      key={current}
+      authorKey={current}
+      userId={userId}
+      session={{ check, epoch, verify: () => void verifySession() }}
+      replyKeys={replyKeys}
+      nav={
+        chained
+          ? {
+              prevKey: prevAuthor(walk, current),
+              nextKey: following,
+              arrival,
+              fetchAuthor,
+              onAuthor: goAuthor,
+              onMuted: () => {
+                ahead.current.delete(current);
+                setMuted((m) => new Set(m).add(current));
+              },
+            }
+          : undefined
+      }
+    />
   );
 }

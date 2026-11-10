@@ -4,13 +4,14 @@
 // (signaler) passent dans l'en-tête, à gauche du ✕.
 // Lot R7b1 (maquette R7.12) : « Message » quitte l'en-tête pour le corps du profil, à côté de « Suivre » (`PublicProfile`) ;
 // il ne reste que « ⋯ » (signaler).
-import { AppBarFlowAction, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot R8b1 (D40, maquette R8.1) : « ⋯ » quitte l'en-tête à son tour : l'icône « Plus » du haut du profil (`PublicProfile`) ouvre la
+// feuille qui porte « Signaler ».
+import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { publicProfileLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
 
 import { PublicProfile } from "@/features/profil/PublicProfile";
-import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -44,25 +45,7 @@ export default function UserProfile() {
 
   const isSelf = p.audience === "self";
   return (
-    <FlowScreen
-      title={p.pseudo}
-      facts={publicProfileLabels.profile}
-      onClose={close}
-      onRefresh={profile.reload}
-      actions={
-        isSelf ? undefined : (
-          <>
-            {/* Signaler : lot 32. La messagerie (lot 18 : abonné → conversation, sinon demande de contact) est dans le corps. */}
-            <AppBarFlowAction
-              icon="more"
-              label={publicProfileLabels.more}
-              onPress={() => openReport({ type: "profile", id: p.userId })}
-              testID="report-open-profile"
-            />
-          </>
-        )
-      }
-    >
+    <FlowScreen title={p.pseudo} facts={publicProfileLabels.profile} onClose={close} onRefresh={profile.reload}>
       <PublicProfile p={p} mode={isSelf ? "self" : "live"} onChanged={() => void profile.reload()} />
 
       {p.contact ? (

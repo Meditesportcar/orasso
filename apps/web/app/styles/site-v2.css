@@ -509,7 +509,31 @@
 /* Vue Liste : l'affiche en petit à gauche. */
 .w-card--row .w-card__link {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: flex-start;
+}
+/* Lot R8x (maquette R8.9) : la puce « Liste d'attente » à droite du décompte, jamais posée par-dessus la carte ; en vue
+   Liste, la jauge de 4 px et le décompte passent sous l'affiche, sur toute la largeur. */
+.w-card__wait {
+  display: inline-flex;
+  margin-left: auto;
+}
+.w-card__seats {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.w-card__seats .w-card__gauge {
+  height: 4px;
+}
+.w-card__seatsline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  color: var(--ink-muted);
 }
 .w-card--row .w-card__poster {
   flex: none;

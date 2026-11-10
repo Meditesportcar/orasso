@@ -177,8 +177,11 @@ export const explorerV2Labels = {
   km: (km: number) => `${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`,
   seatsLeft: (left: number, capacity: number) => `${left} place${left > 1 ? "s" : ""} exposants sur ${capacity}`,
   seatsFull: (capacity: number) => `Complet · ${capacity} exposants`,
+  // Lot R8x (site) : sans effectif fiable (journées limitées différemment de la capacité générale), « Complet » seul.
+  seatsFullShort: "Complet",
+  seatsLeftOpen: (left: number) => `${left} place${left > 1 ? "s" : ""} exposants`,
   seatsFree: "Places exposants sans limite",
-  waitlistFlag: "Complet · liste d'attente",
+  waitlistFlag: "Liste d'attente",
   verified: "Structure validée",
   emptyTitle: "Rien par ici",
   emptyText: "Aucun événement ne correspond. Change de format ou de date.",
@@ -288,7 +291,7 @@ export const explorerR2Labels = {
   segmentEvents: "Événements",
   segmentPros: "Pros",
   segmentPeople: "Personnes et crews",
-  searchEvents: "Un événement, un organisateur, une ville",
+  searchEvents: "Événement, organisateur, ville",
   searchPros: "Un pro, un métier, une ville",
   searchPeople: "Un pseudo, un crew, un modèle…",
   searchLabel: "Rechercher",
@@ -320,8 +323,14 @@ export const explorerR2Labels = {
   wherePeopleHint: "Départements seulement : jamais de position ni de distance.",
   whereKeep: "Gardé pour tes prochaines visites. Tes préférences ne changent pas.",
   km: "km",
-  pillMe: (km: number) => `À ${km} km de moi`,
-  pillMine: (codes: readonly string[]) => (codes.length ? `Mon coin (${codes.join(", ")})` : "Mon coin"),
+  pillMe: (km: number) => `À ${km} km`,
+  // Lot R8x : au-delà de trois départements, un résumé (jusqu'à 20 numéros ne tiendraient ni sur le téléphone ni sur le site).
+  pillMine: (codes: readonly string[]) =>
+    codes.length > 3
+      ? `Mon coin · ${codes.length} départements`
+      : codes.length
+        ? `Mon coin (${codes.join(", ")})`
+        : "Mon coin",
   pillDept: (name: string, code: string) => `${name} (${code})`,
   pillAll: "Partout en France",
   lineMe: (km: number) => keepUnits(`jusqu'à ${km} km de toi`),

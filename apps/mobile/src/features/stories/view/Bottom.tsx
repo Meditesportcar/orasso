@@ -8,6 +8,25 @@ import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 const { space2, space3 } = tokens.spacing;
 
+/** Chevron de part et d'autre du champ (maquette R8.10 `.r8aut2`) : auteur précédent / suivant ; rien s'il n'y en a pas. */
+function AuthorButton({ dir, onPress }: { dir: "prev" | "next"; onPress?: () => void }) {
+  const { t } = useTheme();
+  if (!onPress) return null;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={dir === "prev" ? L.authorPrev : L.authorNext}
+      style={[styles.author, { borderColor: withAlpha(t.color.nightInk, 0.55) }]}
+      testID={dir === "prev" ? "story-author-prev" : "story-author-next"}
+    >
+      <View style={dir === "next" ? styles.mirror : undefined}>
+        <Icon name="back" size={20} color={t.color.nightInk} />
+      </View>
+    </Pressable>
+  );
+}
+
 export function Bottom({
   story,
   mine,
@@ -20,6 +39,8 @@ export function Bottom({
   onFocusChange,
   onFlame,
   onViews,
+  onPrevAuthor,
+  onNextAuthor,
 }: {
   story: StoryView;
   mine: boolean;
@@ -32,6 +53,9 @@ export function Bottom({
   onFocusChange: (focused: boolean) => void;
   onFlame: () => void;
   onViews: () => void;
+  /** Lecture enchaînée (R8s) : absents s'il n'y a pas d'auteur avant ou après. */
+  onPrevAuthor?: () => void;
+  onNextAuthor?: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -40,6 +64,7 @@ export function Bottom({
   if (mine) {
     return (
       <View style={styles.row} pointerEvents="box-none">
+        <AuthorButton dir="prev" onPress={onPrevAuthor} />
         <Pressable
           onPress={onViews}
           accessibilityRole="button"
@@ -52,6 +77,7 @@ export function Bottom({
             {L.views(story.viewsCount ?? 0)}
           </Text>
         </Pressable>
+        <AuthorButton dir="next" onPress={onNextAuthor} />
         <View
           style={[styles.pill, styles.flame, { borderColor: border }]}
           accessibilityLabel={L.flameCount(story.reactionsCount ?? 0)}
@@ -67,6 +93,7 @@ export function Bottom({
   }
   return (
     <View style={styles.row} pointerEvents="box-none">
+      <AuthorButton dir="prev" onPress={onPrevAuthor} />
       {canReply ? (
         <View style={[styles.pill, styles.grow, { borderColor: border }]}>
           <Icon name="bubble" size={18} color={c.nightInk} />
@@ -101,6 +128,7 @@ export function Bottom({
       ) : (
         <View style={styles.grow} pointerEvents="none" />
       )}
+      <AuthorButton dir="next" onPress={onNextAuthor} />
       <Pressable
         onPress={onFlame}
         accessibilityRole="button"
@@ -128,6 +156,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   flame: { justifyContent: "center", minWidth: 48 },
+  author: { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  mirror: { transform: [{ scaleX: -1 }] },
   pillText: { fontSize: 14, lineHeight: 18 },
   input: { flex: 1, minWidth: 0, fontSize: 14.5, paddingVertical: 0, height: 44 },
 });

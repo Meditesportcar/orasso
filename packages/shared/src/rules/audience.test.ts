@@ -137,8 +137,13 @@ describe("storyRing et storyBarOrder", () => {
     expect(storyRing({ live: true }, [{ audience: "followers", ...alive }], now)).toBe("live");
     expect(storyRing({ live: true }, [], now)).toBeNull();
   });
-  it("non vues d'abord, puis la plus récente", () => {
-    const e = (id: string, hasUnseen: boolean, iso: string) => ({ id, hasUnseen, latestAt: new Date(iso) });
+  it("non vues d'abord, puis la plus récente (même rang)", () => {
+    const e = (id: string, hasUnseen: boolean, iso: string, rank: 2 | 3 | 4 = 4) => ({
+      id,
+      hasUnseen,
+      rank,
+      latestAt: new Date(iso),
+    });
     const input = [
       e("a", false, "2026-11-10T11:00:00Z"),
       e("b", true, "2026-11-10T08:00:00Z"),
@@ -147,6 +152,39 @@ describe("storyRing et storyBarOrder", () => {
     ];
     expect(storyBarOrder(input).map((x) => x.id)).toEqual(["c", "b", "d", "a"]);
     expect(input.map((x) => x.id)).toEqual(["a", "b", "c", "d"]);
+  });
+  it("non vues par rang (2, 3, 4) puis récence ; déjà vues ensuite dans le même ordre ; un rang vu passe après un rang 4 non vu", () => {
+    const e = (id: string, hasUnseen: boolean, rank: 2 | 3 | 4, hour: number) => ({
+      id,
+      hasUnseen,
+      rank,
+      latestAt: new Date(Date.UTC(2026, 10, 10, hour)),
+    });
+    const input = [
+      e("vu4", false, 4, 11),
+      e("n4-recent", true, 4, 10),
+      e("vu2", false, 2, 1),
+      e("n3", true, 3, 2),
+      e("n4-ancien", true, 4, 5),
+      e("vu3", false, 3, 9),
+      e("n2", true, 2, 1),
+      e("vu4-ancien", false, 4, 3),
+    ];
+    expect(storyBarOrder(input).map((x) => x.id)).toEqual([
+      "n2",
+      "n3",
+      "n4-recent",
+      "n4-ancien",
+      "vu2",
+      "vu3",
+      "vu4",
+      "vu4-ancien",
+    ]);
+  });
+  it("tri stable : à rang et date égaux, l'ordre reçu est gardé", () => {
+    const at = new Date("2026-11-10T10:00:00Z");
+    const input = ["x", "y", "z"].map((id) => ({ id, hasUnseen: true, rank: 3 as const, latestAt: at }));
+    expect(storyBarOrder(input).map((x) => x.id)).toEqual(["x", "y", "z"]);
   });
 });
 

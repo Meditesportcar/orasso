@@ -112,10 +112,16 @@ export function Seg<T extends string>({
   testID,
   cmode,
   wrap,
+  maxFontScale,
+  compact,
   disabled,
 }: {
   cmode?: boolean;
   wrap?: boolean;
+  /** Lot R8f1 : plafond de la police système pour les libellés (facultatif ; sans lui, rien ne change). */
+  maxFontScale?: number;
+  /** Lot R8f1 : segments de 44 px, corps de 12,5 px et marges de 4 px de la maquette R8.2 (facultatif). */
+  compact?: boolean;
   /** Lot R7e2, tour 4 : segments grisés et sans effet (une opération est en cours). */
   disabled?: boolean;
   options: { value: T; label: string; lead?: ReactNode; icon?: IconName }[];
@@ -148,6 +154,7 @@ export function Seg<T extends string>({
             style={[
               styles.segBtn,
               wrap && styles.segBtnWrap,
+              compact && styles.segBtnCompact,
               cmode && styles.cmodeBtn,
               on &&
                 (cmode
@@ -161,8 +168,9 @@ export function Seg<T extends string>({
             <Text
               variant="bodyStrong"
               color={color}
-              style={wrap ? [styles.segText, styles.segTextWrap] : styles.segText}
+              style={[styles.segText, wrap && styles.segTextWrap, compact && styles.segTextCompact]}
               numberOfLines={wrap ? undefined : 1}
+              maxFontSizeMultiplier={maxFontScale}
             >
               {o.label}
             </Text>
@@ -403,6 +411,8 @@ const styles = StyleSheet.create({
     gap: space1 + 2,
   },
   segBtnWrap: { height: undefined, minHeight: 38, paddingVertical: 4 },
+  segBtnCompact: { minHeight: 44, paddingHorizontal: 4 },
+  segTextCompact: { fontSize: 12.5 },
   segText: { fontSize: 13 },
   segTextWrap: { flexShrink: 1, textAlign: "center" },
   cmode: { padding: 4, gap: 4 },

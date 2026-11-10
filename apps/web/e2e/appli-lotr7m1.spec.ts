@@ -118,9 +118,11 @@ for (const theme of ["beton", "sable"] as const) {
 
     // 3. Son profil : la ligne « Partenaires » ; la fiche du pro liste le passionné pour un autre membre.
     await go(mine.page, "/profil");
-    const line = mine.page.getByTestId("partners-line");
-    await expect(line).toContainText("Partenaires · 1", { timeout: 20_000 });
-    await expect(line).toContainText("Garage du Port");
+    // Lot R8b1 : les partenaires sont le 4e compteur de la bande ; il ouvre la liste.
+    const cell = mine.page.getByTestId("profil-count-partenaires");
+    await expect(cell).toContainText("1", { timeout: 20_000 });
+    await cell.click();
+    await expect(mine.page.getByTestId("partner-row")).toContainText("Garage du Port");
     await shot(mine.page, "pq_pro", theme);
     {
       const other = await openApp(browser, theme);
@@ -132,13 +134,12 @@ for (const theme of ["beton", "sable"] as const) {
     }
 
     // 4. « Mettre fin » : confirmation, puis la ligne disparaît ; la fiche du pro ne le liste plus ; le pro est prévenu.
-    await line.click();
     await expect(mine.page.getByTestId("partner-row")).toHaveCount(1);
     await mine.page.getByTestId("partner-end").click();
     await expect(mine.page.getByTestId("partnership-end-confirm")).toBeVisible();
     await shot(mine.page, "pq_end", theme);
     await mine.page.getByTestId("partnership-end-confirm").click();
-    await expect(mine.page.getByTestId("partners-line")).toHaveCount(0, { timeout: 20_000 });
+    await expect(mine.page.getByTestId("profil-count-partenaires")).toHaveCount(0, { timeout: 20_000 });
     await mine.ctx.close();
 
     const after = await apiCall<{ memberPartners: { pseudo: string }[] }>(

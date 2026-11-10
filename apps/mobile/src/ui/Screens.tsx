@@ -20,8 +20,20 @@ import {
   withAlpha,
 } from "@orasso/design-system/native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Children,
+  cloneElement,
+  Fragment,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Pressable, RefreshControl, ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SwipeEntry } from "@/features/nav/SwipeEntry";
@@ -40,6 +52,45 @@ import { TabTitle } from "./TabTitle";
 import { TopBar, useInTabs, useTabBandRefresh } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
+
+/**
+ * Lot R8b1 (tour 2) : l'enfant d'une page d'onglet qui reste collé en haut de la zone qui défile (la rangée d'onglets du
+ * Profil). `TabScreen` le repère parmi ses enfants : aucun indice à tenir à la main, un bloc en plus ou en moins au-dessus
+ * ne casse pas le collant. Le défilement ne colle que ses enfants directs : l'enfant doit être posé directement dans la page
+ * (les fragments sont aplatis).
+ */
+export function StickyHeader({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  return <View style={style}>{children}</View>;
+}
+
+/** Le nom d'un type d'élément, pour des clés tirées du contenu. */
+function typeName(n: ReactElement): string {
+  const t = n.type as string | { displayName?: string; name?: string };
+  return typeof t === "string" ? t : (t.displayName ?? t.name ?? "enfant");
+}
+
+/**
+ * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment). Clés stables tirées du contenu (la clé donnée,
+ * sinon le nom du type et son rang parmi ceux du même nom) : insérer ou retirer un bloc ne change pas les clés des autres.
+ */
+function flatChildren(nodes: ReactNode): ReactNode[] {
+  const out: ReactNode[] = [];
+  const walk = (list: ReactNode) => {
+    for (const n of Children.toArray(list)) {
+      if (isValidElement(n) && n.type === Fragment) walk((n.props as { children?: ReactNode }).children);
+      else out.push(n);
+    }
+  };
+  walk(nodes);
+  const seen = new Map<string, number>();
+  return out.map((n) => {
+    if (!isValidElement(n)) return n;
+    const base = typeName(n);
+    const rank = seen.get(base) ?? 0;
+    seen.set(base, rank + 1);
+    return cloneElement(n, { key: `${base}-${rank}` });
+  });
+}
 
 type Common = {
   children: ReactNode;
@@ -60,7 +111,11 @@ const TAB_BODY_BOTTOM = 150;
 /** Lot M3 : délai de la relecture du profil à l'arrivée sur un onglet (après l'affichage de la page). */
 const REFRESH_AFTER_FOCUS_MS = 400;
 
-type TabProps = Common & { title?: string; facts?: string; home?: boolean };
+type TabProps = Common & {
+  title?: string;
+  facts?: string;
+  home?: boolean;
+};
 
 /**
  * Écran d'un onglet, mode A (DA v2, lot 40 ; lot C1 : fond de l'artefact, barre flottante par-dessus le contenu) : la
@@ -93,6 +148,9 @@ function useRefreshOnFocus() {
 }
 
 function TabPage({ title, facts, children, onRefresh, footer, still, overlays }: TabProps) {
+  // Lot R8b1 : un enfant `StickyHeader` ? La liste est alors à plat (le défilement compte ses enfants directs), le titre en premier.
+  const flat = flatChildren(children);
+  const stickyAt = flat.findIndex((n) => isValidElement(n) && n.type === StickyHeader);
   // Lot 39 : le O vivant et le fond se mettent en pause quand l'écran n'est plus affiché.
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -108,9 +166,16 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays }:
                 onRefresh={onRefresh}
                 bottom={footer ? space6 : TAB_BODY_BOTTOM + insets.bottom}
                 covered={TAB_BAR_SPACE + insets.bottom}
+                stickyHeaderIndices={stickyAt < 0 ? undefined : [stickyAt + (title ? 1 : 0)]}
               >
-                {title ? <TabTitle title={title} label={facts} /> : null}
-                {children}
+                {stickyAt < 0 ? (
+                  <>
+                    {title ? <TabTitle title={title} label={facts} /> : null}
+                    {children}
+                  </>
+                ) : (
+                  [...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []), ...flat]
+                )}
               </Body>
               {footer ? (
                 // Le bouton fixe de l'écran reste au-dessus de la barre d'onglets flottante.
@@ -295,9 +360,12 @@ function Body({
   endGate,
   hideEndHint = false,
   covered = 0,
+  stickyHeaderIndices,
 }: {
   children: ReactNode;
   onRefresh?: () => Promise<unknown>;
+  /** Lot R8b1 : indices des enfants directs qui restent collés en haut (voir `StickyHeader`). */
+  stickyHeaderIndices?: number[];
   /** Lot R7k2, tour 2 : hauteur du bas de la page cachée par la barre d'onglets flottante (`ScrollAssist.visibleArea`). */
   covered?: number;
   /** Marge sous le contenu (onglets : place de la barre flottante). */
@@ -400,52 +468,55 @@ function Body({
     [],
   );
   const page = (
-    <ScrollView
-      ref={scroll}
-      style={styles.fill}
-      contentContainerStyle={[styles.content, bottom !== undefined ? { paddingBottom: bottom } : null]}
-      keyboardShouldPersistTaps="handled"
-      scrollEnabled={!held}
-      scrollEventThrottle={32}
-      // Lot 59c, tour 2 : filet de sécurité, plus aucun doigt sur la page = elle défile de nouveau.
-      onTouchEnd={(e) => {
-        if (e.nativeEvent.touches.length === 0) setHeld(false);
-      }}
-      onTouchCancel={() => setHeld(false)}
-      onScroll={(e) => {
-        offset.current = e.nativeEvent.contentOffset.y;
-        for (const listener of scrollListeners.current) listener();
-        if (gate.current) checkEnd();
-      }}
-      onLayout={(e) => {
-        viewport.current = e.nativeEvent.layout.height;
-        if (gate.current) checkEnd();
-      }}
-      onContentSizeChange={(_w, h) => {
-        content.current = h;
-        lastContent.current = h;
-        if (gate.current) checkEnd();
-      }}
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl
-            enabled={!held}
-            refreshing={refreshing}
-            tintColor={t.color.accent}
-            onRefresh={async () => {
-              setRefreshing(true);
-              try {
-                await onRefresh();
-              } finally {
-                setRefreshing(false);
-              }
-            }}
-          />
-        ) : undefined
-      }
-    >
-      <ScrollAssistContext.Provider value={assist}>{children}</ScrollAssistContext.Provider>
-    </ScrollView>
+    <ScrollAssistContext.Provider value={assist}>
+      <ScrollView
+        ref={scroll}
+        style={styles.fill}
+        stickyHeaderIndices={stickyHeaderIndices}
+        contentContainerStyle={[styles.content, bottom !== undefined ? { paddingBottom: bottom } : null]}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!held}
+        scrollEventThrottle={32}
+        // Lot 59c, tour 2 : filet de sécurité, plus aucun doigt sur la page = elle défile de nouveau.
+        onTouchEnd={(e) => {
+          if (e.nativeEvent.touches.length === 0) setHeld(false);
+        }}
+        onTouchCancel={() => setHeld(false)}
+        onScroll={(e) => {
+          offset.current = e.nativeEvent.contentOffset.y;
+          for (const listener of scrollListeners.current) listener();
+          if (gate.current) checkEnd();
+        }}
+        onLayout={(e) => {
+          viewport.current = e.nativeEvent.layout.height;
+          if (gate.current) checkEnd();
+        }}
+        onContentSizeChange={(_w, h) => {
+          content.current = h;
+          lastContent.current = h;
+          if (gate.current) checkEnd();
+        }}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              enabled={!held}
+              refreshing={refreshing}
+              tintColor={t.color.accent}
+              onRefresh={async () => {
+                setRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+            />
+          ) : undefined
+        }
+      >
+        {children}
+      </ScrollView>
+    </ScrollAssistContext.Provider>
   );
   if (!endGate) return page;
   const ground = t.color.ground;

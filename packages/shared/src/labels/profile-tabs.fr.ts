@@ -25,6 +25,27 @@ export const profileTabsLabels = {
   noVehicle: "Pas encore de véhicule.",
   noOuting: "Aucune sortie à montrer pour l'instant.",
   message: "Message",
+  // Lot R8b1 (maquette R8.1 `pr-profil`, option A « Compact ») : le haut du Profil.
+  /** La bio sur une ligne : « plus » la déroule, « moins » la replie. */
+  bioMore: "plus",
+  bioLess: "moins",
+  /** Noms accessibles des icônes empilées à droite de la photo (mon profil : mon QR et les réglages). */
+  qrOpen: "Mon QR",
+  settingsOpen: "Réglages",
+  /** Profil d'un autre : l'icône « Plus » (signaler) et le titre de sa feuille. */
+  more: "Plus",
+  moreTitle: "Plus d'actions",
+  /** La ligne de la feuille « Plus » d'un profil : le signalement qui existait déjà dans l'en-tête de l'écran. */
+  reportProfile: "Signaler ce profil",
+  /** Première ligne de Réglages : l'aperçu de mon profil, comme les autres le voient. */
+  seeAsOthers: "Voir mon profil comme les autres",
+  /** Titre de la feuille des partenaires quand leur lecture a échoué et qu'aucune copie n'existe. */
+  partnersTitle: "Partenaires",
+  /** Valeur d'un compteur dont la lecture a échoué : jamais « 0 » ni « aucun » à la place d'une panne. */
+  unknownCount: "–",
+  /** L'onglet Garage vide : l'état vide et son bouton principal (le seul de l'onglet). */
+  garageEmptyTitle: "Ton garage est vide",
+  garageEmptyText: "Ajoute ta première voiture : marque, photos, plaque floutée.",
   /** Mon profil, l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut partout). */
   param: "onglet",
 } as const;
@@ -35,4 +56,12 @@ export const profileTabs: readonly ProfileTab[] = ["garage", "sorties"];
 /** L'onglet demandé par l'adresse (`?onglet=`) ; tout ce qui n'est pas « sorties » ouvre le Garage (défaut retenu partout). */
 export function profileTabFromParam(value: string | null | undefined): ProfileTab {
   return value === "sorties" ? "sorties" : "garage";
+}
+
+/**
+ * Lot R8b1 (décision D40) : un profil sans véhicule n'a pas d'onglet « Garage » et s'ouvre sur « Sorties » ; un garage vide
+ * d'un exposant garde l'onglet (« Garage · 0 »).
+ */
+export function visibleProfileTab(tab: ProfileTab, hasGarage: boolean): ProfileTab {
+  return hasGarage ? tab : "sorties";
 }

@@ -10,23 +10,22 @@
 // « Partenaires » (lot R7m1), les actions « Suivre » et « Message » côte à côte, puis deux onglets internes, Garage (par défaut :
 // « Sa voiture » et « Son garage ») et Sorties (« Prochaine sortie », « Ses sorties », « Vu à »). Compte privé que je ne suis
 // pas : les nombres, « Réservé à ses abonnés » et le bouton, ni Garage ni Sorties.
+// Lot R8b1 (D40, maquette R8.1 `pr-profil`, option A « Compact ») : le même haut que mon profil (`ProfileHead`) : photo de 72 px, pseudo,
+// « Suivre » sur la ligne du grade (petit bouton principal), bio sur une ligne avec « plus », à droite les icônes « Message » et
+// « Plus » (signaler) empilées, puis la bande de compteurs avec « partenaires » en 4e compteur ; les onglets sont soulignés
+// (« Garage · N », « Sorties »), sans « Garage » pour un profil sans véhicule. Le crew et les réseaux restent sous le haut.
 import {
   AvatarRing,
   type AvatarRingState,
-  Button,
   Icon,
   type IconName,
   Photo,
   Text,
   tokens,
   useTheme,
-  WordSafeGroup,
-  WordSafeText,
 } from "@orasso/design-system/native";
 import {
   filledSocials,
-  fitWideWordSize,
-  followButtonKind,
   gradeLabels,
   publicProfileLabels as L,
   networkLabels as N,
@@ -41,26 +40,32 @@ import {
   socialUrl,
   storyViewerLabels,
   type UserProfileView,
+  visibleProfileTab,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { daysUntil } from "@/features/media/model";
 import { MessageButton } from "@/features/messages/MessageButton";
 import { OfferButton } from "@/features/partnerships/OfferButton";
 import { Stamp } from "@/features/passport/Stamp";
+import { openReport } from "@/features/ReportSheet";
 import { FollowButton } from "@/features/social/FollowButton";
 import { now } from "@/lib/clock";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
-import { CrewDot, Num, TagWin } from "@/ui/Kit";
+import { AppSheet } from "@/ui/AppSheet";
+import { CrewDot, TagWin } from "@/ui/Kit";
 import { AngledTag } from "@/ui/KitTz";
 import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
+import { Overlay } from "@/ui/Overlay";
 import { SecHead } from "@/ui/SecHead";
 import { Ticket } from "@/ui/Ticket";
-import { departmentCaption } from "./network";
-import { PartnersLine } from "./PartnersLine";
+import { PartnersHost } from "./PartnersLine";
+import { type BandCell, CounterBand, ProfileHead, SideIcon } from "./ProfileHead";
 import { ProfileTabs } from "./ProfileTabs";
+import { SetList, SetRow } from "./parts";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -76,21 +81,6 @@ const NETWORK_ICON: Record<SocialNetwork, IconName> = {
 };
 
 const TYPE_ICON: Record<ProfileVehicle["vehicleType"], IconName> = { car: "vehicle", moto: "moto", truck: "truck" };
-
-const FOLLOW_ICON = {
-  follow: "add",
-  follow_back: "add",
-  request: "add",
-  following: "check",
-  requested: "wait",
-} as const;
-const FOLLOW_LABEL = {
-  follow: N.follow,
-  follow_back: N.followBack,
-  request: N.request,
-  following: N.followed,
-  requested: N.requested,
-} as const;
 
 /**
  * L'anneau des stories de la personne (`stories` de `GET /users/:pseudo`, lot R7f1) : `null` sans story, anneau fin quand
@@ -181,43 +171,6 @@ function SquareVehicle({ v, onOpen }: { v: ProfileVehicle; onOpen?: () => void }
   );
 }
 
-/** Les trois nombres (`.r5n4 .r6n3`) : abonnés, abonnements, sorties ; visibles de tout membre connecté. */
-function Numbers({ p }: { p: UserProfileView }) {
-  const { t } = useTheme();
-  const cells: [number | null, (n: number) => string][] = [
-    [p.followersCount, N.followers],
-    [p.followingCount, N.following],
-    [p.outingsCount, N.outings],
-  ];
-  const shown = cells.filter(([n]) => n !== null) as [number, (n: number) => string][];
-  if (!shown.length) return null;
-  // Lot R6-police : police agrandie, un libellé ne se coupe jamais ; les trois gardent le même corps.
-  return (
-    <WordSafeGroup>
-      <View
-        style={[styles.n4, { backgroundColor: t.color.surface }]}
-        accessibilityRole="summary"
-        accessibilityLabel={shown.map(([n, label]) => `${n} ${label(n)}`).join(", ")}
-        testID="public-counts"
-      >
-        {shown.map(([n, label], i) => (
-          <View key={label(2)} style={[styles.n4Cell, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.line }]}>
-            <Num size={22}>{String(n)}</Num>
-            <WordSafeText
-              variant="caption"
-              base={styles.n4Label.fontSize}
-              color={t.color.inkMuted}
-              style={styles.n4Label}
-            >
-              {label(n)}
-            </WordSafeText>
-          </View>
-        ))}
-      </View>
-    </WordSafeGroup>
-  );
-}
-
 /** Les réseaux (`.r5socs`) : pastilles icône + pseudo ; le lien est fabriqué par Orasso (`socialUrl`). */
 function Socials({ p }: { p: UserProfileView }) {
   const { t } = useTheme();
@@ -271,11 +224,9 @@ export function PublicProfile({
   const c = t.color;
   const router = useRouter();
   const [w, setW] = useState(0);
-  const [headW, setHeadW] = useState(0);
-  const { fontScale } = useWindowDimensions();
-  // Un pseudo long rapetisse (jusqu'à 14 px) au lieu de se couper ; l'échelle de police du système compte.
-  // Tour 2 : la chasse de chaque signe (« M », « W » dépassent la moyenne), comme le site.
-  const pseudoSize = fitWideWordSize(p.pseudo, headW / Math.max(1, fontScale), 26, 14);
+  // Lot R8b1 : la feuille « Plus » (signaler) et l'erreur de l'icône « Message ».
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [msgError, setMsgError] = useState<string | null>(null);
   // Lot R7b1 : l'onglet interne (Garage par défaut) ; `?onglet=sorties` ouvre l'autre.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
   const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
@@ -286,6 +237,9 @@ export function PublicProfile({
     router.setParams({ onglet: undefined });
   }, [onglet, router]);
   const limited = p.audience === "public_limited";
+  // Lot R8b1 : un profil sans véhicule n'a pas d'onglet « Garage » et s'ouvre sur « Sorties ».
+  const hasGarage = p.vehicles.length > 0;
+  const shownTab = visibleProfileTab(tab, hasGarage);
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
   const others = p.vehicles.filter((v) => v !== main);
@@ -297,24 +251,13 @@ export function PublicProfile({
   const stampSize = w > 0 ? Math.floor((w - 2 * space3) / 3) : 96;
 
   // Aperçu : le bouton qu'un inconnu verrait (« Suivre » ou « Demander à suivre » selon mon réglage), ou « Abonné ».
-  const previewKind = previewAsFollower
-    ? "following"
-    : (followButtonKind({ canFollow: true, mine: "none", followsMe: false, visibility: p.visibility }) ?? "follow");
+  const previewMine = previewAsFollower ? "accepted" : "none";
 
-  const actions =
-    mode === "self" ? (
-      <Button
-        variant="secondary"
-        icon="edit"
-        onPress={() => router.push("/reglages/profil")}
-        fullWidth
-        testID="profile-edit"
-      >
-        Modifier mon profil
-      </Button>
-    ) : mode === "preview" ? (
-      // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. Tour 2 (relecture Opus 8) : masqués aussi
-      // pour TalkBack (`importantForAccessibility`, Android) comme pour VoiceOver (`accessibilityElementsHidden`, iOS).
+  // La ligne du grade : le grade, « Te suit », le département (ou « Compte privé »), puis « Suivre » (petit bouton principal).
+  const followLine =
+    mode === "self" ? null : mode === "preview" ? (
+      // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. Masqués aussi pour TalkBack (`importantForAccessibility`,
+      // Android) comme pour VoiceOver (`accessibilityElementsHidden`, iOS).
       <View
         style={styles.inert}
         pointerEvents="none"
@@ -322,117 +265,183 @@ export function PublicProfile({
         importantForAccessibility="no-hide-descendants"
         testID="preview-actions"
       >
-        <View style={styles.acts}>
-          <Button
-            variant={previewKind === "following" ? "secondary" : "primary"}
-            icon={FOLLOW_ICON[previewKind]}
-            fullWidth
-          >
-            {FOLLOW_LABEL[previewKind]}
-          </Button>
-        </View>
+        <FollowButton
+          size="line"
+          inert
+          pseudo={p.pseudo}
+          mine={previewMine}
+          followsMe={false}
+          canFollow
+          visibility={p.visibility}
+        />
       </View>
     ) : (
-      // Lot R7b1 (maquette R7.12) : « Suivre » (ou « Demander à suivre ») et « Message » côte à côte ; la rangée passe à la
-      // ligne quand la police agrandie ne leur laisse pas la place. « ⋯ » (signaler) reste dans l'en-tête de l'écran.
-      <View style={styles.actsRow} testID="profile-actions">
-        <View style={styles.actCell}>
-          <FollowButton
-            pseudo={p.pseudo}
-            mine={p.follow.mine}
-            followsMe={p.follow.followsMe}
-            canFollow={p.follow.canFollow}
-            visibility={p.visibility}
-            onChanged={() => onChanged?.()}
-          />
+      <FollowButton
+        size="line"
+        pseudo={p.pseudo}
+        mine={p.follow.mine}
+        followsMe={p.follow.followsMe}
+        canFollow={p.follow.canFollow}
+        visibility={p.visibility}
+        onChanged={() => onChanged?.()}
+      />
+    );
+
+  const gradeLine = (
+    <>
+      <TagWin>{gradeLabels[p.grade]}</TagWin>
+      {mode === "live" && p.follow.followsMe ? (
+        <View style={[styles.followsYou, { backgroundColor: c.surfaceRaised }]} testID="follows-you">
+          <Text variant="label" color={c.inkMuted}>
+            {N.followsYou.toUpperCase()}
+          </Text>
         </View>
-        <View style={styles.actCell}>
-          <MessageButton userId={p.userId} pseudo={p.pseudo} fullWidth sheetInOverlay />
+      ) : null}
+      {limited ? (
+        <View style={styles.privateCap}>
+          <Icon name="lock" size={13} color={c.inkMuted} />
+          <Text variant="caption" color={c.inkMuted}>
+            {L.privateAccount}
+          </Text>
         </View>
+      ) : p.departments?.[0] ? (
+        <View style={styles.dept}>
+          <Icon name="place" size={14} color={c.inkMuted} />
+          <Text variant="bodyStrong" color={c.inkMuted} style={styles.deptText}>
+            {p.departments[0]}
+          </Text>
+        </View>
+      ) : null}
+      {followLine}
+    </>
+  );
+
+  // À droite : « Message » et « Plus » (signaler) pour un autre ; « Modifier » pour mon profil ouvert par son lien. « Plus » n'existe
+  // que s'il ouvre une action (ici : signaler), jamais une icône vide.
+  const side =
+    mode === "self" ? (
+      <SideIcon
+        icon="edit"
+        label="Modifier mon profil"
+        onPress={() => router.push("/reglages/profil")}
+        testID="profile-edit"
+      />
+    ) : mode === "preview" ? (
+      <View
+        style={[styles.sideCol, styles.inert]}
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        testID="preview-side"
+      >
+        {!limited ? <SideIcon icon="chat" label={PT.message} /> : null}
+        <SideIcon icon="more" label={PT.more} />
+      </View>
+    ) : (
+      <View style={styles.sideCol} testID="profile-actions">
+        <MessageButton userId={p.userId} pseudo={p.pseudo} asIcon onError={setMsgError} sheetInOverlay />
+        <SideIcon icon="more" label={PT.more} onPress={() => setMoreOpen(true)} testID="profile-more" />
       </View>
     );
 
+  // La bande de compteurs : les nombres visibles de tout membre connecté ; « partenaires » en 4e, seulement quand il y en a.
+  const bandCells = (partners: { count: number | null; names: string; onPress: () => void } | null): BandCell[] => {
+    const cells: BandCell[] = (
+      [
+        ["followers", p.followersCount, N.followers],
+        ["following", p.followingCount, N.following],
+        ["outings", p.outingsCount, N.outings],
+      ] as const
+    )
+      .filter(([, n]) => n !== null)
+      .map(([key, n, label]) => ({
+        key,
+        value: n as number,
+        label: label(n as number),
+        accessibilityLabel: `${n} ${label(n as number)}`,
+        testID: `public-count-${key}`,
+      }));
+    // Tour 2 : un nombre inconnu (lecture de mes partenaires en panne, mode « soi ») garde la case : « – », le toucher ouvre « Réessayer ».
+    if (partners) {
+      cells.push({
+        key: "partners",
+        value: partners.count,
+        label: N.partners(partners.count ?? 2),
+        accessibilityLabel:
+          partners.count === null
+            ? `${N.partners(2)}, ${PT.unknownCount}`
+            : `${partners.count} ${N.partners(partners.count)}, ${partners.names}`,
+        onPress: partners.onPress,
+        testID: "public-count-partners",
+      });
+    }
+    return cells;
+  };
+
   return (
     <View style={styles.page} onLayout={(e) => setW(e.nativeEvent.layout.width)} testID="profil">
-      {/* (1) La tête (`.r5hd`). */}
-      <View style={styles.hd} testID="public-head">
-        <AvatarRing
-          ring={storyRingOf(p)}
-          neon={false}
-          size="xl"
-          source={mediaSource(p.avatarUrl)}
-          name={p.pseudo}
-          onPress={
-            mode !== "preview" && p.stories.count > 0
-              ? () => router.push({ pathname: "/story/[authorKey]", params: { authorKey: `u:${p.userId}` } })
-              : undefined
+      <View style={styles.top}>
+        {/* (1) Le haut compact (\`.r8hd.r8A\`). */}
+        <ProfileHead
+          testID="public-head"
+          avatar={
+            <AvatarRing
+              ring={storyRingOf(p)}
+              neon={false}
+              size="profile"
+              source={mediaSource(p.avatarUrl)}
+              name={p.pseudo}
+              onPress={
+                mode !== "preview" && p.stories.count > 0
+                  ? () => router.push({ pathname: "/story/[authorKey]", params: { authorKey: `u:${p.userId}` } })
+                  : undefined
+              }
+              accessibilityLabel={storyViewerLabels.openStories(p.pseudo)}
+              testID="profil-story-ring"
+            />
           }
-          accessibilityLabel={storyViewerLabels.openStories(p.pseudo)}
-          testID="profil-story-ring"
+          pseudo={p.pseudo}
+          pseudoTestID="profile-pseudo"
+          line={gradeLine}
+          bio={!limited ? p.bio : null}
+          bioTestID="profile-bio"
+          side={side}
         />
-        <View style={styles.hdText} onLayout={(e) => setHeadW(e.nativeEvent.layout.width)}>
-          <Text
-            variant="posterL"
-            color={c.ink}
-            style={[styles.pseudo, { fontSize: pseudoSize, lineHeight: pseudoSize + 1 }]}
-            testID="profile-pseudo"
-          >
-            {p.pseudo}
-          </Text>
-          <View style={styles.tags}>
-            <TagWin>{gradeLabels[p.grade]}</TagWin>
-            {mode === "live" && p.follow.followsMe ? (
-              <View style={[styles.followsYou, { backgroundColor: c.surfaceRaised }]} testID="follows-you">
-                <Text variant="label" color={c.inkMuted}>
-                  {N.followsYou.toUpperCase()}
-                </Text>
-              </View>
-            ) : null}
-            {limited ? (
-              <View style={styles.privateCap}>
-                <Icon name="lock" size={13} color={c.inkMuted} />
-                <Text variant="caption" color={c.inkMuted}>
-                  {L.privateAccount}
-                </Text>
-              </View>
-            ) : departmentCaption(p.departments?.[0]) ? (
-              <Text variant="caption" color={c.inkMuted} style={styles.shrink}>
-                {departmentCaption(p.departments?.[0])}
-              </Text>
-            ) : null}
-          </View>
-          {!limited && crew ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={L.openCrew(crew.name)}
-              disabled={mode === "preview"}
-              onPress={() => router.push(`/crew/${crew.slug}`)}
-              style={({ pressed }) => [
-                styles.crew,
-                { backgroundColor: c.surface, borderColor: c.line },
-                pressed && styles.pressed,
-              ]}
-              testID="profile-crew"
-            >
-              <CrewDot initials={crew.name.slice(0, 2).toUpperCase()} size={22} />
-              <Text variant="bodyStrong" color={c.ink} style={styles.crewText}>
-                {crew.name}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+        {/* Les nombres (visibles de tout membre connecté) et « partenaires » : un seul ouvre sa fiche, plusieurs la liste. */}
+        <PartnersHost partners={p.partners} mine={mode === "self"}>
+          {(cell) => {
+            const cells = bandCells(cell);
+            return cells.length ? (
+              <CounterBand
+                cells={cells}
+                testID="public-counts"
+                accessibilityLabel={cells.map((x) => `${x.value} ${x.label}`).join(", ")}
+              />
+            ) : null;
+          }}
+        </PartnersHost>
       </View>
-      {!limited && p.bio ? (
-        <Text variant="body" color={c.inkMuted} style={styles.bio} testID="profile-bio">
-          {p.bio}
-        </Text>
+      {!limited && crew ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={L.openCrew(crew.name)}
+          disabled={mode === "preview"}
+          onPress={() => router.push(`/crew/${crew.slug}`)}
+          style={({ pressed }) => [
+            styles.crew,
+            { backgroundColor: c.surface, borderColor: c.line },
+            pressed && styles.pressed,
+          ]}
+          testID="profile-crew"
+        >
+          <CrewDot initials={crew.name.slice(0, 2).toUpperCase()} size={22} />
+          <Text variant="bodyStrong" color={c.ink} style={styles.crewText}>
+            {crew.name}
+          </Text>
+        </Pressable>
       ) : null}
       {!limited ? <Socials p={p} /> : null}
-      <Numbers p={p} />
-      <PartnersLine partners={p.partners} mine={mode === "self"} />
 
-      {/* (2) Le bouton unique « Suivre ». */}
-      {actions}
       {/* Lot R7m1 : « Proposer un partenariat », seulement pour un pro vérifié qui regarde (décidé par l'API). */}
       {mode === "live" && p.partnershipOffer ? (
         <OfferButton
@@ -443,7 +452,28 @@ export function PublicProfile({
         />
       ) : null}
       {mode === "preview" ? <Muted variant="caption">{P.inert}</Muted> : null}
+      {msgError ? <Notice tone="error">{msgError}</Notice> : null}
       {topNotice}
+
+      {/* La feuille « Plus » : les actions qui existaient déjà sur ce profil (signaler), dans la zone des feuilles de l'écran. */}
+      {mode === "live" ? (
+        <Overlay>
+          <AppSheet visible={moreOpen} onClose={() => setMoreOpen(false)} accessibilityLabel={PT.moreTitle}>
+            <SetList>
+              <SetRow
+                first
+                icon="flag"
+                title={PT.reportProfile}
+                onPress={() => {
+                  setMoreOpen(false);
+                  openReport({ type: "profile", id: p.userId });
+                }}
+                testID="report-open-profile"
+              />
+            </SetList>
+          </AppSheet>
+        </Overlay>
+      ) : null}
 
       {limited ? (
         <>
@@ -460,9 +490,14 @@ export function PublicProfile({
         </>
       ) : (
         <>
-          {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties. */}
-          <ProfileTabs value={tab} onChange={setTab} />
-          {tab === "garage" ? (
+          {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties ; lot R8b1 : soulignés, « Garage · N ». */}
+          <ProfileTabs
+            value={shownTab}
+            onChange={setTab}
+            items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
+            garageCount={p.vehicles.length}
+          />
+          {shownTab === "garage" ? (
             <>
               {/* (3) « Sa voiture ». */}
               <SecHead title={L.car} hint={L.carHint} />
@@ -567,11 +602,10 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   grow: { flex: 1 },
   shrink: { flexShrink: 1 },
-  hd: { flexDirection: "row", alignItems: "center", gap: space3 + 2 },
-  hdText: { flex: 1, minWidth: 0, gap: 6 },
-  // Le pseudo passe à la ligne plutôt que de se couper (identifiants longs sans espace : coupure du système).
-  pseudo: { fontSize: 24, lineHeight: 25 },
-  tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
+  top: { gap: space2 },
+  dept: { flexDirection: "row", alignItems: "center", gap: 4 },
+  deptText: { fontSize: 13, lineHeight: 16 },
+  sideCol: { gap: 4 },
   privateCap: { flexDirection: "row", alignItems: "center", gap: 4 },
   crew: {
     flexDirection: "row",
@@ -586,7 +620,6 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   crewText: { fontSize: 13, lineHeight: 16, flexShrink: 1 },
-  bio: { fontSize: 14, lineHeight: 20 },
   socs: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   soc: {
     flexDirection: "row",
@@ -598,14 +631,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   socText: { fontSize: 13, lineHeight: 16 },
-  n4: { flexDirection: "row", borderRadius: 14, overflow: "hidden" },
-  n4Cell: { flex: 1, alignItems: "center", paddingVertical: space2, paddingHorizontal: 2, gap: 1 },
-  n4Label: { fontSize: 11.5, lineHeight: 14, textAlign: "center" },
-  // Lot R6b (`.r6acts`) : un seul bouton pleine largeur ; son libellé passe à la ligne ou réduit son corps, jamais coupé.
-  acts: { gap: space2 },
-  // Lot R7b1 : « Suivre » et « Message » côte à côte ; chaque cellule fait au moins 150 px, sinon la rangée passe à la ligne.
-  actsRow: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  actCell: { flexGrow: 1, flexBasis: 150, minWidth: 0 },
   // `.r6tag` : petite pastille majuscule, fond de surface secondaire, texte atténué.
   // Tour 2 (relecture Opus 9) : jetons seulement ; le style « label » (11/14) et 4 px dessus et dessous font 22 px.
   followsYou: {

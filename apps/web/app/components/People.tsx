@@ -76,21 +76,23 @@ export function FollowAction({
   followsMe: boolean;
   canFollow: boolean;
   visibility: ProfileVisibility;
-  size?: "full" | "small";
+  /** Lot R8b1 : `line` est le petit bouton de la ligne du grade (en-tête compact du profil d'un autre). */
+  size?: "full" | "small" | "line";
   /** Aperçu : le bouton ne fait rien. */
   inert?: boolean;
   busy?: boolean;
 }) {
   const kind = followButtonKind({ canFollow, mine, followsMe, visibility });
   if (!kind) return null;
-  const small = size === "small";
-  const testId = small ? SMALL_TEST_ID[kind] : "follow-button";
+  const line = size === "line";
+  const small = size === "small" || line;
+  const testId = size === "small" ? SMALL_TEST_ID[kind] : "follow-button";
   const label = FOLLOW_LABEL[kind];
-  const buttonClass = small ? "fl-sm" : undefined;
+  const buttonClass = line ? "fl-line" : small ? "fl-sm" : undefined;
   if (inert) {
     return (
       <Button
-        variant={isAction(kind) && !small ? "primary" : "secondary"}
+        variant={isAction(kind) && (!small || line) ? "primary" : "secondary"}
         icon={FOLLOW_ICON[kind]}
         fullWidth={!small}
         className={buttonClass}
@@ -109,7 +111,7 @@ export function FollowAction({
           type="submit"
           name="intent"
           value="follow"
-          variant={small ? "secondary" : "primary"}
+          variant={small && !line ? "secondary" : "primary"}
           icon={FOLLOW_ICON[kind]}
           fullWidth={!small}
           className={buttonClass}
@@ -126,7 +128,7 @@ export function FollowAction({
   return (
     <details className={small ? "fl-conf fl-conf--sm" : "fl-conf"}>
       <summary
-        className={`o-button o-t-button o-button--secondary${small ? " fl-sm" : " o-button--full"}`}
+        className={`o-button o-t-button o-button--secondary${line ? " fl-line" : small ? " fl-sm" : " o-button--full"}`}
         aria-label={`${label} ${pseudo}`}
         data-testid={testId}
       >

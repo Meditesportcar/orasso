@@ -15,6 +15,8 @@ export const storyViewerLabels = {
   more: "Plus",
   next: "Story suivante",
   prev: "Story précédente",
+  authorPrev: "Auteur précédent",
+  authorNext: "Auteur suivant",
   progress: (i: number, n: number) => `Story ${i} sur ${n}`,
   paused: "En pause",
   unavailable: "Cette story n'est plus disponible",

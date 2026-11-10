@@ -75,10 +75,12 @@ for (const theme of ["beton", "sable"] as const) {
 
       // 3. Mon compte : la ligne « Partenaires » ; la fiche du pro : « Ses partenaires » (connecté seulement).
       await page.goto("/app/moi");
+      // Lot R8b1 : les partenaires sont le 4e compteur de la bande ; il mène à la liste.
+      await expect(page.getByTestId("profil-count-partenaires")).toContainText("1");
+      await page.getByTestId("profil-count-partenaires").click();
       const line = page.getByTestId("partners-line");
       await expect(line).toContainText("Partenaires · 1");
       await expect(line).toContainText("Garage du Port");
-      await line.locator(":scope > summary").click();
       await shot(page, `pq_pro-${tag}`);
       {
         const other = await browser.newContext({ viewport: { width, height }, locale: "fr-FR", baseURL: WEB });

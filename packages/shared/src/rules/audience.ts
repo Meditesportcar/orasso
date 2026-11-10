@@ -144,12 +144,23 @@ export function storyRing(author: { live: boolean }, stories: readonly RingStory
   return alive.some((s) => s.audience === "crew") ? "crew" : "followers";
 }
 
-export type BarEntry = { hasUnseen: boolean; latestAt: Date };
+/**
+ * Rang d'un auteur dans la barre (décisions R8 § 8, calculé par le serveur) : 2 = la structure d'un événement en cours où
+ * j'ai ma place ; 3 = la structure d'un événement à venir où je suis retenu ou porteur d'un billet valable ; 4 = tout le
+ * reste (crew, abonnements, structures et pros suivis). « Ta story » (`mine`) est à part, toujours en tête.
+ */
+export type BarRank = 2 | 3 | 4;
 
-/** Non vues d'abord, puis la plus récente en premier. Tri stable ; ne modifie pas l'entrée. */
+export type BarEntry = { hasUnseen: boolean; latestAt: Date; rank: BarRank };
+
+/**
+ * Non vues d'abord, puis par rang (2, 3, 4), puis la plus récente en premier ; les déjà vues suivent dans le même ordre.
+ * Tri stable (à égalité, l'ordre reçu) ; ne modifie pas l'entrée.
+ */
 export function storyBarOrder<T extends BarEntry>(entries: readonly T[]): T[] {
   return [...entries].sort((a, b) => {
     if (a.hasUnseen !== b.hasUnseen) return a.hasUnseen ? -1 : 1;
+    if (a.rank !== b.rank) return a.rank - b.rank;
     return b.latestAt.getTime() - a.latestAt.getTime();
   });
 }
