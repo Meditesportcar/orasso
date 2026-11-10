@@ -1,7 +1,13 @@
 // L'étape « Détails » de la story, sans React ni réseau (lot R7f3, testé par `details.test.ts`) : la légende, le lieu, la
 // voiture, l'événement, les personnes identifiées, et le public choisi. Changer de public retire ce qui ne vaut plus pour lui
 // (`pruneForAudience` des règles partagées).
-import { pruneForAudience, type StoryAudienceOption, type StoryTagPick } from "@orasso/shared";
+import {
+  type CommercialDraft,
+  noCommercialDraft,
+  pruneForAudience,
+  type StoryAudienceOption,
+  type StoryTagPick,
+} from "@orasso/shared";
 
 export type DetailsState = {
   caption: string;
@@ -11,6 +17,8 @@ export type DetailsState = {
   tags: StoryTagPick[];
   /** `key` d'une `StoryAudienceOption`. */
   audienceKey: string;
+  /** « Collaboration commerciale » posée à la main (lot R7m2) ; celle d'un partenaire cité est posée par l'API. */
+  commercial: CommercialDraft;
 };
 
 /** `audienceKey` vide : rien n'est encore choisi, la première option du moment s'applique (`settleAudience`). */
@@ -21,6 +29,7 @@ export const initialDetails = (options: readonly StoryAudienceOption[]): Details
   eventId: null,
   tags: [],
   audienceKey: options[0]?.key ?? "",
+  commercial: noCommercialDraft,
 });
 
 /** Au tout début (aucun choix fait), la première option disponible est prise ; ensuite jamais plus, d'office. */

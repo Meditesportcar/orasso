@@ -1,6 +1,6 @@
 // Carte « publication » : photo(s) au format de la publication (4:5, 1:1, paysage), légende, auteur (son pseudo ouvre son
-// profil), voiture et événement, flamme avec son compteur, « ⋯ ». Le bandeau « Collaboration commerciale » viendra du
-// lot R7m2 : le champ `commercialPartner` est lu, `CommercialBadge` (réservé) ne dessine rien d'ici là.
+// profil), voiture et événement, flamme avec son compteur, « ⋯ ». Le bandeau « Collaboration commerciale » (lot R7m2)
+// est en tête de la carte, avant l'en-tête.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedPostView, feedScreenLabels as L, shareLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
@@ -53,7 +53,6 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
     }
   }
 
-  const commercialPartner = (post as { commercialPartner?: { name: string } | null }).commercialPartner ?? null;
   return (
     <CardShell
       card={card}
@@ -63,6 +62,7 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onMenu={onMenu}
       onTitle={post.mine ? undefined : () => router.push(`/u/${encodeURIComponent(post.author.pseudo)}`)}
       faded={faded}
+      banner={<CommercialBadge partner={post.commercialPartner} />}
       testID="feed-card-feed_post"
       actions={
         <>
@@ -92,7 +92,6 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       }
     >
       <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "feed_post", id: post.id }} />
-      <CommercialBadge partner={commercialPartner} />
       <FeedPhotos post={post} />
       {post.caption ? (
         <Text variant="body" color={c.ink} style={styles.text} testID="feed-post-caption">

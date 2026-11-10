@@ -9,9 +9,16 @@ export const partnershipLabels = {
   commercialLine: (pro: string) => `Collaboration commerciale · ${pro}`,
   /** Sous la ligne non décochable, quand un partenaire actif est identifié ou cité. */
   commercialRequired: "Obligatoire pour un contenu fait avec ton partenaire",
-  /** Interrupteur de la mention à la main (un pro qui n'est pas ton partenaire). */
-  commercialSwitchHint: "À poser si ce contenu est fait avec une marque ou un pro",
-  commercialPick: "Choisir le pro",
+  /** « Poser la mention moi-même » (maquette R7.21) : un contenu fait avec une marque ou un pro qui n'est pas ton partenaire. */
+  commercialSelf: "Poser « Collaboration commerciale » moi-même",
+  commercialSelfHint: "Pour un contenu fait avec une marque, sans l'identifier",
+  /** Prévenu : le pro cité (story : il peut aussi la repartager). */
+  commercialNotifiedStory: (pro: string) => `${pro} est prévenu et peut repartager ta story.`,
+  commercialNotifiedPost: (pro: string) => `${pro} est prévenu.`,
+  /** Note de la loi sur l'influence commerciale (à faire relire par un juriste avec le reste). */
+  commercialLaw:
+    "En France, la loi du 9 juin 2023 sur l'influence commerciale impose d'indiquer clairement « Publicité » ou « Collaboration commerciale » sur un contenu fait dans le cadre d'un partenariat.",
+  commercialPick: "Choisis le pro de la collaboration.",
   commercialPickPlaceholder: "Nom du pro",
   commercialPickEmpty: "Aucun pro trouvé.",
   commercialPickError: "La recherche ne répond pas. Réessaie.",

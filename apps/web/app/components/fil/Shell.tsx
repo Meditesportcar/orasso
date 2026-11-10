@@ -39,6 +39,7 @@ export function Shell({
   tag,
   onMenu,
   faded,
+  banner,
   children,
   actions,
 }: {
@@ -54,11 +55,14 @@ export function Shell({
   tag?: string;
   onMenu: (card: FeedCard) => void;
   faded: boolean;
+  /** Bandeau en tête de la carte, avant l'en-tête (« Collaboration commerciale », lot R7m2). */
+  banner?: React.ReactNode;
   children?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (
     <article className={faded ? "fil-card is-faded" : "fil-card"} data-testid={`feed-card-${card.kind}`}>
+      {banner}
       <header className="fil-card__head">
         {head}
         <div className="fil-card__titles">

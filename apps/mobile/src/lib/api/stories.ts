@@ -32,10 +32,10 @@ export const storiesApi = {
   storyDelete: (id: string) => request<unknown>(`/api/me/stories/${id}`, { method: "DELETE" }),
   storyViewers: (id: string) => request<StoryViewers>(`/api/me/stories/${id}/viewers`),
   /** Lot R7h : reprendre une story où je suis identifié dans la mienne (au nom d'une structure, sinon en mon nom). */
-  storyShare: (id: string, asStructureId?: string) =>
+  storyShare: (id: string, asStructureId?: string, asProId?: string) =>
     request<StoryShared>(`/api/stories/${id}/share-to-mine`, {
       method: "POST",
-      body: asStructureId ? { asStructureId } : {},
+      body: asStructureId ? { asStructureId } : asProId ? { asProId } : {},
     }),
   /** Lot R7h : les stories qui identifient la structure ou un de ses événements. */
   storyMentions: (structureId: string, cursor?: string | null) =>
