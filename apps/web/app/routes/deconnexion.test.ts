@@ -1,11 +1,13 @@
 // Dette R7 § 8 : une déconnexion que l'API n'a pas confirmée (503) efface quand même le cookie de session du navigateur
 // et le dit ; une déconnexion réussie ne change rien.
+import { signOutUnconfirmed } from "@orasso/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let outcome: { ok: boolean; status: number };
 vi.mock("../lib/api.server", () => ({
+  getMe: async () => null,
   api: async () => ({ ...outcome, headers: new Headers() }),
-  safeReturn: (v: string, f: string) => (v.startsWith("/") ? v : f),
+  safeReturn: (v: string | null, f = "/app/sorties") => (v?.startsWith("/") ? v : f),
   withCookies: (from: Headers, to: Headers = new Headers()) => {
     for (const c of from.getSetCookie()) to.append("set-cookie", c);
     return to;
@@ -36,5 +38,20 @@ describe("action de déconnexion", () => {
     const { action } = await import("./deconnexion");
     const res = (await action({ request: post() } as never)) as Response;
     expect(res.headers.get("location")).toBe("/app");
+  });
+
+  it("la page de connexion affiche « La déconnexion n'a pas pu être confirmée » à l'arrivée", async () => {
+    const { loader } = await import("./connexion");
+    const shown = (await loader({
+      request: new Request("http://site.test/connexion?deconnexion-echec=1"),
+    } as never)) as {
+      signOutFailed: boolean;
+    };
+    const normal = (await loader({ request: new Request("http://site.test/connexion") } as never)) as {
+      signOutFailed: boolean;
+    };
+    expect(shown.signOutFailed).toBe(true);
+    expect(normal.signOutFailed).toBe(false);
+    expect(signOutUnconfirmed).toBe("La déconnexion n'a pas pu être confirmée");
   });
 });
