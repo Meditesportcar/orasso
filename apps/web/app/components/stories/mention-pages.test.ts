@@ -174,7 +174,11 @@ describe("pager des mentions (hook)", () => {
 
   it("un geste dont la lecture des mentions échoue (première page absente) : la relecture forcée attend la page suivante", async () => {
     let copy: string | null = null;
-    const fetchPage: FetchPage = async () => page(["b1", "b2"], null, copy ? { b2: copy } : {});
+    let calls = 0;
+    const fetchPage: FetchPage = async () => {
+      calls++;
+      return page(["b1", "b2"], null, copy ? { b2: copy } : {});
+    };
     const pager = new MentionPager(fetchPage, () => undefined);
     pager.sync(firstPage(["a1"], "c2"));
     await pager.more(); // profondeur 1, b2 sans copie
@@ -185,8 +189,10 @@ describe("pager des mentions (hook)", () => {
     pager.sync(firstPage(["a1"], "c2"), false); // l'adresse nettoyée recharge une première page identique
     await flush();
     expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBe("copie-b2");
+    expect(calls).toBe(2);
     pager.sync(firstPage(["a1"], "c2"), false); // la dette est payée : plus de relecture
     await flush();
+    expect(calls).toBe(2);
     expect(pager.state.busy).toBe(false);
   });
 
