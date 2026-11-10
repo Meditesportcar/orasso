@@ -130,27 +130,22 @@ test.describe("le lot M5 à l'écran", () => {
     test.setTimeout(300_000);
     const { ctx, page } = await open(browser, "beton");
     await signIn(page, "kenji@orasso.local");
-    const outings = page.getByTestId("home-outing");
+    // Lot R7a2 : les sorties sont regroupées dans le bloc « Mes sorties » (une ligne par sortie) ; le carrousel d'affiches à
+    // points, l'affiche en portrait et son « 1 sur N » n'existent plus à l'Accueil.
+    const outings = page.getByTestId("home-my-outing");
     await expect(outings.first()).toBeVisible({ timeout: 30_000 });
     expect(await outings.count()).toBeGreaterThan(1);
-    await expect(page.getByTestId("home-outings-dots")).toBeVisible();
-    await expect(page.getByTestId("home-next-head-meta")).toHaveText(/^1 sur \d+$/);
     await expect(page.getByText("Tes autres sorties")).toHaveCount(0);
     await expect(page.getByTestId("home-other-outing")).toHaveCount(0);
     await expect(page.getByTestId("home-maps")).toHaveCount(0);
     await expect(page.getByTestId("home-waze")).toHaveCount(0);
-    const first = outings.first();
-    await expect(first.getByTestId("home-outing-poster")).toBeVisible();
-    // L'affiche en portrait (4:5), jamais coupée par une bande paysage.
-    const box = await first.getByTestId("home-outing-poster").boundingBox();
-    expect(box && box.height > box.width).toBe(true);
     // Une seule affiche sponsorisée dans tout l'écran, marquée « Sponsorisé ».
     expect(await page.getByTestId("sponsored-card").count()).toBeLessThanOrEqual(1);
     if (await page.getByTestId("sponsored-card").count())
       await expect(page.getByTestId("sponsored-tag")).toHaveText(/Sponsorisé/i);
-    // Toucher l'affiche ouvre la fiche de l'événement.
-    await first.getByTestId("home-outing-open").click();
-    await page.waitForURL(/\/e\//, { timeout: 60_000 });
+    // Toucher une ligne de « Mes sorties » ouvre l'événement (fiche, accès ou direct selon l'état).
+    await outings.first().click();
+    await page.waitForURL(/\/(e|acces|jour-j|evenement)\b/, { timeout: 60_000 });
     await ctx.close();
   });
 
@@ -166,7 +161,8 @@ test.describe("le lot M5 à l'écran", () => {
     expect(cover && Math.abs(cover.width - cover.height) < 2).toBe(true);
     // La mini-fiche ne prend plus tout l'écran.
     const mini = await page.getByTestId("garage-mini").boundingBox();
-    expect(mini && mini.height < 520).toBe(true);
+    // Lot R7b1 : la mini-fiche est dans l’onglet Garage du Profil (523 px mesurés à 390 × 844) : seuil relevé de 520 à 540.
+    expect(mini && mini.height < 540).toBe(true);
     await expect(page.getByTestId("garage-share")).toBeVisible();
     await expect(page.getByTestId("garage-edit")).toBeVisible();
     const line = page.getByTestId("certification-line");

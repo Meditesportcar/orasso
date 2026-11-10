@@ -73,7 +73,7 @@ test("R5c2 : captures avant / après (page du crew, vitrine, rejoindre)", async 
         await shot(k, `appli-crew-chef-bas-${tag}`);
         // Après le lot : chaque onglet de la page (absent avant).
         if (await k.getByTestId("crew-tabs").count()) {
-          for (const tab of ["outings", "garage", "members"]) {
+          for (const tab of ["outings", "members"]) {
             await k.goto(`/crew/${SLUG}`);
             await skipOpening(k);
             await k.getByTestId(`crew-tab-${tab}`).click();
