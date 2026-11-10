@@ -47,7 +47,7 @@ test("Mon compte : haut compact, quatre compteurs, Garage · N, ligne d'ajout en
     await expect(add).toBeVisible();
     await expect(page.getByTestId("garage-empty-add")).toHaveCount(0);
     const lastCard = await page
-      .getByTestId("garage-other")
+      .locator('[data-testid="garage-main"], [data-testid="garage-other"]')
       .last()
       .boundingBox()
       .then((b) => b ?? { y: 0, height: 0 });
@@ -86,6 +86,8 @@ test("Mon compte : haut compact, quatre compteurs, Garage · N, ligne d'ajout en
 
 test("Mon compte : la bio tient sur une ligne, « plus » la déroule ; les onglets restent collés en défilant", async ({
   page,
+  browser,
+  baseURL,
 }) => {
   await setTheme(page, "beton");
   const pseudo = `Bio${unique()}`.slice(0, 14);
@@ -107,7 +109,7 @@ test("Mon compte : la bio tient sur une ligne, « plus » la déroule ; les ongl
   await toggle.click();
   await expect(toggle).toContainText("plus");
   // Collant : la rangée reste en haut (sous la barre) quand la page défile.
-  const kenji = await page.context().newPage();
+  const kenji = await (await browser.newContext({ baseURL })).newPage();
   await setTheme(kenji, "beton");
   await loginInBrowser(kenji, "kenji@orasso.local", undefined, "/app/moi");
   await kenji.setViewportSize({ width: 390, height: 700 });
@@ -169,7 +171,8 @@ test("profil d'un autre : « Suivre » sur la ligne du grade, « Message » et �
   await page.getByTestId("report-open").click();
   await expect(page.getByTestId("report-dialog")).toBeVisible();
   await shot(page, "06-signaler");
-  await page.keyboard.press("Escape");
+  // La feuille « Plus » reste ouverte : on rouvre la page avant de toucher le compteur.
+  await page.goto("/u/Lea_11");
   // Un seul partenaire : il ouvre sa fiche.
   await page.getByTestId("public-count-partners").click();
   await page.waitForURL(/\/p\//);

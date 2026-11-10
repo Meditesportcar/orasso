@@ -380,10 +380,6 @@
   display: grid;
   gap: var(--space-2);
 }
-/* Les onglets collants sous la barre du haut de l'espace connecté (58 px + son trait de 2 px). */
-[data-testid="profil-tabs"].utabs--sticky {
-  top: 60px;
-}
 /* « Ajouter un véhicule » en fin de liste (`.r8addrow`) : un contour d'un trait, pas un bouton principal. */
 .pt-addrow {
   display: flex;
