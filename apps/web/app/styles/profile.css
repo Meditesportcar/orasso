@@ -471,3 +471,17 @@
   background: var(--surface);
   box-shadow: var(--shadow-card);
 }
+/* La confirmation de « Abonné » / « Demandé » sur la ligne du grade : sous la ligne, alignée à gauche de la colonne (la feuille
+   ne sort pas de l'écran) et au-dessus des onglets collants. */
+.pt-id__mid {
+  position: relative;
+}
+.pt-id__gl .fl-conf--sm {
+  position: static;
+}
+.pt-id__gl .fl-conf--sm .fl-confirm {
+  left: 0;
+  right: auto;
+  top: 100%;
+  z-index: 30;
+}
