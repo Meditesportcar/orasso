@@ -177,6 +177,9 @@ export const explorerV2Labels = {
   km: (km: number) => `${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`,
   seatsLeft: (left: number, capacity: number) => `${left} place${left > 1 ? "s" : ""} exposants sur ${capacity}`,
   seatsFull: (capacity: number) => `Complet · ${capacity} exposants`,
+  // Lot R8x (site) : sans effectif fiable (journées limitées différemment de la capacité générale), « Complet » seul.
+  seatsFullShort: "Complet",
+  seatsLeftOpen: (left: number) => `${left} place${left > 1 ? "s" : ""} exposants`,
   seatsFree: "Places exposants sans limite",
   waitlistFlag: "Liste d'attente",
   verified: "Structure validée",
@@ -321,7 +324,13 @@ export const explorerR2Labels = {
   whereKeep: "Gardé pour tes prochaines visites. Tes préférences ne changent pas.",
   km: "km",
   pillMe: (km: number) => `À ${km} km`,
-  pillMine: (codes: readonly string[]) => (codes.length ? `Mon coin (${codes.join(", ")})` : "Mon coin"),
+  // Lot R8x : au-delà de trois départements, un résumé (jusqu'à 20 numéros ne tiendraient ni sur le téléphone ni sur le site).
+  pillMine: (codes: readonly string[]) =>
+    codes.length > 3
+      ? `Mon coin · ${codes.length} départements`
+      : codes.length
+        ? `Mon coin (${codes.join(", ")})`
+        : "Mon coin",
   pillDept: (name: string, code: string) => `${name} (${code})`,
   pillAll: "Partout en France",
   lineMe: (km: number) => keepUnits(`jusqu'à ${km} km de toi`),

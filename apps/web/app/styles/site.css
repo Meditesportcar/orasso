@@ -1919,6 +1919,7 @@
   align-items: center;
   gap: 3px;
   min-height: 32px;
+  max-width: 100%;
   padding: 0 8px 0 7px;
   border: 1.5px solid var(--line);
   border-radius: var(--radius-pill);
