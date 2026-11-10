@@ -63,6 +63,38 @@ export function pickCurrentEvent(events: readonly EventCard[], at: Date): Curren
   return next ? { event: next, phase: "next" } : null;
 }
 
+/**
+ * Lot R7h, tour 4 : ce que le Direct montre de la story de la structure. « Mentions » pendant l'événement ; « Ma story »
+ * dès qu'une story de la structure est en ligne, avec ou sans événement courant ou à venir (le lendemain du dernier
+ * événement, un responsable doit pouvoir retirer la story publiée la veille).
+ */
+export function storySection(
+  current: Pick<CurrentEvent, "phase"> | null,
+  hasMyStories: boolean,
+  mineFailed = false,
+): { mentions: boolean; mine: boolean; show: boolean } {
+  const mentions = current !== null && current.phase !== "next";
+  // Tour 5 : une lecture de « Ma story » en échec garde l'accès (des stories peuvent être en ligne) avec un message.
+  const mine = mentions || hasMyStories || mineFailed;
+  return { mentions, mine, show: mine };
+}
+
+/**
+ * Lot R7h, tour 6 : la lecture de « Ma story » de la structure. L'échec d'un rafraîchissement est signalé à part des données
+ * gardées : une ancienne réponse (même vide) n'efface jamais l'erreur récente, et l'accès « Ma story » avec « Réessayer »
+ * reste (un autre responsable peut avoir publié entre-temps). Une erreur n'est jamais prise pour « aucune story ».
+ */
+export function myStoriesRead(
+  data: { stories: readonly unknown[] } | null,
+  error: unknown,
+): { has: boolean; failed: boolean; loading: boolean } {
+  return {
+    has: data !== null && data.stories.length > 0,
+    failed: Boolean(error),
+    loading: data === null && !error,
+  };
+}
+
 /** Le statut qui sera demandé à l'API quand on bascule (Maintenu ↔ Incertain). */
 export const otherOutlook = (current: EventOutlook): EventOutlook =>
   current === "maintained" ? "uncertain" : "maintained";

@@ -5,7 +5,7 @@ import { fromWallTime, HOUR, MINUTE, SPOT_MAX_DURATION_MS } from "@orasso/shared
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { resetDb, signUp, type TestUser, useClock, viewerOf } from "../../../test/helpers";
+import { quietHours, resetDb, signUp, type TestUser, useClock, viewerOf } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
@@ -33,6 +33,7 @@ const at = (hour: number, minute = 0, day = 10) => fromWallTime({ year: 2026, mo
 beforeEach(async () => {
   await resetDb();
   clock = useClock(at(10));
+  quietHours(true); // heures calmes allumées, quelle que soit la variable de la machine (des notifications attendent 8 h)
 });
 
 async function req(u: TestUser | null, method: string, path: string, body?: unknown) {

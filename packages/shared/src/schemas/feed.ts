@@ -45,21 +45,43 @@ export const feedPostPhotoInput = z.object({
 export type FeedPostPhotoInput = z.infer<typeof feedPostPhotoInput>;
 
 /** `POST /me/feed-posts` : 1 à 6 photos, légende de 500 caractères, véhicule (le sien) et événement facultatifs. */
-export const feedPostCreateSchema = z.object({
-  caption: optionalText(FEED_CAPTION_MAX),
-  vehicleId: z.uuid().nullish(),
-  eventId: z.uuid().nullish(),
-  aspect: z.enum(feedAspects).default(DEFAULT_FEED_ASPECT),
-  photos: z
-    .array(feedPostPhotoInput)
-    .min(1)
-    .max(FEED_POST_PHOTOS_MAX)
-    .refine((list) => new Set(list.map((p) => p.uploadKey)).size === list.length, {
-      message: "Une photo est en double.",
-    }),
-  /** Identifiant tiré par l'appareil : un nouvel essai après une réponse perdue rend la même publication. */
-  clientId: z.uuid().nullish(),
-});
+export const feedPostCreateSchema = z
+  .object({
+    caption: optionalText(FEED_CAPTION_MAX),
+    vehicleId: z.uuid().nullish(),
+    eventId: z.uuid().nullish(),
+    aspect: z.enum(feedAspects).default(DEFAULT_FEED_ASPECT),
+    photos: z
+      .array(feedPostPhotoInput)
+      .max(FEED_POST_PHOTOS_MAX)
+      .refine((list) => new Set(list.map((p) => p.uploadKey)).size === list.length, {
+        message: "Une photo est en double.",
+      })
+      .default([]),
+    /**
+     * Partager une carte au Fil (R7f4) : un événement ou une voiture ; l'API rend la carte en 4:5 (1080 × 1350) et la publie
+     * comme photo, sans photo envoyée. Sans `linked`, au moins une photo est attendue.
+     */
+    linked: z
+      .object({
+        type: z.enum(["event", "vehicle"]),
+        id: z
+          .string()
+          .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Identifiant invalide")
+          .transform((v) => v.toLowerCase()),
+      })
+      .nullish(),
+    /** Identifiant tiré par l'appareil : un nouvel essai après une réponse perdue rend la même publication. */
+    clientId: z.uuid().nullish(),
+  })
+  .refine((v) => v.photos.length > 0 || Boolean(v.linked), {
+    message: "Au moins une photo est attendue",
+    path: ["photos"],
+  })
+  .refine((v) => !(v.photos.length > 0 && v.linked), {
+    message: "Une carte partagée n'a pas de photo envoyée",
+    path: ["photos"],
+  });
 export type FeedPostCreate = z.infer<typeof feedPostCreateSchema>;
 
 export const feedLessSchema = z.object({ kind: z.enum(feedCardKinds) });

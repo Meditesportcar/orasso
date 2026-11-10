@@ -16,6 +16,12 @@ type After = (cb: () => unknown) => void;
 export async function softDeleteWithCopies(ex: Tx | typeof db, ids: string[]): Promise<string[]> {
   if (!ids.every((i) => /^[0-9a-f-]{36}$/i.test(i))) throw new Error("Identifiant invalide");
   const at = now();
+  // Verrou d'abord, dans une instruction à part : un partage en cours (qui tient l'originale en `FOR SHARE`) se termine
+  // avant, et l'instruction suivante (nouvelle photo de la base) voit sa copie. Sans cela, une copie insérée entre-temps
+  // survivrait à la suppression (lot R7h, tour 2).
+  await ex.execute(
+    sql`select id from stories where id = any(${sql.raw(`'{${ids.join(",")}}'::uuid[]`)}) order by id for update`,
+  );
   const rows = await ex.execute<{ id: string }>(sql`
     with recursive tree(id) as (
       select id from stories where id = any(${sql.raw(`'{${ids.join(",")}}'::uuid[]`)})
@@ -28,6 +34,25 @@ export async function softDeleteWithCopies(ex: Tx | typeof db, ids: string[]): P
   const all = (rows as unknown as { rows: { id: string }[] }).rows.map((r) => r.id);
   await detachReplies(ex, all);
   return all;
+}
+
+/**
+ * Retire les copies des stories d'une personne : `all` (compte suspendu, banni) = toutes ses stories, copies de ses
+ * stories personnelles ou signées d'une structure ou d'un pro ; sinon (compte passé en privé) seulement ses stories
+ * personnelles, la structure et le pro restant publics. Rend les identifiants supprimés (fichiers effacés après la validation).
+ */
+export async function dropCopiesOfAuthor(
+  ex: Tx | typeof db,
+  authorId: string,
+  scope: "all" | "personal" = "personal",
+): Promise<string[]> {
+  const res = await ex.execute<{ id: string }>(sql`
+    select c.id from stories c join stories o on o.id = c.shared_from_story_id
+    where o.author_id = ${authorId} ${scope === "all" ? sql`` : sql`and o.persona not in ('organizer', 'pro')`}
+      and c.deleted_at is null`);
+  const ids = res.rows.map((r) => r.id);
+  if (!ids.length) return [];
+  return softDeleteWithCopies(ex, ids);
 }
 
 /** Marque supprimées les stories d'un auteur ou d'un crew (et leurs copies), puis efface leurs fichiers après la validation. */

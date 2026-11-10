@@ -19,6 +19,7 @@ import {
   type StoryReplyResult,
   type StoryTagInput,
   type StoryTagKind,
+  shareLabels,
   storyAuthorKeyOf,
   storyDenial,
   storyExpiresAt,
@@ -52,6 +53,7 @@ import {
   uploads,
   userFollows,
 } from "../../db/schema";
+import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -73,6 +75,7 @@ import {
   accountActive,
   audienceStoryOf,
   authorKeyOf,
+  notMaskedCopy,
   relationOf,
   type StoryRow,
   selectStories,
@@ -81,7 +84,10 @@ import {
 } from "./common";
 import { composeStoryPhoto } from "./compose";
 import { purgeStoryFiles } from "./expire";
+import { composeLinkedStory, inspect, type LinkedContent, loadLinked } from "./linked";
 import { softDeleteWithCopies } from "./purge";
+import { dropCopiesOfTag } from "./share";
+import { managedStructures } from "./sharing";
 import { type Prepared, prepareVideo } from "./video";
 
 export { softDeleteWithCopies };
@@ -220,6 +226,8 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
         ),
       );
     if (!m) throw forbidden(storyLabels.notOrganizer);
+    // Lot R7h, tour 3 : publier au nom d'une structure exige le second facteur, comme le repartage et le retrait.
+    await requireOrganizer(v, input.structureId);
     return;
   }
   if (persona === "pro") {
@@ -262,7 +270,7 @@ async function notifyPublished(
   authorKey: { kind: StoryTagKind; id: string; key: string },
   name: string,
   /** Les personnes à prévenir d'une identification (elles-mêmes ou, pour une structure ou un pro, ses responsables). */
-  mentions: { userId: string; body: string }[],
+  mentions: { userId: string; body: string; target: Record<string, string> }[],
   /** L'auteur affiché : pour une structure ou un pro, son nom et son logo, jamais le compte personnel de qui publie. */
   actor: { userId?: string; pseudo: string; avatarUrl: string | null },
 ) {
@@ -271,10 +279,11 @@ async function notifyPublished(
   // Identifiés : une notification chacun, jamais de vignette (invariant des stories de crew).
   for (const m of mentions) {
     if (m.userId === story.authorId) continue;
+    // Lot R7h : `target` dit qui est identifié (moi, ma structure, ma fiche pro) : la ligne d'Activité en tire ses boutons.
     await notificationsService.notify(tx, m.userId, "story_mention", {
       title: storyLabels.mentionTitle(actor.pseudo),
       body: m.body,
-      data,
+      data: { ...data, ...m.target },
     });
   }
   const tagged = mentions.map((m) => m.userId);
@@ -345,7 +354,9 @@ export const storiesService = {
   async create(v: Viewer, input: StoryCreate): Promise<StoryCreated> {
     if (suspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     // Reprise : cette publication existe déjà (la réponse s'est perdue) → la même story, sans doublon ni erreur.
-    const id = storyIdFor(v.user.id, input.uploadKey);
+    // Une carte liée (R7f4) n'a pas de fichier envoyé : l'identifiant de l'appareil (`clientId`) tient lieu de clé d'envoi.
+    const sendKey = input.uploadKey ?? `linked:${input.clientId}`;
+    const id = storyIdFor(v.user.id, sendKey);
     const replay = async (): Promise<StoryCreated | null> => {
       const [done] = await db
         .select({ status: stories.status, expiresAt: stories.expiresAt })
@@ -363,7 +374,8 @@ export const storiesService = {
     // Lot R7g : avec une vignette, c'est une vidéo, publiée telle quelle (décision de Damien du 09/11) : aucune plaque.
     const video = Boolean(input.posterKey);
     // Photo : la décision de plaque est obligatoire quel que soit le public, crew compris (D38, « règle des plaques partout »).
-    if (!video && !rects.length && !input.noPlateConfirmed) {
+    // Une carte liée n'a pas de photo de l'auteur : son image est déjà celle que l'API a le droit de montrer (`linked.ts`).
+    if (!video && input.uploadKey && !rects.length && !input.noPlateConfirmed) {
       throw new AppError(400, "plate_decision_required", storyLabels.plateDecisionRequired);
     }
     await checkPersona(v, input);
@@ -419,14 +431,32 @@ export const storiesService = {
     };
     const eventId = input.eventId ? await eventOk(input.eventId, "event") : null;
     let linked: { type: NonNullable<StoryCreate["linked"]>["type"]; id: string } | null = null;
-    if (input.linked) {
+    // Carte liée sans média (R7f4) : le serveur résout le contenu (visible, partageable par ce regard) et rendra le 9:16.
+    let card: LinkedContent | null = null;
+    if (!input.uploadKey && input.linked) {
+      card = await loadLinked(v, input.linked.type, input.linked.id);
+      if (card.type === "feed_post" && !card.mine && !card.authorPublic) {
+        throw new AppError(403, "private_author", shareLabels.errors.privateAuthor);
+      }
+      linked = { type: card.type, id: card.id };
+      // Partager un événement prévient son organisateur (identification de sa structure) seulement depuis un compte
+      // public et hors d'une story de crew ; sinon la story part sans identification, sans rien écarter.
+      if (card.type === "event" && card.event && author.visibility !== "private" && input.audience !== "crew") {
+        stickerStructure = card.event.structureId;
+      }
+    } else if (input.linked) {
       if (input.linked.type === "event") {
         if (await eventOk(input.linked.id, "linked")) linked = input.linked;
       } else if (input.linked.type === "vehicle") {
         const veh = await vehiclesRepo.byId(input.linked.id);
         if (veh && veh.ownerId === v.user.id && veh.status === "active") linked = input.linked;
         else skipped.push({ kind: "vehicle", id: input.linked.id, reason: storyLabels.skipped.not_yours });
-      } else throw validation(storyLabels.linkedUnsupported, { field: "linked" });
+      } else {
+        // Publication du Fil, souvenir, résultat de vote avec une photo à soi : le lien est gardé s'il est visible.
+        const found = await inspect(v, input.linked.type, input.linked.id);
+        if (found.ok) linked = input.linked;
+        else skipped.push({ kind: "event", id: input.linked.id, reason: found.refusal.reason });
+      }
     }
 
     // Identifications : on n'identifie que quelqu'un qui peut voir la story ; compte privé : ni structure, ni pro.
@@ -469,35 +499,44 @@ export const storiesService = {
       else tags.push(t);
     }
 
-    // Le média : la vidéo (lot R7g) a sa préparation à part (`video.ts`) ; la photo est composée ici.
+    // Le média : la vidéo (lot R7g) a sa préparation à part (`video.ts`) ; la photo, ou la carte liée sans fichier envoyé
+    // (R7f4), est composée ici.
     const preparePhoto = async (): Promise<Prepared | { replayed: StoryCreated }> => {
-      // Le fichier envoyé : à moi, pour une story, pas encore rattaché.
-      const [pending] = await db
-        .select()
-        .from(uploads)
-        .where(
-          and(
-            eq(uploads.key, input.uploadKey),
-            eq(uploads.userId, v.user.id),
-            eq(uploads.purpose, "story" satisfies UploadPurpose),
-            isNull(uploads.consumedAt),
-          ),
-        );
+      // Le fichier envoyé : à moi, pour une story, pas encore rattaché (absent pour une carte liée).
+      const uploadKey = input.uploadKey;
+      const [pending] = uploadKey
+        ? await db
+            .select()
+            .from(uploads)
+            .where(
+              and(
+                eq(uploads.key, uploadKey),
+                eq(uploads.userId, v.user.id),
+                eq(uploads.purpose, "story" satisfies UploadPurpose),
+                isNull(uploads.consumedAt),
+              ),
+            )
+        : [];
       // Un envoi presque simultané peut arriver après l'enregistrement du premier (fichier consommé, source supprimée) :
       // on retrouve alors sa story avant de refuser.
-      if (!pending) {
+      if (uploadKey && !pending) {
         const won = await replay();
         if (won) return { replayed: won };
         throw validation("Image inconnue ou déjà utilisée : envoie-la à nouveau.");
       }
-      const source = await storage.get(pending.key);
-      if (!source) {
+      const source = pending ? await storage.get(pending.key) : null;
+      if (pending && !source) {
         const won = await replay();
         if (won) return { replayed: won };
         throw validation("Image introuvable : envoie-la à nouveau.");
       }
       const frame: Frame | undefined = input.frame;
-      const composed = await composeStoryPhoto(source, { frame, rects });
+      const composed = card
+        ? await composeLinkedStory(card, frame).then((c) => ({
+            data: c.data,
+            info: { width: c.width, height: c.height },
+          }))
+        : await composeStoryPhoto(source as Buffer, { frame, rects });
 
       const photoKey = `private/stories/${id}/${randomBytes(8).toString("hex")}.webp`;
       await storage.put(photoKey, composed.data);
@@ -508,12 +547,15 @@ export const storiesService = {
         width: composed.info.width,
         height: composed.info.height,
         durationMs: null,
-        plateState: rects.length ? "blurred" : "none_confirmed",
-        sent: [{ key: pending.key, purpose: "story" }],
+        plateState: card ? card.plate : rects.length ? "blurred" : "none_confirmed",
+        sent: pending ? [{ key: pending.key, purpose: "story" }] : [],
       };
     };
-    const prepared = video
-      ? await prepareVideo(v, { uploadKey: input.uploadKey, posterKey: input.posterKey ?? "" }, id, replay)
+    // Une vidéo a toujours son envoi (`posterKey` sans `uploadKey`, ou une vidéo avec une carte liée : 400 par le schéma).
+    const videoKey = video ? input.uploadKey : undefined;
+    if (video && (!videoKey || card)) throw validation(storyLabels.videoNotLinked, { field: "posterKey" });
+    const prepared = videoKey
+      ? await prepareVideo(v, { uploadKey: videoKey, posterKey: input.posterKey ?? "" }, id, replay)
       : await preparePhoto();
     if ("replayed" in prepared) return prepared.replayed;
     const key = prepared.key;
@@ -530,6 +572,7 @@ export const storiesService = {
             and(
               sql`${stories.deletedAt} is null`,
               sql`${stories.expiresAt} > ${at}`,
+              notMaskedCopy(at),
               ctx.structureId
                 ? and(eq(stories.persona, "organizer"), eq(stories.structureId, ctx.structureId))
                 : ctx.proId
@@ -609,10 +652,10 @@ export const storiesService = {
             : { pseudo: name, avatarUrl: storage.url(shown?.l ?? null) };
         // Identifiés : la personne elle-même ; une structure ou un pro, ses responsables (propriétaire et co-organisateurs
         // actifs, propriétaire de la fiche). Une personne n'est prévenue qu'une fois.
-        const mentions = new Map<string, string>();
+        const mentions = new Map<string, { body: string; target: Record<string, string> }>();
         const pseudo = name;
         for (const t of tags) {
-          if (t.kind === "user") mentions.set(t.id, storyLabels.mention(pseudo));
+          if (t.kind === "user") mentions.set(t.id, { body: storyLabels.mention(pseudo), target: { target: "user" } });
         }
         for (const t of tags) {
           if (t.kind === "structure") {
@@ -629,14 +672,21 @@ export const storiesService = {
               );
             for (const o of owners) {
               if (!mentions.has(o.id))
-                mentions.set(o.id, storyLabels.mentionStructure(pseudo, named?.n ?? "ta structure"));
+                mentions.set(o.id, {
+                  body: storyLabels.mentionStructure(pseudo, named?.n ?? "ta structure"),
+                  target: { target: "structure", structureId: t.id },
+                });
             }
           } else if (t.kind === "pro") {
             const [pro] = await tx
               .select({ owner: proProfiles.ownerUserId, n: proProfiles.name })
               .from(proProfiles)
               .where(eq(proProfiles.id, t.id));
-            if (pro && !mentions.has(pro.owner)) mentions.set(pro.owner, storyLabels.mentionStructure(pseudo, pro.n));
+            if (pro && !mentions.has(pro.owner))
+              mentions.set(pro.owner, {
+                body: storyLabels.mentionStructure(pseudo, pro.n),
+                target: { target: "pro", proId: t.id },
+              });
           }
         }
         await notifyPublished(
@@ -644,7 +694,7 @@ export const storiesService = {
           row,
           authorKey,
           name,
-          [...mentions].map(([userId, body]) => ({ userId, body })),
+          [...mentions].map(([userId, m]) => ({ userId, body: m.body, target: m.target })),
           actor,
         );
         after(() => notificationsService.kick());
@@ -662,15 +712,35 @@ export const storiesService = {
     return { id, status: "ready", expiresAt: storyExpiresAt(at).toISOString(), skipped };
   },
 
-  /** `DELETE /me/stories/:id` : l'auteur retire sa story ; ses copies partent avec elle, les fichiers aussi. */
+  /**
+   * `DELETE /me/stories/:id` : l'auteur retire sa story ; ses copies partent avec elle, les fichiers aussi. Sur une copie,
+   * c'est « Retirer » (l'originale reste). Lot R7h : une story au nom d'une structure se retire aussi par ses responsables
+   * (propriétaire, co-organisateurs), pas seulement par la personne qui l'a publiée.
+   */
   async remove(v: Viewer, id: string): Promise<void> {
     rateLimit("storyWrite", v.user.id);
-    const [mine] = await db
-      .select({ id: stories.id })
+    const [found] = await db
+      .select({
+        id: stories.id,
+        authorId: stories.authorId,
+        persona: stories.persona,
+        structureId: stories.structureId,
+      })
       .from(stories)
-      .where(and(eq(stories.id, id), eq(stories.authorId, v.user.id), isNull(stories.deletedAt)));
+      .where(and(eq(stories.id, id), isNull(stories.deletedAt)));
+    const mine =
+      found &&
+      (found.authorId === v.user.id ||
+        (found.persona === "organizer" &&
+          found.structureId !== null &&
+          (await managedStructures(v.user.id)).has(found.structureId)));
     if (!mine) throw notFound("Story introuvable");
-    const ids = await softDeleteWithCopies(db, [id]);
+    // Une story au nom d'une structure se retire par la garde centralisée de l'organisateur (double authentification
+    // obligatoire), y compris la sienne : c'est un geste fait au nom de la structure.
+    if (found.persona === "organizer" && found.structureId) await requireOrganizer(v, found.structureId);
+    // Dans une transaction : l'originale est verrouillée avant la recherche des copies (un partage en cours ne laisse
+    // pas de copie derrière), puis les fichiers partent après la validation.
+    const ids = await withTx((tx) => softDeleteWithCopies(tx, [id]));
     await purgeStoryFiles(ids);
   },
 
@@ -945,6 +1015,8 @@ export const storiesService = {
           ),
         );
       if (!m) throw notFound("Identification introuvable");
+      // Retirer au nom d'une structure : garde centralisée (double authentification obligatoire).
+      await requireOrganizer(v, target.id);
     } else if (target?.kind === "pro") {
       const [p] = await db
         .select({ id: proProfiles.id })
@@ -957,18 +1029,25 @@ export const storiesService = {
       .from(stories)
       .where(and(eq(stories.id, storyId), isNull(stories.deletedAt), sql`${stories.expiresAt} > ${now()}`));
     if (!story) throw notFound("Identification introuvable");
-    const done = await db
-      .update(storyTags)
-      .set({ removedAt: now() })
-      .where(
-        and(
-          eq(storyTags.storyId, storyId),
-          eq(storyTags.targetKind, kind),
-          eq(storyTags.targetId, targetId),
-          isNull(storyTags.removedAt),
-        ),
-      )
-      .returning({ id: storyTags.id });
-    if (!done.length) throw notFound("Identification introuvable");
+    // Lot R7h, tour 2 : une seule transaction. La ligne de l'identification est verrouillée par la mise à jour ; un partage
+    // en cours (qui la tient en `FOR SHARE`) se termine avant, et la recherche des copies qui suit voit sa copie.
+    const dropped = await withTx(async (tx) => {
+      const done = await tx
+        .update(storyTags)
+        .set({ removedAt: now() })
+        .where(
+          and(
+            eq(storyTags.storyId, storyId),
+            eq(storyTags.targetKind, kind),
+            eq(storyTags.targetId, targetId),
+            isNull(storyTags.removedAt),
+          ),
+        )
+        .returning({ id: storyTags.id });
+      if (!done.length) throw notFound("Identification introuvable");
+      // Les copies fondées sur cette identification tombent avec elle (la story, elle, reste).
+      return dropCopiesOfTag(tx, storyId, kind, targetId);
+    });
+    if (dropped.length) await purgeStoryFiles(dropped);
   },
 };

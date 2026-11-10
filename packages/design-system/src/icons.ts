@@ -52,6 +52,7 @@ export const iconShapes = {
   place: [p("M12 21s-6-6-6-11a6 6 0 0112 0c0 5-6 11-6 11z"), c(12, 10, 2)], // lieu · itinéraire
   entry: [p("M4 12h12M11 7l5 5-5 5M20 4v16")], // entrée
   phone: [p("M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z")], // appeler
+  smartphone: [r(6, 2, 12, 20, 3), p("M11 18h2")], // un téléphone en portrait : « En story » (R7f4, tour 2)
   instagram: [r(3, 3, 18, 18, 5), c(12, 12, 4), c(17.5, 6.5, 1)], // instagram
   plate: [r(2, 7, 20, 10, 2), p("M6 12h3M11 12h7")], // plaque
   express: [p("M13 2L4 14h7l-1 8 9-12h-7z")], // express (réservée : inscription express)

@@ -12,6 +12,7 @@ import {
   createPro,
   createStructure,
   createVehicle,
+  quietHours,
   resetDb,
   seedReference,
   signUp,
@@ -74,6 +75,8 @@ let clock: ReturnType<typeof useClock>;
 beforeEach(async () => {
   await resetDb();
   clock = useClock(new Date());
+  // Les notifications ne dépendent pas de l'heure réelle : heures calmes coupées, sauf dans les tests qui les vérifient.
+  quietHours(false);
 });
 
 /** Dernier e-mail envoyé à une adresse pour un modèle donné. */
@@ -240,6 +243,7 @@ describe("clés d'accès comme double authentification (prouvée par la session)
 
 describe("notifications de sécurité", () => {
   it("livrées tout de suite, même pendant les heures calmes", async () => {
+    quietHours(true);
     const u = await signUp("Nuit_01");
     clock.set(new Date("2026-11-03T22:30:00Z")); // 23:30 à Paris
     const row = await db.transaction((tx) =>

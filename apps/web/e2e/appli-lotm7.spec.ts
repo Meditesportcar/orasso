@@ -155,7 +155,7 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["fiche-evenement", `/e/${id.event}`],
         ["fiche-vehicule", `/vehicule/${id.vehicle}`],
         ["ajout-vehicule", "/vehicule/nouveau"],
-        ["partager-vehicule", `/vehicule/${id.vehicle}/partager`],
+        ["partager-vehicule", `/vehicule/${id.vehicle}/affiche`],
         ["profil-public", `/u/${id.pseudo}`],
         ["crew", `/crew/${id.crew}`],
         ["organisateur-public", `/o/${id.structure}`],

@@ -86,12 +86,21 @@ export const errorCodes = [
 
   "crew_only",
   "not_implemented",
+  "author_only",
+  "story_not_ready",
+  "private_author",
+  "no_masked_photo",
+  "vote_open",
+  "no_ranking",
   // Lot R7f1 (tour 2) : plafond de stories vivantes, page sans messagerie pour répondre à une story.
   "too_many_stories",
   "reply_unavailable",
   // Lot R7g : story vidéo trop longue, vidéo qui n'est pas en H.264.
   "too_long",
   "codec",
+  "share_private",
+  "not_tagged",
+  "already_shared",
 
   // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
   "closed",

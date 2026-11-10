@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { ShareSheet } from "@/features/vehicle/ShareSheet";
+import { PosterSheet } from "@/features/share/PosterSheet";
 import { api } from "@/lib/api";
 import { appReturn } from "@/lib/closeTo";
 import { errorMessage } from "@/lib/http";
@@ -566,7 +566,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           </>
         }
         overlays={
-          <ShareSheet
+          <PosterSheet
             vehicleId={saved.id}
             version={saved.shareVersion}
             visible={shareOpen}

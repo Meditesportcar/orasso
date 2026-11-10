@@ -49,6 +49,7 @@ import {
   registrationBlockText,
   registrationFullText,
   type StructurePublic,
+  storyShareLabels,
   type TicketOffer,
   vehicleTypeLabels,
   weatherTexts,
@@ -67,6 +68,7 @@ import { ContactOrganizer } from "../components/Messaging";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
+import { ShareDialog } from "../components/ShareSheet";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
@@ -638,6 +640,14 @@ function EventPage({
                 <strong>{onSiteLine}</strong>
               </p>
             )}
+            {live?.organizerStoryAvailable && (
+              <p className="ev__live-onsite" data-testid="event-organizer-story">
+                <Icon name="live" size={18} />
+                <a href={`/app/story/${encodeURIComponent(`s:${event.structure.id}`)}`}>
+                  <strong>{storyShareLabels.organizerStory}</strong>
+                </a>
+              </p>
+            )}
             {offerPresence && (
               <p className="o-t-caption s-muted ev__live-app" data-testid="presence-app-only">
                 <Icon name="target" size={16} />
@@ -1054,6 +1064,8 @@ function EventPage({
           <div className="s-card">
             <div className="s-label o-t-label">Partager</div>
             <ShareButtons url={`${origin}/e/${event.slug}`} title={event.title} />
+            {/* Lot R7f4 : story, Fil, message, extérieur (membre connecté ; l'API dit ce qui est ouvert). */}
+            {connected && <ShareDialog target={{ type: "event", id: event.id }} testId="event-share" />}
           </div>
         )}
         {/* Signaler (lot 32) : aussi sur un événement privé, que l'on ne partage pas. */}

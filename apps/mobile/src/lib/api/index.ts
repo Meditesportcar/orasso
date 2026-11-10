@@ -33,6 +33,7 @@ import { prosApi } from "./pros";
 import { providersApi } from "./providers";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
+import { shareApi } from "./share";
 import { socialApi } from "./social";
 import { spotApi } from "./spot";
 import { staffApi } from "./staff";
@@ -101,6 +102,7 @@ export const api = {
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,
   ...storiesVideoApi,

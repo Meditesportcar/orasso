@@ -8,6 +8,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { liveStructureIds } from "./bar";
 import {
   audienceStoryOf,
   authorDisplay,
@@ -53,6 +54,8 @@ export const storiesAccess = {
         pseudoOrName: display.name,
         avatarUrl: display.avatarUrl,
         persona: first.story.persona,
+        // Lot R7h : l'organisateur dont un événement est en cours porte « EN COURS » dans l'en-tête de la visionneuse.
+        live: key.kind === "structure" && (await liveStructureIds(at)).has(key.id),
       },
       stories: views,
     };

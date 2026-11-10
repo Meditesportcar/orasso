@@ -19,6 +19,7 @@ export const storyLabels = {
   tooManyStories: `${STORY_LIVE_MAX} stories en cours au plus : supprime-en une avant d'en publier une autre.`,
   replyUnavailable: "Cette page ne reçoit pas de messages pour le moment.",
   linkedUnsupported: "Ce contenu ne peut pas encore être lié à une story.",
+  videoNotLinked: "Une story vidéo ne peut pas porter un contenu partagé.",
   skipped: {
     not_visible: "Cette personne ne pourrait pas voir ta story.",
     private_account: "Un compte privé ne peut pas identifier une structure, un pro ou un événement.",

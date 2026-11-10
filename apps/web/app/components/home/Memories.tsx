@@ -1,10 +1,11 @@
 // Bloc « Souvenirs » de l'Accueil du site (lot R7j, maquette R7.10) : même contenu que l'appli. Les jours où il y a un
-// souvenir seulement (`GET /me/home` renvoie `memories: null` sinon). Le bouton « En story » est posé par R7f4 sur la page.
+// souvenir seulement (`GET /me/home` renvoie `memories: null` sinon). Le bouton « En story » (R7f4) ouvre la feuille « Partager ».
 import { Button } from "@orasso/design-system/web";
-import { type HomeMemory, memoryLabels, widestWordEm } from "@orasso/shared";
+import { type HomeMemory, memoryLabels, shareLabels, widestWordEm } from "@orasso/shared";
 import type { CSSProperties } from "react";
 
 import { PassportStamp } from "../PassportStamp";
+import { ShareDialog } from "../ShareSheet";
 
 import "../../styles/souvenirs.css";
 
@@ -54,6 +55,11 @@ export function MemoriesBlock({ data }: { data: HomeMemory }) {
                 <Button variant="secondary" icon="grid" href={`/e/${m.slug}/plateau`} data-testid="home-memory-plateau">
                   {memoryLabels.seePlateau}
                 </Button>
+                <ShareDialog
+                  target={{ type: "memory", id: m.eventId }}
+                  label={shareLabels.story}
+                  testId="memory-share"
+                />
               </div>
             </div>
           </article>

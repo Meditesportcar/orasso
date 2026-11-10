@@ -164,6 +164,9 @@ export const rateRules = {
   storyWrite: { max: 300, windowMs: 3_600_000, message: "Trop d'actions sur les stories : réessaie plus tard." },
   /** Lot R7g : vidéos de story (jusqu'à 60 Mo) et leurs vignettes ; 30 envois par heure = 15 vidéos. */
   storyVideoUpload: { max: 30, windowMs: 3_600_000, message: "Trop de vidéos envoyées : réessaie plus tard." },
+  /** Lot R7f4 : carte, aperçu et fichier sortant d'un contenu partagé (rendus d'image côté serveur). */
+  shareExport: { max: 60, windowMs: 3_600_000, message: "Trop de fichiers préparés : réessaie plus tard." },
+  shareInfo: { max: 300, windowMs: 3_600_000, message: "Trop de demandes : réessaie plus tard." },
   crewPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   crewComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
   crewReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },

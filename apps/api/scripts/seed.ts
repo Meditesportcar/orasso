@@ -174,7 +174,7 @@ async function main() {
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
 
-  // Lot R7f1 : six stories de démonstration (photos relues sans plaque), 20 h de vie restantes.
+  // Lot R7f1 : sept stories de démonstration (photos relues sans plaque), 20 h de vie restantes (21 h pour celle du Lydia, R7h).
   await seedStories();
 
   // Lot R7c1 : 12 notifications (cloche) et 3 demandes de Damien_66.

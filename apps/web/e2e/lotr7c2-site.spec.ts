@@ -61,18 +61,25 @@ test("la cloche : Demandes, bandeau d'horaire, groupe « et N autres », la past
     await expect(row).not.toContainText("Demandes de message");
     const band = page.getByTestId("activity-highlight").first();
     await expect(band).toContainText("Changement d'horaire");
-    await expect(
-      page
-        .getByTestId("activity-row")
-        .filter({ hasText: /et 4 autres/ })
-        .first(),
-    ).toBeVisible();
     // Le bandeau d'horaire n'est pas répété dans les groupes ; aucune conversation, aucune demande dans la liste.
     await expect(page.locator(".s-convo")).toHaveCount(0);
     await expect(page.getByTestId("activity-row").filter({ hasText: "Demande de contact" })).toHaveCount(0);
     // La pastille « non vus » tombe : la cloche de la barre ne compte plus que les demandes.
     await expect.poll(async () => (await summaryOf(page)).unseenActivity, { timeout: 20_000 }).toBe(0);
     await shot(page, `activite-${theme}-390`);
+    // Le groupe « et 4 autres » (cinq flammes) : d'autres recettes ajoutent des événements et des notifications, il peut
+    // être passé en page suivante de l'Activité : on le cherche de page en page (« Voir plus »).
+    const group = page
+      .getByTestId("activity-row")
+      .filter({ hasText: /et 4 autres/ })
+      .first();
+    for (let i = 0; i < 10 && !(await group.isVisible()); i++) {
+      const more = page.getByTestId("activity-more");
+      if (!(await more.count())) break;
+      await more.click();
+      await page.waitForLoadState("load");
+    }
+    await expect(group).toBeVisible();
     await page.goto("/app/activite/demandes");
     await expect(page.getByRole("heading", { name: "Demandes", exact: true })).toBeVisible();
     await expect(page.getByTestId("request-contact")).toHaveCount(0);

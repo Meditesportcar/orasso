@@ -1,8 +1,10 @@
-// Lot R7f1 : six stories de démonstration, publiées par le vrai service (composition 9:16, floutage, notifications) à
+// Lot R7f1 : sept stories de démonstration (six, plus celle du Lydia de R7h), publiées par le vrai service (composition 9:16, floutage, notifications) à
 // partir des photos du seed relues « aucune plaque lisible » (`NO_PLATE_REVIEWED`) : jamais une plaque lisible.
 // Quatre auteurs : Kenji_66 (une « Mon abonnés » qui identifie Damien_66, une « Mon crew » de Roussillon Drift), Léa_11
 // (publique), Marc_66 (compte privé), Théo_66, et Roues Libres 66 (casquette organisateur de Sarah_66, avec
-// l'autocollant du Rassemblement du Lydia). Elles finissent dans 20 h. Idempotent : rien si des stories existent déjà.
+// l'autocollant du Rassemblement du Lydia) ; lot R7h : une story publique de Kenji_66 avec ce même autocollant, qui
+// identifie Roues Libres 66 et date d'il y a 3 h ; la story de crew de Kenji_66 date d'il y a 3 h 30 (les cinq autres : il y a 4 h) :
+// l'ordre de lecture de ses trois stories est écrit (abonnés, crew, Lydia). Elles finissent dans 20 h, 21 h 30 et 21 h. Idempotent : rien si des stories existent déjà.
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -12,13 +14,13 @@ import { storiesService } from "../../src/modules/stories/service";
 import { uploadsService } from "../../src/modules/uploads/service";
 import { reviewedNoPlateCar } from "./photos";
 
-async function viewer(pseudo: string): Promise<Viewer | null> {
+async function viewer(pseudo: string, secondFactor: string | null = null): Promise<Viewer | null> {
   const profile = await db.query.profiles.findFirst({
     where: sql`lower(${t.profiles.pseudo}) = ${pseudo.toLowerCase()}`,
   });
   if (!profile) return null;
   const [u] = await db.select().from(t.user).where(eq(t.user.id, profile.userId));
-  return u ? { user: u as AuthUser, profile, session: { secondFactor: null } } : null;
+  return u ? { user: u as AuthUser, profile, session: { secondFactor } } : null;
 }
 
 export async function seedStories() {
@@ -26,8 +28,12 @@ export async function seedStories() {
     console.log("Stories : déjà présentes.");
     return;
   }
+  // Sarah_66 publie au nom de Roues Libres 66 : organisateur connecté avec sa double authentification (comme
+  // `seed/invitations.ts`), sinon le seed s'arrête dès que `DEV_SKIP_2FA` est faux (le VPS le lance à chaque déploiement).
   const [damien, kenji, lea, marc, theo, sarah] = await Promise.all(
-    ["Damien_66", "Kenji_66", "Lea_11", "Marc_66", "Theo_66", "Sarah_66"].map(viewer),
+    ["Damien_66", "Kenji_66", "Lea_11", "Marc_66", "Theo_66", "Sarah_66"].map((pseudo) =>
+      viewer(pseudo, pseudo === "Sarah_66" ? "totp" : null),
+    ),
   );
   if (!damien || !kenji || !lea || !marc || !theo || !sarah) {
     console.log("Stories : comptes absents, rien.");
@@ -81,6 +87,11 @@ export async function seedStories() {
           },
         ]
       : []),
+    // Lot R7h : Kenji colle l'événement du Lydia sur une story publique, ce qui identifie Roues Libres 66 (l'organisateur
+    // la retrouve dans « Mentions » et peut l'ajouter à sa story). Ajoutée en dernier pour ne pas décaler les photos.
+    ...(event
+      ? [{ who: kenji, over: { audience: "public", eventId: event.id, caption: "Le Lydia, c'est parti !" } }]
+      : []),
   ];
   let i = 0;
   for (const { who, over } of shots) {
@@ -102,6 +113,16 @@ export async function seedStories() {
   // « Dans 20 h » : créées il y a 4 h.
   await db.execute(
     sql`update stories set created_at = now() - interval '4 hours', expires_at = now() + interval '20 hours', updated_at = now()`,
+  );
+  // Lot R7h, tour 2 : les trois stories de Kenji_66 ont chacune leur date, l'ordre de lecture est écrit : abonnés (il y a 4 h),
+  // puis crew (il y a 3 h 30), puis le Lydia (il y a 3 h). Les recettes de la visionneuse comptent sur cet ordre.
+  await db.execute(
+    sql`update stories set created_at = now() - interval '210 minutes', expires_at = now() + interval '21 hours 30 minutes', updated_at = now()
+      where author_id = ${kenji.user.id} and audience = 'crew'`,
+  );
+  await db.execute(
+    sql`update stories set created_at = now() - interval '3 hours', expires_at = now() + interval '21 hours', updated_at = now()
+      where author_id = ${kenji.user.id} and caption = ${"Le Lydia, c'est parti !"}`,
   );
   await notificationsService.flush();
   console.log(`Stories : ${i} stories de démonstration (finissent dans 20 h).`);

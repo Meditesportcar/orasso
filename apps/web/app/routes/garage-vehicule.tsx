@@ -32,6 +32,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { ShareCard } from "../components/ShareButtons";
+import { ShareDialog } from "../components/ShareSheet";
 import { StyleProposal } from "../components/StylePicker";
 import { VehicleTrophies } from "../components/VehicleTrophies";
 import { api, apiOrThrow } from "../lib/api.server";
@@ -477,6 +478,12 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
           {shareSheetLabels.title}
         </h2>
         {/* Lot 57 : carte à partager (trois styles, aperçu de la story, téléchargement), comme l'appli. */}
+        {/* Lot R7f4 : la feuille à quatre destinations ; « Vers l'extérieur » ramène à l'affiche à trois styles ci-dessous. */}
+        <ShareDialog
+          target={{ type: "vehicle", id: v.id }}
+          testId="vehicle-share"
+          onPoster={() => document.querySelector('[data-testid="share-card"]')?.scrollIntoView({ behavior: "smooth" })}
+        />
         <ShareCard vehicleId={v.id} version={v.shareVersion} />
       </section>
 

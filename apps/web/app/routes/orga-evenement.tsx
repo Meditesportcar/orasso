@@ -25,6 +25,7 @@ import {
   eventStatusLabels,
   invitationLabels,
   isBadWeather,
+  isEventDay,
   orgaPosterLabels,
   orgaPrizeLabels,
   pluralFr,
@@ -33,16 +34,29 @@ import {
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
   recurrenceOccurrences,
+  type StoriesByAuthor,
+  type StoryMentions,
+  storyAuthorKeyOf,
+  storyShareLabels,
   voteOrgaLabels,
   wallTime,
   weatherTexts,
   weekdayNames,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
+import { OrgaStory } from "../components/stories/OrgaStory";
+import {
+  mineFlags,
+  noStoryMessage,
+  reduceStoryMessage,
+  showStorySection,
+  visibleStoryMessage,
+} from "../components/stories/orga-story-rules";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { now as clockNow } from "../lib/clock";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import type { Route } from "./+types/orga-evenement";
@@ -77,8 +91,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     event.status === "published"
       ? await api<AudiencePrizeBoard>(request, `/events/${params.eventId}/audience-prize`)
       : null;
+  // Lot R7h : mentions de la structure et sa story (jamais bloquant : une panne s'affiche, la page reste). Seulement quand
+  // l'événement a lieu ou que c'est son jour (la même règle que le Direct de l'appli, `phase` ≠ « next ») : avant, la fiche ne
+  // dit rien de la story de l'organisateur non plus.
+  const at = clockNow();
+  const fieldDay =
+    event.status === "published" &&
+    ((new Date(event.startsAt).getTime() <= at.getTime() && at.getTime() < new Date(event.endsAt).getTime()) ||
+      isEventDay(new Date(event.startsAt), at));
+  // Les mentions seulement ce jour-là ; « Ma story » et ses retraits tant qu'une story de la structure est en ligne (le
+  // lendemain aussi : une story publiée la veille au soir reste visible 24 h, un autre responsable doit pouvoir la retirer).
+  const [mentions, mine] = await Promise.all([
+    fieldDay ? api<StoryMentions>(request, `/structures/${membership.structureId}/story-mentions`) : null,
+    event.status === "published"
+      ? api<StoriesByAuthor>(
+          request,
+          `/stories/by-author/${encodeURIComponent(storyAuthorKeyOf("structure", membership.structureId))}`,
+        )
+      : null,
+  ]);
+  const mineRead = mineFlags(mine ? (mine.ok ? mine : { ok: false }) : null);
   return {
     event,
+    // Aucune adresse de média dans les données de la page (les aperçus se lisent par `/thumb`, dans le navigateur).
+    storyMentions: mentions?.ok
+      ? { ...mentions.data, items: mentions.data.items.map((m) => ({ ...m, mediaUrl: "" })) }
+      : null,
+    storyMine: mine?.ok
+      ? { ...mine.data, stories: mine.data.stories.map((x) => ({ ...x, mediaUrl: "", posterUrl: null })) }
+      : null,
+    storyFailed: Boolean(mentions && !mentions.ok),
+    // Lot R7h, tour 4 : « aucune story » (lecture réussie, vide) n'est pas « lecture en échec » (des stories peuvent être en ligne).
+    storyMineFailed: mineRead.mineFailed,
+    storyFieldDay: fieldDay,
+    storyHasMine: mineRead.hasMine,
+    structureId: membership.structureId,
+    storyNotice: url.searchParams.get("story"),
     weather: weather?.ok ? weather.data : null,
     prize: prize?.ok ? prize.data : null,
     posterDone: url.searchParams.get("affiche") === "1",
@@ -91,7 +139,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Result = { error?: string; ok?: string; series?: { title: string; startsAt: string }[] };
 
 export async function action({ request, params }: Route.ActionArgs) {
-  await organizerOf(request, params.structure);
+  const membership = await organizerOf(request, params.structure);
   const form = await request.formData();
   const text = (name: string) => String(form.get(name) ?? "");
   const id = params.eventId;
@@ -114,6 +162,18 @@ export async function action({ request, params }: Route.ActionArgs) {
         },
       });
       return res.ok ? redirect(`${back}?affiche=1`) : fail(res);
+    }
+    // Lot R7h : « Ajouter à ma story » (copie liée, au nom de la structure) et « Retirer » (la copie ou une story à nous).
+    case "story-share": {
+      const res = await api(request, `/stories/${encodeURIComponent(text("storyId"))}/share-to-mine`, {
+        method: "POST",
+        json: { asStructureId: membership.structureId },
+      });
+      return res.ok ? redirect(`${back}?story=added`) : fail(res);
+    }
+    case "story-remove": {
+      const res = await api(request, `/me/stories/${encodeURIComponent(text("storyId"))}`, { method: "DELETE" });
+      return res.ok ? redirect(`${back}?story=removed`) : fail(res);
     }
     case "publish": {
       const res = await api(request, `/events/${id}/publish`, { method: "POST" });
@@ -445,12 +505,48 @@ function PrizePanel({ prize, slug }: { prize: AudiencePrizeBoard; slug: string }
 }
 
 export default function OrgaEvenement({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, weather, ticketing, verified, created, prize, posterDone } = loaderData;
+  const {
+    event,
+    weather,
+    ticketing,
+    verified,
+    created,
+    prize,
+    posterDone,
+    storyMentions,
+    storyMine,
+    storyFailed,
+    storyMineFailed,
+    storyNotice,
+    storyFieldDay,
+    storyHasMine,
+    structureId,
+  } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
   const result = actionData as Result | undefined;
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
+  // Lot R7h, tour 5 : le message de la story (« ?story=added|removed ») est lu une fois, gardé ici, puis retiré de l'adresse :
+  // il ne revient plus aux revalidations ni au rechargement de la page.
+  // Tour 6 : cycle de vie explicite (voir `reduceStoryMessage`) : effacé à la revalidation suivante et au changement d'événement.
+  const [storyState, loadStory] = useReducer(reduceStoryMessage, noStoryMessage);
+  const storyMessage = visibleStoryMessage(storyState, event.id);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `loaderData` marque chaque (re)validation de la page.
+  useEffect(() => {
+    loadStory({ eventId: event.id, notice: storyNotice });
+  }, [loaderData, event.id, storyNotice]);
+  useEffect(() => {
+    if (storyNotice !== "added" && storyNotice !== "removed") return;
+    setSearch(
+      (cur) => {
+        const next = new URLSearchParams(cur);
+        next.delete("story");
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [storyNotice, setSearch]);
   const published = event.status === "published";
   const isDraft = event.status === "draft";
   const justPublished = search.get("publie") === "1";
@@ -609,6 +705,31 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
             )}
           </div>
         </section>
+      )}
+
+      {showStorySection({
+        published,
+        fieldDay: storyFieldDay,
+        hasMine: storyHasMine,
+        mineFailed: storyMineFailed,
+        notice: storyMessage,
+      }) && (
+        <OrgaStory
+          structureId={structureId}
+          mentions={storyMentions}
+          withMentions={storyFieldDay}
+          mine={storyMine}
+          failed={storyFailed}
+          mineFailed={storyMineFailed}
+          afterAction={storyNotice === "added" || storyNotice === "removed"}
+          notice={
+            storyMessage === "added"
+              ? storyShareLabels.added
+              : storyMessage === "removed"
+                ? storyShareLabels.removeDone
+                : null
+          }
+        />
       )}
 
       {published && (

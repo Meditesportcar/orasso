@@ -21,7 +21,9 @@ import { storage } from "../../lib/storage";
 import { canSeeEvent } from "../invitations/access";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
-import { accountActive, type StoryRow } from "./common";
+import { accountActive, creditOf, type StoryRow } from "./common";
+import { linkedViewsOf } from "./linked";
+import { sharingOf } from "./sharing";
 
 export const fileNameOf = (key: string) => key.slice(key.lastIndexOf("/") + 1);
 
@@ -96,7 +98,7 @@ async function tagsOf(ids: string[]): Promise<Map<string, StoryTagView[]>> {
 export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Promise<StoryView[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.story.id);
-  const [seen, liked, tags] = await Promise.all([
+  const [seen, liked, tags, sharing] = await Promise.all([
     db
       .select({ id: storyViews.storyId })
       .from(storyViews)
@@ -106,6 +108,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       .from(storyReactions)
       .where(and(eq(storyReactions.userId, v.user.id), inArray(storyReactions.storyId, ids))),
     tagsOf(ids),
+    sharingOf(v, rows, now()),
   ]);
   const seenIds = new Set(seen.map((r) => r.id));
   const likedIds = new Set(liked.map((r) => r.id));
@@ -138,39 +141,28 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         .where(inArray(events.id, eventIds))
     : [];
   const eventBy = new Map<string, { id: string; slug: string; title: string; startsAt: string }>();
+  // Ce que l'export vérifie en plus (statut, admission) : pour `exportable` seulement, jamais renvoyé.
+  const eventShare = new Map<string, { id: string; slug: string; title: string; status: string; admission: string }>();
   for (const e of eventRows) {
     if (e.status === "draft") continue;
     if (!(await canSeeEvent(e, v))) continue;
     eventBy.set(e.id, { id: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString() });
+    eventShare.set(e.id, { id: e.id, slug: e.slug, title: e.title, status: e.status, admission: e.admission });
   }
 
-  // Crédit d'une copie : le pseudo de l'auteur de l'originale.
-  const originals = [...new Set(rows.flatMap((r) => (r.story.sharedFromStoryId ? [r.story.sharedFromStoryId] : [])))];
-  const creditBy = new Map<string, string>();
-  if (originals.length) {
-    const credits = await db
-      .select({ id: stories.id, pseudo: profiles.pseudo })
-      .from(stories)
-      .innerJoin(profiles, eq(profiles.userId, stories.authorId))
-      .where(inArray(stories.id, originals));
-    for (const c of credits) creditBy.set(c.id, c.pseudo);
-  }
+  // Contenu lié (R7f4) : refiltré pour chaque lecteur avec les droits actuels (événement devenu privé ou brouillon, voiture
+  // retirée ou changée de main, publication ou vote plus visible, souvenir d'un autre) ; ce qui n'est pas visible n'est
+  // pas renvoyé, pas même son identifiant.
+  const linkedBy = await linkedViewsOf(v, rows, {
+    event: eventShare,
+    vehicle: vehicleBy,
+  });
 
   return rows.map((r) => {
     const s = r.story;
     const mine = s.authorId === v.user.id;
     const vehicle = s.vehicleId ? vehicleBy.get(s.vehicleId) : undefined;
     const photo = vehicle ? maskedPhoto(vehicle.photos, vehicle.unregistered) : null;
-    // Contenu lié : refiltré pour chaque lecteur avec les droits actuels (événement devenu privé ou brouillon, voiture
-    // retirée ou changée de main) ; ce qui n'est pas visible n'est pas renvoyé, pas même son identifiant.
-    const linkedVisible =
-      s.linkedType && s.linkedId
-        ? s.linkedType === "event"
-          ? eventBy.has(s.linkedId)
-          : s.linkedType === "vehicle"
-            ? vehicleBy.get(s.linkedId)?.ownerId === s.authorId
-            : false
-        : false;
     return {
       id: s.id,
       mediaKind: s.mediaKind,
@@ -187,11 +179,20 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         : null,
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
-      linked: linkedVisible && s.linkedType && s.linkedId ? { type: s.linkedType, id: s.linkedId } : null,
+      linked: linkedBy.get(s.id) ?? null,
       commercialPartner: null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
-      sharedFrom: s.sharedFromStoryId ? { authorPseudo: creditBy.get(s.sharedFromStoryId) ?? "" } : null,
+      // Le crédit d'une copie : l'identité PUBLIQUE de l'originale selon sa casquette (lot R7h, tour 2).
+      sharedFrom: creditOf(r, storage.url),
+      sharing: sharing.get(s.id) ?? null,
+      // Même règle que `exportService.story` : auteur seul, ni crew, ni copie, prête, et un contenu lié encore sortable.
+      exportable:
+        mine &&
+        s.audience !== "crew" &&
+        s.status === "ready" &&
+        !s.sharedFromStoryId &&
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)),
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),
       viewsCount: mine ? s.viewsCount : null,

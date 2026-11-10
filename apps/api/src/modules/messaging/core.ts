@@ -21,6 +21,7 @@ import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
 import { canSeeEvent, type SeeingUser } from "../invitations/access";
 import { isSecondFactor } from "../security/passkey";
+import { selectStories } from "../stories/common";
 import { type ConversationRow, type KindRules, type Reader, rulesOf } from "./access";
 import { storyThumbFor } from "./story-thumb";
 
@@ -168,11 +169,13 @@ export async function seeingUsersOf(ex: Executor, readers: Reader[]): Promise<Ma
 export async function liveStoriesOf(ex: Executor, rows: Pick<MessageRow, "storyId">[]): Promise<Set<string>> {
   const ids = [...new Set(rows.map((m) => m.storyId).filter((x): x is string => Boolean(x)))];
   if (!ids.length) return new Set();
-  const live = await ex
-    .select({ id: stories.id })
-    .from(stories)
-    .where(and(inArray(stories.id, ids), isNull(stories.deletedAt), gt(stories.expiresAt, now())));
-  return new Set(live.map((x) => x.id));
+  // Lot R7h, tour 3 : `selectStories` écarte aussi une copie dont l'originale n'est plus servable (auteur suspendu, banni,
+  // story retirée…) : un message qui la cite ne la croit plus en ligne.
+  const live = await selectStories(
+    and(inArray(stories.id, ids), isNull(stories.deletedAt), gt(stories.expiresAt, now())),
+    ex,
+  );
+  return new Set(live.map((x) => x.story.id));
 }
 
 export function serializeMessage(
