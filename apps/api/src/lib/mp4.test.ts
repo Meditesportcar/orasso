@@ -1360,12 +1360,26 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
           expectFiller(out.subarray(o + 5, o + tiny.length));
           expect(out[o + tiny.length]).toBe(0);
         }
-        // Plus de 100 000 échantillons vidéo : refusé avant tout calcul de plage.
+        // Plus de 100 000 échantillons vidéo, tous fournis (8 octets : un NAL de tranche de 4 octets) : refusé pour le
+        // plafond lui-même (re-relecture Codex du tour 9) ; sous le plafond : accepté.
+        const slice8 = nal([0x41], Buffer.from([1, 2, 3]));
+        const samplesOf = (n: number) => Buffer.concat(Array.from({ length: n }, () => slice8));
         const many = Array.from({ length: 100_001 }, () => 8);
-        const bad = withMdatTrack(original, (o) => nalSamplesTrack(o, many, 100_001), Buffer.alloc(16, 1));
+        const bad = withMdatTrack(original, (o) => nalSamplesTrack(o, many, 100_001), samplesOf(100_001));
         const p2 = join(dir, "many.mp4");
         await writeFile(p2, bad.file);
-        expect(await kind(stripMp4Metadata(p2))).toBe("unreadable");
+        const refused = await stripMp4Metadata(p2).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(refused).toBeInstanceOf(Mp4Error);
+        expect((refused as Mp4Error).kind).toBe("unreadable");
+        expect((refused as Mp4Error).message).toContain("trop d'échantillons vidéo");
+        const under = Array.from({ length: 90_000 }, () => 8);
+        const fine = withMdatTrack(original, (o) => nalSamplesTrack(o, under, 90_000), samplesOf(90_000));
+        const p3 = join(dir, "under.mp4");
+        await writeFile(p3, fine.file);
+        await stripMp4Metadata(p3);
       });
     });
 
