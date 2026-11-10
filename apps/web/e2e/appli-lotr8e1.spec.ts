@@ -164,3 +164,29 @@ test("police ×1,3 : la ligne et le bandeau ne coupent aucun mot", async ({ brow
   await ctx.close();
   await apiCall(damien, "PATCH", `/events/${id}/outlook`, { outlook: "maintained" });
 });
+
+test("« En cours » porte la météo de son événement, comme sa carte ; Personnaliser : l'œil seul pour la ligne météo", async ({
+  browser,
+}) => {
+  const kenji = await login("kenji@orasso.local");
+  await apiCall(kenji, "PUT", "/me/home/widgets", { order: [], hidden: DEFAULT_HIDDEN });
+  const { ctx, page } = await open(browser, 1, "kenji@orasso.local");
+  const live = page.getByTestId("home-live-line");
+  await expect(live).toBeVisible({ timeout: 30_000 });
+  const line = live.getByTestId("home-outing-weather");
+  await expect(line).toBeVisible();
+  expect(((await line.innerText()).split("\n")[0] ?? "").trim()).toMatch(HEADLINE);
+  // Au-dessus des boutons de la ligne.
+  const a = await line.boundingBox();
+  const b = await live.getByTestId("home-live-sheet").boundingBox();
+  expect(a && b && a.y + a.height <= b.y + 1).toBe(true);
+
+  await page.getByTestId("home-personalize-bottom").click();
+  await expect(page.getByTestId("personalize-row-event_weather")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("personalize-up-event_weather")).toHaveCount(0);
+  await expect(page.getByTestId("personalize-down-event_weather")).toHaveCount(0);
+  await expect(page.getByTestId("personalize-hide-event_weather")).toBeVisible();
+  // « En cours » est le premier bloc qui bouge : il ne monte plus.
+  await expect(page.getByTestId("personalize-up-live")).toBeDisabled();
+  await ctx.close();
+});

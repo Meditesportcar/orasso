@@ -84,7 +84,11 @@ test("R8e1 : captures avant / après de l'Accueil (appli et site)", async ({ bro
   });
   const damien = await login("damien@orasso.local");
   const nocturne = (await apiCall<{ id: string }>(damien, "GET", "/events/by-slug/nocturne-de-canet-2026")).data.id;
-  await apiCall(damien, "PATCH", `/events/${nocturne}/outlook`, { outlook: UNCERTAIN ? "uncertain" : "maintained" });
+  // « Incertain » : Nocturne de Canet et Salon Argelès (la carte visible en tête porte alors le bandeau).
+  const salon = (await apiCall<{ id: string }>(damien, "GET", "/events/by-slug/salon-argeles")).data.id;
+  for (const id of [nocturne, salon]) {
+    await apiCall(damien, "PATCH", `/events/${id}/outlook`, { outlook: UNCERTAIN ? "uncertain" : "maintained" });
+  }
   try {
     if (APP) {
       for (const theme of QUICK ? (["beton"] as const) : (["beton", "sable"] as const)) {
@@ -136,7 +140,8 @@ test("R8e1 : captures avant / après de l'Accueil (appli et site)", async ({ bro
       }
     }
   } finally {
-    await apiCall(damien, "PATCH", `/events/${nocturne}/outlook`, { outlook: "maintained" });
+    for (const id of [nocturne, salon])
+      await apiCall(damien, "PATCH", `/events/${id}/outlook`, { outlook: "maintained" });
   }
   expect(AFTER || true).toBe(true);
 });

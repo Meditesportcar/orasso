@@ -97,3 +97,25 @@ test("Personnaliser : « Météo de l'événement » masqué retire la ligne ; r
   await page.goto("/app");
   await expect(page.getByTestId("home-outing-weather")).toBeVisible();
 });
+
+test("« En cours » porte la météo de son événement ; Personnaliser : la ligne météo n'a que l'œil", async ({
+  page,
+}) => {
+  const kenji = await login("kenji@orasso.local");
+  await apiCall(kenji, "PUT", "/me/home/widgets", { order: [], hidden: DEFAULT_HIDDEN });
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+  const live = page.getByTestId("home-live-line");
+  await expect(live).toBeVisible();
+  const line = live.getByTestId("home-outing-weather");
+  await expect(line).toBeVisible();
+  expect(((await line.innerText()).split("\n")[0] ?? "").trim()).toMatch(HEADLINE);
+  const a = await line.boundingBox();
+  const b = await live.getByTestId("home-live-sheet").boundingBox();
+  expect(a && b && a.y + a.height <= b.y + 1).toBe(true);
+  await page.goto("/app/accueil/personnaliser");
+  await expect(page.getByTestId("personalize-row-event_weather")).toBeVisible();
+  await expect(page.getByTestId("up-event_weather")).toHaveCount(0);
+  await expect(page.getByTestId("down-event_weather")).toHaveCount(0);
+  await expect(page.getByTestId("hide-event_weather")).toBeVisible();
+  await expect(page.getByTestId("up-live")).toBeDisabled();
+});
