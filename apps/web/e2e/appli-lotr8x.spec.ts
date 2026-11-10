@@ -199,8 +199,10 @@ for (const [width, scale] of [
     test.setTimeout(240_000);
     const pseudo = `Coin20_${unique()}`;
     const cookie = await signUpApi(pseudo);
-    const depts = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));
+    const depts = Array.from({ length: 20 }, (_, i) => String(i < 19 ? i + 1 : 21).padStart(2, "0"));
     await apiCall(cookie, "PATCH", "/me/profile", { departments: depts });
+    const put = await apiCall(cookie, "PATCH", "/me/preferences", { departments: depts });
+    expect(put.status, JSON.stringify(put.data).slice(0, 300)).toBe(200);
     await openExplorer(page, width, scale, `${pseudo.toLowerCase()}@e2e.orasso.test`);
     const pill = page.getByTestId("around-open");
     await expect(pill).toContainText("20 départements", { timeout: 30_000 });

@@ -113,9 +113,10 @@ for (const [size, viewport] of [
     test.setTimeout(240_000);
     const pseudo = `Coin20_${unique()}`;
     const cookie = await signUpApi(pseudo);
-    await apiCall(cookie, "PATCH", "/me/profile", {
-      departments: Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0")),
-    });
+    const depts = Array.from({ length: 20 }, (_, i) => String(i < 19 ? i + 1 : 21).padStart(2, "0"));
+    await apiCall(cookie, "PATCH", "/me/profile", { departments: depts });
+    const put = await apiCall(cookie, "PATCH", "/me/preferences", { departments: depts });
+    expect(put.status, JSON.stringify(put.data).slice(0, 300)).toBe(200);
     await page.setViewportSize(viewport);
     await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, SEED_PASSWORD, "/app");
     await page.goto("/app/explorer?segment=evenements");
@@ -140,7 +141,7 @@ test("site Explorer R8x : le décompte « Complet » suit le reste de places (jo
   const tiles = page.getByTestId("event-tile");
   for (let i = 0; i < (await tiles.count()); i++) {
     const t = tiles.nth(i);
-    const complet = (await t.getByTestId("event-seats").innerText()) === "Complet";
+    const complet = (await t.getByTestId("event-seats").textContent()) === "Complet";
     expect(await t.getByTestId("event-waitlist").count()).toBe(complet ? 1 : 0);
   }
 });
