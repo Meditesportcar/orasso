@@ -1,5 +1,5 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { countFr, type EventCard, eventFormatLabels, widestWordEm, yearToShow } from "@orasso/shared";
+import { countFr, type EventCard, eventFormatLabels, explorerV2Labels, widestWordEm, yearToShow } from "@orasso/shared";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
@@ -103,6 +103,25 @@ export function EventTile({
   const where = [event.city, event.department].filter(Boolean).join(" · ");
   const stub = stubOf(event.startsAt);
   const taken = takenOf(event);
+  // Lot R8x : complet = « Complet · 14 exposants » et la puce « Liste d'attente » à droite du décompte (plus de badge ailleurs).
+  const full = event.capacity !== null && event.remaining === 0;
+  const count =
+    event.remaining === null
+      ? "Sans limite"
+      : full && event.capacity !== null
+        ? explorerV2Labels.seatsFull(event.capacity)
+        : countFr(event.remaining, "place");
+  const wait = full ? (
+    <span className="w-card__wait" data-testid="event-waitlist">
+      <Chip>{explorerV2Labels.waitlistFlag}</Chip>
+    </span>
+  ) : null;
+  const gauge =
+    taken !== null ? (
+      <span className="w-card__gauge" aria-hidden="true">
+        <span style={{ width: `${Math.round(taken * 100)}%` }} />
+      </span>
+    ) : null;
   // Affiche en échec de chargement : la carte pose la souche datée du gabarit « Minimal ».
   const [failedPoster, setFailedPoster] = useState<string | null>(null);
   const drawsDate = Boolean(event.generatedPosterUrl) && failedPoster !== event.generatedPosterUrl;
@@ -153,14 +172,21 @@ export function EventTile({
                 {where}
               </span>
             )}
-            <span>{event.remaining === null ? "Sans limite" : countFr(event.remaining, "place")}</span>
+            {layout === "poster" && <span data-testid="event-seats">{count}</span>}
+            {layout === "poster" && wait}
           </span>
-          {taken !== null && (
-            <span className="w-card__gauge" aria-hidden="true">
-              <span style={{ width: `${Math.round(taken * 100)}%` }} />
-            </span>
-          )}
+          {layout === "poster" && gauge}
         </span>
+        {/* Vue Liste : la jauge et le décompte passent sous l'affiche, sur toute la largeur de la carte (maquette R8.9). */}
+        {layout === "row" && (
+          <span className="w-card__seats">
+            {gauge}
+            <span className="w-card__seatsline o-t-meta">
+              <span data-testid="event-seats">{count}</span>
+              {wait}
+            </span>
+          </span>
+        )}
       </a>
       {(event.status === "cancelled" || event.outlook === "uncertain" || hints.length > 0) && (
         <div className="w-card__foot">

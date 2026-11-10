@@ -1790,17 +1790,58 @@
 }
 .ex-search {
   display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* Lot R8x (maquette R8.9, variante A) : le champ et le bouton icône « Filtres » sur une ligne. */
+.ex-searchline {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
+/* `.r8ib` : 40 px, rayon 12 ; la pastille moutarde dit le nombre de filtres actifs. */
+.ex-ibtn {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  cursor: pointer;
+}
+.ex-ibtn[data-set="true"] {
+  background: var(--ink);
+  color: var(--ground);
+  box-shadow: none;
+}
+.ex-ibtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ex-ibtn__n {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+.ex-searchline > .ex-nojs {
+  flex: 1 0 100%;
+}
 .ex-search__field {
   display: flex;
-  flex: 1 1 260px;
+  flex: 1 1 0;
+  min-width: 0;
   align-items: center;
   gap: var(--space-2);
-  min-height: 48px;
-  padding: 0 6px 0 var(--space-3);
+  min-height: 40px;
+  padding: 0 4px 0 var(--space-3);
   border-radius: var(--radius-md);
   background: var(--surface-field);
   color: var(--ink);
@@ -1809,11 +1850,12 @@
 .ex-search__field input {
   flex: 1;
   min-width: 0;
-  height: 44px;
+  height: 36px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
+  font-size: 13px;
 }
 /* Une seule ✕ : celle du navigateur est retirée, la nôtre (lien « Effacer ») reste. */
 .ex-search__field input::-webkit-search-cancel-button {
@@ -1848,8 +1890,8 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -1863,17 +1905,12 @@
 /* `.pills` (maquette R2.9) : une seule ligne, qui défile au doigt si elle déborde ; la pastille « où » reste la première. */
 .ex-pills {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
   margin: 0;
   padding: 1px 0;
   border: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.ex-pills::-webkit-scrollbar {
-  display: none;
 }
 /* `.pill` : 36 px, contour = le réglage habituel ; plein encre = une valeur choisie. */
 .ex-pill {
@@ -1881,7 +1918,7 @@
   flex: none;
   align-items: center;
   gap: 3px;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 8px 0 7px;
   border: 1.5px solid var(--line);
   border-radius: var(--radius-pill);
