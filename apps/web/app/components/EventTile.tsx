@@ -1,9 +1,10 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { countFr, type EventCard, eventFormatLabels, explorerV2Labels, widestWordEm, yearToShow } from "@orasso/shared";
+import { type EventCard, eventFormatLabels, explorerV2Labels, widestWordEm, yearToShow } from "@orasso/shared";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
 import { formatDayShort, formatTime } from "../lib/format";
+import { seatsOf } from "./eventSeats";
 
 const TZ = "Europe/Paris";
 const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short" });
@@ -103,14 +104,7 @@ export function EventTile({
   const where = [event.city, event.department].filter(Boolean).join(" · ");
   const stub = stubOf(event.startsAt);
   const taken = takenOf(event);
-  // Lot R8x : complet = « Complet · 14 exposants » et la puce « Liste d'attente » à droite du décompte (plus de badge ailleurs).
-  const full = event.capacity !== null && event.remaining === 0;
-  const count =
-    event.remaining === null
-      ? "Sans limite"
-      : full && event.capacity !== null
-        ? explorerV2Labels.seatsFull(event.capacity)
-        : countFr(event.remaining, "place");
+  const { full, text: count } = seatsOf(event);
   const wait = full ? (
     <span className="w-card__wait" data-testid="event-waitlist">
       <Chip>{explorerV2Labels.waitlistFlag}</Chip>
