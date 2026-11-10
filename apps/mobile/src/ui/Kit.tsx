@@ -112,10 +112,13 @@ export function Seg<T extends string>({
   testID,
   cmode,
   wrap,
+  maxFontScale,
   disabled,
 }: {
   cmode?: boolean;
   wrap?: boolean;
+  /** Lot R8f1 : plafond de la police système pour les libellés (facultatif ; sans lui, rien ne change). */
+  maxFontScale?: number;
   /** Lot R7e2, tour 4 : segments grisés et sans effet (une opération est en cours). */
   disabled?: boolean;
   options: { value: T; label: string; lead?: ReactNode; icon?: IconName }[];
@@ -163,6 +166,7 @@ export function Seg<T extends string>({
               color={color}
               style={wrap ? [styles.segText, styles.segTextWrap] : styles.segText}
               numberOfLines={wrap ? undefined : 1}
+              maxFontSizeMultiplier={maxFontScale}
             >
               {o.label}
             </Text>

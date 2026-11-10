@@ -185,41 +185,45 @@ export function Fil({ userId }: { userId: string }) {
     <div className="fil" data-testid="fil" ref={topRef}>
       {/* Emplacement de la barre de stories : RÉSERVÉ au lot R7f2. */}
       {/* Lot R7f3 : « Publier » demande où (en story, dans le Fil) ; sans JavaScript aussi (`details`). */}
-      <details className="fil-choose">
-        <summary className="fil-publish" data-testid="fil-publish-open">
-          <Icon name="camera" size={20} /> {L.publish}
-        </summary>
-        <div className="fil-choose__list">
-          <a className="fil-choose__option" href="/app/story/publier" data-testid="fil-publish-choose-story">
-            <Icon name="camera" size={20} />
-            <span>
-              <strong>{S.chooseStory}</strong>
-              <small>{S.chooseStoryHint}</small>
-            </span>
-          </a>
-          <a className="fil-choose__option" href="/app/fil/publier" data-testid="fil-publish-choose-post">
-            <Icon name="feed" size={20} />
-            <span>
-              <strong>{S.choosePost}</strong>
-              <small>{S.choosePostHint}</small>
-            </span>
-          </a>
+      {/* Lot R8f1 (variante A1, maquette R8.2) : une seule rangée, les trois filtres et, à droite, le bouton icône « Publier » ;
+          la liste des choix s'ouvre sous la rangée, alignée à droite, par-dessus le Fil (rien ne descend). */}
+      <div className="fil-top">
+        <div className="fil-filters" role="tablist" aria-label="Filtres du Fil" data-testid="fil-filters">
+          {feedScreenFilters.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="tab"
+              aria-selected={filter === o.value}
+              className={filter === o.value ? "is-on" : undefined}
+              onClick={() => choose(o.value)}
+              data-testid={`fil-filters-${o.value}`}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
-      </details>
-      <div className="fil-filters" role="tablist" aria-label="Filtres du Fil" data-testid="fil-filters">
-        {feedScreenFilters.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            role="tab"
-            aria-selected={filter === o.value}
-            className={filter === o.value ? "is-on" : undefined}
-            onClick={() => choose(o.value)}
-            data-testid={`fil-filters-${o.value}`}
-          >
-            {o.label}
-          </button>
-        ))}
+        <details className="fil-choose">
+          <summary className="fil-publish" data-testid="fil-publish-open" aria-label={L.publish}>
+            <Icon name="camera" size={20} />
+          </summary>
+          <div className="fil-choose__list">
+            <a className="fil-choose__option" href="/app/story/publier" data-testid="fil-publish-choose-story">
+              <Icon name="camera" size={20} />
+              <span>
+                <strong>{S.chooseStory}</strong>
+                <small>{S.chooseStoryHint}</small>
+              </span>
+            </a>
+            <a className="fil-choose__option" href="/app/fil/publier" data-testid="fil-publish-choose-post">
+              <Icon name="feed" size={20} />
+              <span>
+                <strong>{S.choosePost}</strong>
+                <small>{S.choosePostHint}</small>
+              </span>
+            </a>
+          </div>
+        </details>
       </div>
       {notice ? (
         <p className="o-t-caption" role="alert" data-testid="fil-notice">

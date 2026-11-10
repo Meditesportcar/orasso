@@ -17,18 +17,24 @@
   white-space: nowrap;
 }
 
-/* « Publier » : le bouton principal de l'écran (moutarde, icône). */
+/* Lot R8f1 (variante A1) : la rangée du haut, les trois filtres et le bouton icône « Publier » (48 px, le jeton `touch`). */
+.fil-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* « Publier » : le bouton principal de l'écran (moutarde, icône seule, carré de 48 px, rayon 14 de la maquette). */
 .fil-publish {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-height: 50px;
-  border-radius: var(--radius-md);
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: 14px;
   background: var(--accent);
   color: var(--accent-ink);
-  font-weight: 800;
-  text-transform: uppercase;
   text-decoration: none;
   box-shadow: var(--shadow-card);
 }
@@ -48,6 +54,8 @@
 
 /* Les trois filtres et les trois formats : segments en bloc, le segment actif à l'encre. */
 .fil-filters {
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
@@ -58,6 +66,9 @@
 }
 .fil-filters button {
   min-height: 40px;
+  min-width: 0;
+  padding-inline: var(--space-1);
+  line-height: 1.1;
   border: 0;
   border-radius: calc(var(--radius-md) - 2px);
   background: transparent;
@@ -529,22 +540,25 @@
 
 /* « Publier » demande où (lot R7f3) : le bouton principal ouvre deux lignes, en story ou dans le Fil. `summary` sans marqueur. */
 .fil-choose {
-  display: block;
-}
-.fil-choose[open] > summary {
-  margin-bottom: var(--space-2);
+  flex: none;
 }
 .fil-choose > summary {
-  display: flex;
+  display: inline-flex;
   list-style: none;
   cursor: pointer;
 }
 .fil-choose > summary::-webkit-details-marker {
   display: none;
 }
+/* La liste s'ouvre sous la rangée, alignée à droite, par-dessus le Fil : il ne descend pas (lot R8f1). */
 .fil-choose__list {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 5;
   display: grid;
   gap: var(--space-2);
+  width: min(100%, 22rem);
 }
 .fil-choose__option {
   display: flex;
