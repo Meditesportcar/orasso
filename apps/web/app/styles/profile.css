@@ -481,3 +481,10 @@
   top: 100%;
   z-index: 30;
 }
+/* Les liens de l'espace connecté sont moutarde (`.app__body a`) : les onglets du Profil gardent l'encre atténuée, l'actif l'encre. */
+.app__body [data-testid="profil-tabs"] a.utabs__tab {
+  color: var(--ink-muted);
+}
+.app__body [data-testid="profil-tabs"] a.utabs__tab[data-on="true"] {
+  color: var(--ink);
+}
