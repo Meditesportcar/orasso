@@ -119,7 +119,7 @@ describe("pager des mentions (hook)", () => {
     expect(pager.state.depth).toBe(1);
   });
 
-  it("son propre « Ajouter » en page 2, première page inchangée : la page est relue et la ligne passe à « Retirer »", async () => {
+  it("son propre « Ajouter » puis « Retirer » en page 2, première page inchangée : la page est relue à chaque geste", async () => {
     let copy: string | null = null;
     const fetchPage: FetchPage = async () => page(["b1", "b2"], null, copy ? { b2: copy } : {});
     const pager = new MentionPager(fetchPage, () => undefined);
@@ -135,6 +135,11 @@ describe("pager des mentions (hook)", () => {
     pager.sync(firstPage(["a1"], "c2"), true); // retour d'un geste : relecture forcée
     await flush();
     expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBe("copie-b2");
+    // Puis il la retire : même première page, relecture forcée, la ligne revient à « Ajouter ».
+    copy = null;
+    pager.sync(firstPage(["a1"], "c2"), true);
+    await flush();
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
   });
 
   it("une première page qui change pendant le premier « Voir plus » (profondeur zéro) jette la réponse et reprend du nouveau curseur", async () => {
