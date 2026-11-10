@@ -823,3 +823,18 @@ button.story-view__pill {
   color: inherit;
   text-underline-offset: 2px;
 }
+
+/* Lot R7f4 : la carte liée est touchable (« Voir l'événement », « Voir la voiture »…). */
+.story-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: center;
+  margin-bottom: var(--space-2);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--night-ink);
+  color: var(--night);
+  font-weight: 800;
+  text-decoration: none;
+}

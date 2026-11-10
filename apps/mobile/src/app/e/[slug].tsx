@@ -33,6 +33,7 @@ import {
   type MyApplication,
   nearCountdown,
   registrationBlock,
+  shareLabels,
   type VendorTypeCode,
   withYear,
   wizardEndLabels,
@@ -63,6 +64,7 @@ import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet"
 import { SmButton } from "@/features/passionne/kit";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
+import { ShareSheet } from "@/features/share/ShareSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
@@ -176,6 +178,7 @@ export default function EventPage() {
   // `?candidater=crew` l'ouvre en mode crew (page d'un crew, lien du site `/e/<slug>/crew`).
   const [cand, setCand] = useState<"solo" | "crew" | null>(null);
   const [linked, setLinked] = useState(false);
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (candidater && status === "in") setLinked(true);
   }, [candidater, status]);
@@ -561,6 +564,9 @@ export default function EventPage() {
           {shareable ? (
             <InviteSheet event={{ id: e.id, title: e.title }} visible={inviting} onClose={() => setInviting(false)} />
           ) : null}
+          {me ? (
+            <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "event", id: e.id }} />
+          ) : null}
           <InvitationMenu from={menuFrom} onClose={() => setMenuFrom(null)} onChanged={() => void invited.reload()} />
           <ApplySheet
             eventTitle={applying ? e.title : null}
@@ -647,6 +653,12 @@ export default function EventPage() {
         />
       ) : null}
       <EventRows event={e} />
+      {/* Lot R7f4 : « Partager » (story, Fil, message, extérieur) : tout membre connecté, l'API dit ce qui est ouvert. */}
+      {me && !cancelled && !inviteOnly ? (
+        <SmButton kind="s" icon="share" onPress={() => setSharing(true)} testID="event-share">
+          {shareLabels.title}
+        </SmButton>
+      ) : null}
       {/* Lot R4b (maquette R4.3) : le plateau, sous les lignes Quand / Où / Places ; les prestataires présents l'ont rejoint. */}
       <LineupBlock eventId={e.id} slug={e.slug} />
       {/* Lot R6c (R6.3) : qui y va parmi ceux que je suis, et « Inviter du monde » (tout membre connecté, inscrit ou non). */}

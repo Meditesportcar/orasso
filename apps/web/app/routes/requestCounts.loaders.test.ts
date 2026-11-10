@@ -1,7 +1,7 @@
 // Lot R7c2, tour 2 : un compteur de demandes **inconnu** n'est pas zéro. Quand `GET /me/inbox/summary` échoue, les chargeurs
 // de l'Activité, des Demandes et des Messages se rabattent sur la liste des demandes ; sans elle non plus, le compteur
 // reste `null` (la ligne garde son accès, l'écran affiche « Réessayer »), jamais 0.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const calls = new Map<string, unknown>();
 const FAIL = Symbol("panne");
@@ -43,6 +43,12 @@ const summary = (over: Partial<{ pendingRequests: number; contact: number }> = {
   pendingRequests: over.pendingRequests ?? 0,
   requests: { contact: over.contact ?? 0 },
 });
+
+// Les chargeurs sont importés (transformés) une fois pour toutes avant les tests : sous charge, ce premier import
+// dépassait le délai du premier test, qui échouait sans rapport avec ce qu'il vérifie.
+beforeAll(async () => {
+  await Promise.all([import("./app-activite"), import("./app-messages"), import("./app-activite-demandes")]);
+}, 120_000);
 
 beforeEach(() => calls.clear());
 

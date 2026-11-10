@@ -62,13 +62,17 @@ test("Accueil, Sorties, fiche, passeport et vote de Damien pendant le Lydia", as
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "damien@orasso.local");
 
-    // Accueil : « En cours » et « Jour N sur 4 », jamais « J+1 ».
+    // Accueil : « En cours · jour N sur 4 » (la ligne du direct, lot R7a2), jamais « J+1 » ; la sortie est dans « Mes sorties »,
+    // qui la dit « En cours ».
     await page.goto("/accueil");
     await afterOpening(page);
-    const outing = page.getByTestId("home-outing").filter({ hasText: "Rassemblement du Lydia" });
+    const live = page.getByTestId("home-live-line");
+    await expect(live).toBeVisible({ timeout: 30_000 });
+    await expect(live).toContainText(/En cours · jour \d sur 4/i);
+    await expect(live).not.toContainText(/J\+\d/);
+    const outing = page.getByTestId("home-my-outing").filter({ hasText: "Rassemblement du Lydia" });
     await expect(outing).toBeVisible({ timeout: 30_000 });
     await expect(outing).toContainText(/En cours/i);
-    await expect(outing).toContainText(/Jour \d sur 4/i);
     await expect(outing).not.toContainText(/J\+\d/);
 
     // Mes sorties : « En cours · jour N sur 4 ».
@@ -163,7 +167,9 @@ test("Nina_34, entrée la veille : sur la fiche, le bouton principal ne redevien
   await page.goto(`/e/${SLUG}`);
   await afterOpening(page);
   await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "Voir ma candidature" }).first()).toBeVisible({ timeout: 30_000 });
+  // Lot R7d2 : entrée, avec des votes ouverts, le bouton principal de la fiche est « Votes · N ouverts » (sans vote ouvert, ce
+  // serait « Voir ma candidature »). Jamais « Mon QR ».
+  await expect(page.getByRole("button", { name: /^Votes · \d+ ouverts?$/ }).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Mon QR" })).toHaveCount(0);
   await ctx.close();
 });

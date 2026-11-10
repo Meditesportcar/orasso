@@ -1,18 +1,18 @@
-// La story de l'organisateur « En cours » (lot R7h) : mentions par rôle, regard « identifié », « Ajouter à ma story »
-// (copie liée : public, expiration héritée, doublon, crew, compte privé), « Retirer », cascade (suppression de l'originale,
-// retrait de l'identification, compte qui passe en privé), anneau `live`, `organizerStoryAvailable`, widget de l'Accueil.
+// Partager un contenu d'Orasso (lot R7f4) : cartes liées rendues par le serveur (dimensions, plaque floutée, tête d'affiche),
+// story sans média, contenu devenu privé → carte inerte, organisateur prévenu (compte public) ou non (privé), export d'une
+// story (auteur seul, refusé pour un crew, signature), publication du Fil en 4:5, carte au Fil, feuille « Partager ».
 // Aucune plaque lisible : les photos d'essai sont du bruit coloré.
 
 import { randomUUID } from "node:crypto";
-import { fromWallTime, HOUR } from "@orasso/shared";
+import { fromWallTime, STORY_H, STORY_W, shareLabels } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addMember,
+  allCategoriesId,
+  blurPlatesOf,
   createEvent,
-  createPro,
   createStructure,
   createVehicle,
   resetDb,
@@ -25,16 +25,20 @@ import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
   applications,
+  audiencePrizeResults,
+  eventInvitations,
+  events,
   notifications,
   profiles,
   stories,
   storyTags,
-  structureFollows,
   userFollows,
+  vehiclePhotos,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { storage } from "../../lib/storage";
-import { storiesExpire } from "./expire";
+import { blurPlateRegions } from "../vehicles/photos-blur";
+import { CANVAS_H, CANVAS_W, renderCard, renderGround, signFile } from "./card";
 
 afterAll(async () => {
   await pool.end();
@@ -61,20 +65,19 @@ async function req(u: TestUser | null, method: string, path: string, body?: unkn
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  const text = await res.text();
-  // biome-ignore lint/suspicious/noExplicitAny: réponses JSON lues librement dans les tests
-  let json: any = null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  let json: // biome-ignore lint/suspicious/noExplicitAny: réponses JSON lues librement dans les tests
+  any = null;
   try {
-    json = text ? JSON.parse(text) : null;
+    json = JSON.parse(buf.toString("utf8"));
   } catch {
     json = null;
   }
-  return { status: res.status, json, headers: res.headers };
+  return { status: res.status, json, buf, headers: res.headers };
 }
 
-async function photo() {
-  const width = 1600;
-  const height = 900;
+/** Bruit coloré : très « texturé », sans texte ni plaque. */
+async function noise(width = 1600, height = 900) {
   const raw = Buffer.alloc(width * height * 3);
   for (let i = 0; i < raw.length; i++) raw[i] = (i * 2654435761) % 251;
   return sharp(raw, { raw: { width, height, channels: 3 } })
@@ -82,567 +85,693 @@ async function photo() {
     .toBuffer();
 }
 
-async function publish(u: TestUser, over: Record<string, unknown> = {}) {
+/** Variance des niveaux de gris d'une zone. */
+async function variance(data: Buffer, r: { left: number; top: number; width: number; height: number }) {
+  const { data: px } = await sharp(data).extract(r).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const mean = px.reduce((a, b) => a + b, 0) / px.length;
+  return px.reduce((a, b) => a + (b - mean) ** 2, 0) / px.length;
+}
+
+/** Un véhicule à photo montrable : le fichier est du bruit (plaque floutée posée à l'envoi, comme le fait l'API). */
+async function maskedVehicle(owner: TestUser) {
+  const v = await createVehicle(owner.id, ref);
+  const [photo] = await db.select().from(vehiclePhotos).where(eq(vehiclePhotos.vehicleId, v.id));
+  await storage.put(
+    photo?.storageKey as string,
+    await sharp(await noise(1200, 800))
+      .webp()
+      .toBuffer(),
+  );
+  await blurPlatesOf(owner.id);
+  return v;
+}
+
+const follow = async (a: TestUser, b: TestUser) => {
+  await req(a, "POST", `/users/${b.pseudo}/follow`);
+  await db
+    .update(userFollows)
+    .set({ status: "accepted", acceptedAt: clock.now })
+    .where(and(eq(userFollows.followerId, a.id), eq(userFollows.followedId, b.id)));
+};
+const makePrivate = (u: TestUser) =>
+  db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
+
+type Over = Record<string, unknown>;
+const share = (u: TestUser, linked: { type: string; id: string }, over: Over = {}) =>
+  req(u, "POST", "/me/stories", { linked, clientId: randomUUID(), audience: "public", ...over });
+
+async function structureEvent(owner: TestUser, over: Partial<typeof events.$inferInsert> = {}) {
+  const s = await createStructure(owner.id);
+  const e = await createEvent(s.id, { title: "Rassemblement du Lydia", city: "Le Barcarès", ...over });
+  return { s, e };
+}
+
+const byAuthor = (u: TestUser, owner: TestUser) => req(u, "GET", `/stories/by-author/u:${owner.id}`);
+const fileOf = (view: { mediaUrl: string }) => view.mediaUrl.replace(/^\/api/, "");
+
+describe("carte rendue par le serveur", () => {
+  it("1080 × 1350 à fond transparent, fond 1080 × 1920 en couverture", async () => {
+    const card = await renderCard({
+      kicker: "Sport · @damien_66",
+      title: "Toyota GR Supra",
+      subtitle: "Toyota · A90 · Blanche",
+      badge: "1re · 19 voix",
+      stats: [{ label: "Puissance", value: "340", unit: "ch" }],
+      stripe: true,
+      photo: await noise(),
+    });
+    const meta = await sharp(card).metadata();
+    expect([meta.width, meta.height, meta.hasAlpha]).toEqual([CANVAS_W, CANVAS_H, true]);
+    // Les coins du canevas sont transparents (la carte est posée avec ses marges et penchée).
+    const corner = await sharp(card).extract({ left: 0, top: 0, width: 4, height: 4 }).raw().toBuffer();
+    expect(corner[3]).toBe(0);
+    const ground = await renderGround(await noise(), 1080, 1920);
+    const gm = await sharp(ground).metadata();
+    expect([gm.width, gm.height]).toEqual([1080, 1920]);
+  });
+
+  it("un nom très long reste entier sur une ligne, sans photo : le cadre de la marque", async () => {
+    const card = await renderCard({
+      kicker: "Voiture",
+      title: "Mercedes-Benz AMG GT Black Series Édition Spéciale Pack Carbone",
+      subtitle: "",
+      badge: null,
+      stats: [],
+      stripe: false,
+      photo: null,
+    });
+    expect((await sharp(card).metadata()).height).toBe(CANVAS_H);
+  });
+
+  it("la plaque floutée de la photo reste floutée sur la carte (variance de la zone)", async () => {
+    // Photo de 1600 × 900 dont une bande centrale est floutée comme le fait l'API à l'envoi.
+    const src = await noise();
+    const rect = { x: 0.3, y: 0.4, w: 0.4, h: 0.2 };
+    const blurred = (await blurPlateRegions(src, [rect])).data;
+    const spec = { kicker: "Voiture", title: "Test", subtitle: "", badge: null, stats: [], stripe: false };
+    const plain = await renderCard({ ...spec, photo: src });
+    const masked = await renderCard({ ...spec, photo: blurred });
+    // Dans la carte (860 × 620 de photo, posée à (110, 145)), le centre de la bande est à (540, 455).
+    const band = { left: 480, top: 430, width: 120, height: 50 };
+    const away = { left: 150, top: 200, width: 120, height: 50 };
+    const before = await variance(plain, band);
+    const after = await variance(masked, band);
+    expect(before).toBeGreaterThan(50);
+    expect(after).toBeLessThan(before * 0.2);
+    expect(Math.abs((await variance(masked, away)) - (await variance(plain, away)))).toBeLessThan(80);
+  });
+});
+
+describe("story sans média : une voiture", () => {
+  it("compose le 9:16, garde le lien, rend la carte touchable ; la reprise rend la même story", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const v = await maskedVehicle(kenji);
+    const clientId = randomUUID();
+    const res = await share(
+      kenji,
+      { type: "vehicle", id: v.id },
+      { clientId, frame: { scale: 1.3, offsetX: 40, offsetY: -80 } },
+    );
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    expect(res.json.status).toBe("ready");
+    const [row] = await db.select().from(stories).where(eq(stories.id, res.json.id));
+    expect(row).toMatchObject({ linkedType: "vehicle", linkedId: v.id, plateState: "blurred", mediaKind: "photo" });
+    const view = (await byAuthor(nina, kenji)).json.stories[0];
+    expect(view.linked).toMatchObject({ type: "vehicle", id: v.id, label: "Voir la voiture" });
+    const file = await req(nina, "GET", fileOf(view));
+    const meta = await sharp(file.buf).metadata();
+    expect([meta.width, meta.height, meta.format]).toEqual([STORY_W, STORY_H, "webp"]);
+    // Même `clientId` : la même story, pas de doublon.
+    const again = await req(kenji, "POST", "/me/stories", {
+      linked: { type: "vehicle", id: v.id },
+      clientId,
+      audience: "public",
+    });
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(res.json.id);
+    expect(await db.select().from(stories)).toHaveLength(1);
+  });
+
+  it("sans photo montrable (plaque non décidée) : refusé, aucune story ; la voiture d'un autre : introuvable", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const v = await createVehicle(kenji.id, ref);
+    const refused = await share(kenji, { type: "vehicle", id: v.id });
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.code).toBe("no_masked_photo");
+    expect(await db.select().from(stories)).toHaveLength(0);
+    await blurPlatesOf(kenji.id);
+    expect((await share(nina, { type: "vehicle", id: v.id })).status).toBe(404);
+  });
+
+  it("la voiture archivée ou passée à un autre : la carte devient inerte (linked null), rien de la voiture n'est renvoyé", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const v = await maskedVehicle(kenji);
+    await share(kenji, { type: "vehicle", id: v.id });
+    expect((await byAuthor(nina, kenji)).json.stories[0].linked).not.toBeNull();
+    await db.execute(sql`update vehicles set status = 'sold' where id = ${v.id}`);
+    const after = (await byAuthor(nina, kenji)).json.stories[0];
+    expect(after.linked).toBeNull();
+    expect(JSON.stringify(after)).not.toContain(v.id);
+  });
+});
+
+describe("story sans média : un événement", () => {
+  it("compte public : la structure est identifiée et son propriétaire prévenu ; la carte ouvre l'événement", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const nina = await signUp("Nina");
+    const { s, e } = await structureEvent(orga);
+    const res = await share(kenji, { type: "event", id: e.id });
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    expect(res.json.skipped).toEqual([]);
+    const tags = await db.select().from(storyTags).where(eq(storyTags.storyId, res.json.id));
+    expect(tags).toEqual([expect.objectContaining({ targetKind: "structure", targetId: s.id })]);
+    const told = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, orga.id), eq(notifications.type, "story_mention")));
+    expect(told).toHaveLength(1);
+    const view = (await byAuthor(nina, kenji)).json.stories[0];
+    expect(view.linked).toMatchObject({ type: "event", slug: e.slug, label: "Voir l'événement" });
+  });
+
+  it("compte privé : la story part, sans identification ni notification (la feuille le dit)", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    await makePrivate(kenji);
+    const info = await req(kenji, "GET", `/me/share/info?type=event&id=${e.id}`);
+    expect(info.json.organizerNotified).toBe(false);
+    const res = await share(kenji, { type: "event", id: e.id }, { audience: "followers" });
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    expect(res.json.skipped).toEqual([]);
+    expect(await db.select().from(storyTags)).toHaveLength(0);
+    expect(await db.select().from(notifications).where(eq(notifications.type, "story_mention"))).toHaveLength(0);
+    const [row] = await db.select().from(stories).where(eq(stories.id, res.json.id));
+    expect(row?.linkedType).toBe("event");
+  });
+
+  it("un brouillon ou un événement sur invitation ne se partage pas ; devenu brouillon, la carte devient inerte", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const orga = await signUp("Orga");
+    const draft = await structureEvent(orga, { status: "draft" });
+    expect((await share(kenji, { type: "event", id: draft.e.id })).status).toBe(404);
+    const { e } = await structureEvent(orga);
+    await share(kenji, { type: "event", id: e.id });
+    expect((await byAuthor(nina, kenji)).json.stories[0].linked).not.toBeNull();
+    await db.update(events).set({ status: "draft" }).where(eq(events.id, e.id));
+    const view = (await byAuthor(nina, kenji)).json.stories[0];
+    expect(view.linked).toBeNull();
+    expect(JSON.stringify(view)).not.toContain(e.slug);
+  });
+
+  it("une story de crew avec un événement : pas d'identification de la structure", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const crew = (await req(kenji, "POST", "/crews", { name: "Crew partage", department: "66" })).json;
+    const res = await share(kenji, { type: "event", id: e.id }, { audience: "crew", crewId: crew.id });
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    expect(await db.select().from(storyTags)).toHaveLength(0);
+  });
+});
+
+describe("autres contenus liés", () => {
+  it("un souvenir sans tampon : introuvable ; un vote pas encore clos : 409 ; une publication inconnue : 404", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    expect((await share(kenji, { type: "memory", id: e.id })).status).toBe(404);
+    const voteId = await allCategoriesId(e.id);
+    const open = await share(kenji, { type: "vote_result", id: voteId });
+    expect(open.status).toBe(409);
+    expect(open.json.error.code).toBe("vote_open");
+    expect((await share(kenji, { type: "feed_post", id: randomUUID() })).status).toBe(404);
+  });
+
+  it("une publication du Fil : repartageable si l'auteur est public (ou moi) ; refusée si l'auteur est privé", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const lea = await signUp("Lea");
+    const photoUp = async (u: TestUser) => {
+      const form = new FormData();
+      form.append("purpose", "feed_post");
+      form.append("file", new File([new Uint8Array(await noise(800, 1000))], "p.jpg", { type: "image/jpeg" }));
+      const r = await app.request("/api/me/uploads", {
+        method: "POST",
+        headers: { origin: ORIGIN, cookie: u.cookie },
+        body: form,
+      });
+      return ((await r.json()) as { key: string }).key;
+    };
+    const posted = await req(nina, "POST", "/me/feed-posts", {
+      caption: "Belle sortie",
+      photos: [{ uploadKey: await photoUp(nina), noPlateConfirmed: true }],
+      aspect: "portrait_4_5",
+    });
+    expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+    const ok = await share(kenji, { type: "feed_post", id: posted.json.id });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+    const [row] = await db.select().from(stories).where(eq(stories.id, ok.json.id));
+    expect(row).toMatchObject({ linkedType: "feed_post", plateState: "none_confirmed" });
+    // L'auteur passe en privé : Léa ne le suit pas, la publication n'est plus visible pour elle, la carte devient inerte.
+    expect((await byAuthor(lea, kenji)).json.stories[0].linked).not.toBeNull();
+    // « Vers l'extérieur » : pas proposé pour la publication d'un autre (l'export la refuserait), ni à un autre lecteur.
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(false);
+    expect((await req(kenji, "GET", `/stories/${ok.json.id}/export`)).status).toBe(403);
+    expect((await byAuthor(lea, kenji)).json.stories[0].exportable).toBe(false);
+    await makePrivate(nina);
+    const view = (await byAuthor(lea, kenji)).json.stories[0];
+    expect(view.linked).toBeNull();
+    expect((await share(kenji, { type: "feed_post", id: posted.json.id })).status).toBe(404);
+    // Suivi accepté : visible, mais un compte privé ne se repartage pas.
+    await follow(kenji, nina);
+    const refused = await share(kenji, { type: "feed_post", id: posted.json.id });
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.code).toBe("private_author");
+    // L'auteur partage sa propre publication, même privée.
+    const own = await share(nina, { type: "feed_post", id: posted.json.id }, { audience: "followers" });
+    expect(own.status).toBe(201);
+    expect((await byAuthor(nina, nina)).json.stories[0].exportable).toBe(true);
+  });
+});
+
+describe("la feuille « Partager »", () => {
+  it("destinations ouvertes et raisons des fermées", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const ev = (await req(kenji, "GET", `/me/share/info?type=event&id=${e.id}`)).json;
+    expect(ev.destinations).toEqual({ story: true, feed: true, message: true, external: true });
+    expect(ev.linkLabel).toBe("Voir l'événement");
+    expect(ev.organizerNotified).toBe(true);
+    expect(ev.url).toContain(`/e/${e.slug}`);
+    const v = await createVehicle(kenji.id, ref);
+    const car = (await req(kenji, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).json;
+    // L'affiche du lot 50 (qui produit elle-même une photo sûre) reste ouverte ; story et Fil montreraient la photo nette.
+    expect(car.destinations).toEqual({ story: false, feed: false, message: true, external: true });
+    expect(car.reasons.external).toBeUndefined();
+    expect(car.formats).toEqual([]);
+    expect((await req(kenji, "GET", `/me/share/export?type=vehicle&id=${v.id}&format=story`)).status).toBe(409);
+    expect(car.reasons.story).toContain("plaque floutée");
+    // Sans photo montrable, « En message » porte tout de même la page publique de la voiture (jamais l'accueil).
+    expect(car.destinations.message).toBe(true);
+    expect(car.url).toContain(`/v/${v.id}`);
+    // Le nom de la voiture reste (en-tête de la feuille) et le message final le porte : jamais « Partager : https://… ».
+    expect(car.title).toBeTruthy();
+    expect(shareLabels.messageBody(car.title || shareLabels.title, car.url)).toBe(`${car.title} : ${car.url}`);
+    expect(shareLabels.messageBody(car.title || shareLabels.title, car.url)).not.toMatch(/^Partager/);
+    await blurPlatesOf(kenji.id);
+    const ready = (await req(kenji, "GET", `/me/share/info?type=vehicle&id=${v.id}`)).json;
+    expect(ready.destinations).toEqual({ story: true, feed: true, message: true, external: true });
+    expect((await req(null, "GET", `/me/share/info?type=event&id=${e.id}`)).status).toBe(401);
+    expect((await req(kenji, "GET", `/me/share/info?type=event&id=${randomUUID()}`)).status).toBe(404);
+  });
+});
+
+describe("fichiers qui sortent d'Orasso", () => {
+  it("ma story en 9:16 signé « orasso.fr » (la zone de la signature n'est plus unie) ; pas celle d'un autre", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const res = await share(kenji, { type: "event", id: e.id });
+    const out = await req(kenji, "GET", `/stories/${res.json.id}/export`);
+    expect(out.status).toBe(200);
+    expect(out.headers.get("content-type")).toBe("image/jpeg");
+    const meta = await sharp(out.buf).metadata();
+    expect([meta.width, meta.height]).toEqual([STORY_W, STORY_H]);
+    // Le coin bas droit (au-dessus de la zone recouverte par l'application de destination) porte la signature.
+    const corner = { left: 700, top: STORY_H - 250 - 80, width: 320, height: 80 };
+    const stored = await req(kenji, "GET", fileOf((await req(kenji, "GET", "/me/stories")).json.stories[0]));
+    expect(await variance(out.buf, corner)).toBeGreaterThan((await variance(stored.buf, corner)) + 300);
+    expect((await req(nina, "GET", `/stories/${res.json.id}/export`)).status).toBe(403);
+    expect((await req(null, "GET", `/stories/${res.json.id}/export`)).status).toBe(401);
+  });
+
+  it("une story de crew ne sort jamais : 403 crew_only, pour l'auteur comme pour un autre", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const crew = (await req(kenji, "POST", "/crews", { name: "Crew sortie", department: "66" })).json;
+    const res = await share(kenji, { type: "event", id: e.id }, { audience: "crew", crewId: crew.id });
+    for (const u of [kenji, nina]) {
+      const out = await req(u, "GET", `/stories/${res.json.id}/export`);
+      expect(out.status).toBe(403);
+      expect(out.json.error.code).toBe("crew_only");
+    }
+  });
+
+  it("une publication du Fil sort en 4:5 signé, pour son auteur seul", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const form = new FormData();
+    form.append("purpose", "feed_post");
+    form.append("file", new File([new Uint8Array(await noise(1350, 1080))], "p.jpg", { type: "image/jpeg" }));
+    const up = await app.request("/api/me/uploads", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: kenji.cookie },
+      body: form,
+    });
+    const posted = await req(kenji, "POST", "/me/feed-posts", {
+      photos: [{ uploadKey: ((await up.json()) as { key: string }).key, noPlateConfirmed: true }],
+      aspect: "landscape",
+    });
+    expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+    const out = await req(kenji, "GET", `/feed-posts/${posted.json.id}/export`);
+    expect(out.status).toBe(200);
+    const meta = await sharp(out.buf).metadata();
+    expect([meta.width, meta.height, meta.format]).toEqual([1080, 1350, "jpeg"]);
+    expect((await req(nina, "GET", `/feed-posts/${posted.json.id}/export`)).status).toBe(403);
+    // Une publication d'un autre ne part pas non plus par la route des contenus partagés.
+    expect((await req(nina, "GET", `/me/share/export?type=feed_post&id=${posted.json.id}&format=post`)).status).toBe(
+      403,
+    );
+  });
+
+  it("un événement en 9:16 ou en 4:5, signé ; une voiture sans photo montrable est refusée", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const story = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=story`);
+    expect(story.status).toBe(200);
+    expect((await sharp(story.buf).metadata()).height).toBe(STORY_H);
+    const post = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=post&download=1`);
+    expect(post.headers.get("content-disposition")).toContain("attachment");
+    expect((await sharp(post.buf).metadata()).height).toBe(CANVAS_H);
+    const v = await createVehicle(kenji.id, ref);
+    expect((await req(kenji, "GET", `/me/share/export?type=vehicle&id=${v.id}&format=story`)).status).toBe(409);
+    await blurPlatesOf(kenji.id);
+    expect((await req(kenji, "GET", `/me/share/export?type=vehicle&id=${v.id}&format=story`)).status).toBe(200);
+  });
+
+  it("la signature se pose sur n'importe quelle image 9:16 ou 4:5", async () => {
+    const base = await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#202020" } })
+      .png()
+      .toBuffer();
+    const out = await signFile(base, { width: 1080, height: 1350 });
+    expect(await variance(out, { left: 700, top: 1350 - 44 - 70, width: 320, height: 70 })).toBeGreaterThan(300);
+  });
+});
+
+describe("carte au Fil en 4:5", () => {
+  it("un événement et une voiture se publient au Fil : image rendue 1080 × 1350, plaque décidée, lien posé", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const v = await maskedVehicle(kenji);
+    const ev = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "event", id: e.id },
+      clientId: randomUUID(),
+      caption: "On y va",
+    });
+    expect(ev.status, JSON.stringify(ev.json)).toBe(201);
+    expect(ev.json.event.slug).toBe(e.slug);
+    expect(ev.json.aspect).toBe("portrait_4_5");
+    expect(ev.json.photos).toHaveLength(1);
+    expect([ev.json.photos[0].width, ev.json.photos[0].height]).toEqual([1080, 1350]);
+    const car = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "vehicle", id: v.id },
+      clientId: randomUUID(),
+    });
+    expect(car.status, JSON.stringify(car.json)).toBe(201);
+    expect(car.json.vehicle.id).toBe(v.id);
+    // La photo est servie par la route protégée (session) ; Nina la voit (compte public).
+    const photo = await req(nina, "GET", car.json.photos[0].url.replace(/^\/api/, ""));
+    expect(photo.status).toBe(200);
+    // Sans photo montrable : refus, et l'envoi d'une photo seule ou d'un lien seul reste exigé.
+    const bare = await createVehicle(nina.id, ref);
+    expect(
+      (await req(nina, "POST", "/me/feed-posts", { linked: { type: "vehicle", id: bare.id }, clientId: randomUUID() }))
+        .status,
+    ).toBe(409);
+    expect((await req(kenji, "POST", "/me/feed-posts", { clientId: randomUUID() })).status).toBe(400);
+    // Seuls un événement et une voiture se partagent au Fil.
+    expect((await req(kenji, "POST", "/me/feed-posts", { linked: { type: "memory", id: e.id } })).status).toBe(400);
+    // Reprise : le même `clientId` rend la même publication.
+    const clientId = randomUUID();
+    const first = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "event", id: e.id }, clientId });
+    const again = await req(kenji, "POST", "/me/feed-posts", { linked: { type: "event", id: e.id }, clientId });
+    expect(again.json.id).toBe(first.json.id);
+  });
+});
+
+// --- Tour 2 : contenus privés et plaques dans ce qui sort ---------------------------------------------------------------
+
+/** Dépose une photo de Fil (bruit) et publie : l'identifiant de la publication. */
+async function postFeed(u: TestUser, over: Over = {}) {
   const form = new FormData();
-  form.append("purpose", "story");
-  form.append("file", new File([new Uint8Array(await photo())], "photo.jpg", { type: "image/jpeg" }));
+  form.append("purpose", "feed_post");
+  form.append("file", new File([new Uint8Array(await noise(800, 1000))], "p.jpg", { type: "image/jpeg" }));
   const up = await app.request("/api/me/uploads", {
     method: "POST",
     headers: { origin: ORIGIN, cookie: u.cookie },
     body: form,
   });
-  expect(up.status).toBe(201);
-  const key = ((await up.json()) as { key: string }).key;
-  return req(u, "POST", "/me/stories", { uploadKey: key, noPlateConfirmed: true, audience: "public", ...over });
-}
-async function ok(u: TestUser, over: Record<string, unknown> = {}) {
-  const res = await publish(u, over);
-  expect(res.status, JSON.stringify(res.json)).toBe(201);
-  return res.json as { id: string; skipped: unknown[] };
-}
-
-const makePrivate = (u: TestUser) =>
-  db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, u.id));
-
-async function follow(a: TestUser, b: TestUser) {
-  await db
-    .insert(userFollows)
-    .values({ followerId: a.id, followedId: b.id, status: "accepted", acceptedAt: clock.now });
+  const posted = await req(u, "POST", "/me/feed-posts", {
+    caption: "Belle sortie",
+    photos: [{ uploadKey: ((await up.json()) as { key: string }).key, noPlateConfirmed: true }],
+    aspect: "portrait_4_5",
+    ...over,
+  });
+  expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+  return posted.json.id as string;
 }
 
-/** Une structure (propriétaire, co-organisateur, staff, étranger) et un participant public qui l'identifie. */
-async function world() {
-  const owner = await signUp("Sarah_66", { twoFactor: true });
-  const co = await signUp("Coorga_66", { twoFactor: true });
-  const staff = await signUp("Staff_66");
-  const stranger = await signUp("Etranger_66");
-  const kenji = await signUp("Kenji_66");
-  const structure = await createStructure(owner.id);
-  await addMember(structure.id, co.id, "co_organizer");
-  await addMember(structure.id, staff.id, "staff");
-  return { owner, co, staff, stranger, kenji, structure };
-}
-
-const tagStructure = (structureId: string) => ({ tags: [{ kind: "structure", id: structureId }] });
-
-const mentions = (u: TestUser | null, structureId: string, cursor?: string) =>
-  req(u, "GET", `/structures/${structureId}/story-mentions${cursor ? `?cursor=${cursor}` : ""}`);
-const share = (u: TestUser, id: string, body?: unknown) => req(u, "POST", `/stories/${id}/share-to-mine`, body ?? {});
-const byAuthor = (u: TestUser, key: string) => req(u, "GET", `/stories/by-author/${key}`);
-
-describe("mentions de la structure", () => {
-  it("propriétaire, co-organisateur et staff les lisent ; un étranger, un participant et la nuit sans session non", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    for (const u of [w.owner, w.co, w.staff]) {
-      const res = await mentions(u, w.structure.id);
-      expect(res.status, `${u.pseudo}`).toBe(200);
-      expect(res.json.count).toBe(1);
-      expect(res.json.items).toHaveLength(1);
-      expect(res.json.items[0]).toMatchObject({ storyId: s.id, authorName: "Kenji_66", copyId: null });
-    }
-    expect((await mentions(w.stranger, w.structure.id)).status).toBe(403);
-    expect((await mentions(w.kenji, w.structure.id)).status).toBe(403);
-    expect((await mentions(null, w.structure.id)).status).toBe(401);
+/** Un événement terminé dont le vote « Toutes catégories » est clos et réglé, gagné par la voiture de `exhibitor`. */
+async function closedVote(
+  orga: TestUser,
+  exhibitor: TestUser,
+  over: Partial<typeof events.$inferInsert> = {},
+  photo: "blurred" | "none_confirmed" = "blurred",
+) {
+  const structure = await createStructure(orga.id);
+  const car = await maskedVehicle(exhibitor);
+  if (photo === "none_confirmed") {
+    await db
+      .update(vehiclePhotos)
+      .set({ plateBlurred: false, noPlateConfirmed: true })
+      .where(eq(vehiclePhotos.vehicleId, car.id));
+  }
+  const ended = new Date(clock.now.getTime() - 26 * 3_600_000);
+  const event = await createEvent(structure.id, {
+    title: "Nocturne du port",
+    city: "Argelès",
+    startsAt: new Date(ended.getTime() - 4 * 3_600_000),
+    endsAt: ended,
+    ...over,
   });
-
-  it("liste blanche de champs : ni identifiant de compte, ni vues, ni audience interne", async () => {
-    const w = await world();
-    await ok(w.kenji, tagStructure(w.structure.id));
-    const item = (await mentions(w.owner, w.structure.id)).json.items[0];
-    expect(Object.keys(item).sort()).toEqual(
-      [
-        "authorAvatarUrl",
-        "authorKey",
-        "authorName",
-        "caption",
-        "copyId",
-        "createdAt",
-        "expiresAt",
-        "mediaUrl",
-        "storyId",
-      ].sort(),
-    );
-    expect(item.mediaUrl).toMatch(/^\/api\/stories\/[0-9a-f-]+\/media\/[0-9a-f]{16}\.webp$/);
-  });
-
-  it("l'autocollant d'un événement publié de la structure vaut mention", async () => {
-    const w = await world();
-    const event = await createEvent(w.structure.id);
-    const s = await ok(w.kenji, { eventId: event.id });
-    const res = await mentions(w.owner, w.structure.id);
-    expect(res.json.items.map((i: { storyId: string }) => i.storyId)).toEqual([s.id]);
-  });
-
-  it("l'identification retirée, la story expirée ou supprimée, la copie, la story de la structure : plus listées", async () => {
-    const w = await world();
-    const a = await ok(w.kenji, tagStructure(w.structure.id));
-    const b = await ok(w.kenji, tagStructure(w.structure.id));
-    await ok(w.owner, { persona: "organizer", structureId: w.structure.id, ...tagStructure(w.structure.id) });
-    expect((await mentions(w.owner, w.structure.id)).json.count).toBe(2);
-    expect(
-      (await req(w.owner, "POST", `/me/story-tags/${a.id}/remove`, { kind: "structure", id: w.structure.id })).status,
-    ).toBe(204);
-    expect((await mentions(w.owner, w.structure.id)).json.items.map((i: { storyId: string }) => i.storyId)).toEqual([
-      b.id,
-    ]);
-    expect((await req(w.kenji, "DELETE", `/me/stories/${b.id}`)).status).toBe(204);
-    expect((await mentions(w.owner, w.structure.id)).json).toMatchObject({ items: [], count: 0 });
-    // Expirée.
-    await ok(w.kenji, tagStructure(w.structure.id));
-    clock.advance(25 * HOUR);
-    expect((await mentions(w.owner, w.structure.id)).json.count).toBe(0);
-  });
-
-  it("un compte privé n'est jamais listé : il n'a pas pu identifier, et s'il passe en privé ensuite la mention tombe", async () => {
-    const w = await world();
-    const marc = await signUp("Marc_66");
-    await makePrivate(marc);
-    const refused = await ok(marc, { audience: "followers", ...tagStructure(w.structure.id) });
-    expect(refused.skipped).toHaveLength(1);
-    expect((await mentions(w.owner, w.structure.id)).json.count).toBe(0);
-    // Public puis privé : la mention existait, elle n'est plus servie.
-    const late = await signUp("Late_66");
-    await ok(late, tagStructure(w.structure.id));
-    expect((await mentions(w.owner, w.structure.id)).json.count).toBe(1);
-    await makePrivate(late);
-    expect((await mentions(w.owner, w.structure.id)).json).toMatchObject({ items: [], count: 0 });
-  });
-
-  it("une story de crew n'identifie pas une structure : jamais listée, même avec une identification posée à la main", async () => {
-    const w = await world();
-    const crew = await req(w.kenji, "POST", "/crews", { name: "Crew mention", department: "66" });
-    const s = await ok(w.kenji, { audience: "crew", crewId: crew.json.id, persona: "fan" });
-    await db.insert(storyTags).values({ storyId: s.id, targetKind: "structure", targetId: w.structure.id });
-    expect((await mentions(w.owner, w.structure.id)).json.count).toBe(0);
-  });
-
-  it("une autre structure ne voit pas les mentions de celle-ci ; la pagination suit le curseur", async () => {
-    const w = await world();
-    const other = await signUp("Autre_66");
-    const otherStructure = await createStructure(other.id);
-    // Une vraie story, puis 21 lignes clonées en SQL (22 publications réelles dépasseraient le délai du test).
-    const base = await ok(w.kenji, tagStructure(w.structure.id));
-    for (let i = 1; i < 22; i++) {
-      const id = randomUUID();
-      await db.execute(sql`insert into stories (id, author_id, persona, audience, media_kind, storage_key, status, plate_state, expires_at, created_at, updated_at)
-        select ${id}::uuid, author_id, persona, audience, media_kind, storage_key, status, plate_state, expires_at, created_at + (${i} * interval '1 second'), updated_at from stories where id = ${base.id}`);
-      await db.insert(storyTags).values({ storyId: id, targetKind: "structure", targetId: w.structure.id });
-    }
-    expect((await mentions(other, otherStructure.id)).json.count).toBe(0);
-    expect((await mentions(other, w.structure.id)).status).toBe(403);
-    const first = await mentions(w.owner, w.structure.id);
-    expect(first.json.items).toHaveLength(20);
-    expect(first.json.count).toBe(22);
-    expect(first.json.nextCursor).toBeTruthy();
-    const second = await mentions(w.owner, w.structure.id, first.json.nextCursor);
-    expect(second.json.items).toHaveLength(2);
-    expect(second.json.nextCursor).toBeNull();
-    const all = [...first.json.items, ...second.json.items].map((i: { storyId: string }) => i.storyId);
-    expect(new Set(all).size).toBe(22);
-  });
-});
-
-describe("regard « identifié »", () => {
-  it("une organisatrice identifiée voit la story d'un compte devenu privé qu'elle ne suit pas ; un étranger non", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    await makePrivate(w.kenji);
-    const key = `u:${w.kenji.id}`;
-    expect((await byAuthor(w.stranger, key)).json.stories).toHaveLength(0);
-    const seen = await byAuthor(w.owner, key);
-    expect(seen.json.stories.map((x: { id: string }) => x.id)).toEqual([s.id]);
-    const media = new URL(seen.json.stories[0].mediaUrl, "http://x").pathname.replace(/^\/api/, "");
-    expect((await req(w.owner, "GET", media)).status).toBe(200);
-    expect((await req(w.stranger, "GET", media)).status).toBe(403);
-    // Le staff n'est pas identifié (seuls propriétaire et co-organisateurs le sont) : il reste un lecteur ordinaire.
-    expect((await byAuthor(w.staff, key)).json.stories).toHaveLength(0);
-  });
-
-  it("une identification retirée retire le regard", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    await makePrivate(w.kenji);
-    expect((await byAuthor(w.co, `u:${w.kenji.id}`)).json.stories).toHaveLength(1);
-    await req(w.owner, "POST", `/me/story-tags/${s.id}/remove`, { kind: "structure", id: w.structure.id });
-    expect((await byAuthor(w.co, `u:${w.kenji.id}`)).json.stories).toHaveLength(0);
-  });
-
-  it("jamais une story de crew, même identifié à la main", async () => {
-    const w = await world();
-    const crew = await req(w.kenji, "POST", "/crews", { name: "Crew identifié", department: "66" });
-    const s = await ok(w.kenji, { audience: "crew", crewId: crew.json.id, persona: "fan" });
-    await db.insert(storyTags).values({ storyId: s.id, targetKind: "structure", targetId: w.structure.id });
-    expect((await byAuthor(w.owner, `u:${w.kenji.id}`)).json.stories).toHaveLength(0);
-    const res = await req(w.owner, "GET", `/stories/${s.id}/thumb`);
-    expect(res.status).toBe(403);
-  });
-});
-
-describe("« Ajouter à ma story »", () => {
-  it("copie liée au nom de la structure : public, expiration héritée, crédit, tags non copiés, auteur prévenu", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, { ...tagStructure(w.structure.id), caption: "Le Lydia !" });
-    clock.advance(3 * HOUR);
-    const res = await share(w.co, s.id, { asStructureId: w.structure.id });
-    expect(res.status, JSON.stringify(res.json)).toBe(201);
-    const [original] = await db.select().from(stories).where(eq(stories.id, s.id));
-    const [copy] = await db.select().from(stories).where(eq(stories.id, res.json.id));
-    expect(copy).toMatchObject({
-      persona: "organizer",
-      structureId: w.structure.id,
-      audience: "public",
-      authorId: w.co.id,
-      sharedFromStoryId: s.id,
-      sharedByUserId: w.co.id,
-      caption: "Le Lydia !",
-      status: "ready",
-      plateState: original?.plateState,
-    });
-    // Même expiration que l'originale (jamais prolongée), un fichier à elle.
-    expect(copy?.expiresAt.getTime()).toBe(original?.expiresAt.getTime());
-    expect(copy?.storageKey).not.toBe(original?.storageKey);
-    expect(await storage.get(copy?.storageKey ?? "")).not.toBeNull();
-    // Elle paraît sous la structure avec le crédit, visible de tout membre ; aucune identification recopiée.
-    const view = (await byAuthor(w.stranger, `s:${w.structure.id}`)).json;
-    expect(view.author.pseudoOrName).toBe("Club de test");
-    expect(view.stories).toHaveLength(1);
-    expect(view.stories[0].sharedFrom).toMatchObject({ kind: "user", name: "Kenji_66", slug: "Kenji_66" });
-    expect(view.stories[0].tags).toEqual([]);
-    expect(view.stories[0].sharing).toBeNull();
-    // L'auteur est prévenu, sans image, sans le compte personnel de qui a ajouté.
-    const [n] = await db
-      .select()
-      .from(notifications)
-      .where(and(eq(notifications.userId, w.kenji.id), eq(notifications.type, "story_shared_by_organizer")));
-    expect(n).toBeTruthy();
-    expect(JSON.stringify(n?.data)).not.toContain(w.co.id);
-    expect(JSON.stringify(n?.data)).not.toContain("media");
-  });
-
-  it("refuse : staff, non identifié, étranger, sa propre story ; doublon 409 (aussi entre deux co-organisateurs)", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const withBody = { asStructureId: w.structure.id };
-    expect((await share(w.staff, s.id, withBody)).status).toBe(403);
-    expect((await share(w.stranger, s.id, withBody)).status).toBe(403);
-    // Kenji n'est pas membre de la structure : refusé avant même de regarder la story (403).
-    expect((await share(w.kenji, s.id, withBody)).status).toBe(403);
-    // Une structure non identifiée.
-    const otherOwner = await signUp("Autre_66", { twoFactor: true });
-    const other = await createStructure(otherOwner.id);
-    const res = await share(otherOwner, s.id, { asStructureId: other.id });
-    expect(res.status).toBe(403);
-    expect(res.json.error?.code ?? res.json.code).toBe("not_tagged");
-    // Sa propre story.
-    const mine = await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
-    expect((await share(w.owner, mine.id, withBody)).status).toBe(400);
-    // Doublon.
-    expect((await share(w.owner, s.id, withBody)).status).toBe(201);
-    const again = await share(w.co, s.id, withBody);
-    expect(again.status).toBe(409);
-    expect(again.json.error?.code ?? again.json.code).toBe("already_shared");
-    // Deux ajouts simultanés : un seul gagne.
-    const t2 = await ok(w.kenji, tagStructure(w.structure.id));
-    const both = await Promise.all([share(w.owner, t2.id, withBody), share(w.co, t2.id, withBody)]);
-    expect(both.map((r) => r.status).sort()).toEqual([201, 409]);
-    const n = await db.select().from(stories).where(eq(stories.sharedFromStoryId, t2.id));
-    expect(n).toHaveLength(1);
-  });
-
-  it("refuse une story de crew (403 crew_only) et celle d'un compte privé (403) : une copie n'élargit jamais le public", async () => {
-    const w = await world();
-    const crew = await req(w.kenji, "POST", "/crews", { name: "Crew copie", department: "66" });
-    const c = await ok(w.kenji, { audience: "crew", crewId: crew.json.id, persona: "fan" });
-    await db.insert(storyTags).values({ storyId: c.id, targetKind: "structure", targetId: w.structure.id });
-    const refused = await share(w.owner, c.id, { asStructureId: w.structure.id });
-    expect(refused.status).toBe(403);
-    expect(refused.json.error?.code ?? refused.json.code).toBe("crew_only");
-
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    await makePrivate(w.kenji);
-    const priv = await share(w.owner, s.id, { asStructureId: w.structure.id });
-    expect(priv.status).toBe(403);
-    expect(priv.json.error?.code ?? priv.json.code).toBe("share_private");
-    expect(await db.select().from(stories).where(eq(stories.sharedFromStoryId, s.id))).toHaveLength(0);
-  });
-
-  it("une story expirée, supprimée ou inconnue : 404 ; sans session : 401 ; casquette inconnue : 403", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    expect((await req(null, "POST", `/stories/${s.id}/share-to-mine`, {})).status).toBe(401);
-    expect(
-      (await share(w.owner, "00000000-0000-4000-8000-000000000000", { asStructureId: w.structure.id })).status,
-    ).toBe(404);
-    expect((await share(w.owner, s.id, { asStructureId: w.structure.id, asProId: w.structure.id })).status).toBe(400);
-    await req(w.kenji, "DELETE", `/me/stories/${s.id}`);
-    expect((await share(w.owner, s.id, { asStructureId: w.structure.id })).status).toBe(404);
-    const t = await ok(w.kenji, tagStructure(w.structure.id));
-    clock.advance(25 * HOUR);
-    expect((await share(w.owner, t.id, { asStructureId: w.structure.id })).status).toBe(404);
-  });
-
-  it("sharing : l'organisateur identifié voit ses options (et la copie faite), pas un autre", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const before = (await byAuthor(w.owner, `u:${w.kenji.id}`)).json.stories[0];
-    expect(before.sharing).toEqual({
-      taggedMe: false,
-      options: [{ as: "structure", id: w.structure.id, name: "Club de test", copyId: null }],
-    });
-    expect((await byAuthor(w.stranger, `u:${w.kenji.id}`)).json.stories[0].sharing).toBeNull();
-    // Le staff n'a pas la main sur l'ajout.
-    expect((await byAuthor(w.staff, `u:${w.kenji.id}`)).json.stories[0].sharing).toBeNull();
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    const after = (await byAuthor(w.co, `u:${w.kenji.id}`)).json.stories[0];
-    expect(after.sharing.options[0].copyId).toBe(copy.id);
-    // La personne qui a publié ne voit rien.
-    expect((await byAuthor(w.kenji, `u:${w.kenji.id}`)).json.stories[0].sharing).toBeNull();
-  });
-});
-
-describe("« Retirer » et la cascade", () => {
-  it("« Retirer » une copie : par un responsable de la structure, l'originale reste, son fichier aussi", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    const [orig] = await db.select().from(stories).where(eq(stories.id, s.id));
-    expect((await req(w.stranger, "DELETE", `/me/stories/${copy.id}`)).status).toBe(404);
-    expect((await req(w.staff, "DELETE", `/me/stories/${copy.id}`)).status).toBe(404);
-    // Le co-organisateur n'a pas publié la copie, mais gère la structure.
-    expect((await req(w.co, "DELETE", `/me/stories/${copy.id}`)).status).toBe(204);
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
-    const [still] = await db.select().from(stories).where(eq(stories.id, s.id));
-    expect(still?.deletedAt).toBeNull();
-    expect(await storage.get(orig?.storageKey ?? "")).not.toBeNull();
-    expect(await storage.get(gone?.storageKey ?? "")).toBeNull();
-    expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
-    // Et on peut l'ajouter de nouveau.
-    expect((await share(w.owner, s.id, { asStructureId: w.structure.id })).status).toBe(201);
-  });
-
-  it("l'auteur supprime l'originale : les copies et leurs fichiers partent avec elle (et la barre, la liste)", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    const [c] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect((await req(w.kenji, "DELETE", `/me/stories/${s.id}`)).status).toBe(204);
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
-    expect(await storage.get(c?.storageKey ?? "")).toBeNull();
-    expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
-    expect((await req(w.stranger, "GET", `/stories/${copy.id}/thumb`)).status).toBe(404);
-  });
-
-  it("l'identification retirée par la structure : sa copie tombe, la story d'origine reste", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    expect(
-      (await req(w.co, "POST", `/me/story-tags/${s.id}/remove`, { kind: "structure", id: w.structure.id })).status,
-    ).toBe(204);
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
-    const [orig] = await db.select().from(stories).where(eq(stories.id, s.id));
-    expect(orig?.deletedAt).toBeNull();
-    // Plus d'identification : plus d'ajout.
-    expect((await share(w.owner, s.id, { asStructureId: w.structure.id })).status).toBe(403);
-  });
-
-  it("la copie expire avec l'originale (la tâche d'expiration)", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    clock.advance(2 * HOUR);
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    clock.advance(23 * HOUR);
-    expect((await byAuthor(w.stranger, `s:${w.structure.id}`)).json.stories).toHaveLength(0);
-    await storiesExpire.run();
-    const rows = await db.select().from(stories).where(sql`${stories.id} in (${s.id}, ${copy.id})`);
-    expect(rows.every((r) => r.deletedAt !== null)).toBe(true);
-  });
-
-  it("un compte qui passe en privé : les copies de ses stories tombent, pas celles des autres", async () => {
-    const w = await world();
-    const lea = await signUp("Lea_11");
-    const a = await ok(w.kenji, tagStructure(w.structure.id));
-    const b = await ok(lea, tagStructure(w.structure.id));
-    const ca = (await share(w.owner, a.id, { asStructureId: w.structure.id })).json;
-    const cb = (await share(w.owner, b.id, { asStructureId: w.structure.id })).json;
-    const res = await req(w.kenji, "PATCH", "/me/settings", { visibility: "private" });
-    expect(res.status, JSON.stringify(res.json)).toBe(200);
-    const [x] = await db.select().from(stories).where(eq(stories.id, ca.id));
-    const [y] = await db.select().from(stories).where(eq(stories.id, cb.id));
-    expect(x?.deletedAt).not.toBeNull();
-    expect(y?.deletedAt).toBeNull();
-  });
-
-  it("le compte supprimé de l'auteur emporte aussi les copies", async () => {
-    const w = await world();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    await db.update(stories).set({ deletedAt: clock.now }).where(eq(stories.id, s.id));
-    await storiesExpire.run();
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
-  });
-});
-
-describe("repartage par un identifié", () => {
-  it("un identifié repartage à ses abonnés (jamais plus large), crédité, l'auteur prévenu ; doublon 409", async () => {
-    const w = await world();
-    const damien = await signUp("Damien_66");
-    const s = await ok(w.kenji, { tags: [{ kind: "user", id: damien.id }] });
-    const res = await share(damien, s.id);
-    expect(res.status, JSON.stringify(res.json)).toBe(201);
-    const [copy] = await db.select().from(stories).where(eq(stories.id, res.json.id));
-    expect(copy).toMatchObject({ persona: "fan", audience: "followers", authorId: damien.id, sharedFromStoryId: s.id });
-    expect((await share(damien, s.id)).status).toBe(409);
-    // Il voit ses options : « fan », puis la copie.
-    const seen = (await byAuthor(damien, `u:${w.kenji.id}`)).json.stories[0];
-    expect(seen.sharing).toEqual({
-      taggedMe: true,
-      options: [{ as: "fan", id: null, name: "Damien_66", copyId: res.json.id }],
-    });
-    // Un compte privé repartage pour ses abonnés seulement : l'étranger ne la voit pas.
-    await makePrivate(damien);
-    expect((await byAuthor(w.stranger, `u:${damien.id}`)).json.stories).toHaveLength(0);
-    await follow(w.stranger, damien);
-    expect((await byAuthor(w.stranger, `u:${damien.id}`)).json.stories).toHaveLength(1);
-  });
-
-  it("l'identifié retire son identification : sa copie tombe ; un non identifié ne repartage pas", async () => {
-    const w = await world();
-    const damien = await signUp("Damien_66");
-    const s = await ok(w.kenji, { tags: [{ kind: "user", id: damien.id }] });
-    expect((await share(w.stranger, s.id)).status).toBe(403);
-    const copy = (await share(damien, s.id)).json;
-    expect((await req(damien, "POST", `/me/story-tags/${s.id}/remove`)).status).toBe(204);
-    const [gone] = await db.select().from(stories).where(eq(stories.id, copy.id));
-    expect(gone?.deletedAt).not.toBeNull();
-    expect((await share(damien, s.id)).status).toBe(403);
-  });
-
-  it("une story d'un compte privé n'est jamais repartagée, même par une personne identifiée qui la voit", async () => {
-    const w = await world();
-    const marc = await signUp("Marc_66");
-    const damien = await signUp("Damien_66");
-    await follow(damien, marc);
-    await makePrivate(marc);
-    const s = await ok(marc, { audience: "followers", tags: [{ kind: "user", id: damien.id }] });
-    expect((await byAuthor(damien, `u:${marc.id}`)).json.stories[0].sharing).toBeNull();
-    const res = await share(damien, s.id);
-    expect(res.status).toBe(403);
-    expect(res.json.error?.code ?? res.json.code).toBe("share_private");
-    expect(w.owner).toBeTruthy();
-  });
-
-  it("au nom d'un pro : seulement le propriétaire de la fiche identifiée (porte ouverte pour R7m2)", async () => {
-    const w = await world();
-    const proOwner = await signUp("Pro_66");
-    const pro = await createPro(proOwner.id);
-    const s = await ok(w.kenji, { tags: [{ kind: "pro", id: pro.id }] });
-    expect((await share(w.stranger, s.id, { asProId: pro.id })).status).toBe(403);
-    expect((await share(proOwner, s.id, { asProId: randomId() })).status).toBe(403);
-    const res = await share(proOwner, s.id, { asProId: pro.id });
-    expect(res.status, JSON.stringify(res.json)).toBe(201);
-    const [copy] = await db.select().from(stories).where(eq(stories.id, res.json.id));
-    expect(copy).toMatchObject({ persona: "pro", proId: pro.id, audience: "public", structureId: null });
-  });
-});
-
-function randomId() {
-  return "11111111-2222-4333-8444-555555555555";
-}
-
-describe("anneau « EN COURS », fiche et Accueil", () => {
-  async function runningWorld() {
-    const w = await world();
-    const event = await createEvent(w.structure.id, {
-      startsAt: new Date(clock.now.getTime() - 2 * HOUR),
-      endsAt: new Date(clock.now.getTime() + 6 * HOUR),
-      title: "Rassemblement du Lydia",
-    });
-    const visitor = await signUp("Damien_66");
-    const car = await createVehicle(visitor.id, ref);
-    await db.insert(applications).values({
+  const [win] = await db
+    .insert(applications)
+    .values({
       eventId: event.id,
-      userId: visitor.id,
+      userId: exhibitor.id,
       vehicleId: car.id,
       status: "accepted",
       rulesAcceptedAt: clock.now,
       followStructure: false,
-    });
-    return { ...w, event, visitor };
-  }
+      decidedAt: new Date(ended.getTime() - 40 * 3_600_000),
+    })
+    .returning();
+  const voteId = await allCategoriesId(event.id);
+  await db.insert(audiencePrizeResults).values({
+    eventId: event.id,
+    voteId,
+    applicationId: win?.id as string,
+    rank: 1,
+    votes: 9,
+    winner: true,
+    createdAt: clock.now,
+  });
+  await db.update(events).set({ settledAt: clock.now }).where(eq(events.id, event.id));
+  return { event, voteId };
+}
 
-  it("`live` seulement pendant l'événement et avec une story vivante ; avant et après : anneau ordinaire", async () => {
-    const w = await runningWorld();
-    await structureFollowBy(w.stranger, w.structure.id);
-    await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
-    const ring = async (u: TestUser) =>
-      (await req(u, "GET", "/stories/bar")).json.authors.find((a: { key: string }) => a.key === `s:${w.structure.id}`)
-        ?.ring;
-    expect(await ring(w.stranger)).toBe("live");
-    // Après la fin : plus « EN COURS ».
-    clock.advance(7 * HOUR);
-    expect(await ring(w.stranger)).toBe("followers");
+describe("tour 2 : un classement d'un événement sur invitation ne se repartage pas", () => {
+  it("ouvert à tous : partageable ; passé sur invitation, un invité ne peut ni le publier ni l'exporter, la carte devient inerte", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { event, voteId } = await closedVote(orga, winner);
+    const ok = await share(guest, { type: "vote_result", id: voteId });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+    expect((await byAuthor(winner, guest)).json.stories[0].linked).not.toBeNull();
+
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, event.id));
+    await db
+      .insert(eventInvitations)
+      .values({ eventId: event.id, userId: guest.id, token: randomUUID(), status: "pending" });
+    // L'invité voit encore le résultat (lire), mais ne le repartage pas : ni en story publique, ni en fichier.
+    expect((await req(guest, "GET", `/events/${event.id}/votes/${voteId}`)).status).toBe(200);
+    const refused = await share(guest, { type: "vote_result", id: voteId });
+    expect(refused.status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/export?type=vote_result&id=${voteId}&format=story`)).status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/export?type=vote_result&id=${voteId}&format=post`)).status).toBe(404);
+    expect((await req(guest, "GET", `/me/share/info?type=vote_result&id=${voteId}`)).status).toBe(404);
+    // La story déjà publiée : la carte devient inerte et son fichier ne sort plus.
+    expect((await byAuthor(winner, guest)).json.stories[0].linked).toBeNull();
+    expect((await req(guest, "GET", `/stories/${ok.json.id}/export`)).status).toBe(404);
   });
 
-  it("avant le début : anneau ordinaire", async () => {
-    const w = await world();
-    await createEvent(w.structure.id, { startsAt: new Date(clock.now.getTime() + 5 * HOUR) });
-    await structureFollowBy(w.stranger, w.structure.id);
-    await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
-    const bar = (await req(w.stranger, "GET", "/stories/bar")).json;
-    expect(bar.authors.find((a: { key: string }) => a.key === `s:${w.structure.id}`)?.ring).toBe("followers");
+  it("un événement non publié (annulé) : même refus", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { event, voteId } = await closedVote(orga, winner);
+    expect((await share(guest, { type: "vote_result", id: voteId })).status).toBe(201);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, event.id));
+    expect((await share(guest, { type: "vote_result", id: voteId })).status).toBe(404);
   });
 
-  it("sans story vivante, pas d'anneau même pendant l'événement ; un brouillon ne compte pas", async () => {
-    const w = await world();
-    await createEvent(w.structure.id, {
-      startsAt: new Date(clock.now.getTime() - HOUR),
-      endsAt: new Date(clock.now.getTime() + HOUR),
-      status: "draft",
-    });
-    await structureFollowBy(w.stranger, w.structure.id);
-    expect((await req(w.stranger, "GET", "/stories/bar")).json.authors).toEqual([]);
-    await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
-    const bar = (await req(w.stranger, "GET", "/stories/bar")).json;
-    expect(bar.authors[0].ring).toBe("followers");
-  });
-
-  it("un participant avec une place voit l'organisateur « EN COURS » dans sa barre sans le suivre", async () => {
-    const w = await runningWorld();
-    const s = await ok(w.kenji, tagStructure(w.structure.id));
-    const copy = (await share(w.owner, s.id, { asStructureId: w.structure.id })).json;
-    expect(copy.id).toBeTruthy();
-    const bar = (await req(w.visitor, "GET", "/stories/bar")).json;
-    const entry = bar.authors.find((a: { key: string }) => a.key === `s:${w.structure.id}`);
-    expect(entry).toMatchObject({ ring: "live", pseudoOrName: "Club de test", hasUnseen: true });
-    // Un étranger sans place ni abonnement ne la voit pas dans sa barre.
-    expect((await req(w.stranger, "GET", "/stories/bar")).json.authors).toEqual([]);
-    // Le résumé de la page de la structure porte aussi l'anneau.
-    const page = await req(w.visitor, "GET", `/structures/by-slug/${w.structure.slug}`);
-    expect(page.json.stories.ring).toBe("live");
-  });
-
-  it("organizerStoryAvailable sur la fiche (connecté seulement) et organizerStory sur l'Accueil", async () => {
-    const w = await runningWorld();
-    const fiche = (u: TestUser | null) => req(u, "GET", `/events/by-slug/${w.event.slug}`);
-    expect((await fiche(w.visitor)).json.live.organizerStoryAvailable).toBe(false);
-    expect((await req(w.visitor, "GET", "/me/home")).json.live.organizerStory).toBeNull();
-    const story = await ok(w.owner, { persona: "organizer", structureId: w.structure.id });
-    expect((await fiche(w.visitor)).json.live.organizerStoryAvailable).toBe(true);
-    // Sans session, jamais.
-    expect((await fiche(null)).json.live?.organizerStoryAvailable ?? false).toBe(false);
-    const home = (await req(w.visitor, "GET", "/me/home")).json.live;
-    expect(home.organizerStory.structureKey).toBe(`s:${w.structure.id}`);
-    expect(home.organizerStory.posterUrl).toMatch(new RegExp(`^/api/stories/${story.id}/media/[0-9a-f]{16}\\.webp$`));
-    expect(Object.keys(home.organizerStory).sort()).toEqual(["posterUrl", "structureKey"]);
+  it("la plaque de la story d'un vote suit la vraie photo du gagnant (floutée, ou confirmée sans plaque)", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const a = await closedVote(orga, winner);
+    const first = await share(guest, { type: "vote_result", id: a.voteId });
+    expect((await db.select().from(stories).where(eq(stories.id, first.json.id)))[0]?.plateState).toBe("blurred");
+    const orga2 = await signUp("Orga2");
+    const winner2 = await signUp("Gagnant2");
+    const b = await closedVote(orga2, winner2, {}, "none_confirmed");
+    const second = await share(guest, { type: "vote_result", id: b.voteId });
+    expect(second.status, JSON.stringify(second.json)).toBe(201);
+    expect((await db.select().from(stories).where(eq(stories.id, second.json.id)))[0]?.plateState).toBe(
+      "none_confirmed",
+    );
   });
 });
 
-async function structureFollowBy(u: TestUser, structureId: string) {
-  await db.insert(structureFollows).values({ structureId, userId: u.id, source: "manual" });
-}
+describe("tour 2 : l'export d'une story garde la provenance de son contenu", () => {
+  it("la publication d'un autre, partagée en story puis exportée : 403 author_only ; la mienne sort", async () => {
+    const kenji = await signUp("Kenji");
+    const nina = await signUp("Nina");
+    const post = await postFeed(nina);
+    const copy = await share(kenji, { type: "feed_post", id: post });
+    expect(copy.status, JSON.stringify(copy.json)).toBe(201);
+    const refused = await req(kenji, "GET", `/stories/${copy.json.id}/export`);
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.code).toBe("author_only");
+    // Pareil par la route des contenus pas encore partagés (déjà refusé avant ce tour).
+    expect((await req(kenji, "GET", `/me/share/export?type=feed_post&id=${post}&format=post`)).status).toBe(403);
+    // L'auteur partage sa propre publication en story : elle sort.
+    const own = await share(nina, { type: "feed_post", id: post }, { audience: "followers" });
+    expect((await req(nina, "GET", `/stories/${own.json.id}/export`)).status).toBe(200);
+  });
+});
+
+/** La photo de la carte (860 × 620 posée à (110, 145)) : le cadre sombre uni, hors du O de la marque. */
+const photoCorner = { left: 140, top: 190, width: 90, height: 50 };
+
+describe("tour 2 : l'affiche d'un événement ne sort jamais nette (pas de décision de plaque)", () => {
+  it("carte, 9:16 et 4:5 : le cadre de la marque et un fond illisible, même si l'affiche porte une zone de plaque", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    // Affiche = bruit très contrasté de bout en bout : une « plaque » lisible partout si elle sortait nette.
+    const key = `private/test-affiche-${randomUUID()}.jpg`;
+    const poster = await noise(1600, 900);
+    await storage.put(key, poster);
+    await db.update(events).set({ posterPhotoKey: key }).where(eq(events.id, e.id));
+    expect(await variance(poster, { left: 600, top: 400, width: 120, height: 50 })).toBeGreaterThan(500);
+
+    const card = await req(kenji, "GET", `/me/share/card?type=event&id=${e.id}&part=card`);
+    expect(card.status).toBe(200);
+    // La photo de la carte (860 × 620 posée à (110, 145)) : le cadre sombre uni, hors du O de la marque.
+    expect(await variance(card.buf, photoCorner)).toBeLessThan(40);
+    const ground = await req(kenji, "GET", `/me/share/card?type=event&id=${e.id}&part=ground`);
+    expect(await variance(ground.buf, { left: 300, top: 900, width: 120, height: 50 })).toBeLessThan(40);
+
+    const edge = { left: 0, top: 0, width: 30, height: 30 };
+    const story = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=story`);
+    expect(await variance(story.buf, { left: 20, top: 20, width: 200, height: 200 })).toBeLessThan(40);
+    expect(await variance(story.buf, { left: 140, top: 480, width: 90, height: 50 })).toBeLessThan(40);
+    const post = await req(kenji, "GET", `/me/share/export?type=event&id=${e.id}&format=post`);
+    expect(await variance(post.buf, edge)).toBeLessThan(40);
+    expect(await variance(post.buf, photoCorner)).toBeLessThan(40);
+
+    // Une story d'événement : son 9:16 stocké n'est pas net non plus, et la plaque décidée est « floutée » (rien de lisible).
+    const made = await share(kenji, { type: "event", id: e.id });
+    const stored = await req(kenji, "GET", fileOf((await req(kenji, "GET", "/me/stories")).json.stories[0]));
+    expect(await variance(stored.buf, { left: 140, top: 480, width: 90, height: 50 })).toBeLessThan(40);
+    const [row] = await db.select().from(stories).where(eq(stories.id, made.json.id));
+    expect(row?.plateState).toBe("blurred");
+  });
+
+  it("la publication d'un événement au Fil : photo rendue sans l'affiche nette", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const key = `private/test-affiche-${randomUUID()}.jpg`;
+    await storage.put(key, await noise(1600, 900));
+    await db.update(events).set({ posterPhotoKey: key }).where(eq(events.id, e.id));
+    const ev = await req(kenji, "POST", "/me/feed-posts", {
+      linked: { type: "event", id: e.id },
+      clientId: randomUUID(),
+    });
+    expect(ev.status, JSON.stringify(ev.json)).toBe(201);
+    const photo = await req(kenji, "GET", ev.json.photos[0].url.replace(/^\/api/, ""));
+    expect(await variance(photo.buf, photoCorner)).toBeLessThan(40);
+  });
+});
+
+describe("tour 4 : `exportable` suit exactement l'export", () => {
+  const exportOf = (u: TestUser, storyId: string) => req(u, "GET", `/stories/${storyId}/export`);
+
+  it("événement annulé après la publication : la carte reste, exportable faux, export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const posted = await share(kenji, { type: "event", id: e.id });
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(true);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(200);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, e.id));
+    const view = (await byAuthor(kenji, kenji)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(404);
+  });
+
+  it("événement passé sur invitation : exportable faux et export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const orga = await signUp("Orga");
+    const { e } = await structureEvent(orga);
+    const posted = await share(kenji, { type: "event", id: e.id });
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, e.id));
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(404);
+  });
+
+  it("vote sans classement : exportable faux et export refusé (409), de façon cohérente", async () => {
+    const guest = await signUp("Invite");
+    const orga = await signUp("Orga");
+    const winner = await signUp("Gagnant");
+    const { voteId } = await closedVote(orga, winner);
+    const posted = await share(guest, { type: "vote_result", id: voteId });
+    expect(posted.status, JSON.stringify(posted.json)).toBe(201);
+    expect((await byAuthor(guest, guest)).json.stories[0].exportable).toBe(true);
+    expect((await exportOf(guest, posted.json.id)).status).toBe(200);
+    await db.delete(audiencePrizeResults).where(eq(audiencePrizeResults.voteId, voteId));
+    const view = (await byAuthor(guest, guest)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(guest, posted.json.id)).status).toBe(409);
+  });
+
+  it("voiture sans photo montrable après la publication : exportable faux et export refusé", async () => {
+    const kenji = await signUp("Kenji");
+    const car = await maskedVehicle(kenji);
+    const posted = await share(kenji, { type: "vehicle", id: car.id });
+    expect((await byAuthor(kenji, kenji)).json.stories[0].exportable).toBe(true);
+    await db
+      .update(vehiclePhotos)
+      .set({ plateBlurred: false, noPlateConfirmed: false })
+      .where(eq(vehiclePhotos.vehicleId, car.id));
+    const view = (await byAuthor(kenji, kenji)).json.stories[0];
+    expect(view.exportable).toBe(false);
+    expect((await exportOf(kenji, posted.json.id)).status).toBe(409);
+  });
+});

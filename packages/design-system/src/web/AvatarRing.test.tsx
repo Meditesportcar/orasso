@@ -44,7 +44,9 @@ describe("AvatarRing (lot R7b1)", () => {
       ["lg", 64],
       ["xl", 88],
     ] as const) {
-      expect(css).toContain(`.o-avring--${size} { --avring-box: ${px}px;`);
+      // Lu sans dépendre de la mise en forme (le formateur écrit une déclaration par ligne).
+      const rule = css.replace(/\s+/g, " ");
+      expect(rule).toContain(`.o-avring--${size} { --avring-box: ${px}px;`);
     }
     const native = readFileSync(resolve(import.meta.dirname, "../native/AvatarRing.tsx"), "utf8");
     for (const px of [40, 56, 64, 88]) expect(native).toContain(`box: ${px},`);

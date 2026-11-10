@@ -12,6 +12,7 @@ import {
   createEvent,
   createStructure,
   createVehicle,
+  quietHours,
   resetDb,
   seedReference,
   type TestUser,
@@ -48,6 +49,7 @@ beforeEach(async () => {
   await resetDb();
   clock = useClock(fromWallTime({ year: 2026, month: 11, day: 9, hour: 15, minute: 0 }));
   ref = await seedReference();
+  quietHours(true); // heures calmes allumées, quelle que soit la variable de la machine (des notifications attendent 8 h)
 });
 
 /** Un compte neuf, sans la notification de connexion qu'on lui envoie à l'inscription. */

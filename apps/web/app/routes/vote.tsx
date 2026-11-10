@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { FicheBar, ficheHandle } from "../components/FicheBar";
+import { ShareDialog } from "../components/ShareSheet";
 import { useClosingWatch, useOrassoNow } from "../components/votes/useVoteClock";
 import { VoteGrid } from "../components/votes/VoteGrid";
 import { VoteRanking } from "../components/votes/VoteRanking";
@@ -184,6 +185,10 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
         <p className="s-notice" data-testid="vote-reason">
           {T.closedNote}
         </p>
+      )}
+      {/* Lot R7f4 : le résultat d'un vote clos se partage (la carte du gagnant) ; l'API dit si ce regard peut le voir. */}
+      {mode === "closed" && vote.ranking?.[0] && (
+        <ShareDialog target={{ type: "vote_result", id: vote.id }} testId="vote-share" />
       )}
       {mode === "voted" && (
         <div className="s-row">

@@ -150,7 +150,7 @@ export async function removeOrRetry(key: string): Promise<void> {
 
 /**
  * Clés que la tâche `storage.remove` peut retirer : photos de véhicules, bannières de crew (lot R5c2, tour 2), photos du
- * Fil et envois en attente (lot R7e1, tour 2).
+ * Fil et envois en attente (lot R7e1, tour 2), photos des publications de crew (lot R7-dettes, tour 2).
  */
 const RETRY_REMOVABLE = [
   /^private\/feed\/[0-9a-f-]{36}\/[0-9a-f]{32}\.webp$/,
@@ -162,6 +162,9 @@ const RETRY_REMOVABLE = [
   /^private\/stories\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(webp|mp4)$/,
   // Lot R7f1, tour 2 : l'original non flouté d'une story (envoi `story`), dont la suppression avait échoué.
   /^private\/story-uploads\/[0-9a-f-]{36}\.webp$/,
+  // Lot R7-dettes, tour 2 : photos d'une publication de crew (retrait, décision de modération), dont la suppression
+  // avait échoué. Motif strict : le dossier, un identifiant, `.webp`.
+  /^private\/crew-posts\/[0-9a-f-]{36}\.webp$/,
 ];
 
 /** Tâche `storage.remove` : seules les clés de `RETRY_REMOVABLE` sont concernées. */

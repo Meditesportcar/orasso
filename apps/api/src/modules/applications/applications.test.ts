@@ -9,6 +9,7 @@ import {
   createStructure,
   createVehicle,
   createZone,
+  quietHours,
   resetDb,
   seedReference,
   signUp,
@@ -53,6 +54,7 @@ let structureId: string;
 beforeEach(async () => {
   await resetDb();
   clock = useClock(paris(6, 10, 10));
+  quietHours(true); // horloge figée + heures calmes allumées, quelle que soit la variable de la machine
   ref = await seedReference();
   orga = await signUp("Damien_66", { twoFactor: true });
   orgaV = await viewerOf(orga);

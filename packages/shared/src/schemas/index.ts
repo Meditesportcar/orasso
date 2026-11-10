@@ -28,6 +28,7 @@ export * from "./profile";
 export * from "./provider";
 export * from "./review";
 export * from "./search";
+export * from "./share";
 export * from "./shop";
 export * from "./social";
 export * from "./spotMeetup";

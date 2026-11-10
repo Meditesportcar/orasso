@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
 import { openReport, useReportOpen } from "@/features/ReportSheet";
+import { ShareSheet } from "@/features/share/ShareSheet";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
@@ -121,10 +122,16 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
   const [mediaRetries, setMediaRetries] = useState(0);
   const [held, setHeld] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
+  // La story ciblée par « Vers l'extérieur » reste celle choisie jusqu'à la fermeture de la feuille.
+  const [externalTarget, setExternalTarget] = useState<{ story: string; mediaKind: StoryView["mediaKind"] } | null>(
+    null,
+  );
   const [viewersFor, setViewersFor] = useState<StoryView | null>(null);
   const [replyFocused, setReplyFocused] = useState(false);
   const ready = Boolean(story && loadedId === story.id && storyPlayable(story) && !gone.has(story.id));
-  const running = focused && appActive && ready && !held && !menuOpen && !viewersFor && !replyFocused && !reportOpen;
+  const running =
+    focused && appActive && ready && !held && !menuOpen && !externalOpen && !viewersFor && !replyFocused && !reportOpen;
 
   // --- Fermer, avancer, reculer ---------------------------------------------------------------------------------------
   const ty = useSharedValue(0);
@@ -542,6 +549,20 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
           setViewersFor(story);
         }}
         onDelete={() => void remove()}
+        onExternal={
+          story.exportable
+            ? () => {
+                setMenuOpen(false);
+                setExternalTarget({ story: story.id, mediaKind: story.mediaKind });
+                setExternalOpen(true);
+              }
+            : undefined
+        }
+      />
+      <ShareSheet
+        visible={externalOpen}
+        onClose={() => setExternalOpen(false)}
+        target={externalTarget ?? { story: story.id, mediaKind: story.mediaKind }}
       />
       <ViewersSheet story={viewersFor} onClose={() => setViewersFor(null)} onProfile={openProfile} />
     </KeyboardSafe>

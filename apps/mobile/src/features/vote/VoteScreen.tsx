@@ -11,6 +11,7 @@ import {
   myRankIn,
   rankingBarPercent,
   rankingHiddenLine,
+  shareLabels,
   votePassTexts as T,
   VOTE_CLOSING_SOON_MIN,
   type VoteCandidate,
@@ -28,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { Num, PosterSurface, SmButton } from "@/features/passionne/kit";
+import { ShareSheet } from "@/features/share/ShareSheet";
 import { api } from "@/lib/api";
 import { now as orassoNow } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
@@ -68,6 +70,7 @@ export function VoteScreen() {
   // La voiture choisie dans la grille (avant le vote), et la grille rouverte pour changer son vote.
   const [pick, setPick] = useState<VoteCandidate | null>(null);
   const [changing, setChanging] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const data = view.data;
   const mode = voteScreenMode(data, changing);
@@ -169,6 +172,19 @@ export function VoteScreen() {
       ) : null}
       {mode === "blocked" && data ? <Notice testID="vote-blocked">{voteBlockedLine(data)}</Notice> : null}
       {mode === "closed" ? <Notice testID="vote-closed">{T.closedNote}</Notice> : null}
+      {/* Lot R7f4 : le résultat d'un vote clos se partage (la carte du gagnant), l'API dit si ce regard peut le voir. */}
+      {mode === "closed" && data?.ranking?.[0] ? (
+        <>
+          <SmButton kind="s" icon="share" onPress={() => setSharing(true)} testID="vote-share">
+            {shareLabels.title}
+          </SmButton>
+          <ShareSheet
+            visible={sharing}
+            onClose={() => setSharing(false)}
+            target={{ type: "vote_result", id: data.id }}
+          />
+        </>
+      ) : null}
 
       {mode === "voted" && data && !changing ? (
         <>

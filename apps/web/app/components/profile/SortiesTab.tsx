@@ -27,9 +27,12 @@ export function SortiesTab({ data }: { data: SortiesData }) {
         <div className="o-t-label s-label">{view.season.name}</div>
         <h2 className="s-h2">{passportTexts.title}</h2>
       </div>
-      <p className="s-lead" data-testid="passport-summary">
-        {view.total === 0 ? passportScreenTexts.emptyTitle : passportTexts.summary(view.total, view.rare)}
-      </p>
+      {/* Sans tampon, l'état vide (plus bas) le dit seul : « Ton premier tampon t'attend » une fois. */}
+      {view.total > 0 && (
+        <p className="s-lead" data-testid="passport-summary">
+          {passportTexts.summary(view.total, view.rare)}
+        </p>
+      )}
       {view.seasons.length > 1 && (
         <nav className="s-row" aria-label="Saisons">
           {view.seasons.map((s) => (

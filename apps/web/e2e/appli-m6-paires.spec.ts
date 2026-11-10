@@ -94,7 +94,7 @@ for (const theme of THEMES) {
     const vehicle = vehicles.data.find((v) => v.status === "active");
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
-    await page.goto(`/vehicule/${vehicle?.id}/partager`);
+    await page.goto(`/vehicule/${vehicle?.id}/affiche`);
     await afterOpening(page);
     const img = page.getByTestId("share-preview").locator("img");
     for (const [label, file] of [
