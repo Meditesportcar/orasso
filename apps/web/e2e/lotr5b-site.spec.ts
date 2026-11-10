@@ -182,6 +182,7 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
         .locator("a, button")
         .evaluateAll((els) => els.map((e) => (e.textContent ?? "").trim()));
       const order = [
+        "Voir mon profil comme les autres", // Lot R8b1 : première ligne des réglages
         "Modifier mon profil",
         "Mes publications", // Lot R7e1 : la ligne « Mes publications » du hub des réglages
         "Compte",

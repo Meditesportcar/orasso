@@ -34,7 +34,7 @@ test("Mon compte : Garage par défaut, onglet Sorties, aucune plaque lisible dan
     await page.goto("/app/moi");
     await expect(page.getByTestId("profil-tab-garage")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("link", { name: "Ajouter un véhicule" }).first()).toBeVisible();
-    for (const id of ["profil-count-abonnes", "profil-count-abonnements", "profil-count-sorties", "profil-public"]) {
+    for (const id of ["profil-count-abonnes", "profil-count-abonnements", "profil-count-sorties"]) {
       await expect(page.getByTestId(id), `${width} : ${id}`).toBeVisible();
     }
     const a = await auditPage(page);

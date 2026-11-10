@@ -132,8 +132,11 @@ for (const theme of ["beton", "sable"] as const) {
           });
           await signIn(page, first.member.email);
           await go(page, "/profil");
+          // Lot R8b1 : la panne se dit sur le 4e compteur (« – », jamais « 0 »), le toucher propose « Réessayer ».
+          const cell = page.getByTestId("profil-count-partenaires");
+          await expect(cell).toContainText("–", { timeout: 20_000 });
+          await cell.click();
           await expect(page.getByTestId("partners-error")).toBeVisible({ timeout: 20_000 });
-          await expect(page.getByTestId("partners-line")).toHaveCount(0);
           await expect(page.getByTestId("partners-error")).toContainText("Réessayer");
           await shot(page, `ligne-en-panne-${tag}`);
           down = false;
@@ -141,14 +144,18 @@ for (const theme of ["beton", "sable"] as const) {
             .getByTestId("partners-error")
             .getByRole("button", { name: /Réessayer/ })
             .click();
-          await expect(page.getByTestId("partners-line")).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByTestId("partner-row").first()).toBeVisible({ timeout: 20_000 });
           await expect(page.getByTestId("partners-error")).toHaveCount(0);
+          await page.getByTestId("partners-sheet-close").click();
+          await expect(cell).not.toContainText("–");
           // Tour 3, copie locale remplie : la panne se dit aussi, les lignes restent, datées, avec « Réessayer ».
           down = true;
           await go(page, "/profil");
+          await expect(cell).toContainText("–", { timeout: 20_000 });
+          await cell.click();
           await expect(page.getByTestId("partners-error")).toBeVisible({ timeout: 20_000 });
           await expect(page.getByTestId("partners-error")).toContainText("Réessayer");
-          await expect(page.getByTestId("partners-line")).toBeVisible();
+          await expect(page.getByTestId("partner-row").first()).toBeVisible();
           await expect(page.getByTestId("partners-stale")).toContainText("Données");
           await shot(page, `ligne-en-panne-copie-${tag}`);
           await ctx.close();
@@ -170,13 +177,15 @@ for (const theme of ["beton", "sable"] as const) {
           });
           await signIn(page, lone.email);
           await go(page, "/profil");
-          await expect(page.getByTestId("partners-line")).toHaveCount(0);
-          await expect(page.getByTestId("partners-error")).toHaveCount(0);
+          await expect(page.getByTestId("profil-counters")).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByTestId("profil-count-partenaires")).toHaveCount(0);
           down = true;
           await go(page, "/profil");
+          await expect(page.getByTestId("profil-count-partenaires")).toContainText("–", { timeout: 20_000 });
+          await page.getByTestId("profil-count-partenaires").click();
           await expect(page.getByTestId("partners-error")).toBeVisible({ timeout: 20_000 });
           await expect(page.getByTestId("partners-error")).toContainText("Réessayer");
-          await expect(page.getByTestId("partners-line")).toHaveCount(0);
+          await expect(page.getByTestId("partner-row")).toHaveCount(0);
           await expect(page.getByTestId("partners-stale")).toHaveCount(0);
           await ctx.close();
         }

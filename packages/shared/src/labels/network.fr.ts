@@ -28,6 +28,8 @@ export const networkLabels = {
   following: (n: number) => plural(n, "abonnement", "abonnements"),
   requests: (n: number) => plural(n, "demande", "demandes"),
   outings: (n: number) => plural(n, "sortie", "sorties"),
+  /** Lot R8b1 : 4e compteur du Profil, seulement quand il y a au moins un partenaire (« partenaire » à 1). */
+  partners: (n: number) => plural(n, "partenaire", "partenaires"),
   countsGroup: "Abonnés, abonnements et sorties",
   title: "Ton réseau",
   search: "Chercher un pseudo",

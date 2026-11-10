@@ -195,7 +195,7 @@
       "card tabs"
       "card panel";
   }
-  .pr5.pr5--tabs .pr5-tabs {
+  .pr5.pr5--tabs > [data-testid="profil-tabs"] {
     grid-area: tabs;
   }
   .pr5.pr5--tabs .pr5-panel {
@@ -222,4 +222,274 @@
   .pr5-panel--garage .pr5-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* ---------- Lot R8b1 (D40, maquette R8.1 option A « Compact ») : le haut du Profil, la bande de compteurs, les onglets collants ---------- */
+.pt-id {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.pt-id__av {
+  position: relative;
+  flex: none;
+}
+.pt-id__av .pt-head__cam {
+  width: 22px;
+  height: 22px;
+  right: -2px;
+  bottom: -2px;
+}
+.pt-id__mid {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  align-content: start;
+  width: 100%;
+}
+/* Le conteneur de requête est le seul nom : la colonne ne crée plus de contexte d'empilement (la confirmation passe devant). */
+.pt-id__namebox {
+  container-type: inline-size;
+  width: 100%;
+}
+/* Le pseudo tient sur une ligne : il rapetisse (jusqu'à 9 px) au lieu de se couper. */
+.pt-id__mid .pt-id__name.o-t-poster-l {
+  margin: 0;
+  font-size: clamp(9px, calc(100cqi / var(--em, 10)), 18px);
+  line-height: 1.05;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+.pt-id__gl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.pt-dept {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.pt-bio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  min-height: 24px;
+}
+.pt-bio p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-bio--open p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.pt-bio__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.pt-bio--open .pt-bio__more svg {
+  transform: rotate(180deg);
+}
+.pt-side {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.pt-side__btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pt-side__btn:focus-visible,
+.pt-bio__more:focus-visible,
+.pt-band a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app__body a.pt-side__btn {
+  color: var(--ink);
+}
+/* La bande de compteurs : un trait en haut et en bas, des colonnes séparées d'un trait, le nombre en 18 gras. */
+.pt-band {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr));
+  border-block: 1px solid var(--line);
+}
+.pt-band > * {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 3px 2px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.pt-band > * + * {
+  border-left: 1px solid var(--line);
+}
+.app__body .pt-band a {
+  color: var(--ink);
+}
+.pt-band strong {
+  font-stretch: 62%;
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1.05;
+}
+.pt-band small {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--ink-muted);
+  text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+/* Le haut compact de Mon compte : un petit espace entre la grille et la bande. */
+.pt-top {
+  display: grid;
+  gap: var(--space-2);
+}
+/* « Ajouter un véhicule » en fin de liste (`.r8addrow`) : un contour d'un trait, pas un bouton principal. */
+.pt-addrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  font-weight: 750;
+  font-size: 13.5px;
+  text-decoration: none;
+  text-align: center;
+}
+.app__body a.pt-addrow {
+  color: var(--ink);
+}
+.pt-addrow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* L'état vide du garage : le seul bouton principal de l'onglet. */
+.pt-empty {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 22px var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.pt-empty p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+}
+/* Les partenaires : la liste s'ouvre sous la bande (le nombre est un lien vers elle) ; masquée tant qu'elle n'est pas visée. */
+.pt-partners {
+  display: none;
+}
+.pt-partners:target {
+  display: block;
+}
+/* « Suivre » sur la ligne du grade (profil d'un autre) : petit bouton, 32 px (`.r8fol`). */
+.o-button.fl-line {
+  min-height: 32px;
+  padding: 0 10px;
+  gap: 6px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.pt-id__gl .fl-form {
+  display: block;
+  margin: 0;
+}
+/* L'icône « Message » (formulaire) et « Plus » (signaler) à droite de la photo d'un autre. */
+.pt-side .pr5-acts--inert {
+  display: grid;
+  gap: 4px;
+}
+.pt-side__form {
+  margin: 0;
+}
+.pt-more {
+  position: relative;
+}
+.pt-more > summary {
+  list-style: none;
+}
+.pt-more > summary::-webkit-details-marker {
+  display: none;
+}
+.pt-more__sheet {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 190px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+/* La confirmation de « Abonné » / « Demandé » sur la ligne du grade : sous la grille d'identité, sur la largeur de la carte (ancrée
+   à la grille, pas à la colonne centrale), au-dessus des onglets collants. */
+.pt-id {
+  position: relative;
+}
+.pt-id__gl .fl-conf--sm {
+  position: static;
+}
+.pt-id__gl .fl-conf--sm .fl-confirm {
+  left: 0;
+  right: 0;
+  top: 100%;
+  width: auto;
+  z-index: 30;
+}
+/* Les liens de l'espace connecté sont moutarde (`.app__body a`) : les onglets du Profil gardent l'encre atténuée, l'actif l'encre. */
+.app__body [data-testid="profil-tabs"] a.utabs__tab {
+  color: var(--ink-muted);
+}
+.app__body [data-testid="profil-tabs"] a.utabs__tab[data-on="true"] {
+  color: var(--ink);
 }

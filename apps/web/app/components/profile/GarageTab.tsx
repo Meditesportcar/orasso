@@ -6,6 +6,7 @@ import {
   gradeLabels,
   homeLabels,
   mainVehicleLabels as M,
+  profileTabsLabels as PT,
   plateTransferLabels,
   proActivityLabels,
   type VehicleDetail,
@@ -31,6 +32,8 @@ import "../../styles/network.css";
 // Lot R7b1 (D38) : l'onglet « Garage » du Profil (`/app/moi`), le contenu de l'ancienne page `/app/garage` : mes véhicules (le
 // principal en tête), la certification, « Pour ta … », les archivés, mon QR de compte, les demandes de transfert de plaque.
 // Les formulaires (« Mettre en avant », accepter ou refuser un transfert) postent sur la page du Profil.
+// Lot R8b1 (D40, maquette R8.1) : « Ajouter un véhicule » devient une ligne en fin de liste (un contour d'un trait) ; le bouton principal
+// n'existe que si le garage est vide, dans l'état vide (« Ton garage est vide »).
 
 const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wrecked"];
 
@@ -39,11 +42,6 @@ export function GarageTab({ data, actionData }: { data: GarageData; actionData: 
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-stack">
-      <div className="s-row s-row--between">
-        <Button variant="primary" icon="add" href="/app/garage/nouveau">
-          Ajouter un véhicule
-        </Button>
-      </div>
       <div className="s-row s-row--tight" data-testid="garage-crews">
         <span className="s-label o-t-label">{crewLabels.crews}</span>
         {crews.map((c) => (
@@ -55,7 +53,11 @@ export function GarageTab({ data, actionData }: { data: GarageData; actionData: 
           {crews.length ? crewLabels.myCrews : crewLabels.createCrew}
         </a>
       </div>
-      {qrSecret && <AccountQr secret={qrSecret} />}
+      {qrSecret && (
+        <div id="qr">
+          <AccountQr secret={qrSecret} />
+        </div>
+      )}
       {photoRefused && (
         <p className="s-notice s-notice--alert">
           Le véhicule est ajouté, mais la photo n'a pas été acceptée. Ajoutes-en une depuis sa fiche.
@@ -104,7 +106,14 @@ export function GarageTab({ data, actionData }: { data: GarageData; actionData: 
       ))}
 
       {vehicles.length === 0 && (
-        <p className="s-notice">Ton garage est vide. Ajoute un véhicule pour pouvoir candidater.</p>
+        <div className="pt-empty" data-testid="garage-empty">
+          <Icon name="vehicle" size={30} />
+          <strong>{PT.garageEmptyTitle}</strong>
+          <p>{PT.garageEmptyText}</p>
+          <Button variant="primary" icon="add" href="/app/garage/nouveau" data-testid="garage-empty-add">
+            Ajouter un véhicule
+          </Button>
+        </div>
       )}
       <div className="s-grid">
         {vehicles.map((v, i) => (
@@ -156,6 +165,14 @@ export function GarageTab({ data, actionData }: { data: GarageData; actionData: 
           </div>
         ))}
       </div>
+
+      {/* « Ajouter un véhicule » : une ligne en fin de liste, pas un bouton principal (celui de l'état vide est le seul). */}
+      {vehicles.length > 0 && (
+        <a className="pt-addrow" href="/app/garage/nouveau" data-testid="garage-add">
+          <Icon name="add" size={18} />
+          <span>Ajouter un véhicule</span>
+        </a>
+      )}
 
       {pros && vehicles[0] && (pros.sponsored || pros.pros.length > 0 || pros.needsPlace) && (
         <VehicleProsBlock key={pros.vehicleId} pros={pros} modelName={vehicles[0].modelName} />

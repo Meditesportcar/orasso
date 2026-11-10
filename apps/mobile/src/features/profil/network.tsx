@@ -3,30 +3,21 @@
 // côte à côte. Écran des listes (mode fiche) : segment abonnés / abonnements / demandes, recherche, un bouton « Suivre »
 // par ligne, « Accepter » et ✕ pour les demandes, « Toi seul vois ces listes ». Tour 2 : dans Abonnés, le menu ⋯ d'une
 // ligne propose « Retirer cet abonné », avec confirmation dans une feuille.
-import {
-  Button,
-  departmentChoices,
-  Icon,
-  Photo,
-  Text,
-  tokens,
-  useTheme,
-  WordSafeGroup,
-  WordSafeText,
-} from "@orasso/design-system/native";
+import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type FollowedPage,
   type FollowPerson,
   gradeLabels,
   networkLabels as N,
   type NetworkCounts,
+  profileTabsLabels as PT,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { fitWordSize } from "@/features/home/fit";
-import { CrewDot, Num, SmButton } from "@/features/passionne/kit";
+import { CrewDot, SmButton } from "@/features/passionne/kit";
 import { FollowButton } from "@/features/social/FollowButton";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -35,6 +26,8 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
+import type { PartnersCell } from "./PartnersLine";
+import { type BandCell, CounterBand } from "./ProfileHead";
 
 const { space1, space2, space3 } = tokens.spacing;
 /** Corps du libellé d'un compteur (`.r4cnt span`). */
@@ -52,55 +45,47 @@ export function departmentCaption(code: string | undefined): string | null {
   return name ? `${name} (${code})` : `Département ${code}`;
 }
 
-/** `.r4cnt` : trois compteurs (abonnés, abonnements, sorties), chacun ouvre son écran. */
+/**
+ * La bande de compteurs de mon profil (lot R8b1, maquette R8.1 `.r8cnt.band`) : abonnés, abonnements, sorties, et un 4e
+ * compteur « partenaires » seulement quand il y en a (`partners` : la cellule de `PartnersHost`). Chacun ouvre son écran.
+ */
 export function NetworkCounters({
   counts,
   onOpen,
-  plain = false,
+  partners = null,
 }: {
   counts: Pick<NetworkCounts, "followers" | "following" | "outings"> | null;
   onOpen: (target: CounterTarget) => void;
-  /** Lot R7b1 : posés directement sur la page (sans la carte du profil), les compteurs ont leur propre fond de surface. */
-  plain?: boolean;
+  partners?: PartnersCell | null;
 }) {
-  const { t } = useTheme();
-  const c = t.color;
-  const cells: [CounterTarget, number | null, (n: number) => string][] = [
-    ["abonnes", counts?.followers ?? null, N.followers],
-    ["abonnements", counts?.following ?? null, N.following],
-    ["sorties", counts?.outings ?? null, N.outings],
-  ];
-  // Lot R6-police : police agrandie, un libellé ne se coupe jamais (« abonnement / s ») ; les trois gardent le même corps.
-  return (
-    <WordSafeGroup>
-      <View
-        style={[styles.counts, { backgroundColor: plain ? c.surface : c.ground }]}
-        accessibilityRole="summary"
-        accessibilityLabel={N.countsGroup}
-        testID="profil-counters"
-      >
-        {cells.map(([tab, n, label], i) => (
-          <Pressable
-            key={tab}
-            accessibilityRole="button"
-            accessibilityLabel={n === null ? label(2) : `${n} ${label(n)}`}
-            onPress={() => onOpen(tab)}
-            testID={`profil-count-${tab}`}
-            style={({ pressed }) => [
-              styles.count,
-              i > 0 && { borderLeftWidth: 1, borderLeftColor: c.line },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Num size={28}>{n === null ? "—" : String(n)}</Num>
-            <WordSafeText variant="caption" base={COUNT_LABEL_SIZE} color={c.inkMuted} style={styles.countLabel}>
-              {label(n ?? 2)}
-            </WordSafeText>
-          </Pressable>
-        ))}
-      </View>
-    </WordSafeGroup>
-  );
+  const cells: BandCell[] = (
+    [
+      ["abonnes", counts?.followers ?? null, N.followers],
+      ["abonnements", counts?.following ?? null, N.following],
+      ["sorties", counts?.outings ?? null, N.outings],
+    ] as const
+  ).map(([tab, n, label]) => ({
+    key: tab,
+    value: n,
+    label: label(n ?? 2),
+    accessibilityLabel: n === null ? label(2) : `${n} ${label(n)}`,
+    onPress: () => onOpen(tab),
+    testID: `profil-count-${tab}`,
+  }));
+  if (partners) {
+    cells.push({
+      key: "partenaires",
+      value: partners.count,
+      label: N.partners(partners.count ?? 2),
+      accessibilityLabel:
+        partners.count === null
+          ? `${N.partners(2)}, ${PT.unknownCount}`
+          : `${partners.count} ${N.partners(partners.count)}, ${partners.names}`,
+      onPress: partners.onPress,
+      testID: "profil-count-partenaires",
+    });
+  }
+  return <CounterBand cells={cells} testID="profil-counters" accessibilityLabel={N.countsGroup} />;
 }
 
 /** `.r4lk` : deux accès côte à côte. */

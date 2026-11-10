@@ -3,7 +3,7 @@
 // profil (photo, pseudo, description, réseaux), Compte, Notifications, Confidentialité, Tes préférences, Apparence,
 // Aide, Se déconnecter. Chaque ligne ouvre l'écran qu'elle ouvrait déjà ; plus de doublon dans l'onglet.
 import { useTheme } from "@orasso/design-system/native";
-import { feedScreenLabels, settingsHubLabels as L, preferencesLabels } from "@orasso/shared";
+import { feedScreenLabels, settingsHubLabels as L, profileTabsLabels as PT, preferencesLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -25,8 +25,15 @@ export default function ReglagesHub() {
       onRefresh={refreshMe}
     >
       <SetList>
+        {/* Lot R8b1 (D40) : « Profil public » a quitté l'en-tête du Profil ; l'aperçu est la première ligne des réglages. */}
         <SetRow
           first
+          icon="eye"
+          title={PT.seeAsOthers}
+          onPress={() => router.push("/profil-public")}
+          testID="reglage-profil-public"
+        />
+        <SetRow
           icon="edit"
           title={L.editProfile}
           caption={L.editProfileCaption}

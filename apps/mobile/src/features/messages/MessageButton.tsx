@@ -4,7 +4,7 @@ import { AppBarFlowAction, Button } from "@orasso/design-system/native";
 import { messagingLabels, publicProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-
+import { SideIcon } from "@/features/profil/ProfileHead";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { Notice } from "@/ui/Notice";
@@ -17,9 +17,15 @@ export function MessageButton({
   pseudo,
   fullWidth = false,
   sheetInOverlay = false,
+  asIcon = false,
+  onError,
 }: {
   userId: string;
   pseudo: string;
+  /** Lot R8b1 : l'icône carrée « Message » de l'en-tête compact du profil d'un autre (au lieu du bouton). */
+  asIcon?: boolean;
+  /** Avec `asIcon` : l'erreur est rendue par l'écran (la colonne d'icônes est trop étroite pour la porter). */
+  onError?: (message: string | null) => void;
   /** Lot R7b1 : le bouton remplit sa cellule (profil d'un autre : « Suivre » et « Message » côte à côte). */
   fullWidth?: boolean;
   /**
@@ -31,31 +37,46 @@ export function MessageButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [contact, setContact] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorState] = useState<string | null>(null);
+  const setError = (message: string | null) => {
+    setErrorState(onError ? null : message);
+    onError?.(message);
+  };
+  const open = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { id } = await api.openDirect(userId);
+      router.push(`/messages/${id}`);
+    } catch (e) {
+      if (e instanceof ApiRequestError && e.code === "not_friends") setContact(true);
+      else setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <>
-      <Button
-        variant="secondary"
-        icon="chat"
-        loading={busy}
-        fullWidth={fullWidth}
-        testID="message-open"
-        onPress={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            const { id } = await api.openDirect(userId);
-            router.push(`/messages/${id}`);
-          } catch (e) {
-            if (e instanceof ApiRequestError && e.code === "not_friends") setContact(true);
-            else setError(errorMessage(e));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {messagingLabels.message}
-      </Button>
+      {asIcon ? (
+        <SideIcon
+          icon="chat"
+          label={messagingLabels.message}
+          disabled={busy}
+          onPress={() => void open()}
+          testID="message-open"
+        />
+      ) : (
+        <Button
+          variant="secondary"
+          icon="chat"
+          loading={busy}
+          fullWidth={fullWidth}
+          testID="message-open"
+          onPress={() => void open()}
+        >
+          {messagingLabels.message}
+        </Button>
+      )}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {sheetInOverlay ? (
         <Overlay>
