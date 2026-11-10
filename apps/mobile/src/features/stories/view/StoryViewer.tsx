@@ -84,6 +84,8 @@ export type AuthorNav = {
   startAtEnd: boolean;
   fetchAuthor: (key: string) => Promise<StoriesByAuthor>;
   onAuthor: (dir: "next" | "prev") => void;
+  /** Identifiants d'idempotence des réponses : ils vivent dans le parent persistant, un aller-retour entre auteurs ne les perd pas. */
+  replyKeys: ReturnType<typeof createReplyKeys>;
 };
 
 export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: AuthorNav }) {
@@ -355,8 +357,9 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
   const [text, setText] = useState("");
   // Envois en cours, par story : on peut répondre à la suivante pendant qu'une réponse part, et le bouton d'une story reste
   // inactif tant que son propre envoi n'est pas résolu. Les identifiants d'idempotence suivent chaque soumission.
-  const replyKeys = useRef(createReplyKeys(randomUUID)).current;
-  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
+  const ownReplyKeys = useRef(createReplyKeys(randomUUID)).current;
+  const replyKeys = nav?.replyKeys ?? ownReplyKeys;
+  const [sending, setSending] = useState<ReadonlySet<string>>(() => new Set(replyKeys.sendingStories()));
   const syncSending = () => setSending(new Set(replyKeys.sendingStories()));
   const shownDraft = useRef({ storyId: storyId as string | null, text });
   shownDraft.current = { storyId, text };
@@ -398,7 +401,8 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
     try {
       await api.storyMute(authorKey, true);
       setNotice(L.muted);
-      if (!closing.current) muteTimer.current = setTimeout(close, 1500);
+      // Chaîne en cours : on passe à l'auteur suivant au lieu de fermer toute la lecture.
+      if (!closing.current) muteTimer.current = setTimeout(() => (changeAuthor("next") ? undefined : close()), 1500);
     } catch (e) {
       setNotice(errorMessage(e));
     }
@@ -426,7 +430,7 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
       await api.storyDelete(story.id);
       const left = list.filter((s) => s.id !== story.id).length;
       // La dernière story supprimée : on ferme tout de suite (l'écran « plus disponible » n'a rien à dire de plus).
-      if (left === 0) return close();
+      if (left === 0) return changeAuthor("next") ? undefined : close();
       setRemoved((r) => new Set(r).add(story.id));
       setNotice(L.deleteDone);
     } catch (e) {
@@ -474,6 +478,11 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
         {retry ? (
           <SmButton kind="s" icon="undo" onPress={retry} testID="story-retry">
             {L.retry}
+          </SmButton>
+        ) : null}
+        {retry && nextKey ? (
+          <SmButton kind="s" icon="next" onPress={() => changeAuthor("next")} testID="story-author-next">
+            {L.authorNext}
           </SmButton>
         ) : null}
         <SmButton kind="s" icon="close" onPress={close} testID="story-close">

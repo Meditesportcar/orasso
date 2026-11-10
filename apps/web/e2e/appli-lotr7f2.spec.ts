@@ -298,6 +298,15 @@ test("ma story : « Ta story » avec mon anneau, vues pour moi seul, supprimer ;
   await page.getByTestId("story-more").click();
   await expect(page.getByTestId("story-menu-delete")).toBeVisible();
   await page.getByTestId("story-menu-delete").click();
+  // Lot R8s : ouverte depuis la barre, la lecture passe à l'auteur suivant après ma dernière story supprimée ; on la ferme ensuite.
+  await page.waitForTimeout(1_000);
+  if (
+    await page
+      .getByTestId("story-viewer")
+      .isVisible()
+      .catch(() => false)
+  )
+    await page.getByTestId("story-close").click();
   await expect(page.getByTestId("stories-bar")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("stories-mine-ring")).toHaveCount(0);
   await expect(page.getByTestId("stories-add")).toBeVisible();

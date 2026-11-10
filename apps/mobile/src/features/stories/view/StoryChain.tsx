@@ -6,13 +6,15 @@
 // Changement d'auteur : glissement horizontal court et fondu (fondu de 120 ms en mouvement réduit), tout l'état propre à une story
 // (flamme, réponse en cours, feuilles, minuterie) repart de zéro (visionneuse remontée, `key`). L'auteur suivant est lu d'avance.
 import { useTheme } from "@orasso/design-system/native";
-import { nextAuthor, prevAuthor, type StoriesByAuthor, storyChain } from "@orasso/shared";
+import { createReplyKeys, nextAuthor, prevAuthor, type StoriesByAuthor, storyChain } from "@orasso/shared";
+import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { barFor } from "../chainBar";
 import { AuthorViewer } from "./StoryViewer";
 
 const SLIDE_MS = 200;
@@ -21,31 +23,40 @@ const REDUCED_FADE_MS = 120;
 const SLIDE_SHARE = 0.12;
 /** L'auteur suivant est lu d'avance après ce délai ; une lecture d'avance plus vieille que cela est relue. */
 const PREFETCH_DELAY_MS = 800;
-const PREFETCH_MAX_AGE_MS = 60_000;
+const PREFETCH_MAX_AGE_MS = 15_000;
 
 export function StoryChain({ authorKey, followBar }: { authorKey: string; followBar: boolean }) {
   const { t, reducedMotion } = useTheme();
   const { me } = useSession();
   const { width } = useWindowDimensions();
-  const [chain, setChain] = useState<string[]>([authorKey]);
+  const myId = me?.user.id ?? null;
+  // La chaîne est figée AVANT la première lecture (donc avant que la vue de la première story soit enregistrée) : depuis la barre
+  // déjà affichée par `StoriesBar` (mémoire), sinon la barre est lue et la visionneuse attend. Une panne : l'auteur seul.
+  const stored = followBar ? barFor(myId) : null;
+  const [chain, setChain] = useState<string[]>(() =>
+    stored ? storyChain(stored.authors, authorKey, stored.mine && myId ? `u:${myId}` : null) : [authorKey],
+  );
+  const [chainReady, setChainReady] = useState(!followBar || Boolean(stored));
+  const replyKeys = useRef(createReplyKeys(randomUUID)).current;
   const [current, setCurrent] = useState(authorKey);
   const [arrival, setArrival] = useState<"next" | "prev" | null>(null);
 
-  // La barre, lue une seule fois : la chaîne ne se réordonne plus pendant la lecture. Une panne : l'auteur seul.
-  const myId = me?.user.id ?? null;
   useEffect(() => {
-    if (!followBar) return;
+    if (chainReady) return;
     let alive = true;
     api
       .storiesBar()
       .then((bar) => {
         if (alive) setChain(storyChain(bar.authors, authorKey, bar.mine && myId ? `u:${myId}` : null));
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setChainReady(true);
+      });
     return () => {
       alive = false;
     };
-  }, [followBar, authorKey, myId]);
+  }, [chainReady, authorKey, myId]);
 
   // Lecture d'avance de l'auteur suivant (jamais d'effet de vue : la vue n'est posée que par la story réellement affichée).
   const ahead = useRef(new Map<string, { at: number; promise: Promise<StoriesByAuthor> }>());
@@ -90,15 +101,24 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
   const prevKey = prevAuthor(chain, current);
   return (
     <Animated.View style={[{ flex: 1, backgroundColor: t.color.night }, style]} testID="story-chain">
-      <AuthorViewer
-        key={current}
-        authorKey={current}
-        nav={
-          followBar
-            ? { prevKey, nextKey: following, startAtEnd: arrival === "prev", fetchAuthor, onAuthor: goAuthor }
-            : undefined
-        }
-      />
+      {chainReady ? (
+        <AuthorViewer
+          key={current}
+          authorKey={current}
+          nav={
+            followBar
+              ? {
+                  prevKey,
+                  nextKey: following,
+                  startAtEnd: arrival === "prev",
+                  fetchAuthor,
+                  onAuthor: goAuthor,
+                  replyKeys,
+                }
+              : undefined
+          }
+        />
+      ) : null}
     </Animated.View>
   );
 }

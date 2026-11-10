@@ -234,3 +234,28 @@ test("Béton et Sable : la visionneuse avec les boutons d'auteur (captures), pol
     await ctx.close();
   }
 });
+
+test("tour 2 : la chaîne est figée sur la barre affichée, même si la barre n'est plus lue après (plusieurs auteurs, une story chacun)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const authors = await bar();
+  const { ctx, page } = await open(browser);
+  await go(page, "/fil");
+  await expect(page.getByTestId(`stories-author-${authors[authors.length - 1]?.key}`)).toBeVisible({ timeout: 30_000 });
+  // Toute relecture de la barre échoue à partir d'ici : la chaîne vient de la barre déjà affichée.
+  await page.route("**/api/stories/bar", (r) => r.abort());
+  const lea = authors.findIndex((a) => a.pseudoOrName === "Lea_11");
+  expect(lea).toBeGreaterThanOrEqual(0);
+  await page.getByLabel(/Voir les stories de Lea_11/).click();
+  await expect(author(page)).toHaveText("Lea_11", { timeout: 30_000 });
+  await playing(page);
+  // Léa n'a qu'une story : la fin de sa série ouvre l'auteur suivant de la barre, s'il y en a un non vu.
+  const following = authors.slice(lea + 1).find((a) => a.hasUnseen);
+  if (following) {
+    await page.getByTestId("story-surface").click({ position: { x: 360, y: 400 } });
+    await expect(author(page)).toHaveText(following.pseudoOrName, { timeout: 30_000 });
+  }
+  await ctx.close();
+});

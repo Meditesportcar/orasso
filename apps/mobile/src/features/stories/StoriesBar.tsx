@@ -7,6 +7,7 @@
 import { AvatarRing, Icon, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import { barDisplay, storyViewerLabels as L, mineRingState } from "@orasso/shared";
 import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTabSwipeScrollGuard } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
@@ -15,6 +16,7 @@ import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { SmButton } from "@/ui/Kit";
+import { rememberBar } from "./chainBar";
 
 const { space2, space3, space4 } = tokens.spacing;
 const ITEM_W = 68;
@@ -44,6 +46,10 @@ export function StoriesBar() {
   });
 
   const data = bar.data;
+  // La barre affichée est gardée en mémoire : la lecture enchaînée y fige sa chaîne avant la première vue.
+  useEffect(() => {
+    rememberBar(me?.user.id, data);
+  }, [me?.user.id, data]);
   const mine = data?.mine ?? null;
   const mineState = mineRingState(mine);
   const display = barDisplay(data?.authors ?? []);

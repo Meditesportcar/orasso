@@ -319,6 +319,9 @@ test("ne plus voir ses stories, ma story (vues, supprimer), story expirée, sign
   page.once("dialog", (d) => void d.accept());
   await page.getByTestId("story-more").click();
   await page.getByTestId("story-menu-delete").click();
+  // Lot R8s : ouverte depuis la barre, la lecture passe à l'auteur suivant après ma dernière story supprimée ; on la ferme ensuite.
+  await page.waitForTimeout(1_000);
+  if (page.url().includes("/app/story/")) await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/app\/fil/, { timeout: 15_000 });
   expect((await apiCall<{ stories: unknown[] }>(damien, "GET", "/me/stories")).data.stories).toHaveLength(0);
 

@@ -182,3 +182,89 @@ test("la barre lue par le chargeur : sans session, rien ; la chaîne n'est jamai
   const html = await page.content();
   expect(html).not.toContain("/api/stories/");
 });
+
+test("tour 2 : changement de compte + /me en échec : la flèche → ne change pas d'auteur et ne relit pas le préchargement", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const authors = await bar();
+  await signedIn(page, "beton", 390, 844);
+  const second = authors[1]?.key ?? "";
+  const reads: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/stories/by-author/"))
+      reads.push(decodeURIComponent(r.url().split("/by-author/")[1] ?? ""));
+  });
+  await page.getByLabel(new RegExp(`Voir les stories de ${authors[0]?.pseudoOrName}`)).click();
+  await expect(page.getByTestId("story-viewer")).toBeVisible({ timeout: 30_000 });
+  await playing(page);
+  // Le préchargement de l'auteur suivant est parti.
+  await expect.poll(() => reads.filter((k) => k === second).length, { timeout: 10_000 }).toBe(1);
+  // Un autre compte se connecte dans une autre fenêtre ; `/me` échoue.
+  await page.route("**/api/me", (r) => r.fulfill({ status: 503, body: "{}", contentType: "application/json" }));
+  const other = await page.context().newPage();
+  await other.goto("/connexion");
+  await other.evaluate(() => {
+    const c = new BroadcastChannel("orasso-session");
+    c.postMessage({ userId: "autre-compte" });
+    c.close();
+  });
+  await expect(page.getByTestId("story-unverified")).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(500);
+  // Rien de l'ancien compte : pas d'auteur affiché, toujours « non vérifié », aucune lecture de l'auteur suivant.
+  await expect(page.getByTestId("story-unverified")).toBeVisible();
+  await expect(page.getByTestId("story-author")).toHaveCount(0);
+  expect(reads.filter((k) => k === second)).toHaveLength(1);
+  // Le compte est de nouveau vérifié : on revient au même auteur ; passer au suivant relit (le préchargement a été purgé).
+  await page.unroute("**/api/me");
+  await page.getByTestId("story-retry").click();
+  await expect(author(page)).toHaveText(authors[0]?.pseudoOrName ?? "", { timeout: 30_000 });
+  await page.getByRole("button", { name: "Auteur suivant" }).click();
+  await expect(author(page)).toHaveText(authors[1]?.pseudoOrName ?? "", { timeout: 30_000 });
+  expect(reads.filter((k) => k === second).length).toBeGreaterThanOrEqual(2);
+  await other.close();
+});
+
+test("tour 2 : réponse perdue, aller-retour entre auteurs : le même texte repart avec le même identifiant", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await resetViews();
+  const authors = await bar();
+  // Un auteur-personne qui n'a qu'une story et qui n'est pas le dernier de la barre : l'aller-retour revient sur la même.
+  let target = "";
+  const cookie = await login("damien@orasso.local");
+  for (const a of authors.slice(0, -1)) {
+    if (!a.key.startsWith("u:")) continue;
+    const r = await apiCall<{ stories: unknown[] }>(cookie, "GET", `/stories/by-author/${encodeURIComponent(a.key)}`);
+    if (r.data.stories.length === 1) {
+      target = a.pseudoOrName;
+      break;
+    }
+  }
+  test.skip(!target, "aucun auteur à une seule story dans la barre");
+  await signedIn(page, "beton", 390, 844);
+  const ids: string[] = [];
+  await page.route("**/api/stories/*/reply", async (route) => {
+    ids.push((route.request().postDataJSON() as { clientId: string }).clientId);
+    if (ids.length === 1) return route.abort();
+    return route.continue();
+  });
+  await page.getByLabel(new RegExp(`Voir les stories de ${target}`)).click();
+  await expect(author(page)).toHaveText(target, { timeout: 30_000 });
+  await playing(page);
+  await page.getByTestId("story-reply-input").fill("Belle auto");
+  await page.getByTestId("story-reply-send").click();
+  await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(1);
+  await page.getByRole("button", { name: "Auteur suivant" }).click();
+  await expect(author(page)).not.toHaveText(target, { timeout: 30_000 });
+  await page.getByRole("button", { name: "Auteur précédent" }).click();
+  await expect(author(page)).toHaveText(target, { timeout: 30_000 });
+  await page.getByTestId("story-reply-input").fill("Belle auto");
+  await page.getByTestId("story-reply-send").click();
+  await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(2);
+  expect(ids[1]).toBe(ids[0]);
+});
