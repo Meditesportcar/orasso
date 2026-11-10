@@ -36,7 +36,12 @@
   position: absolute;
   inset: calc((40px - var(--touch)) / 2) 0;
 }
-.utabs__tab[data-on="true"] {
+.utabs .utabs__tab,
+.s-main .utabs .utabs__tab {
+  color: var(--ink-muted);
+}
+.utabs .utabs__tab[data-on="true"],
+.s-main .utabs .utabs__tab[data-on="true"] {
   color: var(--ink);
 }
 .utabs__tab[data-on="true"]::after {
