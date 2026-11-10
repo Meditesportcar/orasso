@@ -253,7 +253,9 @@ test("R4c appli : véhicule principal, réseau, aperçu du profil public, suivre
     await expect(page.getByTestId("profil-count-abonnements")).toContainText("3");
     // Lot R6b : plus de compteur « amis ».
     await expect(page.getByTestId("profil-count-amis")).toHaveCount(0);
-    await expect(page.getByTestId("profil-public")).toBeVisible();
+    // Lot R8b1 : « Profil public » a quitté l'en-tête ; il est la première ligne de Réglages ('reglage-profil-public').
+    await expect(page.getByTestId("profil-public")).toHaveCount(0);
+    await expect(page.getByTestId("profil-gear")).toBeVisible();
     // Lot R7b1 (D38) : le crew a quitté l'en-tête du Profil (l'onglet Crew existe depuis R7a1).
     await expect(page.getByTestId("profil-crew")).toHaveCount(0);
     await expect(page.getByTestId("reglage-profil")).toHaveCount(0);

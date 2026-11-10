@@ -275,7 +275,8 @@ test("le profil d'un inconnu : « Message » ouvre la feuille à l'écran (jamai
     await expect(page.getByText("Une seule demande est possible")).toBeInViewport({ ratio: 1 });
     await shot(page, `05-demande-contact-police-${fontScale}`);
     if (fontScale === 1) {
-      await page.getByLabel("Message", { exact: true }).fill("Bonjour, belle voiture !");
+      // Lot R8b1 : l'icône « Message » du haut du profil porte le même nom accessible que le champ : on vise le champ de saisie.
+      await page.getByRole("textbox", { name: "Message" }).fill("Bonjour, belle voiture !");
       await page.getByRole("button", { name: /Envoyer/ }).click();
       await expect(page.getByTestId("contact-sent")).toBeInViewport({ ratio: 1, timeout: 20_000 });
     }
