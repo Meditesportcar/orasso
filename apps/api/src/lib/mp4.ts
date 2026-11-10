@@ -517,68 +517,121 @@ async function blankGaps(handle: FileHandle, gaps: [number, number][], size: num
 }
 
 /**
- * Remplace tout NAL SEI des échantillons vidéo par un NAL de remplissage de même longueur (tour 7) : des caméras écrivent latitude
- * et longitude dans les SEI de chaque image, et `x264` y met sa ligne de réglages. H.264 : type 6 devient 12 (`0x0C`) ; HEVC : 39 et 40
- * deviennent 38 (premier octet `0x4C`, second gardé) ; contenu `0xFF…` terminé par `0x80`. La longueur des NAL vient de `avcC`/`hvcC` ;
- * un NAL qui sort de ses échantillons est refusé. Les plages sont fusionnées, seuls les en-têtes sont lus (fenêtre de 64 Ko) : le
- * travail suit la taille du fichier. Perte connue : les métadonnées HDR portées par des SEI.
+ * Longueur du message SEI « filler payload » (payloadType 3) de `m` octets au total : type (1) + taille codée (`q` octets 0xFF puis
+ * le reste, soit `q + 1` octets) + `payloadSize` octets. Rend `payloadSize` et `q`, ou `undefined` quand le codage saute cette valeur.
  */
-/** Écrit le NAL de remplissage à la place d'un SEI : en-tête, `0xFF…`, `0x80` (même longueur). */
-async function fillNal(
-  handle: FileHandle,
-  start: number,
-  length: number,
-  hevc: boolean,
-  first: number,
-  fill: Buffer,
-): Promise<void> {
-  const header = hevc ? 2 : 1;
-  await handle.write(Buffer.from([hevc ? 0x4c | (first & 1) : 0x0c]), 0, 1, start);
-  const body = start + header;
-  const bodyEnd = start + length - 1;
-  for (let at = body; at < bodyEnd; at += fill.length)
-    await handle.write(fill, 0, Math.min(fill.length, bodyEnd - at), at);
-  if (start + length > body) await handle.write(Buffer.from([0x80]), 0, 1, bodyEnd);
+function fillerMessage(m: number): { size: number; ff: number } | undefined {
+  for (let ff = 0; ff <= m / 255 + 1; ff++) {
+    const size = m - 2 - ff;
+    if (size < 0) return undefined;
+    if (Math.floor(size / 255) === ff) return { size, ff };
+  }
+  return undefined;
 }
 
+/**
+ * Corps de SEI de `length` octets (après l'en-tête du NAL) : un ou deux messages « filler payload » (payloadType 3, `payloadSize`
+ * octets à 0xFF) puis 0x80 (fin de RBSP). Aucun octet nul consécutif possible (pas d'octet d'échappement à gérer). Moins de 3
+ * octets : refus. Deux messages quand le codage de la taille d'un seul ne tombe pas juste.
+ */
+function writeFiller(target: Buffer, at: number, length: number): void {
+  if (length < 3) throw unreadable("SEI trop court pour être remplacé");
+  const rest = length - 1;
+  let first = rest;
+  while (first >= 2 && !(fillerMessage(first) && (rest === first || fillerMessage(rest - first)))) first--;
+  if (first < 2) throw unreadable("SEI de taille impossible à remplacer");
+  let o = at;
+  for (const m of rest === first ? [first] : [first, rest - first]) {
+    const { size, ff } = fillerMessage(m) as { size: number; ff: number };
+    target[o++] = 3;
+    target.fill(0xff, o, o + ff);
+    o += ff;
+    target[o++] = size - 255 * ff;
+    target.fill(0xff, o, o + size);
+    o += size;
+  }
+  target[o] = 0x80;
+}
+
+/** SEI plus grand que cela : refusé (aucun encodeur réel n'en produit ; borne la mémoire d'une fenêtre). */
+const SEI_MAX = 8 * 1024 * 1024;
+/** Fenêtre de lecture et d'écriture des échantillons vidéo. */
+const SEI_WINDOW = 1024 * 1024;
+
+/**
+ * Remplace le contenu de tout NAL SEI des échantillons vidéo par un message SEI « filler payload » de même longueur (tours 7 et 8) :
+ * des caméras écrivent latitude et longitude dans les SEI de chaque image, et `x264` y met sa ligne de réglages. Le NAL **reste un
+ * SEI** (H.264 : type 6 ; HEVC : 39/40, en-tête intact) : un NAL de remplissage (type 12) avant la première tranche n'est pas conforme
+ * en H.264. La longueur des NAL vient de `avcC`/`hvcC` ; un NAL qui sort de ses échantillons est refusé, un NAL de longueur 0 est sauté
+ * (certains encodeurs matériels finissent l'échantillon par des zéros). Lecture et écriture **par fenêtres de 1 Mo** : les NAL sont
+ * parcourus et réécrits en mémoire, une écriture par fenêtre touchée au plus ; le travail suit la taille du fichier. Perte connue :
+ * les métadonnées HDR portées par des SEI.
+ */
 async function replaceSei(
   handle: FileHandle,
   regions: [number, number, number][],
   kinds: NalKind[],
   configSei: [number, number, number][],
 ): Promise<void> {
-  const PIECE = 64 * 1024;
-  const fill = Buffer.alloc(PIECE, 0xff);
-  for (const [start, length, first] of configSei) await fillNal(handle, start, length, true, first, fill);
-  let window = Buffer.alloc(0);
-  let windowAt = 0;
-  const peek = async (at: number, length: number): Promise<Buffer> => {
-    if (at < windowAt || at + length > windowAt + window.length) {
-      const buffer = Buffer.alloc(Math.max(length, PIECE));
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, at);
-      window = buffer.subarray(0, bytesRead);
-      windowAt = at;
-    }
-    return window.subarray(at - windowAt, at - windowAt + length);
-  };
+  for (const [start, length] of configSei) {
+    const body = Buffer.alloc(length - 2);
+    writeFiller(body, 0, body.length);
+    await handle.write(body, 0, body.length, start + 2);
+  }
   for (const [from, to, index] of regions) {
     const { hevc, lengthSize } = kinds[index] as NalKind;
     const header = hevc ? 2 : 1;
     let pos = from;
     while (pos < to) {
-      const head = await peek(pos, lengthSize + header);
-      if (pos + lengthSize > to || head.length < lengthSize) throw unreadable("NAL tronqué");
-      let length = 0;
-      for (let i = 0; i < lengthSize; i++) length = length * 256 + (head[i] as number);
-      const end = pos + lengthSize + length;
-      if (length < header || end > to || head.length < lengthSize + header)
-        throw unreadable("NAL hors de son échantillon");
-      const first = head[lengthSize] as number;
-      const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
-      if (hevc ? type === 39 || type === 40 : type === 6) {
-        await fillNal(handle, pos + lengthSize, length, hevc, first, fill);
+      let want = Math.min(SEI_WINDOW, to - pos);
+      let buf = Buffer.alloc(want);
+      const { bytesRead } = await handle.read(buf, 0, want, pos);
+      if (bytesRead < want) throw unreadable("fichier plus court que prévu");
+      let i = 0;
+      let dirty = false;
+      // Parcours en mémoire : on s'arrête quand le NAL suivant n'est plus entièrement dans la fenêtre.
+      while (i < buf.length) {
+        if (i + lengthSize > buf.length) break;
+        let length = 0;
+        for (let k = 0; k < lengthSize; k++) length = length * 256 + (buf[i + k] as number);
+        if (length === 0) {
+          i += lengthSize;
+          continue;
+        }
+        const end = i + lengthSize + length;
+        if (length < header || pos + end > to) throw unreadable("NAL hors de son échantillon");
+        if (end > buf.length && i + lengthSize + header > buf.length) break;
+        const first = buf[i + lengthSize] as number;
+        const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
+        if (hevc ? type === 39 || type === 40 : type === 6) {
+          if (length > SEI_MAX) throw unreadable("SEI démesuré");
+          if (end > buf.length) break; // à cheval sur deux fenêtres : relu depuis son début, dans une fenêtre assez grande
+          writeFiller(buf, i + lengthSize + header, length - header);
+          dirty = true;
+        }
+        i = end;
+        if (i > buf.length) break; // NAL sans intérêt qui dépasse la fenêtre : on repart juste après lui
       }
-      pos = end;
+      if (i === 0) {
+        // Le premier NAL ne tient pas dans la fenêtre : un SEI (relu dans une fenêtre à sa taille) ou une fin trop courte.
+        if (pos + lengthSize + header > to) throw unreadable("NAL tronqué");
+        let length = 0;
+        for (let k = 0; k < lengthSize; k++) length = length * 256 + (buf[k] as number);
+        want = Math.min(lengthSize + length, to - pos);
+        buf = Buffer.alloc(want);
+        const again = await handle.read(buf, 0, want, pos);
+        if (again.bytesRead < want) throw unreadable("fichier plus court que prévu");
+        const first = buf[lengthSize] as number;
+        const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
+        if (hevc ? type === 39 || type === 40 : type === 6) {
+          writeFiller(buf, lengthSize + header, length - header);
+          await handle.write(buf, 0, want, pos);
+        }
+        pos += want;
+        continue;
+      }
+      if (dirty) await handle.write(buf, 0, Math.min(i, buf.length), pos);
+      pos += i;
     }
   }
 }
@@ -597,7 +650,7 @@ async function replaceSei(
  *   aussi blocs « freeGPS » que les caméras Novatek (Viofo…) rangent entre les morceaux vidéo, sans piste qui les référence.
  *   Refus (`Mp4Error`) d'un échantillon vidéo ou son hors de tout `mdat`, d'un `dref` non autonome, d'un son à `stsz` de
  *   taille 1 dont la description ne permet pas un calcul sûr.
- * - échantillons vidéo H.264/HEVC (tour 7) : tout NAL SEI devient un NAL de remplissage de même longueur (les SEI de la
+ * - échantillons vidéo H.264/HEVC (tour 7) : tout NAL SEI garde son type et son contenu devient un message « filler payload » de même longueur (les SEI de la
  *   configuration `hvcC` aussi) ; le nom du compresseur des descriptions vidéo est mis à zéro.
  * Les tailles ne changent pas (les décalages `stco`/`co64` restent justes), sauf la coupure de fin. Un morceau d'une piste
  * qui pointe au-delà de la fin des boîtes est refusé (`Mp4Error`, 415). À appeler après la vérification du lecteur.

@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   appendChild,
   bareTrack,
@@ -1175,6 +1175,24 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
 
   describe("SEI des images", () => {
     const place = Buffer.from(`${FAKE_PLACE} lat=42.6887 lon=2.8948`);
+    /** Le corps d'un SEI remplacé : un ou deux messages « filler payload » (type 3, taille, 0xFF…) puis 0x80, sans deux zéros de suite. */
+    const expectFiller = (body: Buffer) => {
+      let o = 0;
+      while (body[o] === 3) {
+        o++;
+        let size = 0;
+        while (body[o] === 0xff) {
+          size += 255;
+          o++;
+        }
+        size += body[o++] as number;
+        expect(body.subarray(o, o + size).every((b) => b === 0xff)).toBe(true);
+        o += size;
+      }
+      expect(body[o]).toBe(0x80);
+      expect(o).toBe(body.length - 1);
+      expect(body.includes(Buffer.from([0, 0]))).toBe(false);
+    };
     const slice = (n: number) => Buffer.alloc(n, 0x11);
 
     it("HEVC (fixture x265) : le nom du compresseur de la description disparaît, les images sont intactes", async () => {
@@ -1197,7 +1215,7 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
       });
     });
 
-    it("H.264 : un SEI avec des coordonnées devient un NAL de remplissage de même longueur, les autres NAL sont intacts (longueur sur 4 puis 2 octets)", async () => {
+    it("H.264 : un SEI avec des coordonnées garde son type et devient un message « filler payload » de même longueur, les autres NAL sont intacts (longueur sur 4 puis 2 octets)", async () => {
       const original = await fixture("story-2s.mp4");
       for (const lengthSize of [4, 2]) {
         const sei = nal([0x06], Buffer.concat([Buffer.from([5, 40]), place]), lengthSize);
@@ -1211,11 +1229,9 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
           expect(out.includes(FAKE_PLACE), `l${lengthSize}`).toBe(false);
           expect(out.subarray(at, at + first.length).equals(first)).toBe(true);
           const seiAt = at + first.length;
-          expect(out[seiAt + lengthSize]).toBe(0x0c);
+          expect(out[seiAt + lengthSize]).toBe(0x06); // reste un SEI
           expect(out.subarray(seiAt, seiAt + lengthSize).equals(sei.subarray(0, lengthSize))).toBe(true);
-          const body = out.subarray(seiAt + lengthSize + 1, seiAt + sei.length);
-          expect(body.subarray(0, -1).every((b) => b === 0xff)).toBe(true);
-          expect(body.at(-1)).toBe(0x80);
+          expectFiller(out.subarray(seiAt + lengthSize + 1, seiAt + sei.length));
           expect(
             out.subarray(seiAt + sei.length, at + sample.length).equals(sample.subarray(first.length + sei.length)),
           ).toBe(true);
@@ -1223,7 +1239,7 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
       }
     });
 
-    it("HEVC : un SEI « user data unregistered » avec des coordonnées (préfixe 39 et suffixe 40) devient un NAL de remplissage (38, 0x4C)", async () => {
+    it("HEVC : un SEI « user data unregistered » avec des coordonnées (préfixe 39 et suffixe 40) garde son type et son en-tête (39/40) et devient un message « filler payload »", async () => {
       const original = await fixture("story-2s.mp4");
       const prefix = nal([0x4e, 0x01], Buffer.concat([Buffer.from([5, 40]), place]));
       const middle = nal([0x26, 0x01], slice(40));
@@ -1235,11 +1251,107 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
         const { out } = await stripFile(dir, file);
         expect(out.length).toBe(file.length);
         expect(out.includes(FAKE_PLACE)).toBe(false);
-        expect([...out.subarray(at + 4, at + 6)]).toEqual([0x4c, 0x01]);
+        expect([...out.subarray(at + 4, at + 6)]).toEqual([0x4e, 0x01]);
+        expectFiller(out.subarray(at + 6, at + prefix.length));
         expect(out.subarray(at + prefix.length, at + prefix.length + middle.length).equals(middle)).toBe(true);
         const suffixAt = at + prefix.length + middle.length;
-        expect([...out.subarray(suffixAt + 4, suffixAt + 6)]).toEqual([0x4c, 0x01]);
-        expect(out[at + sample.length - 1]).toBe(0x80);
+        expect([...out.subarray(suffixAt + 4, suffixAt + 6)]).toEqual([0x50, 0x01]);
+        expectFiller(out.subarray(suffixAt + 6, at + sample.length));
+      });
+    });
+
+    it("tailles de SEI de 4 à 3 000 octets (dont celles où un seul message ne tombe pas juste) : toujours un SEI valide de même longueur", async () => {
+      const original = await fixture("story-2s.mp4");
+      const sizes = Array.from({ length: 2997 }, (_, i) => i + 4);
+      const nals = sizes.map((n) => nal([0x06], Buffer.alloc(n - 1, 0x5a)));
+      const sample = Buffer.concat(nals);
+      const { file, at } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length), sample);
+      await workDir(async (dir) => {
+        const { out } = await stripFile(dir, file);
+        let o = at;
+        for (const n of sizes) {
+          expect(out.readUInt32BE(o)).toBe(n);
+          expect(out[o + 4]).toBe(0x06);
+          expectFiller(out.subarray(o + 5, o + 4 + n));
+          o += 4 + n;
+        }
+      });
+    });
+
+    it("un SEI de moins de 3 octets de corps est refusé", async () => {
+      const original = await fixture("story-2s.mp4");
+      const sample = Buffer.concat([nal([0x65], slice(30)), nal([0x06], Buffer.alloc(2, 1))]);
+      const { file } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length), sample);
+      await workDir(async (dir) => {
+        const path = join(dir, "a.mp4");
+        await writeFile(path, file);
+        expect(await kind(stripMp4Metadata(path))).toBe("unreadable");
+      });
+    });
+
+    it("un NAL de longueur 0 est sauté : échantillon qui finit par 4 puis par 8 octets nuls, accepté, image intacte", async () => {
+      const original = await fixture("story-2s.mp4");
+      for (const zeros of [4, 8]) {
+        const first = nal([0x65], slice(30));
+        const sample = Buffer.concat([first, nal([0x06], place), Buffer.alloc(zeros)]);
+        const { file, at } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length), sample);
+        await workDir(async (dir) => {
+          const { out } = await stripFile(dir, file);
+          expect(out.subarray(at, at + first.length).equals(first)).toBe(true);
+          expect(out.subarray(at + sample.length - zeros, at + sample.length).every((b) => b === 0)).toBe(true);
+          expect(out.includes(FAKE_PLACE)).toBe(false);
+        });
+      }
+    });
+
+    it("pire cas : 131 000 SEI minuscules dans 8 Mo : moins de 1 s par Mo, une écriture par fenêtre de 1 Mo", async () => {
+      const original = await fixture("story-2s.mp4");
+      const tiny = nal([0x06], Buffer.from([1, 2, 3]));
+      const count = Math.floor((8 * 1024 * 1024) / tiny.length);
+      const sample = Buffer.concat(Array.from({ length: count }, () => tiny));
+      const { file, at } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length), sample);
+      await workDir(async (dir) => {
+        const path = join(dir, "a.mp4");
+        await writeFile(path, file);
+        const probe = await open(path, "r");
+        const proto = Object.getPrototypeOf(probe) as { write: (...args: unknown[]) => unknown };
+        await probe.close();
+        const spy = vi.spyOn(proto, "write");
+        const start = performance.now();
+        await stripMp4Metadata(path);
+        const elapsed = performance.now() - start;
+        const writes = spy.mock.calls.length;
+        spy.mockRestore();
+        expect(elapsed).toBeLessThan(8 * 1000);
+        // 8 Mo d'échantillons = 9 fenêtres au plus, plus les écritures de moov (boîtes neutralisées) : très loin de 131 000.
+        expect(writes).toBeLessThan(60);
+        const out = await readFile(path);
+        for (const i of [0, 1, count - 1]) {
+          expect(out[at + i * tiny.length + 4]).toBe(0x06);
+          expectFiller(out.subarray(at + i * tiny.length + 5, at + (i + 1) * tiny.length));
+        }
+      });
+    });
+
+    it("un SEI à cheval sur deux fenêtres de 1 Mo, et un SEI de plus de 1 Mo : remplacés", async () => {
+      const original = await fixture("story-2s.mp4");
+      const window = 1024 * 1024;
+      const before = nal([0x65], slice(window - 100));
+      const straddle = nal([0x06], Buffer.concat([Buffer.alloc(900, 0x5a), place]));
+      const huge = nal([0x06], Buffer.concat([Buffer.alloc(2 * window, 0x5a), place]));
+      const after = nal([0x41], slice(20));
+      const sample = Buffer.concat([before, straddle, huge, after]);
+      const { file, at } = withMdatTrack(original, (o) => nalTrack(false, o, sample.length), sample);
+      await workDir(async (dir) => {
+        const { out } = await stripFile(dir, file);
+        expect(out.length).toBe(file.length);
+        expect(out.includes(FAKE_PLACE)).toBe(false);
+        expect(out.subarray(at, at + before.length).equals(before)).toBe(true);
+        expect(out.subarray(at + sample.length - after.length, at + sample.length).equals(after)).toBe(true);
+        const s1 = at + before.length;
+        expectFiller(out.subarray(s1 + 5, s1 + straddle.length));
+        const s2 = s1 + straddle.length;
+        expectFiller(out.subarray(s2 + 5, s2 + huge.length));
       });
     });
 
