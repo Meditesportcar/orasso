@@ -20,7 +20,18 @@ import {
   withAlpha,
 } from "@orasso/design-system/native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
-import { Children, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  Fragment,
+  isValidElement,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -40,6 +51,23 @@ import { TabTitle } from "./TabTitle";
 import { TopBar, useInTabs, useTabBandRefresh } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
+
+/**
+ * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment), clés uniques : le défilement ne colle que
+ * ses enfants directs, et compte les mêmes sur le téléphone et sur le web.
+ */
+function flatChildren(nodes: ReactNode): ReactNode[] {
+  const out: ReactNode[] = [];
+  const walk = (list: ReactNode) => {
+    for (const n of Children.toArray(list)) {
+      if (isValidElement(n) && n.type === Fragment) walk((n.props as { children?: ReactNode }).children);
+      else out.push(n);
+    }
+  };
+  walk(nodes);
+  // biome-ignore lint/suspicious/noArrayIndexKey: liste statique aplatie à chaque rendu, l'ordre est celui de la page
+  return out.map((n, i) => (isValidElement(n) ? cloneElement(n, { key: `flat-${i}` }) : n));
+}
 
 type Common = {
   children: ReactNode;
@@ -128,7 +156,7 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays, s
                 ) : (
                   [
                     ...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []),
-                    ...Children.toArray(children),
+                    ...flatChildren(children),
                   ]
                 )}
               </Body>

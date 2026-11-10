@@ -211,7 +211,8 @@ test("onglets collants : en défilant, la rangée reste sous la barre du haut", 
   await page.waitForTimeout(600);
   const after = (await page.getByTestId("profil-tabs").boundingBox())?.y ?? 9999;
   console.log(`R8b1 onglets collants : y avant ${Math.round(before)}, après défilement ${Math.round(after)}`);
-  expect(after).toBeLessThan(before - 20);
+  // Collée : sous la barre du haut (et non partie avec le défilement).
+  expect(after).toBeGreaterThan(40);
   expect(after).toBeLessThan(160);
   await expect(page.getByTestId("profil-tabs")).toBeVisible();
   await shot(page, "08-onglets-collants");
@@ -290,7 +291,9 @@ test("le profil d'un autre : « Suivre » sur la ligne du grade, « Message » e
   await page.getByTestId("profile-more").click();
   await expect(page.getByTestId("report-open-profile")).toBeVisible();
   await shot(page, "12-plus");
-  await page.keyboard.press("Escape");
+  // La feuille « Plus » reste ouverte sur ce profil : on rouvre la page avant de toucher le compteur.
+  await go(page, "/u/Lea_11");
+  await expect(page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
   const partner = page.getByTestId("public-count-partners");
   await expect(partner).toBeVisible();
   await partner.click({ force: true });

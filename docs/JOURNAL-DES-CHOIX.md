@@ -4811,3 +4811,23 @@ Damien a validé le 10/11 au soir les deux maquettes (« r8 ok », « r9 ok ») 
 - Notifications d'un événement : l'essentiel reste toujours actif, les nouveautés en un résumé par jour au plus, jamais une notification par publication ; « Info importante » plafonnée.
 - Livraison en trois fois (plan `lots/ARCHITECTURE-R8.md` du relais) : 1) corrections et changements visibles sans nouvelle API ; 2) socle des publications, Fil, commentaires, fiche de l'événement, notifications, collaboration ; 3) autres profils, médias, « Pratique », site.
 
+
+## Lot R8b1 : haut du Profil « Compact » (D40, maquette R8.1 `pr-profil`, option A)
+
+Date : 10/11/2026. Fichiers : `apps/mobile/src/features/profil/` (`ProfileHead.tsx` neuf, `ProfilScreen.tsx`, `PublicProfile.tsx`, `PartnersLine.tsx`, `network.tsx`, `ProfileTabs.tsx`), `features/garage/GarageScreen.tsx`, `app/reglages/index.tsx`, `app/u/[pseudo].tsx`, `ui/Screens.tsx` (option `stickyIndex`), `features/social/FollowButton.tsx` (taille `line`), `features/messages/MessageButton.tsx` (`asIcon`), site `routes/moi.tsx`, `components/profile/*`, `components/People.tsx` (`FollowAction` taille `line`), `styles/profile.css`, libellés `profile-tabs.fr.ts`, `network.fr.ts`, `AvatarRing` (taille `profile` 72 px, natif et web).
+
+- **Taille d'anneau `profile` (72 px)** plutôt que de changer `lg` ou `xl` : les autres écrans gardent leurs tailles. Entrée datée dans « Ce qui a changé depuis le gel ». Anneau 2,5 px, écart 2 px (photo de 63 px dans la boîte de 72).
+- **« plus » n'apparaît que si la bio est vraiment coupée** (la maquette l'affiche toujours) : une bio de quelques mots n'a rien à dérouler. Mesure par une copie invisible du texte (appli) ou `scrollWidth` (site).
+- **Département : le numéro seul** (« 66 »), avec l'épingle, comme la maquette ; le nom complet reste dans « Modifier mon profil ».
+- **Partenaires en 4e compteur** : le composant `PartnersHost` garde la lecture, la panne (« – » et « Réessayer » dans la feuille) et les feuilles ; la ligne de logos est supprimée. Site : la case mène à `#partenaires` (liste visée, sans JavaScript).
+- **Hauteur d'une case de la bande : 44 px**, nombre en 18 (maquette). Les compteurs d'un autre profil ne sont pas des boutons (leurs listes ne sont visibles que de leur propriétaire), sauf « partenaires ».
+- **Onglets collants** : `TabScreen` reçoit `stickyIndex` (indice de l'enfant collant parmi ses enfants à plat ; le titre éventuel est compté) ; la page passe à plat ses enfants (`Children.toArray`) seulement quand l'option est donnée, et le `Provider` du défilement entoure maintenant le `ScrollView` (même comportement). **Profil d'un autre (`PublicProfile`)** : la rangée d'onglets est soulignée mais **pas collante dans l'appli** : le profil est un seul composant dans `FlowScreen`, il faudrait une option semblable sur `FlowScreen` et scinder le composant ; à décider (voir « À revoir »). Sur le site, elle est collante partout.
+- **Visiteur** : pas d'onglet « Garage » dans l'appli (la casquette visiteur = aucun véhicule actif) et ouverture sur « Sorties » ; l'ajout d'un premier véhicule reste par `casquette-quick-vehicle` (vérifié en recette). **Site : l'onglet « Garage · 0 » est gardé** pour un visiteur, parce qu'il porte mon QR de compte et l'état vide avec le bouton principal. Un profil d'un autre sans véhicule n'a pas non plus d'onglet « Garage ».
+- **« Plus » d'un autre profil** : feuille avec « Signaler ce profil » (l'ancien « ⋯ » de l'en-tête de l'écran est retiré). Appli : `report-open-profile` est dans cette feuille ; site : `<details>` avec le `ReportDialog`.
+- **Mon QR sur le site** : l'icône mène à `/app/moi?onglet=garage#qr` (le QR vit dans l'onglet Garage).
+- **« Suivre » de la ligne du grade** : bouton principal petit de 32 px (maquette : 30), pour garder une cible tactile correcte.
+- **Réglages** : « Voir mon profil comme les autres » sans sous-titre (la phrase de la maquette est une note) ; `reglage-profil-public`.
+
+### À revoir avec Damien
+- Onglets collants du **profil d'un autre** dans l'appli (voir ci-dessus).
+- L'état vide « Ton garage est vide » de l'appli n'est atteignable qu'un instant (un exposant n'a plus de véhicule actif : il devient visiteur, sans onglet « Garage »). Gardé tel que demandé.
