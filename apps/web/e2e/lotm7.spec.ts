@@ -54,7 +54,6 @@ const TABS: [string, string][] = [
 function fiches(id: Ids): [string, string][] {
   return [
     ["sorties", "/app/sorties"],
-    ["garage", "/app/garage"],
     ["fiche-vehicule", `/app/garage/${id.vehicle}`],
     ["ajout-vehicule", "/app/garage/nouveau"],
     ["profil-public", `/u/${id.pseudo}`],

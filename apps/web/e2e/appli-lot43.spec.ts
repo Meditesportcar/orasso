@@ -263,9 +263,9 @@ for (const home of HOMES) {
       if (home.hero === "ticket") {
         // Lot M5 (maquette 6.1) : le ticket de la prochaine sortie, affiche en portrait, « Sur la carte » à côté du
         // geste ; ni Maps ni Waze (correction de Damien).
-        await expect(page.getByTestId("home-outing").first()).toBeVisible();
-        await expect(page.getByTestId("home-countdown").first()).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
-        await expect(page.getByTestId("home-on-map").first()).toBeVisible();
+        // Lot R7a2 : les sorties sont des lignes du bloc « Mes sorties » ; le ticket à affiche portrait, son compte à rebours
+        // et « Sur la carte » n'existent plus à l'Accueil.
+        await expect(page.getByTestId("home-my-outing").first()).toBeVisible();
         await expect(page.getByTestId("home-maps")).toHaveCount(0);
         await expect(page.getByTestId("home-waze")).toHaveCount(0);
       }
@@ -350,6 +350,8 @@ test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; 
     // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre. Lot C1 : Explorer n'a plus de
     // grand titre (artefact), son en-tête de recherche en tient lieu.
     if (tab === "Explorer") await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 60_000 });
+    else if (tab === "Garage")
+      await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 60_000 }); // Lot R7b1 : onglet interne du Profil
     else await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
     if (tab === "Sorties")
       await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });

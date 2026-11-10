@@ -183,6 +183,7 @@ test("R5b site : /app/moi, Modifier mon profil, profil d'un membre en deux colon
         .evaluateAll((els) => els.map((e) => (e.textContent ?? "").trim()));
       const order = [
         "Modifier mon profil",
+        "Mes publications", // Lot R7e1 : la ligne « Mes publications » du hub des réglages
         "Compte",
         "Notifications",
         "Confidentialité",

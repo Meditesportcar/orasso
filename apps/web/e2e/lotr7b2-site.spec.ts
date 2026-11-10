@@ -45,8 +45,9 @@ test("un crew : onglets, Discussion, voitures du membre, Spots", async ({ page }
   await expect(page.getByTestId("crew-member-profile").first()).toBeVisible();
   await page.getByTestId("crew-tab-spots").click();
   await expect(page.getByTestId("crew-spots")).toContainText("Pas de rendez-vous");
-  await expect(page.getByTestId("crew-spots-soon")).toContainText("Disponible à la prochaine mise à jour");
-  await expect(page.getByTestId("crew-spots-launch")).toBeDisabled();
+  // Lot R7i : les rendez-vous existent, le placeholder « Disponible à la prochaine mise à jour » (R7b2) a disparu.
+  await expect(page.getByTestId("crew-spots-soon")).toHaveCount(0);
+  await expect(page.getByTestId("crew-spots-launch")).toBeEnabled();
   // La page du crew renvoie le membre vers l'onglet ; l'ancien « Mes crews » aussi (302, temporaire).
   await page.goto("/c/roussillon-drift?onglet=membres");
   await page.waitForURL(/\/app\/crew\?crew=roussillon-drift&onglet=membres/);

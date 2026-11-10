@@ -354,9 +354,13 @@ test("en-tête de l'espace connecté : ni défilement horizontal ni recouvrement
     const ctx = await browser.newContext({ viewport });
     const page = await ctx.newPage();
     await setTheme(page, "beton");
-    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/acces");
-    await page.waitForLoadState("networkidle");
-    await noHorizontalScroll(page, `/app/acces ${viewport.width}`);
+    // Lot R7a1 : `/app/acces` (« Mes sorties ») est une page en mode B, sans bande ORASSO ni recherche ; l’en-tête du mode A
+    // (loupe, cloche, bulle) se vérifie sur l’Accueil. Pendant le Lydia du seed, le QR de « Sur place » se renouvelle sans cesse :
+    // plus d’attente de réseau au repos.
+    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
+    await expect(page.getByRole("link", { name: "Rechercher", exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+    await noHorizontalScroll(page, `/app ${viewport.width}`);
     // La recherche reste cliquable : rien ne la recouvre.
     await page.getByRole("link", { name: "Rechercher", exact: true }).click({ trial: true });
     await ctx.close();

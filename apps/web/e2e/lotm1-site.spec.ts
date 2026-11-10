@@ -137,7 +137,8 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   await page.getByTestId("site-no-plate-yes2").click();
   if (await prepared.isChecked()) await prepared.uncheck();
   await page.getByRole("button", { name: "Envoyer", exact: true }).click();
-  await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
+  // Lot R7b1 : le garage vit dans le Profil ; `/app/garage` répond 302 vers `/app/moi?onglet=garage`.
+  await page.waitForURL(/\/app\/(garage|moi\?onglet=garage)$/, { timeout: 30_000 });
 
   const list = await apiCall<Vehicle[]>(cookie, "GET", "/me/vehicles");
   const added = list.data[0];

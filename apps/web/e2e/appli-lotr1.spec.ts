@@ -93,7 +93,7 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     await signIn(page, "damien@orasso.local");
     // Lot R7a1 : le Garage n'est plus un onglet, la page garde son adresse (en-tête de fiche).
     await goto(page, "/garage");
-    await wholeTitle(page, "Mon garage");
+    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
     // Passionné → organisateur (Mon profil, casquettes).
     await goto(page, "/moi");
     await page.getByTestId("casquette-organizer").first().click();
@@ -104,11 +104,11 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     await page.getByTestId("casquette-fan").first().click();
     await expect(page.getByRole("tab", { name: "Crew", exact: true }).last()).toBeVisible({ timeout: 30_000 });
     await goto(page, "/garage");
-    await wholeTitle(page, "Mon garage");
+    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
     // Un aller-retour d'onglets ne le change pas.
     await goto(page, "/explorer");
     await goto(page, "/garage");
-    await wholeTitle(page, "Mon garage");
+    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
     await shot(page, `garage-apres-casquette-${theme}`);
     await ctx.close();
   }
@@ -133,7 +133,10 @@ test("Explorer : « Médite », événements terminés, plus de stations", async
     // « Médite » : les événements de MéditeSportCar, et eux seulement.
     await page.getByTestId("events-q").fill("Médite");
     const rows = page.getByTestId("event-row");
-    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    // Le premier résultat est celui de la recherche, pas la liste d’avant le filtre (le Rassemblement du Lydia, en direct, la
+    // précède) : attendre le filtre avant de lire toutes les lignes.
+    await expect(rows.first()).toContainText("MéditeSportCar", { timeout: 30_000 });
+    await expect(rows.filter({ hasNotText: "MéditeSportCar" })).toHaveCount(0, { timeout: 30_000 });
     for (const text of await rows.allTextContents()) expect(text).toContain("MéditeSportCar");
     await shot(page, `explorer-medite-${theme}`);
     // Sans accent ni majuscule, et un début de mot.

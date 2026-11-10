@@ -167,11 +167,8 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["aide", "/reglages/aide"],
         ["reseau", "/reseau"], // Lot R6b : « Mes amis » est devenu « Ton réseau »
         ["billets", "/billets"],
-        ["passeport", "/mon-passeport"],
+        // Lot R7b1 : passeport, Sorties et Garage vivent dans le Profil (onglets internes, mode A) ; leurs anciennes adresses redirigent.
         ["archives", "/vehicules-archives"],
-        // Lot R7a1 : Sorties et Garage ne sont plus des onglets, mais des pages (en-tête de fiche, sans barre).
-        ["sorties", "/sorties"],
-        ["garage", "/garage"],
         ["creer-fiche-pro", "/pro-nouvelle"],
         ["creer-structure", "/structure/nouvelle"],
         ...(id.pass ? ([["jour-j", `/jour-j/${id.pass}`]] as [string, string][]) : []),

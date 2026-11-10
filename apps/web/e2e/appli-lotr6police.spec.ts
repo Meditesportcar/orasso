@@ -114,7 +114,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
 
     // La simulation tient : `fontScale` vaut 1,3 et les textes grossissent.
     await goto(page, "/profil");
-    const tabs = await lines(page, TAB_LABELS);
+    const tabs = (await lines(page, TAB_LABELS)).filter((t) => !["GARAGE", "SORTIES"].includes(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes
     expect(tabs.map((t) => t.text.toUpperCase())).toEqual(["EXPLORER", "LE FIL", "ACCUEIL", "CREW", "PROFIL"]);
     for (const t of tabs) expect(t.lines, `onglet « ${t.text} » sur une ligne`).toBe(1);
     expect(new Set(tabs.map((t) => t.size)).size, "un seul corps pour la barre").toBe(1);
@@ -166,7 +166,7 @@ test("R6-police : à l'échelle 1, la barre garde son corps d'origine", async ({
   const { ctx, page } = await open(browser, "beton", 1);
   await signIn(page, "kenji@orasso.local");
   await goto(page, "/profil");
-  const tabs = await lines(page, TAB_LABELS);
+  const tabs = (await lines(page, TAB_LABELS)).filter((t) => !["GARAGE", "SORTIES"].includes(t.text.toUpperCase())); // R7b1 : le Profil a ses propres onglets internes
   expect(tabs).toHaveLength(5);
   for (const t of tabs) {
     expect(t.size).toBe(9.5);

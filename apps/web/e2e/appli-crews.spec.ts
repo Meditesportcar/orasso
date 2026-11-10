@@ -89,7 +89,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await k.page.goto("/profil");
     await expect(k.page.getByTestId("profil-crew")).toHaveCount(0);
     await k.page.getByRole("tab", { name: "Crew", exact: true }).click();
-    await expect(k.page.getByTestId("crew-tab-mine")).toBeVisible({ timeout: 30_000 });
+    await expect(k.page.getByTestId("crew-tab-feed")).toBeVisible({ timeout: 30_000 });
     await shot(k.page, `03-profil-crew-${theme}`);
     await k.page.goto("/accueil");
     await k.page

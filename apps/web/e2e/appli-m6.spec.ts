@@ -333,6 +333,8 @@ test("tour 2 : les annonces en attente d'un compte ne s'affichent jamais devant 
   for (const [i, e] of events.entries()) await decideApi(damien, e.id, apps[i] ?? "", i === 0 ? "accept" : "waitlist");
   await expect(page.getByTestId(/announce-/).first()).toBeVisible({ timeout: 30_000 });
   // A se déconnecte depuis Mon profil (sans recharger la page : la file vivrait encore si rien ne la purgeait).
+  // Lot R7a1 : « Mes sorties » est une page en mode B, sans barre d’onglets : on la ferme pour retrouver la barre.
+  await page.getByLabel("Fermer", { exact: true }).first().click();
   await page.getByRole("tab", { name: "Profil" }).click();
   // Lot R5b : « Se déconnecter » est dans l'écran « Réglages » (roue dentée de la carte du profil).
   await page.getByTestId("profil-gear").click();

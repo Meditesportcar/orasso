@@ -394,6 +394,7 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       .evaluateAll((els) => els.map((e) => (e.getAttribute("aria-label") ?? "").split(",")[0]));
     expect(rows).toEqual([
       "Modifier mon profil",
+      "Mes publications", // Lot R7e1
       "Compte",
       "Notifications",
       "Confidentialité",

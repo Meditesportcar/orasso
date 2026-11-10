@@ -27,16 +27,16 @@ const BARS = {
   // Lot R7a1 (D38) : la même barre pour l'exposant et le visiteur (Sorties et Garage sont des pages hors barre).
   fan: [
     ["Explorer", "explorer", null], // Lot C2a : pas de grand titre (artefact).
-    ["Le Fil", "fil", "Le Fil"],
+    ["Le Fil", "fil", null], // Lot R7e2 : le Fil n’a plus de grand titre, ses trois filtres (Pour toi · Autour de moi · Abonnements) en tiennent lieu.
     ["Accueil", "accueil", null], // Lot C2a : la salutation en tient lieu.
-    ["Crew", "crew", "Crew"],
+    ["Crew", "crew", null], // Lot R7b2 : l’onglet Crew n’a plus de grand titre (ses onglets internes Fil · Sorties · Membres · Spots en tiennent lieu).
     ["Profil", "profil", null],
   ],
   visitor: [
     ["Explorer", "explorer", null],
-    ["Le Fil", "fil", "Le Fil"],
+    ["Le Fil", "fil", null], // Lot R7e2 : le Fil n’a plus de grand titre, ses trois filtres (Pour toi · Autour de moi · Abonnements) en tiennent lieu.
     ["Accueil", "accueil", null],
-    ["Crew", "crew", "Crew"],
+    ["Crew", "crew", null], // Lot R7b2 : l’onglet Crew n’a plus de grand titre (ses onglets internes Fil · Sorties · Membres · Spots en tiennent lieu).
     ["Profil", "profil", null],
   ],
   organizer: [
