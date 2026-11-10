@@ -4,7 +4,8 @@
 // pas de détection sur le site : « Trace le cadre sur la plaque, ou confirme qu'aucune n'est visible », décision
 // obligatoire) ; 4 les détails (légende, @identification parmi ceux qui peuvent voir la story, événement, lieu, voiture,
 // public) ; 5 l'aperçu 9:16 et « Publier pour 24 h ». Envoi : `POST /api/me/uploads` (purpose `story`) puis
-// `POST /api/me/stories`. Pas d'appareil photo sur le site (réservé à l'appli). Casquette : passionné (les stories d'une
+// `POST /api/me/stories`. Lot R7g : « Choisir une vidéo » (30 s et 60 Mo au plus, H.264) saute « Ajuster » et la plaque (une
+// vidéo est publiée telle quelle), s'envoie avec sa progression puis sa vignette. Pas d'appareil photo sur le site (réservé à l'appli). Casquette : passionné (les stories d'une
 // structure ou d'une fiche pro se publient depuis l'appli).
 import { Button, Icon } from "@orasso/design-system/web";
 import {
@@ -22,15 +23,20 @@ import {
   removeTag,
   STORY_CAPTION_MAX,
   STORY_PLACE_MAX,
+  STORY_VIDEO_UPLOAD_PATH,
+  STORY_VIDEO_UPLOAD_TIMEOUT_MS,
   type StoryAudienceOption,
   type StoryCreated,
   type StoryTagPick,
+  storyVideoLabels as SV,
   sendIfAlive,
   storyAudienceOptions,
   storyBody,
   storyEventSticker,
   storyPlateDecided,
   storyPublishIssue,
+  storyVideoBody,
+  storyVideoLayout,
   taggableHint,
   taggableQuery,
   type UploadResult,
@@ -49,6 +55,7 @@ import { PREPARE_FAILED } from "../fil/prepare";
 import { PlateFrame } from "../PlateFrame";
 import { Canvas } from "./Canvas";
 import { prepareStoryPhoto, type StoryPhoto } from "./prepare";
+import { ClipRefused, prepareStoryClip, releaseClip, type StoryClip } from "./prepareVideo";
 
 export type PublishFormProps = {
   /** Mon réglage de compte : « public » ou « privé » (sous-titre de « Mes abonnés », autocollant d'événement). */
@@ -74,8 +81,73 @@ async function upload(file: File): Promise<{ ok: true; key: string } | { ok: fal
   }
 }
 
+/**
+ * Envoi d'un fichier avec sa progression réelle (octets partis : `XMLHttpRequest`, `fetch` n'en donne pas). Une vidéo part
+ * **brute** (`POST /api/me/uploads/story-video`, le fichier lui-même en corps, `Content-Length` posé par le navigateur) : le
+ * serveur l'écrit en flux, sans la garder en mémoire. La vignette est un envoi ordinaire.
+ */
+function uploadWithProgress(
+  file: File,
+  purpose: "story_video" | "story_poster",
+  onProgress: (ratio: number) => void,
+  signal?: AbortSignal,
+): Promise<{ ok: true; key: string } | { ok: false; message: string }> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve({ ok: false, message: "" });
+    const raw = purpose === "story_video";
+    const body = new FormData();
+    if (!raw) {
+      body.append("purpose", purpose);
+      body.append("file", file);
+    }
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", raw ? STORY_VIDEO_UPLOAD_PATH : "/api/me/uploads");
+    xhr.withCredentials = true;
+    if (raw) xhr.setRequestHeader("content-type", file.type === "video/quicktime" ? file.type : "video/mp4");
+    xhr.timeout = STORY_VIDEO_UPLOAD_TIMEOUT_MS;
+    // Page quittée : l'envoi s'arrête (rien n'est publié, le serveur efface le morceau reçu).
+    const onAbort = () => xhr.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const settled = () => signal?.removeEventListener("abort", onAbort);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(Math.min(1, e.loaded / e.total));
+    };
+    xhr.onload = () => {
+      settled();
+      let json: (UploadResult & { error?: { message: string } }) | null = null;
+      try {
+        json = JSON.parse(xhr.responseText);
+      } catch {
+        json = null;
+      }
+      if (xhr.status === 429)
+        return resolve({ ok: false, message: (raw && json?.error?.message) || L.tooManyRequests });
+      if (xhr.status < 200 || xhr.status >= 300 || !json?.key) {
+        return resolve({ ok: false, message: json?.error?.message ?? "Envoi impossible. Réessaie." });
+      }
+      resolve({ ok: true, key: json.key });
+    };
+    xhr.onerror = () => {
+      settled();
+      resolve({ ok: false, message: SV.offline });
+    };
+    // Délai dépassé : son propre message (la connexion est là, elle est trop lente).
+    xhr.ontimeout = () => {
+      settled();
+      resolve({ ok: false, message: SV.uploadTimeout });
+    };
+    xhr.onabort = () => {
+      settled();
+      resolve({ ok: false, message: signal?.aborted ? "" : SV.offline });
+    };
+    xhr.send(raw ? file : body);
+  });
+}
+
 export function PublishForm({ visibility, crews, vehicles, applications, optionsFailed }: PublishFormProps) {
   const [photo, setPhoto] = useState<StoryPhoto | null>(null);
+  // Lot R7g : la vidéo choisie (jamais en même temps qu'une photo), ses clés d'envoi gardées pour une reprise.
+  const [clip, setClip] = useState<StoryClip | null>(null);
   const [frame, setFrame] = useState(fitDefault(1, 1));
   const [rects, setRects] = useState<PlateRect[]>([]);
   const [noPlate, setNoPlate] = useState(false);
@@ -94,7 +166,9 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<StoryCreated | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
   const uploaded = useRef<{ url: string; key: string } | null>(null);
+  const clipKeys = useRef<{ url: string; video?: string; poster?: string } | null>(null);
   // Pendant l'envoi comme pendant la préparation d'une photo, rien de ce qui part ne bouge.
   const locked = busy || preparing;
 
@@ -114,10 +188,13 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   // Pendant l'envoi, la page ne se quitte pas (✕, « Annuler », lien, retour du navigateur) : rien ne part après coup. Un
   // changement de page dans l'appli est bloqué ; un lien classique est neutralisé ; fermer l'onglet est signalé.
   const open = useRef(true);
+  /** Envoi de vidéo en cours : annulé quand la page est quittée (R7g, tour 3). */
+  const uploadAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     open.current = true;
     return () => {
       open.current = false;
+      uploadAbort.current?.abort();
     };
   }, []);
   const blocker = useBlocker(busy);
@@ -144,9 +221,12 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
   // L'aperçu de la photo est libéré à la sortie de la page.
   const live = useRef<StoryPhoto | null>(null);
   live.current = photo;
+  const liveClip = useRef<StoryClip | null>(null);
+  liveClip.current = clip;
   useEffect(
     () => () => {
       if (live.current) URL.revokeObjectURL(live.current.url);
+      if (liveClip.current) releaseClip(liveClip.current);
     },
     [],
   );
@@ -160,6 +240,9 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       const next = await prepareStoryPhoto(file);
       if (!next) return setError(PREPARE_FAILED);
       if (photo) URL.revokeObjectURL(photo.url);
+      if (clip) releaseClip(clip);
+      setClip(null);
+      clipKeys.current = null;
       uploaded.current = null;
       setPhoto(next);
       setFrame(fitDefault(next.width, next.height));
@@ -174,8 +257,39 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
     }
   }
 
+  /** Lot R7g : une vidéo choisie (poids, durée et H.264 vérifiés avant l'envoi : l'API reste juge). */
+  async function pickVideo(files: FileList | null) {
+    const file = files?.[0];
+    if (!file || locked) return;
+    setError(null);
+    setPreparing(true);
+    try {
+      const next = await prepareStoryClip(file);
+      if (photo) URL.revokeObjectURL(photo.url);
+      if (clip) releaseClip(clip);
+      setPhoto(null);
+      uploaded.current = null;
+      clipKeys.current = null;
+      setClip(next);
+      setRects([]);
+      setNoPlate(false);
+      setConfirming(false);
+    } catch (e) {
+      setError(e instanceof ClipRefused ? e.message : SV.unreadable);
+    } finally {
+      setPreparing(false);
+      if (videoInput.current) videoInput.current.value = "";
+    }
+  }
+
   const plate = { rects, noPlate, detection: "unavailable" as const };
-  const issue = storyPublishIssue({ hasPhoto: Boolean(photo), preparing, plate, caption, audienceLost: lost });
+  const issue = storyPublishIssue({
+    hasPhoto: Boolean(photo || clip),
+    preparing,
+    plate: clip ? null : plate,
+    caption,
+    audienceLost: lost,
+  });
   const needsFit = photo ? !isStoryRatio(photo.width, photo.height) : false;
   const event = events.find((e) => e.id === eventId) ?? null;
   const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
@@ -192,7 +306,85 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
     setAudienceKey(next.key);
   }
 
+  /** Vidéo : envoi avec progression, vignette, création (même reprise sans doublon que la photo). */
+  async function publishClip(video: StoryClip) {
+    if (busy || issue) return;
+    setBusy(true);
+    setError(null);
+    const keys = clipKeys.current?.url === video.url ? clipKeys.current : { url: video.url };
+    clipKeys.current = keys;
+    if (!keys.video) {
+      setProgress(SV.sendingPercent(0));
+      const abort = new AbortController();
+      uploadAbort.current = abort;
+      const up = await uploadWithProgress(
+        video.file,
+        "story_video",
+        (r) => {
+          if (open.current) setProgress(SV.sendingPercent(Math.round(r * 100)));
+        },
+        abort.signal,
+      );
+      if (uploadAbort.current === abort) uploadAbort.current = null;
+      if (!open.current) return;
+      if (!up.ok) {
+        setError(up.message);
+        setBusy(false);
+        setProgress(null);
+        // Un refus du serveur (format, durée) : au nouvel essai, tout repart.
+        clipKeys.current = null;
+        return;
+      }
+      keys.video = up.key;
+    }
+    if (!keys.poster) {
+      const up = await uploadWithProgress(video.poster, "story_poster", () => undefined);
+      if (!up.ok) {
+        setError(up.message);
+        setBusy(false);
+        setProgress(null);
+        return;
+      }
+      keys.poster = up.key;
+    }
+    setProgress(L.publishing);
+    const body = storyVideoBody({
+      uploadKey: keys.video,
+      posterKey: keys.poster,
+      audience,
+      crewId: chosen?.crewId ?? null,
+      author,
+      caption,
+      place,
+      vehicleId,
+      eventId,
+      tags,
+    });
+    const sent = await sendIfAlive(
+      () => open.current,
+      async () => undefined,
+      async () => {
+        const post = () => apiFetch<StoryCreated>("/me/stories", { method: "POST", json: body });
+        const first = await post();
+        if (!first.ok && first.status === 400 && first.error.code === "validation_error") return post();
+        return first;
+      },
+    );
+    if (!sent.sent) return;
+    const res = sent.value;
+    setBusy(false);
+    setProgress(null);
+    if (res.ok) {
+      clipKeys.current = null;
+      return setDone(res.data);
+    }
+    if (res.status === 429) return setError(L.tooManyRequests);
+    if (res.status >= 400 && res.status < 500) clipKeys.current = null;
+    setError(res.error.message);
+  }
+
   async function publish() {
+    if (clip) return publishClip(clip);
     if (!photo || busy || issue) return;
     setBusy(true);
     setError(null);
@@ -256,7 +448,9 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       <div className="fil" data-testid="story-done">
         <FicheBar title={L.done} back="/app/fil" />
         <div className="story-done">
-          <p className="o-t-body">{L.doneText(L.doneAudience[audience])}</p>
+          <p className="o-t-body">
+            {clip ? SV.doneText(L.doneAudience[audience]) : L.doneText(L.doneAudience[audience])}
+          </p>
           {done.replayed ? (
             <p className="o-t-caption">{L.doneReplayed}</p>
           ) : done.skipped.length ? (
@@ -310,8 +504,9 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
       <FicheBar title={L.title} facts={L.subtitle} back="/app/fil" />
 
       <section className="s-stack s-stack--tight">
-        <h2 className="o-t-label">1 · Photo</h2>
+        <h2 className="o-t-label">1 · Photo ou vidéo</h2>
         <p className="o-t-caption">{L.pickHintSite}</p>
+        <p className="o-t-caption">{SV.pickHintSite}</p>
         <input
           ref={input}
           type="file"
@@ -328,6 +523,24 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
           onClick={() => input.current?.click()}
         >
           {photo ? L.gallery : L.pickSite}
+        </Button>
+        <input
+          ref={videoInput}
+          type="file"
+          accept="video/mp4,video/quicktime"
+          hidden
+          onChange={(e) => void pickVideo(e.currentTarget.files)}
+          data-testid="story-video-file"
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          icon="video"
+          disabled={locked}
+          onClick={() => videoInput.current?.click()}
+          data-testid="story-video-pick"
+        >
+          {SV.pickSite}
         </Button>
       </section>
 
@@ -488,11 +701,16 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
         </section>
       ) : null}
 
-      {photo ? (
+      {photo || clip ? (
         <section className="s-stack s-stack--tight" data-testid="story-details">
           <h2 className="o-t-label">
-            {needsFit ? 4 : 3} · {L.details}
+            {clip ? 2 : needsFit ? 4 : 3} · {L.details}
           </h2>
+          {clip ? (
+            <p className="o-t-caption" data-testid="story-video-asis">
+              {SV.asIsLine}
+            </p>
+          ) : null}
           <label className="s-field">
             <span className="o-t-label">{L.caption}</span>
             <textarea
@@ -649,6 +867,32 @@ export function PublishForm({ visibility, crews, vehicles, applications, options
             ))}
           </fieldset>
           <p className="o-t-caption">{L.audienceNote}</p>
+        </section>
+      ) : null}
+
+      {clip ? (
+        <section className="story-preview" data-testid="story-preview">
+          <h2 className="o-t-label">3 · {L.previewTitle}</h2>
+          <div className="story-canvas" data-testid="story-preview-canvas">
+            <div className="story-video" data-layout={storyVideoLayout(clip.width, clip.height)}>
+              {storyVideoLayout(clip.width, clip.height) === "blurred" ? (
+                <img className="story-video__back" src={clip.posterUrl} alt="" draggable={false} />
+              ) : null}
+              {/* biome-ignore lint/a11y/useMediaCaption: aperçu muet d'une vidéo de l'utilisateur, sans piste de sous-titres. */}
+              <video
+                className="story-video__media"
+                src={clip.url}
+                poster={clip.posterUrl}
+                muted
+                loop
+                autoPlay
+                playsInline
+                data-testid="story-preview-video"
+              />
+            </div>
+            {overlays}
+          </div>
+          <p className="o-t-caption">{SV.previewNote}</p>
         </section>
       ) : null}
 

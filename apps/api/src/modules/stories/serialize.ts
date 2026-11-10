@@ -169,6 +169,8 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       mediaUrl: mediaUrlOf(s.id, s.storageKey),
       posterUrl: s.posterKey ? posterUrlOf(s.id, s.posterKey) : null,
       durationMs: s.durationMs,
+      width: s.width,
+      height: s.height,
       status: s.status,
       caption: s.caption,
       placeLabel: s.placeLabel,

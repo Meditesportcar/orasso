@@ -20,3 +20,16 @@ export async function withRawShot<T>(shot: { uri: string }, run: () => Promise<T
     discardTempPhotos([shot.uri]);
   }
 }
+
+/**
+ * Fin de la préparation d'une prise vidéo brute de l'appareil (lot R7g, tour 2). `kept` : le fichier que le brouillon garde
+ * (`null` : rien). La prise n'est effacée que si une autre vidéo l'a remplacée (copie compressée) ; sinon c'est elle qui sera
+ * publiée, et elle vit jusqu'à la publication ou l'abandon (règle `tempPhotos`).
+ */
+export function settleRawTake(raw: string, kept: string | null): void {
+  if (kept !== raw) discardTempPhotos([raw]);
+}
+
+/** Ce que l'appareil affiche : l'échec de sa propre prise, sinon le refus d'un média préparé par l'écran (vidéo de la galerie…). */
+export const cameraMessage = (failed: string | null, error: string | null | undefined): string | null =>
+  failed ?? error ?? null;

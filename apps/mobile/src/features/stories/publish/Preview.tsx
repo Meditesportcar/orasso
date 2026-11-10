@@ -1,19 +1,29 @@
 // L'aperçu de la story (lot R7f3, maquette R7.8 « Aperçu en 9:16, tel que le voient les autres ») : le canevas final, fond
 // flouté, cadrage, légende et autocollants, et la plaque floutée **simulée** par le cadre plein du kit (le vrai flou est celui
 // du serveur : aucun floutage local, la photo d'origine ne quitte l'appareil que dans l'envoi). « Publier pour 24 h » est le
-// bouton principal de l'écran parent.
+// bouton principal de l'écran parent. Lot R7g : avec `video`, l'aperçu est la vidéo muette en boucle (aucune plaque à simuler).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";
-import { storyPublishLabels as L } from "@orasso/shared";
+import { storyPublishLabels as L, storyVideoLabels as V } from "@orasso/shared";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
+import type { PickedVideo } from "@/lib/storyVideo";
 import { Muted } from "@/ui/Muted";
 import type { StoryDraft } from "./model";
 import { type OverlayData, StoryOverlays } from "./parts";
 import { StoryCanvas } from "./StoryCanvas";
+import { VideoCanvas } from "./VideoCanvas";
 
 const { space2, space3 } = tokens.spacing;
 
-export function Preview({ draft, overlays }: { draft: StoryDraft; overlays: OverlayData }) {
+export function Preview({
+  draft,
+  overlays,
+  video,
+}: {
+  draft: StoryDraft;
+  overlays: OverlayData;
+  video?: PickedVideo | null;
+}) {
   const { t } = useTheme();
   const win = useWindowDimensions();
   const { photo } = draft.plate;
@@ -25,19 +35,25 @@ export function Preview({ draft, overlays }: { draft: StoryDraft; overlays: Over
         {L.previewTitle}
       </Text>
       <View style={styles.center}>
-        <StoryCanvas
-          uri={draft.display.uri}
-          width={photo.width}
-          height={photo.height}
-          frame={draft.frame}
-          viewWidth={viewWidth}
-          plateRects={draft.plate.noPlate ? undefined : draft.plate.rects}
-          testID="story-preview-canvas"
-        >
-          <StoryOverlays width={viewWidth} data={overlays} />
-        </StoryCanvas>
+        {video ? (
+          <VideoCanvas video={video} viewWidth={viewWidth} testID="story-preview-canvas">
+            <StoryOverlays width={viewWidth} data={overlays} />
+          </VideoCanvas>
+        ) : (
+          <StoryCanvas
+            uri={draft.display.uri}
+            width={photo.width}
+            height={photo.height}
+            frame={draft.frame}
+            viewWidth={viewWidth}
+            plateRects={draft.plate.noPlate ? undefined : draft.plate.rects}
+            testID="story-preview-canvas"
+          >
+            <StoryOverlays width={viewWidth} data={overlays} />
+          </StoryCanvas>
+        )}
       </View>
-      <Muted variant="caption">{L.previewNote}</Muted>
+      <Muted variant="caption">{video ? V.previewNote : L.previewNote}</Muted>
     </View>
   );
 }

@@ -484,7 +484,7 @@ describe("compteur de mentions et aperçu", () => {
       audience: "public",
       mediaKind: "video",
       storageKey: "private/stories/video-sans-affiche/0123456789abcdef.mp4",
-      plateState: "none_confirmed",
+      plateState: "not_required",
       expiresAt: new Date(clock.now.getTime() + 20 * HOUR),
     });
     const out = await organizerStoryOf(w.structure.id, clock.now);

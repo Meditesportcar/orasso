@@ -259,10 +259,14 @@ describe("plaque obligatoire", () => {
     ).resolves.toBeDefined();
   });
 
-  it("la vidéo est déclarée mais refusée (501 « Vidéo bientôt »)", async () => {
+  it("la vidéo n'est plus refusée d'office (lot R7g) : un fichier qui n'est pas une vidéo est illisible (415), le reste est dans video.test.ts", async () => {
     const kenji = await signUp("Kenji");
-    const up = await upload(kenji, Buffer.from("x"), "story_video");
-    expect(up.status).toBe(501);
+    const res = await app.request("/api/me/uploads/story-video", {
+      method: "POST",
+      headers: { origin: ORIGIN, cookie: kenji.cookie, "content-type": "video/mp4", "content-length": "1" },
+      body: "x",
+    });
+    expect(res.status).toBe(415);
   });
 });
 

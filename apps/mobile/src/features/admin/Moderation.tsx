@@ -41,6 +41,7 @@ import {
   useAdmin,
   useGesture,
 } from "./kit";
+import { ReportVideo } from "./ReportVideo";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -228,9 +229,13 @@ function ReportBody() {
             {d.target.gone ? <Notice>{moderationLabels.targetGone}</Notice> : null}
             {d.target.removed ? <Notice>{moderationLabels.targetRemoved}</Notice> : null}
             {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
-            {(d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
-              <PrivateImage key={url} url={url} style={styles.image} />
-            ))}
+            {d.target.videoUrl ? (
+              <ReportVideo url={d.target.videoUrl} posterUrl={d.target.imageUrl} style={styles.video} refresh={d} />
+            ) : (
+              (d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
+                <PrivateImage key={url} url={url} style={styles.image} />
+              ))
+            )}
             {d.target.text && d.targetType !== "message" ? (
               <Text variant="body" color={t.color.plateInk}>
                 {d.target.text}
@@ -708,4 +713,5 @@ const styles = StyleSheet.create({
   stack: { gap: space2 },
   line: { gap: 2 },
   image: { width: "100%", height: 220 },
+  video: { width: "100%", height: 440 },
 });

@@ -39,6 +39,7 @@ import { spotApi } from "./spot";
 import { staffApi } from "./staff";
 import { storiesApi } from "./stories";
 import { storiesPublishApi } from "./storiesPublish";
+import { storiesVideoApi } from "./storiesVideo";
 import { structureApi } from "./structure";
 import { stylesApi } from "./styles";
 import { ticketingApi } from "./ticketing";
@@ -104,4 +105,5 @@ export const api = {
   ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,
+  ...storiesVideoApi,
 };

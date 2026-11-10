@@ -80,7 +80,8 @@ async function scrollPage(page: Page, to: number | "bas") {
     let el = document.querySelector('[data-testid="crew-page"]') as HTMLElement | null;
     if (!el) {
       el = document.querySelector('[data-testid="crew-feed"]') as HTMLElement | null;
-      while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+      while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY)))
+        el = el.parentElement;
     }
     if (el) el.scrollTop = y === "bas" ? el.scrollHeight : y;
   }, to);

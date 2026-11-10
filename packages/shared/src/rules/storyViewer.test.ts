@@ -15,6 +15,7 @@ import {
   storyDurationMs,
   storyNext,
   storyPlayable,
+  storyPlayerKey,
   storyPrev,
   storyStartIndex,
   tapTarget,
@@ -325,5 +326,17 @@ describe("liste des vues", () => {
     expect(viewersListPartial(viewersTotalFor(150, { total: 201, viewers: Array(200).fill(person) }))).toBe(true);
     // Réponse sans total (ancien serveur) : le compteur d'ouverture et la liste.
     expect(viewersTotalFor(5, { viewers: [person] })).toBe(5);
+  });
+});
+
+describe("clé du lecteur d'une story", () => {
+  it("reculer sur la première vidéo change la clé du lecteur : elle repart à zéro", () => {
+    expect(storyPlayerKey("s1", 0, 0, true)).not.toBe(storyPlayerKey("s1", 0, 1, true));
+    expect(storyPlayerKey("s1", 0, 1, true)).not.toBe(storyPlayerKey("s1", 0, 2, true));
+  });
+  it("une photo n'est pas rechargée au rejeu, et un nouvel essai change la clé", () => {
+    expect(storyPlayerKey("s1", 0, 0, false)).toBe(storyPlayerKey("s1", 0, 5, false));
+    expect(storyPlayerKey("s1", 0, 0, false)).not.toBe(storyPlayerKey("s1", 1, 0, false));
+    expect(storyPlayerKey("s1", 0, 0, true)).not.toBe(storyPlayerKey("s2", 0, 0, true));
   });
 });

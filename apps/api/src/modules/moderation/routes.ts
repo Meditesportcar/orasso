@@ -11,7 +11,7 @@ import {
   sanctionLiftSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
-
+import { rangedFile } from "../../lib/ranged";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { reportMedia } from "./media";
@@ -58,10 +58,10 @@ export const moderationRoutes = new Hono<AppEnv>()
   // Lot R7e1 : média (photo) du contenu signalé d'une publication du Fil ou d'une story, pour la modération seulement.
   .get("/admin/reports/:id/media/:name", async (c) => {
     const media = await reportMedia(await requireUser(c), uuidParam(c, "id"), c.req.param("name"));
-    return c.body(new Uint8Array(media.data), 200, {
-      "content-type": media.contentType,
-      "cache-control": "private, no-store",
-    });
+    const headers = { "content-type": media.contentType, "cache-control": "private, no-store" };
+    // Lot R7g (tour 2) : une vidéo signalée se lit par morceaux (`Range`), comme pour son auteur, sans la charger en mémoire.
+    if ("key" in media) return rangedFile(c, media.key, media.size, headers);
+    return c.body(new Uint8Array(media.data), 200, headers);
   })
   .post("/admin/reports/:id/status", async (c) => {
     const v = await requireUser(c);

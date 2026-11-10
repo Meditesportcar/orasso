@@ -173,6 +173,48 @@
   object-fit: cover;
   pointer-events: none;
 }
+/* Vidéo (lot R7g) : pleine si elle est en 9:16, sinon posée au centre sur sa vignette floutée (à l'affichage seulement). */
+.story-video {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--night);
+  pointer-events: none;
+}
+.story-video__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.story-video[data-layout="blurred"] .story-video__media {
+  object-fit: contain;
+}
+.story-video__back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(28px) brightness(0.8);
+  transform: scale(1.12);
+}
+.story-view__videobar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.story-view__vtime {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--night) 55%, transparent);
+  color: var(--night-ink);
+  font-size: 0.8125rem;
+}
 .story-view__gone {
   position: absolute;
   inset: 0;

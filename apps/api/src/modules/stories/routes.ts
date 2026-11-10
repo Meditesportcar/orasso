@@ -1,5 +1,6 @@
 // Routes des stories (lot R7f1, ARCHITECTURE-R7 § 2.5). Session requise partout : aucune story n'est servie sans
 // session (vie privée des identifiés). Les fichiers passent par une route qui contrôle l'audience à chaque lecture.
+
 import {
   parseStoryAuthorKey,
   storyCreateSchema,
@@ -11,7 +12,9 @@ import {
 import { Hono } from "hono";
 
 import { notFound, validation } from "../../lib/errors";
+import { rangedFile } from "../../lib/ranged";
 import { type AppEnv, requireUser } from "../../lib/session";
+import { storage } from "../../lib/storage";
 import { body, parse, uuidParam } from "../../lib/validate";
 import { storiesAccess } from "./access";
 import { storiesBar } from "./bar";
@@ -48,8 +51,14 @@ export const storiesRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const name = c.req.param("name");
     if (!FILE_NAME.test(name)) throw notFound("Fichier introuvable");
-    const f = await storiesAccess.file(v, uuidParam(c, "id"), name, "media");
-    return c.body(new Uint8Array(f.data), 200, fileHeaders(f.type));
+    const ref = await storiesAccess.fileRef(v, uuidParam(c, "id"), name, "media");
+    if (ref.type !== "video/mp4") {
+      const data = await storage.get(ref.key);
+      if (!data) throw notFound("Fichier introuvable");
+      return c.body(new Uint8Array(data), 200, fileHeaders(ref.type));
+    }
+    // Lot R7g : une vidéo se sert par morceaux (`Range`), avec les mêmes droits que la photo (déjà contrôlés ci-dessus).
+    return rangedFile(c, ref.key, ref.size, fileHeaders(ref.type));
   })
   .get("/stories/:id/poster/:name", async (c) => {
     const v = await requireUser(c);

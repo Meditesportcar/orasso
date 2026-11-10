@@ -162,6 +162,9 @@ const RETRY_REMOVABLE = [
   /^private\/stories\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(webp|mp4)$/,
   // Lot R7f1, tour 2 : l'original non flouté d'une story (envoi `story`), dont la suppression avait échoué.
   /^private\/story-uploads\/[0-9a-f-]{36}\.webp$/,
+  // Lot R7g : la vidéo envoyée et sa vignette d'envoi, une fois copiées sous la story (ou si l'envoi est abandonné).
+  /^private\/story-videos\/[0-9a-f-]{36}\.mp4$/,
+  /^private\/story-posters\/[0-9a-f-]{36}\.webp$/,
   // Lot R7-dettes, tour 2 : photos d'une publication de crew (retrait, décision de modération), dont la suppression
   // avait échoué. Motif strict : le dossier, un identifiant, `.webp`.
   /^private\/crew-posts\/[0-9a-f-]{36}\.webp$/,

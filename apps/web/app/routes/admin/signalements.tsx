@@ -15,6 +15,7 @@ import {
   reportTargetLabels,
   sanctionKindLabels,
 } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { TextAreaField } from "../../components/Fields";
@@ -82,6 +83,56 @@ export async function action({ request }: Route.ActionArgs) {
   return redirect(back.startsWith("/admin/signalements") ? back : "/admin/signalements");
 }
 
+/**
+ * La vidéo d'une story signalée (lot R7g, tour 3). Si elle ne se lit pas (réseau coupé, fichier absent, refus), le dossier le dit
+ * (« La vidéo n'a pas pu être lue ») et propose « Réessayer » ; recharger le dossier (`dossier` change) relance une lecture en échec.
+ */
+function ReportVideoPlayer({ url, poster, dossier }: { url: string; poster: string | null; dossier: unknown }) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const video = useRef<HTMLVideoElement>(null);
+  const retry = () => {
+    setFailed(false);
+    setAttempt((n) => n + 1);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seul le rechargement du dossier relance
+  useEffect(() => {
+    if (failed) retry();
+  }, [dossier]);
+  // L'erreur peut être arrivée avant l'hydratation de la page : l'élément la porte encore.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu à chaque nouvel essai
+  useEffect(() => {
+    if (video.current?.error) setFailed(true);
+  }, [attempt]);
+  return (
+    <>
+      {/* biome-ignore lint/a11y/useMediaCaption: la modération regarde le contenu signalé, il n'a pas de sous-titres. */}
+      <video
+        key={attempt}
+        ref={video}
+        className="mod-target__video"
+        src={url}
+        poster={poster ?? undefined}
+        controls
+        playsInline
+        preload="metadata"
+        onError={() => setFailed(true)}
+        data-testid="report-video"
+      />
+      {failed && (
+        <div className="s-stack s-stack--tight" data-testid="report-video-failed" role="alert">
+          <p className="s-notice">{moderationLabels.videoFailed}</p>
+          <div>
+            <Button type="button" variant="secondary" icon="undo" onClick={retry} data-testid="report-video-retry">
+              {moderationLabels.videoRetry}
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Detail({ d, back, busy, error }: { d: AdminReportDetail; back: string; busy: boolean; error?: string }) {
   const sanctionOptions = d.can.sanctionKinds.map((k) => ({ value: k, label: sanctionKindLabels[k] }));
   return (
@@ -100,9 +151,14 @@ function Detail({ d, back, busy, error }: { d: AdminReportDetail; back: string; 
       {d.target.gone && <p className="s-notice">{moderationLabels.targetGone}</p>}
       {d.target.removed && <p className="s-notice">{moderationLabels.targetRemoved}</p>}
       {/* Lot R5c1, tour 2 : toutes les photos d'une publication de crew signalée. */}
-      {(d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
-        <img key={url} className="mod-target__img" src={url} alt="" />
-      ))}
+      {d.target.videoUrl ? (
+        // Lot R7g, tour 2 : une story vidéo signalée se lit dans le dossier (par morceaux, droits du modérateur).
+        <ReportVideoPlayer url={d.target.videoUrl} poster={d.target.imageUrl} dossier={d} />
+      ) : (
+        (d.target.imageUrls ?? (d.target.imageUrl ? [d.target.imageUrl] : [])).map((url) => (
+          <img key={url} className="mod-target__img" src={url} alt="" />
+        ))
+      )}
       {d.target.text && d.targetType !== "message" && <p className="s-prewrap">{d.target.text}</p>}
       {d.target.link && (
         <a href={d.target.link} target="_blank" rel="noopener">

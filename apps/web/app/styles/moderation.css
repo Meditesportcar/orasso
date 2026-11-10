@@ -132,6 +132,12 @@
   height: auto;
   border-radius: var(--radius-md);
 }
+.mod-target__video {
+  width: 280px;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
 .mod-queue {
   display: flex;
   flex-direction: column;
