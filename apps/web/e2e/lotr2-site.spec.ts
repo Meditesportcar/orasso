@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { tabMatchesList } from "./helpers/lotr8x";
 import { RELAIS } from "./relais";
 
 // Lot R2 (maquette « Explorer R2 », validée par Damien le 24/10), côté site (le site raccord) : le même en-tête que
@@ -58,14 +59,11 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 30_000 });
       for (const id of ["around-open", "sort-open", "filters-toggle"]) await expect(page.getByTestId(id)).toBeVisible();
       await expect(page.getByTestId("sort-open")).toContainText("Par date");
-      await expect(page.getByTestId("events-q")).toHaveAttribute(
-        "placeholder",
-        "Un événement, un organisateur, une ville",
-      );
+      await expect(page.getByTestId("events-q")).toHaveAttribute("placeholder", "Événement, organisateur, ville");
       // Réglages habituels : pastilles en contour (rien de choisi).
       await expect(page.getByTestId("around-open")).not.toHaveAttribute("data-set", "true");
       await expect(page.getByTestId("sort-open")).not.toHaveAttribute("data-set", "true");
-      await expect(page.getByTestId("sort-line")).toContainText("à venir");
+      await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ");
       await shot(page, `evenements-liste-${tag}`);
       await audit(page);
 
@@ -88,7 +86,8 @@ test("site : Explorer R2 (segments, pastilles, feuilles, mémoire, carte, pros, 
       await page.waitForURL(/autour=ailleurs/);
       await expect(page.getByTestId("around-open")).toContainText("(11)");
       await expect(page.getByTestId("around-open")).toHaveAttribute("data-set", "true");
-      await expect(page.getByTestId("sort-line")).toContainText("(11)");
+      await expect(page.getByTestId("around-open")).toContainText("(11)");
+      await tabMatchesList(page, "event-tile");
 
       // Trier : appliqué au clic.
       await openSheet(page, "sort-open", "sort-sheet");

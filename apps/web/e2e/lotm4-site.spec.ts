@@ -12,6 +12,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { tabMatchesList } from "./helpers/lotr8x";
 import { RELAIS } from "./relais";
 
 // Lot M4, côté site (le site raccord) : la fiche événement (bande de l'organisateur fixée en haut, créneau strict des
@@ -180,7 +181,8 @@ test("Lot M4, site : fiche, « Ta place », écrire avec le contexte, candidatur
         await mine.goto("/app/explorer?segment=evenements&autour=ailleurs&ailleurs=75");
         await expect(mine.getByTestId("around-open")).toContainText("(75)", { timeout: 30_000 });
         await expect(mine.getByTestId("around-open")).toHaveAttribute("data-set", "true");
-        await expect(mine.getByTestId("sort-line")).toContainText("(75)");
+        await expect(mine.getByTestId("around-open")).toContainText("(75)");
+        await tabMatchesList(mine, "event-tile");
         await shot(mine, `explorer-ailleurs-${theme}-${size}`);
         await openSheet(mine, "around-open", "where-sheet");
         await mine.getByTestId("around-mine").click();

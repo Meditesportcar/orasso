@@ -45,6 +45,7 @@ export function PillSheet({
   value,
   set = false,
   count,
+  iconOnly = false,
   title,
   testId,
   sheetId,
@@ -57,6 +58,8 @@ export function PillSheet({
   value: string;
   set?: boolean;
   count?: number;
+  /** Lot R8x : un bouton icône (le nom accessible est le titre de la feuille), pas une pastille (« Filtres »). */
+  iconOnly?: boolean;
   title: string;
   testId: string;
   sheetId: string;
@@ -86,30 +89,49 @@ export function PillSheet({
           </div>
         </details>
       </noscript>
-      <button
-        type="button"
-        className="ex-pill"
-        data-set={set ? "true" : undefined}
-        aria-haspopup="dialog"
-        onClick={() => ref.current?.showModal()}
-        data-testid={testId}
-      >
-        <Icon name={icon} size={18} />
-        <span className="ex-pill__text">
-          {k ? <span className="ex-pill__k">{k} : </span> : null}
-          <strong className="ex-pill__v">{value}</strong>
-        </span>
-        {count ? (
-          <span
-            className="ex-pill__n"
-            role="img"
-            aria-label={`${count} filtre${count > 1 ? "s" : ""} actif${count > 1 ? "s" : ""}`}
-          >
-            {count}
+      {iconOnly ? (
+        <button
+          type="button"
+          className="ex-ibtn"
+          data-set={set ? "true" : undefined}
+          aria-haspopup="dialog"
+          aria-label={count ? `${title} · ${count}` : title}
+          onClick={() => ref.current?.showModal()}
+          data-testid={testId}
+        >
+          <Icon name={icon} size={18} />
+          {count ? (
+            <span className="ex-pill__n ex-ibtn__n" aria-hidden="true">
+              {count}
+            </span>
+          ) : null}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="ex-pill"
+          data-set={set ? "true" : undefined}
+          aria-haspopup="dialog"
+          onClick={() => ref.current?.showModal()}
+          data-testid={testId}
+        >
+          <Icon name={icon} size={18} />
+          <span className="ex-pill__text">
+            {k ? <span className="ex-pill__k">{k} : </span> : null}
+            <strong className="ex-pill__v">{value}</strong>
           </span>
-        ) : null}
-        <Icon name="down" size={16} />
-      </button>
+          {count ? (
+            <span
+              className="ex-pill__n"
+              role="img"
+              aria-label={`${count} filtre${count > 1 ? "s" : ""} actif${count > 1 ? "s" : ""}`}
+            >
+              {count}
+            </span>
+          ) : null}
+          <Icon name="down" size={16} />
+        </button>
+      )}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: Échap ferme déjà la fenêtre (natif) ; le clic sur le fond est un confort */}
       <dialog
         ref={ref}
