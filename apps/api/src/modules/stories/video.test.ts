@@ -17,7 +17,16 @@ import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
-import { appendChild, bareTrack, mebxKeys, metaEntry, withLocation } from "../../../test/mp4-builders";
+import {
+  appendChild,
+  bareTrack,
+  FAKE_PLACE,
+  mebxKeys,
+  metaEntry,
+  sampledTrack,
+  withLocation,
+  withMdatTrack,
+} from "../../../test/mp4-builders";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { adminAuditLog, crewMembers, profiles, reports, stories, uploads, userFollows } from "../../db/schema";
@@ -675,6 +684,63 @@ describe("envoi brut d'une vidéo (route dédiée)", () => {
     const mdatAt = original.indexOf("mdat") - 4;
     const mdatSize = original.readUInt32BE(mdatAt);
     expect(stored.subarray(mdatAt, mdatAt + mdatSize).equals(original.subarray(mdatAt, mdatAt + mdatSize))).toBe(true);
+  });
+
+  it("nettoie par liste blanche : échantillons GPX d'une piste meta/mett à zéro, octets de fin coupés, images intactes", async () => {
+    const kenji = await signUp("Kenji");
+    const original = await fixture("story-2s.mp4");
+    const gpx = Buffer.from(`<gpx><trkpt lat="42.6887" lon="2.8948"/>${FAKE_PLACE}</gpx>`.padEnd(160, " "), "latin1");
+    const { file } = withMdatTrack(original, (at) => sampledTrack("meta", "mett", at, gpx.length), gpx);
+    // Cinq octets après la dernière boîte (le lecteur refuse un bloc de fin plus gros).
+    const sent = Buffer.concat([file, Buffer.from("+42.6")]);
+    expect(sent.includes(FAKE_PLACE)).toBe(true);
+    const res = await upload(kenji, "story_video", sent);
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    const stored = (await storage.get(res.json.key)) as Buffer;
+    expect(stored.length).toBe(sent.length - 5);
+    for (const trace of [FAKE_PLACE, "42.6887", "2.8948", "gpx"]) {
+      expect(stored.includes(trace), trace).toBe(false);
+    }
+    const info = await readMp4Buffer(stored);
+    expect([info.width, info.height, info.h264, info.hasAudio]).toEqual([720, 1280, true, true]);
+    expect(res.json.durationMs).toBe(info.durationMs);
+  });
+
+  it("une vidéo valide de 40 s avec du son, ou dont le son cache 80 s, est refusée « trop longue » (400 too_long), jamais « illisible »", async () => {
+    const kenji = await signUp("Kenji");
+    const base = await fixture("story-2s.mp4");
+    // 40 s dans mvhd, dans le mdhd et dans le stts de chaque piste (vidéo puis son).
+    const long = Buffer.from(base);
+    const mvhd = long.indexOf("mvhd") + 4;
+    long.writeUInt32BE(long.readUInt32BE(mvhd + 12) * 40, mvhd + 16);
+    for (const [from, mdhdAt] of [
+      [long.indexOf("stts"), long.indexOf("mdhd")],
+      [long.indexOf("stts", long.indexOf("stts") + 1), long.indexOf("mdhd", long.indexOf("mdhd") + 1)],
+    ] as const) {
+      long.writeUInt32BE(long.readUInt32BE(mdhdAt + 16) * 40, mdhdAt + 20);
+      for (let i = 0; i < long.readUInt32BE(from + 8); i++) {
+        const delta = from + 12 + i * 8 + 4;
+        long.writeUInt32BE(long.readUInt32BE(delta) * 20, delta);
+      }
+    }
+    expect((await readMp4Buffer(long)).hasAudio).toBe(true);
+    const res = await upload(kenji, "story_video", long);
+    expect([res.status, res.json.error.code, res.json.error.message]).toEqual([
+      400,
+      "too_long",
+      storyVideoLabels.apiTooLong,
+    ]);
+    // Le son seul cache 80 s derrière un mdhd de 2 s.
+    const hidden = Buffer.from(base);
+    const audioStts = hidden.indexOf("stts", hidden.indexOf("stts") + 1);
+    for (let i = 0; i < hidden.readUInt32BE(audioStts + 8); i++) {
+      const delta = audioStts + 12 + i * 8 + 4;
+      hidden.writeUInt32BE(hidden.readUInt32BE(delta) * 40, delta);
+    }
+    const second = await upload(kenji, "story_video", hidden);
+    expect([second.status, second.json.error.code]).toEqual([400, "too_long"]);
+    // Rien n'est resté.
+    expect((await db.query.uploads.findMany({})).filter((r) => r.purpose === "story_video")).toHaveLength(0);
   });
 
   it("refuse un fichier qui annonce 10 s dans mvhd et plus dans une piste, ou qui n'a aucune image", async () => {

@@ -104,3 +104,61 @@ export function metaEntry(format: string): Buffer {
   count.writeUInt32BE(1, 4);
   return box("minf", box("stbl", box("stsd", count, box(format, Buffer.alloc(8)))));
 }
+
+const u32 = (...values: number[]): Buffer => {
+  const out = Buffer.alloc(values.length * 4);
+  for (const [i, v] of values.entries()) out.writeUInt32BE(v, i * 4);
+  return out;
+};
+
+/** `mdhd` de version 0 : échelle de temps et durée (en ticks). */
+export const mdhd = (timescale: number, duration: number): Buffer =>
+  box("mdhd", u32(0, 0, 0, timescale, duration), Buffer.alloc(4));
+
+/**
+ * Une piste (`trak`) complète avec un seul morceau d'`length` octets à `offset` dans le fichier (tables `stsd`, `stts`, `stsc`,
+ * `stsz`, `stco`) : de quoi tester l'effacement des échantillons. `ticks` : durée dite par `stts`, `declared` : durée de `mdhd`
+ * (échelle de 1000 ticks par seconde).
+ */
+export function sampledTrack(
+  handler: string,
+  format: string,
+  offset: number,
+  length: number,
+  ticks = 1000,
+  declared = 1000,
+) {
+  const stsd = box("stsd", u32(0, 1), box(format, Buffer.alloc(8)));
+  const stts = box("stts", u32(0, 1, 1, ticks));
+  const stsc = box("stsc", u32(0, 1, 1, 1, 1));
+  const stsz = box("stsz", u32(0, length, 1));
+  const stco = box("stco", u32(0, 1, offset));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from(handler, "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box("trak", box("mdia", mdhd(1000, declared), hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))));
+}
+
+/**
+ * La fixture (`moov` en tête, `mdat` en dernier) avec `payload` ajouté à la fin de `mdat` et une piste de plus qui le décrit
+ * (`track(offset)`, `offset` = position de `payload` dans le fichier rendu). `moov` grossit : les `stco` des pistes
+ * d'origine sont décalés d'autant, la vidéo reste lisible. Renvoie le fichier et la position de `payload`.
+ */
+export function withMdatTrack(
+  data: Buffer,
+  track: (offset: number) => Buffer,
+  payload: Buffer,
+): { file: Buffer; at: number } {
+  const delta = track(0).length;
+  const shifted = Buffer.from(data);
+  for (let from = shifted.indexOf("stco"); from >= 0; from = shifted.indexOf("stco", from + 1)) {
+    const count = shifted.readUInt32BE(from + 8);
+    for (let i = 0; i < count; i++) {
+      const o = from + 12 + i * 4;
+      shifted.writeUInt32BE(shifted.readUInt32BE(o) + delta, o);
+    }
+  }
+  const at = data.length + delta;
+  const out = Buffer.concat([appendChild(shifted, ["moov"], track(at)), payload]);
+  const [mdat] = locate(out, ["mdat"]) as [number];
+  out.writeUInt32BE(out.readUInt32BE(mdat) + payload.length, mdat);
+  return { file: out, at };
+}
