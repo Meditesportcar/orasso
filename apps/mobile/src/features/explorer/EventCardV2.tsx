@@ -5,7 +5,7 @@
 // Lot M4 (maquette 3.1, retour 19) : `portrait`, la mise en page unique de l'Explorer : l'affiche en portrait (4:5,
 // 116 px) à gauche, les infos à droite (format, distance, « SAM. 24 OCT. · 19 H », nom, organisateur avec son logo et
 // son nom jamais coupé, lieu, jauge) ; plus de grande bande paysage en tête de liste.
-import { Chip, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, Icon, Photo, Plate, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
 import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime, yearToShow } from "@orasso/shared";
 import { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
@@ -18,6 +18,8 @@ import { cardPoster } from "./poster";
 const { space1, space2, space3 } = tokens.spacing;
 /** Lot M3, tour 2 : un appui tenu ce temps-là (sans défilement) lance la lecture de la fiche. */
 const PRESS_INTENT_MS = 90;
+/** Plancher du corps du nom de l'événement (vignette portrait) quand il faut le réduire pour ne couper aucun mot. */
+const PORTRAIT_TITLE_MIN = 11;
 const DAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
 const MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
 
@@ -165,6 +167,38 @@ export function EventCardV2({
     </View>
   );
 
+  // Lot R8x (maquette R8.9) : la jauge de 4 px, puis une ligne : le décompte à gauche, la puce « Liste d'attente » à droite
+  // quand l'événement est complet. Plus de badge en absolu par-dessus la ligne du haut. Dans la vignette portrait de
+  // l'Explorer, le pied passe sous l'affiche, sur toute la largeur de la carte ; ailleurs il reste dans la colonne.
+  const foot = (
+    <View style={[styles.seats, portrait && !big && styles.seatsWide]} testID="event-foot">
+      <View style={[styles.gauge, portrait && !big && styles.gaugeThin, { backgroundColor: c.plateLine }]}>
+        {seats ? (
+          <View
+            style={[
+              styles.gaugeFill,
+              portrait && !big && styles.gaugeThin,
+              {
+                width: `${Math.round(seats.taken * 100)}%`,
+                backgroundColor: seats.taken > 0.7 ? c.accent : c.plateInk,
+              },
+            ]}
+          />
+        ) : null}
+      </View>
+      <View style={styles.seatsLine}>
+        <Text variant="meta" color={c.plateMuted} style={styles.seatsText} testID="event-seats">
+          {seats ? seats.text : L.seatsFree}
+        </Text>
+        {seats?.full ? (
+          <View testID="event-waitlist" accessibilityLabel={L.waitlistFlag}>
+            <Chip surface="plate">{L.waitlistFlag}</Chip>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   const main = (
     <View style={styles.main}>
       <View style={styles.top}>
@@ -182,9 +216,22 @@ export function EventCardV2({
           {whenLine(stub)}
         </Text>
       ) : null}
-      <Text variant={big ? "posterM" : "posterS"} color={c.plateInk} style={portrait ? styles.portraitTitle : null}>
-        {event.title}
-      </Text>
+      {portrait && !big ? (
+        // Lot R8x : le nom d'un événement ne se coupe jamais au milieu d'un mot (police agrandie : le corps baisse au besoin).
+        <WordSafeText
+          variant="posterS"
+          base={styles.portraitTitle.fontSize}
+          min={PORTRAIT_TITLE_MIN}
+          color={c.plateInk}
+          style={styles.portraitTitle}
+        >
+          {event.title}
+        </WordSafeText>
+      ) : (
+        <Text variant={big ? "posterM" : "posterS"} color={c.plateInk}>
+          {event.title}
+        </Text>
+      )}
       <View style={styles.org}>
         {/* Lot M4 (retour 19) : l'adresse du logo passe par `mediaSource` (adresse relative de l'API), sinon rond vide. */}
         {mediaSource(event.structure.logoUrl) ? (
@@ -211,24 +258,7 @@ export function EventCardV2({
           </Text>
         </View>
       ) : null}
-      <View style={styles.seats}>
-        <View style={[styles.gauge, { backgroundColor: c.plateLine }]}>
-          {seats ? (
-            <View
-              style={[
-                styles.gaugeFill,
-                {
-                  width: `${Math.round(seats.taken * 100)}%`,
-                  backgroundColor: seats.taken > 0.7 ? c.accent : c.plateInk,
-                },
-              ]}
-            />
-          ) : null}
-        </View>
-        <Text variant="meta" color={c.plateMuted} testID="event-seats">
-          {seats ? seats.text : L.seatsFree}
-        </Text>
-      </View>
+      {portrait && !big ? null : foot}
     </View>
   );
 
@@ -242,17 +272,15 @@ export function EventCardV2({
       testID="event-row"
     >
       <Plate style={[styles.card, big && styles.cardBig]}>
-        {seats?.full ? (
-          <View style={styles.flag}>
-            <Chip surface="plate">{L.waitlistFlag}</Chip>
-          </View>
-        ) : null}
         {portrait && !big ? (
-          <View style={styles.row}>
-            <View ref={posterRef} collapsable={false} style={styles.posterPortrait}>
-              {poster}
+          <View style={styles.portrait}>
+            <View style={styles.row}>
+              <View ref={posterRef} collapsable={false} style={styles.posterPortrait}>
+                {poster}
+              </View>
+              {main}
             </View>
-            {main}
+            {foot}
           </View>
         ) : big ? (
           <>
@@ -300,7 +328,19 @@ const styles = StyleSheet.create({
   logo: { width: 24, height: 24, borderRadius: tokens.radius.radiusSm, alignItems: "center", justifyContent: "center" },
   place: { flexDirection: "row", alignItems: "center", gap: space1 },
   placeText: { flexShrink: 1 },
+  portrait: { gap: space2 },
   seats: { gap: space1, marginTop: "auto" },
+  seatsWide: { marginTop: 0 },
+  gaugeThin: { height: 4 },
+  seatsLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    columnGap: space2,
+    rowGap: space1,
+  },
+  seatsText: { flexShrink: 1 },
   gauge: { height: 5, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
   gaugeFill: { height: 5, borderRadius: tokens.radius.radiusPill },
   poster: { width: 84, minHeight: 118, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
@@ -310,5 +350,4 @@ const styles = StyleSheet.create({
   when: { fontSize: 12, lineHeight: 15 },
   portraitTitle: { fontSize: 15.5, lineHeight: 16 },
   minimal: { flex: 1, padding: space2, gap: space1, justifyContent: "space-between" },
-  flag: { position: "absolute", top: space2, right: space2, zIndex: 3 },
 });
