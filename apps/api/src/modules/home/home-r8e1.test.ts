@@ -228,6 +228,63 @@ describe("outingsWeather : la ligne météo des cartes de « Prochaine sortie »
   });
 });
 
+describe("lot R8r : la journée d'un événement commencé sur plusieurs jours", () => {
+  // Quatre jours (lundi 9 au jeudi 12 novembre), une température différente par jour.
+  const START = new Date("2026-11-09T07:00:00Z");
+  const END = new Date("2026-11-12T16:00:00Z");
+  async function fourDays() {
+    const { s, u, veh } = await world();
+    const e = await createEvent(s.id, { lat: POS.lat, lng: POS.lng, startsAt: START, endsAt: END });
+    await db.insert(eventWeather).values({
+      eventId: e.id,
+      provider: "open-meteo",
+      lat: POS.lat,
+      lng: POS.lng,
+      fetchedAt: START,
+      forecast: {
+        days: eventDates(e).map((date, i) => ({
+          date,
+          tempMin: 5,
+          tempMax: 10 + i,
+          precipitationProbability: 5,
+          precipitationMm: 0,
+          windMaxKmh: 20,
+          code: "clear" as const,
+        })),
+        hours: [],
+      },
+    });
+    await apply(u, veh.id, e.id, "accepted");
+    return { u, e };
+  }
+  const dayAt = async (when: string) => {
+    const { u, e } = await fourDays();
+    useClock(new Date(when));
+    return (await home(u)).json.outingsWeather[e.id];
+  };
+
+  it("la veille du début : le premier jour (pas encore commencé)", async () => {
+    const w = await dayAt("2026-11-08T15:00:00Z");
+    expect(w).toMatchObject({ day: "2026-11-09", summary: { tempMax: 13 } });
+  });
+  it("jour 1 : aujourd'hui, c'est le jour de début", async () => {
+    const w = await dayAt("2026-11-09T09:00:00Z");
+    expect(w).toMatchObject({ day: "2026-11-09", summary: { date: "2026-11-09", tempMax: 10 } });
+  });
+  it("jour 2 : la journée d'aujourd'hui, pas « Lundi »", async () => {
+    const w = await dayAt("2026-11-10T09:00:00Z");
+    expect(w).toMatchObject({ day: "2026-11-10", summary: { date: "2026-11-10", tempMax: 11 } });
+  });
+  it("dernier jour : la journée d'aujourd'hui", async () => {
+    const w = await dayAt("2026-11-12T09:00:00Z");
+    expect(w).toMatchObject({ day: "2026-11-12", summary: { date: "2026-11-12", tempMax: 13 } });
+  });
+  it("la journée d'aujourd'hui est celle de Paris (23 h 30 à Paris, 22 h 30 UTC, reste ce jour-là)", async () => {
+    const w = await dayAt("2026-11-10T22:30:00Z");
+    expect(w).toMatchObject({ day: "2026-11-10", summary: { tempMax: 11 } });
+  });
+});
+
 describe("le bloc « Météo » et GET /me/weather", () => {
   it("le bloc « Météo » du passionné ne dit jamais l'événement : le département, ou rien", async () => {
     const { s, u, veh } = await world();
@@ -353,6 +410,41 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
     release();
     await vi.waitFor(async () => expect(await db.query.weatherDepartments.findFirst()).toBeTruthy());
     expect((await home(u)).json.weather).toMatchObject({ kind: "place", department: "11", summary: { code: "clear" } });
+  });
+
+  it("lot R8r : stock vide → weatherPending vrai (le rafraîchissement part) ; ensuite la météo est là et weatherPending est faux", async () => {
+    const { u } = await world();
+    await moveTo(u, "09");
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    const first = (await home(u)).json;
+    expect(first.weather).toBeNull();
+    expect(first.weatherPending).toBe(true);
+    await vi.waitFor(async () => expect(await db.query.weatherDepartments.findFirst()).toBeTruthy());
+    await settle();
+    const second = (await home(u)).json;
+    expect(second.weather).toMatchObject({ kind: "place", department: "09" });
+    expect(second.weatherPending).toBe(false);
+  });
+
+  it("lot R8r : fournisseur en échec → weatherPending vrai une fois, puis faux (« indisponible »), jamais éternel", async () => {
+    const { u } = await world();
+    await moveTo(u, "81");
+    const calls = vi.fn(async () => new Response("{}", { status: 503 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    expect((await home(u)).json.weatherPending).toBe(true);
+    await vi.waitFor(() => expect(calls).toHaveBeenCalled());
+    await settle();
+    expect((await home(u)).json.weatherPending).toBe(false);
+  });
+
+  it("lot R8r : pas de département, ou météo désactivée → weatherPending faux", async () => {
+    const { u } = await world();
+    await db.update(profiles).set({ departments: [] }).where(eq(profiles.userId, u.id));
+    expect((await home(u)).json).toMatchObject({ weather: null, weatherPending: false });
+    await moveTo(u, "12");
+    setWeatherFetch(null);
+    expect((await home(u)).json.weatherPending).toBe(false);
   });
 
   it("stock frais d'aujourd'hui : servi sans appel au fournisseur ; périmé mais d'aujourd'hui : servi, rafraîchi en arrière-plan", async () => {

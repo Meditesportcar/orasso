@@ -166,7 +166,7 @@ export const homeService = {
       upcoming,
       interests,
       nearby,
-      weatherMine,
+      weatherStock,
       outingsWeather,
       favoriteGarage,
       wash,
@@ -183,8 +183,8 @@ export const homeService = {
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
       shown.has("weather")
         ? // Lot R8e1, tour 2 : le stock seulement ; le rafraîchissement part sans être attendu.
-          weatherService.mineFromStock(v).catch(() => null)
-        : Promise.resolve(null),
+          weatherService.mineFromStock(v).catch(() => ({ weather: null, pending: false }))
+        : Promise.resolve({ weather: null, pending: false }),
       // Lot R8e1 : la ligne météo des cartes de « Prochaine sortie » ; masquée, elle n'est pas calculée.
       shown.has("event_weather")
         ? this.outingsWeather(v, upcomingPromise, profile === "exhibitor").catch(
@@ -232,7 +232,7 @@ export const homeService = {
             weatherService.dayJForEvent(provider.nextMission.event.id).catch(() => null),
             null,
           )
-        : weatherMine;
+        : weatherStock.weather;
 
     return {
       profile,
@@ -245,6 +245,7 @@ export const homeService = {
       pendingStatuses: upcoming.filter((a) => ["pending", "waitlisted", "offered"].includes(a.status)),
       nearby,
       weather,
+      weatherPending: weather === null && weatherStock.pending,
       outingsWeather,
       favoriteGarage,
       wash,

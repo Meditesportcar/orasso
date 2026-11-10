@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser } from "./helpers";
+import { apiCall, login, loginInBrowser, warmDepartmentWeather } from "./helpers";
 
 // Lot R8e1, côté site : la météo de l'événement est une ligne de la carte « Prochaine sortie » (/app) ; absente quand la
 // météo n'est pas visible (au-delà de 7 jours) ; bandeau quand l'événement est « Incertain » ; masquer « Météo de
@@ -21,6 +21,7 @@ let salonId: string;
 test.beforeAll(async () => {
   cookie = await login(EMAIL);
   damien = await login("damien@orasso.local");
+  await warmDepartmentWeather(cookie); // le stock du département (l'Accueil ne lit que lui)
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["live", ...DEFAULT_HIDDEN] });
   salonId = (await apiCall<{ id: string }>(damien, "GET", `/events/by-slug/${SALON}`)).data.id;
   await apiCall(damien, "PATCH", `/events/${salonId}/outlook`, { outlook: "maintained" });

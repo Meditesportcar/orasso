@@ -20,8 +20,8 @@ import {
   proActivityLabels,
   weatherTexts,
 } from "@orasso/shared";
-import type { ReactNode } from "react";
-import { Form } from "react-router";
+import { type ReactNode, useEffect, useState } from "react";
+import { Form, useRevalidator } from "react-router";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDayShort, formatTime } from "../lib/format";
@@ -125,7 +125,23 @@ export function NearbyBlock({
   );
 }
 
-export function WeatherBlock({ weather }: { weather: HomeData["weather"] }) {
+/** Lot R8r : délai avant l'unique relecture de l'Accueil quand la météo du département se charge (premier chargement). */
+const WEATHER_RETRY_MS = 5000;
+
+export function WeatherBlock({ weather, pending = false }: { weather: HomeData["weather"]; pending?: boolean }) {
+  // Premier chargement : le stock du département est vide, son rafraîchissement est en cours. « Météo en cours de chargement »,
+  // puis une seule relecture de l'Accueil (sans bloquer la page) ; sans météo à ce moment-là, « indisponible ».
+  const waiting = pending && !weather;
+  const [retried, setRetried] = useState(false);
+  const { revalidate } = useRevalidator();
+  useEffect(() => {
+    if (!waiting || retried) return undefined;
+    const timer = setTimeout(() => {
+      setRetried(true);
+      void revalidate();
+    }, WEATHER_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [waiting, retried, revalidate]);
   return (
     <Block id="weather" title={homeWidgetTitles.weather}>
       {weather ? (
@@ -142,6 +158,10 @@ export function WeatherBlock({ weather }: { weather: HomeData["weather"] }) {
           title={weather.kind === "event" ? weather.event.title : weatherTexts.todayTitle}
           compact
         />
+      ) : waiting && !retried ? (
+        <p className="hm-block__muted" data-testid="weather-pending">
+          {weatherTexts.loading}
+        </p>
       ) : (
         <p className="hm-block__muted">{weatherTexts.unavailable}</p>
       )}

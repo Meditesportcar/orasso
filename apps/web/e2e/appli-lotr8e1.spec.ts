@@ -1,5 +1,5 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, warmDepartmentWeather } from "./helpers";
 
 // Lot R8e1, côté appli (version web compilée de recette) : la météo de l'événement est une ligne de sa carte dans
 // « Prochaine sortie » ; absente au-delà de 7 jours ; bandeau quand l'événement est « Incertain » ; masquer « Météo de
@@ -54,6 +54,7 @@ let damien: string;
 test.beforeAll(async () => {
   cookie = await login(EMAIL);
   damien = await login("damien@orasso.local");
+  await warmDepartmentWeather(cookie); // le stock du département (l'Accueil ne lit que lui)
   // « En cours » (le Lydia) remplacerait les tickets : on le masque, comme le ferait la personne.
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["live", ...DEFAULT_HIDDEN] });
   await apiCall(damien, "PATCH", `/events/${await nocturneId(damien)}/outlook`, { outlook: "maintained" });

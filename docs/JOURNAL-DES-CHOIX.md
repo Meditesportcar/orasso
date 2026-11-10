@@ -4932,3 +4932,21 @@ Date : 10/11/2026.
 - **Site** : la confirmation de désabonnement est ancrée à la grille d'identité (largeur de la carte) ; le conteneur de requête du pseudo est un enfant dédié, la colonne ne crée plus de contexte d'empilement.
 - **Audit** : la bio n'est exclue que si « plus » existe. Arrondis de mes styles en jetons.
 - **À vérifier sur le Xiaomi** : le collant des onglets sur Android (`stickyHeaderIndices` de React Native) n'est prouvé ici que sur le web.
+
+## Lot R8r : retouches de la livraison 1 de R8 (API, appli et site, 11/11/2026)
+
+Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineurs des relectures) ; aucune migration.
+
+### A1 : la journée de la ligne météo d'un événement commencé
+- **Choix** : `forOutings` donne le jour d'aujourd'hui (Paris) quand l'événement est commencé, son premier jour sinon. Le résumé est celui de cette journée quand la prévision stockée la contient, sinon le résumé agrégé de l'événement (comportement d'avant). Une seule règle, côté API : « Prochaine sortie » et « En cours » lisent la même fonction.
+- **Raison** : le mardi, le Rassemblement du Lydia (jour 2 sur 4) affichait « Lundi ». Fichiers : `apps/api/src/modules/weather/service.ts`, tests dans `apps/api/src/modules/home/home-r8e1.test.ts`.
+
+### A2 : compteurs du Profil
+- **Choix** : `cellLabel` porte `fontSize: 11.5` (la mesure de la maquette R8.1 `.r8cnt small`) et `lineHeight: 14`, parce que `WordSafeText base={11.5}` ne pose la taille que s'il faut rétrécir. Pas de jeton à 11,5 : 11,5 de la maquette gardé (le style voisin `plusText` fait de même en 12,5). Le site avait déjà 11,5 (`.pt-band small`).
+- Fichier : `apps/mobile/src/features/profil/ProfileHead.tsx`.
+
+### A3 : bloc « Météo » au premier chargement
+- **Choix** : `GET /me/home` ajoute `weatherPending` (vrai quand le stock du département n'a pas la journée d'aujourd'hui ET qu'un rafraîchissement est possible : fournisseur actif, département connu, pas d'échec dans les 10 dernières minutes). L'appli et le site gardent le bloc avec « Météo en cours de chargement » (aucune roue qui tourne), relisent l'Accueil **une fois** 5 secondes plus tard sans le bloquer ; si la météo n'est toujours pas là, le site dit « Météo indisponible pour le moment. » et l'appli retire le bloc (comme avant).
+- **Écart à la fiche** : la relecture se fait par `GET /me/home` (déjà chargé, déjà le stock), pas par `GET /me/weather` : cette route renvoie la météo d'un événement retenu avant celle du département (APK en ligne) et ferait attendre le fournisseur.
+- **Recettes** : `appli-lotr8e1` et `lotr8e1-site` attendent le stock par l'API (`warmDepartmentWeather`) au lieu de dépendre de l'état laissé par un autre test.
+- Fichiers : `apps/api/src/modules/weather/service.ts`, `apps/api/src/modules/home/service.ts`, `packages/shared/src/home.ts`, `packages/shared/src/labels/weather.fr.ts`, `apps/mobile/src/features/home/FanHome.tsx`, `fanBlocks.tsx`, `apps/web/app/components/HomeWidgets.tsx`, `apps/web/app/routes/app-home.tsx`.

@@ -50,7 +50,7 @@ import { SmButton } from "@/ui/Kit";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
-import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
+import { Greet, Nudge, PosterRail, SecH, WeatherCard, WeatherPendingCard } from "./fanBlocks";
 import { liveAccessHref, showsLocalCopy } from "./liveAccess";
 import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, scrubSpot, splitSponsored } from "./rail";
@@ -67,6 +67,8 @@ const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
 /** Pendant un événement, l'Accueil relit ses chiffres (sur place, votes) à ce rythme, et au retour au premier plan. */
 const LIVE_REFRESH_MS = 180_000;
+/** Lot R8r : délai avant l'unique relecture de l'Accueil quand la météo du département se charge (premier chargement). */
+const WEATHER_RETRY_MS = 5000;
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
@@ -325,6 +327,10 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // copie gardée avant ce lot peut porter l'ancienne météo « jour J » : jamais affichée ici.
   const weather = data?.weather?.kind === "place" ? data.weather : null;
   const weatherPlace = department ? `Dép. ${department}` : null;
+  // Lot R8r : premier chargement (stock vide, rafraîchissement en cours) : « Météo en cours de chargement », puis une seule
+  // relecture de l'Accueil quelques secondes plus tard, sans bloquer l'écran ; sans météo à ce moment-là, le bloc s'efface.
+  const weatherPending = !weather && data?.weatherPending === true;
+  const [weatherRetried, setWeatherRetried] = useState(false);
 
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
@@ -335,6 +341,14 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const myOutings = data?.myOutings ? outingsAt(data.myOutings, now) : null;
   const reloadHome = useRef(home.reload);
   reloadHome.current = home.reload;
+  useEffect(() => {
+    if (!weatherPending || weatherRetried) return undefined;
+    const timer = setTimeout(() => {
+      setWeatherRetried(true);
+      void reloadHome.current();
+    }, WEATHER_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [weatherPending, weatherRetried]);
   const liveShown = liveNow !== null;
   useEffect(() => {
     setLiveOn(liveShown);
@@ -446,7 +460,11 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       </>
     ) : null,
-    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} /> : null,
+    weather: weather ? (
+      <WeatherCard weather={weather} place={weatherPlace} />
+    ) : weatherPending && !weatherRetried ? (
+      <WeatherPendingCard place={weatherPlace} />
+    ) : null,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
     favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
     pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,

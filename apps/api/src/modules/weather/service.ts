@@ -317,16 +317,26 @@ export const weatherService = {
    * (requêtes simultanées regroupées, échec retenté au plus toutes les 10 minutes, erreur journalisée), pour que la prochaine
    * ouverture l'ait.
    */
-  async mineFromStock(v: Viewer): Promise<MyWeather | null> {
+  async mineFromStock(v: Viewer): Promise<{ weather: MyWeather | null; pending: boolean }> {
     const department = v.profile.departments[0];
-    if (!department) return null;
+    if (!department) return { weather: null, pending: false };
     const row = await db.query.weatherDepartments.findFirst({ where: eq(weatherDepartments.department, department) });
-    if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+    const refreshing = !row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS;
+    if (refreshing) {
       void this.departmentWeather(department).catch((error) =>
         console.warn("Météo du département non rafraîchie :", error instanceof Error ? error.message : error),
       );
     }
-    return placeWeather(department, row);
+    const weather = placeWeather(department, row);
+    // Lot R8r : sans journée d'aujourd'hui en stock, l'Accueil dit « en cours de chargement » (champ `weatherPending`) tant
+    // qu'un rafraîchissement est possible : fournisseur actif, département connu, pas d'échec dans les 10 dernières minutes.
+    const failedAt = departmentFailures.get(department);
+    const pending =
+      weather === null &&
+      weatherEnabled() &&
+      Boolean(departmentCentroids[department]) &&
+      (failedAt === undefined || now().getTime() - failedAt >= DEPARTMENT_RETRY_MS);
+    return { weather, pending };
   },
 
   /**
@@ -348,11 +358,16 @@ export const weatherService = {
       if (e.status !== "published" || !weatherVisible(e, t)) continue;
       const row = byEvent.get(e.id);
       if (!validFor(row, e)) continue;
-      const summary = forecastForEvent(row.forecast, e);
-      if (!summary) continue;
-      const w = wallTime(e.startsAt, "Europe/Paris");
+      const aggregate = forecastForEvent(row.forecast, e);
+      if (!aggregate) continue;
+      // Lot R8r : un événement commencé montre la journée d'aujourd'hui (Paris), pas celle du début ; pas encore commencé :
+      // son premier jour. Le résumé est celui de la journée quand la prévision la contient, sinon celui de l'événement.
+      const started = e.startsAt.getTime() <= t.getTime();
+      const w = wallTime(started ? t : e.startsAt, "Europe/Paris");
+      const day = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+      const summary = (started && row.forecast.days.find((d) => d.date === day)) || aggregate;
       out[e.id] = {
-        day: `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`,
+        day,
         summary,
         provider: row.provider,
         attribution: weatherAttributions[row.provider],
