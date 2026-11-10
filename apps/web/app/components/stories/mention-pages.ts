@@ -67,6 +67,9 @@ export class MentionPager {
   private generation = 0;
   private key = "";
   private firstNext: string | null = null;
+  private rereading = false;
+  private rereadKey = "";
+  private pending: StoryMentions | null = null;
 
   constructor(
     private readonly fetchPage: FetchPage,
@@ -83,25 +86,24 @@ export class MentionPager {
     return this.state.depth > 0 ? this.state.next : this.firstNext;
   }
 
-  /** À appeler à chaque nouvelle première page (chargement, revalidation, geste). */
+  /**
+   * À appeler à chaque nouvelle première page (chargement, revalidation, geste). Lot R7h, tour 6 : une première page identique
+   * à celle déjà relue ne relance rien ; pendant une relecture, les revalidations se regroupent (une seule relecture de plus,
+   * sur la dernière première page) au lieu de redémarrer celle en cours.
+   */
   sync(first: StoryMentions | null): void {
     const key = firstKeyOf(first);
     const changed = key !== this.key;
     this.key = key;
     this.firstNext = first?.nextCursor ?? null;
     if (!first) return;
-    const depth = this.state.depth;
-    if (depth > 0) {
-      const mine = ++this.generation;
-      this.set({ ...this.state, busy: true });
-      void rereadPages(this.fetchPage, first.nextCursor, depth, () => this.generation === mine).then((out) => {
-        if (!out) return;
-        this.set(
-          out.ok
-            ? { items: out.items, next: out.next, depth: out.depth, busy: false, error: null }
-            : { ...this.state, busy: false, error: out.error },
-        );
-      });
+    if (this.state.depth > 0) {
+      if (this.rereading) {
+        this.pending = first;
+        return;
+      }
+      if (key === this.rereadKey && !this.state.error) return;
+      this.reread(first);
     } else if (changed && this.state.busy) {
       // Une lecture rattachée à l'ancienne première page : jetée, elle repartira du nouveau curseur.
       this.generation++;
@@ -109,10 +111,34 @@ export class MentionPager {
     }
   }
 
+  private reread(first: StoryMentions): void {
+    const mine = ++this.generation;
+    this.rereading = true;
+    this.pending = null;
+    this.rereadKey = firstKeyOf(first);
+    this.set({ ...this.state, busy: true });
+    void rereadPages(this.fetchPage, first.nextCursor, this.state.depth, () => this.generation === mine).then((out) => {
+      if (!out) {
+        this.rereading = false;
+        return;
+      }
+      this.set(
+        out.ok
+          ? { items: out.items, next: out.next, depth: out.depth, busy: false, error: null }
+          : { ...this.state, busy: false, error: out.error },
+      );
+      this.rereading = false;
+      const later = this.pending;
+      this.pending = null;
+      if (later && this.state.depth > 0 && firstKeyOf(later) !== this.rereadKey) this.reread(later);
+    });
+  }
+
   async more(): Promise<void> {
     const cursor = this.next;
     if (!cursor || this.state.busy) return;
     const mine = ++this.generation;
+    this.rereadKey = this.key;
     const before = this.state;
     this.set({ ...before, busy: true, error: null });
     const res = await this.fetchPage(cursor);

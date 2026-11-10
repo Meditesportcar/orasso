@@ -108,7 +108,7 @@ describe("pager des mentions (hook)", () => {
     expect(pager.state.depth).toBe(1);
     // Revalidation : relecture lancée (busy), puis clic sur « Voir plus » pendant la relecture.
     mode = "reread";
-    pager.sync(firstPage(["a1"], "c2"));
+    pager.sync(firstPage(["a0", "a1"], "c2")); // une mention de plus en tête : la première page a changé
     expect(pager.state.busy).toBe(true);
     await pager.more();
     expect(calls).toEqual(["c2", "c2"]); // aucun nouvel appel pour le clic
@@ -156,5 +156,57 @@ describe("pager des mentions (hook)", () => {
     slow.resolve(page(["b1"], null));
     await pending;
     expect(pager.state.items.map((m) => m.storyId)).toEqual(["b1"]);
+  });
+});
+
+describe("revalidations regroupées pendant une relecture (tour 6)", () => {
+  it("une première page identique ne relance pas la relecture", async () => {
+    const calls: string[] = [];
+    const fetchPage: FetchPage = async (c) => {
+      calls.push(c);
+      return page(["b1"], null);
+    };
+    const pager = new MentionPager(fetchPage, () => undefined);
+    pager.sync(firstPage(["a1"], "c2"));
+    await pager.more();
+    pager.sync(firstPage(["a1"], "c2"));
+    pager.sync(firstPage(["a1"], "c2"));
+    await flush();
+    expect(calls).toEqual(["c2"]);
+    expect(pager.state.busy).toBe(false);
+  });
+
+  it("plusieurs revalidations avant la fin d'une relecture lente : elle aboutit, une seule relecture de plus, « Voir plus » redevient actif", async () => {
+    const gates: Array<ReturnType<typeof deferred>> = [];
+    let slow = false;
+    const calls: string[] = [];
+    const fetchPage: FetchPage = async (c) => {
+      calls.push(c);
+      if (!slow) return page(["b1"], "c3");
+      const g = deferred();
+      gates.push(g);
+      return g.promise;
+    };
+    const pager = new MentionPager(fetchPage, () => undefined);
+    pager.sync(firstPage(["a1"], "c2"));
+    await pager.more(); // profondeur 1
+    slow = true;
+    pager.sync(firstPage(["a0", "a1"], "c2")); // lance la relecture
+    pager.sync(firstPage(["a9", "a0", "a1"], "c2")); // regroupées : ne redémarrent pas la relecture
+    pager.sync(firstPage(["a8", "a9", "a0", "a1"], "c2"));
+    expect(gates).toHaveLength(1);
+    expect(pager.state.busy).toBe(true);
+    gates[0]?.resolve(page(["b1"], "c3"));
+    await flush();
+    expect(gates).toHaveLength(2); // une seule relecture de plus, sur la dernière première page
+    expect(pager.state.busy).toBe(true);
+    gates[1]?.resolve(page(["b1"], "c3", { b1: "copie" }));
+    await flush();
+    expect(pager.state.busy).toBe(false);
+    expect(pager.state.items.find((m) => m.storyId === "b1")?.copyId).toBe("copie");
+    expect(calls).toEqual(["c2", "c2", "c2"]);
+    void pager.more();
+    await flush();
+    expect(gates).toHaveLength(3); // « Voir plus » est de nouveau actif (curseur c3)
   });
 });

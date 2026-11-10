@@ -69,8 +69,8 @@ export function DirectScreen() {
     refreshMs: 60_000,
   });
   const mineRead = myStoriesRead(myStories.data, myStories.error);
-  const hasMyStories = mineRead === "has";
-  const mineFailed = mineRead === "error";
+  const hasMyStories = mineRead.has;
+  const mineFailed = mineRead.failed;
   if (!current) {
     return (
       <TabScreen

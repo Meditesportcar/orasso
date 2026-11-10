@@ -23,3 +23,29 @@ export function showStorySection(a: {
 }): boolean {
   return a.published && (a.fieldDay || a.hasMine || a.mineFailed || a.notice === "removed");
 }
+
+/**
+ * Lot R7h, tour 6 : le cycle de vie du message de confirmation (« ?story=added|removed »). Affiché une fois ; le paramètre
+ * est retiré de l'adresse (cette navigation recharge la page, premier chargement sans message : on arme) ; la revalidation
+ * suivante, ou un autre événement, l'efface. Une fois effacé, la section se referme si plus rien ne la justifie.
+ */
+export type StoryMessageState = { message: "added" | "removed" | null; eventId: string | null; armed: boolean };
+export const noStoryMessage: StoryMessageState = { message: null, eventId: null, armed: false };
+
+export function reduceStoryMessage(
+  s: StoryMessageState,
+  load: { eventId: string; notice: string | null },
+): StoryMessageState {
+  if (load.notice === "added" || load.notice === "removed") {
+    return s.message === load.notice && s.eventId === load.eventId && !s.armed
+      ? s
+      : { message: load.notice, eventId: load.eventId, armed: false };
+  }
+  if (!s.message) return s;
+  if (s.eventId !== load.eventId) return noStoryMessage;
+  return s.armed ? noStoryMessage : { ...s, armed: true };
+}
+
+/** Le message à montrer pour cet événement (jamais celui d'un autre, même pendant le rendu qui précède l'effacement). */
+export const visibleStoryMessage = (s: StoryMessageState, eventId: string): "added" | "removed" | null =>
+  s.eventId === eventId ? s.message : null;

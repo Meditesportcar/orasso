@@ -238,19 +238,23 @@ describe("story de la structure dans le Direct (lot R7h, tour 4)", () => {
     expect(pickCurrentEvent(past, dayAfter)).toBeNull();
     const err = new Error("503");
     const state = myStoriesRead(null, err);
-    expect(state).toBe("error");
-    expect(storySection(null, state === "has", state === "error")).toEqual({ mentions: false, mine: true, show: true });
+    expect(state).toEqual({ has: false, failed: true, loading: false });
+    expect(storySection(null, state.has, state.failed)).toEqual({ mentions: false, mine: true, show: true });
   });
 
-  it("chargement, absence confirmée, présence et erreur sont quatre états distincts", () => {
-    expect(myStoriesRead(null, null)).toBe("loading");
-    expect(myStoriesRead({ stories: [] }, null)).toBe("none");
-    expect(myStoriesRead({ stories: [{}] }, null)).toBe("has");
-    expect(myStoriesRead(null, new Error("x"))).toBe("error");
-    // Une donnée déjà lue l'emporte sur une erreur de rafraîchissement.
-    expect(myStoriesRead({ stories: [] }, new Error("x"))).toBe("none");
+  it("chargement, absence confirmée, présence et erreur restent distincts", () => {
+    expect(myStoriesRead(null, null)).toEqual({ has: false, failed: false, loading: true });
+    expect(myStoriesRead({ stories: [] }, null)).toEqual({ has: false, failed: false, loading: false });
+    expect(myStoriesRead({ stories: [{}] }, null)).toEqual({ has: true, failed: false, loading: false });
+    expect(myStoriesRead(null, new Error("x"))).toEqual({ has: false, failed: true, loading: false });
     // Chargement et absence confirmée ne montrent rien hors événement.
     expect(storySection(null, false, false).show).toBe(false);
+  });
+
+  it("réponse vide, publication distante, puis 503 : l'échec reste signalé et « Ma story » reste accessible", () => {
+    const state = myStoriesRead({ stories: [] }, new Error("503"));
+    expect(state).toEqual({ has: false, failed: true, loading: false });
+    expect(storySection(null, state.has, state.failed)).toEqual({ mentions: false, mine: true, show: true });
   });
 
   it("sans événement courant ni story en ligne : rien", () => {

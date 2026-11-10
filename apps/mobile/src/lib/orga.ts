@@ -80,16 +80,19 @@ export function storySection(
 }
 
 /**
- * Lot R7h, tour 5 : l'état de la lecture de « Ma story » de la structure. Chargement, absence confirmée et erreur sont
- * distincts : une erreur n'est jamais prise pour « aucune story » (une publication peut rester en ligne). Une donnée déjà
- * lue (même ancienne) l'emporte sur une erreur de rafraîchissement.
+ * Lot R7h, tour 6 : la lecture de « Ma story » de la structure. L'échec d'un rafraîchissement est signalé à part des données
+ * gardées : une ancienne réponse (même vide) n'efface jamais l'erreur récente, et l'accès « Ma story » avec « Réessayer »
+ * reste (un autre responsable peut avoir publié entre-temps). Une erreur n'est jamais prise pour « aucune story ».
  */
 export function myStoriesRead(
   data: { stories: readonly unknown[] } | null,
   error: unknown,
-): "loading" | "none" | "has" | "error" {
-  if (data) return data.stories.length > 0 ? "has" : "none";
-  return error ? "error" : "loading";
+): { has: boolean; failed: boolean; loading: boolean } {
+  return {
+    has: data !== null && data.stories.length > 0,
+    failed: Boolean(error),
+    loading: data === null && !error,
+  };
 }
 
 /** Le statut qui sera demandé à l'API quand on bascule (Maintenu ↔ Incertain). */

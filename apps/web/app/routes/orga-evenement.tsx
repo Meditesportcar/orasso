@@ -43,11 +43,17 @@ import {
   weatherTexts,
   weekdayNames,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
 import { OrgaStory } from "../components/stories/OrgaStory";
-import { mineFlags, showStorySection } from "../components/stories/orga-story-rules";
+import {
+  mineFlags,
+  noStoryMessage,
+  reduceStoryMessage,
+  showStorySection,
+  visibleStoryMessage,
+} from "../components/stories/orga-story-rules";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { now as clockNow } from "../lib/clock";
@@ -523,10 +529,15 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
   const [search, setSearch] = useSearchParams();
   // Lot R7h, tour 5 : le message de la story (« ?story=added|removed ») est lu une fois, gardé ici, puis retiré de l'adresse :
   // il ne revient plus aux revalidations ni au rechargement de la page.
-  const [storyMessage, setStoryMessage] = useState<string | null>(null);
+  // Tour 6 : cycle de vie explicite (voir `reduceStoryMessage`) : effacé à la revalidation suivante et au changement d'événement.
+  const [storyState, loadStory] = useReducer(reduceStoryMessage, noStoryMessage);
+  const storyMessage = visibleStoryMessage(storyState, event.id);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `loaderData` marque chaque (re)validation de la page.
+  useEffect(() => {
+    loadStory({ eventId: event.id, notice: storyNotice });
+  }, [loaderData, event.id, storyNotice]);
   useEffect(() => {
     if (storyNotice !== "added" && storyNotice !== "removed") return;
-    setStoryMessage(storyNotice);
     setSearch(
       (cur) => {
         const next = new URLSearchParams(cur);
@@ -701,7 +712,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         fieldDay: storyFieldDay,
         hasMine: storyHasMine,
         mineFailed: storyMineFailed,
-        notice: storyMessage ?? storyNotice,
+        notice: storyMessage,
       }) && (
         <OrgaStory
           structureId={structureId}
@@ -711,9 +722,9 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           failed={storyFailed}
           mineFailed={storyMineFailed}
           notice={
-            (storyMessage ?? storyNotice) === "added"
+            storyMessage === "added"
               ? storyShareLabels.added
-              : (storyMessage ?? storyNotice) === "removed"
+              : storyMessage === "removed"
                 ? storyShareLabels.removeDone
                 : null
           }
