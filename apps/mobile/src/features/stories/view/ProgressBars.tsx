@@ -5,6 +5,7 @@ import { storyViewerLabels as L } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
+import { trackLayout } from "./trackLayout";
 
 function CurrentFill({ progress, width }: { progress: SharedValue<number>; width: number }) {
   const { t } = useTheme();
@@ -33,7 +34,7 @@ export function ProgressBars({
           // biome-ignore lint/suspicious/noArrayIndexKey: les barres n'ont pas d'identité propre, seulement un rang.
           key={i}
           style={[styles.track, { backgroundColor: withAlpha(t.color.nightInk, 0.35) }]}
-          onLayout={(e) => setWidths((w) => ({ ...w, [i]: e.nativeEvent.layout.width }))}
+          onLayout={trackLayout(setWidths, i)}
           testID={i < index ? "story-bar-done" : i === index ? "story-bar-current" : "story-bar-next"}
         >
           {i < index ? <View style={[styles.fill, styles.full, { backgroundColor: t.color.nightInk }]} /> : null}
