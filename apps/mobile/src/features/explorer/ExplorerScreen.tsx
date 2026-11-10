@@ -40,7 +40,7 @@ import { usePreferences } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { TabStage } from "@/ui/Screens";
-import { ExSearch, Pill, PillRow, SegmentBar } from "./ExplorerHead";
+import { ExSearch, FilterButton, Pill, PillRow, SearchLine, SegmentBar } from "./ExplorerHead";
 import {
   type ChoiceOption,
   ChoiceSheet,
@@ -132,6 +132,8 @@ export function ExplorerScreen() {
   const insets = useSafeAreaInsets();
   const me = useSession().me;
   const [segment, setSegment] = useState<ExplorerSegment>(fromParams ?? "evenements");
+  // Lot R8x : le nombre de résultats des événements, dans l'onglet (« Événements · 7 ») ; `null` tant qu'il n'est pas lu.
+  const [eventsTotal, setEventsTotal] = useState<number | null>(null);
   // La recherche dépend du segment (son texte d'aide aussi) : un texte par segment.
   const [qs, setQs] = useState<Record<ExplorerSegment, string>>(() => ({
     evenements: "",
@@ -250,6 +252,50 @@ export function ExplorerScreen() {
     [filters, prefFormatsKey],
   );
   const filterCount = activeFilters(listFilters) + (prefFormats.length ? 1 : 0);
+
+  // Lot R8x : le nombre de l'onglet « Événements · N » vient de la même requête que la liste (texte, filtres et lieu des
+  // événements), quelle que soit la vue (liste, carte) et le segment regardé : jamais un nombre périmé. Inconnu : aucun nombre.
+  const evQ = qs.evenements;
+  const evSearching = evQ.trim().length > 0;
+  const evWhere = effectiveWhere(where, habitual, { positionOn, hasCoin: coin.length > 0, searching: evSearching });
+  const evFormats = prefFormatsOn && !filters.format && !evSearching ? prefTypes : [];
+  const evKey = [evQ, JSON.stringify(filters), evFormats.join(","), whereId(evWhere), coinKey].join("|");
+  const countReady = choiceRead && prefsRead && position.status !== "checking" && position.status !== "asking";
+  const evLat = position.position?.lat ?? null;
+  const evLng = position.position?.lng ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la clé `evKey` résume le texte, les filtres et le lieu
+  useEffect(() => {
+    setEventsTotal(null);
+    if (!countReady || (evWhere.kind === "me" && !positionOn)) return;
+    let alive = true;
+    const timer = setTimeout(
+      () => {
+        const query = eventQuery(
+          evQ,
+          { ...filters, formats: evFormats },
+          position.position,
+          "list",
+          new Date(nowMs()),
+          undefined,
+          "date",
+          { where: evWhere, coin },
+        );
+        api
+          .exploreEvents({ ...query, limit: 1 })
+          .then((p) => {
+            if (alive) setEventsTotal(p.total ?? null);
+          })
+          .catch(() => {
+            if (alive) setEventsTotal(null);
+          });
+      },
+      evQ.trim() ? 300 : 0,
+    );
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [evKey, countReady, positionOn, evLat, evLng]);
   const settled = choiceRead && prefsRead;
   const grade = me ? me.profile.grade : null;
   const gradeLabel = grade ? gradeLabels[grade] : null;
@@ -313,14 +359,6 @@ export function ExplorerScreen() {
             testID="sort-open"
           />
         )}
-        <Pill
-          icon="filter"
-          value={R.filters}
-          count={filterCount || undefined}
-          set={activeFilters(listFilters) > 0 || (!prefFormatsOn && prefTypes.length > 0)}
-          onPress={() => setSheet("filters")}
-          testID="filters-toggle"
-        />
       </>
     ) : segment === "pros" ? (
       <>
@@ -378,32 +416,46 @@ export function ExplorerScreen() {
           onPress={() => setSheet("show")}
           testID="show-open"
         />
-        <Pill
-          icon="filter"
-          value={R.filters}
-          count={(people.categoryId ? 1 : 0) + (people.grade ? 1 : 0) || undefined}
-          set={Boolean(people.categoryId || people.grade)}
-          onPress={() => setSheet("peopleFilters")}
-          testID="people-filters"
-        />
       </>
     );
+  // Lot R8x : « Filtres » est un bouton icône à droite du champ (événements et personnes) ; il garde son identifiant.
+  const filterButton =
+    segment === "evenements" ? (
+      <FilterButton
+        count={filterCount || undefined}
+        set={activeFilters(listFilters) > 0 || (!prefFormatsOn && prefTypes.length > 0)}
+        onPress={() => setSheet("filters")}
+        testID="filters-toggle"
+      />
+    ) : segment === "personnes" ? (
+      <FilterButton
+        count={(people.categoryId ? 1 : 0) + (people.grade ? 1 : 0) || undefined}
+        set={Boolean(people.categoryId || people.grade)}
+        onPress={() => setSheet("peopleFilters")}
+        testID="people-filters"
+      />
+    ) : null;
   const header = (
     <View style={styles.head} testID="explorer-head">
       <SegmentBar
         value={segment}
+        eventsCount={eventsTotal}
         onChange={(s) => {
           setSegment(s);
           if (s === "personnes") setView("list");
         }}
       />
       {/* Relecture du lot R2 : le texte s'applique aussi à la carte ; le champ y reste donc visible. */}
-      <ExSearch
-        value={q}
-        onChange={setQ}
-        placeholder={segment === "evenements" ? R.searchEvents : segment === "pros" ? R.searchPros : R.searchPeople}
-        testID={segment === "personnes" ? "people-q" : "events-q"}
-      />
+      <SearchLine>
+        <ExSearch
+          compact
+          value={q}
+          onChange={setQ}
+          placeholder={segment === "evenements" ? R.searchEvents : segment === "pros" ? R.searchPros : R.searchPeople}
+          testID={segment === "personnes" ? "people-q" : "events-q"}
+        />
+        {filterButton}
+      </SearchLine>
       <PillRow>{pills}</PillRow>
     </View>
   );
@@ -562,15 +614,7 @@ export function ExplorerScreen() {
           <AskPosition position={position} dept={coin[0] ?? null} onEnable={enableMyPosition} />
         ) : null}
         {segment === "evenements" ? (
-          <EventsSegment
-            q={q}
-            filters={listFilters}
-            position={position}
-            sort={sort}
-            place={place}
-            placeLine={placeLine}
-            settled={settled}
-          />
+          <EventsSegment q={q} filters={listFilters} position={position} sort={sort} place={place} settled={settled} />
         ) : null}
         {segment === "pros" ? (
           <ProsSegment
@@ -684,7 +728,7 @@ function AskPosition({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   headWrap: { paddingHorizontal: space4, paddingTop: space3, paddingBottom: space2 },
-  head: { gap: 8 },
+  head: { gap: 10 },
   body: { paddingHorizontal: space4, paddingTop: space2, gap: 10 },
   // `.locask` : carte crème, pastille moutarde 44 px rayon 14, phrase 13,5 px.
   ask: { flexDirection: "row", gap: space3, padding: 14, borderRadius: 18 },
