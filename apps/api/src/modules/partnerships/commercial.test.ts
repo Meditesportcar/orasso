@@ -486,7 +486,7 @@ describe("tour 2 : story vidéo commerciale", () => {
         height: 1920,
         durationMs: 5000,
         status: "ready",
-        plateState: "none_confirmed",
+        plateState: "not_required",
         expiresAt: new Date(clock.now.getTime() + 20 * 3_600_000),
         commercialPartnerId: commercial ? pro.id : null,
       })
