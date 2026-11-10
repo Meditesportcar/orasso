@@ -363,7 +363,7 @@ export function withStsdTail(data: Buffer, tail: Buffer): Buffer {
  * `sizes` (table `stsz`), rangés `perChunk` par morceau : un seul morceau (`perChunk` = nombre d'échantillons) ou des morceaux
  * contigus (`perChunk` = 1).
  */
-export function nalSamplesTrack(offset: number, sizes: number[], perChunk: number): Buffer {
+export function nalSamplesTrack(offset: number, sizes: number[], perChunk: number, gap = 0): Buffer {
   const config = box("avcC", Buffer.from([1, 66, 0, 30, 0xff, 0xe0, 0]));
   const stsd = box("stsd", u32(0, 1), box("avc1", Buffer.alloc(78), config));
   const stts = box("stts", u32(0, 1, sizes.length, 1));
@@ -373,7 +373,7 @@ export function nalSamplesTrack(offset: number, sizes: number[], perChunk: numbe
   let o = offset;
   for (const [i, size] of sizes.entries()) {
     if (i % perChunk === 0) starts.push(o);
-    o += size;
+    o += size + gap;
   }
   const stco = box("stco", u32(0, starts.length), u32Array(starts));
   const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from("vide", "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));

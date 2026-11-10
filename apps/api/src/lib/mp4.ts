@@ -120,8 +120,8 @@ const KEPT_HANDLERS = new Set(["vide", "soun"]);
 
 const unreadable = (what: string) => new Mp4Error("unreadable", `Vidéo illisible (${what})`);
 
-/** Échantillons vidéo H.264/HEVC suivis un à un (SEI) : au plus un million (plus de neuf heures à 30 images par seconde). */
-const SAMPLES_MAX = 1_000_000;
+/** Échantillons vidéo H.264/HEVC suivis un à un (SEI) : au plus 100 000 (31 s à 240 images par seconde ≈ 7 500). Pas pour le son. */
+const SAMPLES_MAX = 100_000;
 /** Plus de boîtes dans un niveau que le lecteur n'en tolère (2000) : refus. */
 const LEVEL_BOXES_MAX = 2000;
 /** Descriptions d'échantillons d'une piste vidéo ou son (`stsd`) : au plus 16. */
@@ -170,7 +170,7 @@ type Plan = {
   /** Plages des échantillons des autres pistes (déjà dans le reste de `mdat` : seulement vérifiées, elles doivent y être). */
   foreign: [number, number][];
   /** Plages des échantillons vidéo H.264/HEVC dont les SEI sont remplacés (début, fin, indice dans `nalKinds`). */
-  nal: [number, number, number][];
+  nal: { from: Float64Array; to: Float64Array; kind: Uint8Array; count: number };
   nalKinds: NalKind[];
   /** NAL SEI de la configuration `hvcC` (position dans le fichier, longueur, premier octet) : remplacés eux aussi. */
   configSei: [number, number, number][];
@@ -256,7 +256,7 @@ function trackSampleRanges(
   base: number,
   chunkStarts: number[],
   audio: boolean,
-  samples?: [number, number][],
+  samples?: (from: number, to: number) => void,
   room = 0,
 ): [number, number][] {
   const { boxes } = rawBoxes(moov, stbl.rel + stbl.header, stbl.rel + stbl.size, base);
@@ -317,6 +317,7 @@ function trackSampleRanges(
           : (moov.readUInt8(at + 12 + (index >> 1)) >> (index % 2 === 0 ? 4 : 0)) & 0x0f;
   }
   const ranges: [number, number][] = [];
+  let generated = 0;
   const pcmByDesc = new Map<number, PcmBytes>();
   let stsdEntries: RawBox[] | undefined;
   let sample = 0;
@@ -346,11 +347,12 @@ function trackSampleRanges(
     const start = offsets[chunk - 1] as number;
     if (samples) {
       // Limites de chaque échantillon (avant toute fusion) : les NAL ne peuvent pas les dépasser.
-      if (samples.length + count > room) throw unreadable("trop d'échantillons");
+      generated += count;
+      if (generated > room) throw unreadable("trop d'échantillons vidéo");
       let o = start;
       for (let i = 0; i < count; i++) {
         const size = sizeOf(sample + i);
-        samples.push([o, o + size]);
+        samples(o, o + size);
         o += size;
       }
     }
@@ -470,7 +472,22 @@ function planTrak(moov: Buffer, trak: RawBox, base: number, plan: Plan): void {
     const stsd = inside(stbl, "stsd");
     if (stsd) kind = planEntries(moov, stsd, handler === "soun", base, plan);
   }
-  const samples: [number, number][] | undefined = kind ? [] : undefined;
+  let index = -1;
+  if (kind) {
+    const wanted = kind;
+    index = plan.nalKinds.findIndex((k) => k.hevc === wanted.hevc && k.lengthSize === wanted.lengthSize);
+    if (index < 0) index = plan.nalKinds.push(wanted) - 1;
+  }
+  // Bornes des échantillons vidéo dans des tableaux typés (pas un petit tableau par échantillon).
+  const samples = kind
+    ? (from: number, to: number) => {
+        if (to <= from) return;
+        plan.nal.from[plan.nal.count] = from;
+        plan.nal.to[plan.nal.count] = to;
+        plan.nal.kind[plan.nal.count] = index;
+        plan.nal.count++;
+      }
+    : undefined;
   const ranges = trackSampleRanges(
     moov,
     stbl,
@@ -478,16 +495,11 @@ function planTrak(moov: Buffer, trak: RawBox, base: number, plan: Plan): void {
     plan.chunkStarts,
     handler === "soun",
     samples,
-    SAMPLES_MAX - plan.nal.length,
+    SAMPLES_MAX - plan.nal.count,
   );
   // Ajout par itération : un tableau de 150 000 plages ne passe pas en arguments de fonction (RangeError).
   const target = kept ? plan.kept : plan.foreign;
   for (const range of ranges) target.push(range);
-  if (kind) {
-    let index = plan.nalKinds.findIndex((k) => k.hevc === kind?.hevc && k.lengthSize === kind.lengthSize);
-    if (index < 0) index = plan.nalKinds.push(kind) - 1;
-    for (const [from, to] of samples ?? []) plan.nal.push([from, to, index]);
-  }
 }
 
 /** Parcourt un niveau de `moov` selon la liste blanche. */
@@ -582,18 +594,19 @@ const SEI_MAX = 8 * 1024 * 1024;
 const SEI_WINDOW = 1024 * 1024;
 
 /**
- * Remplace le contenu de tout NAL SEI des échantillons vidéo par un message SEI « filler payload » de même longueur (tours 7 et 8) :
+ * Remplace le contenu de tout NAL SEI des échantillons vidéo par un message SEI « filler payload » de même longueur (tours 7 à 9) :
  * des caméras écrivent latitude et longitude dans les SEI de chaque image, et `x264` y met sa ligne de réglages. Le NAL **reste un
  * SEI** (H.264 : type 6 ; HEVC : 39/40, en-tête intact) : un NAL de remplissage (type 12) avant la première tranche n'est pas conforme
- * en H.264. La longueur des NAL vient de `avcC`/`hvcC` ; un NAL qui sort de ses échantillons est refusé, un NAL de longueur 0 est sauté
- * (certains encodeurs matériels finissent l'échantillon par des zéros). Lecture et écriture **par fenêtres de 1 Mo** : les NAL sont
- * parcourus et réécrits en mémoire, une écriture par fenêtre touchée au plus ; le travail suit la taille du fichier. Perte connue :
- * les métadonnées HDR portées par des SEI.
+ * en H.264. La longueur des NAL vient de `avcC`/`hvcC` ; un NAL qui sort de son échantillon est refusé, un NAL de longueur 0 est sauté
+ * (certains encodeurs matériels finissent l'échantillon par des zéros). **Une fenêtre commune de 1 Mo** couvre tous les échantillons qui y
+ * tombent, trous et son compris (les échantillons sont triés) : les NAL sont parcourus et réécrits en mémoire, une écriture par fenêtre
+ * touchée ; la fenêtre ne change que lorsqu'un NAL (en-tête ou SEI entier) n'y tient plus. Le travail suit la taille du fichier. Perte
+ * connue : les métadonnées HDR portées par des SEI.
  */
 async function replaceSei(
   handle: FileHandle,
-  regions: [number, number, number][],
-  samples: [number, number, number][],
+  size: number,
+  samples: { from: Float64Array; to: Float64Array; kind: Uint8Array; count: number },
   kinds: NalKind[],
   configSei: [number, number, number][],
 ): Promise<void> {
@@ -602,67 +615,55 @@ async function replaceSei(
     writeFiller(body, 0, body.length);
     await handle.write(body, 0, body.length, start + 2);
   }
-  let si = 0;
-  for (const [from, to, index] of regions) {
-    const { hevc, lengthSize } = kinds[index] as NalKind;
-    const header = hevc ? 2 : 1;
-    let pos = from;
-    while (pos < to) {
-      let want = Math.min(SEI_WINDOW, to - pos);
-      let buf = Buffer.alloc(want);
-      const { bytesRead } = await handle.read(buf, 0, want, pos);
+  let window = Buffer.alloc(0);
+  let windowAt = 0;
+  let dirty = false;
+  const flush = async () => {
+    if (dirty) await handle.write(window, 0, window.length, windowAt);
+    dirty = false;
+  };
+  // Rend la position de `abs` dans la fenêtre, après l'avoir déplacée si `length` octets depuis `abs` n'y tiennent pas.
+  const ensure = async (abs: number, length: number): Promise<number> => {
+    if (abs < windowAt || abs + length > windowAt + window.length) {
+      await flush();
+      const want = Math.min(Math.max(SEI_WINDOW, length), size - abs);
+      if (want < length) throw unreadable("fichier plus court que prévu");
+      window = Buffer.alloc(want);
+      const { bytesRead } = await handle.read(window, 0, want, abs);
       if (bytesRead < want) throw unreadable("fichier plus court que prévu");
-      let i = 0;
-      let dirty = false;
-      // Parcours en mémoire : on s'arrête quand le NAL suivant n'est plus entièrement dans la fenêtre.
-      while (i < buf.length) {
-        if (i + lengthSize > buf.length) break;
-        // Échantillon qui contient ce NAL : le NAL ne peut pas en sortir (il pourrait englober le SEI de l'image suivante).
-        while (si < samples.length && (samples[si] as [number, number, number])[1] <= pos + i) si++;
-        const sampleEnd = (samples[si] as [number, number, number])[1];
-        if (pos + i + lengthSize > sampleEnd) throw unreadable("NAL hors de son échantillon");
-        let length = 0;
-        for (let k = 0; k < lengthSize; k++) length = length * 256 + (buf[i + k] as number);
-        if (length === 0) {
-          i += lengthSize;
-          continue;
-        }
-        const end = i + lengthSize + length;
-        if (length < header || pos + end > sampleEnd) throw unreadable("NAL hors de son échantillon");
-        if (end > buf.length && i + lengthSize + header > buf.length) break;
-        const first = buf[i + lengthSize] as number;
-        const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
-        if (hevc ? type === 39 || type === 40 : type === 6) {
-          if (length > SEI_MAX) throw unreadable("SEI démesuré");
-          if (end > buf.length) break; // à cheval sur deux fenêtres : relu depuis son début, dans une fenêtre assez grande
-          writeFiller(buf, i + lengthSize + header, length - header);
-          dirty = true;
-        }
-        i = end;
-        if (i > buf.length) break; // NAL sans intérêt qui dépasse la fenêtre : on repart juste après lui
-      }
-      if (i === 0) {
-        // Le premier NAL ne tient pas dans la fenêtre : un SEI (relu dans une fenêtre à sa taille) ou une fin trop courte.
-        if (pos + lengthSize + header > to) throw unreadable("NAL tronqué");
-        let length = 0;
-        for (let k = 0; k < lengthSize; k++) length = length * 256 + (buf[k] as number);
-        want = Math.min(lengthSize + length, to - pos);
-        buf = Buffer.alloc(want);
-        const again = await handle.read(buf, 0, want, pos);
-        if (again.bytesRead < want) throw unreadable("fichier plus court que prévu");
-        const first = buf[lengthSize] as number;
-        const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
-        if (hevc ? type === 39 || type === 40 : type === 6) {
-          writeFiller(buf, lengthSize + header, length - header);
-          await handle.write(buf, 0, want, pos);
-        }
-        pos += want;
+      windowAt = abs;
+    }
+    return abs - windowAt;
+  };
+  for (let n = 0; n < samples.count; n++) {
+    const to = samples.to[n] as number;
+    const { hevc, lengthSize } = kinds[samples.kind[n] as number] as NalKind;
+    const header = hevc ? 2 : 1;
+    let pos = samples.from[n] as number;
+    while (pos < to) {
+      if (pos + lengthSize > to) throw unreadable("NAL hors de son échantillon");
+      let at = await ensure(pos, Math.min(lengthSize + header, to - pos));
+      let length = 0;
+      for (let k = 0; k < lengthSize; k++) length = length * 256 + (window[at + k] as number);
+      if (length === 0) {
+        pos += lengthSize;
         continue;
       }
-      if (dirty) await handle.write(buf, 0, Math.min(i, buf.length), pos);
-      pos += i;
+      const end = pos + lengthSize + length;
+      if (length < header || end > to) throw unreadable("NAL hors de son échantillon");
+      at = await ensure(pos, lengthSize + header);
+      const first = window[at + lengthSize] as number;
+      const type = hevc ? (first >> 1) & 0x3f : first & 0x1f;
+      if (hevc ? type === 39 || type === 40 : type === 6) {
+        if (length > SEI_MAX) throw unreadable("SEI démesuré");
+        at = await ensure(pos, lengthSize + length);
+        writeFiller(window, at + lengthSize + header, length - header);
+        dirty = true;
+      }
+      pos = end;
     }
   }
+  await flush();
 }
 
 /**
@@ -723,7 +724,12 @@ export async function stripMp4Metadata(path: string): Promise<number> {
       chunkStarts: [],
       kept: [],
       foreign: [],
-      nal: [],
+      nal: {
+        from: new Float64Array(SAMPLES_MAX),
+        to: new Float64Array(SAMPLES_MAX),
+        kind: new Uint8Array(SAMPLES_MAX),
+        count: 0,
+      },
       nalKinds: [],
       configSei: [],
     };
@@ -779,23 +785,36 @@ export async function stripMp4Metadata(path: string): Promise<number> {
       if (at < b) blank.push([at, b]);
     }
 
-    // Échantillons vidéo H.264/HEVC, un par un : triés, les références répétées au même échantillon ne comptent qu'une fois, deux
-    // échantillons différents qui se recouvrent sont refusés. Les plages contiguës (même codec) se lisent d'un seul tenant, mais les
-    // NAL restent bornés par leur échantillon.
-    const samples: [number, number, number][] = [];
-    for (const sample of [...plan.nal]
-      .filter(([x, y]) => y > x)
-      .sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2])) {
-      const last = samples.at(-1);
-      if (last && last[0] === sample[0] && last[1] === sample[1] && last[2] === sample[2]) continue;
-      if (last && sample[0] < last[1]) throw unreadable("échantillons vidéo qui se recouvrent");
-      samples.push(sample);
-    }
-    const regions: [number, number, number][] = [];
-    for (const sample of samples) {
-      const last = regions.at(-1);
-      if (last && sample[0] === last[1] && sample[2] === last[2]) last[1] = sample[1];
-      else regions.push([sample[0], sample[1], sample[2]]);
+    // Échantillons vidéo H.264/HEVC, un par un (tableaux typés) : triés, les références répétées au même échantillon ne comptent
+    // qu'une fois, deux échantillons différents qui se recouvrent sont refusés. Les NAL restent bornés par leur échantillon.
+    const { from: rawFrom, to: rawTo, kind: rawKind } = plan.nal;
+    const order = Uint32Array.from({ length: plan.nal.count }, (_, i) => i).sort(
+      (x, y) =>
+        (rawFrom[x] as number) - (rawFrom[y] as number) ||
+        (rawTo[x] as number) - (rawTo[y] as number) ||
+        (rawKind[x] as number) - (rawKind[y] as number),
+    );
+    const samples = {
+      from: new Float64Array(order.length),
+      to: new Float64Array(order.length),
+      kind: new Uint8Array(order.length),
+      count: 0,
+    };
+    for (const i of order) {
+      const n = samples.count;
+      if (
+        n > 0 &&
+        samples.from[n - 1] === rawFrom[i] &&
+        samples.to[n - 1] === rawTo[i] &&
+        samples.kind[n - 1] === rawKind[i]
+      )
+        continue;
+      if (n > 0 && (rawFrom[i] as number) < (samples.to[n - 1] as number))
+        throw unreadable("échantillons vidéo qui se recouvrent");
+      samples.from[n] = rawFrom[i] as number;
+      samples.to[n] = rawTo[i] as number;
+      samples.kind[n] = rawKind[i] as number;
+      samples.count++;
     }
 
     for (const box of plan.freed) {
@@ -805,7 +824,7 @@ export async function stripMp4Metadata(path: string): Promise<number> {
     }
     for (const [from, to] of plan.zero) await zeroRange(from, to);
     await blankGaps(handle, blank, size);
-    await replaceSei(handle, regions, samples, plan.nalKinds, plan.configSei);
+    await replaceSei(handle, size, samples, plan.nalKinds, plan.configSei);
     if (end < size) await handle.truncate(end);
     return plan.freed.length;
   } finally {

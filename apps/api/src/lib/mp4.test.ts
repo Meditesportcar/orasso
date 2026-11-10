@@ -1334,6 +1334,41 @@ describe("nettoyage borné et sans fuite (tour 7)", () => {
       });
     });
 
+    it("30 000 petits échantillons espacés d'un octet : une fenêtre commune, une écriture ; plus de 100 000 échantillons vidéo : refusé", async () => {
+      const original = await fixture("story-2s.mp4");
+      const tiny = nal([0x06], Buffer.from([1, 2, 3]));
+      const count = 30_000;
+      const payload = Buffer.concat(Array.from({ length: count }, () => Buffer.concat([tiny, Buffer.from([0x41])])));
+      const sizes = Array.from({ length: count }, () => tiny.length);
+      const { file, at } = withMdatTrack(original, (o) => nalSamplesTrack(o, sizes, 1, 1), payload);
+      await workDir(async (dir) => {
+        const path = join(dir, "a.mp4");
+        await writeFile(path, file);
+        const probe = await open(path, "r");
+        const proto = Object.getPrototypeOf(probe) as { write: (...args: unknown[]) => unknown };
+        await probe.close();
+        const spy = vi.spyOn(proto, "write");
+        await stripMp4Metadata(path);
+        const writes = spy.mock.calls.length;
+        spy.mockRestore();
+        // Les écritures de moov (boîtes neutralisées) et des trous mis à zéro : très loin de 30 010.
+        expect(writes).toBeLessThan(60);
+        const out = await readFile(path);
+        for (const i of [0, 1, count - 1]) {
+          const o = at + i * (tiny.length + 1);
+          expect(out[o + 4]).toBe(0x06);
+          expectFiller(out.subarray(o + 5, o + tiny.length));
+          expect(out[o + tiny.length]).toBe(0);
+        }
+        // Plus de 100 000 échantillons vidéo : refusé avant tout calcul de plage.
+        const many = Array.from({ length: 100_001 }, () => 8);
+        const bad = withMdatTrack(original, (o) => nalSamplesTrack(o, many, 100_001), Buffer.alloc(16, 1));
+        const p2 = join(dir, "many.mp4");
+        await writeFile(p2, bad.file);
+        expect(await kind(stripMp4Metadata(p2))).toBe("unreadable");
+      });
+    });
+
     it("un SEI à cheval sur deux fenêtres de 1 Mo, et un SEI de plus de 1 Mo : remplacés", async () => {
       const original = await fixture("story-2s.mp4");
       const window = 1024 * 1024;
