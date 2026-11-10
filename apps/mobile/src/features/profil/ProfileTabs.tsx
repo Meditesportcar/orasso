@@ -1,11 +1,12 @@
-// Les deux onglets internes du Profil (lot R7b1, maquette R7.12 `.seg.r6seg`) : Garage · Sorties. Deux segments qui se
-// partagent la largeur, le segment actif en encre ; chaque segment est un onglet (`tab`, `selected`), zone tactile
-// d'au moins le jeton `touch` ; le libellé ne se coupe jamais (police agrandie : il passe à la ligne).
-import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Les onglets internes du Profil (lot R7b1, maquette R7.12) : Garage · Sorties. Lot R8b1 (D40, maquette R8.1) : les segments
+// pleins deviennent les onglets soulignés du kit (`UnderTabs`) : « Garage · N » (N = véhicules actifs ; icône voiture) et
+// « Sorties » (icône tampon). Ce composant n'est qu'une enveloppe mince : il garde les identifiants `profil-tabs` et
+// `profil-tab-<id>`, et accepte un troisième onglet (« Publications », lot R8b2) sans rien refaire. La rangée est collante :
+// c'est l'écran hôte qui la colle (`TabScreen`, option `stickyIndex`), sur le fond de l'écran.
+import type { IconName } from "@orasso/design-system/native";
 import { profileTabsLabels as L, type ProfileTab } from "@orasso/shared";
-import { Pressable, StyleSheet, View } from "react-native";
 
-const { space1, space2 } = tokens.spacing;
+import { UnderTabs } from "@/ui/UnderTabs";
 
 const ITEMS: { id: ProfileTab; label: string; icon: IconName }[] = [
   { id: "garage", label: L.garage, icon: "vehicle" },
@@ -15,59 +16,29 @@ const ITEMS: { id: ProfileTab; label: string; icon: IconName }[] = [
 export function ProfileTabs({
   value,
   onChange,
-  /** Les onglets proposés (un compte privé vu d'un inconnu n'en a pas : la page ne monte pas ce composant). */
+  /** Les onglets proposés (un profil sans véhicule n'a pas « Garage » ; un compte privé vu d'un inconnu n'en a pas). */
   items = ITEMS.map((i) => i.id),
+  /** Le nombre de véhicules actifs, dans l'onglet « Garage · N » ; inconnu : « Garage » seul. */
+  garageCount = null,
 }: {
   value: ProfileTab;
   onChange: (tab: ProfileTab) => void;
   items?: readonly ProfileTab[];
+  garageCount?: number | null;
 }) {
-  const { t } = useTheme();
-  const c = t.color;
   return (
-    <View
-      style={[styles.row, { backgroundColor: c.surface, borderColor: c.line }]}
-      accessibilityRole="tablist"
+    <UnderTabs
+      value={value}
+      onChange={onChange}
+      items={ITEMS.filter((i) => items.includes(i.id)).map((i) => ({
+        id: i.id,
+        label: i.label,
+        icon: i.icon,
+        count: i.id === "garage" ? garageCount : null,
+      }))}
       accessibilityLabel={L.group}
       testID="profil-tabs"
-    >
-      {ITEMS.filter((i) => items.includes(i.id)).map((item) => {
-        const on = value === item.id;
-        const ink = on ? c.ground : c.inkMuted;
-        return (
-          <Pressable
-            key={item.id}
-            accessibilityRole="tab"
-            accessibilityLabel={item.label}
-            accessibilityState={{ selected: on }}
-            aria-selected={on}
-            onPress={() => onChange(item.id)}
-            testID={`profil-tab-${item.id}`}
-            style={[styles.tab, on && { backgroundColor: c.ink }]}
-          >
-            <Icon name={item.icon} size={16} color={ink} />
-            <Text variant="bodyStrong" color={ink} style={styles.label}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+      itemTestID={(id) => `profil-tab-${id}`}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: space1, padding: space1, borderRadius: 16, borderWidth: 1 },
-  tab: {
-    flex: 1,
-    minHeight: tokens.spacing.touch,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space2 - 2,
-    paddingHorizontal: space2,
-    borderRadius: 12,
-  },
-  // Un libellé ne se coupe jamais : sous une police très grande, il passe à la ligne.
-  label: { flexShrink: 1, textAlign: "center" },
-});

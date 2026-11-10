@@ -6,6 +6,10 @@
 // côte, puis deux onglets internes lus dans `?onglet=` : Garage (par défaut : « Sa voiture » et « Son garage ») et Sorties
 // (« Prochaine sortie », « Ses sorties », « Vu à »). Compte privé que je ne suis pas : les nombres, « Réservé à ses abonnés »
 // et le bouton, ni Garage ni Sorties. Le composant a quitté `components/` pour `components/profile/`.
+// Lot R8b1 (D40, maquette R8.1, option A « Compact ») : le même haut que Mon compte et que l'appli : photo de 72 px, pseudo,
+// « Suivre » sur la ligne du grade (petit bouton principal), bio sur une ligne avec « plus », à droite les icônes « Message » et
+// « Plus » (signaler) empilées, puis la bande de compteurs avec « partenaires » en 4e ; onglets soulignés et collants
+// (« Garage · N », « Sorties »), sans « Garage » pour un profil sans véhicule. Le crew et les réseaux restent sous le haut.
 import { AvatarRing, type AvatarRingState, Button, Chip, Icon, type IconName } from "@orasso/design-system/web";
 import {
   filledSocials,
@@ -24,9 +28,9 @@ import {
   socialUrl,
   storyViewerLabels,
   type UserProfileView,
-  wideWordEm,
+  visibleProfileTab,
 } from "@orasso/shared";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Form, useNavigation, useSearchParams } from "react-router";
 
 import { now } from "../../lib/clock";
@@ -38,7 +42,8 @@ import { ReportDialog } from "../ReportDialog";
 import "../../styles/passport.css";
 import "../../styles/profile-r5.css";
 import "../../styles/profile.css";
-import { PartnersLine } from "./PartnersLine";
+import { PartnersPanel, partnersBandCell } from "./PartnersLine";
+import { type BandCell, CounterBand, ProfileHead, SideIcon } from "./ProfileHead";
 import { ProfileTabs } from "./ProfileTabs";
 
 const TZ = "Europe/Paris";
@@ -95,15 +100,31 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
   const here = `/u/${encodeURIComponent(p.pseudo)}`;
   const crew = p.crews?.[0] ?? null;
   const socials = filledSocials(p.socials);
-  const counts = [
-    [p.followersCount, networkLabels.followers],
-    [p.followingCount, networkLabels.following],
-    [p.outingsCount, networkLabels.outings],
-  ].filter((c): c is [number, (n: number) => string] => c[0] !== null);
+  // La bande de compteurs : les nombres visibles de tout membre connecté ; « partenaires » en 4e, seulement quand il y en a.
+  const partnersCell = partnersBandCell({ partners: p.partners });
+  const cells: BandCell[] = [
+    ...(
+      [
+        ["followers", p.followersCount, networkLabels.followers],
+        ["following", p.followingCount, networkLabels.following],
+        ["outings", p.outingsCount, networkLabels.outings],
+      ] as const
+    )
+      .filter(([, n]) => n !== null)
+      .map(([key, n, label]) => ({
+        key,
+        value: n as number,
+        label: label(n as number),
+        testId: `public-count-${key}`,
+      })),
+    ...(partnersCell ? [{ ...partnersCell, testId: "public-count-partners" }] : []),
+  ];
   const Title = preview ? "h2" : "h1";
   // Lot R7b1 : l'onglet interne (Garage par défaut) ; l'adresse garde le reste de la recherche (`retour`).
   const [search] = useSearchParams();
-  const tab: ProfileTab = profileTabFromParam(search.get(PT.param));
+  // Lot R8b1 : un profil sans véhicule n'a pas d'onglet « Garage » et s'ouvre sur « Sorties ».
+  const hasGarage = p.vehicles.length > 0;
+  const tab: ProfileTab = visibleProfileTab(profileTabFromParam(search.get(PT.param)), hasGarage);
   const tabHref = (t: ProfileTab) => {
     const next = new URLSearchParams(search);
     next.set(PT.param, t);
@@ -129,21 +150,25 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
   return (
     <div className={limited ? "pr5 pr5--limited" : "pr5 pr5--tabs"}>
       <aside className="pr5-card" data-testid="public-head">
-        <div className="pr5-hd">
-          {/* Retour 6 de Damien : la même tête que l'appli (la photo, sinon l'initiale sur le rouge du grade), dans l'anneau
-              de ses stories ; lot R7f2 : dès qu'il y a une story, l'anneau est un lien qui ouvre la visionneuse. */}
-          <AvatarRing
-            ring={storyRingOf(p)}
-            neon={false}
-            size="xl"
-            src={p.avatarUrl}
-            name={p.pseudo}
-            href={!preview && p.stories.count > 0 ? `/app/story/${encodeURIComponent(`u:${p.userId}`)}` : undefined}
-            label={storyViewerLabels.openStories(p.pseudo)}
-          />
-          <div className="pr5-hd__id">
-            <Title style={{ "--em": wideWordEm(p.pseudo) } as CSSProperties}>{p.pseudo}</Title>
-            <div className="pr5-tags">
+        {/* Le haut compact (maquette R8.1, option A). Retour 6 de Damien : la photo, sinon l'initiale sur le rouge du grade, dans
+            l'anneau de ses stories ; lot R7f2 : dès qu'il y a une story, l'anneau est un lien qui ouvre la visionneuse. */}
+        <ProfileHead
+          testId="public-id"
+          avatar={
+            <AvatarRing
+              ring={storyRingOf(p)}
+              neon={false}
+              size="profile"
+              src={p.avatarUrl}
+              name={p.pseudo}
+              href={!preview && p.stories.count > 0 ? `/app/story/${encodeURIComponent(`u:${p.userId}`)}` : undefined}
+              label={storyViewerLabels.openStories(p.pseudo)}
+            />
+          }
+          name={p.pseudo}
+          nameAs={Title}
+          line={
+            <>
               <Chip variant="accent">{gradeLabels[p.grade]}</Chip>
               {live && p.follow.followsMe && (
                 <span className="r6tag" data-testid="follows-you">
@@ -155,25 +180,95 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
                   <Icon name="lock" size={14} /> {L.privateAccount}
                 </span>
               ) : (
-                p.departments &&
-                p.departments.length > 0 && <span className="o-t-caption s-muted">{p.departments.join(", ")}</span>
+                p.departments?.[0] && (
+                  <span className="pt-dept">
+                    <Icon name="place" size={14} />
+                    {p.departments[0]}
+                  </span>
+                )
               )}
-            </div>
-            {crew && (
-              <a
-                className="pr5-crew"
-                href={`/c/${crew.slug}`}
-                aria-label={L.openCrew(crew.name)}
-                data-testid="profile-crew"
-              >
-                <i aria-hidden="true">{crew.name.slice(0, 2).toUpperCase()}</i>
-                <span>{crew.name}</span>
-              </a>
-            )}
-          </div>
-        </div>
+              {live && (
+                // Lot R6b (D37, maquette R6.1) : UN bouton de suivi, selon le lien : Suivre, Suivre en retour, Demander à suivre,
+                // Abonné, Demandé. Lot R8b1 : sur la ligne du grade, petit bouton principal.
+                <FollowAction
+                  size="line"
+                  pseudo={p.pseudo}
+                  mine={p.follow.mine}
+                  followsMe={p.follow.followsMe}
+                  canFollow={p.follow.canFollow}
+                  visibility={p.visibility}
+                  busy={busy}
+                />
+              )}
+              {preview && (
+                // Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. Vu par un membre : le bouton qu'un
+                // inconnu verrait ; vu par un abonné : « Abonné ».
+                <span className="pr5-acts--inert" aria-hidden="true" data-testid="preview-actions">
+                  <FollowAction
+                    size="line"
+                    pseudo={p.pseudo}
+                    mine={previewAs === "follower" ? "accepted" : "none"}
+                    followsMe={false}
+                    canFollow
+                    visibility={p.visibility}
+                    inert
+                  />
+                </span>
+              )}
+            </>
+          }
+          bio={!limited ? p.bio : null}
+          bioTestId="profile-bio"
+          side={
+            mode === "self" ? (
+              <SideIcon icon="edit" label="Modifier mon profil" href="/app/profil/modifier" testId="profile-edit" />
+            ) : live ? (
+              <>
+                {/* Messagerie (lot 18) : conversation existante → conversation ; sinon demande de contact. */}
+                <Form method="post" className="pt-side__form">
+                  <input type="hidden" name="intent" value="message_open" />
+                  <input type="hidden" name="userId" value={p.userId} />
+                  <SideIcon
+                    icon="chat"
+                    label={L.writeTo(p.pseudo)}
+                    type="submit"
+                    disabled={busy}
+                    testId="message-open"
+                  />
+                </Form>
+                {/* « Plus » : les actions qui existaient déjà sur ce profil (signaler, lot 32). */}
+                <details className="pt-more" data-testid="profile-more">
+                  <summary className="pt-side__btn" aria-label={PT.more} title={PT.more}>
+                    <Icon name="more" size={20} />
+                  </summary>
+                  <div className="pt-more__sheet">
+                    <ReportDialog targetType="profile" targetId={p.userId} look="link" label={PT.reportProfile} />
+                  </div>
+                </details>
+              </>
+            ) : (
+              <span className="pr5-acts--inert" aria-hidden="true" data-testid="preview-side">
+                {!limited && <SideIcon icon="chat" label={L.writeTo(p.pseudo)} tabIndex={-1} />}
+                <SideIcon icon="more" label={PT.more} tabIndex={-1} />
+              </span>
+            )
+          }
+        />
 
-        {p.bio && <p className="s-prewrap o-t-caption s-muted">{p.bio}</p>}
+        {cells.length > 0 && <CounterBand cells={cells} label={networkLabels.countsGroup} testId="public-counts" />}
+        <PartnersPanel partners={p.partners} />
+
+        {crew && (
+          <a
+            className="pr5-crew"
+            href={`/c/${crew.slug}`}
+            aria-label={L.openCrew(crew.name)}
+            data-testid="profile-crew"
+          >
+            <i aria-hidden="true">{crew.name.slice(0, 2).toUpperCase()}</i>
+            <span>{crew.name}</span>
+          </a>
+        )}
 
         {socials.length > 0 && (
           <ul className="pr5-socs" aria-label={socialsLabels.group} data-testid="profile-socials">
@@ -198,88 +293,8 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
           </ul>
         )}
 
-        {counts.length > 0 && (
-          <p
-            className="pr5-n4"
-            style={{ gridTemplateColumns: `repeat(${counts.length}, minmax(0, 1fr))` }}
-            data-testid="public-counts"
-          >
-            {counts.map(([n, label]) => (
-              <span key={label(2)}>
-                <b>{n}</b>
-                <small>{label(n)}</small>
-              </span>
-            ))}
-          </p>
-        )}
-
-        <PartnersLine partners={p.partners} />
-
-        {mode === "self" && (
-          <Button variant="secondary" icon="edit" href="/app/profil/modifier">
-            Modifier mon profil
-          </Button>
-        )}
-
-        {live && (
-          <>
-            <div className="pr5-acts r6acts pt-acts">
-              {/* Lot R6b (D37, maquette R6.1) : UN bouton de suivi, selon le lien : Suivre, Suivre en retour, Demander à suivre,
-                  Abonné, Demandé. Lot R7b1 (maquette R7.12) : « Message » à côté (sous lui si la place manque). */}
-              <FollowAction
-                pseudo={p.pseudo}
-                mine={p.follow.mine}
-                followsMe={p.follow.followsMe}
-                canFollow={p.follow.canFollow}
-                visibility={p.visibility}
-                busy={busy}
-              />
-              {/* Messagerie (lot 18) : conversation existante → conversation ; sinon demande de contact. */}
-              <Form method="post">
-                <input type="hidden" name="intent" value="message_open" />
-                <input type="hidden" name="userId" value={p.userId} />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  icon="chat"
-                  loading={busy}
-                  aria-label={L.writeTo(p.pseudo)}
-                  data-testid="message-open"
-                >
-                  {PT.message}
-                </Button>
-              </Form>
-            </div>
-            {offer}
-            <div className="pr5-write">
-              {/* Signaler : lot 32. */}
-              <ReportDialog targetType="profile" targetId={p.userId} />
-            </div>
-          </>
-        )}
-
-        {preview && (
-          <>
-            {/* Les boutons ne font rien dans l'aperçu : c'est ce que voient les autres. */}
-            <div className="pr5-acts r6acts pr5-acts--inert" aria-hidden="true" data-testid="preview-actions">
-              {/* Vu par un membre : le bouton qu'un inconnu verrait ; vu par un abonné : « Abonné ». */}
-              <FollowAction
-                pseudo={p.pseudo}
-                mine={previewAs === "follower" ? "accepted" : "none"}
-                followsMe={false}
-                canFollow
-                visibility={p.visibility}
-                inert
-              />
-              {!limited && (
-                <Button variant="secondary" icon="chat" tabIndex={-1} aria-label={L.writeTo(p.pseudo)}>
-                  {PT.message}
-                </Button>
-              )}
-            </div>
-            <p className="o-t-caption s-muted">{PV.inert}</p>
-          </>
-        )}
+        {live && offer}
+        {preview && <p className="o-t-caption s-muted">{PV.inert}</p>}
 
         {notices}
       </aside>
@@ -307,9 +322,12 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
       ) : (
         <>
           {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties, lus dans `?onglet=`. */}
-          <div className="pr5-tabs">
-            <ProfileTabs value={tab} hrefOf={tabHref} />
-          </div>
+          <ProfileTabs
+            value={tab}
+            hrefOf={tabHref}
+            items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
+            garageCount={p.vehicles.length}
+          />
           {tab === "garage" ? (
             <div className="pr5-panel pr5-panel--garage" data-testid="profil-panel">
               <section

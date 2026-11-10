@@ -33,6 +33,11 @@
   --avring-w: 2.5px;
   --avring-gap: 3px;
 }
+.o-avring--profile {
+  --avring-box: 72px;
+  --avring-w: 2.5px;
+  --avring-gap: 2px;
+}
 .o-avring--xl {
   --avring-box: 88px;
   --avring-w: 3px;

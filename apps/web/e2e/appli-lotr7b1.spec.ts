@@ -58,10 +58,10 @@ test("mon profil : le Garage s'ouvre par défaut, Sorties montre ma saison et le
   await signIn(page, "kenji@orasso.local");
   await go(page, "/profil");
   await expect(page.getByTestId("profil-head")).toBeVisible({ timeout: 30_000 });
-  await expect(selected(page)).toHaveAccessibleName("Garage");
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/);
   // Le bouton principal de l'onglet : « Ajouter un véhicule » ; les trois nombres, « Profil public », la roue dentée.
   await expect(page.getByTestId("garage-add")).toBeVisible({ timeout: 30_000 });
-  for (const id of ["profil-count-abonnes", "profil-count-abonnements", "profil-count-sorties", "profil-public"]) {
+  for (const id of ["profil-count-abonnes", "profil-count-abonnements", "profil-count-sorties"]) {
     await expect(page.getByTestId(id), id).toBeVisible();
   }
   await expect(page.getByTestId("profil-gear")).toBeVisible();
@@ -87,7 +87,7 @@ test("les anciennes adresses : /garage et /mon-passeport mènent au Profil, sur 
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
   await go(page, "/garage");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(page).toHaveURL(/profil/);
   await go(page, "/mon-passeport");
   await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
@@ -98,15 +98,15 @@ test("les anciennes adresses : /garage et /mon-passeport mènent au Profil, sur 
   await ctx.close();
 });
 
-test("visiteur : le Passeport vit dans Profil › Sorties, le Garage vide propose d'ajouter un véhicule", async ({
+test("visiteur : le Passeport vit dans Profil › Sorties, sans onglet Garage (lot R8b1 : le profil s'ouvre sur Sorties)", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser);
   await signIn(page, "paul.photo@orasso.local");
   await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
-  await page.getByTestId("profil-tab-sorties").click();
+  await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+  await expect(page.getByTestId("profil-tab-garage")).toHaveCount(0);
   await expect(page.getByTestId("profil-places")).toBeVisible({ timeout: 30_000 });
   await ctx.close();
 });
@@ -120,7 +120,7 @@ test("le profil d'un autre : mêmes onglets ; compte privé vu d'un inconnu : le
   await signIn(a.page, "kenji@orasso.local");
   await go(a.page, "/u/Lea_11");
   await expect(a.page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
-  await expect(selected(a.page)).toHaveAccessibleName("Garage");
+  await expect(selected(a.page)).toHaveAccessibleName(/^Garage/);
   await expect(a.page.getByTestId("message-open")).toBeVisible();
   await a.page.getByTestId("profil-tab-sorties").click();
   await expect(selected(a.page)).toHaveAccessibleName("Sorties");
@@ -207,7 +207,7 @@ test("?onglet= rebascule à chaque navigation (passeport de l'Accueil → Sortie
     await page.getByTestId("home-passport").click();
     await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
     await page.getByTestId("profil-tab-garage").click();
-    await expect(selected(page)).toHaveAccessibleName("Garage");
+    await expect(selected(page)).toHaveAccessibleName(/^Garage/);
     await page.getByRole("tab", { name: "Accueil" }).last().click();
   }
   await ctx.close();
@@ -228,7 +228,7 @@ test("casquette organisateur active : /garage, /mon-passeport et le retour d'un 
   const bars = () => page.getByRole("tablist").filter({ has: page.getByRole("tab", { name: "Accueil" }) });
   // /garage : on bascule sur le passionné, onglet Garage ; /mon-passeport : onglet Sorties.
   await go(page, "/garage");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(page.getByTestId("casquette-fan").getByTestId("casquette-active")).toBeVisible();
   await shot(page, "08-organisateur-garage");
   await page.goto("/moi");
@@ -252,7 +252,7 @@ test("casquette organisateur active : /garage, /mon-passeport et le retour d'un 
     .getByRole("button", { name: /Fermer/ })
     .first()
     .click();
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(bars()).toHaveCount(1);
   await ctx.close();
 });
@@ -275,7 +275,8 @@ test("le profil d'un inconnu : « Message » ouvre la feuille à l'écran (jamai
     await expect(page.getByText("Une seule demande est possible")).toBeInViewport({ ratio: 1 });
     await shot(page, `05-demande-contact-police-${fontScale}`);
     if (fontScale === 1) {
-      await page.getByLabel("Message", { exact: true }).fill("Bonjour, belle voiture !");
+      // Lot R8b1 : l'icône « Message » du haut du profil porte le même nom accessible que le champ : on vise le champ de saisie.
+      await page.getByRole("textbox", { name: "Message" }).fill("Bonjour, belle voiture !");
       await page.getByRole("button", { name: /Envoyer/ }).click();
       await expect(page.getByTestId("contact-sent")).toBeInViewport({ ratio: 1, timeout: 20_000 });
     }
@@ -332,11 +333,11 @@ test("Garage › Ajouter un véhicule › Terminé : une seule barre d'onglets, 
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await page.getByTestId("garage-add").click();
   await runVehicleWizard(page);
   await page.getByTestId("vehicle-done-garage").click();
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(page).not.toHaveURL(/vehicule\/nouveau/);
   await expect(allBars(page)).toHaveCount(1);
   await shot(page, "09-apres-ajout-garage");
@@ -359,7 +360,7 @@ test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, l
   const { ctx, page } = await open(browser);
   await signIn(page, email);
   await go(page, "/profil");
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   // Depuis la carte du Garage (la fiche s'empile sur la barre), pas à froid.
   await page.getByTestId("garage-card").first().click();
   await page.waitForURL(/\/vehicule\//, { timeout: 30_000 });
@@ -368,7 +369,7 @@ test("Garage › fiche du véhicule › Supprimer : une seule barre d'onglets, l
   await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
   await page.getByTestId("vehicle-delete").click();
   await page.getByTestId("orga-confirm").click();
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(allBars(page)).toHaveCount(1);
   await page.goBack();
   await expect(page).not.toHaveURL(new RegExp(`vehicule/${gone}`));
@@ -400,7 +401,7 @@ test("casquette organisateur : ajout puis « Retour au garage », suppression de
   await go(page, "/vehicule/nouveau");
   await runVehicleWizard(page);
   await page.getByTestId("vehicle-done-garage").click();
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(page).not.toHaveURL(/vehicule\/nouveau/);
   await expect(allBars(page)).toHaveCount(1);
   await shot(page, "10-organisateur-apres-ajout-garage");
@@ -419,7 +420,7 @@ test("casquette organisateur : ajout puis « Retour au garage », suppression de
   await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
   await page.getByTestId("vehicle-delete").click();
   await page.getByTestId("orga-confirm").click();
-  await expect(selected(page)).toHaveAccessibleName("Garage", { timeout: 30_000 });
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/, { timeout: 30_000 });
   await expect(allBars(page)).toHaveCount(1);
   await page.goBack();
   await expect(page).not.toHaveURL(new RegExp(`vehicule/${added?.id}`));

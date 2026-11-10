@@ -25,15 +25,15 @@ import {
   profileVisibilityLabels,
   profileVisibilityRules,
   settingsHubLabels as S,
-  wideWordEm,
+  type VehicleFull,
 } from "@orasso/shared";
-import type { CSSProperties } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
 import { GarageTab } from "../components/profile/GarageTab";
 import { type GarageActionData, garageAction, loadGarage } from "../components/profile/garage.server";
 import { PanelDown } from "../components/profile/PanelDown";
-import { PartnersLine } from "../components/profile/PartnersLine";
+import { PartnersPanel, partnersBandCell } from "../components/profile/PartnersLine";
+import { type BandCell, CounterBand, ProfileHead, SideIcon } from "../components/profile/ProfileHead";
 import { ProfileTabs } from "../components/profile/ProfileTabs";
 import { isPanelFailure, panelRetryHref } from "../components/profile/panel";
 import { loadSorties } from "../components/profile/passport.server";
@@ -52,6 +52,11 @@ import "../styles/profile.css";
 // Lot R7b1 (D38, maquette R7.12) : le Profil porte le Garage. En-tête (photo dans son anneau, nombres, « Partenaires »), puis
 // deux onglets internes, Garage (par défaut) et Sorties (le passeport), lus dans `?onglet=` ; les casquettes et les réglages
 // suivent. `/app/garage` et `/app/passeport` redirigent ici.
+// Lot R8b1 (D40, maquette R8.1 `pr-profil`, option A « Compact ») : le haut du Profil est repris comme dans l'appli (photo de 72 px,
+// pseudo, grade et département, bio sur une ligne avec « plus », QR et Réglages en icônes, bande de compteurs avec « partenaires »
+// en 4e compteur) ; « Profil public » devient la première ligne de Réglages (« Voir mon profil comme les autres ») ; les onglets
+// sont soulignés et collants (« Garage · N », « Sorties »). Le site garde l'onglet « Garage » pour tout le monde (y compris
+// un visiteur sans véhicule : il porte mon QR de compte et l'ajout d'un premier véhicule).
 export function meta() {
   return [{ title: "Mon compte · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -61,7 +66,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   // Lot R7b1 : l'onglet interne ; seule sa lecture est faite (le Garage par défaut, partout).
   const onglet = profileTabFromParam(url.searchParams.get("onglet"));
-  const [settings, network, garage, sorties, partnerships] = await Promise.all([
+  const [settings, network, garage, sorties, partnerships, vehicleList] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     // Lot R4c : abonnés, abonnements, sorties (R6b).
     api<NetworkCounts>(request, "/me/network"),
@@ -69,7 +74,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     onglet === "sorties" ? loadSorties(request) : Promise.resolve(null),
     // Lot R7m1 : mes partenaires (la ligne « Partenaires », « Mettre fin »).
     api<MyPartnerships>(request, "/me/partnerships"),
+    // Lot R8b1 : le nombre de « Garage · N » vient du Garage quand il est ouvert ; sur « Sorties », une lecture légère.
+    onglet === "sorties" ? api<VehicleFull[]>(request, "/me/vehicles") : Promise.resolve(null),
   ]);
+  const garageCount =
+    garage && !isPanelFailure(garage)
+      ? garage.vehicles.length
+      : vehicleList?.ok
+        ? vehicleList.data.filter((v) => v.status === "active").length
+        : null;
   return {
     me,
     settings,
@@ -78,6 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Tour 2 : une panne de cette lecture ne ressemble jamais à « aucun partenaire » (message + « Réessayer »).
     partnershipsDown: !partnerships.ok,
     onglet,
+    garageCount,
     // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
     retryHref: panelRetryHref(url.searchParams),
     garage,
@@ -171,6 +185,25 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
   const { me, settings, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
+  // Lot R8b1 : la bande de compteurs. Un nombre inconnu (lecture en panne) dit « – ». « partenaires » seulement quand il y en a.
+  const partnersCell = partnersBandCell({ mine: loaderData.partnerships, down: loaderData.partnershipsDown });
+  const bandCells: BandCell[] = [
+    ...(
+      [
+        ["abonnes", loaderData.network?.followers, N.followers, "/app/reseau?liste=abonnes"],
+        ["abonnements", loaderData.network?.following, N.following, "/app/reseau?liste=abonnements"],
+        // Lot R6b (D37) : plus d'amis ; le troisième nombre est celui de mes sorties (l'onglet Sorties du Profil).
+        ["sorties", loaderData.network?.outings, N.outings, "/app/moi?onglet=sorties"],
+      ] as const
+    ).map(([tab, n, label, href]) => ({
+      key: tab,
+      value: n ?? null,
+      label: label(n ?? 2),
+      href,
+      testId: `profil-count-${tab}`,
+    })),
+    ...(partnersCell ? [partnersCell] : []),
+  ];
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
   const hats = [
     ...me.memberships
@@ -191,7 +224,15 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         label: p.label,
       })),
   ];
-  const hubRows: { key: string; href: string; icon: IconName; title: string; caption: string; testId?: string }[] = [
+  const hubRows: { key: string; href: string; icon: IconName; title: string; caption?: string; testId?: string }[] = [
+    // Lot R8b1 (D40) : « Profil public » a quitté le haut du Profil ; l'aperçu est la première ligne des réglages.
+    {
+      key: "profil-public",
+      href: "/app/profil-public",
+      icon: "eye",
+      title: PT.seeAsOthers,
+      testId: "reglage-profil-public",
+    },
     {
       key: "profil",
       href: "/app/profil/modifier",
@@ -242,71 +283,62 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           {gradeLabels[me.profile.grade]} · {me.profile.pointsSeason} pts
         </Chip>
       </div>
-      {/* Lot R7b1 (maquette R7.12) : la photo dans son anneau (sans story pour l'instant : `ring = null`, le lot R7f2 l'ouvrira),
-          le pseudo, le grade, le secteur et la roue dentée ; les trois nombres (chacun ouvre sa liste), « Partenaires »
-          (lot R7m1) et « Profil public ». */}
-      <section className="s-stack" data-testid="profil-card" aria-label="Mon profil">
-        <div className="pt-head">
-          <div className="pt-head__av">
-            <AvatarRing ring={null} size="xl" src={me.profile.avatarUrl} name={me.profile.pseudo} />
-            <a
-              className="pt-head__cam"
-              href="/app/profil/modifier"
-              aria-label={profilePhotoLabels.change}
-              data-testid="profil-photo"
-            >
-              <Icon name="camera" size={14} />
-            </a>
-          </div>
-          <div className="pt-head__id">
-            <p
-              className="pt-head__name o-t-poster-l"
-              style={{ "--em": wideWordEm(me.profile.pseudo) } as CSSProperties}
-            >
-              {me.profile.pseudo}
-            </p>
-            <div className="pt-head__tags">
+      {/* Lot R8b1 (maquette R8.1, option A « Compact ») : la grille d'identité (photo de 72 px dans son anneau, sans story pour
+          l'instant : `ring = null` ; pseudo, grade et département, bio sur une ligne ; QR et Réglages en icônes) puis la bande de
+          compteurs : abonnés, abonnements, sorties (chacun ouvre sa liste) et « partenaires » quand il y en a (la liste est
+          dessous, visée par la case). */}
+      <section className="pt-top" data-testid="profil-card" aria-label="Mon profil">
+        <ProfileHead
+          testId="profil-head"
+          avatar={
+            <>
+              <AvatarRing ring={null} size="profile" src={me.profile.avatarUrl} name={me.profile.pseudo} />
+              <a
+                className="pt-head__cam"
+                href="/app/profil/modifier"
+                aria-label={profilePhotoLabels.change}
+                data-testid="profil-photo"
+              >
+                <Icon name="camera" size={12} />
+              </a>
+            </>
+          }
+          name={me.profile.pseudo}
+          line={
+            <>
               <Chip variant="accent">{gradeLabels[me.profile.grade]}</Chip>
-              {me.profile.departments.length > 0 && (
-                <span className="o-t-caption s-muted">{me.profile.departments.join(", ")}</span>
+              {me.profile.departments[0] && (
+                <span className="pt-dept" data-testid="profil-department">
+                  <Icon name="place" size={14} />
+                  {me.profile.departments[0]}
+                </span>
               )}
-            </div>
-          </div>
-          <div className="pt-head__btns">
-            <a className="pt-head__btn" href="#reglages" aria-label={S.open} data-testid="profil-settings">
-              <Icon name="gear" size={22} />
-            </a>
-          </div>
-        </div>
-        {me.profile.bio && <p className="pr5-bio">{me.profile.bio}</p>}
-        <nav className="pt-counts" aria-label={N.countsGroup} data-testid="profil-counters">
-          {(
-            [
-              ["abonnes", loaderData.network?.followers, N.followers, "/app/reseau?liste=abonnes"],
-              ["abonnements", loaderData.network?.following, N.following, "/app/reseau?liste=abonnements"],
-              // Lot R6b (D37) : plus d'amis ; le troisième nombre est celui de mes sorties (l'onglet Sorties du Profil).
-              ["sorties", loaderData.network?.outings, N.outings, "/app/moi?onglet=sorties"],
-            ] as const
-          ).map(([tab, n, label, href]) => (
-            <a key={tab} href={href} data-testid={`profil-count-${tab}`}>
-              <strong>{n ?? "—"}</strong>
-              <small>{label(n ?? 2)}</small>
-            </a>
-          ))}
-        </nav>
-        {loaderData.partnershipsDown ? (
-          <PanelDown message={PTN.partnersLoadError} href={loaderData.retryHref} />
-        ) : (
-          <PartnersLine mine={loaderData.partnerships} busy={busy} />
-        )}
+            </>
+          }
+          bio={me.profile.bio}
+          bioTestId="profil-bio"
+          side={
+            <>
+              <SideIcon icon="qr" label={PT.qrOpen} href="/app/moi?onglet=garage#qr" testId="profil-account-qr" />
+              <SideIcon icon="gear" label={PT.settingsOpen} href="#reglages" testId="profil-settings" />
+            </>
+          }
+        />
+        <CounterBand label={N.countsGroup} testId="profil-counters" cells={bandCells} />
+        <PartnersPanel
+          mine={loaderData.partnerships}
+          busy={busy}
+          failure={
+            loaderData.partnershipsDown ? (
+              <PanelDown message={PTN.partnersLoadError} href={loaderData.retryHref} />
+            ) : null
+          }
+        />
         {err("partnership") && (
           <p className="s-error" role="alert">
             {err("partnership")}
           </p>
         )}
-        <Button variant="secondary" icon="eye" href="/app/profil-public" data-testid="profil-public">
-          {PT.publicProfile}
-        </Button>
       </section>
       {saved && SAVED[saved] && (
         <p className="s-notice s-notice--ok" role="status">
@@ -315,7 +347,11 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
       )}
 
       {/* Lot R7b1 : les deux onglets internes, Garage par défaut ; chaque onglet n'est lu que quand il est ouvert. */}
-      <ProfileTabs value={loaderData.onglet} hrefOf={(tab) => `/app/moi?${PT.param}=${tab}`} />
+      <ProfileTabs
+        value={loaderData.onglet}
+        hrefOf={(tab) => `/app/moi?${PT.param}=${tab}`}
+        garageCount={loaderData.garageCount}
+      />
       <div className="pt-panel" data-testid="profil-panel">
         {/* Tour 2 : une panne du garage ou du passeport n'emporte que son panneau (message + « Réessayer »). */}
         {loaderData.onglet === "garage" && loaderData.garage ? (
@@ -371,7 +407,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
                 </span>
                 <span>
                   <b>{r.title}</b>
-                  <small>{r.caption}</small>
+                  {r.caption && <small>{r.caption}</small>}
                 </span>
                 <Icon name="next" size={16} />
               </a>

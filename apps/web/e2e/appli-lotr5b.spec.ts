@@ -300,9 +300,11 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
     await expect(page.getByTestId("profile-socials")).toContainText("julie.e30");
     await expect(page.getByTestId("profile-social-instagram")).toHaveAttribute("aria-label", "julie.e30 sur Instagram");
     await expect(page.getByTestId("public-counts")).toContainText("sortie");
-    // « Écrire » et « ⋯ » dans l'en-tête.
+    // « Message » et « Plus » (lot R8b1 : icônes du haut du profil) ; « Signaler » est dans la feuille « Plus ».
     await expect(page.getByTestId("message-open")).toBeVisible();
+    await page.getByTestId("profile-more").click();
     await expect(page.getByTestId("report-open-profile")).toBeVisible();
+    await goto(page, `/u/${aPseudo}`);
     // Lot R6b : un seul bouton, « Suivre » (B ne suit pas A et A ne suit pas B).
     await expect(page.getByTestId("follow-button")).toContainText("Suivre");
     await expect(page.getByTestId("friend-add")).toHaveCount(0);
@@ -393,6 +395,7 @@ test("R5b appli : réglages, photo, réseaux, profil d'un membre, titres et bout
       .locator(":scope > [role=button]")
       .evaluateAll((els) => els.map((e) => (e.getAttribute("aria-label") ?? "").split(",")[0]));
     expect(rows).toEqual([
+      "Voir mon profil comme les autres", // Lot R8b1 : première ligne de Réglages
       "Modifier mon profil",
       "Mes publications", // Lot R7e1
       "Compte",
