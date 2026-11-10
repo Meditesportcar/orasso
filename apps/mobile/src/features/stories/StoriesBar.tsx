@@ -21,10 +21,13 @@ const ITEM_W = 68;
 /** Route créée par le lot R7f3 (fusionné juste après celui-ci) : le « + » y mène toujours (Metro ne sait pas la détecter). */
 const PUBLISH = "/story/publier" as never;
 
-/** Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). */
+/**
+ * Ouvre la visionneuse d'un auteur (`u:<compte>`, `s:<structure>`, `p:<pro>`). Depuis la barre du Fil (lot R8s) : `suite=barre`,
+ * la lecture enchaîne les auteurs suivants de la barre.
+ */
 export function useOpenStories() {
   const router = useRouter();
-  return (authorKey: string) => router.push({ pathname: "/story/[authorKey]", params: { authorKey } });
+  return (authorKey: string) => router.push({ pathname: "/story/[authorKey]", params: { authorKey, suite: "barre" } });
 }
 
 export function StoriesBar() {
