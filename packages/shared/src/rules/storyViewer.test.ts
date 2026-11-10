@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  authorSwipe,
   barDisplay,
   barRingState,
   createReplyKeys,
   mineRingState,
+  nextAuthor,
+  prevAuthor,
   profileRingState,
   progressOf,
   remainingMs,
   replyStillShown,
+  STORY_AUTHOR_SWIPE_DISTANCE,
   STORY_PHOTO_MS,
   STORY_VIEWERS_MAX,
   shouldCloseOnDrag,
+  storyChain,
   storyDurationMs,
   storyNext,
   storyPlayable,
@@ -338,5 +343,77 @@ describe("clé du lecteur d'une story", () => {
     expect(storyPlayerKey("s1", 0, 0, false)).toBe(storyPlayerKey("s1", 0, 5, false));
     expect(storyPlayerKey("s1", 0, 0, false)).not.toBe(storyPlayerKey("s1", 1, 0, false));
     expect(storyPlayerKey("s1", 0, 0, true)).not.toBe(storyPlayerKey("s2", 0, 0, true));
+  });
+});
+
+describe("lecture enchaînée (R8s)", () => {
+  const a = (key: string, hasUnseen: boolean) => ({ key, hasUnseen });
+  // La barre est dans l'ordre du serveur : non vus d'abord, puis vus.
+  const bar = [a("s:live", true), a("s:soon", true), a("u:kenji", true), a("u:nina", false), a("u:lea", false)];
+
+  it("un auteur non vu : lui, puis les non vus qui le suivent (les vus ne sont pas enchaînés)", () => {
+    expect(storyChain(bar, "s:live")).toEqual(["s:live", "s:soon", "u:kenji"]);
+    expect(storyChain(bar, "s:soon")).toEqual(["s:soon", "u:kenji"]);
+    expect(storyChain(bar, "u:kenji")).toEqual(["u:kenji"]);
+  });
+  it("un auteur déjà vu : lui, puis les auteurs qui le suivent dans la barre", () => {
+    expect(storyChain(bar, "u:nina")).toEqual(["u:nina", "u:lea"]);
+    expect(storyChain(bar, "u:lea")).toEqual(["u:lea"]);
+  });
+  it("les auteurs qui précèdent l'ouvert ne sont pas dans la chaîne", () => {
+    expect(storyChain(bar, "u:nina")).not.toContain("s:live");
+  });
+  it("« Ta story » (hors liste) : elle, puis toute la barre, non vus d'abord tels que la barre les donne", () => {
+    expect(storyChain(bar, "u:moi", "u:moi")).toEqual(["u:moi", "s:live", "s:soon", "u:kenji", "u:nina", "u:lea"]);
+    // Une barre qui mêlerait vus et non vus : non vus d'abord, ordre relatif gardé.
+    const mixed = [a("x", false), a("y", true), a("z", false), a("w", true)];
+    expect(storyChain(mixed, "u:moi", "u:moi")).toEqual(["u:moi", "y", "w", "x", "z"]);
+  });
+  it("un seul auteur, barre vide, ou clé absente de la barre : la chaîne d'un seul", () => {
+    expect(storyChain([a("u:kenji", true)], "u:kenji")).toEqual(["u:kenji"]);
+    expect(storyChain([], "u:kenji")).toEqual(["u:kenji"]);
+    expect(storyChain(bar, "u:inconnu")).toEqual(["u:inconnu"]);
+    expect(storyChain([], "u:moi", "u:moi")).toEqual(["u:moi"]);
+  });
+  it("la chaîne est une copie : la barre n'est pas modifiée", () => {
+    const before = JSON.stringify(bar);
+    storyChain(bar, "s:live");
+    expect(JSON.stringify(bar)).toBe(before);
+  });
+  it("auteur suivant et précédent ; null aux bouts et pour une clé hors chaîne", () => {
+    const chain = ["a", "b", "c"];
+    expect(nextAuthor(chain, "a")).toBe("b");
+    expect(nextAuthor(chain, "b")).toBe("c");
+    expect(nextAuthor(chain, "c")).toBeNull();
+    expect(prevAuthor(chain, "c")).toBe("b");
+    expect(prevAuthor(chain, "a")).toBeNull();
+    expect(nextAuthor(chain, "z")).toBeNull();
+    expect(prevAuthor(chain, "z")).toBeNull();
+    expect(nextAuthor(["a"], "a")).toBeNull();
+    expect(prevAuthor(["a"], "a")).toBeNull();
+  });
+});
+
+describe("glisser pour changer d'auteur (R8s)", () => {
+  it("à gauche : suivant ; à droite : précédent", () => {
+    expect(authorSwipe(-120, 10)).toBe("next");
+    expect(authorSwipe(120, -10)).toBe("prev");
+  });
+  it("au plus 60 px : rien ; juste au-delà : oui", () => {
+    expect(STORY_AUTHOR_SWIPE_DISTANCE).toBe(60);
+    expect(authorSwipe(-60, 0)).toBeNull();
+    expect(authorSwipe(60, 0)).toBeNull();
+    expect(authorSwipe(-61, 0)).toBe("next");
+    expect(authorSwipe(61, 0)).toBe("prev");
+  });
+  it("trop penché (moins de deux fois plus large que haut) : rien ; pile deux fois : oui", () => {
+    expect(authorSwipe(-100, 60)).toBeNull();
+    expect(authorSwipe(-100, 51)).toBeNull();
+    expect(authorSwipe(-100, 50)).toBe("next");
+    expect(authorSwipe(100, 200)).toBeNull();
+  });
+  it("vers le bas (fermeture) : jamais un changement d'auteur", () => {
+    expect(authorSwipe(5, 200)).toBeNull();
+    expect(authorSwipe(0, 0)).toBeNull();
   });
 });
