@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import { cx } from "./cx";
 
 export type AvatarRingState = "followers" | "crew" | "live" | "seen" | null;
-export type AvatarRingSize = "sm" | "md" | "lg" | "xl";
+export type AvatarRingSize = "sm" | "md" | "lg" | "xl" | "profile";
 
 export type AvatarRingProps = {
   /** `followers` : anneau d'encre ; `crew` : rouge brique ; `live` : moutarde (le seul néon permis) ; `seen` : fin ; `null` : aucun. */
   ring?: AvatarRingState;
-  /** sm 40, md 56, lg 64, xl 88 px. */
+  /** sm 40, md 56, lg 64, profile 72 (lot R8b1, haut du Profil compact), xl 88 px. */
   size?: AvatarRingSize;
   /** L'adresse de la photo ; sans elle, l'initiale de `name` sur fond rouge. */
   src?: string | null;

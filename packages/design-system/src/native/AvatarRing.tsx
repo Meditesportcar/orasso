@@ -3,7 +3,7 @@
 //   - `followers` : story pour ses abonnés, anneau d'encre ; `crew` : story du crew, anneau rouge brique (`win`) ;
 //   - `live` : en direct (story de l'organisateur « En cours »), anneau moutarde, le seul néon permis quand il est là ;
 //   - `seen` : story déjà vue, anneau fin et discret ; `null` : pas d'anneau (la place reste réservée, rien ne bouge).
-// Tailles : sm 40, md 56, lg 64, xl 88 px. Un appui ouvre les stories, seulement si `onPress` est fourni.
+// Tailles : sm 40, md 56, lg 64, profile 72 (lot R8b1, haut du Profil compact), xl 88 px. Un appui ouvre les stories, seulement si `onPress` est fourni.
 
 import { type ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
 import { Photo } from "./Photo";
@@ -11,7 +11,7 @@ import { Text } from "./text";
 import { useTheme } from "./theme";
 
 export type AvatarRingState = "followers" | "crew" | "live" | "seen" | null;
-export type AvatarRingSize = "sm" | "md" | "lg" | "xl";
+export type AvatarRingSize = "sm" | "md" | "lg" | "xl" | "profile";
 
 /** Dimensions : `box` = diamètre total, `ring` = épaisseur de l'anneau, `gap` = espace entre l'anneau et la photo. */
 export const avatarRingSizes: Record<AvatarRingSize, { box: number; ring: number; gap: number; font: number }> = {
@@ -19,6 +19,7 @@ export const avatarRingSizes: Record<AvatarRingSize, { box: number; ring: number
   md: { box: 56, ring: 2.5, gap: 3, font: 16 },
   lg: { box: 64, ring: 2.5, gap: 3, font: 18 },
   xl: { box: 88, ring: 3, gap: 4, font: 26 },
+  profile: { box: 72, ring: 2.5, gap: 2, font: 22 },
 };
 
 export type AvatarRingProps = {
