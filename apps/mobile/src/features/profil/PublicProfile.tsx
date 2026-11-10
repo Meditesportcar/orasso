@@ -361,12 +361,16 @@ export function PublicProfile({
         accessibilityLabel: `${n} ${label(n as number)}`,
         testID: `public-count-${key}`,
       }));
-    if (partners && partners.count !== null) {
+    // Tour 2 : un nombre inconnu (lecture de mes partenaires en panne, mode « soi ») garde la case : « – », le toucher ouvre « Réessayer ».
+    if (partners) {
       cells.push({
         key: "partners",
         value: partners.count,
-        label: N.partners(partners.count),
-        accessibilityLabel: `${partners.count} ${N.partners(partners.count)}, ${partners.names}`,
+        label: N.partners(partners.count ?? 2),
+        accessibilityLabel:
+          partners.count === null
+            ? `${N.partners(2)}, ${PT.unknownCount}`
+            : `${partners.count} ${N.partners(partners.count)}, ${partners.names}`,
         onPress: partners.onPress,
         testID: "public-count-partners",
       });

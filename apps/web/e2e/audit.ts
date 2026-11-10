@@ -57,7 +57,12 @@ export async function auditPage(page: Page): Promise<Audit> {
       greens: [...greens].slice(0, 10),
       // Lot R8b1 : la bio du haut du Profil tient sur une ligne par construction (« plus » la déroule) : ce n'est pas une coupure subie.
       truncated: all
-        .filter((el) => !el.closest('[data-testid="profil-bio"], [data-testid="profile-bio"]'))
+        // Tour 2 : seulement si « plus » existe (bio coupée avec son déroulé) ; sans lui, la bio est contrôlée comme le reste.
+        .filter(
+          (el) =>
+            !el.closest('[data-testid="profil-bio"], [data-testid="profile-bio"]') ||
+            !document.querySelector('[data-testid="profil-bio-toggle"], [data-testid="profile-bio-toggle"]'),
+        )
         .filter((el) => getComputedStyle(el).textOverflow === "ellipsis" && el.scrollWidth > el.clientWidth + 1)
         .map(label),
       horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,

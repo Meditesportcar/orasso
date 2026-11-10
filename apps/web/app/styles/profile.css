@@ -246,6 +246,10 @@
   gap: 3px;
   min-width: 0;
   align-content: start;
+  width: 100%;
+}
+/* Le conteneur de requête est le seul nom : la colonne ne crée plus de contexte d'empilement (la confirmation passe devant). */
+.pt-id__namebox {
   container-type: inline-size;
   width: 100%;
 }
@@ -467,9 +471,9 @@
   background: var(--surface);
   box-shadow: var(--shadow-card);
 }
-/* La confirmation de « Abonné » / « Demandé » sur la ligne du grade : sous la ligne, alignée à gauche de la colonne (la feuille
-   ne sort pas de l'écran) et au-dessus des onglets collants. */
-.pt-id__mid {
+/* La confirmation de « Abonné » / « Demandé » sur la ligne du grade : sous la grille d'identité, sur la largeur de la carte (ancrée
+   à la grille, pas à la colonne centrale), au-dessus des onglets collants. */
+.pt-id {
   position: relative;
 }
 .pt-id__gl .fl-conf--sm {
@@ -477,8 +481,9 @@
 }
 .pt-id__gl .fl-conf--sm .fl-confirm {
   left: 0;
-  right: auto;
+  right: 0;
   top: 100%;
+  width: auto;
   z-index: 30;
 }
 /* Les liens de l'espace connecté sont moutarde (`.app__body a`) : les onglets du Profil gardent l'encre atténuée, l'actif l'encre. */

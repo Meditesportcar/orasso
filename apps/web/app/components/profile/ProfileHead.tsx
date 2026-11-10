@@ -116,9 +116,11 @@ export function ProfileHead({
     <div className="pt-id" data-testid={testId}>
       <div className="pt-id__av">{avatar}</div>
       <div className="pt-id__mid">
-        <Name className="pt-id__name o-t-poster-l" style={{ "--em": wideWordEm(name) } as CSSProperties}>
-          {name}
-        </Name>
+        <div className="pt-id__namebox">
+          <Name className="pt-id__name o-t-poster-l" style={{ "--em": wideWordEm(name) } as CSSProperties}>
+            {name}
+          </Name>
+        </div>
         <div className="pt-id__gl">{line}</div>
         <ProfileBio text={bio} testId={bioTestId} />
       </div>

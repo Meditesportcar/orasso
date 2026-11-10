@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   sideIcon: {
     width: SIDE_ICON,
     height: SIDE_ICON,
-    borderRadius: 10,
+    borderRadius: tokens.radius.radiusSm,
     alignItems: "center",
     justifyContent: "center",
   },

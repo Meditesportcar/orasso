@@ -25,6 +25,7 @@ import {
   cloneElement,
   Fragment,
   isValidElement,
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -32,7 +33,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, type StyleProp, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SwipeEntry } from "@/features/nav/SwipeEntry";
@@ -53,8 +54,24 @@ import { TopBar, useInTabs, useTabBandRefresh } from "./TopBar";
 const { space2, space3, space4, space6 } = tokens.spacing;
 
 /**
- * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment), clés uniques : le défilement ne colle que
- * ses enfants directs, et compte les mêmes sur le téléphone et sur le web.
+ * Lot R8b1 (tour 2) : l'enfant d'une page d'onglet qui reste collé en haut de la zone qui défile (la rangée d'onglets du
+ * Profil). `TabScreen` le repère parmi ses enfants : aucun indice à tenir à la main, un bloc en plus ou en moins au-dessus
+ * ne casse pas le collant. Le défilement ne colle que ses enfants directs : l'enfant doit être posé directement dans la page
+ * (les fragments sont aplatis).
+ */
+export function StickyHeader({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  return <View style={style}>{children}</View>;
+}
+
+/** Le nom d'un type d'élément, pour des clés tirées du contenu. */
+function typeName(n: ReactElement): string {
+  const t = n.type as string | { displayName?: string; name?: string };
+  return typeof t === "string" ? t : (t.displayName ?? t.name ?? "enfant");
+}
+
+/**
+ * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment). Clés stables tirées du contenu (la clé donnée,
+ * sinon le nom du type et son rang parmi ceux du même nom) : insérer ou retirer un bloc ne change pas les clés des autres.
  */
 function flatChildren(nodes: ReactNode): ReactNode[] {
   const out: ReactNode[] = [];
@@ -65,8 +82,14 @@ function flatChildren(nodes: ReactNode): ReactNode[] {
     }
   };
   walk(nodes);
-  // biome-ignore lint/suspicious/noArrayIndexKey: liste statique aplatie à chaque rendu, l'ordre est celui de la page
-  return out.map((n, i) => (isValidElement(n) ? cloneElement(n, { key: `flat-${i}` }) : n));
+  const seen = new Map<string, number>();
+  return out.map((n) => {
+    if (!isValidElement(n)) return n;
+    const base = typeName(n);
+    const rank = seen.get(base) ?? 0;
+    seen.set(base, rank + 1);
+    return cloneElement(n, { key: `${base}-${rank}` });
+  });
 }
 
 type Common = {
@@ -92,11 +115,6 @@ type TabProps = Common & {
   title?: string;
   facts?: string;
   home?: boolean;
-  /**
-   * Lot R8b1 : l'indice, parmi les enfants de la page (`children`, à plat : sans fragment ni `null` avant lui), de celui qui
-   * reste collé en haut de la zone qui défile (la rangée d'onglets du Profil). Absent : rien ne change.
-   */
-  stickyIndex?: number;
 };
 
 /**
@@ -129,7 +147,10 @@ function useRefreshOnFocus() {
   );
 }
 
-function TabPage({ title, facts, children, onRefresh, footer, still, overlays, stickyIndex }: TabProps) {
+function TabPage({ title, facts, children, onRefresh, footer, still, overlays }: TabProps) {
+  // Lot R8b1 : un enfant `StickyHeader` ? La liste est alors à plat (le défilement compte ses enfants directs), le titre en premier.
+  const flat = flatChildren(children);
+  const stickyAt = flat.findIndex((n) => isValidElement(n) && n.type === StickyHeader);
   // Lot 39 : le O vivant et le fond se mettent en pause quand l'écran n'est plus affiché.
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -145,19 +166,15 @@ function TabPage({ title, facts, children, onRefresh, footer, still, overlays, s
                 onRefresh={onRefresh}
                 bottom={footer ? space6 : TAB_BODY_BOTTOM + insets.bottom}
                 covered={TAB_BAR_SPACE + insets.bottom}
-                // Un enfant collant : la liste est à plat (le défilement compte ses enfants directs), le titre en premier.
-                stickyHeaderIndices={stickyIndex === undefined ? undefined : [stickyIndex + (title ? 1 : 0)]}
+                stickyHeaderIndices={stickyAt < 0 ? undefined : [stickyAt + (title ? 1 : 0)]}
               >
-                {stickyIndex === undefined ? (
+                {stickyAt < 0 ? (
                   <>
                     {title ? <TabTitle title={title} label={facts} /> : null}
                     {children}
                   </>
                 ) : (
-                  [
-                    ...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []),
-                    ...flatChildren(children),
-                  ]
+                  [...(title ? [<TabTitle key="tab-title" title={title} label={facts} />] : []), ...flat]
                 )}
               </Body>
               {footer ? (
@@ -347,7 +364,7 @@ function Body({
 }: {
   children: ReactNode;
   onRefresh?: () => Promise<unknown>;
-  /** Lot R8b1 : indices des enfants directs qui restent collés en haut (voir `TabProps.stickyIndex`). */
+  /** Lot R8b1 : indices des enfants directs qui restent collés en haut (voir `StickyHeader`). */
   stickyHeaderIndices?: number[];
   /** Lot R7k2, tour 2 : hauteur du bas de la page cachée par la barre d'onglets flottante (`ScrollAssist.visibleArea`). */
   covered?: number;

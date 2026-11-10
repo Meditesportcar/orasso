@@ -49,7 +49,7 @@ import { usePersona } from "@/lib/persona";
 import { isBaseKind, personaKindLabels } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
-import { TabScreen } from "@/ui/Screens";
+import { StickyHeader, TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
 import { NetworkCounters } from "./network";
 import { PartnersHost } from "./PartnersLine";
@@ -71,10 +71,6 @@ export function ProfilScreen() {
   // Lot R7b1 : l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut, partout) ; un toucher le change.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
   const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
-  // Lot R8b1 : un profil sans véhicule (casquette visiteur) n'a pas « Garage » et s'ouvre sur « Sorties ». L'ajout d'un
-  // premier véhicule reste possible par la ligne « Ajouter un véhicule » de « Mes casquettes » (`casquette-quick-vehicle`).
-  const hasGarage = persona.kind !== "visitor";
-  const shownTab = visibleProfileTab(tab, hasGarage);
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {
     if (onglet === undefined) return;
@@ -92,9 +88,15 @@ export function ProfilScreen() {
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
   // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, sorties ; lot R6b).
   const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
-  // Lot R8b1 : mes véhicules, lus ici (le nombre de l'onglet « Garage · N ») et donnés au panneau Garage.
-  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base && hasGarage });
+  // Lot R8b1 : mes véhicules, lus ici (le nombre de l'onglet « Garage · N ») et donnés au panneau Garage : une seule lecture.
+  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
   const garageCount = vehicles.data ? vehicles.data.filter((v) => v.status === "active").length : null;
+  // Un profil sans véhicule (casquette visiteur) n'a pas « Garage » et s'ouvre sur « Sorties » ; l'ajout d'un premier véhicule
+  // reste possible par `casquette-quick-vehicle` (« Mes casquettes »). Tour 2 : sauf s'il a des véhicules archivés (le dernier
+  // archivé rend visiteur) : « Garage » garde alors le seul lien vers « Véhicules archivés ».
+  const hasArchived = vehicles.data?.some((v) => v.status !== "active") ?? false;
+  const hasGarage = persona.kind !== "visitor" || hasArchived;
+  const shownTab = visibleProfileTab(tab, hasGarage);
 
   const profile = me?.profile;
   const department = profile?.departments[0];
@@ -165,8 +167,6 @@ export function ProfilScreen() {
 
   return (
     <TabScreen
-      // Lot R8b1 : la rangée d'onglets (4e enfant : bannière, carte d'attente, haut compact, onglets) reste collée en haut.
-      stickyIndex={base ? 3 : undefined}
       onRefresh={async () => {
         setRound((r) => r + 1);
         await Promise.all([
@@ -261,15 +261,15 @@ export function ProfilScreen() {
             </PartnersHost>
           </View>
 
-          {/* Onglets soulignés, collants sous la barre du haut (`stickyIndex` de la page). */}
-          <View style={[styles.tabsBar, { backgroundColor: t.color.ground }]}>
+          {/* Onglets soulignés, collants sous la barre du haut (`StickyHeader`, repéré par la page). */}
+          <StickyHeader style={[styles.tabsBar, { backgroundColor: t.color.ground }]}>
             <ProfileTabs
               value={shownTab}
               onChange={setTab}
               items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
               garageCount={garageCount}
             />
-          </View>
+          </StickyHeader>
           {shownTab === "garage" ? (
             <GarageScreen vehicles={vehicles} reloadKey={round} />
           ) : (
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     bottom: -2,
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: tokens.radius.radiusChip,
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",

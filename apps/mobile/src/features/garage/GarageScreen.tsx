@@ -22,7 +22,7 @@ import {
   type VehicleFull,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
@@ -33,6 +33,7 @@ import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
 import type { ApiState } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
+import { LoadError } from "@/ui/LoadError";
 import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 import { SecHead } from "@/ui/SecHead";
@@ -61,6 +62,13 @@ export function GarageScreen({
   const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Tour 2 : la lecture vit dans le Profil ; une lecture échouée pendant que « Sorties » était ouverte est relancée à l'ouverture
+  // de « Garage » (une seule requête quand tout va bien : on ne relit pas ce qui est déjà là).
+  const failedAtOpen = useRef(Boolean(vehicles.error));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: une seule fois, à l'ouverture du panneau
+  useEffect(() => {
+    if (failedAtOpen.current) void vehicles.reload();
+  }, []);
   const isMain = (v: VehicleFull | null) => Boolean(v && active[0]?.id === v.id);
 
   // Le bandeau de confirmation s'efface seul (4,5 s, comme la maquette).
@@ -162,7 +170,11 @@ export function GarageScreen({
       </Overlay>
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
 
-      {active.length === 0 && !vehicles.loading ? (
+      {/* Tour 2 : une lecture échouée n'est jamais « Ton garage est vide » : le message et « Réessayer ». */}
+      {vehicles.error && !vehicles.data ? (
+        <LoadError message={PT.garageDown} onRetry={() => void vehicles.reload()} />
+      ) : null}
+      {active.length === 0 && !vehicles.loading && !vehicles.error ? (
         <EmptyState
           title={PT.garageEmptyTitle}
           text={PT.garageEmptyText}
@@ -270,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space3 - 4,
     paddingHorizontal: space3,
-    borderRadius: 14,
+    borderRadius: tokens.radius.radiusMd,
   },
   addText: { fontSize: 13.5, lineHeight: 17, flexShrink: 1, textAlign: "center" },
   pressed: { opacity: 0.8 },

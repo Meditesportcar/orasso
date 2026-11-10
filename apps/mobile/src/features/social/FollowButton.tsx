@@ -220,7 +220,7 @@ export function FollowButton({
 const styles = StyleSheet.create({
   full: { gap: space2 },
   // Lot R8b1 : le bouton de la ligne du grade (`.r8fol` : 30 px de haut, 10 px de marge).
-  line: { minHeight: 32, paddingHorizontal: 10, borderRadius: 9 },
+  line: { minHeight: 32, paddingHorizontal: 10, borderRadius: tokens.radius.radiusSm },
   confirm: { borderRadius: radiusMd, padding: space3 },
   confirmBody: { gap: space2 },
 });
