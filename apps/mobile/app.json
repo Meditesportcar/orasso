@@ -96,7 +96,8 @@
           "isAndroidMotionActivityEnabled": false
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "./plugins/with-allow-backup-replace"
     ],
     "experiments": {
       "typedRoutes": true
