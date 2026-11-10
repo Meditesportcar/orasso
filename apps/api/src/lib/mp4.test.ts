@@ -8,12 +8,16 @@ import {
   appendChild,
   bareTrack,
   box,
+  chunksTrack,
   FAKE_PLACE,
   mebxKeys,
   metaEntry,
+  pcmTrack,
   sampledTrack,
   shrinkBox,
+  withEntryChild,
   withLocation,
+  withMdatGap,
   withMdatTrack,
 } from "../../test/mp4-builders";
 import { Mp4Error, readMp4Buffer, readMp4File, stripMp4Metadata } from "./mp4";
@@ -308,7 +312,10 @@ describe("effacement des métadonnées (stripMp4Metadata)", () => {
       expect(out.includes("mvhd")).toBe(true);
       expect(out.includes("tkhd")).toBe(true);
       expect(out.includes("mdat")).toBe(true);
-      expect(out.indexOf("garde-moi")).toBe(data.indexOf("garde-moi"));
+      // Le contenu de mvhd et tkhd est intact ; celui de mdat, que nulle piste ne référence, est mis à zéro (tour 6).
+      expect(out.includes("garde-moi")).toBe(true);
+      const mdatAt = out.indexOf("mdat") + 4;
+      expect(out.subarray(mdatAt, mdatAt + "garde-moi".length).every((b) => b === 0)).toBe(true);
       // Une seconde passe ne change plus un octet.
       await stripMp4Metadata(path);
       expect((await readFile(path)).equals(out)).toBe(true);
@@ -650,26 +657,29 @@ describe("effacement par liste blanche (stripMp4Metadata, tour 5)", () => {
     });
   });
 
-  it("les octets après la dernière boîte (bloc de fin façon Insta360, rembourrage) sont coupés", async () => {
+  it("les octets après la dernière boîte sont coupés, par le vrai parcours : le lecteur accepte le fichier, puis le nettoyage", async () => {
     const original = await fixture("story-2s.mp4");
-    const trailer = Buffer.concat([
-      Buffer.from(`INSV-TRAILER ${FAKE_PLACE}`),
-      Buffer.alloc(300, 0xff),
-      Buffer.from("insta360"),
-    ]);
+    // Le lecteur ne tolère derrière la dernière boîte que moins de 8 octets ; au-delà, c'est lui qui refuse (le fichier n'est
+    // alors jamais gardé, le nettoyage n'a rien à faire).
+    const trailer = Buffer.from(`\0GPS${FAKE_PLACE.slice(0, 2)}`, "latin1");
+    expect(trailer.length).toBeLessThan(8);
     const file = Buffer.concat([original, trailer]);
+    const big = Buffer.concat([original, Buffer.from(`INSV-TRAILER ${FAKE_PLACE}`), Buffer.alloc(300, 0xff)]);
+    expect(await kind(readMp4Buffer(big))).toBe("unreadable");
     await workDir(async (dir) => {
       const path = join(dir, "a.mp4");
       await writeFile(path, file);
-      await stripMp4Metadata(path);
+      const info = await readMp4File(path); // 1. le lecteur accepte
+      expect(info.h264).toBe(true);
+      await stripMp4Metadata(path); // 2. le nettoyage coupe
       const out = await readFile(path);
-      // Le même fichier sans bloc de fin, nettoyé seul.
       const alone = join(dir, "alone.mp4");
       await writeFile(alone, original);
       await stripMp4Metadata(alone);
       expect(out.equals(await readFile(alone))).toBe(true);
-      expect(out.length).toBe(original.length);
-      expect((await readMp4File(path)).h264).toBe(true);
+      expect(out.length).toBe(file.length - trailer.length);
+      expect(out.includes("GPS")).toBe(false);
+      expect((await readMp4File(path)).durationMs).toBe(info.durationMs);
     });
   });
 
@@ -752,5 +762,266 @@ describe("lecteur mp4 : durée de toutes les pistes gardées (tour 5)", () => {
     expect(info.hasAudio).toBe(true);
     expect(info.durationMs).toBeGreaterThan(39_000);
     expect(info.durationMs).toBeLessThan(41_000);
+  });
+});
+
+// ─── Tour 6 : tout octet de mdat hors des échantillons vidéo et son est effacé ────────────────────────────────────────
+
+/** Le même `trak` PCM avec un autre décalage de morceau (son seul `stco`). */
+function withOffset(track: Buffer, offset: number): Buffer {
+  const out = Buffer.from(track);
+  out.writeUInt32BE(offset, out.lastIndexOf("stco") + 12);
+  return out;
+}
+
+describe("effacement de mdat hors des échantillons vidéo et son (tour 6)", () => {
+  const workDir = async <T>(run: (dir: string) => Promise<T>): Promise<T> => {
+    const dir = await mkdtemp(join(tmpdir(), "orasso-strip6-"));
+    try {
+      return await run(dir);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  const strip = async (dir: string, file: Buffer, name = "a.mp4") => {
+    const path = join(dir, name);
+    await writeFile(path, file);
+    await stripMp4Metadata(path);
+    return { path, out: await readFile(path) };
+  };
+  const mdatOf = (data: Buffer) => {
+    const at = data.indexOf("mdat") - 4;
+    return { at, body: data.subarray(at + 8, at + data.readUInt32BE(at)) };
+  };
+  /** Bloc façon Novatek : en-tête « freeGPS », position factice, rien d'autre. */
+  const freeGps = Buffer.concat([
+    Buffer.from([0, 0, 0x80, 0]),
+    Buffer.from("freeGPS "),
+    Buffer.from(`A N ${FAKE_PLACE} 042.6887 002.8948 $GPRMC,123519,A,4253.3,N,00253.7,E`.padEnd(120, "\0"), "latin1"),
+  ]);
+
+  it("un bloc « freeGPS » glissé entre deux morceaux vidéo est absent du fichier enregistré, l'image et le son sont intacts", async () => {
+    const original = await fixture("story-2s.mp4");
+    const { file, at } = withMdatGap(original, freeGps);
+    expect(file.includes("freeGPS")).toBe(true);
+    expect(file.length).toBe(original.length + freeGps.length);
+    const before = await readMp4Buffer(file);
+    await workDir(async (dir) => {
+      const { path, out } = await strip(dir, file);
+      expect(out.length).toBe(file.length);
+      for (const trace of ["freeGPS", "GPRMC", "42.6887", "2.8948", FAKE_PLACE]) {
+        expect(out.includes(trace), trace).toBe(false);
+      }
+      expect(out.subarray(at, at + freeGps.length).every((b) => b === 0)).toBe(true);
+      // Tout le reste de mdat est identique, octet pour octet.
+      const a = mdatOf(file);
+      const b = mdatOf(out);
+      const gapAt = at - a.at - 8;
+      expect(b.body.subarray(0, gapAt).equals(a.body.subarray(0, gapAt))).toBe(true);
+      expect(b.body.subarray(gapAt + freeGps.length).equals(a.body.subarray(gapAt + freeGps.length))).toBe(true);
+      const after = await readMp4File(path);
+      expect(after.durationMs).toBe(before.durationMs);
+      expect(after.h264).toBe(true);
+      expect(after.hasAudio).toBe(true);
+    });
+  });
+
+  it("les fixtures sans trou sont gardées telles quelles : mdat identique octet pour octet", async () => {
+    await workDir(async (dir) => {
+      for (const name of ["story-2s.mp4", "story-hevc.mp4", "story-paysage-2s.mp4"]) {
+        const original = await fixture(name);
+        const { out } = await strip(dir, original, name);
+        expect(mdatOf(out).body.equals(mdatOf(original).body), name).toBe(true);
+      }
+    });
+  });
+
+  it("un MOV avec du son PCM stéréo 16 bits et stsz à taille 1 : le son est conservé octet pour octet (versions 0, 1 et 2)", async () => {
+    const original = await fixture("story-2s.mp4");
+    const frames = 4800;
+    const pcm = Buffer.from(randomBytes(frames * 4));
+    pcm[0] = 1; // jamais tout à zéro
+    for (const version of [0, 1, 2] as const) {
+      const payload = Buffer.concat([pcm, freeGps]);
+      const { file, at } = withMdatTrack(original, (o) => pcmTrack(version, o, frames), payload);
+      await workDir(async (dir) => {
+        const { out } = await strip(dir, file);
+        expect(out.length).toBe(file.length);
+        expect(out.subarray(at, at + pcm.length).equals(pcm), `v${version}`).toBe(true);
+        expect(out.includes("freeGPS"), `v${version}`).toBe(false);
+        expect(out.subarray(at + pcm.length).every((b) => b === 0)).toBe(true);
+        // L'image et le son AAC d'origine aussi.
+        const kept = mdatOf(original).body.length;
+        expect(mdatOf(out).body.subarray(0, kept).equals(mdatOf(file).body.subarray(0, kept))).toBe(true);
+      });
+    }
+  });
+
+  it("refuse un son à stsz de taille 1 dont la description ne permet pas un calcul sûr (AAC, 12 bits, 0 bit, paquets inégaux, version inconnue)", async () => {
+    const original = await fixture("story-2s.mp4");
+    const frames = 480;
+    const payload = Buffer.alloc(frames * 4, 5);
+    const odd = pcmTrack(1, 0, frames);
+    odd.writeUInt32BE(7, odd.indexOf("sowt") + 4 + 28); // 480 trames ne sont pas un multiple de 7
+    const unknown = pcmTrack(0, 0, frames);
+    unknown.writeUInt16BE(9, unknown.indexOf("sowt") + 4 + 8);
+    const cases: [string, (o: number) => Buffer][] = [
+      ["aac", (o) => pcmTrack(0, o, frames, "mp4a")],
+      ["12 bits", (o) => pcmTrack(0, o, frames, "sowt", 12)],
+      ["0 bit", (o) => pcmTrack(0, o, frames, "sowt", 0)],
+      ["paquets inégaux", (o) => withOffset(odd, o)],
+      ["version 9", (o) => withOffset(unknown, o)],
+    ];
+    await workDir(async (dir) => {
+      for (const [name, track] of cases) {
+        const { file } = withMdatTrack(original, track, payload);
+        const path = join(dir, `${name}.mp4`);
+        await writeFile(path, file);
+        expect(await kind(stripMp4Metadata(path)), name).toBe("unreadable");
+      }
+    });
+  });
+
+  it("refuse un échantillon vidéo ou son hors de tout mdat, et un dref qui renvoie vers un autre fichier", async () => {
+    const original = await fixture("story-2s.mp4");
+    await workDir(async (dir) => {
+      // Premier morceau vidéo déplacé dans moov (avant mdat).
+      const video = Buffer.from(original);
+      video.writeUInt32BE(100, video.indexOf("stco") + 12);
+      const p1 = join(dir, "video.mp4");
+      await writeFile(p1, video);
+      expect(await kind(stripMp4Metadata(p1))).toBe("unreadable");
+      // Idem pour le son (deuxième stco).
+      const audio = Buffer.from(original);
+      audio.writeUInt32BE(100, audio.indexOf("stco", audio.indexOf("stco") + 1) + 12);
+      const p2 = join(dir, "audio.mp4");
+      await writeFile(p2, audio);
+      expect(await kind(stripMp4Metadata(p2))).toBe("unreadable");
+      // dref : l'entrée « url » n'est plus autonome (indicateur 1 -> 0).
+      const external = Buffer.from(original);
+      const url = external.indexOf("url ");
+      expect(external.readUInt32BE(url + 4) & 1).toBe(1);
+      external.writeUInt32BE(0, url + 4);
+      const p3 = join(dir, "dref.mp4");
+      await writeFile(p3, external);
+      expect(await kind(stripMp4Metadata(p3))).toBe("unreadable");
+    });
+  });
+});
+
+describe("extensions des descriptions, plages fusionnées, collision (tour 6, complément Codex)", () => {
+  const workDir = async <T>(run: (dir: string) => Promise<T>): Promise<T> => {
+    const dir = await mkdtemp(join(tmpdir(), "orasso-strip6b-"));
+    try {
+      return await run(dir);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  const mdatOf = (data: Buffer) => {
+    const at = data.indexOf("mdat") - 4;
+    return data.subarray(at + 8, at + data.readUInt32BE(at));
+  };
+
+  it("une uuid (ou une extension inconnue) sous stsd/avc1 et stsd/mp4a est mise à zéro ; avcC, esds et le reste de la description restent", async () => {
+    const original = await fixture("story-2s.mp4");
+    const place = Buffer.from(`GPS ${FAKE_PLACE} 42.6887,2.8948`);
+    let file = withEntryChild(original, "avc1", box("uuid", Buffer.alloc(16, 9), place));
+    file = withEntryChild(file, "mp4a", box("zzzz", place));
+    expect(file.includes(FAKE_PLACE)).toBe(true);
+    const before = await readMp4Buffer(file);
+    const avcC = original.subarray(
+      original.indexOf("avcC") - 4,
+      original.indexOf("avcC") - 4 + original.readUInt32BE(original.indexOf("avcC") - 4),
+    );
+    const esds = original.subarray(
+      original.indexOf("esds") - 4,
+      original.indexOf("esds") - 4 + original.readUInt32BE(original.indexOf("esds") - 4),
+    );
+    await workDir(async (dir) => {
+      const path = join(dir, "a.mp4");
+      await writeFile(path, file);
+      expect(await stripMp4Metadata(path)).toBeGreaterThanOrEqual(2);
+      const out = await readFile(path);
+      expect(out.length).toBe(file.length);
+      for (const trace of [FAKE_PLACE, "42.6887", "uuid", "zzzz"]) expect(out.includes(trace), trace).toBe(false);
+      expect(out.includes(avcC)).toBe(true);
+      expect(out.includes(esds)).toBe(true);
+      expect(mdatOf(out).equals(mdatOf(file))).toBe(true);
+      const after = await readMp4File(path);
+      expect([after.durationMs, after.h264, after.hasAudio, after.width]).toEqual([
+        before.durationMs,
+        true,
+        true,
+        before.width,
+      ]);
+    });
+  });
+
+  it("les descriptions des fixtures (avc1, mp4a, hvc1) gardent chacune de leurs boîtes : stsd identique avant et après", async () => {
+    await workDir(async (dir) => {
+      for (const name of ["story-2s.mp4", "story-hevc.mp4", "story-paysage-2s.mp4"]) {
+        const original = await fixture(name);
+        const path = join(dir, name);
+        await writeFile(path, original);
+        await stripMp4Metadata(path);
+        const out = await readFile(path);
+        for (let from = original.indexOf("stsd"); from >= 0; from = original.indexOf("stsd", from + 1)) {
+          const size = original.readUInt32BE(from - 4);
+          expect(
+            out.subarray(from - 4, from - 4 + size).equals(original.subarray(from - 4, from - 4 + size)),
+            name,
+          ).toBe(true);
+        }
+      }
+    });
+  });
+
+  it("mille références au même bloc : une seule plage, travail et temps bornés par le fichier", async () => {
+    const original = await fixture("story-2s.mp4");
+    const junk = Buffer.alloc(4 * 1024 * 1024, 0x41); // 4 Mo de « n'importe quoi » dans mdat
+    const probe = Buffer.alloc(100, 0x42);
+    // Une piste vidéo supplémentaire dont 1 000 morceaux visent le même bloc (probe), au milieu du bruit.
+    const payload = Buffer.concat([junk, probe, junk]);
+    const delta = chunksTrack("vide", "avc1", Array(1000).fill(0), 100).length;
+    const aimed = original.length + delta + junk.length;
+    const { file } = withMdatTrack(original, () => chunksTrack("vide", "avc1", Array(1000).fill(aimed), 100), payload);
+    await workDir(async (dir) => {
+      const path = join(dir, "a.mp4");
+      await writeFile(path, file);
+      const start = Date.now();
+      await stripMp4Metadata(path);
+      expect(Date.now() - start).toBeLessThan(5000);
+      const out = await readFile(path);
+      expect(out.subarray(aimed, aimed + 100).equals(probe)).toBe(true);
+      expect(out.subarray(aimed - 10, aimed).every((b) => b === 0)).toBe(true);
+      expect(out.subarray(aimed + 100, aimed + 110).every((b) => b === 0)).toBe(true);
+      expect(out.length).toBe(file.length);
+    });
+  });
+
+  it("une piste meta/mett qui vise les 128 premiers octets vidéo ne les efface pas", async () => {
+    const original = await fixture("story-2s.mp4");
+    const firstVideo = original.readUInt32BE(original.indexOf("stco") + 12);
+    const delta = sampledTrack("meta", "mett", 0, 128).length;
+    const { file } = withMdatTrack(
+      original,
+      () => sampledTrack("meta", "mett", firstVideo + delta, 128),
+      Buffer.alloc(16, 1),
+    );
+    await workDir(async (dir) => {
+      const path = join(dir, "a.mp4");
+      await writeFile(path, file);
+      await stripMp4Metadata(path);
+      const out = await readFile(path);
+      const at = firstVideo + delta;
+      expect(out.subarray(at, at + 128).equals(file.subarray(at, at + 128))).toBe(true);
+      expect(out.subarray(at, at + 128).some((b) => b !== 0)).toBe(true);
+      expect(
+        mdatOf(out)
+          .subarray(0, original.length - 3515)
+          .equals(mdatOf(file).subarray(0, original.length - 3515)),
+      ).toBe(true);
+    });
   });
 });

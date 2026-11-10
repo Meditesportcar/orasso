@@ -162,3 +162,118 @@ export function withMdatTrack(
   out.writeUInt32BE(out.readUInt32BE(mdat) + payload.length, mdat);
   return { file: out, at };
 }
+
+/**
+ * La vidéo avec `block` glissé dans `mdat` **entre deux morceaux** (avant le deuxième morceau du fichier, toutes pistes
+ * confondues), comme les blocs « freeGPS » des caméras Novatek : aucune piste ne le décrit. Les `stco` suivants et la taille de
+ * `mdat` suivent ; `moov` ne change pas de taille. Renvoie le fichier et la position du bloc.
+ */
+export function withMdatGap(data: Buffer, block: Buffer): { file: Buffer; at: number } {
+  const offsets: number[] = [];
+  for (let from = data.indexOf("stco"); from >= 0; from = data.indexOf("stco", from + 1)) {
+    for (let i = 0; i < data.readUInt32BE(from + 8); i++) offsets.push(data.readUInt32BE(from + 12 + i * 4));
+  }
+  const at = [...new Set(offsets)].sort((a, b) => a - b)[1] as number;
+  const shifted = Buffer.from(data);
+  for (let from = shifted.indexOf("stco"); from >= 0; from = shifted.indexOf("stco", from + 1)) {
+    for (let i = 0; i < shifted.readUInt32BE(from + 8); i++) {
+      const o = from + 12 + i * 4;
+      const value = shifted.readUInt32BE(o);
+      if (value >= at) shifted.writeUInt32BE(value + block.length, o);
+    }
+  }
+  const out = Buffer.concat([shifted.subarray(0, at), block, shifted.subarray(at)]);
+  const [mdat] = locate(out, ["mdat"]) as [number];
+  out.writeUInt32BE(out.readUInt32BE(mdat) + block.length, mdat);
+  return { file: out, at };
+}
+
+/**
+ * Une piste son PCM façon QuickTime (`sowt` par défaut, 2 voies, 16 bits, 48 kHz) d'un seul morceau de `frames` trames à
+ * `offset`, **`stsz` à taille 1** : `stsc` compte des trames. `version` : 0, 1 ou 2 de l'entrée `stsd` (`bytesPerFrame` 4).
+ * `format` et `bits` permettent de fabriquer des cas refusés.
+ */
+export function pcmTrack(version: 0 | 1 | 2, offset: number, frames: number, format = "sowt", bits = 16): Buffer {
+  const entry = Buffer.alloc(version === 0 ? 28 : version === 1 ? 44 : 64);
+  entry.writeUInt16BE(1, 6);
+  entry.writeUInt16BE(version, 8);
+  if (version < 2) {
+    entry.writeUInt16BE(2, 16);
+    entry.writeUInt16BE(bits, 18);
+    entry.writeUInt32BE(48000 * 65536, 24);
+  }
+  if (version === 1) {
+    entry.writeUInt32BE(1, 28); // samplesPerPacket
+    entry.writeUInt32BE(4, 32); // bytesPerPacket
+    entry.writeUInt32BE(4, 36); // bytesPerFrame
+    entry.writeUInt32BE(2, 40); // bytesPerSample
+  }
+  if (version === 2) {
+    entry.writeUInt16BE(3, 16);
+    entry.writeUInt16BE(16, 18);
+    entry.writeUInt16BE(0xfffe, 20);
+    entry.writeUInt32BE(72, 28);
+    entry.writeUInt32BE(2, 40); // voies
+    entry.writeUInt32BE(0x7f000000, 44);
+    entry.writeUInt32BE(16, 48);
+    entry.writeUInt32BE(4, 56); // constBytesPerAudioPacket
+    entry.writeUInt32BE(1, 60); // constLPCMFramesPerAudioPacket
+  }
+  const stsd = box("stsd", u32(0, 1), box(format, entry));
+  const stts = box("stts", u32(0, 1, frames, 1));
+  const stsc = box("stsc", u32(0, 1, 1, frames, 1));
+  const stsz = box("stsz", u32(0, 1, frames));
+  const stco = box("stco", u32(0, 1, offset));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from("soun", "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  return box("trak", box("mdia", mdhd(48000, frames), hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))));
+}
+
+/**
+ * Ajoute `child` à la fin de la première description d'échantillon de ce format (`avc1`, `mp4a`…) de la première piste : les
+ * tailles de l'entrée, de `stsd` et de leurs parents suivent, les `stco` sont décalés (`moov` grossit, il est avant `mdat`).
+ */
+export function withEntryChild(data: Buffer, format: string, child: Buffer): Buffer {
+  const shifted = Buffer.from(data);
+  for (let from = shifted.indexOf("stco"); from >= 0; from = shifted.indexOf("stco", from + 1)) {
+    for (let i = 0; i < shifted.readUInt32BE(from + 8); i++) {
+      const o = from + 12 + i * 4;
+      shifted.writeUInt32BE(shifted.readUInt32BE(o) + child.length, o);
+    }
+  }
+  const entry = shifted.indexOf(format, shifted.indexOf("moov")) - 4;
+  if (entry < 0) throw new Error(`description absente : ${format}`);
+  const end = entry + shifted.readUInt32BE(entry);
+  // Boîtes qui contiennent l'entrée, du haut vers le bas (`stsd` a 8 octets de plus avant ses entrées).
+  const parents: number[] = [];
+  let from = 0;
+  let to = shifted.length;
+  for (const type of ["moov", "trak", "mdia", "minf", "stbl", "stsd"]) {
+    let o = from;
+    while (o + 8 <= to) {
+      const size = shifted.readUInt32BE(o);
+      if (shifted.toString("latin1", o + 4, o + 8) === type && o < entry && entry < o + size) break;
+      o += size;
+    }
+    parents.push(o);
+    from = o + 8 + (type === "stsd" ? 8 : 0);
+    to = o + shifted.readUInt32BE(o);
+  }
+  const out = Buffer.concat([shifted.subarray(0, end), child, shifted.subarray(end)]);
+  for (const o of [...parents, entry]) out.writeUInt32BE(out.readUInt32BE(o) + child.length, o);
+  return out;
+}
+
+/**
+ * Une piste (`trak`) dont `offsets.length` morceaux d'un échantillon de `length` octets sont aux `offsets` (qui peuvent être
+ * tous les mêmes : mille références au même bloc).
+ */
+export function chunksTrack(handler: string, format: string, offsets: number[], length: number): Buffer {
+  const stsd = box("stsd", u32(0, 1), box(format, Buffer.alloc(handler === "vide" ? 78 : 8)));
+  const stts = box("stts", u32(0, 1, offsets.length, 1));
+  const stsc = box("stsc", u32(0, 1, 1, 1, 1));
+  const stsz = box("stsz", u32(0, length, offsets.length));
+  const stco = box("stco", u32(0, offsets.length, ...offsets));
+  const hdlr = box("hdlr", Buffer.alloc(8), Buffer.from(handler, "latin1"), Buffer.alloc(12), Buffer.from("Orasso\0"));
+  const mdhdBox = mdhd(1000, offsets.length);
+  return box("trak", box("mdia", mdhdBox, hdlr, box("minf", box("stbl", stsd, stts, stsc, stsz, stco))));
+}

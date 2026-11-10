@@ -837,6 +837,13 @@ describe("pistes de position et fichiers fragmentés : refus à l'envoi", () => 
       o += size;
     }
     const moovLast = Buffer.concat([...parts, ...tail]);
+    // Le moov passe après mdat : les décalages des morceaux reculent de sa taille (un vrai fichier « moov à la fin » est ainsi).
+    const moovSize = (tail[0] as Buffer).length;
+    for (let f = moovLast.indexOf("stco"); f >= 0; f = moovLast.indexOf("stco", f + 1)) {
+      for (let i = 0; i < moovLast.readUInt32BE(f + 8); i++) {
+        moovLast.writeUInt32BE(moovLast.readUInt32BE(f + 12 + i * 4) - moovSize, f + 12 + i * 4);
+      }
+    }
     const gpmd = appendChild(moovLast, ["moov"], bareTrack("meta", metaEntry("gpmd")));
     const located = appendChild(
       moovLast,
