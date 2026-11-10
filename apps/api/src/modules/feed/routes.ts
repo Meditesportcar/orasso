@@ -4,6 +4,7 @@ import {
   feedLessSchema,
   feedMineQuery,
   feedPostCreateSchema,
+  feedPostPatchSchema,
   feedQuery,
   feedReportSchema,
 } from "@orasso/shared";
@@ -39,6 +40,10 @@ export const feedRoutes = new Hono<AppEnv>()
   .post("/me/feed-posts", async (c) => {
     const v = await requireUser(c);
     return c.json(await feedPostsService.create(v, await body(c, feedPostCreateSchema)), 201);
+  })
+  .patch("/me/feed-posts/:id", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await feedPostsService.patch(v, uuidParam(c, "id"), await body(c, feedPostPatchSchema)));
   })
   .get("/me/feed-posts", async (c) => {
     const v = await requireUser(c);

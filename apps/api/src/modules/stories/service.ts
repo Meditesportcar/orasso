@@ -67,6 +67,7 @@ import { contactsService } from "../messaging/contacts";
 import { messagingService } from "../messaging/service";
 import { moderationService } from "../moderation/service";
 import { notificationsService } from "../notifications/service";
+import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
 import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
 import { removeOrRetry } from "../vehicles/photos-blur";
@@ -496,6 +497,15 @@ export const storiesService = {
       else tags.push(t);
     }
 
+    // « Collaboration commerciale » (R7m2) : posée par l'API d'après les identifications DEMANDÉES et la légende.
+    const commercialPartnerId = await commercialPartnerFor(db, {
+      authorId: v.user.id,
+      ownProId: ctx.proId,
+      tagProIds: input.tags.flatMap((t) => (t.kind === "pro" ? [t.id] : [])),
+      caption: input.caption,
+      explicit: input.commercialPartnerId,
+    });
+
     // Le fichier envoyé : à moi, pour une story, pas encore rattaché (absent pour une carte liée).
     const uploadKey = input.uploadKey;
     const [pending] = uploadKey
@@ -584,6 +594,7 @@ export const storiesService = {
             eventId,
             linkedType: linked?.type ?? null,
             linkedId: linked?.id ?? null,
+            commercialPartnerId,
             expiresAt: storyExpiresAt(at),
             createdAt: at,
             updatedAt: at,
@@ -670,6 +681,16 @@ export const storiesService = {
           [...mentions].map(([userId, m]) => ({ userId, body: m.body, target: m.target })),
           actor,
         );
+        if (commercialPartnerId) {
+          await notifyPartnerMention(tx, {
+            proId: commercialPartnerId,
+            authorUserId: v.user.id,
+            already: [...mentions.keys()],
+            kind: "story",
+            actor,
+            data: { storyId: id, authorKey: authorKey.key, link: `/app/story/${authorKey.key}` },
+          });
+        }
         after(() => notificationsService.kick());
       });
     } catch (error) {

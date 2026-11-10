@@ -119,6 +119,9 @@ export const errorCodes = [
   "subscription_required",
   "partnership_exists",
   "partnership_cooldown",
+  // Lot R7m2 : « Collaboration commerciale ».
+  "commercial_locked",
+  "commercial_conflict",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

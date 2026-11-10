@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
+import { commercialViews } from "../partnerships/commercial";
 import type { Profile } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -93,6 +94,10 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     visible.flatMap((r) => (r.post.eventId ? [r.post.eventId] : [])),
   );
 
+  const commercialBy = await commercialViews(
+    ex,
+    visible.map((r) => r.post.commercialPartnerId),
+  );
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {
     const r = byId.get(id);
@@ -114,6 +119,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
         reactedByMe: mine.has(r.post.id),
         createdAt: r.post.createdAt.toISOString(),
         mine: r.post.authorId === viewerId,
+        commercialPartner: r.post.commercialPartnerId ? (commercialBy.get(r.post.commercialPartnerId) ?? null) : null,
       },
     ];
   });

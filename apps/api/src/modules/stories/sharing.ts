@@ -55,7 +55,16 @@ export async function sharingOf(v: Viewer, rows: readonly StoryRow[], at: Date):
     managedStructures(v.user.id),
     ownedPros(v.user.id),
   ]);
-  const mine = tags.filter(
+  // Lot R7m2 : le pro cité en « Collaboration commerciale » compte comme identifié (il peut reprendre la story).
+  const cited = candidates.flatMap((r) =>
+    r.story.commercialPartnerId && pros.has(r.story.commercialPartnerId)
+      ? [{ storyId: r.story.id, kind: "pro" as const, target: r.story.commercialPartnerId }]
+      : [],
+  );
+  const mine = [
+    ...tags,
+    ...cited.filter((c) => !tags.some((t) => t.storyId === c.storyId && t.kind === "pro" && t.target === c.target)),
+  ].filter(
     (t) =>
       (t.kind === "user" && t.target === v.user.id) ||
       (t.kind === "structure" && structs.has(t.target)) ||

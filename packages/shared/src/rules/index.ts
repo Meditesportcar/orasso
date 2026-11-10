@@ -9,6 +9,7 @@ export * from "./arrival";
 export * from "./audience";
 export * from "./audiencePrize";
 export * from "./coalesce";
+export * from "./commercial";
 export * from "./conversationTag";
 export * from "./crewFeed";
 export * from "./crewLive";

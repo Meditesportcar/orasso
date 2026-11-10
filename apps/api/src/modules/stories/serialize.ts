@@ -19,6 +19,7 @@ import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { canSeeEvent } from "../invitations/access";
+import { commercialViews } from "../partnerships/commercial";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 import { accountActive, creditOf, type StoryRow } from "./common";
@@ -110,6 +111,10 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
     tagsOf(ids),
     sharingOf(v, rows, now()),
   ]);
+  const commercialBy = await commercialViews(
+    db,
+    rows.map((r) => r.story.commercialPartnerId),
+  );
   const seenIds = new Set(seen.map((r) => r.id));
   const likedIds = new Set(liked.map((r) => r.id));
 
@@ -178,7 +183,7 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
       event: s.eventId ? (eventBy.get(s.eventId) ?? null) : null,
       tags: tags.get(s.id) ?? [],
       linked: linkedBy.get(s.id) ?? null,
-      commercialPartner: null,
+      commercialPartner: s.commercialPartnerId ? (commercialBy.get(s.commercialPartnerId) ?? null) : null,
       audience: s.audience,
       crewName: s.audience === "crew" ? r.crewName : null,
       // Le crédit d'une copie : l'identité PUBLIQUE de l'originale selon sa casquette (lot R7h, tour 2).

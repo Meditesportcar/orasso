@@ -3,7 +3,14 @@
 // publication du Fil, plaques déjà floutées (rien n'est relu ni refait ici), signature « orasso.fr » ; une vidéo sort
 // telle qu'elle a été publiée (ni floutage ni signature, décision de Damien du 09/11) ; refusé pour un contenu de crew.
 // Un fichier de sortie est un JPEG (lu partout) généré à la demande, jamais stocké.
-import { type ShareFileFormat, STORY_H, STORY_W, type StoryLinkType, shareLabels } from "@orasso/shared";
+import {
+  partnershipLabels,
+  type ShareFileFormat,
+  STORY_H,
+  STORY_W,
+  type StoryLinkType,
+  shareLabels,
+} from "@orasso/shared";
 import { asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 
@@ -13,6 +20,7 @@ import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { commercialViews } from "../partnerships/commercial";
 import { MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
 import { CANVAS_H, CANVAS_W, GROUND_BLUR, GROUND_BRIGHTNESS, signFile } from "./card";
 import {
@@ -27,6 +35,13 @@ import {
 import { requireVisibleStory } from "./service";
 
 export type ExportedFile = { data: Buffer; type: string; name: string };
+
+/** La ligne imprimée sur un fichier qui sort d'Orasso quand le contenu est une « Collaboration commerciale » (R7m2). */
+async function commercialMention(proId: string | null): Promise<string | null> {
+  if (!proId) return null;
+  const partner = (await commercialViews(db, [proId])).get(proId);
+  return partner ? partnershipLabels.commercialLine(partner.name) : null;
+}
 
 const jpeg = (name: string) => ({ type: "image/jpeg", name: `orasso-${name}.jpg` });
 
@@ -57,7 +72,14 @@ export const exportService = {
     if (!file) throw notFound("Story introuvable");
     // Une vidéo sort telle quelle : pas de floutage de plaque, pas de signature (décision de Damien, 09/11).
     if (story.mediaKind === "video") return { data: file, type: "video/mp4", name: "orasso-story.mp4" };
-    return { data: await signFile(file, { width: STORY_W, height: STORY_H }), ...jpeg("story") };
+    return {
+      data: await signFile(
+        file,
+        { width: STORY_W, height: STORY_H },
+        await commercialMention(story.commercialPartnerId),
+      ),
+      ...jpeg("story"),
+    };
   },
 
   /** `GET /feed-posts/:id/export` : ma publication, en 4:5 signé (la première photo ; auteur seul). */
@@ -75,7 +97,11 @@ export const exportService = {
     const photo = first ? await storage.get(first.storageKey) : null;
     if (!photo) throw notFound("Publication introuvable");
     return {
-      data: await signFile(await toPortrait(photo), { width: CANVAS_W, height: CANVAS_H }),
+      data: await signFile(
+        await toPortrait(photo),
+        { width: CANVAS_W, height: CANVAS_H },
+        await commercialMention(post.commercialPartnerId),
+      ),
       ...jpeg("publication"),
     };
   },
