@@ -7,7 +7,13 @@
 //    néon : la ligne passe son « Mon accès » en bouton au trait dès que « Voter » est le bouton principal.
 //  - Rien ici n'invente de donnée : « N sur place » n'est servi que pendant l'événement, le programme est celui du jour.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { BUSINESS_TIMEZONE, type HomeLive, homeBlockLabels, storyShareLabels } from "@orasso/shared";
+import {
+  BUSINESS_TIMEZONE,
+  type HomeLive,
+  homeBlockLabels,
+  type OutingWeather,
+  storyShareLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { type LayoutChangeEvent, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -16,7 +22,7 @@ import { SkewTag } from "@/features/sorties/bits";
 import { formatHour } from "@/lib/format";
 import { Num, SmButton } from "@/ui/Kit";
 import { fitWordSize, WIDE_EM } from "../fit";
-import { PosterButton } from "../NextOutings";
+import { PosterButton, WeatherLine } from "../NextOutings";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -38,11 +44,14 @@ export function LiveLine({
   live,
   onAccess,
   onSheet,
+  weather,
 }: {
   live: HomeLive;
   /** « Mon accès » : `null` sans place à scanner (présence seule) ; le bouton n'existe alors pas. */
   onAccess: (() => void) | null;
   onSheet: () => void;
+  /** Lot R8e1, tour 2 : la météo de l'événement, la même ligne que dans sa carte ; absente : rien. */
+  weather?: OutingWeather | null;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -85,6 +94,7 @@ export function LiveLine({
           {untilLine(live.event.endsAt)}
         </Text>
       </View>
+      {weather ? <WeatherLine weather={weather} /> : null}
       <View style={styles.actions}>
         {onAccess ? (
           primaryAccess ? (

@@ -8,16 +8,18 @@ import type { HomeMemoryBlock } from "./schemas/memories";
 import type { HomeLive } from "./schemas/presence";
 import type { ProCard } from "./schemas/pro";
 import type { SpotMeetupView } from "./schemas/spotMeetup";
-import type { MyWeather } from "./weather";
+import type { MyWeather, OutingWeather } from "./weather";
 
 /**
  * Widgets de l'accueil dans l'ordre par défaut ; « Prochaine sortie » (`next_access`) reste toujours en tête. Lot R7d1 :
- * « En cours » (événement en cours où j'ai une place) juste après. Lot R7a2 (maquette R7.4, décision D38) : Mes sorties,
+ * « Météo de l'événement » (lot R8e1 : une ligne de la carte « Prochaine sortie », pas un bloc de l'écran) puis « En cours »
+ * (événement en cours où j'ai une place) juste après. Lot R7a2 (maquette R7.4, décision D38) : Mes sorties,
  * Mon crew, Du nouveau chez tes potes, Au spot, Souvenirs ; `spot_meetup` et `memories` sont proposés mais vides tant que
  * les lots R7i (rendez-vous au spot) et R7j (souvenirs) n'existent pas.
  */
 export const homeWidgetIds = [
   "next_access",
+  "event_weather",
   "live",
   "my_outings",
   "my_crew",
@@ -49,6 +51,12 @@ export const stationWidgetIds = ["wash", "fuel"] as const satisfies readonly Hom
 export function homeWidgetOffered(id: HomeWidgetId, stations = NEARBY_STATIONS_ENABLED): boolean {
   return stations || !(stationWidgetIds as readonly HomeWidgetId[]).includes(id);
 }
+
+/**
+ * Lot R8e1, tour 2 : « Météo de l'événement » n'est pas un bloc de l'écran (c'est une ligne de la carte « Prochaine sortie ») :
+ * il se masque ou s'affiche, jamais ne se déplace, et aucun bloc ne s'échange avec lui.
+ */
+export const HOME_LINE_WIDGET: HomeWidgetId = "event_weather";
 
 /** Le seul widget qui ne se déplace ni ne se masque : il porte le néon moutarde de l'écran. */
 export const HOME_FIXED_WIDGET: HomeWidgetId = "next_access";
@@ -120,9 +128,10 @@ export function moveHomeWidget(
 ): HomeWidgetsConfig {
   const order = [...config.order];
   const from = order.indexOf(id);
-  if (id === HOME_FIXED_WIDGET || from < 0 || !offered(id)) return config;
+  if (id === HOME_FIXED_WIDGET || id === HOME_LINE_WIDGET || from < 0 || !offered(id)) return config;
   let to = from + delta;
-  while (to >= 1 && to < order.length && !offered(order[to] as HomeWidgetId)) to += delta;
+  while (to >= 1 && to < order.length && (!offered(order[to] as HomeWidgetId) || order[to] === HOME_LINE_WIDGET))
+    to += delta;
   if (to < 1 || to >= order.length) return config;
   [order[from], order[to]] = [order[to] as HomeWidgetId, order[from] as HomeWidgetId];
   return { order, hidden: config.hidden };
@@ -138,8 +147,8 @@ export function moveVisibleHomeWidget(
   delta: -1 | 1,
   offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
 ): HomeWidgetsConfig {
-  if (id === HOME_FIXED_WIDGET) return config;
-  const visible = config.order.filter((w) => !config.hidden.includes(w) && offered(w));
+  if (id === HOME_FIXED_WIDGET || id === HOME_LINE_WIDGET) return config;
+  const visible = config.order.filter((w) => !config.hidden.includes(w) && offered(w) && w !== HOME_LINE_WIDGET);
   const from = visible.indexOf(id);
   const to = from + delta;
   if (from < 0 || to < 1 || to >= visible.length) return config;
@@ -277,7 +286,7 @@ export type HomeNextTicket = {
   name: string;
   /** Prix unitaire en centimes, `null` = gratuit. */
   priceCents: number | null;
-  event: { slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
+  event: { id: string; slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
@@ -365,6 +374,12 @@ export type HomeData = {
   pendingStatuses: MyApplication[];
   nearby: { radiusKm: number | null; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
+  /**
+   * Lot R8e1 : la météo de chaque sortie de « Prochaine sortie » (clé = identifiant de l'événement) : mes places retenues et
+   * mes billets valables dont la météo est visible (7 jours avant le début, jusqu'à la fin) et stockée. `{}` sans sortie, ou
+   * quand « Météo de l'événement » est masqué (alors elle n'est pas calculée).
+   */
+  outingsWeather: Record<string, OutingWeather>;
   favoriteGarage: HomeFavoriteGarage | null;
   wash: NearbyPlace[];
   fuel: FuelStation[];

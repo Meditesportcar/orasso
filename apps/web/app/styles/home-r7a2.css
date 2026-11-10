@@ -67,3 +67,60 @@
   flex: 1 1 200px;
   min-width: 0;
 }
+
+/*
+ * Lot R8e1 : la ligne météo de la carte « Prochaine sortie » (maquette R8.8 `.r8wx`, `.r8wxb`). Jetons de l'affiche ; dans un bloc
+ * clair ou sombre de l'écran (la ligne « En cours »), ceux de la plaque. Les tailles viennent des classes de typographie.
+ */
+.hm-owx {
+  --owx-ink: var(--poster-ink);
+  --owx-muted: var(--poster-muted);
+  --owx-surface: var(--poster);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Le bouton de la carte remonte de 14 px sur ce qui le précède : de quoi ne rien lui cacher. */
+  padding: var(--space-2) 0 20px;
+  color: var(--owx-ink);
+  text-align: left;
+  /* La ligne de faits de la carte est en capitales : la météo garde la casse de la maquette. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.hm-block .hm-owx {
+  --owx-ink: var(--plate-ink);
+  --owx-muted: var(--plate-muted);
+  --owx-surface: var(--plate);
+  padding-bottom: 0;
+}
+.hm-owx__line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: var(--space-2);
+  border-top: 1.5px dashed var(--owx-muted);
+}
+.hm-owx__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hm-owx__temp {
+  font-family: var(--font-narrow);
+  font-variant-numeric: tabular-nums;
+}
+.hm-owx__sub {
+  color: var(--owx-muted);
+}
+.hm-owx__banner {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--owx-ink);
+  color: var(--owx-surface);
+}

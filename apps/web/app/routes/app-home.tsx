@@ -24,6 +24,7 @@ import {
 } from "../components/HomeWidgets";
 import { FriendsNewsBlock, LiveBlock, LiveLine, MyCrewBlock, MyOutingsBlock } from "../components/home/DashboardBlocks";
 import { MemoriesBlock } from "../components/home/Memories";
+import { OutingWeatherLine } from "../components/home/OutingWeather";
 import { SpotMeetupBlock } from "../components/home/SpotMeetup";
 import { WhatsNewBanner } from "../components/WhatsNewBanner";
 import { api, requireMe } from "../lib/api.server";
@@ -106,6 +107,16 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
   const live = home?.live ?? null;
   const next = home?.nextAccess ?? null;
   const nudge = home?.nudge ?? null;
+  // Lot R8e1 : la météo de l'événement est une ligne de la carte (retenue seulement) ; « Météo de l'événement » masqué : aucune.
+  const outingWeather =
+    next?.status === "accepted" && visibleHomeWidgets(widgets).includes("event_weather")
+      ? (home?.outingsWeather?.[next.event.id] ?? null)
+      : null;
+  // « En cours » (présence sur place) porte aussi la météo de son événement.
+  const liveWeather =
+    live && visibleHomeWidgets(widgets).includes("event_weather")
+      ? (home?.outingsWeather?.[live.event.id] ?? null)
+      : null;
   const nudgeLeads = !next && nudge === "add_vehicle";
 
   const blocks: Record<string, ReactNode> = home
@@ -144,12 +155,17 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {live ? (
-        <LiveLine live={live} accessHref={live.hasPlace ? "/app/sorties" : null} />
+        <LiveLine live={live} accessHref={live.hasPlace ? "/app/sorties" : null} weather={liveWeather} />
       ) : next ? (
         <PosterCard
           label={`${homeLabels.nextAccess} · ${formatDay(next.event.startsAt)}`}
           title={next.event.title}
-          facts={`${formatTime(next.event.startsAt)}${next.zone ? ` · Zone ${next.zone.code}` : ""}`}
+          facts={
+            <>
+              {`${formatTime(next.event.startsAt)}${next.zone ? ` · Zone ${next.zone.code}` : ""}`}
+              {outingWeather ? <OutingWeatherLine weather={outingWeather} /> : null}
+            </>
+          }
           status={next.status === "accepted" ? "retained" : "pending"}
           action={
             next.status === "accepted"

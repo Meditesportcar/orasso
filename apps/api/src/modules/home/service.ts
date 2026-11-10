@@ -30,14 +30,25 @@ import {
   type NearbyPlace,
   nearestDepartment,
   normalizeHomeWidgets,
+  pickNextOutings,
   proVisibility,
   resolvePosition,
   visibleHomeWidgets,
 } from "@orasso/shared";
-import { and, count, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { crewMembers, crews, proFollows, profileInterests, profiles, proProfiles, vehicles } from "../../db/schema";
+import {
+  crewMembers,
+  crews,
+  events,
+  proFollows,
+  profileInterests,
+  profiles,
+  proProfiles,
+  tickets,
+  vehicles,
+} from "../../db/schema";
 import { twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -156,6 +167,7 @@ export const homeService = {
       interests,
       nearby,
       weatherMine,
+      outingsWeather,
       favoriteGarage,
       wash,
       fuel,
@@ -170,11 +182,15 @@ export const homeService = {
       interestsPromise,
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
       shown.has("weather")
-        ? withinBudget(
-            weatherService.mine(v).catch(() => null),
-            null,
-          )
+        ? // Lot R8e1, tour 2 : le stock seulement ; le rafraîchissement part sans être attendu.
+          weatherService.mineFromStock(v).catch(() => null)
         : Promise.resolve(null),
+      // Lot R8e1 : la ligne météo des cartes de « Prochaine sortie » ; masquée, elle n'est pas calculée.
+      shown.has("event_weather")
+        ? this.outingsWeather(v, upcomingPromise, profile === "exhibitor").catch(
+            () => ({}) as HomeData["outingsWeather"],
+          )
+        : Promise.resolve({} as HomeData["outingsWeather"]),
       shown.has("favorite_garage") ? this.favoriteGarage(v) : Promise.resolve(null),
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
@@ -186,6 +202,10 @@ export const homeService = {
       want("memories") ? memoriesWidget(v) : Promise.resolve(null),
     ]);
     const live = wantLive ? await presenceService.homeLive(v) : null;
+    // Lot R8e1, tour 2 : la ligne « En cours » porte aussi la météo de son événement (une lecture de plus, seulement si elle manque).
+    if (live && shown.has("event_weather") && !outingsWeather[live.event.id]) {
+      Object.assign(outingsWeather, await weatherService.forOutings([live.event.id]).catch(() => ({})));
+    }
     // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé : dans l'appli (`blocks=app`) il est
     // montré dans « Autour de moi », donc pas rendu (ni compté) quand ce bloc est masqué.
     const sponsored =
@@ -225,6 +245,7 @@ export const homeService = {
       pendingStatuses: upcoming.filter((a) => ["pending", "waitlisted", "offered"].includes(a.status)),
       nearby,
       weather,
+      outingsWeather,
       favoriteGarage,
       wash,
       fuel,
@@ -243,6 +264,47 @@ export const homeService = {
       spotMeetup,
       memories,
     };
+  },
+
+  /**
+   * Lot R8e1 : la météo de chaque sortie de « Prochaine sortie » (mes places retenues et mes billets valables), 6 sorties au
+   * plus comme l'écran. Aucune entrée pour une candidature en attente ou refusée.
+   */
+  async outingsWeather(
+    v: Viewer,
+    upcomingPromise: Promise<MyApplication[]>,
+    exhibitor: boolean,
+  ): Promise<HomeData["outingsWeather"]> {
+    const t = now();
+    const [upcoming, ticketRows] = await Promise.all([
+      upcomingPromise,
+      // Mes billets valables ou contrôlés d'un événement qui n'est pas fini (une jointure, sans passer par la liste de mes billets).
+      db
+        .select({
+          id: tickets.id,
+          status: tickets.status,
+          eventId: events.id,
+          slug: events.slug,
+          startsAt: events.startsAt,
+          endsAt: events.endsAt,
+        })
+        .from(tickets)
+        .innerJoin(events, eq(events.id, tickets.eventId))
+        .where(and(eq(tickets.userId, v.user.id), inArray(tickets.status, ["valid", "used"]), gt(events.endsAt, t))),
+    ]);
+    // Les mêmes cartes que l'Accueil (règle commune, six au plus) : seules les places retenues et les billets ont une météo.
+    const cards = pickNextOutings({
+      applications: upcoming,
+      tickets: ticketRows.map((x) => ({
+        id: x.id,
+        status: x.status,
+        event: { id: x.eventId, slug: x.slug, startsAt: x.startsAt.toISOString(), endsAt: x.endsAt.toISOString() },
+      })),
+      exhibitor,
+      now: t,
+    });
+    const outings = cards.filter((c) => c.kind === "ticket" || c.status === "accepted").map((c) => ({ id: c.eventId }));
+    return weatherService.forOutings(outings.map((o) => o.id));
   },
 
   /** « Autour de moi » : événements à venir à moins de `radiusKm`, par affinités, sans ceux où je suis déjà candidat. */

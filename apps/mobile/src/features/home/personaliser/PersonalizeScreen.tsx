@@ -8,6 +8,7 @@ import {
   addHomeWidget,
   defaultHomeWidgets,
   HOME_FIXED_WIDGET,
+  HOME_LINE_WIDGET,
   type HomeWidgetId,
   type HomeWidgetsConfig,
   homeWidgetOffered,
@@ -34,6 +35,7 @@ const { space2, space3 } = tokens.spacing;
 /** Le pictogramme de chaque bloc. */
 export const widgetIcons: Record<HomeWidgetId, IconName> = {
   next_access: "qr",
+  event_weather: "weatherClear",
   live: "live",
   my_outings: "ticket",
   my_crew: "crew",
@@ -144,16 +146,17 @@ export function PersonalizeScreen() {
           <View style={styles.list} testID="personalize-list">
             {shown.map((id, i) => {
               const fixed = id === HOME_FIXED_WIDGET;
-              // Premier et dernier blocs affichés : « Monter » et « Descendre » s'éteignent (« Prochaine sortie » ne bouge pas).
-              const first = i <= 1;
-              const last = i === shown.length - 1;
+              // « Monter » et « Descendre » s'éteignent quand le bloc ne peut plus bouger (« Prochaine sortie » ne bouge pas, et
+              // « Météo de l'événement », une ligne de sa carte, n'a que l'œil : aucun bloc ne s'échange avec elle).
+              const line = id === HOME_LINE_WIDGET;
               return (
                 <Row
                   key={id}
                   id={id}
                   fixed={fixed}
-                  canUp={!locked && !fixed && !first}
-                  canDown={!locked && !fixed && !last}
+                  noMove={line}
+                  canUp={!locked && !fixed && !line && moveVisibleHomeWidget(config, id, -1) !== config}
+                  canDown={!locked && !fixed && !line && moveVisibleHomeWidget(config, id, 1) !== config}
                   onUp={() => change(moveVisibleHomeWidget(config, id, -1))}
                   onDown={() => change(moveVisibleHomeWidget(config, id, 1))}
                   onHide={() => change(toggleHomeWidget(config, id))}
@@ -231,6 +234,7 @@ function Row({
   id,
   fixed,
   hiddenRow,
+  noMove,
   canUp,
   canDown,
   onUp,
@@ -243,6 +247,8 @@ function Row({
   locked: boolean;
   fixed: boolean;
   hiddenRow?: boolean;
+  /** Pas de flèches : seulement l'œil. */
+  noMove?: boolean;
   canUp?: boolean;
   canDown?: boolean;
   onUp?: () => void;
@@ -262,7 +268,9 @@ function Row({
         <View style={styles.handle}>
           <Icon name="lock" size={18} color={c.inkMuted} />
         </View>
-      ) : hiddenRow ? null : (
+      ) : hiddenRow ? null : noMove ? (
+        <View style={styles.handle} />
+      ) : (
         <View style={styles.handle}>
           <Arrow dir="up" disabled={!canUp} label={`${L.moveUp} ${w.title}`} onPress={onUp} id={id} />
           <Arrow dir="down" disabled={!canDown} label={`${L.moveDown} ${w.title}`} onPress={onDown} id={id} />

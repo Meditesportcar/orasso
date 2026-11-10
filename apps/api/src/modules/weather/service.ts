@@ -11,6 +11,7 @@ import {
   forecastForEvent,
   isBadWeather,
   type MyWeather,
+  type OutingWeather,
   SET_OUTLOOK_UNCERTAIN_ACTION,
   type StoredForecast,
   shouldSuggestUncertain,
@@ -59,6 +60,22 @@ function storedFor(e: EventRow, forecast: ProviderForecast): StoredForecast {
       const t = Date.parse(h.time);
       return t + HOUR > from && t < to;
     }),
+  };
+}
+
+/** La météo d'un département : la journée d'aujourd'hui (Paris) de la prévision gardée ; pas de journée d'aujourd'hui, rien. */
+function placeWeather(department: string, row: typeof weatherDepartments.$inferSelect | null | undefined): MyWeather | null {
+  if (!row) return null;
+  const w = wallTime(now(), "Europe/Paris");
+  const today = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+  const summary = row.forecast.days.find((d) => d.date === today);
+  if (!summary) return null;
+  return {
+    kind: "place",
+    department,
+    provider: row.provider,
+    attribution: weatherAttributions[row.provider],
+    summary,
   };
 }
 
@@ -278,21 +295,68 @@ export const weatherService = {
         };
       }
     }
+    return this.mineAtHome(v);
+  },
+
+  /**
+   * Lot R8e1 : la météo du département du compte, sans jamais celle d'un événement (bloc « Météo » de l'Accueil : « Chez toi,
+   * aujourd'hui ») ; `GET /me/weather` garde sa réponse (`mine`).
+   */
+  async mineAtHome(v: Viewer): Promise<MyWeather | null> {
     const department = v.profile.departments[0];
     if (!department) return null;
-    const row = await this.departmentWeather(department);
-    if (!row) return null;
-    const w = wallTime(t, "Europe/Paris");
-    const today = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
-    const summary = row.forecast.days.find((d) => d.date === today) ?? row.forecast.days[0];
-    if (!summary) return null;
-    return {
-      kind: "place",
-      department,
-      provider: row.provider,
-      attribution: weatherAttributions[row.provider],
-      summary,
-    };
+    return placeWeather(department, await this.departmentWeather(department));
+  },
+
+  /**
+   * Lot R8e1, tour 2 : la même météo pour `GET /me/home`, qui ne lit que le stock : jamais d'attente du fournisseur. Pas de
+   * prévision fraîche : la journée stockée si elle est d'aujourd'hui, sinon rien ; le rafraîchissement part sans être attendu
+   * (requêtes simultanées regroupées, échec retenté au plus toutes les 10 minutes, erreur journalisée), pour que la prochaine
+   * ouverture l'ait.
+   */
+  async mineFromStock(v: Viewer): Promise<MyWeather | null> {
+    const department = v.profile.departments[0];
+    if (!department) return null;
+    const row = await db.query.weatherDepartments.findFirst({ where: eq(weatherDepartments.department, department) });
+    if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+      void this.departmentWeather(department).catch((error) =>
+        console.warn("Météo du département non rafraîchie :", error instanceof Error ? error.message : error),
+      );
+    }
+    return placeWeather(department, row);
+  },
+
+  /**
+   * Lot R8e1 : la météo des sorties de « Prochaine sortie » (`GET /me/home`, `outingsWeather`), clé = identifiant de
+   * l'événement. Une lecture des événements et une des prévisions pour toute la liste ; seulement le stock, jamais le
+   * fournisseur. Un événement non publié, hors des 7 jours avant le début, fini ou sans prévision valable n'a pas d'entrée.
+   */
+  async forOutings(eventIds: string[]): Promise<Record<string, OutingWeather>> {
+    const ids = [...new Set(eventIds)];
+    if (ids.length === 0) return {};
+    const t = now();
+    const [rows, stored] = await Promise.all([
+      db.select().from(events).where(inArray(events.id, ids)),
+      db.select().from(eventWeather).where(inArray(eventWeather.eventId, ids)),
+    ]);
+    const byEvent = new Map(stored.map((r) => [r.eventId, r]));
+    const out: Record<string, OutingWeather> = {};
+    for (const e of rows) {
+      if (e.status !== "published" || !weatherVisible(e, t)) continue;
+      const row = byEvent.get(e.id);
+      if (!validFor(row, e)) continue;
+      const summary = forecastForEvent(row.forecast, e);
+      if (!summary) continue;
+      const w = wallTime(e.startsAt, "Europe/Paris");
+      out[e.id] = {
+        day: `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`,
+        summary,
+        provider: row.provider,
+        attribution: weatherAttributions[row.provider],
+        uncertain: e.outlook === "uncertain",
+      };
+    }
+    return out;
   },
 
   /**

@@ -12,12 +12,14 @@ import {
   type HomeMyOutings,
   type HomeOuting,
   homeBlockLabels,
+  type OutingWeather,
   outingDetail,
   storyShareLabels,
 } from "@orasso/shared";
 
 import { formatDayShort, formatTime } from "../../lib/format";
 import { Block } from "../HomeWidgets";
+import { OutingWeatherLine } from "./OutingWeather";
 
 const untilFmt = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
@@ -30,7 +32,16 @@ const untilFmt = new Intl.DateTimeFormat("fr-FR", {
 export const canVoteNow = (live: HomeLive) => live.votes.open > 0 && live.votes.canVote === true;
 
 /** « En cours · jour 2 sur 4 » : prend la place de « Prochaine sortie » pendant l'événement. */
-export function LiveLine({ live, accessHref }: { live: HomeLive; accessHref: string | null }) {
+export function LiveLine({
+  live,
+  accessHref,
+  weather,
+}: {
+  live: HomeLive;
+  accessHref: string | null;
+  /** Lot R8e1, tour 2 : la météo de l'événement, la même ligne que dans sa carte. */
+  weather?: OutingWeather | null;
+}) {
   const voting = canVoteNow(live);
   return (
     <section className="hm-block hm-live" data-testid="home-live-line" aria-labelledby="hm-live-title">
@@ -41,6 +52,7 @@ export function LiveLine({ live, accessHref }: { live: HomeLive; accessHref: str
       <p className="hm-block__muted">
         {live.event.city ? `${live.event.city} · ` : ""}Jusqu'au {untilFmt.format(new Date(live.event.endsAt))}
       </p>
+      {weather ? <OutingWeatherLine weather={weather} /> : null}
       <div className="hm-actions">
         {accessHref && (
           <Button variant={voting ? "secondary" : "primary"} icon="qr" href={accessHref} data-testid="home-live-access">

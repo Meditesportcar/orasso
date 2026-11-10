@@ -2,6 +2,7 @@ import { Button, Icon } from "@orasso/design-system/web";
 import {
   addHomeWidget,
   HOME_FIXED_WIDGET,
+  HOME_LINE_WIDGET,
   type HomeWidgetId,
   type HomeWidgetsConfig,
   homeWidgetIds,
@@ -111,8 +112,10 @@ export default function AppHomePersonnaliser({ loaderData, actionData }: Route.C
       ) : (
         <>
           <ul className="hm-perso" data-testid="personalize-list">
-            {shown.map((id, i) => {
+            {shown.map((id) => {
               const fixed = id === HOME_FIXED_WIDGET;
+              // « Météo de l'événement » est une ligne de la carte : l'œil seul, aucun bloc ne s'échange avec elle.
+              const line = id === HOME_LINE_WIDGET;
               return (
                 <li key={id} className="hm-perso__item" data-testid={`personalize-row-${id}`}>
                   <span className="hm-perso__text">
@@ -123,8 +126,24 @@ export default function AppHomePersonnaliser({ loaderData, actionData }: Route.C
                     <Icon name="lock" size={18} />
                   ) : (
                     <span className="hm-reorder__actions">
-                      <Op op="up" id={id} label={L.moveUp} icon="up" disabled={i <= 1} />
-                      <Op op="down" id={id} label={L.moveDown} icon="down" disabled={i === shown.length - 1} />
+                      {line ? null : (
+                        <>
+                          <Op
+                            op="up"
+                            id={id}
+                            label={L.moveUp}
+                            icon="up"
+                            disabled={moveVisibleHomeWidget(config, id, -1) === config}
+                          />
+                          <Op
+                            op="down"
+                            id={id}
+                            label={L.moveDown}
+                            icon="down"
+                            disabled={moveVisibleHomeWidget(config, id, 1) === config}
+                          />
+                        </>
+                      )}
                       <Op op="hide" id={id} label={L.hide} icon="eye" />
                     </span>
                   )}

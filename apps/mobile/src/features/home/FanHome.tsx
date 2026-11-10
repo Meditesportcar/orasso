@@ -26,8 +26,8 @@ import {
   homeWidgetOffered,
   type MyApplication,
   normalizeHomeWidgets,
+  pickNextOutings,
   visibleHomeWidgets,
-  withYear,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +36,7 @@ import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/features/home/HomeWidgets";
 import { Stamp } from "@/features/passport/Stamp";
 import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
-import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sorties/model";
+import { arrivalPhrase, liveApplications } from "@/features/sorties/model";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDay, formatHour } from "@/lib/format";
@@ -65,22 +65,8 @@ import { SpotMeetup } from "./widgets/SpotMeetup";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
-const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: "Europe/Paris",
-});
-const HOUR_FMT = new Intl.DateTimeFormat("fr-FR", { hour: "numeric", timeZone: "Europe/Paris" });
-/** « samedi 17 octobre à 19 h » ; lot R3b, tour 2 : « … 17 octobre 2027 à 19 h » hors de l'année en cours. */
-const weatherDay = (iso: string) => {
-  const at = new Date(iso);
-  return `${withYear(DAY_FMT.format(at), at)} à ${HOUR_FMT.format(at).replace(/\s*h$/, "")} h`;
-};
 /** Pendant un événement, l'Accueil relit ses chiffres (sur place, votes) à ce rythme, et au retour au premier plan. */
 const LIVE_REFRESH_MS = 180_000;
-/** Tickets dans le glissement, au plus. */
-const MAX_OUTINGS = 6;
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
@@ -199,6 +185,12 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // homonymes possibles, et l'Explorer ne liste pas les événements sur invitation). L'API dit s'il est visible.
   const onMap = (slug: string) => () => router.push({ pathname: "/carte", params: { event: slug } } as never);
 
+  // Lot R8e1 : la météo de chaque sortie est une ligne de sa carte ; « Météo de l'événement » masqué : aucune ligne.
+  const outingWeather = (eventId: string | undefined) =>
+    eventId && visibleHomeWidgets(normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets)).includes("event_weather")
+      ? (data?.outingsWeather?.[eventId] ?? null)
+      : null;
+
   /** Une candidature en ticket : son affiche, son statut, son arrivée, son geste. */
   const appOuting = (a: MyApplication): Outing => {
     const fromApi = data?.nextAccess?.id === a.id ? data.nextAccess : null;
@@ -240,23 +232,21 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
               onPress: () => goTab("sorties"),
               testID: "home-outing-application",
             },
+      weather: accepted ? outingWeather(a.event.id) : null,
       onMap: accepted ? onMap(a.event.slug) : null,
       onOpen: () => openEvent(a.event.slug),
     };
   };
 
-  // Les sorties du glissement : la prochaine (place retenue d'abord) puis les autres par date. Un billet n'est caché que
-  // si une place retenue donne déjà un accès au même événement (lot M5, tour 2) : en attente ou en liste d'attente, le
-  // billet reste, c'est lui qui fait entrer.
+  // Les cartes du glissement : la règle commune `pickNextOutings` (la même que l'API pour savoir de quels événements envoyer la
+  // météo) ; ici on y met les données de chaque carte. Un billet n'est caché que si une place retenue donne déjà un accès au
+  // même événement ; en attente ou en liste d'attente, le billet reste, c'est lui qui fait entrer.
   const apps = next ? [next, ...live.filter((a) => a.id !== next.id)] : live;
-  const accessSlugs = new Set(apps.filter((a) => a.status === "accepted").map((a) => a.event.slug));
-  const tickets = ticketsUpcoming(myTickets.data ?? [], now).filter(
-    (x) => x.id !== ticket?.id && !accessSlugs.has(x.event.slug),
-  );
   const ticketOuting = (x: {
     id: string;
     priceCents: number | null;
     event: {
+      id?: string;
       slug: string;
       title: string;
       startsAt: string;
@@ -292,34 +282,49 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       onPress: () => router.push(`/billet/${x.id}`),
       testID: "home-hero-action",
     },
+    weather: outingWeather(x.event.id),
     onMap: onMap(x.event.slug),
     onOpen: () => openEvent(x.event.slug),
   });
-  const outings: Outing[] = [
-    ...(ticket
-      ? [
-          ticketOuting({
-            ...ticket,
-            arrivalText: ticket.arrival
-              ? upper(arrivalPhrase(ticket.arrival) ?? "")
-              : homeProfileLabels.publicOpening(formatHour(ticket.event.startsAt)),
-          }),
-        ]
+  const myTicketList = myTickets.data ?? [];
+  const ticketInputs = [
+    ...myTicketList,
+    // Le billet de l'API (visiteur) compte même avant la liste de mes billets (copie du téléphone, première lecture).
+    ...(ticket && !myTicketList.some((x) => x.id === ticket.id)
+      ? [{ id: ticket.id, status: "valid", event: { ...ticket.event, id: ticket.event.id ?? ticket.event.slug } }]
       : []),
-    ...[
-      ...apps.slice(next ? 1 : 0).map((a) => ({ startsAt: a.event.startsAt, o: appOuting(a) })),
-      ...tickets.map((x) => ({ startsAt: x.event.startsAt, o: ticketOuting(x) })),
-    ]
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-      .map((x) => x.o),
   ];
-  if (next) outings.unshift(appOuting(next));
-  const shown = outings.slice(0, MAX_OUTINGS);
+  const picked = pickNextOutings({
+    applications: upcoming ?? [],
+    tickets: ticketInputs,
+    exhibitor,
+    now,
+  });
+  const appById = new Map(apps.map((a) => [a.id, a]));
+  const ticketById = new Map(myTicketList.map((x) => [x.id, x]));
+  const shown: Outing[] = picked.flatMap((card): Outing[] => {
+    if (card.kind === "application") {
+      const a = appById.get(card.id);
+      return a ? [appOuting(a)] : [];
+    }
+    if (ticket?.id === card.id) {
+      return [
+        ticketOuting({
+          ...ticket,
+          arrivalText: ticket.arrival
+            ? upper(arrivalPhrase(ticket.arrival) ?? "")
+            : homeProfileLabels.publicOpening(formatHour(ticket.event.startsAt)),
+        }),
+      ];
+    }
+    const x = ticketById.get(card.id);
+    return x ? [ticketOuting(x)] : [];
+  });
 
-  // Météo : celle du jour J de la prochaine sortie (lieu, jour et heure), sinon celle du département.
-  const weather = data?.weather ?? null;
-  const weatherWhen = weather?.kind === "event" ? weatherDay(weather.event.startsAt) : null;
-  const weatherPlace = weather?.kind === "event" ? (heroEvent?.city ?? null) : department ? `Dép. ${department}` : null;
+  // Météo : celle du département (« Chez toi, aujourd'hui »). Celle de l'événement est une ligne de sa carte (lot R8e1) ; une
+  // copie gardée avant ce lot peut porter l'ancienne météo « jour J » : jamais affichée ici.
+  const weather = data?.weather?.kind === "place" ? data.weather : null;
+  const weatherPlace = department ? `Dép. ${department}` : null;
 
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
@@ -366,6 +371,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         live={liveNow}
         onAccess={liveAccess ? () => router.push(liveAccess as never) : null}
         onSheet={() => openEvent(liveNow.event.slug)}
+        weather={outingWeather(liveNow.event.id)}
       />
     ) : shown.length > 0 ? (
       <NextOutings
@@ -440,7 +446,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       </>
     ) : null,
-    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} when={weatherWhen} /> : null,
+    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} /> : null,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
     favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
     pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,

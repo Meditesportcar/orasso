@@ -69,6 +69,9 @@ test("Personnaliser : monter, masquer, ajouter, remettre par défaut ; le régla
   // « Prochaine sortie » en tête, grisée ; « Défis de la saison » grisé « Bientôt ».
   await expect(page.getByTestId("personalize-row-next_access")).toContainText("Toujours en tête");
   await expect(page.getByTestId("personalize-soon")).toContainText("Bientôt");
+  // Lot R8e1 : « Météo de l'événement » (la ligne de la carte) n'a que l'œil ; « En cours » ne monte donc plus.
+  await expect(page.getByTestId("up-event_weather")).toHaveCount(0);
+  await expect(page.getByTestId("hide-event_weather")).toBeVisible();
   await expect(page.getByTestId("up-live")).toBeDisabled();
 
   await page.getByTestId("up-my_crew").click();
@@ -95,8 +98,9 @@ test("Personnaliser : monter, masquer, ajouter, remettre par défaut ; le régla
       hidden: ["agenda", "favorite_garage", "pending"],
     });
   const widgets = (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets;
-  expect(widgets.order.slice(0, 6)).toEqual([
+  expect(widgets.order.slice(0, 7)).toEqual([
     "next_access",
+    "event_weather",
     "live",
     "my_outings",
     "my_crew",
