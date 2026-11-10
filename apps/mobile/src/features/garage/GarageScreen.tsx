@@ -11,11 +11,19 @@
 // suit le principal.
 // Lot R7b1 (D38) : le Garage n'est plus un écran : c'est le panneau « Garage » du Profil (sans en-tête ni grand titre ; ses
 // feuilles passent par `<Overlay>`) ; « Ajouter un véhicule » devient le bouton principal du panneau.
+// Lot R8b1 (D40, maquette R8.1) : la ligne « N véhicules » disparaît (le nombre est dans l'onglet « Garage · N ») ; « Ajouter un
+// véhicule » devient une ligne en fin de liste (`.r8addrow`, un contour d'un trait) ; le bouton principal n'existe que si le
+// garage est vide, dans l'état vide. La lecture des véhicules est celle du Profil (il en a besoin pour le nombre de l'onglet).
 import { Button, EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { vehicleWizardLabels as L, mainVehicleLabels as M, type VehicleFull } from "@orasso/shared";
+import {
+  vehicleWizardLabels as L,
+  mainVehicleLabels as M,
+  profileTabsLabels as PT,
+  type VehicleFull,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
 import { SetList, SetRow } from "@/features/profil/parts";
@@ -23,9 +31,8 @@ import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useSession } from "@/lib/session";
-import { useApi } from "@/lib/useApi";
+import type { ApiState } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
-import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { Overlay } from "@/ui/Overlay";
 import { SecHead } from "@/ui/SecHead";
@@ -35,13 +42,15 @@ import { VehiclePros } from "./VehiclePros";
 const { space3 } = tokens.spacing;
 
 export function GarageScreen({
+  vehicles,
   reloadKey = 0,
 }: {
+  /** La lecture de mes véhicules, faite par le Profil (cache « vehicles »). */
+  vehicles: ApiState<VehicleFull[]>;
   /** Change à chaque « tirer pour actualiser » du Profil. */ reloadKey?: number;
 }) {
   const { t } = useTheme();
   const router = useRouter();
-  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles" });
   const active = vehicles.data?.filter((v) => v.status === "active") ?? [];
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
   const add = () => router.push("/vehicule/nouveau");
@@ -155,8 +164,8 @@ export function GarageScreen({
 
       {active.length === 0 && !vehicles.loading ? (
         <EmptyState
-          title={L.emptyTitle}
-          text={L.emptyText}
+          title={PT.garageEmptyTitle}
+          text={PT.garageEmptyText}
           action={
             <Button variant="primary" icon="add" onPress={add} testID="garage-empty-add">
               {L.addVehicle}
@@ -165,17 +174,6 @@ export function GarageScreen({
         />
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {vehicles.data && active.length > 0 ? (
-        <Muted variant="caption" testID="garage-count">
-          {L.garageCount(active.length)}
-        </Muted>
-      ) : null}
-      {/* Le bouton principal de l'onglet : ajouter un véhicule (vide, c'est celui de l'état vide). */}
-      {active.length > 0 ? (
-        <Button variant="primary" icon="add" onPress={add} fullWidth testID="garage-add">
-          {L.addVehicle}
-        </Button>
-      ) : null}
       {/* Tour 2 : le bandeau se pose au-dessus de la mini-fiche, dans la page : il ne couvre plus le principal. */}
       {banner ? (
         <View
@@ -216,6 +214,26 @@ export function GarageScreen({
         />
       ))}
 
+      {/* « Ajouter un véhicule » : une ligne en fin de liste, pas un bouton principal (celui de l'état vide est le seul). */}
+      {active.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={L.addVehicle}
+          onPress={add}
+          testID="garage-add"
+          style={({ pressed }) => [
+            styles.addRow,
+            { boxShadow: `inset 0 0 0 1.5px ${t.color.line}` },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name="add" size={18} color={t.color.ink} />
+          <Text variant="bodyStrong" color={t.color.ink} style={styles.addText}>
+            {L.addVehicle}
+          </Text>
+        </Pressable>
+      ) : null}
+
       {/* Une section par véhicule (clé) : jamais les pros d'un autre véhicule, même le temps d'une réponse. */}
       {active[0] ? (
         <VehiclePros key={active[0].id} vehicleId={active[0].id} modelName={active[0].modelName} round={round} />
@@ -244,4 +262,16 @@ const styles = StyleSheet.create({
   },
   bannerIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   bannerText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  // `.r8addrow` : un contour d'un trait, 44 px, icône « plus » et libellé centrés.
+  addRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space3 - 4,
+    paddingHorizontal: space3,
+    borderRadius: 14,
+  },
+  addText: { fontSize: 13.5, lineHeight: 17, flexShrink: 1, textAlign: "center" },
+  pressed: { opacity: 0.8 },
 });

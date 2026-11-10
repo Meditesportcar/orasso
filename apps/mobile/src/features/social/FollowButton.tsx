@@ -2,7 +2,8 @@
 // `followButtonKind` : Suivre / Suivre en retour / Demander à suivre (principal sur le profil), Abonné / Demandé
 // (secondaire ; toucher demande une confirmation avant « Ne plus suivre » ou « Annuler la demande »).
 // `full` : le bouton pleine largeur du profil (confirmation en place). `small` : le bouton compact d'une ligne de liste
-// (confirmation dans une feuille, posée dans la zone des feuilles de l'écran).
+// (confirmation dans une feuille, posée dans la zone des feuilles de l'écran). Lot R8b1 : `line` est le petit bouton posé sur la
+// ligne du grade, dans l'en-tête compact du profil d'un autre (principal pour s'abonner, secondaire sinon ; confirmation en feuille).
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type FollowButtonKind,
@@ -107,7 +108,7 @@ export function FollowButton({
   followsMe: boolean;
   canFollow: boolean;
   visibility: ProfileVisibility;
-  size?: "full" | "small";
+  size?: "full" | "small" | "line";
   /** Aperçu : le bouton ne fait rien. */
   inert?: boolean;
   /** Après suivre, demander, ne plus suivre, annuler : mon nouvel état. */
@@ -162,15 +163,16 @@ export function FollowButton({
     />
   );
 
-  if (size === "small") {
+  if (size === "small" || size === "line") {
     return (
       <>
         <SmButton
-          kind="s"
+          kind={size === "line" && isAction(kind) ? "p" : "s"}
+          style={size === "line" ? styles.line : undefined}
           icon={kind === "requested" ? "wait" : isAction(kind) ? "add" : "check"}
           disabled={busy}
           accessibilityLabel={`${LABEL[kind]} ${pseudo}`}
-          testID={(testIDFor ?? ((k) => SMALL_TEST_ID[k]))(kind)}
+          testID={size === "line" ? "follow-button" : (testIDFor ?? ((k) => SMALL_TEST_ID[k]))(kind)}
           onPress={onPress}
         >
           {LABEL[kind]}
@@ -217,6 +219,8 @@ export function FollowButton({
 
 const styles = StyleSheet.create({
   full: { gap: space2 },
+  // Lot R8b1 : le bouton de la ligne du grade (`.r8fol` : 30 px de haut, 10 px de marge).
+  line: { minHeight: 32, paddingHorizontal: 10, borderRadius: 9 },
   confirm: { borderRadius: radiusMd, padding: space3 },
   confirmBody: { gap: space2 },
 });

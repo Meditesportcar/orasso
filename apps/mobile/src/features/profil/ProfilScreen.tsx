@@ -11,20 +11,16 @@
 // l'instant), pseudo, grade, département, QR de compte et roue dentée ; les trois nombres ; la ligne « Partenaires »
 // (réservée au lot R7m1) ; « Profil public » ; puis deux onglets internes, Garage (par défaut, partout) et Sorties (ma saison,
 // le passeport). Les casquettes et les accès « Devenir… » restent en bas de l'écran.
+// Lot R8b1 (D40, maquette R8.1 `pr-profil`, option A « Compact ») : le haut du Profil passe d'environ 400 px à environ 214 px avant le
+// contenu. Une grille de trois colonnes (photo de 72 px ; pseudo, grade et département, bio sur une ligne avec « plus » ; QR et
+// Réglages en icônes empilées), puis la bande de compteurs (abonnés, abonnements, sorties, et « partenaires » en 4e compteur
+// quand il y en a). « Profil public » sort de l'en-tête : c'est la première ligne de Réglages. Les onglets deviennent
+// soulignés et collants (« Garage · N », « Sorties ») ; un profil sans véhicule (casquette visiteur) n'a pas « Garage » et
+// s'ouvre sur « Sorties ». Les en-têtes des autres casquettes (pro, prestataire, média…) ne changent pas.
 // Lot R4c (maquette R4.6) : l'en-tête devient une carte (`.r4me`) avec trois compteurs (abonnés, abonnements, sorties),
 // les deux premiers ouvrent leur liste (`/reseau`), les sorties l'onglet Sorties, puis « Mon profil public » et le crew côte à côte ; ces deux accès quittent les
 // réglages.
-import {
-  AvatarRing,
-  Button,
-  GradientFill,
-  Icon,
-  Tag,
-  Text,
-  tokens,
-  useTheme,
-  withAlpha,
-} from "@orasso/design-system/native";
+import { AvatarRing, Button, Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   capLabels,
   fitWideWordSize,
@@ -35,6 +31,7 @@ import {
   profilePhotoLabels,
   profileTabFromParam,
   settingsHubLabels,
+  visibleProfileTab,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -54,13 +51,14 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
-import { departmentCaption, NetworkCounters } from "./network";
-import { PartnersLine } from "./PartnersLine";
+import { NetworkCounters } from "./network";
+import { PartnersHost } from "./PartnersLine";
 import { PhotoSheet } from "./PhotoSheet";
+import { ProfileHead, SideIcon } from "./ProfileHead";
 import { ProfileTabs } from "./ProfileTabs";
 import { CapRows, CreateSheet, HeadAvatar, LinkRow, SeasonBlock } from "./parts";
 
-const { space1, space3, space4 } = tokens.spacing;
+const { space1, space2, space3, space4 } = tokens.spacing;
 
 export function ProfilScreen() {
   const { t } = useTheme();
@@ -73,6 +71,10 @@ export function ProfilScreen() {
   // Lot R7b1 : l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut, partout) ; un toucher le change.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
   const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
+  // Lot R8b1 : un profil sans véhicule (casquette visiteur) n'a pas « Garage » et s'ouvre sur « Sorties ». L'ajout d'un
+  // premier véhicule reste possible par la ligne « Ajouter un véhicule » de « Mes casquettes » (`casquette-quick-vehicle`).
+  const hasGarage = persona.kind !== "visitor";
+  const shownTab = visibleProfileTab(tab, hasGarage);
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {
     if (onglet === undefined) return;
@@ -90,13 +92,16 @@ export function ProfilScreen() {
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
   // Lot R4c : les trois compteurs du réseau (abonnés, abonnements, sorties ; lot R6b).
   const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
+  // Lot R8b1 : mes véhicules, lus ici (le nombre de l'onglet « Garage · N ») et donnés au panneau Garage.
+  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base && hasGarage });
+  const garageCount = vehicles.data ? vehicles.data.filter((v) => v.status === "active").length : null;
 
   const profile = me?.profile;
   const department = profile?.departments[0];
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
-  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW / Math.max(1, fontScale), base ? 26 : 22, 9);
+  const pseudoSize = fitWideWordSize(profile?.pseudo ?? "", headW / Math.max(1, fontScale), 22, 9);
 
-  // Les deux boutons de l'en-tête : QR de compte (Ma fiche pour le pro) et roue dentée (Réglages), l'un sur l'autre.
+  // Les deux boutons de l'en-tête des autres casquettes : QR de compte (Ma fiche pour le pro) et roue dentée (Réglages), l'un sur l'autre.
   const headButtons = (
     <View style={styles.headBtns}>
       <Pressable
@@ -150,13 +155,9 @@ export function ProfilScreen() {
         {profile?.pseudo ?? ""}
       </Text>
       <View style={styles.headTags}>
-        {base && profile ? (
-          <TagWin>{gradeLabels[profile.grade]}</TagWin>
-        ) : (
-          <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
-        )}
+        <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
         <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
-          {base ? (departmentCaption(department) ?? "Passionné") : active.label}
+          {active.label}
         </Text>
       </View>
     </View>
@@ -164,9 +165,18 @@ export function ProfilScreen() {
 
   return (
     <TabScreen
+      // Lot R8b1 : la rangée d'onglets (4e enfant : bannière, carte d'attente, haut compact, onglets) reste collée en haut.
+      stickyIndex={base ? 3 : undefined}
       onRefresh={async () => {
         setRound((r) => r + 1);
-        await Promise.all([refreshMe(), points.reload(), staff.reload(), passport.reload(), network.reload()]);
+        await Promise.all([
+          refreshMe(),
+          points.reload(),
+          staff.reload(),
+          passport.reload(),
+          network.reload(),
+          vehicles.reload(),
+        ]);
       }}
       overlays={
         <>
@@ -182,64 +192,86 @@ export function ProfilScreen() {
 
       {base ? (
         <>
-          {/* En-tête de la maquette R7.12 : la photo dans son anneau, le pseudo, le grade et le département, le QR de compte et
-              la roue dentée. Sans story, l'anneau est vide (`ring = null`) ; l'écran des stories (lot R7f2) l'ouvrira. */}
-          <View style={styles.head} testID="profil-head">
-            {/* Tour 2 : un voile du fond de l'écran derrière l'en-tête, pour que le pseudo reste lisible sur les lumières du fond
-                (Béton comme Sable) ; il s'éteint vers le bas. Jetons seulement. */}
-            <GradientFill
-              css={`linear-gradient(180deg, ${withAlpha(t.color.ground, 0.82)} 0%, ${withAlpha(t.color.ground, 0.82)} 62%, ${withAlpha(t.color.ground, 0)} 100%)`}
-              style={styles.headVeil}
+          {/* Le haut compact (maquette R8.1, option A) : la grille d'identité puis la bande de compteurs. */}
+          <View style={styles.top}>
+            <ProfileHead
+              testID="profil-head"
+              avatar={
+                // Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit.
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={profilePhotoLabels.change}
+                  onPress={() => setSheet("photo")}
+                  hitSlop={4}
+                  testID="profil-avatar"
+                  style={({ pressed }) => [styles.avatarBtn, pressed && styles.pressed]}
+                >
+                  <AvatarRing
+                    ring={null}
+                    size="profile"
+                    source={mediaSource(profile?.avatarUrl)}
+                    name={profile?.pseudo ?? "?"}
+                  />
+                  <View style={[styles.cam, { backgroundColor: t.color.accent, borderColor: t.color.ground }]}>
+                    <Icon name="camera" size={11} color={t.color.accentInk} />
+                  </View>
+                </Pressable>
+              }
+              pseudo={profile?.pseudo ?? ""}
+              pseudoTestID="profil-pseudo"
+              line={
+                <>
+                  {profile ? <TagWin>{gradeLabels[profile.grade]}</TagWin> : null}
+                  {department ? (
+                    <View style={styles.dept} testID="profil-department">
+                      <Icon name="place" size={14} color={t.color.inkMuted} />
+                      <Text variant="bodyStrong" color={t.color.inkMuted} style={styles.deptText}>
+                        {department}
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              }
+              bio={profile?.bio}
+              bioTestID="profil-bio"
+              side={
+                <>
+                  <SideIcon icon="qr" label={PT.qrOpen} onPress={() => setSheet("qr")} testID="profil-account-qr" />
+                  <SideIcon
+                    icon="gear"
+                    label={PT.settingsOpen}
+                    onPress={() => router.push("/reglages")}
+                    testID="profil-gear"
+                  />
+                </>
+              }
             />
-            {/* Lot R5b (maquette R5.4) : toucher sa photo ouvre « Ta photo de profil » ; le petit appareil photo le dit. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={profilePhotoLabels.change}
-              onPress={() => setSheet("photo")}
-              hitSlop={4}
-              testID="profil-avatar"
-              style={({ pressed }) => [styles.avatarBtn, pressed && styles.pressed]}
-            >
-              <AvatarRing
-                ring={null}
-                size="xl"
-                source={mediaSource(profile?.avatarUrl)}
-                name={profile?.pseudo ?? "?"}
-              />
-              <View style={[styles.cam, { backgroundColor: t.color.accent, borderColor: t.color.ground }]}>
-                <Icon name="camera" size={13} color={t.color.accentInk} />
-              </View>
-            </Pressable>
-            {headText}
-            {headButtons}
+            <PartnersHost mine reloadKey={round}>
+              {(cell) => (
+                <NetworkCounters
+                  counts={network.data}
+                  partners={cell}
+                  onOpen={(target) =>
+                    target === "sorties"
+                      ? setTab("sorties")
+                      : router.push({ pathname: "/reseau", params: { liste: target } })
+                  }
+                />
+              )}
+            </PartnersHost>
           </View>
-          {profile?.bio ? (
-            <Text variant="body" color={t.color.inkMuted} numberOfLines={2} style={styles.bio} testID="profil-bio">
-              {profile.bio}
-            </Text>
-          ) : null}
-          <NetworkCounters
-            counts={network.data}
-            plain
-            onOpen={(target) =>
-              target === "sorties" ? setTab("sorties") : router.push({ pathname: "/reseau", params: { liste: target } })
-            }
-          />
-          <PartnersLine mine reloadKey={round} />
-          <Button
-            variant="secondary"
-            icon="eye"
-            fullWidth
-            onPress={() => router.push("/profil-public")}
-            accessibilityLabel={`${PT.publicProfile}, ${PT.publicProfileHint.toLowerCase()}`}
-            testID="profil-public"
-          >
-            {PT.publicProfile}
-          </Button>
 
-          <ProfileTabs value={tab} onChange={setTab} />
-          {tab === "garage" ? (
-            <GarageScreen reloadKey={round} />
+          {/* Onglets soulignés, collants sous la barre du haut (`stickyIndex` de la page). */}
+          <View style={[styles.tabsBar, { backgroundColor: t.color.ground }]}>
+            <ProfileTabs
+              value={shownTab}
+              onChange={setTab}
+              items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
+              garageCount={garageCount}
+            />
+          </View>
+          {shownTab === "garage" ? (
+            <GarageScreen vehicles={vehicles} reloadKey={round} />
           ) : (
             <View style={styles.panel} testID="profil-sorties-panel">
               {/* « Ma saison » : points et tampons en un seul bloc (maquette 7.2), puis le passeport lui-même. */}
@@ -303,7 +335,11 @@ export function ProfilScreen() {
 
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: space3 },
-  headVeil: { top: -space3, bottom: -space3, left: -space4, right: -space4 },
+  top: { gap: space2 },
+  // Les onglets collants couvrent toute la largeur (le contenu a 16 px de marge) sur le fond de l'écran.
+  tabsBar: { marginHorizontal: -space4, paddingHorizontal: space4 },
+  dept: { flexDirection: "row", alignItems: "center", gap: 4 },
+  deptText: { fontSize: 13, lineHeight: 16 },
   headText: { flex: 1, minWidth: 0, gap: space1 + 1 },
   pseudo: { fontSize: 22, lineHeight: 23 },
   headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
@@ -316,16 +352,15 @@ const styles = StyleSheet.create({
   avatarBtn: { position: "relative" },
   cam: {
     position: "absolute",
-    right: 0,
-    bottom: 0,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  bio: { fontSize: 13.5, lineHeight: 19 },
   capsay: { fontSize: 13.5, lineHeight: 19 },
   links: { gap: 0 },
 });

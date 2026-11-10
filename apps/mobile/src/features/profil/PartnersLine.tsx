@@ -1,14 +1,17 @@
-// Ligne « Partenaires » sous l'en-tête du Profil (maquette R7.12 et R7.20 `pq_pro`, lot R7m1) : les logos ronds et les noms des
-// pros partenaires. Elle n'existe que s'il y a un partenaire actif. Sur le profil d'un autre : un partenaire ouvre sa fiche,
-// plusieurs ouvrent la liste. Sur mon profil : la liste, avec « Mettre fin » (feuille de confirmation : le pro est prévenu,
-// les contenus déjà publiés gardent leur mention). Les partenaires d'un autre viennent de `GET /users/:pseudo` (vide pour un
-// compte privé que je ne suis pas) ; les miens de `GET /me/partnerships`. Tour 2 : une panne de cette lecture ne ressemble
-// jamais à « aucun partenaire » (message et « Réessayer ») ; un partenaire dont la fiche n'est plus visible reste dans la
-// liste (« Pro indisponible ») et on peut y mettre fin ; tirer pour actualiser relance cette lecture (`reloadKey`).
+// Les partenaires du Profil (maquette R7.12 et R7.20 `pq_pro`, lot R7m1) : les pros partenaires d'un passionné. Lot R8b1 (maquette
+// R8.1) : la ligne de logos disparaît de l'en-tête, les partenaires sont le 4e compteur de la bande (« partenaire » /
+// « partenaires », seulement quand il y en a). Ce composant garde la lecture et les feuilles : il donne au compteur sa
+// valeur et son toucher (`PartnersCell`), et pose la liste dans la zone des feuilles de l'écran. Sur le profil d'un autre,
+// un partenaire ouvre sa fiche, plusieurs ouvrent la liste. Sur mon profil : la liste, avec « Mettre fin » (feuille de
+// confirmation : le pro est prévenu, les contenus déjà publiés gardent leur mention). Les partenaires d'un autre viennent
+// de `GET /users/:pseudo` (vide pour un compte privé que je ne suis pas) ; les miens de `GET /me/partnerships`. Tour 2 de
+// R7m1 : une panne de cette lecture ne ressemble jamais à « aucun partenaire » (le compteur affiche « – », le toucher
+// ouvre le message et « Réessayer ») ; un partenaire dont la fiche n'est plus visible reste dans la liste (« Pro
+// indisponible ») et on peut y mettre fin ; tirer pour actualiser relance cette lecture (`reloadKey`).
 import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { partnershipLabels as L, type PartnerLogo } from "@orasso/shared";
+import { partnershipLabels as L, type PartnerLogo, profileTabsLabels as PT } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { EndSheet } from "@/features/partnerships/EndSheet";
@@ -18,8 +21,15 @@ import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
 import { LoadError } from "@/ui/LoadError";
+import { Overlay } from "@/ui/Overlay";
 
 const { space1, space2, space3 } = tokens.spacing;
+
+/**
+ * Ce que le compteur « partenaires » de la bande sait : `count` (`null` = la lecture a échoué, le compteur affiche « – »),
+ * les noms pour la lecture d'écran, et son toucher. Pas de cellule du tout (`null`) tant qu'il n'y a aucun partenaire.
+ */
+export type PartnersCell = { count: number | null; names: string; onPress: () => void };
 
 type Row = {
   key: string;
@@ -32,15 +42,18 @@ type Row = {
   available: boolean;
 };
 
-export function PartnersLine({
+export function PartnersHost({
   partners,
   mine,
   reloadKey = 0,
+  children,
 }: {
   partners?: PartnerLogo[] | null;
   mine: boolean;
   /** Change à chaque « tirer pour actualiser » de l'écran : la lecture de mes partenaires repart. */
   reloadKey?: number;
+  /** Le compteur de la bande reçoit sa cellule (`null` : rien à montrer). */
+  children: (cell: PartnersCell | null) => ReactNode;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -90,123 +103,94 @@ export function PartnersLine({
         ) : null}
       </View>
     ) : null;
-  if (!rows.length) return failure;
-
   const first = rows[0];
-  const press = () => {
-    if (!mine && rows.length === 1 && first) router.push(`/p/${first.slug}`);
-    else setOpen(true);
+  const title = rows.length ? L.partnersLine(rows.length) : PT.partnersTitle;
+  const failed = mine && Boolean(my.error);
+  // Rien à montrer : ni partenaire ni panne (la lecture en cours ne fait pas apparaître de compteur).
+  if (!rows.length && !failed) return <>{children(null)}</>;
+  const cell: PartnersCell = {
+    count: failed ? null : rows.length,
+    names: rows.map((r) => r.name).join(", "),
+    onPress: () => {
+      if (!mine && rows.length === 1 && first) router.push(`/p/${first.slug}`);
+      else setOpen(true);
+    },
   };
 
   return (
     <>
-      {failure}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${L.partnersLine(rows.length)}, ${rows.map((r) => r.name).join(", ")}`}
-        onPress={press}
-        testID="partners-line"
-        style={({ pressed }) => [
-          styles.line,
-          { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard },
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={styles.logos}>
-          {rows.slice(0, 3).map((r, i) => (
-            <View key={r.key} style={[styles.logo, { borderColor: c.surface }, i > 0 && styles.overlap]}>
-              <Avatar url={r.logoUrl} pseudo={r.name} size={36} />
+      {children(cell)}
+      <Overlay>
+        <AppSheet visible={open && !ending} onClose={() => setOpen(false)} accessibilityLabel={title}>
+          <View style={styles.head}>
+            <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.title}>
+              {title}
+            </Text>
+            <Button variant="close" label="Fermer" onPress={() => setOpen(false)} testID="partners-sheet-close" />
+          </View>
+          {failure}
+          {rows.map((r) => (
+            <View
+              key={r.key}
+              style={[styles.card, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+              testID="partner-row"
+            >
+              <Pressable
+                accessibilityRole={r.available ? "link" : "text"}
+                accessibilityLabel={r.name}
+                disabled={!r.available}
+                onPress={() => {
+                  setOpen(false);
+                  router.push(`/p/${r.slug}`);
+                }}
+                style={({ pressed }) => [styles.cardHead, pressed && styles.pressed]}
+              >
+                <Avatar url={r.logoUrl} pseudo={r.name} size={40} />
+                <View style={styles.text}>
+                  <Text variant="bodyStrong" color={c.ink}>
+                    {r.name}
+                  </Text>
+                  {r.detail ? (
+                    <Text variant="caption" color={c.inkMuted}>
+                      {r.detail}
+                    </Text>
+                  ) : null}
+                </View>
+                {r.available ? <Icon name="next" size={16} color={c.inkMuted} /> : null}
+              </Pressable>
+              {mine && r.id ? (
+                <Button variant="secondary" icon="close" fullWidth onPress={() => setEnding(r)} testID="partner-end">
+                  {L.end}
+                </Button>
+              ) : null}
             </View>
           ))}
-        </View>
-        <View style={styles.text}>
-          <Text variant="bodyStrong" color={c.ink}>
-            {L.partnersLine(rows.length)}
-          </Text>
-          <Text variant="caption" color={c.inkMuted}>
-            {rows.map((r) => r.name).join(" · ")}
-          </Text>
-        </View>
-        <Icon name="next" size={16} color={c.inkMuted} />
-      </Pressable>
-
-      <AppSheet
-        visible={open && !ending}
-        onClose={() => setOpen(false)}
-        accessibilityLabel={L.partnersLine(rows.length)}
-      >
-        <View style={styles.head}>
-          <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.title}>
-            {L.partnersLine(rows.length)}
-          </Text>
-          <Button variant="close" label="Fermer" onPress={() => setOpen(false)} testID="partners-sheet-close" />
-        </View>
-        {rows.map((r) => (
-          <View
-            key={r.key}
-            style={[styles.card, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
-            testID="partner-row"
-          >
-            <Pressable
-              accessibilityRole={r.available ? "link" : "text"}
-              accessibilityLabel={r.name}
-              disabled={!r.available}
-              onPress={() => {
-                setOpen(false);
-                router.push(`/p/${r.slug}`);
-              }}
-              style={({ pressed }) => [styles.cardHead, pressed && styles.pressed]}
-            >
-              <Avatar url={r.logoUrl} pseudo={r.name} size={40} />
-              <View style={styles.text}>
-                <Text variant="bodyStrong" color={c.ink}>
-                  {r.name}
-                </Text>
-                {r.detail ? (
-                  <Text variant="caption" color={c.inkMuted}>
-                    {r.detail}
-                  </Text>
-                ) : null}
-              </View>
-              {r.available ? <Icon name="next" size={16} color={c.inkMuted} /> : null}
-            </Pressable>
-            {mine && r.id ? (
-              <Button variant="secondary" icon="close" fullWidth onPress={() => setEnding(r)} testID="partner-end">
-                {L.end}
-              </Button>
-            ) : null}
-          </View>
-        ))}
-      </AppSheet>
-
-      <EndSheet
-        visible={ending !== null}
-        name={ending?.name ?? ""}
-        onClose={() => setEnding(null)}
-        onConfirm={async () => {
-          if (!ending?.id) return;
-          try {
-            await api.endPartnership(ending.id);
-          } catch (e) {
-            // Déjà fini ailleurs (409/404) : la liste se relit pour dire la vérité, l'erreur reste dans la feuille.
-            void my.reload();
-            throw e;
-          }
-          setEnding(null);
-          setOpen(false);
-          await my.reload();
-        }}
-      />
+        </AppSheet>
+        <EndSheet
+          visible={ending !== null}
+          name={ending?.name ?? ""}
+          onClose={() => setEnding(null)}
+          onConfirm={async () => {
+            if (!ending?.id) return;
+            try {
+              await api.endPartnership(ending.id);
+            } catch (e) {
+              // Déjà fini ailleurs (409/404) : la liste se relit pour dire la vérité, l'erreur reste dans la feuille.
+              void my.reload();
+              throw e;
+            }
+            setEnding(null);
+            setOpen(false);
+            await my.reload();
+          }}
+        />
+      </Overlay>
     </>
   );
 }
 
 const styles = StyleSheet.create({
   failure: { gap: space2 },
-  line: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: 14 },
-  logos: { flexDirection: "row", alignItems: "center" },
-  logo: { borderRadius: 999, borderWidth: 2 },
-  overlap: { marginLeft: -space2 },
   text: { flex: 1, gap: 2 },
   head: { flexDirection: "row", alignItems: "center", gap: space2 },
   title: { flex: 1, fontSize: 18, lineHeight: 20 },
