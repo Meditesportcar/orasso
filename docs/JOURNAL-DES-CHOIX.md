@@ -4812,6 +4812,21 @@ Damien a validé le 10/11 au soir les deux maquettes (« r8 ok », « r9 ok ») 
 - Livraison en trois fois (plan `lots/ARCHITECTURE-R8.md` du relais) : 1) corrections et changements visibles sans nouvelle API ; 2) socle des publications, Fil, commentaires, fiche de l'événement, notifications, collaboration ; 3) autres profils, médias, « Pratique », site.
 
 
+## Lot R8f1 : le haut du Fil en variante « A1 », le sélecteur et le bouton icône « Publier » sur une seule ligne (appli et site, D40, 10/11/2026)
+- **Une seule rangée, appli** (`features/fil/FilScreen.tsx`) : le sélecteur « Pour toi · Autour de moi · Abonnements » prend la place restante, le bouton « Publier » (carré de 48 px au jeton `touch`, rayon 14 de la maquette, moutarde, icône appareil photo, sans texte, libellé accessible « Publier ») est à droite, centré verticalement, 8 px d'écart (`space2`). Même identifiants (`fil-filters`, `fil-publish-open`), même choix « En story » / « Dans le Fil ». Le grand bouton pleine largeur disparaît ; il n'y a toujours qu'un bouton principal par écran.
+- **Police agrandie** : `Seg` (`ui/Kit.tsx`, partagé) reçoit une option facultative `maxFontScale` (défaut : aucune, donc aucun autre écran ne change) ; le Fil la règle à 1,12 (maquette `data-fsmax="1.12"`). « Autour de moi » passe sur deux lignes (option `wrap` déjà en place) plutôt que de se couper.
+- **Site** (`components/fil/Fil.tsx`, `styles/fil.css`) : `div.fil-top` (filtres en `tablist`, puis le bouton icône 48 px dans `details.fil-choose`, `aria-label="Publier"`). La liste des deux choix est posée en absolu sous la rangée, alignée à droite (largeur 22 rem au plus), par-dessus le Fil : il ne descend pas. Sans JavaScript, `details` fonctionne toujours.
+- **Mesure sans jeton** : le rayon 14 px du bouton n'a pas de jeton (le plus proche, `radius-md`, vaut moins) : valeur de la maquette gardée, comme `.r8pub`.
+- **Hors lot, non posé** : phrase sous le sélecteur, feuille « Comment le Fil choisit », bandeau « Publié sur ton profil », « Tu es à jour », rail « Ça plaît en ce moment », pastille « Nouvelles publications » (lots R8c1 et R8c2).
+- Fichiers : `apps/mobile/src/features/fil/FilScreen.tsx`, `apps/mobile/src/ui/Kit.tsx`, `apps/web/app/components/fil/Fil.tsx`, `apps/web/app/styles/fil.css` ; recettes `apps/web/e2e/appli-lotr8f1.spec.ts`, `lotr8f1-site.spec.ts`, captures `captures-lotr8f1.spec.ts`.
+
+### Tour 2 (R8f1, 10/11/2026) : corrections des relectures Opus et Codex
+- **Site, `.fil-publish` partagée** : la classe retrouve sa règle d'avant (liens à texte « Publier » de Mes publications et « Retour au Fil » intacts) ; le carré de 48 px passe sur `.fil-publish--icon`, propre au bouton du haut du Fil.
+- **« Abonnements » entier** : site, corps 12,5 px (maquette), 12 px sous 420 px de large, marges de 2 px ; appli, option locale `compact` de `Seg` (segments de 44 px, corps de 12,5 px, marges de 4 px, comme `.r8sel`), défaut inchangé. Recettes : aucun libellé ne déborde (`scrollWidth`), à 384 et 390 px, ×1 et ×1,3 dans l'appli.
+- **Appli, bouton centré** : `alignSelf: "center"` annule celui de `SmButton`, le bouton reste au milieu quand le sélecteur passe sur deux lignes.
+- **Site, liste des choix** : se ferme au clic ailleurs, à Échap (le focus revient sur le bouton) et au changement de filtre.
+- **Mineurs** : écart du rayon 14 px daté dans `docs/design-system/README.md` ; la recette de l'appli suit aussi « Dans le Fil » ; contrôle de débordement ajouté.
+
 ## Lot R8x : Explorer, haut compact (variante A), carte d'événement sans vide ni chevauchement, onglets soulignés `UnderTabs` (appli et site, 10/11/2026)
 
 Référence : maquette R8.9 (`c-corr`), décisions R8-R9 § 0 et § 9. Aucune API ni migration.
