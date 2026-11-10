@@ -121,8 +121,9 @@ export async function seedMemories() {
         eq(t.passportStamps.kind, "participation"),
       ),
     );
-  // Affiche et photo de l'événement (seulement ceux qui n'en ont pas encore).
-  await seedPosters();
+  // Affiche et photo du seul événement du souvenir : repasser sur tous les événements rendrait son affiche au brouillon
+  // « Expo de printemps », que le seed de la casquette Organisateur (lot 52) a volontairement vidée (R7-V).
+  await seedPosters([event.id]);
 }
 
 const addDaysMs = (d: Date, days: number) => {

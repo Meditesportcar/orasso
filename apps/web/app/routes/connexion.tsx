@@ -1,4 +1,5 @@
 import { Button, TextField } from "@orasso/design-system/web";
+import { SIGN_OUT_FAILED_PARAM, signOutUnconfirmed } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { PasskeySignIn } from "../components/Passkeys";
@@ -12,7 +13,12 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const retour = safeReturn(new URL(request.url).searchParams.get("retour"));
   if (await getMe(request)) throw redirect(retour);
-  return { retour, reset: new URL(request.url).searchParams.get("reinitialise") === "1" };
+  const params = new URL(request.url).searchParams;
+  return {
+    retour,
+    reset: params.get("reinitialise") === "1",
+    signOutFailed: params.get(SIGN_OUT_FAILED_PARAM) === "1",
+  };
 }
 
 type SignIn = { twoFactorRedirect?: boolean };
@@ -40,10 +46,15 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function Connexion({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
-  const { retour, reset } = loaderData;
+  const { retour, reset, signOutFailed } = loaderData;
   return (
     <div className="s-narrow s-stack">
       <h1 className="s-title">Connexion</h1>
+      {signOutFailed && (
+        <p className="s-notice s-notice--alert" role="alert" data-testid="sign-out-unconfirmed">
+          {signOutUnconfirmed}
+        </p>
+      )}
       {reset && (
         <p className="s-notice s-notice--ok" role="status">
           Mot de passe changé : connecte-toi avec le nouveau.

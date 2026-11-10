@@ -171,6 +171,8 @@ async function main() {
   await seedVisitorStamps();
   // 08/11 : « Rassemblement du Lydia » en direct (4 jours, commencé la veille) ; recréé quand il est fini.
   await seedLiveEvent();
+  // R7-V : le Lydia n'existait pas au premier passage de la météo (ou vient d'être recréé) : sa prévision.
+  await seedWeather();
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
 

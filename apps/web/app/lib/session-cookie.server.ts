@@ -5,7 +5,10 @@
 // `withCookies`) n'est jamais doublé ni contredit.
 import { AsyncLocalStorage } from "node:async_hooks";
 
-const SESSION_COOKIE = /^(__Secure-)?better-auth\.session_token=/;
+// Better Auth n'est pas configuré avec un préfixe de cookie (`apps/api/src/auth.ts`) : ses noms par défaut, préfixés
+// `__Secure-` en HTTPS. Un seul endroit les écrit côté site.
+const COOKIE_PREFIX = "better-auth";
+const SESSION_COOKIE = new RegExp(`^(__Secure-)?${COOKIE_PREFIX}\\.session_token=`);
 
 const collected = new AsyncLocalStorage<string[]>();
 
@@ -35,4 +38,13 @@ export async function withRenewedSessionCookie(next: () => Promise<Response>): P
     copy.headers.append("set-cookie", last);
     return copy;
   }
+}
+
+/** `Set-Cookie` qui effacent les cookies de session du navigateur (déconnexion non confirmée par l'API, suppression de compte). */
+export function expiredSessionCookies(): string[] {
+  return ["session_token", "session_data"].flatMap((suffix) =>
+    [`${COOKIE_PREFIX}.${suffix}`, `__Secure-${COOKIE_PREFIX}.${suffix}`].map(
+      (name) => `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${name.startsWith("__Secure") ? "; Secure" : ""}`,
+    ),
+  );
 }

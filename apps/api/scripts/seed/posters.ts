@@ -5,7 +5,7 @@
 // photo de voiture réelle pour chacun (lot C5), un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette. Idempotent : un
 // événement qui a déjà une affiche générée n'est pas refait.
 import { POSTER_TITLE_MAX, type PosterSettings, posterStyles } from "@orasso/shared";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
@@ -24,7 +24,8 @@ export function posterTitleOf(title: string): string {
   return (space > 10 ? cut.slice(0, space) : clean.slice(0, POSTER_TITLE_MAX)).trim();
 }
 
-export async function seedPosters() {
+/** `onlyEventIds` : ne génère l'affiche que de ces événements (le seed d'un événement précis ne refait pas celle d'un brouillon volontairement sans affiche). */
+export async function seedPosters(onlyEventIds?: string[]) {
   // --- Créneaux de la Nocturne et notes d'arrivée -------------------------------------------------------------
   const nocturne = await db.query.events.findFirst({ where: eq(t.events.slug, NOCTURNE_SLUG) });
   if (nocturne && !nocturne.arrivalExhibitorsFrom) {
@@ -67,7 +68,9 @@ export async function seedPosters() {
 
   // --- Affiches générées ------------------------------------------------------------------------------------------
   const todo = await db.query.events.findMany({
-    where: isNull(t.events.posterStyle),
+    where: onlyEventIds
+      ? and(isNull(t.events.posterStyle), inArray(t.events.id, onlyEventIds))
+      : isNull(t.events.posterStyle),
     orderBy: [asc(t.events.startsAt)],
   });
   if (!todo.length) {
