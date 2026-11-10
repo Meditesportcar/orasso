@@ -58,6 +58,11 @@ export const exportService = {
       throw new AppError(403, "author_only", shareLabels.errors.authorOnly);
     }
     if (story.status !== "ready") throw new AppError(409, "story_not_ready", shareLabels.errors.notFound);
+    // Une vidéo sort telle quelle (aucun rendu serveur) : elle ne saurait porter la mention. Tant que c'est ainsi, une story
+    // vidéo « Collaboration commerciale » ne sort pas d'Orasso (R7m2, tour 2).
+    if (story.mediaKind === "video" && story.commercialPartnerId) {
+      throw new AppError(409, "commercial_video", partnershipLabels.errors.commercial_video);
+    }
     // Le fichier garde la provenance de son contenu lié : repartager la publication d'un autre en story ne la fait pas
     // devenir « à moi », et un classement ne sort que par les règles de `/me/share/export` (événement ouvert à tous,
     // publié, visible pour moi). Un contenu supprimé ou devenu privé ne sort plus non plus (ses pixels sont dans le fichier).

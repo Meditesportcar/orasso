@@ -173,7 +173,8 @@ export type StoryLinkedView = {
 };
 
 /** Le pro d'une « Collaboration commerciale » (R7m2) : nom, adresse de sa fiche et logo (liste blanche). */
-export type CommercialPartnerView = { id: string; name: string; slug: string; logoUrl: string | null };
+/** `slug` et `logoUrl` sont `null` quand la fiche n'est plus visible (dépubliée, supprimée, anonymisée) : le texte reste, sans lien. */
+export type CommercialPartnerView = { id: string; name: string; slug: string | null; logoUrl: string | null };
 
 export type StoryView = {
   id: string;
@@ -206,6 +207,8 @@ export type StoryView = {
    * ni story en traitement, ni contenu lié disparu ou d'un autre). Faux pour tout autre lecteur.
    */
   exportable: boolean;
+  /** Pourquoi « Vers l'extérieur » est fermé alors que la story pourrait sortir (R7m2 : vidéo commerciale) ; `null` sinon. */
+  exportBlockedReason: string | null;
   viewed: boolean;
   reacted: boolean;
   /** L'auteur seul. */

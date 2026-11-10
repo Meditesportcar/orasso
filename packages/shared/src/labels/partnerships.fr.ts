@@ -91,6 +91,8 @@ export const partnershipLabels = {
   errors: {
     commercial_locked: "La mention « Collaboration commerciale » ne se retire pas d'un contenu publié.",
     commercial_conflict: "Un contenu ne porte qu'une collaboration commerciale : retire l'autre pro.",
+    commercial_video:
+      "Cette story vidéo est une collaboration commerciale : elle ne peut pas encore sortir d'Orasso, la mention ne peut pas y être imprimée.",
     commercial_unknown: "Ce pro n'est pas disponible pour une collaboration commerciale.",
     not_verified: "Seul un pro dont la fiche est vérifiée peut proposer un partenariat.",
     not_published: "Seule une fiche publiée peut proposer un partenariat.",

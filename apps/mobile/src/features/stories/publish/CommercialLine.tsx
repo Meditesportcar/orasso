@@ -23,7 +23,8 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Option } from "./parts";
 
-const { space1, space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
+const { radiusMd, radiusPill } = tokens.radius;
 
 /** Mes partenaires actifs et l'état de la ligne d'après la légende ; `partners` reste vide tant que la lecture n'a pas répondu. */
 export function useCommercialLine(caption: string, draft: CommercialDraft): CommercialLineState {
@@ -225,16 +226,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space1 + 2,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: space3,
+    paddingVertical: space2,
+    borderRadius: radiusPill,
   },
   result: {
     flexDirection: "row",
     alignItems: "center",
     gap: space2,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1.5,
+    padding: space3,
+    borderRadius: radiusMd,
+    borderWidth: StyleSheet.hairlineWidth * 2,
   },
 });

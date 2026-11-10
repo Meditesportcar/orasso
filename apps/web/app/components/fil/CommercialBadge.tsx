@@ -6,11 +6,18 @@ import { type CommercialPartnerView, partnershipLabels as L } from "@orasso/shar
 
 export function CommercialBadge({ partner }: { partner: CommercialPartnerView | null }) {
   if (!partner) return null;
+  // Fiche plus visible (dépubliée, supprimée) : le texte reste, sans lien.
+  const slug = partner.slug;
+  const Tag = slug ? "a" : "span";
   return (
-    <a
+    <Tag
       className="fil-collab o-t-caption"
-      href={`/p/${partner.slug}`}
-      aria-label={`${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`}
+      {...(slug
+        ? {
+            href: `/p/${slug}`,
+            "aria-label": `${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`,
+          }
+        : {})}
       data-testid="feed-post-commercial"
     >
       {partner.logoUrl ? (
@@ -21,9 +28,9 @@ export function CommercialBadge({ partner }: { partner: CommercialPartnerView | 
         <Icon name="briefcase" size={16} />
       )}
       <span>
-        <b>{L.commercialCollaboration}</b>
+        <b className="o-t-strong">{L.commercialCollaboration}</b>
         {` · ${partner.name}`}
       </span>
-    </a>
+    </Tag>
   );
 }

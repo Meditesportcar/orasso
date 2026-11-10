@@ -35,6 +35,7 @@ import {
   crewMembers,
   crews,
   events as events_,
+  feedPosts,
   mediaProfiles,
   messages,
   notifications,
@@ -498,13 +499,22 @@ export const storiesService = {
     }
 
     // « Collaboration commerciale » (R7m2) : posée par l'API d'après les identifications DEMANDÉES et la légende.
-    const commercialPartnerId = await commercialPartnerFor(db, {
+    // Une story liée à une publication marquée en hérite, même d'un tiers (tour 2 : la carte montre un contenu commercial).
+    const linkedPost =
+      linked?.type === "feed_post"
+        ? (
+            await db.select({ pro: feedPosts.commercialPartnerId }).from(feedPosts).where(eq(feedPosts.id, linked.id))
+          )[0]
+        : undefined;
+    const commercial = await commercialPartnerFor(db, {
       authorId: v.user.id,
       ownProId: ctx.proId,
       tagProIds: input.tags.flatMap((t) => (t.kind === "pro" ? [t.id] : [])),
       caption: input.caption,
       explicit: input.commercialPartnerId,
+      inherited: linkedPost?.pro ?? null,
     });
+    const commercialPartnerId = commercial?.proId ?? null;
 
     // Le fichier envoyé : à moi, pour une story, pas encore rattaché (absent pour une carte liée).
     const uploadKey = input.uploadKey;
@@ -681,11 +691,13 @@ export const storiesService = {
           [...mentions].map(([userId, m]) => ({ userId, body: m.body, target: m.target })),
           actor,
         );
-        if (commercialPartnerId) {
+        // Une mention héritée ne prévient pas le pro (il l'a déjà été à la publication d'origine).
+        if (commercialPartnerId && commercial?.source !== "inherited") {
           await notifyPartnerMention(tx, {
             proId: commercialPartnerId,
             authorUserId: v.user.id,
             already: [...mentions.keys()],
+            sees: (ownerId) => seesStory(ownerId, storyShape, ctx),
             kind: "story",
             actor,
             data: { storyId: id, authorKey: authorKey.key, link: `/app/story/${authorKey.key}` },

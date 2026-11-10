@@ -11,7 +11,16 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createPro, resetDb, seedReference, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { feedPosts, notifications, partnerships, profiles, proProfiles, stories, storyTags } from "../../db/schema";
+import {
+  feedPosts,
+  notifications,
+  partnerships,
+  profiles,
+  proProfiles,
+  stories,
+  storyTags,
+  userFollows,
+} from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { notificationsService } from "../notifications/service";
 import { dropCopiesOfTag } from "../stories/share";
@@ -405,5 +414,158 @@ describe("la mention est imprimée sur le fichier qui sort", () => {
     );
     expect(d.box.x0).toBeGreaterThanOrEqual(44 - 2);
     expect(d.box.x1).toBeLessThanOrEqual(d.width - 44);
+  });
+});
+
+// --- Tour 2 (relectures Opus et Codex) -----------------------------------------------------------------------------------
+
+const shareLinked = (u: TestUser, id: string, over: Record<string, unknown> = {}) =>
+  req(u, "POST", "/me/stories", {
+    linked: { type: "feed_post", id },
+    clientId: crypto.randomUUID(),
+    audience: "public",
+    ...over,
+  });
+
+describe("tour 2 : une story liée à une publication marquée en hérite", () => {
+  it("sa propre publication : la story porte la mention sans nouvelle légende ; l'export 9:16 l'imprime", async () => {
+    await partnerOf(kenji);
+    const made = await post(kenji, { caption: "@wrap-66" });
+    const shared = await shareLinked(kenji, made.json.id);
+    expect(shared.status, JSON.stringify(shared.json)).toBe(201);
+    const [row] = await db.select().from(stories).where(eq(stories.id, shared.json.id));
+    expect(row?.commercialPartnerId).toBe(pro.id);
+    expect((await read(viewer, kenji, shared.json.id))?.commercialPartner).toMatchObject({ slug: "wrap-66" });
+    const get = () =>
+      app.request(`/api/stories/${shared.json.id}/export`, { headers: { origin: ORIGIN, cookie: kenji.cookie } });
+    const res = await get();
+    expect(res.status).toBe(200);
+    const marked = Buffer.from(await res.arrayBuffer());
+    // Même story sans mention : le fichier diffère (la pastille).
+    await db.update(stories).set({ commercialPartnerId: null }).where(eq(stories.id, shared.json.id));
+    const plain = Buffer.from(await (await get()).arrayBuffer());
+    expect(Buffer.compare(marked, plain)).not.toBe(0);
+  });
+
+  it("la publication d'un tiers (carte publique) : la story du tiers porte la mention, sans notifier le pro", async () => {
+    await partnerOf(kenji);
+    const made = await post(kenji, { caption: "@wrap-66" });
+    await db.delete(notifications);
+    const shared = await shareLinked(viewer, made.json.id);
+    expect(shared.status, JSON.stringify(shared.json)).toBe(201);
+    const [row] = await db.select().from(stories).where(eq(stories.id, shared.json.id));
+    expect(row?.commercialPartnerId).toBe(pro.id);
+    expect(await notifsOf(proOwner, "partner_mention")).toHaveLength(0);
+  });
+
+  it("une publication sans mention : rien ; un explicite contradictoire : 400 commercial_conflict ; le même : posé", async () => {
+    const plain = await post(kenji, { caption: "rien" });
+    expect((await shareLinked(viewer, plain.json.id)).status).toBe(201);
+    const other = await signUp("Autre_Pro");
+    const otherPro = await createPro(other.id, { slug: "garage-2", verifiedAt: new Date(0) });
+    await partnerOf(kenji);
+    const marked = await post(kenji, { caption: "@wrap-66" });
+    const clash = await shareLinked(viewer, marked.json.id, { commercialPartnerId: otherPro.id });
+    expect(clash.status).toBe(400);
+    expect(clash.json.error.code).toBe("commercial_conflict");
+    expect((await shareLinked(viewer, marked.json.id, { commercialPartnerId: pro.id })).status).toBe(201);
+  });
+});
+
+describe("tour 2 : story vidéo commerciale", () => {
+  async function video(commercial: boolean) {
+    const [row] = await db
+      .insert(stories)
+      .values({
+        authorId: kenji.id,
+        persona: "fan",
+        audience: "public",
+        mediaKind: "video",
+        storageKey: "private/stories/essai/video.mp4",
+        width: 1080,
+        height: 1920,
+        durationMs: 5000,
+        status: "ready",
+        plateState: "none_confirmed",
+        expiresAt: new Date(clock.now.getTime() + 20 * 3_600_000),
+        commercialPartnerId: commercial ? pro.id : null,
+      })
+      .returning();
+    return row?.id as string;
+  }
+  it("l'export est refusé (409 commercial_video) et « Vers l'extérieur » est fermé avec sa raison", async () => {
+    const id = await video(true);
+    const res = await req(kenji, "GET", `/stories/${id}/export`);
+    expect(res.status).toBe(409);
+    expect(res.json.error.code).toBe("commercial_video");
+    const mine = await req(kenji, "GET", `/stories/by-author/u:${kenji.id}`);
+    const view = mine.json.stories.find((s: { id: string }) => s.id === id);
+    expect(view.exportable).toBe(false);
+    expect(view.exportBlockedReason).toBe(partnershipLabels.errors.commercial_video);
+  });
+  it("une vidéo sans mention sort comme avant (pas de raison de blocage)", async () => {
+    const id = await video(false);
+    const mine = await req(kenji, "GET", `/stories/by-author/u:${kenji.id}`);
+    const view = mine.json.stories.find((s: { id: string }) => s.id === id);
+    expect(view.exportBlockedReason).toBeNull();
+    expect(view.exportable).toBe(true);
+  });
+});
+
+describe("tour 2 : partner_mention seulement si le pro voit le contenu", () => {
+  it("story de crew qui cite un partenaire hors du crew : mention posée, aucune notification", async () => {
+    await partnerOf(kenji);
+    const created = await req(kenji, "POST", "/crews", { name: "Crew essai", department: "66" });
+    expect(created.status).toBe(201);
+    const res = await story(kenji, { audience: "crew", crewId: created.json.id, caption: "@wrap-66" });
+    expect(res.status, JSON.stringify(res.json)).toBe(201);
+    const [row] = await db.select().from(stories).where(eq(stories.id, res.json.id));
+    expect(row?.commercialPartnerId).toBe(pro.id);
+    expect(await notifsOf(proOwner, "partner_mention")).toHaveLength(0);
+    expect(await notifsOf(proOwner, "story_mention")).toHaveLength(0);
+  });
+  it("auteur privé que le pro ne suit pas : story « abonnés » et publication, aucune notification ; abonné accepté : prévenu", async () => {
+    await partnerOf(kenji);
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, kenji.id));
+    expect((await story(kenji, { audience: "followers", caption: "@wrap-66" })).status).toBe(201);
+    expect((await post(kenji, { caption: "@wrap-66" })).status).toBe(201);
+    expect(await notifsOf(proOwner, "partner_mention")).toHaveLength(0);
+    await db
+      .insert(userFollows)
+      .values({ followerId: proOwner.id, followedId: kenji.id, status: "accepted", acceptedAt: clock.now });
+    expect((await story(kenji, { audience: "followers", caption: "@wrap-66 encore" })).status).toBe(201);
+    expect(await notifsOf(proOwner, "partner_mention")).toHaveLength(1);
+  });
+});
+
+describe("tour 2 : mention explicite et fiche qui n'est plus visible", () => {
+  it("l'explicite ne vise qu'une fiche montrable : non vérifiée ou dépubliée : 400", async () => {
+    const o = await signUp("Pro_Non_Verifie");
+    const unverified = await createPro(o.id, { slug: "non-verifie", name: "Non vérifié" });
+    expect((await story(kenji, { commercialPartnerId: unverified.id })).status).toBe(400);
+    expect((await post(kenji, { commercialPartnerId: unverified.id })).status).toBe(400);
+    expect((await story(kenji, { commercialPartnerId: pro.id })).status).toBe(201);
+    await db.update(proProfiles).set({ publishedAt: null }).where(eq(proProfiles.id, pro.id));
+    expect((await story(kenji, { commercialPartnerId: pro.id })).status).toBe(400);
+  });
+  it("fiche dépubliée ou supprimée après coup : le texte reste, l'adresse et le logo disparaissent", async () => {
+    const id = await okStory(kenji, { commercialPartnerId: pro.id });
+    const made = await post(kenji, { commercialPartnerId: pro.id });
+    await db.update(proProfiles).set({ publishedAt: null }).where(eq(proProfiles.id, pro.id));
+    expect((await read(viewer, kenji, id))?.commercialPartner).toEqual({
+      id: pro.id,
+      name: "Wrap 66",
+      slug: null,
+      logoUrl: null,
+    });
+    expect((await req(viewer, "GET", `/feed-posts/${made.json.id}`)).json.commercialPartner).toMatchObject({
+      name: "Wrap 66",
+      slug: null,
+    });
+    await db
+      .update(proProfiles)
+      .set({ publishedAt: new Date(0), deletedAt: new Date() })
+      .where(eq(proProfiles.id, pro.id));
+    expect((await read(viewer, kenji, id))?.commercialPartner).toMatchObject({ name: "Wrap 66", slug: null });
   });
 });

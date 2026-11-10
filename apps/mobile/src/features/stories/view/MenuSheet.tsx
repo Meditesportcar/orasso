@@ -21,6 +21,7 @@ export function MenuSheet({
   onViews,
   onDelete,
   onExternal,
+  externalBlocked,
 }: {
   open: boolean;
   mine: boolean;
@@ -35,6 +36,8 @@ export function MenuSheet({
   onDelete: () => void;
   /** Ma story (hors crew) : l'envoyer vers l'extérieur (R7f4). Absent : pas de ligne. */
   onExternal?: () => void;
+  /** « Vers l'extérieur » fermé : la raison (vidéo « Collaboration commerciale », R7m2). */
+  externalBlocked?: string | null;
 }) {
   const { t } = useTheme();
   return (
@@ -64,6 +67,14 @@ export function MenuSheet({
                 title={shareLabels.menuExternal}
                 onPress={onExternal}
                 testID="story-menu-external"
+              />
+            ) : externalBlocked ? (
+              <SetRow
+                icon="export"
+                title={shareLabels.menuExternal}
+                caption={externalBlocked}
+                onPress={() => undefined}
+                testID="story-menu-external-blocked"
               />
             ) : null}
             <SetRow

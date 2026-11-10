@@ -28,6 +28,26 @@ describe("mentionedSlugs", () => {
   });
   it("accepte la ponctuation après le slug", () => {
     expect(mentionedSlugs("(@wrap-66).")).toEqual(["wrap-66"]);
+    expect(mentionedSlugs("merci @wrap-66.")).toEqual(["wrap-66"]);
+    expect(mentionedSlugs("@wrap-66, @garage-2!")).toEqual(["wrap-66", "garage-2"]);
+  });
+  it("prend le mot entier : un slug suivi de _ ou d'une lettre n'est pas un autre slug", () => {
+    expect(mentionedSlugs("@garage-du_port")).toEqual([]);
+    expect(mentionedSlugs("@wrap-66_x")).toEqual([]);
+    expect(mentionedSlugs("@wrap-66é")).toEqual([]);
+    expect(mentionedSlugs("@Wrap-66")).toEqual(["wrap-66"]);
+  });
+  it("bornes Unicode : jamais dans un mot ni une adresse (andré@wrap-66.fr, email@wrap-66.fr, été@wrap-66)", () => {
+    expect(mentionedSlugs("andré@wrap-66.fr")).toEqual([]);
+    expect(mentionedSlugs("email@wrap-66.fr")).toEqual([]);
+    expect(mentionedSlugs("été@wrap-66")).toEqual([]);
+    expect(mentionedSlugs("« @wrap-66 »")).toEqual(["wrap-66"]);
+  });
+  it("deux slugs qui partagent un préfixe : chacun garde le sien", () => {
+    const wrapShort = { proId: "p3", slug: "wrap", name: "Wrap" };
+    expect(commercialPartnerOf([wrapShort, wrap], [], "@wrap-66")).toBe("p1");
+    expect(commercialPartnerOf([wrapShort, wrap], [], "@wrap")).toBe("p3");
+    expect(commercialPartnerOf([wrapShort], [], "@wrap-66_x")).toBeNull();
   });
 });
 

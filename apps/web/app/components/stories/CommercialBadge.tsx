@@ -7,11 +7,18 @@ import { partnershipLabels as L, type StoryView } from "@orasso/shared";
 export function CommercialBadge({ story }: { story: StoryView }) {
   const partner = story.commercialPartner;
   if (!partner) return null;
+  // Fiche plus visible (dépubliée, supprimée) : le texte reste, sans lien.
+  const slug = partner.slug;
+  const Tag = slug ? "a" : "span";
   return (
-    <a
-      className="story-view__commercial o-t-caption"
-      href={`/p/${partner.slug}`}
-      aria-label={`${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`}
+    <Tag
+      className="story-view__commercial o-t-strong"
+      {...(slug
+        ? {
+            href: `/p/${slug}`,
+            "aria-label": `${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`,
+          }
+        : { "aria-disabled": true })}
       data-testid="story-commercial"
     >
       {partner.logoUrl ? (
@@ -22,6 +29,6 @@ export function CommercialBadge({ story }: { story: StoryView }) {
         <Icon name="briefcase" size={16} />
       )}
       <span>{L.commercialLine(partner.name)}</span>
-    </a>
+    </Tag>
   );
 }

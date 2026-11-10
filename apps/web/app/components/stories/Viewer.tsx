@@ -892,6 +892,14 @@ export function Viewer({ authorKey, userId }: { authorKey: string; userId: strin
                     <small>{shareLabels.externalStoryFile}</small>
                   </span>
                 </a>
+              ) : story.exportBlockedReason ? (
+                <div className="story-menu__row" aria-disabled="true" data-testid="story-menu-external-blocked">
+                  <Icon name="export" size={20} />
+                  <span>
+                    <strong>{shareLabels.menuExternal}</strong>
+                    <small>{story.exportBlockedReason}</small>
+                  </span>
+                </div>
               ) : null}
               <button
                 type="button"

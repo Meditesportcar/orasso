@@ -21,7 +21,7 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPostReactions, feedPosts, uploads } from "../../db/schema";
+import { feedPostPhotos, feedPostReactions, feedPosts, uploads, userFollows } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -102,12 +102,15 @@ export const feedPostsService = {
     }
 
     // « Collaboration commerciale » (R7m2) : posée par l'API d'après la légende (`@<slug>`) et le choix explicite.
-    const commercialPartnerId = await commercialPartnerFor(db, {
-      authorId: userId,
-      tagProIds: [],
-      caption: input.caption,
-      explicit: input.commercialPartnerId,
-    });
+    const commercialPartnerId =
+      (
+        await commercialPartnerFor(db, {
+          authorId: userId,
+          tagProIds: [],
+          caption: input.caption,
+          explicit: input.commercialPartnerId,
+        })
+      )?.proId ?? null;
 
     // 3. Les fichiers envoyés : à moi, pour cet usage, pas encore rattachés, au bon format.
     const keys = input.photos.map((p) => p.uploadKey);
@@ -219,7 +222,25 @@ export const feedPostsService = {
             proId: commercialPartnerId,
             authorUserId: userId,
             kind: "post",
+            // Le titulaire ne voit la publication que d'un compte public, ou qu'il suit (règle du Fil).
+            sees: async (ownerId) =>
+              v.profile.visibility !== "private" ||
+              Boolean(
+                (
+                  await tx
+                    .select({ id: userFollows.followerId })
+                    .from(userFollows)
+                    .where(
+                      and(
+                        eq(userFollows.followerId, ownerId),
+                        eq(userFollows.followedId, userId),
+                        eq(userFollows.status, "accepted"),
+                      ),
+                    )
+                )[0],
+              ),
             actor: { userId, pseudo: v.profile.pseudo, avatarUrl: storage.url(v.profile.avatarKey) },
+            // Aucune page ne montre une seule publication : le lien ouvre le Fil, la publication est dans `postId`.
             data: { postId, link: "/app/fil" },
           });
         }

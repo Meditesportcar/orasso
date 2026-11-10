@@ -8,7 +8,10 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 
-const { space1, space2 } = tokens.spacing;
+const { space1, space2, space4 } = tokens.spacing;
+const { radiusPill } = tokens.radius;
+/** Le logo rond du pro : un cran au-dessus d'une icône de 16 (jetons de l'échelle d'espacement). */
+const LOGO = space4 + space1;
 
 export function CommercialBadge({ partner }: { partner: CommercialPartnerView | null }) {
   const { t } = useTheme();
@@ -16,11 +19,18 @@ export function CommercialBadge({ partner }: { partner: CommercialPartnerView | 
   const router = useRouter();
   if (!partner) return null;
   const logo = mediaSource(partner.logoUrl);
+  // Fiche plus visible (dépubliée, supprimée) : le texte reste, sans lien.
+  const slug = partner.slug;
   return (
     <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={`${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`}
-      onPress={() => router.push(`/p/${partner.slug}`)}
+      accessibilityRole={slug ? "link" : "text"}
+      accessibilityLabel={
+        slug
+          ? `${L.commercialLine(partner.name)}. ${L.commercialOpenPro(partner.name)}`
+          : L.commercialLine(partner.name)
+      }
+      disabled={!slug}
+      onPress={slug ? () => router.push(`/p/${slug}`) : undefined}
       hitSlop={6}
       style={[styles.row, { borderBottomColor: c.line }]}
       testID="feed-post-commercial"
@@ -30,10 +40,10 @@ export function CommercialBadge({ partner }: { partner: CommercialPartnerView | 
           <Photo source={logo} style={styles.img} />
         </View>
       ) : (
-        <Icon name="briefcase" size={16} color={c.accentText} />
+        <Icon name="briefcase" size={LOGO - space1} color={c.accentText} />
       )}
       <Text variant="caption" color={c.ink} style={styles.text}>
-        <Text variant="caption" color={c.ink} style={styles.bold}>
+        <Text variant="bodyStrong" color={c.ink}>
           {L.commercialCollaboration}
         </Text>
         {` · ${partner.name}`}
@@ -51,8 +61,7 @@ const styles = StyleSheet.create({
     marginBottom: space1,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  logo: { width: 20, height: 20, borderRadius: 10, overflow: "hidden" },
-  img: { width: 20, height: 20 },
-  text: { flexShrink: 1, fontSize: 12.5, lineHeight: 16 },
-  bold: { fontFamily: "Archivo-ExtraBold" },
+  logo: { width: LOGO, height: LOGO, borderRadius: radiusPill, overflow: "hidden" },
+  img: { width: LOGO, height: LOGO },
+  text: { flexShrink: 1 },
 });

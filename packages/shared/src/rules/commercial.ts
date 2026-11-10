@@ -6,16 +6,27 @@
 /** Un pro avec lequel l'auteur a un partenariat actif. */
 export type CommercialPartnerCandidate = { proId: string; slug: string };
 
-/** La mention `@wrap-66` : un slug de fiche pro (minuscules, chiffres, tirets), jamais collée à un mot (`a@b.fr`, `@damien_66`). */
-const MENTION = /(?<![\w@])@([a-z0-9]+(?:-[a-z0-9]+)*)(?![a-z0-9_])/gi;
+/**
+ * Une mention : `@` puis le mot ENTIER (lettres, chiffres, `_`, `-`, Unicode). Le mot est capturé en entier avant d'être
+ * validé : `@wrap-66_x` n'est pas `wrap-66`. Sans assertion arrière (Hermes) : la borne gauche est testée à la main.
+ */
+const MENTION = /@([\p{L}\p{N}_-]+)/gu;
+const WORD_CHAR = /[\p{L}\p{N}_@]/u;
+/** La forme d'un slug de fiche pro : minuscules, chiffres, tirets entre deux. */
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** Les slugs cités dans une légende, en minuscules, sans doublon, dans l'ordre. */
+/** Les slugs cités dans une légende, en minuscules, sans doublon, dans l'ordre. Jamais dans un mot ni une adresse e-mail. */
 export function mentionedSlugs(caption: string | null | undefined): string[] {
   if (!caption) return [];
   const out: string[] = [];
   for (const m of caption.matchAll(MENTION)) {
-    const slug = (m[1] ?? "").toLowerCase();
-    if (slug && !out.includes(slug)) out.push(slug);
+    const at = m.index ?? 0;
+    const before = at > 0 ? caption.charAt(at - 1) : "";
+    // Une lettre accentuée hors plan de base occuperait deux unités : on remonte d'un point de code entier.
+    const prev = at > 1 && /[\uDC00-\uDFFF]/.test(before) ? caption.slice(at - 2, at) : before;
+    if (prev && WORD_CHAR.test(prev)) continue;
+    const slug = (m[1] ?? "").toLowerCase().replace(/-+$/, "");
+    if (SLUG.test(slug) && !out.includes(slug)) out.push(slug);
   }
   return out;
 }

@@ -1,7 +1,7 @@
 // Forme d'une story renvoyée au regard (lot R7f1) : liste blanche de champs, fichiers par la route protégée, voiture
 // par sa photo masquée seulement, événement seulement si le regard peut le voir, identifications visibles seulement
 // puisque la story l'est. Le nombre de vues et de flammes : l'auteur seul.
-import { maskedPhoto, type StoryTagView, type StoryView } from "@orasso/shared";
+import { maskedPhoto, partnershipLabels, type StoryTagView, type StoryView } from "@orasso/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -195,7 +195,19 @@ export async function serializeStories(v: Viewer, rows: readonly StoryRow[]): Pr
         s.audience !== "crew" &&
         s.status === "ready" &&
         !s.sharedFromStoryId &&
-        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)),
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)) &&
+        !(s.mediaKind === "video" && s.commercialPartnerId),
+      // « Vers l'extérieur » fermé avec sa raison : une vidéo commerciale ne peut pas porter la mention (R7m2, tour 2).
+      exportBlockedReason:
+        mine &&
+        s.audience !== "crew" &&
+        s.status === "ready" &&
+        !s.sharedFromStoryId &&
+        (!s.linkedType || (linkedBy.get(s.id)?.exportable ?? false)) &&
+        s.mediaKind === "video" &&
+        s.commercialPartnerId
+          ? partnershipLabels.errors.commercial_video
+          : null,
       viewed: mine || seenIds.has(s.id),
       reacted: likedIds.has(s.id),
       viewsCount: mine ? s.viewsCount : null,

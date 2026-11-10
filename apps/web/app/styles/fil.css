@@ -123,9 +123,9 @@
 .fil-collab__logo {
   display: grid;
   flex: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  width: calc(var(--space-4) + var(--space-1));
+  height: calc(var(--space-4) + var(--space-1));
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .fil-collab__logo img {
@@ -134,12 +134,9 @@
   height: 100%;
   object-fit: cover;
 }
-.fil-collab b {
-  font-weight: 800;
-}
 .fil-collab:focus-visible {
   outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
+  outline-offset: var(--space-1);
 }
 .fil-card.is-faded {
   opacity: 0.45;

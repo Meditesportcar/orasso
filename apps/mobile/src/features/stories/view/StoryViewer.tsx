@@ -586,6 +586,7 @@ export function StoryViewer({ authorKey }: { authorKey: string }) {
               }
             : undefined
         }
+        externalBlocked={story.exportBlockedReason}
       />
       <ShareSheet
         visible={externalOpen}
