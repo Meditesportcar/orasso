@@ -291,9 +291,9 @@ for (const outcome of ["succès", "échec"] as const) {
     test.skip(!target, "aucun auteur à une seule story dans la barre");
     await signedIn(page, "beton", 390, 844);
     const ids: string[] = [];
-    let release: (() => void) | null = null;
+    const gate = { release: () => {} };
     const held = new Promise<void>((r) => {
-      release = r;
+      gate.release = r;
     });
     await page.route("**/api/stories/*/reply", async (route) => {
       ids.push((route.request().postDataJSON() as { clientId: string }).clientId);
@@ -315,14 +315,16 @@ for (const outcome of ["succès", "échec"] as const) {
     await page.getByTestId("story-reply-input").fill("Belle auto");
     // Envoi encore en cours : le bouton est inactif.
     await expect(page.getByTestId("story-reply-send")).toBeDisabled();
-    release?.();
-    // La requête finit : le bouton est libre sur le lecteur affiché.
-    await expect(page.getByTestId("story-reply-send")).toBeEnabled({ timeout: 15_000 });
+    gate.release();
+    // La requête finit : échec = bouton libre ; succès = brouillon du lecteur affiché vidé (aucun second envoi possible).
+    if (outcome === "échec") await expect(page.getByTestId("story-reply-send")).toBeEnabled({ timeout: 15_000 });
+    else await expect(page.getByTestId("story-reply-input")).toHaveValue("", { timeout: 15_000 });
     if (outcome === "échec") {
       await page.getByTestId("story-reply-send").click();
       await expect.poll(() => ids.length, { timeout: 15_000 }).toBe(2);
       expect(ids[1]).toBe(ids[0]);
     } else {
+      await page.waitForTimeout(500);
       expect(ids).toHaveLength(1);
     }
   });

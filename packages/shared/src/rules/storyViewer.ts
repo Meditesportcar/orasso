@@ -184,6 +184,9 @@ export function viewersListPartial(total: number | null | undefined): boolean {
  * identifiant **jusqu'à sa résolution** (`end` avec succès), et chaque story garde son propre envoi en cours. Un envoi sur
  * une autre story n'efface donc ni l'identifiant ni le verrou de celle-ci ; une seule réponse à la fois par story.
  */
+/** L'issue d'un envoi de réponse, transmise au lecteur affiché : succès = son brouillon correspondant est vidé. */
+export type ReplyOutcome = { storyId: string; text: string; ok: boolean };
+
 export function createReplyKeys(newId: () => string, now: () => number = Date.now) {
   const MAX_KEYS = 50;
   // Une soumission d'issue incertaine (réponse perdue) est gardée jusqu'à un succès ou ce délai.
@@ -192,9 +195,9 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
   const sending = new Map<string, string>();
   // Abonnés au changement des envois en cours (lot R8s) : le parent persistant de la visionneuse garde ces identifiants d'un
   // auteur à l'autre ; une requête qui finit après un aller-retour doit libérer le bouton du lecteur affiché, pas d'un démonté.
-  const listeners = new Set<() => void>();
-  const notify = () => {
-    for (const l of [...listeners]) l();
+  const listeners = new Set<(outcome?: ReplyOutcome) => void>();
+  const notify = (outcome?: ReplyOutcome) => {
+    for (const l of [...listeners]) l(outcome);
   };
   const keyOf = (storyId: string, text: string) => JSON.stringify([storyId, text]);
   const expire = () => {
@@ -254,10 +257,10 @@ export function createReplyKeys(newId: () => string, now: () => number = Date.no
         const e = keys.get(k);
         if (e) e.uncertainAt = now();
       }
-      notify();
+      notify({ storyId, text, ok });
     },
-    /** Appelé à chaque début ou fin d'envoi ; rend la fonction de désabonnement. */
-    subscribe(listener: () => void): () => void {
+    /** Appelé à chaque début d'envoi, et à chaque fin avec son issue (story, texte, succès) ; rend la fonction de désabonnement. */
+    subscribe(listener: (outcome?: ReplyOutcome) => void): () => void {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

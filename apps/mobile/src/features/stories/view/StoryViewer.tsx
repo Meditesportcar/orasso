@@ -366,7 +366,11 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
   // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
   // du lecteur affiché, pas celui d'un lecteur démonté.
   useEffect(() => {
-    const sync = () => setSending(new Set(replyKeys.sendingStories()));
+    const sync = (outcome?: { storyId: string; text: string; ok: boolean }) => {
+      setSending(new Set(replyKeys.sendingStories()));
+      // Succès reçu pendant un aller-retour entre auteurs : le brouillon du lecteur affiché, s'il correspond à la soumission, est vidé.
+      if (outcome?.ok && replyStillShown(outcome, shownDraft.current)) setText("");
+    };
     sync();
     return replyKeys.subscribe(sync);
   }, [replyKeys]);

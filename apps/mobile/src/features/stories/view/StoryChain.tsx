@@ -20,6 +20,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { barFor } from "../chainBar";
@@ -37,6 +39,7 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
   const { t, reducedMotion } = useTheme();
   const { me } = useSession();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const myId = me?.user.id ?? null;
   // La chaîne est figée AVANT la première lecture (donc avant que la vue de la première story soit enregistrée) : depuis la barre
   // déjà affichée par `StoriesBar` (mémoire), sinon la barre est lue et la visionneuse attend. Une panne : l'auteur seul.
@@ -145,7 +148,7 @@ export function StoryChain({ authorKey, followBar }: { authorKey: string; follow
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/fil"))}
             accessibilityRole="button"
             accessibilityLabel={L.close}
-            style={styles.close}
+            style={[styles.close, { top: insets.top + 8 }]}
             testID="story-close"
           >
             <Icon name="close" size={22} color={t.color.nightInk} />
@@ -160,7 +163,6 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   close: {
     position: "absolute",
-    top: 48,
     right: 12,
     width: 38,
     height: 38,

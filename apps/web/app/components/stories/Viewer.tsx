@@ -9,7 +9,7 @@ import { Button, Icon, type IconName } from "@orasso/design-system/web";
 import {
   authorSwipe,
   clock,
-  createReplyKeys,
+  type createReplyKeys,
   feedAgo,
   storyViewerLabels as L,
   nextAuthor,
@@ -44,6 +44,7 @@ import { useNavigate } from "react-router";
 import "../../styles/stories.css";
 import { apiFetch } from "../../lib/api.client";
 import { now } from "../../lib/clock";
+import { replyKeysFor } from "../../lib/replyKeysStore";
 import { listenSession } from "../../lib/sessionChannel";
 import { ReportDialog } from "../ReportDialog";
 import { CommercialBadge } from "./CommercialBadge";
@@ -194,7 +195,11 @@ function AuthorViewer({
   // Les envois en cours vivent dans le parent persistant : leur fin (même après un aller-retour entre auteurs) libère le bouton
   // du lecteur affiché, pas celui d'un lecteur démonté.
   useEffect(() => {
-    const sync = () => setSending(new Set(replyKeys.sendingStories()));
+    const sync = (outcome?: { storyId: string; text: string; ok: boolean }) => {
+      setSending(new Set(replyKeys.sendingStories()));
+      // Succès reçu pendant un aller-retour entre auteurs : le brouillon du lecteur affiché, s'il correspond à la soumission, est vidé.
+      if (outcome?.ok && replyStillShown(outcome, shownDraft.current)) setText("");
+    };
     sync();
     return replyKeys.subscribe(sync);
   }, [replyKeys]);
@@ -1111,16 +1116,6 @@ function AuthorViewer({
       </dialog>
     </div>
   );
-}
-
-/** Identifiants d'idempotence des réponses, gardés en mémoire pour le compte courant (jamais écrits sur le disque). */
-let heldReplyKeys: { userId: string; keys: ReturnType<typeof createReplyKeys> } | null = null;
-function replyKeysFor(userId: string) {
-  // Rendu serveur : le module est partagé entre visiteurs, rien n'y est gardé.
-  if (typeof window === "undefined") return createReplyKeys(() => crypto.randomUUID());
-  if (!heldReplyKeys || heldReplyKeys.userId !== userId)
-    heldReplyKeys = { userId, keys: createReplyKeys(() => crypto.randomUUID()) };
-  return heldReplyKeys.keys;
 }
 
 /** L'auteur suivant est lu d'avance après ce délai ; une lecture d'avance plus vieille que cela est relue (une story supprimée, échue ou sortie du crew ne reste pas affichée par sa légende). */
