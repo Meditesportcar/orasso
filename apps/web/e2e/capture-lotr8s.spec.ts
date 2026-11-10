@@ -70,6 +70,12 @@ test.describe("appli", () => {
       await page.getByTestId("story-surface").click({ position: { x: width - 40, y: 400 } });
       await shot(page, `${tag}-visionneuse-3`);
       await page.getByTestId("story-surface").click({ position: { x: width - 40, y: 400 } });
+      if (PHASE === "apres") {
+        // Lecture enchaînée : l'auteur suivant s'ouvre seul ; on ferme ensuite par la croix.
+        await expect(page.getByTestId("story-author")).not.toHaveText("Kenji_66", { timeout: 15_000 });
+        await shot(page, `${tag}-auteur-suivant`);
+        await page.getByTestId("story-close").click();
+      }
       await page.waitForURL(/fil/, { timeout: 15_000 });
       await shot(page, `${tag}-fin-de-serie`);
       await ctx.close();
@@ -104,6 +110,11 @@ test.describe("site", () => {
       await page.keyboard.press("ArrowRight");
       await shot(page, `${tag}-visionneuse-3`);
       await page.keyboard.press("ArrowRight");
+      if (PHASE === "apres") {
+        await expect(page.getByTestId("story-author")).not.toHaveText("Kenji_66", { timeout: 15_000 });
+        await shot(page, `${tag}-auteur-suivant`);
+        await page.keyboard.press("Escape");
+      }
       await page.waitForURL(/\/app\/fil/, { timeout: 15_000 });
       await shot(page, `${tag}-fin-de-serie`);
       await ctx.close();
