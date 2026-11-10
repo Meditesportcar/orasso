@@ -64,7 +64,10 @@ function storedFor(e: EventRow, forecast: ProviderForecast): StoredForecast {
 }
 
 /** La météo d'un département : la journée d'aujourd'hui (Paris) de la prévision gardée ; pas de journée d'aujourd'hui, rien. */
-function placeWeather(department: string, row: typeof weatherDepartments.$inferSelect | null | undefined): MyWeather | null {
+function placeWeather(
+  department: string,
+  row: typeof weatherDepartments.$inferSelect | null | undefined,
+): MyWeather | null {
   if (!row) return null;
   const w = wallTime(now(), "Europe/Paris");
   const today = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
