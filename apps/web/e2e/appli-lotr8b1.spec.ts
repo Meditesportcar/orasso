@@ -296,7 +296,7 @@ test("le profil d'un autre : « Suivre » sur la ligne du grade, « Message » e
   await expect(page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
   const partner = page.getByTestId("public-count-partners");
   await expect(partner).toBeVisible();
-  await partner.click({ force: true });
+  await partner.click();
   await expect(page).toHaveURL(/\/p\//, { timeout: 30_000 });
   await ctx.close();
 });
@@ -323,5 +323,72 @@ test("un compte privé vu d'un inconnu : les nombres, « Réservé à ses abonn�
   await afterOpening(page);
   await expect(page.getByTestId("profile-private-note")).toContainText("Ta demande attend", { timeout: 30_000 });
   await shot(page, "14-prive-attente");
+  await ctx.close();
+});
+
+test("tour 2 : le dernier véhicule archivé rend visiteur, mais « Garage » garde le lien vers les archivés", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const pseudo = `Arc${unique()}`.slice(0, 14);
+  const cookie = await signUpApi(pseudo);
+  const vehicleId = await addVehicleApi(cookie, randomPlate());
+  const { ctx, page } = await open(browser);
+  await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  // L'archivage réel du dernier véhicule actif : la casquette passe à « visiteur » (API).
+  const res = await apiCall(cookie, "PATCH", `/me/vehicles/${vehicleId}`, { status: "sold", statusNote: null });
+  expect(res.status).toBe(200);
+  await go(page, "/profil");
+  await expect(page.getByTestId("profil-tab-garage")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("profil-tab-garage").click();
+  await expect(page.getByTestId("garage-empty-add")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("garage-archived").click();
+  await expect(page).toHaveURL(/vehicules-archives/, { timeout: 30_000 });
+  await expect(page.getByTestId("archived-vehicle").first()).toBeVisible({ timeout: 30_000 });
+  await shot(page, "15-archives-visiteur");
+  await ctx.close();
+});
+
+test("tour 2 : lecture des véhicules en panne sur Sorties, réseau rétabli, ouverture de Garage : « Réessayer » puis la liste", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  let down = true;
+  await page.route("**/me/vehicles", async (route) => {
+    if (down && route.request().method() === "GET") {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, status: 500, body: JSON.stringify({ error: { message: "Panne" } }) });
+    } else await route.continue();
+  });
+  await go(page, "/profil?onglet=sorties");
+  await expect(selected(page)).toHaveAccessibleName("Sorties", { timeout: 30_000 });
+  down = false;
+  await page.getByTestId("profil-tab-garage").click();
+  // Relancée à l'ouverture : la liste revient sans faux « Ton garage est vide ».
+  await expect(page.getByTestId("garage-mini")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Ton garage est vide")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("tour 2 : mon profil ouvert par son lien, partenaires en panne : « – » et « Réessayer », jamais un profil sans partenaire", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  await page.route("**/me/partnerships", async (route) => {
+    if (route.request().method() === "GET") {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, status: 500, body: JSON.stringify({ error: { message: "Panne" } }) });
+    } else await route.continue();
+  });
+  await go(page, "/u/Kenji_66");
+  const cell = page.getByTestId("public-count-partners");
+  await expect(cell).toBeVisible({ timeout: 30_000 });
+  await expect(cell).toContainText("–");
+  await cell.click();
+  await expect(page.getByTestId("partners-error")).toContainText("Réessayer", { timeout: 20_000 });
   await ctx.close();
 });

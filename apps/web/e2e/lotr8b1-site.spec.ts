@@ -191,3 +191,34 @@ test("compte privé vu d'un inconnu : les nombres, « Réservé à ses abonnés 
   await expect(page.getByTestId("follow-button")).toBeVisible();
   await shot(page, "07-prive-inconnu");
 });
+
+test("tour 2 : la confirmation « Ne plus suivre » / « Annuler la demande » tient dans la carte à 390 px et se clique sans forcer", async ({
+  page,
+}) => {
+  await setTheme(page, "beton");
+  const pseudo = `Cnf${unique()}`.slice(0, 14);
+  const cookie = await signUpApi(pseudo);
+  await apiCall(cookie, "POST", "/users/Lea_11/follow");
+  await apiCall(cookie, "POST", "/users/Marc_66/follow");
+  await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, SEED_PASSWORD, "/app/moi");
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const [who, yes] of [
+    ["Lea_11", "Ne plus suivre"],
+    ["Marc_66", "Annuler la demande"],
+  ] as const) {
+    await page.goto(`/u/${who}`);
+    await page.getByTestId("follow-button").click();
+    const panel = page.getByTestId("follow-confirm");
+    await expect(panel).toBeVisible();
+    const box = (await panel.boundingBox()) ?? { x: -1, width: 0 };
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    await expect(page.getByTestId("follow-confirm-keep")).toBeVisible();
+    await expect(page.getByTestId("follow-confirm-yes")).toContainText(yes);
+    await shot(page, `08-confirmation-390-${who}`);
+    await page.getByTestId("follow-confirm-keep").click();
+    await page.getByTestId("follow-button").click();
+    await page.getByTestId("follow-confirm-yes").click();
+    await page.waitForLoadState("networkidle");
+  }
+});
