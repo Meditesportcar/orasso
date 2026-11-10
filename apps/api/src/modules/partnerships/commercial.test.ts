@@ -569,3 +569,34 @@ describe("tour 2 : mention explicite et fiche qui n'est plus visible", () => {
     expect((await read(viewer, kenji, id))?.commercialPartner).toMatchObject({ name: "Wrap 66", slug: null });
   });
 });
+
+describe("tour 3", () => {
+  it("la fiche pro qui repartage sous sa casquette la publication qui la concerne garde la mention héritée", async () => {
+    await partnerOf(kenji);
+    const made = await post(kenji, { caption: "@wrap-66" });
+    const shared = await shareLinked(proOwner, made.json.id, { persona: "pro", proId: pro.id });
+    expect(shared.status, JSON.stringify(shared.json)).toBe(201);
+    const [row] = await db.select().from(stories).where(eq(stories.id, shared.json.id));
+    expect(row).toMatchObject({ persona: "pro", proId: pro.id, commercialPartnerId: pro.id });
+    const lu = await req(viewer, "GET", `/stories/by-author/p:${pro.id}`);
+    expect(lu.json.stories[0].commercialPartner).toMatchObject({ name: "Wrap 66", slug: "wrap-66" });
+    // Déduite ou explicite, l'exclusion de soi reste : jamais de collaboration avec soi-même.
+    const own = await story(proOwner, { persona: "pro", proId: pro.id, commercialPartnerId: pro.id });
+    expect(own.status).toBe(201);
+    const [ownRow] = await db.select().from(stories).where(eq(stories.id, own.json.id));
+    expect(ownRow?.commercialPartnerId).toBeNull();
+  });
+
+  it("le sélecteur (GET /pros?eligible=1) ne propose que les fiches éligibles ; une fiche proposée est acceptée", async () => {
+    const o = await signUp("Pro_Sel");
+    await createPro(o.id, { slug: "wrap-non-verifie", name: "Wrap non vérifié" });
+    const all = await req(viewer, "GET", "/pros?q=wrap");
+    expect(all.json.items.map((p: { slug: string }) => p.slug).sort()).toEqual(["wrap-66", "wrap-non-verifie"]);
+    const eligible = await req(viewer, "GET", "/pros?q=wrap&eligible=1");
+    expect(eligible.json.items.map((p: { slug: string }) => p.slug)).toEqual(["wrap-66"]);
+    const picked = await req(viewer, "GET", "/pros/by-slug/wrap-66");
+    expect((await story(kenji, { commercialPartnerId: picked.json.id })).status).toBe(201);
+    // Une valeur inattendue est refusée, pas ignorée.
+    expect((await req(viewer, "GET", "/pros?q=wrap&eligible=0")).status).toBe(400);
+  });
+});

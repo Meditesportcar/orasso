@@ -1,14 +1,3 @@
-// Fiche pro « montrable » (lot R7m1, tour 2, repris par R7m2) : non supprimée, publiée, vérifiée, titulaire en règle. Une seule
-// règle pour afficher un partenaire, lire une demande, accepter, proposer et poser une mention commerciale à la main.
-import { and, isNotNull, isNull, type SQL } from "drizzle-orm";
-
-import { proProfiles } from "../../db/schema";
-import { proOwnerActive } from "../pros/explore";
-
-export const proShown = (at: Date): SQL =>
-  and(
-    isNull(proProfiles.deletedAt),
-    isNotNull(proProfiles.publishedAt),
-    isNotNull(proProfiles.verifiedAt),
-    proOwnerActive(at),
-  ) as SQL;
+// Fiche pro « montrable » : la règle vit avec la recherche des pros (`pros/explore.ts`), pour que le sélecteur et l'API disent la
+// même chose. Ré-exportée ici pour les partenariats.
+export { proShown } from "../pros/explore";

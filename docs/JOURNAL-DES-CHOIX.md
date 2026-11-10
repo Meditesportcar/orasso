@@ -4626,3 +4626,7 @@ Lot sensible. Aucune migration.
 - **7. Jetons** : appli (`CommercialBadge` ×2, `CommercialLine`) : espacements, rayons et taille du logo par `tokens` (`space*`, `radiusPill`, `radiusMd`), plus de famille ni de taille de police en clair (`Text variant`) ; site (`stories.css`, `fil.css`) : `var(--space-*)`, `var(--radius-pill)`, classe `o-t-strong`, plus de `font-weight`.
 - **Vérifié** : typecheck shared, api, web, mobile propres ; `worklets-audit` propre ; tests API partnerships + stories 250/250 ; recettes `appli-lotr7m2` 6/6 et `lotr7m2-site` 8/8 ; captures dans `lot-r7m2-captures/apres-tour2` (384 px et 390 px police 1,3, Béton et Sable).
 
+
+### Tour 3 (R7m2, 10/11/2026)
+- **Mention héritée gardée** (partnerships/commercial.ts) : une mention héritée d'une publication est toujours posée, même quand elle désigne la fiche pro qui republie sous sa casquette ; l'exclusion de soi ne vaut que pour une mention déduite ou explicite. Test : Wrap 66 repartage la publication de Kenji qui le concerne, la mention est enregistrée et renvoyée par `by-author`.
+- **Sélecteurs** : `GET /pros?eligible=1` ne renvoie que les fiches `proShown` (la règle est maintenant définie dans `pros/explore.ts` à côté de `proOwnerActive`, ré-exportée par `partnerships/shown.ts`) ; les sélecteurs de l'appli et du site l'envoient. Valeur autre que `1`/`true` : 400. Test : fiche non vérifiée absente de la recherche du sélecteur, fiche éligible choisie, publication acceptée.

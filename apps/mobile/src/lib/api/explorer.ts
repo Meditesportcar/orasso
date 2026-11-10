@@ -42,6 +42,8 @@ export type ExploreProsQuery = Position &
     activity?: string;
     department?: string;
     sort?: "name" | "distance";
+    /** Sélecteur de « Collaboration commerciale » : seulement les fiches qu'une mention peut viser (R7m2). */
+    eligible?: "1";
     limit?: number;
     cursor?: string;
   };

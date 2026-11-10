@@ -125,7 +125,7 @@ function ProPicker({
     const timer = setTimeout(async () => {
       setState("loading");
       try {
-        const page = await api.explorePros({ q: text, limit: 6 });
+        const page = await api.explorePros({ q: text, limit: 6, eligible: "1" });
         if (stale) return;
         setResults(page.items);
         setState("idle");

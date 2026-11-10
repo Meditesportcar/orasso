@@ -62,7 +62,9 @@ export async function commercialPartnerFor(
     input.tagProIds.filter((id) => id !== input.ownProId),
     input.caption,
   );
-  const inherited = input.inherited && input.inherited !== input.ownProId ? input.inherited : null;
+  // Une mention HÉRITÉE est toujours gardée, même quand elle désigne la fiche qui publie (Wrap 66 repartage la publication d'un
+  // passionné qui le concerne) : l'exclusion de soi ne vaut que pour une mention déduite ou explicite.
+  const inherited = input.inherited ?? null;
   const chosen = derived
     ? { proId: derived, source: "derived" as const }
     : inherited

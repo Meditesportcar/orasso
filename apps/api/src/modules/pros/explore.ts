@@ -48,6 +48,19 @@ function activitiesMatching(token: string): ProActivity[] {
 export const proOwnerActive = (at: Date) =>
   sql`exists (select 1 from profiles pr where pr.user_id = ${proProfiles.ownerUserId} and pr.deleted_at is null and (pr.suspended_until is null or pr.suspended_until <= ${at}))`;
 
+/**
+ * Fiche pro « montrable » (lot R7m1, tour 2, repris par R7m2) : non supprimée, publiée, vérifiée et titulaire en règle. Une seule
+ * règle pour afficher un partenaire, lire une demande, accepter, proposer, poser une mention commerciale à la main et filtrer
+ * les sélecteurs (`eligible`).
+ */
+export const proShown = (at: Date): SQL =>
+  and(
+    isNull(proProfiles.deletedAt),
+    isNotNull(proProfiles.publishedAt),
+    isNotNull(proProfiles.verifiedAt),
+    proOwnerActive(at),
+  ) as SQL;
+
 /** Remises de ces pros, par grade (lot M5, « Pour ta … » du Garage ; lot R2, liste de l'Explorer). */
 export async function discountsByPro(ids: string[]): Promise<Map<string, ProDiscounts>> {
   const out = new Map<string, ProDiscounts>();
@@ -81,6 +94,8 @@ function prosWhere(q: ProListQuery, viewer: Viewer | null, withActivity: boolean
     isNull(proProfiles.deletedAt),
     isNotNull(proProfiles.publishedAt),
     proOwnerActive(t),
+    // Sélecteur de « Collaboration commerciale » : la même règle que la mention explicite (`proShown`).
+    q.eligible ? proShown(t) : undefined,
     withActivity && q.activity ? sql`${q.activity} = any(${proProfiles.activities})` : undefined,
     q.department
       ? or(eq(proProfiles.department, q.department), sql`${q.department} = any(${proProfiles.interventionDepartments})`)

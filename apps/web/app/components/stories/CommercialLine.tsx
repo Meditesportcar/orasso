@@ -128,7 +128,7 @@ function ProPicker({
     let stale = false;
     const timer = setTimeout(async () => {
       setState("loading");
-      const res = await apiFetch<Page<ProCard>>(`/pros?${new URLSearchParams({ q: text, limit: "6" })}`);
+      const res = await apiFetch<Page<ProCard>>(`/pros?${new URLSearchParams({ q: text, limit: "6", eligible: "1" })}`);
       if (stale) return;
       if (res.ok) {
         setResults(res.data.items);
