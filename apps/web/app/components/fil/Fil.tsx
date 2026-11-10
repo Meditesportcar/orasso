@@ -91,11 +91,31 @@ export function Fil({ userId }: { userId: string }) {
     void load(filter);
   }, [ready, filter, load]);
 
+  // Lot R8f1 : la liste des choix « Publier » se ferme au clic ailleurs, à Échap et au changement de filtre.
+  const chooseRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (e: Event) => {
+      const el = chooseRef.current;
+      if (!el?.open) return;
+      if (e.type === "keydown") {
+        if ((e as KeyboardEvent).key !== "Escape") return;
+        el.removeAttribute("open");
+        el.querySelector("summary")?.focus();
+      } else if (!el.contains(e.target as Node)) el.removeAttribute("open");
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, []);
   const choose = (f: FeedFilter) => {
     if (f === filter) return;
     const url = new URL(window.location.href);
     url.searchParams.set("filtre", f);
     window.history.replaceState(null, "", url);
+    chooseRef.current?.removeAttribute("open");
     setFilter(f);
   };
 
@@ -203,8 +223,8 @@ export function Fil({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
-        <details className="fil-choose">
-          <summary className="fil-publish" data-testid="fil-publish-open" aria-label={L.publish}>
+        <details className="fil-choose" ref={chooseRef}>
+          <summary className="fil-publish fil-publish--icon" data-testid="fil-publish-open" aria-label={L.publish}>
             <Icon name="camera" size={20} />
           </summary>
           <div className="fil-choose__list">

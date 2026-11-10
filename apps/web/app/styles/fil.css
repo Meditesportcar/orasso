@@ -25,18 +25,27 @@
   gap: var(--space-2);
 }
 
-/* « Publier » : le bouton principal de l'écran (moutarde, icône seule, carré de 48 px, rayon 14 de la maquette). */
+/* « Publier » : le bouton principal de l'écran (moutarde, icône). Aussi les liens à texte « Publier » et « Retour au Fil ». */
 .fil-publish {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--touch);
-  height: var(--touch);
-  border-radius: 14px;
+  gap: var(--space-2);
+  min-height: 50px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-ink);
+  font-weight: 800;
+  text-transform: uppercase;
   text-decoration: none;
   box-shadow: var(--shadow-card);
+}
+/* Lot R8f1 : la variante icône seule du haut du Fil, carré de 48 px (jeton `touch`), rayon 14 de la maquette. */
+.fil-publish--icon {
+  width: var(--touch);
+  height: var(--touch);
+  min-height: var(--touch);
+  border-radius: 14px;
 }
 /* Le lien générique du contenu (« .s-main a », couleur d'accent) l'emportait sur l'encre du bouton : moutarde sur moutarde. */
 .s-main a.fil-publish,
@@ -67,7 +76,8 @@
 .fil-filters button {
   min-height: 40px;
   min-width: 0;
-  padding-inline: var(--space-1);
+  padding-inline: 2px;
+  font-size: 12.5px; /* maquette R8.2 (`.r8sel`) : « Abonnements » tient dans son segment à 390 px */
   line-height: 1.1;
   border: 0;
   border-radius: calc(var(--radius-md) - 2px);
@@ -75,6 +85,12 @@
   color: var(--ink-muted);
   font-weight: 800;
   cursor: pointer;
+}
+/* Téléphone étroit : 12 px, pour qu'« Abonnements » (800) tienne entier dans son segment à 390 px. */
+@media (max-width: 420px) {
+  .fil-filters button {
+    font-size: 12px;
+  }
 }
 .fil-filters button.is-on {
   background: var(--ink);

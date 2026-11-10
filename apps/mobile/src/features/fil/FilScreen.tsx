@@ -146,6 +146,7 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
         <View style={styles.topSeg}>
           <Seg
             wrap
+            compact
             maxFontScale={FILTER_MAX_FONT_SCALE}
             value={feed.filter}
             onChange={feed.setFilter}
@@ -280,6 +281,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     flexShrink: 0,
     justifyContent: "center",
+    alignSelf: "center",
   },
   less: {
     flexDirection: "row",

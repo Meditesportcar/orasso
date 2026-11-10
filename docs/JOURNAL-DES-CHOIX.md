@@ -4819,3 +4819,10 @@ Damien a validé le 10/11 au soir les deux maquettes (« r8 ok », « r9 ok ») 
 - **Mesure sans jeton** : le rayon 14 px du bouton n'a pas de jeton (le plus proche, `radius-md`, vaut moins) : valeur de la maquette gardée, comme `.r8pub`.
 - **Hors lot, non posé** : phrase sous le sélecteur, feuille « Comment le Fil choisit », bandeau « Publié sur ton profil », « Tu es à jour », rail « Ça plaît en ce moment », pastille « Nouvelles publications » (lots R8c1 et R8c2).
 - Fichiers : `apps/mobile/src/features/fil/FilScreen.tsx`, `apps/mobile/src/ui/Kit.tsx`, `apps/web/app/components/fil/Fil.tsx`, `apps/web/app/styles/fil.css` ; recettes `apps/web/e2e/appli-lotr8f1.spec.ts`, `lotr8f1-site.spec.ts`, captures `captures-lotr8f1.spec.ts`.
+
+### Tour 2 (R8f1, 10/11/2026) : corrections des relectures Opus et Codex
+- **Site, `.fil-publish` partagée** : la classe retrouve sa règle d'avant (liens à texte « Publier » de Mes publications et « Retour au Fil » intacts) ; le carré de 48 px passe sur `.fil-publish--icon`, propre au bouton du haut du Fil.
+- **« Abonnements » entier** : site, corps 12,5 px (maquette), 12 px sous 420 px de large, marges de 2 px ; appli, option locale `compact` de `Seg` (segments de 44 px, corps de 12,5 px, marges de 4 px, comme `.r8sel`), défaut inchangé. Recettes : aucun libellé ne déborde (`scrollWidth`), à 384 et 390 px, ×1 et ×1,3 dans l'appli.
+- **Appli, bouton centré** : `alignSelf: "center"` annule celui de `SmButton`, le bouton reste au milieu quand le sélecteur passe sur deux lignes.
+- **Site, liste des choix** : se ferme au clic ailleurs, à Échap (le focus revient sur le bouton) et au changement de filtre.
+- **Mineurs** : écart du rayon 14 px daté dans `docs/design-system/README.md` ; la recette de l'appli suit aussi « Dans le Fil » ; contrôle de débordement ajouté.

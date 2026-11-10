@@ -78,12 +78,20 @@ for (const { width, scale } of [
     for (const f of ["for_you", "nearby", "following"]) {
       await expect(page.getByTestId(`fil-filters-${f}`)).toBeVisible();
       expect(await cutWords(page, `fil-filters-${f}`)).toEqual([]);
+      // Rien ne déborde du segment (« Abonnements » jamais coupé ni rogné).
+      const over = await page
+        .getByTestId(`fil-filters-${f}`)
+        .evaluate((el) => Math.max(...[el, ...el.querySelectorAll("*")].map((n) => n.scrollWidth - n.clientWidth)));
+      expect(over, `libellé ${f} qui déborde`).toBeLessThanOrEqual(0);
     }
     await shot(page, `haut-${width}-x${scale}`);
     await page.getByTestId("fil-publish-open").click();
     await expect(page.getByTestId("fil-publish-choose-story")).toBeVisible();
     await expect(page.getByTestId("fil-publish-choose-post")).toBeVisible();
     await shot(page, `choix-${width}-x${scale}`);
+    // « Dans le Fil » ouvre aussi la publication au Fil.
+    await page.getByTestId("fil-publish-choose-post").click();
+    await expect(page.getByTestId("fil-publish")).toBeVisible({ timeout: 30_000 });
     await ctx.close();
   });
 }
