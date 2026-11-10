@@ -172,6 +172,24 @@ describe("pager des mentions (hook)", () => {
     expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
   });
 
+  it("un geste dont la lecture des mentions échoue (première page absente) : la relecture forcée attend la page suivante", async () => {
+    let copy: string | null = null;
+    const fetchPage: FetchPage = async () => page(["b1", "b2"], null, copy ? { b2: copy } : {});
+    const pager = new MentionPager(fetchPage, () => undefined);
+    pager.sync(firstPage(["a1"], "c2"));
+    await pager.more(); // profondeur 1, b2 sans copie
+    copy = "copie-b2"; // l'ajout réussit dans l'API…
+    pager.sync(null, true); // …mais la lecture des mentions de ce chargement échoue
+    await flush();
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBeNull();
+    pager.sync(firstPage(["a1"], "c2"), false); // l'adresse nettoyée recharge une première page identique
+    await flush();
+    expect(pager.state.items.find((m) => m.storyId === "b2")?.copyId).toBe("copie-b2");
+    pager.sync(firstPage(["a1"], "c2"), false); // la dette est payée : plus de relecture
+    await flush();
+    expect(pager.state.busy).toBe(false);
+  });
+
   it("une première page qui change pendant le premier « Voir plus » (profondeur zéro) jette la réponse et reprend du nouveau curseur", async () => {
     const old = deferred();
     const calls: string[] = [];

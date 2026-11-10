@@ -75,6 +75,8 @@ export class MentionPager {
   private last: StoryMentions | null = null;
   /** Un geste de la personne est revenu pendant un premier « Voir plus » : sa réponse peut être périmée, à relire. */
   private moreStale = false;
+  /** Un geste est revenu sans première page (lecture en échec) : la relecture forcée est due à la prochaine première page. */
+  private owedForce = false;
 
   constructor(
     private readonly fetchPage: FetchPage,
@@ -104,7 +106,13 @@ export class MentionPager {
     this.key = key;
     this.firstNext = first?.nextCursor ?? null;
     this.last = first;
-    if (!first) return;
+    if (!first) {
+      // Re-relecture Codex : l'invalidation d'un geste n'est pas perdue si la lecture des mentions échoue à ce moment-là.
+      this.owedForce ||= force;
+      return;
+    }
+    force ||= this.owedForce;
+    this.owedForce = false;
     if (this.state.depth > 0) {
       if (this.rereading) {
         this.pending = first;
