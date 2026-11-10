@@ -67,6 +67,19 @@ describe("réglage des widgets de l'accueil", () => {
     expect(defaultHomeWidgets.hidden).not.toContain("event_weather");
   });
 
+  it("lot R8e1, tour 2 : « Météo de l'événement » ne se déplace pas et aucun bloc ne s'échange avec lui", () => {
+    const c = defaultHomeWidgets;
+    expect(moveVisibleHomeWidget(c, "event_weather", 1)).toBe(c);
+    expect(moveHomeWidget(c, "event_weather", 1)).toBe(c);
+    // « En cours » est le premier bloc qui bouge : il ne monte pas (rien à échanger avec la ligne météo).
+    expect(moveVisibleHomeWidget(c, "live", -1)).toBe(c);
+    expect(moveHomeWidget(c, "live", -1)).toBe(c);
+    // Descendre un bloc ne passe jamais par-dessus la ligne météo, qui garde sa place.
+    const down = moveVisibleHomeWidget(c, "live", 1);
+    expect(down.order.slice(0, 3)).toEqual(["next_access", "event_weather", "my_outings"]);
+    expect(down.order[3]).toBe("live");
+  });
+
   it("ne masque jamais « Prochain accès » et ne le déplace pas", () => {
     const c = normalizeHomeWidgets({ order: [], hidden: ["next_access", "wash"] });
     expect(c.hidden).toEqual(["wash"]);

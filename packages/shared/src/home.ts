@@ -52,6 +52,12 @@ export function homeWidgetOffered(id: HomeWidgetId, stations = NEARBY_STATIONS_E
   return stations || !(stationWidgetIds as readonly HomeWidgetId[]).includes(id);
 }
 
+/**
+ * Lot R8e1, tour 2 : « Météo de l'événement » n'est pas un bloc de l'écran (c'est une ligne de la carte « Prochaine sortie ») :
+ * il se masque ou s'affiche, jamais ne se déplace, et aucun bloc ne s'échange avec lui.
+ */
+export const HOME_LINE_WIDGET: HomeWidgetId = "event_weather";
+
 /** Le seul widget qui ne se déplace ni ne se masque : il porte le néon moutarde de l'écran. */
 export const HOME_FIXED_WIDGET: HomeWidgetId = "next_access";
 
@@ -122,9 +128,10 @@ export function moveHomeWidget(
 ): HomeWidgetsConfig {
   const order = [...config.order];
   const from = order.indexOf(id);
-  if (id === HOME_FIXED_WIDGET || from < 0 || !offered(id)) return config;
+  if (id === HOME_FIXED_WIDGET || id === HOME_LINE_WIDGET || from < 0 || !offered(id)) return config;
   let to = from + delta;
-  while (to >= 1 && to < order.length && !offered(order[to] as HomeWidgetId)) to += delta;
+  while (to >= 1 && to < order.length && (!offered(order[to] as HomeWidgetId) || order[to] === HOME_LINE_WIDGET))
+    to += delta;
   if (to < 1 || to >= order.length) return config;
   [order[from], order[to]] = [order[to] as HomeWidgetId, order[from] as HomeWidgetId];
   return { order, hidden: config.hidden };
@@ -140,8 +147,8 @@ export function moveVisibleHomeWidget(
   delta: -1 | 1,
   offered: (id: HomeWidgetId) => boolean = (w) => homeWidgetOffered(w),
 ): HomeWidgetsConfig {
-  if (id === HOME_FIXED_WIDGET) return config;
-  const visible = config.order.filter((w) => !config.hidden.includes(w) && offered(w));
+  if (id === HOME_FIXED_WIDGET || id === HOME_LINE_WIDGET) return config;
+  const visible = config.order.filter((w) => !config.hidden.includes(w) && offered(w) && w !== HOME_LINE_WIDGET);
   const from = visible.indexOf(id);
   const to = from + delta;
   if (from < 0 || to < 1 || to >= visible.length) return config;

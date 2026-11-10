@@ -103,7 +103,7 @@ export function PosterButton({
  * Lot R8e1 (maquette R8.8 `.r8wx`) : la météo de la sortie, séparée du reste de la carte par un trait en pointillés ; pour un
  * événement « Incertain », le bandeau d'encre de l'affiche dessous.
  */
-function WeatherLine({ weather }: { weather: OutingWeather }) {
+export function WeatherLine({ weather }: { weather: OutingWeather }) {
   const { t } = useTheme();
   const c = t.color;
   const now = useNow();
@@ -118,14 +118,14 @@ function WeatherLine({ weather }: { weather: OutingWeather }) {
       >
         <Icon name={weatherIcons[weather.summary.code]} size={26} color={c.posterInk} />
         <View style={styles.wxText}>
-          <Text variant="bodyStrong" color={c.posterInk} style={styles.wxMain}>
+          <Text variant="bodyStrong" color={c.posterInk}>
             {line.lead}
-            <Text variant="numberNarrow" color={c.posterInk} style={styles.wxMain}>
+            <Text variant="bodyStrong" color={c.posterInk} style={styles.wxTemp}>
               {line.temp}
             </Text>
             {line.tail}
           </Text>
-          <Text variant="caption" color={c.posterMuted} style={styles.wxSub} testID="home-outing-weather-sub">
+          <Text variant="caption" color={c.posterMuted} testID="home-outing-weather-sub">
             {line.sub}
           </Text>
         </View>
@@ -331,23 +331,23 @@ const styles = StyleSheet.create({
   wx: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingTop: 8,
+    gap: space3,
+    paddingTop: space2,
     borderTopWidth: 1.5,
     borderStyle: "dashed",
   },
   wxText: { flex: 1, minWidth: 0 },
-  wxMain: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
-  wxSub: { fontSize: 12, lineHeight: 16 },
+  // « 17° » en chiffres étroits, à la taille de la ligne (jeton `bodyStrong`).
+  wxTemp: { fontFamily: archivoAt(62, 800) },
   wxBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    gap: space2,
+    paddingVertical: space2,
+    paddingHorizontal: space3,
+    borderRadius: tokens.radius.radiusSm,
   },
-  wxBannerText: { flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 17, fontWeight: "700" },
+  wxBannerText: { flex: 1, minWidth: 0 },
   actions: { flexDirection: "row", gap: space2 },
   access: { flex: 1, minHeight: 46, paddingHorizontal: 8 },
   pb: {

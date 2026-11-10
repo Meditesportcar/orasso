@@ -3,7 +3,7 @@
 // ligne et, masqué, n'est pas calculé. `GET /me/weather` garde sa réponse (lue par l'APK en ligne).
 import { eventDates, type HomeData } from "@orasso/shared";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   call,
@@ -20,6 +20,7 @@ import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import { applications, events, eventWeather, profiles, tickets, weatherDepartments } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { setWeatherFetch } from "../../lib/weather";
 import { weatherService } from "../weather/service";
 
 afterAll(async () => {
@@ -270,5 +271,137 @@ describe("le bloc « Météo » et GET /me/weather", () => {
       attribution: "Météo : Open-Meteo",
       summary: { code: "clear" },
     });
+  });
+});
+
+// --- Tour 2 -------------------------------------------------------------------------------------------------------------
+
+/** Réponse Open-Meteo minimale : une journée, ciel dégagé, 17°, vent 25 km/h. */
+const omDay = (date: string) => ({
+  daily: {
+    time: [date],
+    weather_code: [0],
+    temperature_2m_max: [17],
+    temperature_2m_min: [9],
+    precipitation_probability_max: [5],
+    precipitation_sum: [0],
+    wind_speed_10m_max: [25],
+  },
+  hourly: { time: [] },
+});
+const departmentRow = (date: string, fetchedAt: Date, department = "66") => ({
+  department,
+  provider: "open-meteo" as const,
+  fetchedAt,
+  forecast: {
+    days: [
+      {
+        date,
+        tempMin: 8,
+        tempMax: 14,
+        precipitationProbability: 20,
+        precipitationMm: 0,
+        windMaxKmh: 12,
+        code: "cloudy" as const,
+      },
+    ],
+    hours: [],
+  },
+});
+/** Chaque test a son département : l'échec d'un fournisseur (retenté au plus toutes les 10 minutes) est retenu par département. */
+const moveTo = (u: TestUser, department: string) =>
+  db
+    .update(profiles)
+    .set({ departments: [department] })
+    .where(eq(profiles.userId, u.id));
+const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+
+describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
+  afterEach(() => setWeatherFetch(null));
+
+  it("cache périmé sans la journée d'aujourd'hui et fournisseur en échec : rien (jamais l'ancienne journée)", async () => {
+    const { u } = await world();
+    await db.insert(weatherDepartments).values(departmentRow("2026-11-07", new Date(NOW.getTime() - 5 * HOUR)));
+    const calls = vi.fn(async () => new Response("{}", { status: 503 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    expect((await home(u)).json.weather).toBeNull();
+    // Le rafraîchissement part sans être attendu, puis la route qui l'attend (GET /me/weather) dit aussi « rien ».
+    await vi.waitFor(() => expect(calls).toHaveBeenCalled());
+    await settle();
+    expect((await call(u, "GET", "/me/weather")).json).toBeNull();
+  });
+
+  it("un fournisseur lent n'attend pas l'Accueil : réponse immédiate, un seul appel regroupé, la prochaine ouverture a la météo", async () => {
+    const { u } = await world();
+    await moveTo(u, "11");
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls = vi.fn(async () => {
+      await gate;
+      return new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 });
+    });
+    setWeatherFetch(calls as unknown as typeof fetch);
+    const started = Date.now();
+    const [a, b] = await Promise.all([home(u), home(u)]);
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(a.json.weather).toBeNull();
+    expect(b.json.weather).toBeNull();
+    await vi.waitFor(() => expect(calls).toHaveBeenCalled());
+    expect(calls).toHaveBeenCalledTimes(1);
+    release();
+    await vi.waitFor(async () => expect(await db.query.weatherDepartments.findFirst()).toBeTruthy());
+    expect((await home(u)).json.weather).toMatchObject({ kind: "place", department: "11", summary: { code: "clear" } });
+  });
+
+  it("stock frais d'aujourd'hui : servi sans appel au fournisseur ; périmé mais d'aujourd'hui : servi, rafraîchi en arrière-plan", async () => {
+    const { u } = await world();
+    await moveTo(u, "34");
+    await db.insert(weatherDepartments).values(departmentRow("2026-11-10", new Date(NOW.getTime() - HOUR), "34"));
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    expect((await home(u)).json.weather).toMatchObject({ summary: { code: "cloudy" } });
+    expect(calls).not.toHaveBeenCalled();
+    await db.update(weatherDepartments).set({ fetchedAt: new Date(NOW.getTime() - 5 * HOUR) });
+    expect((await home(u)).json.weather).toMatchObject({ summary: { code: "cloudy" } });
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    await settle();
+  });
+});
+
+describe("tour 2 : les cartes de « Prochaine sortie » décident de la météo", () => {
+  async function ticketed(orga: TestUser, structureId: string, u: TestUser, startsAt: Date, status?: "used") {
+    const e = await stored(structureId, { startsAt, publicAccess: "free_reservation" });
+    expect((await call(orga, "PUT", `/events/${e.id}/ticketing`, { enabled: true, capacity: 5 })).status).toBe(200);
+    expect((await call(u, "POST", `/events/${e.id}/tickets/reserve`, { quantity: 1 })).status).toBe(201);
+    if (status) await db.update(tickets).set({ status, usedAt: NOW }).where(eq(tickets.eventId, e.id));
+    return e;
+  }
+
+  it("un billet contrôlé d'un événement qui n'est pas fini garde sa météo ; l'événement fini, plus", async () => {
+    const { s, u, orga } = await world();
+    const open = await ticketed(orga, s.id, u, at(2), "used");
+    expect(Object.keys((await home(u)).json.outingsWeather)).toEqual([open.id]);
+    await db
+      .update(events)
+      .set({ startsAt: at(-1), endsAt: at(-0.5) })
+      .where(eq(events.id, open.id));
+    expect((await home(u)).json.outingsWeather).toEqual({});
+  });
+
+  it("la place retenue à J+6 garde sa météo (et son bandeau) derrière six billets plus proches ; le sixième billet, non", async () => {
+    const { s, u, veh, orga } = await world();
+    const accepted = await stored(s.id, { startsAt: at(6), outlook: "uncertain" });
+    await apply(u, veh.id, accepted.id, "accepted");
+    const near: { id: string }[] = [];
+    for (const days of [0.5, 1, 2, 3, 4, 5]) near.push(await ticketed(orga, s.id, u, at(days)));
+    const r = await home(u);
+    const keys = Object.keys(r.json.outingsWeather);
+    expect(keys).toHaveLength(6);
+    expect(r.json.outingsWeather[accepted.id]?.uncertain).toBe(true);
+    // Six cartes : la place retenue + les cinq billets les plus proches ; le sixième billet n'a pas de carte.
+    expect(keys).not.toContain(near[5]?.id);
+    expect(keys).toContain(near[4]?.id);
   });
 });

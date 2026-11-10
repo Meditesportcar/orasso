@@ -63,6 +63,22 @@ function storedFor(e: EventRow, forecast: ProviderForecast): StoredForecast {
   };
 }
 
+/** La météo d'un département : la journée d'aujourd'hui (Paris) de la prévision gardée ; pas de journée d'aujourd'hui, rien. */
+function placeWeather(department: string, row: typeof weatherDepartments.$inferSelect | null | undefined): MyWeather | null {
+  if (!row) return null;
+  const w = wallTime(now(), "Europe/Paris");
+  const today = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+  const summary = row.forecast.days.find((d) => d.date === today);
+  if (!summary) return null;
+  return {
+    kind: "place",
+    department,
+    provider: row.provider,
+    attribution: weatherAttributions[row.provider],
+    summary,
+  };
+}
+
 const spotKey = (p: Position) => `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
 
 async function organizerIds(structureId: string): Promise<string[]> {
@@ -287,22 +303,27 @@ export const weatherService = {
    * aujourd'hui ») ; `GET /me/weather` garde sa réponse (`mine`).
    */
   async mineAtHome(v: Viewer): Promise<MyWeather | null> {
-    const t = now();
     const department = v.profile.departments[0];
     if (!department) return null;
-    const row = await this.departmentWeather(department);
-    if (!row) return null;
-    const w = wallTime(t, "Europe/Paris");
-    const today = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
-    const summary = row.forecast.days.find((d) => d.date === today) ?? row.forecast.days[0];
-    if (!summary) return null;
-    return {
-      kind: "place",
-      department,
-      provider: row.provider,
-      attribution: weatherAttributions[row.provider],
-      summary,
-    };
+    return placeWeather(department, await this.departmentWeather(department));
+  },
+
+  /**
+   * Lot R8e1, tour 2 : la même météo pour `GET /me/home`, qui ne lit que le stock : jamais d'attente du fournisseur. Pas de
+   * prévision fraîche : la journée stockée si elle est d'aujourd'hui, sinon rien ; le rafraîchissement part sans être attendu
+   * (requêtes simultanées regroupées, échec retenté au plus toutes les 10 minutes, erreur journalisée), pour que la prochaine
+   * ouverture l'ait.
+   */
+  async mineFromStock(v: Viewer): Promise<MyWeather | null> {
+    const department = v.profile.departments[0];
+    if (!department) return null;
+    const row = await db.query.weatherDepartments.findFirst({ where: eq(weatherDepartments.department, department) });
+    if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+      void this.departmentWeather(department).catch((error) =>
+        console.warn("Météo du département non rafraîchie :", error instanceof Error ? error.message : error),
+      );
+    }
+    return placeWeather(department, row);
   },
 
   /**

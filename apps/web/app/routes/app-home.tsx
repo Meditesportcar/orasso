@@ -112,6 +112,11 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
     next?.status === "accepted" && visibleHomeWidgets(widgets).includes("event_weather")
       ? (home?.outingsWeather?.[next.event.id] ?? null)
       : null;
+  // « En cours » (présence sur place) porte aussi la météo de son événement.
+  const liveWeather =
+    live && visibleHomeWidgets(widgets).includes("event_weather")
+      ? (home?.outingsWeather?.[live.event.id] ?? null)
+      : null;
   const nudgeLeads = !next && nudge === "add_vehicle";
 
   const blocks: Record<string, ReactNode> = home
@@ -150,7 +155,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {live ? (
-        <LiveLine live={live} accessHref={live.hasPlace ? "/app/sorties" : null} />
+        <LiveLine live={live} accessHref={live.hasPlace ? "/app/sorties" : null} weather={liveWeather} />
       ) : next ? (
         <PosterCard
           label={`${homeLabels.nextAccess} · ${formatDay(next.event.startsAt)}`}

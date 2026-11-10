@@ -10,16 +10,18 @@ export function OutingWeatherLine({ weather }: { weather: OutingWeather }) {
       <section className="hm-owx__line" aria-label={line.aria} data-testid="home-outing-weather">
         <Icon name={weatherIcons[weather.summary.code]} size={26} />
         <span className="hm-owx__text">
-          <b>
+          <b className="o-t-body-strong">
             {line.lead}
             <span className="hm-owx__temp">{line.temp}</span>
             {line.tail}
           </b>
-          <small data-testid="home-outing-weather-sub">{line.sub}</small>
+          <small className="o-t-caption hm-owx__sub" data-testid="home-outing-weather-sub">
+            {line.sub}
+          </small>
         </span>
       </section>
       {line.banner ? (
-        <p className="hm-owx__banner" data-testid="home-outing-weather-banner">
+        <p className="hm-owx__banner o-t-caption" data-testid="home-outing-weather-banner">
           <Icon name="info" size={14} />
           <span>{line.banner}</span>
         </p>
