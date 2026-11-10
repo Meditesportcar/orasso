@@ -1,5 +1,5 @@
-// L'onglet Le Fil (lot R7e2, D38, maquette R7.6 `p-fil`) : en tête l'emplacement de la barre de stories (lot R7f2), le
-// bouton « Publier », les trois filtres (« Pour toi », « Autour de moi », « Abonnements », mémorisés par compte), puis le fil
+// L'onglet Le Fil (lot R7e2, D38, maquette R7.6 `p-fil`) : en tête la barre de stories (lot R7f2), puis (lot R8f1, variante A1)
+// une rangée : les trois filtres (« Pour toi », « Autour de moi », « Abonnements », mémorisés par compte) et le bouton icône « Publier », puis le fil
 // mélangé : une carte par genre, chacune avec sa raison et son « ⋯ ». Mode A (bande ORASSO, barre d'onglets). Liste
 // paginée par le curseur de l'API (`useFeed`) ; une erreur n'est jamais une liste vide ; un état vide par filtre.
 import { EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
@@ -34,6 +34,8 @@ import { WhyThisSheet } from "./WhyThisSheet";
 
 const { space2, space3 } = tokens.spacing;
 const FEED_BLOCKS = [200, 260, 200] as const;
+/** Plafond de la police système pour les libellés du sélecteur (maquette R8.2 : `data-fsmax="1.12"`). */
+const FILTER_MAX_FONT_SCALE = 1.12;
 
 export function FilScreen() {
   return <TabScreenWithFeed />;
@@ -137,25 +139,31 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
   return (
     <>
       <StoriesBar />
-      <SmButton
-        kind="p"
-        big
-        wide
-        icon="camera"
-        onPress={() => setChoosing(true)}
-        testID="fil-publish-open"
-        accessibilityLabel={L.publishTitle}
-      >
-        {L.publish}
-      </SmButton>
-      {/* Le sélecteur segmenté de la maquette ; police agrandie : le segment grandit, le libellé passe sur deux lignes. */}
-      <Seg
-        wrap
-        value={feed.filter}
-        onChange={feed.setFilter}
-        options={feedScreenFilters.map((o) => ({ value: o.value, label: o.label }))}
-        testID="fil-filters"
-      />
+      {/* Lot R8f1 (variante A1 de la maquette R8.2) : une seule rangée, le sélecteur prend la place restante et le bouton
+          icône « Publier » (le bouton principal de l'écran, 48 px, sans texte) reste à droite. Police agrandie : les
+          libellés du sélecteur sont plafonnés à ×1,12 et « Autour de moi » passe sur deux lignes plutôt que de se couper. */}
+      <View style={styles.topRow}>
+        <View style={styles.topSeg}>
+          <Seg
+            wrap
+            compact
+            maxFontScale={FILTER_MAX_FONT_SCALE}
+            value={feed.filter}
+            onChange={feed.setFilter}
+            options={feedScreenFilters.map((o) => ({ value: o.value, label: o.label }))}
+            testID="fil-filters"
+          />
+        </View>
+        <SmButton
+          kind="p"
+          big
+          icon="camera"
+          onPress={() => setChoosing(true)}
+          testID="fil-publish-open"
+          accessibilityLabel={L.publish}
+          style={styles.publish}
+        />
+      </View>
       {notice ? (
         <Text variant="caption" color={t.color.inkMuted} accessibilityRole="alert" selectable testID="fil-notice">
           {notice}
@@ -262,6 +270,19 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
 
 const styles = StyleSheet.create({
   list: { gap: space3 },
+  topRow: { flexDirection: "row", alignItems: "center", gap: space2 },
+  topSeg: { flex: 1, minWidth: 0 },
+  // Carré au jeton `touch` (48 px), rayon 14 de la maquette ; sans texte, l'icône seule.
+  publish: {
+    width: tokens.spacing.touch,
+    height: tokens.spacing.touch,
+    minHeight: tokens.spacing.touch,
+    paddingHorizontal: 0,
+    borderRadius: 14,
+    flexShrink: 0,
+    justifyContent: "center",
+    alignSelf: "center",
+  },
   less: {
     flexDirection: "row",
     alignItems: "center",

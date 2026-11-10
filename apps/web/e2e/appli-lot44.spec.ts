@@ -93,13 +93,13 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     // Demande à la première ouverture, puis refus → icône rouge et repli sur le 66.
     await expect(page.getByTestId("position-ask")).toBeVisible({ timeout: 30_000 });
     // Lot R2 : « N événements à venir · Pyrénées-Orientales (66) » (Mon coin), par date.
-    await expect(page.getByTestId("sort-line")).toContainText("(66)");
+    await expect(page.getByTestId("around-open")).toContainText("(66)");
     await shot(page, `explorer-demande-${theme}`);
     await page.getByTestId("position-enable").click();
     // Lot R2 : plus de bouton « Ma position » (la position se choisit dans « Où chercher ? ») ; refusée, la demande
     // disparaît et le lieu reste Mon coin.
     await expect(page.getByTestId("position-ask")).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByTestId("sort-line")).toContainText("(66)", { timeout: 30_000 });
+    await expect(page.getByTestId("around-open")).toContainText("(66)", { timeout: 30_000 });
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
     // Du plus proche au plus loin : le tri par distance (le tri par défaut est la date).
     await page.getByTestId("sort-open").click();
@@ -110,7 +110,7 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     const km = await distances(page);
     expect(km.length).toBeGreaterThan(3);
     expect([...km].sort((a, b) => a - b)).toEqual(km);
-    await expect(page.getByTestId("sort-line")).toContainText("événement");
+    await expect(page.getByTestId("segment-evenements")).toContainText("Événements · ");
     await audit(page);
     await shot(page, `explorer-liste-${theme}`);
 
@@ -128,7 +128,7 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await page.getByTestId("explorer-filters").getByText("Tous", { exact: true }).click();
     await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
-    await expect(page.getByTestId("sort-line")).toContainText("affinités", { timeout: 30_000 });
+    await expect(page.getByTestId("sort-open")).toContainText("affinités", { timeout: 30_000 });
     await page.getByTestId("filters-toggle").click();
     await page.getByTestId("explorer-filters").getByText("Mes affinités", { exact: true }).click();
     await page.getByTestId("filters-apply").click();
