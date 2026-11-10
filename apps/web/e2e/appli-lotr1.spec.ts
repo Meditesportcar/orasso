@@ -93,7 +93,7 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     await signIn(page, "damien@orasso.local");
     // Lot R7a1 : le Garage n'est plus un onglet, la page garde son adresse (en-tête de fiche).
     await goto(page, "/garage");
-    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
+    await expect(page.getByTestId("profil-tab-garage")).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : onglet interne du Profil ; R8b1 : son nom porte le nombre
     // Passionné → organisateur (Mon profil, casquettes).
     await goto(page, "/moi");
     await page.getByTestId("casquette-organizer").first().click();
@@ -104,11 +104,11 @@ test("« Mon garage » reste entier après un changement de casquette (passionn�
     await page.getByTestId("casquette-fan").first().click();
     await expect(page.getByRole("tab", { name: "Crew", exact: true }).last()).toBeVisible({ timeout: 30_000 });
     await goto(page, "/garage");
-    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
+    await expect(page.getByTestId("profil-tab-garage")).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : onglet interne du Profil ; R8b1 : son nom porte le nombre
     // Un aller-retour d'onglets ne le change pas.
     await goto(page, "/explorer");
     await goto(page, "/garage");
-    await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : le garage est un onglet interne du Profil, plus de titre « Mon garage »
+    await expect(page.getByTestId("profil-tab-garage")).toBeVisible({ timeout: 30_000 }); // Lot R7b1 : onglet interne du Profil ; R8b1 : son nom porte le nombre
     await shot(page, `garage-apres-casquette-${theme}`);
     await ctx.close();
   }

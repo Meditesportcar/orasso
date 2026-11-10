@@ -194,7 +194,8 @@ test("site R4d : recherche, clavier, carte, récents, sans JavaScript", async ({
         });
         const p = await nojs.newPage();
         await p.goto("/app/explorer?segment=evenements&autour=coin");
-        const details = p.locator("details.ex-nojs").first();
+        // Lot R8x : « Filtres » (bouton icône à droite du champ) est la première feuille sans JavaScript : on vise celle du lieu.
+        const details = p.locator("details.ex-nojs", { has: p.getByTestId("around-elsewhere") }).first();
         await details.locator("summary").click();
         await details.getByTestId("around-elsewhere").click();
         await expect(details.getByTestId("around-find")).toBeVisible();
@@ -202,7 +203,7 @@ test("site R4d : recherche, clavier, carte, récents, sans JavaScript", async ({
         await details.getByTestId("around-find").fill("zzzz");
         await details.getByTestId("around-find").press("Enter");
         await p.waitForURL(/dq=zzzz/);
-        const again = p.locator("details.ex-nojs").first();
+        const again = p.locator("details.ex-nojs", { has: p.getByTestId("around-find") }).first();
         await expect(again.getByTestId("around-unmatched")).toHaveText("Aucun département ne correspond à « zzzz ».");
         await expect(again.getByTestId("around-find")).toHaveValue("zzzz");
         await shot(p, `05-sans-javascript-erreur-${tag}`);
@@ -212,7 +213,7 @@ test("site R4d : recherche, clavier, carte, récents, sans JavaScript", async ({
         await expect(p).not.toHaveURL(/dq=/);
         await expect(p.getByTestId("around-open")).toContainText("(34)");
         await p.goto("/app/explorer?segment=evenements&autour=coin");
-        const d2 = p.locator("details.ex-nojs").first();
+        const d2 = p.locator("details.ex-nojs", { has: p.getByTestId("around-elsewhere") }).first();
         await d2.locator("summary").click();
         await d2.getByTestId("around-elsewhere").click();
         await details.getByTestId("around-find").fill("Hérault");

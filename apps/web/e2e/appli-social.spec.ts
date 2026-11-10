@@ -93,7 +93,8 @@ test("appli : personnes, profil, véhicule, suivre, QR de compte, Ton réseau, J
 
     // Profil public + fiche du véhicule + propriétaires près de chez moi.
     await page.goto(`/u/${alpha}`);
-    await expect(page.getByText("Passionné d'anciennes")).toBeVisible({ timeout: 30_000 });
+    // Lot R8b1 : la bio sur une ligne a une copie invisible qui la mesure (« plus ») : la première est celle qu'on voit.
+    await expect(page.getByText("Passionné d'anciennes").first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-profil-public-${theme}`);
     await page.goto(`/v/${alphaVehicle}`);
     await expect(page.getByTestId("vehicule")).toBeVisible({ timeout: 30_000 });

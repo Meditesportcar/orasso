@@ -59,8 +59,10 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   const near50 = await nearby.getByTestId("nearby-event").count();
   expect(near50).toBeGreaterThan(0);
 
-  // Météo : l'événement du jour (prévision factice du seed), avec l'attribution du fournisseur.
-  await expect(page.getByTestId("widget-weather").getByTestId("weather-attribution")).toHaveText("Météo : Open-Meteo");
+  // Météo de l'événement (prévision factice du seed), avec l'attribution du fournisseur. Lot R8e1 : c'est une ligne de la
+  // carte de la sortie ; le bloc « Météo » ne dit plus que le département (servi depuis le stock, vide sans fournisseur).
+  await expect(page.getByTestId("home-outing-weather-sub").first()).toContainText(/ · Open-Meteo$/);
+  await expect(page.getByTestId("widget-weather")).toBeVisible();
 
   // Garage favori de Kenji.
   await expect(page.getByTestId("widget-favorite_garage")).toContainText("Garage du Port");

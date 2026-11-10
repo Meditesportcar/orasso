@@ -351,7 +351,7 @@ test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; 
     // grand titre (artefact), son en-tête de recherche en tient lieu.
     if (tab === "Explorer") await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 60_000 });
     else if (tab === "Garage")
-      await expect(page.getByRole("tab", { name: "Garage", exact: true })).toBeVisible({ timeout: 60_000 }); // Lot R7b1 : onglet interne du Profil
+      await expect(page.getByTestId("profil-tab-garage")).toBeVisible({ timeout: 60_000 }); // Lot R7b1 : onglet interne du Profil ; R8b1 : son nom porte le nombre
     else await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
     if (tab === "Sorties")
       await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
