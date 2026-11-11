@@ -4,18 +4,13 @@
 // moi, le bouton « Publier » compact ; la suite par curseur (« Voir plus ») ; les états : chargement (le O vivant), erreur avec
 // « Réessayer », vide chez moi, vide chez un autre, **compte privé** (liste restreinte : le même panneau qu'il ait publié ou non).
 import { Button, Icon, OLoader } from "@orasso/design-system/web";
-<<<<<<< HEAD
 import {
   type AuthorPostsFilter,
   publicationsLabels as L,
-  PUBLICATIONS_VIEW_KEY,
   type PublicationsViewMode,
   publicationsEmptyKind,
   viewMode,
 } from "@orasso/shared";
-=======
-import { publicationsLabels as L, type PublicationsViewMode, publicationsEmptyKind, viewMode } from "@orasso/shared";
->>>>>>> vague-r8
 import { type ReactNode, useEffect, useState } from "react";
 import { useRouteLoaderData } from "react-router";
 
