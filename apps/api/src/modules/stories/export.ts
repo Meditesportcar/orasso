@@ -16,6 +16,7 @@ import sharp from "sharp";
 
 import { db } from "../../db/client";
 import { feedPostPhotos, feedPosts } from "../../db/schema";
+import { canManagePost } from "../../lib/authorship";
 import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
@@ -92,7 +93,8 @@ export const exportService = {
     rateLimit("shareExport", v.user.id);
     const [post] = await db.select().from(feedPosts).where(eq(feedPosts.id, id));
     if (!post || post.deletedAt) throw notFound("Publication introuvable");
-    if (post.authorId !== v.user.id) throw forbidden(shareLabels.errors.authorOnly);
+    // Une publication de page se repartage au nom de la page (droits de la page), jamais par le seul `author_id`.
+    if (!(await canManagePost(v, post))) throw forbidden(shareLabels.errors.authorOnly);
     const [first] = await db
       .select()
       .from(feedPostPhotos)

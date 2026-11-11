@@ -60,8 +60,15 @@ export async function importantUsage(
  * transaction), puis comptage. 409 `important_quota` avec `{ leftToday, leftWeek }` si le plafond est atteint.
  * À appeler dans la transaction qui écrit la publication.
  */
-export async function reserveImportant(tx: Tx, eventId: string, now: Date): Promise<void> {
+export async function reserveImportant(
+  tx: Tx,
+  eventId: string,
+  now: Date,
+  /** Exécuté sous le verrou, avant le comptage : le rejeu d'un même envoi y est reconnu (jamais un faux refus). */
+  afterLock?: () => Promise<void>,
+): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`important:${eventId}`}, 0))`);
+  await afterLock?.();
   const used = (await importantUsage(tx, [eventId], now)).get(eventId) ?? { today: 0, week: 0 };
   const left = importantLeft(used.today, used.week);
   if (left.leftToday < 1 || left.leftWeek < 1) {

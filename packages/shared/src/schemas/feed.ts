@@ -118,12 +118,12 @@ export const feedReportSchema = z
 
 // --- Ce que l'API rend (liste blanche) -----------------------------------------------------------------------------
 
-/** Une personne dans le Fil : pseudo, photo, grade ; jamais un identifiant de compte. */
+/** Une personne dans le Fil : pseudo, photo, grade (sans identifiant de compte ; `FeedAuthorView.key` en porte un pour une personne, comme les stories). */
 export type FeedPerson = { pseudo: string; avatarUrl: string | null; grade: Grade; official: boolean };
 
 /**
  * Qui parle (vague R8) : la personne ou la page (structure, fiche pro, prestataire, média) au nom de laquelle la
- * publication est faite. `key` = clé d'auteur (`u: s: p: v: m:`) ; jamais un identifiant de compte pour une page. Pour une
+ * publication est faite. `key` = clé d'auteur (`u: s: p: v: m:`) ; `u:<compte>` pour une personne (comme les stories), jamais un identifiant de personne pour une page. Pour une
  * page : `pseudo = name`, `grade` nul. Les champs de `FeedPerson` restent (l'APK en ligne les lit).
  */
 export type FeedAuthorView = {
