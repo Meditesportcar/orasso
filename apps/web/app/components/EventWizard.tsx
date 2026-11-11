@@ -690,6 +690,11 @@ export function EventWizard(props: Props) {
             <a href={`/orga/${structureSlug}/structure`}>Faire vérifier la structure</a>
           </p>
         )}
+        {last && !isDraft && (
+          <p className="s-notice s-notice--alert">
+            Cet événement est publié : si tu changes la date ou l'adresse, tous les inscrits sont prévenus.
+          </p>
+        )}
         {notifyShown && (
           <RecipientsBanner count={preview.count} timing={notifyTimingLine(notifyWhen, { now: notifyClock })} />
         )}

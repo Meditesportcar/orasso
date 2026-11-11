@@ -39,6 +39,32 @@
   font-weight: 800;
   font-size: 12px;
 }
+/* L'organisateur : « 148 inscrits seront prévenus. » */
+.en-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.en-banner > svg {
+  color: var(--accent-text);
+  margin-top: 2px;
+}
+.en-banner div {
+  display: grid;
+  gap: var(--space-1);
+}
+.en-banner b {
+  font-weight: 800;
+}
+.en-banner small {
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
 .en-ess {
   display: grid;
   gap: var(--space-2);
@@ -164,31 +190,4 @@
 }
 .en-dialog__head h2 {
   margin: 0;
-}
-
-/* L'organisateur : « 148 inscrits seront prévenus. » */
-.en-banner {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-3);
-  align-items: start;
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-}
-.en-banner > svg {
-  color: var(--accent-text);
-  margin-top: 2px;
-}
-.en-banner div {
-  display: grid;
-  gap: var(--space-1);
-}
-.en-banner b {
-  font-weight: 800;
-}
-.en-banner small {
-  color: var(--ink-muted);
-  line-height: 1.4;
 }
