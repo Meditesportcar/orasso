@@ -78,6 +78,7 @@ import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { votesRoutes } from "./modules/votes/routes";
+import { practicalRoutes } from "./modules/practical/routes";
 import { weatherRoutes } from "./modules/weather/routes";
 import { ws } from "./ws";
 
@@ -254,6 +255,7 @@ app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
 app.route("/", accountRoutes);
 app.route("/", weatherRoutes);
+app.route("/", practicalRoutes);
 app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);

@@ -53,6 +53,7 @@ export * from "./plateNumber";
 export * from "./points";
 export * from "./positionStore";
 export * from "./poster";
+export * from "./practical";
 export * from "./presence";
 export * from "./pro";
 export * from "./proposedVehicle";

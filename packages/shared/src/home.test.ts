@@ -52,7 +52,7 @@ describe("réglage des widgets de l'accueil", () => {
       "memories",
       "nearby",
     ]);
-    expect(c.order.slice(9, 11)).toEqual(["fuel", "weather"]);
+    expect(c.order.slice(9, 12)).toEqual(["fuel", "weather", "practical"]);
     expect([...c.order].sort()).toEqual([...homeWidgetIds].sort());
     expect(c.hidden).toEqual(["fuel"]);
   });
@@ -140,6 +140,7 @@ describe("réglage des widgets de l'accueil", () => {
       "fuel",
       "nearby",
       "weather",
+      "practical",
       "favorite_garage",
     ]);
     const up = moveHomeWidget(down, "nearby", -1);
@@ -158,6 +159,7 @@ describe("réglage des widgets de l'accueil", () => {
       "fuel",
       "pending",
       "weather",
+      "practical",
       "favorite_garage",
     ]);
     // Une station ne se déplace pas ; le premier proposé ne monte pas au-dessus de « Prochain accès ».
@@ -180,6 +182,7 @@ describe("réglage des widgets de l'accueil", () => {
       "memories",
       "nearby",
       "weather",
+      "practical",
       "agenda",
       "favorite_garage",
       "pending",
@@ -219,6 +222,7 @@ describe("réglage des widgets de l'accueil", () => {
       "spot_meetup",
       "memories",
       "weather",
+      "practical",
       "pending",
       "nearby",
       "agenda",
@@ -235,13 +239,13 @@ describe("réglage des widgets de l'accueil", () => {
   });
 
   it("lot R7a2 : « Personnaliser » monte et descend parmi les blocs affichés, jamais avec un bloc masqué", () => {
-    // Par défaut, Agenda, Garage favori et Candidatures en attente sont masqués : « Météo » descend jusqu'à la fin, pas plus.
+    // Par défaut, Agenda, Garage favori et Candidatures en attente sont masqués : « Pratique » descend jusqu'à la fin, pas plus.
     const c = defaultHomeWidgets;
-    expect(moveVisibleHomeWidget(c, "weather", 1)).toBe(c);
-    const up = moveVisibleHomeWidget(c, "weather", -1);
+    expect(moveVisibleHomeWidget(c, "practical", 1)).toBe(c);
+    const up = moveVisibleHomeWidget(c, "practical", -1);
     const shown = (cfg: typeof c) => visibleHomeWidgets(cfg).filter((id) => homeWidgetOffered(id));
-    expect(shown(up).slice(-2)).toEqual(["weather", "nearby"]);
-    const down = moveVisibleHomeWidget(up, "weather", 1);
+    expect(shown(up).slice(-2)).toEqual(["practical", "weather"]);
+    const down = moveVisibleHomeWidget(up, "practical", 1);
     expect(down.order).toEqual(c.order);
     // Le premier bloc affiché sous « Prochaine sortie » ne monte pas ; « Prochaine sortie » ne bouge pas.
     expect(moveVisibleHomeWidget(c, "event_weather", -1)).toBe(c);

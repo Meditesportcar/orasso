@@ -23,6 +23,7 @@ export * from "./moderation";
 export * from "./partnerships";
 export * from "./passport";
 export * from "./presence";
+export * from "./practical";
 export * from "./pro";
 export * from "./profile";
 export * from "./provider";

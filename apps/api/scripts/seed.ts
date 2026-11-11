@@ -41,6 +41,7 @@ import { seedMultiDay } from "./seed/multi-day";
 import { seedOrgaV2 } from "./seed/orga-v2";
 import { seedPartnerships } from "./seed/partnerships";
 import { seedPassport } from "./seed/passport";
+import { seedPractical } from "./seed/practical";
 import { seedPosters } from "./seed/posters";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
@@ -148,6 +149,7 @@ async function main() {
   await seedInvitations();
   // Lot 30 : garage favori de Kenji, deux emplacements sponsorisés (dont un ciblé 66 + JDM), cache factice lavage et carburant.
   await seedHome();
+  await seedPractical();
   // Lot 27 : bilan de la Nocturne de rentrée, notes internes, badge qui expire dans 5 jours, structure suspendue.
   await seedAfterEvent(hash);
   // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.

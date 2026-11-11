@@ -45,6 +45,9 @@ export const rateRules = {
   /** Lot R8m : enregistrer ses villes (chaque lieu nouveau peut demander une case au fournisseur). */
   weatherPut: { max: 10, windowMs: 60_000, message: "Trop de changements de lieu : réessaie dans une minute." },
   weatherPutHour: { max: 30, windowMs: 3_600_000, message: "Trop de changements de lieu : réessaie plus tard." },
+  /** Lot R8q : « Pratique » (le bloc de l'Accueil lit deux fois, l'écran relit à chaque changement de lieu ou de filtre de sortie). */
+  practical: { max: 40, windowMs: 60_000, message: "Trop de demandes de lieux : réessaie dans une minute." },
+  practicalHour: { max: 400, windowMs: 3_600_000, message: "Trop de demandes de lieux : réessaie plus tard." },
   /** Envoi de justificatifs, logos et affiches. */
   fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
   /** Galerie de 30 photos, avec de la marge pour remplacer les photos retirées du formulaire. */

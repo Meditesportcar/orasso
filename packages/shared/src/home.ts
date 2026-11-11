@@ -28,6 +28,7 @@ export const homeWidgetIds = [
   "memories",
   "nearby",
   "weather",
+  "practical",
   "agenda",
   "favorite_garage",
   "pending",
