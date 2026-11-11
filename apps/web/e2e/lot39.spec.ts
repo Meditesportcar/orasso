@@ -10,7 +10,7 @@ import { RELAIS } from "./relais";
 // de 3 s puis l'appli, fondu de 120 ms avec ?reduce=1, aucun avertissement Reanimated, captures de /_ds.
 // Prérequis : API et site lancés (base seedée inutile pour /_ds).
 
-const ROOT = process.env.LOT39_CAPTURES ?? `${RELAIS}/lot-39-captures`;
+const ROOT = process.env.CAPTURES_DIR ?? process.env.LOT39_CAPTURES ?? `${RELAIS}/lot-39-captures`;
 const SITE = `${ROOT}/site`;
 const APPLI = `${ROOT}/appli`;
 mkdirSync(SITE, { recursive: true });

@@ -128,7 +128,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
         spot_meetup: home.spotMeetup ? <SpotMeetupBlock data={home.spotMeetup} /> : null,
         pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
-        weather: <WeatherBlock weather={home.weather} />,
+        weather: <WeatherBlock weather={home.weather} pending={home.weatherPending === true} />,
         memories: home.memories ? <MemoriesBlock data={home.memories} /> : null,
         agenda: home.agenda.length ? <AgendaBlock items={home.agenda} /> : null,
         favorite_garage: home.favoriteGarage ? <GarageBlock garage={home.favoriteGarage} /> : null,

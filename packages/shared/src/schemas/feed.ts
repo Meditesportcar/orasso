@@ -118,12 +118,12 @@ export const feedReportSchema = z
 
 // --- Ce que l'API rend (liste blanche) -----------------------------------------------------------------------------
 
-/** Une personne dans le Fil : pseudo, photo, grade ; jamais un identifiant de compte. */
+/** Une personne dans le Fil : pseudo, photo, grade (sans identifiant de compte ; `FeedAuthorView.key` en porte un pour une personne, comme les stories). */
 export type FeedPerson = { pseudo: string; avatarUrl: string | null; grade: Grade; official: boolean };
 
 /**
  * Qui parle (vague R8) : la personne ou la page (structure, fiche pro, prestataire, média) au nom de laquelle la
- * publication est faite. `key` = clé d'auteur (`u: s: p: v: m:`) ; jamais un identifiant de compte pour une page. Pour une
+ * publication est faite. `key` = clé d'auteur (`u: s: p: v: m:`) ; `u:<compte>` pour une personne (comme les stories), jamais un identifiant de personne pour une page. Pour une
  * page : `pseudo = name`, `grade` nul. Les champs de `FeedPerson` restent (l'APK en ligne les lit).
  */
 export type FeedAuthorView = {
@@ -144,6 +144,30 @@ export type FeedAttachView = {
   role: FeedEventRole | null;
   phase: FeedAttachPhase;
   presenceValidated: boolean;
+};
+
+/** `GET /me/feed-posts/attachable-events?persona=&structureId=&proId=` : la casquette, comme pour publier. */
+export const attachableEventsQuery = z.object({
+  persona: z.enum(storyPersonas).default("fan"),
+  structureId: z.uuid().optional(),
+  proId: z.uuid().optional(),
+});
+
+/** Un événement où l'on peut se rattacher, avec le rôle qui serait déduit (jamais choisi) ; 50 au plus. */
+export type AttachableEventItem = {
+  id: string;
+  slug: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  city: string | null;
+  posterUrl: string | null;
+  role: FeedEventRole;
+  phase: FeedAttachPhase;
+  /** Une affiche (ou une photo) existe : une publication sans photo peut la prendre pour visuel. */
+  hasVisual: boolean;
+  /** Seulement pour la casquette organisateur : ce qu'il reste d'« Info importante » aujourd'hui et cette semaine. */
+  important: { leftToday: number; leftWeek: number } | null;
 };
 
 /** Aperçu d'un commentaire sous une publication (rempli par R8k1 ; vide dans R8a1). */

@@ -206,9 +206,13 @@ export const emailAlwaysTypes: readonly NotificationType[] = [
   ...r7EmailAlwaysTypes,
 ];
 
-/** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */
-export const defaultNotificationPrefs = { application: true, event: true, social: true, grade: true };
-export type NotificationPrefs = typeof defaultNotificationPrefs;
+/**
+ * Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). Vague R8 (lot R8n1) : `eventNews`
+ * (« Nouveautés de mes sorties », résumé quotidien) ; absente d'un compte plus ancien, elle vaut vrai (fusion à la lecture).
+ */
+export const defaultNotificationPrefs = { application: true, event: true, social: true, grade: true, eventNews: true };
+/** Les comptes d'avant la vague R8 n'ont pas `eventNews` : absente = vrai. */
+export type NotificationPrefs = Omit<typeof defaultNotificationPrefs, "eventNews"> & { eventNews?: boolean };
 
 /** Départements français (métropole, Corse, outre-mer) : codes acceptés pour le secteur d'un profil ou d'une structure. */
 export const departments = [

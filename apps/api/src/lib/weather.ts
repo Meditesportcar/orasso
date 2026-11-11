@@ -10,6 +10,7 @@ import {
   type DailyForecast,
   fromWallTime,
   type HourlyForecast,
+  WEATHER_PROVIDER_TIMEOUT_MS,
   type WeatherCode,
   type WeatherProviderName,
   wallTime,
@@ -35,7 +36,7 @@ export interface WeatherProvider {
   forecast(lat: number, lng: number): Promise<ProviderForecast>;
 }
 
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = WEATHER_PROVIDER_TIMEOUT_MS;
 const TZ = "Europe/Paris";
 const KMH_PER_MS = 3.6;
 

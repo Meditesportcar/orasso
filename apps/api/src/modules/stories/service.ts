@@ -36,13 +36,11 @@ import {
   crews,
   events as events_,
   feedPosts,
-  mediaProfiles,
   messages,
   notifications,
   proFollows,
   profiles,
   proProfiles,
-  providerProfiles,
   stories,
   storyMutes,
   storyReactions,
@@ -55,6 +53,7 @@ import {
   userFollows,
 } from "../../db/schema";
 import { requireOrganizer } from "../../lib/access";
+import { requireAuthorship } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -211,52 +210,13 @@ async function checkPersona(v: Viewer, input: StoryCreate) {
     if (v.profile.visibility === "private" && audience === "public") throw validation(storyLabels.privateAccountPublic);
     return;
   }
-  if (persona === "organizer") {
-    if (!input.structureId) throw validation("Choisis la structure", { field: "structureId" });
-    const [m] = await db
-      .select({ role: structureMembers.role })
-      .from(structureMembers)
-      .innerJoin(structures, eq(structures.id, structureMembers.structureId))
-      .where(
-        and(
-          eq(structureMembers.structureId, input.structureId),
-          eq(structureMembers.userId, v.user.id),
-          eq(structureMembers.status, "active"),
-          inArray(structureMembers.role, ["owner", "co_organizer"]),
-          isNull(structures.deletedAt),
-          sql`${structures.verification} <> 'suspended'`,
-        ),
-      );
-    if (!m) throw forbidden(storyLabels.notOrganizer);
-    // Lot R7h, tour 3 : publier au nom d'une structure exige le second facteur, comme le repartage et le retrait.
-    await requireOrganizer(v, input.structureId);
-    return;
-  }
-  if (persona === "pro") {
-    if (!input.proId) throw validation("Choisis la fiche pro", { field: "proId" });
-    const [p] = await db
-      .select({ id: proProfiles.id })
-      .from(proProfiles)
-      .where(
-        and(eq(proProfiles.id, input.proId), eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)),
-      );
-    if (!p) throw forbidden(storyLabels.notPro);
-    return;
-  }
-  if (persona === "provider") {
-    const [p] = await db
-      .select({ id: providerProfiles.id })
-      .from(providerProfiles)
-      .where(eq(providerProfiles.userId, v.user.id))
-      .limit(1);
-    if (!p) throw forbidden(storyLabels.personaUnavailable);
-    return;
-  }
-  const [m] = await db
-    .select({ id: mediaProfiles.id })
-    .from(mediaProfiles)
-    .where(and(eq(mediaProfiles.userId, v.user.id), isNull(mediaProfiles.deletedAt)));
-  if (!m) throw forbidden(storyLabels.personaUnavailable);
+  // Casquettes : un seul endroit décide qu'un compte peut agir au nom d'une page (R8a1, `lib/authorship.ts`) :
+  // structure (propriétaire ou co-organisateur actif, second facteur), fiche pro, prestataire, média.
+  await requireAuthorship(v, {
+    persona,
+    structureId: persona === "organizer" ? input.structureId : null,
+    proId: persona === "pro" ? input.proId : null,
+  });
 }
 
 async function notifyPublished(

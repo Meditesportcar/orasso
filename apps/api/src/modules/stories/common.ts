@@ -207,7 +207,7 @@ export function authorKeyOf(row: StoryRow): { kind: StoryTagKind; id: string; ke
 export function originAvailable(row: StoryRow, at: Date): boolean {
   if (!row.story.sharedFromStoryId) return true;
   const o = row.origin;
-  if (!o || !o.id || o.deletedAt || o.status !== "ready") return false;
+  if (!o?.id || o.deletedAt || o.status !== "ready") return false;
   if (o.authorDeletedAt || o.authorBannedAt || (o.authorSuspendedUntil && o.authorSuspendedUntil > at)) return false;
   if (o.persona === "organizer") {
     return Boolean(o.structureId && !o.structureDeletedAt && o.structureVerification !== "suspended");

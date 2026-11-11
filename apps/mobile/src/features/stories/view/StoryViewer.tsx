@@ -66,6 +66,7 @@ import { Viewer } from "./Viewer";
 import { ViewersSheet } from "./ViewersSheet";
 
 const { space2, space3 } = tokens.spacing;
+const { radiusMd } = tokens.radius;
 const REDUCED_FADE_MS = 120;
 const CLOSE_MS = 180;
 const NOTICE_MS = 2600;
@@ -517,7 +518,8 @@ export function AuthorViewer({ authorKey, nav }: { authorKey: string; nav?: Auth
           onPress={close}
           accessibilityRole="button"
           accessibilityLabel={L.close}
-          style={[styles.closeAlone, { top: insets.top + 8 }]}
+          hitSlop={6}
+          style={[styles.closeAlone, { top: insets.top + space2 }]}
           testID="story-close"
         >
           <Icon name="close" size={22} color={c.nightInk} />
@@ -700,9 +702,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: space2 },
   closeAlone: {
     position: "absolute",
-    right: 12,
+    right: space3,
     width: 38,
     height: 38,
+    borderRadius: radiusMd,
     alignItems: "center",
     justifyContent: "center",
   },

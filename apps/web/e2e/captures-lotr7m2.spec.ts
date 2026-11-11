@@ -3,7 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { dropMyStories, publishStory, sql, userIdOf } from "./lotr7f2-setup";
 import { landscape } from "./lotr7f3-setup";
-import { RELAIS } from "./relais";
+import { phaseDir, RELAIS } from "./relais";
 
 // Lot R7m2 : captures « avant » / « après » des écrans touchés par « Collaboration commerciale » : publier une story (étape
 // Détails) et une publication du Fil, la visionneuse (auteur partenaire et pro cité), la carte du Fil, l'Activité du pro, la
@@ -11,7 +11,7 @@ import { RELAIS } from "./relais";
 // 1280 px. Données (comptes du seed : Kenji_66 est partenaire de Garage_Port) posées par l'API ; photos du seed seulement.
 const PHASE = process.env.PHASE ?? "apres";
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r7m2-captures/${PHASE}`;
+const DIR = phaseDir(`${RELAIS}/lot-r7m2-captures/${PHASE}`, PHASE);
 const CAPTION = "Covering satiné chez @garage-du-port, merci pour le travail";
 const POST_CAPTION = "Covering satiné terminé hier chez @garage-du-port";
 test.use({ actionTimeout: 30_000 });
