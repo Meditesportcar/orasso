@@ -25,6 +25,7 @@ describe("annulation et heures calmes", () => {
   it("annulation et modification passent outre les heures calmes à moins de 12 h du début, pas les autres", () => {
     expect(essentialQuietOverride("event_cancelled")).toEqual({ within: ESSENTIAL_URGENT_WITHIN_MS });
     expect(essentialQuietOverride("event_updated")).toEqual({ within: 12 * 3_600_000 });
+    expect(essentialQuietOverride("event_important")).toEqual({ within: 12 * 3_600_000 });
     expect(essentialQuietOverride("event_reminder_eve")).toBeUndefined();
     expect(essentialQuietOverride("event_news_digest")).toBeUndefined();
   });

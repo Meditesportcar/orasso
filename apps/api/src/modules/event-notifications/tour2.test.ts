@@ -80,7 +80,10 @@ describe("annulation", () => {
 });
 
 describe("heures calmes de l'Essentiel urgent", () => {
-  async function at23(type: "event_cancelled" | "event_updated" | "event_reminder_eve", startsInMs: number) {
+  async function at23(
+    type: "event_cancelled" | "event_updated" | "event_important" | "event_reminder_eve",
+    startsInMs: number,
+  ) {
     quietHours(true);
     clock.set(fromWallTime({ year: 2026, month: 11, day: 10, hour: 23, minute: 0 }));
     const u = await withDevice(`Nuit${type}${startsInMs}`);
@@ -96,7 +99,7 @@ describe("heures calmes de l'Essentiel urgent", () => {
     return pushed();
   }
 
-  it.each(["event_cancelled", "event_updated"] as const)(
+  it.each(["event_cancelled", "event_updated", "event_important"] as const)(
     "« %s » à 23 h : début dans 8 h, livré ; dans 3 jours, reporté",
     async (type) => {
       expect(await at23(type, 8 * HOUR)).toBe(1);

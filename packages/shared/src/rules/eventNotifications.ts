@@ -29,10 +29,12 @@ export function notificationLevel(type: string): NotificationLevel {
 const placeFreeTypes: readonly string[] = [...applicationDecisionTypes, "event_cancelled"];
 const isDecision = (type: string) => placeFreeTypes.includes(type);
 
-/** Un changement important ou une annulation passe outre les heures calmes quand l'événement commence dans moins de 12 h. */
+/** Un changement important, une annulation ou une « Info importante » passe outre les heures calmes quand l'événement commence dans moins de 12 h. */
 export const ESSENTIAL_URGENT_WITHIN_MS = 12 * 3_600_000;
 export function essentialQuietOverride(type: string): QuietOverride | undefined {
-  return type === "event_cancelled" || type === "event_updated" ? { within: ESSENTIAL_URGENT_WITHIN_MS } : undefined;
+  return type === "event_cancelled" || type === "event_updated" || type === "event_important"
+    ? { within: ESSENTIAL_URGENT_WITHIN_MS }
+    : undefined;
 }
 
 /**
