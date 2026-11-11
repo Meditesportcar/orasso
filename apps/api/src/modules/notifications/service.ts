@@ -108,6 +108,25 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
   for (const t of types) deliveryGuards.set(t, guard);
 }
 
+/**
+ * Garde de lecture du Journal : un domaine retire d'une liste (et de la pastille) les lignes que leur destinataire ne peut
+ * plus lire (ex. commentaire d'une publication qu'il ne voit plus). `false` : la ligne n'est pas montrée.
+ */
+export type JournalGuard = (n: NotificationRow) => Promise<boolean>;
+const journalGuards = new Map<string, JournalGuard>();
+export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
+  for (const t of types) journalGuards.set(t, guard);
+}
+/** Les lignes retirées par les gardes de lecture (identifiants). */
+async function hiddenByJournalGuards(rows: readonly NotificationRow[]): Promise<Set<string>> {
+  const hidden = new Set<string>();
+  for (const n of rows) {
+    const guard = journalGuards.get(n.type);
+    if (guard && !(await guard(n))) hidden.add(n.id);
+  }
+  return hidden;
+}
+
 export const notificationsService = {
   /**
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
@@ -393,12 +412,14 @@ export const notificationsService = {
       )
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(limit + 1);
+    const hidden = await hiddenByJournalGuards(rows.slice(0, limit));
     // Personnes d'une ligne regroupée relues à l'instant : pseudos, avatars, total et textes sans les comptes partis.
     const views = await citedViews(
       rows.filter((n) => Array.isArray((n.data as { _actorIds?: unknown })._actorIds)),
       db,
     );
     const page = toPage(rows, limit, (n) => {
+      if (hidden.has(n.id)) return null;
       const view = views.get(n.id);
       // Ligne regroupée dont le texte ne se recompose pas sans la personne partie : masquée (la page peut être plus courte).
       if (view === null) return null;
@@ -431,7 +452,23 @@ export const notificationsService = {
           citedPeopleRemain(now(), true),
         ),
       );
-    return row?.n ?? 0;
+    // Lignes que leur destinataire ne peut plus lire (gardes de lecture) : pas comptées.
+    const guarded = journalGuards.size
+      ? await ex
+          .select()
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.userId, userId),
+              eq(notifications.inJournal, true),
+              isNotNull(notifications.deliveredAt),
+              isNull(notifications.readAt),
+              inArray(notifications.type, [...journalGuards.keys()] as NotificationType[]),
+            ),
+          )
+      : [];
+    const hidden = guarded.length ? (await hiddenByJournalGuards(guarded)).size : 0;
+    return Math.max(0, (row?.n ?? 0) - hidden);
   },
 
   async markRead(userId: string, ids: string[] | "all") {
