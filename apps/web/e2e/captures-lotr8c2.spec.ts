@@ -131,6 +131,12 @@ for (const theme of ["beton", "sable"] as const) {
         await shot(page, `site-onglet-${filter}-${theme}-${width}`);
       }
       const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "Roues Libres 66" }).first();
+      for (let i = 0; i < 14 && !(await card.isVisible().catch(() => false)); i++) {
+        const more = page.getByTestId("fil-more");
+        if (await more.isVisible().catch(() => false)) await more.click();
+        await page.mouse.wheel(0, 800);
+        await page.waitForTimeout(300);
+      }
       await card.scrollIntoViewIfNeeded();
       await shot(page, `site-carte-rattachee-${theme}-${width}`);
     });
