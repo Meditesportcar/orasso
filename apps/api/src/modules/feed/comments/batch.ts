@@ -121,7 +121,7 @@ export async function readableBatch(
   return { readable, authorOf, pseudoOf };
 }
 
-type Verdict = { shown: boolean; actors?: string[] };
+type Verdict = { shown: boolean; actors?: string[]; commentReadable?: boolean };
 type Cand = { id: string; authorId: string; postId: string; replyToId: string | null };
 
 /**
@@ -198,7 +198,7 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
     }
     const cands = byGroup.get(n.id);
     if (!cands) {
-      out.set(n.id, { shown: readable.has(id) });
+      out.set(n.id, { shown: readable.has(id), commentReadable: readable.has(id) });
       continue;
     }
     const authors = new Set(cands.filter((x) => readable.has(x.id)).map((x) => x.authorId));
@@ -206,6 +206,7 @@ export async function commentNotificationVerdicts(userId: string, rows: Row[]): 
     if (own) authors.add(own);
     out.set(n.id, {
       shown: authors.size > 0,
+      commentReadable: readable.has(id),
       actors: [...authors].flatMap((a) => pseudoOf.get(a) ?? []),
     });
   }

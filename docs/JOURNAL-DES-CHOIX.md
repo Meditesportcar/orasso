@@ -5402,3 +5402,7 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 ### Tour 3 (lot R8b2, 11/11/2026)
 - **Organisateur sur un compte privé** : hors audience limitée, un compteur nul est traité comme un compteur inconnu : le profil s'ouvre sur « Garage » (« Sorties » sans véhicule), pas sur le panneau « Compte privé » (qui reste un clic à côté). Appli et site ; recette Sarah_66 sur Marc_66.
 - **Choix de vue du site** : le compte vient de la mise en page de la session (`useRouteLoaderData("layouts/app")`), plus de `/me` ; `purgeViewChoices` (`components/publications/viewChoice.ts`, testé) efface les clés de tous les comptes à la déconnexion, avec `purgePublished`.
+
+### Tour 8 (R8k1, 11/11/2026)
+- **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
+- **Équivalence** : le test compare aussi publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse vivante et compte supprimé.

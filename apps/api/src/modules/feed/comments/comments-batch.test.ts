@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
-import { feedPostComments, notifications, profiles } from "../../../db/schema";
+import { feedPostComments, feedPosts, notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
 import { readableBatch } from "./batch";
 import { stillReadable } from "./readers";
@@ -65,8 +65,25 @@ describe("équivalence avec stillReadable", () => {
       .set({ suspendedUntil: new Date(Date.now() + 86_400_000 * 30) })
       .where(eq(profiles.userId, sus.id));
     await db.update(feedPostComments).set({ deletedAt: new Date() }).where(eq(feedPostComments.id, d));
+    // Publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse restée vivante, compte supprimé.
+    const removedPost = await dbPost(author);
+    await add(pub, removedPost, "sous une publication retirée");
+    await db.update(feedPosts).set({ deletedAt: new Date() }).where(eq(feedPosts.id, removedPost));
+    const suspendedAuthor = await person("AuteurSuspendu_66");
+    const postOfSuspended = await dbPost(suspendedAuthor);
+    await add(pub, postOfSuspended, "sous l'auteur suspendu");
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 86_400_000 * 30) })
+      .where(eq(profiles.userId, suspendedAuthor.id));
+    const root = await add(pub, id, "racine bientôt supprimée");
+    await add(follower, id, "réponse restée vivante", root);
+    await db.update(feedPostComments).set({ deletedAt: new Date() }).where(eq(feedPostComments.id, root));
+    const erased = await person("Efface_66");
+    await add(erased, id, "d'un compte supprimé");
+    await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, erased.id));
     ids.push(randomUUID());
-    for (const viewer of [author, pub, priv, follower, stranger, privPost, sus, gone]) {
+    for (const viewer of [author, pub, priv, follower, stranger, privPost, sus, gone, suspendedAuthor, erased]) {
       const batch = await readableBatch(db, viewer.id, ids);
       for (const commentId of ids) {
         const one = await stillReadable(db, viewer.id, commentId);
@@ -124,6 +141,31 @@ describe("coût du Journal et de la pastille", () => {
     const few = await countQueries(() => notificationsService.list(author.id, 10));
     expect(Math.abs(few.queries - page.queries)).toBeLessThanOrEqual(2);
     expect(commentIds).toHaveLength(100);
+  });
+});
+
+describe("corps de la ligne", () => {
+  it("le commentaire cité ne se lit plus (racine suspendue) alors qu'un autre de la personne se lit : le libellé générique remplace l'extrait", async () => {
+    const author = await person("Kenji_66");
+    const r = await person("Racine_66");
+    const x = await person("Xavier_66");
+    const id = await dbPost(author);
+    await comment(x, id, "Un ancien commentaire de X");
+    await notificationsService.deliverDue();
+    await notificationsService.markRead(author.id, "all");
+    const root = await comment(r, id, "Racine");
+    await notificationsService.markRead(author.id, "all");
+    await comment(x, id, "Réponse sensible de X", { parentId: root.json.id });
+    await notificationsService.deliverDue();
+    const before = (await notificationsService.list(author.id, 20)).items;
+    expect(before.map((i) => i.body).join("|")).toContain("Réponse sensible de X");
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 86_400_000 * 30) })
+      .where(eq(profiles.userId, r.id));
+    const after = (await notificationsService.list(author.id, 20)).items;
+    expect(after.map((i) => i.body)).toContain("Xavier_66 a commenté ta publication.");
+    expect(JSON.stringify(after)).not.toContain("Réponse sensible");
   });
 });
 

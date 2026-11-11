@@ -15,6 +15,7 @@ import {
   pushRecipientId,
   type QuietOverride,
   r7QuietOverride,
+  r8NotificationTable,
   shouldDeliver,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
@@ -114,7 +115,7 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
  * domaine d'une page (ou de la pastille) et rend un verdict par ligne. `shown: false` : la ligne n'est pas montrée ;
  * `actors` : les pseudos des personnes d'une ligne regroupée que le destinataire peut encore lire (les autres ne sont pas nommées).
  */
-export type JournalVerdict = { shown: boolean; actors?: string[] };
+export type JournalVerdict = { shown: boolean; actors?: string[]; commentReadable?: boolean };
 export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
 const journalGuards = new Map<string, JournalGuard>();
 export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
@@ -443,7 +444,14 @@ export const notificationsService = {
           narrowed && first && typeof template === "string"
             ? fillTemplate(template, first.pseudo)
             : (view?.title ?? n.title),
-        body: view?.body ?? n.body,
+        // Le commentaire cité par la ligne ne se lit plus : son extrait ne part pas, le libellé générique du type le remplace.
+        body:
+          verdict?.commentReadable === false && n.type in r8NotificationTable
+            ? fillTemplate(
+                r8NotificationTable[n.type as keyof typeof r8NotificationTable].body,
+                first?.pseudo ?? view?.actors[0]?.pseudo ?? "",
+              )
+            : (view?.body ?? n.body),
         data: view
           ? { ...stripInternal(n.data), actors, count: narrowed ? Math.max(1, allowed?.size ?? 1) : view.count }
           : stripInternal(n.data),
