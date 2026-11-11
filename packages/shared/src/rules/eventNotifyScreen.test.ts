@@ -212,12 +212,12 @@ describe("Nouveautés de mes sorties : le résumé coupé par type se lit coupé
 
 describe("le message d'après enregistrement suit l'échéance de l'API", () => {
   it("nouveau changement différé : à 8 h ; immédiat : tout de suite", () => {
-    expect(notifyTimingOfSave("a", { id: "b", deferred: true })).toBe("at_8");
-    expect(notifyTimingOfSave("a", { id: "b", deferred: false })).toBe("now");
-    expect(notifyTimingOfSave(null, { id: "b", deferred: false })).toBe("now");
+    expect(notifyTimingOfSave("a", { createdAt: "b", deferred: true })).toBe("at_8");
+    expect(notifyTimingOfSave("a", { createdAt: "b", deferred: false })).toBe("now");
+    expect(notifyTimingOfSave(null, { createdAt: "b", deferred: false })).toBe("now");
   });
   it("aucun nouveau changement annoncé : rien à dire (même la nuit, même à une borne franchie)", () => {
-    expect(notifyTimingOfSave("a", { id: "a", deferred: true })).toBeNull();
+    expect(notifyTimingOfSave("a", { createdAt: "a", deferred: true })).toBeNull();
     expect(notifyTimingOfSave("a", null)).toBeNull();
     expect(notifyTimingOfSave(undefined, undefined)).toBeNull();
   });

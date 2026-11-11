@@ -539,7 +539,7 @@ export function EventWizard(props: Props) {
       setIndex(eventWizardSteps.indexOf(invalid.step));
       return setError(invalid.problem);
     }
-    const notifiedBefore = saved?.lastNotify?.id ?? null;
+    const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
     setBusy(true);
     setError(null);
     const { event: s } = await persist(d);

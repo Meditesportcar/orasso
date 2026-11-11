@@ -22,7 +22,8 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
   const [busy, setBusy] = useState(false);
   const writer = useRef<SerialWriter<boolean> | null>(null);
   const alive = useRef(true);
-  const failedOnce = useRef(false);
+  // Un échec d'écriture pas encore « vu » à l'appui : le premier appui le montre, le suivant ferme.
+  const unseenFailure = useRef(false);
 
   useEffect(() => {
     alive.current = true;
@@ -42,6 +43,7 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
           write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
           onSettled: (value) => alive.current && setNews(value),
           onError: (confirmed) => {
+            unseenFailure.current = true;
             if (!alive.current) return;
             setNews(confirmed);
             setMessage(L.saveFailed);
@@ -57,12 +59,12 @@ export function NotifySignup({ eventId, onDone }: { eventId: string; onDone: () 
   async function noted() {
     if (busy) return;
     setBusy(true);
-    const ok = (await writer.current?.whenIdle()) ?? true;
+    await writer.current?.whenIdle();
     if (!alive.current) return;
     setBusy(false);
     // Un échec reste visible : un second appui ferme quand même (la candidature n'est jamais remise en cause).
-    if (!ok && !failedOnce.current) {
-      failedOnce.current = true;
+    if (unseenFailure.current) {
+      unseenFailure.current = false;
       return;
     }
     onDone();

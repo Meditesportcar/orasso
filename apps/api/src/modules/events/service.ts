@@ -414,7 +414,7 @@ export const eventsService = {
     // parti, prévu plus tard) : l'assistant dit « à 8 h » d'après elle, jamais d'après un calcul local.
     const [lastNotify] = await db
       .select({
-        id: notifications.id,
+        createdAt: notifications.createdAt,
         deliverAfter: notifications.deliverAfter,
         deliveredAt: notifications.deliveredAt,
       })
@@ -425,7 +425,7 @@ export const eventsService = {
     return {
       lastNotify: lastNotify
         ? {
-            id: lastNotify.id,
+            createdAt: lastNotify.createdAt.toISOString(),
             deferred: lastNotify.deliveredAt === null && lastNotify.deliverAfter.getTime() > now().getTime(),
           }
         : null,

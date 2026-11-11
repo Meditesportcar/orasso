@@ -12,7 +12,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-type View = { lastNotify: { id: string; deferred: boolean } | null; startsAt: string };
+type View = { lastNotify: { createdAt: string; deferred: boolean } | null; startsAt: string };
 
 let clock: ReturnType<typeof useClock>;
 let owner: TestUser;
@@ -57,6 +57,6 @@ describe("lastNotify", () => {
     const first = await move(2 * HOUR);
     const res = await call(owner, "PATCH", `/events/${eventId}`, { title: "Autre titre" });
     expect(res.status).toBe(200);
-    expect(res.json.lastNotify?.id).toBe(first.json.lastNotify?.id);
+    expect(res.json.lastNotify?.createdAt).toBe(first.json.lastNotify?.createdAt);
   });
 });

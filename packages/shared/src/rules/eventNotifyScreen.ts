@@ -122,13 +122,13 @@ export function notifyFieldsOfDraft(d: EventDraft): NotifyFields {
 
 /**
  * Le moment d'envoi du changement qu'on vient d'enregistrer, d'après l'échéance décidée par l'API (`lastNotify` de
- * l'événement relu) : `null` si aucun nouveau changement n'a été annoncé (identifiant inchangé : rien à dire).
+ * l'événement relu) : `null` si aucun nouveau changement n'a été annoncé (date de création inchangée : rien à dire).
  */
 export function notifyTimingOfSave(
-  beforeId: string | null | undefined,
-  after: { id: string; deferred: boolean } | null | undefined,
+  beforeCreatedAt: string | null | undefined,
+  after: { createdAt: string; deferred: boolean } | null | undefined,
 ): NotifyTiming | null {
-  if (!after || after.id === (beforeId ?? null)) return null;
+  if (!after || after.createdAt === (beforeCreatedAt ?? null)) return null;
   return after.deferred ? "at_8" : "now";
 }
 

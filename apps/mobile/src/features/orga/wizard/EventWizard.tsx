@@ -545,7 +545,7 @@ export function EventWizard({
   async function finish(mode: "draft" | "publish" | "preview" | "save") {
     if (busy) return;
     if (photoSending !== null) return setError(W.posterStillSending);
-    const notifiedBefore = saved?.lastNotify?.id ?? null;
+    const notifiedBefore = saved?.lastNotify?.createdAt ?? null;
     setBusy(true);
     setError(null);
     try {

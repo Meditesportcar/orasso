@@ -177,6 +177,11 @@ export function NotifyPrefsSheet({
     });
   }, [visible, initialNews, eventId]);
 
+  // À la fermeture : on attend la fin des écritures avant que la cloche relise le réglage.
+  const closeWhenIdle = () => {
+    void (writer.current?.whenIdle() ?? Promise.resolve(true)).then(onClose);
+  };
+
   const change = (next: boolean) => {
     setNews(next);
     setMessage(null);
@@ -184,7 +189,7 @@ export function NotifyPrefsSheet({
   };
 
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
+    <AppSheet visible={visible} onClose={closeWhenIdle} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
       <Text variant="posterM" color={t.color.ink}>
         {L.bellLabel}
       </Text>
