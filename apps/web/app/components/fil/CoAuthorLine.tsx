@@ -59,7 +59,7 @@ function Picker({ onPick, disabled }: { onPick: (item: CoAuthorSearchItem) => vo
 
   return (
     <div className="s-stack s-stack--tight" data-testid="coauthor-picker">
-      <div className="fil-chips" role="group" aria-label={T.pickTitle}>
+      <div className="fil-chips" data-testid="coauthor-kinds">
         {coauthorKinds.map((k) => (
           <button
             key={k}
