@@ -467,8 +467,11 @@ export const prosService = {
 
   /** `GET /pros/by-slug/:slug` : une fiche publiée (ou la fiche du propriétaire, même en brouillon). */
   async getPublic(slug: string, viewer: Viewer | null): Promise<ProPublic> {
+    // Vague R8 (lot R8d) : « Sa fiche » d'une mention ne connaît que l'identifiant de la fiche (clé d'auteur `p:<id>`) :
+    // un identifiant se lit comme le slug (un slug n'a jamais la forme d'un UUID).
+    const byId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
     const p = await db.query.proProfiles.findFirst({
-      where: and(eq(proProfiles.slug, slug), isNull(proProfiles.deletedAt)),
+      where: and(byId ? eq(proProfiles.id, slug) : eq(proProfiles.slug, slug), isNull(proProfiles.deletedAt)),
     });
     if (!p || (!p.publishedAt && viewer?.user.id !== p.ownerUserId)) throw notFound("Fiche pro introuvable");
     // Titulaire supprimé ou suspendu : la fiche disparaît pour tous sauf lui (comme dans les listes, `proOwnerActive`).

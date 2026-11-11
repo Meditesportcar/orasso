@@ -20,6 +20,7 @@ export * from "./dateYear";
 export * from "./departmentSearch";
 export * from "./eventDays";
 export * from "./eventInvites";
+export * from "./eventJournal";
 export * from "./eventNotifications";
 export * from "./eventNotifyScreen";
 export * from "./eventProgress";

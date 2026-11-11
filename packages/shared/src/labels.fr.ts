@@ -24,6 +24,7 @@ export * from "./labels/events.fr";
 export * from "./labels/explorer.fr";
 export * from "./labels/feed.fr";
 export * from "./labels/feedPublish.fr";
+export * from "./labels/eventJournal.fr";
 export * from "./labels/feedLists.fr";
 export * from "./labels/feedScreen.fr";
 export * from "./labels/garage.fr";
