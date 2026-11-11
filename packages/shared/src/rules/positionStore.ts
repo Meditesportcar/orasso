@@ -25,6 +25,9 @@ export type PositionDeps = {
   weatherAt: (position: LatLng) => Promise<WeatherAt>;
 };
 
+/** La session et la génération capturées au geste (« Utiliser ma position ») : revérifiées après chaque attente. */
+export type PositionTicket = { owner: string; gen: number };
+
 export function createPositionStore(deps: PositionDeps) {
   const empty: PositionState = { owner: null, coarse: null, at: null, fetchedAt: 0, busy: false };
   let state: PositionState = empty;
@@ -45,6 +48,11 @@ export function createPositionStore(deps: PositionDeps) {
     if (state.owner !== null && state.owner !== deps.scope()) forget();
   };
 
+  const begin = (): PositionTicket | null => {
+    const owner = deps.scope();
+    return owner ? { owner, gen: generation } : null;
+  };
+
   return {
     getState: () => state,
     subscribe(l: () => void) {
@@ -63,11 +71,17 @@ export function createPositionStore(deps: PositionDeps) {
     },
     forget,
     purgeForeign,
+    /** Capture la session et la génération DÈS LE GESTE ; `null` sans session. */
+    begin,
+    /** La session est-elle restée la même (et la position non oubliée) depuis le geste ? */
+    valid(ticket: PositionTicket): boolean {
+      return deps.scope() === ticket.owner && generation === ticket.gen;
+    },
     /** Une position arrondie vient d'être lue : sa météo est demandée puis gardée, si la session est restée la même. */
-    async give(coarse: LatLng): Promise<boolean> {
-      const owner = deps.scope();
-      if (!owner) return false;
-      const gen = generation;
+    async give(coarse: LatLng, ticket: PositionTicket | null = begin()): Promise<boolean> {
+      // Rien n'est envoyé ni gardé si la session a changé depuis le geste (attente du GPS comprise).
+      if (!ticket || !this.valid(ticket)) return false;
+      const { owner, gen } = ticket;
       try {
         const at = await deps.weatherAt(coarse);
         if (deps.scope() !== owner || gen !== generation) return false;

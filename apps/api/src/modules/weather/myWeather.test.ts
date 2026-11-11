@@ -682,6 +682,70 @@ describe("coût : PUT des lieux", () => {
   });
 });
 
+describe("tour 3 : plafond du préchauffage et garde R8r complète", () => {
+  const rowFor = (cell: string, fetchedAt: Date, days: string[]) => ({
+    cell,
+    provider: "open-meteo" as const,
+    fetchedAt,
+    forecast: {
+      days: days.map((date) => ({
+        date,
+        tempMin: 8,
+        tempMax: 16,
+        precipitationProbability: 5,
+        precipitationMm: 0,
+        windMaxKmh: 20,
+        code: "clear" as const,
+      })),
+      hours: [],
+    },
+  });
+
+  it("budget global épuisé : l'Accueil (préchauffage) n'appelle pas le fournisseur pour une case lointaine", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    const u = await fan("Fan_Budget", ["59"]);
+    fillPositionBudget();
+    const home = await call(u, "GET", "/me/home?persona=visitor");
+    expect(home.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 300));
+    // La météo du département (R8r) a son propre chemin ; la case de la préfecture (50.6 ; 3.1) ne part pas.
+    expect(urlsOf(f).some((url) => url.includes("latitude=50.6000"))).toBe(false);
+  });
+
+  it("ligne récente sans l'heure en cours : renouvelée, pending vrai (jamais « indisponible » sans relecture)", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    const u = await fan("Fan_Garde");
+    // Aujourd'hui (jour) présent mais aucune heure : inexploitable pour « Ma météo ».
+    await db.insert(weatherPlacesCache).values(rowFor("42.7,2.9", new Date(NOW.getTime() - HOUR), ["2026-10-16"]));
+    const home = await call(u, "GET", "/me/home?persona=visitor");
+    expect(home.json.myWeather.pending).toBe(true);
+    expect(home.json.myWeather.places[0].weather).toBeNull();
+    await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(1));
+    await vi.waitFor(async () =>
+      expect((await call(u, "GET", "/me/home?persona=visitor")).json.myWeather.places[0].weather).not.toBeNull(),
+    );
+  });
+
+  it("ligne ancienne inexploitable : renouvelée et pending vrai ; ancienne mais exploitable : servie sans pending", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    const u = await fan("Fan_Ancienne");
+    await db.insert(weatherPlacesCache).values(rowFor("42.7,2.9", new Date(NOW.getTime() - 5 * HOUR), ["2026-10-14"]));
+    const first = await call(u, "GET", "/me/home?persona=visitor");
+    expect(first.json.myWeather.pending).toBe(true);
+    await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(1));
+    // Une ligne ancienne mais exploitable (réponse du fournisseur gardée) : servie, rafraîchie, pas d'attente.
+    await vi.waitFor(async () =>
+      expect((await db.select().from(weatherPlacesCache))[0]?.fetchedAt.getTime()).toBe(NOW.getTime()),
+    );
+    clock.advance(4 * HOUR);
+    const later = await call(u, "GET", "/me/home?persona=visitor");
+    expect(later.json.myWeather.pending).toBe(false);
+  });
+});
+
 describe("export des données personnelles et état « en cours de chargement »", () => {
   it("l'export contient les villes choisies, jamais une position", async () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);

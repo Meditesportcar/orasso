@@ -53,6 +53,29 @@ beforeEach(async () => {
   resetPlaceCellState();
 });
 
+/** Lot R8m : une prévision de case exploitable (aujourd'hui et l'heure en cours), comme celle que garde `weather.refresh`. */
+const usablePlaceForecast = () => ({
+  days: [
+    {
+      date: "2026-11-10",
+      tempMin: 8,
+      tempMax: 16,
+      precipitationProbability: 5,
+      precipitationMm: 0,
+      windMaxKmh: 20,
+      code: "clear" as const,
+    },
+  ],
+  hours: [-1, 0, 1, 2, 3, 4, 5, 6].map((i) => ({
+    time: new Date(Math.floor(NOW.getTime() / HOUR) * HOUR + i * HOUR).toISOString(),
+    temp: 12,
+    precipitationProbability: 5,
+    precipitationMm: 0,
+    windKmh: 20,
+    code: "clear" as const,
+  })),
+});
+
 const at = (days: number, hours = 0) => new Date(NOW.getTime() + days * DAY + hours * HOUR);
 
 async function world() {
@@ -529,7 +552,7 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
       cell: weatherCell(departmentPrefectures["48"] as { lat: number; lng: number }).key,
       provider: "open-meteo",
       fetchedAt: new Date(NOW.getTime() - HOUR),
-      forecast: { days: [], hours: [] },
+      forecast: usablePlaceForecast(),
     });
     const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
     setWeatherFetch(calls as unknown as typeof fetch);
@@ -612,7 +635,7 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
       cell: prefecture.key,
       provider: "open-meteo",
       fetchedAt: new Date(NOW.getTime() - HOUR),
-      forecast: { days: [], hours: [] },
+      forecast: usablePlaceForecast(),
     });
     const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
     setWeatherFetch(calls as unknown as typeof fetch);

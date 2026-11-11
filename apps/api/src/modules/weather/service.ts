@@ -630,16 +630,19 @@ export const weatherService = {
       rows = cells.map((c) => byKey.get(c.key) ?? null);
       for (const c of new Map(cells.map((cell) => [cell.key, cell])).values()) {
         const row = byKey.get(c.key);
-        if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+        const stale = !row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS;
+        const usable = row ? this.placeWeather(row) !== null : false;
+        if (stale || !usable) {
+          // Le préchauffage passe aussi par le plafond horaire commun (jamais d'appel au fournisseur hors plafond).
           const failedAt = cellFailures.get(c.key);
           if (
-            !row &&
+            !usable &&
             weatherEnabled() &&
             (failedAt === undefined || now().getTime() - failedAt >= DEPARTMENT_RETRY_MS)
           ) {
             pending = true;
           }
-          void this.cellForecast(c).catch((error) =>
+          void this.cellForAt(c).catch((error) =>
             console.warn("Météo du lieu non rafraîchie :", error instanceof Error ? error.message : error),
           );
         }
@@ -697,14 +700,20 @@ export const weatherService = {
   async cellForAt(cell: WeatherCell) {
     const cached = await db.query.weatherPlacesCache.findFirst({ where: eq(weatherPlacesCache.cell, cell.key) });
     const t = now().getTime();
-    if (cached && t - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
+    const fresh = cached ? t - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS : false;
+    // Lot R8r : une ligne récente mais sans la journée d'aujourd'hui ni l'heure en cours (minuit passé) est à renouveler comme une
+    // ligne périmée (équivalent de `needToday`).
+    const usable = cached ? this.placeWeather(cached) !== null : false;
+    if (cached && fresh && usable) return cached;
+    const failedAt = cellFailures.get(cell.key);
+    if (cached && fresh && failedAt !== undefined && t - failedAt < DEPARTMENT_RETRY_MS) return cached;
     while (atFetches.length > 0 && (atFetches[0] ?? 0) <= t - HOUR) atFetches.shift();
     if (atFetches.length >= AT_NEW_CELLS_PER_HOUR && !cellFlights.has(cell.key)) {
       const near = await this.nearestCell(cell);
       return near ?? cached ?? null;
     }
     if (!cellFlights.has(cell.key)) atFetches.push(t);
-    return this.cellForecast(cell).catch(() => null);
+    return this.cellForecast(cell, fresh).catch(() => null);
   },
 
   /** La case fraîche du stock la plus proche (à `NEAREST_CELL_DEG` au plus), ou `null`. */

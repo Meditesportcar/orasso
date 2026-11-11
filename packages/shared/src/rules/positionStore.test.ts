@@ -102,6 +102,23 @@ describe("position en mémoire de « Ma météo »", () => {
     expect(t.store.view().at?.label).toBe("Canet 3");
   });
 
+  it("changement de compte pendant l'attente du GPS : rien n'est envoyé ni gardé sous B", async () => {
+    const t = setup();
+    const ticket = t.store.begin();
+    // Le GPS répond après la connexion de B.
+    t.setScope("B");
+    expect(await t.store.give(here, ticket)).toBe(false);
+    expect(t.calls()).toBe(0);
+    expect(t.store.view().at).toBeNull();
+    expect(t.store.getState().owner).toBeNull();
+    // Même compte mais position oubliée entre-temps : rien non plus.
+    t.setScope("A");
+    const second = t.store.begin();
+    t.store.forget();
+    expect(await t.store.give(here, second)).toBe(false);
+    expect(t.calls()).toBe(0);
+  });
+
   it("une relecture en échec garde la dernière météo", async () => {
     const t = setup();
     const g = t.store.give(here);
