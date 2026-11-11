@@ -251,3 +251,23 @@ test("espace Communication : plus de « Nouvelle annonce », « Publier pour cet
   await page.goto(`/orga/${ev.structure.slug}/communication?onglet=messages&e=${ev.id}`);
   await expect(page.locator("select[name=eventId]")).toHaveValue(ev.id, { timeout: 30_000 });
 });
+
+test("l'organisateur d'une fiche sans publication voit l'invitation « Publier pour cet événement » ; un passionné rien", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await setTheme(page, "beton");
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/e/msc-edition-27");
+  await page.goto("/e/msc-edition-27");
+  await expect(page.getByTestId("journal-invite")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("journal-publish")).toContainText("Publier pour cet événement");
+  await expect(page.getByTestId("journal-publish")).toHaveAttribute(
+    "href",
+    /\/app\/fil\/publier\?structure=.+&evenement=.+/,
+  );
+  await shot(page, "fiche-invitation-organisateur");
+  await page.context().clearCookies();
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/e/msc-edition-27");
+  await page.goto("/e/msc-edition-27");
+  await expect(page.getByTestId("event-journal")).toHaveCount(0);
+});

@@ -79,8 +79,8 @@
   height: 30px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: rgb(11 12 14 / 0.6);
-  color: #f3ebdd;
+  background: var(--scrim);
+  color: var(--night-ink);
   cursor: pointer;
 }
 .evj-dots::after {
@@ -204,8 +204,8 @@
   padding: 2px var(--space-2);
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: rgb(11 12 14 / 0.6);
-  color: #f3ebdd;
+  background: var(--scrim);
+  color: var(--night-ink);
   font-size: 0.6875rem;
   font-weight: 700;
   text-overflow: ellipsis;

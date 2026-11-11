@@ -261,3 +261,26 @@ test("l'organisatrice : plus de « Nouvelle annonce », « Publier pour cet év�
   await shot(page, "publier-prerempli");
   await ctx.close();
 });
+
+test("l'organisateur d'une fiche sans publication voit l'invitation « Publier pour cet événement » ; un passionné rien", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const damien = await login("damien@orasso.local");
+  const ev = await detail(damien, "msc-edition-27");
+  expect(ev.publications?.count ?? 0).toBe(0);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "damien@orasso.local");
+  await go(page, "/e/msc-edition-27");
+  await expect(page.getByTestId("journal-invite")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("journal-publish")).toContainText("Publier pour cet événement");
+  await page.getByTestId("journal-invite").scrollIntoViewIfNeeded();
+  await shot(page, "fiche-invitation-organisateur");
+  await ctx.close();
+  const fan = await open(browser);
+  await signIn(fan.page, "kenji@orasso.local");
+  await go(fan.page, "/e/msc-edition-27");
+  await expect(fan.page.getByTestId("event-journal")).toHaveCount(0);
+  await expect(fan.page.getByTestId("journal-invite")).toHaveCount(0);
+  await fan.ctx.close();
+});

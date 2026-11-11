@@ -258,8 +258,8 @@ export function MentionsScreen() {
                       style={[styles.fanShot, { backgroundColor: c.surface }]}
                     >
                       <PhotoBox post={item.post} style={styles.shotImage} />
-                      <View style={styles.who}>
-                        <Text variant="caption" color="#f3ebdd" numberOfLines={1}>
+                      <View style={[styles.who, { backgroundColor: c.scrim }]}>
+                        <Text variant="caption" color={c.nightInk} numberOfLines={1}>
                           {item.post.author.pseudo}
                         </Text>
                       </View>
@@ -338,7 +338,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(11,12,14,.6)",
     alignSelf: "flex-start",
   },
   stamp: {

@@ -57,7 +57,9 @@ const EVENTS = [
   ["rentree", "nocturne-de-rentree"],
 ] as const;
 
-test("appli : la fiche (journal, mentions) en passionné, Béton et Sable, 384 et 390 px, police x1 et x1,3", async ({ browser }) => {
+test("appli : la fiche (journal, mentions) en passionné, Béton et Sable, 384 et 390 px, police x1 et x1,3", async ({
+  browser,
+}) => {
   test.skip(!APP, "Appli : lancer avec APP_URL");
   test.setTimeout(900_000);
   for (const [theme, width, scale] of [
@@ -129,17 +131,23 @@ test("appli : l'organisatrice (menus, une par une, mentions masquées) et sans s
   await go(damien.page, "/moi");
   await damien.page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
   await damien.page.waitForURL(/\/direct/, { timeout: 30_000 });
-  const ev = (await apiCall<{ id: string }>(await login("damien@orasso.local"), "GET", "/events/by-slug/nocturne-de-canet-2026")).data;
+  const ev = (
+    await apiCall<{ id: string }>(await login("damien@orasso.local"), "GET", "/events/by-slug/nocturne-de-canet-2026")
+  ).data;
   await go(damien.page, `/evenement/${ev.id}`);
   await expect(damien.page.getByTestId("orga-publish-for-event")).toBeVisible({ timeout: 60_000 });
   await shot(damien.page, "appli-evenement-organisateur-sable");
   await damien.ctx.close();
 });
 
-test("site : la fiche (journal, mentions) 390 et 1280 px, Béton et Sable, passionné, organisatrice, sans session", async ({ page, browser }) => {
+test("site : la fiche (journal, mentions) 390 et 1280 px, Béton et Sable, passionné, organisatrice, sans session", async ({
+  page,
+  browser,
+}) => {
   test.setTimeout(900_000);
   for (const theme of ["beton", "sable"] as const) {
     await setTheme(page, theme);
+    await page.context().clearCookies();
     await loginInBrowser(page, "kenji@orasso.local", undefined, "/e/nocturne-de-canet-2026");
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
@@ -167,6 +175,7 @@ test("site : la fiche (journal, mentions) 390 et 1280 px, Béton et Sable, passi
     await shot(ap, `site-fiche-lydia-sans-session-${theme}-1280`);
     await anon.close();
     // Organisatrice : menus.
+    await page.context().clearCookies();
     await loginInBrowser(page, "sarah@orasso.local", undefined, "/e/rassemblement-du-lydia");
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto("/e/rassemblement-du-lydia");
@@ -178,7 +187,9 @@ test("site : la fiche (journal, mentions) 390 et 1280 px, Béton et Sable, passi
     await shot(page, `site-menu-epingler-${theme}-390`);
     // Communication.
     const sarah = await login("sarah@orasso.local");
-    const ev = (await apiCall<{ id: string; structure: { slug: string } }>(sarah, "GET", "/events/by-slug/rassemblement-du-lydia")).data;
+    const ev = (
+      await apiCall<{ id: string; structure: { slug: string } }>(sarah, "GET", "/events/by-slug/rassemblement-du-lydia")
+    ).data;
     await page.goto(`/orga/${ev.structure.slug}/communication?e=${ev.id}`);
     await expect(page.getByTestId("publish-panel")).toBeVisible({ timeout: 30_000 });
     await shot(page, `site-communication-${theme}-390`);

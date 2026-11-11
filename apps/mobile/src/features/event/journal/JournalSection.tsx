@@ -142,7 +142,7 @@ export function JournalSection({
         </View>
       ) : null}
 
-      {kind === "invite" && !list.loading && list.items.length === 0 && !list.error ? (
+      {kind === "invite" && list.items.length === 0 && (count === 0 || (!list.loading && !list.error)) ? (
         <View
           style={[styles.invite, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
           testID="journal-invite"

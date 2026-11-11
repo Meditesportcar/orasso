@@ -53,10 +53,10 @@ function Tile({ post, tick, journal }: { post: FeedPostView; tick: number; journ
           accessibilityLabel={eventJournalLabels.menuOpen}
           onPress={() => journal.onMenu?.(post)}
           hitSlop={6}
-          style={styles.dots}
+          style={[styles.dots, { backgroundColor: c.scrim }]}
           testID="journal-tile-menu"
         >
-          <Icon name="more" size={18} color="#f3ebdd" />
+          <Icon name="more" size={18} color={c.nightInk} />
         </Pressable>
       ) : null}
       <View style={[styles.caption, { backgroundColor: c.surface, borderColor: c.line }]}>
@@ -110,7 +110,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(11,12,14,.6)",
   },
   pressed: { opacity: 0.85 },
   // La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px).
