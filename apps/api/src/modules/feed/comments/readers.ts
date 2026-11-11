@@ -13,6 +13,8 @@ import { commentRow } from "./view";
 
 type PostRow = NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>;
 type Commenter = { userId: string; visibility: "public" | "private" };
+/** Le commentaire de premier niveau d'une réponse : son auteur et sa confidentialité (il doit être lisible aussi). */
+export type RootComment = { authorId: string; visibility: "public" | "private"; unavailable: boolean };
 
 /** Parmi `ids`, ceux qui sont en règle, voient la publication et lisent un commentaire de `commenter` (jamais `commenter` lui-même). */
 export async function commentReaders(
@@ -21,6 +23,7 @@ export async function commentReaders(
   commenter: Commenter,
   ids: string[],
   at: Date,
+  root: RootComment | null = null,
 ): Promise<Set<string>> {
   const wanted = [...new Set(ids)].filter((id) => id !== commenter.userId);
   if (!wanted.length) return new Set();
@@ -51,11 +54,23 @@ export async function commentReaders(
     );
   const ofPostAuthor = await follows(post.post.authorId);
   const ofCommenter = commenter.visibility === "private" ? await follows(commenter.userId) : new Set<string>();
+  const ofRoot = root && root.visibility === "private" ? await follows(root.authorId) : new Set<string>();
   const facts = factsOf(post, at);
   return new Set(
     alive.filter(
       (userId) =>
         canSeeFeedPost({ userId }, facts, { followAccepted: ofPostAuthor.has(userId) }) &&
+        (!root ||
+          canSeeComment(
+            { userId, managesPost: userId === post.post.authorId },
+            {
+              authorId: root.authorId,
+              authorVisibility: root.visibility,
+              authorUnavailable: root.unavailable,
+              deleted: false,
+            },
+            { followAccepted: ofRoot.has(userId) },
+          )) &&
         canSeeComment(
           { userId, managesPost: userId === post.post.authorId },
           {
@@ -79,12 +94,11 @@ export async function stillReadable(ex: Executor, userId: string, commentId: str
   if (!row || row.c.deletedAt) return false;
   const at = now();
   if (unavailable(row.p, at)) return false;
+  let root: RootComment | null = null;
   if (row.c.parentId) {
-    const [root] = await ex
-      .select({ deletedAt: feedPostComments.deletedAt, authorId: feedPostComments.authorId })
-      .from(feedPostComments)
-      .where(eq(feedPostComments.id, row.c.parentId));
-    if (!root || root.deletedAt) return false;
+    const top = await commentRow(row.c.parentId, ex);
+    if (!top || top.c.deletedAt) return false;
+    root = { authorId: top.c.authorId, visibility: top.p.visibility, unavailable: unavailable(top.p, at) };
   }
   const post = await postWithAuthor(row.c.postId, ex);
   if (!post) return false;
@@ -94,6 +108,7 @@ export async function stillReadable(ex: Executor, userId: string, commentId: str
     { userId: row.c.authorId, visibility: row.p.visibility },
     [userId],
     at,
+    root,
   );
   // L'auteur du commentaire le lit toujours tant qu'il voit la publication (la flamme qu'il reçoit).
   if (readers.has(userId)) return true;

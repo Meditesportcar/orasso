@@ -278,3 +278,43 @@ describe("droits et lecture", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("premier niveau d'un compte privé : les notifications suivent la même règle que la lecture", () => {
+  it("un abonné de P répond « @M » sous le commentaire de P : M (qui ne suit pas P) ne reçoit rien, ni citation ni flamme", async () => {
+    const author = await person("Kenji_66");
+    const priv = await person("Lea_11", { visibility: "private" });
+    const follower = await person("Suiveur_66");
+    const m = await person("Membre_66");
+    await follow(follower, priv);
+    const id = await dbPost(author);
+    const top = await comment(priv, id, "Compte privé");
+    const reply = await comment(follower, id, "Réponse pour @Membre_66", { parentId: top.json.id });
+    expect(reply.status).toBe(201);
+    expect((await call(m, "GET", `/feed-comments/${reply.json.id}/replies`)).status).toBe(404);
+    expect(await notifs(m.id, "feed_comment_mention")).toHaveLength(0);
+    // La flamme de M sur la réponse est refusée (404) : rien ne part vers l'abonné ; celle de P (qui lit tout) le prévient.
+    expect((await call(m, "PUT", `/feed-comments/${reply.json.id}/reaction`)).status).toBe(404);
+    expect(await notifs(follower.id, "feed_comment_like")).toHaveLength(0);
+    await call(priv, "PUT", `/feed-comments/${reply.json.id}/reaction`);
+    expect(await notifs(follower.id, "feed_comment_like")).toHaveLength(1);
+  });
+
+  it("garde de livraison : le premier niveau devenu illisible du destinataire supprime la notification différée", async () => {
+    const author = await person("Kenji_66");
+    const priv = await person("Lea_11", { visibility: "private" });
+    const follower = await person("Suiveur_66");
+    const m = await person("Membre_66");
+    await follow(follower, priv);
+    await follow(m, priv);
+    const id = await dbPost(author);
+    clock.set(new Date("2026-06-15T21:00:00Z"));
+    quietHours(true);
+    const top = await comment(priv, id, "Compte privé");
+    await comment(follower, id, "Pour @Membre_66", { parentId: top.json.id });
+    expect(await notifs(m.id, "feed_comment_mention")).toHaveLength(1);
+    await unfollow(m, priv);
+    clock.set(new Date("2026-06-16T08:30:00Z"));
+    await notificationsService.deliverDue();
+    expect(await notifs(m.id, "feed_comment_mention")).toHaveLength(0);
+  });
+});

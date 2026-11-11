@@ -15,8 +15,9 @@ import { notifications } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
 import type { Tx } from "../../../lib/tx";
 import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
-import { postWithAuthor } from "../access";
+import { postWithAuthor, unavailable } from "../access";
 import { commentReaders, stillReadable } from "./readers";
+import { commentRow } from "./view";
 
 type Actor = { userId: string; pseudo: string; avatarUrl: string | null };
 type Commenter = { userId: string; pseudo: string; avatarKey: string | null; visibility: "public" | "private" };
@@ -33,6 +34,8 @@ export type NewCommentContext = {
   text: string;
   /** Le commentaire auquel on répond (avant rattachement au premier niveau) : son identifiant et son auteur. */
   repliedTo: { id: string; authorId: string } | null;
+  /** Le commentaire de premier niveau quand c'est une réponse. */
+  rootId?: string | null;
   /** Personnes citées (en règle, ni soi-même) : seules celles qui lisent le commentaire sont prévenues. */
   mentioned: string[];
 };
@@ -67,7 +70,11 @@ export async function notifyNewComment(ctx: NewCommentContext): Promise<void> {
   const candidates = [...new Set([...ctx.mentioned, ctx.repliedTo?.authorId, ctx.postAuthorId])].filter(
     (id): id is string => !!id,
   );
-  const readers = await commentReaders(tx, post, commenter, candidates, at);
+  const top = ctx.rootId ? await commentRow(ctx.rootId, tx) : null;
+  const root = top
+    ? { authorId: top.c.authorId, visibility: top.p.visibility, unavailable: unavailable(top.p, at) }
+    : null;
+  const readers = await commentReaders(tx, post, commenter, candidates, at, root);
   const notified = new Set<string>([commenter.userId]);
   const data = (extra: Record<string, unknown> = {}) => ({
     postId: ctx.postId,

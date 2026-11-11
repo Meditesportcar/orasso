@@ -251,6 +251,7 @@ export const feedCommentsService = {
           commentId: row.id,
           text: input.text,
           repliedTo: target,
+          rootId: parentId,
           mentioned: mentioned.map((m) => m.userId),
         });
         return row.id;
