@@ -21,6 +21,7 @@ export * from "./media";
 export * from "./memories";
 export * from "./messaging";
 export * from "./moderation";
+export * from "./pageFollows";
 export * from "./partnerships";
 export * from "./passport";
 export * from "./presence";

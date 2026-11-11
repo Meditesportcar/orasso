@@ -130,6 +130,7 @@ export const errorCodes = [
   "commercial_video",
   // Lot R8a1 : publier au nom d'une casquette, rattachement, « Info importante ».
   "persona_forbidden",
+  "follow_private_account",
   "event_not_attachable",
   "important_requires_event",
   "important_quota",
