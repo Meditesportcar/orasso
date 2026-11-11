@@ -128,3 +128,6 @@ export function publicationLinkOf(data: unknown, opts: { web?: boolean } = {}): 
   const comments = typeof d.commentId === "string" && d.commentId !== "";
   return publicationPath(id, { web: opts.web, comments });
 }
+
+/** Un profil servi par `GET /users/:pseudo` avec le compteur de publications (décoration de R8a2 ; absent d'une réponse plus ancienne). */
+export type WithPublications<T> = T & { publications?: { count: number } | null };

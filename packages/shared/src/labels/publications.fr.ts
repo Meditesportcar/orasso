@@ -32,6 +32,9 @@ export const publicationsLabels = {
   /** La légende d'une carte repliée après trois lignes. */
   captionMore: "plus",
   captionLess: "moins",
+  /** La petite ligne d'une carte posée dans une liste de profil (à la place de la raison du Fil), avant « il y a 3 h ». */
+  cardReasonMine: "Sur ton profil",
+  cardReasonOther: "Sur son profil",
   /** Date et lieu sous une vignette (le lieu est facultatif). */
   tileLabel: (date: string, place: string | null) => (place ? `${date}, ${place}` : date),
   // La publication seule (`/publication/<id>`, `/app/publication/:id`).

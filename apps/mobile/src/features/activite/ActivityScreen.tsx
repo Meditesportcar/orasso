@@ -11,6 +11,7 @@ import {
   type ActivityGroup,
   type ActivityItem,
   type ActivityPage,
+  publicationLinkOf,
   type RequestItem,
   requestCountSpoken,
   requestCountText,
@@ -148,13 +149,18 @@ export function ActivityScreen() {
     }
     const team = teamRequestTarget(item.data);
     const admin = adminLinkOf(item.data.link);
-    const link = appLinkOf(item.data.link);
+    const link = publicationLinkOf(item.data) ?? appLinkOf(item.data.link);
     if (team) choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
     else if (admin) choose({ kind: "admin" }, admin);
     else if (link) router.push(link as never);
   }
   const hasLink = (item: ActivityItem) =>
-    Boolean(teamRequestTarget(item.data) || adminLinkOf(item.data.link) || appLinkOf(item.data.link));
+    Boolean(
+      teamRequestTarget(item.data) ||
+        adminLinkOf(item.data.link) ||
+        publicationLinkOf(item.data) ||
+        appLinkOf(item.data.link),
+    );
 
   const empty = page && groups.length === 0 && highlighted.length === 0 && activityRequests === 0;
   const countFailed = status === "failed";

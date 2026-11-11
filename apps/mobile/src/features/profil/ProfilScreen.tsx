@@ -22,16 +22,22 @@
 // réglages.
 import { AvatarRing, Button, Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  authorKeyOf,
   capLabels,
+  explicitProfileTab,
   fitWideWordSize,
   gradeLabels,
   type ProfileTab,
   profileTabsLabels as PT,
   passportScreenTexts,
+  profileOpenTab,
   profilePhotoLabels,
   profileTabFromParam,
+  profileTabItems,
   settingsHubLabels,
+  type UserProfileView,
   visibleProfileTab,
+  type WithPublications,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -43,6 +49,7 @@ import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TagWin } from "@/features/passionne/kit";
 import { PassportPanel } from "@/features/passport/PassportScreen";
+import { PublicationsTab } from "@/features/publications/PublicationsTab";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
@@ -70,7 +77,10 @@ export function ProfilScreen() {
   const { fontScale } = useWindowDimensions();
   // Lot R7b1 : l'onglet interne s'ouvre par `?onglet=garage|sorties` (Garage par défaut, partout) ; un toucher le change.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
-  const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
+  // Lot R8b2 : sans demande de l'adresse, mon profil s'ouvre sur « Publications » (par défaut sur tous les profils, le mien compris).
+  const [tab, setTab] = useState<ProfileTab>(
+    explicitProfileTab(onglet) ?? profileOpenTab({ mine: true, hasGarage: true, publications: undefined }),
+  );
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {
     if (onglet === undefined) return;
@@ -90,6 +100,15 @@ export function ProfilScreen() {
   const network = useApi(() => api.network(), [], { cacheKey: "network", enabled: base });
   // Lot R8b1 : mes véhicules, lus ici (le nombre de l'onglet « Garage · N ») et donnés au panneau Garage : une seule lecture.
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
+  // Lot R8b2 : mon nombre de publications (la ligne « N publications » de l'onglet) : mon profil public le porte.
+  const selfCount = useApi(
+    async () => (await api.userProfile(me?.profile.pseudo ?? "")) as WithPublications<UserProfileView>,
+    [me?.profile.pseudo],
+    {
+      cacheKey: "profile.self.publications",
+      enabled: base && Boolean(me?.profile.pseudo),
+    },
+  );
   const garageCount = vehicles.data ? vehicles.data.filter((v) => v.status === "active").length : null;
   // Un profil sans véhicule (casquette visiteur) n'a pas « Garage » et s'ouvre sur « Sorties » ; l'ajout d'un premier véhicule
   // reste possible par `casquette-quick-vehicle` (« Mes casquettes »). Tour 2 : sauf s'il a des véhicules archivés (le dernier
@@ -181,6 +200,7 @@ export function ProfilScreen() {
           passport.reload(),
           network.reload(),
           vehicles.reload(),
+          selfCount.reload(),
         ]);
       }}
       overlays={
@@ -271,7 +291,7 @@ export function ProfilScreen() {
             <ProfileTabs
               value={shownTab}
               onChange={setTab}
-              items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
+              items={profileTabItems({ hasGarage, restricted: false })}
               garageCount={garageCount}
             />
           </StickyHeader>
@@ -281,6 +301,14 @@ export function ProfilScreen() {
                 {PT.garageLoading}
               </Text>
             </View>
+          ) : shownTab === "publications" ? (
+            <PublicationsTab
+              key={round}
+              authorKey={authorKeyOf("user", me?.user.id ?? "")}
+              pseudo={profile?.pseudo ?? ""}
+              mine
+              total={selfCount.data?.publications?.count ?? null}
+            />
           ) : shownTab === "garage" ? (
             <GarageScreen vehicles={vehicles} round={round} />
           ) : (
