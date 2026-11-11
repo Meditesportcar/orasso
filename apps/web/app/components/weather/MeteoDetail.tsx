@@ -17,7 +17,7 @@ import {
   windCompass,
 } from "@orasso/shared";
 import { useEffect } from "react";
-import { Form, useNavigate } from "react-router";
+import { Form, useNavigate, useSearchParams } from "react-router";
 
 import { cardTitle, UsePositionButton } from "./MyWeatherBlock";
 import { forgetMyPosition, refreshMyPosition, useWeatherPosition } from "./position";
@@ -130,9 +130,10 @@ function PlacePanel({
         <ul className="wxm-results">
           {cities.map((city, i) => (
             <li key={`${city.label}-${city.lat}-${city.lng}`}>
-              <Form method="post" onSubmit={() => mode === "change" && forgetMyPosition()}>
+              <Form method="post">
                 <input type="hidden" name="op" value={mode === "change" ? "change" : "add"} />
                 <input type="hidden" name="slot" value={card?.slot ?? ""} />
+                <input type="hidden" name="kind" value={card?.kind ?? ""} />
                 <input type="hidden" name="label" value={city.label.replace(/ \(\w+\)$/, "")} />
                 <input type="hidden" name="lat" value={city.lat} />
                 <input type="hidden" name="lng" value={city.lng} />
@@ -186,6 +187,15 @@ export function MeteoDetail({
   const here = (lieu: "changer" | "second") => `?card=${cardIndex}&lieu=${lieu}`;
   // Navigation sans rechargement : la position donnée (gardée en mémoire de la page) n'est pas oubliée.
   const navigate = useNavigate();
+  // Après l'enregistrement d'une ville à la place de la position : la position est oubliée (jamais avant la réussite).
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get("remplace") === "position") {
+      forgetMyPosition();
+      params.delete("remplace");
+      setParams(params, { replace: true });
+    }
+  }, [params, setParams]);
   const go = (to: string) => (e: { preventDefault: () => void }) => {
     e.preventDefault();
     navigate(to);

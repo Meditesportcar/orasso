@@ -51,10 +51,14 @@ function readPosition(): Promise<GeolocationPosition> {
 /** Demande la position à l'appareil puis la météo de sa case. `false` si refusée ou indisponible (la ville reste). */
 export async function askMyPosition(): Promise<boolean> {
   if (store.getState().busy) return false;
+  // Le compte et la génération sont capturés DÈS LE GESTE et revérifiés après chaque attente (GPS, réseau).
+  const ticket = store.begin();
+  if (!ticket) return false;
   store.setBusy(true);
   try {
     const fix = await readPosition();
-    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }));
+    if (!store.valid(ticket)) return false;
+    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }), ticket);
   } catch {
     return false;
   } finally {

@@ -9,6 +9,7 @@ import {
   type MyWeatherPlaces,
   type PlaceCoords,
   type PlaceWeather,
+  POSITION_REFRESH_MS,
   placesAfterAdd,
   placesAfterChange,
   placesAfterRemove,
@@ -20,8 +21,8 @@ import {
   windCompass,
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, ScrollView, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -159,6 +160,19 @@ export function MeteoDetail() {
       void refreshMyPosition();
     }, []),
   );
+  // Retour de l'appli au premier plan : lieux et position relus, au plus toutes les dix minutes (mêmes bornes que l'Accueil).
+  const lastReload = useRef(Date.now());
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void refreshMyPosition();
+      if (Date.now() - lastReload.current >= POSITION_REFRESH_MS) {
+        lastReload.current = Date.now();
+        void places.reload();
+      }
+    });
+    return () => sub.remove();
+  }, [places]);
   const [sheet, setSheet] = useState<"change" | "add" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +231,8 @@ export function MeteoDetail() {
             } else {
               // La ville choisie remplace la carte ; la position gardée en mémoire n'est oubliée qu'une fois la ville enregistrée.
               void save(placesAfterChange(data.places, card ?? { slot: null }, city)).then((ok) => {
-                if (ok) forgetMyPosition();
+                // Seulement après l'enregistrement et seulement si la carte remplacée est celle de la position.
+                if (ok && card?.kind === "position") forgetMyPosition();
               });
             }
           }}

@@ -129,9 +129,12 @@ export function NearbyBlock({
 export function WeatherBlock({
   weather,
   myWeather,
+  pending = false,
 }: {
   weather: HomeData["weather"];
   myWeather?: HomeData["myWeather"];
+  /** Lot R8r : stock vide, rafraîchissement en cours (repli sans « Ma météo »). */
+  pending?: boolean;
 }) {
   // Lot R8m : « Ma météo » (l'endroit où je suis ou ma ville, deux lieux au plus) ; sans elle (réponse ancienne), la météo du département.
   if (myWeather) {
@@ -157,6 +160,10 @@ export function WeatherBlock({
           title={weather.kind === "event" ? weather.event.title : weatherTexts.todayTitle}
           compact
         />
+      ) : pending ? (
+        <p className="hm-block__muted" data-testid="weather-pending">
+          {weatherTexts.loading}
+        </p>
       ) : (
         <p className="hm-block__muted">{weatherTexts.unavailable}</p>
       )}

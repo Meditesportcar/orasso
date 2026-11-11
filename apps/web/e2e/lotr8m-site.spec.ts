@@ -290,3 +290,40 @@ test("tour 2 : /app/fil puis l'Accueil sans recharger : « Utiliser ma position 
   await expect(block).toContainText("Canet-en-Roussillon · ma position", { timeout: 20_000 });
   await ctx.close();
 });
+
+test("tour 3 : position + Lyon, puis remplacer la position par Toulouse : Lyon reste, la position est oubliée après l'enregistrement", async ({
+  browser,
+}) => {
+  const cookie26 = await login("pilote26@orasso.local");
+  await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    geolocation: GEO,
+    permissions: ["geolocation"],
+  });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "pilote26@orasso.local", undefined, "/app");
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("widget-weather").getByTestId("my-weather-choose").click();
+  await page.waitForURL(/\/app\/meteo/);
+  await page.getByTestId("meteo-change").click();
+  await page.getByTestId("my-weather-use-position").click();
+  await expect(page.getByText("Canet-en-Roussillon · ma position")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("meteo-second").click();
+  await page.getByTestId("place-search").fill("Lyon");
+  await page.getByTestId("place-search-submit").click();
+  await page.getByTestId("place-result-0").click();
+  await page.waitForURL(/\/app\/meteo$/);
+  // La position est toujours la première carte, Lyon la seconde.
+  await page.getByTestId("meteo-change").click();
+  await page.getByTestId("place-search").fill("Toulouse");
+  await page.getByTestId("place-search-submit").click();
+  await page.getByTestId("place-result-0").click();
+  await page.waitForURL(/\/app\/meteo(\?remplace=position)?$/);
+  const saved = await apiCall<{ places: { label: string }[] }>(cookie26, "GET", "/me/weather/places");
+  expect(saved.data.places.map((p) => p.label)).toEqual(["Toulouse", "Lyon"]);
+  await expect(page.getByText("Canet-en-Roussillon · ma position")).toHaveCount(0);
+  await apiCall(cookie26, "PUT", "/me/weather/places", { places: [] });
+  await ctx.close();
+});

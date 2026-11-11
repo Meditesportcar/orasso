@@ -57,6 +57,7 @@ export function listenSession(listener: Listener): () => void {
     if (e.key !== NAME || !e.newValue) return;
     try {
       const id = (JSON.parse(e.newValue) as { userId?: unknown }).userId;
+      lastAnnounced = typeof id === "string" ? id : null;
       listener(typeof id === "string" ? id : null);
     } catch {
       // Valeur illisible : ignorée.

@@ -68,7 +68,10 @@ export async function action({ request }: Route.ActionArgs) {
   const slotRaw = String(form.get("slot") ?? "");
   const slot = slotRaw === "" ? null : Number.parseInt(slotRaw, 10);
   let next: ReturnType<typeof placesAfterAdd>;
-  if (op === "change") next = placesAfterChange(current.data.places, { slot }, city);
+  const kind = String(form.get("kind") ?? "");
+  const replacesPosition = op === "change" && kind === "position";
+  if (op === "change")
+    next = placesAfterChange(current.data.places, { slot, kind: kind === "position" ? "position" : undefined }, city);
   else if (op === "add") next = placesAfterAdd(current.data.places, city);
   else if (op === "remove" && slot !== null) next = placesAfterRemove(current.data.places, slot);
   else return data({ error: L.savedFailed }, { status: 400 });
@@ -76,7 +79,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (!weatherPlacesInput.safeParse({ places: next }).success) return data({ error: L.savedFailed }, { status: 400 });
   const res = await api(request, "/me/weather/places", { method: "PUT", json: { places: next } });
   if (!res.ok) return data({ error: res.error.message || L.savedFailed }, { status: res.status });
-  throw redirect("/app/meteo");
+  throw redirect(replacesPosition ? "/app/meteo?remplace=position" : "/app/meteo");
 }
 
 export default function AppMeteo({ loaderData, actionData }: Route.ComponentProps) {

@@ -42,12 +42,16 @@ export function useWeatherPosition(): WeatherPosition {
  */
 export async function askMyPosition(): Promise<boolean> {
   if (store.getState().busy) return false;
+  // Le compte et la génération sont capturés DÈS LE GESTE et revérifiés après chaque attente (permission, GPS, réseau).
+  const ticket = store.begin();
+  if (!ticket) return false;
   store.setBusy(true);
   try {
     const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") return false;
+    if (permission.status !== "granted" || !store.valid(ticket)) return false;
     const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }));
+    if (!store.valid(ticket)) return false;
+    return await store.give(coarsePosition({ lat: fix.coords.latitude, lng: fix.coords.longitude }), ticket);
   } catch {
     return false;
   } finally {
