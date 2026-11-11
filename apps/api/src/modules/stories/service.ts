@@ -27,7 +27,7 @@ import {
   storyLabels,
   type UploadPurpose,
 } from "@orasso/shared";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -299,18 +299,13 @@ async function notifyPublished(
               .where(and(eq(userFollows.followedId, authorKey.id), eq(userFollows.status, "accepted")));
   const audience = rows.map((r) => r.id).filter((id) => id !== story.authorId && !tagged.includes(id));
   if (!audience.length) return;
-  // Un mute de la page, ou (page de prestataire ou de média) du compte de son titulaire : même règle que la barre.
   const muted = await tx
     .select({ id: storyMutes.userId })
     .from(storyMutes)
     .where(
       and(
-        authorKey.kind === "provider" || authorKey.kind === "media"
-          ? or(
-              and(eq(storyMutes.authorKind, authorKey.kind), eq(storyMutes.authorId, authorKey.id)),
-              and(eq(storyMutes.authorKind, "user"), eq(storyMutes.authorId, story.authorId)),
-            )
-          : and(eq(storyMutes.authorKind, authorKey.kind), eq(storyMutes.authorId, authorKey.id)),
+        eq(storyMutes.authorKind, authorKey.kind),
+        eq(storyMutes.authorId, authorKey.id),
         inArray(storyMutes.userId, audience),
       ),
     );

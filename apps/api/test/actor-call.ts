@@ -1,9 +1,7 @@
 // Requêtes de test avec l'en-tête de l'acteur (lot R9a) : `callAs(u, "s:<uuid>", "GET", "/stories/bar")`.
 import { ACTOR_HEADER } from "@orasso/shared";
-import { sql } from "drizzle-orm";
 
 import { app } from "../src/app";
-import { db } from "../src/db/client";
 import type { TestUser } from "./helpers";
 
 const ORIGIN = process.env.PUBLIC_URL ?? "http://localhost:5173";
@@ -30,6 +28,3 @@ export async function callAs(u: TestUser | null, actor: string | null, method: s
   }
   return { status: res.status, json, text, headers: res.headers };
 }
-
-/** `resetDb` ne vide que les tables liées aux comptes par une clé étrangère : `page_follows` (sans clé étrangère) se vide ici. */
-export const resetPageFollows = () => db.execute(sql`truncate page_follows`);

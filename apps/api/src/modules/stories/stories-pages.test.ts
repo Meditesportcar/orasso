@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { callAs, resetPageFollows } from "../../../test/actor-call";
+import { callAs } from "../../../test/actor-call";
 import {
   addMember,
   createEvent,
@@ -44,7 +44,6 @@ let ref: Awaited<ReturnType<typeof seedReference>>;
 
 beforeEach(async () => {
   await resetDb();
-  await resetPageFollows();
   resetRateLimits();
   clock = useClock(fromWallTime({ year: 2026, month: 11, day: 10, hour: 10, minute: 0 }));
   ref = await seedReference();
@@ -272,19 +271,24 @@ describe("mutes", () => {
     expect((await req(w.kenji, "PUT", "/me/story-mutes/v:pas-un-uuid")).status).toBe(404);
   });
 
-  it("le mute du compte du titulaire (fait avant la migration) masque aussi sa page", async () => {
+  it("aucun héritage : masquer puis démasquer une personne ne change rien à l'anneau de sa page", async () => {
     const w = await world();
     await ok(w.brasaHolder, { persona: "provider" });
     await followPage(w.kenji, `v:${w.brasa.id}`);
+    expect(await keysOf(w.kenji)).toEqual([`v:${w.brasa.id}`]);
+    // Masquer le compte du titulaire (route publique : `u:` d'un compte) puis le démasquer : l'anneau de la page ne bouge pas.
+    expect((await req(w.kenji, "PUT", `/me/story-mutes/u:${w.brasaHolder.id}`)).status).toBe(204);
+    expect(await keysOf(w.kenji)).toEqual([`v:${w.brasa.id}`]);
+    expect((await req(w.kenji, "DELETE", `/me/story-mutes/u:${w.brasaHolder.id}`)).status).toBe(204);
+    expect(await keysOf(w.kenji)).toEqual([`v:${w.brasa.id}`]);
+    // Et la notification « nouvelle story » part quand même (le masquage d'une personne n'en est pas un de sa page).
     await db.insert(storyMutes).values({ userId: w.kenji.id, authorKind: "user", authorId: w.brasaHolder.id });
-    expect(await keysOf(w.kenji)).toEqual([]);
-    // Et la notification « nouvelle story » ne lui est pas envoyée.
     await ok(w.brasaHolder, { persona: "provider" });
     const news = await db
       .select()
       .from(notifications)
       .where(and(eq(notifications.userId, w.kenji.id), eq(notifications.type, "story_published")));
-    expect(news).toHaveLength(0);
+    expect(news).toHaveLength(1);
   });
 });
 
@@ -483,6 +487,23 @@ describe("la barre lue en tant que page", () => {
     expect(await keysOf(w.brasaHolder, w.as)).toEqual([`u:${w.kenji.id}`, `m:${w.media.id}`, `s:${w.structure.id}`]);
     await req(w.brasaHolder, "PUT", `/me/story-mutes/m:${w.media.id}`);
     expect(await keysOf(w.brasaHolder, w.as)).toEqual([`u:${w.kenji.id}`, `s:${w.structure.id}`]);
+  });
+
+  it("lue par un responsable de la page : ses propres stories de crew ne passent pas (regard sans lien, pas l'auteur)", async () => {
+    const w = await setup();
+    const co = await signUp("Co_Crew", { twoFactor: true });
+    await addMember(w.structure.id, co.id, "co_organizer");
+    // La structure suit le co-organisateur (ligne posée par la base : la route refuserait « le compte qui la tient »).
+    await db.insert(pageFollows).values({
+      followerKind: "structure",
+      followerId: w.structure.id,
+      targetKind: "user",
+      targetId: co.id,
+    });
+    const crew = await req(co, "POST", "/crews", { name: "Crew du co", department: "66" });
+    expect(crew.status).toBe(201);
+    await ok(co, { audience: "crew", crewId: crew.json.id });
+    expect(await keysOf(co, `s:${w.structure.id}`)).not.toContain(`u:${co.id}`);
   });
 
   it("l'acteur est vérifié : une page qu'on ne tient pas, 403 ; un co-organisateur lit sans second facteur", async () => {

@@ -40,7 +40,7 @@ import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
-import type { Executor, Tx } from "../../lib/tx";
+import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { profilesRepo } from "../profiles/repo";
 
 /** Ce que suit un acteur, par genre : des identifiants (compte pour `users`, UUID de la page pour les autres). */
@@ -316,17 +316,31 @@ export const pageFollowsService = {
       throw validation(pageFollowErrors.existingRoute);
     }
     const at = now();
-    const target = await loadTarget(key.kind, key.id, at, db);
-    if (!target) throw notFound(pageFollowErrors.notFound);
-    const sameAccount = isPageActor(actor)
-      ? key.kind === "user" && key.id === v.user.id
-      : target.holderUserId === v.user.id;
-    const denied = refusal(canFollow({ kind: actor.kind, id: actor.id }, { ...target, sameAccount }));
-    if (denied) throw denied;
-    await db
-      .insert(pageFollows)
-      .values({ followerKind: actor.kind, followerId: actor.id, targetKind: key.kind, targetId: key.id, createdAt: at })
-      .onConflictDoNothing();
+    // Une transaction, avec `FOR SHARE` sur le profil d'un compte suivi (comme `followProfile`) : un passage en privé en
+    // même temps est sérialisé, soit il passe d'abord et la page est refusée (T6), soit la ligne est écrite avant et il la
+    // supprime dans sa propre transaction ; jamais une ligne qui reviendrait quand le compte repasse public.
+    await withTx(async (tx) => {
+      if (key.kind === "user") {
+        await tx.select({ id: profiles.userId }).from(profiles).where(eq(profiles.userId, key.id)).for("share");
+      }
+      const target = await loadTarget(key.kind, key.id, at, tx);
+      if (!target) throw notFound(pageFollowErrors.notFound);
+      const sameAccount = isPageActor(actor)
+        ? key.kind === "user" && key.id === v.user.id
+        : target.holderUserId === v.user.id;
+      const denied = refusal(canFollow({ kind: actor.kind, id: actor.id }, { ...target, sameAccount }));
+      if (denied) throw denied;
+      await tx
+        .insert(pageFollows)
+        .values({
+          followerKind: actor.kind,
+          followerId: actor.id,
+          targetKind: key.kind,
+          targetId: key.id,
+          createdAt: at,
+        })
+        .onConflictDoNothing();
+    });
     return { following: true, followersCount: await followersCountOf(key, at) };
   },
 

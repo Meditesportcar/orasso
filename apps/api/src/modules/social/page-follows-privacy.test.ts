@@ -2,7 +2,7 @@
 // restent celles des personnes, deux pages d'un même titulaire ne se mélangent pas.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { callAs, resetPageFollows } from "../../../test/actor-call";
+import { callAs } from "../../../test/actor-call";
 import { createPro, createStructure, resetDb, signUp, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import { mediaProfiles, pageFollows, providerProfiles } from "../../db/schema";
@@ -15,7 +15,6 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDb();
-  await resetPageFollows();
   resetRateLimits();
   useClock(new Date("2026-11-11T09:00:00Z"));
 });

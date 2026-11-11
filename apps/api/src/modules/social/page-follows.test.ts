@@ -4,7 +4,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { callAs, resetPageFollows } from "../../../test/actor-call";
+import { callAs } from "../../../test/actor-call";
 import { addMember, createPro, createStructure, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
@@ -28,7 +28,6 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDb();
-  await resetPageFollows();
   resetRateLimits();
   useClock(new Date("2026-11-11T09:00:00Z"));
 });
@@ -458,6 +457,35 @@ describe("disparitions", () => {
     // Le compteur du média ne compte plus que la structure.
     const media = await callAs(w.damien, null, "GET", `/media/${w.media.id}`);
     expect(media.json.followersCount).toBe(1);
+  });
+});
+
+describe("identifiants en majuscules et accès concurrent", () => {
+  it("un UUID en majuscules dans l'adresse donne les mêmes compteurs et le même état", async () => {
+    const w = await world();
+    await callAs(w.kenji, null, "PUT", `/me/page-follows/v:${w.brasa.id}`);
+    await callAs(w.kenji, null, "PUT", `/me/page-follows/m:${w.media.id}`);
+    const prov = await callAs(w.kenji, null, "GET", `/providers/${w.brasa.id.toUpperCase()}`);
+    expect(prov.json).toMatchObject({ followersCount: 1, isFollowing: true });
+    const media = await callAs(w.kenji, null, "GET", `/media/${w.media.id.toUpperCase()}`);
+    expect(media.json).toMatchObject({ followersCount: 1, isFollowing: true });
+  });
+
+  it("T6 : une page qui suit pendant le passage en privé ne laisse jamais de ligne", async () => {
+    for (let i = 0; i < 4; i++) {
+      const w = await world();
+      const [follow, priv] = await Promise.all([
+        callAs(w.brasaHolder, `v:${w.brasa.id}`, "PUT", `/me/page-follows/u:${w.kenji.id}`),
+        callAs(w.kenji, null, "PATCH", "/me/profile", { visibility: "private" }),
+      ]);
+      expect(priv.status).toBe(200);
+      expect([200, 422]).toContain(follow.status);
+      expect(await rows()).toHaveLength(0);
+      // Le compte repasse public : rien ne revient.
+      await callAs(w.kenji, null, "PATCH", "/me/profile", { visibility: "public" });
+      expect(await rows()).toHaveLength(0);
+      await resetDb();
+    }
   });
 });
 

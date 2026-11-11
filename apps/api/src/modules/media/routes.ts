@@ -68,7 +68,7 @@ export const mediaRoutes = new Hono<AppEnv>()
   .delete("/me/media-profile/logo", async (c) => c.json(await mediaService.setLogo(await requireUser(c), null)))
   .get("/media/:id", async (c) => {
     const v = await requireUser(c);
-    const id = uuidParam(c, "id");
+    const id = uuidParam(c, "id").toLowerCase();
     // Vague R9 (lot R9a) : `followersCount` (personnes et pages) et `isFollowing` pour l'acteur (en-tête d'une page).
     const actor = await readActor(c, v);
     if (isPageActor(actor)) noStore(c);

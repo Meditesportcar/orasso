@@ -55,6 +55,17 @@ describe("migration persona-follows sur une base avec données", () => {
           [id],
         );
       }
+      // u-prov a un compte privé (ses stories « Mes abonnés » de page sont closes par la migration), u-media un compte public.
+      for (const [id, visibility] of [
+        ["u-prov", "private"],
+        ["u-media", "public"],
+      ] as const) {
+        await pool.query(
+          `insert into profiles (user_id, pseudo, visibility, account_qr_secret, account_qr_short_id, invite_token)
+           values ($1, $1, $2::profile_visibility, decode(md5(random()::text), 'hex'), decode(substr(md5(random()::text), 1, 16), 'hex'), $1)`,
+          [id, visibility],
+        );
+      }
       const prov = (
         await pool.query(
           `insert into provider_profiles (user_id, type, name) values ('u-prov', 'photographer', 'La Brasa') returning id`,
@@ -78,10 +89,16 @@ describe("migration persona-follows sur une base avec données", () => {
       const sProv = await story("u-prov", "provider");
       const sMedia = await story("u-media", "media");
       const sGone = await story("u-gone", "provider");
+      const sFollowers = (
+        await pool.query(
+          `insert into stories (author_id, persona, audience, storage_key, plate_state, status, expires_at)
+           values ('u-prov', 'provider', 'followers', 'private/stories/x/' || gen_random_uuid() || '.webp', 'none_confirmed', 'ready', now() + interval '1 hour') returning id`,
+        )
+      ).rows[0].id as string;
       const sFan = await story("u-fan", "fan");
       const sNoProfile = await story("u-fan", "media");
       await pool.query(
-        `insert into story_mutes (user_id, author_kind, author_id) values ('u-fan', 'user', 'u-prov'), ('u-fan', 'structure', 'abc')`,
+        `insert into story_mutes (user_id, author_kind, author_id) values ('u-fan', 'user', 'u-prov'), ('u-fan', 'user', 'u-media'), ('u-fan', 'structure', 'abc')`,
       );
 
       // La migration s'applique sur ces données.
@@ -96,12 +113,19 @@ describe("migration persona-follows sur une base avec données", () => {
       expect(by(sNoProfile)).toMatchObject({ media_id: null });
       expect(by(sFan)).toMatchObject({ persona: "fan", provider_id: null, media_id: null });
 
-      // Les mutes sont gardés, sur le nouvel enum à cinq genres.
-      const mutes = await pool.query(`select author_kind::text as k, author_id from story_mutes order by author_id`);
+      // Les mutes sont gardés, sur le nouvel enum à cinq genres ; ceux d'une personne sont copiés UNE fois sur ses pages.
+      const mutes = await pool.query(`select author_kind::text as k, author_id from story_mutes order by k, author_id`);
       expect(mutes.rows).toEqual([
+        { k: "media", author_id: media },
+        { k: "provider", author_id: prov },
         { k: "structure", author_id: "abc" },
+        { k: "user", author_id: "u-media" },
         { k: "user", author_id: "u-prov" },
       ]);
+      // D38 : la story « Mes abonnés » d'une page au titulaire privé est close ; les autres restent vivantes.
+      const closed = await pool.query(`select deleted_at is not null as gone from stories where id = $1`, [sFollowers]);
+      expect(closed.rows[0].gone).toBe(true);
+      expect((await pool.query(`select deleted_at from stories where id = $1`, [sProv])).rows[0].deleted_at).toBeNull();
       await pool.query(
         `insert into story_mutes (user_id, author_kind, author_id) values ('u-fan', 'provider', 'x'), ('u-fan', 'media', 'y')`,
       );
@@ -118,11 +142,13 @@ describe("migration persona-follows sur une base avec données", () => {
         .split("--> statement-breakpoint")
         .map((x) => x.trim())
         .filter(Boolean);
-      expect(data).toHaveLength(2);
+      expect(data).toHaveLength(5);
       for (const statement of data) await pool.query(statement);
       expect((await pool.query(`select id, persona, provider_id, media_id from stories order by id`)).rows).toEqual(
         rows.rows,
       );
+      // Rejouée, la copie des mutes n'ajoute rien (3 d.origine + 2 copiés + 2 ajoutés plus haut).
+      expect((await pool.query(`select count(*)::int as n from story_mutes`)).rows[0].n).toBe(7);
 
       // Une story est supprimée avec sa page (cascade).
       await pool.query(`delete from provider_profiles where id = $1`, [prov]);

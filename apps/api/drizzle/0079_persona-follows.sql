@@ -28,4 +28,19 @@ UPDATE "stories" s SET "provider_id" = (
 ) WHERE s."persona" = 'provider' AND s."provider_id" IS NULL;--> statement-breakpoint
 UPDATE "stories" s SET "media_id" = (
   SELECT m."id" FROM "media_profiles" m WHERE m."user_id" = s."author_id" AND m."deleted_at" IS NULL LIMIT 1
-) WHERE s."persona" = 'media' AND s."media_id" IS NULL;
+) WHERE s."persona" = 'media' AND s."media_id" IS NULL;--> statement-breakpoint
+-- Masquages d'une personne copiés UNE SEULE FOIS sur les pages qu'elle tient alors (les stories déjà masquées ne reviennent
+-- pas). Aucun héritage ensuite : masquer ou démasquer une personne ne change rien à l'anneau de sa page.
+INSERT INTO "story_mutes" ("user_id", "author_kind", "author_id", "created_at")
+SELECT m."user_id", 'provider'::"story_author_kind", p."id"::text, m."created_at" FROM "story_mutes" m
+JOIN "provider_profiles" p ON p."user_id" = m."author_id" AND p."deleted_at" IS NULL
+WHERE m."author_kind" = 'user' ON CONFLICT DO NOTHING;--> statement-breakpoint
+INSERT INTO "story_mutes" ("user_id", "author_kind", "author_id", "created_at")
+SELECT m."user_id", 'media'::"story_author_kind", p."id"::text, m."created_at" FROM "story_mutes" m
+JOIN "media_profiles" p ON p."user_id" = m."author_id" AND p."deleted_at" IS NULL
+WHERE m."author_kind" = 'user' ON CONFLICT DO NOTHING;--> statement-breakpoint
+-- D38 : une page est publique. Les stories vivantes « Mes abonnés » d'un prestataire ou d'un média dont le titulaire a un
+-- compte privé deviendraient visibles de tous : elles sont closes (suppression douce, les fichiers partent au balayage).
+UPDATE "stories" s SET "deleted_at" = now(), "updated_at" = now()
+WHERE s."persona" IN ('provider', 'media') AND s."audience" = 'followers' AND s."deleted_at" IS NULL AND s."expires_at" > now()
+  AND EXISTS (SELECT 1 FROM "profiles" pr WHERE pr."user_id" = s."author_id" AND pr."visibility" = 'private');

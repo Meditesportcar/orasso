@@ -10,6 +10,7 @@
 // Invariant : tout ce qu'une barre lue en casquette contient est visible de n'importe quel membre connecté.
 import {
   type AudienceRelation,
+  type AudienceViewer,
   type BarRank,
   STORY_LIVE_MAX,
   type StoriesSummary,
@@ -43,6 +44,9 @@ import {
   setsFor,
   viewerOf,
 } from "./common";
+
+/** Un membre connecté quelconque, qui n'est l'auteur d'aucune story : `storyDenial` laisse toujours passer l'auteur (lot R9a). */
+const MEMBER: AudienceViewer = { id: "\u0000membre", active: true };
 
 /** Le regard d'un membre connecté quelconque : aucun lien avec l'auteur (barre lue en casquette, lot R9a). */
 const NO_RELATION: AudienceRelation = { followAccepted: false, crewMemberActive: () => false, tagged: false };
@@ -146,12 +150,8 @@ export const storiesBar = {
     };
     const mutedRows = await db.select().from(storyMutes).where(eq(storyMutes.userId, me));
     const muted = new Set(mutedRows.map((m) => storyAuthorKeyOf(m.authorKind, m.authorId)));
-    // Une page de prestataire ou de média est aussi masquée si le compte de son titulaire l'est (lot R9a : qui avait masqué
-    // une personne avant la migration ne voit pas revenir ses stories de food truck).
-    const mutedRow = (r: StoryRow, key: string) =>
-      muted.has(key) ||
-      ((r.story.persona === "provider" || r.story.persona === "media") &&
-        muted.has(storyAuthorKeyOf("user", r.story.authorId)));
+    // Une page n'hérite jamais du masquage de son titulaire (le démasquer ferait deviner qui la tient) : la migration a copié
+    // une fois les masquages existants sur les pages.
 
     const ors: (SQL | undefined)[] = [];
     if (sets.users.size) ors.push(and(personal, anyOf(stories.authorId, sets.users, "text")));
@@ -182,13 +182,13 @@ export const storiesBar = {
     const viewer = viewerOf(v);
     const visible = candidates.filter((r) => {
       const key = authorKeyOf(r);
-      if (!key || mutedRow(r, key.key)) return false;
+      if (!key || muted.has(key.key)) return false;
       if (asPage) {
         // Lue en casquette, la barre ne contient que du contenu visible de n'importe quel membre connecté : on juge chaque
         // story avec un regard sans aucun lien (ni abonnement accepté, ni crew, ni identification). Un abonnement de page
         // n'est pas un abonnement accepté : jamais un crew, jamais les abonnés d'un compte privé, jamais un compte privé.
         if (key.key === asPage.key) return false;
-        return storyDenial(viewer, audienceStoryOf(r, at), NO_RELATION) === null;
+        return storyDenial(MEMBER, audienceStoryOf(r, at), NO_RELATION) === null;
       }
       return storyDenial(viewer, audienceStoryOf(r, at), relationOf(sets, r)) === null;
     });
