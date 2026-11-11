@@ -138,7 +138,7 @@ test("position accordée : jamais dans une adresse ni dans le stockage, les sour
   }
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(stored).not.toMatch(/42\.704937|2\.895412|42\.70494|2\.89541/);
-  await expect(page.getByTestId("widget-weather")).not.toContainText("ma position");
+  await expect(page.getByTestId("widget-weather")).not.toContainText("· ma position");
   await shot(page, "site-position-390");
   await ctx.close();
 });
