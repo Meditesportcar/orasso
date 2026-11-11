@@ -28,6 +28,7 @@ import { networkApi } from "./network";
 import { orgaApi } from "./orga";
 import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
+import { practicalApi } from "./practical";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
@@ -73,6 +74,7 @@ export const api = {
   ...applicationsApi,
   ...staffApi,
   ...weatherApi,
+  ...practicalApi,
   ...socialApi,
   ...networkApi,
   ...settingsApi,

@@ -11,29 +11,30 @@ import type { WeatherAt } from "../weather";
 /** Une météo de position plus vieille que ça est relue au retour sur l'écran (la case se rafraîchit côté API toutes les 3 h). */
 export const POSITION_REFRESH_MS = 10 * 60_000;
 
-export type PositionState = {
+export type PositionState<T = WeatherAt> = {
   owner: string | null;
   coarse: LatLng | null;
-  at: WeatherAt | null;
+  at: T | null;
   fetchedAt: number;
   busy: boolean;
 };
 
-export type PositionDeps = {
+/** Lot R8q : `T` est ce que la position donne (la météo de sa case pour « Ma météo », les lieux proches pour « Pratique »). */
+export type PositionDeps<T = WeatherAt> = {
   scope: () => string | null;
   now: () => number;
-  weatherAt: (position: LatLng) => Promise<WeatherAt>;
+  weatherAt: (position: LatLng) => Promise<T>;
 };
 
 /** La session et la génération capturées au geste (« Utiliser ma position ») : revérifiées après chaque attente. */
 export type PositionTicket = { owner: string; gen: number };
 
-export function createPositionStore(deps: PositionDeps) {
-  const empty: PositionState = { owner: null, coarse: null, at: null, fetchedAt: 0, busy: false };
-  let state: PositionState = empty;
+export function createPositionStore<T = WeatherAt>(deps: PositionDeps<T>) {
+  const empty: PositionState<T> = { owner: null, coarse: null, at: null, fetchedAt: 0, busy: false };
+  let state: PositionState<T> = empty;
   let generation = 0;
   const listeners = new Set<() => void>();
-  const set = (patch: Partial<PositionState>) => {
+  const set = (patch: Partial<PositionState<T>>) => {
     state = { ...state, ...patch };
     for (const l of listeners) l();
   };
@@ -62,7 +63,7 @@ export function createPositionStore(deps: PositionDeps) {
       };
     },
     /** La position visible pour la session courante. */
-    view(): { at: WeatherAt | null; busy: boolean } {
+    view(): { at: T | null; busy: boolean } {
       const mine = state.owner !== null && state.owner === deps.scope();
       return { at: mine ? state.at : null, busy: state.busy };
     },

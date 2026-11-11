@@ -4,13 +4,13 @@
 // département. La position d'une personne n'arrive ici qu'arrondie à la case de 0,1° (`weatherCell`, dès la route) ; elle
 // n'est écrite nulle part, ni journalisée, ni rattachée au compte. Distances et tri fin : le téléphone, avec sa position exacte.
 import {
-  type PracticalData,
-  type PracticalOrigin,
-  type PracticalPlace,
   homeLabels,
   myWeatherPlaces,
   nearestDepartments,
   PRACTICAL_DEPARTMENTS,
+  type PracticalData,
+  type PracticalOrigin,
+  type PracticalPlace,
   placesAround,
   practicalPlaceId,
   practicalTexts,
@@ -121,9 +121,7 @@ export const practicalService = {
       ...apps
         .filter((a) => (a.dayEndsAt ?? a.endsAt).getTime() > t)
         .map((a) => ({ ...a, startsMs: (a.dayStartsAt ?? a.startsAt).getTime() })),
-      ...held
-        .filter((x) => x.endsAt.getTime() > t)
-        .map((x) => ({ ...x, startsMs: x.startsAt.getTime() })),
+      ...held.filter((x) => x.endsAt.getTime() > t).map((x) => ({ ...x, startsMs: x.startsAt.getTime() })),
     ];
     candidates.sort((a, b) => a.startsMs - b.startsMs || a.id.localeCompare(b.id));
     return candidates[0] ?? null;
@@ -140,25 +138,29 @@ export const practicalService = {
     const departments = nearestDepartments(origin, PRACTICAL_DEPARTMENTS);
     const loads = departments.flatMap((d) => [
       withinBudget(washNear(d), [], budgetMs).then((list) =>
-        list.map((p): PracticalPlace => ({
-          id: practicalPlaceId("wash", p.lat, p.lng),
-          kind: "wash",
-          name: p.name,
-          address: p.address,
-          lat: p.lat,
-          lng: p.lng,
-        })),
+        list.map(
+          (p): PracticalPlace => ({
+            id: practicalPlaceId("wash", p.lat, p.lng),
+            kind: "wash",
+            name: p.name,
+            address: p.address,
+            lat: p.lat,
+            lng: p.lng,
+          }),
+        ),
       ),
       // Liste blanche : ni prix ni heure de mise à jour ne sortent d'ici.
       withinBudget(fuelNear(d), [], budgetMs).then((list) =>
-        list.map((p): PracticalPlace => ({
-          id: practicalPlaceId("fuel", p.lat, p.lng),
-          kind: "fuel",
-          name: p.name,
-          address: p.address,
-          lat: p.lat,
-          lng: p.lng,
-        })),
+        list.map(
+          (p): PracticalPlace => ({
+            id: practicalPlaceId("fuel", p.lat, p.lng),
+            kind: "fuel",
+            name: p.name,
+            address: p.address,
+            lat: p.lat,
+            lng: p.lng,
+          }),
+        ),
       ),
     ]);
     const all = (await Promise.all(loads)).flat();

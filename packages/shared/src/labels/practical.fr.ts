@@ -15,6 +15,11 @@ export const practicalTexts = {
   fuelNearest: "Station-service la plus proche",
   washNearest: "Lavage le plus proche",
   goThere: "Y aller",
+  /** La feuille de « Y aller » : le même choix que sur la fiche d'un événement. */
+  goMaps: "Maps",
+  goWaze: "Waze",
+  /** `aria-label` de « Y aller » : « Y aller : Station du Vernet ». */
+  goA11y: (title: string) => `Y aller : ${title}`,
   usePosition: "Utiliser ma position",
   /** « Autour de Perpignan, ta ville. » */
   aroundCity: (city: string) => `Autour de ${city}, ta ville.`,
@@ -24,6 +29,8 @@ export const practicalTexts = {
   noOrigin: "Donne ta position pour voir les lieux proches.",
   nothingNear: keepUnits("Rien à moins de 30 km."),
   loading: "Recherche des lieux proches…",
+  /** Les deux sources n'ont pas répondu : le bloc se replie sur cette ligne, sans erreur. */
+  unavailable: "Lieux proches indisponibles pour le moment.",
   /** Sous le nom d'un lieu : « Station-service · 1,2 km ». */
   kindLabel: { fuel: "Station-service", wash: "Lavage" } satisfies Record<PracticalKind, string>,
   /** Chips de l'écran : « Tout · Stations-service · Lavage ». */

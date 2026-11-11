@@ -9,7 +9,10 @@ import * as t from "../../src/db/schema";
 import { now } from "./helpers";
 
 type Wash = { name: string; address: string | null; lat: number; lng: number };
-type Station = Wash & { prices: { sp95: number | null; sp98: number | null; gazole: number | null; e85: number | null }; updatedAt: string | null };
+type Station = Wash & {
+  prices: { sp95: number | null; sp98: number | null; gazole: number | null; e85: number | null };
+  updatedAt: string | null;
+};
 
 const wash: Wash[] = [
   { name: "Lavage Tech'Auto", address: "Avenue du Languedoc, 66000 Perpignan", lat: 42.7092, lng: 2.8827 },
@@ -17,7 +20,12 @@ const wash: Wash[] = [
   { name: "Lavage du Moulin", address: "Chemin du Moulin à Vent, 66000 Perpignan", lat: 42.6871, lng: 2.8739 },
   { name: "Lavage du Port", address: "Quai Nord, 66140 Canet-en-Roussillon", lat: 42.6956, lng: 3.0368 },
   { name: "Canet Clean", address: "Avenue de la Méditerranée, 66140 Canet-en-Roussillon", lat: 42.7103, lng: 3.0229 },
-  { name: "Station de lavage du Barcarès", address: "Avenue Gérard Philipe, 66420 Le Barcarès", lat: 42.7791, lng: 3.0316 },
+  {
+    name: "Station de lavage du Barcarès",
+    address: "Avenue Gérard Philipe, 66420 Le Barcarès",
+    lat: 42.7791,
+    lng: 3.0316,
+  },
   { name: "Lavage Argelès Express", address: "Route de Collioure, 66700 Argelès-sur-Mer", lat: 42.5463, lng: 3.0252 },
 ];
 
@@ -53,5 +61,7 @@ export async function seedPractical() {
       .values({ key, fetchedAt: now, data })
       .onConflictDoUpdate({ target: t.externalCache.key, set: { fetchedAt: now, data: sql`excluded.data` } });
   }
-  console.log(`Pratique : ${wash.length} lavages et ${fuel.length} stations-service factices dans le cache (66), aucun appel réel.`);
+  console.log(
+    `Pratique : ${wash.length} lavages et ${fuel.length} stations-service factices dans le cache (66), aucun appel réel.`,
+  );
 }

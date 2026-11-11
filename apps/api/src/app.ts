@@ -57,6 +57,7 @@ import { notificationsRoutes } from "./modules/notifications/routes";
 import { partnershipsRoutes } from "./modules/partnerships/routes";
 import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
+import { practicalRoutes } from "./modules/practical/routes";
 import { presenceRoutes } from "./modules/presence/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
@@ -78,7 +79,6 @@ import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { votesRoutes } from "./modules/votes/routes";
-import { practicalRoutes } from "./modules/practical/routes";
 import { weatherRoutes } from "./modules/weather/routes";
 import { ws } from "./ws";
 

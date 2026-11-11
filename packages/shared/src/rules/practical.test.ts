@@ -18,7 +18,12 @@ import {
 } from "./practical";
 
 const PERPIGNAN = { lat: 42.7, lng: 2.9 };
-const place = (kind: "fuel" | "wash", lat: number, lng: number, extra: Partial<PracticalPlace> = {}): PracticalPlace => ({
+const place = (
+  kind: "fuel" | "wash",
+  lat: number,
+  lng: number,
+  extra: Partial<PracticalPlace> = {},
+): PracticalPlace => ({
   id: practicalPlaceId(kind, lat, lng),
   kind,
   name: kind === "fuel" ? "Station-service" : "Lavage Tech'Auto",
@@ -98,7 +103,9 @@ describe("règles de Pratique (R8q)", () => {
     expect(practicalTitle(place("fuel", 1, 1, { address: "12 bis avenue du Vernet, 66000 Perpignan" }), UNNAMED)).toBe(
       "Avenue du Vernet",
     );
-    expect(practicalTitle(place("fuel", 1, 1, { address: "Route de Canet, 66140 Canet" }), UNNAMED)).toBe("Route de Canet");
+    expect(practicalTitle(place("fuel", 1, 1, { address: "Route de Canet, 66140 Canet" }), UNNAMED)).toBe(
+      "Route de Canet",
+    );
     expect(practicalTitle(place("fuel", 1, 1, { address: null }), UNNAMED)).toBe("Station-service");
     expect(practicalTitle(place("fuel", 1, 1, { address: "66000 Perpignan" }), UNNAMED)).toBe("Station-service");
   });
@@ -113,7 +120,9 @@ describe("règles de Pratique (R8q)", () => {
       expect(practicalInput.safeParse({ near: "position", lat: 42.69, lng: 2.89 }).success).toBe(true);
       expect(practicalInput.safeParse({ near: "city" }).success).toBe(true);
       expect(practicalInput.safeParse({ near: "outing" }).success).toBe(true);
-      expect(practicalInput.safeParse({ near: "outing", eventId: "d3b07384-d9a1-4f4e-8a8e-3f0f2d1c9a11" }).success).toBe(true);
+      expect(
+        practicalInput.safeParse({ near: "outing", eventId: "d3b07384-d9a1-4f4e-8a8e-3f0f2d1c9a11" }).success,
+      ).toBe(true);
     });
     it("hors de France, champ en trop, mauvais identifiant : refusés", () => {
       expect(practicalInput.safeParse({ near: "position", lat: 51.5, lng: -0.12 }).success).toBe(false);

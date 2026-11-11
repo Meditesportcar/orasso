@@ -44,6 +44,7 @@ export const widgetIcons: Record<HomeWidgetId, IconName> = {
   memories: "stamp",
   nearby: "explore",
   weather: "weatherClear",
+  practical: "fuel",
   agenda: "calendar",
   favorite_garage: "wrench",
   pending: "wait",

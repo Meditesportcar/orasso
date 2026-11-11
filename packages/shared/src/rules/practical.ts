@@ -1,7 +1,7 @@
 // Lot R8q : règles pures de « Pratique » (maquette R8.12) : la station-service et le lavage les plus proches, de moi ou d'une
 // sortie. Aucune règle ici ne lit l'heure. La position d'une personne n'est jamais une donnée du serveur : l'API ne connaît
 // que la case de 0,1° (`weatherCell`), le téléphone calcule les distances avec sa position exacte, qui ne le quitte pas.
-import { type LatLng, departmentCentroids, distanceKm } from "../geo";
+import { departmentCentroids, distanceKm, type LatLng } from "../geo";
 import { NBSP } from "../labels/units.fr";
 
 /** Les deux sortes de lieu : station-service (`fuel`) et lavage (`wash`). */
@@ -36,6 +36,15 @@ export type PracticalData = {
 };
 
 export type PracticalPlaceAt = PracticalPlace & { distanceKm: number };
+
+/** Ce que la position donnée à « Pratique » garde EN MÉMOIRE de l'écran : les lieux de sa case et la position exacte (jamais envoyée). */
+export type PracticalAt = { exact: LatLng; data: PracticalData };
+
+/** « Près de moi | Près de ma sortie ». */
+export type PracticalChoice = "me" | "outing";
+
+/** Relecture d'une réponse partielle (une source n'avait pas répondu dans le budget de l'API) : une seule, après ce délai. */
+export const PRACTICAL_PARTIAL_RETRY_MS = 3000;
 
 /** Une empreinte stable (sorte et position) : la même station garde le même identifiant d'un jour à l'autre. */
 export function practicalPlaceId(kind: PracticalKind, lat: number, lng: number): string {
@@ -115,7 +124,10 @@ export function filterKind<T extends { kind: PracticalKind }>(places: readonly T
  * Le titre d'un lieu. Lavage : son nom OpenStreetMap, à défaut « Station de lavage ». Station-service : la rue de son adresse
  * (le jeu public des prix n'a pas de nom de station), sans le numéro, à défaut « Station-service ».
  */
-export function practicalTitle(place: Pick<PracticalPlace, "kind" | "name" | "address">, unnamed: Record<PracticalKind, string>): string {
+export function practicalTitle(
+  place: Pick<PracticalPlace, "kind" | "name" | "address">,
+  unnamed: Record<PracticalKind, string>,
+): string {
   if (place.kind === "wash") return place.name.trim() || unnamed.wash;
   const street = (place.address ?? "").split(",")[0]?.replace(/\s+/g, " ").trim() ?? "";
   // Pas de rue (l'adresse commence par le code postal) : le titre par défaut.

@@ -115,7 +115,12 @@ describe("POST /practical : la réponse", () => {
       lon: 2.9 + Math.floor(i / 50) * 0.002,
     }));
     practicalSources({
-      wash: { "66": [{ name: "Trop loin", lat: 43.2, lon: 2.9 }, { name: "Près", lat: 42.7005, lon: 2.9 }] },
+      wash: {
+        "66": [
+          { name: "Trop loin", lat: 43.2, lon: 2.9 },
+          { name: "Près", lat: 42.7005, lon: 2.9 },
+        ],
+      },
       fuel: { "66": stations },
     });
     const res = await here(await fan("Fan_Plafond"));
@@ -193,7 +198,11 @@ describe("POST /practical : ma sortie", () => {
     const owner = await signUp("Orga_R8q", { twoFactor: true });
     return createStructure(owner.id);
   }
-  async function apply(u: TestUser, eventId: string, status: (typeof applications.$inferInsert)["status"] = "accepted") {
+  async function apply(
+    u: TestUser,
+    eventId: string,
+    status: (typeof applications.$inferInsert)["status"] = "accepted",
+  ) {
     const car = await createVehicle(u.id, ref);
     await db
       .insert(applications)
@@ -203,7 +212,15 @@ describe("POST /practical : ma sortie", () => {
     const [type] = await db.insert(ticketTypes).values({ eventId, name: "Entrée", capacity: 100 }).returning();
     const [order] = await db
       .insert(orders)
-      .values({ eventId, userId: u.id, ticketTypeId: type!.id, status: "paid", quantity: 1, amountCents: 0, paidAt: clock.now })
+      .values({
+        eventId,
+        userId: u.id,
+        ticketTypeId: type!.id,
+        status: "paid",
+        quantity: 1,
+        amountCents: 0,
+        paidAt: clock.now,
+      })
       .returning();
     await db
       .insert(signingKeys)
