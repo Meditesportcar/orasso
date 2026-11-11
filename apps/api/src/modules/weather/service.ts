@@ -140,7 +140,7 @@ const atFetches: number[] = [];
 const NEAREST_CELL_DEG = 0.5;
 const CITY_KEY = "reverse-city:";
 const CITY_MISS_MS = HOUR;
-const CITY_KEEP_MS = 30 * DAY;
+const CITY_KEEP_MS = 7 * DAY;
 /** Dernier échec du fournisseur par département (lot 30) et délai avant de réessayer. */
 const departmentFailures = new Map<string, number>();
 const DEPARTMENT_RETRY_MS = 10 * 60_000;
@@ -619,7 +619,8 @@ export const weatherService = {
     let rows: (typeof weatherPlacesCache.$inferSelect | null)[];
     let pending = false;
     if (mode === "fresh") {
-      rows = await Promise.all(cells.map((c) => this.cellForecast(c).catch(() => null)));
+      // Les cases nouvelles passent par le même plafond horaire que « Utiliser ma position » (quota du fournisseur).
+      rows = await Promise.all(cells.map((c) => this.cellForAt(c).catch(() => null)));
     } else {
       const keys = [...new Set(cells.map((c) => c.key))];
       const stock = keys.length

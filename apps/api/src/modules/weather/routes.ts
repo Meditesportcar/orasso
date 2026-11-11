@@ -48,7 +48,8 @@ export const weatherRoutes = new Hono<AppEnv>()
   })
   .put("/me/weather/places", async (c) => {
     const v = await requireUser(c);
-    rateLimit("myWeather", v.user.id);
+    rateLimit("weatherPut", v.user.id);
+    rateLimit("weatherPutHour", v.user.id);
     const input = await body(c, weatherPlacesInput);
     return c.json(await weatherService.savePlaces(v, input.places));
   })

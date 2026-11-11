@@ -661,6 +661,27 @@ describe("coût : limites de « Utiliser ma position » et cache du géocodage i
   });
 });
 
+describe("coût : PUT des lieux", () => {
+  it("10 par minute et 30 par heure ; les cases nouvelles passent par le plafond horaire commun", async () => {
+    const f = providerStub();
+    setWeatherFetch(f as unknown as typeof fetch);
+    const u = await fan("Fan_Put");
+    const codes: number[] = [];
+    for (let i = 0; i < 11; i++)
+      codes.push((await call(u, "PUT", "/me/weather/places", { places: [perpignan] })).status);
+    expect(codes.slice(0, 10).every((x) => x === 200)).toBe(true);
+    expect(codes[10]).toBe(429);
+    // Plafond atteint : un lieu lointain nouveau ne part pas au fournisseur.
+    resetRateLimits();
+    fillPositionBudget();
+    const before = f.mock.calls.length;
+    const res = await call(u, "PUT", "/me/weather/places", { places: [{ label: "Lille", lat: 50.63, lng: 3.06 }] });
+    expect(res.status).toBe(200);
+    expect(res.json.places[0].weather).toBeNull();
+    expect(f.mock.calls.length).toBe(before);
+  });
+});
+
 describe("export des données personnelles et état « en cours de chargement »", () => {
   it("l'export contient les villes choisies, jamais une position", async () => {
     setWeatherFetch(providerStub() as unknown as typeof fetch);
