@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { confirmRemove } from "@/features/crews/feed/confirm";
+import { postLive } from "@/features/fil/comments/live";
 import { forgetMyPublished, markFeedDirty } from "@/features/fil/feedSignal";
 import { SetRow } from "@/features/profil/parts";
 import { openReport } from "@/features/ReportSheet";
@@ -20,18 +21,33 @@ import { notifyPostRemoved } from "./publicationsSignal";
 export function PostMenu({
   post,
   canDelete,
+  canCommentsOff = false,
   onClose,
   onRemoved,
 }: {
   /** La publication dont le menu est ouvert ; `null` : fermé. */
   post: FeedPostView | null;
   canDelete: boolean;
+  /** `manage.canCommentsOff` : « Couper les commentaires » / « Rétablir les commentaires ». */
+  canCommentsOff?: boolean;
   onClose: () => void;
   /** Supprimée : l'écran la retire (la liste) ou revient (la page seule). */
   onRemoved: (post: FeedPostView) => void;
 }) {
   const { t } = useTheme();
   const [error, setError] = useState<string | null>(null);
+
+  async function toggleComments(target: FeedPostView) {
+    setError(null);
+    const off = !postLive.apply(target).commentsOff;
+    try {
+      const res = await api.setFeedCommentsOff(target.id, off);
+      postLive.set(target, { ...postLive.apply(target), commentsOff: res.commentsOff });
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
 
   async function remove(target: FeedPostView) {
     setError(null);
@@ -92,9 +108,18 @@ export function PostMenu({
                   testID="publication-menu-remove"
                 />
               ) : null}
-              {post.mine ? null : (
+              {canCommentsOff ? (
                 <SetRow
                   first={!canDelete}
+                  icon={postLive.apply(post).commentsOff ? "undo" : "close"}
+                  title={postLive.apply(post).commentsOff ? L.menuCommentsOn : L.menuCommentsOff}
+                  onPress={() => void toggleComments(post)}
+                  testID="publication-menu-comments"
+                />
+              ) : null}
+              {post.mine ? null : (
+                <SetRow
+                  first={!canDelete && !canCommentsOff}
                   icon="flag"
                   title={F.report}
                   caption={F.reportHint}

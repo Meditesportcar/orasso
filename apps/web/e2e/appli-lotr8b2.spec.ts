@@ -338,3 +338,46 @@ test("organisateur sur un compte privé : Garage et Sorties restent visibles, «
   await expect(selected(page)).toHaveAccessibleName("Publications");
   await ctx.close();
 });
+
+test("commentaires (R8k2) : la publication seule a sa ligne flamme · commentaire · partager, `?commentaires=1` ouvre la feuille, « Couper les commentaires » est au menu", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const kenji = await login("kenji@orasso.local");
+  const id = await publishApi(kenji, `Pour les commentaires ${unique()}`);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  await go(page, `/publication/${id}`);
+  await expect(page.getByTestId("feed-post-comment")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("feed-post-fire")).toBeVisible();
+  await expect(page.getByTestId("feed-post-share")).toBeVisible();
+  await expect(page.getByTestId("feed-comments-sheet")).toHaveCount(0);
+  await go(page, `/publication/${id}?commentaires=1`);
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible({ timeout: 30_000 });
+  await go(page, `/publication/${id}`);
+  await page.getByTestId("feed-card-more").click();
+  await page.getByTestId("publication-menu-comments").click();
+  await expect
+    .poll(async () => (await apiCall<{ commentsOff: boolean }>(kenji, "GET", `/feed-posts/${id}`)).data.commentsOff)
+    .toBe(true);
+  await apiCall(kenji, "DELETE", `/me/feed-posts/${id}`);
+  await ctx.close();
+});
+
+test("commentaires (R8k2) : la feuille s'ouvre depuis une carte de « Une par une » sur mon profil", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  await go(page, "/profil");
+  await expect(page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Une par une" }).click();
+  await page.getByTestId("feed-post-comment").first().click();
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible({ timeout: 30_000 });
+  await page
+    .getByRole("button", { name: "Grille de deux" })
+    .click()
+    .catch(() => undefined);
+  await ctx.close();
+});

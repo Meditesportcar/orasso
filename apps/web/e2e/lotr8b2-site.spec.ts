@@ -259,3 +259,26 @@ test("organisateur sur un compte privé : Garage et Sorties restent visibles, «
   await page.goto("/u/Kenji_66?onglet=nimporte");
   await expect(selected(page)).toHaveAccessibleName("Publications");
 });
+
+test("commentaires (R8k2) : `?commentaires=1` ouvre la feuille sur la publication seule, « Couper les commentaires » est au menu", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await setTheme(page, "beton");
+  const kenji = await login("kenji@orasso.local");
+  const id = await publishApi(kenji, `Pour les commentaires ${unique()}`);
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/moi");
+  await page.goto(`/app/publication/${id}`);
+  await expect(page.getByTestId("feed-post-comment")).toBeVisible();
+  await expect(page.getByTestId("feed-comments-sheet")).not.toBeVisible();
+  await page.goto(`/app/publication/${id}?commentaires=1`);
+  await expect(page.getByTestId("feed-comments-sheet")).toBeVisible({ timeout: 30_000 });
+  await page.goto(`/app/publication/${id}`);
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("feed-card-more").click();
+  await page.getByTestId("publication-menu-comments").click();
+  await expect
+    .poll(async () => (await apiCall<{ commentsOff: boolean }>(kenji, "GET", `/feed-posts/${id}`)).data.commentsOff)
+    .toBe(true);
+  await apiCall(kenji, "DELETE", `/me/feed-posts/${id}`);
+});

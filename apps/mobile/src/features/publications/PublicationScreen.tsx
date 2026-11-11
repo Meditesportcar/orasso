@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { FeedPostCard } from "@/features/fil/cards/FeedPostCard";
+import { postLive } from "@/features/fil/comments/live";
 import { api } from "@/lib/api";
 import { ApiRequestError } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
@@ -29,7 +30,7 @@ type Read =
 export function PublicationScreen() {
   const { t } = useTheme();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string; commentaires?: string }>();
+  const { id, commentaires } = useLocalSearchParams<{ id: string; commentaires?: string }>();
   const [read, setRead] = useState<Read>({ status: "loading" });
   const [menu, setMenu] = useState(false);
   const gate = useRef(createRequestGate(cacheScope)).current;
@@ -51,6 +52,15 @@ export function PublicationScreen() {
     void load();
     return () => gate.invalidate();
   }, [load, gate]);
+
+  // `?commentaires=1` (le lien d'une notification de commentaire) : la feuille de R8k2 s'ouvre une fois la publication affichée.
+  const opened = useRef(false);
+  const postId = read.status === "ok" ? read.post.id : null;
+  useEffect(() => {
+    if (commentaires !== "1" || !postId || opened.current) return;
+    opened.current = true;
+    postLive.open(postId, false);
+  }, [commentaires, postId]);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/fil"));
 
@@ -75,6 +85,7 @@ export function PublicationScreen() {
           <PostMenu
             post={menu ? read.post : null}
             canDelete={read.post.manage?.canDelete ?? read.post.mine}
+            canCommentsOff={read.post.manage?.canCommentsOff ?? false}
             onClose={() => setMenu(false)}
             onRemoved={close}
           />

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import "../../styles/fil.css";
 import "../../styles/moderation.css";
 import { apiFetch } from "../../lib/api.client";
+import { postLive } from "../fil/commentsLive";
 import { forgetPublished } from "../fil/mine";
 import { ReportDialog } from "../ReportDialog";
 import { notifyPostRemoved } from "./signal";
@@ -15,12 +16,15 @@ import { notifyPostRemoved } from "./signal";
 export function PostMenu({
   post,
   canDelete,
+  canCommentsOff = false,
   onClose,
   onRemoved,
 }: {
   /** La publication dont le menu est ouvert ; `null` : fermé. */
   post: FeedPostView | null;
   canDelete: boolean;
+  /** `manage.canCommentsOff` : « Couper les commentaires » / « Rétablir les commentaires ». */
+  canCommentsOff?: boolean;
   onClose: () => void;
   /** Supprimée : la liste la retire (le signal) ; la page seule revient en arrière. */
   onRemoved?: (post: FeedPostView) => void;
@@ -33,6 +37,18 @@ export function PostMenu({
     if (post && !dialog.open) dialog.showModal();
     if (!post && dialog.open) dialog.close();
   }, [post]);
+
+  async function toggleComments(target: FeedPostView) {
+    setError(null);
+    const off = !postLive.apply(target).commentsOff;
+    const res = await apiFetch<{ commentsOff: boolean }>(`/me/feed-posts/${target.id}/comments-off`, {
+      method: "PUT",
+      json: { off },
+    });
+    if (!res.ok) return setError(res.error.message);
+    postLive.set(target, { ...postLive.apply(target), commentsOff: res.data.commentsOff });
+    onClose();
+  }
 
   async function remove(target: FeedPostView) {
     setError(null);
@@ -75,6 +91,19 @@ export function PostMenu({
               <Icon name="trash" size={20} />
               <span>
                 <strong>{L.menuRemove}</strong>
+              </span>
+            </button>
+          ) : null}
+          {canCommentsOff ? (
+            <button
+              type="button"
+              className="fil-menu__row"
+              onClick={() => void toggleComments(post)}
+              data-testid="publication-menu-comments"
+            >
+              <Icon name={postLive.apply(post).commentsOff ? "undo" : "close"} size={20} />
+              <span>
+                <strong>{postLive.apply(post).commentsOff ? L.menuCommentsOn : L.menuCommentsOff}</strong>
               </span>
             </button>
           ) : null}
