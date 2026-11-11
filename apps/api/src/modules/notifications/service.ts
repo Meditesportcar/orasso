@@ -277,9 +277,10 @@ export const notificationsService = {
 
   /**
    * Lot R8n1 : une notification personnalisée par personne (le résumé quotidien), en une requête par tranche de 1 000.
-   * Sans regroupement ni report aux heures calmes (exigibles tout de suite).
+   * Sans regroupement. JAMAIS REPORTÉ aux heures calmes (exigible tout de suite) : l'appelant abandonne lui-même ce qui tombe
+   * la nuit (garde de livraison). Pour une notification qui doit attendre 8 h, utiliser `notify` / `notifyMany`.
    */
-  async notifyEach(
+  async notifyEachNow(
     ex: Executor,
     type: NotificationType,
     items: readonly {

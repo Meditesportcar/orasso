@@ -125,7 +125,7 @@ export const eventNewsDigest = {
               : { label: "Ouvrir Orasso", path: "/app" },
           };
         });
-        await notificationsService.notifyEach(tx, DIGEST_TYPE, items);
+        await notificationsService.notifyEachNow(tx, DIGEST_TYPE, items);
         if (items.length) after(() => notificationsService.kick());
         return { reserved: reserved.rows.length, sent: items.length };
       });
