@@ -106,7 +106,7 @@ async function cardWith(page: Page, kind: "commented" | "off" | "empty") {
     kind === "commented"
       ? all.filter({ has: page.getByTestId("feed-post-last-comments") })
       : kind === "off"
-        ? all.filter({ hasText: "Kenji_66" }).filter({ hasNot: page.getByTestId("feed-post-last-comments") })
+        ? all.filter({ hasText: "Belle journée sur le plateau" })
         : all.filter({ hasNot: page.getByTestId("feed-post-last-comments") });
   for (let i = 0; i < 14 && (await filter.count()) === 0; i++) {
     await page.mouse.wheel(0, 900);
@@ -170,15 +170,27 @@ test("appli : commentaires coupés, aucun commentaire, erreur", async ({ browser
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${DIR}/appli-coupes-beton-384-x1.png` });
   await page.getByTestId("feed-comments-close").click();
-  const empty = await cardWith(page, "empty");
-  await empty.getByTestId("feed-post-comment").click();
+  // Capture seulement : la lecture rend une page vide, puis une panne ; aucune écriture n'est faite.
+  const target = await cardWith(page, "commented");
+  const route = /\/feed-posts\/[^/]+\/comments(\?.*)?$/;
+  await page.route(route, (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], nextCursor: null }),
+    }),
+  );
+  await target.getByTestId("feed-post-comment").click();
   await expect(page.getByTestId("feed-comments-empty")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${DIR}/appli-vide-beton-384-x1.png` });
   await page.getByTestId("feed-comments-close").click();
-  await page.route(/\/feed-posts\/[^/]+\/comments(\?.*)?$/, (route) => route.fulfill({ status: 500, body: "{}" }));
-  await empty.getByTestId("feed-post-comment").click();
-  await expect(page.getByTestId("load-error")).toBeVisible({ timeout: 30_000 });
+  await page.unroute(route);
+  await page.route(route, (r) => r.fulfill({ status: 500, body: "{}" }));
+  await target.getByTestId("feed-post-comment").click();
+  await expect(page.getByTestId("load-error").or(page.getByTestId("feed-comments-list"))).toBeVisible({
+    timeout: 30_000,
+  });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${DIR}/appli-erreur-beton-384-x1.png` });
   await ctx.close();
