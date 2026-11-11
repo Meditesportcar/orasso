@@ -6,7 +6,14 @@
 // 116 px) à gauche, les infos à droite (format, distance, « SAM. 24 OCT. · 19 H », nom, organisateur avec son logo et
 // son nom jamais coupé, lieu, jauge) ; plus de grande bande paysage en tête de liste.
 import { Chip, Icon, Photo, Plate, Text, tokens, useTheme, WordSafeText } from "@orasso/design-system/native";
-import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime, yearToShow } from "@orasso/shared";
+import {
+  type EventCard,
+  eventFormatLabels,
+  explorerV2Labels as L,
+  seatsOf,
+  wallTime,
+  yearToShow,
+} from "@orasso/shared";
 import { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
@@ -49,19 +56,6 @@ const NBSP = " ";
 export function whenLine(stub: ReturnType<typeof stubOf>): string {
   const date = stub.year ? [stub.date, stub.month, stub.year].join(NBSP) : [stub.day, stub.date, stub.month].join(NBSP);
   return `${date}${NBSP}· ${stub.hour.replaceAll(" ", NBSP)}`;
-}
-
-/** Jauge des places : part prise (0 → 1), texte ; `null` sans limite. */
-export function seatsOf(
-  e: Pick<EventCard, "capacity" | "remaining">,
-): { taken: number; text: string; full: boolean } | null {
-  if (e.capacity === null || e.remaining === null) return null;
-  const left = Math.max(0, e.remaining);
-  return {
-    taken: e.capacity > 0 ? (e.capacity - left) / e.capacity : 1,
-    text: left > 0 ? L.seatsLeft(left, e.capacity) : L.seatsFull(e.capacity),
-    full: left === 0,
-  };
 }
 
 /** Initiales d'une structure (logo absent). */
@@ -173,7 +167,7 @@ export function EventCardV2({
   const foot = (
     <View style={[styles.seats, portrait && !big && styles.seatsWide]} testID="event-foot">
       <View style={[styles.gauge, portrait && !big && styles.gaugeThin, { backgroundColor: c.plateLine }]}>
-        {seats ? (
+        {seats.taken !== null ? (
           <View
             style={[
               styles.gaugeFill,
@@ -188,9 +182,9 @@ export function EventCardV2({
       </View>
       <View style={styles.seatsLine}>
         <Text variant="meta" color={c.plateMuted} style={styles.seatsText} testID="event-seats">
-          {seats ? seats.text : L.seatsFree}
+          {seats.text}
         </Text>
-        {seats?.full ? (
+        {seats.full ? (
           <View testID="event-waitlist" accessibilityLabel={L.waitlistFlag}>
             <Chip surface="plate">{L.waitlistFlag}</Chip>
           </View>

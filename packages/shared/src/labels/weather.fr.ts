@@ -27,4 +27,6 @@ export const weatherTexts = {
     "La météo annoncée pour cet événement est mauvaise. Les inscrits seront prévenus du passage en Incertain.",
   suggestionAction: "Passer en Incertain",
   unavailable: "Météo indisponible pour le moment.",
+  // Lot R8r : premier chargement, le stock du département est vide et son rafraîchissement est en cours.
+  loading: "Météo en cours de chargement",
 } as const;

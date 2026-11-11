@@ -132,8 +132,12 @@ test("tour 2 : plateau de pros seulement, signalement d'un prestataire, fenêtre
   await page.getByTestId("lineup-pros").getByTestId("lineup-pro").click();
   await expect(page.getByTestId("provider-public")).toBeVisible();
   const report = page.getByTestId("provider-public").getByRole("button", { name: "Signaler" });
-  await report.click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // Lot R8r : le clic n'a d'effet qu'une fois la page hydratée (serveur de développement lent, 3 échecs sur 3 en suite) : on le
+  // répète jusqu'à l'ouverture de la fenêtre.
+  await expect(async () => {
+    await report.click({ timeout: 2_000 });
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
 
   // Fenêtres de 30 : la Nocturne (plus de 90 voitures), à partir de la 91e, puis les précédentes.
   await page.goto(`/e/${NOCTURNE}/plateau?depart=90`);

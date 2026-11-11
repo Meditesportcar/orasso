@@ -375,6 +375,11 @@ export type HomeData = {
   nearby: { radiusKm: number | null; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
   /**
+   * Lot R8r : le stock du département est vide mais un rafraîchissement est en cours (premier chargement) : l'Accueil dit
+   * « Météo en cours de chargement » et relit une fois, quelques secondes plus tard. Faux dès que `weather` est présent.
+   */
+  weatherPending: boolean;
+  /**
    * Lot R8e1 : la météo de chaque sortie de « Prochaine sortie » (clé = identifiant de l'événement) : mes places retenues et
    * mes billets valables dont la météo est visible (7 jours avant le début, jusqu'à la fin) et stockée. `{}` sans sortie, ou
    * quand « Météo de l'événement » est masqué (alors elle n'est pas calculée).

@@ -10,6 +10,7 @@ import {
   homeProfileLabels,
   type MyWeather,
   weatherCodeLabels,
+  weatherTexts,
   withYear,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
@@ -175,6 +176,41 @@ export function WeatherCard({
         ) : null}
         <Text variant="caption" color={c.inkMuted}>
           {weather.attribution}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Lot R8r : le bloc « Météo » au premier chargement (le stock du département est vide, son rafraîchissement est en cours) :
+ * la même carte que `.wx`, avec une icône de ciel couvert et la ligne « Météo en cours de chargement » ; aucune roue qui tourne.
+ */
+export function WeatherPendingCard({ place }: { place: string | null }) {
+  const { t, theme } = useTheme();
+  const c = t.color;
+  const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
+  return (
+    <View
+      style={[styles.card, styles.wx, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+      accessible
+      accessibilityLabel={`Météo du jour : ${place ? `${place}, ` : ""}${weatherTexts.loading}`}
+      testID="home-weather-pending"
+    >
+      <View style={[styles.wxIcon, { backgroundColor: accentSoft }]}>
+        <Icon name={weatherIcons.cloudy} size={34} color={c.accentText} />
+      </View>
+      <View style={styles.fill}>
+        <Text variant="label" color={c.inkMuted}>
+          Météo du jour
+        </Text>
+        {place ? (
+          <Text variant="bodyStrong" color={c.ink} style={styles.wxTitle}>
+            {place}
+          </Text>
+        ) : null}
+        <Text variant="caption" color={c.inkMuted}>
+          {weatherTexts.loading}
         </Text>
       </View>
     </View>
