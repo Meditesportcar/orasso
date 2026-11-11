@@ -35,6 +35,9 @@ async function create(damien: string, structureId: string, title: string) {
   return { id: created.data.id, slug: created.data.slug, title };
 }
 
+/** Les événements créés par `r1Events` dans ce processus, supprimés par `removeR1Events` (sinon « En cours R1… » reste visible sur le site). */
+const createdIds: string[] = [];
+
 export async function r1Events(damien: string): Promise<R1Events> {
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(damien, "GET", "/me");
   const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
@@ -51,7 +54,15 @@ export async function r1Events(damien: string): Promise<R1Events> {
     "update events set starts_at = now() - interval '2 days', ends_at = now() + interval '3 hours' where id = $1",
     [running.id],
   );
+  createdIds.push(over.id, running.id);
   return { over, running };
+}
+
+/** À appeler en `afterAll` : supprime les événements de recette créés par `r1Events` (sans candidature : rien ne les retient). */
+export async function removeR1Events(): Promise<void> {
+  const ids = createdIds.splice(0);
+  if (ids.length === 0) return;
+  await sql("delete from events where id = any($1::uuid[])", [ids]);
 }
 
 /** Les titres des événements à venir de MéditeSportCar (ce que « Médite » doit trouver). */

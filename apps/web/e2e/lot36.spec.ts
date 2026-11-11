@@ -8,7 +8,7 @@ import { RELAIS } from "./relais";
 // l'appli (assetlinks.json), vérification de l'adresse d'une fiche pro. Captures (Béton et Sable, 390 px) dans le relais.
 // Prérequis : API et site lancés sur la base seedée (damien@orasso.local, MéditeSportCar vérifiée).
 
-const DIR = process.env.LOT36_CAPTURES ?? `${RELAIS}/lot-36-captures/site`;
+const DIR = process.env.CAPTURES_DIR ?? process.env.LOT36_CAPTURES ?? `${RELAIS}/lot-36-captures/site`;
 mkdirSync(DIR, { recursive: true });
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 

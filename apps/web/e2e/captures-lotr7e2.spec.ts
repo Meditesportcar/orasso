@@ -1,13 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
-import { RELAIS } from "./relais";
+import { phaseDir, RELAIS } from "./relais";
 
 // Lot R7e2 : captures « avant » / « après » du Fil (onglet, Explorer, composer du crew, site). PHASE=avant|apres.
 // Appli : APP_URL (version compilée) ; site : API et site lancés sur la base seedée.
 const PHASE = process.env.PHASE ?? "apres";
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r7e2-captures/${PHASE}`;
+const DIR = phaseDir(`${RELAIS}/lot-r7e2-captures/${PHASE}`, PHASE);
 test.use({ actionTimeout: 30_000 });
 
 async function afterOpening(page: Page) {

@@ -2,14 +2,14 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
 import { sql } from "./lotr7f2-setup";
-import { RELAIS } from "./relais";
+import { phaseDir, RELAIS } from "./relais";
 
 // Lot R8s : captures « avant » et « après » de la barre des stories et de la visionneuse (appli compilée `APP_URL`, site).
 // `PHASE=avant|apres` choisit le dossier `lot-r8s-captures/<phase>/`. Béton et Sable ; appli à 384 et 390 px (police ×1 et ×1,3),
 // site à 390 et 1280 px. Les vues du seed sont remises à zéro : la barre part « non vue ».
 const APP = process.env.APP_URL;
-const PHASE = process.env.PHASE ?? "avant";
-const DIR = `${RELAIS}/lot-r8s-captures/${PHASE}`;
+const PHASE = process.env.PHASE ?? "apres";
+const DIR = phaseDir(`${RELAIS}/lot-r8s-captures/${PHASE}`, PHASE);
 test.use({ actionTimeout: 30_000 });
 
 async function shot(page: Page, name: string) {

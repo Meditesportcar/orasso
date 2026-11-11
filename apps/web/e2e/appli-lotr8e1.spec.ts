@@ -63,6 +63,8 @@ test.beforeAll(async () => {
   await apiCall(damien, "PATCH", `/events/${await nocturneId(damien)}/outlook`, { outlook: "maintained" });
 });
 test.afterAll(async () => {
+  // Kenji (test « En cours ») retrouve ses réglages d'Accueil par défaut : d'autres recettes comptent sur son garage favori.
+  await apiCall(await login("kenji@orasso.local"), "DELETE", "/me/home/widgets");
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: DEFAULT_HIDDEN });
   await apiCall(damien, "PATCH", `/events/${await nocturneId(damien)}/outlook`, { outlook: "maintained" });
 });
