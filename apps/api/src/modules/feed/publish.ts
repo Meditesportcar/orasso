@@ -26,16 +26,17 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPostReactions, feedPosts, uploads, userFollows } from "../../db/schema";
+import { feedPostPhotos, feedPostReactions, feedPosts, proProfiles, uploads, userFollows } from "../../db/schema";
 import { canManagePost, requireAuthorship } from "../../lib/authorship";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Executor, withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
 import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
+import { assertProMayPost, lockProPostQuota } from "../pros/service";
 import { composeLinkedPost, loadLinked } from "../stories/linked";
 import { uploadsService } from "../uploads/service";
 import { blurPlateRegions, removeOrRetry } from "../vehicles/photos-blur";
@@ -79,6 +80,23 @@ async function ownView(v: Viewer, id: string): Promise<FeedPostView> {
   return view;
 }
 
+/** La publication déjà enregistrée pour ce `clientId` (rejeu d'un envoi), ou `undefined`. */
+async function findReplay(ex: Executor, userId: string, clientId: string | null | undefined) {
+  if (!clientId) return undefined;
+  const [again] = await ex
+    .select({ id: feedPosts.id })
+    .from(feedPosts)
+    .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, clientId), isNull(feedPosts.deletedAt)));
+  return again?.id;
+}
+
+/** Le même envoi (même `clientId`) vient d'être validé par une autre requête : on rend sa publication. */
+class Replayed extends Error {
+  constructor(readonly id: string) {
+    super("replayed");
+  }
+}
+
 export const feedPostsService = {
   /** `POST /me/feed-posts` */
   async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
@@ -98,6 +116,12 @@ export const feedPostsService = {
     // 0. Au nom de qui : une casquette exige ses droits (403 `persona_forbidden`), la structure le second facteur.
     const persona = input.persona;
     const authorship = await requireAuthorship(v, input);
+    // Fiche pro : publiée et abonnement en règle, comme pour une offre (`POST /pros/:id/posts`).
+    if (persona === "pro") {
+      const [pro] = await db.select().from(proProfiles).where(eq(proProfiles.id, authorship.id));
+      if (!pro) throw new AppError(403, "persona_forbidden", publicationErrors.persona_forbidden);
+      assertProMayPost(pro);
+    }
     if (persona !== "fan" && (input.vehicleId || input.linked?.type === "vehicle" || input.commercialPartnerId)) {
       throw validation(publicationErrors.fanOnly);
     }
@@ -181,7 +205,12 @@ export const feedPostsService = {
       .where(and(eq(uploads.userId, userId), eq(uploads.purpose, "feed_post"), isNull(uploads.consumedAt)));
     const byKey = new Map(rows.map((r) => [r.key, r]));
     for (const key of keys) {
-      if (!byKey.has(key)) throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      if (!byKey.has(key)) {
+        // Le même envoi vient peut-être d'être validé par une autre requête qui a consommé ces photos.
+        const again = await findReplay(db, userId, input.clientId);
+        if (again) return ownView(v, again);
+        throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      }
     }
     for (const key of keys) {
       const u = byKey.get(key);
@@ -207,7 +236,11 @@ export const feedPostsService = {
     try {
       for (const [index, p] of input.photos.entries()) {
         const source = await storage.get(p.uploadKey);
-        if (!source) throw validation("Photo introuvable : envoie-la à nouveau.");
+        if (!source) {
+          const again = await findReplay(db, userId, input.clientId);
+          if (again) throw new Replayed(again);
+          throw validation("Photo introuvable : envoie-la à nouveau.");
+        }
         const d = decisions[index] as (typeof decisions)[number];
         const out = d.rects.length
           ? await blurPlateRegions(source, d.rects)
@@ -252,9 +285,25 @@ export const feedPostsService = {
       // 5. Une transaction : rattacher les fichiers (une seule fois), écrire la publication et ses photos.
       await withTx(async (tx, after) => {
         // « Info importante » : le plafond se compte sous verrou, dans cette transaction, avant d'écrire la publication.
-        if (input.important && event) await reserveImportant(tx, event.id, at);
+        // Sous chaque verrou, on cherche de nouveau le `clientId` : deux envois simultanés du même identifiant rendent la
+        // même publication au lieu d'un faux refus de plafond.
+        const replayed = async () => {
+          if (!input.clientId) return;
+          const [again] = await tx
+            .select({ id: feedPosts.id })
+            .from(feedPosts)
+            .where(
+              and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, input.clientId), isNull(feedPosts.deletedAt)),
+            );
+          if (again) throw new Replayed(again.id);
+        };
+        // Fiche pro : même limite mensuelle et même verrou que `POST /pros/:id/posts`.
+        if (persona === "pro") await lockProPostQuota(tx, authorship.id, replayed);
+        if (input.important && event) await reserveImportant(tx, event.id, at, replayed);
         for (const p of photos) {
           if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
+            const again = await findReplay(tx, userId, input.clientId);
+            if (again) throw new Replayed(again);
             throw validation("Photo déjà utilisée : envoie-la à nouveau.");
           }
         }
@@ -269,6 +318,9 @@ export const feedPostsService = {
           clientId: input.clientId ?? null,
           commercialPartnerId,
           persona,
+          // Fiche pro : l'heure de l'application (comme les offres) pour compter le mois sur l'horloge simulée.
+          // Un seul instant pour le comptage du mois (sous verrou) et l'insertion : pris ici, dans la transaction.
+          ...(persona === "pro" ? { createdAt: now() } : {}),
           structureId: authorship.kind === "structure" ? authorship.id : null,
           proId: authorship.kind === "pro" ? authorship.id : null,
           providerId: authorship.kind === "provider" ? authorship.id : null,
@@ -333,6 +385,7 @@ export const feedPostsService = {
       });
     } catch (error) {
       for (const key of written) await removeOrRetry(key);
+      if (error instanceof Replayed) return ownView(v, error.id);
       // Deux envois simultanés du même `clientId` : le second rend la publication du premier.
       if (input.clientId && sqlState(error) === "23505") {
         const [again] = await db

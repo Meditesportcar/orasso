@@ -80,7 +80,7 @@ export async function attachFactsFor(
         and a.kind = 'provider' and a.status = 'accepted') as provider_accepted,
       exists (select 1 from applications a where a.event_id = e.id and a.user_id = ${userId}
         and a.kind = 'media' and a.status = 'accepted') as media_accepted,
-      exists (select 1 from tickets t where t.event_id = e.id and t.user_id = ${userId} and t.status = 'valid') as ticket_valid,
+      exists (select 1 from tickets t where t.event_id = e.id and t.user_id = ${userId} and t.status in ('valid', 'used')) as ticket_valid,
       (exists (select 1 from checkins c join applications a on a.id = c.application_id
           where c.event_id = e.id and a.user_id = ${userId} and a.kind = 'vehicle')
         or exists (select 1 from tickets t where t.event_id = e.id and t.user_id = ${userId} and t.used_at is not null)
@@ -273,7 +273,7 @@ export async function attachableEvents(
             sql`${events.endsAt} >= ${windowStart.toISOString()}::timestamptz`,
             sql`(exists (select 1 from applications a where a.event_id = ${events.id} and a.user_id = ${userId}
                 and a.kind = 'vehicle' and a.status in ('accepted', 'pending'))
-              or exists (select 1 from tickets t where t.event_id = ${events.id} and t.user_id = ${userId} and t.status = 'valid')
+              or exists (select 1 from tickets t where t.event_id = ${events.id} and t.user_id = ${userId} and t.status in ('valid', 'used'))
               or exists (select 1 from checkins c join applications a on a.id = c.application_id
                 where c.event_id = ${events.id} and a.user_id = ${userId} and a.kind = 'vehicle')
               or exists (select 1 from tickets t where t.event_id = ${events.id} and t.user_id = ${userId} and t.used_at is not null)
