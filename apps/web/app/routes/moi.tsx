@@ -10,6 +10,7 @@ import {
   networkLabels as N,
   type NetworkCounts,
   type NotificationFamily,
+  newsDigestType,
   notificationFamilies,
   notificationFamilyLabels,
   notificationTypeLabels,
@@ -29,6 +30,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
+import { EventNotificationsFieldset } from "../components/event/NotifySignup";
 import { GarageTab } from "../components/profile/GarageTab";
 import { type GarageActionData, garageAction, loadGarage } from "../components/profile/garage.server";
 import { PanelDown } from "../components/profile/PanelDown";
@@ -109,7 +111,9 @@ export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
 };
 
 const MUTABLE = mutableTypesByFamily();
-const FAMILIES = notificationFamilies.filter((f) => MUTABLE[f]?.length) as NotificationFamily[];
+// Lot R8n2 : « Nouveautés de mes sorties » a sa propre ligne (réglage `eventNews`), pas une case de plus dans la famille.
+const typesOf = (f: NotificationFamily) => (MUTABLE[f] ?? []).filter((t) => !(f === "event" && t === newsDigestType));
+const FAMILIES = notificationFamilies.filter((f) => f === "event" || MUTABLE[f]?.length) as NotificationFamily[];
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
@@ -130,11 +134,11 @@ export async function action({ request }: Route.ActionArgs) {
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
     ) as Record<"application" | "event" | "social" | "grade", boolean>;
-    const mutedTypes = FAMILIES.flatMap((f) => MUTABLE[f] ?? []).filter((t) => form.get(`type_${t}`) !== "on");
+    const mutedTypes = FAMILIES.flatMap(typesOf).filter((t) => form.get(`type_${t}`) !== "on");
     const res = await api(request, "/me/settings", {
       method: "PATCH",
       json: {
-        notificationPrefs: prefs,
+        notificationPrefs: { ...prefs, eventNews: form.get("eventNews") === "on" },
         mutedTypes,
         visibility: String(form.get("visibility") ?? "public"),
       },
@@ -475,26 +479,38 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             Les relances du staff et les alertes de sécurité du compte arrivent toujours. Tout reste visible dans ton
             Journal.
           </p>
-          {FAMILIES.map((family) => (
-            <fieldset key={family} className="s-fieldset s-stack s-stack--tight">
-              <legend className="s-label o-t-label">{notificationFamilyLabels[family]}</legend>
-              <CheckboxField
-                name={`fam_${family}`}
-                label={`Recevoir les notifications « ${notificationFamilyLabels[family]} »`}
-                defaultChecked={settings.notificationPrefs[family] !== false}
+          {FAMILIES.map((family) =>
+            family === "event" ? (
+              <EventNotificationsFieldset
+                key={family}
+                familyOn={settings.notificationPrefs.event !== false}
+                eventNews={
+                  settings.notificationPrefs.eventNews !== false && !settings.mutedTypes.includes(newsDigestType)
+                }
+                types={typesOf("event")}
+                mutedTypes={settings.mutedTypes}
               />
-              <div className="s-checklist">
-                {(MUTABLE[family] ?? []).map((type) => (
-                  <CheckboxField
-                    key={type}
-                    name={`type_${type}`}
-                    label={notificationTypeLabels[type]}
-                    defaultChecked={!settings.mutedTypes.includes(type)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-          ))}
+            ) : (
+              <fieldset key={family} className="s-fieldset s-stack s-stack--tight">
+                <legend className="s-label o-t-label">{notificationFamilyLabels[family]}</legend>
+                <CheckboxField
+                  name={`fam_${family}`}
+                  label={`Recevoir les notifications « ${notificationFamilyLabels[family]} »`}
+                  defaultChecked={settings.notificationPrefs[family] !== false}
+                />
+                <div className="s-checklist">
+                  {typesOf(family).map((type) => (
+                    <CheckboxField
+                      key={type}
+                      name={`type_${type}`}
+                      label={notificationTypeLabels[type]}
+                      defaultChecked={!settings.mutedTypes.includes(type)}
+                    />
+                  ))}
+                </div>
+              </fieldset>
+            ),
+          )}
         </section>
 
         {/* Lot M5 (parité de la maquette 7.2) : « Confidentialité » = compte public ou privé, export des données. */}

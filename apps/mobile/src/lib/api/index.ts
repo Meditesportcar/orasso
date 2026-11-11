@@ -12,6 +12,7 @@ import { crewPageApi } from "./crewPage";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
+import { eventNotificationsApi } from "./eventNotifications";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { feedApi } from "./feed";
@@ -97,6 +98,7 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...eventNotificationsApi,
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
