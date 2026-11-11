@@ -322,7 +322,7 @@ describe("création idempotente (tour 2)", () => {
 });
 
 describe("prestataire et média : l'audience réelle d'un compte privé (tour 2)", () => {
-  it("compte privé : la story publiée en « abonnés » n'est vue que d'un abonné de la page, jamais d'un inconnu (lot R9a)", async () => {
+  it("compte privé : même publiée en « abonnés », la story d'une page est celle d'une page publique ; sous le compte, rien (lot R9a)", async () => {
     const owner = await signUp("Presta");
     const fan = await signUp("Abonne");
     const stranger = await signUp("Inconnu");
@@ -332,24 +332,18 @@ describe("prestataire et média : l'audience réelle d'un compte privé (tour 2)
       .values({ userId: owner.id, type: "photographer", name: "Studio Presta" })
       .returning();
     const [med] = await db.insert(mediaProfiles).values({ userId: owner.id, name: "Média Presta" }).returning();
-    // Suivre le compte du titulaire ne donne pas ses stories de page : il faut suivre la page (`page_follows`).
     await follow(fan, owner);
     for (const persona of ["provider", "media"] as const) {
       const res = await publish(owner, { persona, audience: "followers" });
       expect(res.status, JSON.stringify(res.json)).toBe(201);
     }
-    const keys = [`v:${prov?.id}`, `m:${med?.id}`];
-    for (const key of keys) {
-      expect((await req(fan, "GET", `/stories/by-author/${key}`)).json.stories ?? []).toHaveLength(0);
-    }
+    // Sous le compte du titulaire : jamais ses stories de page, même pour son abonné accepté.
     expect((await req(fan, "GET", `/stories/by-author/u:${owner.id}`)).json.stories ?? []).toHaveLength(0);
-    for (const target of keys) {
-      expect((await req(fan, "PUT", `/me/page-follows/${target}`)).status).toBe(200);
-    }
-    for (const key of keys) {
-      expect((await req(fan, "GET", `/stories/by-author/${key}`)).json.stories).toHaveLength(1);
-      const seenByStranger = await req(stranger, "GET", `/stories/by-author/${key}`);
-      expect(seenByStranger.json?.stories ?? []).toHaveLength(0);
+    // Sous la clé de la page : tout membre, abonné ou non (une page est publique, D38).
+    for (const key of [`v:${prov?.id}`, `m:${med?.id}`]) {
+      for (const reader of [fan, stranger]) {
+        expect((await req(reader, "GET", `/stories/by-author/${key}`)).json.stories).toHaveLength(1);
+      }
     }
   });
 
