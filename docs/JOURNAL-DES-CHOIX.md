@@ -4992,3 +4992,9 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **Plafond** : `cellForAt` (plafond horaire commun, repli sur la case proche) sert `GET`/`PUT places`, « Utiliser ma position » et le préchauffage de `/me/home` ; seule la tâche planifiée appelle `cellForecast`. La météo du département de R8r garde son propre chemin.
 - **Garde R8r complète** : une ligne n'est « exploitable » que si `placeWeather(row)` donne aujourd'hui et l'heure en cours ; sinon elle est renouvelée (même récente) et `pending` est vrai si aucune météo exploitable n'existe.
 - **Détail hors ligne** : la copie du détail est la valeur AFFICHÉE (relecture comprise). **Site** : le formulaire transmet le type de carte (la position remplacée garde le second lieu) ; la position n'est oubliée qu'après l'enregistrement (`?remplace=position`), appli : seulement si la carte remplacée est la position. **Détail de l'appli** relu au retour au premier plan (10 minutes). `fromStorage` met à jour le dernier compte annoncé ; le repli du site affiche l'attente R8r.
+
+### Lot R8m : Tour 4 (relectures Opus et Codex du tour 3, 11/11/2026)
+
+- **Sessions** : chaque fin de session invalide les demandes de position en cours (nouvelle génération) : appli par `onCacheScopeDropped`, site par l'annonce de session (« aucun compte » invalide les demandes sans effacer la position, un autre compte l'efface). `positionStore.invalidate()` ajouté (paramètres facultatifs seulement, signatures inchangées).
+- **Plafond** : retenue après échec et regroupement avant de réserver ; seul un appel réellement parti au fournisseur compte (`cellForecast(cell, force, onCall)`) ; une réponse inexploitable est retenue 10 minutes comme un échec.
+- **Copie du détail** : conditionnée à la valeur affichée ; l'abonnement `AppState` du détail dépend de `places.reload`.
