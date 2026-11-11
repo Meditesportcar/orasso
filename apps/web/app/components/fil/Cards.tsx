@@ -12,6 +12,7 @@ import { useState } from "react";
 
 import { PersonAvatar } from "../People";
 import { FoldedCaption } from "../publications/FoldedCaption";
+import { AttachLine, AttachSeeButton } from "./AttachLine";
 import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
@@ -251,18 +252,25 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onMenu={onMenu}
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
-      actions={<PostActions post={post} />}
+      actions={
+        <>
+          <PostActions post={post} />
+          {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
+        </>
+      }
     >
+      {/* Lot R8c2 : l'événement rattaché est la deuxième ligne de la carte, sous l'auteur ; toute la ligne ouvre la fiche. */}
+      {post.attach ? <AttachLine attach={post.attach} /> : null}
       <FeedPhotos post={post} />
       {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
-      {post.vehicle || post.event ? (
+      {post.vehicle || (post.event && !post.attach) ? (
         <div className="fil-pills">
           {post.vehicle ? (
             <span className="fil-pill" data-testid="feed-post-vehicle">
               <Icon name="vehicle" size={14} /> {post.vehicle.label}
             </span>
           ) : null}
-          {post.event ? (
+          {post.event && !post.attach ? (
             <a className="fil-pill" href={`/e/${post.event.slug}`} data-testid="feed-post-event">
               <Icon name="calendar" size={14} /> {post.event.title}
             </a>

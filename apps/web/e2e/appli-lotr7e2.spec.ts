@@ -148,7 +148,7 @@ test("menu « ⋯ » : pourquoi je vois ça, moins de ce genre puis annuler, sig
   await page.waitForTimeout(900);
   await shot(page, "menu-trois-lignes");
   await page.getByTestId("feed-menu-why").click();
-  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
+  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso|sortie/);
   await shot(page, "pourquoi-je-vois-ca");
   await page.getByTestId("feed-why-ok").click();
   await expect(page.getByTestId("feed-why-text")).toHaveCount(0);

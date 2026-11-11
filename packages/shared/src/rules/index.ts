@@ -6,6 +6,7 @@ export * from "./afterEvent";
 export * from "./announcements";
 export * from "./applicationTransitions";
 export * from "./arrival";
+export * from "./attachPhrase";
 export * from "./audience";
 export * from "./audiencePrize";
 export * from "./authors";
