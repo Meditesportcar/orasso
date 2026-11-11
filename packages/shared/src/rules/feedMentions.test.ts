@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { authorKeyOf } from "./authors";
-import { MENTION_WORDS_MAX, mentionedCandidates, mentionedWords, mentionsOf, mentionVisible } from "./feedMentions";
+import { MENTION_WORDS_MAX, mentionedCandidates, mentionsOf, mentionVisible } from "./feedMentions";
 
 const NOW = new Date("2026-11-11T10:00:00Z");
 const EV = "11111111-1111-4111-8111-111111111111";
@@ -16,22 +16,30 @@ const base = {
   words: [],
 } as const;
 
-describe("mentionedWords", () => {
+describe("mentions : mots lus", () => {
+  const first = (caption: string | null) => mentionedCandidates(caption).map((c) => c[0]);
   it("lit les mots entiers, pseudos compris, sans doublon ni adresse e-mail", () => {
-    expect(mentionedWords("Salut @Kenji_66 et @wrap-66, @KENJI_66 ! mail a@b.fr @-")).toEqual(["kenji_66", "wrap-66"]);
-    expect(mentionedWords(null)).toEqual([]);
+    expect(first("Salut @Kenji_66 et @wrap-66, @KENJI_66 ! mail a@b.fr @-")).toEqual(["kenji_66", "wrap-66"]);
+    expect(first(null)).toEqual([]);
   });
   it("borne le nombre de mots", () => {
     const caption = Array.from({ length: 60 }, (_, i) => `@mot${i}`).join(" ");
-    expect(mentionedWords(caption)).toHaveLength(MENTION_WORDS_MAX);
+    expect(first(caption)).toHaveLength(MENTION_WORDS_MAX);
   });
   it("un pseudo avec un point est lu en entier ; le point final d'une phrase n'en fait pas partie", () => {
-    expect(mentionedWords("Salut @jean.dupont, et @jean. Fin @jean.dupont.")).toEqual(["jean.dupont", "jean"]);
-    expect(mentionedWords("@jean")).toEqual(["jean"]);
-    expect(mentionedWords("@jean.dupont")).not.toContain("jean");
+    expect(mentionedCandidates("Salut @jean.dupont, et @jean. Fin @jean.dupont.")).toEqual([
+      ["jean.dupont"],
+      ["jean.", "jean"],
+      ["jean.dupont.", "jean.dupont"],
+    ]);
+    expect(first("@jean.dupont")).not.toContain("jean");
   });
   it("cinq fois le même mot : un seul", () => {
-    expect(mentionedWords("@a @a @a @a @a")).toEqual(["a"]);
+    expect(first("@a @a @a @a @a")).toEqual(["a"]);
+  });
+  it("une lettre hors du plan de base collée devant le @ écarte la mention", () => {
+    expect(first("𝐚@jean")).toEqual([]);
+    expect(first("𝐚 @jean")).toEqual(["jean"]);
   });
 });
 

@@ -5056,3 +5056,8 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **Pseudo complet d'abord** : `mentionedCandidates` rend, par mention, le mot entier puis la ponctuation finale retirée une à une (`jean..`, `jean.`, `jean`) ; la base prend le premier candidat qui existe, jamais un préfixe. `jean`, `jean.` et `jean..` coexistent ; `@jean.` en fin de phrase quand seul `jean` existe mentionne `jean` (testé). `mentionedWords` reste pour la lecture seule.
 - **Test du cookie** : session vieillie de 2 jours (horloge `Date` simulée), contrôle qu'une route derrière `loadSession` (`/api/me`) renouvelle bien le cookie, puis 200 et 304 des photos sans `Set-Cookie`.
 - **Compteurs sans session** : une structure non vérifiée n'affiche plus `publications` (événement, structure), comme son journal qui répond 404 ; les membres connectés les gardent (testé).
+
+### Tour 4 (relectures Opus et Codex du tour 3, 11/11/2026)
+- **Classe de caractères corrompue** : la plage des demi-codets bas de `feedMentions.ts` avait été écrite en octets U+FFFD ; réécrite en échappements ASCII (`\uDC00-\uDFFF`). Une lettre hors du plan de base collée devant le `@` écarte de nouveau la mention (`𝐚@jean`, testé). Aucun autre fichier du lot ne contient U+FFFD.
+- **Test du cookie** : trois sessions vieillies distinctes (une par requête photo, 200 puis 304, et une pour le contrôle positif `/api/me`, qui renouvelle bien le cookie). Vérifié une fois en montant temporairement la route après `loadSession` : le test échoue (`Set-Cookie` présent) ; remise en place, rien commité de ce déplacement.
+- **`mentionedWords` retiré** (la règle n'existe plus qu'en `mentionedCandidates`, tests adaptés) ; un mot de ponctuation seule (`@-`, `@.`) n'est pas une mention.

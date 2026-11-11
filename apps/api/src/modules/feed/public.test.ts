@@ -262,26 +262,31 @@ describe("photos publiques", () => {
   const tokenCookie = (res: Response) =>
     res.headers.getSetCookie().find((c) => c.includes("better-auth.session_token="));
 
-  it("200 et 304 sans Set-Cookie, même avec une session vieillie à renouveler (route avant la session)", async () => {
+  it("200 et 304 sans Set-Cookie, chacune avec sa propre session vieillie à renouveler (route avant la session)", async () => {
     const w = await world();
     const p = await orgPost(w);
-    const fan = await signUp("Cookie_P");
-    // La session est vieillie : un passage par `loadSession` la prolonge et renouvelle son cookie.
+    // Trois sessions distinctes, vieillies ensemble : chaque requête photo a la sienne (un passage par `loadSession` en
+    // renouvellerait le cookie), et le contrôle positif a la troisième, jamais utilisée avant lui.
+    const forPhoto = await signUp("CookieA_P");
+    const forRevalidation = await signUp("CookieB_P");
+    const forControl = await signUp("CookieC_P");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(Date.now() + 2 * 24 * HOUR));
     const url = `/api/public/feed-posts/${p.row.id}/photos/${p.name}`;
-    // Contrôle : une route derrière la session renouvelle bien le cookie.
-    const control = await app.request("/api/me", { headers: { origin: "http://localhost:5173", cookie: fan.cookie } });
-    expect(control.status).toBe(200);
-    expect(tokenCookie(control), "cookie renouvelé").toBeTruthy();
-    const res = await app.request(url, { headers: { cookie: fan.cookie } });
+    const res = await app.request(url, { headers: { cookie: forPhoto.cookie } });
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
     const again = await app.request(url, {
-      headers: { cookie: fan.cookie, "if-none-match": res.headers.get("etag") ?? "" },
+      headers: { cookie: forRevalidation.cookie, "if-none-match": res.headers.get("etag") ?? "" },
     });
     expect(again.status).toBe(304);
     expect(again.headers.get("set-cookie")).toBeNull();
+    // Contrôle : une route derrière la session renouvelle bien le cookie d'une session vieillie (le test discrimine).
+    const control = await app.request("/api/me", {
+      headers: { origin: "http://localhost:5173", cookie: forControl.cookie },
+    });
+    expect(control.status).toBe(200);
+    expect(tokenCookie(control), "cookie renouvelé").toBeTruthy();
   });
 
   it("les revalidations des photos ont leur limite : aucune 429 sur la liste après plus de 60 appels", async () => {

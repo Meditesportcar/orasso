@@ -12,25 +12,6 @@ const MENTION = /@([\p{L}\p{N}_.-]+)/gu;
 const WORD_CHAR = /[\p{L}\p{N}_@]/u;
 
 /**
- * Les mots cités dans une légende (`@mot`), en minuscules, sans doublon, dans l'ordre, jamais dans un mot ni une adresse
- * e-mail. Plus large que `mentionedSlugs` : un pseudo porte des `_` et des `.` (`@kenji_66`, `@jean.dupont`), le point final d une phrase n en fait pas partie. Au plus `MENTION_WORDS_MAX`.
- */
-export function mentionedWords(caption: string | null | undefined): string[] {
-  if (!caption) return [];
-  const out: string[] = [];
-  for (const m of caption.matchAll(MENTION)) {
-    const at = m.index ?? 0;
-    const before = at > 0 ? caption.charAt(at - 1) : "";
-    const prev = at > 1 && /[\uDC00-\uDFFF]/.test(before) ? caption.slice(at - 2, at) : before;
-    if (prev && WORD_CHAR.test(prev)) continue;
-    const word = (m[1] ?? "").toLowerCase().replace(/[.-]+$/, "");
-    if (word && !out.includes(word)) out.push(word);
-    if (out.length >= MENTION_WORDS_MAX) break;
-  }
-  return out;
-}
-
-/**
  * Les mots cités, avec leurs candidats : le mot **complet** d'abord (un pseudo peut finir par un point : `jean.`), puis,
  * retirée une à une, la ponctuation finale d'une phrase (`jean.` → `jean`). La résolution en base prend le premier
  * candidat qui existe (un pseudo ou un slug entier, jamais un préfixe). Un mot par mention, sans doublon, au plus
@@ -43,7 +24,7 @@ export function mentionedCandidates(caption: string | null | undefined): string[
   for (const m of caption.matchAll(MENTION)) {
     const at = m.index ?? 0;
     const before = at > 0 ? caption.charAt(at - 1) : "";
-    const prev = at > 1 && /[�-�]/.test(before) ? caption.slice(at - 2, at) : before;
+    const prev = at > 1 && /[\uDC00-\uDFFF]/.test(before) ? caption.slice(at - 2, at) : before;
     if (prev && WORD_CHAR.test(prev)) continue;
     let word = (m[1] ?? "").toLowerCase();
     const candidates: string[] = [];
@@ -53,7 +34,8 @@ export function mentionedCandidates(caption: string | null | undefined): string[
       word = word.slice(0, -1);
     }
     const first = candidates[0];
-    if (!first || seen.has(first)) continue;
+    // Un mot fait de ponctuation seule (`@-`, `@.`) n'est pas une mention.
+    if (!first || /^[.-]+$/.test(first) || seen.has(first)) continue;
     seen.add(first);
     out.push(candidates);
     if (out.length >= MENTION_WORDS_MAX) break;
