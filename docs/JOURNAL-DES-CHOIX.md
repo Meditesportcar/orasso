@@ -4932,3 +4932,16 @@ Date : 10/11/2026.
 - **Site** : la confirmation de désabonnement est ancrée à la grille d'identité (largeur de la carte) ; le conteneur de requête du pseudo est un enfant dédié, la colonne ne crée plus de contexte d'empilement.
 - **Audit** : la bio n'est exclue que si « plus » existe. Arrondis de mes styles en jetons.
 - **À vérifier sur le Xiaomi** : le collant des onglets sur Android (`stickyHeaderIndices` de React Native) n'est prouvé ici que sur le web.
+
+## Lot R8m : « Ma météo » (appli et site, D40, 11/11/2026)
+
+- **Migration** (générée `0077_weather-places`, le coordinateur la renumérote 0089) : deux tables neuves, aucun `ALTER` de `profiles`. `profile_weather_places` (PK `(user_id, slot)`, slot 0 ou 1, libellé 1 à 80, `lat`/`lng` à 0,01°, cascade avec le compte) ; `weather_places_cache` (PK `cell` = position à 0,1°, jamais de compte). Vérifiée sur base neuve et sur une base au niveau 0076.
+- **Position jamais enregistrée ni journalisée** : `POST /weather/at` (corps de requête, pas d'adresse) arrondit à 0,1° dès la première ligne ; fournisseur, cache et géocodeur n'ont que la case ; aucune écriture liée au compte. Test : aucune ligne d'aucune table, aucune adresse envoyée, aucun journal ne porte la position reçue. Conséquence assumée : l'arrondi à 0,1° peut nommer la commune voisine.
+- **Écart à la fiche** : les lieux de `GET /me/weather/places` portent aussi `lat` et `lng` (ceux de la **ville** à 0,01°, jamais une position) : sans eux, retirer ou changer un lieu sur deux obligerait à réenvoyer l'autre sans ses coordonnées (le `PUT` remplace tout).
+- **La position prend la place du premier lieu**, le second lieu choisi reste à côté (deux cartes au plus) ; elle est gardée en mémoire de l'écran seulement (appli : module en mémoire lié au compte ; site : mémoire de la page, navigation sans rechargement ; recharger l'oublie). Demandée à l'appui du bouton seulement.
+- **« Second lieu » sur la ville par défaut** : la préfecture est enregistrée avec lui (sinon le second lieu prendrait sa place). Règles communes dans `rules/myWeather.ts` (`weatherCards`, `placesAfterChange/Add/Remove`), testées.
+- **Libellé d'une ville choisie** : « Argelès-sur-Mer » (le « (66) » de la recherche est retiré à l'enregistrement, comme la maquette). Sans département ni lieu : carte « Choisis ta ville » qui ouvre le détail.
+- **Guyane** : le test des préfectures tolère 200 km (centre du département en forêt) au lieu de 120.
+- **Accueil lu du cache** (`myWeather`) : case manquante ou vieille rafraîchie sans être attendue ; la tâche `weather.refresh` rafraîchit aussi les cases des lieux choisis et des préfectures utilisées (≤ 300 par passage) et purge celles de plus de 7 jours. Limite de débit unique `myWeather` (120 par minute) pour les quatre routes.
+- **Fichiers hors liste** : `modules/account/service.ts` (suppression du compte : ses lieux partent, 2 lignes), `scripts/seed.ts` (une ligne), `e2e/meteo` non touché ; recettes R8e1 adaptées (le bloc ne dit plus « Dép. 66 »).
+- **À revoir avec Damien** : `POST /weather/at` est refusé à un compte suspendu (écriture) alors que c'est une lecture ; à ajouter à la liste des écritures permises dans `lib/session.ts` (hors de ce lot).
