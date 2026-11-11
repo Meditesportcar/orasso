@@ -420,9 +420,8 @@ function PublishForm() {
         uploaded.push(key);
       }
       setSent(photos.length);
-      const body: FeedPostBody =
-        uncertain ??
-        feedPostBodyR8({
+      const body: FeedPostBody = uncertain ?? {
+        ...feedPostBodyR8({
           photos: photos.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
           caption,
           aspect,
@@ -433,8 +432,10 @@ function PublishForm() {
           placeLabel: choice.placeLabel,
           important,
           ...(fan ? commercialField(commercialLine) : {}),
-          ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
-        });
+        }),
+        // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
+        ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
+      };
       if (!guard.current()) return;
       sending = body;
       const post = await api.createFeedPost(body);

@@ -449,9 +449,8 @@ export function PublishForm({
       uploaded.push(key);
     }
     setProgress(L.publishing);
-    const body =
-      (uncertain as ReturnType<typeof feedPostBodyR8> | null) ??
-      feedPostBodyR8({
+    const body = (uncertain as ReturnType<typeof feedPostBodyR8> | null) ?? {
+      ...feedPostBodyR8({
         photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
         caption,
         aspect,
@@ -462,8 +461,10 @@ export function PublishForm({
         placeLabel: choice.placeLabel,
         important,
         ...(fan ? commercialField(commercialLine) : {}),
-        ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
-      });
+      }),
+      // « Publier avec… » (R8o) : le corps R8p ne le connaît pas ; il part à côté, sauf avec « Info importante ».
+      ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
+    };
     const second = await accountCheck();
     if (second !== "same") {
       setBusy(false);
