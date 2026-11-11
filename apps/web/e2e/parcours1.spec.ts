@@ -87,6 +87,8 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.locator('[data-step="3"]')).toBeVisible();
   await page.getByRole("button", { name: "Envoyer ma candidature" }).click();
+  // Lot R8n2 : l'écran de fin (« Ce que tu recevras pour cet événement ») précède les Sorties.
+  await page.getByTestId("notify-noted").click();
   await page.waitForURL(/\/app\/(acces|sorties)/);
   const card = page.getByTestId("application").first();
   await expect(card).toHaveAttribute("data-status", "pending");

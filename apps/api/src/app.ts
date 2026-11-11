@@ -49,6 +49,7 @@ import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
+import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -232,6 +233,8 @@ const videoLengthGuard: MiddlewareHandler = async (c, next) => {
 app.use("*", (c, next) =>
   c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoLengthGuard(c, next) : generalLimit(c, next),
 );
+// Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, avant la session (aucun cookie dans une réponse en cache public).
+app.route("/", feedPublicPhotoRoutes);
 // Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
 // Une route qui lit la session (`loadSession`) peut renouveler le cookie (`Set-Cookie`) : elle ne prend jamais un cache public.
 app.route("/", accessPublicRoutes);
@@ -281,6 +284,8 @@ app.route("/", communicationRoutes);
 app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
+// Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
+app.route("/", feedListRoutes);
 app.route("/", feedRoutes);
 app.route("/", feedCommentRoutes);
 app.route("/", afterEventRoutes);

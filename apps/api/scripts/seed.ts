@@ -29,6 +29,7 @@ import { seedEventNotifications } from "./seed/event-notifications";
 import { seedExplorer } from "./seed/explorer";
 import { seedFeed } from "./seed/feed";
 import { seedFeedComments } from "./seed/feed-comments";
+import { seedFeedMentions } from "./seed/feed-mentions";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -179,6 +180,8 @@ async function main() {
   await seedFeed();
   // Lot R8k1 : cinq commentaires sous une publication de Kenji_66, une réponse avec @Kenji_66, des flammes ; une publication aux commentaires coupés.
   await seedFeedComments();
+  // Vague R8 (lot R8a2) : mentions matérialisées, mention masquée, publication épinglée dans le journal du Lydia.
+  await seedFeedMentions();
 
   // Lot R7f1 : sept stories de démonstration (photos relues sans plaque), 20 h de vie restantes (21 h pour celle du Lydia, R7h).
   await seedStories();
