@@ -70,8 +70,9 @@ function typeName(n: ReactElement): string {
 }
 
 /**
- * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment). Clés stables tirées du contenu (la clé donnée,
- * sinon le nom du type et son rang parmi ceux du même nom) : insérer ou retirer un bloc ne change pas les clés des autres.
+ * Lot R8b1 : les enfants d'une page à plat (sans `null`, sans tableau ni fragment). Chaque enfant reçoit (`cloneElement`) une clé tirée
+ * du nom de son type et de son rang parmi ceux du même nom, jamais de sa position : insérer ou retirer un bloc ne change pas les clés
+ * des autres. La clé donnée par l'appelant est remplacée par celle-là.
  */
 function flatChildren(nodes: ReactNode): ReactNode[] {
   const out: ReactNode[] = [];

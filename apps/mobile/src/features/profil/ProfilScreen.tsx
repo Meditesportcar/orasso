@@ -96,6 +96,9 @@ export function ProfilScreen() {
   // archivé rend visiteur) : « Garage » garde alors le seul lien vers « Véhicules archivés ».
   const hasArchived = vehicles.data?.some((v) => v.status !== "active") ?? false;
   const hasGarage = persona.kind !== "visitor" || hasArchived;
+  // Visiteur dont les véhicules ne sont pas encore lus : on ne sait pas s'il a l'onglet « Garage » (véhicules archivés) ; le panneau
+  // attend la lecture au lieu d'ouvrir « Sorties » puis de basculer sur « Garage ».
+  const garageUnknown = persona.kind === "visitor" && base && vehicles.data === null && !vehicles.error;
   const shownTab = visibleProfileTab(tab, hasGarage);
 
   const profile = me?.profile;
@@ -270,8 +273,10 @@ export function ProfilScreen() {
               garageCount={garageCount}
             />
           </StickyHeader>
-          {shownTab === "garage" ? (
-            <GarageScreen vehicles={vehicles} reloadKey={round} />
+          {garageUnknown ? (
+            <View style={styles.panel} testID="profil-tab-pending" />
+          ) : shownTab === "garage" ? (
+            <GarageScreen vehicles={vehicles} round={round} />
           ) : (
             <View style={styles.panel} testID="profil-sorties-panel">
               {/* « Ma saison » : points et tampons en un seul bloc (maquette 7.2), puis le passeport lui-même. */}
