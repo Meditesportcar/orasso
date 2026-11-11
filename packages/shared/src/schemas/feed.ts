@@ -283,6 +283,11 @@ export type FeedCard<K extends FeedCardKind = FeedCardKind> = {
     reason: { code: FeedReasonCode; label: string };
     at: string;
     payload: FeedPayloads[Kind];
+    /**
+     * Vue sans interaction (ni flamme, ni ouverture, ni partage) à l'instant du parcours (`FeedPage.ref`) : l'écran pose
+     * « Tu es à jour » avant la première carte `seen: true`. Donnée de lecture privée de la personne (R8c1).
+     */
+    seen: boolean;
   };
 }[K];
 
@@ -295,4 +300,8 @@ export type FeedPage = {
    * curseur est abandonné, cette page est la première d'un nouveau parcours, et le client **remplace** sa liste.
    */
   reset?: true;
+  /** L'instant du parcours (ISO), figé à la première page : base de `GET /fil/fresh?since=` et du « vu » (R8c1). */
+  ref: string;
+  /** Rail « Ça plaît en ce moment » : première page d'« Abonnements » et d'« Autour de moi » seulement (les cartes restent aussi dans `items`). */
+  hot?: FeedCard<"feed_post">[];
 };

@@ -143,6 +143,7 @@ export const source: FeedSource<"vote_result"> = {
           structureId: r.e.structureId,
           proId: null,
           categoryIds: [],
+          eventId: r.e.id,
           payload: { event: summaryOf(r.e, r.s), podium },
         },
       ];
