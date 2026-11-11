@@ -7,6 +7,16 @@ import { type AppEnv, requireUser } from "../../lib/session";
 import { uuidParam } from "../../lib/validate";
 import { weatherService } from "./service";
 
+// Correctif cache et session (11/11) : monté avant `loadSession` (app.ts). Même réponse pour tout le monde (aucun lecteur
+// dans le service), donc cache public permis et aucun `Set-Cookie` possible.
+export const weatherPublicRoutes = new Hono<AppEnv>()
+  // Public : `null` au-delà de 7 jours avant l'événement, après sa fin ou sans prévision. Cache d'une heure.
+  .get("/events/by-slug/:slug/weather", async (c) => {
+    const weather = await weatherService.forEvent(c.req.param("slug"));
+    c.header("cache-control", "public, max-age=3600");
+    return c.json(weather);
+  });
+
 // Météo (lot 28). Lecture du cache en base uniquement : aucune de ces routes n'appelle un fournisseur pour un
 // utilisateur (sauf le cache d'un département à `GET /me/weather`, regroupé et limité à un appel par 3 h).
 export const weatherRoutes = new Hono<AppEnv>()
@@ -17,12 +27,6 @@ export const weatherRoutes = new Hono<AppEnv>()
     }
     await requirePlatformRole(await requireUser(c), "super_admin");
     return c.json(await weatherService.refresh(uuidParam(c, "eventId")));
-  })
-  // Public : `null` au-delà de 7 jours avant l'événement, après sa fin ou sans prévision. Cache d'une heure.
-  .get("/events/by-slug/:slug/weather", async (c) => {
-    const weather = await weatherService.forEvent(c.req.param("slug"));
-    c.header("cache-control", "public, max-age=3600");
-    return c.json(weather);
   })
   .get("/me/weather", async (c) => {
     const user = await requireUser(c);

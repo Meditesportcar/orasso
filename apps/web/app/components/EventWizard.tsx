@@ -30,10 +30,17 @@ import {
   hasRefusals,
   initialEventDraft,
   type NeedDraft,
+  type NotifyPreview,
   needChanges,
   needsFromSaved,
   noNeedWrites,
   noRefusals,
+  notifyChanged,
+  notifyFieldsOfDraft,
+  notifySavedCode,
+  notifyStart,
+  notifyTiming,
+  notifyTimingLine,
   parseWizardMemo,
   posterTexts,
   reconcileDraft,
@@ -58,12 +65,13 @@ import {
   type ZoneWrites,
   zoneChanges,
 } from "@orasso/shared";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useLocation, useNavigate } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
+import { RecipientsBanner } from "./event/NotifySignup";
 import { ArrivalsStep } from "./wizard/ArrivalsStep";
 import { CriteriaStep } from "./wizard/CriteriaStep";
 import { PlaceStep } from "./wizard/PlaceStep";
@@ -170,6 +178,38 @@ export function EventWizard(props: Props) {
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   // Brouillon (création ou brouillon rouvert) : enregistré à chaque temps ; publié : à la fin seulement.
   const isDraft = !saved || saved.status === "draft";
+
+  // Lot R8n2 (R8.11) : sur un événement publié, un changement d'heure ou de lieu prévient tout seul ; la confirmation le
+  // dit avant « Enregistrer les modifications » (nombre lu par `notify-preview`, moment selon l'heure et le départ).
+  const savedFields = useMemo(
+    () => (saved ? notifyFieldsOfDraft(initialEventDraft(clockNow(), saved)) : null),
+    [saved],
+  );
+  const notifies =
+    savedFields !== null && saved?.status === "published" && last && notifyChanged(savedFields, notifyFieldsOfDraft(d));
+  const [preview, setPreview] = useState<{ done: boolean; count: number | null }>({ done: false, count: null });
+  const savedId = saved?.id ?? null;
+  useEffect(() => {
+    if (!notifies || !savedId) return;
+    let alive = true;
+    setPreview({ done: false, count: null });
+    void apiFetch<NotifyPreview>(`/events/${savedId}/notify-preview`).then((res) => {
+      if (alive) setPreview({ done: true, count: res.ok ? res.data.recipients : null });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [notifies, savedId]);
+  const notifyShown = notifies && preview.done && preview.count !== 0;
+  // L'heure se rafraîchit pendant que la confirmation est affichée (21 h 58 puis 22 h 01 : « à 8 h »).
+  const [, setNotifyTick] = useState(0);
+  useEffect(() => {
+    if (!notifyShown) return;
+    const timer = setInterval(() => setNotifyTick((n) => n + 1), 20_000);
+    return () => clearInterval(timer);
+  }, [notifyShown]);
+  const notifyClock = clockNow();
+  const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
 
   // Lot 36 : copie d'un événement (duplication) encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
@@ -529,7 +569,11 @@ export function EventWizard(props: Props) {
           : `/orga/${structureSlug}/e/${s.id}?erreur=${encodeURIComponent(published.error.message)}`,
       );
     }
-    window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : ""}`);
+    // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lu par la page de l'événement (`?prevenus=`).
+    // Le moment se calcule à l'enregistrement, pas au dernier rendu.
+    const whenSaved = notifyTiming({ now: clockNow(), startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
+    const told = mode === "save" && notifyShown ? `?prevenus=${notifySavedCode(preview.count, whenSaved)}` : "";
+    window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : told}`);
   }
 
   const [title, intro] = HEADS[step];
@@ -659,6 +703,9 @@ export function EventWizard(props: Props) {
           <p className="s-notice s-notice--alert">
             Cet événement est publié : si tu changes la date ou l'adresse, tous les inscrits sont prévenus.
           </p>
+        )}
+        {notifyShown && (
+          <RecipientsBanner count={preview.count} timing={notifyTimingLine(notifyWhen, { now: notifyClock })} />
         )}
         {error && (
           <p className="s-error" role="alert" data-testid="wizard-error">

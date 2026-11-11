@@ -1,0 +1,193 @@
+/* Lot R8n2 (maquette R8.11) : notifications d'un événement. Le bloc « Essentiel », la ligne « Nouveautés » à
+   interrupteur, la cloche de la fiche et sa fenêtre, la confirmation de l'organisateur. Jetons seulement. */
+
+.en-box {
+  display: grid;
+  gap: var(--space-3);
+}
+.en-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--touch);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-align: left;
+}
+.en-row > .o-icon,
+.en-row > svg {
+  color: var(--accent-text);
+}
+.en-row b {
+  display: block;
+  font-weight: 800;
+}
+.en-row small {
+  display: block;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+.en-row[aria-disabled="true"] {
+  opacity: 0.55;
+}
+.en-lock-state {
+  color: var(--ink-muted);
+  font-weight: 800;
+  font-size: 12px;
+}
+/* L'organisateur : « 148 inscrits seront prévenus. » */
+.en-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.en-banner > svg {
+  color: var(--accent-text);
+  margin-top: 2px;
+}
+.en-banner div {
+  display: grid;
+  gap: var(--space-1);
+}
+.en-banner b {
+  font-weight: 800;
+}
+.en-banner small {
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.en-ess {
+  display: grid;
+  gap: var(--space-2);
+}
+.en-ess ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  list-style: none;
+}
+.en-ess li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.en-ess li svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
+/* L'interrupteur : une case à cocher native (clavier, lecteur d'écran) dessinée comme dans la maquette. */
+.en-switch {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 30px;
+}
+.en-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.en-switch input:disabled {
+  cursor: not-allowed;
+}
+.en-switch span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  pointer-events: none;
+}
+.en-switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-muted);
+  transition: transform var(--timing-fast, 120ms);
+}
+.en-switch input:checked + span {
+  background: var(--accent);
+}
+.en-switch input:checked + span::after {
+  transform: translateX(22px);
+  background: var(--accent-ink);
+}
+.en-switch input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .en-switch span::after {
+    transition: opacity var(--timing-fast, 120ms);
+  }
+}
+
+.en-note {
+  margin: 0;
+  color: var(--ink-muted);
+}
+.en-error {
+  margin: 0;
+  color: var(--win-text);
+}
+
+/* La cloche de la fiche et sa fenêtre. */
+.en-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  cursor: pointer;
+}
+.en-bell:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.en-dialog {
+  width: min(480px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised, var(--surface));
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+}
+.en-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.en-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.en-dialog__head h2 {
+  margin: 0;
+}

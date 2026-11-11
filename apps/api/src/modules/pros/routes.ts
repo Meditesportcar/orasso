@@ -19,6 +19,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { authorCountsFor } from "../feed/lists";
 import { partnershipsService } from "../partnerships/service";
 import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
@@ -29,6 +30,12 @@ const statsQuery = z.object({ days: z.coerce.number().int().min(7).max(90).defau
 /** Adresse du visiteur (posée par nginx / le rendu serveur du site), sinon un repère commun. */
 const visitorOf = (c: { req: { header(name: string): string | undefined } }) =>
   c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "direct";
+
+// Correctif cache et session (11/11) : monté avant `loadSession` (app.ts). Pros partenaires d'une structure, sans lecteur, donc cache public permis et aucun
+// `Set-Cookie` possible dans une réponse que le cache public pourrait garder.
+export const prosPublicRoutes = new Hono<AppEnv>().get("/structures/by-slug/:slug/pros", async (c) =>
+  c.json(await prosService.partnersPublicBySlug(c.req.param("slug")), 200, { "cache-control": "public, max-age=60" }),
+);
 
 export const prosRoutes = new Hono<AppEnv>()
   // Annuaire (lot 29 : rayon et tri par distance depuis la position envoyée ou le secteur du profil, donc privé).
@@ -56,6 +63,8 @@ export const prosRoutes = new Hono<AppEnv>()
       stories: await storiesSummaryFor(viewer, "pro", view.id),
       memberPartners: partners.items,
       memberPartnersTotal: partners.total,
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (rien sans session : T4).
+      ...(await authorCountsFor("pro", view.id, viewer)),
     });
   })
   // Lot R7m1, tour 2 : « Voir tout » de « Ses partenaires », page par page (connecté seulement, mêmes regards que la fiche).
@@ -146,9 +155,6 @@ export const prosRoutes = new Hono<AppEnv>()
   })
   .delete("/pros/:id/partners/:structureSlug", async (c) =>
     c.json(await prosService.removePartner(await requireUser(c), uuidParam(c, "id"), c.req.param("structureSlug"))),
-  )
-  .get("/structures/by-slug/:slug/pros", async (c) =>
-    c.json(await prosService.partnersPublicBySlug(c.req.param("slug")), 200, { "cache-control": "public, max-age=60" }),
   )
   // Côté organisateur : demandes de partenariat reçues, acceptation, retrait.
   .get("/structures/:id/partners", async (c) =>

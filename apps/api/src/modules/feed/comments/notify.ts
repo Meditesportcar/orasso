@@ -11,11 +11,11 @@ import { ACTIVITY_MAX_ACTORS, commentExcerpt, feedCommentLabels, r8NotificationT
 import { and, desc, eq, inArray, isNull, ne, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../../db/client";
-import { feedPostComments, notifications, profiles } from "../../../db/schema";
+import { feedPostComments, feedPosts, notifications, profiles } from "../../../db/schema";
 import { storage } from "../../../lib/storage";
-import type { Tx } from "../../../lib/tx";
+import { type Executor, type Tx, withTx } from "../../../lib/tx";
 import { fillTemplate } from "../../notifications/grouped";
-import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
+import { notificationsService, registerDeliveryGuard, registerJournalGuard } from "../../notifications/service";
 import { postWithAuthor, unavailable } from "../access";
 import { commentReaders, stillReadable } from "./readers";
 import { commentRow } from "./view";
@@ -206,35 +206,81 @@ export async function dropCommentNotifications(tx: Tx, commentIds: string[], pos
  * illisible (auteur suspendu, passé privé, commentaire retiré) ne part.
  */
 export async function guardCommentNotification(n: typeof notifications.$inferSelect) {
-  const data = n.data as { commentId?: unknown; postId?: unknown; parentId?: unknown; _actorIds?: unknown };
+  const data = n.data as { commentId?: unknown; postId?: unknown };
   if (typeof data.commentId !== "string") return true;
   if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return stillReadable(db, n.userId, data.commentId);
+  // Recomposition sous le verrou du regroupement (publication, puis clé de groupe, puis ligne : l'ordre de la création d'un
+  // commentaire) et sur la ligne relue : un commentaire arrivé entre la réservation et la garde n'est pas effacé.
+  return withTx(async (tx) => {
+    if (typeof data.postId === "string") {
+      await tx.select({ id: feedPosts.id }).from(feedPosts).where(eq(feedPosts.id, data.postId)).for("update");
+    }
+    if (n.groupKey) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`notif-group:${n.userId}:${n.groupKey}`}))`);
+    }
+    const [fresh] = await tx.select().from(notifications).where(eq(notifications.id, n.id)).for("update");
+    return fresh ? recompose(tx, fresh) : false;
+  });
+}
+
+type Readable = { id: string; authorId: string; text: string };
+
+/**
+ * Les commentaires lisibles du destinataire parmi ceux des acteurs d'une ligne regroupée : le premier lisible de chaque
+ * personne, du plus récent au plus ancien (la lisibilité tient aussi au commentaire racine).
+ */
+async function findReadable(ex: Executor, userId: string, scope: SQL, actorIds: string[]): Promise<Readable[]> {
+  const c = feedPostComments;
+  const rows = await ex
+    .select({ id: c.id, authorId: c.authorId, text: c.text, createdAt: c.createdAt })
+    .from(c)
+    .where(and(scope, isNull(c.deletedAt), inArray(c.authorId, actorIds), ne(c.authorId, userId)))
+    .orderBy(desc(c.createdAt), desc(c.id))
+    .limit(400);
+  const tried = new Map<string, number>();
+  const readable: Readable[] = [];
+  for (const cand of rows) {
+    if (readable.some((r) => r.authorId === cand.authorId)) continue;
+    const count = tried.get(cand.authorId) ?? 0;
+    if (count >= 15) continue;
+    tried.set(cand.authorId, count + 1);
+    if (await stillReadable(ex, userId, cand.id)) readable.push(cand);
+  }
+  return readable;
+}
+
+/** Portée d'une ligne regroupée (publication, ou réponses qui visent le commentaire) et ses acteurs d'origine. */
+function groupScope(n: typeof notifications.$inferSelect): { scope: SQL; actorIds: string[] } | null {
+  const data = n.data as { postId?: unknown; parentId?: unknown; _actorIds?: unknown };
   const c = feedPostComments;
   let scope: SQL | undefined;
   if (n.type === "feed_comment" && typeof data.postId === "string") scope = eq(c.postId, data.postId);
-  // Une réponse regroupe par commentaire **directement visé** : seules les réponses qui le visent comptent.
   if (n.type === "feed_comment_reply" && typeof data.parentId === "string") scope = eq(c.replyToId, data.parentId);
   const actorIds = Array.isArray(data._actorIds)
     ? data._actorIds.filter((x): x is string => typeof x === "string")
     : [];
-  if (!scope || !actorIds.length) return stillReadable(db, n.userId, data.commentId);
-  // Le plus récent de chaque acteur (un par personne : la lisibilité tient à l'auteur, aucune limite ne cache un lisible).
-  const newestPerActor = await db
-    .selectDistinctOn([c.authorId], { id: c.id, authorId: c.authorId, text: c.text, createdAt: c.createdAt })
-    .from(c)
-    .where(and(scope, isNull(c.deletedAt), inArray(c.authorId, actorIds), ne(c.authorId, n.userId)))
-    .orderBy(c.authorId, desc(c.createdAt), desc(c.id));
-  const candidates = newestPerActor.sort(
-    (x, y) => y.createdAt.getTime() - x.createdAt.getTime() || (y.id < x.id ? -1 : 1),
-  );
-  // Le plus récent lisible de chaque personne, la plus récente d'abord.
-  const readable: { id: string; authorId: string; text: string }[] = [];
-  for (const cand of candidates) {
-    if (await stillReadable(db, n.userId, cand.id)) readable.push(cand);
-  }
+  return scope && actorIds.length ? { scope, actorIds } : null;
+}
+
+/** Lecture du Journal : la ligne est-elle encore montrable à son destinataire ? (une ligne regroupée tient tant qu'un de ses commentaires se lit) */
+export async function commentNotificationShown(n: typeof notifications.$inferSelect): Promise<boolean> {
+  const data = n.data as { commentId?: unknown };
+  if (typeof data.commentId !== "string") return true;
+  if (await stillReadable(db, n.userId, data.commentId)) return true;
+  const group = n.type === "feed_comment" || n.type === "feed_comment_reply" ? groupScope(n) : null;
+  return group ? (await findReadable(db, n.userId, group.scope, group.actorIds)).length > 0 : false;
+}
+
+async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
+  if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return true;
+  const data = n.data as { commentId?: unknown; postId?: unknown; parentId?: unknown; _actorIds?: unknown };
+  if (typeof data.commentId !== "string") return true;
+  const group = groupScope(n);
+  if (!group) return stillReadable(tx, n.userId, data.commentId);
+  const readable = await findReadable(tx, n.userId, group.scope, group.actorIds);
   const newest = readable[0];
   if (!newest) return false;
-  const people = await db
+  const people = await tx
     .select({ userId: profiles.userId, pseudo: profiles.pseudo, avatarKey: profiles.avatarKey })
     .from(profiles)
     .where(
@@ -252,7 +298,7 @@ export async function guardCommentNotification(n: typeof notifications.$inferSel
   if (!first) return false;
   const spec = r8NotificationTable[n.type];
   const bodyTemplate = readable.length === 1 ? feedCommentLabels.quote(commentExcerpt(newest.text)) : spec.body;
-  const [updated] = await db
+  const [updated] = await tx
     .update(notifications)
     .set({
       title: fillTemplate(spec.title, first.pseudo),
@@ -272,3 +318,4 @@ export async function guardCommentNotification(n: typeof notifications.$inferSel
 }
 
 registerDeliveryGuard([...COMMENT_TYPES], guardCommentNotification);
+registerJournalGuard([...COMMENT_TYPES], commentNotificationShown);

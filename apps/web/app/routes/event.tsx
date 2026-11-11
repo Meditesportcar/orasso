@@ -63,6 +63,7 @@ import { EventFeed } from "../components/EventFeed";
 import { InviteBanner, WhoGoes } from "../components/EventInvite";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
+import { NotifyBell } from "../components/event/NotifyBell";
 import { CarGrid, ProItem, VisitorNotice } from "../components/Lineup";
 import { ContactOrganizer } from "../components/Messaging";
 import { PhotoGallery } from "../components/PhotoGallery";
@@ -602,6 +603,7 @@ function EventPage({
                 {formatWhen(event.startsAt, event.endsAt)}
                 {place ? ` · ${place}` : ""}
               </div>
+              {connected && <NotifyBell eventId={event.id} stamp={mine.map((a) => a.status).join(",")} />}
             </div>
             <div className="ev__poster-frame" data-testid="event-poster">
               <PosterFace event={{ ...event, generatedPosterUrl: event.poster?.postUrl ?? null }} />

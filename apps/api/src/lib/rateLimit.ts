@@ -93,6 +93,9 @@ export const rateRules = {
   referenceSearchPublic: { max: 120, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   /** Lot R4b : le plateau d'un événement (route publique, pages de 30). */
   lineup: { max: 120, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
+  // Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, revalidées à chaque affichage (304 compris) :
+  // une limite à part, dimensionnée pour des galeries, pour ne pas épuiser celle des listes.
+  feedPublicPhoto: { max: 600, windowMs: 60_000, message: "Trop de photos demandées : réessaie dans une minute." },
   lineupPublic: { max: 60, windowMs: 60_000, message: "Trop de lectures du plateau : réessaie dans une minute." },
   /** QR ami : lectures par minute, et codes refusés (le code à 8 chiffres ne se devine pas par essais). */
   friendQr: { max: 30, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
