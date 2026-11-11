@@ -185,6 +185,8 @@ export const rateRules = {
   feedPost: { max: 20, windowMs: 3_600_000, message: "Trop de publications : réessaie plus tard." },
   feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
+  // Lot R8c1 : cartes vues du Fil (50 par envoi, un envoi toutes les quelques secondes au plus en lecture).
+  feedSeen: { max: 90, windowMs: 3_600_000, message: "Trop d'envois de cartes vues : réessaie plus tard." },
   feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 

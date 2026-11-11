@@ -17,6 +17,7 @@ import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { posterService } from "./modules/events/poster/service";
+import { feedSeenService } from "./modules/feed/seen";
 import { fieldService } from "./modules/field/service";
 import { sponsoredService } from "./modules/home/sponsored";
 import { memoriesService } from "./modules/memories/service";
@@ -105,6 +106,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "memories.daily": () => memoriesService.daily(),
   // Lot R7i : à la fin d un rendez-vous au spot, lieu et liste effacés (les lignes restent 30 jours, sans lieu).
   "spot.purge": () => spotMeetupsPurge.run(),
+  // Lot R8c1 : cartes vues du Fil de plus de 30 jours effacées (donnée de lecture privée).
+  "feed.seen-purge": () => feedSeenService.purge(),
 };
 
 /**
@@ -165,6 +168,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // pendant une heure (le défaut de pg-boss reprend tout de suite, deux fois : inutile après une vraie panne).
     await boss.schedule("memories.daily", "0 9 * * *", null, { tz: "Europe/Paris", retryLimit: 6, retryDelay: 600 });
     await boss.schedule("spot.purge", "*/5 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("feed.seen-purge", "30 4 * * *", null, { tz: "Europe/Paris" });
   }
   const previous = deps.jobs;
   deps.jobs = {

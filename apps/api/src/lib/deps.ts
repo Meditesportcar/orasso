@@ -70,7 +70,9 @@ export type JobName =
   // Lot R7j : souvenirs du jour (« il y a un an »), notification à 10 h.
   | "memories.daily"
   // Lot R7i : lieu et liste des rendez-vous au spot finis effacés (toutes les 5 minutes).
-  | "spot.purge";
+  | "spot.purge"
+  // Lot R8c1 : cartes vues du Fil de plus de 30 jours (et au-delà de 5 000 par compte), quotidienne.
+  | "feed.seen-purge";
 
 /** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
 export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };

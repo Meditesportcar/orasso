@@ -27,6 +27,7 @@ import {
   emailOutbox,
   events,
   expressInvites,
+  feedSeen,
   knownLogins,
   malusContests,
   notifications,
@@ -483,6 +484,8 @@ export const accountService = {
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
       // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
       photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
+      // Lot R8c1 : ses cartes vues du Fil (donnée de lecture privée) partent avec le compte.
+      await tx.delete(feedSeen).where(eq(feedSeen.userId, userId));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
