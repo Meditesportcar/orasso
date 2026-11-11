@@ -11,7 +11,7 @@ import { CrewPhotoImage } from "@/features/crews/feed/CrewPhotoImage";
 import { now } from "@/lib/clock";
 import { useNearScreen, useScrollTick } from "./useNearScreen";
 
-const { space1 } = tokens.spacing;
+const { space1, space2, space3, space4 } = tokens.spacing;
 const { radiusMd } = tokens.radius;
 /** La vignette est un 4:5 (largeur sur hauteur). */
 const TILE_RATIO = 4 / 5;
@@ -38,7 +38,7 @@ function Tile({ post, tick }: { post: FeedPostView; tick: number }) {
         {photo && near ? <CrewPhotoImage url={photo.url} style={styles.image} resizeMode="cover" /> : null}
       </Pressable>
       <View style={[styles.caption, { backgroundColor: c.surface, borderColor: c.line }]}>
-        <Text variant="bodyStrong" color={c.ink} style={styles.date} testID="publication-tile-date">
+        <Text variant="bodyStrong" color={c.ink} testID="publication-tile-date">
           {meta.date}
         </Text>
         {meta.place ? (
@@ -73,15 +73,19 @@ export function PublicationsGrid({ posts }: { posts: readonly FeedPostView[] }) 
 }
 
 const styles = StyleSheet.create({
-  grid: { gap: 14 },
-  row: { flexDirection: "row", gap: 10 },
-  tile: { flex: 1, minWidth: 0, gap: 6 },
+  grid: { gap: space4 },
+  row: { flexDirection: "row", gap: space3 },
+  tile: { flex: 1, minWidth: 0, gap: space2 },
   photo: { width: "100%", aspectRatio: TILE_RATIO, borderRadius: radiusMd, overflow: "hidden" },
   image: { width: "100%", height: "100%" },
   pressed: { opacity: 0.85 },
   // La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px).
-  caption: { gap: 1, paddingHorizontal: 8, paddingVertical: 3, borderRadius: tokens.radius.radiusMd, borderWidth: 1.5 },
-  date: { fontSize: 12.5, lineHeight: 16 },
-  placeRow: { flexDirection: "row", alignItems: "center", gap: space1 - 1 },
-  place: { flexShrink: 1, fontSize: 12, lineHeight: 15 },
+  caption: {
+    paddingHorizontal: space2,
+    paddingVertical: space1,
+    borderRadius: tokens.radius.radiusMd,
+    borderWidth: 1.5,
+  },
+  placeRow: { flexDirection: "row", alignItems: "center", gap: space1 },
+  place: { flexShrink: 1 },
 });

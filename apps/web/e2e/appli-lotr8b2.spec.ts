@@ -307,3 +307,34 @@ test("une notification de publication ouvre la publication seule", async ({ brow
   await expect(page.getByTestId("feed-card-feed_post")).toContainText("Merci @Kenji_66");
   await ctx.close();
 });
+
+test("organisateur sur un compte privé : Garage et Sorties restent visibles, « Publications » montre le panneau « Compte privé »", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  // Sarah_66 est l'organisatrice d'un événement où Marc_66 (compte privé) candidate : l'audience est « organisateur ».
+  const sarah = await login("sarah@orasso.local");
+  const view = await apiCall<{ audience: string; publications: unknown }>(sarah, "GET", "/users/Marc_66");
+  expect(view.data.audience).toBe("organizer");
+  expect(view.data.publications).toBeNull();
+  const { ctx, page } = await open(browser);
+  await signIn(page, "sarah@orasso.local");
+  await go(page, "/u/Marc_66");
+  await expect(page.getByTestId("profil-tabs").getByRole("tab")).toHaveText(
+    [/^Garage · \d+$/, "Sorties", "Publications"],
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(selected(page)).toHaveAccessibleName("Publications");
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
+  await page.getByTestId("profil-tab-garage").click();
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/);
+  await expect(page.getByTestId("publications-private")).toHaveCount(0);
+  await page.getByTestId("profil-tab-sorties").click();
+  await expect(selected(page)).toHaveAccessibleName("Sorties");
+  // Un paramètre d'onglet invalide est ignoré : l'ouverture suit la règle.
+  await go(page, "/u/Kenji_66?onglet=nimporte");
+  await expect(selected(page)).toHaveAccessibleName("Publications");
+  await ctx.close();
+});

@@ -15,33 +15,39 @@
 }
 .pub-head__count {
   flex: 1 1 auto;
-  font-size: 13px;
+  font-size: var(--type-label-size, inherit);
 }
 /* Le bouton « Publier » compact (`.btn.sm` de la maquette : 40 px, rayon 10, 12 px), seul bouton principal de l'écran. */
 .o-button.pub-head__publish {
-  min-height: 40px;
+  position: relative;
+  min-height: calc(var(--touch) - var(--space-1) * 2);
   padding: 0 var(--space-3);
-  gap: 6px;
-  border-radius: 10px;
-  font-size: 12px;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
+}
+/* Zone de toucher portée au jeton `touch` sans grandir le bouton (40 px visibles, 48 px touchables). */
+.o-button.pub-head__publish::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--space-1) * -1) 0;
 }
 
 /* La bascule des deux vues (`.r8vt`). */
 .pub-toggle {
   display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: calc(var(--radius-md) + 2px);
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
 }
 .pub-toggle__btn {
   display: grid;
   place-items: center;
   width: var(--touch);
-  height: 38px;
+  height: var(--touch);
   border: 0;
-  border-radius: calc(var(--radius-md) - 1px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
@@ -61,7 +67,7 @@
 .pub-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px var(--space-3);
+  gap: var(--space-4) var(--space-3);
 }
 @media (min-width: 900px) {
   .pub-grid {
@@ -71,7 +77,7 @@
 .pub-tile {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .pub-tile__photo {
@@ -90,28 +96,25 @@
 /* La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px). */
 .pub-tile__caption {
   display: grid;
-  gap: 1px;
-  padding: 3px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: inset 0 0 0 1.5px var(--line);
 }
 .pub-tile__caption b {
   color: var(--ink);
-  font-size: 12.5px;
 }
 .pub-tile__caption span {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-1);
   color: var(--ink-muted);
-  font-size: 12px;
 }
 
 /* La vue « Une par une » : les cartes du Fil, une sous l'autre. */
 .pub-one {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 /* Légende repliée après trois lignes ; « plus » la déroule. */
 .pub-caption--clamp {
@@ -138,7 +141,7 @@
   display: grid;
   justify-items: center;
   gap: var(--space-2);
-  padding: 22px var(--space-4);
+  padding: var(--space-6) var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);

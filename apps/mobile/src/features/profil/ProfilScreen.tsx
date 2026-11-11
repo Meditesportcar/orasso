@@ -32,7 +32,6 @@ import {
   passportScreenTexts,
   profileOpenTab,
   profilePhotoLabels,
-  profileTabFromParam,
   profileTabItems,
   settingsHubLabels,
   type UserProfileView,
@@ -84,7 +83,8 @@ export function ProfilScreen() {
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {
     if (onglet === undefined) return;
-    setTab(profileTabFromParam(onglet));
+    const asked = explicitProfileTab(onglet);
+    if (asked) setTab(asked);
     router.setParams({ onglet: undefined });
   }, [onglet, router]);
   // Change à chaque « tirer pour actualiser » : le garage et le passeport se relisent aussi.

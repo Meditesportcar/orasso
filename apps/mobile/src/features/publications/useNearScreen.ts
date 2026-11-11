@@ -36,7 +36,8 @@ export function useNearScreen(box: RefObject<View | null>, tick: number): boolea
   useEffect(() => {
     if (!assist) return;
     box.current?.measureInWindow((_x, y, _w, h) => {
-      setNear(isNearViewport(y, h, Dimensions.get("window").height));
+      // Une vignette devenue proche reste chargée : pas de relecture des photos à chaque aller-retour.
+      if (isNearViewport(y, h, Dimensions.get("window").height)) setNear(true);
     });
   }, [assist, box, tick]);
   return near;

@@ -5153,3 +5153,11 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 ### À revoir avec Damien (lot R8b2)
 - **Compte privé : un seul onglet** « Publications » (au lieu des trois du dessin, dont deux vides) ; la note « Réservé à ses abonnés » du lot R7b1 disparaît au profit du panneau « Compte privé » du dessin. À confirmer.
 - **La petite ligne de la carte dans une liste** : « Sur ton profil » / « Sur son profil » à la place de la raison du Fil (la maquette montre la date et le lieu sous le nom) ; R8c2 refait l'en-tête avec la ligne de rattachement.
+
+### Tour 2 (lot R8b2, relecture Opus, 11/11/2026)
+- **Régression corrigée** : seul `limited` (audience limitée) bride la rangée d'onglets ; un organisateur qui ouvre un candidat au compte privé garde Garage et Sorties (`countsForPerson` rend un compteur nul à tout non-abonné, organisateur compris). Le compteur nul ne restreint que la liste (`restricted` passé à `PublicationsTab`). Recettes appli et site avec Sarah_66 sur Marc_66.
+- **Cibles de 44 px** : la bascule fait 48 × 48 (jeton `touch`). « Publier » reste à 40 px de haut sur le site (zone de toucher de 48 px par un pseudo-élément) ; dans l'appli, `SmButton` n'a pas de `hitSlop` : il prend `minHeight` = `touch` (écart de 8 px à la maquette, noté).
+- **Jetons** : plus de valeur en dur dans les styles de l'onglet, de la grille et de la bascule (espacements `space1` à `space6`, rayons, tailles de texte des variants). Reste un seul chiffre sans jeton : la colonne de 600 px de la page seule (comme `.fil`).
+- **Vignettes** : une vignette devenue proche reste chargée.
+- **Vue retenue par compte** (corrige la ligne plus haut) : appli, copie du compte (`cacheGetJson/cacheSetJson`, vidée avec ses données) ; site, clé `orasso.publications.view.<compte>` du navigateur (non vidée à la déconnexion : propre à chaque compte, jamais lue par un autre).
+- **`?onglet=` invalide** ignoré (appli : `explicitProfileTab` dans les deux effets) ; tests `labels/profile-tabs.test.ts`.

@@ -16,7 +16,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { kvGet, kvSet } from "@/lib/kv";
+import { cacheGetJson, cacheSetJson } from "@/lib/kv";
 import { SmButton } from "@/ui/Kit";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -26,14 +26,14 @@ import { PublicationsOneByOne } from "./PublicationsOneByOne";
 import { usePublications } from "./usePublications";
 import { ViewToggle } from "./ViewToggle";
 
-const { space2, space3 } = tokens.spacing;
+const { space2, space3, space4, space6 } = tokens.spacing;
 
-/** Le choix d'affichage, retenu sur l'appareil (jamais bloquant : sans mémoire, la grille). */
+/** Le choix d'affichage, retenu **par compte** (copie du compte, vidée avec ses autres données) : jamais hérité d'un autre compte. */
 function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => void] {
   const [mode, setMode] = useState<PublicationsViewMode>("grid");
   useEffect(() => {
     let alive = true;
-    void kvGet(PUBLICATIONS_VIEW_KEY)
+    void cacheGetJson<string>(PUBLICATIONS_VIEW_KEY)
       .then((stored) => {
         if (alive) setMode(viewMode(stored));
       })
@@ -44,7 +44,7 @@ function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => v
   }, []);
   const choose = (next: PublicationsViewMode) => {
     setMode(next);
-    void kvSet(PUBLICATIONS_VIEW_KEY, next).catch(() => undefined);
+    void cacheSetJson(PUBLICATIONS_VIEW_KEY, next).catch(() => undefined);
   };
   return [mode, choose];
 }
@@ -161,7 +161,13 @@ export function PublicationsTab({
           {count === null ? "" : L.count(count)}
         </Text>
         {mine ? (
-          <SmButton kind="p" icon="camera" onPress={() => router.push("/fil/publier")} testID="publications-publish">
+          <SmButton
+            kind="p"
+            icon="camera"
+            onPress={() => router.push("/fil/publier")}
+            style={styles.publish}
+            testID="publications-publish"
+          >
             {L.publish}
           </SmButton>
         ) : null}
@@ -190,14 +196,16 @@ export function PublicationsTab({
 const styles = StyleSheet.create({
   wrap: { gap: space3 },
   head: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
-  count: { fontSize: 13, flexGrow: 1 },
+  count: { flexGrow: 1 },
   panel: {
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 22,
-    paddingHorizontal: 16,
+    gap: space2,
+    paddingVertical: space6,
+    paddingHorizontal: space4,
     borderRadius: tokens.radius.radiusLg,
   },
   panelText: { textAlign: "center" },
   panelButton: { alignSelf: "center" },
+  // Le « Publier » compact suit la maquette (40 px) ; la zone de toucher est portée au jeton `touch` (44 px au moins).
+  publish: { minHeight: tokens.spacing.touch },
 });

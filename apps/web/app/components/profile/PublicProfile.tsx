@@ -136,7 +136,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
   const restricted = limited || publications === null;
   const mine = p.audience === "self";
   const asked = explicitProfileTab(search.get(PT.param));
-  const tab: ProfileTab = restricted
+  const tab: ProfileTab = limited
     ? "publications"
     : visibleProfileTab(
         asked ??
@@ -322,7 +322,7 @@ export function PublicProfile({ profile: p, mode, previewAs = "member", notices,
         <ProfileTabs
           value={tab}
           hrefOf={tabHref}
-          items={profileTabItems({ hasGarage, restricted })}
+          items={profileTabItems({ hasGarage, restricted: limited })}
           garageCount={p.vehicles.length}
         />
         {tab === "publications" ? (

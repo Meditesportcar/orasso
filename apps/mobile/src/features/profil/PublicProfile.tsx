@@ -37,7 +37,6 @@ import {
   profileTabsLabels as PT,
   profileOpenTab,
   profileRingState,
-  profileTabFromParam,
   profileTabItems,
   type SocialNetwork,
   socialsLabels,
@@ -242,6 +241,8 @@ export function PublicProfile({
   // Lot R8b2 : le compteur de publications (`null` : liste restreinte, compte privé que je ne suis pas) et l'onglet d'ouverture :
   // « Publications » sauf chez un autre sans aucune publication (« Garage », ou « Sorties » sans véhicule).
   const publications = (p as WithPublications<UserProfileView>).publications;
+  // Les onglets ne sont bridés que par l'audience limitée (un organisateur voit le Garage et les Sorties d'un candidat privé) ;
+  // la liste, elle, est restreinte dès que son compteur est nul.
   const restricted = limited || publications === null;
   const mine = mode === "self";
   const [tab, setTab] = useState<ProfileTab>(
@@ -250,10 +251,11 @@ export function PublicProfile({
   // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
   useEffect(() => {
     if (onglet === undefined) return;
-    setTab(profileTabFromParam(onglet));
+    const asked = explicitProfileTab(onglet);
+    if (asked) setTab(asked);
     router.setParams({ onglet: undefined });
   }, [onglet, router]);
-  const shownTab = restricted ? "publications" : visibleProfileTab(tab, hasGarage);
+  const shownTab = limited ? "publications" : visibleProfileTab(tab, hasGarage);
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
   const others = p.vehicles.filter((v) => v !== main);
@@ -494,7 +496,7 @@ export function PublicProfile({
         <ProfileTabs
           value={shownTab}
           onChange={setTab}
-          items={profileTabItems({ hasGarage, restricted })}
+          items={profileTabItems({ hasGarage, restricted: limited })}
           garageCount={p.vehicles.length}
         />
         {shownTab === "publications" ? (

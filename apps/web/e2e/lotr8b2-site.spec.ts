@@ -236,3 +236,26 @@ test("« Mes publications » redirige ; une notification de publication ouvre la
   await expect(page).toHaveURL(new RegExp(`/app/publication/${id}`), { timeout: 30_000 });
   await expect(page.getByTestId("feed-card-feed_post")).toContainText("Merci @Kenji_66");
 });
+
+test("organisateur sur un compte privé : Garage et Sorties restent visibles, « Publications » montre le panneau « Compte privé »", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await setTheme(page, "beton");
+  const sarah = await login("sarah@orasso.local");
+  const view = await apiCall<{ audience: string; publications: unknown }>(sarah, "GET", "/users/Marc_66");
+  expect(view.data.audience).toBe("organizer");
+  await loginInBrowser(page, "sarah@orasso.local", undefined, "/app/moi");
+  await page.goto("/u/Marc_66");
+  await expect(page.getByTestId("profil-tabs").getByRole("tab")).toHaveText([
+    /^Garage · \d+$/,
+    "Sorties",
+    "Publications",
+  ]);
+  await expect(selected(page)).toHaveAccessibleName("Publications");
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé", { timeout: 30_000 });
+  await page.goto("/u/Marc_66?onglet=garage");
+  await expect(selected(page)).toHaveAccessibleName(/^Garage/);
+  await page.goto("/u/Kenji_66?onglet=nimporte");
+  await expect(selected(page)).toHaveAccessibleName("Publications");
+});

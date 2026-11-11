@@ -45,6 +45,12 @@ export function ViewToggle({
 }
 
 const styles = StyleSheet.create({
-  group: { flexDirection: "row", gap: 2, padding: 3, borderRadius: radiusMd + 2 },
-  btn: { width: 44, height: 38, borderRadius: radiusMd - 1, alignItems: "center", justifyContent: "center" },
+  group: { flexDirection: "row", gap: 2, padding: 2, borderRadius: radiusMd },
+  btn: {
+    width: tokens.spacing.touch,
+    height: tokens.spacing.touch,
+    borderRadius: radiusMd - 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

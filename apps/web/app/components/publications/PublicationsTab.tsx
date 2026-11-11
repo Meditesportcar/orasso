@@ -14,25 +14,37 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 
 import "../../styles/publications.css";
+import { apiFetch } from "../../lib/api.client";
 import { PublicationsGrid } from "./PublicationsGrid";
 import { PublicationsOneByOne } from "./PublicationsOneByOne";
 import { usePublications } from "./usePublications";
 import { ViewToggle } from "./ViewToggle";
 
-/** Le choix d'affichage, retenu dans le navigateur (jamais bloquant : sans mémoire, la grille). */
+/** Le choix d'affichage, retenu **par compte** dans le navigateur (l'identifiant du compte est dans la clé) : jamais hérité d'un autre compte. */
 function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => void] {
   const [mode, setMode] = useState<PublicationsViewMode>("grid");
+  const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
-    try {
-      setMode(viewMode(window.localStorage.getItem(PUBLICATIONS_VIEW_KEY)));
-    } catch {
-      /* navigation privée : la grille */
-    }
+    let alive = true;
+    void apiFetch<{ user: { id: string } }>("/me").then((res) => {
+      if (!alive || !res.ok) return;
+      const k = `${PUBLICATIONS_VIEW_KEY}.${res.data.user.id}`;
+      setKey(k);
+      try {
+        setMode(viewMode(window.localStorage.getItem(k)));
+      } catch {
+        /* navigation privée : la grille */
+      }
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
   const choose = (next: PublicationsViewMode) => {
     setMode(next);
+    if (!key) return;
     try {
-      window.localStorage.setItem(PUBLICATIONS_VIEW_KEY, next);
+      window.localStorage.setItem(key, next);
     } catch {
       /* rien à retenir */
     }
