@@ -360,9 +360,12 @@ export const feedService = {
       if (forYou && (!cursor || phase1)) {
         // Phase 1 : la fenêtre de 48 h, classée par score. Les sources qui dépassaient le plafond à la première page
         // restent bornées à la même clé (`floor`) : une carte retirée n'en fait pas entrer une autre.
+        // La borne de rognage est figée à la première page pour toute la phase 1 : un rognage en route ne retire aucune carte du
+        // classement (l'empreinte des flammes ne bouge pas). Ce qui sort ainsi de la zone A reste servi ; au pire un doublon plus loin.
+        const p1Floor = phase1 ? (phase1.floorAt ? new Date(phase1.floorAt) : null) : seenFloor;
         const floors = new Map(x.map((k) => [kindOfId(k.id), k]));
         const lists = await loadAll(
-          { ...base, zone: "A", since: boundary, limit: WINDOW_CAP },
+          { ...base, zone: "A", seenFloor: p1Floor, since: boundary, limit: WINDOW_CAP },
           undefined,
           (k) => floors.get(k) ?? null,
         );
@@ -398,6 +401,7 @@ export const feedService = {
             ...head("A"),
             phase: 1,
             sc: consumedDigest(edge),
+            floorAt: p1Floor?.getTime() ?? 0,
             score: edge.score,
             frontier: edge.id,
             kinds: [...(phase1?.kinds ?? []), ...shown.map((c) => c.kind)].slice(-2),

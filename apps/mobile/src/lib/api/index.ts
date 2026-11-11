@@ -28,6 +28,7 @@ import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { networkApi } from "./network";
 import { orgaApi } from "./orga";
+import { pagesApi } from "./pages";
 import { partnershipsApi } from "./partnerships";
 import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
@@ -112,4 +113,5 @@ export const api = {
   ...storiesPublishApi,
   ...storiesVideoApi,
   ...publicationsApi,
+  ...pagesApi,
 };

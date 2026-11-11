@@ -60,8 +60,10 @@ export async function auditPage(page: Page): Promise<Audit> {
         // Tour 2 : seulement si « plus » existe (bio coupée avec son déroulé) ; sans lui, la bio est contrôlée comme le reste.
         .filter(
           (el) =>
-            !el.closest('[data-testid="profil-bio"], [data-testid="profile-bio"]') ||
-            !document.querySelector('[data-testid="profil-bio-toggle"], [data-testid="profile-bio-toggle"]'),
+            !el.closest('[data-testid="profil-bio"], [data-testid="profile-bio"], [data-testid="page-bio"]') ||
+            !document.querySelector(
+              '[data-testid="profil-bio-toggle"], [data-testid="profile-bio-toggle"], [data-testid="page-bio-toggle"]',
+            ),
         )
         .filter((el) => getComputedStyle(el).textOverflow === "ellipsis" && el.scrollWidth > el.clientWidth + 1)
         .map(label),
