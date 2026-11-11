@@ -150,7 +150,9 @@ export function PublishForm({
   const now = useRef({ account: userId, key: author.key, loadedAt: 0 });
   now.current = { account: userId, key: author.key, loadedAt: loaded.loadedAt };
   // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
-  const [uncertain, setUncertain] = useState<unknown | null>(null);
+  const [uncertain, setUncertain] = useState<(ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [found, setFound] = useState(false);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
   const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
@@ -354,12 +356,36 @@ export function PublishForm({
       forbidden: eventBlock ? loaded.forbidden : null,
     }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
-  /** Modifier une publication dont l'envoi est incertain : nouvel identifiant (jamais l'ancien avec un autre corps). */
-  function abandonUncertain() {
-    setUncertain(null);
-    setClientId(crypto.randomUUID());
-    keys.current = {};
-    setError(T.uncertainEdited);
+  /** Le compte de la session est-il encore celui de ce formulaire ? (un autre onglet a pu en changer) */
+  async function sameAccount(): Promise<boolean> {
+    const me = await apiFetch<{ user: { id: string } }>("/me");
+    return me.ok && me.data.user.id === userId;
+  }
+
+  /**
+   * « Modifier ma publication » après un envoi incertain : on vérifie d'abord (`GET /me/feed-posts/by-client/:clientId`).
+   * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
+   * reste incertain (le formulaire ne se libère jamais sur un doute).
+   */
+  async function abandonUncertain() {
+    if (!uncertain || checking) return;
+    setChecking(true);
+    setError(null);
+    const res = await apiFetch<FeedPostView>(`/me/feed-posts/by-client/${uncertain.clientId}`);
+    setChecking(false);
+    if (res.ok) {
+      rememberPublished(userId, res.data);
+      setUncertain(null);
+      setFound(true);
+      return setDone(true);
+    }
+    if (res.status === 404) {
+      setUncertain(null);
+      setClientId(crypto.randomUUID());
+      keys.current = {};
+      return;
+    }
+    setError(T.uncertainUnchecked);
   }
 
   async function publish() {
@@ -367,6 +393,11 @@ export function PublishForm({
     setBusy(true);
     setError(null);
     setSecurity(false);
+    // Le compte de la session : si un autre onglet en a changé, rien ne part (ni photos, ni publication au nom d'un autre).
+    if (!(await sameAccount())) {
+      setBusy(false);
+      return setError(T.accountChanged);
+    }
     const uploaded: string[] = [];
     for (const [i, p] of uncertain ? [] : items.entries()) {
       setProgress(L.sending(i + 1, items.length));
@@ -399,6 +430,11 @@ export function PublishForm({
         important,
         ...(fan ? commercialField(commercialLine) : {}),
       });
+    if (!(await sameAccount())) {
+      setBusy(false);
+      setProgress(null);
+      return setError(T.accountChanged);
+    }
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
     setProgress(null);
@@ -407,8 +443,15 @@ export function PublishForm({
       setUncertain(body);
       return setError(T.noNetwork);
     }
+    // 429 et 401 tombent avant le contrôle de rejeu de l'API : ils ne prouvent rien, l'envoi incertain est gardé (401 : jusqu'à
+    // la reconnexion). Toute autre réponse (succès, refus 4xx) dit que l'envoi est réglé.
+    if (!res.ok && (res.status === 429 || res.status === 401)) {
+      return setError(res.status === 429 ? L.tooManyRequests : res.error.message);
+    }
     setUncertain(null);
     if (res.ok) {
+      // Une réponse arrivée après un changement de compte (autre onglet) n'écrit rien.
+      if (!(await sameAccount())) return;
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements »).
       rememberPublished(userId, res.data as FeedPostView);
       return setDone(true);
@@ -448,13 +491,15 @@ export function PublishForm({
     return (
       <div className="fil" data-testid="fil-publish-done">
         <FicheBar title={L.published} back="/app/fil" />
-        <p className="o-t-body">{L.publishedText}</p>
+        <p className="o-t-body">{found ? T.uncertainFound : L.publishedText}</p>
         <a className="fil-publish" href="/app/fil" data-testid="fil-publish-back">
           <Icon name="feed" size={20} /> {L.backToFeed}
         </a>
-        <a className="fil-link" href="/app/fil/mes-publications">
-          <Icon name="gallery" size={16} /> {L.mineTitle}
-        </a>
+        {fan ? (
+          <a className="fil-link" href="/app/fil/mes-publications">
+            <Icon name="gallery" size={16} /> {L.mineTitle}
+          </a>
+        ) : null}
       </div>
     );
   }
@@ -860,10 +905,11 @@ export function PublishForm({
           type="button"
           variant="secondary"
           icon="edit"
-          onClick={abandonUncertain}
+          disabled={checking}
+          onClick={() => void abandonUncertain()}
           data-testid="fil-publish-uncertain-edit"
         >
-          {T.uncertainEdit}
+          {checking ? T.uncertainChecking : T.uncertainEdit}
         </Button>
       ) : null}
       {security || (loaded.forbidden && eventBlock) ? (

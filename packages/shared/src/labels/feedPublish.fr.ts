@@ -78,8 +78,10 @@ export const feedPublishLabels = {
   uncertainTitle: "Envoi en cours de vérification",
   uncertainRetry: "Réessayer",
   uncertainEdit: "Modifier ma publication",
-  uncertainEdited:
-    "Ta publication précédente a peut-être été publiée : regarde « Mes publications » avant de la renvoyer.",
+  uncertainChecking: "Vérification de l'envoi…",
+  uncertainUnchecked: "Impossible de vérifier l'envoi pour l'instant : réessaie dans un instant.",
+  accountChanged: "Ta session a changé dans un autre onglet : recharge la page avant de publier.",
+  uncertainFound: "Ta publication est en ligne.",
   attachRetry: "Réessayer",
   securityLink: "Ouvrir la sécurité du compte",
   forbiddenMore: "Pour publier au nom d'une structure, la double authentification doit être active.",

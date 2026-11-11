@@ -334,30 +334,6 @@ test("réponse perdue après validation : le formulaire se fige, « Réessayer �
   await ctx.close();
 });
 
-test("réponse perdue puis « Modifier » : un nouvel identifiant et le message clair, jamais l'ancien corps annoncé comme le nouveau", async ({
-  browser,
-}) => {
-  test.setTimeout(240_000);
-  const { ctx, page } = await open(browser, "damien@orasso.local");
-  await addPhoto(page);
-  const stamp = Date.now();
-  await page.getByTestId("fil-publish-caption").fill(`Avant ${stamp}`);
-  await loseResponses(page);
-  await page.getByTestId("fil-publish-send").click();
-  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
-  await page.unroute("**/api/me/feed-posts");
-  await page.getByTestId("fil-publish-uncertain-edit").click();
-  await expect(page.getByText("a peut-être été publiée")).toBeVisible();
-  await expect(page.getByTestId("fil-publish-caption")).toBeEditable();
-  await page.getByTestId("fil-publish-caption").fill(`Après ${stamp}`);
-  await page.getByTestId("fil-publish-send").click();
-  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
-  const captions = await myCaptions();
-  expect(captions).toContain(`Avant ${stamp}`);
-  expect(captions).toContain(`Après ${stamp}`);
-  await ctx.close();
-});
-
 test("la liste des événements en panne : « Réessayer » ; refus 403 : message, lien sécurité, « Publier » bloqué", async ({
   browser,
 }) => {
@@ -388,5 +364,163 @@ test("la liste des événements en panne : « Réessayer » ; refus 403 : messag
   await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
   await expect(missing(page)).toContainText("double authentification");
   await shot(page, "liste-refusee");
+  await ctx.close();
+});
+
+// --- Tour 3 ------------------------------------------------------------------------------------------------------------
+
+/** Sans réponse : la requête n'atteint jamais le serveur (rien n'est créé). */
+async function dropRequests(page: Page) {
+  await page.route("**/api/me/feed-posts", (route) =>
+    route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+  );
+}
+
+test("« Modifier » vérifie d'abord : publiée, « Ta publication est en ligne », rien à renvoyer", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  const stamp = Date.now();
+  await page.getByTestId("fil-publish-caption").fill(`Publiée ${stamp}`);
+  await loseResponses(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByTestId("fil-publish-done")).toContainText("Ta publication est en ligne.");
+  expect((await myCaptions()).filter((c) => c === `Publiée ${stamp}`)).toHaveLength(1);
+  await ctx.close();
+});
+
+test("« Modifier » vérifie d'abord : absente, nouvel identifiant et saisie gardée, sans message d'incertitude ; vérification impossible, reste incertain", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  const stamp = Date.now();
+  await page.getByTestId("fil-publish-caption").fill(`Absente ${stamp}`);
+  await dropRequests(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  // La vérification ne peut pas aboutir (réseau) : le formulaire reste figé.
+  await page.route("**/api/me/feed-posts/by-client/**", (route) => route.abort("failed"));
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByText("Impossible de vérifier l'envoi")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).not.toBeEditable();
+  await page.unroute("**/api/me/feed-posts/by-client/**");
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByTestId("fil-publish-caption")).toBeEditable();
+  await expect(page.getByTestId("fil-publish-caption")).toHaveValue(`Absente ${stamp}`);
+  await expect(page.getByText("peut-être")).toHaveCount(0);
+  await page.unroute("**/api/me/feed-posts");
+  await page.getByTestId("fil-publish-caption").fill(`Corrigée ${stamp}`);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  const captions = await myCaptions();
+  expect(captions).toContain(`Corrigée ${stamp}`);
+  expect(captions).not.toContain(`Absente ${stamp}`);
+  await ctx.close();
+});
+
+for (const [status, code] of [
+  [409, "important_quota"],
+  [422, "event_not_attachable"],
+  [403, "persona_forbidden"],
+] as const) {
+  test(`réseau perdu puis ${status} ${code} : l'envoi n'est plus incertain, on corrige et on renvoie`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const { ctx, page } = await open(browser, "damien@orasso.local");
+    await addPhoto(page);
+    await page.getByTestId("fil-publish-caption").fill("Un mot");
+    await dropRequests(page);
+    await page.getByTestId("fil-publish-send").click();
+    await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+    await page.unroute("**/api/me/feed-posts");
+    await page.route("**/api/me/feed-posts", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({
+            status,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code, message: code, details: { leftToday: 0, leftWeek: 2 } } }),
+          })
+        : route.continue(),
+    );
+    await page.getByTestId("fil-publish-send").click();
+    await expect(page.getByTestId("fil-publish-uncertain")).toHaveCount(0);
+    await expect(page.getByTestId("fil-publish-caption")).toBeEditable();
+    await expect(page.getByTestId("fil-publish-send")).toContainText(/Publier/i);
+    await ctx.close();
+  });
+}
+
+test("un 429 pendant l'incertitude ne libère pas le formulaire", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  await page.getByTestId("fil-publish-caption").fill("Un mot");
+  await dropRequests(page);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+  await page.route("**/api/me/feed-posts", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "rate_limited", message: "429" } }),
+        })
+      : route.continue(),
+  );
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).not.toBeEditable();
+  await ctx.close();
+});
+
+test("la réponse d'envoi de A, arrivée après la connexion de B, n'écrit rien dans le Fil de B", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await addPhoto(page);
+  const secret = `Secret de A ${Date.now()}`;
+  await page.getByTestId("fil-publish-caption").fill(secret);
+  // La réponse du POST est retardée : A est déconnecté et B connecté (sans recharger l'appli) avant son arrivée.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/me/feed-posts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const real = await route.fetch();
+    await held;
+    await route.fulfill({ response: real });
+  });
+  await page.getByTestId("fil-publish-send").click();
+  const spa = (path: string) =>
+    page.evaluate((to) => {
+      window.history.pushState({}, "", to);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, path);
+  await spa("/moi");
+  await page.getByTestId("profil-gear").click();
+  await page.getByTestId("profil-sign-out").click();
+  await page.waitForURL(/auth/, { timeout: 30_000 });
+  await page.getByLabel("E-mail").fill("kenji@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil/, { timeout: 60_000 });
+  await spa("/fil");
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  release();
+  await page.waitForTimeout(3_000);
+  // Le Fil de B (sans recharger : l'état global de l'appli est celui qu'on vérifie) ne montre pas le texte de A.
+  await spa("/accueil");
+  await spa("/fil");
+  await expect(page.getByTestId("fil-publish-open")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(secret)).toHaveCount(0);
   await ctx.close();
 });

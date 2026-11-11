@@ -148,6 +148,8 @@ function PublishForm() {
   now.current = { account, key: author.key, loadedAt: loaded.loadedAt };
   // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
   const [uncertain, setUncertain] = useState<FeedPostBody | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [found, setFound] = useState(false);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
   const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
@@ -229,11 +231,12 @@ function PublishForm() {
   useEffect(() => {
     if (!showImportant || !event) return;
     let live = true;
+    const guard = accountGuard();
     const id = event.id;
     api
       .eventNotifyPreview(id)
-      .then((r) => live && setRecipients({ eventId: id, n: r.recipients }))
-      .catch(() => live && setRecipients({ eventId: id, n: null }));
+      .then((r) => live && guard.current() && setRecipients({ eventId: id, n: r.recipients }))
+      .catch(() => live && guard.current() && setRecipients({ eventId: id, n: null }));
     return () => {
       live = false;
     };
@@ -393,6 +396,9 @@ function PublishForm() {
     setBusy(true);
     setError(null);
     setSecurity(false);
+    // Le compte au départ : après chaque attente, si ce n'est plus le même, rien ne part et rien n'est écrit (ni requête, ni
+    // Fil global, ni photos temporaires : tout cela appartient au compte d'aujourd'hui).
+    const guard = accountGuard();
     let sending: FeedPostBody | null = null;
     try {
       const uploaded: string[] = [];
@@ -401,6 +407,7 @@ function PublishForm() {
         let key = keys.current[p.photo.uri];
         if (!key) {
           key = await uploadPhoto(p.photo, i);
+          if (!guard.current()) return;
           keys.current[p.photo.uri] = key;
         }
         uploaded.push(key);
@@ -420,15 +427,25 @@ function PublishForm() {
           important,
           ...(fan ? commercialField(commercialLine) : {}),
         });
+      if (!guard.current()) return;
       sending = body;
       const post = await api.createFeedPost(body);
+      // La réponse d'un autre compte (déconnexion, reconnexion pendant l'envoi) n'écrit rien chez celui d'aujourd'hui.
+      if (!guard.current()) return;
       setUncertain(null);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
       markFeedDirty(post);
       discardTempPhotos();
       setDone(true);
     } catch (e) {
+      if (!guard.current()) return;
+      // Un refus définitif prouve que rien n'a été créé : on sort de l'état incertain (429 et 401 ne prouvent rien : le contrôle
+      // de rejeu de l'API vient après ; le corps incertain est gardé).
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500 && e.status !== 429 && e.status !== 401) {
+        setUncertain(null);
+      }
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
+      else if (e instanceof ApiRequestError && e.status === 401) setError(errorMessage(e));
       else if (sending && e instanceof ApiRequestError && (e.isNetwork || e.status >= 500)) {
         // Pas de réponse : la publication est peut-être partie. Le formulaire se fige sur ce corps et ce `clientId`.
         setUncertain(sending);
@@ -462,7 +479,6 @@ function PublishForm() {
         if (Number.isFinite(at)) setCurrent(at);
         setError(e.message);
       } else {
-        setUncertain(null);
         // Une clé déjà envoyée peut avoir été refusée (photo inconnue) : au nouvel essai, tout repart.
         if (e instanceof ApiRequestError && e.status === 400) keys.current = {};
         setError(errorMessage(e));
@@ -473,12 +489,34 @@ function PublishForm() {
     }
   }
 
-  /** Modifier une publication dont l'envoi est incertain : nouvel identifiant (jamais l'ancien avec un autre corps). */
-  function abandonUncertain() {
-    setUncertain(null);
-    setClientId(randomUUID());
-    keys.current = {};
-    setError(T.uncertainEdited);
+  /**
+   * « Modifier ma publication » après un envoi incertain : on vérifie d'abord (`GET /me/feed-posts/by-client/:clientId`).
+   * Publiée : on le dit, rien à renvoyer. Absente : nouvel identifiant, saisie gardée. Vérification impossible : l'envoi
+   * reste incertain (le formulaire ne se libère jamais sur un doute).
+   */
+  async function abandonUncertain() {
+    if (!uncertain || checking) return;
+    const guard = accountGuard();
+    setChecking(true);
+    setError(null);
+    try {
+      const post = await api.feedPostByClient(uncertain.clientId);
+      if (!guard.current()) return;
+      markFeedDirty(post);
+      discardTempPhotos();
+      setUncertain(null);
+      setFound(true);
+      setDone(true);
+    } catch (e) {
+      if (!guard.current()) return;
+      if (e instanceof ApiRequestError && e.status === 404) {
+        setUncertain(null);
+        setClientId(randomUUID());
+        keys.current = {};
+      } else setError(T.uncertainUnchecked);
+    } finally {
+      setChecking(false);
+    }
   }
 
   if (cropping) {
@@ -512,15 +550,17 @@ function PublishForm() {
             {L.published}
           </Text>
           <Text variant="body" color={c.inkMuted}>
-            {L.publishedText}
+            {found ? T.uncertainFound : L.publishedText}
           </Text>
         </View>
         <SmButton kind="p" big wide icon="feed" onPress={close} testID="fil-publish-back">
           {L.backToFeed}
         </SmButton>
-        <SmButton kind="s" wide icon="gallery" onPress={() => router.replace("/fil/mes-publications")}>
-          {L.mineTitle}
-        </SmButton>
+        {fan ? (
+          <SmButton kind="s" wide icon="gallery" onPress={() => router.replace("/fil/mes-publications")}>
+            {L.mineTitle}
+          </SmButton>
+        ) : null}
       </FlowScreen>
     );
   }
@@ -554,8 +594,15 @@ function PublishForm() {
             </Muted>
           ) : null}
           {uncertain && !busy ? (
-            <SmButton kind="s" wide icon="edit" onPress={abandonUncertain} testID="fil-publish-uncertain-edit">
-              {T.uncertainEdit}
+            <SmButton
+              kind="s"
+              wide
+              icon="edit"
+              disabled={checking}
+              onPress={() => void abandonUncertain()}
+              testID="fil-publish-uncertain-edit"
+            >
+              {checking ? T.uncertainChecking : T.uncertainEdit}
             </SmButton>
           ) : null}
           <SmButton

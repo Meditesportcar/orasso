@@ -179,34 +179,6 @@ test("une fiche pro ne voit pas le bloc des événements ; prestataire et média
 
 // --- Tour 2 ------------------------------------------------------------------------------------------------------------
 
-test("site : réponse perdue après validation, le formulaire se fige ; « Modifier » donne un nouvel identifiant", async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  await openAs(page, "damien@orasso.local");
-  await addPhoto(page);
-  const stamp = Date.now();
-  await page.getByTestId("fil-publish-caption").fill(`Avant ${stamp}`);
-  await page.route("**/api/me/feed-posts", async (route) => {
-    if (route.request().method() !== "POST") return route.continue();
-    await route.fetch();
-    await route.abort("failed");
-  });
-  await page.getByTestId("fil-publish-send").click();
-  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
-  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
-  await page.unroute("**/api/me/feed-posts");
-  await page.getByTestId("fil-publish-uncertain-edit").click();
-  await expect(page.getByText("a peut-être été publiée")).toBeVisible();
-  await page.getByTestId("fil-publish-caption").fill(`Après ${stamp}`);
-  await page.getByTestId("fil-publish-send").click();
-  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
-  const res = await page.evaluate(async () => (await fetch("/api/me/feed-posts")).json());
-  const captions = (res.items as { caption: string | null }[]).map((p) => p.caption);
-  expect(captions).toContain(`Avant ${stamp}`);
-  expect(captions).toContain(`Après ${stamp}`);
-});
-
 test("site : « Réessayer » sans doublon après une réponse perdue", async ({ page }) => {
   test.setTimeout(240_000);
   await openAs(page, "damien@orasso.local");
@@ -265,3 +237,93 @@ test("site : liste relue au retour sur l'onglet, « Réessayer » après une pan
   await expect(page.getByTestId("fil-publish-security")).toBeVisible();
   await expect(page.getByTestId("fil-publish-send")).toBeDisabled();
 });
+
+// --- Tour 3 ------------------------------------------------------------------------------------------------------------
+
+async function lostThenUncertain(page: Page, caption: string, reachServer: boolean) {
+  await addPhoto(page);
+  await page.getByTestId("fil-publish-caption").fill(caption);
+  await page.route("**/api/me/feed-posts", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    if (reachServer) await route.fetch();
+    await route.abort("failed");
+  });
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await page.unroute("**/api/me/feed-posts");
+}
+
+test("site : « Modifier » vérifie d'abord : publiée, « Ta publication est en ligne »", async ({ page }) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  const caption = `Publiée ${Date.now()}`;
+  await lostThenUncertain(page, caption, true);
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByTestId("fil-publish-done")).toContainText("Ta publication est en ligne.");
+  const res = await page.evaluate(async () => (await fetch("/api/me/feed-posts")).json());
+  expect((res.items as { caption: string | null }[]).filter((p) => p.caption === caption)).toHaveLength(1);
+});
+
+test("site : « Modifier » vérifie d'abord : absente, saisie gardée, nouvel identifiant ; vérification impossible, reste incertain", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  const caption = `Absente ${Date.now()}`;
+  await lostThenUncertain(page, caption, false);
+  await page.route("**/api/me/feed-posts/by-client/**", (route) => route.abort("failed"));
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByText("Impossible de vérifier l'envoi")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+  await page.unroute("**/api/me/feed-posts/by-client/**");
+  await page.getByTestId("fil-publish-uncertain-edit").click();
+  await expect(page.getByTestId("fil-publish-caption")).toBeEnabled();
+  await expect(page.getByTestId("fil-publish-caption")).toHaveValue(caption);
+  await expect(page.getByText("peut-être")).toHaveCount(0);
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+});
+
+for (const [status, code] of [
+  [409, "important_quota"],
+  [422, "event_not_attachable"],
+  [403, "persona_forbidden"],
+] as const) {
+  test(`site : réseau perdu puis ${status} ${code} : plus incertain, on corrige et on renvoie`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await openAs(page, "damien@orasso.local");
+    await lostThenUncertain(page, "Un mot", false);
+    await page.route("**/api/me/feed-posts", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({
+            status,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code, message: code, details: { leftToday: 0, leftWeek: 2 } } }),
+          })
+        : route.continue(),
+    );
+    await page.getByTestId("fil-publish-send").click();
+    await expect(page.getByTestId("fil-publish-uncertain")).toHaveCount(0);
+    await expect(page.getByTestId("fil-publish-caption")).toBeEnabled();
+  });
+}
+
+for (const status of [429, 401] as const) {
+  test(`site : un ${status} pendant l'incertitude ne libère pas le formulaire`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await openAs(page, "damien@orasso.local");
+    await lostThenUncertain(page, "Un mot", false);
+    await page.route("**/api/me/feed-posts", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({
+            status,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code: "x", message: "refus" } }),
+          })
+        : route.continue(),
+    );
+    await page.getByTestId("fil-publish-send").click();
+    await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+    await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+  });
+}

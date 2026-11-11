@@ -50,6 +50,8 @@ export const feedApi = {
     request<{ items: AttachableEventItem[] }>(`/api/me/feed-posts/attachable-events${qs(query)}`),
   /** Combien d'inscrits une « Info importante » préviendrait (responsables de l'événement). */
   eventNotifyPreview: (eventId: string) => request<NotifyPreview>(`/api/events/${eventId}/notify-preview`),
+  /** Vérifier un envoi dont la réponse s'est perdue : ma publication envoyée avec cet identifiant (404 si elle n'existe pas). */
+  feedPostByClient: (clientId: string) => request<FeedPostView>(`/api/me/feed-posts/by-client/${clientId}`),
   removeFeedPost: (id: string) => request<unknown>(`/api/me/feed-posts/${id}`, { method: "DELETE" }),
   myFeedPosts: (cursor?: string | null) => request<Page<FeedPostView>>(`/api/me/feed-posts${qs({ cursor })}`),
 };
