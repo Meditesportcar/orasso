@@ -230,10 +230,14 @@ export async function inspect(v: Viewer, type: StoryLinkType, id: string): Promi
   if (type === "feed_post") {
     const [post] = await loadPostViews(db, [id], v.user.id, at);
     if (!post) return refuse(404, "not_found", shareLabels.errors.notFound);
-    const [author] = await db
-      .select({ visibility: profiles.visibility })
-      .from(profiles)
-      .where(eq(profiles.pseudo, post.author.pseudo));
+    // Auteur lu par sa clé (`u:<compte>`), jamais par le pseudo : pour une page, `pseudo` est le nom de la page.
+    const [author] =
+      post.author.kind === "user"
+        ? await db
+            .select({ visibility: profiles.visibility })
+            .from(profiles)
+            .where(eq(profiles.userId, post.author.key.slice(2)))
+        : [];
     const [first] = await db
       .select()
       .from(feedPostPhotos)

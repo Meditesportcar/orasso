@@ -26,6 +26,8 @@ export const source: FeedSource<"feed_post"> = {
     const atExpr = atMs(sql`${feedPosts.createdAt}`);
     const filters: (SQL | undefined)[] = [
       sql`${feedPosts.deletedAt} is null`,
+      // Les publications des pages entrent dans le Fil avec R8c1, pas avant (sinon elles suivraient les abonnés de la personne).
+      sql`${feedPosts.persona} = 'fan'`,
       authorVisibleSql("profiles", sql`${feedPosts.authorId}`, input.userId, input.ref),
       sql`${feedPosts.createdAt} <= ${tsParam(input.ref)}`,
       sql`exists (select 1 from feed_post_photos ph where ph.post_id = ${feedPosts.id})`,

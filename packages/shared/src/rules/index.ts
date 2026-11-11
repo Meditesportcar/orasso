@@ -22,6 +22,7 @@ export * from "./eventDays";
 export * from "./eventInvites";
 export * from "./eventNotifications";
 export * from "./eventProgress";
+export * from "./eventSeats";
 export * from "./explore";
 export * from "./feed";
 export * from "./feedAttach";

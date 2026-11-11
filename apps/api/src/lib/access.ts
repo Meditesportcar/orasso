@@ -36,14 +36,19 @@ async function assertTwoFactor(v: Viewer) {
   throw new AppError(403, "two_factor_required", "Double authentification obligatoire pour cet espace");
 }
 
-export async function activeMembership(userId: string, structureId: string) {
-  return db.query.structureMembers.findFirst({
-    where: and(
-      eq(structureMembers.structureId, structureId),
-      eq(structureMembers.userId, userId),
-      eq(structureMembers.status, "active"),
-    ),
-  });
+export async function activeMembership(userId: string, structureId: string, ex: Executor = db) {
+  const [row] = await ex
+    .select()
+    .from(structureMembers)
+    .where(
+      and(
+        eq(structureMembers.structureId, structureId),
+        eq(structureMembers.userId, userId),
+        eq(structureMembers.status, "active"),
+      ),
+    )
+    .limit(1);
+  return row;
 }
 
 export type OrganizerAccess = { role: StructureRole | "super_admin" };
@@ -103,8 +108,14 @@ export async function traceViewAs(
  * d'aide ouverte ; elle est tracée (`structure.assist`) avec l'identifiant de la demande. Les routes `/api/admin/*`
  * (décisions de l'équipe, déjà tracées par elles-mêmes) ne sont pas concernées.
  */
-export async function requireOrganizer(v: Viewer, structureId: string, ip?: string | null): Promise<OrganizerAccess> {
-  const member = await activeMembership(v.user.id, structureId);
+export async function requireOrganizer(
+  v: Viewer,
+  structureId: string,
+  ip?: string | null,
+  /** Exécuteur de la transaction de l'appelant : une lecture par le pool global sous un verrou fige l'API. */
+  ex: Executor = db,
+): Promise<OrganizerAccess> {
+  const member = await activeMembership(v.user.id, structureId, ex);
   if (member && (member.role === "owner" || member.role === "co_organizer")) {
     await assertTwoFactor(v);
     return { role: member.role };

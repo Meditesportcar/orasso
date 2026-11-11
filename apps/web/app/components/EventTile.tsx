@@ -1,10 +1,9 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
-import { type EventCard, eventFormatLabels, explorerV2Labels, widestWordEm, yearToShow } from "@orasso/shared";
+import { type EventCard, eventFormatLabels, explorerV2Labels, seatsOf, widestWordEm, yearToShow } from "@orasso/shared";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { now } from "../lib/clock";
 import { formatDayShort, formatTime } from "../lib/format";
-import { seatsOf } from "./eventSeats";
 
 const TZ = "Europe/Paris";
 const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short" });
@@ -71,12 +70,6 @@ export function PosterFace({
   );
 }
 
-/** Jauge des places exposants : part prise (0 → 1), `null` sans limite. */
-function takenOf(event: EventCard): number | null {
-  if (event.capacity === null || event.remaining === null || event.capacity <= 0) return null;
-  return Math.min(1, Math.max(0, (event.capacity - event.remaining) / event.capacity));
-}
-
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -103,8 +96,8 @@ export function EventTile({
 }) {
   const where = [event.city, event.department].filter(Boolean).join(" · ");
   const stub = stubOf(event.startsAt);
-  const taken = takenOf(event);
-  const { full, text: count } = seatsOf(event);
+  // Lot R8r : la règle des places est commune à l'appli et au site (`seatsOf` de `@orasso/shared`).
+  const { full, text: count, taken } = seatsOf(event);
   const wait = full ? (
     <span className="w-card__wait" data-testid="event-waitlist">
       <Chip>{explorerV2Labels.waitlistFlag}</Chip>
