@@ -213,18 +213,21 @@ test("lot R8r : stock vide → « Météo en cours de chargement », puis la rel
     const res = await route.fetch();
     if (!route.request().url().includes("blocks=app") || reads++ > 0) return route.fulfill({ response: res });
     const json = (await res.json()) as Record<string, unknown>;
-    return route.fulfill({ response: res, json: { ...json, weather: null, weatherPending: true } });
+    // Lot R8m : « Ma météo » porte l'attente (`myWeather.pending`) ; le stock vide est simulé sur ses lieux.
+    const mine = json.myWeather as { places: Record<string, unknown>[] };
+    const myWeather = { ...mine, pending: true, places: mine.places.map((pl) => ({ ...pl, weather: null })) };
+    return route.fulfill({ response: res, json: { ...json, weather: null, weatherPending: true, myWeather } });
   });
   await page.goto("/accueil");
   await afterOpening(page);
   const pending = page.getByTestId("home-weather-pending");
   await expect(pending).toBeVisible({ timeout: 30_000 });
   await expect(pending).toContainText("Météo en cours de chargement");
-  await expect(pending).toContainText("Dép. 66");
+  await expect(page.getByTestId("home-weather")).toContainText("Perpignan · ta ville");
   await expect(page.getByTestId("home-outing").first()).toBeVisible();
   await page.screenshot({ path: `${DIR}/appli-meteo-chargement-384.png` });
   // L'état reste jusqu'à la relecture unique de la seule météo du département (après le délai du fournisseur), puis la carte.
-  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66", { timeout: 45_000 });
+  await expect(page.getByTestId("home-weather")).toContainText(/Vent \d+\s*km\/h/, { timeout: 45_000 });
   await expect(pending).toHaveCount(0);
   await ctx.close();
 });
