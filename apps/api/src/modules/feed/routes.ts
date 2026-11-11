@@ -1,5 +1,6 @@
 // Routes du Fil (lot R7e1). Toutes exigent une session : le Fil et ses publications ne sont jamais servis à un visiteur.
 import {
+  attachableEventsQuery,
   feedCardKinds,
   feedLessSchema,
   feedMineQuery,
@@ -40,6 +41,11 @@ export const feedRoutes = new Hono<AppEnv>()
   .post("/me/feed-posts", async (c) => {
     const v = await requireUser(c);
     return c.json(await feedPostsService.create(v, await body(c, feedPostCreateSchema)), 201);
+  })
+  // Vague R8 : les événements où cette casquette peut se rattacher, avec le rôle déduit (jamais choisi).
+  .get("/me/feed-posts/attachable-events", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await feedPostsService.attachable(v, query(c, attachableEventsQuery)));
   })
   .patch("/me/feed-posts/:id", async (c) => {
     const v = await requireUser(c);

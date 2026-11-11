@@ -35,6 +35,7 @@ import sharp from "sharp";
 
 import { db } from "../../db/client";
 import {
+  feedPosts,
   proDailyStats,
   proDiscounts,
   proDiscountUses,
@@ -202,14 +203,52 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
 async function postsUsedThisMonth(
   proId: string,
   ex: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+  /** Instant du comptage (facultatif) : l'appelant sous verrou le réutilise pour dater son insertion. */
+  at: Date = now(),
 ): Promise<number> {
   // Les publications supprimées comptent (suppression douce, lot 34) : supprimer ne rend pas la place du mois.
-  const { start, end } = monthBounds(now());
+  const { start, end } = monthBounds(at);
   const [row] = await ex
     .select({ n: count() })
     .from(proPosts)
     .where(and(eq(proPosts.proId, proId), gte(proPosts.createdAt, start), lt(proPosts.createdAt, end)));
-  return row?.n ?? 0;
+  // Vague R8 : les publications du Fil faites au nom de la fiche comptent dans la même limite (supprimées comprises).
+  const [feed] = await ex
+    .select({ n: count() })
+    .from(feedPosts)
+    .where(and(eq(feedPosts.proId, proId), gte(feedPosts.createdAt, start), lt(feedPosts.createdAt, end)));
+  return (row?.n ?? 0) + (feed?.n ?? 0);
+}
+
+/**
+ * Une fiche peut-elle publier (offre ou publication du Fil) ? Publiée, et abonnement en règle (`proVisibility`). Mêmes
+ * contrôles pour `POST /pros/:id/posts` et `POST /me/feed-posts` au nom de la fiche.
+ */
+export function assertProMayPost(p: ProRow): void {
+  if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
+  if (proVisibility(p, null, now()).hidden.posts) throw forbidden("Publications réservées aux pros abonnés");
+}
+
+/**
+ * Verrou par fiche (jusqu'à la fin de la transaction) puis limite du mois : deux publications simultanées, par l'une ou
+ * l'autre route, ne dépassent pas la limite. À appeler au début de la transaction qui écrit.
+ */
+export async function lockProPostQuota(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  proId: string,
+  /** Exécuté sous le verrou, avant le comptage (rejeu d'un même envoi). */
+  afterLock?: () => Promise<void>,
+) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${proId}`}, 0))`);
+  await afterLock?.();
+  // Un seul instant, pris sous le verrou : il sert au comptage du mois et (rendu) à la date de l'insertion.
+  const at = now();
+  if (postsRemaining(await postsUsedThisMonth(proId, tx, at)) === 0) {
+    throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
+      limit: PRO_POSTS_PER_MONTH,
+    });
+  }
+  return at;
 }
 
 async function toOwner(p: ProRow, v: Viewer): Promise<ProOwner> {
@@ -485,20 +524,14 @@ export const prosService = {
   async createPost(v: Viewer, id: string, input: ProPostCreate): Promise<ProPostView> {
     rateLimit("proWrite", v.user.id);
     const p = await ownedPro(v, id);
-    if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
-    if (proVisibility(p, null, now()).hidden.posts) throw forbidden("Publications réservées aux pros abonnés");
+    assertProMayPost(p);
     // Verrou par fiche : deux publications simultanées ne dépassent pas la limite du mois.
     const row = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${id}`}, 0))`);
-      if (postsRemaining(await postsUsedThisMonth(id, tx)) === 0) {
-        throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
-          limit: PRO_POSTS_PER_MONTH,
-        });
-      }
+      const at = await lockProPostQuota(tx, id);
       const [created] = await tx
         .insert(proPosts)
         // Date de l'horloge de l'appli (et non celle de la base) : le mois compté suit l'horloge simulée en dev.
-        .values({ proId: id, ...input, createdAt: now(), updatedAt: now() })
+        .values({ proId: id, ...input, createdAt: at, updatedAt: at })
         .returning();
       return created;
     });

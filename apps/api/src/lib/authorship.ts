@@ -60,7 +60,7 @@ export async function requireAuthorship(v: Viewer, input: AuthorshipInput, ex: E
       );
     if (!m) throw denied();
     // Second facteur : publier au nom d'une structure l'exige, comme le repartage et le retrait (lot R7h, tour 3).
-    await requireOrganizer(v, input.structureId);
+    await requireOrganizer(v, input.structureId, null, ex);
     return { key: authorKeyOf("structure", input.structureId), kind: "structure", id: input.structureId };
   }
   if (persona === "pro") {
