@@ -141,15 +141,22 @@ test("publier au Fil : bouton grisé expliqué, plaque obligatoire, 4:5, puis Me
   const first = page.getByTestId("feed-card-feed_post").first();
   await expect(first).toContainText("Site : prêtes pour dimanche");
   await expect(first).toContainText("Ta publication");
+  // Lot R8b2 : « Mes publications » redirige vers l'onglet « Publications » de mon compte ; supprimer se fait par le menu de la
+  // publication ouverte seule.
   await page.goto("/app/fil/mes-publications");
-  const posts = page.getByTestId("fil-mine-post");
-  await expect(posts.first()).toBeVisible({ timeout: 30_000 });
-  await expect(posts.first()).toContainText("Site : prêtes pour dimanche");
+  await expect(page).toHaveURL(/\/app\/moi\?onglet=publications/);
+  const tiles = page.getByTestId("publication-tile");
+  await expect(tiles.first()).toBeVisible({ timeout: 30_000 });
   await shot(page, "mes-publications");
-  const total = await posts.count();
+  const total = await tiles.count();
+  await page.getByTestId("publication-tile-open").first().click();
+  await expect(page.getByTestId("feed-card-feed_post")).toContainText("Site : prêtes pour dimanche");
+  await page.waitForLoadState("networkidle");
+  await page.getByTestId("feed-card-more").click();
   page.once("dialog", (d) => void d.accept());
-  await page.getByTestId("fil-mine-remove").first().click();
-  await expect(posts).toHaveCount(total - 1);
+  await page.getByTestId("publication-menu-remove").click();
+  await expect(page).toHaveURL(/\/app\/moi\?onglet=publications/, { timeout: 30_000 });
+  await expect(tiles).toHaveCount(total - 1);
   // Tour 4 : la publication supprimée ne revient pas en tête du Fil.
   await page.goto("/app/fil?filtre=following");
   await loaded(page);

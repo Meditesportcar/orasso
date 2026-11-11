@@ -2,6 +2,8 @@ import { AvatarRing, Button, CheckboxField, Chip, Icon, type IconName, TextField
 import {
   type AccountSettings,
   accountAppLabels,
+  authorKeyOf,
+  explicitProfileTab,
   feedScreenLabels,
   gradeLabels,
   type MyPartnerships,
@@ -19,14 +21,16 @@ import {
   partnershipLabels as PTN,
   personaKindLabels,
   preferencesLabels,
+  profileOpenTab,
   profilePhotoLabels,
-  profileTabFromParam,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
   profileVisibilityRules,
   settingsHubLabels as S,
+  type UserProfileView,
   type VehicleFull,
+  type WithPublications,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { LeftCrewsSection } from "../components/crew-feed/LeftCrewsSection"; // R5c1, tour 2
@@ -40,6 +44,7 @@ import { ProfileTabs } from "../components/profile/ProfileTabs";
 import { isPanelFailure, panelRetryHref } from "../components/profile/panel";
 import { loadSorties } from "../components/profile/passport.server";
 import { SortiesTab } from "../components/profile/SortiesTab";
+import { PublicationsTab } from "../components/publications/PublicationsTab";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
@@ -66,9 +71,11 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const url = new URL(request.url);
-  // Lot R7b1 : l'onglet interne ; seule sa lecture est faite (le Garage par défaut, partout).
-  const onglet = profileTabFromParam(url.searchParams.get("onglet"));
-  const [settings, network, garage, sorties, partnerships, vehicleList] = await Promise.all([
+  // Lot R7b1 : l'onglet interne ; seule sa lecture est faite. Lot R8b2 : « Publications » s'ouvre par défaut, le mien compris.
+  const onglet =
+    explicitProfileTab(url.searchParams.get("onglet")) ??
+    profileOpenTab({ mine: true, hasGarage: true, publications: undefined });
+  const [settings, network, garage, sorties, partnerships, vehicleList, selfProfile] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     // Lot R4c : abonnés, abonnements, sorties (R6b).
     api<NetworkCounts>(request, "/me/network"),
@@ -77,7 +84,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Lot R7m1 : mes partenaires (la ligne « Partenaires », « Mettre fin »).
     api<MyPartnerships>(request, "/me/partnerships"),
     // Lot R8b1 : le nombre de « Garage · N » vient du Garage quand il est ouvert ; sur « Sorties », une lecture légère.
-    onglet === "sorties" ? api<VehicleFull[]>(request, "/me/vehicles") : Promise.resolve(null),
+    onglet !== "garage" ? api<VehicleFull[]>(request, "/me/vehicles") : Promise.resolve(null),
+    // Lot R8b2 : mon nombre de publications (la ligne « N publications » de l'onglet) : mon profil public le porte.
+    onglet === "publications"
+      ? api<WithPublications<UserProfileView>>(request, `/users/${encodeURIComponent(me.profile.pseudo)}`)
+      : Promise.resolve(null),
   ]);
   const garageCount =
     garage && !isPanelFailure(garage)
@@ -94,6 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     partnershipsDown: !partnerships.ok,
     onglet,
     garageCount,
+    publicationsCount: selfProfile?.ok ? (selfProfile.data.publications?.count ?? null) : null,
     // Tour 4 : « Réessayer » garde l'onglet et la saison de la page.
     retryHref: panelRetryHref(url.searchParams),
     garage,
@@ -367,6 +379,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
               actionData={(actionData?.scope === "garage" ? actionData : undefined) as GarageActionData | undefined}
             />
           )
+        ) : null}
+        {loaderData.onglet === "publications" ? (
+          <PublicationsTab
+            authorKey={authorKeyOf("user", loaderData.me.user.id)}
+            pseudo={loaderData.me.profile.pseudo}
+            mine
+            total={loaderData.publicationsCount}
+          />
         ) : null}
         {loaderData.onglet === "sorties" && loaderData.sorties ? (
           isPanelFailure(loaderData.sorties) ? (

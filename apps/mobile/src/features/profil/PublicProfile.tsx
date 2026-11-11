@@ -25,6 +25,8 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import {
+  authorKeyOf,
+  explicitProfileTab,
   filledSocials,
   gradeLabels,
   publicProfileLabels as L,
@@ -33,14 +35,16 @@ import {
   type ProfileTab,
   type ProfileVehicle,
   profileTabsLabels as PT,
+  profileOpenTab,
   profileRingState,
-  profileTabFromParam,
+  profileTabItems,
   type SocialNetwork,
   socialsLabels,
   socialUrl,
   storyViewerLabels,
   type UserProfileView,
   visibleProfileTab,
+  type WithPublications,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
@@ -49,8 +53,10 @@ import { daysUntil } from "@/features/media/model";
 import { MessageButton } from "@/features/messages/MessageButton";
 import { OfferButton } from "@/features/partnerships/OfferButton";
 import { Stamp } from "@/features/passport/Stamp";
+import { PublicationsTab } from "@/features/publications/PublicationsTab";
 import { openReport } from "@/features/ReportSheet";
 import { FollowButton } from "@/features/social/FollowButton";
+import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { formatDay, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
@@ -229,17 +235,27 @@ export function PublicProfile({
   const [msgError, setMsgError] = useState<string | null>(null);
   // Lot R7b1 : l'onglet interne (Garage par défaut) ; `?onglet=sorties` ouvre l'autre.
   const { onglet } = useLocalSearchParams<{ onglet?: string }>();
-  const [tab, setTab] = useState<ProfileTab>(profileTabFromParam(onglet));
-  // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
-  useEffect(() => {
-    if (onglet === undefined) return;
-    setTab(profileTabFromParam(onglet));
-    router.setParams({ onglet: undefined });
-  }, [onglet, router]);
   const limited = p.audience === "public_limited";
   // Lot R8b1 : un profil sans véhicule n'a pas d'onglet « Garage » et s'ouvre sur « Sorties ».
   const hasGarage = p.vehicles.length > 0;
-  const shownTab = visibleProfileTab(tab, hasGarage);
+  // Lot R8b2 : le compteur de publications (`null` : liste restreinte, compte privé que je ne suis pas) et l'onglet d'ouverture :
+  // « Publications » sauf chez un autre sans aucune publication (« Garage », ou « Sorties » sans véhicule).
+  const publications = (p as WithPublications<UserProfileView>).publications;
+  // Les onglets ne sont bridés que par l'audience limitée (un organisateur voit le Garage et les Sorties d'un candidat privé) ;
+  // la liste, elle, est restreinte dès que son compteur est nul.
+  const restricted = limited || publications === null;
+  const mine = mode === "self";
+  const [tab, setTab] = useState<ProfileTab>(
+    explicitProfileTab(onglet) ?? profileOpenTab({ mine, hasGarage, publications: restricted ? null : publications }),
+  );
+  // Le paramètre s’applique à chaque navigation, même avec la même valeur qu’avant : une fois lu, on le retire.
+  useEffect(() => {
+    if (onglet === undefined) return;
+    const asked = explicitProfileTab(onglet);
+    if (asked) setTab(asked);
+    router.setParams({ onglet: undefined });
+  }, [onglet, router]);
+  const shownTab = limited ? "publications" : visibleProfileTab(tab, hasGarage);
   const crew = p.crews?.[0];
   const main = p.vehicles.find((v) => v.main) ?? p.vehicles[0];
   const others = p.vehicles.filter((v) => v !== main);
@@ -475,124 +491,124 @@ export function PublicProfile({
         </Overlay>
       ) : null}
 
-      {limited ? (
-        <>
-          {/* Tour 2 (maquette R7.12) : un compte privé vu d'un inconnu montre les nombres seulement ; ses véhicules ne sont plus listés. */}
-          <View style={[styles.note, { backgroundColor: c.surface }]} testID="profile-private-note">
-            <Icon name="lock" size={16} color={c.inkMuted} />
-            <Text variant="caption" color={c.inkMuted} style={styles.noteText}>
-              <Text variant="caption" color={c.ink} style={styles.noteStrong}>
-                {PT.privateTitle}.
-              </Text>{" "}
-              {p.follow.mine === "pending" ? PT.privateBodyWaiting : PT.privateBody}
-            </Text>
-          </View>
-        </>
-      ) : (
-        <>
-          {/* Lot R7b1 : deux onglets internes, Garage (par défaut) et Sorties ; lot R8b1 : soulignés, « Garage · N ». */}
-          <ProfileTabs
-            value={shownTab}
-            onChange={setTab}
-            items={hasGarage ? ["garage", "sorties"] : ["sorties"]}
-            garageCount={p.vehicles.length}
+      <>
+        {/* Lot R7b1 : onglets internes ; lot R8b1 : soulignés, « Garage · N » ; lot R8b2 : « Publications » (compte privé : lui seul). */}
+        <ProfileTabs
+          value={shownTab}
+          onChange={setTab}
+          items={profileTabItems({ hasGarage, restricted: limited })}
+          garageCount={p.vehicles.length}
+        />
+        {shownTab === "publications" ? (
+          <PublicationsTab
+            authorKey={authorKeyOf("user", p.userId)}
+            pseudo={p.pseudo}
+            mine={mine}
+            total={publications?.count ?? null}
+            restricted={restricted}
+            follow={
+              mode === "live" && p.follow.canFollow
+                ? {
+                    asked: p.follow.mine === "pending",
+                    onAsk: async () => {
+                      await api.follow(p.pseudo);
+                      onChanged?.();
+                    },
+                  }
+                : undefined
+            }
           />
-          {shownTab === "garage" ? (
-            <>
-              {/* (3) « Sa voiture ». */}
-              <SecHead title={L.car} hint={L.carHint} />
-              {main ? <HeroVehicle v={main} onOpen={open(main)} /> : <Muted variant="body">{L.noVehicle}</Muted>}
+        ) : shownTab === "garage" ? (
+          <>
+            {/* (3) « Sa voiture ». */}
+            <SecHead title={L.car} hint={L.carHint} />
+            {main ? <HeroVehicle v={main} onOpen={open(main)} /> : <Muted variant="body">{L.noVehicle}</Muted>}
 
-              {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}
-              {others.length ? (
-                <>
-                  <SecHead title={L.garage} hint={L.garageOthers(others.length)} />
-                  <View style={styles.grid} testID="profile-garage">
-                    {others.map((v) => (
-                      <SquareVehicle key={v.id} v={v} onOpen={open(v)} />
-                    ))}
-                  </View>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {/* (4) « Prochaine sortie » : un ticket, et « Toi aussi » pour la personne qui regarde. */}
-              {next ? (
-                <>
-                  <SecHead title={L.next} hint={L.nextIn(days)} />
-                  <Ticket
-                    date={next.event.startsAt}
-                    badge={<AngledTag tone="acc">{days <= 0 ? "Jour J" : `J-${days}`}</AngledTag>}
-                    title={next.event.title}
-                    detail={[formatHour(next.event.startsAt), next.event.city, next.event.structureName]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    onPress={mode === "preview" ? undefined : () => router.push(`/e/${next.event.slug}`)}
-                    testID="profile-next"
-                  >
-                    {next.together ? (
-                      <View style={[styles.both, { backgroundColor: c.surfaceRaised }]} testID="profile-together">
-                        <Icon name="check" size={14} color={c.accentText} />
-                        <Text variant="caption" color={c.ink} style={styles.bothText}>
-                          {L.together}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </Ticket>
-                </>
-              ) : p.upcomingEvents ? (
-                // Ses sorties sont visibles mais aucune n'est à venir : on le dit (au lieu d'une section absente).
-                <>
-                  <SecHead title={L.next} />
-                  <Muted variant="body" testID="profile-next-none">
-                    {L.noOuting}
-                  </Muted>
-                </>
-              ) : null}
+            {/* (5) « Son garage » : les autres véhicules, deux par ligne. */}
+            {others.length ? (
+              <>
+                <SecHead title={L.garage} hint={L.garageOthers(others.length)} />
+                <View style={styles.grid} testID="profile-garage">
+                  {others.map((v) => (
+                    <SquareVehicle key={v.id} v={v} onOpen={open(v)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {/* (4) « Prochaine sortie » : un ticket, et « Toi aussi » pour la personne qui regarde. */}
+            {next ? (
+              <>
+                <SecHead title={L.next} hint={L.nextIn(days)} />
+                <Ticket
+                  date={next.event.startsAt}
+                  badge={<AngledTag tone="acc">{days <= 0 ? "Jour J" : `J-${days}`}</AngledTag>}
+                  title={next.event.title}
+                  detail={[formatHour(next.event.startsAt), next.event.city, next.event.structureName]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  onPress={mode === "preview" ? undefined : () => router.push(`/e/${next.event.slug}`)}
+                  testID="profile-next"
+                >
+                  {next.together ? (
+                    <View style={[styles.both, { backgroundColor: c.surfaceRaised }]} testID="profile-together">
+                      <Icon name="check" size={14} color={c.accentText} />
+                      <Text variant="caption" color={c.ink} style={styles.bothText}>
+                        {L.together}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Ticket>
+              </>
+            ) : p.upcomingEvents ? (
+              // Ses sorties sont visibles mais aucune n'est à venir : on le dit (au lieu d'une section absente).
+              <>
+                <SecHead title={L.next} />
+                <Muted variant="body" testID="profile-next-none">
+                  {L.noOuting}
+                </Muted>
+              </>
+            ) : null}
 
-              {/* (6) « Ses sorties » puis « Vu à ». */}
-              {moreOutings.length ? (
-                <>
-                  <SecHead title={L.outings} hint={L.outingsHint(moreOutings.length)} />
-                  <View style={styles.plist} testID="profile-outings">
-                    {moreOutings.map((e) => (
-                      <Pressable
-                        key={e.slug}
-                        accessibilityRole="link"
-                        accessibilityLabel={`${e.title}, ${formatDay(e.startsAt)}`}
-                        disabled={mode === "preview"}
-                        onPress={() => router.push(`/e/${e.slug}`)}
-                        style={({ pressed }) => [
-                          styles.pitem,
-                          { backgroundColor: c.surface },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Icon name="calendar" size={16} color={c.ink} />
-                        <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
-                          {e.title}
-                        </Text>
-                        <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
-                      </Pressable>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-              {p.seenAt?.stamps.length ? (
-                <>
-                  <SecHead title={L.seenAt} hint={L.seenAtHint(p.seenAt.events)} />
-                  <View style={styles.seen} testID="profile-seen">
-                    {p.seenAt.stamps.slice(0, 3).map((s) => (
-                      <Stamp key={s.id} stamp={s} size={stampSize} paper={c.ground} />
-                    ))}
-                  </View>
-                </>
-              ) : null}
-            </>
-          )}
-        </>
-      )}
+            {/* (6) « Ses sorties » puis « Vu à ». */}
+            {moreOutings.length ? (
+              <>
+                <SecHead title={L.outings} hint={L.outingsHint(moreOutings.length)} />
+                <View style={styles.plist} testID="profile-outings">
+                  {moreOutings.map((e) => (
+                    <Pressable
+                      key={e.slug}
+                      accessibilityRole="link"
+                      accessibilityLabel={`${e.title}, ${formatDay(e.startsAt)}`}
+                      disabled={mode === "preview"}
+                      onPress={() => router.push(`/e/${e.slug}`)}
+                      style={({ pressed }) => [styles.pitem, { backgroundColor: c.surface }, pressed && styles.pressed]}
+                    >
+                      <Icon name="calendar" size={16} color={c.ink} />
+                      <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
+                        {e.title}
+                      </Text>
+                      <Muted variant="caption">{formatDay(e.startsAt)}</Muted>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {p.seenAt?.stamps.length ? (
+              <>
+                <SecHead title={L.seenAt} hint={L.seenAtHint(p.seenAt.events)} />
+                <View style={styles.seen} testID="profile-seen">
+                  {p.seenAt.stamps.slice(0, 3).map((s) => (
+                    <Stamp key={s.id} stamp={s} size={stampSize} paper={c.ground} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+          </>
+        )}
+      </>
     </View>
   );
 }

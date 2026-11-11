@@ -20,6 +20,7 @@ export * from "./qr";
 export * from "./roles";
 export * from "./rules";
 export * from "./rules/feedComments";
+export * from "./rules/feedCommentsList";
 export * from "./rules/homeAgo";
 export * from "./schemas";
 export * from "./schemas/feedComments";
