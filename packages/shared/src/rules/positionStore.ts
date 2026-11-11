@@ -71,6 +71,10 @@ export function createPositionStore(deps: PositionDeps) {
     },
     forget,
     purgeForeign,
+    /** Invalide les demandes en cours (tickets) sans toucher à la position gardée : une transition de session a eu lieu. */
+    invalidate() {
+      generation += 1;
+    },
     /** Capture la session et la génération DÈS LE GESTE ; `null` sans session. */
     begin,
     /** La session est-elle restée la même (et la position non oubliée) depuis le geste ? */
