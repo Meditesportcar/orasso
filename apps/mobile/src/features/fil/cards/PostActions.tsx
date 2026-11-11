@@ -3,6 +3,7 @@
 // événement et les pages la posent telle quelle. La feuille des commentaires est montée ici, à la première ouverture.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedCommentScreenLabels as C, type FeedPostView, feedScreenLabels as L, shareLabels } from "@orasso/shared";
+import { useIsFocused } from "expo-router";
 import { useEffect, useId, useRef, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
@@ -23,7 +24,12 @@ export function PostActions({
   const { post, change, opening } = usePostLive(server, onChange);
   // Une publication montée deux fois (Fil resté monté sous un profil) n'ouvre qu'une feuille : la première instance la porte.
   const instance = useId();
-  useEffect(() => postLive.register(server.id, instance), [server.id, instance]);
+  // La feuille est portée par l'instance dont l'écran est affiché (le Fil resté monté sous un profil ne la prend pas).
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  useEffect(() => postLive.register(server.id, instance, focusedRef.current), [server.id, instance]);
+  useEffect(() => postLive.setFocused(server.id, instance, focused), [server.id, instance, focused]);
   const isHost = postLive.host(server.id) === instance;
   // Flamme : la réponse de l'API fait foi ; en attendant, le compteur bouge tout de suite (annulé si l'envoi échoue).
   const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
@@ -99,6 +105,11 @@ export function PostActions({
         <Icon name="share" size={17} color={c.ink} />
       </Pressable>
       <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "feed_post", id: post.id }} />
+      {postLive.isGone(post.id) ? (
+        <Text variant="caption" color={c.inkMuted} style={styles.gone} testID="feed-post-gone">
+          {C.goneNotice}
+        </Text>
+      ) : null}
       {everOpened && isHost ? (
         <CommentsSheet
           post={post}
@@ -123,4 +134,5 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusPill,
   },
   count: { fontSize: 13 },
+  gone: { fontSize: 12 },
 });

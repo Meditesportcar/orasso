@@ -95,6 +95,11 @@ export function PostActions({
       >
         {sharing ? <ShareBody target={{ type: "feed_post", id: post.id }} onClose={() => setSharing(false)} /> : null}
       </dialog>
+      {postLive.isGone(post.id) ? (
+        <small className="fil-gone" data-testid="feed-post-gone">
+          {C.goneNotice}
+        </small>
+      ) : null}
       {everOpened && isHost ? (
         <CommentsDialog
           post={post}

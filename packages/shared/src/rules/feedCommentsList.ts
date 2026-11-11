@@ -15,8 +15,10 @@ export type RepliesState = {
   cursor: string | null;
   /** Dépliées à l'écran. */
   open: boolean;
-  /** Une première lecture a abouti. */
+  /** Une première lecture a abouti (remis à faux à chaque réouverture : les réponses se revalident au dépliage). */
   loaded: boolean;
+  /** Réponses confirmées par l'API depuis la dernière revalidation : une page qui arrive ne les efface pas (réconciliation par identifiant). */
+  recent: FeedCommentView[];
 };
 
 /** Un envoi que l'API n'a pas encore confirmé : la ligne s'affiche tout de suite, grisée. Le `clientId` est gardé à chaque essai. */
@@ -35,11 +37,20 @@ export type SheetState = {
   loaded: boolean;
   replies: Record<string, RepliesState>;
   pending: PendingComment[];
+  /** Commentaires de premier niveau confirmés depuis la dernière ouverture : une première page tardive ne les efface pas. */
+  recent: FeedCommentView[];
 };
 
-export const emptySheet = (): SheetState => ({ items: [], cursor: null, loaded: false, replies: {}, pending: [] });
+export const emptySheet = (): SheetState => ({
+  items: [],
+  cursor: null,
+  loaded: false,
+  replies: {},
+  pending: [],
+  recent: [],
+});
 
-const emptyReplies = (): RepliesState => ({ items: [], cursor: null, open: false, loaded: false });
+const emptyReplies = (): RepliesState => ({ items: [], cursor: null, open: false, loaded: false, recent: [] });
 
 /** Du plus ancien au plus récent, comme l'API (date, puis identifiant). */
 const chronological = (a: FeedCommentView, b: FeedCommentView) =>
@@ -68,7 +79,7 @@ export function sheetWithTopPage(
 ): SheetState {
   return {
     ...state,
-    items: first ? mergeComments([], items) : mergeComments(state.items, items),
+    items: first ? mergeComments(items, state.recent) : mergeComments(state.items, items),
     cursor: nextCursor,
     loaded: true,
   };
@@ -89,7 +100,7 @@ export function sheetWithRepliesPage(
       ...state.replies,
       [parentId]: {
         ...was,
-        items: first ? mergeComments([], items) : mergeComments(was.items, items),
+        items: first ? mergeComments(items, was.recent) : mergeComments(was.items, items),
         cursor: nextCursor,
         loaded: true,
       },
@@ -119,7 +130,11 @@ export function sheetAddComment(
   if (!parentId) {
     const known = state.items.some((c) => c.id === comment.id);
     return {
-      state: { ...state, items: mergeComments(state.items, [comment]) },
+      state: {
+        ...state,
+        items: mergeComments(state.items, [comment]),
+        recent: known ? state.recent : mergeComments(state.recent, [comment]),
+      },
       counted: known ? 0 : 1,
     };
   }
@@ -129,7 +144,15 @@ export function sheetAddComment(
     state: {
       ...state,
       items: known ? state.items : patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: c.repliesCount + 1 })),
-      replies: { ...state.replies, [parentId]: { ...was, items: mergeComments(was.items, [comment]), open: true } },
+      replies: {
+        ...state.replies,
+        [parentId]: {
+          ...was,
+          items: mergeComments(was.items, [comment]),
+          recent: known ? was.recent : mergeComments(was.recent, [comment]),
+          open: true,
+        },
+      },
     },
     counted: known ? 0 : 1,
   };
@@ -145,7 +168,12 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
   if (top) {
     const { [id]: _gone, ...replies } = state.replies;
     return {
-      state: { ...state, items: state.items.filter((c) => c.id !== id), replies },
+      state: {
+        ...state,
+        items: state.items.filter((c) => c.id !== id),
+        replies,
+        recent: state.recent.filter((c) => c.id !== id),
+      },
       removed: 1 + top.repliesCount,
     };
   }
@@ -155,7 +183,10 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
       state: {
         ...state,
         items: patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: Math.max(0, c.repliesCount - 1) })),
-        replies: { ...state.replies, [parentId]: { ...r, items: r.items.filter((c) => c.id !== id) } },
+        replies: {
+          ...state.replies,
+          [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((c) => c.id !== id) },
+        },
       },
       removed: 1,
     };
@@ -192,6 +223,75 @@ export function sheetFind(state: SheetState, id: string): FeedCommentView | unde
       .flatMap((r) => r.items)
       .find((c) => c.id === id)
   );
+}
+
+/**
+ * La feuille se rouvre : les réponses déjà lues ne sont plus sûres (supprimées, devenues privées entre-temps) : elles se revalident au
+ * dépliage, et les ajouts confirmés de la séance précédente ne comptent plus (la première page, relue, fait foi). Les envois en
+ * attente restent.
+ */
+export function sheetReopen(state: SheetState): SheetState {
+  return {
+    ...state,
+    recent: [],
+    replies: Object.fromEntries(
+      Object.entries(state.replies).map(([id, r]) => [id, { ...r, loaded: false, recent: [] }]),
+    ),
+  };
+}
+
+// --- La flamme d'un commentaire : une mutation à la fois -----------------------------------------------------------------
+
+type FlameState = { reactionsCount: number; reactedByMe: boolean };
+
+/**
+ * Sérialise les flammes par commentaire : des touchers rapides ne partent pas en parallèle (leurs réponses pourraient arriver dans le
+ * désordre et inverser l'état). On garde la **dernière intention** ; chaque envoi attend le précédent, seul le dernier résultat s'affiche,
+ * et une panne remet l'état connu de l'API (jamais une annulation périmée).
+ */
+export function createFlameGate() {
+  const running = new Map<string, { want: boolean; known: FlameState }>();
+  return {
+    /**
+     * `current` : ce que l'écran montre. `send(on)` : l'appel de l'API. `apply` : écrit l'état à l'écran. `alive` : le compte n'a pas changé.
+     * Rend la promesse de la fin de la série.
+     */
+    fire(
+      id: string,
+      current: FlameState,
+      io: {
+        send: (on: boolean) => Promise<FlameState>;
+        apply: (state: FlameState) => void;
+        alive?: () => boolean;
+      },
+    ): Promise<void> {
+      const live = running.get(id);
+      const on = !(live ? live.want : current.reactedByMe);
+      io.apply(reactionGuess(live ? { reactionsCount: current.reactionsCount, reactedByMe: live.want } : current, on));
+      if (live) {
+        live.want = on;
+        return Promise.resolve();
+      }
+      const entry = { want: on, known: current };
+      running.set(id, entry);
+      return (async () => {
+        let last: FlameState = entry.known;
+        try {
+          for (;;) {
+            const sent = entry.want;
+            last = await io.send(sent);
+            if (entry.want === sent) break;
+          }
+        } catch {
+          // Panne : l'état connu de l'API (le dernier rendu, ou celui d'avant le premier toucher).
+        } finally {
+          running.delete(id);
+        }
+        if (io.alive && !io.alive()) return;
+        io.apply(last);
+      })();
+    },
+  };
 }
 
 // --- Les envois en attente ---------------------------------------------------------------------------------------------
@@ -382,16 +482,34 @@ const baseKey = (p: FeedPostView) =>
 
 export type CommentsOpening = { postId: string; focus: boolean };
 
+/** Ce que la personne a commencé d'écrire sous une publication : gardé hors du montage des cartes (changer de filtre ne le perd pas). */
+export type CommentDraft = { text: string; replyTo: { id: string; pseudo: string } | null };
+const emptyDraft = (): CommentDraft => ({ text: "", replyTo: null });
+
+type Thread = { sheet: SheetState; draft: CommentDraft };
+
 export function createPostLiveStore() {
   const entries = new Map<string, LiveEntry>();
+  const threads = new Map<string, Thread>();
+  const gone = new Set<string>();
   const subs = new Set<() => void>();
   let opening: CommentsOpening | null = null;
   let version = 0;
-  /** Les instances de `PostActions` montées pour chaque publication : seule la première porte la feuille (une publication montée deux fois n'ouvre pas deux feuilles). */
-  const hosts = new Map<string, string[]>();
+  let account: string | null | undefined;
+  let generation = 0;
+  /** Les instances de `PostActions` montées pour chaque publication : porte la feuille celle dont l'écran est affiché (sinon la première). */
+  const hosts = new Map<string, { id: string; focused: boolean }[]>();
   const emit = () => {
     version += 1;
     for (const fn of subs) fn();
+  };
+  const threadOf = (postId: string): Thread => threads.get(postId) ?? { sheet: emptySheet(), draft: emptyDraft() };
+  const reset = () => {
+    entries.clear();
+    threads.clear();
+    gone.clear();
+    opening = null;
+    generation += 1;
   };
   return {
     subscribe(fn: () => void) {
@@ -403,8 +521,22 @@ export function createPostLiveStore() {
     /** Change à chaque modification (instantané de `useSyncExternalStore`). */
     version: () => version,
     /**
-     * La publication telle qu'on la montre : ce que l'écran a changé depuis (un commentaire ajouté, les commentaires coupés), tant
-     * que la publication reçue de l'API est celle d'alors. Une publication relue (autres chiffres) reprend la main.
+     * Le compte qui regarde (`null` : personne). Un autre compte, ou aucun : tout ce qui appartient au précédent s'en va (publications
+     * changées, fils, brouillons, envois en attente) et les réponses encore en route sont jetées (`ticket` / `alive`).
+     */
+    setAccount(next: string | null, silent = false) {
+      if (account === next) return;
+      const changed = account !== undefined;
+      account = next;
+      if (!changed) return;
+      reset();
+      if (!silent) emit();
+    },
+    /** La génération courante : une réponse partie sous un autre compte n'écrit rien (`alive(ticket)` faux). */
+    ticket: () => generation,
+    alive: (ticket: number) => ticket === generation,
+    /**
+     * La publication telle qu'on la montre : ce que l'écran a changé depuis, tant que la publication reçue de l'API est celle d'alors.
      */
     apply(server: FeedPostView): FeedPostView {
       const entry = entries.get(server.id);
@@ -416,16 +548,44 @@ export function createPostLiveStore() {
       return { ...server, ...entry.fields };
     },
     /** Retient la publication changée (`next`) par-dessus celle de l'API (`server`). */
-    set(server: FeedPostView, next: FeedPostView) {
+    set(server: FeedPostView, next: FeedPostView, ticket: number = generation) {
+      if (ticket !== generation) return;
       entries.set(server.id, {
         base: baseKey(server),
         fields: { commentsCount: next.commentsCount, commentsOff: next.commentsOff, lastComments: next.lastComments },
       });
       emit();
     },
+    /** Le fil (liste, réponses, envois en attente) d'une publication. */
+    sheetOf: (postId: string): SheetState => threadOf(postId).sheet,
+    updateSheet(postId: string, fn: (s: SheetState) => SheetState, ticket: number = generation): SheetState {
+      if (ticket !== generation) return threadOf(postId).sheet;
+      const t = threadOf(postId);
+      const sheet = fn(t.sheet);
+      threads.set(postId, { ...t, sheet });
+      emit();
+      return sheet;
+    },
+    draftOf: (postId: string): CommentDraft => threadOf(postId).draft,
+    setDraft(postId: string, patch: Partial<CommentDraft>) {
+      const t = threadOf(postId);
+      threads.set(postId, { ...t, draft: { ...t.draft, ...patch } });
+      emit();
+    },
+    /** La publication n'est plus lisible (404) : ses commentaires, compteurs, brouillon et envois en attente s'en vont ; la feuille se ferme. */
+    markGone(postId: string, ticket: number = generation) {
+      if (ticket !== generation) return;
+      threads.delete(postId);
+      entries.delete(postId);
+      gone.add(postId);
+      if (opening?.postId === postId) opening = null;
+      emit();
+    },
+    isGone: (postId: string): boolean => gone.has(postId),
     opening: (): CommentsOpening | null => opening,
     /** Ouvre la feuille d'une publication (`focus` : le champ prend la main, bouton « Commenter »). */
     open(postId: string, focus: boolean) {
+      gone.delete(postId);
       opening = { postId, focus };
       emit();
     },
@@ -435,25 +595,32 @@ export function createPostLiveStore() {
       emit();
     },
     /** Enregistre une instance de la ligne d'actions d'une publication ; rend l'arrêt. */
-    register(postId: string, instance: string) {
-      hosts.set(postId, [...(hosts.get(postId) ?? []), instance]);
+    register(postId: string, instance: string, focused = true) {
+      hosts.set(postId, [...(hosts.get(postId) ?? []), { id: instance, focused }]);
       emit();
       return () => {
-        const left = (hosts.get(postId) ?? []).filter((i) => i !== instance);
+        const left = (hosts.get(postId) ?? []).filter((i) => i.id !== instance);
         if (left.length) hosts.set(postId, left);
         else hosts.delete(postId);
         emit();
       };
     },
-    /** L'instance qui porte la feuille de cette publication (la première montée). */
-    host: (postId: string): string | undefined => hosts.get(postId)?.[0],
-    /**
-     * Tout oublier (déconnexion, autre compte) : ce que l'écran avait changé et la feuille ouverte. `silent` : sans prévenir
-     * les abonnés (appel pendant un rendu). Les instances montées restent enregistrées.
-     */
+    /** L'écran de cette instance est affiché (ou non) : la feuille passe à l'instance de l'écran visible. */
+    setFocused(postId: string, instance: string, focused: boolean) {
+      const list = hosts.get(postId);
+      const found = list?.find((i) => i.id === instance);
+      if (!list || !found || found.focused === focused) return;
+      found.focused = focused;
+      emit();
+    },
+    /** L'instance qui porte la feuille de cette publication : la première dont l'écran est affiché, sinon la première montée. */
+    host: (postId: string): string | undefined => {
+      const list = hosts.get(postId);
+      return (list?.find((i) => i.focused) ?? list?.[0])?.id;
+    },
+    /** Tout oublier sans changer de compte (rarement utile ; `silent` : sans prévenir). */
     clear(silent = false) {
-      entries.clear();
-      opening = null;
+      reset();
       if (!silent) emit();
     },
   };

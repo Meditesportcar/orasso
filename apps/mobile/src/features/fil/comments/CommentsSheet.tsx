@@ -30,7 +30,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SetRow } from "@/features/profil/parts";
 import { openReport } from "@/features/ReportSheet";
-import { cacheScope } from "@/lib/kv";
 import { useKeyboardOverlap } from "@/ui/KeyboardSafe";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -69,25 +68,19 @@ export function CommentsSheet({
   const inputRef = useRef<TextInput>(null);
   const ctl = useComments(post, visible, onChange);
   const { sheet } = ctl;
-  const [text, setText] = useState("");
+  // Le brouillon et la réponse en cours vivent dans le magasin (par compte et par publication) : changer de filtre ne les perd pas.
+  const text = ctl.draft.text;
+  const replyTo = ctl.draft.replyTo;
+  const setText = (value: string) => ctl.setDraft({ text: value });
+  const setReplyTo = (value: { id: string; pseudo: string } | null) => ctl.setDraft({ replyTo: value });
   const [sel, setSel] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [forceSel, setForceSel] = useState<{ start: number; end: number } | null>(null);
-  const [replyTo, setReplyTo] = useState<{ id: string; pseudo: string } | null>(null);
   const [menu, setMenu] = useState<Menu>(null);
-
-  // Un autre compte : ni le brouillon, ni la réponse en cours, ni le menu ne passent au suivant.
-  const account = cacheScope();
-  const lastAccount = useRef(account);
+  // La feuille se ferme (touché, 404, autre compte) : le menu aussi.
   useEffect(() => {
-    if (lastAccount.current === account) return;
-    lastAccount.current = account;
-    setText("");
-    setSel({ start: 0, end: 0 });
-    setForceSel(null);
-    setReplyTo(null);
-    setMenu(null);
-  }, [account]);
-  const sending = useRef(false);
+    if (!visible) setMenu(null);
+  }, [visible]);
+  const lastSent = useRef<{ text: string; at: number } | null>(null);
 
   const draft: MentionDraft | null = visible && !post.commentsOff ? mentionQuery(text, sel.end) : null;
   const suggestions = useMentionSuggestions(post.id, draft);
@@ -122,15 +115,14 @@ export function CommentsSheet({
   }
 
   function submit() {
-    if (sending.current || commentIssue(text) !== null || post.commentsOff) return;
+    if (commentIssue(text) !== null || post.commentsOff) return;
     // Un double toucher très rapide n'envoie qu'un commentaire (le champ vidé n'est pas encore rendu).
-    sending.current = true;
-    setTimeout(() => {
-      sending.current = false;
-    }, 400);
+    const now = Date.now();
+    // Le même texte renvoyé dans la foulée (double toucher avant que le champ vidé soit rendu) ne part qu'une fois.
+    if (lastSent.current && lastSent.current.text === text && now - lastSent.current.at < 600) return;
+    lastSent.current = { text, at: now };
     ctl.send(text, replyTo?.id ?? null);
-    setText("");
-    setReplyTo(null);
+    ctl.setDraft({ text: "", replyTo: null });
     setSel({ start: 0, end: 0 });
   }
 

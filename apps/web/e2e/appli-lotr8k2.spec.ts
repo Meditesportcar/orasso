@@ -242,11 +242,17 @@ test("« Non envoyé » : le texte reste, « Réessayer » renvoie le même clie
   await ctx.close();
 });
 
-test("une publication devenue invisible (404) : la feuille le dit et ne montre rien", async ({ browser }) => {
+test("une publication devenue invisible (404) après une lecture réussie : commentaires vidés, feuille fermée, message bref", async ({
+  browser,
+}) => {
   test.setTimeout(180_000);
   const { ctx, page } = await open(browser, "damien@orasso.local");
   await goFil(page);
   const card = await commentedCard(page);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(page.getByTestId("feed-comments-waiting")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("feed-comment").first()).toBeVisible();
+  await page.getByTestId("feed-comments-close").click();
   await page.route(/\/feed-posts\/[^/]+\/comments(\?.*)?$/, (route) =>
     route.fulfill({
       status: 404,
@@ -255,9 +261,57 @@ test("une publication devenue invisible (404) : la feuille le dit et ne montre r
     }),
   );
   await card.getByTestId("feed-post-comment").click();
-  await expect(page.getByTestId("feed-comments-gone")).toHaveText("Cette publication n'est plus disponible.");
-  await expect(page.getByTestId("feed-comment-input")).toHaveCount(0);
+  await expect(page.getByTestId("feed-post-gone")).toHaveText("Cette publication n'est plus disponible.", {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId("feed-comments-sheet")).toBeHidden();
   await expect(page.getByTestId("feed-comment")).toHaveCount(0);
+  await expect(page.getByTestId("feed-post-last-comments")).toHaveCount(0);
+  await ctx.close();
+});
+
+test("un envoi en échec survit au changement de filtre : même clientId à la reprise, aucun doublon", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local");
+  await goFil(page);
+  let card = await commentedCard(page);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(page.getByTestId("feed-comments-waiting")).toHaveCount(0, { timeout: 30_000 });
+  const clientIds: string[] = [];
+  let fail = true;
+  await page.route(/\/feed-posts\/[^/]+\/comments(\?.*)?$/, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    clientIds.push((route.request().postDataJSON() as { clientId: string }).clientId);
+    if (fail) return route.abort("failed");
+    return route.continue();
+  });
+  const text = `Filtre R8k2 ${unique()}`;
+  await page.getByTestId("feed-comment-input").fill(`${text} brouillon`);
+  await page.getByTestId("feed-comment-send").click();
+  await expect(page.getByTestId("feed-comment-notsent")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("feed-comment-input").fill("suite du brouillon");
+  await page.getByTestId("feed-comments-close").click();
+  // Changer de filtre démonte les cartes : l'envoi en échec et le brouillon restent (par compte et par publication).
+  await page.getByTestId("fil-filters-nearby").click();
+  await expect(page.getByTestId("fil-waiting")).toHaveCount(0, { timeout: 30_000 });
+  await page.getByTestId("fil-filters-for_you").click();
+  await expect(page.getByTestId("fil-waiting")).toHaveCount(0, { timeout: 30_000 });
+  card = await commentedCard(page);
+  await card.getByTestId("feed-post-comment").click();
+  await expect(page.getByTestId("feed-comment-pending")).toContainText(text, { timeout: 30_000 });
+  await expect(page.getByTestId("feed-comment-input")).toHaveValue("suite du brouillon");
+  fail = false;
+  await page.getByTestId("feed-comment-retry").click();
+  await expect(page.getByTestId("feed-comment-pending")).toHaveCount(0, { timeout: 30_000 });
+  expect(clientIds).toHaveLength(2);
+  expect(clientIds[0]).toBe(clientIds[1]);
+  await expect(page.getByTestId("feed-comment").filter({ hasText: text })).toHaveCount(1);
+  await commentRow(page, text).getByTestId("feed-comment-more").click();
+  page.once("dialog", (d) => void d.accept());
+  await page.getByTestId("feed-comment-delete").click();
+  await expect(commentRow(page, text)).toHaveCount(0, { timeout: 30_000 });
   await ctx.close();
 });
 

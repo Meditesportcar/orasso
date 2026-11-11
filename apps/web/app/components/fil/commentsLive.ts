@@ -7,17 +7,17 @@ import { listenSession } from "../../lib/sessionChannel";
 
 export const postLive = createPostLiveStore();
 
-// Un autre compte (ou aucun), annoncé par `sessionChannel` : rien de ce que le précédent avait changé ne reste. Chaque page annonce le
-// compte courant : seul un compte **différent** du dernier annoncé compte (la première annonce ne fait que poser la référence).
-let lastUser: string | null | undefined;
+// Un autre compte (ou aucun), annoncé par `sessionChannel` : tout ce qui appartient au précédent s'en va (publications changées, fils,
+// brouillons, envois en attente) et les réponses encore en route sont jetées. Chaque page annonce le compte courant : seul un compte
+// **différent** du dernier annoncé compte (le magasin le sait : la première annonce ne fait que poser la référence).
 const accountSubs = new Set<() => void>();
+let announced: string | null | undefined;
 if (typeof window !== "undefined") {
   listenSession((userId) => {
-    const changed = lastUser !== undefined && lastUser !== userId;
-    lastUser = userId;
-    if (!changed) return;
-    postLive.clear();
-    for (const fn of [...accountSubs]) fn();
+    const changed = announced !== undefined && announced !== userId;
+    announced = userId;
+    postLive.setAccount(userId);
+    if (changed) for (const fn of [...accountSubs]) fn();
   });
 }
 

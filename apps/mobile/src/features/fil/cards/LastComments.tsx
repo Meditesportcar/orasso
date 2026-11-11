@@ -16,7 +16,7 @@ export function LastComments({
   const { t } = useTheme();
   const c = t.color;
   const { post } = usePostLive(server, onChange);
-  if (post.commentsCount <= 0 && post.lastComments.length === 0) return null;
+  if (postLive.isGone(post.id) || (post.commentsCount <= 0 && post.lastComments.length === 0)) return null;
   const now = new Date();
   return (
     <View style={styles.wrap} testID="feed-post-last-comments">

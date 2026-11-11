@@ -14,7 +14,7 @@ export function CommentsPreview({
   onChange?: (post: FeedPostView) => void;
 }) {
   const { post } = usePostLive(server, onChange);
-  if (post.commentsCount <= 0 && post.lastComments.length === 0) return null;
+  if (postLive.isGone(post.id) || (post.commentsCount <= 0 && post.lastComments.length === 0)) return null;
   const now = new Date();
   return (
     <div className="fil-cmts" data-testid="feed-post-last-comments">

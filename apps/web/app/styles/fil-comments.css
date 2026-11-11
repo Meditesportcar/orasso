@@ -403,3 +403,8 @@
 .fil-cm-sheet[open] {
   animation: fil-cm-fade 120ms linear;
 }
+
+.fil-gone {
+  flex-basis: 100%;
+  color: var(--ink-muted);
+}

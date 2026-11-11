@@ -58,9 +58,11 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
   const titleId = useId();
   const ctl = useComments(post, open, onChange);
   const { sheet } = ctl;
-  const [text, setText] = useState("");
+  const text = ctl.draft.text;
+  const replyTo = ctl.draft.replyTo;
+  const setText = (value: string) => ctl.setDraft({ text: value });
+  const setReplyTo = (value: { id: string; pseudo: string } | null) => ctl.setDraft({ replyTo: value });
   const [caret, setCaret] = useState(0);
-  const [replyTo, setReplyTo] = useState<{ id: string; pseudo: string } | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [postMenu, setPostMenu] = useState(false);
 
@@ -68,15 +70,13 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
   useEffect(
     () =>
       onAccountChange(() => {
-        setText("");
         setCaret(0);
-        setReplyTo(null);
         setMenuFor(null);
         setPostMenu(false);
       }),
     [],
   );
-  const sending = useRef(false);
+  const lastSent = useRef<{ text: string; at: number } | null>(null);
 
   const draft: MentionDraft | null = open && !post.commentsOff ? mentionQuery(text, caret) : null;
   const suggestions = useMentionSuggestions(post.id, draft);
@@ -118,16 +118,15 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
 
   function submit(event?: React.FormEvent) {
     event?.preventDefault();
-    if (sending.current || commentIssue(text) !== null || post.commentsOff) return;
+    if (commentIssue(text) !== null || post.commentsOff) return;
     // Un double clic très rapide n'envoie qu'un commentaire.
-    sending.current = true;
-    setTimeout(() => {
-      sending.current = false;
-    }, 400);
+    const now = Date.now();
+    // Le même texte renvoyé dans la foulée (double toucher avant que le champ vidé soit rendu) ne part qu'une fois.
+    if (lastSent.current && lastSent.current.text === text && now - lastSent.current.at < 600) return;
+    lastSent.current = { text, at: now };
     ctl.send(text, replyTo?.id ?? null);
-    setText("");
+    ctl.setDraft({ text: "", replyTo: null });
     setCaret(0);
-    setReplyTo(null);
   }
 
   const issue = commentIssue(text);
