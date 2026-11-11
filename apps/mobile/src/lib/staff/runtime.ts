@@ -593,7 +593,7 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
   try {
     let result: Record<string, unknown> = { ok: true };
     if (action.kind === "presence") await api.setPresence(action.eventId, Boolean(p.present));
-    else if (action.kind === "express") result = await api.expressInvite(action.eventId, String(p.email), 15_000);
+    else if (action.kind === "express") result = await api.expressInvite(action.eventId, String(p.email), action.id, 15_000);
     else if (action.kind === "incident") {
       await api.incident(action.eventId, {
         clientId: action.id,

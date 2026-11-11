@@ -56,8 +56,8 @@ export const checkinsRoutes = new Hono<AppEnv>()
   )
   .post("/events/:id/express-invites", async (c) => {
     const v = await requireUser(c);
-    const { email } = await body(c, expressInviteSchema);
-    return c.json(await expressService.invite(v, uuidParam(c, "id"), email), 201);
+    const { email, clientId } = await body(c, expressInviteSchema);
+    return c.json(await expressService.invite(v, uuidParam(c, "id"), email, clientId ?? null), 201);
   })
   .get("/express/:token", async (c) => c.json(await expressService.get(tokenParam(c.req.param("token")))))
   .post("/express/:token", async (c) => {
