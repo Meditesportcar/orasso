@@ -101,6 +101,8 @@ export const errorCodes = [
   "share_private",
   "not_tagged",
   "already_shared",
+  // Lot R8n1 : réglages de notification d'un événement où la personne n'a pas de place.
+  "no_place",
 
   // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
   "closed",
