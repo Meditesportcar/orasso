@@ -23,7 +23,15 @@ export const practicalSession: { choice: PracticalChoice; filter: PracticalFilte
 
 /** Dernière réponse de la séance, par compte : en mémoire seulement. */
 const memory = new Map<string, PracticalData>();
-const keyOf = (near: string) => `${currentSession() ?? "-"}|${near}`;
+/** La clé de mémoire d'un compte : `null` tant que la session n'est pas annoncée (rien n'est gardé ni relu sous un compte inconnu). */
+const keyOf = (near: string): string | null => {
+  const who = currentSession();
+  return who ? `${who}|${near}` : null;
+};
+const remembered = (near: string): PracticalData | null => {
+  const key = keyOf(near);
+  return key ? (memory.get(key) ?? null) : null;
+};
 
 type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
 
@@ -35,15 +43,15 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
   const load = useCallback(async () => {
     if (!enabled) return;
     const scope = currentSession();
-    const key = keyOf(near);
     const res = await apiFetch<PracticalData>("/practical", { method: "POST", json: { near } });
-    // Une réponse arrivée après un changement de compte est jetée.
-    if (currentSession() !== scope) return;
+    // Une réponse arrivée après un changement de compte est jetée (la session peut ne pas être annoncée au premier montage).
+    if (scope !== null && currentSession() !== scope) return;
     if (!res.ok) {
-      setState((s) => ({ data: s.data ?? memory.get(key) ?? null, loading: false, offline: true }));
+      setState((s) => ({ data: s.data ?? remembered(near), loading: false, offline: true }));
       return;
     }
-    memory.set(key, res.data);
+    const key = keyOf(near);
+    if (key) memory.set(key, res.data);
     setState({ data: res.data, loading: false, offline: false });
     if (res.data.partial && !retried.current) {
       retried.current = true;
@@ -58,8 +66,7 @@ function useRead(near: "city" | "outing", enabled: boolean): Read {
       setState((s) => ({ ...s, loading: false }));
       return undefined;
     }
-    const remembered = memory.get(keyOf(near)) ?? null;
-    setState({ data: remembered, loading: true, offline: false });
+    setState({ data: remembered(near), loading: true, offline: false });
     void load();
     return undefined;
   }, [load]);

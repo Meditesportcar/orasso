@@ -26,7 +26,15 @@ export const practicalSession: { choice: PracticalChoice; filter: PracticalFilte
 
 /** Dernière réponse de la séance, par compte : en mémoire seulement. */
 const memory = new Map<string, PracticalData>();
-const keyOf = (near: string, eventId?: string) => `${cacheScope() ?? "-"}|${near}|${eventId ?? ""}`;
+/** La clé de mémoire d'un compte : `null` sans compte lié (rien n'est gardé ni relu sous un compte inconnu). */
+const keyOf = (near: string, eventId?: string): string | null => {
+  const who = cacheScope();
+  return who ? `${who}|${near}|${eventId ?? ""}` : null;
+};
+const remembered = (near: string, eventId?: string): PracticalData | null => {
+  const key = keyOf(near, eventId);
+  return key ? (memory.get(key) ?? null) : null;
+};
 
 /** Un état de lecture : la réponse (ou la dernière connue), et si le réseau n'a pas répondu. */
 type Read = { data: PracticalData | null; loading: boolean; offline: boolean };
@@ -36,7 +44,7 @@ const STALE_MS = 60_000;
 
 function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): Read {
   const [state, setState] = useState<Read>(() => ({
-    data: memory.get(keyOf(near, eventId)) ?? null,
+    data: remembered(near, eventId),
     loading: enabled,
     offline: false,
   }));
@@ -55,12 +63,12 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
   const load = useCallback(async () => {
     if (!enabled) return;
     const scope = cacheScope();
-    const key = keyOf(near, eventId);
     try {
       const data = await api.practical(near === "city" ? { near } : { near, ...(eventId ? { eventId } : {}) });
       // Une réponse arrivée après un changement de compte ou de sortie est jetée.
       if (!alive.current || cacheScope() !== scope) return;
-      memory.set(key, data);
+      const key = keyOf(near, eventId);
+      if (key) memory.set(key, data);
       fetchedAt.current = Date.now();
       setState({ data, loading: false, offline: false });
       if (data.partial && !retried.current) {
@@ -69,7 +77,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       }
     } catch {
       if (!alive.current || cacheScope() !== scope) return;
-      setState((s) => ({ data: s.data ?? memory.get(key) ?? null, loading: false, offline: true }));
+      setState((s) => ({ data: s.data ?? remembered(near, eventId), loading: false, offline: true }));
     }
   }, [enabled, near, eventId]);
 
@@ -80,7 +88,7 @@ function useRead(near: "city" | "outing", enabled: boolean, eventId?: string): R
       setState((s) => ({ ...s, loading: false }));
       return;
     }
-    setState({ data: memory.get(keyOf(near, eventId)) ?? null, loading: true, offline: false });
+    setState({ data: remembered(near, eventId), loading: true, offline: false });
     void load();
   }, [enabled, near, eventId]);
 
