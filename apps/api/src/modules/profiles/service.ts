@@ -32,6 +32,7 @@ import { inboxService } from "../messaging/inbox";
 import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
 import { followsService } from "../social/follows";
+import { dropPageFollowsOfPrivateAccount } from "../social/pageFollows";
 import { retireCopiesOfPrivateAccount } from "../stories/share";
 import { assertInterests } from "../vehicles/categories";
 import { mainVehicleIdOf } from "../vehicles/main";
@@ -222,7 +223,11 @@ export const profilesService = {
       // Lot R6b : un compte qui passe public accepte toutes ses demandes d'abonnement en attente (comme /me/settings).
       if (rest.visibility === "public") await followsService.acceptAllPending(tx, v.user.id);
       // Lot R7h : un compte qui passe en privé ne laisse plus reprendre ses stories (les copies faites tombent).
-      if (rest.visibility === "private") await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+      if (rest.visibility === "private") {
+        await retireCopiesOfPrivateAccount(tx, after, v.user.id);
+        // Lot R9a (T6) : les pages qui le suivaient ne le suivent plus, dans la même transaction.
+        await dropPageFollowsOfPrivateAccount(tx, v.user.id);
+      }
       return updated;
     });
   },

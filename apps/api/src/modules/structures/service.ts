@@ -36,6 +36,7 @@ import {
   requireOrganizerWrite,
   requirePlatformRole,
 } from "../../lib/access";
+import { type Actor, isPageActor } from "../../lib/actor";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -49,6 +50,7 @@ import { staffChatsService } from "../communication/staff-chats";
 import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
+import { isFollowingAs, pageFollowerCount } from "../social/pageFollows";
 import { staffRequestsService } from "../staff/requests";
 
 /** Lot 47 : affiches générées à refaire (import différé : le module des affiches dépend des envois de fichiers). */
@@ -67,12 +69,13 @@ export async function structureById(id: string): Promise<StructureRow> {
   return s;
 }
 
+/** Abonnés : les personnes (`structure_follows`) **plus** les pages qui la suivent (`page_follows`, lot R9a). */
 async function followersCount(structureId: string) {
   const [row] = await db
     .select({ n: count() })
     .from(structureFollows)
     .where(eq(structureFollows.structureId, structureId));
-  return row?.n ?? 0;
+  return (row?.n ?? 0) + (await pageFollowerCount("structure", structureId));
 }
 
 export async function isFollowing(structureId: string, userId: string): Promise<boolean> {
@@ -92,7 +95,7 @@ async function ratingOf(structureId: string): Promise<StructureRating> {
   return { average: reviewAverage(rows.map((r) => r.rating)), count: rows.length };
 }
 
-async function toPublic(s: StructureRow, viewer?: Viewer | null): Promise<StructurePublic> {
+async function toPublic(s: StructureRow, viewer?: Viewer | null, actor?: Actor): Promise<StructurePublic> {
   return {
     id: s.id,
     slug: s.slug,
@@ -112,7 +115,15 @@ async function toPublic(s: StructureRow, viewer?: Viewer | null): Promise<Struct
     verified: s.verification === "verified",
     followersCount: await followersCount(s.id),
     rating: await ratingOf(s.id),
-    ...(viewer ? { isFollowing: await isFollowing(s.id, viewer.user.id) } : {}),
+    // Lot R9a : lu en tant que page, « suivi » est l'abonnement de la page ; sinon celui de la personne.
+    ...(viewer
+      ? {
+          isFollowing:
+            actor && isPageActor(actor)
+              ? await isFollowingAs(actor, { kind: "structure", id: s.id })
+              : await isFollowing(s.id, viewer.user.id),
+        }
+      : {}),
   };
 }
 
@@ -247,7 +258,7 @@ export const structuresService = {
     return toOrganizer(s, access);
   },
 
-  async getPublic(slug: string, viewer: Viewer | null): Promise<StructurePublic> {
+  async getPublic(slug: string, viewer: Viewer | null, actor?: Actor): Promise<StructurePublic> {
     const s = await db.query.structures.findFirst({
       where: and(eq(structures.slug, slug), isNull(structures.deletedAt)),
     });
@@ -257,7 +268,7 @@ export const structuresService = {
     if (s.verification !== "verified" && !(viewer && (await activeMembership(viewer.user.id, s.id)))) {
       throw notFound("Structure introuvable");
     }
-    return toPublic(s, viewer);
+    return toPublic(s, viewer, actor);
   },
 
   /** N'importe quel utilisateur peut créer une structure ; il en devient le propriétaire (docs/01, bloc 1). */
