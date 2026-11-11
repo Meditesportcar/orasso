@@ -242,6 +242,17 @@ describe("aperçu des destinataires et changement de date", () => {
     expect(await notifiedOf("event_updated")).toEqual([a.id, visitor.id].sort());
   });
 
+  it("l'organisateur qui a aussi une place n'est pas compté (N − 1), comme à l'envoi de l'Info importante", async () => {
+    await apply(await signUp("Alice"), eventId, ref, "accepted");
+    await apply(await signUp("Bruno"), eventId, ref, "accepted");
+    expect((await call(owner, "GET", `/events/${eventId}/notify-preview`)).json).toEqual({ recipients: 2 });
+    await apply(owner, eventId, ref, "accepted");
+    expect((await call(owner, "GET", `/events/${eventId}/notify-preview`)).json).toEqual({ recipients: 2 });
+    const co = await signUp("CoOrga", { twoFactor: true });
+    await addMember(structureId, co.id, "co_organizer");
+    expect((await call(co, "GET", `/events/${eventId}/notify-preview`)).json).toEqual({ recipients: 3 });
+  });
+
   it("événement sans inscrit : zéro", async () => {
     expect((await call(owner, "GET", `/events/${eventId}/notify-preview`)).json).toEqual({ recipients: 0 });
   });

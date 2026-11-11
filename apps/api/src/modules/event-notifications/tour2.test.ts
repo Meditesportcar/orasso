@@ -192,6 +192,38 @@ describe("résumé", () => {
     expect((await digests()).filter((d) => d.userId === u.id)).toHaveLength(1);
   });
 
+  it("22 h franchies entre le lancement et l'insertion : le résumé n'est pas reporté à 8 h, il est abandonné", async () => {
+    const u = await signUp("Limite");
+    await apply(u, eventId, ref, "accepted");
+    await post(new Date(AT.getTime() - HOUR));
+    const saved = env.NOTIFY_QUIET_HOURS;
+    try {
+      env.NOTIFY_QUIET_HOURS = true;
+      // Le traitement commence à 21 h 59 (`at`), l'horloge de l'insertion est à 22 h 05.
+      clock.set(fromWallTime({ year: 2026, month: 11, day: 10, hour: 22, minute: 5 }));
+      const out = await eventNewsDigest.run(fromWallTime({ year: 2026, month: 11, day: 10, hour: 21, minute: 59 }));
+      expect(out.sent).toBe(1);
+      // Exigible tout de suite (jamais programmé à 8 h) : la garde l'a déjà abandonné, ou il attend sans date future.
+      const rows = await digests();
+      expect(rows.every((r) => r.deliverAfter.getTime() <= clock.now.getTime())).toBe(true);
+      await notificationsService.deliverDue();
+      expect(await digests()).toHaveLength(0);
+    } finally {
+      env.NOTIFY_QUIET_HOURS = saved;
+    }
+  });
+
+  it("billet scanné : il règle ses Nouveautés (PUT accepté) et n'a plus de résumé", async () => {
+    const u = await signUp("Scanne");
+    await ticket(u, eventId, "used");
+    const put = await call(u, "PUT", `/me/events/${eventId}/notification-prefs`, { news: false });
+    expect(put.status).toBe(200);
+    expect(put.json).toEqual({ news: false, hasPlace: true });
+    await post(new Date(AT.getTime() - HOUR));
+    await eventNewsDigest.run(AT);
+    expect((await digests()).filter((d) => d.userId === u.id)).toHaveLength(0);
+  });
+
   it("heures calmes : pas préparé ni réservé ; un résumé livré en retard est abandonné", async () => {
     const u = await signUp("Nuit");
     await apply(u, eventId, ref, "accepted");

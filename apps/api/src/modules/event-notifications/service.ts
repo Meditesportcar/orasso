@@ -49,11 +49,12 @@ export const eventNotificationsService = {
 
   /**
    * « 148 inscrits seront prévenus » : le nombre de personnes qui ont une place à l'événement, c'est-à-dire exactement la
-   * liste à qui part un changement de date ou de lieu (`event_updated`). Responsables de la structure seulement.
+   * liste à qui part un changement de date ou de lieu (`event_updated`), moins l'auteur de l'aperçu (qui publie ne se prévient pas lui-même). Responsables de la structure seulement.
    */
   async preview(v: Viewer, eventId: string): Promise<NotifyPreview> {
     const e = await eventsRepo.byId(eventId);
     await requireOrganizer(v, e.structureId);
-    return { recipients: (await eventPlaceHolderIds(db, eventId)).length };
+    // Les destinataires réels de l'envoi (`sendImportant`, R8a1) : tous ceux qui ont une place, sauf celui qui publie.
+    return { recipients: (await eventPlaceHolderIds(db, eventId)).filter((id) => id !== v.user.id).length };
   },
 };

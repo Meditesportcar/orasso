@@ -57,6 +57,13 @@ function userParam(c: Context, name = "id"): string {
 const roleSchema = z.object({ role: z.enum(["user", "moderator"]), reason: adminReasonSchema.shape.reason });
 const searchQuery = z.object({ q: z.string().trim().max(100).optional() });
 
+// Correctif cache et session (11/11) : monté avant `loadSession` (app.ts). Réglages publics identiques pour tout le monde, donc cache public permis et aucun
+// `Set-Cookie` possible dans une réponse que le cache public pourrait garder.
+export const adminPublicRoutes = new Hono<AppEnv>().get("/settings/public", async (c) => {
+  c.header("cache-control", "public, max-age=60");
+  return c.json(await adminSettingsService.publicSettings());
+});
+
 export const adminRoutes = new Hono<AppEnv>()
   // --- Accueil et journal ---------------------------------------------------------------------------------------------
   .get("/admin/overview", async (c) => c.json(await overviewService.overview(await requireUser(c))))
@@ -219,12 +226,6 @@ export const adminRoutes = new Hono<AppEnv>()
   .delete("/admin/message-templates/:id", async (c) => {
     await orassoTemplatesService.remove(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
-  })
-
-  // --- Listes et interrupteurs publics --------------------------------------------------------------------------------
-  .get("/settings/public", async (c) => {
-    c.header("cache-control", "public, max-age=60");
-    return c.json(await adminSettingsService.publicSettings());
   })
 
   // --- Newsletter -----------------------------------------------------------------------------------------------------

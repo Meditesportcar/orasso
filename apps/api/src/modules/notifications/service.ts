@@ -277,9 +277,10 @@ export const notificationsService = {
 
   /**
    * Lot R8n1 : une notification personnalisée par personne (le résumé quotidien), en une requête par tranche de 1 000.
-   * Mêmes règles d'heure que `notifyMany` (heures calmes), sans regroupement.
+   * Sans regroupement. JAMAIS REPORTÉ aux heures calmes (exigible tout de suite) : l'appelant abandonne lui-même ce qui tombe
+   * la nuit (garde de livraison). Pour une notification qui doit attendre 8 h, utiliser `notify` / `notifyMany`.
    */
-  async notifyEach(
+  async notifyEachNow(
     ex: Executor,
     type: NotificationType,
     items: readonly {
@@ -292,7 +293,9 @@ export const notificationsService = {
   ): Promise<void> {
     if (!items.length) return;
     const at = now();
-    const deliverAt = env.NOTIFY_QUIET_HOURS ? deliverAfter(at, null, undefined, r7QuietOverride(type)) : at;
+    // Jamais reportées à 8 h : exigibles tout de suite ; le domaine abandonne à la livraison ce qui tombe dans les heures
+    // calmes (garde de livraison du résumé), le suivant remplace.
+    const deliverAt = at;
     for (let i = 0; i < items.length; i += 1000) {
       await ex.insert(notifications).values(
         items.slice(i, i + 1000).map((item) => ({
