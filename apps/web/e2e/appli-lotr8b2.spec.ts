@@ -326,11 +326,11 @@ test("organisateur sur un compte privé : Garage et Sorties restent visibles, «
       timeout: 30_000,
     },
   );
-  await expect(selected(page)).toHaveAccessibleName("Publications");
-  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
-  await page.getByTestId("profil-tab-garage").click();
+  // Hors audience limitée, un compteur nul ouvre « Garage » ; le panneau « Compte privé » est dans « Publications ».
   await expect(selected(page)).toHaveAccessibleName(/^Garage/);
   await expect(page.getByTestId("publications-private")).toHaveCount(0);
+  await page.getByTestId("profil-tab-publications").click();
+  await expect(page.getByTestId("publications-private")).toContainText("Compte privé");
   await page.getByTestId("profil-tab-sorties").click();
   await expect(selected(page)).toHaveAccessibleName("Sorties");
   // Un paramètre d'onglet invalide est ignoré : l'ouverture suit la règle.
