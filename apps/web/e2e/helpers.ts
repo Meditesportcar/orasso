@@ -429,3 +429,16 @@ export async function sidelineOtherEvents(
       await run((c) => c.query("update applications set status = $2 where id = $1", [r.id, r.status]));
   };
 }
+
+/**
+ * Lot R8r : l'Accueil ne lit que le stock météo du département ; le premier appel lance le rafraîchissement (stub local) sans
+ * l'attendre. Une recette qui attend « Dép. 66 » relit l'Accueil par l'API jusqu'à ce que le stock soit rempli, au lieu de
+ * dépendre de l'état laissé par une recette précédente.
+ */
+export async function warmDepartmentWeather(cookie: Cookie): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    const home = await apiCall<{ weather: unknown }>(cookie, "GET", "/me/home");
+    if (home.data?.weather) return;
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+}

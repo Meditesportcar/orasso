@@ -176,7 +176,6 @@ export const explorerV2Labels = {
   results: (n: number, more: boolean) => `${n}${more ? "+" : ""} résultat${n > 1 || more ? "s" : ""}`,
   km: (km: number) => `${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`,
   seatsLeft: (left: number, capacity: number) => `${left} place${left > 1 ? "s" : ""} exposants sur ${capacity}`,
-  seatsFull: (capacity: number) => `Complet · ${capacity} exposants`,
   // Lot R8x (site) : sans effectif fiable (journées limitées différemment de la capacité générale), « Complet » seul.
   seatsFullShort: "Complet",
   seatsLeftOpen: (left: number) => `${left} place${left > 1 ? "s" : ""} exposants`,

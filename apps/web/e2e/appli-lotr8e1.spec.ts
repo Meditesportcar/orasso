@@ -1,5 +1,8 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, warmDepartmentWeather } from "./helpers";
+import { RELAIS } from "./relais";
+
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-r8r-captures/apres`;
 
 // Lot R8e1, côté appli (version web compilée de recette) : la météo de l'événement est une ligne de sa carte dans
 // « Prochaine sortie » ; absente au-delà de 7 jours ; bandeau quand l'événement est « Incertain » ; masquer « Météo de
@@ -54,11 +57,14 @@ let damien: string;
 test.beforeAll(async () => {
   cookie = await login(EMAIL);
   damien = await login("damien@orasso.local");
+  await warmDepartmentWeather(cookie); // le stock du département (l'Accueil ne lit que lui)
   // « En cours » (le Lydia) remplacerait les tickets : on le masque, comme le ferait la personne.
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: ["live", ...DEFAULT_HIDDEN] });
   await apiCall(damien, "PATCH", `/events/${await nocturneId(damien)}/outlook`, { outlook: "maintained" });
 });
 test.afterAll(async () => {
+  // Kenji (test « En cours ») retrouve ses réglages d'Accueil par défaut : d'autres recettes comptent sur son garage favori.
+  await apiCall(await login("kenji@orasso.local"), "DELETE", "/me/home/widgets");
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: DEFAULT_HIDDEN });
   await apiCall(damien, "PATCH", `/events/${await nocturneId(damien)}/outlook`, { outlook: "maintained" });
 });
@@ -176,6 +182,9 @@ test("« En cours » porte la météo de son événement, comme sa carte ; Perso
   const line = live.getByTestId("home-outing-weather");
   await expect(line).toBeVisible();
   expect(((await line.innerText()).split("\n")[0] ?? "").trim()).toMatch(HEADLINE);
+  // Lot R8r : « En cours » (le Lydia, plusieurs jours) montre la journée d'aujourd'hui, pas celle du début de l'événement.
+  const today = new Date().toLocaleDateString("fr-FR", { weekday: "long", timeZone: "Europe/Paris" });
+  expect(((await line.innerText()).split("\n")[0] ?? "").trim().toLowerCase()).toMatch(new RegExp(`^${today} :`));
   // Au-dessus des boutons de la ligne.
   const a = await line.boundingBox();
   const b = await live.getByTestId("home-live-sheet").boundingBox();
@@ -188,5 +197,33 @@ test("« En cours » porte la météo de son événement, comme sa carte ; Perso
   await expect(page.getByTestId("personalize-hide-event_weather")).toBeVisible();
   // « En cours » est le premier bloc qui bouge : il ne monte plus.
   await expect(page.getByTestId("personalize-up-live")).toBeDisabled();
+  await ctx.close();
+});
+
+// Lot R8r : premier chargement (le stock du département est vide) : « Météo en cours de chargement », puis une seule relecture
+// de l'Accueil quelques secondes plus tard ; la météo arrive sans que l'écran ait été bloqué. La réponse « vide » est simulée
+// sur la première lecture seulement (le stock réel est rempli par le bouchon local).
+test("lot R8r : stock vide → « Météo en cours de chargement », puis la relecture unique amène la météo", async ({
+  browser,
+}) => {
+  const { ctx, page } = await open(browser);
+  let reads = 0;
+  await ctx.route("**/api/me/home*", async (route) => {
+    const res = await route.fetch();
+    if (!route.request().url().includes("blocks=app") || reads++ > 0) return route.fulfill({ response: res });
+    const json = (await res.json()) as Record<string, unknown>;
+    return route.fulfill({ response: res, json: { ...json, weather: null, weatherPending: true } });
+  });
+  await page.goto("/accueil");
+  await afterOpening(page);
+  const pending = page.getByTestId("home-weather-pending");
+  await expect(pending).toBeVisible({ timeout: 30_000 });
+  await expect(pending).toContainText("Météo en cours de chargement");
+  await expect(pending).toContainText("Dép. 66");
+  await expect(page.getByTestId("home-outing").first()).toBeVisible();
+  await page.screenshot({ path: `${DIR}/appli-meteo-chargement-384.png` });
+  // L'état reste jusqu'à la relecture unique de la seule météo du département (après le délai du fournisseur), puis la carte.
+  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66", { timeout: 45_000 });
+  await expect(pending).toHaveCount(0);
   await ctx.close();
 });

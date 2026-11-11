@@ -44,19 +44,18 @@ const { space3 } = tokens.spacing;
 
 export function GarageScreen({
   vehicles,
-  reloadKey = 0,
+  round = 0,
 }: {
   /** La lecture de mes véhicules, faite par le Profil (cache « vehicles »). */
   vehicles: ApiState<VehicleFull[]>;
-  /** Change à chaque « tirer pour actualiser » du Profil. */ reloadKey?: number;
+  /** Change à chaque « tirer pour actualiser » du Profil : la certification et « Pour ta … » se relisent (la lecture des véhicules, elle, est relancée par le Profil). */
+  round?: number;
 }) {
   const { t } = useTheme();
   const router = useRouter();
   const active = vehicles.data?.filter((v) => v.status === "active") ?? [];
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
   const add = () => router.push("/vehicule/nouveau");
-  // Tour 2 : la certification et « Pour ta … » se relisent au « tirer pour actualiser » du Profil.
-  const round = reloadKey;
   const { refreshMe } = useSession();
   const [menuFor, setMenuFor] = useState<VehicleFull | null>(null);
   const [archiveFor, setArchiveFor] = useState<VehicleFull | null>(null);
@@ -89,12 +88,6 @@ export function GarageScreen({
       setError(errorMessage(e));
     }
   };
-
-  // Le Profil relit tout au « tirer pour actualiser » : le garage aussi.
-  const reload = vehicles.reload;
-  useEffect(() => {
-    if (reloadKey > 0) void reload();
-  }, [reloadKey, reload]);
 
   return (
     <View style={styles.panel} testID="garage-panel">

@@ -276,5 +276,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: space1,
     gap: 1,
   },
-  cellLabel: { textAlign: "center" },
+  cellLabel: { textAlign: "center", fontSize: 11.5, lineHeight: 14 },
 });

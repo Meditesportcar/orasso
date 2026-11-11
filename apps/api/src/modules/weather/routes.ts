@@ -25,7 +25,13 @@ export const weatherRoutes = new Hono<AppEnv>()
     return c.json(weather);
   })
   .get("/me/weather", async (c) => {
-    const weather = await weatherService.mine(await requireUser(c));
+    const user = await requireUser(c);
+    // Lot R8r : `?place=1` = la météo du département seule (relecture de l'Accueil au premier chargement), jamais mise en cache.
+    if (c.req.query("place") === "1") {
+      c.header("cache-control", "private, no-store");
+      return c.json(await weatherService.mineAtHome(user));
+    }
+    const weather = await weatherService.mine(user);
     c.header("cache-control", "private, max-age=600");
     return c.json(weather);
   });

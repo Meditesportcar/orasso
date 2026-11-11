@@ -3,7 +3,7 @@
 // partenariat, l'imprime sur le fichier qui sort d'Orasso, la prête à la copie du pro, et prévient le pro.
 // Aucune plaque lisible : les photos d'essai sont du bruit ou des aplats.
 
-import { fromWallTime, mentionedSlugs, partnershipLabels } from "@orasso/shared";
+import { mentionedSlugs, partnershipLabels } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -39,7 +39,8 @@ let viewer: TestUser;
 beforeEach(async () => {
   await resetDb();
   resetRateLimits();
-  clock = useClock(fromWallTime({ year: 2026, month: 11, day: 10, hour: 10, minute: 0 }));
+  // Horloge relative à l'heure réelle : `created_at` prend l'heure du système, un instant figé dans le passé écarterait les publications du Fil.
+  clock = useClock(new Date());
   await seedReference();
   proOwner = await signUp("Wrap_66");
   pro = await createPro(proOwner.id, { name: "Wrap 66", slug: "wrap-66", verifiedAt: new Date(0) });
@@ -238,6 +239,8 @@ describe("règle de pose : publications du Fil", () => {
     expect(res.json.commercialPartner).toEqual({ id: pro.id, name: "Wrap 66", slug: "wrap-66", logoUrl: null });
     const read1 = await req(viewer, "GET", `/feed-posts/${res.json.id}`);
     expect(read1.json.commercialPartner).toMatchObject({ name: "Wrap 66", slug: "wrap-66" });
+    // La publication est datée de l'heure du système : l'horloge simulée la rattrape avant la lecture du Fil.
+    clock.set(new Date());
     const fil = await req(viewer, "GET", "/fil?filter=for_you");
     const card = (
       fil.json.items as { kind: string; payload: { post?: { id: string; commercialPartner: unknown } } }[]
