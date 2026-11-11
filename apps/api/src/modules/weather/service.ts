@@ -573,6 +573,8 @@ export const weatherService = {
       places: shown.map((p, i) => ({
         slot: p.slot,
         label: p.label,
+        lat: p.lat,
+        lng: p.lng,
         source: p.source,
         weather: this.placeWeather(rows[i]),
       })),

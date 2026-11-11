@@ -119,6 +119,9 @@ export type PlaceWeather = {
 export type MyWeatherPlace = {
   slot: number;
   label: string;
+  /** Coordonnées de la ville (0,01°) : nécessaires pour réenregistrer l'autre lieu ; jamais la position d'une personne. */
+  lat: number;
+  lng: number;
   source: "saved" | "default";
   weather: PlaceWeather | null;
 };

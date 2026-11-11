@@ -8,10 +8,14 @@ import {
   myWeatherPlaces,
   nextHours,
   placeForecast,
+  placesAfterAdd,
+  placesAfterChange,
+  placesAfterRemove,
   roundPlace,
   trimForecast,
   WEATHER_PLACES_MAX,
   weatherAtInput,
+  weatherCards,
   weatherCell,
   weatherPlacesInput,
   windCompass,
@@ -158,5 +162,57 @@ describe("windCompass", () => {
     expect(windCompass(180)).toBe("S");
     expect(windCompass(359)).toBe("N");
     expect(windCompass(-45)).toBe("NO");
+  });
+});
+
+describe("cartes et modifications des lieux", () => {
+  const w = (label: string) =>
+    ({
+      today: day("2026-11-11"),
+      now: hour(0),
+      hours: [],
+      provider: "open-meteo",
+      attribution: label,
+      fetchedAt: "x",
+    }) as never;
+  const city = { slot: 0, label: "Perpignan", lat: 42.7, lng: 2.9, source: "default" as const, weather: w("p") };
+  const s0 = { slot: 0, label: "Perpignan", lat: 42.7, lng: 2.9, source: "saved" as const, weather: w("a") };
+  const s1 = { slot: 1, label: "Argelès-sur-Mer", lat: 42.55, lng: 3.03, source: "saved" as const, weather: w("b") };
+  const here = { label: "Canet-en-Roussillon", weather: w("c") };
+
+  it("sans position : une carte par lieu, « ta ville » pour la ville par défaut", () => {
+    expect(weatherCards([city], null).map((c) => [c.kind, c.slot, c.label])).toEqual([["city", null, "Perpignan"]]);
+    expect(weatherCards([s0, s1], null).map((c) => [c.kind, c.slot])).toEqual([
+      ["saved", 0],
+      ["saved", 1],
+    ]);
+    expect(weatherCards([], null)).toEqual([]);
+  });
+  it("la position prend la place du premier lieu, le second reste", () => {
+    expect(weatherCards([city], here).map((c) => [c.kind, c.label])).toEqual([["position", "Canet-en-Roussillon"]]);
+    expect(weatherCards([s0, s1], here).map((c) => [c.kind, c.label])).toEqual([
+      ["position", "Canet-en-Roussillon"],
+      ["saved", "Argelès-sur-Mer"],
+    ]);
+    expect(weatherCards([], here)).toHaveLength(1);
+  });
+  const lyon = { label: "Lyon", lat: 45.76, lng: 4.84 };
+  it("Changer de lieu : la ville remplace la carte ; la ville par défaut devient le premier emplacement", () => {
+    expect(placesAfterChange([city], { slot: null }, lyon)).toEqual([lyon]);
+    expect(placesAfterChange([s0, s1], { slot: 1 }, lyon)).toEqual([{ label: "Perpignan", lat: 42.7, lng: 2.9 }, lyon]);
+    expect(placesAfterChange([s0, s1], { slot: null }, lyon)).toEqual([
+      lyon,
+      { label: "Argelès-sur-Mer", lat: 42.55, lng: 3.03 },
+    ]);
+  });
+  it("Second lieu : après la ville par défaut (enregistrée avec lui), après un lieu choisi, rien au-delà de deux", () => {
+    expect(placesAfterAdd([city], lyon)).toEqual([{ label: "Perpignan", lat: 42.7, lng: 2.9 }, lyon]);
+    expect(placesAfterAdd([s0], lyon)).toEqual([{ label: "Perpignan", lat: 42.7, lng: 2.9 }, lyon]);
+    expect(placesAfterAdd([], lyon)).toEqual([lyon]);
+    expect(placesAfterAdd([s0, s1], lyon)).toHaveLength(2);
+  });
+  it("Retirer ce lieu : les autres restent", () => {
+    expect(placesAfterRemove([s0, s1], 0)).toEqual([{ label: "Argelès-sur-Mer", lat: 42.55, lng: 3.03 }]);
+    expect(placesAfterRemove([s0], 0)).toEqual([]);
   });
 });

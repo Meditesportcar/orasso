@@ -208,7 +208,7 @@ describe("GET /me/weather/places", () => {
     const u = await fan("Fan_Blanche");
     const res = await call(u, "GET", "/me/weather/places");
     expect(Object.keys(res.json).sort()).toEqual(["max", "places"]);
-    expect(Object.keys(res.json.places[0]).sort()).toEqual(["label", "slot", "source", "weather"]);
+    expect(Object.keys(res.json.places[0]).sort()).toEqual(["label", "lat", "lng", "slot", "source", "weather"]);
     expect(Object.keys(res.json.places[0].weather).sort()).toEqual([
       "attribution",
       "fetchedAt",
@@ -217,7 +217,9 @@ describe("GET /me/weather/places", () => {
       "provider",
       "today",
     ]);
-    expect(JSON.stringify(res.json)).not.toMatch(/"(lat|lng|userId|cell)"/);
+    // Les coordonnées sont celles de la ville (0,01°), jamais d'une position ni d'un compte.
+    expect(res.json.places[0]).toMatchObject({ lat: 42.7, lng: 2.9 });
+    expect(JSON.stringify(res.json)).not.toMatch(/"(userId|cell)"/);
   });
 });
 
