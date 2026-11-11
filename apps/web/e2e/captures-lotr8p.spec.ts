@@ -92,6 +92,19 @@ for (const theme of ["beton", "sable"]) {
           if (await chip.isVisible().catch(() => false)) await chip.click();
           await shot(page, `avec-evenement-${tag}`);
         }
+        if (PHASE === "apres") {
+          await page.getByTestId("fil-publish-photo-remove").first().click();
+          await page.locator('[data-testid^="fil-publish-as-structure:"]').first().click();
+          await page
+            .locator('[data-testid^="fil-publish-event-"]')
+            .filter({ hasText: "Expo Rivesaltes" })
+            .first()
+            .click();
+          await shot(page, `structure-affiche-${tag}`);
+          await page.getByTestId("fil-publish-important-toggle").click();
+          await page.getByTestId("fil-publish-important-reasons").getByText("Accès").click();
+          await shot(page, `structure-info-importante-${tag}`);
+        }
         await ctx.close();
       });
     }
@@ -113,6 +126,18 @@ for (const theme of ["beton", "sable"] as const) {
       await page.getByTestId("fil-publish-none-yes").click();
       await page.getByTestId("fil-publish-caption").fill("Prête pour samedi, on se retrouve au port");
       await shot(page, `site-avec-photo-${theme}-${width}`);
+      if (PHASE === "apres") {
+        await page.getByTestId("fil-publish-photo-remove").first().click();
+        await page.locator('[data-testid^="fil-publish-as-structure:"]').first().click();
+        await page
+          .locator('[data-testid^="fil-publish-event-"]')
+          .filter({ hasText: "Expo Rivesaltes" })
+          .first()
+          .click();
+        await page.getByTestId("fil-publish-important-toggle").click();
+        await page.getByTestId("fil-publish-important-reasons").getByText("Accès").click();
+        await shot(page, `site-structure-info-importante-${theme}-${width}`);
+      }
     });
   }
 }
