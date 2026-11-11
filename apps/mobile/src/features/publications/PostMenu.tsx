@@ -72,10 +72,10 @@ export function PostMenu({
     try {
       await api.withdrawCoAuthor(target.id);
       markFeedDirty();
-      notifyPostChanged(target.id);
       setDone(message);
       timer.current = setTimeout(() => {
         setDone(null);
+        notifyPostChanged(target.id);
         onClose();
       }, DONE_MS);
     } catch (e) {

@@ -238,7 +238,9 @@ test("un pro partenaire : la phrase de la mention, puis « Collaboration commerc
   await expect(k.page.getByTestId("coauthor-result").first()).toContainText("Pro partenaire", { timeout: 20_000 });
   await k.page.getByTestId("coauthor-result").first().click();
   await expect(k.page.getByTestId("coauthor-sub")).toContainText("pro partenaire · invité");
-  await expect(k.page.getByText("est un pro partenaire : la mention « Collaboration commerciale » s'applique")).toBeVisible();
+  await expect(
+    k.page.getByText("est un pro partenaire : la mention « Collaboration commerciale » s'applique"),
+  ).toBeVisible();
   await shot(k.page, "pub-pro");
   await k.page.getByTestId("fil-publish-send").click();
   await expect(k.page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });

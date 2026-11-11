@@ -61,10 +61,10 @@ export function PostMenu({
     }
     const res = await apiFetch(`/feed-posts/${target.id}/coauthor`, { method: "DELETE" });
     if (!res.ok) return setError(res.error.message);
-    notifyPostChanged(target.id);
     setDone(message);
     timer.current = setTimeout(() => {
       setDone(null);
+      notifyPostChanged(target.id);
       onClose();
     }, DONE_MS);
   }

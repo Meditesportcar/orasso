@@ -169,7 +169,9 @@ test("un refus laisse la publication chez son auteur, qui le lit sur sa publicat
   await ctx.close();
 });
 
-test("un pro partenaire : la phrase de la mention, puis « Collaboration commerciale » sur la publication", async ({ page }) => {
+test("un pro partenaire : la phrase de la mention, puis « Collaboration commerciale » sur la publication", async ({
+  page,
+}) => {
   test.setTimeout(300_000);
   await openAs(page, "kenji@orasso.local");
   await addPhoto(page, "car-gtr.jpg");
