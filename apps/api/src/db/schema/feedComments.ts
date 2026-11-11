@@ -43,6 +43,8 @@ export const feedPostComments = pgTable(
     mediaId: uuid("media_id").references(() => mediaProfiles.id, { onDelete: "cascade" }),
     /** Le commentaire de premier niveau dont c'est une réponse ; nul au premier niveau (un seul niveau, vérifié par le service). */
     parentId: uuid("parent_id").references((): AnyPgColumn => feedPostComments.id, { onDelete: "cascade" }),
+    /** Le commentaire directement visé par une réponse (un commentaire de premier niveau ou une autre réponse) ; sert au regroupement des notifications. */
+    replyToId: uuid("reply_to_id").references((): AnyPgColumn => feedPostComments.id, { onDelete: "set null" }),
     text: text("text").notNull(),
     reactionsCount: integer("reactions_count").notNull().default(0),
     repliesCount: integer("replies_count").notNull().default(0),
@@ -57,6 +59,7 @@ export const feedPostComments = pgTable(
       .on(t.postId, t.createdAt, t.id)
       .where(sql`${t.parentId} is null and ${t.deletedAt} is null`),
     index("feed_post_comments_replies_idx").on(t.parentId, t.createdAt, t.id),
+    index("feed_post_comments_reply_to_idx").on(t.replyToId),
     uniqueIndex("feed_post_comments_client_key").on(t.authorId, t.clientId),
     index("feed_post_comments_deleted_by_idx").on(t.deletedBy),
     check("feed_post_comments_text_check", sql`char_length(${t.text}) between 1 and 300`),

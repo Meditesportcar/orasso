@@ -2,7 +2,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { quietHours, resetDb, useClock } from "../../../../test/helpers";
+import { call, quietHours, resetDb, useClock } from "../../../../test/helpers";
 import { db, pool } from "../../../db/client";
 import { notifications, profiles } from "../../../db/schema";
 import { notificationsService } from "../../notifications/service";
@@ -86,5 +86,56 @@ describe("ligne regroupée recomposée à la livraison", () => {
     clock.set(new Date("2026-06-16T08:30:00Z"));
     await notificationsService.deliverDue();
     expect(await lines(author.id, "feed_comment")).toHaveLength(0);
+  });
+});
+
+describe("regroupement par commentaire visé", () => {
+  it("une réponse adressée à quelqu'un d'autre ne maintient pas « a répondu à ton commentaire »", async () => {
+    const author = await person("Kenji_66");
+    const lea = await person("Lea_11");
+    const y = await person("Yann_66");
+    const z = await person("Zoe_66");
+    const id = await dbPost(author, { createdAt: new Date("2026-06-15T20:00:00Z") });
+    clock.set(new Date("2026-06-15T21:00:00Z"));
+    quietHours(true);
+    const top = await comment(lea, id, "Premier niveau");
+    const z1 = await comment(z, id, "Zoe répond à Lea", { parentId: top.json.id });
+    clock.advance(1000);
+    const yr = await comment(y, id, "Yann répond à Lea", { parentId: top.json.id });
+    clock.advance(1000);
+    await comment(z, id, "Zoe répond à Yann", { parentId: yr.json.id });
+    await call(z, "DELETE", `/feed-comments/${z1.json.id}`);
+    clock.set(new Date("2026-06-16T08:30:00Z"));
+    await notificationsService.deliverDue();
+    const [line] = await lines(lea.id, "feed_comment_reply");
+    expect(line?.title).toBe("Yann_66 a répondu à ton commentaire");
+    expect(JSON.stringify(line)).not.toContain("Zoe_66");
+    expect(line?.data).toMatchObject({ count: 1, commentId: yr.json.id });
+  });
+
+  it("plus de 20 réponses récentes illisibles : la réponse plus ancienne et lisible est trouvée", async () => {
+    const author = await person("Kenji_66");
+    const lea = await person("Lea_11");
+    const x = await person("Xavier_66");
+    const y = await person("Yann_66");
+    const id = await dbPost(author, { createdAt: new Date("2026-06-15T20:00:00Z") });
+    clock.set(new Date("2026-06-15T21:00:00Z"));
+    quietHours(true);
+    const top = await comment(lea, id, "Premier niveau");
+    const yr = await comment(y, id, "Une réponse lisible", { parentId: top.json.id });
+    for (let i = 0; i < 25; i++) {
+      clock.advance(1000);
+      await comment(x, id, `Réponse de X ${i}`, { parentId: top.json.id });
+    }
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date("2026-07-15T00:00:00Z") })
+      .where(eq(profiles.userId, x.id));
+    clock.set(new Date("2026-06-16T08:30:00Z"));
+    await notificationsService.deliverDue();
+    const [line] = await lines(lea.id, "feed_comment_reply");
+    expect(line?.title).toBe("Yann_66 a répondu à ton commentaire");
+    expect(line?.data).toMatchObject({ commentId: yr.json.id, count: 1 });
+    expect(JSON.stringify(line)).not.toContain("Xavier_66");
   });
 });

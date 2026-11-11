@@ -1,5 +1,5 @@
 {
-  "id": "2daf98a8-5f6f-4950-b174-1ed70412a328",
+  "id": "1d70228f-0573-4869-9a70-4777a5266f41",
   "prevId": "18f3ffd9-5343-4193-a602-0d0da4de688d",
   "version": "7",
   "dialect": "postgresql",
@@ -7411,6 +7411,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reply_to_id": {
+          "name": "reply_to_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "text": {
           "name": "text",
           "type": "text",
@@ -7510,6 +7516,21 @@
             },
             {
               "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feed_post_comments_reply_to_idx": {
+          "name": "feed_post_comments_reply_to_idx",
+          "columns": [
+            {
+              "expression": "reply_to_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7647,6 +7668,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "feed_post_comments_reply_to_id_feed_post_comments_id_fk": {
+          "name": "feed_post_comments_reply_to_id_feed_post_comments_id_fk",
+          "tableFrom": "feed_post_comments",
+          "tableTo": "feed_post_comments",
+          "columnsFrom": [
+            "reply_to_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "feed_post_comments_deleted_by_user_id_fk": {

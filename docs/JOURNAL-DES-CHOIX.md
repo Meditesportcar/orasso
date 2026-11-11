@@ -4977,3 +4977,7 @@ Date : 11/11/2026. API seule (les écrans sont le lot R8k2). Lot sensible : vie 
 
 ### Tour 4 (R8k1, 11/11/2026)
 - **Garde de livraison** : une ligne regroupée (`feed_comment`, `feed_comment_reply`) est recomposée entièrement (titre, extrait, acteurs, compte, `commentId`) à partir des commentaires encore lisibles du destinataire, parmi ses acteurs d origine ; supprimée s il n en reste aucun. Plus aucun nom ni texte d un commentaire devenu illisible (auteur suspendu, passé privé) ne part.
+
+### Tour 5 (R8k1, 11/11/2026)
+- **Migration 0078 régénérée** avec `feed_post_comments.reply_to_id` (le commentaire directement visé par une réponse, `set null`), pour que la garde de livraison ne retienne que les réponses qui visent le commentaire du groupe (regroupement par `replied.id`). Les anciennes lignes (aucune en base : lot non fusionné) auraient `reply_to_id` nul.
+- **Recherche de remplacement** : le plus récent commentaire de **chaque acteur** (`DISTINCT ON`), lisibilité testée ensuite : plus aucune limite ne cache un commentaire lisible plus ancien.

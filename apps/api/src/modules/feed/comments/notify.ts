@@ -212,24 +212,24 @@ export async function guardCommentNotification(n: typeof notifications.$inferSel
   const c = feedPostComments;
   let scope: SQL | undefined;
   if (n.type === "feed_comment" && typeof data.postId === "string") scope = eq(c.postId, data.postId);
-  if (n.type === "feed_comment_reply" && typeof data.parentId === "string") {
-    const [target] = await db.select({ parentId: c.parentId }).from(c).where(eq(c.id, data.parentId));
-    scope = eq(c.parentId, target?.parentId ?? data.parentId);
-  }
+  // Une réponse regroupe par commentaire **directement visé** : seules les réponses qui le visent comptent.
+  if (n.type === "feed_comment_reply" && typeof data.parentId === "string") scope = eq(c.replyToId, data.parentId);
   const actorIds = Array.isArray(data._actorIds)
     ? data._actorIds.filter((x): x is string => typeof x === "string")
     : [];
   if (!scope || !actorIds.length) return stillReadable(db, n.userId, data.commentId);
-  const candidates = await db
-    .select({ id: c.id, authorId: c.authorId, text: c.text })
+  // Le plus récent de chaque acteur (un par personne : la lisibilité tient à l'auteur, aucune limite ne cache un lisible).
+  const newestPerActor = await db
+    .selectDistinctOn([c.authorId], { id: c.id, authorId: c.authorId, text: c.text, createdAt: c.createdAt })
     .from(c)
     .where(and(scope, isNull(c.deletedAt), inArray(c.authorId, actorIds), ne(c.authorId, n.userId)))
-    .orderBy(desc(c.createdAt), desc(c.id))
-    .limit(60);
+    .orderBy(c.authorId, desc(c.createdAt), desc(c.id));
+  const candidates = newestPerActor.sort(
+    (x, y) => y.createdAt.getTime() - x.createdAt.getTime() || (y.id < x.id ? -1 : 1),
+  );
   // Le plus récent lisible de chaque personne, la plus récente d'abord.
   const readable: { id: string; authorId: string; text: string }[] = [];
   for (const cand of candidates) {
-    if (readable.some((r) => r.authorId === cand.authorId)) continue;
     if (await stillReadable(db, n.userId, cand.id)) readable.push(cand);
   }
   const newest = readable[0];

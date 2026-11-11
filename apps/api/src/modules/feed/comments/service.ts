@@ -209,6 +209,7 @@ export const feedCommentsService = {
             authorId: userId,
             persona: "fan",
             parentId,
+            replyToId: target?.id ?? null,
             text: input.text,
             clientId: input.clientId,
             createdAt: at,

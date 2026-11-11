@@ -25,6 +25,7 @@ CREATE TABLE "feed_post_comments" (
 	"provider_id" uuid,
 	"media_id" uuid,
 	"parent_id" uuid,
+	"reply_to_id" uuid,
 	"text" text NOT NULL,
 	"reactions_count" integer DEFAULT 0 NOT NULL,
 	"replies_count" integer DEFAULT 0 NOT NULL,
@@ -53,10 +54,12 @@ ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_pro_id_pro_p
 ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_provider_id_provider_profiles_id_fk" FOREIGN KEY ("provider_id") REFERENCES "public"."provider_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_media_id_media_profiles_id_fk" FOREIGN KEY ("media_id") REFERENCES "public"."media_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_parent_id_feed_post_comments_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."feed_post_comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_reply_to_id_feed_post_comments_id_fk" FOREIGN KEY ("reply_to_id") REFERENCES "public"."feed_post_comments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "feed_post_comments" ADD CONSTRAINT "feed_post_comments_deleted_by_user_id_fk" FOREIGN KEY ("deleted_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "feed_comment_mentions_user_idx" ON "feed_comment_mentions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "feed_post_comment_reactions_user_idx" ON "feed_post_comment_reactions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "feed_post_comments_top_idx" ON "feed_post_comments" USING btree ("post_id","created_at","id") WHERE "feed_post_comments"."parent_id" is null and "feed_post_comments"."deleted_at" is null;--> statement-breakpoint
 CREATE INDEX "feed_post_comments_replies_idx" ON "feed_post_comments" USING btree ("parent_id","created_at","id");--> statement-breakpoint
+CREATE INDEX "feed_post_comments_reply_to_idx" ON "feed_post_comments" USING btree ("reply_to_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "feed_post_comments_client_key" ON "feed_post_comments" USING btree ("author_id","client_id");--> statement-breakpoint
 CREATE INDEX "feed_post_comments_deleted_by_idx" ON "feed_post_comments" USING btree ("deleted_by");

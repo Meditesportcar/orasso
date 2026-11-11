@@ -84,6 +84,7 @@ export async function seedFeedComments() {
         postId: recent.id,
         authorId: await userOf("Damien_66"),
         parentId: first,
+        replyToId: first,
         text: reply,
         clientId: randomUUID(),
         reactionsCount: 1,
