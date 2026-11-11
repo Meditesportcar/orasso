@@ -882,7 +882,7 @@ function SaysBlock({ says }: { says: ReturnType<typeof publishSays> }) {
           <small data-testid="fil-publish-says-phrase">{says.phrase ?? T.sayNow}</small>
         </span>
         {says.stamp ? (
-          <span className="fp-stamp">
+          <span className="fp-stamp" data-testid="fil-publish-stamp">
             <Icon name="stamp" size={14} /> {T.stamp}
           </span>
         ) : null}

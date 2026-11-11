@@ -1,6 +1,6 @@
 // Les blocs de l'écran « Publier » (lot R8p, maquette R8.4) : « Publier en tant que », « Rattacher à … », le visuel de
 // l'affiche, « Info importante », « Ce que verront les autres ». Aucune règle ici : tout vient de `rules/feedPublish.ts`.
-import { Chip, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type AttachableEventItem,
   attachDateLabel,
@@ -16,13 +16,63 @@ import {
 } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { Option } from "@/features/stories/publish/parts";
 import { mediaSource } from "@/lib/media";
 import { Avatar } from "@/ui/Avatar";
 import { CheckBox } from "@/ui/Kit";
 import { Muted } from "@/ui/Muted";
 
 const { space1, space2, space3 } = tokens.spacing;
+
+/** Une ligne de choix exclusif (radio) : icône, titre, sous-titre ; annonce « coché » aux lecteurs d'écran. */
+function Option({
+  icon,
+  title,
+  hint,
+  selected,
+  disabled,
+  onPress,
+  testID,
+}: {
+  icon: IconName;
+  title: string;
+  hint: string;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, disabled }}
+      aria-checked={selected}
+      accessibilityLabel={`${title}. ${hint}`}
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        styles.option,
+        {
+          backgroundColor: c.surface,
+          borderColor: selected ? c.accent : c.line,
+          opacity: disabled && !selected ? 0.6 : 1,
+        },
+      ]}
+      testID={testID}
+    >
+      <Icon name={icon} size={22} color={selected ? c.accentText : c.ink} />
+      <View style={styles.flex}>
+        <Text variant="bodyStrong" color={c.ink}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted}>
+          {hint}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
 
 export function Label({ children }: { children: string }) {
   const { t } = useTheme();
@@ -192,6 +242,7 @@ export function ImportantBox({
         accessibilityRole="checkbox"
         accessibilityLabel={`${T.important} : ${sub}`}
         accessibilityState={{ checked: on, disabled: disabled || blocked !== null }}
+        aria-checked={on}
         disabled={disabled || blocked !== null}
         onPress={() => onToggle(!on)}
         style={[
@@ -250,7 +301,7 @@ export function Says({ says }: { says: PublishSays }) {
           </Text>
         </View>
         {says.stamp ? (
-          <View style={[styles.stamp, { backgroundColor: c.accent }]}>
+          <View style={[styles.stamp, { backgroundColor: c.accent }]} testID="fil-publish-stamp">
             <Icon name="stamp" size={14} color={c.accentInk} />
             <Text variant="label" color={c.accentInk}>
               {T.stamp}
@@ -264,6 +315,15 @@ export function Says({ says }: { says: PublishSays }) {
 }
 
 const styles = StyleSheet.create({
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    minHeight: 48,
+    padding: space3,
+    borderRadius: tokens.radius.radiusMd,
+    borderWidth: 2,
+  },
   block: { gap: space2 },
   list: { gap: space2 },
   flex: { flex: 1, flexShrink: 1 },
