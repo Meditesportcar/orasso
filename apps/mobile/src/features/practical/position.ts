@@ -4,9 +4,9 @@
 // chaque attente (`positionStore`) : une réponse qui arrive après une déconnexion ou un autre compte est jetée.
 // Ce qui diffère de la météo : l'API ne connaît que la case de 0,1° ; les distances (« 0,8 km ») se calculent ici, avec la position
 // EXACTE, qui reste dans la mémoire de l'écran et ne part jamais (la case seule fausserait la distance de plusieurs kilomètres).
-// Position partagée avec le bloc « Ma météo » pendant la séance, dans un seul sens : une position donnée à la météo est reprise ici
-// sans nouvelle fenêtre (permission déjà accordée). Un geste dans « Pratique » lit l'appareil une seule fois et envoie un seul POST
-// (la météo n'est pas relancée : elle garde sa position ou sa ville).
+// Position partagée avec le bloc « Ma météo » pendant la séance, dans les deux sens : une position donnée à la météo est reprise ici
+// sans nouvelle fenêtre (permission déjà accordée) ; un geste dans « Pratique » lit l'appareil une seule fois, envoie un seul POST,
+// puis donne à la météo la case déjà arrondie (`giveMyPositionCell`, avec le ticket pris au geste), sans seconde lecture.
 import {
   coarsePosition,
   createFollowTracker,
