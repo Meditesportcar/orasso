@@ -1,6 +1,13 @@
 // Le Fil (lot R7e1) : lecture des publications (liste blanche des champs de `FeedPostView`), retrait. Toute lecture
 // repasse par `canSeeFeedPost` : une publication qu'on ne peut pas voir est omise, quel que soit l'appelant.
-import { canSeeFeedPost, type FeedPerson, type FeedPostView } from "@orasso/shared";
+import {
+  authorKeyOf,
+  canSeeFeedPost,
+  type FeedAuthorView,
+  type FeedCommentPreview,
+  type FeedPerson,
+  type FeedPostView,
+} from "@orasso/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { feedPostPhotos, feedPostReactions, feedPosts, profiles, userFollows, vehicles } from "../../db/schema";
@@ -20,6 +27,36 @@ export const personOf = (p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "of
   // Donnée administrée (seed, puis l'administration), jamais déduite du pseudo.
   official: p.official,
 });
+
+/** La personne comme auteur d'une publication (vague R8) : sa clé `u:`, son pseudo comme nom. */
+export const personAuthorView = (
+  userId: string,
+  p: Pick<Profile, "pseudo" | "avatarKey" | "grade" | "official">,
+): FeedAuthorView => ({
+  key: authorKeyOf("user", userId),
+  kind: "user",
+  name: p.pseudo,
+  avatarUrl: storage.url(p.avatarKey),
+  verified: false,
+  pseudo: p.pseudo,
+  grade: p.grade,
+  official: p.official,
+});
+
+/**
+ * Les deux derniers commentaires de chaque publication (R8k1 s'y branche sans toucher ce fichier). Le chargeur reçoit
+ * toutes les publications visibles d'un coup (jamais une requête par publication) et le regard de la personne.
+ */
+export type LastCommentsLoader = (
+  ex: Executor,
+  postIds: string[],
+  viewerId: string,
+  at: Date,
+) => Promise<Map<string, FeedCommentPreview[]>>;
+let lastCommentsLoader: LastCommentsLoader = async () => new Map();
+export function registerLastComments(loader: LastCommentsLoader): void {
+  lastCommentsLoader = loader;
+}
 
 /** Dossier des photos du Fil : clés privées, servies seulement par `GET /feed-posts/:id/photos/:nom` (jamais `/api/files`). */
 export const FEED_PHOTO_FOLDER = "private/feed/";
@@ -98,6 +135,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     ex,
     visible.map((r) => r.post.commercialPartnerId),
   );
+  const lastComments = await lastCommentsLoader(ex, postIds, viewerId, at);
   const byId = new Map(visible.map((r) => [r.post.id, r]));
   return ids.flatMap((id): FeedPostView[] => {
     const r = byId.get(id);
@@ -107,7 +145,7 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
     return [
       {
         id: r.post.id,
-        author: personOf(r.author),
+        author: personAuthorView(r.post.authorId, r.author),
         caption: r.post.caption,
         aspect: r.post.aspect,
         photos: photos
@@ -120,6 +158,15 @@ export async function loadPostViews(ex: Executor, ids: string[], viewerId: strin
         createdAt: r.post.createdAt.toISOString(),
         mine: r.post.authorId === viewerId,
         commercialPartner: r.post.commercialPartnerId ? (commercialBy.get(r.post.commercialPartnerId) ?? null) : null,
+        coAuthor: null,
+        attach: null,
+        placeLabel: null,
+        visual: "photos",
+        important: null,
+        pinned: false,
+        commentsCount: r.post.commentsCount,
+        commentsOff: r.post.commentsOff,
+        lastComments: lastComments.get(r.post.id) ?? [],
       },
     ];
   });

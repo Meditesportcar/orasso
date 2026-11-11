@@ -126,6 +126,12 @@ export const errorCodes = [
   "commercial_locked",
   "commercial_conflict",
   "commercial_video",
+  // Lot R8a1 : publier au nom d'une casquette, rattachement, « Info importante ».
+  "persona_forbidden",
+  "event_not_attachable",
+  "important_requires_event",
+  "important_quota",
+  "photo_required",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

@@ -249,8 +249,9 @@ describe("sources du Fil", () => {
     const text = JSON.stringify(res.json);
     // Ni la plaque, ni un identifiant de compte, ni l'annonce réservée aux participants.
     expect(text).not.toContain(car.plate as string);
-    expect(text).not.toContain(kenji.id);
-    expect(text).not.toContain(viewer.id);
+    // Vague R8 : l'identifiant d'une personne n'apparaît que dans la clé d'auteur `u:<compte>` (comme les stories).
+    expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(kenji.id);
+    expect(text.replaceAll(`u:${kenji.id}`, "")).not.toContain(viewer.id);
     expect(text).not.toContain("Réservée aux participants");
     expect(text).toContain("Ouverture des portes à 18 h");
     // chaque carte a une raison lisible
@@ -594,20 +595,32 @@ describe("publier", () => {
     expect(Object.keys(post).sort()).toEqual(
       [
         "aspect",
+        "attach",
         "author",
         "caption",
+        "coAuthor",
+        "commentsCount",
+        "commentsOff",
         "commercialPartner",
         "createdAt",
         "event",
         "id",
+        "important",
+        "lastComments",
         "mine",
         "photos",
+        "pinned",
+        "placeLabel",
         "reactedByMe",
         "reactionsCount",
         "vehicle",
+        "visual",
       ].sort(),
     );
-    expect(Object.keys(post.author).sort()).toEqual(["avatarUrl", "grade", "official", "pseudo"]);
+    // Vague R8 : `FeedAuthorView` ⊇ `FeedPerson` ; la clé d'une personne est `u:<compte>`, comme dans les stories.
+    expect(Object.keys(post.author).sort()).toEqual(
+      ["avatarUrl", "grade", "key", "kind", "name", "official", "pseudo", "verified"].sort(),
+    );
     expect(post.caption).toBe("Ma E36 au lever du soleil");
     expect(post.aspect).toBe("portrait_4_5");
     expect(post.mine).toBe(true);
@@ -762,7 +775,7 @@ describe("lire, retirer, flamme", () => {
     expect(Object.keys(mine.json).sort()).toEqual(Object.keys(other.json).sort());
     expect(mine.json.mine).toBe(true);
     expect(other.json.mine).toBe(false);
-    expect(JSON.stringify(other.json)).not.toContain(author.id);
+    expect(JSON.stringify(other.json).replaceAll(`u:${author.id}`, "")).not.toContain(author.id);
     expect((await call(fan, "GET", `/feed-posts/${randomUUID()}`)).status).toBe(404);
     expect((await call(fan, "GET", "/feed-posts/pas-un-uuid")).status).toBe(400);
   });
