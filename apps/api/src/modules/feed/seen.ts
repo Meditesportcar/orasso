@@ -5,7 +5,7 @@
 // ouverture ni partage avant `ref`, et — pour une publication — sans flamme de la personne avant `ref` (la flamme se lit
 // dans `feed_post_reactions` : ni ce module ni `publish.ts` n'écrivent deux fois). Ce qui arrive après `ref` ne change pas
 // la zone d'une carte pendant le parcours.
-import { FEED_SEEN_AT_MAX_AGE_MS, FEED_SEEN_TTL_MS, type FeedSeenAction, type FeedSeenBody } from "@orasso/shared";
+import { FEED_SEEN_TTL_MS, type FeedSeenAction, type FeedSeenBody } from "@orasso/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -72,23 +72,19 @@ async function trimUser(userId: string): Promise<number> {
 export const feedSeenService = {
   /**
    * `POST /me/fil/seen` : retient des cartes vues (`view`) ou ouvertes, partagées (`open`, `share`). Idempotent : la première
-   * heure vue et la première interaction gagnent (un renvoi ne déplace rien, le parcours en cours reste stable). `at` est
-   * ramenée entre maintenant − 24 h et maintenant. Jamais « Sponsorisé » (refusé par le schéma).
+   * vue et la première interaction gagnent (un renvoi ne déplace rien). Jamais « Sponsorisé » (refusé par le schéma).
+   * **Les heures sont celles de la réception**, pas l'heure de l'appareil : l'état d'un parcours est figé à son `ref`, et une
+   * synchronisation tardive (carte vue ou ouverte hors ligne, `at` d'avant `ref`) ne doit changer la zone d'aucune carte du
+   * parcours en cours (elle ferait passer une carte de B en A après la fin de A : carte jamais servie). `at` est validée par le
+   * schéma (et bornée à 24 h) mais ne sert pas à dater : elle reste dans le contrat pour l'écran.
    */
   async record(v: Viewer, input: FeedSeenBody): Promise<void> {
     rateLimit("feedSeen", v.user.id);
     const t = now();
-    const earliest = t.getTime() - FEED_SEEN_AT_MAX_AGE_MS;
-    const byId = new Map<string, { seenAt: number; interactedAt: number | null }>();
+    const byId = new Map<string, { interacted: boolean }>();
     for (const c of input.cards) {
-      const raw = c.at ? Date.parse(c.at) : t.getTime();
-      const at = Math.min(t.getTime(), Math.max(earliest, Number.isNaN(raw) ? t.getTime() : raw));
-      const interacted = (c.action as FeedSeenAction) !== "view";
-      const old = byId.get(c.id);
-      byId.set(c.id, {
-        seenAt: Math.min(old?.seenAt ?? at, at),
-        interactedAt: interacted ? Math.min(old?.interactedAt ?? at, at) : (old?.interactedAt ?? null),
-      });
+      const interacted = (c.action as FeedSeenAction) !== "view" || byId.get(c.id)?.interacted === true;
+      byId.set(c.id, { interacted });
     }
     await db
       .insert(feedSeen)
@@ -96,8 +92,8 @@ export const feedSeenService = {
         [...byId].map(([cardId, r]) => ({
           userId: v.user.id,
           cardId,
-          seenAt: new Date(r.seenAt),
-          interactedAt: r.interactedAt === null ? null : new Date(r.interactedAt),
+          seenAt: t,
+          interactedAt: r.interacted ? t : null,
         })),
       )
       .onConflictDoUpdate({

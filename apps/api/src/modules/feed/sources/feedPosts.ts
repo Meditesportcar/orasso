@@ -50,6 +50,16 @@ export function feedPostScopeSql(args: {
   const out: SQL[] = [
     sql`((${fan} and ${fanVisible}) or (${feedPosts.persona} <> 'fan' and profiles.banned_at is null))`,
   ];
+  // L'état de la page, **avant le LIMIT** : une publication de page suspendue ou supprimée (ou sans visuel possible) ne devient jamais
+  // la borne de lecture (`tail`), dont l'identifiant et la date partent dans le curseur. `loadPostViews` revérifie ensuite.
+  out.push(sql`(
+    (${fan} or (
+      (${feedPosts.persona} = 'organizer' and exists (select 1 from structures st where st.id = ${feedPosts.structureId}
+        and st.deleted_at is null and st.verification <> 'suspended'))
+      or (${feedPosts.persona} = 'pro' and exists (select 1 from pro_profiles pp where pp.id = ${feedPosts.proId} and pp.deleted_at is null))
+      or (${feedPosts.persona} = 'provider' and exists (select 1 from provider_profiles pv where pv.id = ${feedPosts.providerId} and pv.deleted_at is null))
+      or (${feedPosts.persona} = 'media' and exists (select 1 from media_profiles mp where mp.id = ${feedPosts.mediaId} and mp.deleted_at is null))))
+    and (exists (select 1 from feed_post_photos ph where ph.post_id = ${feedPosts.id}) or ${feedPosts.eventId} is not null))`);
   if (filter === "following") {
     out.push(sql`(
       (${fan} and (${feedPosts.authorId} = ${userId}
@@ -143,6 +153,7 @@ export const source: FeedSource<"feed_post"> = {
         publicOnly: input.filter === "nearby",
       }),
       sql`${feedPosts.createdAt} <= ${tsParam(input.ref)}`,
+      ...(input.excludeMine ? [sql`${feedPosts.authorId} <> ${input.userId}`] : []),
       ...atBounds(atExpr, sql`${feedPosts.id}`, "feed_post", input),
     ];
     const raw = await db

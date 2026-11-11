@@ -88,6 +88,19 @@ export function contextFingerprint(ctx: FeedViewerContext): string {
   return createHash("sha1").update(json).digest().subarray(0, 6).toString("hex");
 }
 
+/**
+ * Empreinte (6 octets) des flammes qui comptent dans le classement des cartes en lice : une flamme retirée (ou d'un compte devenu
+ * hors règle) après la première page change les scores, donc la frontière enregistrée dans le curseur ne tient plus (une carte
+ * déjà servie pourrait l'être deux fois). Le parcours repart alors de la première page (`reset`).
+ */
+function flamesDigest(cards: readonly { id: string; flames7d?: number }[]): string {
+  const lines = cards
+    .filter((c) => (c.flames7d ?? 0) > 0)
+    .map((c) => `${c.id}=${c.flames7d}`)
+    .sort();
+  return createHash("sha1").update(lines.join("|")).digest().subarray(0, 6).toString("hex");
+}
+
 /** Mes sorties à venir ou en cours (R8c1) : événement publié pas fini, où j'ai une candidature véhicule retenue ou un billet. */
 async function myOutingsOf(userId: string, at: Date): Promise<Map<string, Date>> {
   const res = await db.execute<{ id: string; starts_at: Date }>(
@@ -350,6 +363,11 @@ export const feedService = {
           .filter(keep)
           .map((c) => ({ ...c, score: scoreCard(c as FeedCandidate, ctx, ref) }))
           .sort(compareByScore);
+        const sc = flamesDigest(ranked);
+        if (phase1 && phase1.sc !== sc) {
+          // Des flammes ont changé depuis la première page : les scores ne sont plus ceux du parcours.
+          return { ...(await feedService.feed(v, { filter: q.filter })), reset: true as const };
+        }
         // Les cartes après la frontière (la dernière consommée), puis celles qui ont été vues sans être servies.
         const rest = phase1
           ? ranked.filter((c) => c.score < phase1.score || (c.score === phase1.score && c.id < phase1.frontier))
@@ -368,6 +386,7 @@ export const feedService = {
           next = {
             ...head("A"),
             phase: 1,
+            sc,
             score: edge.score,
             frontier: edge.id,
             kinds: [...(phase1?.kinds ?? []), ...shown.map((c) => c.kind)].slice(-2),
@@ -438,27 +457,34 @@ export const feedService = {
     const sinceMs = Math.min(t.getTime(), Math.max(t.getTime() - FEED_FRESH_MAX_AGE_MS, Date.parse(q.since)));
     const ctx = await viewerContext(v, t);
     const nearby = nearbyDepartments(ctx.departments);
-    const lists = await loadAll({
-      viewer: v,
-      userId: v.user.id,
-      ref: t,
-      since: new Date(sinceMs),
-      until: t,
-      limit: 3 * FEED_FRESH_CAP,
-      filter: q.filter,
-      ctx,
-      nearby,
-      zone: "A",
-    });
-    const cards = merge(lists).filter(
-      (c) =>
-        allowed(c, q.filter, ctx, nearby, v.user.id) &&
-        c.at.getTime() > sinceMs &&
-        c.authorId !== v.user.id &&
-        !c.mine &&
-        c.kind !== "event_recommended" &&
-        !ctx.lessKinds.has(c.kind),
-    );
+    // Les exclusions (mes publications) sont posées dans le SQL des publications, avant le LIMIT ; pour les autres genres, on relit
+    // plus large (×4, trois fois au plus) tant que moins de 20 cartes admissibles sont trouvées et qu'une source a encore des lignes.
+    let cards: LoadedCard[] = [];
+    for (let limit = 3 * FEED_FRESH_CAP, attempt = 0; attempt < 3; attempt++, limit *= 4) {
+      const lists = await loadAll({
+        viewer: v,
+        userId: v.user.id,
+        ref: t,
+        since: new Date(sinceMs),
+        until: t,
+        limit,
+        filter: q.filter,
+        ctx,
+        nearby,
+        zone: "A",
+        excludeMine: true,
+      });
+      cards = merge(lists).filter(
+        (c) =>
+          allowed(c, q.filter, ctx, nearby, v.user.id) &&
+          c.at.getTime() > sinceMs &&
+          c.authorId !== v.user.id &&
+          !c.mine &&
+          c.kind !== "event_recommended" &&
+          !ctx.lessKinds.has(c.kind),
+      );
+      if (cards.length >= FEED_FRESH_CAP || !lists.some((l) => l.more)) break;
+    }
     return { count: Math.min(cards.length, FEED_FRESH_CAP) };
   },
 

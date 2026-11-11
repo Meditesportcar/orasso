@@ -349,7 +349,8 @@ describe("pas vu / vu sans interaction", () => {
     // Pendant le défilement, les cartes de la page 2 sont vues (et même aimées).
     clock.advance(60_000);
     await view(me, all.slice(20));
-    await call(me, "PUT", `/feed-posts/${all[25]}/reaction`);
+    // Une flamme posée après `ref` (l'horloge de la base est en retard sur celle du test) ne compte ni dans la zone ni dans le score.
+    await flames(all[25] as string, [me], new Date(clock.now.getTime()));
     const second = await fil(me, `?cursor=${encodeURIComponent(first.next as string)}`);
     expect(second.items.length).toBe(10);
     expect(second.items.every((c) => !c.seen)).toBe(true);

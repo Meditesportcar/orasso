@@ -43,22 +43,28 @@ describe("POST /me/fil/seen", () => {
     expect(rows[0]?.interactedAt).toBeNull();
   });
 
-  it("`open` et `share` posent l'interaction ; un renvoi ne déplace ni l'heure vue ni l'interaction (le parcours en cours reste stable)", async () => {
+  it("`open` et `share` posent l'interaction ; un renvoi ne déplace ni la première vue ni la première interaction ; les heures sont celles de la réception", async () => {
     const me = await person("Lecteur_Idem");
     const id = `feed_post:${UUID}`;
-    const early = new Date(clock.now.getTime() - 5 * HOUR);
-    const late = new Date(clock.now.getTime() - 1 * HOUR);
-    await seen(me, [{ id, action: "view", at: late.toISOString() }]);
-    await seen(me, [{ id, action: "view", at: early.toISOString() }]);
-    let [row] = await rowsOf(me.id);
-    expect(row?.seenAt.getTime()).toBe(early.getTime());
-    expect(row?.interactedAt).toBeNull();
-    await seen(me, [{ id, action: "share", at: late.toISOString() }]);
-    await seen(me, [{ id, action: "open", at: early.toISOString() }]);
+    const t0 = clock.now.getTime();
+    // L'heure de l'appareil (`at`) n'est pas ce qui date : une synchronisation tardive ne change pas le passé du parcours.
+    const early = new Date(t0 - 5 * HOUR).toISOString();
+    await seen(me, [{ id, action: "view", at: early }]);
+    clock.advance(60_000);
     await seen(me, [{ id, action: "view" }]);
+    let [row] = await rowsOf(me.id);
+    expect(row?.seenAt.getTime()).toBe(t0);
+    expect(row?.interactedAt).toBeNull();
+    clock.advance(60_000);
+    await seen(me, [{ id, action: "share", at: early }]);
+    clock.advance(60_000);
+    await seen(me, [
+      { id, action: "open" },
+      { id, action: "view" },
+    ]);
     row = (await rowsOf(me.id))[0];
-    expect(row?.seenAt.getTime()).toBe(early.getTime());
-    expect(row?.interactedAt?.getTime()).toBe(early.getTime());
+    expect(row?.seenAt.getTime()).toBe(t0);
+    expect(row?.interactedAt?.getTime()).toBe(t0 + 120_000);
     // Un lot qui répète la même carte : une seule ligne, l'interaction la plus forte gagne.
     const other = `event_recommended:${UUID}`;
     expect(
@@ -74,17 +80,15 @@ describe("POST /me/fil/seen", () => {
     expect(o[0]?.interactedAt).not.toBeNull();
   });
 
-  it("`at` est ramenée entre maintenant − 24 h et maintenant", async () => {
+  it("`at` est validée (ISO) et acceptée loin dans le passé ou le futur sans erreur : la zone se joue sur l'heure de réception", async () => {
     const me = await person("Lecteur_Bornes");
-    await seen(me, [
+    const res = await seen(me, [
       { id: `feed_post:${UUID}`, action: "view", at: new Date(clock.now.getTime() - 40 * HOUR).toISOString() },
       { id: `lineup:${UUID}`, action: "view", at: new Date(clock.now.getTime() + 5 * HOUR).toISOString() },
-      { id: `vote_result:${UUID}`, action: "view", at: new Date(clock.now.getTime() - 3 * HOUR).toISOString() },
     ]);
-    const by = Object.fromEntries((await rowsOf(me.id)).map((r) => [r.cardId.split(":")[0], r.seenAt.getTime()]));
-    expect(by.feed_post).toBe(clock.now.getTime() - 24 * HOUR);
-    expect(by.lineup).toBe(clock.now.getTime());
-    expect(by.vote_result).toBe(clock.now.getTime() - 3 * HOUR);
+    expect(res.status).toBe(204);
+    const rows = await rowsOf(me.id);
+    expect(rows.every((r) => r.seenAt.getTime() === clock.now.getTime())).toBe(true);
   });
 
   it("refuse : « sponsored », un genre inconnu, un identifiant mal formé, une action inconnue, 0 ou 51 cartes", async () => {

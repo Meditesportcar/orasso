@@ -1,0 +1,14 @@
+05:36 suite de l'API lancée (/c/Users/Dams/.claude/relais/orasso/outils/verrous-suite-api/place-2)
+
+ RUN  v5.0.4 C:/Users/Dams/Orasso/.claude/worktrees/lot-r8c1/apps/api
+
+
+ Test Files  124 passed (124)
+      Tests  2235 passed (2235)
+   Start at  05:36:44
+   Duration  1881.06s (tests 88%, import 9%, setup 2%, transform 1%)
+
+    Isolate  124 workers spawned · ~197ms startup each (spawn + environment, per file)
+             at least ~12.03s faster with isolate: false — reuses workers across files instead of one per file
+
+FIN 0

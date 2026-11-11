@@ -15,7 +15,7 @@
 // et le Fil repart de la première page avec `reset: true`.
 //
 // Une clé de carte est `genre:uuid` ; elle tient sur 17 octets (1 de genre, 16 d'uuid). Plus grand curseur produit :
-// 21 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) = 759 octets = 1012 caractères.
+// 21 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) (+ 6 d'empreinte des flammes) = 765 octets = 1020 caractères.
 import { FEED_POOL, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 
 import { validation } from "../../lib/errors";
@@ -52,6 +52,8 @@ export type Cursor = {
       kinds: FeedCardKind[];
       /** Cartes consommées (au-dessus de la frontière) mais non servies : elles passent en premier à la page suivante. */
       deferred: string[];
+      /** Empreinte (6 octets) des flammes qui comptent dans le classement, prise à chaque page : si elle change (flamme retirée), le parcours repart (`reset`). */
+      sc: string;
     }
   | { phase: 2; anchor: Key | null }
 );
@@ -169,6 +171,7 @@ export function encodeCursor(c: Cursor): string {
   for (const k of c.x) w.key(k);
   if (c.phase === 1) {
     if (c.deferred.length > MAX_DEFERRED) throw new Error("Trop de cartes différées dans le curseur");
+    w.bytes(Buffer.from(c.sc, "hex"));
     w.f64(c.score);
     w.cardId(c.frontier);
     w.u8(c.kinds.length);
@@ -213,6 +216,7 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
     r.end();
     return { ...head, phase: 2, anchor };
   }
+  const sc = r.bytes(6).toString("hex");
   const score = r.f64();
   if (!Number.isFinite(score)) invalid();
   const frontier = r.cardId();
@@ -229,7 +233,7 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   const deferred: string[] = [];
   for (let i = 0; i < nd; i++) deferred.push(r.cardId());
   r.end();
-  return { ...head, phase: 1, score, frontier, kinds, deferred };
+  return { ...head, phase: 1, sc, score, frontier, kinds, deferred };
 }
 
 /**

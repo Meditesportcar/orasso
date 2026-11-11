@@ -38,6 +38,8 @@ export type SourceInput = {
    * vues sans interaction, à l'instant `ref`. La zone se joue **dans le SQL**, avant le LIMIT (`atBounds` / `seenSql`).
    */
   zone: Zone;
+  /** `GET /fil/fresh` : ne lit pas mes publications (exclues **avant** le LIMIT). */
+  excludeMine?: boolean;
 };
 
 export type Zone = "A" | "B";
