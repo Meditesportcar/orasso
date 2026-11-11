@@ -6,12 +6,21 @@
 // Idempotence : le compte est **réservé d'abord** (`profiles.event_news_digest_at`, y compris quand il n'y a rien à dire),
 // sous verrou de ligne (`for update skip locked`) : une tâche rejouée ou deux tâches simultanées n'envoient rien de plus.
 // Requêtes ensemblistes : par paquet de 500 comptes, une réservation, une lecture des publications, une insertion.
-import { BUSINESS_TIMEZONE, DAY, eventNotifyLabels, fromWallTime, shouldDeliver, wallTime } from "@orasso/shared";
+import {
+  BUSINESS_TIMEZONE,
+  DAY,
+  eventNotifyLabels,
+  fromWallTime,
+  isQuietHour,
+  shouldDeliver,
+  wallTime,
+} from "@orasso/shared";
 import { sql } from "drizzle-orm";
-
+import { db } from "../../db/client";
+import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { withTx } from "../../lib/tx";
-import { notificationsService } from "../notifications/service";
+import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 
 const BATCH = 500;
 /** Sans résumé précédent : les publications des dernières 24 h. */
@@ -21,6 +30,12 @@ const FINISHED_WINDOW_MS = 7 * DAY;
 /** Copie des statuts de `modules/events/place.ts` (non modifiable ici) : un test garde les deux d'accord. */
 const PLACE_STATUSES = sql`('pending', 'accepted', 'waitlisted', 'offered', 'awaiting_member')`;
 const DIGEST_TYPE = "event_news_digest" as const;
+/** Une ligne de profil verrouillée par ailleurs est sautée par `skip locked` : on la reprend (au plus 10 fois, 200 ms). */
+const LOCK_RETRIES = 10;
+const LOCK_WAIT_MS = 200;
+const ELIGIBLE = (at: Date, dayStart: Date) => sql`p.deleted_at is null and p.banned_at is null
+  and (p.suspended_until is null or p.suspended_until <= ${at.toISOString()}::timestamptz)
+  and (p.event_news_digest_at is null or p.event_news_digest_at < ${dayStart.toISOString()}::timestamptz)`;
 
 /** Minuit (Paris) du jour de `at` : début de la journée réservée. */
 export function parisDayStart(at: Date): Date {
@@ -42,18 +57,19 @@ export const eventNewsDigest = {
    * traités (réservés) et de notifications créées. `batch` : taille du paquet (500 ; réduite seulement par les tests).
    */
   async run(at: Date = now(), batch = BATCH): Promise<{ accounts: number; sent: number }> {
+    // Un résumé qui tomberait dans les heures calmes n'est pas reporté à 8 h : il est abandonné (le suivant le remplace).
+    if (env.NOTIFY_QUIET_HOURS && isQuietHour(at)) return { accounts: 0, sent: 0 };
     const dayStart = parisDayStart(at);
     let accounts = 0;
     let sent = 0;
+    let waits = 0;
     for (;;) {
       const done = await withTx(async (tx, after) => {
         const reserved = await tx.execute<Reserved>(sql`
           with picked as (
             select p.user_id, p.event_news_digest_at as since, p.notification_prefs, p.muted_types
             from profiles p
-            where p.deleted_at is null and p.banned_at is null
-              and (p.suspended_until is null or p.suspended_until <= ${at.toISOString()}::timestamptz)
-              and (p.event_news_digest_at is null or p.event_news_digest_at < ${dayStart.toISOString()}::timestamptz)
+            where ${ELIGIBLE(at, dayStart)}
             order by p.user_id
             limit ${batch}
             for update skip locked
@@ -80,7 +96,7 @@ export const eventNewsDigest = {
               select a.user_id, a.event_id from applications a join u on u.user_id = a.user_id
                 where a.status in ${PLACE_STATUSES}
               union
-              select t.user_id, t.event_id from tickets t join u on u.user_id = t.user_id where t.status = 'valid'
+              select t.user_id, t.event_id from tickets t join u on u.user_id = t.user_id where t.status in ('valid', 'used')
             )
             select h.user_id, e.id as event_id, e.title, e.slug, count(fp.id)::int as n
             from holders h
@@ -103,6 +119,7 @@ export const eventNewsDigest = {
             userId,
             title: eventNotifyLabels.digestTitle(count),
             body: eventNotifyLabels.digestBody(events.map((e) => e.title)),
+            data: { eventIds: events.map((e) => e.event_id) },
             link: only
               ? { label: "Voir l'événement", path: `/e/${only.slug}` }
               : { label: "Ouvrir Orasso", path: "/app" },
@@ -114,8 +131,21 @@ export const eventNewsDigest = {
       });
       accounts += done.reserved;
       sent += done.sent;
-      if (done.reserved < batch) break;
+      if (done.reserved > 0) continue;
+      // Plus rien à prendre : reste-t-il des comptes sautés parce qu'une autre transaction tient leur ligne ?
+      const left = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from profiles p where ${ELIGIBLE(at, dayStart)}`,
+      );
+      if (!(left.rows[0]?.n ?? 0)) break;
+      if (++waits > LOCK_RETRIES) {
+        // Pg-boss reprend la tâche (idempotente) : les comptes déjà servis ne le sont pas deux fois.
+        throw new Error(`Résumé des nouveautés : ${left.rows[0]?.n} compte(s) verrouillé(s) non servis`);
+      }
+      await new Promise((r) => setTimeout(r, LOCK_WAIT_MS));
     }
     return { accounts, sent };
   },
 };
+
+/** Un résumé livré en retard (panne, reprise) qui tombe dans les heures calmes est abandonné, jamais reporté à 8 h. */
+registerDeliveryGuard([DIGEST_TYPE], async () => !(env.NOTIFY_QUIET_HOURS && isQuietHour(now())));

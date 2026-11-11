@@ -6,6 +6,7 @@ import {
   deliversNotification,
   emailAlwaysTypes,
   essentialNeedsPlace,
+  essentialQuietOverride,
   journalOnlyNotificationTypes,
   journalWindowStart,
   type NotificationType,
@@ -19,7 +20,7 @@ import {
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { type NotificationData, notifications, profiles, user } from "../../db/schema";
+import { eventNotificationPrefs, type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -121,7 +122,12 @@ export const notificationsService = {
     const due =
       immediate || input.silent || !env.NOTIFY_QUIET_HOURS
         ? at
-        : deliverAfter(at, input.eventStartsAt ?? null, undefined, input.urgent ?? r7QuietOverride(type));
+        : deliverAfter(
+            at,
+            input.eventStartsAt ?? null,
+            undefined,
+            input.urgent ?? r7QuietOverride(type) ?? essentialQuietOverride(type),
+          );
     const grouped = input.groupKey && !input.silent ? input.groupKey : null;
     // Le verrou du regroupement ne vaut que dans une transaction : appelée sur la base, `notify` ouvre la sienne.
     if (grouped && ex === db) {
@@ -256,7 +262,12 @@ export const notificationsService = {
       deliverAfter:
         immediate || !env.NOTIFY_QUIET_HOURS
           ? at
-          : deliverAfter(at, input.eventStartsAt ?? null, undefined, input.urgent ?? r7QuietOverride(type)),
+          : deliverAfter(
+              at,
+              input.eventStartsAt ?? null,
+              undefined,
+              input.urgent ?? r7QuietOverride(type) ?? essentialQuietOverride(type),
+            ),
     };
     const unique = [...new Set(userIds)];
     for (let i = 0; i < unique.length; i += 1000) {
@@ -271,7 +282,13 @@ export const notificationsService = {
   async notifyEach(
     ex: Executor,
     type: NotificationType,
-    items: readonly { userId: string; title: string; body: string; link?: { label: string; path: string } }[],
+    items: readonly {
+      userId: string;
+      title: string;
+      body: string;
+      link?: { label: string; path: string };
+      data?: Record<string, unknown>;
+    }[],
   ): Promise<void> {
     if (!items.length) return;
     const at = now();
@@ -284,7 +301,7 @@ export const notificationsService = {
           family: notificationTypes[type],
           title: item.title,
           body: item.body,
-          data: item.link ? { link: item.link.path, linkLabel: item.link.label } : {},
+          data: { ...item.data, ...(item.link ? { link: item.link.path, linkLabel: item.link.label } : {}) },
           inJournal: true,
           eventId: null,
           groupKey: null,
@@ -439,10 +456,30 @@ async function wantsNotification(n: NotificationRow, profile: typeof profiles.$i
   const prefs = profile?.notificationPrefs;
   const mutedTypes = profile?.mutedTypes;
   const base = { prefs, mutedTypes, type: n.type, hasEventId: Boolean(n.eventId) };
+  // Le résumé préparé ne part pas si la personne a coupé « Nouveautés de mes sorties » depuis (ou toutes ses sorties).
+  if (n.type === "event_news_digest" && !(await digestStillWanted(n, prefs))) return false;
   if (shouldDeliver(prefs, mutedTypes, n.type)) return true;
   const needsPlace = essentialNeedsPlace(n.type, Boolean(n.eventId));
   const placed = needsPlace && n.eventId ? await hasPlace(db, n.eventId, n.userId) : false;
   return deliversNotification({ ...base, hasPlace: placed });
+}
+
+async function digestStillWanted(n: NotificationRow, prefs: { eventNews?: boolean } | null | undefined) {
+  if (prefs?.eventNews === false) return false;
+  const ids = (n.data as { eventIds?: unknown }).eventIds;
+  if (!Array.isArray(ids) || !ids.length) return true;
+  // Tous les événements du résumé coupés (réglage par événement) depuis sa préparation : rien à annoncer.
+  const rows = await db
+    .select({ eventId: eventNotificationPrefs.eventId })
+    .from(eventNotificationPrefs)
+    .where(
+      and(
+        eq(eventNotificationPrefs.userId, n.userId),
+        eq(eventNotificationPrefs.news, false),
+        inArray(eventNotificationPrefs.eventId, ids as string[]),
+      ),
+    );
+  return rows.length < ids.length;
 }
 
 async function deliverOne(n: NotificationRow) {

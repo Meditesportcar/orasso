@@ -6,6 +6,7 @@
 import { z } from "zod";
 
 import { type NotificationType, notificationTypes } from "../enums";
+import type { QuietOverride } from "../notifications/r7";
 import { applicationDecisionTypes, essentialNotificationTypes } from "./essentialTypes";
 import { shouldDeliver } from "./notifications";
 
@@ -21,7 +22,18 @@ export function notificationLevel(type: string): NotificationLevel {
   return type === newsDigestType ? "news" : "other";
 }
 
-const isDecision = (type: string) => (applicationDecisionTypes as readonly string[]).includes(type);
+/**
+ * Types livrés sans condition de place : les décisions sur la candidature, et l'annulation (les places et billets sont
+ * annulés avant la livraison : le destinataire a été choisi par l'émetteur, quand il avait encore une place).
+ */
+const placeFreeTypes: readonly string[] = [...applicationDecisionTypes, "event_cancelled"];
+const isDecision = (type: string) => placeFreeTypes.includes(type);
+
+/** Un changement important ou une annulation passe outre les heures calmes quand l'événement commence dans moins de 12 h. */
+export const ESSENTIAL_URGENT_WITHIN_MS = 12 * 3_600_000;
+export function essentialQuietOverride(type: string): QuietOverride | undefined {
+  return type === "event_cancelled" || type === "event_updated" ? { within: ESSENTIAL_URGENT_WITHIN_MS } : undefined;
+}
 
 /**
  * La livraison de cette notification dépend-elle d'une place à l'événement ? Oui pour un type Essentiel rattaché à un
