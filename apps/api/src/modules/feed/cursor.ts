@@ -7,16 +7,22 @@
 // - les bornes de coupure des sources qui dépassent le plafond (`x`), calculées à la première page ;
 // - la phase 1 : la clé de la dernière carte consommée du classement (`score`, `frontier`), les deux derniers genres
 //   affichés (`kinds`) et les cartes vues mais non servies (`deferred`, 20 au plus) ;
-// - la phase 2 : la dernière clé servie (`anchor`).
+// - la phase 2 : la dernière clé servie (`anchor`) ;
+// - la zone (R8c1) : `A` les cartes pas encore vues, `B` les cartes vues sans interaction (rangées après, par date). La zone B
+//   n'a que la phase 2 (parcours par date).
+//
+// Version 3 (R8c1) : un curseur de la version 2 (APK en ligne en plein parcours) n'est jamais une erreur : `isPreviousCursor`,
+// et le Fil repart de la première page avec `reset: true`.
 //
 // Une clé de carte est `genre:uuid` ; elle tient sur 17 octets (1 de genre, 16 d'uuid). Plus grand curseur produit :
-// 20 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) = 758 octets = 1011 caractères.
+// 21 octets d'en-tête + 1 + 16 × 23 (sources) + 8 + 17 + 1 + 2 + 1 + 20 × 17 (phase 1) = 759 octets = 1012 caractères.
 import { FEED_POOL, type FeedCardKind, feedCardKinds } from "@orasso/shared";
 
 import { validation } from "../../lib/errors";
 import type { Key } from "./sources/types";
 
-const VERSION = 2;
+const VERSION = 3;
+const PREVIOUS_VERSION = 2;
 export const MAX_SOURCES = 16;
 export const MAX_DEFERRED = FEED_POOL / 2;
 /** Cartes servies au plus dans un parcours : au-delà, le curseur est forgé (400). */
@@ -30,6 +36,8 @@ export type Cursor = {
   fp: string;
   /** Genres « Moins de ce genre » figés à la première page. */
   less: ReadonlySet<FeedCardKind>;
+  /** Zone du parcours : `A` les cartes pas encore vues, `B` les cartes vues sans interaction. */
+  zone: "A" | "B";
   /** Cartes déjà servies avant la page (positions du Sponsorisé). */
   offset: number;
   /** Bornes de coupure des sources qui dépassent le plafond : la dernière ligne lue de chacune, à la première page. */
@@ -151,6 +159,7 @@ export function encodeCursor(c: Cursor): string {
   const w = new Writer();
   w.u8(VERSION);
   w.u8(c.phase);
+  w.u8(c.zone === "B" ? 1 : 0);
   w.u48(c.ref.getTime());
   w.bytes(Buffer.from(c.fp, "hex"));
   w.u16([...c.less].reduce((mask, k) => mask | (1 << kindIndex(k)), 0));
@@ -181,6 +190,11 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   if (r.u8() !== VERSION) invalid();
   const phase = r.u8();
   if (phase !== 1 && phase !== 2) invalid();
+  const zoneByte = r.u8();
+  if (zoneByte > 1) invalid();
+  // La zone B se parcourt par date seulement : une phase 1 dans la zone B est un curseur forgé.
+  if (zoneByte === 1 && phase === 1) invalid();
+  const zone = zoneByte === 1 ? "B" : "A";
   const ref = r.date();
   const fp = r.bytes(6).toString("hex");
   const mask = r.u16();
@@ -191,7 +205,7 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   if (nx > MAX_SOURCES) invalid();
   const x: Key[] = [];
   for (let i = 0; i < nx; i++) x.push(r.key());
-  const head = { ref, fp, less, offset, x };
+  const head = { ref, fp, zone, less, offset, x } as const;
   if (phase === 2) {
     const flag = r.u8();
     if (flag > 1) invalid();
@@ -216,6 +230,15 @@ export function decodeCursor(raw: string | undefined): Cursor | null {
   for (let i = 0; i < nd; i++) deferred.push(r.cardId());
   r.end();
   return { ...head, phase: 1, score, frontier, kinds, deferred };
+}
+
+/**
+ * Le curseur est-il bien formé mais d'une version antérieure (2) ? C'est l'APK en ligne, en plein parcours : jamais un 400,
+ * le Fil repart de la première page (`reset`).
+ */
+export function isPreviousCursor(raw: string | undefined): boolean {
+  if (!raw || !/^[A-Za-z0-9_-]+$/.test(raw)) return false;
+  return Buffer.from(raw, "base64url")[0] === PREVIOUS_VERSION;
 }
 
 /** Identifiant de la carte-clé d'un curseur (frontière en phase 1, dernière clé servie en phase 2) : pour les tests. */

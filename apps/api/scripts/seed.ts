@@ -27,6 +27,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
 import { seedFeed } from "./seed/feed";
+import { seedFeedSeen } from "./seed/feed-seen";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -186,6 +187,8 @@ async function main() {
   await seedMemories();
   // Lot R7m1 : « Ses partenaires » d'un pro, « Partenaires » d'un profil, une proposition dans les Demandes de Damien_66.
   await seedPartnerships();
+  // Lot R8c1 : cartes vues de Damien_66, rail « Ça plaît en ce moment », publication du journal de sa sortie.
+  await seedFeedSeen();
 }
 
 try {

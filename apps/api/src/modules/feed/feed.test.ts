@@ -406,7 +406,7 @@ describe("vie privée : comptes privés, suspendus, photos", () => {
 });
 
 describe("filtres, diversité, « moins de ce genre »", () => {
-  it("« Mes abonnements » : seulement ce que la personne suit, jamais ses propres publications", async () => {
+  it("« Mes abonnements » : ce que la personne suit et ses propres publications (R8c1), pas les autres", async () => {
     const viewer = await person("Viewer_Suivis");
     const followed = await person("Suivi_A");
     const stranger = await person("Etranger_B");
@@ -418,14 +418,13 @@ describe("filtres, diversité, « moins de ce genre »", () => {
     const b = await dbPost(stranger);
     await createEvent(structure.id, { department: "66" });
     const res = await fil(viewer, "?filter=following");
-    expect(postIdsOf(res.items)).toEqual([a]);
+    expect([...postIdsOf(res.items)].sort()).toEqual([a, mine].sort());
     expect(postIdsOf(res.items)).not.toContain(b);
-    expect(postIdsOf(res.items)).not.toContain(mine);
     // l'événement d'une structure non suivie n'y est pas
     expect(kinds(res.items).has("event_recommended")).toBe(false);
     await db.insert(structureFollows).values({ structureId: structure.id, userId: viewer.id, source: "manual" });
     expect(kinds((await fil(viewer, "?filter=following")).items).has("event_recommended")).toBe(true);
-    // « Pour toi » garde les siennes
+    // « Pour toi » les garde aussi
     expect(postIdsOf((await fil(viewer)).items)).toContain(mine);
   });
 
@@ -995,7 +994,7 @@ describe("compte supprimé, forme des cartes", () => {
     expect(Object.keys(payload("vehicle_public").owner ?? {}).sort()).toEqual(
       ["avatarUrl", "grade", "official", "pseudo"].sort(),
     );
-    for (const c of res.items) expect(Object.keys(c).sort()).toEqual(["at", "id", "kind", "payload", "reason"]);
+    for (const c of res.items) expect(Object.keys(c).sort()).toEqual(["at", "id", "kind", "payload", "reason", "seen"]);
   });
 });
 
@@ -1424,6 +1423,7 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       less: new Set(feedCardKinds),
       offset: 100_000,
       x: Array.from({ length: 16 }, (_, n) => key(n)),
+      zone: "A" as const,
       phase: 1 as const,
       score: Number.MAX_VALUE,
       frontier: id("event_recommended", 999),
@@ -1431,7 +1431,7 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       deferred: Array.from({ length: 20 }, (_, n) => id("event_recommended", 100 + n)),
     };
     const raw = encodeCursor(biggest);
-    expect(raw.length).toBe(1011);
+    expect(raw.length).toBe(1012);
     expect(raw.length).toBeLessThanOrEqual(FEED_CURSOR_MAX);
     expect(decodeCursor(raw)).toEqual(biggest);
     // l'API l'accepte (empreinte inconnue : un nouveau parcours, pas un refus)

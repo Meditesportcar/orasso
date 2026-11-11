@@ -31,7 +31,14 @@ export type SourceInput = {
   ctx: FeedViewerContext;
   /** Départements de la personne et leurs voisins (filtre « Autour de moi »). */
   nearby: string[];
+  /**
+   * Zone du parcours (R8c1) : `A` = les cartes pas encore vues (ou vues puis ouvertes, partagées, aimées), `B` = les cartes
+   * vues sans interaction, à l'instant `ref`. La zone se joue **dans le SQL**, avant le LIMIT (`atBounds` / `seenSql`).
+   */
+  zone: Zone;
 };
+
+export type Zone = "A" | "B";
 
 export type LoadedCard<K extends FeedCardKind = FeedCardKind> = FeedCandidate<K> & {
   payload: FeedPayloads[K];
@@ -104,13 +111,33 @@ export function atBounds(
   atExpr: SQL,
   idExpr: SQL,
   kind: FeedCardKind,
-  input: Pick<SourceInput, "since" | "until" | "before" | "floor">,
+  input: Pick<SourceInput, "since" | "until" | "before" | "floor" | "zone" | "userId" | "ref">,
 ): SQL[] {
-  const out = [sql`${atExpr} <= ${ts(input.until)}`, ...beforeKeys(atExpr, idExpr, kind, input.before)];
+  const seen = seenSql(kind, idExpr, input);
+  const out = [
+    sql`${atExpr} <= ${ts(input.until)}`,
+    input.zone === "B" ? seen : sql`not ${seen}`,
+    ...beforeKeys(atExpr, idExpr, kind, input.before),
+  ];
   // La borne figée est incluse : tout sauf « strictement après elle ».
   for (const c of input.floor ? beforeKeys(atExpr, idExpr, kind, [input.floor]) : []) out.push(sql`not (${c})`);
   if (input.since) out.push(sql`${atExpr} >= ${ts(input.since)}`);
   return out;
+}
+
+/**
+ * « Vue sans interaction à l'instant `ref` » (R8c1), en SQL : une ligne `feed_seen` de la personne vue avant `ref`, sans
+ * ouverture ni partage avant `ref`, et — pour une publication — sans flamme de sa part avant `ref`. Ce qui arrive après
+ * `ref` (une carte vue, aimée pendant qu'on fait défiler) ne change pas la zone d'une carte : le parcours reste stable.
+ */
+export function seenSql(kind: FeedCardKind, idExpr: SQL, input: Pick<SourceInput, "userId" | "ref">): SQL {
+  const at = ts(input.ref);
+  const seen = sql`exists (select 1 from feed_seen fs where fs.user_id = ${input.userId}
+    and fs.card_id = (${`${kind}:`}::text || ${idExpr}::text) and fs.seen_at <= ${at}
+    and (fs.interacted_at is null or fs.interacted_at > ${at}))`;
+  if (kind !== "feed_post") return seen;
+  return sql`(${seen} and not exists (select 1 from feed_post_reactions fr
+    where fr.post_id = ${idExpr} and fr.user_id = ${input.userId} and fr.created_at <= ${at}))`;
 }
 
 export const tsParam = ts;
