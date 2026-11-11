@@ -554,6 +554,13 @@
       "when": 1794359227082,
       "tag": "0078_event-notification-prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794384375269,
+      "tag": "0079_persona-follows",
+      "breakpoints": true
     }
   ]
 }
