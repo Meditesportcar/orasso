@@ -17,6 +17,7 @@ import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
 import { badgeService } from "../after-event/badge";
+import { authorCountsFor } from "../feed/lists";
 import { storiesSummaryFor } from "../stories/bar";
 import { storiesShare } from "../stories/share";
 import { structuresService } from "./service";
@@ -75,7 +76,12 @@ export const structuresRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     const view = await structuresService.getPublic(c.req.param("slug"), viewer);
     // Lot R7f1 : ses stories selon le regard (zéro sans session ou si rien n'est visible, sans rien révéler).
-    return c.json({ ...view, stories: await storiesSummaryFor(viewer, "structure", view.id) });
+    return c.json({
+      ...view,
+      stories: await storiesSummaryFor(viewer, "structure", view.id),
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (sans session : les publications de l'organisateur seulement).
+      ...(await authorCountsFor("structure", view.id, viewer)),
+    });
   })
   // Lot R7h : les stories qui identifient la structure ou un de ses événements (organisation et staff, lecture).
   .get("/structures/:id/story-mentions", async (c) => {

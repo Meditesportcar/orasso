@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { personCountsFor } from "../feed/lists";
 import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
 import { decorateOtherVehicle, decorateProfile } from "../partnerships/decorate";
@@ -39,7 +40,9 @@ export const socialRoutes = new Hono<AppEnv>()
   .get("/users/:pseudo", async (c) => {
     const v = await requireUser(c);
     // Lot R7m1 : « Partenaires » et « Proposer un partenariat » (pro vérifié qui regarde).
-    return c.json(await decorateProfile(v, await socialProfile.view(v, c.req.param("pseudo"))));
+    const view = await decorateProfile(v, await socialProfile.view(v, c.req.param("pseudo")));
+    // Vague R8 (lot R8a2) : `publications`, nul quand la liste est restreinte (compte privé non suivi).
+    return c.json({ ...view, ...(await personCountsFor(c.req.param("pseudo"), v)) });
   })
   // Fiche d'un véhicule d'un autre : complète (compte public ou abonné accepté) ou réduite (compte privé, lot R4b :
   // `privateVehicleFields`). Jamais la plaque.
