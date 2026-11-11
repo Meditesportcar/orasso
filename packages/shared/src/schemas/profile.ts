@@ -62,6 +62,8 @@ export const profileUpdateSchema = z
       event: z.boolean(),
       social: z.boolean(),
       grade: z.boolean(),
+      // Lot R8n1 : facultative (le corps à quatre clés de l'APK en ligne reste valide).
+      eventNews: z.boolean().optional(),
     }),
     newsletterOptIn: z.boolean(),
     firstName: optionalText(60),
