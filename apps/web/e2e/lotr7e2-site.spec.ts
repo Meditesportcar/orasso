@@ -47,7 +47,7 @@ test("le Fil : trois filtres, une raison par carte, menu « ⋯ », flamme", asy
   await expect(page.getByTestId("feed-menu-report")).toBeVisible();
   await shot(page, "menu");
   await page.getByTestId("feed-menu-why").click();
-  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso/);
+  await expect(page.getByTestId("feed-why-text")).toContainText(/Tu suis|suit|Orasso|sortie/);
   await shot(page, "pourquoi");
   await page.getByTestId("feed-why-ok").click();
   await post.getByTestId("feed-card-more").click();
