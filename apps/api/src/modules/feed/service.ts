@@ -381,7 +381,7 @@ export const feedService = {
     if (runA2) {
       const need = FEED_PAGE - served.length;
       const sinceBoundary: Key = { at: boundary, id: "" };
-      const cutoffs = new Map(x.map((k) => [kindOfId(k.id), k]));
+      const cutoffs = new Map(firstX.map((k) => [kindOfId(k.id), k]));
       const before = (kind: FeedCardKind): Key[] => [
         ...(anchor ? [anchor] : []),
         ...(forYou ? [cutoffs.get(kind) ?? sinceBoundary] : []),
