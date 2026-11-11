@@ -42,7 +42,8 @@ export const eventNotifyLabels = {
   signupNote: "Flammes, commentaires, identifications : tes réglages « Social » (ils ne changent pas).",
   noted: "C'est noté",
   bellLabel: "Notifications de cet événement",
-  ficheNote: "Les mêmes réglages qu'à l'inscription : on les retrouve par la cloche de la fiche, tant qu'on est inscrit.",
+  ficheNote:
+    "Les mêmes réglages qu'à l'inscription : on les retrouve par la cloche de la fiche, tant qu'on est inscrit.",
   alwaysOn: "Toujours actif",
   essentialAria: "Essentiel, toujours actif",
   saveFailed:

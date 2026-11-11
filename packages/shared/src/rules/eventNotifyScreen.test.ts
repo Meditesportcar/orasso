@@ -1,10 +1,14 @@
 // Lot R8n2 : règles d'écran des notifications d'un événement (maquette R8.11). `now` toujours passé.
 import { describe, expect, it } from "vitest";
 
+import { initialEventDraft } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
 import {
   type NotifyFields,
   notifyChanged,
+  notifyFieldsOfDraft,
+  notifySavedCode,
+  notifySavedMessage,
   notifyStart,
   notifyTiming,
   notifyTimingLine,
@@ -109,5 +113,27 @@ describe("settingsEventRows : les deux lignes de la famille « Événements »",
     expect(rows.news.disabled).toBe(true);
     expect(rows.news.reason).toBe(eventNotifyLabels.newsFamilyOff);
     expect(rows.essential.locked).toBe(true);
+  });
+});
+
+describe("l'assistant de l'organisateur : champs lus et message de retour", () => {
+  const draft = initialEventDraft(new Date("2026-11-10T10:00:00+01:00"));
+  it("changer le titre ou la description ne prévient personne ; l'heure, si", () => {
+    const before = notifyFieldsOfDraft(draft);
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...draft, title: "Autre titre", description: "x" }))).toBe(
+      false,
+    );
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...draft, startsAt: "2026-12-01T18:00" }))).toBe(true);
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...draft, endsAt: "2026-12-01T23:00" }))).toBe(true);
+    expect(notifyChanged(before, notifyFieldsOfDraft({ ...draft, city: "Elne" }))).toBe(true);
+  });
+  it("le code de retour se relit en message (inscrits prévenus, 8 h, nombre inconnu, illisible)", () => {
+    expect(notifySavedMessage(notifySavedCode(148, "now"))).toBe("Enregistré : 148 inscrits prévenus");
+    expect(notifySavedMessage(notifySavedCode(1, "now"))).toBe("Enregistré : 1 inscrit prévenu");
+    expect(notifySavedMessage(notifySavedCode(148, "at_8"))).toBe("Enregistré : 148 inscrits seront prévenus à 8 h");
+    expect(notifySavedMessage(notifySavedCode(null, "now"))).toBe(eventNotifyLabels.savedNotifiedFallback);
+    expect(notifySavedMessage(notifySavedCode(null, "at_8"))).toBe(eventNotifyLabels.savedNotifiedFallbackAt8);
+    expect(notifySavedMessage("<script>")).toBeNull();
+    expect(notifySavedMessage(null)).toBeNull();
   });
 });

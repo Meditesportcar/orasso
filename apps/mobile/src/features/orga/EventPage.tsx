@@ -24,6 +24,7 @@ import {
   eventOutlookLabels,
   eventStatusLabels,
   invitationLabels,
+  notifySavedMessage,
   orgaLabels,
   orgaV2Labels,
   ticketingAppLabels,
@@ -61,7 +62,7 @@ export function EventPage({
   warning = null,
 }: {
   eventId: string;
-  /** Retour de l'assistant (lot 35b) : `cree`, `modifie` ou `publie` (lot 36). */
+  /** Retour de l'assistant (lot 35b) : `cree`, `modifie` ou `publie` (lot 36) ; `prevenus:<code>` (lot R8n2) : modifié, inscrits prévenus. */
   done?: string | null;
   /** Avertissement de l'assistant (affiche ou zone non enregistrée). */
   warning?: string | null;
@@ -84,9 +85,11 @@ export function EventPage({
       ? EL.created
       : done === "modifie"
         ? EL.saved
-        : done === "publie"
-          ? wizardEndLabels.publishedDone
-          : null,
+        : done?.startsWith("prevenus:")
+          ? (notifySavedMessage(done.slice("prevenus:".length)) ?? EL.saved)
+          : done === "publie"
+            ? wizardEndLabels.publishedDone
+            : null,
   );
   const [failure, setFailure] = useState<unknown>(null);
   const [typed, setTyped] = useState("");

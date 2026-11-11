@@ -29,6 +29,12 @@ import {
   eventEditorLabels as L,
   type NeedDraft,
   needsFromSaved,
+  notifyChanged,
+  notifyFieldsOfDraft,
+  notifySavedCode,
+  notifyStart,
+  notifyTiming,
+  notifyTimingLine,
   posterTexts,
   reconcileDraft,
   recurrenceRuleOf,
@@ -67,6 +73,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { RecipientsBanner } from "../../event/NotifyPrefsSheet";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { BackSquare, StepRail } from "./StepRail";
@@ -338,6 +345,16 @@ export function EventWizard({
 
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
+  // Lot R8n2 (R8.11) : sur un événement publié, un changement d'heure ou de lieu prévient tout seul ; la confirmation le
+  // dit avant « Enregistrer les modifications » (nombre lu par `notify-preview`, moment selon l'heure et le départ).
+  const savedFields = useMemo(() => (saved ? notifyFieldsOfDraft(initialEventDraft(now(), saved)) : null), [saved]);
+  const notifies =
+    savedFields !== null && saved?.status === "published" && last && notifyChanged(savedFields, notifyFieldsOfDraft(d));
+  const preview = useApi(() => api.notifyPreview(saved?.id ?? ""), [saved?.id, notifies], { enabled: notifies });
+  const previewCount = preview.data ? preview.data.recipients : null;
+  const notifyShown = notifies && (preview.data !== null || preview.error !== null) && previewCount !== 0;
+  const notifyClock = now();
+  const notifyWhen = notifyTiming({ now: notifyClock, startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
   const formatsOn = useEventFormats();
   const formats = useMemo<EventFormat[]>(
     () => (formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format]),
@@ -547,6 +564,8 @@ export function EventWizard({
       }
       // « Brouillon » : « Brouillon enregistré. » (le brouillon a déjà un identifiant depuis le temps 2).
       let fait = mode === "draft" ? "cree" : "modifie";
+      // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lue sur l'événement (EventPage) avec le même code.
+      if (mode === "save" && notifyShown) fait = `prevenus:${notifySavedCode(previewCount, notifyWhen)}`;
       const warnings: string[] = [];
       if (mode === "publish") {
         try {
@@ -722,6 +741,9 @@ export function EventWizard({
         </View>
       ) : null}
       <Screen {...ctx} />
+      {notifyShown ? (
+        <RecipientsBanner count={previewCount} timing={notifyTimingLine(notifyWhen, { now: notifyClock })} />
+      ) : null}
       {typeof error === "string" ? (
         <Notice tone="error" testID="wizard-error">
           {error}

@@ -1,5 +1,6 @@
 // Notifications d'un événement, écrans (vague R8, lot R8n2) : règles pures (`now` passé), partagées par l'appli et le site.
 // Les règles de livraison sont celles de R8n1 (`eventNotifications.ts`, `quietHours.ts`) : rien n'est recopié ici.
+import { draftStart, type EventDraft, fromWallInput, sortedDraftDays } from "../eventWizard";
 import { eventNotifyLabels } from "../labels/eventNotifications.fr";
 import { ESSENTIAL_URGENT_WITHIN_MS } from "./eventNotifications";
 import { isQuietHour, urgentWithin } from "./quietHours";
@@ -76,4 +77,34 @@ export function settingsEventRows(prefs: { event?: boolean; eventNews?: boolean 
       reason: familyOff ? eventNotifyLabels.newsFamilyOff : null,
     },
   };
+}
+
+/** Les champs de l'assistant qui préviennent les inscrits : début du premier jour, fin du dernier, adresse. */
+export function notifyFieldsOfDraft(d: EventDraft): NotifyFields {
+  const days = d.multiDay ? sortedDraftDays(d) : [];
+  const last = days[days.length - 1];
+  return {
+    startsAt: draftStart(d),
+    endsAt: last ? fromWallInput(`${last.date}T${last.endTime}`) : fromWallInput(d.endsAt),
+    addressLine: d.addressLine,
+    postalCode: d.postalCode,
+    city: d.city,
+    lat: d.lat,
+    lng: d.lng,
+  };
+}
+
+/** Code porté par l'adresse de retour de l'assistant (« 148.now », « 148.at_8 », « x.now » quand le nombre est inconnu). */
+export function notifySavedCode(count: number | null, timing: NotifyTiming): string {
+  return `${count ?? "x"}.${timing}`;
+}
+
+/** « Enregistré : 148 inscrits prévenus » (ou « … seront prévenus à 8 h »), lu depuis le code ; `null` si illisible. */
+export function notifySavedMessage(code: string | null | undefined): string | null {
+  const m = /^(\d{1,6}|x)\.(now|at_8)$/.exec(code ?? "");
+  if (!m) return null;
+  const count = m[1] === "x" ? null : Number(m[1]);
+  if (m[2] === "at_8")
+    return count === null ? eventNotifyLabels.savedNotifiedFallbackAt8 : eventNotifyLabels.savedNotifiedAt8(count);
+  return count === null ? eventNotifyLabels.savedNotifiedFallback : eventNotifyLabels.savedNotified(count);
 }
