@@ -22,9 +22,12 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   const fan = await fanCtx.newPage();
   await loginInBrowser(fan, `${pseudo.toLowerCase()}@e2e.orasso.test`, undefined, "/o/meditesportcar");
   await fan.goto("/o/meditesportcar");
+  // Lot R8g : « Devenir staff » est dans le menu « Plus » du haut de la page.
+  await fan.getByTestId("page-more").locator("summary").click();
   const become = fan.getByTestId("become-staff").getByRole("button", { name: "Devenir staff" });
   await expect(become).toBeVisible();
   await become.click();
+  await fan.getByTestId("page-more").locator("summary").click();
   await expect(fan.getByTestId("become-staff")).toContainText("Demande de staff envoyée");
   await fan.screenshot({ path: `${DIR}/01-devenir-staff-demande.png` });
 
