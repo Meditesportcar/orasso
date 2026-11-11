@@ -90,7 +90,7 @@ export function JournalSection({
   const showList = count !== 0 && (list.loading || list.items.length > 0 || Boolean(list.error));
   if (!showList && kind !== "invite" && !mentionsRow) return null;
 
-  const journal = manager && signedIn ? { onMenu: (post: FeedPostView) => setMenu(post) } : {};
+  const journal = !signedIn ? { readOnly: true } : manager ? { onMenu: (post: FeedPostView) => setMenu(post) } : {};
 
   return (
     <View style={styles.section} testID="event-journal">
@@ -114,10 +114,12 @@ export function JournalSection({
 
       {list.items.length > 0 ? (
         <View style={styles.list}>
-          <View style={styles.head}>
-            <ViewToggle value={mode} onChange={setMode} />
-          </View>
-          {mode === "one" ? (
+          {signedIn ? (
+            <View style={styles.head}>
+              <ViewToggle value={mode} onChange={setMode} />
+            </View>
+          ) : null}
+          {signedIn && mode === "one" ? (
             <PublicationsOneByOne posts={list.items} journal={journal} />
           ) : (
             <PublicationsGrid posts={list.items} journal={journal} />

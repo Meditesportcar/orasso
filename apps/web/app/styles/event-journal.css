@@ -1,0 +1,248 @@
+/* La fiche d'un événement : « Publications » (le journal), « Mentions · N » et son écran (lot R8d, maquette R8.5 `e-fiche`). Jetons
+   seulement. Préfixe `evj`. */
+
+.evj {
+  display: grid;
+  gap: var(--space-3);
+}
+.evj__intro {
+  margin: 0;
+  font-size: var(--type-caption-size, 0.8125rem);
+}
+.evj__list {
+  display: grid;
+  gap: var(--space-3);
+}
+.evj__head {
+  display: flex;
+  justify-content: flex-end;
+}
+.evj__invite {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: center;
+}
+.evj__invite p {
+  margin: 0;
+}
+
+/* Les étiquettes « Épinglée » (moutarde) et « Inscrits prévenus » (`.r8pin`, `.r8pin.ntf`). */
+.evj-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.evj-badges--floating {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  pointer-events: none;
+}
+.evj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.65625rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.evj-badge--pinned {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.evj-item {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Le « … » de l'organisateur sur une vignette (`.r8dots`) : 30 px visibles sur fond sombre, zone de toucher à 44 px. */
+.pub-tile {
+  position: relative;
+}
+.evj-dots {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgb(11 12 14 / 0.6);
+  color: #f3ebdd;
+  cursor: pointer;
+}
+.evj-dots::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+.evj-dots:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* La ligne « Mentions · N » (`.r8mrow`). */
+.evj__mentions {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.evj__mentions > :first-child {
+  color: var(--accent-text);
+}
+.evj__mentions strong,
+.evj__mentions small {
+  display: block;
+}
+.evj__mentions small {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+.evj__mentions:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* L'écran « Mentions · N » (`mentionsH`). */
+.evm {
+  display: grid;
+  gap: var(--space-4);
+}
+.evm__section {
+  display: grid;
+  gap: var(--space-3);
+}
+.evm__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.evm__head span {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+.evm__place {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.evm__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.evm__who > div {
+  flex: 1;
+  min-width: 0;
+}
+.evm__who small {
+  display: block;
+  color: var(--ink-muted);
+}
+.evm__shot {
+  display: block;
+  height: 120px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.evm__shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.evm__rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.evm__fan {
+  position: relative;
+  width: 118px;
+}
+.evm__fanshot {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.evm__fanshot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.evm__name {
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-1);
+  right: var(--space-1);
+  padding: 2px var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: rgb(11 12 14 / 0.6);
+  color: #f3ebdd;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evm__stamp {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.65625rem;
+  font-weight: 800;
+}
+.evm__fan .evj-dots {
+  top: 4px;
+  right: 4px;
+}
+.evm__dots {
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.evm__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

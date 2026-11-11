@@ -5,8 +5,8 @@ import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type FeedPostView, journalBadges, eventJournalLabels as L } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-/** Ce que la fiche donne à la liste : le menu « … » de l'organisateur (absent pour un passionné) et les étiquettes. */
-export type JournalOptions = { onMenu?: (post: FeedPostView) => void };
+/** Ce que la fiche donne à la liste : le menu « … » de l'organisateur (absent pour un passionné) et les étiquettes ; `readOnly` (sans session) : des vignettes qui ne mènent nulle part. */
+export type JournalOptions = { onMenu?: (post: FeedPostView) => void; readOnly?: boolean };
 
 const { space1 } = tokens.spacing;
 
