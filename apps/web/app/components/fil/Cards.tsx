@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 
 import { PersonAvatar } from "../People";
+import { FoldedCaption } from "../publications/FoldedCaption";
 import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
@@ -253,11 +254,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       actions={<PostActions post={post} />}
     >
       <FeedPhotos post={post} />
-      {post.caption ? (
-        <p className="o-t-body" data-testid="feed-post-caption">
-          {post.caption}
-        </p>
-      ) : null}
+      {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
       {post.vehicle || post.event ? (
         <div className="fil-pills">
           {post.vehicle ? (

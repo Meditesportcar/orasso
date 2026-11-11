@@ -33,6 +33,7 @@ import { passportApi } from "./passport";
 import { presenceApi } from "./presence";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
+import { publicationsApi } from "./publications";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { shareApi } from "./share";
@@ -110,4 +111,5 @@ export const api = {
   ...storiesApi,
   ...storiesPublishApi,
   ...storiesVideoApi,
+  ...publicationsApi,
 };
