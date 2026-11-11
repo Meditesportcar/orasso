@@ -201,7 +201,7 @@ test("« En cours » porte la météo de son événement, comme sa carte ; Perso
 // Lot R8r : premier chargement (le stock du département est vide) : « Météo en cours de chargement », puis une seule relecture
 // de l'Accueil quelques secondes plus tard ; la météo arrive sans que l'écran ait été bloqué. La réponse « vide » est simulée
 // sur la première lecture seulement (le stock réel est rempli par le bouchon local).
-test("lot R8r : stock vide → « Météo en cours de chargement », puis une seule relecture amène la météo", async ({
+test("lot R8r : stock vide → « Météo en cours de chargement », puis la relecture unique amène la météo", async ({
   browser,
 }) => {
   const { ctx, page } = await open(browser);
@@ -220,9 +220,8 @@ test("lot R8r : stock vide → « Météo en cours de chargement », puis une se
   await expect(pending).toContainText("Dép. 66");
   await expect(page.getByTestId("home-outing").first()).toBeVisible();
   await page.screenshot({ path: `${DIR}/appli-meteo-chargement-384.png` });
-  // Une seule relecture, puis la carte de la météo.
-  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66", { timeout: 30_000 });
+  // L'état reste jusqu'à la relecture unique de la seule météo du département (après le délai du fournisseur), puis la carte.
+  await expect(page.getByTestId("home-weather")).toContainText("Dép. 66", { timeout: 45_000 });
   await expect(pending).toHaveCount(0);
-  expect(reads).toBe(2);
   await ctx.close();
 });

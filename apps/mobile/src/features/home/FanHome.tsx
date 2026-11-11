@@ -25,9 +25,11 @@ import {
   homeProfileLabels,
   homeWidgetOffered,
   type MyApplication,
+  type MyWeather,
   normalizeHomeWidgets,
   pickNextOutings,
   visibleHomeWidgets,
+  WEATHER_PROVIDER_TIMEOUT_MS,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -67,8 +69,8 @@ const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
 /** Pendant un événement, l'Accueil relit ses chiffres (sur place, votes) à ce rythme, et au retour au premier plan. */
 const LIVE_REFRESH_MS = 180_000;
-/** Lot R8r : délai avant l'unique relecture de l'Accueil quand la météo du département se charge (premier chargement). */
-const WEATHER_RETRY_MS = 5000;
+/** Lot R8r : délai avant l'unique relecture de la météo du département au premier chargement : le délai maximal du fournisseur plus une marge d'enregistrement. */
+const WEATHER_RETRY_MS = WEATHER_PROVIDER_TIMEOUT_MS + 2000;
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
@@ -325,12 +327,14 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   // Météo : celle du département (« Chez toi, aujourd'hui »). Celle de l'événement est une ligne de sa carte (lot R8e1) ; une
   // copie gardée avant ce lot peut porter l'ancienne météo « jour J » : jamais affichée ici.
-  const weather = data?.weather?.kind === "place" ? data.weather : null;
+  const [lateWeather, setLateWeather] = useState<Extract<MyWeather, { kind: "place" }> | null>(null);
+  const [weatherRetryDone, setWeatherRetryDone] = useState(false);
+  const weather = data?.weather?.kind === "place" ? data.weather : lateWeather;
   const weatherPlace = department ? `Dép. ${department}` : null;
   // Lot R8r : premier chargement (stock vide, rafraîchissement en cours) : « Météo en cours de chargement », puis une seule
-  // relecture de l'Accueil quelques secondes plus tard, sans bloquer l'écran ; sans météo à ce moment-là, le bloc s'efface.
+  // relecture de la seule météo du département après le délai du fournisseur, sans bloquer l'écran ; l'état « en cours de
+  // chargement » reste jusqu'au résultat, puis le bloc s'efface s'il n'y a toujours pas de météo.
   const weatherPending = !weather && data?.weatherPending === true;
-  const [weatherRetried, setWeatherRetried] = useState(false);
 
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
@@ -342,13 +346,24 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const reloadHome = useRef(home.reload);
   reloadHome.current = home.reload;
   useEffect(() => {
-    if (!weatherPending || weatherRetried) return undefined;
+    if (!weatherPending || weatherRetryDone) return undefined;
+    let alive = true;
     const timer = setTimeout(() => {
-      setWeatherRetried(true);
-      void reloadHome.current();
+      api
+        .myPlaceWeather()
+        .then((w) => {
+          if (alive && w?.kind === "place") setLateWeather(w);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (alive) setWeatherRetryDone(true);
+        });
     }, WEATHER_RETRY_MS);
-    return () => clearTimeout(timer);
-  }, [weatherPending, weatherRetried]);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [weatherPending, weatherRetryDone]);
   const liveShown = liveNow !== null;
   useEffect(() => {
     setLiveOn(liveShown);
@@ -462,7 +477,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     ) : null,
     weather: weather ? (
       <WeatherCard weather={weather} place={weatherPlace} />
-    ) : weatherPending && !weatherRetried ? (
+    ) : weatherPending && !weatherRetryDone ? (
       <WeatherPendingCard place={weatherPlace} />
     ) : null,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,

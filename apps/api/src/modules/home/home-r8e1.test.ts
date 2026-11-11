@@ -279,6 +279,78 @@ describe("lot R8r : la journée d'un événement commencé sur plusieurs jours",
     const w = await dayAt("2026-11-12T09:00:00Z");
     expect(w).toMatchObject({ day: "2026-11-12", summary: { date: "2026-11-12", tempMax: 13 } });
   });
+  it("événement d'un seul jour : ses heures avant comme après son début (l'orage du soir n'entre pas dans la ligne)", async () => {
+    const { s, u, veh } = await world();
+    // 9 h - 13 h à Paris le 10/11 (8 h - 12 h UTC) : ciel dégagé ; la journée entière annonce des orages (le soir).
+    const e = await createEvent(s.id, {
+      lat: POS.lat,
+      lng: POS.lng,
+      startsAt: new Date("2026-11-10T08:00:00Z"),
+      endsAt: new Date("2026-11-10T12:00:00Z"),
+    });
+    await db.insert(eventWeather).values({
+      eventId: e.id,
+      provider: "open-meteo",
+      lat: POS.lat,
+      lng: POS.lng,
+      fetchedAt: NOW,
+      forecast: {
+        days: [
+          {
+            date: "2026-11-10",
+            tempMin: 5,
+            tempMax: 20,
+            precipitationProbability: 90,
+            precipitationMm: 8,
+            windMaxKmh: 60,
+            code: "thunderstorm" as const,
+          },
+        ],
+        hours: [8, 9, 10, 11].map((h) => ({
+          time: `2026-11-10T${String(h).padStart(2, "0")}:00Z`,
+          temp: 12,
+          precipitationProbability: 0,
+          precipitationMm: 0,
+          windKmh: 10,
+          code: "clear" as const,
+        })),
+      },
+    });
+    await apply(u, veh.id, e.id, "accepted");
+    for (const when of ["2026-11-10T06:00:00Z", "2026-11-10T08:30:00Z", "2026-11-10T10:00:00Z"]) {
+      useClock(new Date(when));
+      const w = (await home(u)).json.outingsWeather[e.id];
+      expect(w, when).toMatchObject({ day: "2026-11-10", summary: { code: "clear", tempMax: 12, windMaxKmh: 10 } });
+    }
+  });
+  it("prévision partielle ou ancienne (sans aujourd'hui) : pas de ligne, jamais la météo d'un autre jour", async () => {
+    const { u, e } = await fourDays();
+    await db
+      .update(eventWeather)
+      .set({
+        forecast: {
+          days: [
+            {
+              date: "2026-11-09",
+              tempMin: 5,
+              tempMax: 10,
+              precipitationProbability: 5,
+              precipitationMm: 0,
+              windMaxKmh: 20,
+              code: "clear" as const,
+            },
+          ],
+          hours: [],
+        },
+      })
+      .where(eq(eventWeather.eventId, e.id));
+    useClock(new Date("2026-11-10T09:00:00Z"));
+    expect((await home(u)).json.outingsWeather[e.id]).toBeUndefined();
+    // Le premier jour, la même prévision convient.
+    useClock(new Date("2026-11-09T09:00:00Z"));
+    expect((await home(u)).json.outingsWeather[e.id]).toMatchObject({ day: "2026-11-09" });
+  });
+
   it("la journée d'aujourd'hui est celle de Paris (23 h 30 à Paris, 22 h 30 UTC, reste ce jour-là)", async () => {
     const w = await dayAt("2026-11-10T22:30:00Z");
     expect(w).toMatchObject({ day: "2026-11-10", summary: { tempMax: 11 } });
@@ -436,6 +508,60 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
     await vi.waitFor(() => expect(calls).toHaveBeenCalled());
     await settle();
     expect((await home(u)).json.weatherPending).toBe(false);
+  });
+
+  it("lot R8r : écriture du stock en échec après une réponse du fournisseur → retenue de 10 minutes, pas de rappel à chaque Accueil", async () => {
+    const { u } = await world();
+    await moveTo(u, "48");
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    const realInsert = db.insert.bind(db) as (table: unknown) => unknown;
+    const insert = vi.spyOn(db, "insert").mockImplementation(((table: unknown) => {
+      if (table === weatherDepartments) throw new Error("écriture impossible");
+      return realInsert(table);
+    }) as never);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect((await home(u)).json.weather).toBeNull();
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(insert).toHaveBeenCalled();
+    insert.mockRestore();
+    // L'Accueil suivant ne rappelle pas le fournisseur (retenue), et ne dit plus « en cours de chargement ».
+    const again = (await home(u)).json;
+    await settle();
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(again.weatherPending).toBe(false);
+    warn.mockRestore();
+  });
+
+  it("lot R8r : stock récent sans la journée d'aujourd'hui → rafraîchissement réel (et weatherPending), puis la météo", async () => {
+    const { u } = await world();
+    await moveTo(u, "30");
+    await db.insert(weatherDepartments).values(departmentRow("2026-11-09", new Date(NOW.getTime() - HOUR), "30"));
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    const first = (await home(u)).json;
+    expect(first.weather).toBeNull();
+    expect(first.weatherPending).toBe(true);
+    await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+    await settle();
+    expect((await home(u)).json).toMatchObject({ weather: { kind: "place", department: "30" }, weatherPending: false });
+  });
+
+  it("lot R8r : GET /me/weather?place=1 = la météo du département seule (même avec une sortie retenue), jamais mise en cache", async () => {
+    const { s, u, veh } = await world();
+    await moveTo(u, "65");
+    const e = await stored(s.id, { startsAt: at(2) });
+    await apply(u, veh.id, e.id, "accepted");
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    expect((await call(u, "GET", "/me/weather")).json).toMatchObject({ kind: "event" });
+    const r = await app.request("/api/me/weather?place=1", { headers: { origin: ORIGIN, cookie: u.cookie } });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toContain("no-store");
+    expect(await r.json()).toMatchObject({ kind: "place", department: "65" });
+    const anon = await app.request("/api/me/weather?place=1", { headers: { origin: ORIGIN } });
+    expect(anon.status).toBe(401);
   });
 
   it("lot R8r : pas de département, ou météo désactivée → weatherPending faux", async () => {

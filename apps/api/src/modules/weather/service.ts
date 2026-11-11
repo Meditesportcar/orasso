@@ -4,11 +4,13 @@
 // Les routes et le rappel de la veille ne lisent que cette base : jamais d'appel au fournisseur par requête, jamais
 // bloquant (sans météo, tout fonctionne comme avant).
 import {
+  addDays,
   departmentCentroids,
   describeWeather,
   type EventWeather,
   eventDates,
   forecastForEvent,
+  fromWallTime,
   isBadWeather,
   type MyWeather,
   type OutingWeather,
@@ -257,7 +259,7 @@ export const weatherService = {
   /** Météo du jour J d'un événement donné (accueil du prestataire : l'événement de sa mission), `null` si elle n'est pas encore visible. */
   async dayJForEvent(eventId: string): Promise<MyWeather | null> {
     const e = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-    if (!e || e.status !== "published" || !weatherVisible(e, now())) return null;
+    if (e?.status !== "published" || !weatherVisible(e, now())) return null;
     const found = await this.stored(e);
     if (!found) return null;
     return {
@@ -321,15 +323,16 @@ export const weatherService = {
     const department = v.profile.departments[0];
     if (!department) return { weather: null, pending: false };
     const row = await db.query.weatherDepartments.findFirst({ where: eq(weatherDepartments.department, department) });
-    const refreshing = !row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS;
+    const weather = placeWeather(department, row);
+    // Lot R8r : un stock récent qui n'a pas la journée d'aujourd'hui (veille, minuit passé) est à renouveler comme un stock périmé.
+    const refreshing = !row || weather === null || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS;
     if (refreshing) {
-      void this.departmentWeather(department).catch((error) =>
+      void this.departmentWeather(department, { needToday: weather === null }).catch((error) =>
         console.warn("Météo du département non rafraîchie :", error instanceof Error ? error.message : error),
       );
     }
-    const weather = placeWeather(department, row);
     // Lot R8r : sans journée d'aujourd'hui en stock, l'Accueil dit « en cours de chargement » (champ `weatherPending`) tant
-    // qu'un rafraîchissement est possible : fournisseur actif, département connu, pas d'échec dans les 10 dernières minutes.
+    // qu'un rafraîchissement est réellement lancé : fournisseur actif, département connu, pas d'échec dans les 10 dernières minutes.
     const failedAt = departmentFailures.get(department);
     const pending =
       weather === null &&
@@ -361,11 +364,24 @@ export const weatherService = {
       const aggregate = forecastForEvent(row.forecast, e);
       if (!aggregate) continue;
       // Lot R8r : un événement commencé montre la journée d'aujourd'hui (Paris), pas celle du début ; pas encore commencé :
-      // son premier jour. Le résumé est celui de la journée quand la prévision la contient, sinon celui de l'événement.
+      // son premier jour. Commencé, le résumé porte sur la part d'aujourd'hui de l'événement (ses heures d'aujourd'hui quand on
+      // les a, sinon la journée) : un événement d'un seul jour garde exactement ses heures, nuit exclue.
       const started = e.startsAt.getTime() <= t.getTime();
       const w = wallTime(started ? t : e.startsAt, "Europe/Paris");
       const day = `${String(w.year).padStart(4, "0")}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
-      const summary = (started && row.forecast.days.find((d) => d.date === day)) || aggregate;
+      let summary: WeatherSummary | null = aggregate;
+      if (started) {
+        const dayStart = fromWallTime({ ...w, hour: 0, minute: 0 }, "Europe/Paris");
+        const dayEnd = fromWallTime({ ...addDays(w, 1), hour: 0, minute: 0 }, "Europe/Paris");
+        const today = {
+          startsAt: new Date(Math.max(e.startsAt.getTime(), dayStart.getTime())),
+          endsAt: new Date(Math.min(e.endsAt.getTime(), dayEnd.getTime() - 1)),
+          timezone: "Europe/Paris",
+        };
+        // Seulement les données d'aujourd'hui : sans elles (prévision partielle ou ancienne), pas de ligne plutôt qu'une autre journée.
+        summary = forecastForEvent(row.forecast, today);
+      }
+      if (!summary) continue;
       out[e.id] = {
         day,
         summary,
@@ -381,11 +397,13 @@ export const weatherService = {
    * Cache du centre d'un département (3 h). Au plus une requête au fournisseur par département et par passage
    * (requêtes simultanées regroupées) : aucune requête par utilisateur. Indisponible : l'ancien cache, sinon `null`.
    */
-  async departmentWeather(department: string) {
+  async departmentWeather(department: string, opts: { needToday?: boolean } = {}) {
     const cached = await db.query.weatherDepartments.findFirst({
       where: eq(weatherDepartments.department, department),
     });
-    if (cached && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
+    // `needToday` : un stock récent mais sans la journée d'aujourd'hui n'est pas servi tel quel (lot R8r).
+    const lacksToday = Boolean(opts.needToday && placeWeather(department, cached) === null);
+    if (cached && !lacksToday && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
     const centre = departmentCentroids[department];
     if (!centre) return cached ?? null;
     // Lot 30 : après un échec du fournisseur, on ne le réinterroge pas avant 10 minutes (l'Accueil appelle cette fonction
@@ -407,12 +425,21 @@ export const weatherService = {
           fetchedAt: now(),
           forecast: { days: result.forecast.daily, hours: [] } satisfies StoredForecast,
         };
-        const [saved] = await db
-          .insert(weatherDepartments)
-          .values(values)
-          .onConflictDoUpdate({ target: weatherDepartments.department, set: values })
-          .returning();
-        return saved ?? null;
+        try {
+          const [saved] = await db
+            .insert(weatherDepartments)
+            .values(values)
+            .onConflictDoUpdate({ target: weatherDepartments.department, set: values })
+            .returning();
+          // Réponse sans la journée d'aujourd'hui : même retenue de 10 minutes (pas de rappel à chaque Accueil).
+          if (placeWeather(department, saved) === null) departmentFailures.set(department, now().getTime());
+          return saved ?? null;
+        } catch (error) {
+          // Lot R8r : le fournisseur a répondu mais le stock n'a pas pu être écrit : même retenue de 10 minutes qu'après un échec du
+          // fournisseur (sinon chaque Accueil le rappellerait), et l'erreur remonte aux appelants comme avant.
+          departmentFailures.set(department, now().getTime());
+          throw error;
+        }
       })().finally(() => departmentFlights.delete(department));
       departmentFlights.set(department, flight);
     }

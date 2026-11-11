@@ -15,13 +15,15 @@ import {
   homeNudges,
   homeWidgetTitles,
   type MyApplication,
+  type MyWeather,
   type NearbyPlace,
   preferencesLabels,
   proActivityLabels,
+  WEATHER_PROVIDER_TIMEOUT_MS,
   weatherTexts,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useState } from "react";
-import { Form, useRevalidator } from "react-router";
+import { Form } from "react-router";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDayShort, formatTime } from "../lib/format";
@@ -125,23 +127,32 @@ export function NearbyBlock({
   );
 }
 
-/** Lot R8r : délai avant l'unique relecture de l'Accueil quand la météo du département se charge (premier chargement). */
-const WEATHER_RETRY_MS = 5000;
+/** Lot R8r : délai avant l'unique relecture de la météo du département au premier chargement : le délai maximal du fournisseur plus une marge d'enregistrement. */
+const WEATHER_RETRY_MS = WEATHER_PROVIDER_TIMEOUT_MS + 2000;
 
-export function WeatherBlock({ weather, pending = false }: { weather: HomeData["weather"]; pending?: boolean }) {
-  // Premier chargement : le stock du département est vide, son rafraîchissement est en cours. « Météo en cours de chargement »,
-  // puis une seule relecture de l'Accueil (sans bloquer la page) ; sans météo à ce moment-là, « indisponible ».
+export function WeatherBlock({ weather: first, pending = false }: { weather: HomeData["weather"]; pending?: boolean }) {
+  // Premier chargement : le stock du département est vide, son rafraîchissement est en cours. « Météo en cours de chargement »
+  // jusqu'à l'unique relecture de la seule météo du département (`/me/weather?place=1`, après le délai du fournisseur) : le
+  // reste de la page n'est jamais relu, donc une relecture en échec ne fait rien disparaître.
+  const [late, setLate] = useState<MyWeather | null>(null);
+  const [done, setDone] = useState(false);
+  const weather = first ?? late;
   const waiting = pending && !weather;
-  const [retried, setRetried] = useState(false);
-  const { revalidate } = useRevalidator();
   useEffect(() => {
-    if (!waiting || retried) return undefined;
+    if (!waiting || done) return undefined;
+    let alive = true;
     const timer = setTimeout(() => {
-      setRetried(true);
-      void revalidate();
+      void apiFetch<MyWeather | null>("/me/weather?place=1").then((res) => {
+        if (!alive) return;
+        if (res.ok && res.data?.kind === "place") setLate(res.data);
+        setDone(true);
+      });
     }, WEATHER_RETRY_MS);
-    return () => clearTimeout(timer);
-  }, [waiting, retried, revalidate]);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [waiting, done]);
   return (
     <Block id="weather" title={homeWidgetTitles.weather}>
       {weather ? (
@@ -158,7 +169,7 @@ export function WeatherBlock({ weather, pending = false }: { weather: HomeData["
           title={weather.kind === "event" ? weather.event.title : weatherTexts.todayTitle}
           compact
         />
-      ) : waiting && !retried ? (
+      ) : waiting && !done ? (
         <p className="hm-block__muted" data-testid="weather-pending">
           {weatherTexts.loading}
         </p>

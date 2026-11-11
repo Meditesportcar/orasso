@@ -226,13 +226,13 @@ export const homeService = {
     ]);
 
     // Prestataire : la météo du jour J de l'événement de sa mission (pas celle d'une autre candidature).
-    const weather =
-      profile === "provider" && !q.light && provider?.nextMission
-        ? await withinBudget(
-            weatherService.dayJForEvent(provider.nextMission.event.id).catch(() => null),
-            null,
-          )
-        : weatherStock.weather;
+    const missionWeather = profile === "provider" && !q.light ? (provider?.nextMission ?? null) : null;
+    const weather = missionWeather
+      ? await withinBudget(
+          weatherService.dayJForEvent(missionWeather.event.id).catch(() => null),
+          null,
+        )
+      : weatherStock.weather;
 
     return {
       profile,
@@ -245,7 +245,7 @@ export const homeService = {
       pendingStatuses: upcoming.filter((a) => ["pending", "waitlisted", "offered"].includes(a.status)),
       nearby,
       weather,
-      weatherPending: weather === null && weatherStock.pending,
+      weatherPending: !missionWeather && weather === null && weatherStock.pending,
       outingsWeather,
       favoriteGarage,
       wash,
