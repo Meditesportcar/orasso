@@ -540,6 +540,13 @@
       "when": 1794251303168,
       "tag": "0076_story-video",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794355612340,
+      "tag": "0077_publications",
+      "breakpoints": true
     }
   ]
 }

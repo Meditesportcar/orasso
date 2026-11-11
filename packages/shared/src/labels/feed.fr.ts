@@ -80,3 +80,39 @@ export const feedLabels = {
   pseudoReserved: "Ce pseudo est réservé : choisis-en un autre.",
   officialBio: "Le compte officiel d'Orasso : des photos pour bien démarrer.",
 } as const;
+
+/**
+ * Publier au nom d'une casquette, pour un événement (vague R8, lot R8a1). Les mots du rattachement viennent de la
+ * maquette R8.4 (`publierH`) : « pour le », « présent au », « sera au », « était au », suivis du titre de l'événement.
+ */
+export const feedAttachLabels = {
+  organizer: "pour le",
+  on_site: "présent au",
+  attendeeBefore: "sera au",
+  attendeeAfter: "était au",
+  presentStamp: "Présent",
+} as const;
+
+/** Motifs d'une « Info importante » (maquette R8.4 : Horaires, Accès, Sécurité, Météo, Autre). */
+export const importantReasonLabels = {
+  schedule: "Horaires",
+  access: "Accès",
+  safety: "Sécurité",
+  weather: "Météo",
+  other: "Autre",
+} as const;
+
+/** Messages des refus de la publication au nom d'une casquette (codes de `errorCodes`). */
+export const publicationErrors = {
+  persona_forbidden: "Tu ne peux pas publier au nom de cette page.",
+  event_not_attachable: "Tu ne peux pas rattacher ta publication à cet événement.",
+  important_requires_event: "Une info importante se publie en tant qu'organisateur, pour un événement de ta structure.",
+  important_quota: "Tu as atteint la limite d'infos importantes pour cet événement (une par jour, trois par semaine).",
+  photo_required:
+    "Ajoute une photo. Seule une publication rattachée à un événement qui a une affiche peut s'en passer.",
+  captionTooLong: "La légende est trop longue.",
+  choosePage: "Choisis la page au nom de laquelle tu publies.",
+  unexpectedPage: "Une publication personnelle n'a pas de page.",
+  fanOnly: "Cette option est réservée aux publications personnelles.",
+  importantReasonRequired: "Choisis le motif de l'info importante.",
+} as const;

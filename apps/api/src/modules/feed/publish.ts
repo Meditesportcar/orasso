@@ -9,12 +9,14 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   aspectMatches,
   FEED_ASPECT_RATIOS,
+  FEED_CAPTION_MAX,
   type FeedPostCreate,
   type FeedPostPatch,
   type FeedPostView,
   feedLabels,
   type PlateRect,
   partnershipLabels,
+  publicationErrors,
   type ReportReason,
 } from "@orasso/shared";
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
@@ -68,6 +70,14 @@ export const feedPostsService = {
   async create(v: Viewer, input: FeedPostCreate): Promise<FeedPostView> {
     rateLimit("feedPost", v.user.id);
     const userId = v.user.id;
+    // Légende : 500 caractères pour un passionné (2 000 pour une casquette, R8a1).
+    if (input.persona === "fan" && (input.caption?.length ?? 0) > FEED_CAPTION_MAX) {
+      throw validation(publicationErrors.captionTooLong, { field: "caption" });
+    }
+    // Une photo ou une carte partagée au moins (R8a1 : le visuel d'un événement rattaché se règle au commit suivant).
+    if (!input.photos.length && !input.linked) {
+      throw new AppError(400, "photo_required", publicationErrors.photo_required);
+    }
 
     // Rejeu d'un envoi dont la réponse s'est perdue : la même publication, rien de plus.
     if (input.clientId) {
