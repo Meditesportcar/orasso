@@ -80,7 +80,7 @@ export function MyWeatherBlock({ myWeather }: { myWeather: MyWeatherPlaces | nul
   const cards = weatherCards(myWeather.places, at);
   const open = (index: number) => router.push(`/meteo?card=${index}` as never);
   return (
-    <View style={styles.wrap} testID="home-my-weather">
+    <View style={styles.wrap} testID="home-weather">
       <SecH title={homeWidgetTitles.weather} />
       {cards.length === 0 ? (
         <SmButton kind="s" icon="place" wide onPress={() => open(0)} testID="my-weather-choose">
