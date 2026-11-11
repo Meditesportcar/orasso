@@ -20,6 +20,7 @@ export function SideIcon({
   disabled,
   tabIndex,
   onClick,
+  target,
 }: {
   icon: IconName;
   label: string;
@@ -29,10 +30,22 @@ export function SideIcon({
   disabled?: boolean;
   tabIndex?: number;
   onClick?: () => void;
+  /** Un lien qui sort d'Orasso (`_blank`) : ouvert dans un nouvel onglet, sans lien vers l'opener. */
+  target?: "_blank";
 }) {
   const body = <Icon name={icon} size={20} />;
   return href ? (
-    <a className="pt-side__btn" href={href} aria-label={label} title={label} data-testid={testId} tabIndex={tabIndex}>
+    <a
+      className="pt-side__btn"
+      href={href}
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      tabIndex={tabIndex}
+      target={target}
+      rel={target ? "noopener noreferrer" : undefined}
+      onClick={onClick}
+    >
       {body}
     </a>
   ) : (

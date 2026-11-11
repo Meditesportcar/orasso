@@ -4,7 +4,13 @@
 // moi, le bouton « Publier » compact ; la suite par curseur (« Voir plus ») ; les états : chargement (le O vivant), erreur avec
 // « Réessayer », vide chez moi, vide chez un autre, **compte privé** (liste restreinte : le même panneau qu'il ait publié ou non).
 import { Button, Icon, OLoader } from "@orasso/design-system/web";
-import { publicationsLabels as L, type PublicationsViewMode, publicationsEmptyKind, viewMode } from "@orasso/shared";
+import {
+  type AuthorPostsFilter,
+  publicationsLabels as L,
+  type PublicationsViewMode,
+  publicationsEmptyKind,
+  viewMode,
+} from "@orasso/shared";
 import { type ReactNode, useEffect, useState } from "react";
 import { useRouteLoaderData } from "react-router";
 
@@ -42,14 +48,7 @@ function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => v
   return [mode, choose];
 }
 
-export function PublicationsTab({
-  authorKey,
-  pseudo,
-  mine,
-  total,
-  restricted: restrictedHint = false,
-  privateAction,
-}: {
+type TabProps = {
   /** La clé d'auteur (`u:<compte>` pour une personne). */
   authorKey: string;
   /** Le pseudo (ou le nom de la page) : il entre dans les phrases des états vides et du compte privé. */
@@ -62,8 +61,38 @@ export function PublicationsTab({
   restricted?: boolean;
   /** Compte privé : le bouton « Demander à suivre » (ou « Demande envoyée à … »), posé par la page. */
   privateAction?: ReactNode;
-}) {
-  const list = usePublications(authorKey, undefined, !restrictedHint);
+  /** Lot R8g : le filtre « Tout · Événements · Hors événement » d'une page de structure (absent : toutes les publications). */
+  filter?: AuthorPostsFilter;
+  /** Lot R8g : une phrase d'état vide propre à une page (le titre reste « Pas encore de publication »). */
+  emptyText?: string;
+};
+
+/**
+ * Lot R8g : `header` (les puces du filtre d'une page) reste affiché au-dessus de tous les états, y compris le chargement, l'erreur
+ * et le vide d'un filtre : on peut toujours changer de filtre. Sans `header`, rien ne change.
+ */
+export function PublicationsTab({ header, ...props }: TabProps & { header?: ReactNode }) {
+  return header ? (
+    <div className="pub">
+      {header}
+      <PublicationsBody {...props} />
+    </div>
+  ) : (
+    <PublicationsBody {...props} />
+  );
+}
+
+function PublicationsBody({
+  authorKey,
+  pseudo,
+  mine,
+  total,
+  restricted: restrictedHint = false,
+  privateAction,
+  filter,
+  emptyText,
+}: TabProps) {
+  const list = usePublications(authorKey, filter, !restrictedHint);
   const [mode, setMode] = useViewMode();
   const empty = publicationsEmptyKind({
     mine,
@@ -105,7 +134,7 @@ export function PublicationsTab({
       <div className="pub-state" data-testid="publications-empty">
         <Icon name={isMine ? "camera" : "gallery"} size={30} />
         <strong>{isMine ? L.emptyMineTitle : L.emptyOtherTitle}</strong>
-        <p className="o-t-caption">{isMine ? L.emptyMineText : L.emptyOtherText(pseudo)}</p>
+        <p className="o-t-caption">{isMine ? L.emptyMineText : (emptyText ?? L.emptyOtherText(pseudo))}</p>
         {isMine ? (
           <Button variant="primary" icon="camera" href="/app/fil/publier" data-testid="publications-publish">
             {L.publish}
