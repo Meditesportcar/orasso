@@ -48,7 +48,7 @@ export function PagePublications({
   /** Sans session : la première page lue par le serveur. */
   publicFirst: PublicPostsPage | null;
 }) {
-  if (!session) return <PublicPublications authorKey={authorKey} name={name} first={publicFirst} />;
+  if (!session) return <PublicPublications key={authorKey} authorKey={authorKey} name={name} first={publicFirst} />;
   const header = withFilter ? (
     <nav className="pg-filter" aria-label={L.filterGroup} data-testid="page-filter">
       {pageFilters.map((f) => (

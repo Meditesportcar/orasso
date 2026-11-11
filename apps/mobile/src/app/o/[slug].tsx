@@ -26,7 +26,7 @@ import {
   type WithPageExtras,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Linking, Share, StyleSheet } from "react-native";
 import { siteUrl } from "@/api";
 import { FollowLine, PageHead } from "@/features/pages/PageHead";
@@ -67,6 +67,8 @@ export default function StructurePage() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [more, setMore] = useState(false);
+  // Un double toucher sur « Message » n'ouvre qu'une conversation.
+  const contacting = useRef(false);
   const [picked, setPicked] = useState<PageTab | null>(null);
   const [filter, setFilter] = useState<"all" | "event" | "no_event">("all");
   const [mentionsDelta, setMentionsDelta] = useState(0);
@@ -144,12 +146,16 @@ export default function StructurePage() {
   async function contact() {
     if (!s) return;
     if (!session) return needAccount();
+    if (contacting.current) return;
+    contacting.current = true;
     setNote(null);
     try {
       const { id } = await api.contactStructure(s.id);
       router.push(`/messages/${id}`);
     } catch (e) {
       setNote({ tone: "error", text: errorMessage(e) });
+    } finally {
+      contacting.current = false;
     }
   }
 
@@ -159,7 +165,11 @@ export default function StructurePage() {
   const tabs = pageTabs("structure", { session, mentionsCount });
   const wanted = picked ?? pageOpenTab("structure", { publications: pagePublicationsCount(s) }, session);
   const tab = tabs.some((x) => x.id === wanted) ? wanted : (tabs[0]?.id ?? "events");
-  const eventsRead = upcoming.data && past.data ? upcoming.data.items.length + past.data.items.length : null;
+  // Le nombre n'est dit que quand les deux listes sont lues en entier (pas de page suivante) : jamais un plancher présenté comme un total.
+  const eventsRead =
+    upcoming.data && past.data && !upcoming.data.nextCursor && !past.data.nextCursor
+      ? upcoming.data.items.length + past.data.items.length
+      : null;
   const counters = pageCounters("structure", {
     followers: s.followersCount,
     events: eventsRead,

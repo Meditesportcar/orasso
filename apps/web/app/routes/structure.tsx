@@ -30,13 +30,14 @@ import {
   structureKindLabels,
   type WithPageExtras,
 } from "@orasso/shared";
+import { useState } from "react";
 import { data, Form, redirect } from "react-router";
 
 import { PageHead } from "../components/pages/PageHead";
 import { PageMentions } from "../components/pages/PageMentions";
 import { PageMore } from "../components/pages/PageMore";
 import { PagePublications } from "../components/pages/PagePublications";
-import { PageTabs, pageTabHref } from "../components/pages/PageTabs";
+import { mentionsShown, PageTabs, pageTabHref } from "../components/pages/PageTabs";
 import { StructureEvents } from "../components/pages/StructureEvents";
 import { SideIcon } from "../components/profile/ProfileHead";
 import { ShareButtons } from "../components/ShareButtons";
@@ -83,6 +84,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     staffState: (mine && mine.role === "staff" ? mine.status : null) as "active" | "invited" | "requested" | null,
     structure,
+    // Le total des événements n'est dit que si les deux listes sont lues en entier.
+    eventsComplete: upcoming.ok && past.ok && !upcoming.data.nextCursor && !past.data.nextCursor,
+    staffSent: url.searchParams.get("staff") === "demande",
     upcoming: upcoming.ok ? upcoming.data.items : [],
     past: past.ok ? past.data.items : [],
     partners: partners.ok ? partners.data : [],
@@ -154,15 +158,21 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
     tab,
     filter,
     publicFirst,
+    eventsComplete,
+    staffSent,
   } = loaderData;
+  const [mentionsDelta, setMentionsDelta] = useState(0);
   const staffError = (actionData as { staffError?: string } | undefined)?.staffError;
   const messageError = (actionData as { messageError?: string | null } | undefined)?.messageError;
   const path = `/o/${structure.slug}`;
   const retour = `/connexion?retour=${encodeURIComponent(path)}`;
-  const tabs = pageTabs("structure", { session: connected, mentionsCount: pageMentionsCount(structure) });
+  const tabs = pageTabs("structure", {
+    session: connected,
+    mentionsCount: mentionsShown(pageMentionsCount(structure), mentionsDelta),
+  });
   const counters = pageCounters("structure", {
     followers: structure.followersCount,
-    events: upcoming.length + past.length,
+    events: eventsComplete ? upcoming.length + past.length : null,
     partners: partners.length,
   });
   const key = authorKeyOf("structure", structure.id);
@@ -250,11 +260,6 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
                         {staffRequestLabels.becomeStaff}
                       </Button>
                     )}
-                    {staffError && (
-                      <p className="s-error" role="alert">
-                        {staffError}
-                      </p>
-                    )}
                   </div>
                 )}
                 {isOrganizer && (
@@ -270,6 +275,17 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
         counterHref={() => eventsHref}
       />
 
+      {/* L'issue de « Devenir staff » se lit hors du menu (il revient fermé après l'envoi). */}
+      {staffError && (
+        <p className="s-error" role="alert" data-testid="staff-error">
+          {staffError}
+        </p>
+      )}
+      {(staffSent || staffState === "requested") && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="staff-notice">
+          {staffRequestLabels.sent}
+        </p>
+      )}
       {messageError && (
         <p className="s-error" role="alert">
           {messageError}
@@ -299,7 +315,12 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
           publicFirst={publicFirst}
         />
       ) : (
-        <PageMentions pageKey={key} pageName={structure.name} manage={isOrganizer} />
+        <PageMentions
+          pageKey={key}
+          pageName={structure.name}
+          manage={isOrganizer}
+          onHiddenChange={(d) => setMentionsDelta((v) => v + d)}
+        />
       )}
     </div>
   );

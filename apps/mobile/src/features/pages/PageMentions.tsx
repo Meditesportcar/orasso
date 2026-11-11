@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   thumb: { width: 56, height: 70, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
   thumbImage: { width: 56, height: 70 },
   text: { flex: 1, minWidth: 0, gap: space1 },
-  author: { flexDirection: "row", alignItems: "center", gap: space2, minHeight: tokens.spacing.touch / 2 },
+  author: { flexDirection: "row", alignItems: "center", gap: space2, minHeight: tokens.spacing.touch },
   authorName: { flexShrink: 1 },
   tag: { flexDirection: "row", alignItems: "center", gap: 4 },
   more: { width: tokens.spacing.touch, height: tokens.spacing.touch, alignItems: "center", justifyContent: "center" },

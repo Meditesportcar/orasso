@@ -20,14 +20,14 @@ import {
   profileRingState,
   type WithPageExtras,
 } from "@orasso/shared";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Form, redirect } from "react-router";
 
 import { PageHead } from "../components/pages/PageHead";
 import { PageMentions } from "../components/pages/PageMentions";
 import { PageMore } from "../components/pages/PageMore";
 import { PagePublications } from "../components/pages/PagePublications";
-import { PageTabs } from "../components/pages/PageTabs";
+import { mentionsShown, PageTabs } from "../components/pages/PageTabs";
 import { ProPresentation } from "../components/pages/ProPresentation";
 import { SideIcon } from "../components/profile/ProfileHead";
 import { ReportDialog } from "../components/ReportDialog";
@@ -113,13 +113,17 @@ function track(slug: string, kind: "view" | "call" | "route") {
 
 export default function ProPage({ loaderData }: Route.ComponentProps) {
   const { pro, connected, origin, tab } = loaderData;
+  const [mentionsDelta, setMentionsDelta] = useState(0);
   const path = `/p/${pro.slug}`;
   const retour = `/connexion?retour=${encodeURIComponent(path)}`;
   const route =
     pro.lat != null && pro.lng != null
       ? `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=%3B${pro.lat}%2C${pro.lng}`
       : null;
-  const tabs = pageTabs("pro", { session: connected, mentionsCount: pageMentionsCount(pro) });
+  const tabs = pageTabs("pro", {
+    session: connected,
+    mentionsCount: mentionsShown(pageMentionsCount(pro), mentionsDelta),
+  });
   const counters = pageCounters("pro", {
     followers: pro.followersCount,
     partners: pro.memberPartnersTotal,
@@ -177,7 +181,16 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
         bio={pro.description}
         side={
           <>
-            {route && <SideIcon icon="nav" label={L.route} href={route} testId="route-icon" />}
+            {route && (
+              <SideIcon
+                icon="nav"
+                label={L.route}
+                href={route}
+                target="_blank"
+                onClick={() => track(pro.slug, "route")}
+                testId="route-icon"
+              />
+            )}
             <PageMore>
               <div className="s-stack s-stack--tight">
                 {connected && !pro.isOwner && <ReportDialog look="link" targetType="pro" targetId={pro.id} />}
@@ -209,7 +222,12 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
           publicFirst={null}
         />
       ) : (
-        <PageMentions pageKey={key} pageName={pro.name} manage={pro.isOwner} />
+        <PageMentions
+          pageKey={key}
+          pageName={pro.name}
+          manage={pro.isOwner}
+          onHiddenChange={(d) => setMentionsDelta((v) => v + d)}
+        />
       )}
     </div>
   );

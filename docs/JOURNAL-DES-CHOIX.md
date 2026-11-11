@@ -5371,3 +5371,9 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **« Contacter » devient une icône active** dans l'appli (il était désactivé « bientôt » depuis le lot 18) : c'était prévu par le lot 18 et la fiche le demande (« Message »), mais c'est un changement de comportement visible.
 - **Pas de signalement de structure** (ni dans l'appli ni sur le site) : la fiche parle de « signaler » dans « Plus » ; il faut un type de signalement `structure` côté API (hors lot).
 - **Le nom de l'auteur d'une mention de page n'ouvre rien** (une page n'expose pas son adresse dans la publication) ; la même chose manque pour la ligne d'auteur du Fil.
+
+### Tour 2 (lot R8g, relecture Opus, 11/11/2026)
+- **Issue de Â« Devenir staff Â» (site)** : Â« Demande de staff envoyÃ©e Â» (`?staff=demande` ou demande en cours) et l'erreur sont affichÃ©es **hors du menu Â« Plus Â»** (qui revient fermÃ©), comme `messageError` ; le bouton reste dans le menu. Recette `staff-site` : la puce se lit sans rouvrir le menu.
+- **Â« ItinÃ©raire Â» du haut d'un pro (site)** : `SideIcon` (lien) reÃ§oit `target` (`_blank`, `rel` noopener) et `onClick` ; le clic compte l'itinÃ©raire. Recette : l'icÃ´ne est `_blank` et envoie le compteur.
+- **Compteur Â« Ã©vÃ©nements Â»** : l'API ne sert pas de total ; le nombre n'est dit que si les deux listes sont lues en entier (aucune page suivante), sinon Â« â€“ Â» (jamais un plancher prÃ©sentÃ© comme un total). Appli et site.
+- **Mineurs** : cible du nom d'auteur d'une mention Ã  44 px (appli) ; Â« Mentions Â· N Â» suit un masquage sur le site (`mentionsShown`) ; Â« Message Â» protÃ©gÃ© contre le double toucher (appli) ; `key={authorKey}` sur la liste publique du site.

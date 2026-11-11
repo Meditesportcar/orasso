@@ -27,8 +27,8 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   const become = fan.getByTestId("become-staff").getByRole("button", { name: "Devenir staff" });
   await expect(become).toBeVisible();
   await become.click();
-  await fan.getByTestId("page-more").locator("summary").click();
-  await expect(fan.getByTestId("become-staff")).toContainText("Demande de staff envoyée");
+  // L'issue se lit sans rouvrir le menu.
+  await expect(fan.getByTestId("staff-notice")).toContainText("Demande de staff envoyée");
   await fan.screenshot({ path: `${DIR}/01-devenir-staff-demande.png` });
 
   // L'organisateur : la demande est dans /orga/meditesportcar/staff.

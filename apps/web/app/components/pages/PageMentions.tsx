@@ -178,12 +178,15 @@ export function PageMentions({
   pageKey,
   pageName,
   manage,
+  onHiddenChange,
 }: {
   /** La clé de la page : `s:<structure>` ou `p:<fiche pro>` (aussi la cible de « Masquer »). */
   pageKey: string;
   pageName: string;
   /** Le regard est celui d'un responsable de la page (l'API revérifie). */
   manage: boolean;
+  /** Une mention masquée (`-1`) ou remise (`+1`) : le nombre de l'onglet suit. */
+  onHiddenChange?: (delta: number) => void;
 }) {
   const list = useMentions(pageKey, manage);
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +202,7 @@ export function PageMentions({
     setBusy(false);
     if (!res.ok) return setError(res.error.message || L.hideError);
     list.setHidden(item.post.id, !item.hidden);
+    onHiddenChange?.(item.hidden ? 1 : -1);
   }
 
   if (list.loading && !list.loaded)

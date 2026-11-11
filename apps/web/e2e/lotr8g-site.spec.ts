@@ -200,6 +200,12 @@ test("la fiche d'un pro : « Présentation » complète, « Publications », « 
   await expect(selected(p)).toHaveAccessibleName(/^Mentions/);
   await expect(p.getByTestId("mention-row").or(p.getByTestId("mentions-empty"))).toBeVisible({ timeout: 30_000 });
   await shot(p, "pro-mentions");
+  // L'icône « Itinéraire » du haut est comptée et s'ouvre dans un nouvel onglet.
+  await p.goto("/p/atelier-covering-66");
+  await expect(p.getByTestId("route-icon")).toHaveAttribute("target", "_blank");
+  const counted = p.waitForRequest((r) => r.url().includes("/track") && (r.postData() ?? "").includes("route"));
+  await p.getByTestId("route-icon").click();
+  await counted;
 
   // Suivre : « Suivre » puis « Suivi », et on le rend.
   const pseudo = `Hg${unique()}`;
@@ -285,6 +291,10 @@ test("la responsable masque une mention de sa page, puis la remet", async ({ pag
     await row.getByTestId("mention-more").click();
     await row.getByTestId("mention-hide").click();
     await expect(row.getByTestId("mention-hidden")).toHaveText("Masquée", { timeout: 20_000 });
+    // Le nombre de l'onglet suit.
+    await expect(p.getByTestId("page-tab-mentions")).toContainText(
+      `· ${all.items.filter((i) => !i.hidden).length - 1}`,
+    );
     await shot(p, "structure-mention-masquee");
     expect((await read(false)).items.map((i) => i.post.id)).not.toContain(target);
     // Un autre visiteur ne la voit plus sur la page ; la publication de son auteur existe toujours.

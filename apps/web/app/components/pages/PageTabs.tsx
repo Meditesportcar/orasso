@@ -33,3 +33,7 @@ export function PageTabs({ value, items, path }: { value: PageTab; items: readon
     />
   );
 }
+
+/** Le nombre de « Mentions · N » après un masquage (-1) ou une remise (+1) ; inconnu reste inconnu. */
+export const mentionsShown = (base: number | undefined, delta: number): number | undefined =>
+  base === undefined ? undefined : Math.max(0, base + delta);
