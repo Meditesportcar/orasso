@@ -2,14 +2,17 @@
 // publication viennent d'une route privée (`/api/feed-posts/:id/photos/:name`) : le navigateur envoie le cookie de session.
 import { Icon } from "@orasso/design-system/web";
 import {
+  coauthorLabels as CO,
   FEED_ASPECT_RATIOS,
   type FeedCard,
   type FeedCardKind,
   type FeedPostView,
+  feedAgo,
   feedScreenLabels as L,
 } from "@orasso/shared";
 import { useState } from "react";
 
+import "../../styles/coauthors.css";
 import { PersonAvatar } from "../People";
 import { FoldedCaption } from "../publications/FoldedCaption";
 import { AttachLine, AttachSeeButton } from "./AttachLine";
@@ -241,13 +244,37 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
   );
 }
 
+/** Le nom d'un auteur dans la signature : un lien vers son profil pour une personne (les pages ouvrent avec le lot R8g). */
+function SignName({ a }: { a: FeedPostView["author"] }) {
+  return a.kind === "user" ? <a href={`/u/${encodeURIComponent(a.pseudo)}`}>{a.name}</a> : <>{a.name}</>;
+}
+
 function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const post = card.payload.post;
+  // Collaboration (R8o) : acceptée, la carte est signée des deux (« Kenji_66 et Wrap 66 »), sous la ligne « Collaboration ».
+  const co = post.coAuthor;
   return (
     <Shell
       card={card}
-      head={<PersonAvatar url={post.author.avatarUrl} pseudo={post.author.pseudo} size={38} />}
-      title={post.author.pseudo}
+      head={
+        co ? (
+          <span className="co-two" aria-hidden="true">
+            <PersonAvatar url={post.author.avatarUrl} pseudo={post.author.name} size={30} />
+            <PersonAvatar url={co.avatarUrl} pseudo={co.name} size={30} />
+          </span>
+        ) : (
+          <PersonAvatar url={post.author.avatarUrl} pseudo={post.author.pseudo} size={38} />
+        )
+      }
+      title={co ? CO.signature(post.author.name, co.name) : post.author.pseudo}
+      titleNode={
+        co ? (
+          <span className="fil-card__title o-t-strong co-sign" data-testid="feed-card-signature">
+            <SignName a={post.author} /> et <SignName a={co} />
+          </span>
+        ) : undefined
+      }
+      reasonText={co ? `${CO.collaboration} · ${feedAgo(card.at, new Date())}` : undefined}
       href={post.mine ? undefined : `/u/${encodeURIComponent(post.author.pseudo)}`}
       onMenu={onMenu}
       faded={faded}
@@ -261,6 +288,11 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
     >
       {/* Lot R8c2 : l'événement rattaché est la deuxième ligne de la carte, sous l'auteur ; toute la ligne ouvre la fiche. */}
       {post.attach ? <AttachLine attach={post.attach} /> : null}
+      {post.coAuthorInvite && post.coAuthorInvite.status !== "accepted" ? (
+        <p className="o-t-caption co-invite" data-testid="feed-card-invite">
+          {CO.inviteStatus(post.coAuthorInvite.name, post.coAuthorInvite.status)}
+        </p>
+      ) : null}
       <FeedPhotos post={post} />
       {post.caption ? <FoldedCaption text={post.caption} testId="feed-post-caption" /> : null}
       {post.vehicle || (post.event && !post.attach) ? (

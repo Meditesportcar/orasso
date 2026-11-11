@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { cacheScope } from "@/lib/kv";
 import { createRequestGate } from "@/lib/requestGate";
-import { onPostRemoved } from "./publicationsSignal";
+import { onPostChanged, onPostRemoved } from "./publicationsSignal";
 
 export type PublicationsState = {
   items: FeedPostView[];
@@ -70,6 +70,12 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     void reload();
     return () => gate.invalidate();
   }, [enabled, reload, gate]);
+
+  // Collaboration (R8o) : un co-auteur retiré ou une invitation annulée change les deux listes de la publication.
+  useEffect(() => {
+    if (!enabled) return;
+    return onPostChanged(() => void reload());
+  }, [enabled, reload]);
 
   const more = useCallback(async () => {
     const cursor = cursorRef.current;

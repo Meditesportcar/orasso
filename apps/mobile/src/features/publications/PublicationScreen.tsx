@@ -20,6 +20,7 @@ import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 import { Waiting } from "@/ui/Waiting";
 import { PostMenu } from "./PostMenu";
+import { onPostChanged } from "./publicationsSignal";
 
 type Read =
   | { status: "loading" }
@@ -52,6 +53,9 @@ export function PublicationScreen() {
     void load();
     return () => gate.invalidate();
   }, [load, gate]);
+
+  // Collaboration (R8o) : un co-auteur retiré ou une invitation annulée depuis le menu relit la page.
+  useEffect(() => onPostChanged((changed) => (changed === String(id) ? void load() : undefined)), [id, load]);
 
   // `?commentaires=1` (le lien d'une notification de commentaire) : la feuille de R8k2 s'ouvre une fois la publication affichée.
   const opened = useRef(false);

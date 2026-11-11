@@ -423,7 +423,7 @@ async function notifyAuthor(
   await notificationsService.notify(tx, post.authorId, type, {
     title: content.title,
     body: content.body,
-    data: { actor: { pseudo: by.name, avatarUrl: by.avatarUrl }, postId: post.id, link: `/app/publication/${post.id}` },
+    data: { actor: { pseudo: by.name, avatarUrl: by.avatarUrl }, postId: post.id, link: "/app/fil" },
   });
 }
 

@@ -5,7 +5,7 @@ import { type AuthorPostsFilter, type AuthorPostsPage, appendUnique, type FeedPo
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
-import { onPostRemoved } from "./signal";
+import { onPostChanged, onPostRemoved } from "./signal";
 
 export type PublicationsState = {
   items: FeedPostView[];
@@ -67,6 +67,12 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     return () => {
       seq.current++;
     };
+  }, [enabled, reload]);
+
+  // Collaboration (R8o) : un co-auteur retiré ou une invitation annulée change les deux listes de la publication.
+  useEffect(() => {
+    if (!enabled) return;
+    return onPostChanged(() => void reload());
   }, [enabled, reload]);
 
   const more = useCallback(async () => {

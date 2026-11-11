@@ -9,10 +9,13 @@ import {
   acceptEvents,
   attachableQuery,
   attachLeadOf,
+  coauthorLabels as CO,
+  type CoAuthorSearchItem,
   type CommercialDraft,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
+  coAuthorInputOf,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -70,6 +73,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { SquareCropper } from "@/ui/SquareCropper";
 import { markFeedDirty } from "../feedSignal";
+import { CoAuthorLine } from "./CoAuthorLine";
 import {
   addFrame,
   blurInstead,
@@ -155,6 +159,8 @@ function PublishForm() {
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
+  // « Publier avec… » (lot R8o) : un seul co-auteur invité ; absent de la publication quand « Info importante » est cochée.
+  const [coAuthor, setCoAuthor] = useState<CoAuthorSearchItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +171,7 @@ function PublishForm() {
   // jusqu'à la fin, une seule opération à la fois.
   const [working, setWorking] = useState(false);
   const [done, setDone] = useState(false);
+  const [invitedName, setInvitedName] = useState<string | null>(null);
   const [clientId, setClientId] = useState(() => randomUUID());
   // Photos déjà envoyées (adresse locale → clé) : un nouvel essai ne les renvoie pas.
   const keys = useRef<Record<string, string>>({});
@@ -426,6 +433,7 @@ function PublishForm() {
           placeLabel: choice.placeLabel,
           important,
           ...(fan ? commercialField(commercialLine) : {}),
+          ...(coAuthor && !important.on ? { coAuthor: coAuthorInputOf(coAuthor) } : {}),
         });
       if (!guard.current()) return;
       sending = body;
@@ -436,6 +444,7 @@ function PublishForm() {
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
       markFeedDirty(post);
       discardTempPhotos();
+      setInvitedName(post.coAuthorInvite ? post.coAuthorInvite.name : null);
       setDone(true);
     } catch (e) {
       if (!guard.current()) return;
@@ -552,6 +561,11 @@ function PublishForm() {
           <Text variant="body" color={c.inkMuted}>
             {found ? T.uncertainFound : L.publishedText}
           </Text>
+          {invitedName ? (
+            <Text variant="body" color={c.inkMuted} testID="fil-publish-invited">
+              {CO.sent(invitedName)}
+            </Text>
+          ) : null}
         </View>
         <SmButton kind="p" big wide icon="feed" onPress={close} testID="fil-publish-back">
           {L.backToFeed}
@@ -889,6 +903,7 @@ function PublishForm() {
         />
       ) : null}
       {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={frozen} kind="post" /> : null}
+      {!important.on ? <CoAuthorLine value={coAuthor} onChange={setCoAuthor} disabled={frozen} /> : null}
       <Says says={publishSays(author, event, important.on)} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {loaded.forbidden && eventBlock ? (

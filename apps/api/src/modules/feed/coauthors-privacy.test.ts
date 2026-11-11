@@ -340,7 +340,7 @@ describe("notifications", () => {
     expect(await notifs(owner.id, "coauthor_accepted")).toHaveLength(0);
   });
 
-  it("le lien d'une notification d'invitation mène aux Demandes ; d'une acceptation, à la publication", async () => {
+  it("le lien d une notification d invitation mène aux Demandes ; d une acceptation, à la publication (par `postId`, comme les mentions)", async () => {
     const kenji = await person("Kenji_66");
     const damien = await person("Damien_66");
     const post = (await publishWith(kenji, { kind: "user", id: damien.id })).json as FeedPostView;
@@ -348,7 +348,7 @@ describe("notifications", () => {
     expect(((invited as { data: unknown }).data as { link?: string }).link).toBe("/app/activite/demandes");
     await call(damien, "POST", `/me/feed-coauthor-requests/${post.id}/accept`);
     const accepted = (await notifs(kenji.id, "coauthor_accepted"))[0];
-    expect(((accepted as { data: unknown }).data as { link?: string }).link).toBe(`/app/publication/${post.id}`);
+    expect(((accepted as { data: unknown }).data as { link?: string }).link).toBe("/app/fil");
     expect(randomUUID()).toBeDefined();
   });
 });

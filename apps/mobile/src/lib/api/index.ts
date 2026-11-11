@@ -6,6 +6,7 @@ import { activityApi } from "./activity";
 import { adminApi } from "./admin";
 import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
+import { coauthorsApi } from "./coauthors";
 import { communicationApi } from "./communication";
 import { crewFeedApi } from "./crewFeed";
 import { crewPageApi } from "./crewPage";
@@ -107,6 +108,7 @@ export const api = {
   ...spotApi,
   ...feedApi,
   ...feedCommentsApi,
+  ...coauthorsApi,
   ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,

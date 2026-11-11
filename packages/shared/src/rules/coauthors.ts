@@ -3,7 +3,7 @@
 // de base ni d'horloge ici : l'API appelle ces fonctions, et les écrans s'en servent pour n'afficher que ce qui est permis
 // (l'API revérifie toujours).
 import { coauthorLabels } from "../labels/coauthors.fr";
-import type { AuthorKind } from "./authors";
+import { type AuthorKind, parseAuthorKey } from "./authors";
 
 export const coauthorStatuses = ["pending", "accepted", "declined", "withdrawn"] as const;
 export type CoauthorStatus = (typeof coauthorStatuses)[number];
@@ -87,4 +87,10 @@ export function captionPreview(caption: string | null | undefined): string {
   const cut = text.slice(0, COAUTHOR_CAPTION_PREVIEW_MAX - 1);
   const space = cut.lastIndexOf(" ");
   return `${(space > COAUTHOR_CAPTION_PREVIEW_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/** Le co-auteur choisi (un résultat de la recherche) tel que `POST /me/feed-posts` l'attend : `kind` et l'identifiant de sa clé. */
+export function coAuthorInputOf(item: { key: string; kind: CoauthorKind }): { kind: CoauthorKind; id: string } {
+  const parsed = parseAuthorKey(item.key);
+  return { kind: item.kind, id: parsed?.id ?? "" };
 }
