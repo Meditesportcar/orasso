@@ -31,6 +31,8 @@ async function create(damien: string, structureId: string, title: string) {
     description: "Événement de recette du lot R1.",
   });
   expect(created.status).toBe(201);
+  // Gardé dès la création : un échec avant la publication ou les mises à jour SQL ne laisse pas d'événement de recette.
+  createdIds.push(created.data.id);
   expect((await apiCall(damien, "POST", `/events/${created.data.id}/publish`)).status).toBe(200);
   return { id: created.data.id, slug: created.data.slug, title };
 }
@@ -54,7 +56,6 @@ export async function r1Events(damien: string): Promise<R1Events> {
     "update events set starts_at = now() - interval '2 days', ends_at = now() + interval '3 hours' where id = $1",
     [running.id],
   );
-  createdIds.push(over.id, running.id);
   return { over, running };
 }
 
