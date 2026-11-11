@@ -66,12 +66,38 @@ export const feedCommentTarget: TargetRules = {
   },
   async resolve(v, targetId) {
     const found = await requireVisibleComment(v, targetId);
-    return { ownerId: found.c.authorId };
+    // Copie de ce qui est signalé, gardée avec le signalement (même conservation) : elle survit à la disparition du commentaire
+    // (publication retirée avec le compte de son propriétaire, compte supprimé, purge de la ligne gardée).
+    return {
+      ownerId: found.c.authorId,
+      context: [
+        {
+          id: found.c.id,
+          pseudo: found.p.pseudo,
+          body: found.c.text,
+          note: null,
+          createdAt: found.c.createdAt.toISOString(),
+          reported: true,
+        },
+      ],
+    };
   },
   async view(report) {
     if (!UUID_RE.test(report.targetId)) return goneView("Commentaire du Fil");
     const [row] = await db.select().from(feedPostComments).where(eq(feedPostComments.id, report.targetId));
-    if (!row) return goneView("Commentaire du Fil");
+    if (!row) {
+      // Le commentaire n'existe plus : la copie du signalement fait foi.
+      const copy = report.context?.[0];
+      if (!copy) return goneView("Commentaire du Fil");
+      return {
+        title: `Commentaire de ${copy.pseudo} sous une publication du Fil`,
+        text: copy.body,
+        imageUrl: null,
+        link: null,
+        gone: false,
+        removed: true,
+      };
+    }
     return {
       title: `Commentaire de ${await pseudoOf(row.authorId)} sous une publication du Fil`,
       text: row.text,

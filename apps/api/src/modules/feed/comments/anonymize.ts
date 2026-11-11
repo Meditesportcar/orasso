@@ -22,6 +22,19 @@ import { now } from "../../../lib/deps";
 import type { Tx } from "../../../lib/tx";
 import { dropCommentNotifications } from "./notify";
 
+/**
+ * Verrou des publications où ce compte reçoit ou a reçu des notifications de commentaires (les siennes, et celles où il a
+ * commenté), **avant toute mutation de ses notifications** : un commentaire en cours prend la publication puis la ligne de
+ * notification regroupée ; l'anonymisation doit les prendre dans le même ordre (publication, puis notification).
+ */
+export async function lockPostsOfDeletedAccount(tx: Tx, userId: string): Promise<void> {
+  await tx.execute(
+    sql`select id from feed_posts where author_id = ${userId}
+      or id in (select post_id from feed_post_comments where author_id = ${userId})
+      order by id for update`,
+  );
+}
+
 export async function anonymizeFeedCommentsForDeletedAccount(tx: Tx, userId: string): Promise<void> {
   const c = feedPostComments;
   const mine = await tx

@@ -4968,3 +4968,9 @@ Date : 11/11/2026. API seule (les écrans sont le lot R8k2). Lot sensible : vie 
 - **Preuves d'un signalement** : à la suppression d'un compte, un commentaire (ou une réponse) qui a un signalement en attente est seulement caché (ligne et texte gardés), son commentaire de premier niveau aussi ; la dernière décision efface ce qui avait été retiré par la suppression du compte (`afterDecision`).
 - **Ordre des verrous** : l'anonymisation des commentaires passe avant celle des notifications regroupées (publication, puis notification, comme la création) ; test de concurrence anonymisation / création.
 - **Mineurs** : `requireVisibleComment` vérifie aussi le premier niveau ; l'auteur supprime son commentaire et retire sa flamme (seulement si elle existe : sinon 404) sans voir la publication ; signalement en `.strict()` ; doc de `FeedCommentView` et test corrigés (la `key` d'un auteur est `u:<compte>`, contrat de R8a1).
+
+### Tour 3 (R8k1, 11/11/2026)
+- **Premier niveau pour les notifications** : `commentReaders` et `stillReadable` vérifient aussi que le commentaire de premier niveau d'une réponse est lisible du destinataire (citation, réponse, flamme, garde de livraison).
+- **Copie du signalement** : `resolve` de `feed_comment` renvoie le texte, le pseudo et la date en `reports.context` (colonne existante, conservée et purgée avec le signalement) ; la vue de modération la lit quand le commentaire n'existe plus (publication retirée avec son propriétaire, compte supprimé, ligne gardée purgée). Pas de migration en plus.
+- **Verrous** : `lockPostsOfDeletedAccount` prend les publications concernées avant toute mutation du Journal dans `accountService.anonymize`.
+- **Groupe perdu** : la garde de livraison recompose une ligne `feed_comment` ou `feed_comment_reply` sur le commentaire lisible le plus récent, et ne la supprime que s'il n'en reste aucun.
