@@ -1,0 +1,410 @@
+/* Commentaires d'une publication du Fil (lot R8k2, maquette R8.3 `f-clair`) : la ligne d'actions, les deux derniers commentaires sous la
+   carte (`.r8cmts`), la feuille (`.r8cm`, `.r8reps`, `.r8sugg`, `.r8repto`, `.r8cmin`). Jetons seulement. */
+
+/* Ligne d'actions : flamme · commentaire · partager (icône seule). */
+.fil-acts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.fil-fire.is-sm {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  height: 30px;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 12px;
+}
+
+/* Sous la carte : les deux derniers commentaires et « Voir les N commentaires ». */
+.fil-cmts {
+  display: grid;
+  gap: 4px;
+}
+.fil-cmts p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.fil-cmts small {
+  margin-left: 6px;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+}
+.fil-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+/* La feuille : un dialogue, plein écran à 390 px. */
+.fil-cm-sheet {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(88vh, 820px);
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--ground);
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+}
+.fil-cm-sheet[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: min(88vh, 820px);
+}
+.fil-cm-sheet::backdrop {
+  background: var(--scrim);
+}
+@media (max-width: 480px) {
+  .fil-cm-sheet {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    padding: var(--space-3);
+  }
+  .fil-cm-sheet[open] {
+    height: 100dvh;
+  }
+}
+.fil-cm-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.fil-cm-sheet__head h2 {
+  flex: 1;
+  margin: 0;
+}
+.fil-cm-sheet__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.fil-cm-sheet__list {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.fil-cm-sheet__off {
+  margin: 0;
+}
+.fil-cm-sheet__composer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Une ligne : avatar, pseudo, âge, texte, flamme, « Répondre », « … ». */
+.fil-cm__item {
+  display: grid;
+  gap: 6px;
+}
+.fil-cm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.fil-cm.is-sub {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.fil-cm__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fil-cm__head {
+  margin: 0;
+  font-size: 13.5px;
+}
+.fil-cm__head small {
+  margin-left: 6px;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+}
+.fil-cm__text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.fil-mention {
+  color: var(--accent-text);
+  font-weight: 800;
+}
+.fil-fire.is-sm.is-on {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.fil-cm__acts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.fil-rep {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.fil-cm__dots {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.fil-cm__repwrap {
+  display: grid;
+  gap: 6px;
+  padding-left: 38px;
+}
+.fil-cm__replies {
+  display: grid;
+  gap: calc(var(--space-2) + 2px);
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+
+/* Menus : « … » d'un commentaire, « … » de la feuille (couper les commentaires). */
+.fil-cm__menu {
+  display: grid;
+  margin-top: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.fil-cm__menu.is-head {
+  margin-top: 0;
+}
+.fil-cm__menurow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.fil-cm__menurow + .fil-cm__menurow {
+  border-top: 1px solid var(--line);
+}
+.fil-cm__menurow small {
+  display: block;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+.fil-cm__menurow.is-out {
+  color: var(--win-text);
+}
+
+/* Un envoi en attente : grisé ; en échec, « Non envoyé » et « Réessayer ». */
+.fil-cm__pending {
+  display: grid;
+  gap: 4px;
+  padding-left: 38px;
+}
+.fil-cm__pending.is-sending {
+  opacity: 0.5;
+}
+.fil-cm__sending {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.fil-cm__failed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--win-text);
+}
+.fil-cm__failed .fil-rep {
+  margin-left: auto;
+  color: var(--ink);
+}
+
+/* Le champ : `.r8cmin`, la liste « @ » au-dessus, le bandeau « Réponse à… ». */
+.fil-cmin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+.fil-cmin input {
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.fil-cmin input:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+}
+.fil-cmin__send {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  cursor: pointer;
+}
+.fil-cmin__send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.fil-cmin__counter {
+  justify-self: end;
+  color: var(--ink-muted);
+}
+.fil-repto {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink-muted);
+}
+.fil-repto button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.fil-sugg {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.fil-sugg li + li {
+  border-top: 1px solid var(--line);
+}
+.fil-sugg button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fil-sugg small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Cibles de 44 px : la zone tactile dépasse le dessin (comme ailleurs sur le site). */
+.fil-fire.is-sm,
+.fil-rep,
+.fil-more,
+.fil-cm__dots,
+.fil-repto button {
+  position: relative;
+}
+.fil-fire.is-sm::before,
+.fil-rep::before,
+.fil-more::before,
+.fil-cm__dots::before,
+.fil-repto button::before {
+  content: "";
+  position: absolute;
+  inset: -7px -6px;
+}
+.fil-cm__dots::before {
+  inset: -6px;
+}
+
+/* La feuille s'ouvre en fondu de 120 ms (mouvement réduit compris : jamais une animation raccourcie). */
+@keyframes fil-cm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fil-cm-sheet[open] {
+  animation: fil-cm-fade 120ms linear;
+}
+
+.fil-gone {
+  flex-basis: 100%;
+  color: var(--ink-muted);
+}
