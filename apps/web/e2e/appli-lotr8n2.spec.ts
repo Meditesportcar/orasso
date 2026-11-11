@@ -166,8 +166,9 @@ test("appli : à l'inscription, la cloche de la fiche et la place perdue", async
   await page.getByTestId("notify-signup-news").click();
   await expect.poll(async () => (await prefsOf(a.cookie, event.id)).data.news, { timeout: 15_000 }).toBe(false);
   await page.getByTestId("cand-close").click();
-  const again = await apiCall<{ id: string }[]>(a.cookie, "GET", "/me/applications?scope=upcoming");
-  expect((await apiCall(a.cookie, "POST", `/applications/${again.data[0]?.id}/withdraw`, {})).status).toBe(200);
+  const again = await apiCall<{ id: string; status: string }[]>(a.cookie, "GET", "/me/applications?scope=upcoming");
+  const live = again.data.find((x) => ["pending", "accepted", "waitlisted", "offered"].includes(x.status));
+  expect((await apiCall(a.cookie, "POST", `/applications/${live?.id}/withdraw`, {})).status).toBe(200);
   await applyInApp(page, event.slug);
   await expect(page.getByTestId("notify-signup-news")).toHaveAttribute("aria-checked", "false", { timeout: 15_000 });
   await ctx.close();
