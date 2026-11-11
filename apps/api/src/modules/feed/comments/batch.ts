@@ -2,7 +2,7 @@
 // même règle, mêmes verdicts, mais un nombre **fixe** de requêtes (commentaires et auteurs, commentaires de premier niveau,
 // publications et auteurs, profil du destinataire, ses abonnements) quel que soit le nombre de lignes. La garde de lecture
 // du Journal et de la pastille (`registerJournalGuard`) s'en sert pour toutes les lignes `feed_comment*` d'une page.
-import { canSeeComment, canSeeFeedPost } from "@orasso/shared";
+import { canSeeComment, canSeeFeedPost, type FeedPostFacts } from "@orasso/shared";
 import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import { db } from "../../../db/client";
@@ -10,8 +10,9 @@ import { feedPostComments, feedPosts, type notifications, profiles, userFollows 
 import { now } from "../../../lib/deps";
 import type { Executor } from "../../../lib/tx";
 import { registerJournalGuard } from "../../notifications/service";
-import { factsOf, profileOkSql, unavailable } from "../access";
+import { profileOkSql, unavailable } from "../access";
 import { COMMENT_TYPES, groupScopeKeys } from "./notify";
+import { factsMapOf } from "./pagefacts";
 
 type Row = typeof notifications.$inferSelect;
 
@@ -81,13 +82,14 @@ export async function readableBatch(
         ).map((r) => r.id),
       )
     : new Set<string>();
+  const facts = await factsMapOf(ex, posts, at);
   for (const r of rows) {
     if (r.c.deletedAt || unavailable(r.p, at)) continue;
     const root = r.c.parentId ? rootById.get(r.c.parentId) : null;
     if (r.c.parentId && (!root || root.c.deletedAt)) continue;
     const post = postById.get(r.c.postId);
     if (!post) continue;
-    const seesPost = canSeeFeedPost({ userId }, factsOf(post, at), {
+    const seesPost = canSeeFeedPost({ userId }, facts.get(r.c.postId) as FeedPostFacts, {
       followAccepted: followed.has(post.post.authorId),
     });
     if (userId === r.c.authorId) {

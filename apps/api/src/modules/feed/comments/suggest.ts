@@ -11,7 +11,8 @@ import { now } from "../../../lib/deps";
 import { escapeLike } from "../../../lib/pagination";
 import type { Viewer } from "../../../lib/session";
 import { storage } from "../../../lib/storage";
-import { factsOf, profileOkSql, requireVisiblePost } from "../access";
+import { profileOkSql, requireVisiblePost } from "../access";
+import { postFactsOf } from "./pagefacts";
 import { commentVisibleSql, managesPost } from "./view";
 
 /** Lignes lues par source avant de retirer ceux qui ne verraient pas la publication. */
@@ -102,7 +103,7 @@ export async function mentionSuggestions(v: Viewer, postId: string, q: string): 
   if (!merged.length) return [];
 
   // Seulement des personnes qui peuvent voir la publication (même règle que sa lecture).
-  const facts = factsOf(row, at);
+  const facts = await postFactsOf(db, row, at);
   const followsAuthor = new Set(
     (
       await db

@@ -21,6 +21,7 @@ import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
 import { inboxService } from "../messaging/inbox";
 import { citedPeopleRemain, citedViews } from "../notifications/grouped";
+import { applyJournalVerdict, journalGuardedTypes, journalVerdicts } from "../notifications/service";
 
 type NotificationRow = typeof notifications.$inferSelect;
 
@@ -53,10 +54,13 @@ const feedFilter = notInArray(notifications.type, [...feedOnlyNotificationTypes,
  */
 async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<ActivityRow[]> {
   const views = await citedViews(rows, ex);
+  // Gardes de lecture (commentaires du Fil…) : mêmes verdicts que le Journal, en lot.
+  const verdicts = rows[0] ? await journalVerdicts(rows[0].userId, rows) : new Map();
   return rows.flatMap((n): ActivityRow[] => {
     const view = views.get(n.id);
-    // Personnes citées mais plus aucune en règle : rien à montrer.
-    if (view === null) return [];
+    // Personnes citées mais plus aucune en règle, ou commentaire que le destinataire ne peut plus lire : rien à montrer.
+    const shown = applyJournalVerdict(n, view, verdicts.get(n.id));
+    if (!shown) return [];
     const storedCount = (n.data as { count?: unknown }).count;
     return [
       {
@@ -65,11 +69,11 @@ async function toRows(rows: NotificationRow[], ex: Executor = db): Promise<Activ
         groupKey: n.groupKey,
         at: n.deliveredAt ?? n.createdAt,
         readAt: n.readAt,
-        title: view?.title ?? n.title,
-        body: view?.body ?? n.body,
-        count: view ? view.count : typeof storedCount === "number" ? storedCount : 1,
-        actors: view?.actors ?? [],
-        people: view?.people,
+        title: shown.title,
+        body: shown.body,
+        count: view ? (shown.count ?? view.count) : typeof storedCount === "number" ? storedCount : 1,
+        actors: shown.actors ?? [],
+        people: shown.people,
         data: sanitize(n.data),
         eventId: n.eventId,
       },
@@ -172,7 +176,30 @@ export const activityService = {
           citedPeopleRemain(now()),
         ),
       );
-    return row?.n ?? 0;
+    // Lignes que leur destinataire ne peut plus lire (gardes de lecture) : pas comptées, en une passe en lot, avec les mêmes
+    // critères que le total (une ligne déjà exclue n'est pas retirée deux fois).
+    const types = journalGuardedTypes();
+    const guarded = types.length
+      ? await ex
+          .select()
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.userId, userId),
+              eq(notifications.inJournal, true),
+              isNotNull(notifications.deliveredAt),
+              isNull(notifications.readAt),
+              feedFilter,
+              gt(notifications.deliveredAt, since),
+              citedPeopleRemain(now()),
+              inArray(notifications.type, types),
+            ),
+          )
+      : [];
+    const hidden = guarded.length
+      ? [...(await journalVerdicts(userId, guarded)).values()].filter((v) => !v.shown).length
+      : 0;
+    return Math.max(0, (row?.n ?? 0) - hidden);
   },
 
   /** `POST /me/activity/seen` : la cloche vient d'être ouverte. */

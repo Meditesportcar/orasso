@@ -8,7 +8,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { feedPostComments, profiles, userFollows } from "../../../db/schema";
 import { now } from "../../../lib/deps";
 import type { Executor } from "../../../lib/tx";
-import { factsOf, postWithAuthor, profileOkSql, unavailable } from "../access";
+import { postWithAuthor, profileOkSql, unavailable } from "../access";
+import { postFactsOf } from "./pagefacts";
 import { commentRow } from "./view";
 
 type PostRow = NonNullable<Awaited<ReturnType<typeof postWithAuthor>>>;
@@ -55,7 +56,7 @@ export async function commentReaders(
   const ofPostAuthor = await follows(post.post.authorId);
   const ofCommenter = commenter.visibility === "private" ? await follows(commenter.userId) : new Set<string>();
   const ofRoot = root && root.visibility === "private" ? await follows(root.authorId) : new Set<string>();
-  const facts = factsOf(post, at);
+  const facts = await postFactsOf(ex, post, at);
   return new Set(
     alive.filter(
       (userId) =>
@@ -123,5 +124,5 @@ export async function stillReadable(ex: Executor, userId: string, commentId: str
         eq(userFollows.status, "accepted"),
       ),
     );
-  return canSeeFeedPost({ userId }, factsOf(post, at), { followAccepted: Boolean(self) });
+  return canSeeFeedPost({ userId }, await postFactsOf(ex, post, at), { followAccepted: Boolean(self) });
 }
