@@ -60,7 +60,10 @@ async function goFil(page: Page, filter: "for_you" | "nearby" | "following") {
 /** La carte rattachée à un événement (organisateur : Roues Libres 66). */
 async function attachedCard(page: Page) {
   const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "Roues Libres 66" }).first();
-  for (let i = 0; i < 16 && !(await card.isVisible().catch(() => false)); i++) {
+  for (let i = 0; i < 30 && !(await card.isVisible().catch(() => false)); i++) {
+    // « Après » : les cartes déjà vues (Roues Libres 66 dans le seed) sont rangées en dernier : on tourne les pages.
+    const more = page.getByTestId("fil-more");
+    if (await more.isVisible().catch(() => false)) await more.click();
     await page.mouse.wheel(0, 700);
     await page.waitForTimeout(350);
   }
