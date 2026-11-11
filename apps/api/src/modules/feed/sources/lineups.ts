@@ -63,6 +63,7 @@ export const source: FeedSource<"lineup"> = {
           structureId: r.e.structureId,
           proId: null,
           categoryIds: r.e.criteria?.categoryIds ?? [],
+          eventId: r.e.id,
           payload: { event: summaryOf(r.e, r.s), count: p.count, photoUrls: p.photoUrls },
         },
       ];

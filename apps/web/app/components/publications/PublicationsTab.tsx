@@ -4,6 +4,7 @@
 // moi, le bouton « Publier » compact ; la suite par curseur (« Voir plus ») ; les états : chargement (le O vivant), erreur avec
 // « Réessayer », vide chez moi, vide chez un autre, **compte privé** (liste restreinte : le même panneau qu'il ait publié ou non).
 import { Button, Icon, OLoader } from "@orasso/design-system/web";
+<<<<<<< HEAD
 import {
   type AuthorPostsFilter,
   publicationsLabels as L,
@@ -12,40 +13,39 @@ import {
   publicationsEmptyKind,
   viewMode,
 } from "@orasso/shared";
+=======
+import { publicationsLabels as L, type PublicationsViewMode, publicationsEmptyKind, viewMode } from "@orasso/shared";
+>>>>>>> vague-r8
 import { type ReactNode, useEffect, useState } from "react";
+import { useRouteLoaderData } from "react-router";
 
 import "../../styles/publications.css";
-import { apiFetch } from "../../lib/api.client";
 import { PublicationsGrid } from "./PublicationsGrid";
 import { PublicationsOneByOne } from "./PublicationsOneByOne";
 import { usePublications } from "./usePublications";
 import { ViewToggle } from "./ViewToggle";
+import { viewChoiceKey } from "./viewChoice";
 
-/** Le choix d'affichage, retenu **par compte** dans le navigateur (l'identifiant du compte est dans la clé) : jamais hérité d'un autre compte. */
+/**
+ * Le choix d'affichage, retenu **par compte** dans le navigateur : le compte est celui de la session déjà connue de la page (le
+ * chargeur de la mise en page), sans requête de plus ; la clé part avec la session (`purgeViewChoices`, déconnexion).
+ */
 function useViewMode(): [PublicationsViewMode, (mode: PublicationsViewMode) => void] {
+  const userId = useRouteLoaderData<{ userId?: string }>("layouts/app")?.userId ?? null;
   const [mode, setMode] = useState<PublicationsViewMode>("grid");
-  const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
-    let alive = true;
-    void apiFetch<{ user: { id: string } }>("/me").then((res) => {
-      if (!alive || !res.ok) return;
-      const k = `${PUBLICATIONS_VIEW_KEY}.${res.data.user.id}`;
-      setKey(k);
-      try {
-        setMode(viewMode(window.localStorage.getItem(k)));
-      } catch {
-        /* navigation privée : la grille */
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+    if (!userId) return;
+    try {
+      setMode(viewMode(window.localStorage.getItem(viewChoiceKey(userId))));
+    } catch {
+      /* navigation privée : la grille */
+    }
+  }, [userId]);
   const choose = (next: PublicationsViewMode) => {
     setMode(next);
-    if (!key) return;
+    if (!userId) return;
     try {
-      window.localStorage.setItem(key, next);
+      window.localStorage.setItem(viewChoiceKey(userId), next);
     } catch {
       /* rien à retenir */
     }

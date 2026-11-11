@@ -75,25 +75,51 @@ export type SheetMark = { recent: string[]; bumped: Record<string, number> };
 export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent], bumped: { ...s.bumped } });
 
 /**
- * Une première page qui arrive. Ce qu'elle apporte fait foi ; les ajouts confirmés **depuis le départ de la lecture** (`since`) qu'elle
- * ne contient pas restent, dans leur version locale la plus fraîche ; ceux d'avant le départ y sont déjà (absents = supprimés
- * entre-temps) et s'en vont. Le compteur de réponses d'un commentaire de la page reçoit les réponses confirmées depuis le départ.
+ * Les ajouts locaux qui survivent à une première page. Une page ne prouve l'absence que pour **la portion qu'elle couvre** :
+ * - un ajout confirmé depuis le départ de la lecture (`since`) reste toujours (la page ne pouvait pas le connaître) ;
+ * - un ajout plus ancien que ce départ est déjà côté API : absent d'une page **complète** (ou de la portion couverte par une page
+ *   partielle) il a été supprimé et s'en va ; situé **au-delà** de la dernière ligne d'une page partielle (`partial`), son absence ne
+ *   prouve rien et il reste (envoyer dans une discussion de plus d'une page).
+ * Les copies gardées sont les versions locales les plus fraîches (compteurs, flammes).
  */
 function withLocalAdditions(
   page: readonly FeedCommentView[],
   local: readonly FeedCommentView[],
   recent: readonly string[],
-  since?: SheetMark,
-): FeedCommentView[] {
+  since: SheetMark | undefined,
+  partial: boolean,
+): { items: FeedCommentView[]; kept: string[] } {
   const inPage = new Set(page.map((c) => c.id));
-  const posterior = recent.filter((id) => !since?.recent.includes(id));
-  const keep = local.filter((c) => posterior.includes(c.id) && !inPage.has(c.id));
-  return mergeComments(keep, page);
+  const last = partial ? page[page.length - 1] : undefined;
+  const survives = (c: FeedCommentView) =>
+    !since?.recent.includes(c.id) || (last !== undefined && chronological(c, last) > 0);
+  const keep = local.filter((c) => recent.includes(c.id) && !inPage.has(c.id) && survives(c));
+  return { items: mergeComments(keep, page), kept: keep.map((c) => c.id) };
 }
 
 /**
- * Applique une page de premier niveau. Sans curseur envoyé (`first`) : la liste est remplacée (on garde ce qu'on vient
- * d'écrire s'il n'y est pas encore). Sinon la page s'ajoute à la suite.
+ * Le compteur de réponses d'un commentaire reçu dans une page (de n'importe quelle page, pagination comprise). Jamais d'addition : une
+ * réponse confirmée depuis le départ de la lecture n'est peut-être pas dans le compteur reçu (GET parti avant l'enregistrement) ou y est
+ * déjà (GET lu après). Le compteur local, qui compte toutes les réponses confirmées connues, sert de **plancher** : le plus grand des
+ * deux, donc ni masquée ni comptée deux fois.
+ */
+function withCountFloor(
+  page: readonly FeedCommentView[],
+  local: readonly FeedCommentView[],
+  bumped: Record<string, number>,
+  since: SheetMark | undefined,
+): FeedCommentView[] {
+  return page.map((c) => {
+    if ((bumped[c.id] ?? 0) - (since?.bumped[c.id] ?? 0) <= 0) return c;
+    const mine = local.find((x) => x.id === c.id);
+    return mine && mine.repliesCount > c.repliesCount ? { ...c, repliesCount: mine.repliesCount } : c;
+  });
+}
+
+/**
+ * Applique une page de premier niveau. Sans curseur envoyé (`first`) : la liste est remplacée, sauf les ajouts que la page ne couvre pas
+ * (voir `withLocalAdditions`). Sinon la page s'ajoute à la suite. Dans les deux cas, les compteurs reçus se réconcilient (`withCountFloor`)
+ * avec une marque prise au **départ de la lecture** (`since`).
  */
 export function sheetWithTopPage(
   state: SheetState,
@@ -102,19 +128,18 @@ export function sheetWithTopPage(
   first: boolean,
   since?: SheetMark,
 ): SheetState {
-  if (!first) return { ...state, items: mergeComments(state.items, items), cursor: nextCursor, loaded: true };
+  const page = withCountFloor(items, state.items, state.bumped, since);
+  if (!first) return { ...state, items: mergeComments(state.items, page), cursor: nextCursor, loaded: true };
   const posterior: Record<string, number> = {};
   for (const [id, n] of Object.entries(state.bumped)) {
     const d = n - (since?.bumped[id] ?? 0);
     if (d > 0) posterior[id] = d;
   }
-  const page = items.map((c) =>
-    posterior[c.id] ? { ...c, repliesCount: c.repliesCount + (posterior[c.id] ?? 0) } : c,
-  );
+  const merged = withLocalAdditions(page, state.items, state.recent, since, nextCursor !== null);
   return {
     ...state,
-    items: withLocalAdditions(page, state.items, state.recent, since),
-    recent: state.recent.filter((id) => !since?.recent.includes(id)),
+    items: merged.items,
+    recent: merged.kept,
     bumped: posterior,
     cursor: nextCursor,
     loaded: true,
@@ -131,16 +156,23 @@ export function sheetWithRepliesPage(
   since?: string[],
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
+  const merged = first
+    ? withLocalAdditions(
+        items,
+        was.items,
+        was.recent,
+        since ? { recent: since, bumped: {} } : undefined,
+        nextCursor !== null,
+      )
+    : null;
   return {
     ...state,
     replies: {
       ...state.replies,
       [parentId]: {
         ...was,
-        items: first
-          ? withLocalAdditions(items, was.items, was.recent, since ? { recent: since, bumped: {} } : undefined)
-          : mergeComments(was.items, items),
-        recent: first ? was.recent.filter((id) => !since?.includes(id)) : was.recent,
+        items: merged ? merged.items : mergeComments(was.items, items),
+        recent: merged ? merged.kept : was.recent,
         cursor: nextCursor,
         loaded: true,
       },

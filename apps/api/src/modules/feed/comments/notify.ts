@@ -15,7 +15,7 @@ import { feedPostComments, feedPosts, notifications, profiles } from "../../../d
 import { storage } from "../../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../../lib/tx";
 import { fillTemplate } from "../../notifications/grouped";
-import { notificationsService, registerDeliveryGuard, registerJournalGuard } from "../../notifications/service";
+import { notificationsService, registerDeliveryGuard } from "../../notifications/service";
 import { postWithAuthor, unavailable } from "../access";
 import { commentReaders, stillReadable } from "./readers";
 import { commentRow } from "./view";
@@ -154,7 +154,12 @@ export async function notifyCommentLike(args: {
   });
 }
 
-const COMMENT_TYPES = ["feed_comment", "feed_comment_reply", "feed_comment_like", "feed_comment_mention"] as const;
+export const COMMENT_TYPES = [
+  "feed_comment",
+  "feed_comment_reply",
+  "feed_comment_like",
+  "feed_comment_mention",
+] as const;
 
 /**
  * Retire des Journaux les notifications qui citent des commentaires retirés (suppression, modération, compte supprimé) :
@@ -262,15 +267,6 @@ function groupScope(n: typeof notifications.$inferSelect): { scope: SQL; actorId
   return scope && actorIds.length ? { scope, actorIds } : null;
 }
 
-/** Lecture du Journal : la ligne est-elle encore montrable à son destinataire ? (une ligne regroupée tient tant qu'un de ses commentaires se lit) */
-export async function commentNotificationShown(n: typeof notifications.$inferSelect): Promise<boolean> {
-  const data = n.data as { commentId?: unknown };
-  if (typeof data.commentId !== "string") return true;
-  if (await stillReadable(db, n.userId, data.commentId)) return true;
-  const group = n.type === "feed_comment" || n.type === "feed_comment_reply" ? groupScope(n) : null;
-  return group ? (await findReadable(db, n.userId, group.scope, group.actorIds)).length > 0 : false;
-}
-
 async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
   if (n.type !== "feed_comment" && n.type !== "feed_comment_reply") return true;
   const data = n.data as { commentId?: unknown; postId?: unknown; parentId?: unknown; _actorIds?: unknown };
@@ -318,4 +314,19 @@ async function recompose(tx: Tx, n: typeof notifications.$inferSelect) {
 }
 
 registerDeliveryGuard([...COMMENT_TYPES], guardCommentNotification);
-registerJournalGuard([...COMMENT_TYPES], commentNotificationShown);
+
+/** Clés d'une ligne regroupée pour la lecture en lot (`batch.ts`) : la publication ou le commentaire visé, et les acteurs d'origine. */
+export function groupScopeKeys(
+  n: typeof notifications.$inferSelect,
+): { kind: "post" | "reply"; key: string; actorIds: string[] } | null {
+  const data = n.data as { postId?: unknown; parentId?: unknown; _actorIds?: unknown };
+  const actorIds = Array.isArray(data._actorIds)
+    ? data._actorIds.filter((x): x is string => typeof x === "string")
+    : [];
+  if (!actorIds.length) return null;
+  if (n.type === "feed_comment" && typeof data.postId === "string") return { kind: "post", key: data.postId, actorIds };
+  if (n.type === "feed_comment_reply" && typeof data.parentId === "string") {
+    return { kind: "reply", key: data.parentId, actorIds };
+  }
+  return null;
+}
