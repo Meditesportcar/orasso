@@ -21,6 +21,7 @@ import { AppError, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { requireVisiblePost } from "../feed/access";
 import { commercialViews } from "../partnerships/commercial";
 import { MAX_INPUT_PIXELS } from "../vehicles/photos-blur";
 import { CANVAS_H, CANVAS_W, GROUND_BLUR, GROUND_BRIGHTNESS, signFile } from "./card";
@@ -93,6 +94,8 @@ export const exportService = {
     rateLimit("shareExport", v.user.id);
     const [post] = await db.select().from(feedPosts).where(eq(feedPosts.id, id));
     if (!post || post.deletedAt) throw notFound("Publication introuvable");
+    // Les droits sur la page ne suffisent pas : le contenu doit aussi être visible (auteur banni, page hors règle : 404).
+    await requireVisiblePost(v, id);
     // Une publication de page se repartage au nom de la page (droits de la page), jamais par le seul `author_id`.
     if (!(await canManagePost(v, post))) throw forbidden(shareLabels.errors.authorOnly);
     const [first] = await db

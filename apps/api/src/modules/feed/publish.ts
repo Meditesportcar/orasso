@@ -33,7 +33,7 @@ import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Executor, withTx } from "../../lib/tx";
 import { moderationService } from "../moderation/service";
 import { commercialPartnerFor, notifyPartnerMention } from "../partnerships/commercial";
 import { assertProMayPost, lockProPostQuota } from "../pros/service";
@@ -77,6 +77,16 @@ async function ownView(v: Viewer, id: string): Promise<FeedPostView> {
   const [view] = await loadPostViews(db, [id], v.user.id, now());
   if (!view) throw notFound("Publication introuvable");
   return view;
+}
+
+/** La publication déjà enregistrée pour ce `clientId` (rejeu d'un envoi), ou `undefined`. */
+async function findReplay(ex: Executor, userId: string, clientId: string | null | undefined) {
+  if (!clientId) return undefined;
+  const [again] = await ex
+    .select({ id: feedPosts.id })
+    .from(feedPosts)
+    .where(and(eq(feedPosts.authorId, userId), eq(feedPosts.clientId, clientId), isNull(feedPosts.deletedAt)));
+  return again?.id;
 }
 
 /** Le même envoi (même `clientId`) vient d'être validé par une autre requête : on rend sa publication. */
@@ -194,7 +204,12 @@ export const feedPostsService = {
       .where(and(eq(uploads.userId, userId), eq(uploads.purpose, "feed_post"), isNull(uploads.consumedAt)));
     const byKey = new Map(rows.map((r) => [r.key, r]));
     for (const key of keys) {
-      if (!byKey.has(key)) throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      if (!byKey.has(key)) {
+        // Le même envoi vient peut-être d'être validé par une autre requête qui a consommé ces photos.
+        const again = await findReplay(db, userId, input.clientId);
+        if (again) return ownView(v, again);
+        throw validation("Photo inconnue ou déjà utilisée : envoie-la à nouveau.");
+      }
     }
     for (const key of keys) {
       const u = byKey.get(key);
@@ -220,7 +235,11 @@ export const feedPostsService = {
     try {
       for (const [index, p] of input.photos.entries()) {
         const source = await storage.get(p.uploadKey);
-        if (!source) throw validation("Photo introuvable : envoie-la à nouveau.");
+        if (!source) {
+          const again = await findReplay(db, userId, input.clientId);
+          if (again) throw new Replayed(again);
+          throw validation("Photo introuvable : envoie-la à nouveau.");
+        }
         const d = decisions[index] as (typeof decisions)[number];
         const out = d.rects.length
           ? await blurPlateRegions(source, d.rects)
@@ -282,6 +301,8 @@ export const feedPostsService = {
         if (input.important && event) await reserveImportant(tx, event.id, at, replayed);
         for (const p of photos) {
           if (p.uploadKey && !(await uploadsService.consume(tx, userId, p.uploadKey, "feed_post"))) {
+            const again = await findReplay(tx, userId, input.clientId);
+            if (again) throw new Replayed(again);
             throw validation("Photo déjà utilisée : envoie-la à nouveau.");
           }
         }
@@ -297,7 +318,8 @@ export const feedPostsService = {
           commercialPartnerId,
           persona,
           // Fiche pro : l'heure de l'application (comme les offres) pour compter le mois sur l'horloge simulée.
-          ...(persona === "pro" ? { createdAt: at } : {}),
+          // Un seul instant pour le comptage du mois (sous verrou) et l'insertion : pris ici, dans la transaction.
+          ...(persona === "pro" ? { createdAt: now() } : {}),
           structureId: authorship.kind === "structure" ? authorship.id : null,
           proId: authorship.kind === "pro" ? authorship.id : null,
           providerId: authorship.kind === "provider" ? authorship.id : null,

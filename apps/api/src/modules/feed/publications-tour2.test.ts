@@ -3,7 +3,7 @@
 import { fromWallTime, PRO_PAID_FROM, PRO_POSTS_PER_MONTH } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -33,6 +33,7 @@ import {
   ticketTypes,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { eventPlaceHolderIds, hasPlace } from "../events/place";
 import { purgeHeldPhotos } from "../moderation/targets/feedPost";
@@ -123,17 +124,15 @@ describe("1. suppressions simultanées : aucune attente sans fin du pool", () =>
     await addMember(structure.id, co.id, "co_organizer");
     const n = 16; // le pool a 10 connexions : avant la correction, chaque suppression tenait la sienne et en attendait une autre
     const ids = Array.from({ length: n }, () => crypto.randomUUID());
-    await db
-      .insert(feedPosts)
-      .values(
-        ids.map((id) => ({
-          id,
-          authorId: owner.id,
-          persona: "organizer" as const,
-          structureId: structure.id,
-          caption: "x",
-        })),
-      );
+    await db.insert(feedPosts).values(
+      ids.map((id) => ({
+        id,
+        authorId: owner.id,
+        persona: "organizer" as const,
+        structureId: structure.id,
+        caption: "x",
+      })),
+    );
     const results = await Promise.all(ids.map((id) => call(co, "DELETE", `/me/feed-posts/${id}`)));
     expect(results.map((r) => r.status)).toEqual(Array(n).fill(204));
   }, 40_000);
@@ -288,4 +287,67 @@ describe("6. export d'une publication de page", () => {
     const former = await call(owner, "GET", `/feed-posts/${page.json.id}/export`);
     expect(former.status).toBe(403);
   });
+});
+
+describe("tour 3", () => {
+  it("export : l'auteur est banni, le co-organisateur ne peut plus exporter ce que la lecture refuse", async () => {
+    const { owner, structure } = await setup();
+    const co = await signUp("Co4_T3", { twoFactor: true });
+    await addMember(structure.id, co.id, "co_organizer");
+    const page = await call(owner, "POST", "/me/feed-posts", {
+      persona: "organizer",
+      structureId: structure.id,
+      ...(await photoOf(owner)),
+    });
+    expect((await call(co, "GET", `/feed-posts/${page.json.id}/export`)).status).toBe(200);
+    await db.update(profiles).set({ bannedAt: clock.now }).where(eq(profiles.userId, owner.id));
+    expect((await call(co, "GET", `/feed-posts/${page.json.id}`)).status).toBe(404);
+    expect((await call(co, "GET", `/feed-posts/${page.json.id}/export`)).status).toBe(404);
+  });
+
+  it("fiche pro : le mois du comptage et de l'insertion est le même quand on passe minuit pendant le traitement d'une photo", async () => {
+    const owner = await signUp("ProMois_T3");
+    const pro = await createPro(owner.id);
+    const nov = fromWallTime({ year: 2026, month: 11, day: 29, hour: 12, minute: 0 });
+    await db.insert(feedPosts).values(
+      Array.from({ length: 4 }, () => ({
+        authorId: owner.id,
+        persona: "pro" as const,
+        proId: pro.id,
+        caption: "x",
+        createdAt: nov,
+      })),
+    );
+    clock.set(fromWallTime({ year: 2026, month: 11, day: 30, hour: 23, minute: 59 }));
+    const body = { persona: "pro", proId: pro.id, ...(await photoOf(owner)) };
+    const realPut = storage.put.bind(storage);
+    const spy = vi.spyOn(storage, "put").mockImplementation(async (...args) => {
+      clock.set(fromWallTime({ year: 2026, month: 12, day: 1, hour: 0, minute: 1 }));
+      return realPut(...args);
+    });
+    const res = await call(owner, "POST", "/me/feed-posts", body);
+    spy.mockRestore();
+    expect(res.status).toBe(201);
+    const [row] = await db.select().from(feedPosts).where(eq(feedPosts.id, res.json.id));
+    expect(row!.createdAt.getTime()).toBe(
+      fromWallTime({ year: 2026, month: 12, day: 1, hour: 0, minute: 1 }).getTime(),
+    );
+  });
+
+  it("rejeu simultané avec les mêmes photos : la même publication, jamais « photo déjà utilisée »", async () => {
+    const { owner } = await setup();
+    const body = { ...(await photoOf(owner)), clientId: "0b0c3a5e-6a47-4f0c-9c1e-2a1d1c0b0a02" };
+    const realGet = storage.get.bind(storage);
+    let n = 0;
+    const spy = vi.spyOn(storage, "get").mockImplementation(async (...args) => {
+      // La seconde requête attend que la première ait fini : elle a manqué la première recherche du clientId.
+      if (++n === 2) await new Promise((r) => setTimeout(r, 1500));
+      return realGet(...args);
+    });
+    const results = await Promise.all([1, 2].map(() => call(owner, "POST", "/me/feed-posts", body)));
+    spy.mockRestore();
+    expect(results.map((r) => r.status)).toEqual([201, 201]);
+    expect(results[0]!.json.id).toBe(results[1]!.json.id);
+    expect(await db.select().from(feedPosts).where(eq(feedPosts.authorId, owner.id))).toHaveLength(1);
+  }, 30_000);
 });
