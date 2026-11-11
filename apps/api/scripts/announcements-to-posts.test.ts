@@ -8,6 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { db, pool } from "../src/db/client";
 import {
+  applications,
   eventAnnouncements,
   type events,
   feedPostPhotos,
@@ -23,6 +24,7 @@ import {
   call,
   createEvent,
   createStructure,
+  createVehicle,
   resetDb,
   seedReference,
   signUp,
@@ -431,6 +433,41 @@ describe("façades et Fil", () => {
     expect(res.json.items.some((c: { kind: string }) => c.kind === "announcement")).toBe(false);
     const ids = res.json.items.map((c: { id: string }) => c.id);
     expect(ids).toContain(`feed_post:${post.id}`);
+  });
+});
+
+describe("annonces réservées aux inscrits (T3)", () => {
+  it("restent lisibles d'un inscrit retenu et de l'équipe, invisibles d'un visiteur et d'un passionné sans candidature, avant comme après la reprise", async () => {
+    const ref = await seedReference();
+    const e = await mkEvent();
+    await mkAnnouncement(e.id, { audience: "participants", body: "Réservée aux retenus" });
+    await mkAnnouncement(e.id, { body: "Annonce publique" });
+    const inscrit = await signUp("Retenu_R8d");
+    const autre = await signUp("Sans_R8d");
+    const car = await createVehicle(inscrit.id, ref);
+    await db.insert(applications).values({
+      eventId: e.id,
+      userId: inscrit.id,
+      vehicleId: car.id,
+      status: "accepted",
+      rulesAcceptedAt: new Date(),
+      followStructure: false,
+      decidedAt: new Date(),
+    });
+    const bodies = async (u: TestUser | null) =>
+      ((await call(u, "GET", `/events/by-slug/${e.slug}/announcements`)).json.items as { body: string }[]).map(
+        (i) => i.body,
+      );
+    for (const phase of ["avant", "après"]) {
+      expect(await bodies(inscrit), phase).toContain("Réservée aux retenus");
+      expect(await bodies(owner), phase).toContain("Réservée aux retenus");
+      expect(await bodies(null), phase).not.toContain("Réservée aux retenus");
+      expect(await bodies(autre), phase).not.toContain("Réservée aux retenus");
+      expect(await bodies(inscrit), phase).toContain("Annonce publique");
+      if (phase === "avant") await announcementsToPosts();
+    }
+    // Seule l'annonce publique a été reprise.
+    expect(await count()).toBe(1);
   });
 });
 
