@@ -12,9 +12,11 @@ import { crewPageApi } from "./crewPage";
 import { crewsApi } from "./crews";
 import { eventEditorApi } from "./eventEditor";
 import { eventInvitesApi } from "./eventInvites";
+import { eventNotificationsApi } from "./eventNotifications";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { feedApi } from "./feed";
+import { feedCommentsApi } from "./feedComments";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
@@ -97,11 +99,13 @@ export const api = {
   ...ticketingApi,
   ...ticketsApi,
   ...eventEditorApi,
+  ...eventNotificationsApi,
   ...crewPageApi,
   ...eventInvitesApi,
   ...stylesApi,
   ...spotApi,
   ...feedApi,
+  ...feedCommentsApi,
   ...shareApi,
   ...storiesApi,
   ...storiesPublishApi,

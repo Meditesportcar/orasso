@@ -47,6 +47,7 @@ import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
+import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
 import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
@@ -286,6 +287,7 @@ app.route("/", homeRoutes);
 // Vague R8 (lot R8a2) : listes par auteur, journal, mentions, épingle ; avant `feedRoutes` (`GET /feed-posts/:id` + `manage`).
 app.route("/", feedListRoutes);
 app.route("/", feedRoutes);
+app.route("/", feedCommentRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
 app.route("/", devMailRoutes);

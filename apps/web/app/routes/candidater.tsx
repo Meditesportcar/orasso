@@ -15,6 +15,7 @@ import {
 import { useState } from "react";
 import { redirect, useNavigate } from "react-router";
 import { ArrivalSeen, arrivalBody } from "../components/ArrivalSeen";
+import { NotifySignup } from "../components/event/NotifySignup";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
@@ -161,6 +162,18 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
   const [newsletter, setNewsletter] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Lot R8n2 (R8.11) : l'écran de fin, « Ce que tu recevras pour cet événement », avant les Sorties.
+  const [done, setDone] = useState<{ retained: boolean } | null>(null);
+  const afterUrl = `/app/sorties?candidature=envoyee&e=${encodeURIComponent(event.slug)}`;
+
+  if (done) {
+    return (
+      <div className="s-narrow s-stack" data-testid="cand-done">
+        <AppBar kind="flow" title={done.retained ? "Tu es retenu" : "Candidature envoyée"} closeHref={afterUrl} bleed />
+        <NotifySignup eventId={event.id} onDone={() => navigate(afterUrl)} />
+      </div>
+    );
+  }
 
   if (state.kind !== "open") {
     return (
@@ -203,8 +216,10 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     };
     const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
     if (res.ok) {
-      // Lot R6c (R6.5) : l'événement suit, pour la carte « Invite du monde à venir ».
-      navigate(`/app/sorties?candidature=envoyee&e=${encodeURIComponent(event.slug)}`);
+      // Lot R8n2 : l'écran de fin de candidature d'abord ; « C'est noté » mène à Sorties, où la carte « Invite du monde à
+      // venir » de R6c (R6.5) attend l'événement (`?candidature=envoyee&e=`).
+      setDone({ retained: res.data.some((a) => a.status === "accepted") });
+      setBusy(false);
       return;
     }
     setBusy(false);
