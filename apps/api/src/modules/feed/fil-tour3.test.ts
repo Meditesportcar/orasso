@@ -236,4 +236,39 @@ describe("tour 3", () => {
     const floor1 = (await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id)))[0]?.floorAt;
     expect(floor1?.getTime()).toBe(floor0?.getTime());
   }, 120_000);
+
+  it("tour 6 : « Pour toi » : une carte consommée avec des flammes que la borne fait passer en zone B ne renvoie pas en haut", async () => {
+    const author = await person("Auteur_Palier6");
+    const me = await person("Lecteur_Palier6");
+    const fan = await person("Fan_Palier6");
+    const posts: string[] = [];
+    // Une carte ancienne avec des flammes (elle passera sous la borne), puis 30 récentes.
+    const flamed = await dbPost(author, at(100));
+    await flames(flamed, [fan], at(1));
+    posts.push(flamed);
+    for (let i = 0; i < 30; i++) posts.push(await dbPost(author, at(5 + i)));
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'lineup:' || gen_random_uuid()::text, ${at(10).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 5000) g`);
+    clock.advance(60_000);
+    const first = await fil(me);
+    expect(first.items.length).toBe(20);
+    expect(postIds(first.items)).toContain(flamed);
+    // Dépassement réel du plafond entre deux pages : rognage à 4 000, la borne passe au-dessus de la carte aux flammes.
+    // (Datée de l'instant du premier parcours : elle en fait partie, vue puis rangée en zone B.)
+    const extra = await dbPost(author, at(0));
+    await view(me, [extra]);
+    const floor = (await db.select().from(feedSeenFloor).where(eq(feedSeenFloor.userId, me.id)))[0]?.floorAt;
+    expect(floor && floor.getTime() > at(100).getTime()).toBe(true);
+    clock.advance(60_000);
+    const got = [...postIds(first.items)];
+    let cursor = first.next;
+    while (cursor) {
+      const page = await fil(me, `?cursor=${cursor}`);
+      expect(page.json.reset).toBeUndefined();
+      got.push(...postIds(page.items));
+      cursor = page.next;
+    }
+    expect(new Set(got)).toEqual(new Set([...posts, extra]));
+  }, 120_000);
 });

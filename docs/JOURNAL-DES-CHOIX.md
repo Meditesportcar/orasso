@@ -5406,3 +5406,6 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 ### Tour 8 (R8k1, 11/11/2026)
 - **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
 - **Équivalence** : le test compare aussi publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse vivante et compte supprimé.
+
+### Tour 6 (R8c1, relecture Codex des tours 4 et 5, 11/11/2026)
+- **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
