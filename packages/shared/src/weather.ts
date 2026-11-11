@@ -34,6 +34,13 @@ export type HourlyForecast = {
   precipitationMm: number;
   windKmh: number;
   code: WeatherCode;
+  /**
+   * Lot R8m : ressenti (°C), rafales (km/h) et direction du vent (degrés d'où il vient). Facultatifs : l'autre fournisseur
+   * ne les donne pas, l'écran ne les montre alors pas.
+   */
+  feelsLike?: number;
+  gustKmh?: number;
+  windDirection?: number;
 };
 
 /** Prévision d'un jour calendaire du fuseau de l'événement (`date` : AAAA-MM-JJ). */
@@ -94,3 +101,33 @@ export type OutingWeather = {
   attribution: string;
   uncertain: boolean;
 };
+
+/**
+ * Lot R8m : la météo d'un lieu de « Ma météo » (`GET /me/weather/places`, `POST /weather/at`) : la journée d'aujourd'hui
+ * (Paris), l'heure en cours et les six suivantes.
+ */
+export type PlaceWeather = {
+  today: DailyForecast;
+  now: HourlyForecast;
+  hours: HourlyForecast[];
+  provider: WeatherProviderName;
+  attribution: string;
+  fetchedAt: string;
+};
+
+/** Un lieu de « Ma météo » : `saved` = une ville choisie (ligne `slot`), `default` = la préfecture du département (T10). */
+export type MyWeatherPlace = {
+  slot: number;
+  label: string;
+  source: "saved" | "default";
+  weather: PlaceWeather | null;
+};
+
+/** Réponse de `GET /me/weather/places` et champ `myWeather` de `GET /me/home`. */
+export type MyWeatherPlaces = { places: MyWeatherPlace[]; max: number };
+
+/** Réponse de `POST /weather/at` (« Utiliser ma position ») : jamais rattachée au compte. */
+export type WeatherAt = { label: string; weather: PlaceWeather | null };
+
+/** Une commune proposée par `GET /geo/cities`, par exemple « Argelès-sur-Mer (66) ». */
+export type CitySuggestion = { label: string; lat: number; lng: number };
