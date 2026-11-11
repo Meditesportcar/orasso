@@ -480,6 +480,17 @@ export const feedPostsService = {
     };
   },
 
+  /**
+   * `GET /me/feed-posts/by-client/:clientId` (R8p, tour 3) : la publication que **cet auteur** a envoyée avec cet identifiant,
+   * quelle que soit la casquette (même règle que le contrôle de rejeu de `create`), ou 404. Jamais celle d'un autre compte.
+   */
+  async byClient(v: Viewer, clientId: string): Promise<FeedPostView> {
+    rateLimit("feedRead", v.user.id);
+    const id = await findReplay(db, v.user.id, clientId);
+    if (!id) throw notFound("Publication introuvable");
+    return ownView(v, id);
+  },
+
   /** `GET /me/feed-posts?cursor=` : mes publications, les plus récentes d'abord. */
   async mine(v: Viewer, cursor: string | undefined): Promise<{ items: FeedPostView[]; nextCursor: string | null }> {
     rateLimit("feedRead", v.user.id);
