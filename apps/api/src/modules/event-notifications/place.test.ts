@@ -46,7 +46,7 @@ describe("une place, c'est une candidature active ou un billet valable", () => {
 
   it.each([
     ["valid", true],
-    ["used", false],
+    ["used", true],
     ["cancelled", false],
   ] as const)("billet « %s » : place = %s", async (status, expected) => {
     const u = await signUp("Visiteur");
