@@ -5439,6 +5439,12 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 - **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
 - **Équivalence** : le test compare aussi publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse vivante et compte supprimé.
 
+### Tour 6 (R8c1, relecture Codex des tours 4 et 5, 11/11/2026)
+- **« Pour toi » et borne de rognage** : l'empreinte des flammes était calculée sur un classement dont la borne retirait une carte consommée (passée en zone B) : `reset` au franchissement d'un palier. La borne de rognage est maintenant **figée à la première page dans le curseur de la phase 1** (`floorAt`, +6 octets, curseur de 1 028 caractères au plus) : le classement de la phase 1 ne bouge pas si le plafond rogne en route ; au pire une carte déjà servie est revue plus loin en zone B, que l'écran dédoublonne par identifiant. Test « Pour toi » avec dépassement réel des 5 000 vues entre deux pages : aucun `reset`, aucune carte perdue.
+
+### Tour 7 (R8c1, 11/11/2026)
+- **Curseur : dates born�es** : toute date d'un curseur au-del� de l'an 9999 est refus�e (400 propre, au lieu d'un 500 de PostgreSQL) ; la borne de rognage \loorAt\ est ramen�e entre 0 et \ef\ au d�codage. Tests : \loorAt\ futur et �norme (ramen�, 200), \ef\ et ancre �normes (400).
+
 ### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
 - **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
 - **Marque au départ de chaque lecture, pagination comprise** (`since` est pris pour la première page comme pour « Voir plus », et pour les réponses) ; le compteur de réponses se réconcilie pour **toutes** les pages. Test : page suivante tardive contenant une ancienne version du parent.
