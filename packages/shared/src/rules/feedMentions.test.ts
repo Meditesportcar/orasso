@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { authorKeyOf } from "./authors";
-import { MENTION_WORDS_MAX, mentionedWords, mentionsOf, mentionVisible } from "./feedMentions";
+import { MENTION_WORDS_MAX, mentionedCandidates, mentionedWords, mentionsOf, mentionVisible } from "./feedMentions";
 
 const NOW = new Date("2026-11-11T10:00:00Z");
 const EV = "11111111-1111-4111-8111-111111111111";
@@ -32,6 +32,18 @@ describe("mentionedWords", () => {
   });
   it("cinq fois le même mot : un seul", () => {
     expect(mentionedWords("@a @a @a @a @a")).toEqual(["a"]);
+  });
+});
+
+describe("mentionedCandidates", () => {
+  it("le mot complet d'abord, puis la ponctuation finale retirée une à une", () => {
+    expect(mentionedCandidates("Merci @jean.. et @jean. puis @jean.dupont.")).toEqual([
+      ["jean..", "jean.", "jean"],
+      ["jean.", "jean"],
+      ["jean.dupont.", "jean.dupont"],
+    ]);
+    expect(mentionedCandidates("@kenji_66 @kenji_66 a@b.fr")).toEqual([["kenji_66"]]);
+    expect(mentionedCandidates(null)).toEqual([]);
   });
 });
 

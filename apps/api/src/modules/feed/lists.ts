@@ -390,12 +390,30 @@ export async function listJournal(
 /** Compteurs de la fiche d'un événement (rien pour un brouillon, un événement sur invitation ou d'une structure supprimée). */
 export async function eventCountsFor(eventId: string, viewer: Viewer | null): Promise<PageCounts> {
   const e = (await attachEventsByIds(db, [eventId])).get(eventId);
-  return e ? countsForEvent(db, e, viewer?.user.id ?? null, now()) : {};
+  if (!e || (!viewer && !(await structureVerified(e.structureId)))) return {};
+  return countsForEvent(db, e, viewer?.user.id ?? null, now());
 }
 
 /** Compteurs de la page d'une structure, d'un pro, d'un prestataire ou d'un média. */
-export const authorCountsFor = (kind: AuthorKey["kind"], id: string, viewer: Viewer | null): Promise<PageCounts> =>
-  countsForAuthor(db, { kind, id, key: authorKeyOf(kind, id) }, viewer?.user.id ?? null, now());
+export async function authorCountsFor(kind: AuthorKey["kind"], id: string, viewer: Viewer | null): Promise<PageCounts> {
+  if (!viewer && kind === "structure" && !(await structureVerified(id))) return {};
+  return countsForAuthor(db, { kind, id, key: authorKeyOf(kind, id) }, viewer?.user.id ?? null, now());
+}
+
+/** Sans session, une structure non vérifiée ne montre rien (comme son journal, qui répond 404) : ni liste, ni compteur. */
+async function structureVerified(structureId: string): Promise<boolean> {
+  const [r] = await db
+    .select({ id: structures.id })
+    .from(structures)
+    .where(
+      and(
+        eq(structures.id, structureId),
+        eq(structures.verification, "verified"),
+        sql`${structures.deletedAt} is null`,
+      ),
+    );
+  return Boolean(r);
+}
 
 /** Compteur du profil d'une personne : `publications` nul quand la liste est restreinte. */
 export const personCountsFor = (pseudo: string, viewer: Viewer): Promise<ProfileCounts> =>

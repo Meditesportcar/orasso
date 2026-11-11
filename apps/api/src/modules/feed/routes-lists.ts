@@ -93,7 +93,7 @@ export const feedListRoutes = new Hono<AppEnv>()
  * retirée, une page suspendue disparaissent tout de suite), les 304 restent légers.
  */
 export const feedPublicPhotoRoutes = new Hono<AppEnv>().get("/public/feed-posts/:id/photos/:name", async (c) => {
-  rateLimit("lineupPublic", visitorOf(c));
+  rateLimit("feedPublicPhoto", visitorOf(c));
   const photo = await publicPhoto(c.req.param("id"), c.req.param("name"), c.req.header("if-none-match"));
   const headers = { "cache-control": "public, no-cache", etag: photo.etag };
   if (photo.status === 304) return c.body(null, 304, headers);

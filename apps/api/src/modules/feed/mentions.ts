@@ -13,7 +13,7 @@ import {
   feedMentionLabels,
   type MentionItem,
   type MentionsPage,
-  mentionedWords,
+  mentionedCandidates,
   mentionsOf,
   type PostManage,
   parseMentionTargetKey,
@@ -44,8 +44,9 @@ import {
 import { loadPostViews } from "./posts";
 
 /** Les mots de la légende résolus en base : fiche pro publiée (slug), structure (slug), personne (pseudo), en 3 requêtes. */
-async function resolveWords(ex: Executor, words: string[], at: Date): Promise<CaptionWord[]> {
-  if (!words.length) return [];
+async function resolveWords(ex: Executor, groups: string[][], at: Date): Promise<CaptionWord[]> {
+  if (!groups.length) return [];
+  const words = [...new Set(groups.flat())];
   // L'une après l'autre : une transaction n'a qu'une connexion (les requêtes parallèles y sont dépréciées par pg).
   const pros = await ex
     .select({ id: proProfiles.id, slug: proProfiles.slug })
@@ -65,12 +66,16 @@ async function resolveWords(ex: Executor, words: string[], at: Date): Promise<Ca
     .select({ userId: profiles.userId, pseudo: profiles.pseudo })
     .from(profiles)
     .where(and(inArray(sql`lower(${profiles.pseudo})`, words), profileOkSql("profiles", at)));
-  return words.map((word) => ({
-    word,
-    proId: pros.find((p) => p.slug.toLowerCase() === word)?.id ?? null,
-    structureId: structs.find((s) => s.slug.toLowerCase() === word)?.id ?? null,
-    userId: people.find((p) => p.pseudo.toLowerCase() === word)?.userId ?? null,
-  }));
+  // Par mention : le premier candidat (le mot complet d'abord) qui est une fiche, une structure ou une personne.
+  return groups.map((candidates) => {
+    for (const word of candidates) {
+      const proId = pros.find((p) => p.slug.toLowerCase() === word)?.id ?? null;
+      const structureId = structs.find((s) => s.slug.toLowerCase() === word)?.id ?? null;
+      const userId = people.find((p) => p.pseudo.toLowerCase() === word)?.userId ?? null;
+      if (proId || structureId || userId) return { word, proId, structureId, userId };
+    }
+    return { word: candidates[0] ?? "" };
+  });
 }
 
 /** La personne citée peut-elle voir cette publication ? (même règle que le Fil : jamais un compte privé qu'elle ne suit pas.) */
@@ -110,7 +115,7 @@ export async function materializeMentions(
     eventRole: post.eventRole,
     eventStructureId,
     commercialPartnerId: post.commercialPartnerId,
-    words: await resolveWords(tx, mentionedWords(post.caption), at),
+    words: await resolveWords(tx, mentionedCandidates(post.caption), at),
   });
   if (!targets.length) return 0;
   const inserted = await tx

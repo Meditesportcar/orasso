@@ -290,6 +290,32 @@ describe("pseudos avec point et notification d'une page", () => {
     expect(await rowsOf(b.id)).toEqual([`user:${jean.id}:caption`]);
   });
 
+  it("pseudo complet d'abord : jean, jean. et jean.. coexistent ; @jean. quand seul jean existe mentionne jean", async () => {
+    await world();
+    const fan = await signUp("Fan_M");
+    const one = await signUp("Jean");
+    // Le pseudo finit par un point : l'adresse e-mail du test ne le supporte pas, on pose le pseudo après l'inscription.
+    const dot = await signUp("JeanPoint");
+    const dots = await signUp("JeanPoints");
+    await db.update(profiles).set({ pseudo: "Jean." }).where(eq(profiles.userId, dot.id));
+    await db.update(profiles).set({ pseudo: "Jean.." }).where(eq(profiles.userId, dots.id));
+    const a = await mkPost({ authorId: fan.id, caption: "Merci @jean.. @jean. @jean" });
+    expect((await rowsOf(a.id)).sort()).toEqual(
+      [`user:${dots.id}:caption`, `user:${dot.id}:caption`, `user:${one.id}:caption`].sort(),
+    );
+    await db.delete(feedPosts);
+    await db
+      .update(profiles)
+      .set({ deletedAt: new Date(0) })
+      .where(eq(profiles.userId, dot.id));
+    await db
+      .update(profiles)
+      .set({ deletedAt: new Date(0) })
+      .where(eq(profiles.userId, dots.id));
+    const b = await mkPost({ authorId: fan.id, caption: "Merci à @jean." });
+    expect(await rowsOf(b.id)).toEqual([`user:${one.id}:caption`]);
+  });
+
   it("la notification d'une page porte le logo et le nom de la page, jamais l'avatar ni l'identifiant du gestionnaire", async () => {
     const { owner, structure, event } = await world();
     await db

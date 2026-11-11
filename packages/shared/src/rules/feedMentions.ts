@@ -30,6 +30,37 @@ export function mentionedWords(caption: string | null | undefined): string[] {
   return out;
 }
 
+/**
+ * Les mots cités, avec leurs candidats : le mot **complet** d'abord (un pseudo peut finir par un point : `jean.`), puis,
+ * retirée une à une, la ponctuation finale d'une phrase (`jean.` → `jean`). La résolution en base prend le premier
+ * candidat qui existe (un pseudo ou un slug entier, jamais un préfixe). Un mot par mention, sans doublon, au plus
+ * `MENTION_WORDS_MAX`.
+ */
+export function mentionedCandidates(caption: string | null | undefined): string[][] {
+  if (!caption) return [];
+  const out: string[][] = [];
+  const seen = new Set<string>();
+  for (const m of caption.matchAll(MENTION)) {
+    const at = m.index ?? 0;
+    const before = at > 0 ? caption.charAt(at - 1) : "";
+    const prev = at > 1 && /[�-�]/.test(before) ? caption.slice(at - 2, at) : before;
+    if (prev && WORD_CHAR.test(prev)) continue;
+    let word = (m[1] ?? "").toLowerCase();
+    const candidates: string[] = [];
+    while (word) {
+      candidates.push(word);
+      if (!/[.-]$/.test(word)) break;
+      word = word.slice(0, -1);
+    }
+    const first = candidates[0];
+    if (!first || seen.has(first)) continue;
+    seen.add(first);
+    out.push(candidates);
+    if (out.length >= MENTION_WORDS_MAX) break;
+  }
+  return out;
+}
+
 /** Ce que la base répond pour un mot de la légende : une fiche pro publiée, une structure, une personne (au plus un par sorte). */
 export type CaptionWord = { word: string; proId?: string | null; structureId?: string | null; userId?: string | null };
 

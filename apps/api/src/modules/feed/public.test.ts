@@ -3,7 +3,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { fromWallTime } from "@orasso/shared";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   call,
@@ -211,6 +211,22 @@ describe("journal et liste d'une structure, sans session", () => {
   });
 });
 
+describe("compteurs sans session et structure non vérifiée", () => {
+  it("un visiteur ne lit aucun compteur d'une structure en attente (le journal répond 404) ; vérifiée : les compteurs sont là", async () => {
+    const w = await world();
+    await orgPost(w);
+    const event = async () => (await call(null, "GET", `/events/by-slug/${w.event.slug}`)).json;
+    const structure = async () => (await call(null, "GET", `/structures/by-slug/${w.structure.slug}`)).json;
+    expect((await event()).publications).toEqual({ count: 1 });
+    expect((await structure()).publications).toEqual({ count: 1 });
+    await db.update(structures).set({ verification: "pending" }).where(eq(structures.id, w.structure.id));
+    expect("publications" in (await event())).toBe(false);
+    expect((await call(null, "GET", `/events/${w.event.id}/feed-posts`)).status).toBe(404);
+    // Un membre connecté garde ses compteurs.
+    expect((await call(w.owner, "GET", `/events/by-slug/${w.event.slug}`)).json.publications).toEqual({ count: 1 });
+  });
+});
+
 describe("structure non vérifiée : rien de public", () => {
   it("en attente, non vérifiée, suspendue, supprimée : journal, liste et photo en 404 ; vérifiée : servis", async () => {
     const w = await world();
@@ -239,11 +255,25 @@ describe("structure non vérifiée : rien de public", () => {
 });
 
 describe("photos publiques", () => {
-  it("200 et 304 sans Set-Cookie, même avec une session à renouveler (route avant la session)", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const tokenCookie = (res: Response) =>
+    res.headers.getSetCookie().find((c) => c.includes("better-auth.session_token="));
+
+  it("200 et 304 sans Set-Cookie, même avec une session vieillie à renouveler (route avant la session)", async () => {
     const w = await world();
     const p = await orgPost(w);
     const fan = await signUp("Cookie_P");
+    // La session est vieillie : un passage par `loadSession` la prolonge et renouvelle son cookie.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.now() + 2 * 24 * HOUR));
     const url = `/api/public/feed-posts/${p.row.id}/photos/${p.name}`;
+    // Contrôle : une route derrière la session renouvelle bien le cookie.
+    const control = await app.request("/api/me", { headers: { origin: "http://localhost:5173", cookie: fan.cookie } });
+    expect(control.status).toBe(200);
+    expect(tokenCookie(control), "cookie renouvelé").toBeTruthy();
     const res = await app.request(url, { headers: { cookie: fan.cookie } });
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -252,6 +282,20 @@ describe("photos publiques", () => {
     });
     expect(again.status).toBe(304);
     expect(again.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("les revalidations des photos ont leur limite : aucune 429 sur la liste après plus de 60 appels", async () => {
+    const w = await world();
+    const p = await orgPost(w);
+    const url = `/api/public/feed-posts/${p.row.id}/photos/${p.name}`;
+    const first = await app.request(url);
+    const etag = first.headers.get("etag") ?? "";
+    for (let i = 0; i < 100; i++) {
+      const r = await app.request(url, { headers: { "if-none-match": etag } });
+      expect(r.status).toBe(304);
+    }
+    expect((await call(null, "GET", `/events/${w.event.id}/feed-posts`)).status).toBe(200);
+    expect((await call(null, "GET", `/authors/s:${w.structure.id}/feed-posts`)).status).toBe(200);
   });
 
   const photo = (id: string, name: string, headers: Record<string, string> = {}) =>
