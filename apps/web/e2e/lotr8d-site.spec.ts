@@ -18,8 +18,29 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-type Detail = { id: string; structure: { id: string; slug: string }; publications?: { count: number }; mentions?: { count: number } };
+type Detail = {
+  id: string;
+  structure: { id: string; slug: string };
+  publications?: { count: number };
+  mentions?: { count: number };
+};
 const detail = async (cookie: string) => (await apiCall<Detail>(cookie, "GET", `/events/by-slug/${SLUG}`)).data;
+
+/** Rend à la fiche les mentions « Sur place » qu'un essai a masquées (un essai interrompu ne laisse rien derrière lui). */
+async function restoreOnSite() {
+  const sarah = await login("sarah@orasso.local");
+  const ev = await detail(sarah);
+  const list = await apiCall<{ items: { hidden: boolean; post: { id: string } }[] }>(
+    sarah,
+    "GET",
+    `/events/${ev.id}/mentions?section=on_site&hidden=1`,
+  );
+  for (const m of list.data.items.filter((i) => i.hidden)) {
+    await apiCall(sarah, "DELETE", `/mentions/e:${ev.id}/${m.post.id}/hidden`);
+  }
+}
+test.beforeAll(restoreOnSite);
+test.afterEach(restoreOnSite);
 
 test("passionné : le journal (épinglée en tête, inscrits prévenus), les deux vues, aucun menu, « Mentions · N » et son écran", async ({
   page,
@@ -28,7 +49,11 @@ test("passionné : le journal (épinglée en tête, inscrits prévenus), les deu
   await setTheme(page, "beton");
   const kenji = await login("kenji@orasso.local");
   const ev = await detail(kenji);
-  const journal = await apiCall<{ items: { id: string; pinned: boolean }[] }>(kenji, "GET", `/events/${ev.id}/feed-posts`);
+  const journal = await apiCall<{ items: { id: string; pinned: boolean }[] }>(
+    kenji,
+    "GET",
+    `/events/${ev.id}/feed-posts`,
+  );
   expect(journal.data.items.length).toBeGreaterThanOrEqual(3);
   expect(journal.data.items[0]?.pinned).toBe(true);
   await loginInBrowser(page, "kenji@orasso.local", undefined, `/e/${SLUG}`);
@@ -38,7 +63,9 @@ test("passionné : le journal (épinglée en tête, inscrits prévenus), les deu
     const section = page.getByTestId("event-journal");
     await expect(section).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("journal-title")).toHaveText("Publications");
-    await expect(page.getByTestId("journal-intro")).toContainText("Le journal de l'événement, dans la durée : seulement celles de");
+    await expect(page.getByTestId("journal-intro")).toContainText(
+      "Le journal de l'événement, dans la durée : seulement celles de",
+    );
     await expect(page.getByTestId("journal-intro")).not.toContainText("Épinglée en tête si tu le veux");
     await expect(section.getByTestId("publication-tile")).toHaveCount(journal.data.items.length);
     // L'épinglée est la première vignette ; « Inscrits prévenus » sur une « Info importante » envoyée ; aucun menu.
@@ -50,7 +77,9 @@ test("passionné : le journal (épinglée en tête, inscrits prévenus), les deu
   }
   // Les deux vues : « Une par une » montre les cartes entières, étiquettes comprises ; sans menu d'organisateur (la carte garde « Signaler »).
   await page.getByRole("button", { name: "Une par une" }).click();
-  await expect(page.getByTestId("event-journal").getByTestId("feed-card-feed_post")).toHaveCount(journal.data.items.length);
+  await expect(page.getByTestId("event-journal").getByTestId("feed-card-feed_post")).toHaveCount(
+    journal.data.items.length,
+  );
   await expect(page.getByTestId("event-journal").getByTestId("journal-pinned")).toHaveCount(1);
   await page.getByRole("button", { name: "Grille de deux" }).click();
   // « Mentions · N » : la ligne, puis l'écran à part.
@@ -88,12 +117,18 @@ test("passionné : le journal (épinglée en tête, inscrits prévenus), les deu
   await shot(page, "mentions-apres-evenement");
 });
 
-test("organisatrice : épingle une autre publication puis rend l'épingle, masque une mention puis la remet", async ({ page }) => {
+test("organisatrice : épingle une autre publication puis rend l'épingle, masque une mention puis la remet", async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   await setTheme(page, "beton");
   const sarah = await login("sarah@orasso.local");
   const ev = await detail(sarah);
-  const before = await apiCall<{ items: { id: string; pinned: boolean }[] }>(sarah, "GET", `/events/${ev.id}/feed-posts`);
+  const before = await apiCall<{ items: { id: string; pinned: boolean }[] }>(
+    sarah,
+    "GET",
+    `/events/${ev.id}/feed-posts`,
+  );
   const originalPin = before.data.items.find((p) => p.pinned)?.id ?? null;
   await loginInBrowser(page, "sarah@orasso.local", undefined, `/e/${SLUG}`);
   await page.setViewportSize({ width: 390, height: 900 });
@@ -110,7 +145,10 @@ test("organisatrice : épingle une autre publication puis rend l'épingle, masqu
   await page.getByTestId("publication-menu-pin").click();
   const lastId = before.data.items.at(-1)?.id as string;
   await expect
-    .poll(async () => (await apiCall<{ items: { id: string }[] }>(sarah, "GET", `/events/${ev.id}/feed-posts`)).data.items[0]?.id)
+    .poll(
+      async () =>
+        (await apiCall<{ items: { id: string }[] }>(sarah, "GET", `/events/${ev.id}/feed-posts`)).data.items[0]?.id,
+    )
     .toBe(lastId);
   await expect(section.getByTestId("journal-pinned")).toHaveCount(1);
   await expect(section.getByTestId("publication-tile").first().getByTestId("journal-pinned")).toBeVisible();
@@ -145,7 +183,9 @@ test("organisatrice : épingle une autre publication puis rend l'épingle, masqu
   await expect(page.getByTestId("mention-menu")).toHaveCount(visible);
 });
 
-test("sans session : la fiche ne montre que le journal (ni mentions, ni menu, ni lien, ni personne)", async ({ page }) => {
+test("sans session : la fiche ne montre que le journal (ni mentions, ni menu, ni lien, ni personne)", async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   await setTheme(page, "beton");
   const anon = await apiCall<Detail>("", "GET", `/events/by-slug/${SLUG}`);
@@ -178,7 +218,11 @@ test("une annonce réservée aux inscrits reste invisible d'un visiteur ; l'orga
   await expect(page.getByTestId("event-journal")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(text)).toHaveCount(0);
   const damien = await login("damien@orasso.local");
-  const list = await apiCall<{ items: { body: string; audience: string }[] }>(damien, "GET", "/events/by-slug/nocturne-de-canet-2026/announcements");
+  const list = await apiCall<{ items: { body: string; audience: string }[] }>(
+    damien,
+    "GET",
+    "/events/by-slug/nocturne-de-canet-2026/announcements",
+  );
   expect(list.data.items.some((i) => i.body.startsWith(text) && i.audience === "participants")).toBe(true);
 });
 
