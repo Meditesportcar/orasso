@@ -27,6 +27,7 @@ import { apiFetch } from "../lib/api.client";
 import { formatDayShort, formatTime } from "../lib/format";
 import { UsePosition } from "./UsePosition";
 import { Weather } from "./Weather";
+import { MyWeatherCards } from "./weather/MyWeatherBlock";
 
 export const RADIUS_FORM = "home-radius";
 
@@ -125,7 +126,21 @@ export function NearbyBlock({
   );
 }
 
-export function WeatherBlock({ weather }: { weather: HomeData["weather"] }) {
+export function WeatherBlock({
+  weather,
+  myWeather,
+}: {
+  weather: HomeData["weather"];
+  myWeather?: HomeData["myWeather"];
+}) {
+  // Lot R8m : « Ma météo » (l'endroit où je suis ou ma ville, deux lieux au plus) ; sans elle (réponse ancienne), la météo du département.
+  if (myWeather) {
+    return (
+      <Block id="weather" title={homeWidgetTitles.weather}>
+        <MyWeatherCards myWeather={myWeather} />
+      </Block>
+    );
+  }
   return (
     <Block id="weather" title={homeWidgetTitles.weather}>
       {weather ? (

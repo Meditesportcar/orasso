@@ -33,6 +33,7 @@ import { whatsNewSeen } from "../lib/whatsnew.server";
 import type { Route } from "./+types/app-home";
 import "../styles/home.css";
 import "../styles/home-r7a2.css";
+import "../styles/weather-r8m.css";
 
 // Accueil du compte (docs/02, lot 30) : « Prochain accès » en tête, puis les blocs réglables dans l'ordre choisi (mêmes
 // que dans l'appli), un emplacement sponsorisé et une seule incitation. Rayon, position et réglages sont dans l'adresse
@@ -128,7 +129,7 @@ export default function AppHome({ loaderData }: Route.ComponentProps) {
         spot_meetup: home.spotMeetup ? <SpotMeetupBlock data={home.spotMeetup} /> : null,
         pending: home.pendingStatuses.length ? <PendingBlock items={home.pendingStatuses} /> : null,
         nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
-        weather: <WeatherBlock weather={home.weather} />,
+        weather: <WeatherBlock weather={home.weather} myWeather={home.myWeather} />,
         memories: home.memories ? <MemoriesBlock data={home.memories} /> : null,
         agenda: home.agenda.length ? <AgendaBlock items={home.agenda} /> : null,
         favorite_garage: home.favoriteGarage ? <GarageBlock garage={home.favoriteGarage} /> : null,

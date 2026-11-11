@@ -1,0 +1,186 @@
+/* Lot R8m : « Ma météo » du site (maquette R8.8 `.r8mw`, `.r8mwbig`, `.r8hr`, `.r8same`). Jetons seulement. */
+.wxm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+}
+.wxm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  width: 100%;
+}
+.wxm-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.wxm-card {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.wxm-card:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.wxm-card__place {
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+.wxm-card__temp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--accent-text);
+}
+.wxm-card__temp b {
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+}
+.wxm-card small {
+  color: var(--ink-muted);
+}
+
+.wxm-big {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--accent-text);
+}
+.wxm-big__num {
+  color: var(--ink);
+  font-size: 44px;
+  line-height: 1;
+}
+.wxm-big__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--ink);
+}
+.wxm-big__text small {
+  color: var(--ink-muted);
+}
+.wxm-hours {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 2px;
+  list-style: none;
+  overflow-x: auto;
+}
+.wxm-hour {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  width: 62px;
+  padding: 10px 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--accent-text);
+}
+.wxm-hour small {
+  color: var(--ink-muted);
+}
+.wxm-hour b {
+  color: var(--ink);
+  font-size: 16px;
+}
+.wxm-same {
+  display: grid;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.wxm-same > div {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px var(--space-3);
+  color: var(--ink);
+}
+.wxm-same > div + div {
+  border-top: 1px solid var(--card-line);
+}
+.wxm-same > div > :first-child {
+  color: var(--ink-muted);
+}
+.wxm-same i {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.wxm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.wxm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.wxm-panel h2 {
+  margin: 0;
+}
+.wxm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.wxm-search label {
+  flex-basis: 100%;
+}
+.wxm-search input[name="q"] {
+  flex: 1 1 200px;
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--card-line);
+  background: var(--surface-field);
+  color: var(--ink);
+  font: inherit;
+}
+.wxm-results {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wxm-results form {
+  margin: 0;
+}
+.wxm-gps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.wxm-gps p {
+  margin: 0;
+}
