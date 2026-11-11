@@ -8,6 +8,7 @@ import {
   applyFeedPage,
   emptyFeedList,
   eventsWithPlace,
+  FEED_JUST_PUBLISHED_MS,
   FEED_KINDS_DRAWN,
   feedAgo,
   feedCropPlan,
@@ -18,9 +19,8 @@ import {
   isFeedKindReserved,
   isNearViewport,
   isUntouchedFrame,
-  MY_PUBLISHED_PIN_MS,
+  justPublished,
   mergeDetectedFrames,
-  pinnedPublished,
   publishedCard,
   publishIssue,
   slidesToLoad,
@@ -282,18 +282,18 @@ describe("ma publication après l'envoi", () => {
   });
 });
 
-describe("ma publication épinglée 24 h", () => {
+describe("ma publication à l'envoi", () => {
   const at = (iso: string) => ({ ...card("x"), at: iso }) as FeedCard;
   const now = Date.parse("2026-11-10T10:00:00.000Z");
-  it("reste en tête moins de 24 h, tombe à 24 h pile", () => {
-    const fresh = at("2026-11-09T10:00:01.000Z");
-    const old = at("2026-11-09T10:00:00.000Z");
-    expect(pinnedPublished([fresh, old], now)).toEqual([fresh]);
-    expect(MY_PUBLISHED_PIN_MS).toBe(86_400_000);
+  it("n'est « juste publiée » que moins d'une heure : plus de 24 h d'épingle", () => {
+    const fresh = at("2026-11-10T09:00:01.000Z");
+    const old = at("2026-11-10T09:00:00.000Z");
+    expect(justPublished([fresh, old], now)).toEqual([fresh]);
+    expect(FEED_JUST_PUBLISHED_MS).toBe(3_600_000);
   });
   it("une date illisible reste (on ne perd pas une publication sur un doute)", () => {
     const odd = at("pas une date");
-    expect(pinnedPublished([odd], now)).toEqual([odd]);
+    expect(justPublished([odd], now)).toEqual([odd]);
   });
 });
 
