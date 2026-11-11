@@ -167,10 +167,55 @@ export async function savePhoto(
       const file = new File(Paths.document, photoFileName(scope, hash, ms));
       file.create();
       file.write(dataUrl);
+      await enforcePhotoCap(PHOTO_TOTAL_MAX_BYTES, account);
     } catch {
       // Ignoré : voir l'en-tête.
     }
   });
+}
+
+/** Efface la photo gardée de `url` (accès refusé : elle ne doit plus jamais s'afficher). */
+export async function deletePhoto(url: string, account = accountGuard()): Promise<void> {
+  const scope = account.scope;
+  if (!scope || !account.current()) return;
+  try {
+    const hash = photoHash(url);
+    if (isWeb) {
+      const index = (await cacheGetJson<WebPhoto[]>(WEB_INDEX)) ?? [];
+      if (!index.some((p) => p.hash === hash)) return;
+      await cacheSetJson(webKey(hash), null, scope);
+      await cacheSetJson(
+        WEB_INDEX,
+        index.filter((p) => p.hash !== hash),
+        scope,
+      );
+      return;
+    }
+    for (const p of photoEntries(scope)) if (p.hash === hash) p.entry.delete();
+  } catch {
+    // Ignoré : voir l'en-tête.
+  }
+}
+
+/** Plafond des photos gardées, par compte : les plus anciennes partent d'abord. */
+export const PHOTO_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
+
+export async function enforcePhotoCap(max = PHOTO_TOTAL_MAX_BYTES, account = accountGuard()): Promise<void> {
+  const scope = account.scope;
+  if (!scope || !account.current() || isWeb) return;
+  try {
+    const files = photoEntries(scope)
+      .map((p) => ({ ...p, size: new File(Paths.document, photoFileName(scope, p.hash, p.ms)).size ?? 0 }))
+      .sort((a, b) => a.ms - b.ms);
+    let total = files.reduce((n, f) => n + f.size, 0);
+    for (const f of files) {
+      if (total <= max) break;
+      f.entry.delete();
+      total -= f.size;
+    }
+  } catch {
+    // Ignoré : voir l'en-tête.
+  }
 }
 
 /** La photo gardée de `url` (adresse de données), ou `null` : absente, de plus de 7 jours, ou d'un autre compte. */

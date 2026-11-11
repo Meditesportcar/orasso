@@ -107,10 +107,4 @@ describe("file des cartes vues : changement de compte", () => {
     await t.flushSeen();
     expect(env.sent).toHaveLength(0);
   });
-
-  it("un vrai toucher bouge de moins de 10 px ; un défilement n'est pas un toucher", () => {
-    expect(t.isRealTap({ x: 100, y: 400 }, { x: 103, y: 404 })).toBe(true);
-    expect(t.isRealTap({ x: 100, y: 400 }, { x: 100, y: 330 })).toBe(false);
-    expect(t.isRealTap({ x: 100, y: 400 }, { x: 100, y: 390 })).toBe(false);
-  });
 });

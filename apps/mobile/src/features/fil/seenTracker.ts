@@ -23,9 +23,6 @@ import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { useScrollAssist } from "@/ui/ScrollAssist";
 
 const QUEUE_KEY = "fil.seen-queue";
-/** Un toucher sur une carte suivi d'un départ de l'écran dans ce délai = la carte a été ouverte. */
-const OPEN_WINDOW_MS = 4000;
-/** La mesure de ce qui est à l'écran : deux fois par seconde (la présence se compte à la seconde). */
 const MEASURE_EVERY_MS = 500;
 
 type Store = { scope: string; queue: ReturnType<typeof createSeenQueue>; restored: boolean };
@@ -116,14 +113,10 @@ export const isTrackable = (card: FeedCard): boolean =>
 
 type Layout = { y: number; h: number };
 
-/** Un vrai toucher : le doigt a bougé de moins de 10 px (un défilement n'ouvre aucune carte). */
-export const isRealTap = (from: { x: number; y: number }, to: { x: number; y: number }): boolean =>
-  Math.hypot(to.x - from.x, to.y - from.y) < 10;
-
 /**
  * Suit les cartes de la liste : toutes les 500 ms (Fil affiché, application active), mesure la liste et les cartes à l'écran,
  * compte une seconde de présence, puis retient la carte. Envoie toutes les 10 s, à la sortie du Fil, au passage en arrière-plan
- * et au retour du réseau. Un toucher puis la sortie du Fil = la carte a été ouverte.
+ * et au retour du réseau. `open` et `share` ne viennent que des actions qui ouvrent la publication ou le partage (`noteSeen`).
  *
  * `list` : la vue qui contient les cartes ; `layouts` : la place de chaque carte dans cette vue (`onLayout`) ; `reset` : un
  * numéro qui change quand la liste est remplacée (autre onglet, actualisation) et repart la mesure de présence.
@@ -141,18 +134,12 @@ export function useSeenTracker(opts: {
   const dwell = useRef(createSeenDwell());
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
-  const touched = useRef<{ id: string; at: number } | null>(null);
 
   // Une autre liste : la présence repart de zéro.
   // biome-ignore lint/correctness/useExhaustiveDependencies: seul le changement de liste relance la mesure.
   useEffect(() => {
     dwell.current = createSeenDwell();
   }, [reset]);
-
-  /** Appelé à la fin d'un vrai toucher sur une carte (déplacement de moins de 10 px : un défilement n'ouvre rien). */
-  const touch = useCallback((id: string) => {
-    touched.current = { id, at: Date.now() };
-  }, []);
 
   useEffect(() => {
     if (!focused) return;
@@ -180,10 +167,6 @@ export function useSeenTracker(opts: {
       clearInterval(measuring);
       clearInterval(sending);
       state.remove();
-      // Quitter le Fil juste après un toucher sur une carte : elle a été ouverte (fiche, profil, publication…).
-      const last = touched.current;
-      touched.current = null;
-      if (last && Date.now() - last.at < OPEN_WINDOW_MS) noteSeen(last.id, "open");
       void flushSeen();
     };
   }, [focused, assist, list, layouts]);
@@ -194,6 +177,4 @@ export function useSeenTracker(opts: {
     if (online && !wasOnline.current) void flushSeen();
     wasOnline.current = online;
   }, [online]);
-
-  return { touch };
 }

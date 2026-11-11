@@ -38,7 +38,7 @@ import { HotRail } from "./HotRail";
 import { HowFeedSheet } from "./HowFeedSheet";
 import { FilOfflineContext } from "./offlineContext";
 import { PublishChoice } from "./PublishChoice";
-import { isRealTap, noteSeen, useSeenTracker } from "./seenTracker";
+import { noteSeen, useSeenTracker } from "./seenTracker";
 import { useFeed } from "./useFeed";
 import { WhyThisSheet } from "./WhyThisSheet";
 
@@ -144,11 +144,10 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
     wasOnline.current = online;
   }, [online, failed, offlineCopy, reload, askPill, assist]);
 
-  // Les cartes vues : suivies à l'écran, envoyées par lots ; un toucher puis la sortie du Fil = la carte a été ouverte.
+  // Les cartes vues : suivies à l'écran, envoyées par lots .
   const listBox = useRef<View>(null);
   const layouts = useRef(new Map<string, { y: number; h: number }>());
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const { touch } = useSeenTracker({
+  useSeenTracker({
     list: listBox,
     layouts,
     cards: feed.items ?? [],
@@ -339,15 +338,6 @@ function FeedBody({ feed }: { feed: ReturnType<typeof useFeed> }) {
                 onLayout={(e) =>
                   layouts.current.set(card.id, { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })
                 }
-                onTouchStart={(e) => {
-                  touchStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
-                }}
-                onTouchEnd={(e) => {
-                  const from = touchStart.current;
-                  touchStart.current = null;
-                  // Un vrai toucher (moins de 10 px de déplacement) : un défilement n'ouvre aucune carte.
-                  if (from && isRealTap(from, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })) touch(card.id);
-                }}
                 style={styles.item}
               >
                 {i === frontier ? (

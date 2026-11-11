@@ -34,3 +34,13 @@ export const isWantedPhoto = (url: string): boolean => feedFilters.some((f) => w
 
 /** Un autre compte : rien n'est voulu. */
 export const resetWantedPhotos = (): void => wanted.clear();
+
+/**
+ * Que faire d'une réponse du serveur pour une photo : `show` (200), `forget` (401, 403, 404, 410 : l'accès est retiré, la photo
+ * gardée est effacée et ne s'affiche plus), `fallback` (autre erreur : `CrewPhotoImage` dit pourquoi, jamais la photo gardée).
+ * Seule une absence de réponse (requête rejetée) autorise la photo gardée.
+ */
+export function photoResponseAction(status: number): "show" | "forget" | "fallback" {
+  if (status >= 200 && status < 300) return "show";
+  return [401, 403, 404, 410].includes(status) ? "forget" : "fallback";
+}

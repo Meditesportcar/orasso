@@ -17,6 +17,7 @@ export function PostActions({
   onChange,
   offline = false,
   onShared,
+  onOpened,
 }: {
   post: FeedPostView;
   onChange?: (post: FeedPostView) => void;
@@ -24,6 +25,8 @@ export function PostActions({
   offline?: boolean;
   /** Lot R8c2 : le partage est ouvert depuis cette carte (le Fil le retient comme une interaction). */
   onShared?: () => void;
+  /** Lot R8c2 : la feuille des commentaires est ouverte depuis cette carte (le Fil retient `open`). */
+  onOpened?: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -94,7 +97,7 @@ export function PostActions({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={C.comment}
-        onPress={() => (offline ? setNoNet(true) : postLive.open(post.id, true))}
+        onPress={() => (offline ? setNoNet(true) : (onOpened?.(), postLive.open(post.id, true)))}
         style={[styles.pill, { backgroundColor: c.ground }]}
         testID="feed-post-comment"
       >

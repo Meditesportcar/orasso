@@ -38,7 +38,12 @@ export function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       testID="feed-card-feed_post"
       actions={
         <>
-          <PostActions post={post} offline={offline} onShared={() => noteSeen(card.id, "share")} />
+          <PostActions
+            post={post}
+            offline={offline}
+            onShared={() => noteSeen(card.id, "share")}
+            onOpened={() => noteSeen(card.id, "open")}
+          />
           {post.attach ? <AttachSeeButton attach={post.attach} /> : null}
         </>
       }
