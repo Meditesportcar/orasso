@@ -160,9 +160,9 @@ export async function pageInGoodStanding(ex: Executor, key: AuthorKey): Promise<
   }
 }
 
-/** Lit la clé d'une adresse (`s:<uuid>`, `u:<compte>`…) ; 404 si elle est mal formée (on ne dit pas pourquoi). */
+/** Lit la clé d'une adresse (déjà décodée par le routeur : `s:<uuid>`, `u:<compte>`…) ; 404 si elle est mal formée (on ne dit pas pourquoi). */
 export function requireAuthorKey(raw: string | undefined): AuthorKey {
-  const key = parseAuthorKey(decodeURIComponent(raw ?? ""));
+  const key = parseAuthorKey(raw ?? "");
   if (!key) throw notFound(feedListErrors.authorNotFound);
   return key;
 }

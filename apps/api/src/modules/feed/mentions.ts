@@ -241,7 +241,7 @@ export async function listAuthorMentions(
  * L'auteur n'est pas prévenu et sa publication ne change pas. Idempotent. 404 : cible, mention ou clé inconnues.
  */
 export async function setMentionHidden(v: Viewer, rawTarget: string, postId: string, hidden: boolean) {
-  const target = parseMentionTargetKey(decodeURIComponent(rawTarget));
+  const target = parseMentionTargetKey(rawTarget);
   if (!target || (target.kind !== "event" && target.kind !== "structure" && target.kind !== "pro")) {
     throw notFound(feedListErrors.mentionNotFound);
   }
