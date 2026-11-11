@@ -5,30 +5,55 @@
 // `feed_post`), puis `POST /api/me/feed-posts`. Pas de détection automatique de plaque sur le site (elle vit dans l'appli).
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  type AttachableEventItem,
+  attachableQuery,
+  attachDateLabel,
+  attachLeadOf,
+  attachStateLabel,
   type CommercialDraft,
+  captionMaxOf,
+  chooseAuthor,
+  chooseEvent,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
-  eventsWithPlace,
   FEED_ASPECT_RATIOS,
-  FEED_CAPTION_MAX,
+  FEED_PLACE_LABEL_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
   type FeedPostView,
   feedAspectLabels,
   feedCropPlan,
-  feedPostBody,
+  feedPostBodyR8,
+  importantAvailable,
+  importantBlocked,
+  importantImmediate,
+  importantReasonLabels,
+  importantReasons,
+  importantWhoText,
+  initialPublishChoice,
   feedScreenLabels as L,
+  type NotifyPreview,
   noCommercialDraft,
+  type PersonaEntry,
   type PlateRect,
+  type PublishChoice,
   partnershipLabels,
-  publishIssue,
+  publicationErrors,
+  publishAuthors,
+  publishIssueR8,
+  publishSays,
+  showAuthorChoice,
+  showEventBlock,
+  feedPublishLabels as T,
   type UploadResult,
   vehicleWizardLabels as V,
+  vehicleAllowed,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../../styles/fil.css";
+import "../../styles/fil-publish.css";
 import { CommercialLine, useCommercialLine } from "../stories/CommercialLine";
 import "../../styles/garage.css";
 import { apiFetch } from "../../lib/api.client";
@@ -87,13 +112,17 @@ async function upload(file: File): Promise<{ ok: true; key: string } | { ok: fal
 
 export function PublishForm({
   userId,
+  pseudo,
+  avatarUrl,
+  personas,
   vehicles,
-  applications,
   optionsFailed,
 }: {
   userId: string;
+  pseudo: string;
+  avatarUrl: string | null;
+  personas: Pick<PersonaEntry, "kind" | "id" | "label" | "logoUrl">[];
   vehicles: { id: string; label: string }[];
-  applications: { status: string; event: { id: string; title: string; startsAt: string; status: string } }[];
   optionsFailed: boolean;
 }) {
   const [aspect, setAspect] = useState<FeedAspect>(DEFAULT_FEED_ASPECT);
@@ -103,8 +132,19 @@ export function PublishForm({
   // ferait passer la suivante à sa place).
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [eventId, setEventId] = useState<string | null>(null);
+  // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
+  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
+  const authors = useMemo(() => publishAuthors(personas, pseudo, avatarUrl), [personas, pseudo, avatarUrl]);
+  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  const fan = vehicleAllowed(author);
+  const [loaded, setLoaded] = useState<{ key: string; items: AttachableEventItem[] | null; failed: boolean }>({
+    key: "",
+    items: null,
+    failed: false,
+  });
+  const [reloadEvents, setReloadEvents] = useState(0);
+  const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
+  const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
@@ -122,7 +162,47 @@ export function PublishForm({
   const keys = useRef<Record<string, string>>({});
   const generation = useRef(0);
   const input = useRef<HTMLInputElement>(null);
-  const events = eventsWithPlace(applications);
+  const eventBlock = showEventBlock(author);
+  // Les événements rattachables de la casquette choisie (rôle déduit par l'API), rechargés à chaque changement de casquette.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la casquette est identifiée par sa clé.
+  useEffect(() => {
+    if (!eventBlock) return;
+    let live = true;
+    setLoaded({ key: author.key, items: null, failed: false });
+    const q = attachableQuery(author);
+    const query = new URLSearchParams({ persona: q.persona });
+    if (q.structureId) query.set("structureId", q.structureId);
+    if (q.proId) query.set("proId", q.proId);
+    void apiFetch<{ items: AttachableEventItem[] }>(`/me/feed-posts/attachable-events?${query}`).then((res) => {
+      if (!live) return;
+      setLoaded(
+        res.ok
+          ? { key: author.key, items: res.data.items, failed: false }
+          : { key: author.key, items: [], failed: true },
+      );
+    });
+    return () => {
+      live = false;
+    };
+  }, [author.key, eventBlock, reloadEvents]);
+  const events = eventBlock && loaded.key === author.key ? (loaded.items ?? []) : [];
+  const eventsLoading = eventBlock && (loaded.key !== author.key || loaded.items === null);
+  const event = events.find((e) => e.id === choice.eventId) ?? null;
+  const showImportant = importantAvailable(author, event);
+  // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.
+  useEffect(() => {
+    if (!showImportant || !event) return;
+    let live = true;
+    const id = event.id;
+    void apiFetch<NotifyPreview>(`/events/${id}/notify-preview`).then((res) => {
+      if (live) setRecipients({ eventId: id, n: res.ok ? res.data.recipients : null });
+    });
+    return () => {
+      live = false;
+    };
+  }, [showImportant, event?.id]);
+  const posterVisual = items.length === 0 && event !== null && event.hasVisual;
 
   // Les aperçus sont libérés à la sortie de la page (pas à chaque changement : ceux qui restent servent encore).
   const live = useRef<Item[]>([]);
@@ -223,14 +303,16 @@ export function PublishForm({
       setError,
     );
   }
+  const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
   const issue =
-    publishIssue({ photos: items, caption, preparing }) ??
-    commercialIssue(commercialLine, partnershipLabels.commercialPick);
+    publishIssueR8({ photos: items, caption, preparing, author, event, important }) ??
+    (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   async function publish() {
     if (busy || issue) return;
     setBusy(true);
     setError(null);
+    setSecurity(false);
     const uploaded: string[] = [];
     for (const [i, p] of items.entries()) {
       setProgress(L.sending(i + 1, items.length));
@@ -249,14 +331,17 @@ export function PublishForm({
       uploaded.push(key);
     }
     setProgress(L.publishing);
-    const body = feedPostBody({
+    const body = feedPostBodyR8({
       photos: items.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
       caption,
       aspect,
-      vehicleId,
-      eventId,
       clientId,
-      ...commercialField(commercialLine),
+      author,
+      eventId: event ? event.id : null,
+      vehicleId: choice.vehicleId,
+      placeLabel: choice.placeLabel,
+      important,
+      ...(fan ? commercialField(commercialLine) : {}),
     });
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
@@ -267,6 +352,30 @@ export function PublishForm({
       return setDone(true);
     }
     if (res.status === 429) return setError(L.tooManyRequests);
+    if (res.status === 0) return setError(T.noNetwork);
+    if (res.error.code === "persona_forbidden" || res.error.code === "two_factor_required") {
+      setSecurity(true);
+      return setError(res.error.code === "persona_forbidden" ? publicationErrors.persona_forbidden : res.error.message);
+    }
+    if (res.error.code === "event_not_attachable") {
+      setChoice((c) => chooseEvent(c, null));
+      setReloadEvents((n) => n + 1);
+      return setError(`${publicationErrors.event_not_attachable} ${T.listReloaded}`);
+    }
+    if (res.error.code === "important_quota") {
+      const d = (res.error as { details?: { leftToday?: number; leftWeek?: number } }).details;
+      const at = event?.id;
+      if (at && d && Number.isFinite(d.leftToday) && Number.isFinite(d.leftWeek)) {
+        setLoaded((l) => ({
+          ...l,
+          items: (l.items ?? []).map((x) =>
+            x.id === at ? { ...x, important: { leftToday: Number(d.leftToday), leftWeek: Number(d.leftWeek) } } : x,
+          ),
+        }));
+      }
+      setChoice((c) => ({ ...c, importantOn: false, importantReason: null }));
+      return setError(publicationErrors.important_quota);
+    }
     if (res.error.code === "plate_decision_required") {
       const at = Number((res.error as { details?: { photoIndex?: number } }).details?.photoIndex);
       if (Number.isFinite(at)) setCurrent(at);
@@ -323,6 +432,12 @@ export function PublishForm({
         <div className="o-t-label">
           {L.publishPhotos} · {L.publishPhotosCount(items.length, FEED_POST_PHOTOS_MAX)}
         </div>
+        {posterVisual && event ? (
+          <div className="fp-poster" data-testid="fil-publish-poster">
+            {event.posterUrl ? <img src={event.posterUrl} alt={T.posterAlt(event.title)} /> : null}
+            <p className="o-t-caption">{T.posterNote}</p>
+          </div>
+        ) : null}
         <div className="fil-thumbs">
           {items.map((p, i) => (
             <div key={p.key} className={i === index ? "fil-thumb is-on" : "fil-thumb"}>
@@ -501,22 +616,51 @@ export function PublishForm({
         <span className="o-t-label">{L.caption}</span>
         <textarea
           value={caption}
-          maxLength={FEED_CAPTION_MAX}
+          maxLength={captionMaxOf(author)}
           rows={3}
           placeholder={L.captionPlaceholder}
           disabled={busy}
           onChange={(e) => setCaption(e.currentTarget.value)}
           data-testid="fil-publish-caption"
         />
-        <span className="o-t-caption">{L.captionHint}</span>
+        <span className="o-t-caption">{fan ? L.captionHint : T.captionHintPage}</span>
       </label>
 
+      <p className="fp-note" data-testid="fil-publish-gesture">
+        <Icon name="info" size={16} />
+        <span>
+          <strong>{T.oneGesture.lead}</strong> {T.oneGesture.rest}
+        </span>
+      </p>
+
       {optionsFailed ? (
-        <p className="o-t-caption">
-          Ta voiture et tes événements n&apos;ont pas pu être chargés : tu peux publier sans.
-        </p>
+        <p className="o-t-caption">Ta voiture n&apos;a pas pu être chargée : tu peux publier sans.</p>
       ) : null}
-      {vehicles.length ? (
+      {showAuthorChoice(authors) ? (
+        <div className="s-stack s-stack--tight" data-testid="fil-publish-as">
+          <div className="o-t-label">{T.asTitle}</div>
+          <div className="fp-opts">
+            {authors.map((a) => (
+              <button
+                key={a.key}
+                type="button"
+                aria-pressed={a.key === author.key}
+                className={a.key === author.key ? "fp-opt is-on" : "fp-opt"}
+                disabled={busy}
+                onClick={() => setChoice((c) => chooseAuthor(c, authors, a.key))}
+                data-testid={`fil-publish-as-${a.key}`}
+              >
+                <Icon name={a.icon} size={22} />
+                <span>
+                  <b>{a.title}</b>
+                  <small>{a.hint}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {fan && vehicles.length ? (
         <div className="s-stack s-stack--tight">
           <div className="o-t-label">
             {L.vehicle} <span className="o-t-caption">{L.optional}</span>
@@ -526,10 +670,10 @@ export function PublishForm({
               <button
                 key={v.id}
                 type="button"
-                className={vehicleId === v.id ? "fil-chip is-on" : "fil-chip"}
-                aria-pressed={vehicleId === v.id}
+                className={choice.vehicleId === v.id ? "fil-chip is-on" : "fil-chip"}
+                aria-pressed={choice.vehicleId === v.id}
                 disabled={busy}
-                onClick={() => setVehicleId(vehicleId === v.id ? null : v.id)}
+                onClick={() => setChoice((c) => ({ ...c, vehicleId: c.vehicleId === v.id ? null : v.id }))}
               >
                 {v.label}
               </button>
@@ -537,29 +681,87 @@ export function PublishForm({
           </div>
         </div>
       ) : null}
-      {events.length ? (
-        <div className="s-stack s-stack--tight">
+      {eventBlock ? (
+        <div className="s-stack s-stack--tight" data-testid="fil-publish-events">
           <div className="o-t-label">
-            {L.event} <span className="o-t-caption">{L.optional}</span>
+            {attachLeadOf(author)} · {T.optional}
           </div>
-          <div className="fil-chips">
+          <div className="fp-opts">
+            <button
+              type="button"
+              aria-pressed={!event}
+              className={!event ? "fp-opt is-on" : "fp-opt"}
+              disabled={busy}
+              onClick={() => setChoice((c) => chooseEvent(c, null))}
+              data-testid="fil-publish-event-none"
+            >
+              <Icon name="close" size={22} />
+              <span>
+                <b>{T.attachNone}</b>
+                <small>{T.attachNoneHint[author.destination]}</small>
+              </span>
+            </button>
             {events.map((e) => (
               <button
                 key={e.id}
                 type="button"
-                className={eventId === e.id ? "fil-chip is-on" : "fil-chip"}
-                aria-pressed={eventId === e.id}
+                aria-pressed={event?.id === e.id}
+                className={event?.id === e.id ? "fp-opt is-on" : "fp-opt"}
                 disabled={busy}
-                onClick={() => setEventId(eventId === e.id ? null : e.id)}
+                onClick={() => setChoice((c) => chooseEvent(c, e.id))}
+                data-testid={`fil-publish-event-${e.id}`}
               >
-                {e.title}
+                <Icon
+                  name={
+                    e.role === "on_site" ? "truck" : e.role === "attendee" && e.phase === "after" ? "stamp" : "ticket"
+                  }
+                  size={22}
+                />
+                <span>
+                  <b>{e.title}</b>
+                  <small>
+                    {attachDateLabel(e.startsAt)} · {attachStateLabel(e.role, e.phase)}
+                  </small>
+                </span>
               </button>
             ))}
           </div>
+          {eventsLoading ? <p className="o-t-caption">{T.attachLoading}</p> : null}
+          {loaded.key === author.key && loaded.failed ? <p className="o-t-caption">{T.attachFailed}</p> : null}
+          {fan ? <p className="o-t-caption">{T.attachFoot}</p> : null}
         </div>
       ) : null}
-
-      <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" />
+      {!event ? (
+        <label className="s-field">
+          <span className="o-t-label">
+            {T.placeLabel} · {T.optional}
+          </span>
+          <input
+            type="text"
+            value={choice.placeLabel}
+            maxLength={FEED_PLACE_LABEL_MAX}
+            placeholder={T.placePlaceholder}
+            disabled={busy}
+            onChange={(e) => {
+              const placeLabel = e.currentTarget.value;
+              setChoice((c) => ({ ...c, placeLabel }));
+            }}
+            data-testid="fil-publish-place"
+          />
+          <span className="o-t-caption">{T.placeHint}</span>
+        </label>
+      ) : null}
+      {showImportant && event ? (
+        <ImportantBlock
+          event={event}
+          choice={choice}
+          recipients={recipients?.eventId === event.id ? recipients.n : null}
+          busy={busy}
+          onChoice={setChoice}
+        />
+      ) : null}
+      {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" /> : null}
+      <SaysBlock says={publishSays(author, event, important.on)} />
 
       {error ? (
         <p className="s-error" role="alert">
@@ -575,6 +777,11 @@ export function PublishForm({
           {issue}
         </p>
       ) : null}
+      {security ? (
+        <a className="fil-link" href="/app/securite" data-testid="fil-publish-security">
+          <Icon name="shield" size={16} /> {T.securityLink}
+        </a>
+      ) : null}
       <Button type="submit" icon="upload" fullWidth disabled={busy || Boolean(issue)} data-testid="fil-publish-send">
         {L.publish}
       </Button>
@@ -582,5 +789,108 @@ export function PublishForm({
         <Icon name="close" size={16} /> Annuler
       </a>
     </form>
+  );
+}
+
+/** La case « Info importante », ses cinq motifs et le plafond (même règles et mêmes mots que l'appli). */
+function ImportantBlock({
+  event,
+  choice,
+  recipients,
+  busy,
+  onChoice,
+}: {
+  event: AttachableEventItem;
+  choice: PublishChoice;
+  recipients: number | null;
+  busy: boolean;
+  onChoice: (fn: (c: PublishChoice) => PublishChoice) => void;
+}) {
+  const blocked = importantBlocked(event);
+  const on = choice.importantOn && !blocked;
+  const left = event.important;
+  const quota = left ? T.importantQuota(left.leftToday, left.leftWeek) : null;
+  const sub = blocked
+    ? T.importantLimit[blocked]
+    : on
+      ? importantWhoText(recipients, importantImmediate(event.startsAt, new Date()))
+      : T.importantOff;
+  return (
+    <div className="s-stack s-stack--tight" data-testid="fil-publish-important">
+      <button
+        type="button"
+        aria-pressed={on}
+        aria-label={`${T.important} : ${on ? T.importantChecked : T.importantUnchecked}. ${sub}`}
+        className={on ? "fp-opt fp-opt--box is-on" : "fp-opt fp-opt--box"}
+        disabled={busy || blocked !== null}
+        onClick={() => onChoice((c) => ({ ...c, importantOn: !c.importantOn, importantReason: null }))}
+        data-testid="fil-publish-important-toggle"
+      >
+        <Icon name="bell" size={22} />
+        <span>
+          <b>{T.important}</b>
+          <small data-testid="fil-publish-important-sub">{sub}</small>
+        </span>
+        <span className="fp-box" aria-hidden="true">
+          {on ? <Icon name="check" size={16} /> : null}
+        </span>
+      </button>
+      {on ? (
+        <>
+          <div className="o-t-label">{T.importantReason}</div>
+          <div className="fil-chips" data-testid="fil-publish-important-reasons">
+            {importantReasons.map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={choice.importantReason === r}
+                className={choice.importantReason === r ? "fil-chip is-on" : "fil-chip"}
+                disabled={busy}
+                onClick={() => onChoice((c) => ({ ...c, importantReason: r }))}
+                data-testid={`fil-publish-important-${r}`}
+              >
+                {importantReasonLabels[r]}
+              </button>
+            ))}
+          </div>
+          {quota ? (
+            <p className="fp-note" data-testid="fil-publish-important-quota">
+              <Icon name="info" size={16} />
+              <span>
+                <strong>{quota.lead}</strong> {quota.rest}
+              </span>
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function SaysBlock({ says }: { says: ReturnType<typeof publishSays> }) {
+  return (
+    <div className="s-stack s-stack--tight" data-testid="fil-publish-says">
+      <div className="o-t-label">{T.says}</div>
+      <div className="fp-says">
+        {says.logoUrl ? (
+          <img src={says.logoUrl} alt="" />
+        ) : (
+          <span className="fp-says__ini">{says.authorName.charAt(0)}</span>
+        )}
+        <span>
+          <b>{says.authorName}</b>
+          <small data-testid="fil-publish-says-phrase">{says.phrase ?? T.sayNow}</small>
+        </span>
+        {says.stamp ? (
+          <span className="fp-stamp">
+            <Icon name="stamp" size={14} /> {T.stamp}
+          </span>
+        ) : null}
+      </div>
+      <p className="fp-note" data-testid="fil-publish-says-where">
+        <Icon name="info" size={16} />
+        <span>{says.where}</span>
+      </p>
+    </div>
   );
 }

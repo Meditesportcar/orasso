@@ -1,0 +1,131 @@
+/* « Publier au Fil » (lot R8p, maquette R8.4) : au nom de qui, pour quel événement, « Info importante », « Ce que verront
+   les autres ». Jetons seulement ; un nom d'événement passe à la ligne, jamais tronqué ; cibles de 44 px au moins. */
+.fp-opts {
+  display: grid;
+  gap: var(--space-2);
+}
+.fp-opt {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 48px;
+  padding: var(--space-3);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.fp-opt b {
+  display: block;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.fp-opt small {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.fp-opt.is-on {
+  border-color: var(--accent);
+}
+.fp-opt:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.fp-opt:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.fp-opt--box {
+  grid-template-columns: auto 1fr auto;
+  width: 100%;
+}
+.fp-box {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.fp-opt--box.is-on .fp-box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.fp-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.fp-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+.fp-note strong {
+  color: var(--ink);
+}
+.fp-poster {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.fp-poster img {
+  width: 72px;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.fp-poster p {
+  margin: 0;
+}
+.fp-says {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.fp-says img,
+.fp-says__ini {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--plate-field, var(--surface));
+  font-weight: 800;
+}
+.fp-says b {
+  display: block;
+}
+.fp-says small {
+  display: block;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+.fp-stamp {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  margin-left: auto;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}

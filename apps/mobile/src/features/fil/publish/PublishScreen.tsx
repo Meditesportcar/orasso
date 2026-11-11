@@ -6,34 +6,52 @@
 // parties ; l'identifiant de la publication est gardé (une réponse perdue ne crée pas de doublon).
 import { Chip, Icon, SendProgress, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type AttachableEventItem,
+  attachableQuery,
+  attachLeadOf,
   type CommercialDraft,
+  captionMaxOf,
+  chooseAuthor,
+  chooseEvent,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
-  eventsWithPlace,
   FEED_ASPECT_RATIOS,
-  FEED_CAPTION_MAX,
+  FEED_PLACE_LABEL_MAX,
   FEED_POST_PHOTOS_MAX,
   type FeedAspect,
   feedAspectLabels,
-  feedPostBody,
+  feedPostBodyR8,
+  importantAvailable,
+  importantImmediate,
+  initialPublishChoice,
   feedScreenLabels as L,
   noCommercialDraft,
+  type PublishChoice,
   partnershipLabels,
-  publishIssue,
+  publicationErrors,
+  publishAuthors,
+  publishIssueR8,
+  publishSays,
+  showAuthorChoice,
+  showEventBlock,
+  feedPublishLabels as T,
   vehicleWizardLabels as V,
+  vehicleAllowed,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { CommercialLine, useCommercialLine } from "@/features/stories/publish/CommercialLine";
 import { PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
+import { isTwoFactorError } from "@/lib/orga";
 import { cropAspect, type PickedPhoto, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings, surePlates } from "@/lib/plates/detect";
+import { useSession } from "@/lib/session";
 import { discardTempPhotos, rememberTempPhotos, tempPhotoEpoch } from "@/lib/tempPhotos";
 import { useApi } from "@/lib/useApi";
 import { Seg, SmButton } from "@/ui/Kit";
@@ -59,6 +77,7 @@ import {
   setFrames,
   withDetection,
 } from "./model";
+import { AuthorChoice, EventChoice, ImportantBox, Note, PosterVisual, Says } from "./PublishChoices";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -91,8 +110,23 @@ export function PublishScreen() {
   // ferait passer la suivante à sa place).
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [eventId, setEventId] = useState<string | null>(null);
+  // Au nom de qui, pour quel événement, « Info importante » (lot R8p) : un seul état, des règles pures.
+  const { me } = useSession();
+  const [choice, setChoice] = useState<PublishChoice>(initialPublishChoice);
+  const authors = useMemo(
+    () => publishAuthors(me?.personas ?? [], me?.profile.pseudo ?? "", me?.profile.avatarUrl ?? null),
+    [me?.personas, me?.profile.pseudo, me?.profile.avatarUrl],
+  );
+  const author = authors.find((a) => a.key === choice.authorKey) ?? (authors[0] as (typeof authors)[number]);
+  const fan = vehicleAllowed(author);
+  const [loaded, setLoaded] = useState<{ key: string; items: AttachableEventItem[] | null; failed: boolean }>({
+    key: "",
+    items: null,
+    failed: false,
+  });
+  const [reloadEvents, setReloadEvents] = useState(0);
+  const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
+  const [security, setSecurity] = useState(false);
   // « Collaboration commerciale » (lot R7m2) : obligatoire si un partenaire actif est cité dans la légende, sinon à la main.
   const [commercial, setCommercial] = useState<CommercialDraft>(noCommercialDraft);
   const commercialLine = useCommercialLine(caption, commercial);
@@ -121,8 +155,40 @@ export function PublishScreen() {
   };
 
   const vehicles = useApi(() => api.vehicles(), []);
-  const applications = useApi(() => api.applications("upcoming"), []);
-  const events = eventsWithPlace(applications.data ?? []);
+  const eventBlock = showEventBlock(author);
+  // Les événements rattachables de la casquette choisie (rôle déduit par l'API) : rechargés à chaque changement de casquette.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la casquette est identifiée par sa clé.
+  useEffect(() => {
+    if (!eventBlock) return;
+    let live = true;
+    setLoaded({ key: author.key, items: null, failed: false });
+    api
+      .attachableEvents(attachableQuery(author))
+      .then((r) => live && setLoaded({ key: author.key, items: r.items, failed: false }))
+      .catch(() => live && setLoaded({ key: author.key, items: [], failed: true }));
+    return () => {
+      live = false;
+    };
+  }, [author.key, eventBlock, reloadEvents]);
+  const events = eventBlock && loaded.key === author.key ? (loaded.items ?? []) : [];
+  const eventsLoading = eventBlock && (loaded.key !== author.key || loaded.items === null);
+  const event = events.find((e) => e.id === choice.eventId) ?? null;
+  const showImportant = importantAvailable(author, event);
+  // Combien d'inscrits sont prévenus : relu à chaque événement choisi ; en cas d'échec, la phrase sans nombre.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relu pour l'événement choisi.
+  useEffect(() => {
+    if (!showImportant || !event) return;
+    let live = true;
+    const id = event.id;
+    api
+      .eventNotifyPreview(id)
+      .then((r) => live && setRecipients({ eventId: id, n: r.recipients }))
+      .catch(() => live && setRecipients({ eventId: id, n: null }));
+    return () => {
+      live = false;
+    };
+  }, [showImportant, event?.id]);
+  const posterVisual = photos.length === 0 && event !== null && event.hasVisual;
   const activeVehicles = (vehicles.data ?? []).filter((v) => v.status === undefined || v.status === "active");
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/fil"));
@@ -259,13 +325,16 @@ export function PublishScreen() {
   const controls = photo ? plateControls(photo) : null;
   const preparing = working || photos.some((p) => p.detection === "pending");
   const locked = busy || working;
+  const important = { on: showImportant && choice.importantOn, reason: choice.importantReason };
   const issue =
-    publishIssue({ photos, caption, preparing }) ?? commercialIssue(commercialLine, partnershipLabels.commercialPick);
+    publishIssueR8({ photos, caption, preparing, author, event, important }) ??
+    (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
   async function publish() {
     if (busy || working || issue) return;
     setBusy(true);
     setError(null);
+    setSecurity(false);
     try {
       const uploaded: string[] = [];
       for (const [i, p] of photos.entries()) {
@@ -278,14 +347,17 @@ export function PublishScreen() {
         uploaded.push(key);
       }
       setSent(photos.length);
-      const body = feedPostBody({
+      const body = feedPostBodyR8({
         photos: photos.map((p, i) => ({ rects: p.rects, noPlate: p.noPlate, uploadKey: uploaded[i] as string })),
         caption,
         aspect,
-        vehicleId,
-        eventId,
         clientId,
-        ...commercialField(commercialLine),
+        author,
+        eventId: event ? event.id : null,
+        vehicleId: choice.vehicleId,
+        placeLabel: choice.placeLabel,
+        important,
+        ...(fan ? commercialField(commercialLine) : {}),
       });
       const post = await api.createFeedPost(body);
       // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») ; les JPEG non floutés s'effacent.
@@ -294,7 +366,35 @@ export function PublishScreen() {
       setDone(true);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 429) setError(L.tooManyRequests);
-      else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
+      else if (e instanceof ApiRequestError && e.isNetwork) setError(T.noNetwork);
+      else if (isTwoFactorError(e) || (e instanceof ApiRequestError && e.code === "persona_forbidden")) {
+        // Pas le droit de parler au nom de cette page (ou second facteur manquant) : le message et le lien vers la sécurité.
+        setError(
+          e instanceof ApiRequestError && e.code === "persona_forbidden"
+            ? publicationErrors.persona_forbidden
+            : errorMessage(e),
+        );
+        setSecurity(true);
+      } else if (e instanceof ApiRequestError && e.code === "event_not_attachable") {
+        // L'événement n'est plus rattachable : la liste est rechargée, l'événement retiré, rien d'autre n'est perdu.
+        setChoice((c) => chooseEvent(c, null));
+        setReloadEvents((n) => n + 1);
+        setError(`${publicationErrors.event_not_attachable} ${T.listReloaded}`);
+      } else if (e instanceof ApiRequestError && e.code === "important_quota") {
+        // Le plafond réel est affiché, la case se décoche, le reste du brouillon reste.
+        const d = e.details as { leftToday?: number; leftWeek?: number } | undefined;
+        const at = event?.id;
+        if (at && d && Number.isFinite(d.leftToday) && Number.isFinite(d.leftWeek)) {
+          setLoaded((l) => ({
+            ...l,
+            items: (l.items ?? []).map((x) =>
+              x.id === at ? { ...x, important: { leftToday: Number(d.leftToday), leftWeek: Number(d.leftWeek) } } : x,
+            ),
+          }));
+        }
+        setChoice((c) => ({ ...c, importantOn: false, importantReason: null }));
+        setError(publicationErrors.important_quota);
+      } else if (e instanceof ApiRequestError && e.code === "plate_decision_required") {
         // Le serveur dit quelle photo n'a pas de décision de plaque : on l'ouvre.
         const at = Number((e.details as { photoIndex?: number } | undefined)?.photoIndex);
         if (Number.isFinite(at)) setCurrent(at);
@@ -394,6 +494,7 @@ export function PublishScreen() {
     >
       <View style={styles.block} testID="fil-publish">
         <Label text={L.publishPhotos} hint={L.publishPhotosCount(photos.length, FEED_POST_PHOTOS_MAX)} />
+        {posterVisual && event ? <PosterVisual event={event} /> : null}
         <View style={styles.grid}>
           {photos.map((p, i) => (
             <Pressable
@@ -588,21 +689,32 @@ export function PublishScreen() {
         onChangeText={setCaption}
         editable={!busy}
         placeholder={L.captionPlaceholder}
-        maxLength={FEED_CAPTION_MAX}
+        maxLength={captionMaxOf(author)}
         multiline
         testID="fil-publish-caption"
       />
-      <Muted variant="caption">{L.captionHint}</Muted>
+      <Muted variant="caption">{fan ? L.captionHint : T.captionHintPage}</Muted>
 
-      {activeVehicles.length ? (
+      <Note lead={T.oneGesture.lead} testID="fil-publish-gesture">
+        {T.oneGesture.rest}
+      </Note>
+      {showAuthorChoice(authors) ? (
+        <AuthorChoice
+          authors={authors}
+          value={author.key}
+          disabled={busy}
+          onChoose={(key) => setChoice((c) => chooseAuthor(c, authors, key))}
+        />
+      ) : null}
+      {fan && activeVehicles.length ? (
         <View style={styles.block}>
           <Label text={L.vehicle} hint={L.optional} />
           <View style={styles.chips}>
             {activeVehicles.map((v) => (
               <Chip
                 key={v.id}
-                selected={vehicleId === v.id}
-                onPress={() => !busy && setVehicleId(vehicleId === v.id ? null : v.id)}
+                selected={choice.vehicleId === v.id}
+                onPress={() => !busy && setChoice((c) => ({ ...c, vehicleId: c.vehicleId === v.id ? null : v.id }))}
               >
                 {v.label}
               </Chip>
@@ -610,24 +722,58 @@ export function PublishScreen() {
           </View>
         </View>
       ) : null}
-      {events.length ? (
-        <View style={styles.block}>
-          <Label text={L.event} hint={L.optional} />
-          <View style={styles.chips}>
-            {events.map((e) => (
-              <Chip
-                key={e.id}
-                selected={eventId === e.id}
-                onPress={() => !busy && setEventId(eventId === e.id ? null : e.id)}
-              >
-                {e.title}
-              </Chip>
-            ))}
-          </View>
-        </View>
+      {eventBlock ? (
+        <EventChoice
+          lead={attachLeadOf(author)}
+          noneHint={T.attachNoneHint[author.destination]}
+          events={events}
+          loading={eventsLoading}
+          failed={loaded.key === author.key && loaded.failed}
+          value={event ? event.id : null}
+          disabled={busy}
+          onChoose={(id) => setChoice((c) => chooseEvent(c, id))}
+          foot={fan ? T.attachFoot : null}
+        />
       ) : null}
-      <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" />
+      {!event ? (
+        <TextField
+          label={`${T.placeLabel} · ${T.optional}`}
+          value={choice.placeLabel}
+          onChangeText={(placeLabel) => setChoice((c) => ({ ...c, placeLabel }))}
+          editable={!busy}
+          placeholder={T.placePlaceholder}
+          maxLength={FEED_PLACE_LABEL_MAX}
+          testID="fil-publish-place"
+        />
+      ) : null}
+      {showImportant && event ? (
+        <ImportantBox
+          event={event}
+          on={choice.importantOn}
+          reason={choice.importantReason}
+          recipients={recipients?.eventId === event.id ? recipients.n : null}
+          immediate={importantImmediate(event.startsAt, new Date())}
+          disabled={busy}
+          onToggle={(on) =>
+            setChoice((c) => ({ ...c, importantOn: on, importantReason: on ? c.importantReason : null }))
+          }
+          onReason={(importantReason) => setChoice((c) => ({ ...c, importantReason }))}
+        />
+      ) : null}
+      {fan ? <CommercialLine line={commercialLine} onDraft={setCommercial} disabled={busy} kind="post" /> : null}
+      <Says says={publishSays(author, event, important.on)} />
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {security ? (
+        <SmButton
+          kind="s"
+          wide
+          icon="shield"
+          onPress={() => router.push("/reglages/securite")}
+          testID="fil-publish-security"
+        >
+          {T.securityLink}
+        </SmButton>
+      ) : null}
       {vehicles.error ? <LoadError message={vehicles.error.message} onRetry={() => void vehicles.reload()} /> : null}
     </FlowScreen>
   );
