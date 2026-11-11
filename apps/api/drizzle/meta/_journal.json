@@ -540,6 +540,13 @@
       "when": 1794251303168,
       "tag": "0076_story-video",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794356446207,
+      "tag": "0077_weather-places",
+      "breakpoints": true
     }
   ]
 }

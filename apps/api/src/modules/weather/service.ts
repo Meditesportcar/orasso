@@ -5,27 +5,49 @@
 // bloquant (sans météo, tout fonctionne comme avant).
 import {
   departmentCentroids,
+  departmentPrefectures,
   describeWeather,
   type EventWeather,
   eventDates,
   forecastForEvent,
   isBadWeather,
   type MyWeather,
+  type MyWeatherPlaces,
+  myWeatherPlaces,
   type OutingWeather,
+  type PlaceWeather,
+  placeForecast,
+  roundPlace,
   SET_OUTLOOK_UNCERTAIN_ACTION,
   type StoredForecast,
   shouldSuggestUncertain,
+  trimForecast,
+  WEATHER_PLACES_MAX,
+  type WeatherAt,
+  type WeatherCell,
   type WeatherSummary,
   wallTime,
   weatherAttributions,
+  weatherCell,
   weatherVisible,
 } from "@orasso/shared";
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, events, eventWeather, structureMembers, structures, weatherDepartments } from "../../db/schema";
+import {
+  applications,
+  events,
+  eventWeather,
+  profiles,
+  profileWeatherPlaces,
+  structureMembers,
+  structures,
+  weatherDepartments,
+  weatherPlacesCache,
+} from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
+import { reverseCity } from "../../lib/geocode";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { fetchForecast, type ProviderForecast, weatherEnabled } from "../../lib/weather";
@@ -100,9 +122,23 @@ async function organizerIds(structureId: string): Promise<string[]> {
 
 /** Départements en cours de récupération (une seule requête au fournisseur par département à la fois). */
 const departmentFlights = new Map<string, Promise<typeof weatherDepartments.$inferSelect | null>>();
+/** Lot R8m : cases de 0,1° en cours de récupération (un seul appel par case à la fois) et dernier échec par case. */
+const cellFlights = new Map<string, Promise<typeof weatherPlacesCache.$inferSelect | null>>();
+const cellFailures = new Map<string, number>();
+/** Une case plus vieille que ça est rafraîchie par la tâche (elle passe toutes les 3 h : une marge évite de la rater d'une seconde). */
+const CELL_REFRESH_AFTER_MS = 2 * HOUR;
+/** Cases rafraîchies par passage au plus, et durée de garde d'une case que personne ne lit plus. */
+const CELLS_PER_PASS = 300;
+const CELL_KEEP_MS = 7 * DAY;
 /** Dernier échec du fournisseur par département (lot 30) et délai avant de réessayer. */
 const departmentFailures = new Map<string, number>();
 const DEPARTMENT_RETRY_MS = 10 * 60_000;
+
+/** Tests : oublie les cases en cours et les échecs retenus (état du module, qui survit à la remise à zéro de la base). */
+export function resetPlaceCellState() {
+  cellFlights.clear();
+  cellFailures.clear();
+}
 
 export const weatherService = {
   /**
@@ -167,7 +203,52 @@ export const weatherService = {
       refreshed += 1;
       if (await this.suggestUncertain(e, summary)) suggested += 1;
     }
+    // Lot R8m : les cases des lieux de « Ma météo » (jamais bloquant pour la météo des événements).
+    if (!eventId) {
+      await this.refreshPlaces().catch((error) =>
+        console.warn("Météo des lieux non rafraîchie :", error instanceof Error ? error.message : error),
+      );
+    }
     return { refreshed, suggested };
+  },
+
+  /**
+   * Lot R8m : rafraîchit les cases des villes choisies et des préfectures par défaut utilisées (comptes sans lieu choisi),
+   * puis purge celles que personne n'a plus demandées depuis 7 jours. Une case = un appel, quel que soit le nombre de comptes.
+   */
+  async refreshPlaces(): Promise<{ cells: number }> {
+    const t = now();
+    const wanted = new Map<string, WeatherCell>();
+    const saved = await db
+      .select({ lat: profileWeatherPlaces.lat, lng: profileWeatherPlaces.lng })
+      .from(profileWeatherPlaces);
+    for (const p of saved) {
+      const cell = weatherCell(p);
+      wanted.set(cell.key, cell);
+    }
+    const defaults = await db.execute<{ code: string }>(
+      sql`select distinct ${profiles.departments}[1] as code from ${profiles}
+        where ${profiles.departments}[1] is not null
+          and not exists (select 1 from ${profileWeatherPlaces} w where w.user_id = ${profiles.userId})`,
+    );
+    for (const { code } of defaults.rows) {
+      const prefecture = departmentPrefectures[code];
+      if (!prefecture) continue;
+      const cell = weatherCell(prefecture);
+      wanted.set(cell.key, cell);
+    }
+    const cached = await db.select().from(weatherPlacesCache);
+    const fetchedAt = new Map(cached.map((r) => [r.cell, r.fetchedAt.getTime()]));
+    const due = [...wanted.values()]
+      .filter((c) => t.getTime() - (fetchedAt.get(c.key) ?? 0) >= CELL_REFRESH_AFTER_MS)
+      .sort((a, b) => (fetchedAt.get(a.key) ?? 0) - (fetchedAt.get(b.key) ?? 0))
+      .slice(0, CELLS_PER_PASS);
+    let cells = 0;
+    for (const cell of due) {
+      if (await this.cellForecast(cell, true)) cells += 1;
+    }
+    await db.delete(weatherPlacesCache).where(lt(weatherPlacesCache.fetchedAt, new Date(t.getTime() - CELL_KEEP_MS)));
+    return { cells };
   },
 
   /**
@@ -402,5 +483,129 @@ export const weatherService = {
       departmentFlights.set(department, flight);
     }
     return flight;
+  },
+
+  /**
+   * Lot R8m : la prévision d'une case de 0,1° (cache de 3 h, partagé par tous les comptes). Un seul appel au fournisseur par
+   * case à la fois ; fournisseur indisponible : l'ancienne prévision, sinon `null`. Au fournisseur ne part que la case.
+   * `force` : la tâche planifiée (ignore l'âge du cache).
+   */
+  async cellForecast(cell: WeatherCell, force = false) {
+    const cached = await db.query.weatherPlacesCache.findFirst({ where: eq(weatherPlacesCache.cell, cell.key) });
+    if (!force && cached && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
+    const failedAt = cellFailures.get(cell.key);
+    if (!force && failedAt !== undefined && now().getTime() - failedAt < DEPARTMENT_RETRY_MS) return cached ?? null;
+    let flight = cellFlights.get(cell.key);
+    if (!flight) {
+      flight = (async () => {
+        const result = await fetchForecast(cell.lat, cell.lng);
+        if (!result) {
+          if (weatherEnabled()) cellFailures.set(cell.key, now().getTime());
+          return cached ?? null;
+        }
+        cellFailures.delete(cell.key);
+        const t = now();
+        const values = {
+          cell: cell.key,
+          provider: result.provider,
+          fetchedAt: t,
+          forecast: trimForecast(result.forecast.daily, result.forecast.hourly, t),
+        };
+        const [saved] = await db
+          .insert(weatherPlacesCache)
+          .values(values)
+          .onConflictDoUpdate({ target: weatherPlacesCache.cell, set: values })
+          .returning();
+        return saved ?? null;
+      })().finally(() => cellFlights.delete(cell.key));
+      cellFlights.set(cell.key, flight);
+    }
+    return flight;
+  },
+
+  /** La météo d'un lieu depuis une case du cache : aujourd'hui, l'heure en cours et les six suivantes, ou `null`. */
+  placeWeather(row: typeof weatherPlacesCache.$inferSelect | null | undefined): PlaceWeather | null {
+    if (!row) return null;
+    const found = placeForecast(row.forecast, now());
+    if (!found) return null;
+    return {
+      ...found,
+      provider: row.provider,
+      attribution: weatherAttributions[row.provider],
+      fetchedAt: row.fetchedAt.toISOString(),
+    };
+  },
+
+  /**
+   * Lot R8m : `GET /me/weather/places` (`fresh`) et le champ `myWeather` de `GET /me/home` (`stock`, jamais d'attente du
+   * fournisseur : une case manquante ou vieille est rafraîchie sans être attendue). Les lieux choisis, sinon la préfecture
+   * du premier département (T10), sinon aucun.
+   */
+  async places(v: Viewer, mode: "fresh" | "stock" = "fresh"): Promise<MyWeatherPlaces> {
+    const saved = await db
+      .select()
+      .from(profileWeatherPlaces)
+      .where(eq(profileWeatherPlaces.userId, v.user.id))
+      .orderBy(asc(profileWeatherPlaces.slot));
+    const shown = myWeatherPlaces({ saved, departments: v.profile.departments });
+    const cells = shown.map((p) => weatherCell(p));
+    let rows: (typeof weatherPlacesCache.$inferSelect | null)[];
+    if (mode === "fresh") {
+      rows = await Promise.all(cells.map((c) => this.cellForecast(c).catch(() => null)));
+    } else {
+      const keys = [...new Set(cells.map((c) => c.key))];
+      const stock = keys.length
+        ? await db.select().from(weatherPlacesCache).where(inArray(weatherPlacesCache.cell, keys))
+        : [];
+      const byKey = new Map(stock.map((r) => [r.cell, r]));
+      rows = cells.map((c) => byKey.get(c.key) ?? null);
+      for (const c of new Map(cells.map((cell) => [cell.key, cell])).values()) {
+        const row = byKey.get(c.key);
+        if (!row || now().getTime() - row.fetchedAt.getTime() >= DEPARTMENT_TTL_MS) {
+          void this.cellForecast(c).catch((error) =>
+            console.warn("Météo du lieu non rafraîchie :", error instanceof Error ? error.message : error),
+          );
+        }
+      }
+    }
+    return {
+      max: WEATHER_PLACES_MAX,
+      places: shown.map((p, i) => ({
+        slot: p.slot,
+        label: p.label,
+        source: p.source,
+        weather: this.placeWeather(rows[i]),
+      })),
+    };
+  },
+
+  /** `PUT /me/weather/places` : remplace tous les lieux choisis du compte (0 à 2), arrondis à 0,01°. */
+  async savePlaces(v: Viewer, places: { label: string; lat: number; lng: number }[]): Promise<MyWeatherPlaces> {
+    await withTx(async (tx) => {
+      // Deux enregistrements simultanés du même compte se suivent (verrou sur son profil), jamais de conflit de clé.
+      await tx.select({ id: profiles.userId }).from(profiles).where(eq(profiles.userId, v.user.id)).for("update");
+      await tx.delete(profileWeatherPlaces).where(eq(profileWeatherPlaces.userId, v.user.id));
+      if (places.length === 0) return;
+      await tx.insert(profileWeatherPlaces).values(
+        places.slice(0, WEATHER_PLACES_MAX).map((p, slot) => ({
+          userId: v.user.id,
+          slot,
+          label: p.label,
+          ...roundPlace(p),
+          updatedAt: now(),
+        })),
+      );
+    });
+    return this.places(v);
+  },
+
+  /**
+   * Lot R8m : `POST /weather/at` (« Utiliser ma position »). La position est arrondie à 0,1° dès la première ligne ; rien
+   * d'autre que la case ne va au fournisseur, au cache ou au géocodeur, et rien n'est écrit pour le compte.
+   */
+  async at(position: { lat: number; lng: number }): Promise<WeatherAt> {
+    const cell = weatherCell(position);
+    const [city, row] = await Promise.all([reverseCity(cell), this.cellForecast(cell).catch(() => null)]);
+    return { label: city ?? "Ma position", weather: this.placeWeather(row) };
   },
 };

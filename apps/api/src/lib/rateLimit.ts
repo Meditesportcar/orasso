@@ -37,6 +37,8 @@ export const rateRules = {
   registryCheck: { max: 10, windowMs: 3_600_000, message: "Trop de contrôles : réessaie dans une heure." },
   /** Recherche d'adresse de l'assistant d'événement (service de géocodage public). */
   geocode: { max: 60, windowMs: 60_000, message: "Trop de recherches d'adresse : réessaie dans une minute." },
+  /** Lot R8m : « Ma météo » (lieux, position, recherche d'une commune à la frappe). */
+  myWeather: { max: 120, windowMs: 60_000, message: "Trop de demandes de météo : réessaie dans une minute." },
   /** Envoi de justificatifs, logos et affiches. */
   fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
   /** Galerie de 30 photos, avec de la marge pour remplacer les photos retirées du formulaire. */

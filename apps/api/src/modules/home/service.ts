@@ -233,6 +233,8 @@ export const homeService = {
             null,
           )
         : weatherMine;
+    // Lot R8m : « Ma météo » (les lieux de la personne), lue du cache seulement ; masqué, le bloc n'est pas calculé.
+    const myWeather = shown.has("weather") ? await weatherService.places(v, "stock").catch(() => null) : null;
 
     return {
       profile,
@@ -245,6 +247,7 @@ export const homeService = {
       pendingStatuses: upcoming.filter((a) => ["pending", "waitlisted", "offered"].includes(a.status)),
       nearby,
       weather,
+      myWeather,
       outingsWeather,
       favoriteGarage,
       wash,

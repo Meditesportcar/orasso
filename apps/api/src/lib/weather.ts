@@ -86,6 +86,9 @@ type OpenMeteoResponse = {
     precipitation_probability?: (number | null)[];
     precipitation?: (number | null)[];
     wind_speed_10m?: (number | null)[];
+    apparent_temperature?: (number | null)[];
+    wind_gusts_10m?: (number | null)[];
+    wind_direction_10m?: (number | null)[];
   };
 };
 
@@ -116,6 +119,10 @@ export function parseOpenMeteo(json: OpenMeteoResponse): ProviderForecast {
     const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
     if (typeof temp !== "number" || !m) return;
     const wind = h.wind_speed_10m?.[i] ?? 0;
+    // Lot R8m : ressenti, rafales et direction du vent, quand le fournisseur les donne.
+    const feels = h.apparent_temperature?.[i];
+    const gust = h.wind_gusts_10m?.[i];
+    const direction = h.wind_direction_10m?.[i];
     hourly.push({
       time: fromWallTime(
         { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]), hour: Number(m[4]), minute: Number(m[5]) },
@@ -126,6 +133,9 @@ export function parseOpenMeteo(json: OpenMeteoResponse): ProviderForecast {
       precipitationMm: r1(h.precipitation?.[i] ?? 0),
       windKmh: r1(wind),
       code: withWind(wmoToCode(h.weather_code?.[i]), wind),
+      ...(typeof feels === "number" ? { feelsLike: r1(feels) } : {}),
+      ...(typeof gust === "number" ? { gustKmh: r1(gust) } : {}),
+      ...(typeof direction === "number" ? { windDirection: Math.round(direction) } : {}),
     });
   });
   if (!daily.length) throw new Error("Open-Meteo : aucune journée");
@@ -141,7 +151,8 @@ function openMeteo(): WeatherProvider {
         longitude: coord(lng),
         daily:
           "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max",
-        hourly: "weather_code,temperature_2m,precipitation_probability,precipitation,wind_speed_10m",
+        hourly:
+          "weather_code,temperature_2m,precipitation_probability,precipitation,wind_speed_10m,apparent_temperature,wind_gusts_10m,wind_direction_10m",
         timezone: TZ,
         forecast_days: "8",
         wind_speed_unit: "kmh",
