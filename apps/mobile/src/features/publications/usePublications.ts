@@ -1,8 +1,9 @@
 // La liste des publications d'un auteur (`GET /authors/:key/feed-posts`), page par page (curseur opaque, 20 par page). Ne sait
 // rien du profil : une clé d'auteur suffit (les pages de structure, de pro et la fiche d'un événement la reprendront).
 // Une panne n'est jamais une liste vide ; une liste restreinte (compte privé non suivi) n'a ni élément ni curseur.
-import { type AuthorPostsFilter, appendUnique, type FeedPostView } from "@orasso/shared";
+import { type AuthorPostsFilter, applyNextPage, type FeedPostView } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
+import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -104,6 +105,14 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
     wasOnline.current = online;
   }, [online, stale, reload]);
 
+  // Retour sur l'écran (après « Publier ») : ma liste se relit, la nouvelle publication y est. Seulement chez moi.
+  const focused = useIsFocused();
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (focused && !wasFocused.current && offline && enabled) void reload();
+    wasFocused.current = focused;
+  }, [focused, offline, enabled, reload]);
+
   // Une autre clé ou un autre filtre : la liste repart de zéro (jamais les publications de l'auteur précédent).
   useEffect(() => {
     if (!enabled) return;
@@ -122,13 +131,9 @@ export function usePublications(authorKey: string, filter?: AuthorPostsFilter, e
       const page = await api.authorPosts(authorKey, cursor, filter);
       if (!ticket.current()) return;
       cursorRef.current = page.nextCursor;
-      setState((s) => ({
-        ...s,
-        items: appendUnique(s.items, page.items),
-        nextCursor: page.nextCursor,
-        loadingMore: false,
-        error: null,
-      }));
+      // L'accès a disparu entre deux pages : la restriction vaut pour toute la liste (`applyNextPage`).
+      cursorRef.current = page.restricted ? null : page.nextCursor;
+      setState((s) => ({ ...s, ...applyNextPage(s, page), loadingMore: false, error: null }));
     } catch (e) {
       if (!ticket.current()) return;
       setState((s) => ({ ...s, loadingMore: false, error: errorMessage(e) }));

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   appendUnique,
+  applyNextPage,
   CAPTION_FOLD_LINES,
   captionFold,
   profileOpenTab,
@@ -139,5 +140,23 @@ describe("publicationLinkOf : ouvrir une notification sur sa publication", () =>
   it("publicationPath", () => {
     expect(publicationPath(POST)).toBe(`/publication/${POST}`);
     expect(publicationPath(POST, { web: true, comments: true })).toBe(`/app/publication/${POST}?commentaires=1`);
+  });
+});
+
+describe("applyNextPage : la suite d'une liste", () => {
+  const list = { items: [{ id: "a" }, { id: "b" }], nextCursor: "c1", restricted: false };
+  it("ajoute la page sans doublon", () => {
+    expect(applyNextPage(list, { items: [{ id: "b" }, { id: "c" }], nextCursor: null, restricted: false })).toEqual({
+      items: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      nextCursor: null,
+      restricted: false,
+    });
+  });
+  it("une page restreinte vide toute la liste et le curseur", () => {
+    expect(applyNextPage(list, { items: [], nextCursor: null, restricted: true })).toEqual({
+      items: [],
+      nextCursor: null,
+      restricted: true,
+    });
   });
 });

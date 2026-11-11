@@ -5446,3 +5446,7 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 
 ### Tour 3 bis (lot R8b2, hors ligne)
 - **Hors ligne (point 7, outil `lib/offlineCopy.ts` de R8c2, commit 95d091dc fusionné seul)** : `usePublications(…, offline)` (passé par `PublicationsTab` quand `mine`) garde la première page dans la copie du compte (`publications.mine`, sans filtre) après chaque lecture réussie ; si la lecture échoue, la copie s'affiche (liste sans « Voir plus ») avec la phrase de l'Accueil « Hors ligne : voici ce que ton téléphone a gardé. » ; au passage hors ligne → en ligne, la liste se recharge seule. Jamais pour le profil d'un autre. Recette : copie, retour du réseau, profil d'un autre sans copie.
+
+### Tour 4 (lot R8b2, relecture Codex, 11/11/2026)
+- **Pagination** : si l'acces disparait entre deux pages (estricted d'une page suivante), la restriction vaut pour toute la liste : elements et curseur vides, panneau Compte prive (pplyNextPage, partage, teste ; appli et site). La copie hors ligne n'est pas touchee (mon profil ne peut pas etre restreint).
+- **Publication creee depuis le profil** : ma liste se relit au retour sur l'ecran (useIsFocused, seulement chez moi) ; recette profil vide -> Publier -> retour -> vignette.

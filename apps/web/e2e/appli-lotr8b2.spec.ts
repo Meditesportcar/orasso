@@ -418,3 +418,23 @@ test("hors ligne : mon onglet montre la dernière copie, se recharge au retour d
   await expect(page.getByTestId("publication-tile")).toHaveCount(0);
   await ctx.close();
 });
+
+test("profil vide → Publier → retour : la nouvelle publication est là (la liste se relit au retour)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const pseudo = `Retour_${unique()}`.slice(0, 18);
+  const cookie = await signUpApi(pseudo);
+  const { ctx, page } = await open(browser);
+  await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await go(page, "/profil");
+  await expect(page.getByTestId("publications-empty")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("publications-publish").click();
+  await expect(page).toHaveURL(/fil\/publier/, { timeout: 30_000 });
+  // La publication part (ici par l'API) pendant que l'écran « Publier » est ouvert, puis retour sur le profil.
+  await publishApi(cookie, `Première photo ${unique()}`);
+  await page.goBack();
+  await expect(page.getByTestId("publication-tile")).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId("publications-empty")).toHaveCount(0);
+  await ctx.close();
+});
