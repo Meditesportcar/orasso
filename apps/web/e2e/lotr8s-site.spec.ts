@@ -76,14 +76,18 @@ test("la barre ouvre l'auteur avec ?suite=barre ; lecture enchaînée, fermeture
         const keys = await page
           .locator('[data-testid^="stories-author-"]')
           .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")?.replace("stories-author-", "") ?? ""));
-        return JSON.stringify(keys) === JSON.stringify((await bar()).map((a) => a.key));
+        const server = await bar();
+        const same = JSON.stringify(keys) === JSON.stringify(server.map((a) => a.key));
+        // La réponse comparée, au moment où elle correspond à la page, devient la référence des attentes suivantes.
+        if (same) {
+          authors = server;
+          unseen = server.filter((a) => a.hasUnseen);
+        }
+        return same;
       },
       { timeout: 30_000 },
     )
     .toBe(true);
-  // Toutes les attentes suivantes viennent de la réponse du serveur qui a alimenté la barre affichée (relue après l'accord).
-  authors = await bar();
-  unseen = authors.filter((a) => a.hasUnseen);
   await shot(page, "barre-1280");
   await page.getByLabel(new RegExp(`Voir les stories de ${unseen[0]?.pseudoOrName}`)).click();
   await expect(page).toHaveURL(/\/app\/story\/.*suite=barre/);
