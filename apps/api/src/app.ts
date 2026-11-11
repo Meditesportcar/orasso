@@ -45,6 +45,7 @@ import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
+import { feedCommentRoutes } from "./modules/feed/comments/routes";
 import { feedRoutes } from "./modules/feed/routes";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
@@ -270,6 +271,7 @@ app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 // Lot R7e1 : le Fil (cartes, publications 4:5, flamme, signalement).
 app.route("/", feedRoutes);
+app.route("/", feedCommentRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
 app.route("/", devMailRoutes);

@@ -21,6 +21,8 @@ export const reportTargets = [
 
   // Lot R7f1 : story (R7e1 pose `feed_post` et `story` ensemble ; le coordinateur ne garde qu'une des deux migrations).
   "story",
+  // Lot R8k1 : commentaire d'une publication du Fil (publique parmi les membres).
+  "feed_comment",
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
 
@@ -93,6 +95,8 @@ export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]
   feed_post: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
 
   story: ["shocking", "insult", "harassment", "plate_or_face", "copyright", "spam", "other"],
+  // Lot R8k1 : les motifs d'un commentaire de crew.
+  feed_comment: ["insult", "harassment", "spam", "other"],
 };
 
 /** Le motif est-il proposé pour ce type ? (contrôle de l'API, `reportCreateSchema`). */

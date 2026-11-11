@@ -186,6 +186,8 @@ export const rateRules = {
   feedPhotoUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   feedReact: { max: 120, windowMs: 600_000, message: "Trop de réactions : réessaie dans quelques minutes." },
   feedWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  // Lot R8k1 : commentaires d'une publication du Fil (60 par heure et par compte).
+  feedComment: { max: 60, windowMs: 3_600_000, message: "Trop de commentaires : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

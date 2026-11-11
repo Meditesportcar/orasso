@@ -27,6 +27,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
 import { seedFeed } from "./seed/feed";
+import { seedFeedComments } from "./seed/feed-comments";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -175,6 +176,8 @@ async function main() {
   await seedWeather();
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
+  // Lot R8k1 : cinq commentaires sous une publication de Kenji_66, une réponse avec @Kenji_66, des flammes ; une publication aux commentaires coupés.
+  await seedFeedComments();
 
   // Lot R7f1 : sept stories de démonstration (photos relues sans plaque), 20 h de vie restantes (21 h pour celle du Lydia, R7h).
   await seedStories();

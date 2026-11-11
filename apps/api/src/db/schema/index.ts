@@ -12,6 +12,7 @@ export * from "./devClock";
 export * from "./eventInvites";
 export * from "./events";
 export * from "./feed";
+export * from "./feedComments";
 export * from "./field";
 export * from "./home";
 export * from "./invitations";
