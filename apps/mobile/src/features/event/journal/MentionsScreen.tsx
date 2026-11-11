@@ -165,12 +165,7 @@ export function MentionsScreen() {
           {manager ? (
             <ChipRow accessibilityRole="tablist">
               {(["visible", "hidden"] as const).map((f) => (
-                <Chip
-                  key={f}
-                  accessibilityRole="tab"
-                  selected={filter === f}
-                  onPress={() => setFilter(f)}
-                >
+                <Chip key={f} accessibilityRole="tab" selected={filter === f} onPress={() => setFilter(f)}>
                   {f === "visible" ? L.filterVisible : L.filterHidden}
                 </Chip>
               ))}
