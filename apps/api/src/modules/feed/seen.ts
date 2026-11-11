@@ -20,7 +20,7 @@ export const SEEN_TTL_MS = FEED_SEEN_TTL_MS;
 export const PURGE_BATCH = 5000;
 /** Lignes gardées au plus par compte : les plus anciennes partent. */
 export const SEEN_MAX_PER_USER = 5000;
-/** Au-delà du plafond, le rognage redescend à ce nombre (par paliers : la borne ne bouge qu'une fois tous les ~1 000 envois). */
+/** Au-delà du plafond, le rognage redescend à ce nombre (par paliers : la borne ne bouge qu'environ toutes les 1 000 vues, soit une vingtaine de lots de 50). */
 export const SEEN_TRIM_TO = 4000;
 
 /**

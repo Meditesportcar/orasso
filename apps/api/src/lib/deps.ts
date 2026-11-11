@@ -69,6 +69,8 @@ export type JobName =
   | "votes.sweep"
   // Lot R7j : souvenirs du jour (« il y a un an »), notification à 10 h.
   | "memories.daily"
+  // Lot R8n1 : résumé quotidien des nouveautés des sorties (18 h, Paris).
+  | "event-news.digest"
   // Lot R7i : lieu et liste des rendez-vous au spot finis effacés (toutes les 5 minutes).
   | "spot.purge"
   // Lot R8c1 : cartes vues du Fil de plus de 30 jours (et au-delà de 5 000 par compte), quotidienne.

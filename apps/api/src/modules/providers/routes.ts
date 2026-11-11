@@ -20,6 +20,7 @@ import { type AppEnv, requireUser } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
+import { authorCountsFor } from "../feed/lists";
 import { registerPersonaSource } from "../profiles/personas";
 import { missionsService } from "./missions";
 import { loadProvider } from "./serializers";
@@ -78,8 +79,10 @@ export const providersRoutes = new Hono<AppEnv>()
     c.json(await providersService.removePhoto(await requireUser(c), uuidParam(c, "photoId"))),
   )
   .get("/providers/:id", async (c) => {
-    await requireUser(c);
-    return c.json(await providersService.getPublic(uuidParam(c, "id")));
+    const v = await requireUser(c);
+    const id = uuidParam(c, "id");
+    // Vague R8 (lot R8a2) : `publications` et `mentions` (toujours 0 : un prestataire n'a pas de slug à citer).
+    return c.json({ ...(await providersService.getPublic(id)), ...(await authorCountsFor("provider", id, v)) });
   })
   .get("/me/provider-applications", async (c) => {
     const v = await requireUser(c);

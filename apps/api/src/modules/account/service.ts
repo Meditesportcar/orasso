@@ -66,6 +66,7 @@ import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
 import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
+import { anonymizeFeedCommentsForDeletedAccount, lockPostsOfDeletedAccount } from "../feed/comments/anonymize";
 import { hasFavoriteGarage } from "../home/service";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
@@ -381,6 +382,8 @@ export const accountService = {
       // Verrou : deux suppressions simultanées n'anonymisent qu'une fois.
       const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).for("update");
       if (!profile || profile.deletedAt) return;
+      // Lot R8k1 : les publications concernées d'abord, avant toute mutation du Journal (même ordre qu'un commentaire).
+      await lockPostsOfDeletedAccount(tx, userId);
       const [current] = await tx.select({ email: user.email }).from(user).where(eq(user.id, userId));
       oldEmail = current?.email ?? null;
       oldPseudo = profile.pseudo;
@@ -479,6 +482,9 @@ export const accountService = {
       // Lot R7f1 : ses stories partent (fichiers effacés après la validation, sauf signalement ouvert), ses identifications aussi.
       await anonymizeStoriesForDeletedAccount(tx, userId, after);
 
+      // Lot R8k1 : ses commentaires du Fil, ses réponses, ses flammes et ses citations (les compteurs suivent). Avant les
+      // notifications regroupées : la publication d'abord, puis les notifications, comme la création d'un commentaire.
+      await anonymizeFeedCommentsForDeletedAccount(tx, userId);
       // Lot R7c1 : les notifications regroupées des autres (flammes sur une story…) perdent son pseudo et son avatar.
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.

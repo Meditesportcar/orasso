@@ -8,6 +8,8 @@ export const errorCodes = [
   "forbidden",
   "not_found",
   "conflict",
+  // Lot R8k1 : commentaires coupés sur une publication (409).
+  "comments_off",
   "invalid_transition",
   "event_full",
   "plate_taken",
@@ -101,6 +103,8 @@ export const errorCodes = [
   "share_private",
   "not_tagged",
   "already_shared",
+  // Lot R8n1 : réglages de notification d'un événement où la personne n'a pas de place.
+  "no_place",
 
   // Lot R7d1 : présence par GPS (refus de la validation, dans l'ordre de la règle).
   "closed",
