@@ -5,8 +5,10 @@
 // `feed_post`), puis `POST /api/me/feed-posts`. Pas de détection automatique de plaque sur le site (elle vit dans l'appli).
 import { Button, Icon } from "@orasso/design-system/web";
 import {
+  type AccountCheck,
   type AttachableEventItem,
   acceptEvents,
+  accountCheckOf,
   attachableQuery,
   attachDateLabel,
   attachLeadOf,
@@ -15,6 +17,7 @@ import {
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
+  clearUncertain,
   commercialField,
   commercialIssue,
   DEFAULT_FEED_ASPECT,
@@ -38,6 +41,7 @@ import {
   importantWhoText,
   initialPublishChoice,
   feedScreenLabels as L,
+  loadUncertain,
   type NotifyPreview,
   noCommercialDraft,
   type PersonaEntry,
@@ -48,6 +52,7 @@ import {
   publishAuthors,
   publishIssueR8,
   publishSays,
+  saveUncertain,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -150,7 +155,15 @@ export function PublishForm({
   const now = useRef({ account: userId, key: author.key, loadedAt: 0 });
   now.current = { account: userId, key: author.key, loadedAt: loaded.loadedAt };
   // Un envoi sans réponse : le même corps, le même identifiant, tant que la personne n'a pas choisi de le modifier.
-  const [uncertain, setUncertain] = useState<(ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null>(null);
+  const [uncertain, setUncertainState] = useState<(ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null>(
+    null,
+  );
+  /** Garde (ou efface) le corps incertain dans l'onglet, rangé par compte : il survit à un rechargement (reconnexion). */
+  const setUncertain = (body: (ReturnType<typeof feedPostBodyR8> & { clientId: string }) | null) => {
+    setUncertainState(body);
+    if (body) saveUncertain(tabStore(), userId, body);
+    else clearUncertain(tabStore());
+  };
   const [checking, setChecking] = useState(false);
   const [found, setFound] = useState(false);
   const [recipients, setRecipients] = useState<{ eventId: string; n: number | null } | null>(null);
@@ -168,6 +181,15 @@ export function PublishForm({
   const [preparing, setPreparing] = useState(false);
   // Pendant l'envoi comme pendant un recadrage, rien de ce qui part ne bouge : l'écran montre exactement ce qui est envoyé.
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
+  // Retour sur « Publier » après un rechargement : l'envoi incertain de ce compte reprend (même corps, même `clientId`).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lu une fois par compte.
+  useEffect(() => {
+    const saved = loadUncertain(tabStore(), userId);
+    if (!saved) return;
+    setUncertainState(saved as never);
+    setClientId(saved.clientId as `${string}-${string}-${string}-${string}-${string}`);
+    setError(T.noNetwork);
+  }, [userId]);
   const frozen = busy || uncertain !== null;
   const locked = frozen || preparing;
   const keys = useRef<Record<string, string>>({});
@@ -356,11 +378,13 @@ export function PublishForm({
       forbidden: eventBlock ? loaded.forbidden : null,
     }) ?? (fan ? commercialIssue(commercialLine, partnershipLabels.commercialPick) : null);
 
-  /** Le compte de la session est-il encore celui de ce formulaire ? (un autre onglet a pu en changer) */
-  async function sameAccount(): Promise<boolean> {
+  /** Le compte de la session : le même, un autre, plus de session (401), ou rien de sûr (réseau, 5xx). */
+  async function accountCheck(): Promise<AccountCheck> {
     const me = await apiFetch<{ user: { id: string } }>("/me");
-    return me.ok && me.data.user.id === userId;
+    return accountCheckOf(me.ok ? { ok: true, userId: me.data.user.id } : { ok: false, status: me.status }, userId);
   }
+  const stopMessage = (check: Exclude<AccountCheck, "same">) =>
+    check === "other" ? T.accountChanged : check === "signed_out" ? T.sessionLost : T.noNetwork;
 
   /**
    * « Modifier ma publication » après un envoi incertain : on vérifie d'abord (`GET /me/feed-posts/by-client/:clientId`).
@@ -394,9 +418,11 @@ export function PublishForm({
     setError(null);
     setSecurity(false);
     // Le compte de la session : si un autre onglet en a changé, rien ne part (ni photos, ni publication au nom d'un autre).
-    if (!(await sameAccount())) {
+    const first = await accountCheck();
+    if (first !== "same") {
+      // L'envoi incertain, s'il y en a un, reste tel quel : rien n'est levé sur un contrôle qui n'a pas abouti.
       setBusy(false);
-      return setError(T.accountChanged);
+      return setError(stopMessage(first));
     }
     const uploaded: string[] = [];
     for (const [i, p] of uncertain ? [] : items.entries()) {
@@ -430,10 +456,11 @@ export function PublishForm({
         important,
         ...(fan ? commercialField(commercialLine) : {}),
       });
-    if (!(await sameAccount())) {
+    const second = await accountCheck();
+    if (second !== "same") {
       setBusy(false);
       setProgress(null);
-      return setError(T.accountChanged);
+      return setError(stopMessage(second));
     }
     const res = await apiFetch("/me/feed-posts", { method: "POST", json: body });
     setBusy(false);
@@ -448,12 +475,11 @@ export function PublishForm({
     if (!res.ok && (res.status === 429 || res.status === 401)) {
       return setError(res.status === 429 ? L.tooManyRequests : res.error.message);
     }
+    // Une réponse du serveur (succès ou refus) règle l'envoi : l'incertitude se lève ici, après qu'on a la réponse.
     setUncertain(null);
     if (res.ok) {
-      // Une réponse arrivée après un changement de compte (autre onglet) n'écrit rien.
-      if (!(await sameAccount())) return;
-      // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements »).
-      rememberPublished(userId, res.data as FeedPostView);
+      // Ma publication passe en tête du Fil (l'API ne la met pas dans « Abonnements ») : seulement si le compte est le même.
+      if ((await accountCheck()) === "same") rememberPublished(userId, res.data as FeedPostView);
       return setDone(true);
     }
     if (res.status === 429) return setError(L.tooManyRequests);
@@ -934,6 +960,15 @@ export function PublishForm({
 }
 
 /** La case « Info importante », ses cinq motifs et le plafond (même règles et mêmes mots que l'appli). */
+/** Le stockage de l'onglet (absent côté serveur, refusé en navigation privée). */
+function tabStore(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 function ImportantBlock({
   event,
   choice,

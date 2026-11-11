@@ -10,11 +10,13 @@ import {
 import type { PlateRect } from "../schemas/vehicle";
 import {
   acceptEvents,
+  accountCheckOf,
   attachableQuery,
   attachLeadOf,
   captionMaxOf,
   chooseAuthor,
   chooseEvent,
+  clearUncertain,
   emptyEventsLoad,
   eventsOf,
   eventsStale,
@@ -23,11 +25,13 @@ import {
   importantBlocked,
   importantImmediate,
   initialPublishChoice,
+  loadUncertain,
   type PublishAuthor,
   type PublishDraft,
   publishAuthors,
   publishIssueR8,
   publishSays,
+  saveUncertain,
   showAuthorChoice,
   showEventBlock,
   startEventsLoad,
@@ -488,3 +492,38 @@ describe("événements lus pour un compte (tour 2)", () => {
 function decidedPhoto() {
   return { rects: [{ x: 0.1, y: 0.1, w: 0.3, h: 0.1 }], noPlate: false } as never;
 }
+
+describe("contrôle du compte et envoi incertain gardé (tour 4)", () => {
+  it("quatre états : même compte, autre compte, session perdue (401), rien de sûr (réseau, 5xx)", () => {
+    expect(accountCheckOf({ ok: true, userId: "A" }, "A")).toBe("same");
+    expect(accountCheckOf({ ok: true, userId: "B" }, "A")).toBe("other");
+    expect(accountCheckOf({ ok: false, status: 401 }, "A")).toBe("signed_out");
+    expect(accountCheckOf({ ok: false, status: 0 }, "A")).toBe("unreachable");
+    expect(accountCheckOf({ ok: false, status: 503 }, "A")).toBe("unreachable");
+  });
+  const memory = () => {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    };
+  };
+  it("le corps incertain survit au rechargement, par compte, et s'efface", () => {
+    const store = memory();
+    saveUncertain(store, "A", { clientId: "c1", caption: "x" } as never);
+    expect(loadUncertain(store, "A")).toMatchObject({ clientId: "c1", caption: "x" });
+    // Un autre compte ne le relit jamais, et l'écarte.
+    expect(loadUncertain(store, "B")).toBeNull();
+    expect(loadUncertain(store, "A")).toBeNull();
+    saveUncertain(store, "A", { clientId: "c2" });
+    clearUncertain(store);
+    expect(loadUncertain(store, "A")).toBeNull();
+    expect(loadUncertain(null, "A")).toBeNull();
+  });
+  it("un contenu abîmé n'est pas un corps incertain", () => {
+    const store = memory();
+    store.setItem("orasso:fil:publish-uncertain", "{pas du json");
+    expect(loadUncertain(store, "A")).toBeNull();
+  });
+});

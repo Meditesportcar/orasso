@@ -327,3 +327,62 @@ for (const status of [429, 401] as const) {
     await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
   });
 }
+
+// --- Tour 4 ------------------------------------------------------------------------------------------------------------
+
+test("site : réseau coupé pendant « Réessayer » : « Pas de réseau », l'envoi reste incertain (jamais « session changée »)", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await lostThenUncertain(page, "Un mot", false);
+  await page.route("**/api/me", (route) => route.abort("failed"));
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByText("Pas de réseau")).toBeVisible();
+  await expect(page.getByText("session a changé")).toHaveCount(0);
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+  // 401 : la session est à reprendre, le corps incertain reste gardé.
+  await page.unroute("**/api/me");
+  await page.route("**/api/me", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "x", message: "non" } }),
+    }),
+  );
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByText("Ta session a expiré")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+});
+
+test("site : l'envoi incertain survit au rechargement, par compte ; « Réessayer » sans doublon ; un autre compte ne le voit pas", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  const caption = `Rechargée ${Date.now()}`;
+  await lostThenUncertain(page, caption, true);
+  await page.reload();
+  await expect(page.getByTestId("fil-publish-uncertain")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-caption")).toBeDisabled();
+  await page.getByTestId("fil-publish-send").click();
+  await expect(page.getByTestId("fil-publish-done")).toBeVisible({ timeout: 60_000 });
+  const res = await page.evaluate(async () => (await fetch("/api/me/feed-posts")).json());
+  expect((res.items as { caption: string | null }[]).filter((p) => p.caption === caption)).toHaveLength(1);
+  // Effacé à la confirmation : un rechargement ne le ressuscite pas.
+  await page.goto("/app/fil/publier");
+  await expect(page.getByTestId("fil-publish")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-uncertain")).toHaveCount(0);
+});
+
+test("site : le corps incertain de A n'est jamais relu par B (même onglet)", async ({ page }) => {
+  test.setTimeout(240_000);
+  await openAs(page, "damien@orasso.local");
+  await lostThenUncertain(page, "Un mot de A", false);
+  await page.context().clearCookies();
+  await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/fil/publier");
+  await expect(page.getByTestId("fil-publish")).toBeVisible();
+  await expect(page.getByTestId("fil-publish-uncertain")).toHaveCount(0);
+  await expect(page.getByTestId("fil-publish-caption")).toBeEnabled();
+});

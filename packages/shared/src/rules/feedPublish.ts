@@ -389,3 +389,59 @@ export function withImportantLeft(
 
 /** Le premier ordre d'envoi, figé tant qu'il est incertain (réponse perdue) : le même corps repart avec le même `clientId`. */
 export type UncertainSend = { clientId: string; body: unknown };
+
+// --- Contrôle du compte et envoi incertain gardé par compte (tour 4) ----------------------------------------------------
+
+/** Ce que dit `GET /me` du compte de la session : le même, un autre, plus de session (401), ou rien de sûr (réseau, 5xx). */
+export type AccountCheck = "same" | "other" | "signed_out" | "unreachable";
+
+export function accountCheckOf(
+  res: { ok: true; userId: string } | { ok: false; status: number },
+  expected: string,
+): AccountCheck {
+  if (res.ok) return res.userId === expected ? "same" : "other";
+  return res.status === 401 ? "signed_out" : "unreachable";
+}
+
+/** Le stockage de l'onglet (`sessionStorage`) ou tout ce qui y ressemble. */
+export type PublishStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+const UNCERTAIN_KEY = "orasso:fil:publish-uncertain";
+type StoredUncertain = { account: string; body: { clientId: string } & Record<string, unknown> };
+
+/** Garde le corps d'un envoi incertain pour ce compte (un seul à la fois). */
+export function saveUncertain(store: PublishStore | null, account: string, body: { clientId: string }): void {
+  try {
+    store?.setItem(UNCERTAIN_KEY, JSON.stringify({ account, body } satisfies StoredUncertain));
+  } catch {
+    // Stockage refusé : l'envoi reste incertain tant que la page est ouverte.
+  }
+}
+
+/** Le corps incertain de ce compte ; jamais celui d'un autre (il est alors écarté), `null` sinon. */
+export function loadUncertain(
+  store: PublishStore | null,
+  account: string,
+): ({ clientId: string } & Record<string, unknown>) | null {
+  try {
+    const raw = store?.getItem(UNCERTAIN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredUncertain>;
+    if (parsed.account !== account || typeof parsed.body?.clientId !== "string") {
+      if (parsed.account !== account) store?.removeItem(UNCERTAIN_KEY);
+      return null;
+    }
+    return parsed.body;
+  } catch {
+    return null;
+  }
+}
+
+/** Efface le corps incertain (envoi confirmé, ou abandon vérifié). */
+export function clearUncertain(store: PublishStore | null): void {
+  try {
+    store?.removeItem(UNCERTAIN_KEY);
+  } catch {
+    // Rien à effacer.
+  }
+}
