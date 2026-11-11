@@ -310,7 +310,8 @@ export const weatherService = {
   async mineAtHome(v: Viewer): Promise<MyWeather | null> {
     const department = v.profile.departments[0];
     if (!department) return null;
-    return placeWeather(department, await this.departmentWeather(department));
+    // Lot R8r : un stock récent sans la journée d'aujourd'hui est renouvelé (relecture de l'Accueil au premier chargement).
+    return placeWeather(department, await this.departmentWeather(department, { needToday: true }));
   },
 
   /**

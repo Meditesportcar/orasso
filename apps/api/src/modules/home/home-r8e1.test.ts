@@ -564,6 +564,17 @@ describe("tour 2 : le bloc « Météo » ne lit que le stock", () => {
     expect(anon.status).toBe(401);
   });
 
+  it("lot R8r : GET /me/weather?place=1 renouvelle un stock récent sans la journée d'aujourd'hui", async () => {
+    const { u } = await world();
+    await moveTo(u, "31");
+    await db.insert(weatherDepartments).values(departmentRow("2026-11-09", new Date(NOW.getTime() - HOUR), "31"));
+    const calls = vi.fn(async () => new Response(JSON.stringify(omDay("2026-11-10")), { status: 200 }));
+    setWeatherFetch(calls as unknown as typeof fetch);
+    const r = await app.request("/api/me/weather?place=1", { headers: { origin: ORIGIN, cookie: u.cookie } });
+    expect(await r.json()).toMatchObject({ kind: "place", department: "31", summary: { date: "2026-11-10" } });
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+
   it("lot R8r : pas de département, ou météo désactivée → weatherPending faux", async () => {
     const { u } = await world();
     await db.update(profiles).set({ departments: [] }).where(eq(profiles.userId, u.id));
