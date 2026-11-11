@@ -29,4 +29,12 @@ describe("annulation et heures calmes", () => {
     expect(essentialQuietOverride("event_reminder_eve")).toBeUndefined();
     expect(essentialQuietOverride("event_news_digest")).toBeUndefined();
   });
+
+  it("pas pour un événement terminé (tour 4)", () => {
+    const now = new Date("2026-11-10T22:00:00Z");
+    expect(essentialQuietOverride("event_important", { endsAt: new Date(now.getTime() - 1000), now })).toBeUndefined();
+    expect(essentialQuietOverride("event_important", { endsAt: new Date(now.getTime() + 1000), now })).toEqual({
+      within: ESSENTIAL_URGENT_WITHIN_MS,
+    });
+  });
 });

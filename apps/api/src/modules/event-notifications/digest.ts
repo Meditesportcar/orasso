@@ -15,16 +15,26 @@ import {
   shouldDeliver,
   wallTime,
 } from "@orasso/shared";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
+import { eventNotificationPrefs, notifications, profiles } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { withTx } from "../../lib/tx";
+import { postOkSql } from "../feed/lists";
 import { notificationsService, registerDeliveryGuard } from "../notifications/service";
 
 const BATCH = 500;
 /** Sans résumé précédent : les publications des dernières 24 h. */
 const FIRST_WINDOW_MS = DAY;
+/**
+ * Marge de chevauchement : une publication dont la transaction a commencé avant le passage précédent mais s'est validée après
+ * (sa date précède donc le curseur) est reprise ; celles déjà résumées sont écartées par leur identifiant (`data.postIds`
+ * des résumés envoyés).
+ */
+const OVERLAP_MS = 60 * 60_000;
+/** Les résumés envoyés qui servent à dédoublonner (la marge est d'une heure : trois jours suffisent largement). */
+const DEDUP_LOOKBACK_MS = 3 * DAY;
 /** Un événement fini depuis plus de 7 jours ne compte plus. */
 const FINISHED_WINDOW_MS = 7 * DAY;
 /** Copie des statuts de `modules/events/place.ts` (non modifiable ici) : un test garde les deux d'accord. */
@@ -49,7 +59,9 @@ type Reserved = {
   prefs: Record<string, boolean> | null;
   muted: string[] | null;
 };
-type NewsRow = { user_id: string; event_id: string; title: string; slug: string; n: number };
+type NewsRow = { user_id: string; event_id: string; title: string; slug: string; n: number; post_ids: string[] };
+/** Un événement d'un résumé, gardé dans `data.events` pour le recomposer à la livraison. */
+export type DigestEvent = { id: string; title: string; slug: string; n: number };
 
 export const eventNewsDigest = {
   /**
@@ -85,7 +97,9 @@ export const eventNewsDigest = {
         if (wanting.length) {
           const values = sql.join(
             wanting.map((r) => {
-              const since = r.since ? new Date(r.since) : new Date(at.getTime() - FIRST_WINDOW_MS);
+              const since = r.since
+                ? new Date(new Date(r.since).getTime() - OVERLAP_MS)
+                : new Date(at.getTime() - FIRST_WINDOW_MS);
               return sql`(${r.user_id}::text, ${since.toISOString()}::timestamptz)`;
             }),
             sql`, `,
@@ -98,31 +112,32 @@ export const eventNewsDigest = {
               union
               select t.user_id, t.event_id from tickets t join u on u.user_id = t.user_id where t.status in ('valid', 'used')
             )
-            select h.user_id, e.id as event_id, e.title, e.slug, count(fp.id)::int as n
+            select h.user_id, e.id as event_id, e.title, e.slug, count(p.id)::int as n,
+              array_agg(p.id::text order by p.created_at) as post_ids
             from holders h
             join u on u.user_id = h.user_id
             join events e on e.id = h.event_id and e.status = 'published'
               and e.ends_at >= ${new Date(at.getTime() - FINISHED_WINDOW_MS).toISOString()}::timestamptz
-            join feed_posts fp on fp.event_id = e.id and fp.event_role = 'organizer' and fp.deleted_at is null
-              and fp.important_sent_at is null and fp.author_id <> h.user_id
-              and fp.created_at > u.since and fp.created_at <= ${at.toISOString()}::timestamptz
+            join feed_posts p on p.event_id = e.id and p.event_role = 'organizer'
+              and p.important_sent_at is null and p.author_id <> h.user_id
+              and p.created_at > u.since and p.created_at <= ${at.toISOString()}::timestamptz
+            join profiles a on a.user_id = p.author_id
             left join event_notification_prefs np on np.user_id = h.user_id and np.event_id = e.id
             where coalesce(np.news, true)
+              and ${postOkSql(at)}
+              and not exists (select 1 from notifications n where n.user_id = h.user_id and n.type = 'event_news_digest'
+                and n.created_at >= ${new Date(at.getTime() - DEDUP_LOOKBACK_MS).toISOString()}::timestamptz
+                and n.data -> 'postIds' @> to_jsonb(p.id::text))
             group by h.user_id, e.id, e.title, e.slug, e.starts_at
             order by h.user_id, e.starts_at, e.id`);
           for (const row of news.rows) byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row]);
         }
-        const items = [...byUser.entries()].map(([userId, events]) => {
-          const count = events.reduce((sum, e) => sum + e.n, 0);
-          const only = events.length === 1 ? events[0] : undefined;
+        const items = [...byUser.entries()].map(([userId, rows]) => {
+          const events = rows.map((r) => ({ id: r.event_id, title: r.title, slug: r.slug, n: r.n }));
           return {
             userId,
-            title: eventNotifyLabels.digestTitle(count),
-            body: eventNotifyLabels.digestBody(events.map((e) => e.title)),
-            data: { eventIds: events.map((e) => e.event_id) },
-            link: only
-              ? { label: "Voir l'événement", path: `/e/${only.slug}` }
-              : { label: "Ouvrir Orasso", path: "/app" },
+            ...composeDigest(events),
+            data: { events, postIds: rows.flatMap((r) => r.post_ids) },
           };
         });
         await notificationsService.notifyEachNow(tx, DIGEST_TYPE, items);
@@ -147,5 +162,50 @@ export const eventNewsDigest = {
   },
 };
 
-/** Un résumé livré en retard (panne, reprise) qui tombe dans les heures calmes est abandonné, jamais reporté à 8 h. */
-registerDeliveryGuard([DIGEST_TYPE], async () => !(env.NOTIFY_QUIET_HOURS && isQuietHour(now())));
+/** Titre, corps et lien d'un résumé fait de ces événements (au moins un). */
+export function composeDigest(events: readonly DigestEvent[]) {
+  const count = events.reduce((sum, e) => sum + e.n, 0);
+  const only = events.length === 1 ? events[0] : undefined;
+  return {
+    title: eventNotifyLabels.digestTitle(count),
+    body: eventNotifyLabels.digestBody(events.map((e) => e.title)),
+    link: only ? { label: "Voir l'événement", path: `/e/${only.slug}` } : { label: "Ouvrir Orasso", path: "/app" },
+  };
+}
+
+/**
+ * Garde de livraison du résumé. Un résumé livré en retard (panne, reprise) qui tombe dans les heures calmes est abandonné,
+ * jamais reporté à 8 h. À la livraison, les réglages sont relus : « Nouveautés de mes sorties » coupées depuis, ou tous les
+ * événements du résumé coupés : abandonné ; quelques événements coupés : le résumé est recomposé avec les autres.
+ */
+registerDeliveryGuard([DIGEST_TYPE], async (n) => {
+  if (env.NOTIFY_QUIET_HOURS && isQuietHour(now())) return false;
+  const profile = await db.query.profiles.findFirst({
+    where: eq(profiles.userId, n.userId),
+    columns: { notificationPrefs: true },
+  });
+  if (!profile || profile.notificationPrefs?.eventNews === false) return false;
+  const data = n.data as { events?: DigestEvent[]; link?: string; linkLabel?: string };
+  if (!Array.isArray(data.events) || !data.events.length) return true;
+  const muted = await db
+    .select({ eventId: eventNotificationPrefs.eventId })
+    .from(eventNotificationPrefs)
+    .where(
+      and(
+        eq(eventNotificationPrefs.userId, n.userId),
+        eq(eventNotificationPrefs.news, false),
+        inArray(
+          eventNotificationPrefs.eventId,
+          data.events.map((e) => e.id),
+        ),
+      ),
+    );
+  const off = new Set(muted.map((m) => m.eventId));
+  const remaining = data.events.filter((e) => !off.has(e.id));
+  if (!remaining.length) return false;
+  if (remaining.length === data.events.length) return true;
+  const { title, body, link } = composeDigest(remaining);
+  const next = { ...n.data, events: remaining, link: link.path, linkLabel: link.label };
+  await db.update(notifications).set({ title, body, data: next }).where(eq(notifications.id, n.id));
+  return { ...n, title, body, data: next };
+});
