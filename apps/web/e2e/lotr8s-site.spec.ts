@@ -68,10 +68,19 @@ test("la barre ouvre l'auteur avec ?suite=barre ; lecture enchaînée, fermeture
   await signedIn(page, "beton", 1280, 800);
   // L'ordre des ronds est celui du serveur (la barre est lue après l'affichage de la page).
   await expect(page.getByTestId(`stories-author-${authors[authors.length - 1]?.key}`)).toBeVisible({ timeout: 30_000 });
-  const keys = await page
-    .locator('[data-testid^="stories-author-"]')
-    .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")?.replace("stories-author-", "") ?? ""));
-  expect(keys).toEqual(authors.map((a) => a.key));
+  // Lot R8r : juste après un seed, l'ordre du serveur peut encore bouger entre deux lectures : on compare la page à la réponse du
+  // serveur du moment (relue à chaque essai), pas à une lecture plus ancienne.
+  await expect
+    .poll(
+      async () => {
+        const keys = await page
+          .locator('[data-testid^="stories-author-"]')
+          .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")?.replace("stories-author-", "") ?? ""));
+        return JSON.stringify(keys) === JSON.stringify((await bar()).map((a) => a.key));
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await shot(page, "barre-1280");
   await page.getByLabel(new RegExp(`Voir les stories de ${unseen[0]?.pseudoOrName}`)).click();
   await expect(page).toHaveURL(/\/app\/story\/.*suite=barre/);
