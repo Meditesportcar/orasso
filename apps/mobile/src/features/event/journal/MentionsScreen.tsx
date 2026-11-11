@@ -170,7 +170,6 @@ export function MentionsScreen() {
                   accessibilityRole="tab"
                   selected={filter === f}
                   onPress={() => setFilter(f)}
-                  testID={`mentions-filter-${f}`}
                 >
                   {f === "visible" ? L.filterVisible : L.filterHidden}
                 </Chip>
