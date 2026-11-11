@@ -3,8 +3,24 @@ import { FEED_SPONSORED_OPEN_REASON } from "../rules/sponsored";
 
 // Le Fil (lot R7e1, D38) : libellés des raisons, des filtres, des genres de carte et du menu ⋯.
 
+/**
+ * « Pour ta sortie de samedi » : le jour du début, à Paris. Au-delà d'une semaine, le jour seul serait ambigu : « Pour ta
+ * sortie du 21 novembre ». Une sortie déjà commencée dit le jour où elle a commencé.
+ */
+export function feedMyOutingLabel(startsAt: Date, now: Date): string {
+  const tz = "Europe/Paris";
+  if (startsAt.getTime() - now.getTime() > 6 * 86_400_000) {
+    return `Pour ta sortie du ${startsAt.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: tz })}`;
+  }
+  return `Pour ta sortie de ${startsAt.toLocaleDateString("fr-FR", { weekday: "long", timeZone: tz })}`;
+}
+
 /** « Pourquoi je vois ça » : la ligne sous la carte. `pseudo` ou `name` complètent les liens directs. */
-export function feedReasonLabel(code: FeedReasonCode, who?: string | null): string {
+export function feedReasonLabel(
+  code: FeedReasonCode,
+  who?: string | null,
+  outing?: { startsAt: Date; now: Date },
+): string {
   switch (code) {
     case "following_author":
       return who ? `Tu suis ${who}` : "Tu suis cette personne";
@@ -30,6 +46,8 @@ export function feedReasonLabel(code: FeedReasonCode, who?: string | null): stri
       return "Proposé par Orasso";
     case "your_memory":
       return "Un souvenir pour toi";
+    case "my_outing":
+      return outing ? feedMyOutingLabel(outing.startsAt, outing.now) : "Pour ta sortie";
     case "new_here":
       return "Nouveau sur Orasso";
     case "sponsored":

@@ -2,6 +2,7 @@
 // `reset` de l'API), les genres de carte qu'on sait dessiner, et ce qui bloque « Publier au Fil ».
 import { feedScreenLabels as L } from "../labels/feedScreen.fr";
 import type { FeedCard, FeedPage, FeedPostView } from "../schemas/feed";
+import { FEED_SEEN_BATCH_MAX, FEED_SEEN_QUEUE_MAX, type FeedSeenAction } from "../schemas/feedSeen";
 import { MAX_PLATE_RECTS, type PlateRect } from "../schemas/vehicle";
 import {
   FEED_ASPECT_RATIOS,
@@ -21,9 +22,13 @@ export type FeedListState = {
   filter: FeedFilter;
   items: FeedCard[];
   nextCursor: string | null;
+  /** Le rail « Ça plaît en ce moment » de la première page (R8c1) ; il ne change pas pendant le parcours. */
+  hot?: FeedCard<"feed_post">[];
+  /** L'instant du parcours (`FeedPage.ref`) : base de la pastille « Nouvelles publications ». */
+  ref?: string;
 };
 
-export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null });
+export const emptyFeedList = (filter: FeedFilter): FeedListState => ({ filter, items: [], nextCursor: null, hot: [] });
 
 /** La première place d'une carte « Sponsorisé » dans la liste affichée (0 = première) : la 4e, jamais avant (D38). */
 export const SPONSORED_MIN_INDEX = 3;
@@ -60,20 +65,61 @@ export function appendCards(current: readonly FeedCard[], next: readonly FeedCar
  */
 export function applyFeedPage(
   state: FeedListState,
-  page: Pick<FeedPage, "items" | "nextCursor" | "filter" | "reset">,
+  page: Pick<FeedPage, "items" | "nextCursor" | "filter" | "reset"> & Partial<Pick<FeedPage, "hot" | "ref">>,
   sentCursor: string | null,
 ): { state: FeedListState; scrollTop: boolean } | null {
   if (page.filter !== state.filter) return null;
   if (!sentCursor || page.reset) {
     return {
-      state: { filter: state.filter, items: [...page.items], nextCursor: page.nextCursor },
+      state: {
+        filter: state.filter,
+        items: [...page.items],
+        nextCursor: page.nextCursor,
+        hot: page.hot ? [...page.hot] : [],
+        ...(page.ref ? { ref: page.ref } : {}),
+      },
       scrollTop: Boolean(page.reset && sentCursor),
     };
   }
   return {
-    state: { filter: state.filter, items: appendCards(state.items, page.items), nextCursor: page.nextCursor },
+    state: {
+      ...state,
+      items: appendCards(state.items, page.items),
+      nextCursor: page.nextCursor,
+    },
     scrollTop: false,
   };
+}
+
+/**
+ * Place de « Tu es à jour » : l'index de la première carte vue sans interaction (`seen: true`), ou -1 s'il n'y en a pas.
+ * 0 : tout est vu, la ligne est en tête. Le serveur range les cartes vues après les autres : la frontière est unique.
+ */
+export function caughtUpIndex(items: readonly Pick<FeedCard, "seen">[]): number {
+  return items.findIndex((c) => c.seen === true);
+}
+
+/** Une carte vue (ou ouverte, partagée) à envoyer à `POST /me/fil/seen`. */
+export type SeenEntry = { id: string; action: FeedSeenAction; at?: string };
+
+/**
+ * La file des cartes vues, prête à partir : sans doublon (une carte : la plus forte action, l'heure la plus ancienne),
+ * sans « Sponsorisé » (jamais retenu), 200 au plus (les plus récentes), puis `send` = les 50 premières d'un envoi, `rest` = la suite.
+ */
+export function seenBatch(queue: readonly SeenEntry[]): { send: SeenEntry[]; rest: SeenEntry[] } {
+  const byId = new Map<string, SeenEntry>();
+  for (const e of queue) {
+    if (e.id.startsWith("sponsored:")) continue;
+    const old = byId.get(e.id);
+    if (!old) {
+      byId.set(e.id, { ...e });
+      continue;
+    }
+    if (e.action !== "view") old.action = e.action;
+    if (e.at && (!old.at || e.at < old.at)) old.at = e.at;
+  }
+  const all = [...byId.values()].slice(-FEED_SEEN_QUEUE_MAX);
+  return { send: all.slice(0, FEED_SEEN_BATCH_MAX), rest: all.slice(FEED_SEEN_BATCH_MAX) };
 }
 
 /** Genres que le Fil dessine (lot R7e2, puis `spot_meetup` du lot R7i, `sponsored` du lot R7k2 et `memory` du lot R7j) : plus aucun n'est réservé. */
@@ -266,6 +312,7 @@ export function publishedCard(post: FeedPostView): FeedCard<"feed_post"> {
     reason: { code: "following_author", label: L.publishedReason },
     at: post.createdAt,
     payload: { post: { ...post, mine: true } },
+    seen: false,
   };
 }
 

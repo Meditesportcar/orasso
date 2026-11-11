@@ -12,6 +12,7 @@ export * from "./crewPage";
 export * from "./crews";
 export * from "./event";
 export * from "./feed";
+export * from "./feedSeen";
 export * from "./garage";
 export * from "./home";
 export * from "./invitations";
