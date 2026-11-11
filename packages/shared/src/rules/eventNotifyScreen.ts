@@ -120,6 +120,18 @@ export function notifyFieldsOfDraft(d: EventDraft): NotifyFields {
   };
 }
 
+/**
+ * Le moment d'envoi du changement qu'on vient d'enregistrer, d'après l'échéance décidée par l'API (`lastNotify` de
+ * l'événement relu) : `null` si aucun nouveau changement n'a été annoncé (identifiant inchangé : rien à dire).
+ */
+export function notifyTimingOfSave(
+  beforeId: string | null | undefined,
+  after: { id: string; deferred: boolean } | null | undefined,
+): NotifyTiming | null {
+  if (!after || after.id === (beforeId ?? null)) return null;
+  return after.deferred ? "at_8" : "now";
+}
+
 /** Code porté par l'adresse de retour de l'assistant (« 148.now », « 148.at_8 », « x.now » quand le nombre est inconnu). */
 export function notifySavedCode(count: number | null, timing: NotifyTiming): string {
   return `${count ?? "x"}.${timing}`;

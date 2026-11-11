@@ -40,6 +40,7 @@ import {
   notifySavedCode,
   notifyStart,
   notifyTiming,
+  notifyTimingOfSave,
   notifyTimingLine,
   parseWizardMemo,
   posterTexts,
@@ -538,6 +539,7 @@ export function EventWizard(props: Props) {
       setIndex(eventWizardSteps.indexOf(invalid.step));
       return setError(invalid.problem);
     }
+    const notifiedBefore = saved?.lastNotify?.id ?? null;
     setBusy(true);
     setError(null);
     const { event: s } = await persist(d);
@@ -570,9 +572,9 @@ export function EventWizard(props: Props) {
       );
     }
     // Lot R8n2 : « Enregistré : 148 inscrits prévenus », lu par la page de l'événement (`?prevenus=`).
-    // Le moment se calcule à l'enregistrement, pas au dernier rendu.
-    const whenSaved = notifyTiming({ now: clockNow(), startsAt: notifyStart(saved?.startsAt ?? null, draftStart(d)) });
-    const told = mode === "save" && notifyShown ? `?prevenus=${notifySavedCode(preview.count, whenSaved)}` : "";
+    // Le moment décidé par l'API (pas un calcul local) : une échéance franchie pendant l'enregistrement ne trompe pas.
+    const whenSaved = notifyTimingOfSave(notifiedBefore, s.lastNotify);
+    const told = mode === "save" && notifyShown && whenSaved ? `?prevenus=${notifySavedCode(preview.count, whenSaved)}` : "";
     window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : told}`);
   }
 

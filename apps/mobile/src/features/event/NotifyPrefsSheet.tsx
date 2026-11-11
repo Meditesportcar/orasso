@@ -1,8 +1,8 @@
 // Notifications d'un événement (lot R8n2, maquette R8.11) : les pièces communes (bloc « Essentiel », ligne « Nouveautés
 // de l'événement » à interrupteur) et la feuille de la cloche de la fiche. Les mots viennent de `eventNotifyLabels`.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { eventNotifyLabels as L } from "@orasso/shared";
-import { useCallback, useEffect, useState } from "react";
+import { createSerialWriter, eventNotifyLabels as L, type SerialWriter } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -155,30 +155,33 @@ export function NotifyPrefsSheet({
   const { t } = useTheme();
   const [news, setNews] = useState(initialNews);
   const [message, setMessage] = useState<string | null>(null);
+  const writer = useRef<SerialWriter<boolean> | null>(null);
+  const lost = useRef(onLost);
+  lost.current = onLost;
+  // À chaque ouverture : un écrivain neuf à partir de la valeur lue (envois sérialisés, dernier choix gardé).
   useEffect(() => {
-    if (visible) {
-      setNews(initialNews);
-      setMessage(null);
-    }
-  }, [visible, initialNews]);
-
-  const change = useCallback(
-    async (next: boolean) => {
-      setNews(next);
-      setMessage(null);
-      try {
-        const saved = await api.setEventNotificationPrefs(eventId, next);
-        setNews(saved.news);
-      } catch (e) {
-        setNews(!next);
+    if (!visible) return;
+    setNews(initialNews);
+    setMessage(null);
+    writer.current = createSerialWriter<boolean>({
+      initial: initialNews,
+      write: async (value) => (await api.setEventNotificationPrefs(eventId, value)).news,
+      onSettled: setNews,
+      onError: (confirmed, e) => {
+        setNews(confirmed);
         if (e instanceof ApiRequestError && e.status === 403 && e.code === "no_place") {
           setMessage(L.noPlace);
-          onLost();
+          lost.current();
         } else setMessage(errorMessage(e) || L.ficheSaveFailed);
-      }
-    },
-    [eventId, onLost],
-  );
+      },
+    });
+  }, [visible, initialNews, eventId]);
+
+  const change = (next: boolean) => {
+    setNews(next);
+    setMessage(null);
+    writer.current?.set(next);
+  };
 
   return (
     <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.bellLabel} maxHeight={0.85}>
@@ -190,7 +193,7 @@ export function NotifyPrefsSheet({
         title={L.eventNewsTitle}
         help={L.eventNewsHelpOnFiche}
         on={news}
-        onChange={(v) => void change(v)}
+        onChange={change}
         testID="notify-news-switch"
       />
       {message ? (

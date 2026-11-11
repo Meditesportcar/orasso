@@ -434,6 +434,8 @@ export type EventPublic = EventCard & {
 };
 
 export type EventOrganizer = EventPublic & {
+  /** Lot R8n2, tour 3 : le dernier changement annoncé aux inscrits ; `deferred` : son envoi est prévu plus tard (heures calmes). */
+  lastNotify?: { id: string; deferred: boolean } | null;
   zones: EventZone[];
   counters: EventCounters;
   publishedAt: string | null;

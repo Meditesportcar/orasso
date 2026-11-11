@@ -41,7 +41,7 @@ import {
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
@@ -51,6 +51,7 @@ import {
   eventDays,
   events,
   eventZones,
+  notifications,
   orders,
   structureBans,
   structureFollows,
@@ -409,7 +410,18 @@ export const eventsService = {
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
     });
     const settings = posterSettingsOf(e);
+    // Lot R8n2, tour 3 : le dernier changement annoncé aux inscrits et son échéance décidée par l'API (différé = pas encore
+    // parti, prévu plus tard) : l'assistant dit « à 8 h » d'après elle, jamais d'après un calcul local.
+    const [lastNotify] = await db
+      .select({ id: notifications.id, deliverAfter: notifications.deliverAfter, deliveredAt: notifications.deliveredAt })
+      .from(notifications)
+      .where(and(eq(notifications.eventId, id), eq(notifications.type, "event_updated")))
+      .orderBy(desc(notifications.createdAt), desc(notifications.id))
+      .limit(1);
     return {
+      lastNotify: lastNotify
+        ? { id: lastNotify.id, deferred: lastNotify.deliveredAt === null && lastNotify.deliverAfter.getTime() > now().getTime() }
+        : null,
       ...(await publicView(e, s, {
         instructions: true,
         exhibitorSlot: true,
