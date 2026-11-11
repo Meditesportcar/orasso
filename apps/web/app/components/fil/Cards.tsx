@@ -8,13 +8,13 @@ import {
   type FeedPostView,
   feedScreenLabels as L,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { apiFetch } from "../../lib/api.client";
 import { PersonAvatar } from "../People";
-import { ShareDialog } from "../ShareSheet";
+import { CommentsPreview } from "./CommentsPreview";
 import { CommercialBadge } from "./CommercialBadge";
 import { MemoryCard } from "./MemoryCard";
+import { PostActions } from "./PostActions";
 import { type CardProps, OrgLogo, Shell } from "./Shell";
 import { SponsoredCard } from "./SponsoredCard";
 import { SpotMeetupCard } from "./SpotMeetupCard";
@@ -241,26 +241,6 @@ export function FeedPhotos({ post }: { post: Pick<FeedPostView, "photos" | "aspe
 
 function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
   const post = card.payload.post;
-  const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
-  const [busy, setBusy] = useState(false);
-  useEffect(
-    () => setFire({ count: post.reactionsCount, on: post.reactedByMe }),
-    [post.reactionsCount, post.reactedByMe],
-  );
-
-  async function toggle() {
-    if (busy) return;
-    const before = fire;
-    const on = !before.on;
-    setBusy(true);
-    setFire({ count: Math.max(0, before.count + (on ? 1 : -1)), on });
-    const res = await apiFetch<{ reactionsCount: number; reactedByMe: boolean }>(`/feed-posts/${post.id}/reaction`, {
-      method: on ? "PUT" : "DELETE",
-    });
-    setFire(res.ok ? { count: res.data.reactionsCount, on: res.data.reactedByMe } : before);
-    setBusy(false);
-  }
-
   return (
     <Shell
       card={card}
@@ -270,23 +250,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
       onMenu={onMenu}
       faded={faded}
       banner={<CommercialBadge partner={post.commercialPartner} />}
-      actions={
-        <>
-          <button
-            type="button"
-            className={fire.on ? "fil-fire is-on" : "fil-fire"}
-            aria-pressed={fire.on}
-            aria-label={L.fireLabel(fire.count, fire.on)}
-            disabled={busy}
-            onClick={() => void toggle()}
-            data-testid="feed-post-fire"
-          >
-            <Icon name="fire" size={17} />
-            <span data-testid="feed-post-fire-count">{fire.count}</span>
-          </button>
-          <ShareDialog target={{ type: "feed_post", id: post.id }} testId="feed-post-share" />
-        </>
-      }
+      actions={<PostActions post={post} />}
     >
       <FeedPhotos post={post} />
       {post.caption ? (
@@ -308,6 +272,7 @@ function FeedPostCard({ card, onMenu, faded }: CardProps<"feed_post">) {
           ) : null}
         </div>
       ) : null}
+      <CommentsPreview post={post} />
     </Shell>
   );
 }
