@@ -6,10 +6,13 @@ import {
   eventTargetKey,
   journalBadges,
   journalSection,
+  lastJournalNotice,
+  lastLegacyNotice,
   latestNotice,
   mentionsPhase,
   pinGesture,
   publicToFeedPost,
+  publishStartChoice,
   remainingFil,
   showMentionsRow,
 } from "./eventJournal";
@@ -134,5 +137,63 @@ describe("publicToFeedPost : sans session", () => {
     expect(out).toMatchObject({ mine: false, reactedByMe: false, commentsOff: true, pinned: true, vehicle: null });
     expect(out.author).toMatchObject({ kind: "structure", pseudo: "Club", grade: null });
     expect(out.photos).toHaveLength(1);
+  });
+});
+
+describe("publishStartChoice : « Publier pour cet événement »", () => {
+  const S = "11111111-2222-4333-8444-555555555555";
+  const E = "66666666-7777-4888-9999-000000000000";
+  const authors = [{ key: "me" }, { key: "structure:" + S, structureId: S }];
+  it("la structure et l'événement sont posés", () => {
+    expect(publishStartChoice({ structure: S, evenement: E }, authors)).toMatchObject({
+      authorKey: `structure:${S}`,
+      eventId: E,
+      importantOn: false,
+      vehicleId: null,
+    });
+  });
+  it("une structure qui n'est pas la mienne ou une adresse mal formée : les valeurs habituelles", () => {
+    expect(publishStartChoice({ structure: "autre", evenement: E }, authors).authorKey).toBe("me");
+    expect(
+      publishStartChoice({ structure: "11111111-2222-4333-8444-000000000000", evenement: E }, authors),
+    ).toMatchObject({
+      authorKey: "me",
+      eventId: null,
+    });
+    expect(publishStartChoice({}, authors).eventId).toBeNull();
+  });
+  it("un événement mal formé est ignoré, la structure reste", () => {
+    expect(publishStartChoice({ structure: S, evenement: "x" }, authors)).toMatchObject({
+      authorKey: `structure:${S}`,
+      eventId: null,
+    });
+  });
+});
+
+describe("lastJournalNotice et lastLegacyNotice", () => {
+  it("la publication la plus récente par date de création, texte de repli sans légende", () => {
+    const items = [
+      { id: "pinned", caption: "Épinglée ancienne", createdAt: "2026-10-01T10:00:00Z" },
+      { id: "new", caption: null, createdAt: "2026-11-11T08:00:00Z", important: { reason: "other" } },
+      { id: "mid", caption: "Milieu", createdAt: "2026-11-05T08:00:00Z" },
+    ];
+    expect(lastJournalNotice(items, "Photo")).toMatchObject({ id: "new", text: "Photo", important: true });
+    expect(lastJournalNotice([], "Photo")).toBeNull();
+  });
+  it("la dernière annonce seulement : ni consigne ni changement de statut", () => {
+    const items = [
+      { id: "i", kind: "instructions", body: "Consignes", publishedAt: "2026-11-11T09:00:00Z" },
+      { id: "a1", kind: "announcement", body: "Ancienne", publishedAt: "2026-11-01T09:00:00Z" },
+      { id: "a2", kind: "announcement", body: "Récente", publishedAt: "2026-11-10T09:00:00Z" },
+    ];
+    expect(lastLegacyNotice(items)).toMatchObject({ id: "a2", text: "Récente", source: "legacy" });
+    expect(lastLegacyNotice([items[0] as (typeof items)[number]])).toBeNull();
+  });
+  it("une « Info importante » d'aujourd'hui passe devant une annonce d'hier", () => {
+    const journal = lastJournalNotice([{ id: "j", caption: "Horaires", createdAt: "2026-11-11T08:00:00Z" }], "Photo");
+    const legacy = lastLegacyNotice([
+      { id: "a", kind: "announcement", body: "Hier", publishedAt: "2026-11-10T08:00:00Z" },
+    ]);
+    expect(latestNotice(journal, legacy)?.source).toBe("journal");
   });
 });

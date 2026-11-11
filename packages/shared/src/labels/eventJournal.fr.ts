@@ -27,14 +27,19 @@ export const eventJournalLabels = {
   /** L'écran des mentions. */
   mentionsTitle: (n: number) => `Mentions · ${n}`,
   backToEvent: "Retour à la fiche",
-  mentionsIntro: (event: string, manager: boolean) =>
-    `${event} : ce que les autres publient en citant l'événement. Ces publications ne sont pas celles de la fiche : elles restent chez leur auteur.${manager ? " Tu peux en masquer une de ta fiche (« … »)." : ""}`,
   onSite: "Sur place",
   fansBefore: "Passionnés · j'y serai",
   fansAfter: "Passionnés · j'y étais",
   fansNoteBefore: "Comptes publics seulement. Les autres comptes n'apparaissent pas.",
-  fansNoteAfter: "Comptes publics seulement. Après l'événement, seulement ceux dont la présence est validée (QR ou GPS).",
+  fansNoteAfter:
+    "Comptes publics seulement. Après l'événement, seulement ceux dont la présence est validée (QR ou GPS).",
   herPage: "Sa fiche",
+  /** Sous le nom d'une mention « Sur place » : ce qu'il est, puis où il en est (retenu avant l'événement, présent après). */
+  kindProvider: "Prestataire",
+  kindPro: "Pro",
+  kindMedia: "Média",
+  stateBefore: "retenu",
+  stateAfter: "présent",
   present: "Présent",
   mentionsLoading: "Chargement des mentions…",
   mentionsError: "Les mentions ne se chargent pas pour le moment.",
@@ -56,6 +61,10 @@ export const eventJournalLabels = {
   hideDone: "Mention masquée de la fiche.",
   unhideDone: "Mention remise sur la fiche.",
   actionError: "Le geste n'a pas abouti. Réessaie.",
+  /** Jour J : la plus récente nouvelle de l'organisateur (publication du journal ou annonce non reprise). */
+  lastNews: "Dernière nouvelle",
+  /** Une publication sans légende, au jour J. */
+  newsPhoto: "Nouvelle publication avec photo",
   /** Les anciennes annonces qui restent sous le journal. */
   legacyTitle: "Fil de l'événement",
 } as const;

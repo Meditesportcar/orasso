@@ -3,6 +3,7 @@
 import type { FeedPostView } from "../schemas/feed";
 import type { PublicPostView } from "../schemas/feedLists";
 import type { AuthorKind } from "./authors";
+import { initialPublishChoice, type PublishChoice } from "./feedPublish";
 
 /** Une entrée de l'ancien fil (`AnnouncementView`) : celle qui porte `migratedPostId` est déjà dans le journal. */
 export type LegacyEntry = { id: string; migratedPostId?: string | null };
@@ -65,6 +66,34 @@ export function latestNotice(journal: Notice | null, legacy: Notice | null): Not
   if (!journal) return legacy;
   if (!legacy) return journal;
   return new Date(legacy.at).getTime() > new Date(journal.at).getTime() ? legacy : journal;
+}
+
+/** La publication du journal la plus récente (par date de création : l'épinglée n'est pas forcément la dernière). */
+export function lastJournalNotice(
+  items: readonly { id: string; caption: string | null; createdAt: string; important?: unknown }[],
+  photoText: string,
+): Notice | null {
+  const latest = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!latest) return null;
+  return {
+    source: "journal",
+    id: latest.id,
+    text: latest.caption?.trim() ? latest.caption : photoText,
+    at: latest.createdAt,
+    important: Boolean(latest.important),
+  };
+}
+
+/** La dernière annonce (genre « annonce » seulement) de l'ancien fil. */
+export function lastLegacyNotice(
+  items: readonly { id: string; kind: string; body: string; publishedAt: string }[],
+): Notice | null {
+  const latest = [...items]
+    .filter((i) => i.kind === "announcement")
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0];
+  return latest
+    ? { source: "legacy", id: latest.id, text: latest.body, at: latest.publishedAt, important: false }
+    : null;
 }
 
 // --- « Sa fiche » ---------------------------------------------------------------------------------------------------------
@@ -130,4 +159,25 @@ export function publicToFeedPost(p: PublicPostView): FeedPostView {
     commentsOff: true,
     lastComments: [],
   };
+}
+
+// --- « Publier pour cet événement » -------------------------------------------------------------------------------------
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Les valeurs de départ de « Publier » ouvert depuis la fiche de l'événement (`?structure=<id>&evenement=<id>`) : la structure
+ * déjà choisie comme auteur (si la personne en est responsable : elle figure dans ses casquettes) et l'événement posé. Une
+ * adresse mal formée, une structure qui n'est pas la sienne ou un événement sans structure : les valeurs habituelles. L'écran
+ * relâche lui-même un événement que la structure ne peut pas rattacher.
+ */
+export function publishStartChoice(
+  params: { structure?: string | null; evenement?: string | null },
+  authors: readonly { key: string; structureId?: string }[],
+): PublishChoice {
+  const structure = params.structure && UUID.test(params.structure) ? params.structure : null;
+  const author = structure ? authors.find((a) => a.structureId === structure) : undefined;
+  if (!author) return initialPublishChoice;
+  const eventId = params.evenement && UUID.test(params.evenement) ? params.evenement : null;
+  return { ...initialPublishChoice, authorKey: author.key, eventId };
 }
