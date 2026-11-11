@@ -173,6 +173,9 @@ describe("liste d'un auteur : une personne", () => {
       expect((await call(viewer, "GET", `/authors/${encodeURIComponent(key)}/feed-posts`)).status, key).toBe(404);
     }
     expect((await call(null, "GET", `/authors/u:${viewer.id}/feed-posts`)).status).toBe(401);
+    // Un pourcentage mal formé dans la clé : 404, jamais 500.
+    expect((await call(viewer, "GET", "/authors/%E0%A4%A/feed-posts")).status).toBe(404);
+    expect((await call(viewer, "PUT", `/mentions/%E0%A4%A/${randomUUID()}/hidden`)).status).toBe(404);
   });
 
   it("strictement les siennes : jamais les publications d'une page signées par la même personne", async () => {
