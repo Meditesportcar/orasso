@@ -9,6 +9,7 @@
 // (la météo n'est pas relancée : elle garde sa position ou sa ville).
 import {
   coarsePosition,
+  createFollowTracker,
   createPositionStore,
   type LatLng,
   PRACTICAL_PARTIAL_RETRY_MS,
@@ -16,7 +17,7 @@ import {
 } from "@orasso/shared";
 import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
-import { useWeatherPosition } from "@/features/weather/position";
+import { beginMyPosition, giveMyPositionCell, useWeatherPosition } from "@/features/weather/position";
 import { api } from "@/lib/api";
 import { cacheScope, onCacheScopeDropped } from "@/lib/kv";
 
@@ -33,7 +34,12 @@ const store: ReturnType<typeof createPositionStore<PracticalAt>> = createPositio
 });
 
 // Chaque fin de session invalide les demandes en cours, même sans position gardée (comme « Ma météo »).
-onCacheScopeDropped(async () => store.forget());
+// Une autre session : le suivi de la météo repart de zéro (une première position du même lieu n'est pas ignorée).
+const follow = createFollowTracker();
+onCacheScopeDropped(async () => {
+  store.forget();
+  follow.reset();
+});
 
 export type PracticalPosition = { at: PracticalAt | null; busy: boolean };
 
@@ -70,6 +76,8 @@ export async function askPracticalPosition(silent = false): Promise<boolean> {
   if (store.getState().busy) return false;
   const ticket = store.begin();
   if (!ticket) return false;
+  // Le ticket de la météo est pris au même geste : elle reçoit la case déjà lue, sans seconde lecture de l'appareil.
+  const weatherTicket = silent ? null : beginMyPosition();
   store.setBusy(true);
   try {
     const permission = silent
@@ -81,7 +89,13 @@ export async function askPracticalPosition(silent = false): Promise<boolean> {
     const options = { accuracy: Location.Accuracy.Balanced, maximumAge: 0 };
     const fix = await Location.getCurrentPositionAsync(options);
     if (!store.valid(ticket)) return false;
-    const ok = await give({ lat: fix.coords.latitude, lng: fix.coords.longitude }, ticket);
+    const exact = { lat: fix.coords.latitude, lng: fix.coords.longitude };
+    const ok = await give(exact, ticket);
+    if (ok && weatherTicket) {
+      // La météo affiche la même position ; son lieu n'est pas repris ici en retour (déjà connu).
+      follow.echo();
+      void giveMyPositionCell(coarsePosition(exact), weatherTicket);
+    }
     return ok;
   } catch {
     return false;
@@ -102,9 +116,6 @@ export const PARTIAL_RETRY_MS = PRACTICAL_PARTIAL_RETRY_MS;
  * Lot R8q, tour 2 : « Pratique » suit « Ma météo ». Chaque nouvelle position donnée à la météo est reprise ici une seule fois, sans nouvelle
  * fenêtre (permission déjà accordée) : une deuxième position dans la même séance remplace la première des deux côtés.
  */
-/** Le dernier lieu de la météo déjà repris ici (mémoire de la séance). */
-let followed: string | null = null;
-
 export function useFollowWeatherPosition(): void {
   const weather = useWeatherPosition();
   const mine = usePracticalPosition();
@@ -113,11 +124,7 @@ export function useFollowWeatherPosition(): void {
   const weatherKey = weather.at ? weather.at.label : null;
   const busy = mine.busy;
   useEffect(() => {
-    if (!weatherKey) followed = null;
     // Une tentative par lieu de la météo, pour toute la séance (pas à chaque montage de l'écran) : un échec ne relance pas en boucle.
-    if (weatherKey && !busy && followed !== weatherKey) {
-      followed = weatherKey;
-      void askPracticalPosition(true);
-    }
+    if (!busy && follow.shouldFollow(weatherKey)) void askPracticalPosition(true);
   }, [weatherKey, busy]);
 }

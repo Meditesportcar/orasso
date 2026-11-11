@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createFollowTracker,
   createSingleTimer,
   PRACTICAL_MIN_GAP_MS,
   practicalReadAllowed,
@@ -52,5 +53,21 @@ describe("relances de Pratique (R8q, tour 3)", () => {
     vi.advanceTimersByTime(5_000);
     expect(tries).toBe(2 + 3);
     expect(timer.pending()).toBe(false);
+  });
+
+  it("suivi de la météo : une tentative par lieu, remise à zéro au changement de compte, écho d'un geste ignoré", () => {
+    let t = 1_000;
+    const tracker = createFollowTracker(() => t, 10_000);
+    expect(tracker.shouldFollow(null)).toBe(false);
+    expect(tracker.shouldFollow("Perpignan")).toBe(true);
+    expect(tracker.shouldFollow("Perpignan")).toBe(false);
+    // Un autre compte reprend le même lieu : la première position n'est pas ignorée.
+    tracker.reset();
+    expect(tracker.shouldFollow("Perpignan")).toBe(true);
+    // Un geste dans « Pratique » donne sa case à la météo : le lieu qui en résulte n'est pas relu.
+    tracker.echo();
+    expect(tracker.shouldFollow("Canet-en-Roussillon")).toBe(false);
+    t += 11_000;
+    expect(tracker.shouldFollow("Argelès-sur-Mer")).toBe(true);
   });
 });

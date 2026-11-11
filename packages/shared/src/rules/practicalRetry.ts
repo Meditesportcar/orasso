@@ -45,3 +45,30 @@ export function createSingleTimer(
     pending: () => handle !== null,
   };
 }
+
+/**
+ * Suivi de « Ma météo » (tour 4) : une tentative par lieu de la météo pour toute la séance, remise à zéro à chaque changement de compte.
+ * `echo` : un geste dans « Pratique » vient de donner sa case à la météo : le lieu qui en résulte n'est pas repris (déjà connu ici).
+ */
+export function createFollowTracker(now: () => number = Date.now, echoMs = 10_000) {
+  let followed: string | null = null;
+  let echoUntil = 0;
+  return {
+    shouldFollow(key: string | null): boolean {
+      if (!key) {
+        followed = null;
+        return false;
+      }
+      if (followed === key) return false;
+      followed = key;
+      return now() >= echoUntil;
+    },
+    echo() {
+      echoUntil = now() + echoMs;
+    },
+    reset() {
+      followed = null;
+      echoUntil = 0;
+    },
+  };
+}

@@ -175,8 +175,8 @@ test("position accordée : jamais dans une adresse ni dans le stockage, les sour
   // Rien dans le stockage du navigateur.
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(stored).not.toMatch(/42\.704937|2\.895412|42\.70494|2\.89541/);
-  // Sens unique : la météo garde sa ville (un geste dans « Pratique » ne la relance pas).
-  await expect(page.getByTestId("home-weather")).not.toContainText("· ma position");
+  // La météo suit : elle reçoit la case déjà lue (sans seconde lecture de l'appareil).
+  await expect(page.getByTestId("home-weather")).toContainText("· ma position", { timeout: 20_000 });
   await shot(page, "appli-position-beton-384");
   await ctx.close();
 });
@@ -347,7 +347,9 @@ test("tour 2 : deux positions dans la même séance, « Me relocaliser » ; la s
 }) => {
   const { ctx, page } = await open(browser, { geo: true });
   const posted: { lat: number; lng: number }[] = [];
+  let weatherReads = 0;
   page.on("request", (r) => {
+    if (r.url().includes("/api/weather/at") && r.method() === "POST") weatherReads += 1;
     if (r.url().includes("/api/practical") && r.method() === "POST") {
       const body = JSON.parse(r.postData() ?? "{}");
       if (body.near === "position") posted.push({ lat: body.lat, lng: body.lng });
@@ -371,6 +373,9 @@ test("tour 2 : deux positions dans la même séance, « Me relocaliser » ; la s
   await page.waitForTimeout(2500);
   expect(await page.evaluate(() => (window as unknown as { __gps: number }).__gps)).toBe(1);
   expect(posted).toHaveLength(1);
+  // La météo suit avec la même case : une seule lecture météo, aucune seconde lecture de l'appareil.
+  expect(weatherReads).toBe(1);
+  await expect(page.getByTestId("home-weather")).toContainText("· ma position");
 
   await ctx.setGeolocation({ latitude: 42.552, longitude: 3.031 });
   await block.getByTestId("practical-use-position").click();

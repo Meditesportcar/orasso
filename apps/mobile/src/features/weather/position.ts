@@ -3,7 +3,7 @@
 // envoyée en corps de requête (pas dans l'adresse) et gardée EN MÉMOIRE de l'appli : jamais écrite sur le téléphone, jamais
 // dans un cache. Fermer l'appli, se déconnecter ou changer de compte l'oublie (règles dans `positionStore.ts`). Refusée : la
 // météo reste celle de la ville, sans message.
-import { coarsePosition, createPositionStore } from "@orasso/shared";
+import { coarsePosition, createPositionStore, type LatLng, type PositionTicket } from "@orasso/shared";
 import * as Location from "expo-location";
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -68,3 +68,7 @@ export const refreshMyPosition = (force = false) => store.refresh(force);
 
 /** Oublie la position (une ville choisie la remplace). */
 export const forgetMyPosition = () => store.forget();
+
+/** Lot R8q : « Pratique » donne à la météo la case qu'il vient de lire (ticket pris au geste), sans seconde lecture de l'appareil. */
+export const beginMyPosition = () => store.begin();
+export const giveMyPositionCell = (coarse: LatLng, ticket: PositionTicket | null) => store.give(coarse, ticket);
