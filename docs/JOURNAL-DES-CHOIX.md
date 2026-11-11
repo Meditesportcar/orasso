@@ -4974,3 +4974,6 @@ Date : 11/11/2026. API seule (les écrans sont le lot R8k2). Lot sensible : vie 
 - **Copie du signalement** : `resolve` de `feed_comment` renvoie le texte, le pseudo et la date en `reports.context` (colonne existante, conservée et purgée avec le signalement) ; la vue de modération la lit quand le commentaire n'existe plus (publication retirée avec son propriétaire, compte supprimé, ligne gardée purgée). Pas de migration en plus.
 - **Verrous** : `lockPostsOfDeletedAccount` prend les publications concernées avant toute mutation du Journal dans `accountService.anonymize`.
 - **Groupe perdu** : la garde de livraison recompose une ligne `feed_comment` ou `feed_comment_reply` sur le commentaire lisible le plus récent, et ne la supprime que s'il n'en reste aucun.
+
+### Tour 4 (R8k1, 11/11/2026)
+- **Garde de livraison** : une ligne regroupée (`feed_comment`, `feed_comment_reply`) est recomposée entièrement (titre, extrait, acteurs, compte, `commentId`) à partir des commentaires encore lisibles du destinataire, parmi ses acteurs d origine ; supprimée s il n en reste aucun. Plus aucun nom ni texte d un commentaire devenu illisible (auteur suspendu, passé privé) ne part.
