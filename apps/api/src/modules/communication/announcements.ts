@@ -13,13 +13,14 @@ import {
   shorten,
   statusChangeText,
 } from "@orasso/shared";
-import { and, count, desc, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   eventAnnouncements,
   events,
+  feedPosts,
   profiles,
   structureBans,
   structureFollows,
@@ -33,6 +34,7 @@ import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { arrivalsOf } from "../events/arrivals";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { softDeletePost } from "../feed/posts";
 import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
@@ -42,7 +44,12 @@ type AnnouncementRow = typeof eventAnnouncements.$inferSelect;
 
 const PAGE = 50;
 
-function serialize(row: AnnouncementRow, structureName: string, authorPseudo?: string | null): AnnouncementView {
+function serialize(
+  row: AnnouncementRow,
+  structureName: string,
+  authorPseudo?: string | null,
+  migratedPostId?: string,
+): AnnouncementView {
   return {
     id: row.id,
     eventId: row.eventId,
@@ -56,7 +63,20 @@ function serialize(row: AnnouncementRow, structureName: string, authorPseudo?: s
     publishedAt: row.publishedAt.toISOString(),
     structureName,
     ...(authorPseudo !== undefined ? { authorPseudo } : {}),
+    // Vague R8 (lot R8d) : la publication qui a repris cette annonce. Les nouveaux écrans sautent l'annonce (elle est dans
+    // le journal) ; l'ancien APK ignore le champ et lit la même chose qu'avant.
+    ...(migratedPostId ? { migratedPostId } : {}),
   };
+}
+
+/** Les publications qui ont repris ces annonces, retirées comprises : une reprise retirée du journal ne revient pas en annonce. */
+async function migratedPosts(ex: Tx | typeof db, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const rows = await ex
+    .select({ announcementId: feedPosts.legacyAnnouncementId, postId: feedPosts.id })
+    .from(feedPosts)
+    .where(and(isNotNull(feedPosts.legacyAnnouncementId), inArray(feedPosts.legacyAnnouncementId, ids)));
+  return new Map(rows.flatMap((r) => (r.announcementId ? [[r.announcementId, r.postId] as const] : [])));
 }
 
 /** Retenus (véhicules et prestataires) : ceux qui reçoivent les consignes et lisent les entrées `participants`. */
@@ -136,7 +156,11 @@ export const announcementsService = {
         desc(eventAnnouncements.createdAt),
       )
       .limit(PAGE);
-    return { items: rows.map((r) => serialize(r, row.structureName)) };
+    const migrated = await migratedPosts(
+      db,
+      rows.map((r) => r.id),
+    );
+    return { items: rows.map((r) => serialize(r, row.structureName, undefined, migrated.get(r.id))) };
   },
 
   /** `GET /events/:id/announcements` (organisateurs) : tout le fil, avec l'auteur. */
@@ -153,7 +177,13 @@ export const announcementsService = {
         desc(eventAnnouncements.createdAt),
       )
       .limit(PAGE);
-    return { items: rows.map((r) => serialize(r.a, s.name, r.deletedAt ? null : (r.pseudo ?? null))) };
+    const migrated = await migratedPosts(
+      db,
+      rows.map((r) => r.a.id),
+    );
+    return {
+      items: rows.map((r) => serialize(r.a, s.name, r.deletedAt ? null : (r.pseudo ?? null), migrated.get(r.a.id))),
+    };
   },
 
   /**
@@ -278,7 +308,7 @@ export const announcementsService = {
   /** `DELETE /events/:id/announcements/:aid` : retirée du fil pour tous, photo effacée du stockage. */
   async remove(v: Viewer, eventId: string, id: string) {
     const { e } = await requireEventSpeaker(v, eventId);
-    const imageKey = await withTx(async (tx) => {
+    const { imageKey, postKeys } = await withTx(async (tx) => {
       const [current] = await tx
         .select({ imageKey: eventAnnouncements.imageKey })
         .from(eventAnnouncements)
@@ -295,9 +325,17 @@ export const announcementsService = {
         .update(eventAnnouncements)
         .set({ deletedAt: now(), imageKey: null, imageWidth: null, imageHeight: null })
         .where(eq(eventAnnouncements.id, id));
-      return current.imageKey;
+      // L'ancien APK retire une annonce que le journal a reprise : la publication reprise est retirée avec elle (sinon
+      // l'organisateur la verrait revenir sur la fiche). Ses photos copiées partent après la validation.
+      const [taken] = await tx
+        .select({ id: feedPosts.id })
+        .from(feedPosts)
+        .where(and(eq(feedPosts.legacyAnnouncementId, id), isNull(feedPosts.deletedAt)));
+      const postKeys = taken ? await softDeletePost(tx, taken.id, v.user.id, now()) : [];
+      return { imageKey: current.imageKey, postKeys };
     });
     if (imageKey) await storage.remove(imageKey).catch(() => undefined);
+    for (const key of postKeys) await storage.remove(key).catch(() => undefined);
   },
 
   /**
