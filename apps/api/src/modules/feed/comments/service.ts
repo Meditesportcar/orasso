@@ -11,6 +11,7 @@ import {
   commentMentions,
   commentParent,
   FEED_COMMENTS_PAGE,
+  type FeedCommentCreated,
   type FeedCommentPage,
   type FeedCommentReaction,
   type FeedCommentView,
@@ -45,6 +46,7 @@ import {
   commentVisibleSql,
   managesPost,
   managesPostStrict,
+  repliesCountsOf,
   requireVisibleComment,
   toViews,
 } from "./view";
@@ -150,7 +152,7 @@ export const feedCommentsService = {
     v: Viewer,
     postId: string,
     input: { text: string; parentId?: string | null; clientId: string },
-  ): Promise<FeedCommentView> {
+  ): Promise<FeedCommentCreated> {
     rateLimit("feedComment", v.user.id);
     const userId = v.user.id;
     let createdId: string;
@@ -406,12 +408,17 @@ export const feedCommentsService = {
 };
 
 /** Le commentaire que je viens d'écrire, tel que je le relis (mêmes champs que la liste). */
-async function ownView(v: Viewer, id: string): Promise<FeedCommentView> {
+async function ownView(v: Viewer, id: string): Promise<FeedCommentCreated> {
   const row = await commentRow(id);
   if (!row || row.c.deletedAt) throw notFound(feedCommentLabels.commentNotFound);
   const post = await postWithAuthor(row.c.postId);
   const manages = post ? await managesPost(v, post.post) : false;
   const [view] = await toViews(db, [row], v, manages, now());
   if (!view) throw notFound(feedCommentLabels.commentNotFound);
+  // Une réponse : le compteur de son commentaire de premier niveau, lu **après** l'enregistrement, avec l'instant de sa lecture (l'écran n'ajoute rien).
+  if (row.c.parentId) {
+    const parent = (await repliesCountsOf(db, [row.c.parentId])).get(row.c.parentId);
+    if (parent) return { ...view, parent: { id: row.c.parentId, repliesCount: parent.n, countedAt: parent.at } };
+  }
   return view;
 }

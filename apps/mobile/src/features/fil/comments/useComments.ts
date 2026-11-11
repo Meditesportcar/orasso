@@ -189,7 +189,7 @@ export function useComments(
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
-          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId);
+          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId, created.parent);
           counted = r.counted;
           return r.state;
         }, t);

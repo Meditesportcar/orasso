@@ -37,10 +37,10 @@ export type SheetState = {
   loaded: boolean;
   replies: Record<string, RepliesState>;
   pending: PendingComment[];
-  /** Réponses confirmées par l'API, par commentaire de premier niveau, depuis la dernière première page : une page partie avant ne les efface pas. */
-  bumped: Record<string, number>;
   /** Commentaires de premier niveau confirmés depuis la dernière ouverture : une première page tardive ne les efface pas. */
   recent: string[];
+  /** Identifiants supprimés (par l'écran) pour la durée de la feuille : une lecture partie avant la suppression ne les fait pas réapparaître. */
+  removed: string[];
 };
 
 export const emptySheet = (): SheetState => ({
@@ -50,7 +50,7 @@ export const emptySheet = (): SheetState => ({
   replies: {},
   pending: [],
   recent: [],
-  bumped: {},
+  removed: [],
 });
 
 const emptyReplies = (): RepliesState => ({ items: [], cursor: null, open: false, loaded: false, recent: [] });
@@ -59,67 +59,73 @@ const emptyReplies = (): RepliesState => ({ items: [], cursor: null, open: false
 const chronological = (a: FeedCommentView, b: FeedCommentView) =>
   a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
-/** Fusionne par identifiant (le plus récent écrase), du plus ancien au plus récent : relire une page ne double rien. */
+/**
+ * Le compteur de réponses : **le serveur fait foi, avec sa version** (`countedAt`, l'horloge de la base, comparable comme du texte). Une valeur
+ * plus ancienne que celle qu'on a déjà ne la remplace pas ; l'écran ne calcule jamais le compteur à partir de ses propres confirmations.
+ */
+function withNewerCount(known: FeedCommentView | undefined, incoming: FeedCommentView): FeedCommentView {
+  return known && known.countedAt > incoming.countedAt
+    ? { ...incoming, repliesCount: known.repliesCount, countedAt: known.countedAt }
+    : incoming;
+}
+
+/** Fusionne par identifiant (le plus récent écrase, sauf un compteur de réponses plus récent), du plus ancien au plus récent. */
 export function mergeComments(
   current: readonly FeedCommentView[],
   next: readonly FeedCommentView[],
 ): FeedCommentView[] {
   const byId = new Map<string, FeedCommentView>();
   for (const c of current) byId.set(c.id, c);
-  for (const c of next) byId.set(c.id, c);
+  for (const c of next) byId.set(c.id, withNewerCount(byId.get(c.id), c));
   return [...byId.values()].sort(chronological);
 }
 
 /** Ce que la feuille savait au départ d'une lecture : seuls les ajouts **postérieurs** doivent survivre à la page qui en revient. */
-export type SheetMark = { recent: string[]; bumped: Record<string, number> };
-export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent], bumped: { ...s.bumped } });
+export type SheetMark = { recent: string[] };
+export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent] });
 
 /**
- * Les ajouts locaux qui survivent à une première page. Une page ne prouve l'absence que pour **la portion qu'elle couvre** :
- * - un ajout confirmé depuis le départ de la lecture (`since`) reste toujours (la page ne pouvait pas le connaître) ;
- * - un ajout plus ancien que ce départ est déjà côté API : absent d'une page **complète** (ou de la portion couverte par une page
- *   partielle) il a été supprimé et s'en va ; situé **au-delà** de la dernière ligne d'une page partielle (`partial`), son absence ne
- *   prouve rien et il reste (envoyer dans une discussion de plus d'une page).
- * Les copies gardées sont les versions locales les plus fraîches (compteurs, flammes).
+ * Une page (de premier niveau ou de réponses) qui arrive, réconciliée avec ce que la feuille garde. Une page ne prouve l'absence que pour **la
+ * portion qu'elle couvre** :
+ * - ce qu'elle apporte fait foi (sauf un compteur de réponses plus récent déjà connu) ;
+ * - un ajout confirmé depuis le départ de la lecture (`since`) reste toujours : la page ne pouvait pas le connaître ;
+ * - la première page couvre tout ce qui la précède jusqu'à sa dernière ligne (ou tout si elle est complète) : un ajout plus ancien que le départ
+ *   qu'elle ne contient pas a été supprimé ; au-delà de sa dernière ligne (page partielle) son absence ne prouve rien et il reste ;
+ * - une page suivante couvre de sa première à sa dernière ligne (ou jusqu'à la fin si elle est complète) : un commentaire local de cette portion
+ *   qu'elle ne contient pas a été supprimé ; le reste de la liste (pages précédentes) ne bouge pas ;
+ * - un identifiant supprimé par l'écran (`removed`) ne revient jamais d'une lecture tardive.
  */
-function withLocalAdditions(
+function reconcilePage(
   page: readonly FeedCommentView[],
   local: readonly FeedCommentView[],
   recent: readonly string[],
-  since: SheetMark | undefined,
+  sinceRecent: readonly string[],
+  removed: readonly string[],
   partial: boolean,
-): { items: FeedCommentView[]; kept: string[] } {
+  isFirst: boolean,
+): { items: FeedCommentView[]; recent: string[] } {
   const inPage = new Set(page.map((c) => c.id));
-  const last = partial ? page[page.length - 1] : undefined;
-  const survives = (c: FeedCommentView) =>
-    !since?.recent.includes(c.id) || (last !== undefined && chronological(c, last) > 0);
-  const keep = local.filter((c) => recent.includes(c.id) && !inPage.has(c.id) && survives(c));
-  return { items: mergeComments(keep, page), kept: keep.map((c) => c.id) };
-}
-
-/**
- * Le compteur de réponses d'un commentaire reçu dans une page (de n'importe quelle page, pagination comprise). Jamais d'addition : une
- * réponse confirmée depuis le départ de la lecture n'est peut-être pas dans le compteur reçu (GET parti avant l'enregistrement) ou y est
- * déjà (GET lu après). Le compteur local, qui compte toutes les réponses confirmées connues, sert de **plancher** : le plus grand des
- * deux, donc ni masquée ni comptée deux fois.
- */
-function withCountFloor(
-  page: readonly FeedCommentView[],
-  local: readonly FeedCommentView[],
-  bumped: Record<string, number>,
-  since: SheetMark | undefined,
-): FeedCommentView[] {
-  return page.map((c) => {
-    if ((bumped[c.id] ?? 0) - (since?.bumped[c.id] ?? 0) <= 0) return c;
-    const mine = local.find((x) => x.id === c.id);
-    return mine && mine.repliesCount > c.repliesCount ? { ...c, repliesCount: mine.repliesCount } : c;
+  const first = page[0];
+  const last = page[page.length - 1];
+  const keep = local.filter((c) => {
+    if (inPage.has(c.id) || removed.includes(c.id)) return false;
+    const mine = recent.includes(c.id);
+    if (mine && !sinceRecent.includes(c.id)) return true;
+    if (isFirst) return mine && partial && last !== undefined && chronological(c, last) > 0;
+    const covered =
+      first !== undefined &&
+      chronological(c, first) >= 0 &&
+      (!partial || (last !== undefined && chronological(c, last) <= 0));
+    return !covered;
   });
+  const localById = new Map(local.map((c) => [c.id, c]));
+  const fresh = page.filter((c) => !removed.includes(c.id)).map((c) => withNewerCount(localById.get(c.id), c));
+  return { items: mergeComments(keep, fresh), recent: recent.filter((id) => keep.some((k) => k.id === id)) };
 }
 
 /**
- * Applique une page de premier niveau. Sans curseur envoyé (`first`) : la liste est remplacée, sauf les ajouts que la page ne couvre pas
- * (voir `withLocalAdditions`). Sinon la page s'ajoute à la suite. Dans les deux cas, les compteurs reçus se réconcilient (`withCountFloor`)
- * avec une marque prise au **départ de la lecture** (`since`).
+ * Applique une page de premier niveau (`first` : sans curseur envoyé, la liste est reprise depuis le début ; sinon la page est la suite). Voir
+ * `reconcilePage`. `since` : la marque prise au départ de **cette** lecture.
  */
 export function sheetWithTopPage(
   state: SheetState,
@@ -128,25 +134,19 @@ export function sheetWithTopPage(
   first: boolean,
   since?: SheetMark,
 ): SheetState {
-  const page = withCountFloor(items, state.items, state.bumped, since);
-  if (!first) return { ...state, items: mergeComments(state.items, page), cursor: nextCursor, loaded: true };
-  const posterior: Record<string, number> = {};
-  for (const [id, n] of Object.entries(state.bumped)) {
-    const d = n - (since?.bumped[id] ?? 0);
-    if (d > 0) posterior[id] = d;
-  }
-  const merged = withLocalAdditions(page, state.items, state.recent, since, nextCursor !== null);
-  return {
-    ...state,
-    items: merged.items,
-    recent: merged.kept,
-    bumped: posterior,
-    cursor: nextCursor,
-    loaded: true,
-  };
+  const merged = reconcilePage(
+    items,
+    state.items,
+    state.recent,
+    since?.recent ?? [],
+    state.removed,
+    nextCursor !== null,
+    first,
+  );
+  return { ...state, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true };
 }
 
-/** Applique une page de réponses (la première remplace). Ne change ni l'ouverture ni le compteur du parent. */
+/** Applique une page de réponses (mêmes règles). Ne change ni l'ouverture ni le compteur du parent. */
 export function sheetWithRepliesPage(
   state: SheetState,
   parentId: string,
@@ -156,26 +156,12 @@ export function sheetWithRepliesPage(
   since?: string[],
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
-  const merged = first
-    ? withLocalAdditions(
-        items,
-        was.items,
-        was.recent,
-        since ? { recent: since, bumped: {} } : undefined,
-        nextCursor !== null,
-      )
-    : null;
+  const merged = reconcilePage(items, was.items, was.recent, since ?? [], state.removed, nextCursor !== null, first);
   return {
     ...state,
     replies: {
       ...state.replies,
-      [parentId]: {
-        ...was,
-        items: merged ? merged.items : mergeComments(was.items, items),
-        recent: merged ? merged.kept : was.recent,
-        cursor: nextCursor,
-        loaded: true,
-      },
+      [parentId]: { ...was, items: merged.items, recent: merged.recent, cursor: nextCursor, loaded: true },
     },
   };
 }
@@ -189,15 +175,20 @@ export function sheetToggleReplies(state: SheetState, parentId: string, open?: b
 const patchTop = (items: readonly FeedCommentView[], id: string, patch: (c: FeedCommentView) => FeedCommentView) =>
   items.map((c) => (c.id === id ? patch(c) : c));
 
+/** Le compteur de réponses d'un commentaire de premier niveau, tel que le serveur l'a rendu (avec sa version). */
+export type ParentCount = { id: string; repliesCount: number; countedAt: string };
+
 /**
- * Ajoute le commentaire que l'API vient de rendre. Premier niveau : à la suite de la liste. Réponse (`parentId`) : sous son
- * commentaire, dont le compteur de réponses monte, et les réponses s'ouvrent. Le même commentaire rendu deux fois (envoi rejoué)
- * ne compte qu'une fois. Rend `counted` : ce que le compteur de la carte doit gagner (0 ou 1).
+ * Ajoute le commentaire que l'API vient de rendre. Premier niveau : à la suite de la liste. Réponse (`parentId`) : sous son commentaire ; le
+ * compteur du parent est celui que l'API rend avec la réponse (`parent`, lu après l'enregistrement), jamais un calcul local : il ne remplace
+ * qu'une valeur plus ancienne, et les réponses s'ouvrent. Le même commentaire rendu deux fois (envoi rejoué) ne compte qu'une fois. Rend
+ * `counted` : ce que le compteur de la carte doit gagner (0 ou 1).
  */
 export function sheetAddComment(
   state: SheetState,
   comment: FeedCommentView,
   parentId: string | null,
+  parent?: ParentCount,
 ): { state: SheetState; counted: number } {
   if (!parentId) {
     const known = state.items.some((c) => c.id === comment.id);
@@ -215,8 +206,13 @@ export function sheetAddComment(
   return {
     state: {
       ...state,
-      items: known ? state.items : patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: c.repliesCount + 1 })),
-      bumped: known ? state.bumped : { ...state.bumped, [parentId]: (state.bumped[parentId] ?? 0) + 1 },
+      items: parent
+        ? patchTop(state.items, parentId, (c) =>
+            c.countedAt > parent.countedAt
+              ? c
+              : { ...c, repliesCount: parent.repliesCount, countedAt: parent.countedAt },
+          )
+        : state.items,
       replies: {
         ...state.replies,
         [parentId]: {
@@ -232,20 +228,22 @@ export function sheetAddComment(
 }
 
 /**
- * Retire un commentaire de l'affichage. Un commentaire de premier niveau emporte ses réponses (l'API les retire de la vue) :
- * `removed` est ce que le compteur de la carte perd (1 + ses réponses). Une réponse : 1, et le compteur de son parent baisse.
- * Un commentaire inconnu ne change rien (`removed` 0).
+ * Retire un commentaire de l'affichage (et note son identifiant : une lecture partie avant ne le fait pas revenir). Un commentaire de premier
+ * niveau emporte ses réponses (l'API les retire de la vue) : `removed` est ce que le compteur de la carte perd (1 + ses réponses). Une réponse : 1,
+ * et le compteur de son parent baisse (sa version ne change pas : une lecture plus ancienne ne le remonte pas). Un commentaire inconnu ne change
+ * rien (`removed` 0).
  */
 export function sheetRemoveComment(state: SheetState, id: string): { state: SheetState; removed: number } {
   const top = state.items.find((c) => c.id === id);
   if (top) {
-    const { [id]: _gone, ...replies } = state.replies;
+    const { [id]: gone, ...replies } = state.replies;
     return {
       state: {
         ...state,
         items: state.items.filter((c) => c.id !== id),
         replies,
         recent: state.recent.filter((x) => x !== id),
+        removed: [...state.removed, id, ...(gone?.items.map((c) => c.id) ?? [])],
       },
       removed: 1 + top.repliesCount,
     };
@@ -260,6 +258,7 @@ export function sheetRemoveComment(state: SheetState, id: string): { state: Shee
           ...state.replies,
           [parentId]: { ...r, items: r.items.filter((c) => c.id !== id), recent: r.recent.filter((x) => x !== id) },
         },
+        removed: [...state.removed, id],
       },
       removed: 1,
     };
@@ -307,7 +306,6 @@ export function sheetReopen(state: SheetState): SheetState {
   return {
     ...state,
     recent: [],
-    bumped: {},
     replies: Object.fromEntries(
       Object.entries(state.replies).map(([id, r]) => [id, { ...r, loaded: false, recent: [] }]),
     ),

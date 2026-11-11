@@ -5,6 +5,7 @@
 import {
   type CommentDraft,
   createFlameGate,
+  type FeedCommentCreated,
   type FeedCommentPage,
   type FeedCommentReaction,
   type FeedCommentView,
@@ -199,14 +200,14 @@ export function useComments(
       const p = postLive.sheetOf(id).pending.find((x) => x.clientId === clientId);
       if (!p) return;
       try {
-        const created = await call<FeedCommentView>(`/feed-posts/${id}/comments`, {
+        const created = await call<FeedCommentCreated>(`/feed-posts/${id}/comments`, {
           method: "POST",
           json: { text: p.text.trim(), parentId: p.parentId, clientId },
         });
         if (!postLive.alive(t)) return;
         let counted = 1;
         const next = update((s) => {
-          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId);
+          const r = sheetAddComment(pendingDrop(s, clientId), created, p.parentId, created.parent);
           counted = r.counted;
           return r.state;
         }, t);

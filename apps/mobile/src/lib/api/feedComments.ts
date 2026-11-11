@@ -1,6 +1,7 @@
 // Commentaires d'une publication du Fil (lot R8k2) : liste, réponses, envoi, suppression, flamme, couper, suggestions « @ ».
 // Aucune règle ici : l'API les tient (lot R8k1).
 import type {
+  FeedCommentCreated,
   FeedCommentCreateInput,
   FeedCommentPage,
   FeedCommentReaction,
@@ -17,7 +18,7 @@ export const feedCommentsApi = {
   feedCommentReplies: (commentId: string, cursor?: string | null) =>
     request<FeedCommentPage>(`/api/feed-comments/${commentId}/replies${qs({ cursor })}`),
   createFeedComment: (postId: string, body: FeedCommentCreateInput) =>
-    request<FeedCommentView>(`/api/feed-posts/${postId}/comments`, { method: "POST", body }),
+    request<FeedCommentCreated>(`/api/feed-posts/${postId}/comments`, { method: "POST", body }),
   removeFeedComment: (commentId: string) => request<unknown>(`/api/feed-comments/${commentId}`, { method: "DELETE" }),
   fireFeedComment: (commentId: string, on: boolean) =>
     request<FeedCommentReaction>(`/api/feed-comments/${commentId}/reaction`, { method: on ? "PUT" : "DELETE" }),
