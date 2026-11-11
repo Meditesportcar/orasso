@@ -25,6 +25,11 @@ describe("mentionedWords", () => {
     const caption = Array.from({ length: 60 }, (_, i) => `@mot${i}`).join(" ");
     expect(mentionedWords(caption)).toHaveLength(MENTION_WORDS_MAX);
   });
+  it("un pseudo avec un point est lu en entier ; le point final d'une phrase n'en fait pas partie", () => {
+    expect(mentionedWords("Salut @jean.dupont, et @jean. Fin @jean.dupont.")).toEqual(["jean.dupont", "jean"]);
+    expect(mentionedWords("@jean")).toEqual(["jean"]);
+    expect(mentionedWords("@jean.dupont")).not.toContain("jean");
+  });
   it("cinq fois le même mot : un seul", () => {
     expect(mentionedWords("@a @a @a @a @a")).toEqual(["a"]);
   });

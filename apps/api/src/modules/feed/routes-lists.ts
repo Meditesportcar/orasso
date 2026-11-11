@@ -84,12 +84,18 @@ export const feedListRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     rateLimit("feedWrite", v.user.id);
     return c.json(await setMentionHidden(v, c.req.param("targetKey"), uuidParam(c, "postId"), false));
-  })
-  // Photos d'une publication d'organisateur, sans session (T4) : jamais celles d'une personne, d'un pro, d'un prestataire.
-  .get("/public/feed-posts/:id/photos/:name", async (c) => {
-    rateLimit("lineupPublic", visitorOf(c));
-    const photo = await publicPhoto(c.req.param("id"), c.req.param("name"), c.req.header("if-none-match"));
-    const headers = { "cache-control": "public, max-age=300", etag: photo.etag };
-    if (photo.status === 304) return c.body(null, 304, headers);
-    return c.body(new Uint8Array(photo.data), 200, { ...headers, "content-type": "image/webp" });
   });
+
+/**
+ * Photos d'une publication d'organisateur, sans session (T4) : jamais celles d'une personne, d'un pro, d'un prestataire.
+ * Montée **avant** le middleware de session (`app.ts`) : aucune lecture de session, donc aucun `Set-Cookie` (cookie renouvelé)
+ * dans une réponse que les caches partagés ont le droit de garder. `no-cache` + `ETag` : chaque affichage revalide (une photo
+ * retirée, une page suspendue disparaissent tout de suite), les 304 restent légers.
+ */
+export const feedPublicPhotoRoutes = new Hono<AppEnv>().get("/public/feed-posts/:id/photos/:name", async (c) => {
+  rateLimit("lineupPublic", visitorOf(c));
+  const photo = await publicPhoto(c.req.param("id"), c.req.param("name"), c.req.header("if-none-match"));
+  const headers = { "cache-control": "public, no-cache", etag: photo.etag };
+  if (photo.status === 304) return c.body(null, 304, headers);
+  return c.body(new Uint8Array(photo.data), 200, { ...headers, "content-type": "image/webp" });
+});

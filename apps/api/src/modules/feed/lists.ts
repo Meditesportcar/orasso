@@ -31,18 +31,25 @@ export const PAGE = 20;
 // --- Curseur : (date à la milliseconde, identifiant). Le curseur porte des millisecondes (JavaScript) : on compare et on
 // trie à la milliseconde, pas à la microseconde de PostgreSQL, sinon des publications de la même milliseconde seraient
 // sautées entre deux pages (même règle que `GET /me/feed-posts`).
-export type ListCursor = { at: Date; id: string };
+export type ListCursor = {
+  at: Date;
+  id: string /** Journal : l'épinglée de la première page, exclue des suivantes. */;
+  pin?: string;
+};
 
-export const encodeCursor = (c: { at: Date; id: string }): string =>
-  Buffer.from(JSON.stringify({ at: c.at.toISOString(), id: c.id })).toString("base64url");
+export const encodeCursor = (c: { at: Date; id: string; pin?: string | null }): string =>
+  Buffer.from(JSON.stringify({ at: c.at.toISOString(), id: c.id, ...(c.pin ? { pin: c.pin } : {}) })).toString(
+    "base64url",
+  );
 
 export function decodeCursor(raw: string | undefined): ListCursor | null {
   if (!raw) return null;
   try {
-    const c = JSON.parse(Buffer.from(raw, "base64url").toString()) as { at?: unknown; id?: unknown };
+    const c = JSON.parse(Buffer.from(raw, "base64url").toString()) as { at?: unknown; id?: unknown; pin?: unknown };
     if (typeof c.at !== "string" || Number.isNaN(Date.parse(c.at)) || typeof c.id !== "string") throw new Error();
     if (!/^[0-9a-f-]{36}$/.test(c.id)) throw new Error();
-    return { at: new Date(c.at), id: c.id };
+    if (c.pin !== undefined && (typeof c.pin !== "string" || !/^[0-9a-f-]{36}$/.test(c.pin))) throw new Error();
+    return { at: new Date(c.at), id: c.id, ...(typeof c.pin === "string" ? { pin: c.pin } : {}) };
   } catch {
     throw validation("Curseur invalide : recharge la liste.");
   }
@@ -285,13 +292,18 @@ export async function journalPostIds(
   const created = msSql("p.created_at");
   const res = await ex.execute<{ id: string; at: Date }>(sql`select p.id as id, ${created} as at
     from feed_posts p join profiles a on a.user_id = p.author_id
-    where ${journalWhere(event.id, event.structureId)} and p.pinned_at is null and ${postOkSql(at)}
+    where ${journalWhere(event.id, event.structureId)} and ${pinned ? sql`p.id <> ${pinned}` : cursor?.pin ? sql`p.id <> ${cursor.pin}` : sql`true`} and ${postOkSql(at)}
       and ${beforeSql(created, "p.id", cursor)}
     order by ${created} desc, p.id desc limit ${size + 1}`);
-  const { page, nextCursor } = pageOf(
+  const { page } = pageOf(
     res.rows.map((r) => ({ id: r.id, at: new Date(r.at) })),
     size,
   );
+  // L'épinglée de la première page reste dans le curseur : les pages suivantes l'excluent par son identifiant (et non par
+  // `pinned_at`, qui peut changer entre deux lectures : doublon ou publication omise).
+  const last = page.at(-1);
+  const nextCursor =
+    res.rows.length > size && last ? encodeCursor({ at: last.at, id: last.id, pin: pinned ?? cursor?.pin }) : null;
   return { ids: [...(pinned ? [pinned] : []), ...page.map((r) => r.id)], nextCursor };
 }
 

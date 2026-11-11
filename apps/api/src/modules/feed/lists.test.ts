@@ -366,6 +366,31 @@ describe("journal d'un événement", () => {
   });
 });
 
+describe("journal : l'épingle change entre deux pages", () => {
+  it("aucun doublon ni publication omise, l'épinglée de la première page est gardée dans le curseur", async () => {
+    const w = await world();
+    const viewer = await signUp("Lecteur_L");
+    const made: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      made.push((await journalPost(w, { createdAt: new Date(clock.now.getTime() - (i + 1) * 60_000) })).id);
+    }
+    const a = made[3] as string;
+    const c = made[25] as string;
+    await db
+      .update(feedPosts)
+      .set({ pinnedAt: new Date(0) })
+      .where(eq(feedPosts.id, a));
+    const first = await call(viewer, "GET", `/events/${w.event.id}/feed-posts`);
+    expect(first.json.items[0].id).toBe(a);
+    // Entre les deux lectures, l'épingle passe de A à C (une publication de la page 2).
+    await call(w.owner, "PUT", `/events/${w.event.id}/feed-posts/${c}/pin`);
+    const second = await call(viewer, "GET", `/events/${w.event.id}/feed-posts?cursor=${first.json.nextCursor}`);
+    const seen = [...ids(first), ...ids(second)];
+    expect(new Set(seen).size).toBe(seen.length);
+    expect([...seen].sort()).toEqual([...made].sort());
+  });
+});
+
 describe("épingle", () => {
   it("une seule par événement : épingler en remplace une autre ; DELETE la retire (idempotent)", async () => {
     const w = await world();

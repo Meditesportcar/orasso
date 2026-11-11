@@ -14,7 +14,7 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { feedPostPhotos, feedPosts, profiles } from "../../db/schema";
+import { feedPostPhotos, feedPosts, profiles, structures } from "../../db/schema";
 import { notFound } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import type { Executor } from "../../lib/tx";
@@ -23,6 +23,19 @@ import { EVENT_VISUAL_SIZE, eventVisualUrl, loadAttachViews } from "./attach";
 import { loadPageInfo } from "./authors";
 import { authorPostIds, decodeCursor, journalPostIds, pageInGoodStanding, pageOf, requireJournalEvent } from "./lists";
 import { FEED_PHOTO_NAME_RE, feedPhotoKey, feedPhotoName } from "./posts";
+
+/**
+ * Structures vérifiées parmi `ids` : une structure en attente ou refusée n'est lisible que de ses membres
+ * (`structuresService.getPublic`), jamais par un visiteur : ni ses publications, ni ses photos.
+ */
+async function verifiedStructures(ex: Executor, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const rows = await ex
+    .select({ id: structures.id })
+    .from(structures)
+    .where(and(inArray(structures.id, ids), eq(structures.verification, "verified"), isNull(structures.deletedAt)));
+  return new Set(rows.map((r) => r.id));
+}
 
 /** Adresse publique d'une photo d'une publication d'organisateur (jamais `/api/feed-posts/…`, qui exige une session). */
 export const publicPhotoUrl = (postId: string, storageKey: string) =>
@@ -43,9 +56,13 @@ export async function loadPublicViews(ex: Executor, ids: string[], at: Date): Pr
     ex,
     rows.map((r) => r.post),
   );
+  const verified = await verifiedStructures(
+    ex,
+    rows.flatMap((r) => (r.post.structureId ? [r.post.structureId] : [])),
+  );
   const ok = rows.filter((r) => {
     const page = r.post.structureId ? pages.get(`s:${r.post.structureId}`) : undefined;
-    return page?.inGoodStanding && !r.author.bannedAt;
+    return page?.inGoodStanding && !r.author.bannedAt && r.post.structureId && verified.has(r.post.structureId);
   });
   if (!ok.length) return [];
   const photos = await ex
@@ -114,6 +131,8 @@ export async function publicJournal(
   at: Date,
 ): Promise<PublicPostsPage> {
   const event = await requireJournalEvent(db, eventId);
+  if (!(await verifiedStructures(db, [event.structureId])).has(event.structureId))
+    throw notFound(feedListErrors.eventNotFound);
   const { ids, nextCursor } = await journalPostIds(db, event, decodeCursor(rawCursor), at);
   return { items: await loadPublicViews(db, ids, at), nextCursor };
 }
@@ -124,7 +143,13 @@ export async function publicStructurePosts(
   q: { cursor?: string; filter: AuthorPostsFilter },
   at: Date,
 ): Promise<PublicPostsPage> {
-  if (key.kind !== "structure" || !(await pageInGoodStanding(db, key))) throw notFound(feedListErrors.authorNotFound);
+  if (
+    key.kind !== "structure" ||
+    !(await pageInGoodStanding(db, key)) ||
+    !(await verifiedStructures(db, [key.id])).has(key.id)
+  ) {
+    throw notFound(feedListErrors.authorNotFound);
+  }
   const rows = await authorPostIds(db, key, q.filter, decodeCursor(q.cursor), at);
   const { page, nextCursor } = pageOf(rows);
   return {
@@ -155,7 +180,13 @@ export async function publicPhoto(
     .where(and(eq(feedPosts.id, id), isNull(feedPosts.deletedAt), eq(feedPosts.persona, "organizer")));
   if (!post || post.author.bannedAt) throw notFound(feedListErrors.photoNotFound);
   const page = (await loadPageInfo(db, [post.post])).get(`s:${post.post.structureId}`);
-  if (!page?.inGoodStanding) throw notFound(feedListErrors.photoNotFound);
+  if (
+    !page?.inGoodStanding ||
+    !post.post.structureId ||
+    !(await verifiedStructures(db, [post.post.structureId])).has(post.post.structureId)
+  ) {
+    throw notFound(feedListErrors.photoNotFound);
+  }
   const key = feedPhotoKey(id, name.slice(0, -".webp".length));
   const [known] = await db
     .select({ id: feedPostPhotos.id })

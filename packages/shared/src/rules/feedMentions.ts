@@ -8,12 +8,12 @@ import type { FeedEventRole } from "./feedAttach";
 /** Nombre de mots `@` lus dans une légende (la légende d'une casquette tient 2 000 caractères : on borne le travail). */
 export const MENTION_WORDS_MAX = 20;
 
-const MENTION = /@([\p{L}\p{N}_-]+)/gu;
+const MENTION = /@([\p{L}\p{N}_.-]+)/gu;
 const WORD_CHAR = /[\p{L}\p{N}_@]/u;
 
 /**
  * Les mots cités dans une légende (`@mot`), en minuscules, sans doublon, dans l'ordre, jamais dans un mot ni une adresse
- * e-mail. Plus large que `mentionedSlugs` : un pseudo porte des `_` (`@kenji_66`). Au plus `MENTION_WORDS_MAX`.
+ * e-mail. Plus large que `mentionedSlugs` : un pseudo porte des `_` et des `.` (`@kenji_66`, `@jean.dupont`), le point final d une phrase n en fait pas partie. Au plus `MENTION_WORDS_MAX`.
  */
 export function mentionedWords(caption: string | null | undefined): string[] {
   if (!caption) return [];
@@ -23,7 +23,7 @@ export function mentionedWords(caption: string | null | undefined): string[] {
     const before = at > 0 ? caption.charAt(at - 1) : "";
     const prev = at > 1 && /[\uDC00-\uDFFF]/.test(before) ? caption.slice(at - 2, at) : before;
     if (prev && WORD_CHAR.test(prev)) continue;
-    const word = (m[1] ?? "").toLowerCase().replace(/-+$/, "");
+    const word = (m[1] ?? "").toLowerCase().replace(/[.-]+$/, "");
     if (word && !out.includes(word)) out.push(word);
     if (out.length >= MENTION_WORDS_MAX) break;
   }

@@ -46,7 +46,7 @@ import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { feedRoutes } from "./modules/feed/routes";
-import { feedListRoutes } from "./modules/feed/routes-lists";
+import { feedListRoutes, feedPublicPhotoRoutes } from "./modules/feed/routes-lists";
 import { fieldRoutes } from "./modules/field/routes";
 import { homeRoutes } from "./modules/home/routes";
 import { invitationsRoutes } from "./modules/invitations/routes";
@@ -228,6 +228,8 @@ const videoLengthGuard: MiddlewareHandler = async (c, next) => {
 app.use("*", (c, next) =>
   c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoLengthGuard(c, next) : generalLimit(c, next),
 );
+// Vague R8 (lot R8a2) : photos publiques des publications d'organisateur, avant la session (aucun cookie dans une réponse en cache public).
+app.route("/", feedPublicPhotoRoutes);
 app.use("*", loadSession);
 
 app.route("/", accessRoutes);

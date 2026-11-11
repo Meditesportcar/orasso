@@ -46,26 +46,25 @@ import { loadPostViews } from "./posts";
 /** Les mots de la légende résolus en base : fiche pro publiée (slug), structure (slug), personne (pseudo), en 3 requêtes. */
 async function resolveWords(ex: Executor, words: string[], at: Date): Promise<CaptionWord[]> {
   if (!words.length) return [];
-  const [pros, structs, people] = await Promise.all([
-    ex
-      .select({ id: proProfiles.id, slug: proProfiles.slug })
-      .from(proProfiles)
-      .where(and(inArray(sql`lower(${proProfiles.slug})`, words), proShown(at))),
-    ex
-      .select({ id: structures.id, slug: structures.slug })
-      .from(structures)
-      .where(
-        and(
-          inArray(sql`lower(${structures.slug})`, words),
-          isNull(structures.deletedAt),
-          sql`${structures.verification} <> 'suspended'`,
-        ),
+  // L'une après l'autre : une transaction n'a qu'une connexion (les requêtes parallèles y sont dépréciées par pg).
+  const pros = await ex
+    .select({ id: proProfiles.id, slug: proProfiles.slug })
+    .from(proProfiles)
+    .where(and(inArray(sql`lower(${proProfiles.slug})`, words), proShown(at)));
+  const structs = await ex
+    .select({ id: structures.id, slug: structures.slug })
+    .from(structures)
+    .where(
+      and(
+        inArray(sql`lower(${structures.slug})`, words),
+        isNull(structures.deletedAt),
+        sql`${structures.verification} <> 'suspended'`,
       ),
-    ex
-      .select({ userId: profiles.userId, pseudo: profiles.pseudo })
-      .from(profiles)
-      .where(and(inArray(sql`lower(${profiles.pseudo})`, words), profileOkSql("profiles", at))),
-  ]);
+    );
+  const people = await ex
+    .select({ userId: profiles.userId, pseudo: profiles.pseudo })
+    .from(profiles)
+    .where(and(inArray(sql`lower(${profiles.pseudo})`, words), profileOkSql("profiles", at)));
   return words.map((word) => ({
     word,
     proId: pros.find((p) => p.slug.toLowerCase() === word)?.id ?? null,
@@ -122,16 +121,20 @@ export async function materializeMentions(
     .onConflictDoNothing()
     .returning({ kind: feedPostMentions.targetKind, id: feedPostMentions.targetId, source: feedPostMentions.source });
   if (opts.notify) {
-    const name = pageKeyOf(post) ? (await loadPageInfo(tx, [post])).get(authorKey)?.view.name : row.author.pseudo;
+    // Une publication de page est annoncée sous le nom et le logo de la page, jamais sous le compte de qui l'a publiée
+    // (ni son pseudo, ni son avatar, dont la clé porte l'identifiant du compte).
+    const page = pageKeyOf(post) ? (await loadPageInfo(tx, [post])).get(authorKey)?.view : undefined;
+    const name = page ? page.name : row.author.pseudo;
+    const avatarUrl = page ? page.avatarUrl : storage.url(row.author.avatarKey);
     for (const m of inserted) {
       if (m.kind !== "user" || m.source !== "caption" || m.id === post.authorId) continue;
       if (!(await citedCanSee(tx, m.id, postId, at))) continue;
-      const who = name ?? row.author.pseudo;
+      const who = name;
       await notificationsService.notify(tx, m.id, "feed_post_mention", {
         title: feedMentionLabels.notificationTitle(who),
         body: feedMentionLabels.notificationBody(who),
         data: {
-          actor: { pseudo: who, avatarUrl: storage.url(row.author.avatarKey) },
+          actor: { pseudo: who, avatarUrl },
           postId,
           link: "/app/fil",
         },

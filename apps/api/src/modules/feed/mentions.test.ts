@@ -30,6 +30,7 @@ import {
   profiles,
   proProfiles,
   providerProfiles,
+  structures,
   userFollows,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
@@ -274,6 +275,42 @@ describe("notification feed_post_mention", () => {
     const [n] = await notifsOf(kenji);
     expect(n?.title).toContain("Club de test");
     expect(JSON.stringify(n)).not.toContain(owner.id);
+  });
+});
+
+describe("pseudos avec point et notification d'une page", () => {
+  it("@jean.dupont ne mentionne pas jean ; @jean. en fin de phrase mentionne jean", async () => {
+    await world();
+    const jean = await signUp("Jean");
+    const dotted = await signUp("Jean.Dupont");
+    const fan = await signUp("Fan_M");
+    const a = await mkPost({ authorId: fan.id, caption: "Merci @jean.dupont pour tout" });
+    expect(await rowsOf(a.id)).toEqual([`user:${dotted.id}:caption`]);
+    const b = await mkPost({ authorId: fan.id, caption: "Merci à @jean." });
+    expect(await rowsOf(b.id)).toEqual([`user:${jean.id}:caption`]);
+  });
+
+  it("la notification d'une page porte le logo et le nom de la page, jamais l'avatar ni l'identifiant du gestionnaire", async () => {
+    const { owner, structure, event } = await world();
+    await db
+      .update(profiles)
+      .set({ avatarKey: `avatars/${owner.id}/moi.webp`, visibility: "private" })
+      .where(eq(profiles.userId, owner.id));
+    await db.update(structures).set({ logoKey: "logos/club.webp" }).where(eq(structures.id, structure.id));
+    const kenji = await signUp("Kenji_M");
+    const res = await call(owner, "POST", "/me/feed-posts", {
+      persona: "organizer",
+      structureId: structure.id,
+      eventId: event.id,
+      caption: "Bravo @kenji_m",
+    });
+    expect(res.status).toBe(201);
+    const [n] = await notifsOf(kenji);
+    const text = JSON.stringify(n);
+    expect(text).toContain("logos/club.webp");
+    expect(text).not.toContain(owner.id);
+    expect(text).not.toContain("avatars/");
+    expect(text).not.toContain(owner.pseudo);
   });
 });
 

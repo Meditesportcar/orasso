@@ -211,7 +211,49 @@ describe("journal et liste d'une structure, sans session", () => {
   });
 });
 
+describe("structure non vérifiée : rien de public", () => {
+  it("en attente, non vérifiée, suspendue, supprimée : journal, liste et photo en 404 ; vérifiée : servis", async () => {
+    const w = await world();
+    const p = await orgPost(w);
+    const check = async (expected: number) => {
+      const j = await call(null, "GET", `/events/${w.event.id}/feed-posts`);
+      const l = await call(null, "GET", `/authors/s:${w.structure.id}/feed-posts`);
+      const ph = await app.request(`/api/public/feed-posts/${p.row.id}/photos/${p.name}`);
+      return [j.status, l.status, ph.status, expected];
+    };
+    expect(await check(200)).toEqual([200, 200, 200, 200]);
+    for (const verification of ["pending", "unverified"] as const) {
+      await db.update(structures).set({ verification }).where(eq(structures.id, w.structure.id));
+      expect((await check(404)).slice(0, 3), verification).toEqual([404, 404, 404]);
+      // Un membre connecté garde la liste (comme avant).
+      expect((await call(w.owner, "GET", `/authors/s:${w.structure.id}/feed-posts`)).status).toBe(200);
+    }
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, w.structure.id));
+    expect((await check(404)).slice(0, 3)).toEqual([404, 404, 404]);
+    await db
+      .update(structures)
+      .set({ verification: "verified", deletedAt: new Date(0) })
+      .where(eq(structures.id, w.structure.id));
+    expect((await check(404)).slice(0, 3)).toEqual([404, 404, 404]);
+  });
+});
+
 describe("photos publiques", () => {
+  it("200 et 304 sans Set-Cookie, même avec une session à renouveler (route avant la session)", async () => {
+    const w = await world();
+    const p = await orgPost(w);
+    const fan = await signUp("Cookie_P");
+    const url = `/api/public/feed-posts/${p.row.id}/photos/${p.name}`;
+    const res = await app.request(url, { headers: { cookie: fan.cookie } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    const again = await app.request(url, {
+      headers: { cookie: fan.cookie, "if-none-match": res.headers.get("etag") ?? "" },
+    });
+    expect(again.status).toBe(304);
+    expect(again.headers.get("set-cookie")).toBeNull();
+  });
+
   const photo = (id: string, name: string, headers: Record<string, string> = {}) =>
     app.request(`/api/public/feed-posts/${id}/photos/${name}`, { headers });
 
@@ -220,7 +262,7 @@ describe("photos publiques", () => {
     const p = await orgPost(w);
     const res = await photo(p.row.id, p.name);
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(res.headers.get("cache-control")).toBe("public, no-cache");
     expect(res.headers.get("content-type")).toBe("image/webp");
     expect(res.headers.get("set-cookie")).toBeNull();
     const etag = res.headers.get("etag") ?? "";

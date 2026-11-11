@@ -5014,3 +5014,11 @@ Date : 11/11/2026. Corrections seulement (source : vérification R8-V1 et mineur
 - **Export et repartage** : `exportService.feedPost` passe par `canManagePost` ; `loadLinked` lit l'auteur par sa clé (`u:<compte>`), jamais par le pseudo (qui est le nom de la page). Hors liste touché : `stories/export.ts`, `stories/linked.ts`.
 - **Commentaire de type** corrigé (`FeedPerson` / `FeedAuthorView.key`) ; le choix `u:<compte>` est déjà dans « À revoir avec Damien ».
 - **`grade: null`** pour une page : l'appli en ligne ne lit pas `author.grade` des publications (aucun usage dans `apps/mobile`), donc pas de valeur neutre.
+
+### Tour 2 (relectures Opus et Codex, 11/11/2026)
+- **Photos publiques avant la session** : `feedPublicPhotoRoutes` est montée dans `app.ts` **avant** `loadSession` : aucune lecture de session, aucun `Set-Cookie` dans une réponse que les caches partagés peuvent garder (testé : 200 et 304 avec un cookie de session). Le cache passe à `public, no-cache` + `ETag` : chaque affichage revalide (photo retirée ou page suspendue : disparue tout de suite) ; le « 5 minutes » du plan est abandonné.
+- **Notification d'une page** : `feed_post_mention` porte le nom et le logo de la page, jamais l'avatar ni le pseudo du gestionnaire (testé avec un compte privé qui a un avatar).
+- **Structures non vérifiées** : sans session, le journal, la liste d'une structure, les publications et les photos exigent `verification = 'verified'` (en attente, non vérifiée, suspendue, supprimée : 404) ; un membre connecté garde la liste.
+- **Pseudos avec point** : les mots `@` s'écrivent `[lettres, chiffres, _ . -]`, le point ou le tiret final (fin de phrase) est retiré ; la résolution est toujours par mot entier, jamais par préfixe (`jean` et `jean.dupont` distincts, testé).
+- **Épingle entre deux pages** : les pages suivantes excluent l'épinglée **initiale par son identifiant**, gardé dans le curseur (`pin`), et non par `pinned_at` ; aucune requête ne dépend d'un état qui change (testé : l'épingle change entre les pages, ni doublon ni omission).
+- Mineurs : `resolveWords` lit ses trois tables l'une après l'autre ; `.run-suite.out` retiré, `.run-*` ignoré.
