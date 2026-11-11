@@ -29,6 +29,7 @@ import {
   FEED_PAGE,
   FEED_POOL,
   FEED_SCORE_WINDOW_MS,
+  FEED_SEEN_TTL_MS,
   type FeedCandidate,
   type FeedCard,
   type FeedCardKind,
@@ -213,7 +214,9 @@ async function hotRail(
     cards.map((c) => c.id),
     ref,
   );
-  return cards.map((c) => toCard(c, ctx, seen.has(c.id), ref) as FeedCard<"feed_post">);
+  // Plus ancienne que 30 jours : « vue » comme dans la liste (zone B).
+  const oldAt = ref.getTime() - FEED_SEEN_TTL_MS;
+  return cards.map((c) => toCard(c, ctx, seen.has(c.id) || c.at.getTime() <= oldAt, ref) as FeedCard<"feed_post">);
 }
 
 /** Tours de lecture au plus pour remplir une page de la phase 2 (garde-fou : chaque tour avance strictement). */
@@ -452,6 +455,7 @@ export const feedService = {
         allowed(c, q.filter, ctx, nearby, v.user.id) &&
         c.at.getTime() > sinceMs &&
         c.authorId !== v.user.id &&
+        !c.mine &&
         c.kind !== "event_recommended" &&
         !ctx.lessKinds.has(c.kind),
     );

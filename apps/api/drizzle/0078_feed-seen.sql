@@ -8,4 +8,5 @@ CREATE TABLE "feed_seen" (
 --> statement-breakpoint
 ALTER TABLE "feed_seen" ADD CONSTRAINT "feed_seen_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "feed_seen_user_seen_idx" ON "feed_seen" USING btree ("user_id","seen_at");--> statement-breakpoint
+CREATE INDEX "feed_seen_seen_idx" ON "feed_seen" USING btree ("seen_at");--> statement-breakpoint
 CREATE INDEX "feed_post_reactions_created_idx" ON "feed_post_reactions" USING btree ("created_at");

@@ -23,5 +23,7 @@ export const feedSeen = pgTable(
   (t) => [
     primaryKey({ columns: [t.userId, t.cardId], name: "feed_seen_pkey" }),
     index("feed_seen_user_seen_idx").on(t.userId, t.seenAt),
+    // La purge quotidienne cherche par date seule.
+    index("feed_seen_seen_idx").on(t.seenAt),
   ],
 );

@@ -1,7 +1,9 @@
 // Le Fil (lot R7e1, ARCHITECTURE-R7 § 2.4) : une source = un fichier `sources/<source>.ts` qui exporte `source`. Elle rend
 // des candidats (jamais le score) : le classement, la diversité et la pagination sont à `service.ts`. Les fichiers
 // `spotMeetup.ts` (R7i), `memory.ts` (R7j) et `sponsored.ts` (R7k1) sont réservés : `export const source = null`.
+
 import type { FeedCandidate, FeedCardKind, FeedFilter, FeedPayloads, FeedViewerContext } from "@orasso/shared";
+import { FEED_SEEN_TTL_MS } from "@orasso/shared";
 import { type SQL, sql } from "drizzle-orm";
 
 import type { Viewer } from "../../../lib/session";
@@ -48,6 +50,8 @@ export type LoadedCard<K extends FeedCardKind = FeedCardKind> = FeedCandidate<K>
   official?: boolean;
   /** Tous les départements que la carte couvre (pro mobile : adresse et zone d'intervention) ; sinon son `department`. */
   areaDepartments?: readonly string[];
+  /** Publiée par la personne qui lit (y compris au nom d'une page) : `GET /fil/fresh` ne la compte jamais. */
+  mine?: boolean;
 };
 
 /** Clé d'une carte dans le parcours par date : sa date (à la milliseconde) et son identifiant de carte (`genre:uuid`). */
@@ -114,9 +118,11 @@ export function atBounds(
   input: Pick<SourceInput, "since" | "until" | "before" | "floor" | "zone" | "userId" | "ref">,
 ): SQL[] {
   const seen = seenSql(kind, idExpr, input);
+  // Plus ancienne que ref − 30 jours (durée de vie du « vu ») : toujours zone B, la purge ne la fait pas revenir en haut.
+  const old = sql`${atExpr} <= ${ts(new Date(input.ref.getTime() - FEED_SEEN_TTL_MS))}`;
   const out = [
     sql`${atExpr} <= ${ts(input.until)}`,
-    input.zone === "B" ? seen : sql`not ${seen}`,
+    input.zone === "B" ? sql`(${seen} or ${old})` : sql`(not ${seen} and not ${old})`,
     ...beforeKeys(atExpr, idExpr, kind, input.before),
   ];
   // La borne figée est incluse : tout sauf « strictement après elle ».

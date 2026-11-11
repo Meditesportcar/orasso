@@ -5,8 +5,8 @@
 // ouverture ni partage avant `ref`, et — pour une publication — sans flamme de la personne avant `ref` (la flamme se lit
 // dans `feed_post_reactions` : ni ce module ni `publish.ts` n'écrivent deux fois). Ce qui arrive après `ref` ne change pas
 // la zone d'une carte pendant le parcours.
-import { FEED_SEEN_AT_MAX_AGE_MS, type FeedSeenAction, type FeedSeenBody } from "@orasso/shared";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { FEED_SEEN_AT_MAX_AGE_MS, FEED_SEEN_TTL_MS, type FeedSeenAction, type FeedSeenBody } from "@orasso/shared";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { feedPostReactions, feedSeen } from "../../db/schema";
@@ -15,7 +15,9 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 
 /** Durée de vie d'une ligne. */
-export const SEEN_TTL_MS = 30 * 86_400_000;
+export const SEEN_TTL_MS = FEED_SEEN_TTL_MS;
+/** Lignes effacées par requête de la purge (jamais toute la table d'un coup). */
+export const PURGE_BATCH = 5000;
 /** Lignes gardées au plus par compte : les plus anciennes partent. */
 export const SEEN_MAX_PER_USER = 5000;
 
@@ -115,15 +117,22 @@ export const feedSeenService = {
    * les plus anciennes. `at` : l'instant (tests).
    */
   async purge(at: Date = now()): Promise<{ expired: number; trimmed: number }> {
-    const expired = await db
-      .delete(feedSeen)
-      .where(lt(feedSeen.seenAt, new Date(at.getTime() - SEEN_TTL_MS)))
-      .returning({ id: feedSeen.cardId });
+    const limit = new Date(at.getTime() - SEEN_TTL_MS).toISOString();
+    let expired = 0;
+    // Par paquets (index sur `seen_at`) : rien n'est remonté en mémoire, une longue transaction n'est jamais ouverte.
+    for (;;) {
+      const done = await db.execute(sql`
+        delete from feed_seen where ctid in (
+          select ctid from feed_seen where seen_at < ${limit}::timestamptz limit ${PURGE_BATCH})`);
+      const n = done.rowCount ?? 0;
+      expired += n;
+      if (n < PURGE_BATCH) break;
+    }
     const res = await db.execute(sql`
       delete from feed_seen f using (
         select user_id, card_id, row_number() over (partition by user_id order by seen_at desc, card_id desc) as rn
         from feed_seen where user_id in (select user_id from feed_seen group by user_id having count(*) > ${SEEN_MAX_PER_USER})
       ) x where f.user_id = x.user_id and f.card_id = x.card_id and x.rn > ${SEEN_MAX_PER_USER}`);
-    return { expired: expired.length, trimmed: res.rowCount ?? 0 };
+    return { expired, trimmed: res.rowCount ?? 0 };
   },
 };

@@ -119,6 +119,7 @@ export async function postCards(
         proId: r.post.persona === "pro" ? r.post.proId : null,
         categoryIds: [],
         eventId: r.post.eventId,
+        mine: r.post.authorId === userId,
         flames7d: counts.get(r.post.id) ?? 0,
         authorPseudo: isPage ? view.author.name : r.author.pseudo,
         official: isPage ? false : r.author.official,

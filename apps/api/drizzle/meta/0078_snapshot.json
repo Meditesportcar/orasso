@@ -1,5 +1,5 @@
 {
-  "id": "b6a38bb5-b0ff-4b95-81ab-7327c9642caa",
+  "id": "5b85a448-b109-4dcb-bf7e-d100ab563243",
   "prevId": "18f3ffd9-5343-4193-a602-0d0da4de688d",
   "version": "7",
   "dialect": "postgresql",
@@ -7224,6 +7224,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "seen_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feed_seen_seen_idx": {
+          "name": "feed_seen_seen_idx",
+          "columns": [
             {
               "expression": "seen_at",
               "isExpression": false,

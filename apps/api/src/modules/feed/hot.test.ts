@@ -210,6 +210,21 @@ describe("GET /fil/fresh : « Nouvelles publications »", () => {
     expect((await fresh(null, q("following"))).status).toBe(401);
   });
 
+  it("ne compte pas mes publications de page (carte sans auteur), ni celles que j'ai publiées au nom d'une structure", async () => {
+    const me = await person("Orga_Fresh");
+    const other = await person("Autre_Fresh");
+    const structure = await createStructure(me.id);
+    await db.insert(structureFollows).values({ structureId: structure.id, userId: me.id, source: "manual" });
+    await db.insert(structureFollows).values({ structureId: structure.id, userId: other.id, source: "manual" });
+    const since = hoursAgo(2);
+    await dbPost(me, hoursAgo(1), { persona: "organizer", structureId: structure.id });
+    const q = (filter: string) => `?filter=${filter}&since=${encodeURIComponent(since.toISOString())}`;
+    for (const filter of ["for_you", "following", "nearby"])
+      expect((await fresh(me, q(filter))).json.count, filter).toBe(0);
+    // Pour un autre abonné, c'est bien une nouveauté.
+    expect((await fresh(other, q("following"))).json.count).toBe(1);
+  });
+
   it("ne compte jamais ce qu'on ne verrait pas (compte privé non suivi) ni un abonnement qu'on n'a pas", async () => {
     const me = await person("Lecteur_Neuf_Prive");
     const priv = await person("Auteur_Neuf_Prive", { visibility: "private" });

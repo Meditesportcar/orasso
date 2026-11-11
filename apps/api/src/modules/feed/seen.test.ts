@@ -239,6 +239,17 @@ describe("tâche feed.seen-purge", () => {
     expect((await rowsOf(me.id)).length).toBe(0);
   });
 
+  it("20 000 lignes expirées : effacées par paquets, le compte exact est rendu, le reste est intact", async () => {
+    const me = await person("Lecteur_Volume_Purge");
+    await db.execute(sql`insert into feed_seen (user_id, card_id, seen_at)
+      select ${me.id}, 'feed_post:' || gen_random_uuid()::text, ${hoursAgo(24 * 40).toISOString()}::timestamptz - (g || ' seconds')::interval
+      from generate_series(1, 20000) g`);
+    await db.insert(feedSeen).values({ userId: me.id, cardId: `lineup:${UUID}`, seenAt: hoursAgo(24) });
+    const done = await feedSeenService.purge(clock.now);
+    expect(done.expired).toBe(20_000);
+    expect((await rowsOf(me.id)).map((r) => r.cardId)).toEqual([`lineup:${UUID}`]);
+  }, 60_000);
+
   it("ramène un compte à 5 000 lignes au plus", async () => {
     const me = await person("Lecteur_Purge_Max");
     const other = await person("Autre_Purge_Max");

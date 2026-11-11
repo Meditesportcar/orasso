@@ -8,6 +8,12 @@ import { feedCardKinds, feedFilters } from "../rules/feed";
 export const FEED_SEEN_BATCH_MAX = 50;
 /** Une carte vue hors ligne part avec son heure, jusqu'à 24 h en arrière ; au-delà, elle est ramenée à cette borne. */
 export const FEED_SEEN_AT_MAX_AGE_MS = 24 * 3_600_000;
+/**
+ * Durée de vie d'une carte vue (30 jours), **et** âge au-delà duquel une carte du Fil n'est plus « pas vue » : plus ancienne que
+ * `ref` − 30 jours, elle est rangée en zone B (`seen: true`) même sans ligne `feed_seen`. Sans cette borne, la purge ferait
+ * revenir tout l'historique en haut du Fil. Une seule constante pour la purge et pour la zone.
+ */
+export const FEED_SEEN_TTL_MS = 30 * 86_400_000;
 /** File d'attente gardée sur le téléphone hors ligne (R8c2). */
 export const FEED_SEEN_QUEUE_MAX = 200;
 

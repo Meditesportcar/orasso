@@ -452,4 +452,23 @@ describe("pas vu / vu sans interaction", () => {
     expect(pages.flat().every((c) => c.seen)).toBe(true);
     expect(ids(pages.flat()).length).toBe(70);
   });
+
+  it("plus ancienne que 30 jours : toujours en zone B (par date), même sans ligne « vu » (purgée ou rognée) ; plus récente : zone A", async () => {
+    const author = await person("Auteur_Ancien");
+    const me = await person("Lecteur_Ancien");
+    const old = await dbPost(author, hoursAgo(24 * 40));
+    const justOld = await dbPost(author, hoursAgo(24 * 30 + 1));
+    const recent = await dbPost(author, hoursAgo(24 * 20));
+    // Vue il y a 31 jours puis purgée : aucune ligne, la carte reste en zone B.
+    for (const filter of ["following", "nearby", "for_you"]) {
+      if (filter === "following") await follow(me, author);
+      const flat = (await walk(me, filter)).flat();
+      const order = flat.map((c) => [postIds([c])[0], c.seen]);
+      expect(order, filter).toEqual([
+        [recent, false],
+        [justOld, true],
+        [old, true],
+      ]);
+    }
+  });
 });
