@@ -127,7 +127,7 @@ export function useComments(
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
-      const since = from ? undefined : [...(postLive.sheetOf(id).replies[parentId]?.recent ?? [])];
+      const since = [...(postLive.sheetOf(id).replies[parentId]?.recent ?? [])];
       try {
         const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`);
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
@@ -152,7 +152,8 @@ export function useComments(
   const loadTop = useCallback(
     async (from?: string | null) => {
       const t = from ? postLive.followRead(id, "top") : postLive.beginRead(id, "top");
-      const since = from ? undefined : sheetMark(postLive.sheetOf(id));
+      // La marque se prend au départ de **chaque** lecture, pagination comprise.
+      const since = sheetMark(postLive.sheetOf(id));
       try {
         const page = await call<FeedCommentPage>(`/feed-posts/${id}/comments${cursorQs(from)}`);
         if (!postLive.fresh(t)) return;

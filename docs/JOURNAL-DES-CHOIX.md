@@ -5406,3 +5406,8 @@ Maquette R8.11 (`n-notif`, vues `insc`, `fiche`, `reg`, `org`). La vue `ex` (« 
 ### Tour 8 (R8k1, 11/11/2026)
 - **Corps de la ligne** : quand le `commentId` d une ligne n est plus lisible pour le destinataire alors qu un autre commentaire de la ligne se lit, le Journal sert le libellé générique du type (`r8NotificationTable[type].body`) au lieu de l extrait enregistré (verdict `commentReadable`).
 - **Équivalence** : le test compare aussi publication retirée, auteur de la publication suspendu, racine supprimée sous une réponse vivante et compte supprimé.
+
+### Tour 6 (R8k2, 11/11/2026) : relecture Codex du tour 5, après fusion dans `vague-r8`
+- **Une page ne prouve l'absence que pour la portion qu'elle couvre** : un ajout confirmé avant le départ d'une lecture reste quand la page est **partielle** (curseur) et qu'il se situe après sa dernière ligne ; absent d'une page complète, ou de la portion couverte, il a été supprimé et s'en va. Test : envoi dans une discussion de plus de 20 réponses (la réponse ne disparaît plus), puis page complète qui prouve la suppression.
+- **Marque au départ de chaque lecture, pagination comprise** (`since` est pris pour la première page comme pour « Voir plus », et pour les réponses) ; le compteur de réponses se réconcilie pour **toutes** les pages. Test : page suivante tardive contenant une ancienne version du parent.
+- **Plancher, jamais d'addition** : le compteur reçu est remplacé par le compteur local seulement si une réponse a été confirmée depuis le départ de la lecture et que le local est plus grand (le plus grand des deux) : un GET lu avant l'enregistrement (0) comme après (1) donne 1. Limite connue : une réponse supprimée ailleurs pendant la lecture ne fait redescendre le compteur qu'à la réouverture.
