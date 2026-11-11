@@ -27,6 +27,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedEventInvites } from "./seed/event-invites";
 import { seedExplorer } from "./seed/explorer";
 import { seedFeed } from "./seed/feed";
+import { seedFeedMentions } from "./seed/feed-mentions";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
 import { seedHomeProfiles } from "./seed/home-profiles";
@@ -175,6 +176,8 @@ async function main() {
   await seedWeather();
   // Lot R7e1 : le compte officiel Orasso et les publications de départ du Fil.
   await seedFeed();
+  // Vague R8 (lot R8a2) : mentions matérialisées, mention masquée, publication épinglée dans le journal du Lydia.
+  await seedFeedMentions();
 
   // Lot R7f1 : sept stories de démonstration (photos relues sans plaque), 20 h de vie restantes (21 h pour celle du Lydia, R7h).
   await seedStories();
