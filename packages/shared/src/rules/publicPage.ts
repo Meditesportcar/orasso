@@ -110,7 +110,11 @@ export function pageEmptyText(filter: AuthorPostsFilter, name: string): string {
 
 // --- L'en-tête ----------------------------------------------------------------------------------------------------------
 
-export type PageCounter = { key: "followers" | "events" | "partners" | "organizers"; value: number | null; label: string };
+export type PageCounter = {
+  key: "followers" | "events" | "partners" | "organizers";
+  value: number | null;
+  label: string;
+};
 
 /**
  * La bande de compteurs. Structure : « abonnés », « événements », « partenaires » (les pros partenaires). Pro : « abonnés », puis

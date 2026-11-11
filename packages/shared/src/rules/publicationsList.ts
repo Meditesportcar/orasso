@@ -141,8 +141,15 @@ export function publicationCard(post: FeedPostView): FeedCard<"feed_post"> {
   return {
     id: `feed_post:${post.id}`,
     kind: "feed_post",
-    reason: { code: "following_author", label: post.mine ? L.cardReasonMine : L.cardReasonOther },
+    reason: { code: "following_author", label: cardReasonOf(post) },
     at: post.createdAt,
     payload: { post },
   };
+}
+
+/** « Sur son profil » pour une personne, « Sur sa page » pour une page (structure, fiche pro…) : lot R8g. */
+function cardReasonOf(post: FeedPostView): string {
+  const page = post.author.kind !== "user";
+  if (post.mine) return page ? L.cardReasonMinePage : L.cardReasonMine;
+  return page ? L.cardReasonOtherPage : L.cardReasonOther;
 }
