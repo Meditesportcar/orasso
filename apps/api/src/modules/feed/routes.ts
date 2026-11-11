@@ -47,6 +47,12 @@ export const feedRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await feedPostsService.attachable(v, query(c, attachableEventsQuery)));
   })
+  // Vérifier un envoi dont la réponse s'est perdue : la publication de cet auteur (toutes casquettes) ou 404.
+  .get("/me/feed-posts/by-client/:clientId", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "private, no-store");
+    return c.json(await feedPostsService.byClient(v, uuidParam(c, "clientId")));
+  })
   .patch("/me/feed-posts/:id", async (c) => {
     const v = await requireUser(c);
     return c.json(await feedPostsService.patch(v, uuidParam(c, "id"), await body(c, feedPostPatchSchema)));
