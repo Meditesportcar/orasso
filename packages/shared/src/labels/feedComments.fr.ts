@@ -32,6 +32,10 @@ export const feedCommentScreenLabels = {
   /** Dans la feuille. */
   fireOnComment: "Flamme sur le commentaire",
   reply: "Répondre",
+  replyToLabel: (pseudo: string) => `Répondre à ${pseudo}`,
+  retryLabel: "Réessayer d'envoyer le commentaire",
+  loadMoreComments: "Voir plus de commentaires",
+  loadMoreReplies: "Voir plus de réponses",
   hideReplies: "Masquer",
   loadMore: "Voir plus",
   empty: "Sois le premier à commenter.",

@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../../lib/api.client";
+import { onAccountChange } from "./commentsLive";
 
 class CallError extends Error {
   constructor(
@@ -81,6 +82,8 @@ export function useComments(
   const [actionError, setActionError] = useState<string | null>(null);
   // Seule la dernière lecture de la première page compte.
   const seq = useRef(0);
+  // Change à chaque annonce de compte : une réponse (page, réponses) partie sous l'ancien compte est jetée.
+  const epoch = useRef(0);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -100,6 +103,23 @@ export function useComments(
   const handleGone = useCallback((e: unknown) => {
     if (statusOf(e) === 404 && mounted.current) setGone(true);
   }, []);
+
+  // Un autre compte (ou aucun) : la feuille repart de zéro.
+  useEffect(
+    () =>
+      onAccountChange(() => {
+        epoch.current += 1;
+        seq.current += 1;
+        sheetRef.current = emptySheet();
+        if (mounted.current) {
+          setSheetState(sheetRef.current);
+          setLoadError(null);
+          setGone(false);
+          setActionError(null);
+        }
+      }),
+    [],
+  );
 
   const loadTop = useCallback(
     async (from?: string | null) => {
@@ -128,10 +148,13 @@ export function useComments(
 
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
+      const born = epoch.current;
       try {
         const page = await call<FeedCommentPage>(`/feed-comments/${parentId}/replies${cursorQs(from)}`);
+        if (born !== epoch.current) return;
         update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from));
       } catch (e) {
+        if (born !== epoch.current) return;
         handleGone(e);
         setActionError(message(e));
       }
@@ -282,6 +305,8 @@ export function useComments(
 export function useMentionSuggestions(postId: string, draft: MentionDraft | null): MentionSuggestion[] {
   const [items, setItems] = useState<MentionSuggestion[]>([]);
   const query = draft ? draft.query : null;
+  // Un autre compte : la liste du précédent s'en va.
+  useEffect(() => onAccountChange(() => setItems([])), []);
   useEffect(() => {
     if (query === null) {
       setItems([]);

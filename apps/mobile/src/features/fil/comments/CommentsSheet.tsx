@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SetRow } from "@/features/profil/parts";
 import { openReport } from "@/features/ReportSheet";
+import { cacheScope } from "@/lib/kv";
 import { useKeyboardOverlap } from "@/ui/KeyboardSafe";
 import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
@@ -74,6 +75,20 @@ export function CommentsSheet({
   const [replyTo, setReplyTo] = useState<{ id: string; pseudo: string } | null>(null);
   const [menu, setMenu] = useState<Menu>(null);
 
+  // Un autre compte : ni le brouillon, ni la réponse en cours, ni le menu ne passent au suivant.
+  const account = cacheScope();
+  const lastAccount = useRef(account);
+  useEffect(() => {
+    if (lastAccount.current === account) return;
+    lastAccount.current = account;
+    setText("");
+    setSel({ start: 0, end: 0 });
+    setForceSel(null);
+    setReplyTo(null);
+    setMenu(null);
+  }, [account]);
+  const sending = useRef(false);
+
   const draft: MentionDraft | null = visible && !post.commentsOff ? mentionQuery(text, sel.end) : null;
   const suggestions = useMentionSuggestions(post.id, draft);
 
@@ -107,7 +122,12 @@ export function CommentsSheet({
   }
 
   function submit() {
-    if (commentIssue(text) !== null || post.commentsOff) return;
+    if (sending.current || commentIssue(text) !== null || post.commentsOff) return;
+    // Un double toucher très rapide n'envoie qu'un commentaire (le champ vidé n'est pas encore rendu).
+    sending.current = true;
+    setTimeout(() => {
+      sending.current = false;
+    }, 400);
     ctl.send(text, replyTo?.id ?? null);
     setText("");
     setReplyTo(null);
@@ -190,7 +210,7 @@ export function CommentsSheet({
                           accessibilityRole="button"
                           accessibilityState={{ expanded: Boolean(r?.open) }}
                           onPress={() => ctl.toggleReplies(m.id)}
-                          hitSlop={6}
+                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                           style={styles.more}
                           testID="feed-comment-replies-toggle"
                         >
@@ -215,6 +235,8 @@ export function CommentsSheet({
                             <Pressable
                               accessibilityRole="button"
                               onPress={() => ctl.loadMoreReplies(m.id)}
+                              accessibilityLabel={L.loadMoreReplies}
+                              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                               style={styles.more}
                               testID="feed-comment-replies-more"
                             >
@@ -237,6 +259,8 @@ export function CommentsSheet({
               <Pressable
                 accessibilityRole="button"
                 onPress={ctl.loadMore}
+                accessibilityLabel={L.loadMoreComments}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 style={styles.more}
                 testID="feed-comments-more"
               >
@@ -420,8 +444,9 @@ function PendingRow({
           </Text>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={L.retryLabel}
             onPress={() => onRetry(p.clientId)}
-            hitSlop={6}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             style={styles.retry}
             testID="feed-comment-retry"
           >
@@ -475,7 +500,7 @@ const styles = StyleSheet.create({
   counter: { alignSelf: "flex-end" },
   replyto: { flexDirection: "row", alignItems: "center", gap: 8 },
   replytoText: { flex: 1, fontSize: 12.5 },
-  replytoX: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  replytoX: { width: 44, height: 44, marginVertical: -7, alignItems: "center", justifyContent: "center" },
   menu: { borderRadius: tokens.radius.radiusLg, overflow: "hidden" },
   pending: { gap: 4, paddingLeft: 38 },
   sending: { opacity: 0.5 },

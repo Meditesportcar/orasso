@@ -124,15 +124,18 @@ export function useComments(
 
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
+      const ticket = gate.follow();
       try {
         const page = await api.feedCommentReplies(parentId, from);
+        // Une page de réponses du compte précédent n'arrive pas chez le suivant.
+        if (!ticket.current()) return;
         update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from));
       } catch (e) {
         handleGone(e);
         setActionError(errorMessage(e));
       }
     },
-    [update, handleGone],
+    [gate, update, handleGone],
   );
 
   const toggleReplies = useCallback(
@@ -276,6 +279,10 @@ export function useComments(
 export function useMentionSuggestions(postId: string, draft: MentionDraft | null): MentionSuggestion[] {
   const [items, setItems] = useState<MentionSuggestion[]>([]);
   const query = draft ? draft.query : null;
+  const scope = cacheScope();
+  // Un autre compte : la liste du précédent s'en va.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `scope` seul déclenche.
+  useEffect(() => setItems([]), [scope]);
   useEffect(() => {
     if (query === null) {
       setItems([]);

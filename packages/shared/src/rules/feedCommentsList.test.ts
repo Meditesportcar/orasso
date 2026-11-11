@@ -360,3 +360,29 @@ describe("caretAfterEdit", () => {
     expect(caretAfterEdit("aaa", "aaaa")).toBe(4);
   });
 });
+
+describe("magasin : autre compte et feuille unique", () => {
+  it("après une déconnexion (clear), le compte suivant ne reprend rien du commentaire de l'autre", async () => {
+    const { createPostLiveStore } = await import("./feedCommentsList");
+    const store = createPostLiveStore();
+    const server = post({ commentsCount: 2, lastComments: [] });
+    const a = at("a", 1);
+    store.set(server, { ...server, commentsCount: 3, lastComments: [preview(a)] });
+    store.open("p", true);
+    expect(store.apply(server).commentsCount).toBe(3);
+    store.clear();
+    expect(store.apply(server)).toBe(server);
+    expect(store.opening()).toBeNull();
+  });
+  it("une publication montée deux fois : seule la première instance porte la feuille", async () => {
+    const { createPostLiveStore } = await import("./feedCommentsList");
+    const store = createPostLiveStore();
+    const stopA = store.register("p", "A");
+    const stopB = store.register("p", "B");
+    expect(store.host("p")).toBe("A");
+    stopA();
+    expect(store.host("p")).toBe("B");
+    stopB();
+    expect(store.host("p")).toBeUndefined();
+  });
+});

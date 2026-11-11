@@ -22,6 +22,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { PersonAvatar } from "../People";
 import { ReportDialog } from "../ReportDialog";
+import { onAccountChange } from "./commentsLive";
 import { useComments, useMentionSuggestions } from "./useComments";
 import "../../styles/fil-comments.css";
 
@@ -63,6 +64,20 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [postMenu, setPostMenu] = useState(false);
 
+  // Un autre compte (ou aucun) : ni le brouillon, ni la réponse en cours, ni les menus ne passent au suivant.
+  useEffect(
+    () =>
+      onAccountChange(() => {
+        setText("");
+        setCaret(0);
+        setReplyTo(null);
+        setMenuFor(null);
+        setPostMenu(false);
+      }),
+    [],
+  );
+  const sending = useRef(false);
+
   const draft: MentionDraft | null = open && !post.commentsOff ? mentionQuery(text, caret) : null;
   const suggestions = useMentionSuggestions(post.id, draft);
 
@@ -103,7 +118,12 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
 
   function submit(event?: React.FormEvent) {
     event?.preventDefault();
-    if (commentIssue(text) !== null || post.commentsOff) return;
+    if (sending.current || commentIssue(text) !== null || post.commentsOff) return;
+    // Un double clic très rapide n'envoie qu'un commentaire.
+    sending.current = true;
+    setTimeout(() => {
+      sending.current = false;
+    }, 400);
     ctl.send(text, replyTo?.id ?? null);
     setText("");
     setCaret(0);
@@ -161,7 +181,13 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
             <span data-testid="feed-comment-fire-count">{c.reactionsCount}</span>
           </button>
           {isReply ? null : (
-            <button type="button" className="fil-rep" onClick={() => reply(c)} data-testid="feed-comment-reply">
+            <button
+              type="button"
+              className="fil-rep"
+              aria-label={L.replyToLabel(c.author.pseudo)}
+              onClick={() => reply(c)}
+              data-testid="feed-comment-reply"
+            >
               <Icon name="chat" size={15} />
               {L.reply}
             </button>
@@ -198,6 +224,7 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
           <button
             type="button"
             className="fil-rep"
+            aria-label={L.retryLabel}
             onClick={() => ctl.retry(p.clientId)}
             data-testid="feed-comment-retry"
           >
@@ -316,6 +343,7 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
                         <button
                           type="button"
                           className="fil-more"
+                          aria-label={L.loadMoreReplies}
                           onClick={() => ctl.loadMoreReplies(m.id)}
                           data-testid="feed-comment-replies-more"
                         >
@@ -331,7 +359,13 @@ export function CommentsDialog({ post, open, focus, onClose, onChange }: Props) 
           );
         })}
         {sheet.cursor ? (
-          <button type="button" className="fil-more" onClick={ctl.loadMore} data-testid="feed-comments-more">
+          <button
+            type="button"
+            className="fil-more"
+            aria-label={L.loadMoreComments}
+            onClick={ctl.loadMore}
+            data-testid="feed-comments-more"
+          >
             {L.loadMore}
             <Icon name="down" size={14} />
           </button>

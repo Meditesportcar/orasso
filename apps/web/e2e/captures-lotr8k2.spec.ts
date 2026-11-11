@@ -117,6 +117,18 @@ async function cardWith(page: Page, kind: "commented" | "off" | "empty") {
   return card;
 }
 
+/** Capture seulement : la réponse du Fil marque la première publication « commentaires coupés » (aucune écriture). */
+async function forceOff(page: Page) {
+  await page.route(/\/api\/fil\?/, async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    const first = (json.items ?? []).find((c: { kind: string }) => c.kind === "feed_post");
+    if (first) first.payload.post.commentsOff = true;
+    await route.fulfill({ response: res, json });
+  });
+  await page.reload();
+}
+
 async function statesFor(page: Page, tag: string, surface: "appli" | "site") {
   mkdirSync(DIR, { recursive: true });
   const snap = async (name: string) => {
@@ -164,7 +176,11 @@ test("appli : commentaires coupés, aucun commentaire, erreur", async ({ browser
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
   const { ctx, page } = await openApp(browser, "beton", 384, 1);
-  const off = await cardWith(page, "off");
+  await forceOff(page);
+  await afterOpening(page);
+  await page.getByTestId("fil-filters-for_you").click();
+  await expect(page.getByTestId("fil-list")).toBeVisible({ timeout: 30_000 });
+  const off = page.getByTestId("feed-card-feed_post").first();
   await off.getByTestId("feed-post-comment").click();
   await expect(page.getByTestId("feed-comments-off")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(700);
@@ -188,7 +204,7 @@ test("appli : commentaires coupés, aucun commentaire, erreur", async ({ browser
   await page.unroute(route);
   await page.route(route, (r) => r.fulfill({ status: 500, body: "{}" }));
   await target.getByTestId("feed-post-comment").click();
-  await expect(page.getByTestId("load-error").or(page.getByTestId("feed-comments-list"))).toBeVisible({
+  await expect(page.getByTestId("feed-comments-list")).toBeVisible({
     timeout: 30_000,
   });
   await page.waitForTimeout(700);
@@ -233,7 +249,9 @@ for (const theme of ["beton", "sable"] as const) {
       await statesFor(page, `${theme}-${width}`, "site");
       if (theme === "beton") {
         await page.getByTestId("feed-comments-close").click();
-        const off = await cardWith(page, "off");
+        await forceOff(page);
+        await expect(page.getByTestId("fil-waiting")).toHaveCount(0, { timeout: 30_000 });
+        const off = page.getByTestId("feed-card-feed_post").first();
         await off.getByTestId("feed-post-comment").click();
         await expect(page.getByTestId("feed-comments-off")).toBeVisible({ timeout: 30_000 });
         await page.waitForTimeout(500);

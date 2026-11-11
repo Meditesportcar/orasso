@@ -387,6 +387,8 @@ export function createPostLiveStore() {
   const subs = new Set<() => void>();
   let opening: CommentsOpening | null = null;
   let version = 0;
+  /** Les instances de `PostActions` montées pour chaque publication : seule la première porte la feuille (une publication montée deux fois n'ouvre pas deux feuilles). */
+  const hosts = new Map<string, string[]>();
   const emit = () => {
     version += 1;
     for (const fn of subs) fn();
@@ -432,10 +434,27 @@ export function createPostLiveStore() {
       opening = null;
       emit();
     },
-    clear() {
+    /** Enregistre une instance de la ligne d'actions d'une publication ; rend l'arrêt. */
+    register(postId: string, instance: string) {
+      hosts.set(postId, [...(hosts.get(postId) ?? []), instance]);
+      emit();
+      return () => {
+        const left = (hosts.get(postId) ?? []).filter((i) => i !== instance);
+        if (left.length) hosts.set(postId, left);
+        else hosts.delete(postId);
+        emit();
+      };
+    },
+    /** L'instance qui porte la feuille de cette publication (la première montée). */
+    host: (postId: string): string | undefined => hosts.get(postId)?.[0],
+    /**
+     * Tout oublier (déconnexion, autre compte) : ce que l'écran avait changé et la feuille ouverte. `silent` : sans prévenir
+     * les abonnés (appel pendant un rendu). Les instances montées restent enregistrées.
+     */
+    clear(silent = false) {
       entries.clear();
       opening = null;
-      emit();
+      if (!silent) emit();
     },
   };
 }

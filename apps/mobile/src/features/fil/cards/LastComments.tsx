@@ -34,7 +34,7 @@ export function LastComments({
       <Pressable
         accessibilityRole="button"
         onPress={() => postLive.open(post.id, false)}
-        hitSlop={6}
+        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
         style={styles.more}
         testID="feed-post-comments-open"
       >

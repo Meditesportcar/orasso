@@ -370,10 +370,36 @@
   color: var(--ink-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fil-cm-sheet,
-  .fil-cm-sheet::backdrop {
-    animation-duration: 120ms;
-    transition-duration: 120ms;
+/* Cibles de 44 px : la zone tactile dépasse le dessin (comme ailleurs sur le site). */
+.fil-fire.is-sm,
+.fil-rep,
+.fil-more,
+.fil-cm__dots,
+.fil-repto button {
+  position: relative;
+}
+.fil-fire.is-sm::before,
+.fil-rep::before,
+.fil-more::before,
+.fil-cm__dots::before,
+.fil-repto button::before {
+  content: "";
+  position: absolute;
+  inset: -7px -6px;
+}
+.fil-cm__dots::before {
+  inset: -6px;
+}
+
+/* La feuille s'ouvre en fondu de 120 ms (mouvement réduit compris : jamais une animation raccourcie). */
+@keyframes fil-cm-fade {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
+.fil-cm-sheet[open] {
+  animation: fil-cm-fade 120ms linear;
 }

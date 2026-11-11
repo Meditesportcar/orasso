@@ -3,12 +3,26 @@
 import { createPostLiveStore, type FeedPostView } from "@orasso/shared";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
+import { cacheScope } from "@/lib/kv";
+
 export const postLive = createPostLiveStore();
+
+// Un autre compte (ou aucun) : rien de ce que le précédent avait changé ne reste (la déconnexion appelle aussi `postLive.clear()`).
+let liveScope = cacheScope();
+function syncScope() {
+  const scope = cacheScope();
+  if (scope === liveScope) return;
+  liveScope = scope;
+  postLive.clear(true);
+}
 
 export function usePostLive(server: FeedPostView, onChange?: (post: FeedPostView) => void) {
   const version = useSyncExternalStore(postLive.subscribe, postLive.version, postLive.version);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` relit le magasin.
-  const post = useMemo(() => postLive.apply(server), [server, version]);
+  const post = useMemo(() => {
+    syncScope();
+    return postLive.apply(server);
+  }, [server, version]);
   const opening = useSyncExternalStore(postLive.subscribe, postLive.opening, postLive.opening);
   const change = useCallback(
     (next: FeedPostView) => {

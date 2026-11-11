@@ -3,7 +3,7 @@
 // événement et les pages la posent telle quelle. La feuille des commentaires est montée ici, à la première ouverture.
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { feedCommentScreenLabels as C, type FeedPostView, feedScreenLabels as L, shareLabels } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
 import { ShareSheet } from "@/features/share/ShareSheet";
@@ -21,6 +21,10 @@ export function PostActions({
   const { t } = useTheme();
   const c = t.color;
   const { post, change, opening } = usePostLive(server, onChange);
+  // Une publication montée deux fois (Fil resté monté sous un profil) n'ouvre qu'une feuille : la première instance la porte.
+  const instance = useId();
+  useEffect(() => postLive.register(server.id, instance), [server.id, instance]);
+  const isHost = postLive.host(server.id) === instance;
   // Flamme : la réponse de l'API fait foi ; en attendant, le compteur bouge tout de suite (annulé si l'envoi échoue).
   const [fire, setFire] = useState({ count: post.reactionsCount, on: post.reactedByMe });
   const [busy, setBusy] = useState(false);
@@ -39,8 +43,8 @@ export function PostActions({
     [post.reactionsCount, post.reactedByMe],
   );
   useEffect(() => {
-    if (opening) setEverOpened(true);
-  }, [opening]);
+    if (opening && isHost) setEverOpened(true);
+  }, [opening, isHost]);
 
   async function toggle() {
     if (busy) return;
@@ -95,7 +99,7 @@ export function PostActions({
         <Icon name="share" size={17} color={c.ink} />
       </Pressable>
       <ShareSheet visible={sharing} onClose={() => setSharing(false)} target={{ type: "feed_post", id: post.id }} />
-      {everOpened ? (
+      {everOpened && isHost ? (
         <CommentsSheet
           post={post}
           visible={opening !== null}

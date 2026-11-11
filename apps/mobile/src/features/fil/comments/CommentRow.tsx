@@ -44,6 +44,7 @@ export function CommentRow({
             accessibilityRole="button"
             accessibilityLabel={L.fireOnComment}
             accessibilityState={{ selected: comment.reactedByMe }}
+            hitSlop={{ top: 7, bottom: 7, left: 6, right: 6 }}
             onPress={() => onFire(comment)}
             style={[
               styles.fire,
@@ -59,8 +60,9 @@ export function CommentRow({
           {reply ? null : (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={L.replyToLabel(comment.author.pseudo)}
               onPress={() => onReply?.(comment)}
-              hitSlop={6}
+              hitSlop={{ top: 7, bottom: 7, left: 6, right: 6 }}
               style={styles.replyBtn}
               testID="feed-comment-reply"
             >
