@@ -11,6 +11,7 @@ import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../../lib/session";
 import { body, query, uuidParam } from "../../../lib/validate";
+import "./batch";
 import "./last";
 import { feedCommentsService } from "./service";
 
