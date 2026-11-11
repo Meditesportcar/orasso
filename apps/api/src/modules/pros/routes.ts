@@ -19,6 +19,7 @@ import { validation } from "../../lib/errors";
 import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { authorCountsFor } from "../feed/lists";
 import { partnershipsService } from "../partnerships/service";
 import { storiesSummaryFor } from "../stories/bar";
 import { exploreProsList, proActivityCounts } from "./explore";
@@ -56,6 +57,8 @@ export const prosRoutes = new Hono<AppEnv>()
       stories: await storiesSummaryFor(viewer, "pro", view.id),
       memberPartners: partners.items,
       memberPartnersTotal: partners.total,
+      // Vague R8 (lot R8a2) : `publications` et `mentions` (rien sans session : T4).
+      ...(await authorCountsFor("pro", view.id, viewer)),
     });
   })
   // Lot R7m1, tour 2 : « Voir tout » de « Ses partenaires », page par page (connecté seulement, mêmes regards que la fiche).
