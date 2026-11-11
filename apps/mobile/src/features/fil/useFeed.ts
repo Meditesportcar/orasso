@@ -34,7 +34,7 @@ import { AppState } from "react-native";
 
 import { shouldRevalidate } from "@/features/explorer/usePaged";
 import { api } from "@/lib/api";
-import { ApiRequestError, errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage, NETWORK_MESSAGE } from "@/lib/http";
 import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { readCopy, saveCopy } from "@/lib/offlineCopy";
 import { createRequestGate } from "@/lib/requestGate";
@@ -138,7 +138,7 @@ export function useFeed() {
         if (!onlineRef.current) {
           if (await showCopy(f, ticket.current)) return;
           if (ticket.current()) {
-            setError(errorMessage(new ApiRequestError(0, "network", "")));
+            setError(NETWORK_MESSAGE);
             setErrorSource("reload");
           }
           return;

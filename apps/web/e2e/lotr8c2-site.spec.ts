@@ -78,11 +78,15 @@ test("la phrase de chaque onglet, et la fenêtre « Comment le Fil choisit »", 
     await expect(rule).toContainText(name);
     await expect(rule).toContainText(PHRASES[filter]);
   }
-  await expect(page.getByTestId("fil-how-for_you")).toContainText("Une carte « Sponsorisé » environ toutes les 6 cartes.");
+  await expect(page.getByTestId("fil-how-for_you")).toContainText(
+    "Une carte « Sponsorisé » environ toutes les 6 cartes.",
+  );
   await expect(page.getByTestId("fil-how-nearby")).toContainText("Seulement des publications publiques.");
   await expect(page.getByTestId("fil-how-following")).toContainText("Tes propres publications y sont.");
   await expect(page.getByTestId("fil-how-mine")).toContainText("Ta publication");
-  await expect(page.getByTestId("fil-how-mine")).toContainText("Elle reprend sa place normale dès que tu quittes le Fil ou que tu actualises.");
+  await expect(page.getByTestId("fil-how-mine")).toContainText(
+    "Elle reprend sa place normale dès que tu quittes le Fil ou que tu actualises.",
+  );
   await expect(page.getByTestId("fil-how-note")).toContainText(
     "Le Fil classe selon ce que tu suis, la distance, tes sorties, tes types de voitures, la fraîcheur et ce qui plaît. Rien d'autre : pas de vente de données.",
   );
@@ -110,7 +114,8 @@ test("le rail « Ça plaît en ce moment » : Abonnements et Autour de moi, jama
   await page.getByTestId("fil-hot-rail").focus();
   await expect(page.getByTestId("fil-hot-rail")).toBeFocused();
   await tab(page, "nearby");
-  if (await page.getByTestId("fil-hot").count()) await expect(page.getByTestId("fil-hot")).toContainText("près de chez toi · 7 jours");
+  if (await page.getByTestId("fil-hot").count())
+    await expect(page.getByTestId("fil-hot")).toContainText("près de chez toi · 7 jours");
   // Toucher une vignette ouvre la publication.
   await tab(page, "following");
   const href = await page.getByTestId("fil-hot-tile").first().getAttribute("href");
@@ -166,7 +171,9 @@ test("cartes vues : elles partent à l'API, puis « Tu es à jour » et « Déj�
   const order = await page
     .getByTestId("fil-list")
     .locator(".fil-item, [data-testid='fil-uptodate']")
-    .evaluateAll((els) => els.map((e) => (e.classList.contains("is-seen") ? "seen" : e.getAttribute("data-testid") ?? "card")));
+    .evaluateAll((els) =>
+      els.map((e) => (e.classList.contains("is-seen") ? "seen" : (e.getAttribute("data-testid") ?? "card"))),
+    );
   const firstSeen = order.indexOf("seen");
   expect(firstSeen).toBeGreaterThan(0);
   expect(order.slice(0, firstSeen)).not.toContain("seen");
@@ -251,12 +258,36 @@ for (const width of [390, 1280]) {
     test.setTimeout(240_000);
     await goFil(page, width);
     const wanted = [
-      { author: "Roues Libres 66", event: "Rassemblement du Lydia", verb: /^pour le Rassemblement du Lydia · /, stamp: false, see: true },
-      { author: "La Brasa", event: "Rassemblement du Lydia", verb: /^présent au Rassemblement du Lydia · /, stamp: false, see: false },
+      {
+        author: "Roues Libres 66",
+        event: "Rassemblement du Lydia",
+        verb: /^pour le Rassemblement du Lydia · /,
+        stamp: false,
+        see: true,
+      },
+      {
+        author: "La Brasa",
+        event: "Rassemblement du Lydia",
+        verb: /^présent au Rassemblement du Lydia · /,
+        stamp: false,
+        see: false,
+      },
       // Le seed : Kenji_66 était à la « Nocturne de rentrée » (féminin : « à la »), présence validée : le tampon.
-      { author: "Kenji_66", event: "Nocturne de rentrée", verb: /^était à la Nocturne de rentrée · /, stamp: true, see: false },
+      {
+        author: "Kenji_66",
+        event: "Nocturne de rentrée",
+        verb: /^était à la Nocturne de rentrée · /,
+        stamp: true,
+        see: false,
+      },
       // Un passionné pendant l'événement : « est au », sans tampon (présence non validée).
-      { author: "Marc_66", event: "Rassemblement du Lydia", verb: /^est au Rassemblement du Lydia · /, stamp: false, see: false },
+      {
+        author: "Marc_66",
+        event: "Rassemblement du Lydia",
+        verb: /^est au Rassemblement du Lydia · /,
+        stamp: false,
+        see: false,
+      },
     ];
     for (const w of wanted) {
       let card: Locator | null = null;

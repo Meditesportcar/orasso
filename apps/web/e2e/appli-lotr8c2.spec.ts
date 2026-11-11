@@ -30,7 +30,12 @@ async function afterOpening(page: Page) {
   await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
-async function open(browser: Browser, email = "damien@orasso.local", theme = "beton", size: { scale?: number; width?: number } = {}) {
+async function open(
+  browser: Browser,
+  email = "damien@orasso.local",
+  theme = "beton",
+  size: { scale?: number; width?: number } = {},
+) {
   const ctx = await browser.newContext({ viewport: { width: size.width ?? 384, height: 860 }, baseURL: APP });
   await ctx.addInitScript(
     ([t, scale]) => {
@@ -105,7 +110,9 @@ test("la phrase de chaque onglet, et la feuille « Comment le Fil choisit »", a
     await expect(rule).toContainText(name);
     await expect(rule).toContainText(PHRASES[filter]);
   }
-  await expect(page.getByTestId("fil-how-for_you")).toContainText("Une carte « Sponsorisé » environ toutes les 6 cartes.");
+  await expect(page.getByTestId("fil-how-for_you")).toContainText(
+    "Une carte « Sponsorisé » environ toutes les 6 cartes.",
+  );
   await expect(page.getByTestId("fil-how-nearby")).toContainText("Seulement des publications publiques.");
   await expect(page.getByTestId("fil-how-following")).toContainText("Tes propres publications y sont.");
   await expect(page.getByTestId("fil-how-mine")).toContainText("Ta publication");
@@ -138,7 +145,8 @@ test("le rail « Ça plaît en ce moment » : Abonnements et Autour de moi, jama
   await expect(page.getByTestId("fil-hot-tile").first()).toContainText(/\d/);
   await shot(page, "rail-abonnements-384");
   await tab(page, "nearby");
-  if (await page.getByTestId("fil-hot").count()) await expect(page.getByTestId("fil-hot")).toContainText("près de chez toi · 7 jours");
+  if (await page.getByTestId("fil-hot").count())
+    await expect(page.getByTestId("fil-hot")).toContainText("près de chez toi · 7 jours");
   await tab(page, "following");
   // Toucher une vignette ouvre la publication.
   await page.getByTestId("fil-hot-tile").first().click();
@@ -146,12 +154,15 @@ test("le rail « Ça plaît en ce moment » : Abonnements et Autour de moi, jama
   await ctx.close();
 });
 
-test("cartes vues : elles partent à l'API, puis « Tu es à jour » et « Déjà vu » au rechargement", async ({ browser }) => {
+test("cartes vues : elles partent à l'API, puis « Tu es à jour » et « Déjà vu » au rechargement", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser);
   const sent: { cards: { id: string; action: string; at?: string }[] }[] = [];
   page.on("request", (req) => {
-    if (req.method() === "POST" && req.url().includes("/api/me/fil/seen")) sent.push(req.postDataJSON() as (typeof sent)[number]);
+    if (req.method() === "POST" && req.url().includes("/api/me/fil/seen"))
+      sent.push(req.postDataJSON() as (typeof sent)[number]);
   });
   await goFil(page);
   for (let i = 0; i < 4; i++) {
@@ -197,7 +208,9 @@ test("cartes vues : elles partent à l'API, puis « Tu es à jour » et « Déj�
   await ctx.close();
 });
 
-test("la publication juste envoyée : en tête avec son bandeau, qui repart quand on quitte le Fil", async ({ browser }) => {
+test("la publication juste envoyée : en tête avec son bandeau, qui repart quand on quitte le Fil", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const caption = `R8c2 appli ${unique()}`;
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
@@ -259,15 +272,41 @@ test("la pastille « Nouvelles publications » : elle apparaît, la toucher actu
   await ctx.close();
 });
 
-test("les cartes rattachées du seed : « pour le », « présent au », « était à la » avec le tampon", async ({ browser }) => {
+test("les cartes rattachées du seed : « pour le », « présent au », « était à la » avec le tampon", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "following");
   const wanted = [
-    { author: "Roues Libres 66", event: "Rassemblement du Lydia", verb: /^pour le Rassemblement du Lydia · /, stamp: false, see: true },
-    { author: "La Brasa", event: "Rassemblement du Lydia", verb: /^présent au Rassemblement du Lydia · /, stamp: false, see: false },
-    { author: "Kenji_66", event: "Nocturne de rentrée", verb: /^était à la Nocturne de rentrée · /, stamp: true, see: false },
-    { author: "Marc_66", event: "Rassemblement du Lydia", verb: /^est au Rassemblement du Lydia · /, stamp: false, see: false },
+    {
+      author: "Roues Libres 66",
+      event: "Rassemblement du Lydia",
+      verb: /^pour le Rassemblement du Lydia · /,
+      stamp: false,
+      see: true,
+    },
+    {
+      author: "La Brasa",
+      event: "Rassemblement du Lydia",
+      verb: /^présent au Rassemblement du Lydia · /,
+      stamp: false,
+      see: false,
+    },
+    {
+      author: "Kenji_66",
+      event: "Nocturne de rentrée",
+      verb: /^était à la Nocturne de rentrée · /,
+      stamp: true,
+      see: false,
+    },
+    {
+      author: "Marc_66",
+      event: "Rassemblement du Lydia",
+      verb: /^est au Rassemblement du Lydia · /,
+      stamp: false,
+      see: false,
+    },
   ];
   for (const w of wanted) {
     let card: Locator | null = null;
@@ -299,7 +338,9 @@ test("les cartes rattachées du seed : « pour le », « présent au », « éta
   await ctx.close();
 });
 
-test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; le retour du réseau", async ({ browser }) => {
+test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; le retour du réseau", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "for_you");
@@ -311,7 +352,10 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
     const out: Record<string, { kinds: string[]; at: string | null }> = {};
     for (const key of Object.keys(localStorage)) {
       if (!key.includes("copy.fil.") || key.includes("seen-queue")) continue;
-      const ref = JSON.parse(localStorage.getItem(key) ?? "null") as { savedAt?: string; value?: { items?: { kind: string }[] } } | null;
+      const ref = JSON.parse(localStorage.getItem(key) ?? "null") as {
+        savedAt?: string;
+        value?: { items?: { kind: string }[] };
+      } | null;
       out[key] = { kinds: (ref?.value?.items ?? []).map((i) => i.kind), at: ref?.savedAt ?? null };
     }
     return out;
@@ -350,7 +394,9 @@ test("hors ligne : la copie gardée, sans rendez-vous au spot ni sponsorisé ; l
   await ctx.close();
 });
 
-test("hors ligne : un onglet jamais lu en ligne n'a pas de copie, l'erreur propose « Réessayer »", async ({ browser }) => {
+test("hors ligne : un onglet jamais lu en ligne n'a pas de copie, l'erreur propose « Réessayer »", async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
   const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
   await goFil(page, "for_you");
@@ -360,5 +406,34 @@ test("hors ligne : un onglet jamais lu en ligne n'a pas de copie, l'erreur propo
   await expect(page.getByTestId("load-error")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Réessayer" })).toBeVisible();
   await ctx.setOffline(false);
+  await ctx.close();
+});
+
+test("hors ligne puis retour du réseau en bas de la liste : la pastille « Nouvelles publications », pas de saut", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "damien@orasso.local", "beton", { width: 390 });
+  await goFil(page, "for_you");
+  await tab(page, "nearby");
+  await ctx.setOffline(true);
+  await tab(page, "for_you");
+  await expect(page.getByTestId("fil-offline")).toBeVisible();
+  const first = (await page.getByTestId("feed-card-feed_post").first().textContent()) ?? "";
+  // On descend dans la copie : le retour du réseau ne remplace pas la liste sous les yeux.
+  for (let i = 0; i < 4; i++) {
+    await page.mouse.wheel(0, 600);
+    await page.waitForTimeout(250);
+  }
+  await ctx.setOffline(false);
+  await expect(page.getByTestId("fil-fresh")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("fil-offline")).toBeVisible();
+  await shot(page, "retour-reseau-pastille-390");
+  // La pastille actualise : la liste en ligne remplace la copie et on remonte.
+  await page.getByTestId("fil-fresh").click();
+  await expect(page.getByTestId("fil-offline")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("fil-fresh")).toHaveCount(0);
+  await expect(page.getByTestId("fil-list")).toBeVisible();
+  expect(first.length).toBeGreaterThan(0);
   await ctx.close();
 });
