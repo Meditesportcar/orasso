@@ -22,6 +22,8 @@ export const accountSettingsSchema = z
       event: z.boolean(),
       social: z.boolean(),
       grade: z.boolean(),
+      // Lot R8n1 : facultative (le corps à quatre clés de l'APK en ligne reste valide).
+      eventNews: z.boolean().optional(),
     }),
     mutedTypes: z.array(z.enum(notificationTypeNames)).max(100),
     visibility: z.enum(profileVisibilities),
@@ -34,7 +36,10 @@ export const accountSettingsSchema = z
 export type AccountSettingsUpdate = z.infer<typeof accountSettingsSchema>;
 
 export type AccountSettings = {
-  notificationPrefs: Record<NotificationFamily, boolean>;
+  notificationPrefs: Record<NotificationFamily, boolean> & {
+    /** Lot R8n1 : toujours rendu par l'API ; facultatif ici (les écrans de l'appli en ligne ne le lisent pas). */
+    eventNews?: boolean;
+  };
   mutedTypes: string[];
   visibility: (typeof profileVisibilities)[number];
   departments: string[];

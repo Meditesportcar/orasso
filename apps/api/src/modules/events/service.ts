@@ -85,6 +85,7 @@ import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
 import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
+import { eventPlaceHolderIds } from "./place";
 import { posterColumns, posterService, posterSettingsOf, posterYearStale, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
@@ -181,6 +182,8 @@ async function isMember(structureId: string, userId: string) {
   });
   return Boolean(m);
 }
+
+const earliest = (a: Date, b: Date) => (a.getTime() <= b.getTime() ? a : b);
 
 /** Organisateur de l'événement ; renvoie l'événement. */
 async function organizerEvent(v: Viewer, id: string) {
@@ -536,12 +539,14 @@ export const eventsService = {
       const addressChanged = ADDRESS_FIELDS.some((f) => row[f] !== current[f]);
       if (datesChanged || addressChanged) {
         const what = datesChanged ? `nouvelle date : ${formatDateTime(row.startsAt)}` : "nouvelle adresse";
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
+        // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
+        for (const userId of await eventPlaceHolderIds(tx, id)) {
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });
@@ -642,12 +647,14 @@ export const eventsService = {
         const what = next.length
           ? `jours : ${next.map((d) => formatDayDate(d.dayDate, { weekday: false })).join(", ")}`
           : `nouvelle date : ${formatDateTime(row.startsAt)}`;
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
+        // Lot R8n1 : tous ceux qui ont une place (billet compris), la liste que compte « N inscrits seront prévenus ».
+        for (const userId of await eventPlaceHolderIds(tx, id)) {
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
             eventId: id,
-            eventStartsAt: row.startsAt,
+            // Heures calmes : le plus tôt des deux départs (un départ repoussé ne doit pas retarder le message).
+            eventStartsAt: earliest(current.startsAt, row.startsAt),
             data: { eventId: id },
             link: { label: "Voir l'événement", path: `/e/${row.slug}` },
           });

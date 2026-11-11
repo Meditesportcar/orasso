@@ -42,6 +42,7 @@ import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
 import { devMailRoutes } from "./modules/dev-mail/routes";
 import { eventInvitesRoutes } from "./modules/event-invites/routes";
+import { eventNotificationsRoutes } from "./modules/event-notifications/routes";
 import { lineupService } from "./modules/events/lineup";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
@@ -295,6 +296,8 @@ app.route("/", presenceRoutes);
 app.route("/", partnershipsRoutes);
 app.route("/", recapRoutes);
 app.route("/", memoriesRoutes);
+// Lot R8n1 : notifications d'un événement (mes Nouveautés, aperçu des destinataires).
+app.route("/", eventNotificationsRoutes);
 // Lot R5a : catalogue des styles et file « Styles proposés » (administration).
 app.route("/", stylesAdminRoutes);
 
