@@ -102,7 +102,7 @@ test.describe("appli", () => {
         await expect(page.getByTestId("feed-card-feed_post")).toBeVisible({ timeout: 30_000 });
         await shot(page, `publication-seule-${tag}`);
         await page.getByTestId("feed-card-more").click();
-        await expect(page.getByTestId("publication-menu-report")).toBeVisible();
+        await expect(page.getByTestId("publication-menu-remove")).toBeVisible();
         await shot(page, `publication-seule-menu-${tag}`);
       }
       await ctx.close();
@@ -168,7 +168,7 @@ test.describe("site", () => {
           await page.waitForLoadState("networkidle");
           await page.screenshot({ path: `${DIR}/site-publication-seule-${tag}.png` });
           await page.getByTestId("feed-card-more").click();
-          await page.getByTestId("publication-menu-report").waitFor();
+          await page.getByTestId("publication-menu-remove").waitFor();
           await page.screenshot({ path: `${DIR}/site-publication-seule-menu-${tag}.png` });
         }
       }

@@ -296,9 +296,12 @@ test("une notification de publication ouvre la publication seule", async ({ brow
   const id = await publishApi(cookie, `Merci @Kenji_66 pour la sortie ${unique()}`);
   const { ctx, page } = await open(browser);
   await signIn(page, "kenji@orasso.local");
-  await go(page, "/activite");
+  // La notification arrive un instant après la publication : l'écran de l'Activité est rouvert jusqu'à l'y voir.
   const row = page.getByText(`${author} te cite dans une publication`).first();
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(async () => {
+    await go(page, "/activite");
+    await expect(row).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 90_000 });
   await row.click();
   await expect(page).toHaveURL(new RegExp(`/publication/${id}`), { timeout: 30_000 });
   await expect(page.getByTestId("feed-card-feed_post")).toContainText("Merci @Kenji_66");

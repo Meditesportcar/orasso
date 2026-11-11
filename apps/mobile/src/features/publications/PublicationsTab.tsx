@@ -144,6 +144,7 @@ export function PublicationsTab({
             variant="primary"
             icon="camera"
             onPress={() => router.push("/fil/publier")}
+            style={styles.panelButton}
             testID="publications-publish"
           >
             {L.publish}
@@ -198,4 +199,5 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusLg,
   },
   panelText: { textAlign: "center" },
+  panelButton: { alignSelf: "center" },
 });
