@@ -12,6 +12,7 @@ export * from "./messaging";
 export * from "./moderation";
 export * from "./notifications/r7";
 export * from "./preferences";
+export * from "./prefectures";
 export * from "./privacy";
 export * from "./provider";
 export * from "./qr";
