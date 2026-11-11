@@ -104,6 +104,7 @@ test("une publication : vignette, page seule, légende repliée après trois lig
   await expect(page.getByTestId("feed-card-feed_post")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("publication-caption-toggle")).toHaveCount(0);
   await shot(page, "publication-seule");
+  await page.waitForLoadState("networkidle");
   await page.getByTestId("feed-card-more").click();
   await expect(page.getByTestId("publication-menu-remove")).toBeVisible();
   await expect(page.getByTestId("publication-menu-report")).toHaveCount(0);
@@ -205,6 +206,9 @@ test("profil d'un autre avec publications : « Publications » par défaut, sans
   }
   await page.getByTestId("publication-tile-open").first().click();
   await expect(page).toHaveURL(/\/app\/publication\//);
+  await expect(page.getByTestId("feed-card-feed_post")).toBeVisible();
+  // La page est hydratée avant le clic (sinon le clic part sans effet).
+  await page.waitForLoadState("networkidle");
   await page.getByTestId("feed-card-more").click();
   await expect(page.getByTestId("publication-menu-report")).toBeVisible();
   await expect(page.getByTestId("publication-menu-remove")).toHaveCount(0);
@@ -221,9 +225,13 @@ test("« Mes publications » redirige ; une notification de publication ouvre la
   const author = `Cite_${unique()}`.slice(0, 18);
   const cookie = await signUpApi(author);
   const id = await publishApi(cookie, `Merci @Kenji_66 pour la sortie ${unique()}`);
-  await page.goto("/app/activite");
+  // La notification arrive un instant après la publication : la page de l'Activité est relue jusqu'à l'y voir.
   const row = page.getByText(`${author} te cite dans une publication`).first();
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(async () => {
+    await page.goto("/app/activite");
+    await expect(row).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 60_000 });
+  await page.waitForLoadState("networkidle");
   await row.click();
   await expect(page).toHaveURL(new RegExp(`/app/publication/${id}`), { timeout: 30_000 });
   await expect(page.getByTestId("feed-card-feed_post")).toContainText("Merci @Kenji_66");

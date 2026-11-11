@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, SEED_PASSWORD, setTheme } from "./helpers";
+import { loginInBrowser, SEED_PASSWORD, setTheme, signUpApi, unique } from "./helpers";
 
 // Lot R8b2 : captures « avant » / « après » du Profil, de ses onglets et de « Mes publications » (appli et site). CAPTURES_DIR =
 // dossier de sortie, CAPTURE_TARGET = `app` (APP_URL) ou `site`, CAPTURE_PHASE = `avant` (seuls les repères d'avant servent) ou
@@ -81,6 +81,7 @@ test.describe("appli", () => {
         await page.getByRole("tab", { name: /^Publications/ }).click();
         await page.getByRole("button", { name: "Une par une" }).click();
         await shot(page, `mon-profil-publications-une-par-une-${tag}`);
+        await page.getByRole("button", { name: "Grille de deux" }).click();
       }
       await go(page, "/u/Lea_11");
       await expect(page.getByTestId("profil-tabs")).toBeVisible({ timeout: 30_000 });
@@ -91,10 +92,31 @@ test.describe("appli", () => {
         await go(page, "/fil/mes-publications");
         await shot(page, `mes-publications-${tag}`);
       } else {
+        await go(page, "/u/Lea_11");
+        await page.getByTestId("profil-tab-publications").click();
+        await shot(page, `vide-autre-${tag}`);
         await go(page, "/u/Kenji_66");
         await shot(page, `profil-kenji-${tag}`);
+        // La publication seule et son menu (ma publication : « Supprimer » ; on ne supprime rien).
+        await page.getByTestId("publication-tile-open").first().click();
+        await expect(page.getByTestId("feed-card-feed_post")).toBeVisible({ timeout: 30_000 });
+        await shot(page, `publication-seule-${tag}`);
+        await page.getByTestId("feed-card-more").click();
+        await expect(page.getByTestId("publication-menu-report")).toBeVisible();
+        await shot(page, `publication-seule-menu-${tag}`);
       }
       await ctx.close();
+      if (PHASE === "apres") {
+        // L'état vide chez moi : un compte neuf, sans publication.
+        const fresh = `Vide_${unique()}`.slice(0, 18);
+        await signUpApi(fresh);
+        const b = await openApp(browser, theme, width, scale);
+        await signIn(b.page, `${fresh.toLowerCase()}@e2e.orasso.test`);
+        await go(b.page, "/profil");
+        await expect(b.page.getByTestId("publications-empty")).toBeVisible({ timeout: 30_000 });
+        await shot(b.page, `vide-moi-${tag}`);
+        await b.ctx.close();
+      }
     }
   });
 });
@@ -134,6 +156,21 @@ test.describe("site", () => {
         await page.goto("/u/Marc_66");
         await page.waitForLoadState("networkidle");
         await page.screenshot({ path: `${DIR}/site-profil-prive-${tag}.png` });
+        if (PHASE === "apres") {
+          await page.goto("/u/Lea_11?onglet=publications");
+          await page.waitForLoadState("networkidle");
+          await page.screenshot({ path: `${DIR}/site-vide-autre-${tag}.png` });
+          await page.goto("/u/Kenji_66");
+          await page.waitForLoadState("networkidle");
+          await page.screenshot({ path: `${DIR}/site-profil-kenji-${tag}.png` });
+          await page.getByTestId("publication-tile-open").first().click();
+          await page.getByTestId("feed-card-feed_post").waitFor();
+          await page.waitForLoadState("networkidle");
+          await page.screenshot({ path: `${DIR}/site-publication-seule-${tag}.png` });
+          await page.getByTestId("feed-card-more").click();
+          await page.getByTestId("publication-menu-report").waitFor();
+          await page.screenshot({ path: `${DIR}/site-publication-seule-menu-${tag}.png` });
+        }
       }
     }
   });

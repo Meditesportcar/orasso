@@ -37,7 +37,7 @@ function Tile({ post, tick }: { post: FeedPostView; tick: number }) {
       >
         {photo && near ? <CrewPhotoImage url={photo.url} style={styles.image} resizeMode="cover" /> : null}
       </Pressable>
-      <View style={styles.caption}>
+      <View style={[styles.caption, { backgroundColor: c.surface, borderColor: c.line }]}>
         <Text variant="bodyStrong" color={c.ink} style={styles.date} testID="publication-tile-date">
           {meta.date}
         </Text>
@@ -79,7 +79,8 @@ const styles = StyleSheet.create({
   photo: { width: "100%", aspectRatio: TILE_RATIO, borderRadius: radiusMd, overflow: "hidden" },
   image: { width: "100%", height: "100%" },
   pressed: { opacity: 0.85 },
-  caption: { gap: 1, paddingHorizontal: 2 },
+  // La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px).
+  caption: { gap: 1, paddingHorizontal: 8, paddingVertical: 3, borderRadius: tokens.radius.radiusMd, borderWidth: 1.5 },
   date: { fontSize: 12.5, lineHeight: 16 },
   placeRow: { flexDirection: "row", alignItems: "center", gap: space1 - 1 },
   place: { flexShrink: 1, fontSize: 12, lineHeight: 15 },

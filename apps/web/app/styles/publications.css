@@ -87,10 +87,14 @@
   height: 100%;
   object-fit: cover;
 }
+/* La date et le lieu dans une petite plaque arrondie sous la photo (la maquette R8.6 la dessine ainsi : fond de carte, trait de 1,5 px). */
 .pub-tile__caption {
   display: grid;
   gap: 1px;
-  padding-inline: 2px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line);
 }
 .pub-tile__caption b {
   color: var(--ink);
