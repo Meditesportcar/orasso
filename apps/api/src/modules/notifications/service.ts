@@ -115,7 +115,13 @@ export function registerDeliveryGuard(types: readonly NotificationType[], guard:
  * domaine d'une page (ou de la pastille) et rend un verdict par ligne. `shown: false` : la ligne n'est pas montrée ;
  * `actors` : les pseudos des personnes d'une ligne regroupée que le destinataire peut encore lire (les autres ne sont pas nommées).
  */
-export type JournalVerdict = { shown: boolean; actors?: string[]; commentReadable?: boolean };
+export type JournalVerdict = {
+  shown: boolean;
+  actors?: string[];
+  /** Avatar de chaque personne lisible (par pseudo), pour nommer celles qui étaient au-delà des trois premières. */
+  avatars?: Record<string, string | null>;
+  commentReadable?: boolean;
+};
 export type JournalGuard = (userId: string, rows: NotificationRow[]) => Promise<Map<string, JournalVerdict>>;
 const journalGuards = new Map<string, JournalGuard>();
 export function registerJournalGuard(types: readonly NotificationType[], guard: JournalGuard): void {
@@ -158,8 +164,19 @@ export function applyJournalVerdict(
   if (verdict && !verdict.shown) return null;
   if (view === null) return null;
   const allowed = verdict?.actors ? new Set(verdict.actors) : null;
-  const actors = view && allowed ? view.actors.filter((a) => allowed.has(a.pseudo)) : view?.actors;
-  const narrowed = Boolean(view && actors && actors.length < view.actors.length);
+  // Toutes les personnes en règle (pas seulement les trois affichées) sont filtrées par lisibilité, puis les trois premières
+  // lisibles sont nommées : une personne cachée ne reprend ni le titre, ni le corps, ni le compte.
+  const people = view ? (allowed ? view.people.filter((p) => allowed.has(p)) : view.people) : undefined;
+  const narrowed = Boolean(view && people && people.length < view.people.length);
+  if (view && people && people.length === 0) return null;
+  const actors =
+    view && people && narrowed
+      ? people
+          .slice(0, ACTIVITY_MAX_ACTORS)
+          .map(
+            (p) => view.actors.find((a) => a.pseudo === p) ?? { pseudo: p, avatarUrl: verdict?.avatars?.[p] ?? null },
+          )
+      : view?.actors;
   const template = (n.data as { _text?: { title?: unknown } })._text?.title;
   const first = actors?.[0];
   return {
@@ -176,8 +193,12 @@ export function applyJournalVerdict(
           )
         : (view?.body ?? n.body),
     actors,
-    count: view ? (narrowed ? Math.max(1, allowed?.size ?? 1) : view.count) : undefined,
-    people: view ? (narrowed && allowed ? view.people.filter((p) => allowed.has(p)) : view.people) : undefined,
+    count: view
+      ? narrowed && people
+        ? Math.max(1, view.count - (view.people.length - people.length))
+        : view.count
+      : undefined,
+    people,
   };
 }
 
