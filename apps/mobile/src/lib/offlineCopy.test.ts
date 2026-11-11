@@ -27,6 +27,9 @@ vi.mock("expo-file-system", () => ({
     get exists() {
       return device.files.has(this.uri);
     }
+    get size() {
+      return (device.files.get(this.uri) ?? "").length;
+    }
     create() {
       device.files.set(this.uri, "");
     }
@@ -132,5 +135,76 @@ describe.each(["web", "ios"])("copie hors ligne (%s)", (os) => {
     await copy.saveCopy("fil.for_you", { de: "b" }, when);
     expect((await copy.readCopy<{ de: string }>("fil.for_you"))?.value).toEqual({ de: "b" });
     expect(await copy.readCopy("fil.for_you", guardA)).toBeNull();
+  });
+
+  describe("photos de la copie", () => {
+    const url = "/api/feed-posts/p1/photos/a.jpg";
+    const data = "data:image/jpeg;base64,AAAA";
+    const photoFiles = () => [...device.files.keys()].filter((k) => k.includes(".photo."));
+
+    it("une photo gardée se relit (hors ligne elle s'affiche), avec la copie du compte seulement", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      expect(await copy.readPhoto(url, when)).toBe(data);
+      expect(await copy.readPhoto("/autre.jpg", when)).toBeNull();
+    });
+
+    it("de plus de 7 jours : plus lue, et effacée au nettoyage", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      const later = new Date(when.getTime() + copy.PHOTO_MAX_AGE_MS);
+      expect(await copy.readPhoto(url, new Date(later.getTime() - 1))).toBe(data);
+      expect(await copy.readPhoto(url, later)).toBeNull();
+      await copy.prunePhotos(null, later);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      if (os === "ios") expect(photoFiles()).toHaveLength(0);
+    });
+
+    it("une carte sortie de la copie : sa photo est retirée, celles qui restent sont gardées", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      await copy.savePhoto("/b.jpg", data, when);
+      await copy.prunePhotos(new Set(["/b.jpg"]), when);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      expect(await copy.readPhoto("/b.jpg", when)).toBe(data);
+    });
+
+    it("déconnexion : plus aucun fichier photo du compte ; un autre compte ne lit rien", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      await kv.purgeCaches();
+      expect(photoFiles()).toHaveLength(0);
+      await kv.bindCacheScope("b");
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      await kv.bindCacheScope("a");
+      expect(await copy.readPhoto(url, when)).toBeNull();
+    });
+
+    it("accès retiré (403, 404…) : la photo gardée est effacée et ne se relit plus", async () => {
+      await kv.bindCacheScope("a");
+      await copy.savePhoto(url, data, when);
+      await copy.deletePhoto(url);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+      if (os === "ios") expect(photoFiles()).toHaveLength(0);
+    });
+
+    it("plafond par compte : les plus anciennes photos partent d'abord", async () => {
+      if (os !== "ios") return;
+      await kv.bindCacheScope("a");
+      const big = `data:image/jpeg;base64,${"A".repeat(1000)}`;
+      await copy.savePhoto("/1.jpg", big, new Date(when.getTime() + 1));
+      await copy.savePhoto("/2.jpg", big, new Date(when.getTime() + 2));
+      await copy.savePhoto("/3.jpg", big, new Date(when.getTime() + 3));
+      await copy.enforcePhotoCap(2100);
+      expect(await copy.readPhoto("/1.jpg", when)).toBeNull();
+      expect(await copy.readPhoto("/2.jpg", when)).toBe(big);
+      expect(await copy.readPhoto("/3.jpg", when)).toBe(big);
+    });
+
+    it("sans compte lié, rien n'est gardé", async () => {
+      await copy.savePhoto(url, data, when);
+      expect(photoFiles()).toHaveLength(0);
+      expect(await copy.readPhoto(url, when)).toBeNull();
+    });
   });
 });

@@ -1426,13 +1426,14 @@ describe("curseur stable du début à la fin (tour 3)", () => {
       zone: "A" as const,
       phase: 1 as const,
       sc: "ffffffffffff",
+      floorAt: clock.now.getTime(),
       score: Number.MAX_VALUE,
       frontier: id("event_recommended", 999),
       kinds: ["event_recommended", "sponsored"] as FeedCardKind[],
       deferred: Array.from({ length: 20 }, (_, n) => id("event_recommended", 100 + n)),
     };
     const raw = encodeCursor(biggest);
-    expect(raw.length).toBe(1020);
+    expect(raw.length).toBe(1028);
     expect(raw.length).toBeLessThanOrEqual(FEED_CURSOR_MAX);
     expect(decodeCursor(raw)).toEqual(biggest);
     // l'API l'accepte (empreinte inconnue : un nouveau parcours, pas un refus)

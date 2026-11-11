@@ -10,6 +10,7 @@ import type {
   ImportantReason,
   NotifyPreview,
   Page,
+  SeenEntry,
   StoryPersona,
 } from "@orasso/shared";
 
@@ -35,6 +36,12 @@ export type FeedPostBody = {
 export const feedApi = {
   /** Le curseur est opaque : renvoyé tel quel. */
   feed: (filter: FeedFilter, cursor?: string | null) => request<FeedPage>(`/api/fil${qs({ filter, cursor })}`),
+  /** Nouveautés depuis l'instant du parcours affiché (`FeedPage.ref`) : la pastille « Nouvelles publications » (R8c2). */
+  feedFresh: (filter: FeedFilter, since: string) =>
+    request<{ count: number }>(`/api/fil/fresh${qs({ filter, since })}`),
+  /** Les cartes vues, ouvertes ou partagées (lots de 50 au plus, 204 sans corps). */
+  feedSeen: (cards: SeenEntry[]) =>
+    request<unknown>("/api/me/fil/seen", { method: "POST", body: { cards }, timeout: 15_000 }),
   feedLess: (kind: FeedCardKind) =>
     request<{ kinds: FeedCardKind[] }>("/api/me/feed/less", { method: "POST", body: { kind } }),
   feedLessUndo: (kind: FeedCardKind) =>
