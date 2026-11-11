@@ -39,6 +39,7 @@ afterAll(async () => {
 
 const HOUR = 3_600_000;
 let clock: ReturnType<typeof useClock>;
+let ref: Awaited<ReturnType<typeof seedReference>>;
 let owner: TestUser;
 let structure: Awaited<ReturnType<typeof createStructure>>;
 
@@ -46,7 +47,7 @@ beforeEach(async () => {
   await resetDb();
   resetRateLimits();
   clock = useClock(fromWallTime({ year: 2026, month: 11, day: 10, hour: 10, minute: 0 }));
-  await seedReference();
+  ref = await seedReference();
   owner = await signUp("Orga_R8d", { twoFactor: true });
   structure = await createStructure(owner.id);
 });
@@ -438,7 +439,6 @@ describe("façades et Fil", () => {
 
 describe("annonces réservées aux inscrits (T3)", () => {
   it("restent lisibles d'un inscrit retenu et de l'équipe, invisibles d'un visiteur et d'un passionné sans candidature, avant comme après la reprise", async () => {
-    const ref = await seedReference();
     const e = await mkEvent();
     await mkAnnouncement(e.id, { audience: "participants", body: "Réservée aux retenus" });
     await mkAnnouncement(e.id, { body: "Annonce publique" });
