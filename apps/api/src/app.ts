@@ -17,6 +17,7 @@ import { db } from "./db/client";
 import { user } from "./db/schema";
 import { env } from "./env";
 import { hasSecondFactor } from "./lib/access";
+import { cacheGuard } from "./lib/cache-guard";
 import { clockOffsetHeader } from "./lib/dev-clock";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
@@ -24,11 +25,11 @@ import { requestContextMiddleware } from "./lib/request-context";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { settingsStore } from "./lib/settings";
 import { storage } from "./lib/storage";
-import { accessRoutes } from "./modules/access/routes";
+import { accessPublicRoutes, accessRoutes } from "./modules/access/routes";
 import { accountRoutes } from "./modules/account/routes";
 import { accountQrRoutes } from "./modules/account-qr/routes";
 import { activityRoutes } from "./modules/activity/routes";
-import { adminRoutes } from "./modules/admin/routes";
+import { adminPublicRoutes, adminRoutes } from "./modules/admin/routes";
 import { stylesAdminRoutes } from "./modules/admin/styles-routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
@@ -60,7 +61,7 @@ import { pointsRoutes } from "./modules/points/routes";
 import { presenceRoutes } from "./modules/presence/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
-import { prosRoutes } from "./modules/pros/routes";
+import { prosPublicRoutes, prosRoutes } from "./modules/pros/routes";
 import { providersRoutes } from "./modules/providers/routes";
 import { recapRoutes } from "./modules/recap/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
@@ -72,13 +73,13 @@ import { spotMeetupsRoutes } from "./modules/spot-meetups/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { storiesRoutes } from "./modules/stories/routes";
 import { shareRoutes } from "./modules/stories/share-routes";
-import { structuresRoutes } from "./modules/structures/routes";
+import { structuresPublicRoutes, structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
 import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { votesRoutes } from "./modules/votes/routes";
-import { weatherRoutes } from "./modules/weather/routes";
+import { weatherPublicRoutes, weatherRoutes } from "./modules/weather/routes";
 import { ws } from "./ws";
 
 export const app = new Hono<AppEnv>().basePath("/api");
@@ -124,6 +125,8 @@ app.onError(errorResponse);
 // Lot 33 : méthode, chemin et adresse de la requête lisibles par les gardes (mode assistance, journal, inscriptions),
 // monté avant Better Auth pour que ses crochets le voient aussi.
 app.use("*", requestContextMiddleware);
+// Correctif cache et session (11/11) : filet de sécurité, jamais de `Set-Cookie` sous un `Cache-Control` public.
+app.use("*", cacheGuard);
 app.notFound((c) => errorResponse(notFound("Route inconnue"), c));
 
 app.get("/health", async (c) => {
@@ -227,6 +230,13 @@ const videoLengthGuard: MiddlewareHandler = async (c, next) => {
 app.use("*", (c, next) =>
   c.req.method === "POST" && c.req.path === STORY_VIDEO_UPLOAD_PATH ? videoLengthGuard(c, next) : generalLimit(c, next),
 );
+// Correctif cache et session (11/11) : routes à cache public dont la réponse ne dépend pas de la session, montées avant elle.
+// Une route qui lit la session (`loadSession`) peut renouveler le cookie (`Set-Cookie`) : elle ne prend jamais un cache public.
+app.route("/", accessPublicRoutes);
+app.route("/", weatherPublicRoutes);
+app.route("/", adminPublicRoutes);
+app.route("/", structuresPublicRoutes);
+app.route("/", prosPublicRoutes);
 app.use("*", loadSession);
 
 app.route("/", accessRoutes);

@@ -25,16 +25,19 @@ import { verificationService } from "./verification";
 const ip = (c: { req: { header(name: string): string | undefined } }) =>
   c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 
+// Correctif cache et session (11/11) : monté avant `loadSession` (app.ts). Liste des structures sans lecteur (le service ne reçoit pas de session), donc cache public permis et aucun
+// `Set-Cookie` possible dans une réponse que le cache public pourrait garder.
+export const structuresPublicRoutes = new Hono<AppEnv>().get("/structures", async (c) => {
+  const q = query(c, structureListQuery);
+  return c.json(await structuresService.list(q.limit, q.cursor, q.q), 200, {
+    "cache-control": "public, max-age=60",
+  });
+});
+
 export const structuresRoutes = new Hono<AppEnv>()
   .post("/structures", async (c) => {
     const v = await requireUser(c);
     return c.json(await structuresService.create(v, await body(c, structureCreateSchema)), 201);
-  })
-  .get("/structures", async (c) => {
-    const q = query(c, structureListQuery);
-    return c.json(await structuresService.list(q.limit, q.cursor, q.q), 200, {
-      "cache-control": "public, max-age=60",
-    });
   })
   .get("/invitations/:token", async (c) => c.json(await structuresService.byInviteToken(c.req.param("token"))))
   .post("/invitations/:token/accept", async (c) =>
