@@ -475,6 +475,9 @@ test("mode avion sans quitter l'onglet : la copie filtrée, « Pas de réseau »
   await card.getByTestId("feed-post-comment").click();
   await expect(card.getByTestId("feed-post-no-network")).toBeVisible();
   await ctx.setOffline(false);
+  // On a défilé pour toucher la carte : le retour du réseau propose la pastille, qui actualise.
+  await page.waitForTimeout(3000);
+  if (await page.getByTestId("fil-fresh").count()) await page.getByTestId("fil-fresh").click();
   await expect(page.getByTestId("fil-offline")).toHaveCount(0, { timeout: 30_000 });
   await ctx.close();
 });
@@ -487,7 +490,7 @@ test("partager une carte la retient comme interaction (`share`)", async ({ brows
     if (req.method() === "POST" && req.url().includes("/api/me/fil/seen")) sent.push(req.postDataJSON());
   });
   await goFil(page, "following");
-  const card = page.getByTestId("feed-card-feed_post").filter({ hasText: "Tu suis" }).first();
+  const card = page.getByTestId("feed-card-feed_post").first();
   await card.scrollIntoViewIfNeeded();
   await card.getByTestId("feed-post-share").click();
   await expect
