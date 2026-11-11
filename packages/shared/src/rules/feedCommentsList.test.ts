@@ -22,6 +22,7 @@ import {
   repliesLine,
   type SheetState,
   sheetAddComment,
+  sheetMark,
   sheetRemoveComment,
   sheetReopen,
   sheetSetReaction,
@@ -590,5 +591,50 @@ describe("tour 3 : compte, 404, réponses, flamme", () => {
       },
     });
     expect(current).toEqual({ reactionsCount: 3, reactedByMe: false });
+  });
+});
+
+describe("tour 5 : files par compte, pages tardives", () => {
+  it("flamme : B touche pendant la requête de A, sa file est la sienne (clé par génération de compte)", async () => {
+    const { createFlameGate } = await import("./feedCommentsList");
+    const gate = createFlameGate();
+    const sent: string[] = [];
+    const resolvers: (() => void)[] = [];
+    const make = (who: string) => ({
+      send: (on: boolean) => {
+        sent.push(`${who}:${on}`);
+        return new Promise<{ reactionsCount: number; reactedByMe: boolean }>((r) => {
+          resolvers.push(() => r({ reactionsCount: 1, reactedByMe: on }));
+        });
+      },
+      apply: () => undefined,
+    });
+    const base = { reactionsCount: 0, reactedByMe: false };
+    void gate.fire("1|0|p|c", base, make("A"));
+    void gate.fire("2|0|p|c", base, make("B"));
+    expect(sent).toEqual(["A:true", "B:true"]);
+    for (const r of resolvers) r();
+  });
+  it("page tardive contenant une ancienne version du parent : le compteur compte les réponses confirmées depuis le départ", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("p", 1, { repliesCount: 0 })], null, true);
+    const mark = sheetMark(s); // départ de la lecture
+    s = sheetAddComment(s, at("r", 5), "p").state; // une réponse est confirmée pendant la lecture
+    expect(s.items[0]?.repliesCount).toBe(1);
+    // La page revient avec le parent tel qu'il était au départ.
+    s = sheetWithTopPage(s, [at("p", 1, { repliesCount: 0 })], null, true, mark);
+    expect(s.items.find((c) => c.id === "p")?.repliesCount).toBe(1);
+    // Une page fraîche qui compte déjà la réponse ne la compte pas deux fois (le départ était après).
+    const mark2 = sheetMark(s);
+    s = sheetWithTopPage(s, [at("p", 1, { repliesCount: 1 })], null, true, mark2);
+    expect(s.items.find((c) => c.id === "p")?.repliesCount).toBe(1);
+  });
+  it("mon commentaire supprimé par l'auteur de la publication ne reste pas : seuls les ajouts postérieurs au départ survivent", () => {
+    let s = sheetWithTopPage(emptySheet(), [at("x", 1)], null, true);
+    s = sheetAddComment(s, at("old", 5), null).state;
+    const mark = sheetMark(s); // la lecture part après l'envoi de « old »
+    s = sheetAddComment(s, at("new", 9), null).state;
+    s = sheetWithTopPage(s, [at("x", 1)], null, true, mark); // « old » absent : supprimé entre-temps
+    expect(s.items.map((c) => c.id)).toEqual(["x", "new"]);
+    expect(s.recent).toEqual(["new"]);
   });
 });

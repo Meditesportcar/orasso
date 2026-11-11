@@ -37,6 +37,8 @@ export type SheetState = {
   loaded: boolean;
   replies: Record<string, RepliesState>;
   pending: PendingComment[];
+  /** Réponses confirmées par l'API, par commentaire de premier niveau, depuis la dernière première page : une page partie avant ne les efface pas. */
+  bumped: Record<string, number>;
   /** Commentaires de premier niveau confirmés depuis la dernière ouverture : une première page tardive ne les efface pas. */
   recent: string[];
 };
@@ -48,6 +50,7 @@ export const emptySheet = (): SheetState => ({
   replies: {},
   pending: [],
   recent: [],
+  bumped: {},
 });
 
 const emptyReplies = (): RepliesState => ({ items: [], cursor: null, open: false, loaded: false, recent: [] });
@@ -67,18 +70,24 @@ export function mergeComments(
   return [...byId.values()].sort(chronological);
 }
 
+/** Ce que la feuille savait au départ d'une lecture : seuls les ajouts **postérieurs** doivent survivre à la page qui en revient. */
+export type SheetMark = { recent: string[]; bumped: Record<string, number> };
+export const sheetMark = (s: SheetState): SheetMark => ({ recent: [...s.recent], bumped: { ...s.bumped } });
+
 /**
- * Une première page qui arrive : ce qu'elle apporte fait foi, et les ajouts confirmés depuis (`recent`) qu'elle ne contient pas
- * (envoyés après son départ) restent, **dans leur version locale la plus fraîche** (compteurs de réponses, flammes) : jamais une
- * copie ancienne qui masquerait une réponse.
+ * Une première page qui arrive. Ce qu'elle apporte fait foi ; les ajouts confirmés **depuis le départ de la lecture** (`since`) qu'elle
+ * ne contient pas restent, dans leur version locale la plus fraîche ; ceux d'avant le départ y sont déjà (absents = supprimés
+ * entre-temps) et s'en vont. Le compteur de réponses d'un commentaire de la page reçoit les réponses confirmées depuis le départ.
  */
 function withLocalAdditions(
   page: readonly FeedCommentView[],
   local: readonly FeedCommentView[],
   recent: readonly string[],
+  since?: SheetMark,
 ): FeedCommentView[] {
   const inPage = new Set(page.map((c) => c.id));
-  const keep = local.filter((c) => recent.includes(c.id) && !inPage.has(c.id));
+  const posterior = recent.filter((id) => !since?.recent.includes(id));
+  const keep = local.filter((c) => posterior.includes(c.id) && !inPage.has(c.id));
   return mergeComments(keep, page);
 }
 
@@ -91,10 +100,22 @@ export function sheetWithTopPage(
   items: readonly FeedCommentView[],
   nextCursor: string | null,
   first: boolean,
+  since?: SheetMark,
 ): SheetState {
+  if (!first) return { ...state, items: mergeComments(state.items, items), cursor: nextCursor, loaded: true };
+  const posterior: Record<string, number> = {};
+  for (const [id, n] of Object.entries(state.bumped)) {
+    const d = n - (since?.bumped[id] ?? 0);
+    if (d > 0) posterior[id] = d;
+  }
+  const page = items.map((c) =>
+    posterior[c.id] ? { ...c, repliesCount: c.repliesCount + (posterior[c.id] ?? 0) } : c,
+  );
   return {
     ...state,
-    items: first ? withLocalAdditions(items, state.items, state.recent) : mergeComments(state.items, items),
+    items: withLocalAdditions(page, state.items, state.recent, since),
+    recent: state.recent.filter((id) => !since?.recent.includes(id)),
+    bumped: posterior,
     cursor: nextCursor,
     loaded: true,
   };
@@ -107,6 +128,7 @@ export function sheetWithRepliesPage(
   items: readonly FeedCommentView[],
   nextCursor: string | null,
   first: boolean,
+  since?: string[],
 ): SheetState {
   const was = state.replies[parentId] ?? emptyReplies();
   return {
@@ -115,7 +137,10 @@ export function sheetWithRepliesPage(
       ...state.replies,
       [parentId]: {
         ...was,
-        items: first ? withLocalAdditions(items, was.items, was.recent) : mergeComments(was.items, items),
+        items: first
+          ? withLocalAdditions(items, was.items, was.recent, since ? { recent: since, bumped: {} } : undefined)
+          : mergeComments(was.items, items),
+        recent: first ? was.recent.filter((id) => !since?.includes(id)) : was.recent,
         cursor: nextCursor,
         loaded: true,
       },
@@ -159,6 +184,7 @@ export function sheetAddComment(
     state: {
       ...state,
       items: known ? state.items : patchTop(state.items, parentId, (c) => ({ ...c, repliesCount: c.repliesCount + 1 })),
+      bumped: known ? state.bumped : { ...state.bumped, [parentId]: (state.bumped[parentId] ?? 0) + 1 },
       replies: {
         ...state.replies,
         [parentId]: {
@@ -249,6 +275,7 @@ export function sheetReopen(state: SheetState): SheetState {
   return {
     ...state,
     recent: [],
+    bumped: {},
     replies: Object.fromEntries(
       Object.entries(state.replies).map(([id, r]) => [id, { ...r, loaded: false, recent: [] }]),
     ),
@@ -271,6 +298,7 @@ export function createFlameGate() {
      * `current` : ce que l'écran montre. `send(on)` : l'appel de l'API. `apply` : écrit l'état à l'écran. `alive` : le compte n'a pas changé.
      * Rend la promesse de la fin de la série.
      */
+    /** `id` : clé de la file, à composer avec la génération du compte et de la publication (`<g>|<p>|<commentaire>`) : jamais partagée entre deux comptes. */
     fire(
       id: string,
       current: FlameState,

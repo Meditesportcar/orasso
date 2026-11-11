@@ -399,6 +399,15 @@ test("un 404 de commentaire n'est pas une publication disparue : seule la ligne 
   await apiCall(lea, "DELETE", `/feed-comments/${parentC}`);
   await page.getByTestId("feed-comment-replies-toggle").last().click();
   await expect(commentRow(page, `Parent C ${stamp}`)).toHaveCount(0, { timeout: 30_000 });
+  // Plus aucune requête de commentaires ou de réponses ensuite : pas de boucle réseau après la disparition du parent.
+  let calls = 0;
+  page.on("request", (r) => {
+    if (/\/feed-(posts|comments)\/[^?]*(comments|replies)/.test(r.url())) calls += 1;
+  });
+  await page.waitForTimeout(1500);
+  const settled = calls;
+  await page.waitForTimeout(2500);
+  expect(calls).toBe(settled);
   await expect(page.getByTestId("feed-comments-sheet")).toBeVisible();
   await expect(page.getByTestId("feed-post-gone")).toHaveCount(0);
   await expect(page.getByTestId("feed-comment-input")).toBeVisible();

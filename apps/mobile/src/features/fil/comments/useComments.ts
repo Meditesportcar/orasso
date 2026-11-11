@@ -21,6 +21,7 @@ import {
   type SheetState,
   sheetAddComment,
   sheetFind,
+  sheetMark,
   sheetRemoveComment,
   sheetReopen,
   sheetSetReaction,
@@ -112,16 +113,18 @@ export function useComments(
   const loadReplies = useCallback(
     async (parentId: string, from?: string | null) => {
       const t = from ? postLive.followRead(id, `r:${parentId}`) : postLive.beginRead(id, `r:${parentId}`);
+      const since = from ? undefined : [...(postLive.sheetOf(id).replies[parentId]?.recent ?? [])];
       try {
         const page = await api.feedCommentReplies(parentId, from);
         // Une lecture plus récente de ce fil de réponses (même d'une autre instance) a pris la main : celle-ci est jetée.
         if (!postLive.fresh(t)) return;
-        update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from), t);
+        update((s) => sheetWithRepliesPage(s, parentId, page.items, page.nextCursor, !from, since), t);
       } catch (e) {
         if (!postLive.fresh(t)) return;
-        // Parent introuvable (supprimé) : la publication se revalide, la liste relue retire la ligne.
+        // Parent introuvable (supprimé) : on retire le parent et son état de réponses (ses lectures en cours sont invalidées), les envois en
+        // attente restent, et la publication se revalide une seule fois.
         if (statusOf(e) === 404) {
-          void loadTopRef.current?.();
+          parentGoneRef.current?.(parentId);
           return;
         }
         if (mounted.current) setActionError(errorMessage(e));
@@ -130,16 +133,18 @@ export function useComments(
     [update, id],
   );
   const loadTopRef = useRef<(() => Promise<void>) | null>(null);
+  const parentGoneRef = useRef<((parentId: string) => void) | null>(null);
 
   const loadTop = useCallback(
     async (from?: string | null) => {
       const t = from ? postLive.followRead(id, "top") : postLive.beginRead(id, "top");
+      const since = from ? undefined : sheetMark(postLive.sheetOf(id));
       try {
         const page = await api.feedComments(id, from);
         if (!postLive.fresh(t)) return;
         // Une lecture réussie rend la publication lisible (rouvrir ne suffit pas).
         postLive.clearGone(t);
-        const next = update((s) => sheetWithTopPage(s, page.items, page.nextCursor, !from), t);
+        const next = update((s) => sheetWithTopPage(s, page.items, page.nextCursor, !from, since), t);
         if (mounted.current) setLoadError(null);
         // Les réponses restées dépliées se revalident (elles ont pu être supprimées ou devenir privées entre deux ouvertures).
         if (!from) {
@@ -247,6 +252,14 @@ export function useComments(
     [id, update, emitPost],
   );
 
+  parentGoneRef.current = (parentId: string) => {
+    postLive.beginRead(id, `r:${parentId}`);
+    const t = postLive.ticket(id);
+    if (!postLive.sheetOf(id).items.some((c) => c.id === parentId)) return;
+    dropRemoved(parentId, t);
+    void loadTop();
+  };
+
   const remove = useCallback(
     async (comment: FeedCommentView) => {
       const hasReplies = comment.repliesCount > 0 && postLive.sheetOf(id).items.some((c) => c.id === comment.id);
@@ -273,7 +286,7 @@ export function useComments(
       const t = postLive.ticket(id);
       const current = sheetFind(postLive.sheetOf(id), comment.id) ?? comment;
       void flames.fire(
-        comment.id,
+        `${t.g}|${t.p}|${id}|${comment.id}`,
         { reactionsCount: current.reactionsCount, reactedByMe: current.reactedByMe },
         {
           send: (on) => api.fireFeedComment(comment.id, on),
