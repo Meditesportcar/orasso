@@ -381,3 +381,40 @@ test("commentaires (R8k2) : la feuille s'ouvre depuis une carte de « Une par un
     .catch(() => undefined);
   await ctx.close();
 });
+
+test("hors ligne : mon onglet montre la dernière copie, se recharge au retour du réseau ; le profil d'un autre n'est jamais gardé", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser);
+  await signIn(page, "kenji@orasso.local");
+  await go(page, "/profil");
+  await expect(page.getByTestId("publications-grid")).toBeVisible({ timeout: 30_000 });
+  const n = await page.getByTestId("publication-tile").count();
+  await page.waitForTimeout(1500); // la copie est écrite après la lecture
+  // L'API ne répond plus : la copie s'affiche, même ancienne, avec la phrase de l'Accueil hors ligne.
+  await ctx.route("**/api/authors/**", (route) => route.abort());
+  await go(page, "/profil");
+  await expect(page.getByTestId("publications-offline")).toContainText(
+    "Hors ligne : voici ce que ton téléphone a gardé.",
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(page.getByTestId("publication-tile")).toHaveCount(n);
+  await shot(page, "hors-ligne");
+  // Retour du réseau : la liste se recharge seule.
+  await ctx.setOffline(true);
+  await ctx.unroute("**/api/authors/**");
+  await ctx.setOffline(false);
+  await expect(page.getByTestId("publications-offline")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("publication-tile")).toHaveCount(n);
+  // Le profil d'un autre n'est jamais gardé : sans réseau, une erreur et « Réessayer », jamais sa liste.
+  await ctx.route("**/api/authors/**", (route) => route.abort());
+  await go(page, "/u/Lea_11?onglet=publications");
+  await expect(page.getByTestId("publication-tile")).toHaveCount(0);
+  await go(page, "/u/Damien_66");
+  await expect(page.getByTestId("publications-offline")).toHaveCount(0);
+  await expect(page.getByTestId("publication-tile")).toHaveCount(0);
+  await ctx.close();
+});
