@@ -10,7 +10,6 @@ import { useEffect, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
 import { cacheScope } from "@/lib/kv";
 
-
 const store = createPositionStore({
   scope: cacheScope,
   now: () => Date.now(),

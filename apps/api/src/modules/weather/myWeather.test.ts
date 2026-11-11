@@ -6,7 +6,14 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { call, resetDb, signUp, useClock } from "../../../test/helpers";
 import { db } from "../../db/client";
-import { externalCache, profiles, profileWeatherPlaces, user, weatherDepartments, weatherPlacesCache } from "../../db/schema";
+import {
+  externalCache,
+  profiles,
+  profileWeatherPlaces,
+  user,
+  weatherDepartments,
+  weatherPlacesCache,
+} from "../../db/schema";
 import { env } from "../../env";
 import { setGeocodeFetch } from "../../lib/geocode";
 import { resetRateLimits } from "../../lib/rateLimit";
