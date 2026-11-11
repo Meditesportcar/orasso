@@ -64,6 +64,7 @@ import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeCrewFeedForDeletedAccount } from "../crews/feed/anonymize";
 import { anonymizeEventInvitesForDeletedAccount } from "../event-invites/service";
 import { anonymizeFeedForDeletedAccount } from "../feed/anonymize";
+import { anonymizeFeedCommentsForDeletedAccount } from "../feed/comments/anonymize";
 import { hasFavoriteGarage } from "../home/service";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
@@ -481,6 +482,8 @@ export const accountService = {
       await anonymizeGroupedNotificationsForDeletedAccount(tx, userId);
       // Lot R5c1 : ses publications, commentaires, flammes et voix dans le fil des crews.
       photoKeys.push(...(await anonymizeCrewFeedForDeletedAccount(tx, userId)));
+      // Lot R8k1 : ses commentaires du Fil, ses réponses, ses flammes et ses citations (les compteurs suivent).
+      await anonymizeFeedCommentsForDeletedAccount(tx, userId);
       // Lot R7e1 : ses publications du Fil, leurs photos et ses flammes.
       photoKeys.push(...(await anonymizeFeedForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId, after)));
