@@ -7,13 +7,11 @@ import { coarsePosition, createPositionStore, type WeatherAt } from "@orasso/sha
 import { useSyncExternalStore } from "react";
 
 import { apiFetch } from "../../lib/api.client";
-import { listenSession } from "../../lib/sessionChannel";
-
-/** Le compte annoncé par la mise en page de la page (`null` : aucun, ou pas encore annoncé). */
-let currentUser: string | null = null;
+import { currentSession, listenSession } from "../../lib/sessionChannel";
 
 const store = createPositionStore({
-  scope: () => currentUser,
+  // Le dernier compte annoncé par la mise en page, même si l'annonce a eu lieu avant le chargement de ce module.
+  scope: currentSession,
   now: () => Date.now(),
   weatherAt: async (position) => {
     const res = await apiFetch<WeatherAt>("/weather/at", { method: "POST", json: position });
@@ -23,10 +21,7 @@ const store = createPositionStore({
 });
 
 if (typeof window !== "undefined") {
-  listenSession((userId) => {
-    currentUser = userId;
-    store.purgeForeign();
-  });
+  listenSession(() => store.purgeForeign());
 }
 
 const EMPTY = { at: null, busy: false } as const;

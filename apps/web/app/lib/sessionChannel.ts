@@ -11,6 +11,10 @@ type Listener = (userId: string | null) => void;
 // sont donc notifiés directement, quel que soit le transport.
 const local = new Set<Listener>();
 
+/** Le dernier compte annoncé dans CETTE fenêtre (`undefined` : rien annoncé), pour un module chargé après l'annonce. */
+let lastAnnounced: string | null | undefined;
+export const currentSession = (): string | null => lastAnnounced ?? null;
+
 function channel(): BroadcastChannel | null {
   try {
     return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(NAME);
@@ -21,6 +25,7 @@ function channel(): BroadcastChannel | null {
 
 /** Annonce le compte courant (`null` = déconnecté) aux autres fenêtres. */
 export function announceSession(userId: string | null): void {
+  lastAnnounced = userId;
   const c = channel();
   if (c) {
     c.postMessage({ userId });
@@ -45,6 +50,7 @@ export function listenSession(listener: Listener): () => void {
   const c = channel();
   const fromMessage = (e: MessageEvent) => {
     const id = (e.data as { userId?: unknown } | null)?.userId;
+    lastAnnounced = typeof id === "string" ? id : null;
     listener(typeof id === "string" ? id : null);
   };
   const fromStorage = (e: StorageEvent) => {
