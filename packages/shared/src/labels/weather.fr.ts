@@ -54,6 +54,8 @@ export const myWeatherTexts = {
   savedFailed: "Lieu non enregistré. Réessaie.",
   /** Libellé de repli quand la commune de la position n'est pas trouvée. */
   myPositionFallback: "Ma position",
+  /** Même phrase que l'Accueil : la dernière météo connue reste affichée. */
+  offline: "Hors ligne : voici ce que ton téléphone a gardé.",
   /** Le fournisseur ne répond pas : la carte garde le nom du lieu. */
   unavailable: "Météo indisponible pour le moment.",
   /** Source d'un lieu : « Perpignan · ma position », « Perpignan · ta ville » ; un lieu choisi n'a que son nom. */

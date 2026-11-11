@@ -37,6 +37,7 @@ import { AgendaWidget, FavoriteGarageWidget, NudgeCard, PendingWidget } from "@/
 import { Stamp } from "@/features/passport/Stamp";
 import { ApplicationTag, SkewTag } from "@/features/sorties/bits";
 import { arrivalPhrase, liveApplications } from "@/features/sorties/model";
+import { MyWeatherBlock } from "@/features/weather/MyWeatherBlock";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDay, formatHour } from "@/lib/format";
@@ -50,7 +51,7 @@ import { SmButton } from "@/ui/Kit";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
-import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
+import { Greet, Nudge, PosterRail, SecH } from "./fanBlocks";
 import { liveAccessHref, showsLocalCopy } from "./liveAccess";
 import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, scrubSpot, splitSponsored } from "./rail";
@@ -321,10 +322,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     return x ? [ticketOuting(x)] : [];
   });
 
-  // Météo : celle du département (« Chez toi, aujourd'hui »). Celle de l'événement est une ligne de sa carte (lot R8e1) ; une
-  // copie gardée avant ce lot peut porter l'ancienne météo « jour J » : jamais affichée ici.
-  const weather = data?.weather?.kind === "place" ? data.weather : null;
-  const weatherPlace = department ? `Dép. ${department}` : null;
+  // Météo : « Ma météo » (lot R8m), l'endroit où je suis ou ma ville, deux lieux au plus. Celle de l'événement est une ligne de
+  // sa carte (lot R8e1).
 
   // --- Lot R7a2 : l'Accueil « tableau de bord » : les blocs dans l'ordre réglé par la personne -------------------------------
   const widgets = normalizeHomeWidgets(data?.widgets ?? defaultHomeWidgets);
@@ -446,7 +445,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       </>
     ) : null,
-    weather: weather ? <WeatherCard weather={weather} place={weatherPlace} /> : null,
+    weather: data?.myWeather ? <MyWeatherBlock myWeather={data.myWeather} /> : null,
     agenda: data && data.agenda.length > 0 ? <AgendaWidget items={data.agenda} /> : null,
     favorite_garage: data?.favoriteGarage ? <FavoriteGarageWidget garage={data.favoriteGarage} /> : null,
     pending: data && data.pendingStatuses.length > 0 ? <PendingWidget items={data.pendingStatuses} /> : null,

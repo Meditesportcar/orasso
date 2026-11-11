@@ -1,22 +1,19 @@
 // Blocs de l'Accueil du passionné (lot C2a, artefact DA v2 `s-home`), reproduits d'après le HTML et le CSS de
-// l'artefact : intitulé de section `.sec-h`, carte météo `.wx`, mini-tickets `.stat-strip` / `.mini-t`, incitation
+// l'artefact : intitulé de section `.sec-h`, mini-tickets `.stat-strip` / `.mini-t`, incitation
 // `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 à 18.
-import { Icon, type IconName, Photo, Text, tokens, useTheme, weatherIcons } from "@orasso/design-system/native";
+import { Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type EventCard,
   type HomeSponsored,
   homeBlockLabels,
   homeLabels,
   homeProfileLabels,
-  type MyWeather,
-  weatherCodeLabels,
   withYear,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
-import { temperatureRange } from "@/lib/weather";
 import { useSecHeadStack } from "@/ui/SecHead";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -113,70 +110,6 @@ export function SecH({
           <Icon name="next" size={14} color={c.accentText} />
         </Pressable>
       ) : null}
-    </View>
-  );
-}
-
-/** `.wx` : pastille d'icône 64 px sur `--accent-soft`, lieu et jour en gras, grand chiffre, pied en pointillés. */
-export function WeatherCard({
-  weather,
-  place,
-}: {
-  weather: Extract<MyWeather, { kind: "place" }>;
-  place: string | null;
-}) {
-  const { t, theme } = useTheme();
-  const c = t.color;
-  const s = weather.summary;
-  // `--accent-soft` de l'artefact : moutarde à 16 % (Béton) ou 26 % (Sable).
-  const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
-  const label = weatherCodeLabels[s.code];
-  // Lot R8e1 : seulement la météo du département ; celle de l'événement est une ligne de sa carte.
-  const title = "Météo du jour";
-  const line = place ?? "";
-  return (
-    <View
-      style={[styles.card, styles.wx, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
-      accessible
-      accessibilityLabel={`${title} : ${line ? `${line}, ` : ""}${label}, ${temperatureRange(s)}`}
-      testID="home-weather"
-    >
-      <View style={[styles.wxIcon, { backgroundColor: accentSoft }]}>
-        <Icon name={weatherIcons[s.code]} size={34} color={c.accentText} />
-      </View>
-      <View style={styles.fill}>
-        <Text variant="label" color={c.inkMuted}>
-          {title}
-        </Text>
-        {line ? (
-          <Text variant="bodyStrong" color={c.ink} style={styles.wxTitle}>
-            {line}
-          </Text>
-        ) : null}
-        <View style={styles.wxBig}>
-          <Text variant="numberNarrow" color={c.ink} style={styles.wxNum}>
-            {`${Math.round(s.tempMax)}°`}
-          </Text>
-          <Text variant="caption" color={c.inkMuted} style={styles.fill}>
-            {label}
-          </Text>
-        </View>
-      </View>
-      <View style={[styles.wxFoot, { borderTopColor: c.line }]}>
-        <View style={styles.wxFootItem}>
-          <Icon name="weatherWind" size={16} color={c.inkMuted} />
-          <Text variant="caption" color={c.inkMuted}>{`Vent ${Math.round(s.windMaxKmh)} km/h`}</Text>
-        </View>
-        {s.precipitationProbability !== null ? (
-          <View style={styles.wxFootItem}>
-            <Icon name="weatherRain" size={16} color={c.inkMuted} />
-            <Text variant="caption" color={c.inkMuted}>{`Pluie ${Math.round(s.precipitationProbability)} %`}</Text>
-          </View>
-        ) : null}
-        <Text variant="caption" color={c.inkMuted}>
-          {weather.attribution}
-        </Text>
-      </View>
     </View>
   );
 }
@@ -405,23 +338,6 @@ const styles = StyleSheet.create({
   secTitle: { fontSize: 16, lineHeight: 18, flexGrow: 1, flexShrink: 1 },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   secLinkText: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  wx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 4 },
-  wxIcon: { width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  wxTitle: { fontSize: 15, lineHeight: 19, fontWeight: "800", marginTop: 2 },
-  wxBig: { flexDirection: "row", alignItems: "baseline", gap: 10 },
-  wxNum: { fontSize: 46, lineHeight: 44 },
-  wxFoot: {
-    width: "100%",
-    borderTopWidth: 1,
-    borderStyle: "dashed",
-    paddingTop: 10,
-    marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 16,
-    rowGap: 4,
-  },
-  wxFootItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   strip: { flexDirection: "row", gap: 10 },
   mini: { flex: 1, borderRadius: 16, padding: space3, gap: 8 },
   miniTitle: { lineHeight: 14 },
